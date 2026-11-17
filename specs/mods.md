@@ -128,8 +128,8 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 | `moddil/sync` | Sync cells (`Atomic<T>`, `AtomicRc<T>`, `Mutex`, `RwLock`), channels, lock-free queues (SPSC/MPMC) ([`concurrency.md`](concurrency.md) §4) | G H X |
 | `moddil/alloc` | Arenas, pools, bump allocators, allocator capability | G H |
 | `moddil/crypto` | Ed25519, ML-DSA, FN-DSA, Blake2/3, SHA-2/3, ChaCha20-Poly1305, TLS primitives | W X |
-| `moddil/simd`, `moddil/tensor` | Portable SIMD, n-d arrays | G H X |
-| `moddil/gpu` | Kernels, memory spaces, WebGPU/Vulkan/Metal/CUDA backends (§2.9) | G H |
+| `moddil/simd`, `moddil/tensor` | Portable SIMD; n-d arrays and tensor expressions compiled to graphs or kernels ([`accelerators.md`](accelerators.md) §8) | G H X |
+| `moddil/gpu` | Devices, buffers, launches; WebGPU/Vulkan/Metal/CUDA/ROCm and CPU-simulator handlers ([`accelerators.md`](accelerators.md)) | G H |
 | `moddil/decimal` | Fixed-point and decimal arithmetic | H W |
 | `moddil/sql` | Typed SQL, schemas, migrations, connection pools | H W |
 | `moddil/timeseries` | Columnar storage, compression, tick data | H |

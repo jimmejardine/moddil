@@ -1,7 +1,9 @@
 # Concurrency across CPUs
 
 > **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §2.8 and builds on
-> [`memory-and-resources.md`](memory-and-resources.md). Snippets are **illustration only**.
+> [`memory-and-resources.md`](memory-and-resources.md). GPUs and other accelerators, which reuse these
+> rules for kernel launches, are in [`accelerators.md`](accelerators.md). Snippets are
+> **illustration only**.
 
 ## 1. Summary
 
@@ -95,6 +97,7 @@ boundaries by accident. Holding a lock across a suspension point is allowed but 
 | Fan-out of immutable data | rc slices |
 | Actors | A task owning its state, plus a channel; a library pattern, not a language feature |
 | Thread-per-core / sharded state | Each shard owns its data; cross-shard work is messages |
+| GPU offload | A kernel launch is a child task borrowing its buffers; the scope end is the fence ([`accelerators.md`](accelerators.md) §6) |
 
 ## 6. Runtime contract
 

@@ -9,17 +9,18 @@
 
 **Document map**
 
-| Document | Covers | Status |
-|---|---|---|
-| [`rationale.md`](rationale.md) | Problems, prior art, direction (this document) | Living |
-| [`memory-and-resources.md`](memory-and-resources.md) | Ownership, borrows and view types, `.to_rc()`, linear resources, zero-copy I/O (§2.2) | Decided direction |
-| [`concurrency.md`](concurrency.md) | CPU concurrency: sharing rules, structured tasks, sync cells, runtime contract (§2.8) | Decided direction (CPU); GPU to come |
-| [`mods.md`](mods.md) | Mods, the core/mod boundary, standard-mod catalogue (R2) | Decided direction |
-| [`error-handling.md`](error-handling.md) | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§2.3) | Partly decided; survey |
-| [`correctness.md`](correctness.md) | Contracts, validated newtypes, property testing, fuzzing, verification, assurance levels (§2.7) | Proposal |
-| [`comptime.md`](comptime.md) | Compile-time evaluation, reflection, typed derives, tagged-literal DSLs instead of macros (§2.6) | Decided direction |
-| [`bootstrap.md`](bootstrap.md) | Bootstrap compiler, self-hosting, backends, WASM engine support (R1) | Proposed |
-| [`examples/`](examples/README.md) | Four reference systems used to test every decision | Written |
+| Document                                             | Covers                                                                                           | Status                               |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------ |
+| [`rationale.md`](rationale.md)                       | Problems, prior art, direction (this document)                                                   | Living                               |
+| [`memory-and-resources.md`](memory-and-resources.md) | Ownership, borrows and view types, `.to_rc()`, linear resources, zero-copy I/O (§2.2)            | Decided direction                    |
+| [`concurrency.md`](concurrency.md)                   | CPU concurrency: sharing rules, structured tasks, sync cells, runtime contract (§2.8)            | Decided direction                    |
+| [`accelerators.md`](accelerators.md)                 | GPUs and accelerators: three kernel levels, devices and addressing, launches as tasks (§2.9)     | Decided direction                    |
+| [`mods.md`](mods.md)                                 | Mods, the core/mod boundary, standard-mod catalogue (R2)                                         | Decided direction                    |
+| [`error-handling.md`](error-handling.md)             | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§2.3)              | Partly decided; survey               |
+| [`correctness.md`](correctness.md)                   | Contracts, validated newtypes, property testing, fuzzing, verification, assurance levels (§2.7)  | Proposal                             |
+| [`comptime.md`](comptime.md)                         | Compile-time evaluation, reflection, typed derives, tagged-literal DSLs instead of macros (§2.6) | Decided direction                    |
+| [`bootstrap.md`](bootstrap.md)                       | Bootstrap compiler, self-hosting, backends, WASM engine support (R1)                             | Proposed                             |
+| [`examples/`](examples/README.md)                    | Four reference systems used to test every decision                                               | Written                              |
 
 ---
 
@@ -446,26 +447,36 @@ touch it; those who do are often tied to one vendor.
 - Portable performance is still mostly a myth. Schedules are tuned per device by hand.
 - Synchronisation between CPU and GPU (streams, fences, events) is manual and unchecked.
 
-**Directions.**
-- **One language, many targets.** Kernels are ordinary functions restricted to a subset (no allocation,
-  no unbounded recursion, …) that the compiler checks: a "kernel-safe" effect set.
-- **Memory space in the type**: `Buffer<f32, @device(gpu0)>` vs `Buffer<f32, @host>`. Transfers are
-  explicit operations; aliasing across spaces is a compile error. The same idea already covers NIC
-  DMA buffers (`@dma(nic0)`) in the zero-copy I/O design
-  ([`memory-and-resources.md`](memory-and-resources.md) §6), and device buffers follow the same
-  ownership rules as any other resource.
-- **Algorithm/schedule separation** (Halide-style) as a language feature, so the same algorithm can
-  carry several schedules per target, and LLMs or autotuners can propose schedules without touching the
-  algorithm.
-- **GPU work participates in structured concurrency**: a kernel launch is a task whose completion is a
-  value you can wait on, so fences and streams become scoped tasks.
-- Lower through **MLIR / SPIR-V / PTX / Metal IR** instead of building backends from scratch.
+**Decision** (detail: [`accelerators.md`](accelerators.md)).
+- **One language, three levels**, all ordinary Moddil restricted by a compiler-checked `kernel` effect
+  set (no heap allocation except scoped shared memory, no recursion, no rc, no suspension or I/O;
+  always specialised):
+  1. **tensor expressions** in `moddil/tensor`, whose graph is built at comptime and lowered to
+     XLA/ONNX/Core ML (the only route to NPUs and TPUs) or to generated kernels;
+  2. **tile kernels** (Triton-style), the default for custom kernels;
+  3. **SIMT kernels** for experts.
+- **Devices are capability values.** `main` receives `Devices`; libraries cannot enumerate hardware.
+  - A **CPU pool** over chosen cores is a device too (a "pseudo-GPU" with host memory).
+  - Buffers are **branded by their device** (`Buffer<T, g0>`), so mixing devices is a compile error;
+    `.erase()` gives a runtime-checked form.
+  - Code asks for **roles or requirements**; a deployment manifest binds them to hardware.
+- **Launches are structured tasks** that borrow inputs (`let`) and outputs (`mut`); the end of the
+  scope is the fence. CPU–GPU races and fence bugs are ruled out by the existing borrowing rules.
+- **Race-free kernels by default**: disjoint output tiles and atomics are safe; arbitrary scatter
+  writes need `unsafe`; the CPU simulator detects races.
+- **Algorithm/schedule separation**: schedules are comptime data per target; autotuning is an
+  offline tool whose output is embedded, so comptime stays pure.
+- **Runtimes are mods** handling the `gpu` effect. WebGPU (via naga) comes first, CUDA (via LLVM)
+  second; a CPU simulator gives GPU-free tests.
 
-**Open questions.**
-- How much of the CPU language is allowed in kernels? A strict subset, or a separate sub-language?
-- Is a single-source model realistic across NVIDIA, AMD, Apple and Intel, or should we target a
-  portable IR and accept a performance gap?
-- Should tensor/array types be built into the language (like Fortran/APL) or left to libraries?
+**Directions.**
+- MLIR for tensor-level optimisation if needed; vendor graph compilers for NPUs.
+- Feature tiers (subgroups, f16, tensor cores) as target capabilities checked at compile time.
+
+**Open questions** (more in [`accelerators.md`](accelerators.md) §14).
+- Autodiff: a comptime transformation or a tensor-mod feature?
+- Multi-GPU collectives as a library over placement (§2.10)?
+- Exact rules for device brands, and how they interact with views and generics.
 
 ---
 
@@ -1063,7 +1074,8 @@ removal.
 
 **Documents written** (see the document map at the top)
 - `specs/memory-and-resources.md`: ownership, borrows and views, rc, linear resources, zero-copy I/O (§2.2)
-- `specs/concurrency.md`: CPU part — sharing rules, structured concurrency, runtime contract (§2.8)
+- `specs/concurrency.md`: sharing rules, structured concurrency, runtime contract (§2.8)
+- `specs/accelerators.md`: GPUs and accelerators, devices and addressing, kernels (§2.9)
 - `specs/mods.md`: mods, core/mod boundary, standard-mod catalogue (R2)
 - `specs/error-handling.md`: `?`, try blocks, R3, outcome classes, traces (§2.3); survey of prior art
 - `specs/correctness.md`: contracts, testing and verification (§2.7); proposal
@@ -1074,7 +1086,6 @@ removal.
 **Documents still to write**
 - `specs/effects-and-capabilities.md`: the unifying mechanism (§2.1). Natural next step: both
   written specs lean on effects (suspension, scheduling, implicit context).
-- `specs/concurrency.md`, GPU part: kernels, memory spaces, launches as scoped tasks (§2.9)
 - `specs/packages-and-supply-chain.md`: §2.16
 - `specs/agent-interface.md`: compiler-as-a-service for LLMs (§2.18)
 - `specs/semantic-vcs.md`: diffs and review (§2.19)
