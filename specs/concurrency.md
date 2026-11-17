@@ -112,6 +112,7 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers (ration
   operation is an owner operation; scopes still work, with children interleaved on one thread.
 - **Deterministic simulation** (`moddil/runtime-sim`, rationale §2.11): the scheduler is a handler, so
   interleavings are seed-controlled and replayable.
+  See [`determinism.md`](determinism.md) for the simulation runtime, virtual time and record/replay.
 
 ## 7. Open questions
 

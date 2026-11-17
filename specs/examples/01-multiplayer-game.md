@@ -92,7 +92,8 @@ Initial targets, to be refined:
 ## Open questions
 
 - Is deterministic floating point across WASM and native achievable, or should shared simulation code
-  use fixed point?
+  use fixed point? ([`../determinism.md`](../determinism.md) §2 proposes strict IEEE floating point
+  plus a deterministic `moddil/math`, which would make it achievable.)
 - Is WebTransport sufficient everywhere, or is a WebRTC data-channel fallback required?
 - How much of the hub is a choreography, and how much is ordinary server code?
 - Is a game UI/HUD a use case for `moddil/ui`, or always custom-rendered?

@@ -18,6 +18,7 @@
 | [`mods.md`](mods.md)                                 | Mods, the core/mod boundary, standard-mod catalogue (R2)                                         | Decided direction                    |
 | [`error-handling.md`](error-handling.md)             | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§2.3)              | Partly decided; survey               |
 | [`correctness.md`](correctness.md)                   | Contracts, validated newtypes, property testing, fuzzing, verification, assurance levels (§2.7)  | Proposal                             |
+| [`determinism.md`](determinism.md) | Deterministic core, simulation testing, scoped handlers, record and replay, reproducible builds (§2.11) | Proposal |
 | [`comptime.md`](comptime.md)                         | Compile-time evaluation, reflection, typed derives, tagged-literal DSLs instead of macros (§2.6) | Decided direction                    |
 | [`bootstrap.md`](bootstrap.md)                       | Bootstrap compiler, self-hosting, backends, WASM engine support (R1)                             | Proposed                             |
 | [`examples/`](examples/README.md)                    | Four reference systems used to test every decision                                               | Written                              |
@@ -571,6 +572,11 @@ Today that means:
 
 ### 2.11 Determinism and reproducibility
 
+> Expanded in [`determinism.md`](determinism.md) (proposal): core semantics deterministic with all
+> nondeterminism entering through effects; strict IEEE floating point; scoped handlers for
+> per-node and per-subsystem injection; record and replay; reproducible builds. Lessons from
+> Hashiverse's hand-written time and transport seams.
+
 - **Problem.** Concurrent and distributed bugs are hard to reproduce.
 - **State of the art.** FoundationDB and TigerBeetle deterministic simulation testing; `rr` record and
   replay; Loom (Rust) model checking for concurrency.
@@ -1069,6 +1075,8 @@ removal.
    ownership, second-class borrows and view types, `.to_rc()` with biased RC, affine + linear
    resources (summary in §2.2).
 8. Effect system design: row-polymorphic (Koka) vs capability-passing vs hybrid.
+   [`determinism.md`](determinism.md) §4 recommends a hybrid: scoped handlers plus second-class
+   capability values.
 9. Canonical AST storage: text with canonical printing, or a structured store (Unison-style) with text
    as a view?
 
@@ -1079,6 +1087,7 @@ removal.
 - `specs/mods.md`: mods, core/mod boundary, standard-mod catalogue (R2)
 - `specs/error-handling.md`: `?`, try blocks, R3, outcome classes, traces (§2.3); survey of prior art
 - `specs/correctness.md`: contracts, testing and verification (§2.7); proposal
+- `specs/determinism.md`: determinism, simulation, scoped handlers, record and replay (§2.11); proposal
 - `specs/comptime.md`: compile-time evaluation, reflection, typed derives, tagged literals (§2.6)
 - `specs/bootstrap.md`: stage 0, self-hosting, backends, WASM support status (R1)
 - `specs/examples/`: the four reference systems

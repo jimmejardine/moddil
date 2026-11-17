@@ -109,6 +109,8 @@ exists for comptime.
 
 ### 3.7 Systematic concurrency testing
 
+See also [`determinism.md`](determinism.md) §3.
+
 Because scheduling is an effect, `runtime-sim` can explore task interleavings: random, PCT (a
 probabilistic strategy with good bug-finding guarantees), or exhaustive for small tests (Loom,
 shuttle, Coyote, FoundationDB). Every failure replays from a seed (rationale §2.11).
