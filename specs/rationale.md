@@ -9,24 +9,24 @@
 
 **Document map**
 
-| Document                                             | Covers                                                                                           | Status                               |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------ |
-| [`rationale.md`](rationale.md)                       | Problems, prior art, direction (this document)                                                   | Living                               |
-| [`memory-and-resources.md`](memory-and-resources.md) | Ownership, borrows and view types, `.to_rc()`, linear resources, zero-copy I/O (§2.2)            | Decided direction                    |
-| [`concurrency.md`](concurrency.md)                   | CPU concurrency: sharing rules, structured tasks, sync cells, runtime contract (§2.8)            | Decided direction                    |
-| [`accelerators.md`](accelerators.md)                 | GPUs and accelerators: three kernel levels, devices and addressing, launches as tasks (§2.9)     | Decided direction                    |
-| [`observability.md`](observability.md)               | Logging, spans, metrics as write-only effects; task-aware stacks; flight recorder; introspection (§2.12) | Decided direction            |
-| [`interop.md`](interop.md)                           | C ABI and Rust only: header import, overlays, generated Rust bridge, components, C++ via shims (§2.13) | Decided direction              |
-| [`docs-and-tests.md`](docs-and-tests.md)             | Checked and generated docs, examples as tests, attached tests and benchmarks, notes (§2.17, §2.18) | Decided direction                  |
-| [`mods.md`](mods.md)                                 | Mods, the core/mod boundary, standard-mod catalogue (R2)                                         | Decided direction                    |
-| [`error-handling.md`](error-handling.md)             | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§2.3)              | Partly decided; survey               |
-| [`correctness.md`](correctness.md)                   | Contracts, validated newtypes, property testing, fuzzing, verification, assurance levels (§2.7)  | Proposal                             |
-| [`determinism.md`](determinism.md) | Deterministic core, simulation testing, scoped handlers, record and replay, reproducible builds (§2.11) | Proposal |
-| [`build-times.md`](build-times.md) | Language rules for fast builds, query-based lazy compiler, no-link dev builds, default profiles, budgets (§2.14) | Proposal |
-| [`closures.md`](closures.md) | Lambdas that borrow, fail and suspend; parameter modes for closures; escaping closures (§2.8) | Mostly follows from decided direction |
-| [`comptime.md`](comptime.md)                         | Compile-time evaluation, reflection, typed derives, tagged-literal DSLs instead of macros (§2.6) | Decided direction                    |
-| [`bootstrap.md`](bootstrap.md)                       | Bootstrap compiler, self-hosting, backends, WASM engine support (R1)                             | Proposed                             |
-| [`examples/`](examples/README.md)                    | Four reference systems used to test every decision                                               | Written                              |
+| Document                                             | Covers                                                                                                           | Status                                |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| [`rationale.md`](rationale.md)                       | Problems, prior art, direction (this document)                                                                   | Living                                |
+| [`memory-and-resources.md`](memory-and-resources.md) | Ownership, borrows and view types, `.to_rc()`, linear resources, zero-copy I/O (§2.2)                            | Decided direction                     |
+| [`concurrency.md`](concurrency.md)                   | CPU concurrency: sharing rules, structured tasks, sync cells, runtime contract (§2.8)                            | Decided direction                     |
+| [`accelerators.md`](accelerators.md)                 | GPUs and accelerators: three kernel levels, devices and addressing, launches as tasks (§2.9)                     | Decided direction                     |
+| [`observability.md`](observability.md)               | Logging, spans, metrics as write-only effects; task-aware stacks; flight recorder; introspection (§2.12)         | Decided direction                     |
+| [`interop.md`](interop.md)                           | C ABI and Rust only: header import, overlays, generated Rust bridge, components, C++ via shims (§2.13)           | Decided direction                     |
+| [`docs-and-tests.md`](docs-and-tests.md)             | Checked and generated docs, examples as tests, attached tests and benchmarks, notes (§2.17, §2.18)               | Decided direction                     |
+| [`mods.md`](mods.md)                                 | Mods, the core/mod boundary, standard-mod catalogue (R2)                                                         | Decided direction                     |
+| [`error-handling.md`](error-handling.md)             | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§2.3)                              | Partly decided; survey                |
+| [`correctness.md`](correctness.md)                   | Contracts, validated newtypes, property testing, fuzzing, verification, assurance levels (§2.7)                  | Proposal                              |
+| [`determinism.md`](determinism.md)                   | Deterministic core, simulation testing, scoped handlers, record and replay, reproducible builds (§2.11)          | Proposal                              |
+| [`build-times.md`](build-times.md)                   | Language rules for fast builds, query-based lazy compiler, no-link dev builds, default profiles, budgets (§2.14) | Proposal                              |
+| [`closures.md`](closures.md)                         | Lambdas that borrow, fail and suspend; parameter modes for closures; escaping closures (§2.8)                    | Mostly follows from decided direction |
+| [`comptime.md`](comptime.md)                         | Compile-time evaluation, reflection, typed derives, tagged-literal DSLs instead of macros (§2.6)                 | Decided direction                     |
+| [`bootstrap.md`](bootstrap.md)                       | Bootstrap compiler, self-hosting, backends, WASM engine support (R1)                                             | Proposed                              |
+| [`examples/`](examples/README.md)                    | Four reference systems used to test every decision                                                               | Written                               |
 
 ---
 

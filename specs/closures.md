@@ -80,6 +80,8 @@ One implementation serves all cases; there is no `try_visit` or `visit_async`.
 
 ### Concurrency inside a visit
 
+A full worked example, `parallel_map`, is in [`concurrency.md`](concurrency.md) §5.1.
+
 ```
 index.visit_concurrent(limit: 8) { path, meta -> upload(path)? }
 ```
