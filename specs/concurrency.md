@@ -120,11 +120,54 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers (ration
   `on_cancel` consumer (e.g. rollback); or cancellation is deferred while linear values are live.
 - **Deadlock:** this model prevents data races, not deadlocks. Lock ordering by type? A lint? Lock
   levels (as in some kernels)? Or steer toward message passing?
-- **Async drop:** drop may not suspend. Is that enough for resources whose clean shutdown needs I/O
-  (e.g. flushing a TLS stream)? Probably: they become linear with an explicit `close`.
+- **Async drop:** drop may not suspend (§8). Is that enough for resources whose clean shutdown needs
+  I/O (e.g. flushing a TLS stream)? Probably: they become linear with an explicit `close`.
 - **Priority inversion** under the scheduler effect: does the core effect interface carry priority?
 - **Long-lived tasks:** what is the idiomatic shape for a server's top-level scope (accept loop with
   per-connection children) so that it reads naturally, not as a workaround for "no fire-and-forget"?
+
+## 8. Construction may suspend; drop may not
+
+**The problem elsewhere.** C#, JavaScript, Python, Java and C++ all forbid async constructors:
+1. `new T()` must produce a `T` synchronously. An async constructor would make it produce a
+   `Task<T>` or a promise instead.
+2. The object is allocated before the constructor runs, which only initialises `this`. An `async`
+   body is rewritten into a separate state machine, and that cannot initialise `this` or its
+   `readonly` fields.
+3. A constructor suspended at an `await` would expose a half-built `this` to anything that already
+   holds it (event handlers, virtual calls, stored references).
+4. Even if it were allowed, async colouring would spread to every `new` and every caller.
+
+The usual workarounds are a static `CreateAsync()` factory, a two-phase `InitAsync()` that leaves a
+usable-but-invalid object in between, and `Lazy<Task<T>>`. Each is awkward or leaves invalid states
+reachable.
+
+**Moddil's answer.** Two decisions remove the problem rather than working around it:
+- **No special constructors** ([`memory-and-resources.md`](memory-and-resources.md) §2). A value
+  exists only once an all-fields literal has been evaluated. Creators are ordinary functions.
+- **Suspension is an effect, not a colour** (§1).
+
+So async construction is simply a function that suspends:
+
+```
+fn connect(addr: let Addr) -> Conn ! {net, suspend, fail(NetError)} {
+    let socket  = tcp.connect(addr)     // may suspend
+    let session = handshake(socket)     // may suspend or fail; on failure, socket is dropped
+    Conn { socket, session }            // the Conn exists only from here, fully formed
+}
+```
+
+- Callers do not change colour; their signatures gain the effects, which are inferred inside a
+  module.
+- There is never a partial object. Before the literal there are only owned locals, and failure or
+  cancellation drops them (or requires linear ones to be consumed).
+- **Long-lived services** (the dependency-injection case) are built by suspending functions at the
+  top of a structured scope, or provided as effect handlers. Nothing like `Lazy<Task<T>>` is needed.
+
+**Drop never suspends.** Destruction runs on every exit path, including cancellation and traps, so
+it must be immediate and infallible. A resource whose teardown needs I/O is a **linear type** with an
+explicit `close()` or `commit()`, which may suspend and fail like any other function
+([`memory-and-resources.md`](memory-and-resources.md) §7).
 
 ## Prior art
 

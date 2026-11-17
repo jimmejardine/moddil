@@ -15,6 +15,7 @@
 | **rc is immutable inside** | Shared mutation only through thread-safe *sync cells* (`Mutex`, `Atomic<T>`, …). |
 | **Biased RC** | rc is always thread-safe, and nearly free when it stays on one thread. |
 | **Affine + linear resources** | Ordinary values auto-drop; *linear* values must be explicitly consumed. |
+| **No special constructors** | A value exists only once a literal has supplied every field. "Constructors" are ordinary functions, which may suspend or fail. |
 
 Together these give memory safety and data-race freedom without a GC, without `Send`/`Sync`
 traits and without lifetime annotations ([`concurrency.md`](concurrency.md) §2).
@@ -27,8 +28,21 @@ traits and without lifetime annotations ([`concurrency.md`](concurrency.md) §2)
 - This applies to **every resource**: memory, file handles, sockets, locks, GPU buffers, NIC ring
   slots. There is no raw `new`/`free` outside `unsafe`.
 - Moving transfers ownership; the source can no longer be used (checked at compile time).
-- **Drop must not suspend and must not fail.** Finalisation that can fail or needs a decision is a
-  linear type (§7).
+- **There are no special constructors.**
+  - A value comes into existence only through a literal that supplies every field, e.g.
+    `Conn { socket, session }`. This follows from definite initialisation (rationale §2.4).
+  - The literal is pure: it cannot suspend or fail.
+  - With private fields, only the type's own module can write the literal, so its creator
+    functions enforce the invariants.
+  - Creator functions (`connect`, `open`, `new`) are ordinary functions. They may suspend, fail and
+    acquire resources.
+  - There is no `this` before the literal, so a partially constructed object can never be observed.
+  - If creation fails or is cancelled midway, the resources acquired so far are owned locals and
+    are dropped. Linear ones must be consumed on that path (§7).
+  - The asymmetry is deliberate: creation may suspend, drop may not. Async teardown is a linear
+    type's explicit `close` or `commit` (§7, [`concurrency.md`](concurrency.md) §8).
+- **Drop must not suspend and must not fail.** The compiler checks this: a drop implementation has
+  an empty effect set. Finalisation that can fail or needs a decision is a linear type (§7, §7.1).
 - Unique ownership covers more than people expect: singly linked lists, trees, ASTs with owned
   children and builder patterns need no rc at all.
 
@@ -229,6 +243,52 @@ Rules:
   propagation (`?`) on a path holding a linear value requires an explicit handler for it
   (exact syntax open; see rationale §2.3).
 - Behaviour on **task cancellation** is open ([`concurrency.md`](concurrency.md) §7).
+
+### 7.1 Cleanup that can fail (why drop cannot)
+
+**The problem in C++.**
+- Destructors run during stack unwinding. If one throws while another exception is in flight, C++
+  cannot carry two exceptions and calls `std::terminate`.
+- Since C++11, destructors are implicitly `noexcept`, so a throw terminates even when nothing else
+  is in flight. The rule is enforced at runtime, by killing the process.
+- Cleanup can genuinely fail: `fclose` flushing to a full disk, a network filesystem reporting a
+  write error on close, a commit. Because destructors can't report it, libraries swallow the error,
+  and the program believes its data was written.
+- A throwing member destructor can leave the remaining members and bases uncleaned.
+
+**Elsewhere.**
+- Rust: `Drop` cannot return an error, a panic in drop while already panicking aborts, and
+  `BufWriter` silently discards flush errors on drop.
+- Go: `defer f.Close()` routinely ignores the error.
+- Java: try-with-resources is the best mainstream answer. It records a failing `close` as a
+  *suppressed* exception on the primary one.
+
+**Moddil's rules.**
+1. **Drop has an empty effect set, checked by the compiler.** A drop implementation cannot fail,
+   suspend, or call anything that does. C++'s `noexcept` becomes a compile error, not a
+   `std::terminate`.
+2. **Fallible cleanup is a linear type.** Written files, buffered writers, transactions and TLS
+   streams must be explicitly consumed (`close`, `commit`, `rollback`, `abort`). These are ordinary
+   functions that may fail and suspend. Since every path must consume the value, the cleanup error
+   is always reported.
+3. **Errors do not unwind.** `fail` is compiled to the return channel
+   ([`error-handling.md`](error-handling.md) §8, §11), so no error is "in flight" while drops run.
+   The double-fault mechanism does not exist.
+4. **Two errors at once are explicit, and nothing is lost.** On an error path, a linear value is
+   consumed by an `errdefer` (or a handler). If that cleanup fails too, its error is attached to the
+   primary error as **suppressed** rather than replacing it or terminating
+   ([`error-handling.md`](error-handling.md) §9).
+5. **Traps inside drop are crashes** (class 3: out of memory, ÷ 0, out of bounds). They terminate
+   with a full trace, as in Rust. They are honest, never silently swallowed.
+6. **No flush-on-drop trap.** A drop cannot call a fallible `flush`, so a type like Rust's
+   `BufWriter` must be linear, or its author must discard the error explicitly and visibly.
+
+```
+let out = fs.create(path)?           // linear: must be closed or aborted
+errdefer out.abort()                 // consumes out on error paths; if abort fails, its error is suppressed
+out.write(data)?
+out.close()?                         // a flush/close failure surfaces here, not in a destructor
+```
 
 ## 8. Cost table
 

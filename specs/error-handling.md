@@ -15,6 +15,8 @@
 | D6 | **Integer division traps, as in Rust**: `x / 0`, `x % 0`, `MIN / -1`. Same crash class as out-of-memory. |
 | D7 | **Indexing traps on out-of-bounds**; `get(i)` returns `Option`. Bounds checks are elided where the compiler proves the index is in range. |
 | D8 | **Resource exhaustion and faults are crashes**, not R3 violations: out of memory, stack overflow, `unreachable`, native FFI faults. |
+| D9 | **Drop cannot fail or suspend**: a drop implementation has an empty effect set, checked by the compiler. Cleanup that can fail is a linear type with an explicit `close`/`commit` (§9). |
+| D10 | **Cleanup failures during error handling are suppressed, not lost**: they are attached to the primary error (as in Java's try-with-resources), never replace it and never terminate (§9). |
 
 ## 2. Three outcome classes
 
@@ -264,6 +266,35 @@ write_body(file)?;
 fs.rename(tmp, final)?;
 ```
 
+### 9.1 Cleanup that can fail (D9, D10)
+
+C++ shows what goes wrong otherwise:
+- a destructor that throws during unwinding calls `std::terminate`, and since C++11 destructors are
+  implicitly `noexcept`;
+- so libraries swallow real cleanup errors (a failed flush on `fclose`), and data loss goes
+  unreported.
+
+Moddil avoids both:
+- **Drop has an empty effect set (D9).** It cannot fail, so there is nothing to throw. Fallible
+  cleanup is a linear type, which must be consumed explicitly on every path, so its error is always
+  reported ([`memory-and-resources.md`](memory-and-resources.md) §7.1).
+- **No unwinding for errors** (§8), so no error is in flight while drops run.
+- **Suppressed errors (D10).** When an error path consumes a linear value and that cleanup also
+  fails, the cleanup error is attached to the primary error:
+  - the primary error stays the one that propagates and is matched on;
+  - suppressed errors appear in traces (§6), in the language server (§7) and in logs;
+  - they can be read from the error value (exact API open), as Java's `getSuppressed()` allows;
+  - a failure inside an `errdefer` body is suppressed in this way automatically.
+
+```
+let txn = db.begin()?
+errdefer txn.rollback()        // consumes txn on error paths; a rollback failure is suppressed
+txn.insert(order)?             // fails: the insert error propagates, with any rollback error attached
+txn.commit()?
+```
+
+- **Traps inside drop** (class 3) terminate with a full trace (D8).
+
 ## 10. State of the art: what to take, what to avoid
 
 | Source | Take | Avoid / lesson |
@@ -272,7 +303,8 @@ fs.rename(tmp, final)?;
 | **Zig** | Inferred error sets; `try`/`catch`; **`errdefer`**; **error return traces** | No payloads on errors |
 | **Swift** | Visible `try` at call sites; typed throws (Swift 6, SE-0413); return-channel implementation; `rethrows` | Untyped `throws` by default (fixed late) |
 | **Midori** (Joe Duffy, *The Error Model*) | Errors vs bugs split; abandonment; marked call sites; checked exceptions done right | — (the key reading) |
-| **C++** | `std::expected` (C++23); P0709 static exceptions | Table-based exceptions (§8) |
+| **C++** | `std::expected` (C++23); P0709 static exceptions | Table-based exceptions (§8); throwing destructors call `std::terminate`, so cleanup errors get swallowed (§9.1) |
+| **Java try-with-resources** | **Suppressed exceptions**: a failing `close` is attached to the primary error (§9.1) | — |
 | **Roc / OCaml polymorphic variants** | **Open structural unions with payloads, inferred** | — |
 | **Koka / Effekt / OCaml 5** | Errors as effects; handlers; effect polymorphism | Resumable handlers for ordinary errors (cost) |
 | **Common Lisp conditions** | Restarts: recovery decided by the handler without unwinding | Complexity |

@@ -177,8 +177,8 @@ Each area follows the same template:
 
 ### 2.3 Error handling
 
-> Expanded in [`error-handling.md`](error-handling.md). Decided: Rust-style `?`, try blocks, and
-> **R3** (§5.1): no unhandled errors.
+> Expanded in [`error-handling.md`](error-handling.md). Decided: Rust-style `?`, try blocks,
+> **R3** (§5.1): no unhandled errors, and cleanup that cannot fail silently or fatally.
 
 - **Problem.** Exceptions hide control flow; error codes get ignored; `Result` types are explicit but
   noisy; panics/abort are coarse. Composing error types across libraries is painful (Rust's
@@ -191,6 +191,18 @@ Each area follows the same template:
   task, not the process, in structured concurrency). Error propagation must also respect linear
   values (§2.2): a path that propagates an error while holding an open transaction has to consume it.
   Absence is *not* an error: "not found" is an `Option` (§2.4), and `or_fail` converts explicitly.
+- **Decided: cleanup cannot fail silently or fatally.**
+  - In C++, a destructor that throws during unwinding calls `std::terminate`, and destructors are
+    `noexcept` by default. So libraries swallow real cleanup errors, such as a failed flush on close.
+  - In Moddil, **drop has an empty effect set**, checked by the compiler, so it cannot fail or
+    suspend.
+  - Cleanup that can fail is a **linear type** with an explicit `close`/`commit`, which every path
+    must call.
+  - Errors don't unwind, so there is never a second error in flight while drops run.
+  - If cleanup on an error path fails too, its error is **suppressed** onto the primary error (as in
+    Java's try-with-resources): it is never lost and never fatal.
+  - Details: [`error-handling.md`](error-handling.md) §9.1 and
+    [`memory-and-resources.md`](memory-and-resources.md) §7.1.
 - **Open question.** Checked-exception fatigue (Java) vs inference: how much should be inferred?
 
 ---
@@ -244,6 +256,8 @@ plus compiler-checked narrowing*, in one of two styles:
     ([`memory-and-resources.md`](memory-and-resources.md) §4).
   - Moving out of an `Option` is an ordinary move (`take()`).
 - **Definite initialisation:** no zero values, and no reads of uninitialised memory in safe code.
+  Values are created only by literals that supply every field; there are no special constructors
+  ([`memory-and-resources.md`](memory-and-resources.md) §2).
 - **Invalid states beyond null:**
   - **Cheap newtypes:** zero-cost and distinct, with no implicit conversion (`UserId` ≠ `OrderId`).
   - **Pattern/range types** (`u32 in 1..`): values that are excluded become free niches for `Option`.
@@ -364,6 +378,9 @@ ecosystems into "sync" and "async" halves.
 - Rust's guarantees come with a learning curve that is still the most common complaint about the
   language.
 - Cancellation is an afterthought almost everywhere.
+- **No async constructors** in C#, JavaScript, Python, Java or C++. The workarounds (`CreateAsync`
+  factories, two-phase `InitAsync`, `Lazy<Task<T>>`) give awkward APIs or leave invalid objects
+  reachable.
 
 **Decision** (detail: [`concurrency.md`](concurrency.md)).
 - **Data-race freedom by construction**, built on the memory model of §2.2:
@@ -379,6 +396,9 @@ ecosystems into "sync" and "async" halves.
   (stack switching, JSPI, …; see R1).
 - **Runtimes are mods** that handle the scheduling effect (R2). They also poll the biased-RC merge
   queue (§2.2).
+- **Construction may suspend; drop may not.** There are no special constructors, so creating a value
+  is an ordinary function that may suspend or fail. Async teardown is an explicit `close()` on a
+  linear type ([`concurrency.md`](concurrency.md) §8).
 
 **Directions.**
 - Actors, channels and thread-per-core sharding as library patterns built on these primitives, not
