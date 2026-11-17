@@ -1,6 +1,6 @@
 # Compile-time Evaluation (instead of Macros)
 
-> **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §3.4.
+> **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §2.6.
 > Snippets are **illustration only**; no syntax is committed.
 
 ## 1. Summary
@@ -48,8 +48,8 @@ Zig has no macro language. It has one idea: ordinary Zig code can be evaluated b
 **Gaps that matter for Moddil:**
 - **Duck-typed generics.** `anytype` and comptime `type` parameters have no declared bounds. As with
   C++ templates, errors appear at instantiation, deep inside library code, and a signature does not
-  say what it requires. That conflicts with local reasoning (rationale §2.6) and with debug-mode
-  dictionary passing (§2.4).
+  say what it requires. That conflicts with local reasoning (rationale §2.18) and with debug-mode
+  dictionary passing (§2.14).
 - **Lazy analysis.** Code that is never instantiated is never checked.
 - **No generated declarations.** `@Type` cannot create methods or attach an implementation to an
   existing type, so there is no `derive`. Consumers reflect at the call site instead.
@@ -67,21 +67,21 @@ Zig has no macro language. It has one idea: ordinary Zig code can be evaluated b
 ## 3. Evaluation model
 
 - Comptime code is **ordinary Moddil**: the same syntax, types, ownership rules and standard mods.
-- It must have an **empty effect set**, which the effect system checks (rationale §3.2).
+- It must have an **empty effect set**, which the effect system checks (rationale §2.1).
   - Allocation within the evaluator is allowed.
   - `fail` becomes a compile error.
   - Every other effect is rejected.
 - **Deterministic**: the same inputs always give the same output.
 - **Fuel-limited**: a default step budget, raisable per call site with a visible annotation.
 - **Errors**: `compile_error(msg, span)` reports a diagnostic at a source location chosen by the
-  comptime code, such as a position inside a literal. Diagnostics are structured, for agents (§2.6).
+  comptime code, such as a position inside a literal. Diagnostics are structured, for agents (§2.18).
 - **Sandboxed**: the evaluator has no ambient authority (R1 makes WASM the natural sandbox; see §13).
 - **Cached** by a hash of the function, its arguments and the reflected inputs it read. This makes it
-  fit the query-based, content-addressed compiler of §2.4.
+  fit the query-based, content-addressed compiler of §2.14.
 - **External inputs** (schemas, IDL files, protocol definitions) come only through `embed("path")`.
   - Embedded files are declared in the mod manifest.
   - They are hashed into the cache key.
-  - They are visible to audits (§2.5).
+  - They are visible to audits (§2.16).
 
 ## 4. Comptime parameters and values
 
@@ -108,7 +108,7 @@ fn max<T: Ord>(a: let T, b: let T) -> &T                   // the bound is part 
 - This preserves:
   - local reasoning: a signature tells you what is required;
   - debug builds with dictionary passing and release builds with specialisation, with identical
-    semantics (§2.4);
+    semantics (§2.14);
   - errors that point at the call site, not into library internals.
 
 ## 6. Static reflection
@@ -144,8 +144,8 @@ type Order {
 - Comptime functions can also return **types** (Zig-style, e.g. a struct-of-arrays layout computed
   from a struct), constants and specialised functions.
 - **Visible expansion:**
-  - `moddil explain Order` prints the generated impls as canonical source (§2.6).
-  - Expansions are part of the semantic diff (§2.7), so a derive version bump that changes generated
+  - `moddil explain Order` prints the generated impls as canonical source (§2.18).
+  - Expansions are part of the semantic diff (§2.19), so a derive version bump that changes generated
     code shows up in review.
 
 ## 8. Tagged string literals (embedded DSLs)
@@ -182,7 +182,7 @@ Generated code is ordinary code once expanded:
 ## 10. Security and supply chain
 
 - No code runs at build time with ambient authority. Comptime is pure and sandboxed, unlike
-  `build.rs`, proc macros or `postinstall` (§2.5).
+  `build.rs`, proc macros or `postinstall` (§2.16).
 - External inputs are declared (`embed`), hashed and auditable.
 - A malicious derive can still generate bad *code*. That code is visible in `explain` and in diffs,
   and is limited to the capabilities the consuming mod declares.
@@ -217,13 +217,13 @@ None of them needed token-level macros.
   - a hybrid of the two.
 - **Allocation:** what allocator does comptime use, and how does comptime data become static data in
   the binary?
-- **Budget:** what is the default fuel and the per-mod compile-time budget (§2.4)?
+- **Budget:** what is the default fuel and the per-mod compile-time budget (§2.14)?
 - **Ordering:** can one derive depend on another's output (e.g. `Hash` relying on `Eq`), and how are
   cycles detected?
 - **Reflection and privacy:** exactly which private details may a derive in another mod see?
 - **IDE responsiveness:** comptime must be incremental enough to run on every keystroke for agents
-  (§2.6).
-- **Construction API:** how expressive is it, and does it stay stable across editions (§3.11)?
+  (§2.18).
+- **Construction API:** how expressive is it, and does it stay stable across editions (§2.20)?
 
 ## Prior art
 

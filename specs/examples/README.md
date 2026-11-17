@@ -28,24 +28,24 @@ Section numbers refer to [`../rationale.md`](../rationale.md).
 
 | Problem area | Game | HFT | Store | Hashiverse |
 |---|---|---|---|---|
-| §2.1 CPU concurrency | ● | ● | ○ | ● (parallel PoW) |
-| §2.2 GPU | ● (WebGPU) | ● (research) | | |
-| §2.3 Memory / resources | ○ | ● (zero-alloc hot path) | ○ | ○ |
-| §2.4 Build times | ○ | ○ | ● (large app team) | ○ |
-| §2.5 Supply chain / capabilities | ○ | ● (`order` capability) | ● (`payments`) | ● (untrusted peers) |
-| §2.6 LLM-friendliness | ○ | ○ | ● (CRUD volume) | ○ |
-| §2.7 Semantic diffs / review | ○ | ● (audited algos) | ● | ○ |
-| §2.8 C/C++/Rust interop | ○ | ● (kernel bypass, exchange SDKs) | ○ (mobile platform APIs) | ● (existing Rust code) |
-| §2.9 Distributed / multi-tier | ● | ● | ● | ● (P2P) |
+| §2.1 Effects and handlers | ○ | ● (sim ↔ live) | ○ | ● (pluggable transport/time/storage) |
+| §2.2 Memory / resources | ○ | ● (zero-alloc hot path) | ○ | ○ |
+| §2.3 Error handling | ○ | ● | ○ | ○ |
+| §2.5 Numerics | ○ | ● (decimal, SIMD) | ○ (money) | ○ (crypto) |
+| §2.7 Contracts / verification | | ● (risk checks) | ○ | ○ |
+| §2.8 CPU concurrency | ● | ● | ○ | ● (parallel PoW) |
+| §2.9 GPU | ● (WebGPU) | ● (research) | | |
+| §2.10 Distributed / multi-tier | ● | ● | ● | ● (P2P) |
+| §2.11 Deterministic simulation | ● | ● | ○ | ● |
+| §2.13 C/C++/Rust interop | ○ | ● (kernel bypass, exchange SDKs) | ○ (mobile platform APIs) | ● (existing Rust code) |
+| §2.14 Build times | ○ | ○ | ● (large app team) | ○ |
+| §2.16 Supply chain / capabilities | ○ | ● (`order` capability) | ● (`payments`) | ● (untrusted peers) |
+| §2.18 LLM-friendliness | ○ | ○ | ● (CRUD volume) | ○ |
+| §2.19 Semantic diffs / review | ○ | ● (audited algos) | ● | ○ |
 | R1 WASM | ● (browser client) | | ● (web client) | ● (browser client) |
-| §3.1 Error handling | ○ | ● | ○ | ○ |
-| §3.2 Effects and handlers | ○ | ● (sim ↔ live) | ○ | ● (pluggable transport/time/storage) |
-| §3.5 Contracts / verification | | ● (risk checks) | ○ | ○ |
-| §3.6 Deterministic simulation | ● | ● | ○ | ● |
-| §3.10 Numerics | ○ | ● (decimal, SIMD) | ○ (money) | ○ (crypto) |
 | Mobile (iOS/Android) | | | ● | |
 
-No problem area is left unexercised. §2.2 GPU is the thinnest; if research workloads in the HFT
+No problem area is left unexercised. §2.9 GPU is the thinnest; if research workloads in the HFT
 example are not enough, a fifth GPU-heavy example (e.g. ML inference) may be added.
 
 ## Coverage: examples × standard mods

@@ -1,6 +1,6 @@
 # Mods: Small Core, Big Library
 
-> **Status:** brainstorm. Implements requirement **R2** in [`rationale.md`](rationale.md) §6.1.
+> **Status:** brainstorm. Implements requirement **R2** in [`rationale.md`](rationale.md) §5.1.
 
 ## 1. Idea
 
@@ -17,21 +17,21 @@ networking, crypto, runtimes, GPU support and UI, comes from **mods**:
   (a different runtime, a different collections library).
 
 Why a small core:
-- **The language stays learnable**, for humans and LLMs (§2.6). The stable surface is small.
+- **The language stays learnable**, for humans and LLMs (§2.18). The stable surface is small.
 - **Evolution happens in libraries**, which can be versioned, forked and replaced. The core changes
-  rarely (§3.11).
-- **Build times** (§2.4): the core does not drag in code you don't use.
+  rarely (§2.20).
+- **Build times** (§2.14): the core does not drag in code you don't use.
 - **No privileged magic**: if a standard mod can do it, a community mod can do it too.
 
 ## 2. What a mod is
 
 A mod is the unit of:
-- **Versioning**: semver, with editions for the language (§3.11).
-- **Compilation and caching** (§2.4): interface hash vs implementation hash.
-- **Capabilities** (§2.5): the manifest declares which capabilities the mod may require (`net`, `fs`,
+- **Versioning**: semver, with editions for the language (§2.20).
+- **Compilation and caching** (§2.14): interface hash vs implementation hash.
+- **Capabilities** (§2.16): the manifest declares which capabilities the mod may require (`net`, `fs`,
   `ffi`, `gpu`, `unsafe`, …). The compiler rejects any use beyond them.
 - **Targets**: native, WASM (R1), GPU-kernel-safe, and so on. A mod declares which targets it supports.
-- **Audit** (§2.5): reviews and attestations attach to a mod version.
+- **Audit** (§2.16): reviews and attestations attach to a mod version.
 
 Illustrative manifest (syntax not decided):
 
@@ -63,13 +63,13 @@ Candidate core list (to be argued over):
 | Core | Why core |
 |---|---|
 | Primitive types, structs, sum types, generics | Needed to define anything |
-| Ownership, borrowing / linearity | Compiler-checked (§2.3) |
-| Effects and handlers (definition and checking) | Compiler-checked; the extension mechanism for everything else (§3.2) |
-| Capabilities | Compiler-checked (§2.5) |
-| Placement annotations | Compiler-checked (§2.2, §2.9) |
+| Ownership, borrowing / linearity | Compiler-checked (§2.2) |
+| Effects and handlers (definition and checking) | Compiler-checked; the extension mechanism for everything else (§2.1) |
+| Capabilities | Compiler-checked (§2.16) |
+| Placement annotations | Compiler-checked (§2.9, §2.10) |
 | Structured concurrency *interface* (task scopes, cancellation, the `suspend` effect) | Compiler-checked; must be shared by all runtimes |
-| Contracts | Compiler-checked (§3.5) |
-| Compile-time evaluation, static reflection | Needed to define mods (§3.4) |
+| Contracts | Compiler-checked (§2.7) |
+| Compile-time evaluation, static reflection | Needed to define mods (§2.6) |
 | Intrinsics: atomics, SIMD primitives, C ABI / FFI | Not expressible otherwise |
 
 Everything else is a mod, **including the scheduler, the allocator implementations, I/O and the
@@ -86,11 +86,11 @@ ecosystem that partly fragmented.
 
 - `moddil/runtime`: the standard multi-threaded work-stealing runtime.
 - `moddil/runtime-wasm`: browser/WASI runtime using stack switching and JSPI (R1).
-- `moddil/runtime-sim`: deterministic simulation runtime (§3.6).
+- `moddil/runtime-sim`: deterministic simulation runtime (§2.11).
 - A community `fastrt` (the tokio-equivalent): a different scheduler, io_uring, thread-per-core, etc.
 
 Because libraries only use the *effects*, **every library works on every runtime**. Swapping the
-runtime is a choice in `main` (or in the deployment manifest, §2.9), not a choice made by the whole
+runtime is a choice in `main` (or in the deployment manifest, §2.10), not a choice made by the whole
 dependency tree.
 
 The same mechanism generalises the pluggable traits that real projects build by hand. Hashiverse,
@@ -104,7 +104,7 @@ Moddil these are effects, and the test versions are handlers.
 |---|---|---|---|
 | Core-adjacent | `moddil/core-*` | Ships with the compiler; tiny; changes only with editions | `core-fmt`, `core-collections` (Vec, Map), `core-text` |
 | Standard | `moddil/*` | Curated, RFC process, capability review, audited, edition-aware | `moddil/net`, `moddil/crypto`, `moddil/gpu` |
-| Community | anyone | Registry rules only (§2.5) | `fastrt`, `hashiverse/protocol` |
+| Community | anyone | Registry rules only (§2.16) | `fastrt`, `hashiverse/protocol` |
 
 **Promotion path:** a community mod that becomes a de facto standard can be proposed for `moddil/`
 (the Boost → C++ standard library path). Standard mods can also be **deprecated** and moved out,
@@ -122,20 +122,20 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 | `moddil/serde` | Serialisation framework; binary and JSON formats; schema evolution; zero-copy validated views ([`memory-and-resources.md`](memory-and-resources.md) §6) | G H W X |
 | `moddil/fs` / `moddil/io` | Files, streams, buffers | H W X |
 | `moddil/net` | TCP, UDP, TLS, HTTP/1-2-3, WebSocket, WebTransport | G H W X |
-| `moddil/rpc` | Compiler-generated wire contracts, version compatibility (§2.9) | G H W X |
+| `moddil/rpc` | Compiler-generated wire contracts, version compatibility (§2.10) | G H W X |
 | `moddil/time` | Clocks, monotonic time, time zones, high-resolution timestamps | G H W X |
 | `moddil/runtime`, `-wasm`, `-sim` | Effect handlers for scheduling and I/O (§4) | G H W X |
 | `moddil/sync` | Sync cells (`Atomic<T>`, `AtomicRc<T>`, `Mutex`, `RwLock`), channels, lock-free queues (SPSC/MPMC) ([`concurrency.md`](concurrency.md) §4) | G H X |
 | `moddil/alloc` | Arenas, pools, bump allocators, allocator capability | G H |
 | `moddil/crypto` | Ed25519, ML-DSA, FN-DSA, Blake2/3, SHA-2/3, ChaCha20-Poly1305, TLS primitives | W X |
 | `moddil/simd`, `moddil/tensor` | Portable SIMD, n-d arrays | G H X |
-| `moddil/gpu` | Kernels, memory spaces, WebGPU/Vulkan/Metal/CUDA backends (§2.2) | G H |
+| `moddil/gpu` | Kernels, memory spaces, WebGPU/Vulkan/Metal/CUDA backends (§2.9) | G H |
 | `moddil/decimal` | Fixed-point and decimal arithmetic | H W |
 | `moddil/sql` | Typed SQL, schemas, migrations, connection pools | H W |
 | `moddil/timeseries` | Columnar storage, compression, tick data | H |
-| `moddil/sim` | Deterministic simulation: network, time, faults (§3.6) | G H W X |
+| `moddil/sim` | Deterministic simulation: network, time, faults (§2.11) | G H W X |
 | `moddil/test`, `moddil/prop`, `moddil/bench` | Test runner, property-based testing, benchmarks | G H W X |
-| `moddil/log`, `moddil/trace` | Structured logging and tracing (§3.7) | G H W X |
+| `moddil/log`, `moddil/trace` | Structured logging and tracing (§2.12) | G H W X |
 | `moddil/web` | Browser APIs, DOM, JS interop for the `wasm-browser` target | G W X |
 | `moddil/storage` | Key-value storage: SQLite, IndexedDB, files | W X |
 | `moddil/ui` | Cross-platform UI (**open question**, see [`examples/03-web-store.md`](examples/03-web-store.md)) | G W X |
@@ -145,16 +145,16 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 
 - **RFCs** for new standard mods and breaking changes.
 - **Capability review**: any increase in a standard mod's declared capabilities needs review.
-- **Audit trail** (§2.5): standard mod releases are reproducibly built, signed, and reviewed. The
+- **Audit trail** (§2.16): standard mod releases are reproducibly built, signed, and reviewed. The
   review record says whether the reviewer was a human or an agent.
-- **Wrappers are allowed**: a mod may wrap a C or Rust library (§2.8), but it carries the `ffi`
+- **Wrappers are allowed**: a mod may wrap a C or Rust library (§2.13), but it carries the `ffi`
   capability, which is visible to every consumer.
-- **Editions**: standard mods follow language editions, with automated migrations (§3.11).
+- **Editions**: standard mods follow language editions, with automated migrations (§2.20).
 
 ## 8. Open questions
 
 - **How many batteries?** Go ships a broad standard library (HTTP, crypto, JSON); Rust ships a minimal
-  one. With strong supply-chain controls (§2.5), a broad `moddil/` set reduces risky third-party
+  one. With strong supply-chain controls (§2.16), a broad `moddil/` set reduces risky third-party
   dependencies. Which way should Moddil lean?
 - **Distribution**: should standard mods ship with the toolchain, or be fetched and pinned like
   any other mod?

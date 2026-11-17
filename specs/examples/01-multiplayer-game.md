@@ -44,24 +44,24 @@ point is a real-time, authoritative-server architecture of the kind used by most
 
 - **WASM in the browser (R1)**: binary size, start-up time, stack switching + JSPI for suspending on
   browser APIs.
-- **GPU (§2.2)**: rendering and possibly particle/physics kernels through the WebGPU/WGSL path. The same
+- **GPU (§2.9)**: rendering and possibly particle/physics kernels through the WebGPU/WGSL path. The same
   kernel code could run server-side for authoritative physics.
-- **Placement and the `remote` effect (§2.9)**: the client/hub/chat split in one program. Unreliable vs
+- **Placement and the `remote` effect (§2.10)**: the client/hub/chat split in one program. Unreliable vs
   reliable channels must be distinguishable in types (an unreliable send can be lost; the type system
   should say so).
-- **Choreographies (§2.9)**: the join → match → play protocol written once from a global view and
+- **Choreographies (§2.10)**: the join → match → play protocol written once from a global view and
   projected to `@client`, `@hub` and `@chat`.
-- **Untrusted client (§2.9)**: all data from `@client` is untrusted; the hub is authoritative. Anti-cheat
+- **Untrusted client (§2.10)**: all data from `@client` is untrusted; the hub is authoritative. Anti-cheat
   starts with the type system refusing to let client-claimed state flow into authoritative state
   without validation.
 - **Shared code across tiers**: game rules and the simulation step run in *both* `@client` (prediction)
   and `@hub` (authority). They must compile to WASM and native and give **bit-identical results**
-  (deterministic floating point or fixed point, §3.10).
-- **Structured concurrency (§2.1)**: one task scope per match and per room. When a match ends, all its
+  (deterministic floating point or fixed point, §2.5).
+- **Structured concurrency (§2.8)**: one task scope per match and per room. When a match ends, all its
   tasks end with it.
-- **Deterministic simulation (§3.6)**: run hub + chat + N simulated clients in one process, with
+- **Deterministic simulation (§2.11)**: run hub + chat + N simulated clients in one process, with
   simulated latency, packet loss and disconnects, replayable from a seed.
-- **Hot reload (§2.4)**: change game rules or rendering without restarting the client.
+- **Hot reload (§2.14)**: change game rules or rendering without restarting the client.
 
 ## Success criteria
 
@@ -86,7 +86,7 @@ Initial targets, to be refined:
 ## Interop and non-Moddil parts
 
 - Browser APIs (WebGPU, WebTransport, WebRTC, input, audio) through `moddil/web`.
-- Possibly an existing physics engine (C/C++/Rust) compiled to WASM and linked as a component (§2.8, R1).
+- Possibly an existing physics engine (C/C++/Rust) compiled to WASM and linked as a component (§2.13, R1).
 - Authentication through a standard identity provider (OAuth/OIDC).
 
 ## Open questions

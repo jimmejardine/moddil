@@ -1,6 +1,6 @@
 # Memory and Resources
 
-> **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §2.3 and is the
+> **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §2.2 and is the
 > foundation for CPU concurrency in [`concurrency.md`](concurrency.md). Snippets are **illustration
 > only**; no syntax is committed.
 
@@ -51,7 +51,7 @@ by pointer**, whichever is cheaper (as Swift and Hylo do). Small types travel in
 - A source cannot be mutated, moved or dropped while a borrow of it is live.
 - Checking is **intraprocedural** and flow-sensitive (NLL-style): a borrow ends at its last use.
   Function signatures carry everything a caller needs, so checking stays local and incremental
-  (rationale §2.4).
+  (rationale §2.14).
 - **Non-escaping closures** may capture borrows (Swift's model). Escaping closures capture by move
   or rc.
 
@@ -98,7 +98,7 @@ view SymbolTable { map: Map<Name, &Node> }
 ```
 
 An alternative to context objects that fits Moddil especially well: things like `Config` and
-`DbPool` can be **effects/capabilities** provided by a handler higher up (rationale §3.2), giving
+`DbPool` can be **effects/capabilities** provided by a handler higher up (rationale §2.1), giving
 implicit context with no parameter threading, still visible in signatures.
 
 ### 4.1 Known limitations (accepted)
@@ -176,12 +176,12 @@ Goal: data arrives from a NIC (or disk, or GPU) and is consumed without ever bei
 
 1. **The buffer is an owned resource.** The NIC DMA-writes into pool memory (io_uring provided
    buffers, AF_XDP UMEM, DPDK mbufs). The runtime/net mod hands out a `Packet`: a unique value whose
-   type carries its memory space (e.g. `Buffer<@dma(nic0)>`, rationale §2.2). Dropping it returns
+   type carries its memory space (e.g. `Buffer<@dma(nic0)>`, rationale §2.9). Dropping it returns
    the slot to the ring. Moving it moves a pointer and a length.
 2. **Validate once, access in place.** `moddil/serde` uses compile-time reflection to generate
    accessor views over the bytes (FlatBuffers / Cap'n Proto / SBE style). Validation happens once at
    the boundary and produces a validated type, which also implements the untrusted-data rule of
-   rationale §2.9.
+   rationale §2.10.
 3. **Choose a carrier:**
 
 | Case | Carrier | Cost |
@@ -227,7 +227,7 @@ Rules:
   and it may be on any thread.
 - Every control-flow path, including error propagation, must consume a linear value. Error
   propagation (`?`) on a path holding a linear value requires an explicit handler for it
-  (exact syntax open; see rationale §3.1).
+  (exact syntax open; see rationale §2.3).
 - Behaviour on **task cancellation** is open ([`concurrency.md`](concurrency.md) §7).
 
 ## 8. Cost table
@@ -256,11 +256,11 @@ No case required first-class references with explicit lifetimes.
 ## 10. Open questions
 
 - Exact syntax for parameter modes, views and `from`.
-- Allocators: how does the allocator capability (rationale §2.3, Zig-style) interact with `.to_rc()`
+- Allocators: how does the allocator capability (rationale §2.2, Zig-style) interact with `.to_rc()`
   and arenas? Does an `Rc` remember its allocator?
 - Should `Weak` be core or a mod? (It needs header support, so probably core.)
 - Linear values on error paths: what is the least noisy explicit handling?
-- Can the borrow check give diagnostics good enough for LLM agents (rationale §2.6) — e.g.
+- Can the borrow check give diagnostics good enough for LLM agents (rationale §2.18) — e.g.
   machine-applicable "insert `.to_rc()` here" fixes?
 
 ## Prior art

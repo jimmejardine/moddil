@@ -41,34 +41,34 @@ data, time and order routing are effects, and only their handlers differ.
 3. **Backtest**: `@research` replays historical data from `@store` through the *same* strategy mod, with
    simulated time, a simulated order book and a simulated exchange (fills, latency, queue position).
 4. **Promote**: a strategy version that passes research is promoted to `@execution`. The review shows
-   its semantic diff (§2.7) and capability set.
+   its semantic diff (§2.19) and capability set.
 5. **Replay**: a trading day can be replayed bit for bit for post-trade analysis and incident review.
 
 ## Moddil features this stresses
 
-- **Effects and handlers as the core architecture (§3.2, §3.6).** A strategy is written against
+- **Effects and handlers as the core architecture (§2.1, §2.11).** A strategy is written against
   effects such as `market_data`, `clock` and `orders`:
   - live handlers: kernel-bypass feed, hardware clock, exchange gateway;
   - research handlers: historical replay, simulated clock, simulated exchange.
 
   The strategy code is identical in both. This is the clearest demonstration of why effects belong in
   the core language.
-- **Capabilities (§2.5).** Research code physically cannot reach the live `orders` capability; only a
+- **Capabilities (§2.16).** Research code physically cannot reach the live `orders` capability; only a
   deployment to `@execution` grants it. A third-party analytics mod cannot touch the network.
-- **Predictable latency (§2.3).** No GC; arenas and pools; **a "no allocation" effect** that the
+- **Predictable latency (§2.2).** No GC; arenas and pools; **a "no allocation" effect** that the
   compiler can check on the hot path; no hidden locks; core pinning and NUMA-aware placement.
-- **Lock-free concurrency (§2.1).** SPSC/MPMC rings between feed, strategy and gateway threads;
+- **Lock-free concurrency (§2.8).** SPSC/MPMC rings between feed, strategy and gateway threads;
   thread-per-core designs; busy-polling.
-- **C/C++ interop (§2.8).** Kernel-bypass NIC libraries (e.g. DPDK, ef_vi/Onload-style APIs), exchange
+- **C/C++ interop (§2.13).** Kernel-bypass NIC libraries (e.g. DPDK, ef_vi/Onload-style APIs), exchange
   SDKs and FIX engines are typically C/C++. Calls must be zero-overhead.
-- **GPU (§2.2).** Research-side simulations, option pricing, ML training and inference.
-- **Numerics (§3.10).** Fixed-point/decimal prices, units (price vs quantity vs notional), SIMD for
+- **GPU (§2.9).** Research-side simulations, option pricing, ML training and inference.
+- **Numerics (§2.5).** Fixed-point/decimal prices, units (price vs quantity vs notional), SIMD for
   book updates and analytics, defined overflow behaviour.
-- **Contracts (§3.5).** Pre-trade risk limits as contracts: position limits, price collars, rate limits.
+- **Contracts (§2.7).** Pre-trade risk limits as contracts: position limits, price collars, rate limits.
   These are checked at runtime, and ideally proven for the risk module.
-- **Error handling (§3.1).** No unexpected panics in the trading path; failures are explicit and
+- **Error handling (§2.3).** No unexpected panics in the trading path; failures are explicit and
   handled (e.g. a kill switch on any unknown state).
-- **Review and audit (§2.6, §2.7).** Every change to a live algo is reviewed against a semantic diff;
+- **Review and audit (§2.18, §2.19).** Every change to a live algo is reviewed against a semantic diff;
   provenance (who or what wrote it, which model) is recorded for compliance.
 
 ## Success criteria

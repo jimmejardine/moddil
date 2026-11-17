@@ -1,6 +1,6 @@
 # Concurrency across CPUs
 
-> **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §2.1 and builds on
+> **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §2.8 and builds on
 > [`memory-and-resources.md`](memory-and-resources.md). Snippets are **illustration only**.
 
 ## 1. Summary
@@ -12,7 +12,7 @@ Moddil gets **data-race freedom by construction** from three ingredients:
    cells.
 2. **Structured concurrency as the only way to start a task**: every task has a parent scope and
    finishes before that scope ends.
-3. **Suspension is an effect**, not a function colour (rationale §2.1, §3.2).
+3. **Suspension is an effect**, not a function colour (rationale §2.8, §2.1).
 
 ## 2. No `Send` / `Sync`
 
@@ -29,7 +29,7 @@ has none:
 
 So **every type is sendable**, and there are no auto traits to learn, infer, or get wrong in
 generic bounds. The one exception is `unsafe` code, which must uphold these rules itself (and is
-visible in capabilities, rationale §2.5).
+visible in capabilities, rationale §2.16).
 
 ## 3. Tasks and borrowing
 
@@ -65,7 +65,7 @@ Rules:
   `Rc` somewhere that outlives the borrow (e.g. in a value it sends on a channel).
 - Long-lived tasks (e.g. a server's per-connection tasks, children of an accept-loop scope near the
   top of `main`) still borrow from that top-level frame, or receive owned values and `Rc`s.
-- Cancellation and errors propagate through scopes as defined by the language (rationale §2.1).
+- Cancellation and errors propagate through scopes as defined by the language (rationale §2.8).
 
 ## 4. Shared mutable state
 
@@ -99,7 +99,7 @@ boundaries by accident. Holding a lock across a suspension point is allowed but 
 ## 6. Runtime contract
 
 Scheduling is a core **effect**; runtimes are mods that provide handlers (rationale R2,
-[`mods.md`](mods.md) §4). The memory model adds obligations for runtime handlers:
+[`mods.md`](mods.md) §3). The memory model adds obligations for runtime handlers:
 
 - **Biased-RC merge queue:** each worker thread must poll its queue of objects whose last shared
   reference was dropped elsewhere. The runtime chooses when (between tasks, on idle, on a timer).
@@ -107,7 +107,7 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers (ration
   old thread; correctness is unaffected, only the fast path is lost.
 - **Single-threaded targets** (browser WASM without cross-origin isolation, rationale R1): every rc
   operation is an owner operation; scopes still work, with children interleaved on one thread.
-- **Deterministic simulation** (`moddil/runtime-sim`, rationale §3.6): the scheduler is a handler, so
+- **Deterministic simulation** (`moddil/runtime-sim`, rationale §2.11): the scheduler is a handler, so
   interleavings are seed-controlled and replayable.
 
 ## 7. Open questions

@@ -1,7 +1,7 @@
 # Error Handling
 
-> **Status:** survey + partial decisions. Expands [`rationale.md`](rationale.md) §3.1 and defines
-> requirement **R3** (§6.1). Decisions made so far are marked **Decided**; everything else is open.
+> **Status:** survey + partial decisions. Expands [`rationale.md`](rationale.md) §2.3 and defines
+> requirement **R3** (§5.1). Decisions made so far are marked **Decided**; everything else is open.
 
 ## 1. Decisions so far
 
@@ -10,7 +10,7 @@
 | D1 | **Rust-style `?`** for propagation. Chained `?` propagates at every step. |
 | D2 | **Try blocks**: `try { … }` is an expression that scopes `?`. |
 | D3 | **R3: no crash from an unhandled, language-known error.** An unhandled error at any entry point or call site is a **compile-time error**. |
-| D4 | **No fire-and-forget tasks.** Every spawned task is awaited by its enclosing scope (structured concurrency, §2.1). |
+| D4 | **No fire-and-forget tasks.** Every spawned task is awaited by its enclosing scope (structured concurrency, §2.8). |
 | D5 | **Arithmetic is unchecked.** Integers wrap (two's complement, no UB); floats follow IEEE 754 (NaN, ±∞). |
 | D6 | **Integer division traps, as in Rust**: `x / 0`, `x % 0`, `MIN / -1`. Same crash class as out-of-memory. |
 | D7 | **Indexing traps on out-of-bounds**; `get(i)` returns `Option`. Bounds checks are elided where the compiler proves the index is in range. |
@@ -35,7 +35,7 @@ Notes:
   `NonZero` type). `checked_div` returns `Option`.
 - **Wrapping arithmetic (D5)** is fast but can silently produce wrong values. `checked_*`,
   `saturating_*` and `wrapping_*` operations live in a mod, and debug sanitisers can be optional tooling.
-- **Open:** do failed contract assertions (§3.5) trap (class 3), or raise an error (class 1)?
+- **Open:** do failed contract assertions (§2.7) trap (class 3), or raise an error (class 1)?
 
 ## 3. Results and effects
 
@@ -50,7 +50,7 @@ Notes:
 `fn parse(s) -> Config ! fail(ParseError)`. Raising performs the `fail` effect; a handler further up
 the stack decides what happens. Because functions can be **generic over effects**, one higher-order
 function works for fallible and infallible callers alike (§3.2). It is the same mechanism as Moddil's
-other effects (§3.2 of the rationale).
+other effects (rationale §2.1).
 
 **Moddil has both, linked:**
 ```
@@ -145,7 +145,7 @@ Every **entry point** must have an *empty* failure set:
 - `main` (it returns an explicit exit status, never an escaped error);
 - task bodies at spawn;
 - exported and FFI functions and callbacks;
-- tier endpoints (`@server` handlers etc., §2.9);
+- tier endpoints (`@server` handlers etc., §2.10);
 - effect handlers.
 
 If anything remains, compilation fails, and the error lists each unhandled variant with the chain of
@@ -153,7 +153,7 @@ If anything remains, compilation fails, and the error lists each unhandled varia
 
 **Ignored results:** dropping a `Result` silently is a compile error (not a warning, as `must_use` is
 in Rust). *Open:* is an explicit discard allowed at all, and should it require a reason string, such
-as `discard(r, "best-effort cache warm")`, so it is visible in reviews and semantic diffs (§2.7)?
+as `discard(r, "best-effort cache warm")`, so it is visible in reviews and semantic diffs (§2.19)?
 
 ### 4.5 Tasks and concurrency
 
@@ -173,8 +173,8 @@ inference:
 - Unlike Rust, no `From` conversions are needed to combine errors from different sources; the sets
   simply union.
 - **Explicit at mod boundaries.** Public functions of a mod declare their error set (consistent with
-  rationale §3.2 and §2.6). Inference stays local, which helps incremental builds (§2.4) and makes
-  semantic diffs meaningful ("`parse()` can now fail with `Io`", §2.7).
+  rationale §2.1 and §2.18). Inference stays local, which helps incremental builds (§2.14) and makes
+  semantic diffs meaningful ("`parse()` can now fail with `Io`", §2.19).
 - Named error types are still possible for documentation and reuse.
 
 *Open:* how to attach context (`.context("loading config")`, as in `anyhow`) without losing the
@@ -190,7 +190,7 @@ structured variant?
 - **Origin capture** (Rust's `Backtrace`): opt-in per error type or in debug builds, since a full stack
   walk is expensive.
 - **Async-aware:** traces include the chain of task spawn sites; across tiers they link through trace
-  IDs (§2.9, §3.7).
+  IDs (§2.10, §2.12).
 - **Traps (class 3)** always capture a full trace.
 
 ## 7. Language server support
@@ -252,7 +252,7 @@ this rare path. *Open.*
 
 ## 9. Cleanup
 
-- RAII / linear types (§2.3) clean up on every path.
+- RAII / linear types (§2.2) clean up on every path.
 - **`errdefer`** (Zig): cleanup that runs only when the scope exits with an error, for example rolling
   back a half-built structure.
 
@@ -304,7 +304,7 @@ fs.rename(tmp, final)?;
 5. Should a resumable recovery effect ("retry"/"default") exist as a separate effect?
 6. How is context attached to structured errors (§5)?
 7. Is `Option` part of the same machinery (`?` on `Option`, as in Rust)?
-8. Should errors from the `remote` effect (§2.9) have a standard shape (timeout, unreachable,
+8. Should errors from the `remote` effect (§2.10) have a standard shape (timeout, unreachable,
    incompatible version), and how are errors serialised across tiers?
 
 ## References
