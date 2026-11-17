@@ -27,7 +27,8 @@ Why a small core:
 
 A mod is the unit of:
 - **Versioning**: semver, with editions for the language (§2.20).
-- **Compilation and caching** (§2.14): interface hash vs implementation hash.
+- **Compilation and caching** (§2.14): interface hash vs implementation hash (see
+  [`build-times.md`](build-times.md) §3).
 - **Capabilities** (§2.16): the manifest declares which capabilities the mod may require (`net`, `fs`,
   `ffi`, `gpu`, `unsafe`, …). The compiler rejects any use beyond them.
 - **Targets**: native, WASM (R1), GPU-kernel-safe, and so on. A mod declares which targets it supports.

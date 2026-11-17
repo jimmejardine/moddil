@@ -21,6 +21,7 @@
 | [`error-handling.md`](error-handling.md)             | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§2.3)              | Partly decided; survey               |
 | [`correctness.md`](correctness.md)                   | Contracts, validated newtypes, property testing, fuzzing, verification, assurance levels (§2.7)  | Proposal                             |
 | [`determinism.md`](determinism.md) | Deterministic core, simulation testing, scoped handlers, record and replay, reproducible builds (§2.11) | Proposal |
+| [`build-times.md`](build-times.md) | Language rules for fast builds, query-based lazy compiler, no-link dev builds, default profiles, budgets (§2.14) | Proposal |
 | [`comptime.md`](comptime.md)                         | Compile-time evaluation, reflection, typed derives, tagged-literal DSLs instead of macros (§2.6) | Decided direction                    |
 | [`bootstrap.md`](bootstrap.md)                       | Bootstrap compiler, self-hosting, backends, WASM engine support (R1)                             | Proposed                             |
 | [`examples/`](examples/README.md)                    | Four reference systems used to test every decision                                               | Written                              |
@@ -672,6 +673,11 @@ codebases, and a growing Rust ecosystem must be reachable with low friction and 
 
 ### 2.14 Build times
 
+> Expanded in [`build-times.md`](build-times.md) (proposal): the language rules that decide build
+> speed (no cycles between mods, explicit interface artefacts, witness tables in debug and
+> specialisation in release), a lazy query-based compiler with a shared cache and no link step in
+> dev builds, optimised dependencies by default, and published budgets.
+
 **Problem.** Slow builds damage the edit-compile-test loop for humans, and are worse for LLM agents
 that iterate dozens of times per task.
 
@@ -706,8 +712,10 @@ that iterate dozens of times per task.
 
 **Open questions.**
 - Can debug-mode dictionary passing and release-mode specialisation produce *identical semantics*,
-  so the difference is purely performance?
-- Target: what is the budget? (e.g., "incremental rebuild of a 1 MLOC project under 1 s").
+  so the difference is purely performance? *Proposed answer:* yes, if everything layout-dependent
+  lives in the witness table, as Swift does ([`build-times.md`](build-times.md) §3).
+- Target: what is the budget? *Proposed:* < 100 ms keystroke to diagnostics, < 1 s from a
+  function-body edit to a runnable test regardless of project size ([`build-times.md`](build-times.md) §6).
 
 ---
 
@@ -1124,6 +1132,7 @@ removal.
 - `specs/error-handling.md`: `?`, try blocks, R3, outcome classes, traces (§2.3); survey of prior art
 - `specs/correctness.md`: contracts, testing and verification (§2.7); proposal
 - `specs/determinism.md`: determinism, simulation, scoped handlers, record and replay (§2.11); proposal
+- `specs/build-times.md`: language rules, compiler architecture, profiles, budgets (§2.14); proposal
 - `specs/comptime.md`: compile-time evaluation, reflection, typed derives, tagged literals (§2.6)
 - `specs/bootstrap.md`: stage 0, self-hosting, backends, WASM support status (R1)
 - `specs/examples/`: the four reference systems
