@@ -482,8 +482,9 @@ codebases, and a growing Rust ecosystem must be reachable with low friction and 
 **Directions.**
 - **Zero-overhead C ABI** in both directions, and **direct import of C headers** (Zig-style), with a
   bundled C compiler/cross-compiler.
-- **Annotation overlays** for imported C APIs: ownership, nullability, lifetimes, thread safety, and
-  capabilities, ideally shareable across projects (like TypeScript's DefinitelyTyped).
+- **Annotation overlays** for imported C APIs: ownership (owned / borrowed / rc), nullability
+  (nullable pointers become `Option<…>`, §3.3), thread safety, and capabilities, ideally shareable
+  across projects (like TypeScript's DefinitelyTyped).
 - **C++**: a defined, documented subset (POD types, non-template functions, explicit instantiations,
   simple classes) via a Clang-based importer; no promise of full template interop.
 - **Rust**: via `extern "C"` + a richer **interface description** (shared IDL that both sides generate
@@ -604,6 +605,7 @@ These were not on the original list but come up repeatedly and interact with the
   for free; a clear split between *recoverable errors* and *bugs* (contract violations → abort the
   task, not the process, in structured concurrency). Error propagation must also respect linear
   values (§2.3): a path that propagates an error while holding an open transaction has to consume it.
+  Absence is *not* an error: "not found" is an `Option` (§3.3), and `or_fail` converts explicitly.
 - **Open question.** Checked-exception fatigue (Java) vs inference: how much should be inferred?
 
 ### 3.2 Effects and capabilities as a unifying idea
@@ -629,13 +631,85 @@ These were not on the original list but come up repeatedly and interact with the
 
 ### 3.3 Null and invalid states
 
-- **Problem.** Null references (Hoare's "billion-dollar mistake"), plus in general types that allow
-  values the domain does not.
-- **State of the art.** `Option`/`Maybe` (Rust, Swift, Kotlin's nullable types), sum types and
-  exhaustive matching, newtypes, refinement types (Liquid Haskell, F*).
-- **Directions.** No null; sum types and exhaustive matching as core features; cheap newtypes;
-  optional refinements (`Int where 0 <= self < 100`) checked statically where possible, dynamically
-  otherwise.
+**Problem.** Null references (Hoare's "billion-dollar mistake"). More generally: types that admit
+values the domain does not, such as zero values nobody chose, unchecked ranges, mixed-up IDs, and
+objects used in the wrong state.
+
+**State of the art.** Every language that has tackled null is converging on *absence in the type,
+plus compiler-checked narrowing*, in one of two styles:
+
+| Style | Languages | Strength | Weakness |
+|---|---|---|---|
+| Wrapper sum type `Option<T>` | Rust, Haskell (`Maybe`), OCaml, Scala, Zig (`?T`) | Ordinary type; composes; nests (`Option<Option<T>>` ≠ `Option<T>`) | Ceremony without sugar |
+| Nullable union `T \| null` + flow typing | Kotlin, TypeScript (`strictNullChecks`), Dart 3, C# 8, Java (Valhalla null-restricted types, JSpecify) | Ergonomic; can be retrofitted onto a language with null | `T??` collapses to `T?`: "absent" vs "present but null" is lost |
+
+- **Swift** is the synthesis most new designs copy. `T?` is sugar for a real `Optional<T>` sum type,
+  so it nests correctly, and it adds `if let`, `guard let`, optional chaining `a?.b` and `x ?? d`.
+- **Rust** has exactly one `Option`, kept separate from `Result`: absence is a normal outcome,
+  failure is an error.
+  - Raw pointers can be null only in `unsafe` code.
+  - The **niche optimisation** makes `Option<&T>` pointer-sized, with `None` as address 0.
+  - Ergonomics keep improving: `?` on `Option`, `let … else`, `if let` chains (2024 edition).
+  - The *pattern types* work (`u32 is 1..`) generalises niches.
+- **The frontier is invalid states in general:**
+  - definite initialisation (no Go-style zero values);
+  - refinement types (Liquid Haskell, F*);
+  - newtypes;
+  - typestate.
+
+**Decision.**
+- **No null in safe code.** Absence is `Option<T>` = `None | Some(T)`. It is an ordinary sum type in a
+  core-adjacent mod (R2); the compiler adds only sugar and layout guarantees.
+- **Swift-style sugar:** `T?` means `Option<T>`, and nests (`T??` ≠ `T?`). It comes with:
+  - exhaustive `match`, `if let` and `let … else`;
+  - optional chaining `a?.b`;
+  - defaulting `x ?? d`.
+
+  There is no implicit unwrap. `unwrap()` is an explicit, visible panic point.
+- **Absence is data; failure is an effect.** `fail(E)` (§3.1) plays the role of Rust's `Result`,
+  so `Option` is the only "maybe" type in everyday code.
+  - `opt.or_fail(e)` turns absence into failure.
+  - Catching a failure can produce an `Option`.
+- **Guaranteed niches:** `Option<&T>`, `Option<Rc<T>>`, owned pointers, non-zero and range-typed
+  integers, and enums with spare values are all the same size as `T`. Nullable C pointers import as
+  `Option<…>` (§2.8).
+- **Fits the ownership model:**
+  - `Option<&T>`, or an `Option` holding a view, is itself a view
+    ([`memory-and-resources.md`](memory-and-resources.md) §4).
+  - Moving out of an `Option` is an ordinary move (`take()`).
+- **Definite initialisation:** no zero values, and no reads of uninitialised memory in safe code.
+- **Invalid states beyond null:**
+  - **Cheap newtypes:** zero-cost and distinct, with no implicit conversion (`UserId` ≠ `OrderId`).
+  - **Pattern/range types** (`u32 in 1..`): values that are excluded become free niches for `Option`.
+  - **Refinement types** (`Int where 0 <= self < 100`): checked statically where provable,
+    dynamically otherwise. They share machinery with contracts (§3.5).
+  - **Typestate through linear types** (§2.3): states are types, and transitions consume the old
+    state, e.g. `Conn<Unauthed>` → `Conn<Authed>`.
+
+Illustration only:
+```
+type UserId = newtype u64
+type Port   = u16 in 1..                          // 0 excluded: Port? is still 2 bytes
+
+fn email_of(users: let Map<UserId, User>, id: UserId) -> &str? {
+    users.get(id)?.profile?.email                 // optional chaining: absence flows through
+}
+
+fn connect(host: let str, port: Port?) ! {net, fail(NetError)} {
+    let addr = resolve(host) ?? return            // default/early exit on absence
+    let Some(p) = port else { fail(NetError.NoPort) }
+    …
+}
+```
+
+**Open questions.**
+- **What does postfix `?` mean?** In Rust it propagates `None`/`Err`; in Swift it is chaining.
+  - If `fail` is an effect, failure may propagate implicitly. The `call()?` in the snippets of
+    [`memory-and-resources.md`](memory-and-resources.md) would then disappear.
+  - Separately: should `opt?` inside a function returning `T?` propagate `None`?
+  - Resolve together with §3.1.
+- How much refinement checking is static vs dynamic, and what does it cost in compile time (§2.4)?
+- Layout of nested options (`T??`): how far should niche packing go?
 
 ### 3.4 Metaprogramming
 
@@ -946,6 +1020,11 @@ removal.
 - **Version control:** Pijul theory of patches; Jujutsu; Difftastic; GumTree (Falleri et al., 2014);
   Unison codebase model.
 - **Verification:** Dafny; Verus; SPARK; Liquid Haskell; Kani.
+- **Null and invalid states:** Hoare, "Null References: The Billion Dollar Mistake" (QCon 2009);
+  Swift `Optional`; Kotlin null safety; TypeScript `strictNullChecks`; Dart sound null safety; C# 8
+  nullable reference types; Java Project Valhalla null-restricted types and JSpecify; Rust niche
+  optimisation and pattern types; F* and Liquid Haskell refinement types; typestate (Strom and
+  Yemini, 1986).
 - **Interop:** Zig `@cImport` / `zig cc`; Swift C++ interoperability; Carbon language goals; `cxx`;
   `crubit`; Rust `crabi` proposal.
 - **Determinism:** FoundationDB simulation testing; TigerBeetle VOPR; `rr`.
