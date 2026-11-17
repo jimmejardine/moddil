@@ -67,7 +67,7 @@ by pointer**, whichever is cheaper (as Swift and Hylo do). Small types travel in
   Function signatures carry everything a caller needs, so checking stays local and incremental
   (rationale §2.14).
 - **Non-escaping closures** may capture borrows (Swift's model). Escaping closures capture by move
-  or rc.
+  or rc. Details in [`closures.md`](closures.md).
 
 ### 3.3 Returning borrows
 

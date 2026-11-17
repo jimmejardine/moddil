@@ -22,6 +22,7 @@
 | [`correctness.md`](correctness.md)                   | Contracts, validated newtypes, property testing, fuzzing, verification, assurance levels (§2.7)  | Proposal                             |
 | [`determinism.md`](determinism.md) | Deterministic core, simulation testing, scoped handlers, record and replay, reproducible builds (§2.11) | Proposal |
 | [`build-times.md`](build-times.md) | Language rules for fast builds, query-based lazy compiler, no-link dev builds, default profiles, budgets (§2.14) | Proposal |
+| [`closures.md`](closures.md) | Lambdas that borrow, fail and suspend; parameter modes for closures; escaping closures (§2.8) | Mostly follows from decided direction |
 | [`comptime.md`](comptime.md)                         | Compile-time evaluation, reflection, typed derives, tagged-literal DSLs instead of macros (§2.6) | Decided direction                    |
 | [`bootstrap.md`](bootstrap.md)                       | Bootstrap compiler, self-hosting, backends, WASM engine support (R1)                             | Proposed                             |
 | [`examples/`](examples/README.md)                    | Four reference systems used to test every decision                                               | Written                              |
@@ -362,6 +363,9 @@ fn connect(host: let str, port: Port?) ! {net, fail(NetError)} {
 ---
 
 ### 2.8 Concurrency across CPUs
+
+> Closures and lambdas, including ones that suspend or fail inside `visit`/`map`, are covered in
+> [`closures.md`](closures.md).
 
 **Problem.** Shared-memory parallelism is still the main source of the hardest bugs: data races,
 deadlocks, priority inversion, and memory-ordering mistakes. Async programming has split many
@@ -1133,6 +1137,7 @@ removal.
 - `specs/correctness.md`: contracts, testing and verification (§2.7); proposal
 - `specs/determinism.md`: determinism, simulation, scoped handlers, record and replay (§2.11); proposal
 - `specs/build-times.md`: language rules, compiler architecture, profiles, budgets (§2.14); proposal
+- `specs/closures.md`: lambdas that borrow, fail and suspend; escaping closures (§2.8)
 - `specs/comptime.md`: compile-time evaluation, reflection, typed derives, tagged literals (§2.6)
 - `specs/bootstrap.md`: stage 0, self-hosting, backends, WASM support status (R1)
 - `specs/examples/`: the four reference systems

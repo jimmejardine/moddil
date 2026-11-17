@@ -100,7 +100,7 @@ With effects, one `map` serves every case:
 fn map<A, B, e>(xs: List<A>, f: A -> B ! e) -> List<B> ! e
 
 fn load_all(paths: List<Path>) -> List<Config> {
-    paths.map(|p| parse(p)?)    // `?` propagates through map into load_all's errors
+    paths.map { p -> parse(p)? }  // `?` propagates through map into load_all's errors
 }
 ```
 

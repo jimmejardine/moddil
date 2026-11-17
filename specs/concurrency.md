@@ -60,7 +60,7 @@ fn normalise(prices: mut [Price]) ! {spawn} {
 
 Rules:
 - A child task closure is a **non-escaping closure** relative to its scope, so it may capture
-  borrows and views from enclosing frames.
+  borrows and views from enclosing frames. See [`closures.md`](closures.md) for closures in general.
 - A shared borrow may be captured by any number of children; a `mut` borrow by exactly one.
 - The parent cannot touch a source lent `mut` to a child until the scope ends.
 - Passing an `Rc` into children by borrow costs nothing. A child only clones it if it stores the
