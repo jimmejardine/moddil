@@ -113,6 +113,8 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers (ration
 - **Deterministic simulation** (`moddil/runtime-sim`, rationale §2.11): the scheduler is a handler, so
   interleavings are seed-controlled and replayable.
   See [`determinism.md`](determinism.md) for the simulation runtime, virtual time and record/replay.
+- **Observability:** runtimes expose the task tree and each task's blocked-on effect operation to
+  spans and to the `introspect` capability ([`observability.md`](observability.md) §7, §9).
 
 ## 7. Open questions
 

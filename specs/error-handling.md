@@ -196,6 +196,8 @@ structured variant?
 - **Async-aware:** traces include the chain of task spawn sites; across tiers they link through trace
   IDs (§2.10, §2.12).
 - **Traps (class 3)** always capture a full trace.
+- Traces join the task-aware stacks and flight-recorder dumps described in
+  [`observability.md`](observability.md) §7–§8.
 
 ## 7. Language server support
 

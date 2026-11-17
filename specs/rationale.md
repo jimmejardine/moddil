@@ -15,6 +15,7 @@
 | [`memory-and-resources.md`](memory-and-resources.md) | Ownership, borrows and view types, `.to_rc()`, linear resources, zero-copy I/O (§2.2)            | Decided direction                    |
 | [`concurrency.md`](concurrency.md)                   | CPU concurrency: sharing rules, structured tasks, sync cells, runtime contract (§2.8)            | Decided direction                    |
 | [`accelerators.md`](accelerators.md)                 | GPUs and accelerators: three kernel levels, devices and addressing, launches as tasks (§2.9)     | Decided direction                    |
+| [`observability.md`](observability.md)               | Logging, spans, metrics as write-only effects; task-aware stacks; flight recorder; introspection (§2.12) | Decided direction            |
 | [`mods.md`](mods.md)                                 | Mods, the core/mod boundary, standard-mod catalogue (R2)                                         | Decided direction                    |
 | [`error-handling.md`](error-handling.md)             | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§2.3)              | Partly decided; survey               |
 | [`correctness.md`](correctness.md)                   | Contracts, validated newtypes, property testing, fuzzing, verification, assurance levels (§2.7)  | Proposal                             |
@@ -541,7 +542,8 @@ Today that means:
 - **Choreographies** for multi-party protocols (client ↔ server ↔ worker), projected to each
   participant.
 - **Trust boundaries in the type system.** Data arriving from `@client` is *untrusted* until
-  validated; values marked secret cannot flow to `@client` (information-flow checking). Capabilities
+  validated; values marked secret cannot flow to `@client` (information-flow checking), nor into logs
+  or traces ([`observability.md`](observability.md) §6). Capabilities
   (§2.16, §2.1) decide which tier may touch which resources.
 - **Separate the logical program from the physical topology** (the Service Weaver idea). The code
   defines components and placements; a declarative **deployment manifest** maps them to processes and
@@ -588,9 +590,34 @@ Today that means:
 
 ### 2.12 Observability and debuggability
 
-- **Problem.** Optimised code is hard to debug; async stacks are unreadable; tracing is bolted on.
-- **Directions.** Structured tracing as a language-level effect; async/task-aware stack traces;
-  record-and-replay in dev builds; good debug info even in release mode.
+**Problem.** Optimised code is hard to debug; async stacks are unreadable; tracing is bolted on and
+context is propagated by hand; logging is slow, stringly typed and global; secrets leak into logs;
+production bugs can't be reproduced.
+
+**State of the art.** OpenTelemetry and W3C Trace Context; Rust `tracing`; Java Flight Recorder;
+BEAM's live introspection of production nodes; defmt and NanoLog (format strings interned at compile
+time); rr, Pernosco and WinDbg TTD (record and replay); tokio-console and Swift async backtraces; eBPF
+and continuous profilers.
+
+**Decision** (detail: [`observability.md`](observability.md)).
+- **`log`, `span` and `metric` are write-only ambient effects**: always available, never in
+  signatures. Handlers are mods and cannot feed values back, so observing never changes results.
+  There is no global logger.
+- **Events are interned at compile time** through `fmt"…"` literals; the hot path writes an event ID
+  plus typed arguments, and text is rendered later.
+- **Spans follow the structured-concurrency tree**, and trace context crosses `remote` calls
+  automatically.
+- **`Secret<T>` values cannot reach any event**: compile error.
+- **Task-aware stacks** and a live task tree showing what each task is blocked on.
+- **Flight recorder**: a bounded production recording of effect results, dumped on failure and
+  replayed deterministically (record and replay: [`determinism.md`](determinism.md) §5).
+- **Live introspection** (attach, inspect, enable tracing without restarting) behind an
+  `introspect` capability.
+- **Release builds stay debuggable**: full debug info, stored separately and keyed by build hash.
+
+**Open questions** (more in [`observability.md`](observability.md) §13).
+- Continuous profiling with time attributed by effect?
+- Retention and privacy of recordings.
 
 ---
 
@@ -1084,6 +1111,7 @@ removal.
 - `specs/memory-and-resources.md`: ownership, borrows and views, rc, linear resources, zero-copy I/O (§2.2)
 - `specs/concurrency.md`: sharing rules, structured concurrency, runtime contract (§2.8)
 - `specs/accelerators.md`: GPUs and accelerators, devices and addressing, kernels (§2.9)
+- `specs/observability.md`: logging, tracing, metrics, task-aware stacks, flight recorder (§2.12)
 - `specs/mods.md`: mods, core/mod boundary, standard-mod catalogue (R2)
 - `specs/error-handling.md`: `?`, try blocks, R3, outcome classes, traces (§2.3); survey of prior art
 - `specs/correctness.md`: contracts, testing and verification (§2.7); proposal
@@ -1140,6 +1168,9 @@ removal.
 - **Interop:** Zig `@cImport` / `zig cc`; Swift C++ interoperability; Carbon language goals; `cxx`;
   `crubit`; Rust `crabi` proposal.
 - **Determinism:** FoundationDB simulation testing; TigerBeetle VOPR; `rr`.
+- **Observability:** OpenTelemetry; W3C Trace Context; Rust `tracing`; Java Flight Recorder; BEAM
+  observer and recon; defmt; Yang et al., *NanoLog* (USENIX ATC 2018); Pernosco; WinDbg TTD;
+  tokio-console.
 - **WebAssembly:** Haas et al., *Bringing the Web up to Speed with WebAssembly* (PLDI 2017); WASI and
   the Component Model / WIT (Bytecode Alliance); stack-switching and JSPI proposals; WASM GC
   proposal; RLBox (sandboxing C libraries via WASM in Firefox).
