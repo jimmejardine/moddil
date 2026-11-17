@@ -22,6 +22,9 @@ interoperate with a running network built in another language.
 ## Recommendation: client first, server second
 
 **Phase A: Moddil reference client.**
+- **CLI/native client first, browser client second.** The early toolchain targets native and WASI on
+  Wasmtime; the browser needs the JSPI lowering, which comes later (see
+  [`../bootstrap.md`](../bootstrap.md) §5–§7).
 - Smaller scope than a server.
 - Must speak the protocol **on the wire** with existing Rust servers. This is a strong test of
   compiler-checked wire contracts against a protocol Moddil does not own (§2.8, §2.9).

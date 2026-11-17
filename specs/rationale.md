@@ -698,7 +698,7 @@ Being honest about where goals collide:
 | Location transparency vs explicitness              | One language across tiers is attractive, but hiding the network repeats the RPC mistakes of the 1990s. Moddil chooses explicit boundaries.                                                       |
 | Language vs infrastructure scope                   | Every step toward describing infrastructure risks turning Moddil into a cloud platform.                                                                                                          |
 | Whole-program view vs independent deploys          | Whole-system checking is powerful, but teams must still ship components separately.                                                                                                              |
-| WASM as a required target vs native-first features | Threads and GPU access are weaker on WASM, and Moddil depends on stack switching before it is fully standardised. Every core feature needs a WASM implementation strategy, even if it is slower. |
+| WASM as a required target vs native-first features | Threads and GPU access are weaker on WASM, and stack switching does not ship in browsers yet, so browsers need a JSPI-based lowering in the meantime. Every core feature needs a WASM implementation strategy, even if it is slower. |
 | Small core vs compiler-checked guarantees | R2 wants a tiny core, but anything the compiler must check (ownership, effects, capabilities, placement, contracts) has to be in it. The core is "small" only relative to its guarantees. |
 | "For LLMs" vs "for humans"                         | Must not produce a language only machines can comfortably write. Humans still need to read, debug and occasionally write it.                                                                     |
 
@@ -737,16 +737,19 @@ What "first-class" means in practice:
 Design constraints this places on the rest of Moddil:
 - **Memory model**: Moddil has no global tracing GC, so linear memory is the natural fit. The WASM GC
   proposal is an optional optimisation for interop with JS objects, not a dependency.
-- **Concurrency without function colouring (§2.1)** needs suspendable stacks. **Decision: Moddil
-  assumes the WASM stack-switching proposal** (typed continuations; Phase 3 at the time of writing).
-  Moddil will not ship before it is likely to be standardised and widely implemented, and designing
-  around a compiler transform would distort the concurrency model.
-  - JSPI (JS Promise Integration) is used *with* stack switching at the browser boundary, to
-    suspend Moddil code while awaiting JS promises.
-  - A CPS/Asyncify-style transform is **not** a design target. At most it is a stop-gap backend for
-    runtimes that lack stack switching, and it may never be built.
-  - Risk to track: the proposal's final shape may differ from today's. Keep the dependency in one
-    place in the backend (the task/continuation runtime) so changes stay local.
+- **Concurrency without function colouring (§2.1)** needs suspendable stacks. *Revised after checking
+  engine support (Nov 2026; see [`bootstrap.md`](bootstrap.md) §6 and §8):* stack switching is Phase 3
+  but ships in **no** browser or Node (Chrome has it behind a flag only); Wasmtime has it at Tier 3 on
+  x86_64 Linux. JSPI, however, is standardised and ships in all major browsers and Node ≥ 26.
+  **Decision:** the concurrency semantics are target-independent, and the backend picks a lowering:
+  1. **WASM stack switching**: the preferred lowering, built first against **Wasmtime**.
+  2. **JSPI**: the browser and Node baseline until stack switching ships there. Each Moddil task is
+     its own suspended `promising` stack, scheduled from JS.
+  3. **CPS/Asyncify-style transform**: only if WASI runtimes without stack switching must be
+     supported (open question).
+
+  Keep the dependency in one place in the backend (the task/continuation runtime) so proposal
+  changes stay local.
 - **Threads**: shared memory + atomics are available but restricted in browsers (cross-origin
   isolation). Structured concurrency must degrade gracefully to a single thread.
 - **Exceptions, SIMD, tail calls**: use the standard proposals (exception handling, 128-bit SIMD,
@@ -835,9 +838,9 @@ store, Hashiverse) are the yardstick for every decision. A feature no example ne
 removal.
 
 **Technical questions**
-6. Implementation language for the bootstrap compiler (Rust? Zig? OCaml?) and back ends
-   (Cranelift for dev, LLVM/MLIR for release, SPIR-V/PTX/WGSL for GPU, and WASM core + Component
-   Model from day one; see R1).
+6. ~~Implementation language for the bootstrap compiler and back ends.~~ **Proposed in
+   [`bootstrap.md`](bootstrap.md):** stage 0 in Rust, then self-host; Cranelift (debug) + LLVM
+   (release) + own WASM emitter + naga/LLVM for GPU; Wasmtime as the reference WASM runtime first.
 7. Ownership/borrowing vs mutable value semantics vs generational references as the memory core.
 8. Effect system design: row-polymorphic (Koka) vs capability-passing vs hybrid.
 9. Canonical AST storage: text with canonical printing, or a structured store (Unison-style) with text
@@ -856,6 +859,7 @@ removal.
 - `specs/mods.md`: **written**: mods, core/mod boundary, standard-mod catalogue
 - `specs/examples/`: **written**: the four reference systems
 - `specs/wasm.md`: target details: WASI/Component Model mapping, browser/JS interop, stack switching
+- `specs/bootstrap.md`: **written**: stage 0, self-hosting, backends, WASM support status
 
 ---
 

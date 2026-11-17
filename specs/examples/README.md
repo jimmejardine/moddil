@@ -74,7 +74,9 @@ mods the example would create.
 ## Proposed order
 
 1. **Hashiverse client.** A real protocol with real users, with existing Rust servers to interoperate
-   against. It exercises WASM, interop, crypto and effects-as-pluggable-traits.
+   against. It exercises WASM, interop, crypto and effects-as-pluggable-traits. The CLI/native client
+   comes first and the browser client follows once JSPI lowering exists
+   ([`../bootstrap.md`](../bootstrap.md) §5).
 2. **Multiplayer game.** Multi-tier, browser, real-time, WebGPU.
 3. **Web store.** Everyday ergonomics, databases and the mobile question.
 4. **HFT platform.** The hardest latency requirements and the flagship "same code in simulation and live"
