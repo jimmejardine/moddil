@@ -15,6 +15,7 @@
 | [`memory-and-resources.md`](memory-and-resources.md) | Ownership, borrows and view types, `.to_rc()`, linear resources, zero-copy I/O (§2.3) | Decided direction |
 | [`concurrency.md`](concurrency.md) | CPU concurrency: sharing rules, structured tasks, sync cells, runtime contract (§2.1) | Decided direction (CPU); GPU to come |
 | [`mods.md`](mods.md) | Mods, the core/mod boundary, standard-mod catalogue (R2) | Decided direction |
+| [`error-handling.md`](error-handling.md) | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§3.1) | Partly decided; survey |
 | [`bootstrap.md`](bootstrap.md) | Bootstrap compiler, self-hosting, backends, WASM engine support (R1) | Proposed |
 | [`examples/`](examples/README.md) | Four reference systems used to test every decision | Written |
 
@@ -595,6 +596,9 @@ These were not on the original list but come up repeatedly and interact with the
 
 ### 3.1 Error handling
 
+> Expanded in [`error-handling.md`](error-handling.md). Decided: Rust-style `?`, try blocks, and
+> **R3** (§6.1): no unhandled errors.
+
 - **Problem.** Exceptions hide control flow; error codes get ignored; `Result` types are explicit but
   noisy; panics/abort are coarse. Composing error types across libraries is painful (Rust's
   `thiserror`/`anyhow` split shows this).
@@ -763,7 +767,9 @@ fn connect(host: let str, port: Port?) ! {net, fail(NetError)} {
 ### 3.10 Numerics and data
 
 - **Problem.** Silent integer overflow (C), undefined behaviour, float surprises, no units.
-- **Directions.** Defined overflow behaviour (trap in debug, explicit wrapping/saturating operators);
+- **Directions.** **Decided** ([`error-handling.md`](error-handling.md) §2): integer arithmetic
+  wraps (two's complement, no UB, no checks); floats follow IEEE 754; integer division by zero and
+  `MIN / -1` trap, as in Rust; explicit checked/saturating operators live in a mod;
   units of measure (F#) as an optional type feature; SIMD vectors and tensors as first-class types
   (ties into §2.2); arbitrary-precision integers in the standard library.
 
@@ -825,6 +831,7 @@ Being honest about where goals collide:
 | Language vs infrastructure scope                   | Every step toward describing infrastructure risks turning Moddil into a cloud platform.                                                                                                          |
 | Whole-program view vs independent deploys          | Whole-system checking is powerful, but teams must still ship components separately.                                                                                                              |
 | WASM as a required target vs native-first features | Threads and GPU access are weaker on WASM, and stack switching does not ship in browsers yet, so browsers need a JSPI-based lowering in the meantime. Every core feature needs a WASM implementation strategy, even if it is slower. |
+| Wrapping arithmetic vs correctness | Unchecked, wrapping integers are fast and predictable but can silently produce wrong values. Checked operators and debug sanitisers are opt-in. |
 | Small core vs compiler-checked guarantees | R2 wants a tiny core, but anything the compiler must check (ownership, effects, capabilities, placement, contracts) has to be in it. The core is "small" only relative to its guarantees. |
 | "For LLMs" vs "for humans"                         | Must not produce a language only machines can comfortably write. Humans still need to read, debug and occasionally write it.                                                                     |
 
@@ -900,6 +907,16 @@ STL/Boost); anyone can write and publish their own (for example, a tokio-style r
   split.
 
 Details: [`mods.md`](mods.md).
+
+**R3. No crash from an unhandled error.**
+
+Every error the language knows about (the `fail` effect / `Result`) must be handled. An unhandled
+error at any entry point (`main`, task bodies, exported/FFI functions, tier endpoints, handlers) or a
+silently dropped result is a **compile-time error**. There are **no fire-and-forget tasks**: every
+task is awaited by its enclosing scope. Out of scope for R3: traps such as out of memory, stack
+overflow, integer division by zero and out-of-bounds indexing, which are crashes as in Rust.
+
+Details: [`error-handling.md`](error-handling.md).
 
 ### 6.2 Non-goals (draft)
 
@@ -979,6 +996,7 @@ removal.
 - `specs/memory-and-resources.md`: ownership, borrows and views, rc, linear resources, zero-copy I/O (§2.3)
 - `specs/concurrency.md`: CPU part — sharing rules, structured concurrency, runtime contract (§2.1)
 - `specs/mods.md`: mods, core/mod boundary, standard-mod catalogue (R2)
+- `specs/error-handling.md`: `?`, try blocks, R3, outcome classes, traces (§3.1); survey of prior art
 - `specs/bootstrap.md`: stage 0, self-hosting, backends, WASM support status (R1)
 - `specs/examples/`: the four reference systems
 
