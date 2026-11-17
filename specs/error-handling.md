@@ -38,6 +38,8 @@ Notes:
 - **Wrapping arithmetic (D5)** is fast but can silently produce wrong values. `checked_*`,
   `saturating_*` and `wrapping_*` operations live in a mod, and debug sanitisers can be optional tooling.
 - **Open:** do failed contract assertions (§2.7) trap (class 3), or raise an error (class 1)?
+  [`correctness.md`](correctness.md) §5 recommends trapping, with untrusted input handled by
+  validated newtypes that return errors.
 
 ## 3. Results and effects
 
@@ -330,7 +332,8 @@ txn.commit()?
 ## 12. Open questions
 
 1. Are explicit discards of errors allowed, and do they need a reason (§4.4)?
-2. Do failed contract assertions trap or raise an error (§2)?
+2. Do failed contract assertions trap or raise an error (§2)? (Recommendation: trap; see
+   [`correctness.md`](correctness.md) §5.)
 3. Task scopes: first error and cancel siblings, or collect all errors (§4.5)?
 4. Can a trap terminate only its task rather than the process, and how are its resources freed (§8)?
 5. Should a resumable recovery effect ("retry"/"default") exist as a separate effect?

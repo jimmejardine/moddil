@@ -16,6 +16,7 @@
 | [`concurrency.md`](concurrency.md) | CPU concurrency: sharing rules, structured tasks, sync cells, runtime contract (§2.8) | Decided direction (CPU); GPU to come |
 | [`mods.md`](mods.md) | Mods, the core/mod boundary, standard-mod catalogue (R2) | Decided direction |
 | [`error-handling.md`](error-handling.md) | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§2.3) | Partly decided; survey |
+| [`correctness.md`](correctness.md) | Contracts, validated newtypes, property testing, fuzzing, verification, assurance levels (§2.7) | Proposal |
 | [`comptime.md`](comptime.md) | Compile-time evaluation, reflection, typed derives, tagged-literal DSLs instead of macros (§2.6) | Decided direction |
 | [`bootstrap.md`](bootstrap.md) | Bootstrap compiler, self-hosting, backends, WASM engine support (R1) | Proposed |
 | [`examples/`](examples/README.md) | Four reference systems used to test every decision | Written |
@@ -339,6 +340,11 @@ fn connect(host: let str, port: Port?) ! {net, fail(NetError)} {
 ---
 
 ### 2.7 Correctness tooling: contracts and verification
+
+> Expanded in [`correctness.md`](correctness.md) (proposal): easy v1 wins (contracts, validated
+> newtypes, property testing with contracts as oracles, fuzzing, mutation testing, a Miri-style
+> checker, interleaving tests), and state of the art to design for now (proofs in Moddil itself,
+> assurance levels per mod, refinement types, model checking).
 
 - **Problem.** Tests show the presence of bugs, not their absence; specifications live in comments or
   nowhere.
@@ -1060,6 +1066,7 @@ removal.
 - `specs/concurrency.md`: CPU part — sharing rules, structured concurrency, runtime contract (§2.8)
 - `specs/mods.md`: mods, core/mod boundary, standard-mod catalogue (R2)
 - `specs/error-handling.md`: `?`, try blocks, R3, outcome classes, traces (§2.3); survey of prior art
+- `specs/correctness.md`: contracts, testing and verification (§2.7); proposal
 - `specs/comptime.md`: compile-time evaluation, reflection, typed derives, tagged literals (§2.6)
 - `specs/bootstrap.md`: stage 0, self-hosting, backends, WASM support status (R1)
 - `specs/examples/`: the four reference systems
