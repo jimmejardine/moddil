@@ -123,7 +123,8 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 | `moddil/serde` | Serialisation framework; binary and JSON formats; schema evolution; zero-copy validated views ([`memory-and-resources.md`](memory-and-resources.md) §6) | G H W X |
 | `moddil/fs` / `moddil/io` | Files, streams, buffers | H W X |
 | `moddil/net` | TCP, UDP, TLS, HTTP/1-2-3, WebSocket, WebTransport | G H W X |
-| `moddil/rpc` | Compiler-generated wire contracts, version compatibility (§2.10) | G H W X |
+| `moddil/rpc` | Compiler-generated wire contracts, version compatibility (§2.10, [`distribution.md`](distribution.md)) | G H W X |
+| `moddil/deploy-*` | Adapters from the topology file to Compose, Kubernetes, Nomad, systemd; discovery and secret-provider handlers ([`distribution.md`](distribution.md) §12) | G H W X |
 | `moddil/time` | Clocks, monotonic time, time zones, high-resolution timestamps | G H W X |
 | `moddil/runtime`, `-wasm`, `-sim` | Effect handlers for scheduling and I/O (§4) | G H W X |
 | `moddil/sync` | Sync cells (`Atomic<T>`, `AtomicRc<T>`, `Mutex`, `RwLock`), channels, lock-free queues (SPSC/MPMC) ([`concurrency.md`](concurrency.md) §4) | G H X |
