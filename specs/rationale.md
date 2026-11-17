@@ -367,7 +367,8 @@ fn connect(host: let str, port: Port?) ! {net, fail(NetError)} {
 ### 2.8 Concurrency across CPUs
 
 > Closures and lambdas, including ones that suspend or fail inside `visit`/`map`, are covered in
-> [`closures.md`](closures.md).
+> [`closures.md`](closures.md). How tasks map onto OS threads (one runtime, several executors) is
+> in [`concurrency.md`](concurrency.md) §6.1.
 
 **Problem.** Shared-memory parallelism is still the main source of the hardest bugs: data races,
 deadlocks, priority inversion, and memory-ordering mistakes. Async programming has split many

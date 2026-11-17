@@ -181,6 +181,31 @@ Notes:
   `'static` spawns.
 - The merge-queue poll is part of the runtime-handler contract (rationale R2,
   [`concurrency.md`](concurrency.md) §6). On single-threaded WASM every count is the owner count.
+
+**Proposed: bias to the owner task, not the owner thread.** Tasks migrate between worker threads
+([`concurrency.md`](concurrency.md) §6.1), and with a thread id in the header a migrated task would
+lose the fast path. Instead:
+
+1. **The header stores the owner *task* id.** Only the owning task touches the non-atomic owner
+   count. A task runs on one thread at a time, and every migration passes through the scheduler's
+   queues (release/acquire), so the owner's successive accesses stay ordered even across threads.
+   Non-atomic is still correct, and migration costs nothing. The check compares against the current
+   task id, which the runtime keeps in a register or thread-local slot: as cheap as a thread-id
+   check. Non-owners only ever touch the atomic shared count, so the merge protocol is unchanged.
+2. **Merge queue per task.** An object whose last shared reference is dropped by a non-owner while
+   the owner still holds some is queued to the owner *task*. The runtime drains the queue when it
+   resumes the task, and always at task exit (when the owner count must reach zero anyway).
+3. **Rebias on unique transfer.** When a uniquely held rc (owner count 1, shared count 0) moves to
+   another task (a channel send, `sink` into a child), ownership passes to the receiver for free, so
+   pipelines handing objects from stage to stage stay on the fast path.
+4. **Fewer count operations in the first place:** children borrow rcs without touching counts;
+   compile-time RC elision (Perceus-style) removes inc/dec pairs; rc contents are immutable, so the
+   slow path is only an atomic increment or decrement, never a lock.
+5. **Measured:** the runtime counts slow-path rc operations per task and call site, and the profiler
+   reports them.
+
+The remaining slow case is an rc used heavily by many tasks at once (cache-line contention), which
+biasing never addressed; borrowing does.
 - An rc's destructor runs on **whichever thread drops the last reference**. Destructors must not
   rely on thread identity. This is one reason linear values cannot be rc'd (§7).
 
