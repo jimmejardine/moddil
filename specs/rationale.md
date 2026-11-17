@@ -3,6 +3,20 @@
 > **Status:** brainstorm / living document for **Moddil**. This is not a specification and makes no syntax commitments.
 > Its job is to list the problems clearly, credit what already works, and narrow down where a new
 > language could actually earn its place.
+>
+> Where a decision has been made, this document gives a short summary and links to the detailed
+> companion document (see the map below). The companion documents are authoritative for detail.
+
+**Document map**
+
+| Document | Covers | Status |
+|---|---|---|
+| [`rationale.md`](rationale.md) | Problems, prior art, direction (this document) | Living |
+| [`memory-and-resources.md`](memory-and-resources.md) | Ownership, borrows and view types, `.to_rc()`, linear resources, zero-copy I/O (§2.3) | Decided direction |
+| [`concurrency.md`](concurrency.md) | CPU concurrency: sharing rules, structured tasks, sync cells, runtime contract (§2.1) | Decided direction (CPU); GPU to come |
+| [`mods.md`](mods.md) | Mods, the core/mod boundary, standard-mod catalogue (R2) | Decided direction |
+| [`bootstrap.md`](bootstrap.md) | Bootstrap compiler, self-hosting, backends, WASM engine support (R1) | Proposed |
+| [`examples/`](examples/README.md) | Four reference systems used to test every decision | Written |
 
 ---
 
@@ -62,7 +76,8 @@ Each area follows the same template:
 - **Problem**: what goes wrong today.
 - **State of the art**: who does it best, and why.
 - **What still hurts**: the remaining gaps.
-- **Directions**: ideas to explore (not decisions).
+- **Decision** (once made): a short summary, with a link to the companion document.
+- **Directions**: ideas still to explore (not decisions).
 - **Open questions**
 
 ---
@@ -96,26 +111,32 @@ ecosystems into "sync" and "async" halves.
   language.
 - Cancellation is an afterthought almost everywhere.
 
-**Decided:** see [`concurrency.md`](concurrency.md). Data-race freedom comes from the memory model
-([`memory-and-resources.md`](memory-and-resources.md)) plus structured concurrency: children may
-borrow from their parent's frame, rc is thread-safe and immutable inside, and shared mutation only
-goes through sync cells, so no `Send`/`Sync` traits are needed.
+**Decision** (detail: [`concurrency.md`](concurrency.md)).
+- **Data-race freedom by construction**, built on the memory model of §2.3:
+  - owned values are *moved* into tasks;
+  - shared borrows may be lent to many child tasks, a `mut` borrow to exactly one;
+  - `Rc` is always thread-safe and its contents are immutable;
+  - the only shared mutable state is thread-safe *sync cells* (`Atomic`, `AtomicRc`, `Mutex`, …).
+- Therefore **no `Send`/`Sync` traits**: every type can be sent between tasks.
+- **Structured concurrency is the only way to start a task.** Every task has a parent scope and ends
+  before it, which is what lets children borrow from their parent's frame with no `'static` bounds
+  and no `Arc` cloning (Rust's `thread::scope`, as the only mode).
+- **No function colouring.** Suspension is an *effect* (§3.2); the backend chooses the lowering
+  (stack switching, JSPI, …; see R1).
+- **Runtimes are mods** that handle the scheduling effect (R2). They also poll the biased-RC merge
+  queue (§2.3).
 
 **Directions.**
-- **No function colouring.** Suspension is an *effect*, not a different kind of function (see §3.2).
-  The runtime or compiler chooses stackful or stackless implementation; the user never chooses.
-- **Structured concurrency is the only primitive.** You cannot "fire and forget". Every task has a
-  parent scope, and cancellation and error propagation are defined by the language.
-- **Compile-time race freedom** through ownership or reference capabilities, but ergonomics should be a
-  primary design goal from day one, not a later concern.
-- Actors and channels as library patterns built on those primitives, not as the only model.
+- Actors, channels and thread-per-core sharding as library patterns built on these primitives, not
+  as the only model.
 - Deterministic scheduling mode for tests (see §3.6).
+- Lints for holding a lock across a suspension point.
 
-**Open questions.**
-- ~~Can reference capabilities (Pony) be made more approachable than Rust's borrow checker?~~
-  Resolved: second-class borrows and view types, no lifetime annotations
-  ([`memory-and-resources.md`](memory-and-resources.md) §3–§4).
+**Open questions** (tracked in [`concurrency.md`](concurrency.md) §7).
 - Should preemption be guaranteed (BEAM-style) or cooperative?
+- What happens to a linear value (e.g. an open transaction) in a task that is cancelled?
+- The model prevents data races, not deadlocks. Lock ordering, lock levels, lints, or steering
+  toward message passing?
 
 ---
 
@@ -149,7 +170,10 @@ touch it; those who do are often tied to one vendor.
 - **One language, many targets.** Kernels are ordinary functions restricted to a subset (no allocation,
   no unbounded recursion, …) that the compiler checks: a "kernel-safe" effect set.
 - **Memory space in the type**: `Buffer<f32, @device(gpu0)>` vs `Buffer<f32, @host>`. Transfers are
-  explicit operations; aliasing across spaces is a compile error.
+  explicit operations; aliasing across spaces is a compile error. The same idea already covers NIC
+  DMA buffers (`@dma(nic0)`) in the zero-copy I/O design
+  ([`memory-and-resources.md`](memory-and-resources.md) §6), and device buffers follow the same
+  ownership rules as any other resource.
 - **Algorithm/schedule separation** (Halide-style) as a language feature, so the same algorithm can
   carry several schedules per target, and LLMs or autotuners can propose schedules without touching the
   algorithm.
@@ -196,29 +220,38 @@ touch it; those who do are often tied to one vendor.
 - Atomic RC makes multithreaded code slower even when objects are never shared.
 - Rust lifetimes leak into APIs and make refactoring expensive.
 
-**Decided:** see [`memory-and-resources.md`](memory-and-resources.md). Unique ownership/RAII by
-default; `.to_rc()` (biased RC) is the only way to share a pointer; rc contents are immutable and
-shared mutation uses sync cells; borrows are second-class with *view types* and no lifetime
-parameters; resources are affine, with opt-in linear types for must-finalise resources.
+**Decision** (detail: [`memory-and-resources.md`](memory-and-resources.md)).
+- **Unique ownership and RAII by default**, for every resource, enforced by the compiler. Values
+  are moved or borrowed. Drop is deterministic, never suspends and never fails.
+- **Borrows are second-class; there are no lifetime annotations anywhere.**
+  - Parameter modes `let` (shared), `mut` (exclusive) and `sink` (move), as in Hylo. A shared
+    borrow freezes its source.
+  - *View types* (structs and containers holding borrows, with one inferred region) cover context
+    objects, custom iterators and arena-backed graphs.
+  - Functions may return borrows derived from their parameters.
+  - Accepted limits: no structs with two independent lifetimes, and no borrows stored in long-lived
+    owned data.
+- **`.to_rc()` is the only way to share a pointer**, so the cost is visible where it is paid. `Weak`
+  handles break cycles.
+  - rc contents are immutable; shared mutation goes only through sync cells.
+  - **Biased reference counting**: one rc type, always thread-safe, and nearly free while it stays
+    on its owning thread. Compile-time RC elision removes more.
+- **Affine by default, linear on request.** Linear types (transactions, fallible `close`) must be
+  explicitly consumed, and cannot be rc'd.
+- **Zero-copy I/O** comes from moving owned buffers: DMA buffers are owned values, parsed through
+  validated views, *owning views* (buffer + offsets) or rc slices.
 
 **Directions.**
-- **Deterministic destruction by default, enforced by the compiler**: RAII that cannot be bypassed.
-- **Linear/affine types for *every* resource**, not only memory. A file handle that is not closed, a
-  transaction that is not committed or rolled back, or a lock guard that escapes is a compile-time
-  error.
-- **Layered strategy**: ownership plus borrowing as the base; compile-time RC (Perceus-style) for shared
-  immutable data; an explicit `Rc`/arena escape hatch for graphs. The aim is for most code never to
-  write a lifetime annotation.
-- **Non-atomic by default**: RC is atomic only when the type system shows the value crosses threads.
 - **Allocators as a capability**: the allocator is visible (Zig-style), and per-scope arenas are cheap
   and idiomatic.
-- **No global GC**, but an optional per-task/per-actor collector for workloads that want it?
+- Machine-applicable diagnostics for the borrow check (e.g. "insert `.to_rc()` here"), aimed at
+  agents (§2.6).
 
-**Open questions.**
-- ~~Can lifetime inference cover the overwhelming majority of code?~~ Resolved: there are no
-  lifetime annotations at all; borrows are second-class and views have one inferred region.
-- ~~Should mutable value semantics be the default instead of references?~~ Resolved: a hybrid,
-  with Hylo-style parameter modes (`let`/`mut`/`sink`) plus view types.
+**Open questions** (more in [`memory-and-resources.md`](memory-and-resources.md) §10).
+- How do allocators interact with `.to_rc()` and arenas? Does an `Rc` remember its allocator?
+- What is the least noisy way to consume linear values on error paths (§3.1)?
+- Is there still a place for an optional per-task/per-actor collector, or does the model above make
+  it unnecessary?
 
 ---
 
@@ -569,7 +602,8 @@ These were not on the original list but come up repeatedly and interact with the
 - **Directions.** Errors as an *effect* (`fail(E)`) so they are visible in signatures but cheap to
   propagate; inferred error sets (Zig) to reduce boilerplate; mandatory handling; error return traces
   for free; a clear split between *recoverable errors* and *bugs* (contract violations → abort the
-  task, not the process, in structured concurrency).
+  task, not the process, in structured concurrency). Error propagation must also respect linear
+  values (§2.3): a path that propagates an error while holding an open transaction has to consume it.
 - **Open question.** Checked-exception fatigue (Java) vs inference: how much should be inferred?
 
 ### 3.2 Effects and capabilities as a unifying idea
@@ -586,6 +620,8 @@ These were not on the original list but come up repeatedly and interact with the
   - supply-chain security (capabilities, §2.5)
   - reviewability (effects in signatures, §2.6, §2.7)
   - testability (handlers swap real I/O for fakes, §3.6)
+  - implicit context (config, database pools) provided by handlers instead of threading context
+    objects through every call ([`memory-and-resources.md`](memory-and-resources.md) §4)
 - **Directions.** Effect *inference* inside a module, explicit effects at module/package boundaries;
   capabilities as values; handlers compiled to zero-cost code where possible (Koka's evidence passing).
 - **Open question.** Can effect systems be made ergonomic for mainstream programmers? No mainstream
@@ -680,7 +716,9 @@ When the problem areas are laid side by side, four ideas keep recurring:
 
 3. **Safe by default, with explicit escape hatches.** Unsafe, FFI, manual memory and wrapping
    arithmetic are always possible, but always *visible*: in signatures, in package metadata and in PR
-   summaries.
+   summaries. The same goes for **cost**: the default is zero-cost (owned values and borrows), and
+   anything more expensive is spelled out where it happens (`.to_rc()`, a sync cell, a `remote`
+   call).
 
 4. **Placement is one concept at every scale.** Thread → core → GPU → machine → tier: work is placed
    and coordinated by the same structured-concurrency model, and *where data lives* is part of its
@@ -700,7 +738,9 @@ Being honest about where goals collide:
 | Tension                                            | Notes                                                                                                                                                                                            |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Explicitness vs brevity                            | Effects in every signature could be noisy. Mitigate with inference inside modules and explicit effects only at boundaries.                                                                       |
-| Compile-time safety vs build speed                 | Borrow checking, effect inference and verification all cost time. Keep the expensive checks incremental and per-module.                                                                          |
+| Compile-time safety vs build speed                 | Borrow checking, effect inference and verification all cost time. Keep the expensive checks incremental and per-module. Second-class borrows help: the borrow check is local to each function. |
+| No lifetimes vs expressiveness                     | Second-class borrows and view types remove lifetime annotations, but lose structs with several independent lifetimes and borrows stored in long-lived data. Owning views, rc and indices fill the gap. |
+| Visible sharing vs single-threaded convenience     | rc contents are immutable and shared mutation needs sync cells, so a mutable graph used by one thread still pays (cheap) atomic costs. Arenas, indices and library collections are the idiomatic answer. |
 | Monomorphisation vs build time vs runtime speed    | Dual-mode generics (§2.4) is promising but unproven at scale.                                                                                                                                    |
 | Strict capabilities vs ergonomics                  | Passing capabilities everywhere is tedious. Need good defaults (e.g., `main` receives all; libraries receive nothing unless asked).                                                              |
 | Canonical syntax vs expressiveness                 | One way to do things limits DSLs and clever code, which is usually good, and sometimes painful.                                                                                                  |
@@ -763,7 +803,8 @@ Design constraints this places on the rest of Moddil:
   Keep the dependency in one place in the backend (the task/continuation runtime) so proposal
   changes stay local.
 - **Threads**: shared memory + atomics are available but restricted in browsers (cross-origin
-  isolation). Structured concurrency must degrade gracefully to a single thread.
+  isolation). Structured concurrency must degrade gracefully to a single thread; on a single thread
+  every biased-RC operation takes the cheap owner path ([`concurrency.md`](concurrency.md) §6).
 - **Exceptions, SIMD, tail calls**: use the standard proposals (exception handling, 128-bit SIMD,
   tail calls) where available; error handling (§3.1) must not depend on unwinding.
 - **GPU (§2.2)** in the browser goes through WebGPU/WGSL, so kernel lowering needs a WGSL path.
@@ -850,29 +891,34 @@ store, Hashiverse) are the yardstick for every decision. A feature no example ne
 removal.
 
 **Technical questions**
-6. ~~Implementation language for the bootstrap compiler and back ends.~~ **Proposed in
-   [`bootstrap.md`](bootstrap.md):** stage 0 in Rust, then self-host; Cranelift (debug) + LLVM
-   (release) + own WASM emitter + naga/LLVM for GPU; Wasmtime as the reference WASM runtime first.
-7. ~~Ownership/borrowing vs mutable value semantics vs generational references as the memory
-   core.~~ **Decided**: see [`memory-and-resources.md`](memory-and-resources.md).
+6. **Bootstrap compiler and back ends — proposed** in [`bootstrap.md`](bootstrap.md): stage 0 in
+   Rust, then self-host; Cranelift (debug) + LLVM (release) + own WASM emitter + naga/LLVM for GPU;
+   Wasmtime as the reference WASM runtime first.
+7. **Memory core — decided** in [`memory-and-resources.md`](memory-and-resources.md): unique
+   ownership, second-class borrows and view types, `.to_rc()` with biased RC, affine + linear
+   resources (summary in §2.3).
 8. Effect system design: row-polymorphic (Koka) vs capability-passing vs hybrid.
 9. Canonical AST storage: text with canonical printing, or a structured store (Unison-style) with text
    as a view?
 
-**Proposed next documents**
-- `specs/effects-and-capabilities.md`: the unifying mechanism (§3.2)
-- `specs/memory-and-resources.md`: **written**: ownership, borrows and views, rc, linear resources (§2.3)
-- `specs/concurrency.md`: **written** (CPU part): sharing rules and structured concurrency (§2.1); GPU (§2.2) still to come
+**Documents written** (see the document map at the top)
+- `specs/memory-and-resources.md`: ownership, borrows and views, rc, linear resources, zero-copy I/O (§2.3)
+- `specs/concurrency.md`: CPU part — sharing rules, structured concurrency, runtime contract (§2.1)
+- `specs/mods.md`: mods, core/mod boundary, standard-mod catalogue (R2)
+- `specs/bootstrap.md`: stage 0, self-hosting, backends, WASM support status (R1)
+- `specs/examples/`: the four reference systems
+
+**Documents still to write**
+- `specs/effects-and-capabilities.md`: the unifying mechanism (§3.2). Natural next step: both
+  written specs lean on effects (suspension, scheduling, implicit context).
+- `specs/concurrency.md`, GPU part: kernels, memory spaces, launches as scoped tasks (§2.2)
 - `specs/packages-and-supply-chain.md`: §2.5
 - `specs/agent-interface.md`: compiler-as-a-service for LLMs (§2.6)
 - `specs/semantic-vcs.md`: diffs and review (§2.7)
-- `specs/interop.md`: §2.8
+- `specs/interop.md`: §2.8, including how C pointers map onto ownership, borrows and rc
 - `specs/distribution.md`: placement, the `remote` effect, wire contracts, topology manifests (§2.9)
 - `specs/requirements.md`: firm requirements (R1 WASM, R2 small core, …) and non-goals, grown from §6
-- `specs/mods.md`: **written**: mods, core/mod boundary, standard-mod catalogue
-- `specs/examples/`: **written**: the four reference systems
 - `specs/wasm.md`: target details: WASI/Component Model mapping, browser/JS interop, stack switching
-- `specs/bootstrap.md`: **written**: stage 0, self-hosting, backends, WASM support status
 
 ---
 
@@ -882,11 +928,15 @@ removal.
 
 - **Concurrency:** Nystrom, "What Color is Your Function?" (2015); N. J. Smith, "Notes on structured
   concurrency, or: Go statement considered harmful" (2018); Pony reference capabilities and the ORCA
-  GC; Java JEP 444 (virtual threads) and JEP 453/480 (structured concurrency).
+  GC; Java JEP 444 (virtual threads) and JEP 453/480 (structured concurrency); Rust
+  `std::thread::scope` and rayon.
 - **GPU:** Ragan-Kelley et al., *Halide* (PLDI 2013); Tillet et al., *Triton* (MAPL 2019); Henriksen
   et al., *Futhark* (PLDI 2017); MLIR (Lattner et al., CGO 2021); SYCL specification.
 - **Memory:** Reinking et al., *Perceus: Garbage Free Reference Counting with Reuse* (PLDI 2021);
-  Vale generational references; Hylo (Val) mutable value semantics; Rust Polonius.
+  Vale generational references; Hylo (Val) mutable value semantics and parameter conventions; Mojo
+  argument conventions and origins; Swift non-escaping closures; Rust Polonius; Choi, Shull,
+  Torrellas, *Biased Reference Counting* (PACT 2018) and CPython PEP 703; Austral and Linear
+  Haskell (linear types); Rust `bytes::Bytes` and `yoke`; FlatBuffers, Cap'n Proto, SBE.
 - **Build systems:** Mokhov, Mitchell, Peyton Jones, *Build Systems à la Carte* (ICFP 2018); Salsa;
   Bazel / Buck2.
 - **Supply chain:** Go modules and Cox's "Our Software Dependency Problem" (2019); SLSA; Sigstore;
