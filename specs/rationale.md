@@ -17,6 +17,7 @@
 | [`accelerators.md`](accelerators.md)                 | GPUs and accelerators: three kernel levels, devices and addressing, launches as tasks (§2.9)     | Decided direction                    |
 | [`observability.md`](observability.md)               | Logging, spans, metrics as write-only effects; task-aware stacks; flight recorder; introspection (§2.12) | Decided direction            |
 | [`interop.md`](interop.md)                           | C ABI and Rust only: header import, overlays, generated Rust bridge, components, C++ via shims (§2.13) | Decided direction              |
+| [`docs-and-tests.md`](docs-and-tests.md)             | Checked and generated docs, examples as tests, attached tests and benchmarks, notes (§2.17, §2.18) | Decided direction                  |
 | [`mods.md`](mods.md)                                 | Mods, the core/mod boundary, standard-mod catalogue (R2)                                         | Decided direction                    |
 | [`error-handling.md`](error-handling.md)             | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§2.3)              | Partly decided; survey               |
 | [`correctness.md`](correctness.md)                   | Contracts, validated newtypes, property testing, fuzzing, verification, assurance levels (§2.7)  | Proposal                             |
@@ -790,6 +791,17 @@ graph the largest attack surface in modern software.
   LSP, benchmark harness and linter, shipped with the compiler, removes endless ecosystem fragmentation.
 - **Directions.** The compiler is a library and a service; every tool (formatter, LSP, agent API,
   semantic diff, docs) uses the same front end.
+- **Decided: docs and tests live next to the code, and do more than in Rust** (detail:
+  [`docs-and-tests.md`](docs-and-tests.md)).
+  - `///` docs are parsed into the AST and **checked** (parameter names, links, error docs); effects,
+    capabilities, error sets, contracts and traps are **generated** by the compiler.
+  - **Examples are tests** with expected results (`// => value`), run in the same build under the
+    deterministic simulation runtime.
+  - **Tests name their subject** (`test "…" for withdraw { }`), so tooling and semantic diffs know
+    what each test covers. Property tests, fuzz targets, proofs and benchmarks attach the same way,
+    and contracts become tests automatically.
+  - Only affected tests run, with results cached by content hash.
+  - `note` blocks record the *why* for maintainers, separate from user docs.
 
 ---
 
@@ -842,6 +854,8 @@ languages optimise for the writer and against the reviewer.
   checking.
 - **Intent and provenance.** First-class places for *why* (design notes, linked issues) and *who/what*
   (human, model, model version, prompt reference) that survive refactors, unlike comments, which drift.
+  The *why* is decided: `note` blocks attached to declarations
+  ([`docs-and-tests.md`](docs-and-tests.md) §9); where provenance lives is still open.
 - **Stable, small surface syntax** that changes rarely, so training data stays valid. Editions handle
   evolution (§2.20).
 - **Explainability tooling**: `explain` commands that show the expanded, desugared, effect-annotated
@@ -1132,6 +1146,7 @@ removal.
 - `specs/accelerators.md`: GPUs and accelerators, devices and addressing, kernels (§2.9)
 - `specs/observability.md`: logging, tracing, metrics, task-aware stacks, flight recorder (§2.12)
 - `specs/interop.md`: C ABI and Rust interop, overlays, generated bridge, C++ via shims (§2.13)
+- `specs/docs-and-tests.md`: docs, examples, attached tests and benchmarks, notes (§2.17, §2.18)
 - `specs/mods.md`: mods, core/mod boundary, standard-mod catalogue (R2)
 - `specs/error-handling.md`: `?`, try blocks, R3, outcome classes, traces (§2.3); survey of prior art
 - `specs/correctness.md`: contracts, testing and verification (§2.7); proposal

@@ -88,7 +88,9 @@ fn withdraw_never_overdraws(account: Account, amount: Money) {
 
 - **Coverage-guided fuzzing** in the standard test runner (Go `go test -fuzz`, cargo-fuzz): fuzz
   targets look like tests, and failing inputs are saved as regression tests.
-- **Doc tests**: examples in documentation are compiled and run (Rust).
+- **Doc tests**: examples in documentation are compiled and run (Rust). In Moddil they carry
+  expected results and run under the simulation runtime; all of this section's tools attach to the
+  declaration they test ([`docs-and-tests.md`](docs-and-tests.md)).
 - **Snapshot / golden tests** (`insta`), useful for generated code and comptime expansions.
 
 ### 3.5 Mutation testing

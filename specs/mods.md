@@ -135,7 +135,7 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 | `moddil/sql` | Typed SQL, schemas, migrations, connection pools | H W |
 | `moddil/timeseries` | Columnar storage, compression, tick data | H |
 | `moddil/sim` | Deterministic simulation: network, time, faults (§2.11) | G H W X |
-| `moddil/test`, `moddil/prop`, `moddil/bench` | Test runner, property-based testing, fuzzing, mutation testing, benchmarks ([`correctness.md`](correctness.md)) | G H W X |
+| `moddil/test`, `moddil/prop`, `moddil/bench` | Test runner, property-based testing, fuzzing, mutation testing, benchmarks ([`correctness.md`](correctness.md), [`docs-and-tests.md`](docs-and-tests.md)) | G H W X |
 | `moddil/verify` | Verifier front end: proof obligations, SMT back ends, assurance levels (open: core tool or mod) | H X |
 | `moddil/log`, `moddil/trace` | Handlers for the write-only `log`/`span`/`metric` effects: pretty output, OTLP, Prometheus, flight recorder ([`observability.md`](observability.md)) | G H W X |
 | `moddil/web` | Browser APIs, DOM, JS interop for the `wasm-browser` target | G W X |
