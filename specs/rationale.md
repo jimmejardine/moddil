@@ -16,6 +16,7 @@
 | [`concurrency.md`](concurrency.md) | CPU concurrency: sharing rules, structured tasks, sync cells, runtime contract (§2.1) | Decided direction (CPU); GPU to come |
 | [`mods.md`](mods.md) | Mods, the core/mod boundary, standard-mod catalogue (R2) | Decided direction |
 | [`error-handling.md`](error-handling.md) | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§3.1) | Partly decided; survey |
+| [`comptime.md`](comptime.md) | Compile-time evaluation, reflection, typed derives, tagged-literal DSLs instead of macros (§3.4) | Decided direction |
 | [`bootstrap.md`](bootstrap.md) | Bootstrap compiler, self-hosting, backends, WASM engine support (R1) | Proposed |
 | [`examples/`](examples/README.md) | Four reference systems used to test every decision | Written |
 
@@ -287,7 +288,7 @@ that iterate dozens of times per task.
 - **Avoid monomorphisation blow-up by default**: dictionary passing / dynamic dispatch for generics in
   debug builds, specialisation in release builds (as Swift does with witness tables).
 - **Bounded compile-time execution**: compile-time code is deterministic, sandboxed, has no I/O, and
-  is cacheable.
+  is cacheable ([`comptime.md`](comptime.md) §3).
 - **Hot reload** of function bodies in dev builds.
 
 **Open questions.**
@@ -331,7 +332,8 @@ graph the largest attack surface in modern software.
   library only gets what its caller hands it. (Prior art: E, Austral, WASI, Deno.)
 - **Capability diffs on upgrade**: "`foo` 1.4 → 1.5 now requests `net`" is a red flag shown by the tool.
 - **No arbitrary code at install time.** Build logic is declarative or runs in a WASM sandbox
-  (R1, §6.1) with no network or file access beyond its inputs.
+  (R1, §6.1) with no network or file access beyond its inputs. Comptime code, which replaces proc
+  macros, is pure and sandboxed ([`comptime.md`](comptime.md) §10).
 - **Reproducible builds by default**; packages are published from source and the registry verifies
   the build.
 - **Hash-pinned lockfiles, minimal version selection, transparency log.**
@@ -717,12 +719,35 @@ fn connect(host: let str, port: Port?) ! {net, fail(NetError)} {
 
 ### 3.4 Metaprogramming
 
-- **Problem.** Macros are powerful but break tooling, readability, caching and LLM understanding
-  (C preprocessor, C++ templates, Rust proc macros).
-- **State of the art.** Zig `comptime` (ordinary code run at compile time, no separate macro language);
-  Rust hygienic `macro_rules!`; Lisp/Racket macros; C++ `constexpr`/reflection (C++26).
-- **Directions.** Zig-style compile-time evaluation plus **static reflection**; no textual macros;
-  compile-time code is pure, sandboxed and cached (§2.4); every expansion can be viewed (§2.6).
+**Problem.** Macros are powerful but break tooling, readability, caching and LLM understanding
+(C preprocessor, C++ templates, Rust proc macros). Proc macros also run arbitrary code at build time.
+
+**State of the art.**
+- **Zig `comptime`**: ordinary code run at compile time, with no separate macro language. Types are
+  values and reflection is built in. But generics are duck-typed, and comptime cannot add
+  declarations (no `derive`).
+- **Rust**: hygienic `macro_rules!` and very powerful proc macros (`serde`, `sqlx`), which are opaque,
+  slow to build and unsandboxed.
+- **Others**: C++ `constexpr` and C++26 static reflection; Swift's sandboxed, typed macros;
+  Lisp/Racket macros.
+
+**Decision** (detail: [`comptime.md`](comptime.md)).
+- **No macro language.** Metaprogramming is ordinary Moddil code run by the compiler.
+- **Comptime is pure**: an empty effect set, deterministic, fuel-limited, sandboxed and cached by
+  input hash (§2.4). External inputs come only through declared `embed` files.
+- **Generics stay trait-bounded** and are checked at definition. Comptime is for values (sizes,
+  tables, format strings) and for code generation.
+- **Static reflection**: `reflect(T)`, read-only, respecting visibility.
+- **Typed generation at the annotation site.** `@derive(serde.Serialize)` calls a comptime function
+  that returns a typed impl built through a construction API, never token streams.
+- **Tagged string literals for DSLs**: `fmt"…"`, `re"…"`, `sql"…"`. These are checked at compile time,
+  with interpolations as typed holes, and `sql` checks against an embedded schema rather than a
+  live database.
+- **Every expansion is visible**, through `explain` (§2.6) and in semantic diffs (§2.7).
+
+**Open questions** (more in [`comptime.md`](comptime.md) §13).
+- Does comptime run in an interpreter inside the compiler, as WASM, or a hybrid?
+- What are the default compile-time budget and the per-mod limits?
 
 ### 3.5 Correctness tooling: contracts and verification
 
@@ -997,6 +1022,7 @@ removal.
 - `specs/concurrency.md`: CPU part — sharing rules, structured concurrency, runtime contract (§2.1)
 - `specs/mods.md`: mods, core/mod boundary, standard-mod catalogue (R2)
 - `specs/error-handling.md`: `?`, try blocks, R3, outcome classes, traces (§3.1); survey of prior art
+- `specs/comptime.md`: compile-time evaluation, reflection, typed derives, tagged literals (§3.4)
 - `specs/bootstrap.md`: stage 0, self-hosting, backends, WASM support status (R1)
 - `specs/examples/`: the four reference systems
 
@@ -1043,6 +1069,9 @@ removal.
   nullable reference types; Java Project Valhalla null-restricted types and JSpecify; Rust niche
   optimisation and pattern types; F* and Liquid Haskell refinement types; typestate (Strom and
   Yemini, 1986).
+- **Metaprogramming:** Zig `comptime`; Rust proc macros, `syn`, `serde`, `sqlx`; C++26 static
+  reflection (P2996); D CTFE; Jai `#run`/`#insert`; Nim macros; Swift macros; Scala 3 inline and
+  quotes; JavaScript tagged templates.
 - **Interop:** Zig `@cImport` / `zig cc`; Swift C++ interoperability; Carbon language goals; `cxx`;
   `crubit`; Rust `crabi` proposal.
 - **Determinism:** FoundationDB simulation testing; TigerBeetle VOPR; `rr`.
