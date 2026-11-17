@@ -96,6 +96,11 @@ ecosystems into "sync" and "async" halves.
   language.
 - Cancellation is an afterthought almost everywhere.
 
+**Decided:** see [`concurrency.md`](concurrency.md). Data-race freedom comes from the memory model
+([`memory-and-resources.md`](memory-and-resources.md)) plus structured concurrency: children may
+borrow from their parent's frame, rc is thread-safe and immutable inside, and shared mutation only
+goes through sync cells, so no `Send`/`Sync` traits are needed.
+
 **Directions.**
 - **No function colouring.** Suspension is an *effect*, not a different kind of function (see §3.2).
   The runtime or compiler chooses stackful or stackless implementation; the user never chooses.
@@ -107,8 +112,9 @@ ecosystems into "sync" and "async" halves.
 - Deterministic scheduling mode for tests (see §3.6).
 
 **Open questions.**
-- Can reference capabilities (Pony) be made more approachable than Rust's borrow checker, or is the
-  complexity irreducible?
+- ~~Can reference capabilities (Pony) be made more approachable than Rust's borrow checker?~~
+  Resolved: second-class borrows and view types, no lifetime annotations
+  ([`memory-and-resources.md`](memory-and-resources.md) §3–§4).
 - Should preemption be guaranteed (BEAM-style) or cooperative?
 
 ---
@@ -190,6 +196,11 @@ touch it; those who do are often tied to one vendor.
 - Atomic RC makes multithreaded code slower even when objects are never shared.
 - Rust lifetimes leak into APIs and make refactoring expensive.
 
+**Decided:** see [`memory-and-resources.md`](memory-and-resources.md). Unique ownership/RAII by
+default; `.to_rc()` (biased RC) is the only way to share a pointer; rc contents are immutable and
+shared mutation uses sync cells; borrows are second-class with *view types* and no lifetime
+parameters; resources are affine, with opt-in linear types for must-finalise resources.
+
 **Directions.**
 - **Deterministic destruction by default, enforced by the compiler**: RAII that cannot be bypassed.
 - **Linear/affine types for *every* resource**, not only memory. A file handle that is not closed, a
@@ -204,9 +215,10 @@ touch it; those who do are often tied to one vendor.
 - **No global GC**, but an optional per-task/per-actor collector for workloads that want it?
 
 **Open questions.**
-- Can lifetime inference cover the overwhelming majority of code, so annotations become rare
-  (as research on Rust Polonius, Hylo/Val's mutable value semantics, and Vale suggests)?
-- Should mutable value semantics (Hylo/Val, Swift) be the default model instead of references?
+- ~~Can lifetime inference cover the overwhelming majority of code?~~ Resolved: there are no
+  lifetime annotations at all; borrows are second-class and views have one inferred region.
+- ~~Should mutable value semantics be the default instead of references?~~ Resolved: a hybrid,
+  with Hylo-style parameter modes (`let`/`mut`/`sink`) plus view types.
 
 ---
 
@@ -841,15 +853,16 @@ removal.
 6. ~~Implementation language for the bootstrap compiler and back ends.~~ **Proposed in
    [`bootstrap.md`](bootstrap.md):** stage 0 in Rust, then self-host; Cranelift (debug) + LLVM
    (release) + own WASM emitter + naga/LLVM for GPU; Wasmtime as the reference WASM runtime first.
-7. Ownership/borrowing vs mutable value semantics vs generational references as the memory core.
+7. ~~Ownership/borrowing vs mutable value semantics vs generational references as the memory
+   core.~~ **Decided**: see [`memory-and-resources.md`](memory-and-resources.md).
 8. Effect system design: row-polymorphic (Koka) vs capability-passing vs hybrid.
 9. Canonical AST storage: text with canonical printing, or a structured store (Unison-style) with text
    as a view?
 
 **Proposed next documents**
 - `specs/effects-and-capabilities.md`: the unifying mechanism (§3.2)
-- `specs/memory-and-resources.md`: §2.3 in depth
-- `specs/concurrency.md`: CPU + GPU structured concurrency (§2.1, §2.2)
+- `specs/memory-and-resources.md`: **written**: ownership, borrows and views, rc, linear resources (§2.3)
+- `specs/concurrency.md`: **written** (CPU part): sharing rules and structured concurrency (§2.1); GPU (§2.2) still to come
 - `specs/packages-and-supply-chain.md`: §2.5
 - `specs/agent-interface.md`: compiler-as-a-service for LLMs (§2.6)
 - `specs/semantic-vcs.md`: diffs and review (§2.7)

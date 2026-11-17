@@ -119,13 +119,13 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 |---|---|---|
 | `moddil/collections` | Vec, Map, Set, deque, ring buffers, persistent collections | G H W X |
 | `moddil/text` | UTF-8 strings, Unicode, regex | G W X |
-| `moddil/serde` | Serialisation framework; binary and JSON formats; schema evolution | G H W X |
+| `moddil/serde` | Serialisation framework; binary and JSON formats; schema evolution; zero-copy validated views ([`memory-and-resources.md`](memory-and-resources.md) §6) | G H W X |
 | `moddil/fs` / `moddil/io` | Files, streams, buffers | H W X |
 | `moddil/net` | TCP, UDP, TLS, HTTP/1-2-3, WebSocket, WebTransport | G H W X |
 | `moddil/rpc` | Compiler-generated wire contracts, version compatibility (§2.9) | G H W X |
 | `moddil/time` | Clocks, monotonic time, time zones, high-resolution timestamps | G H W X |
 | `moddil/runtime`, `-wasm`, `-sim` | Effect handlers for scheduling and I/O (§4) | G H W X |
-| `moddil/sync` | Channels, lock-free queues (SPSC/MPMC), atomics wrappers | G H X |
+| `moddil/sync` | Sync cells (`Atomic<T>`, `AtomicRc<T>`, `Mutex`, `RwLock`), channels, lock-free queues (SPSC/MPMC) ([`concurrency.md`](concurrency.md) §4) | G H X |
 | `moddil/alloc` | Arenas, pools, bump allocators, allocator capability | G H |
 | `moddil/crypto` | Ed25519, ML-DSA, FN-DSA, Blake2/3, SHA-2/3, ChaCha20-Poly1305, TLS primitives | W X |
 | `moddil/simd`, `moddil/tensor` | Portable SIMD, n-d arrays | G H X |
