@@ -16,6 +16,7 @@
 | [`concurrency.md`](concurrency.md)                   | CPU concurrency: sharing rules, structured tasks, sync cells, runtime contract (§2.8)            | Decided direction                    |
 | [`accelerators.md`](accelerators.md)                 | GPUs and accelerators: three kernel levels, devices and addressing, launches as tasks (§2.9)     | Decided direction                    |
 | [`observability.md`](observability.md)               | Logging, spans, metrics as write-only effects; task-aware stacks; flight recorder; introspection (§2.12) | Decided direction            |
+| [`interop.md`](interop.md)                           | C ABI and Rust only: header import, overlays, generated Rust bridge, components, C++ via shims (§2.13) | Decided direction              |
 | [`mods.md`](mods.md)                                 | Mods, the core/mod boundary, standard-mod catalogue (R2)                                         | Decided direction                    |
 | [`error-handling.md`](error-handling.md)             | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§2.3)              | Partly decided; survey               |
 | [`correctness.md`](correctness.md)                   | Contracts, validated newtypes, property testing, fuzzing, verification, assurance levels (§2.7)  | Proposal                             |
@@ -621,7 +622,7 @@ and continuous profilers.
 
 ---
 
-### 2.13 Interoperability with C, C++ and Rust
+### 2.13 Interoperability with C and Rust
 
 **Problem.** Nobody adopts a language that can't use existing code. Decades of C libraries, huge C++
 codebases, and a growing Rust ecosystem must be reachable with low friction and low overhead.
@@ -643,24 +644,29 @@ codebases, and a growing Rust ecosystem must be reachable with low friction and 
 - **Rust has no stable ABI**; interop goes through `extern "C"`, losing generics, traits, and ownership.
 - Each FFI boundary is a hole in safety guarantees.
 
-**Directions.**
-- **Zero-overhead C ABI** in both directions, and **direct import of C headers** (Zig-style), with a
-  bundled C compiler/cross-compiler.
-- **Annotation overlays** for imported C APIs: ownership (owned / borrowed / rc), nullability
-  (nullable pointers become `Option<…>`, §2.4), thread safety, and capabilities, ideally shareable
-  across projects (like TypeScript's DefinitelyTyped).
-- **C++**: a defined, documented subset (POD types, non-template functions, explicit instantiations,
-  simple classes) via a Clang-based importer; no promise of full template interop.
-- **Rust**: via `extern "C"` + a richer **interface description** (shared IDL that both sides generate
-  from, carrying ownership and simple generics). Track Rust's `crabi` / stable-ABI efforts.
-- **Foreign code is a capability**: calling FFI requires `ffi`/`unsafe` in the effect set, so it is
-  visible in signatures, PR summaries (§2.19) and package audits (§2.16).
-- **Export to C** cleanly, so Moddil can be adopted *inside* existing C/C++/Rust projects
-  one module at a time.
+**Decision** (detail: [`interop.md`](interop.md)).
+- **Only the C ABI and Rust are supported by the language.** C++ is reached through C shims
+  (`extern "C"` wrappers), hand-written or produced by an optional tool, never by a C++ importer in
+  the compiler. Mobile platform APIs are reachable through C too (JNI, the Objective-C runtime, Swift
+  `@_cdecl`).
+- **C, both directions, zero overhead**: direct header import (Zig-style), C-layout types, C export
+  with generated headers.
+- **The toolchain compiles C**: C dependencies are built hermetically and cross-compiled by the
+  bundled clang/LLVM (`zig cc`-style).
+- **Annotation overlays** type the C surface: ownership (owned / borrowed / linear), nullability
+  (`Option`, §2.4), error conventions (`fail(E)`), effects including `blocking` (offloaded by the
+  runtime), thread affinity and capabilities. They are shared across projects, DefinitelyTyped-style.
+- **Rust through a generated bridge** over the C ABI (as UniFFI, Diplomat and `cxx` do): tooling
+  reads a crate's API and generates a Rust shim plus Moddil bindings, mapping ownership, `Option`,
+  `Result` → `fail`, panics → traps, and futures → suspension. crABI is tracked, not depended on.
+- **WASM components (WIT)** are the sandboxed path for untrusted or browser-bound C and Rust code.
+- **Foreign code is visible**: raw bindings are `unsafe`, and the `ffi` capability shows in
+  signatures, PR summaries (§2.19) and package audits (§2.16). Callbacks from C are entry points
+  (R3), and nothing unwinds across the boundary.
 
-**Open questions.**
-- How much C++ is worth supporting? Carbon and Swift spent years on this.
-- Should the language *be able to compile C* (as Zig does) to own the build end-to-end?
+**Open questions** (more in [`interop.md`](interop.md) §12).
+- How stable is rustdoc's JSON output as the bridge's input, and how far can generics cross?
+- Who may publish annotation overlays, and how are they audited?
 
 ---
 
@@ -1036,7 +1042,7 @@ Details: [`error-handling.md`](error-handling.md).
 - Maximum syntactic novelty. Familiar syntax wins unless there is a strong reason.
 - Replacing every language. Scripting, notebooks and quick glue may remain better served elsewhere
   (open question: is a REPL/script mode desirable?).
-- Full C++ template interop.
+- C++ interop in the language. C++ is reached through C shims ([`interop.md`](interop.md) §10).
 - A custom VCS that replaces Git (tooling on top of Git first).
 - A cloud platform, orchestrator or service mesh. Moddil emits artefacts and manifests for existing
   ones.
@@ -1084,7 +1090,8 @@ with effects and capabilities as a unifying mechanism, are where the opportunity
    central for ML, peripheral for services).
 2. **Who is the first user?** An agent-assisted team writing services? A numerics group? The answer
    sets the bar for ergonomics vs guarantees.
-3. **Adoption path**: embed in existing C/C++/Rust codebases one module at a time (§2.13)?
+3. **Adoption path**: embed in existing C/C++/Rust codebases one module at a time, through C export
+   and the generated Rust bridge (§2.13)?
 4. **Is multi-tier deployment (§2.10) a v0 goal**, or something the design must *allow* but only
    delivers later? Even if it comes later, placement has to be in the type system from the start.
 5. **Mobile and UI**: shared logic under native UI shells, or a Moddil UI mod? See
@@ -1112,6 +1119,7 @@ removal.
 - `specs/concurrency.md`: sharing rules, structured concurrency, runtime contract (§2.8)
 - `specs/accelerators.md`: GPUs and accelerators, devices and addressing, kernels (§2.9)
 - `specs/observability.md`: logging, tracing, metrics, task-aware stacks, flight recorder (§2.12)
+- `specs/interop.md`: C ABI and Rust interop, overlays, generated bridge, C++ via shims (§2.13)
 - `specs/mods.md`: mods, core/mod boundary, standard-mod catalogue (R2)
 - `specs/error-handling.md`: `?`, try blocks, R3, outcome classes, traces (§2.3); survey of prior art
 - `specs/correctness.md`: contracts, testing and verification (§2.7); proposal
@@ -1126,7 +1134,6 @@ removal.
 - `specs/packages-and-supply-chain.md`: §2.16
 - `specs/agent-interface.md`: compiler-as-a-service for LLMs (§2.18)
 - `specs/semantic-vcs.md`: diffs and review (§2.19)
-- `specs/interop.md`: §2.13, including how C pointers map onto ownership, borrows and rc
 - `specs/distribution.md`: placement, the `remote` effect, wire contracts, topology manifests (§2.10)
 - `specs/requirements.md`: firm requirements (R1 WASM, R2 small core, …) and non-goals, grown from §5
 - `specs/wasm.md`: target details: WASI/Component Model mapping, browser/JS interop, stack switching
@@ -1166,7 +1173,7 @@ removal.
   reflection (P2996); D CTFE; Jai `#run`/`#insert`; Nim macros; Swift macros; Scala 3 inline and
   quotes; JavaScript tagged templates.
 - **Interop:** Zig `@cImport` / `zig cc`; Swift C++ interoperability; Carbon language goals; `cxx`;
-  `crubit`; Rust `crabi` proposal.
+  `crubit`; Rust `crabi` proposal; Mozilla UniFFI; ICU4X Diplomat; `wit-bindgen`; RLBox.
 - **Determinism:** FoundationDB simulation testing; TigerBeetle VOPR; `rr`.
 - **Observability:** OpenTelemetry; W3C Trace Context; Rust `tracing`; Java Flight Recorder; BEAM
   observer and recon; defmt; Yang et al., *NanoLog* (USENIX ATC 2018); Pernosco; WinDbg TTD;

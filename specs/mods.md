@@ -148,8 +148,8 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 - **Capability review**: any increase in a standard mod's declared capabilities needs review.
 - **Audit trail** (§2.16): standard mod releases are reproducibly built, signed, and reviewed. The
   review record says whether the reviewer was a human or an agent.
-- **Wrappers are allowed**: a mod may wrap a C or Rust library (§2.13), but it carries the `ffi`
-  capability, which is visible to every consumer.
+- **Wrappers are allowed**: a mod may wrap a C or Rust library (§2.13, [`interop.md`](interop.md)),
+  but it carries the `ffi` capability, which is visible to every consumer.
 - **Editions**: standard mods follow language editions, with automated migrations (§2.20).
 
 ## 8. Open questions
