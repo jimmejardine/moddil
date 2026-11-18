@@ -14,28 +14,28 @@ Status legend:
 
 **Problem areas** (each links to its summary below)
 
-| §                                                             | Area                                   | Status       | Detail                                                                                   |
-| ------------------------------------------------------------- | -------------------------------------- | ------------ | ---------------------------------------------------------------------------------------- |
-| [2.1](#21-effects-and-capabilities-as-a-unifying-idea)        | Effects and capabilities               | 🟡 started   | [`effects-and-capabilities.md`](effects-and-capabilities.md)                             |
-| [2.2](#22-memory-and-resource-management)                     | Memory and resource management         | 🟠 questions | [`memory-and-resources.md`](memory-and-resources.md)                                     |
-| [2.3](#23-error-handling)                                     | Error handling                         | 🟠 questions | [`error-handling.md`](error-handling.md)                                                 |
-| [2.4](#24-null-and-invalid-states)                            | Null and invalid states                | 🟠 questions | [`null-safety.md`](null-safety.md)                                                       |
-| [2.5](#25-numerics-and-data)                                  | Numerics and data                      | 🟡 started   | [`numerics.md`](numerics.md), [`units.md`](units.md)                                     |
-| [2.6](#26-metaprogramming)                                    | Metaprogramming                        | 🟠 questions | [`comptime.md`](comptime.md)                                                             |
-| [2.7](#27-correctness-tooling-contracts-and-verification)     | Contracts and verification             | 🟡 started   | [`correctness.md`](correctness.md)                                                       |
-| [2.8](#28-concurrency-across-cpus)                            | Concurrency across CPUs                | 🟠 questions | [`concurrency.md`](concurrency.md), [`closures.md`](closures.md)                         |
-| [2.9](#29-concurrency-across-gpus-and-accelerators)           | GPUs and accelerators                  | 🟠 questions | [`accelerators.md`](accelerators.md)                                                     |
-| [2.10](#210-distributed-and-multi-tier-programs)              | Distributed and multi-tier programs    | 🟠 questions | [`distribution.md`](distribution.md)                                                     |
-| [2.11](#211-determinism-and-reproducibility)                  | Determinism and reproducibility        | 🟡 started   | [`determinism.md`](determinism.md)                                                       |
-| [2.12](#212-observability-and-debuggability)                  | Observability and debuggability        | 🟠 questions | [`observability.md`](observability.md)                                                   |
-| [2.13](#213-interoperability-with-c-and-rust)                 | Interoperability with C and Rust       | 🟠 questions | [`interop.md`](interop.md)                                                               |
-| [2.14](#214-build-times)                                      | Build times                            | 🟡 started   | [`build-times.md`](build-times.md)                                                       |
-| [2.15](#215-cross-compilation-and-deployment)                 | Cross-compilation and deployment       | 🟠 questions | [`targets.md`](targets.md), [`freestanding.md`](freestanding.md)                         |
-| [2.16](#216-package-management-and-supply-chain-security)     | Packages and supply-chain security     | 🟡 started   | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)                           |
-| [2.17](#217-tooling-uniformity)                               | Tooling uniformity                     | 🟠 questions | [`docs-and-tests.md`](docs-and-tests.md)                                                 |
-| [2.18](#218-llms-as-first-class-programmers)                  | LLMs as first-class programmers        | 🟡 started   | [`agent-interface.md`](agent-interface.md)                                               |
-| [2.19](#219-diffs-code-review-and-version-control)            | Diffs, code review and version control | 🟡 started   | [`semantic-vcs.md`](semantic-vcs.md)                                                     |
-| [2.20](#220-language-evolution)                               | Language evolution                     | 🟡 started   | [`evolution.md`](evolution.md)                                                           |
+| §                                                         | Area                                   | Status       | Detail                                                           |
+| --------------------------------------------------------- | -------------------------------------- | ------------ | ---------------------------------------------------------------- |
+| [2.1](#21-effects-and-capabilities-as-a-unifying-idea)    | Effects and capabilities               | 🟡 started   | [`effects-and-capabilities.md`](effects-and-capabilities.md)     |
+| [2.2](#22-memory-and-resource-management)                 | Memory and resource management         | 🟠 questions | [`memory-and-resources.md`](memory-and-resources.md)             |
+| [2.3](#23-error-handling)                                 | Error handling                         | 🟠 questions | [`error-handling.md`](error-handling.md)                         |
+| [2.4](#24-null-and-invalid-states)                        | Null and invalid states                | 🟠 questions | [`null-safety.md`](null-safety.md)                               |
+| [2.5](#25-numerics-and-data)                              | Numerics and data                      | 🟡 started   | [`numerics.md`](numerics.md), [`units.md`](units.md)             |
+| [2.6](#26-metaprogramming)                                | Metaprogramming                        | 🟠 questions | [`comptime.md`](comptime.md)                                     |
+| [2.7](#27-correctness-tooling-contracts-and-verification) | Contracts and verification             | 🟡 started   | [`correctness.md`](correctness.md)                               |
+| [2.8](#28-concurrency-across-cpus)                        | Concurrency across CPUs                | 🟠 questions | [`concurrency.md`](concurrency.md), [`closures.md`](closures.md) |
+| [2.9](#29-concurrency-across-gpus-and-accelerators)       | GPUs and accelerators                  | 🟠 questions | [`accelerators.md`](accelerators.md)                             |
+| [2.10](#210-distributed-and-multi-tier-programs)          | Distributed and multi-tier programs    | 🟠 questions | [`distribution.md`](distribution.md)                             |
+| [2.11](#211-determinism-and-reproducibility)              | Determinism and reproducibility        | 🟡 started   | [`determinism.md`](determinism.md)                               |
+| [2.12](#212-observability-and-debuggability)              | Observability and debuggability        | 🟠 questions | [`observability.md`](observability.md)                           |
+| [2.13](#213-interoperability-with-c-and-rust)             | Interoperability with C and Rust       | 🟠 questions | [`interop.md`](interop.md)                                       |
+| [2.14](#214-build-times)                                  | Build times                            | 🟡 started   | [`build-times.md`](build-times.md)                               |
+| [2.15](#215-cross-compilation-and-deployment)             | Cross-compilation and deployment       | 🟠 questions | [`targets.md`](targets.md), [`freestanding.md`](freestanding.md) |
+| [2.16](#216-package-management-and-supply-chain-security) | Packages and supply-chain security     | 🟡 started   | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)   |
+| [2.17](#217-tooling-uniformity)                           | Tooling uniformity                     | 🟠 questions | [`docs-and-tests.md`](docs-and-tests.md)                         |
+| [2.18](#218-llms-as-first-class-programmers)              | LLMs as first-class programmers        | 🟡 started   | [`agent-interface.md`](agent-interface.md)                       |
+| [2.19](#219-diffs-code-review-and-version-control)        | Diffs, code review and version control | 🟡 started   | [`semantic-vcs.md`](semantic-vcs.md)                             |
+| [2.20](#220-language-evolution)                           | Language evolution                     | 🟡 started   | [`evolution.md`](evolution.md)                                   |
 
 **Other documents**
 
