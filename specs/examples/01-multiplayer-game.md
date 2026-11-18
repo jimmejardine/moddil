@@ -79,8 +79,8 @@ Initial targets, to be refined:
 
 - Standard: `moddil/net` (WebTransport, WebRTC data channels, WebSocket), `moddil/rpc`,
   `moddil/runtime` / `-wasm` / `-sim`, `moddil/serde` (compact binary), `moddil/gpu` (WebGPU),
-  `moddil/simd`, `moddil/web`, `moddil/sync`, `moddil/collections`, `moddil/text`, `moddil/ui` (game
-  HUD / menus, possibly).
+  `moddil/simd`, `moddil/web`, `moddil/sync`, `moddil/collections`, `moddil/text`. The HUD and menus are
+  GPU-rendered or DOM ([`ui.md`: Games and graphics](../ui.md#games-and-graphics)).
 - New: `game/netcode` (prediction, interpolation, delta compression), `game/chat`.
 
 ## Interop and non-Moddil parts
@@ -96,4 +96,5 @@ Initial targets, to be refined:
   plus a deterministic `moddil/math`, which would make it achievable.)
 - Is WebTransport sufficient everywhere, or is a WebRTC data-channel fallback required?
 - How much of the hub is a choreography, and how much is ordinary server code?
-- Is a game UI/HUD a use case for `moddil/ui`, or always custom-rendered?
+- ~~Is a game UI/HUD a use case for `moddil/ui`?~~ **Resolved:** there is no standard UI mod; the HUD is
+  GPU-rendered or DOM ([`ui.md`: Games and graphics](../ui.md#games-and-graphics)).

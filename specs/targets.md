@@ -151,7 +151,9 @@ build or the repository.
   libraries for apps.
 - **iOS:** Moddil produces static libraries or frameworks; final app packaging needs Apple's tools.
 - This matches the web store's "shared logic, native UI shells" approach
-  ([`examples/03-web-store.md`](examples/03-web-store.md)). Scope is open ([Open questions](#open-questions)).
+  ([`examples/03-web-store.md`](examples/03-web-store.md)). **Decided scope:** Moddil builds the
+  XCFramework and AAR plus generated bindings; Xcode and Gradle build and sign the app
+  ([`ui.md`: Mobile packaging](ui.md#mobile-packaging)).
 
 ## Fit check against the reference examples
 
@@ -166,7 +168,7 @@ build or the repository.
 
 - **Licensing review** of bundling macOS headers and link stubs.
 - Notarising from CI without a Mac, and how Apple credentials are held.
-- Scope of iOS and Android packaging.
+- ~~Scope of iOS and Android packaging.~~ **Resolved** ([`ui.md`: Mobile packaging](ui.md#mobile-packaging)).
 - Which tier-2 targets (Windows on ARM, FreeBSD, RISC-V), and when they become tier 1.
 - The default CPU feature level per architecture.
 - Which glibc versions to ship stubs for.

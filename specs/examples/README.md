@@ -68,7 +68,6 @@ mods the example would create.
 | `moddil/timeseries` | | ● | | |
 | `moddil/web` | ● | | ● | ● |
 | `moddil/storage` | | | ○ | ● |
-| `moddil/ui` | ○ | | ● | ○ |
 | **new** | `game/netcode`, `game/chat` | `hft/marketdata`, `hft/risk`, `hft/fix` | `store/catalog`, `store/payments` | `hashiverse/protocol`, `moddil/dht`?, `moddil/pow`? |
 
 ## Proposed order

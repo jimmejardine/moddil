@@ -76,9 +76,9 @@ The web client is covered by WASM (R1). Android and iOS raise new requirements:
      renderer on all three platforms (the Flutter / Compose Multiplatform approach).
   3. **Web everywhere**: the web client wrapped in a native shell (Capacitor/Tauri-style).
 
-**Recommendation:** start with option 1 (shared logic plus thin native UI shells). It needs C-ABI
-export ([Interoperability with C and Rust](../interop.md)) and binding generation for Swift and Kotlin, both of which Moddil needs anyway. A
-`moddil/ui` can follow later as a community or standard mod.
+**Decided:** option 1, shared logic under native UI shells, permanently. Moddil never owns UI;
+`moddil bind` generates the Swift, Kotlin and TypeScript bindings, and the toolchain packages the core
+as an XCFramework and an AAR ([`ui.md`](../ui.md)). Options 2 and 3 are left to community mods.
 
 ## Success criteria
 
@@ -96,7 +96,7 @@ Initial targets, to be refined:
 - Standard: `moddil/net` (HTTP server/client), `moddil/rpc`, `moddil/sql`, `moddil/serde` (JSON +
   binary), `moddil/crypto` (password hashing, tokens), `moddil/decimal` (money), `moddil/text`,
   `moddil/time`, `moddil/web`, `moddil/storage` (client cache), `moddil/log`, `moddil/trace`,
-  `moddil/test`, `moddil/prop`, `moddil/ui` (later).
+  `moddil/test`, `moddil/prop`.
 - New: `store/catalog`, `store/cart`, `store/orders`, `store/payments` (wrapping a provider's API).
 
 ## Interop and non-Moddil parts
@@ -107,7 +107,7 @@ Initial targets, to be refined:
 
 ## Open questions
 
-- Which mobile UI option? (The recommendation above is a starting point.)
+- ~~Which mobile UI option?~~ **Resolved:** shared core under native UI shells ([`ui.md`](../ui.md)).
 - How far back must API compatibility checking go, and how does the compiler know which client
   versions are still in use (deployment metadata)?
 - Is typed SQL a language feature (compile-time evaluation against a schema), or purely a mod using

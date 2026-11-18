@@ -17,8 +17,8 @@ areas.
 4. **Is multi-tier deployment ([Distributed and multi-tier programs](distribution.md)) a v0 goal?** **Decided:** the language layer (components,
    placement, `remote`, contracts, single-process and simulated runs) is v0; images, Compose,
    Kubernetes and skew checks are v1; other adapters later ([`distribution.md`: Staging](distribution.md#staging)).
-5. **Mobile and UI**: shared logic under native UI shells, or a Moddil UI mod? See
-   [`examples/03-web-store.md`](examples/03-web-store.md).
+5. **Mobile and UI**: shared logic under native UI shells, or a Moddil UI mod? **Decided:** native UI
+   over a shared Moddil core, always; no standard UI mod ([`ui.md`](ui.md)).
 
 The **reference examples** in [`examples/`](examples/README.md) (multiplayer game, HFT platform, web
 store, Hashiverse) are the yardstick for every decision. A feature no example needs is a candidate for
