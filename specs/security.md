@@ -1,36 +1,231 @@
 # Security model
 
-> **Status:** not started. Nothing is decided yet; this page records the problem and the
-> questions to settle. Listed in the [index](README.md).
+> **Status:** decided direction, details open. Listed in the [index](README.md). This document ties
+> together security mechanisms decided in other areas and states the guarantee they add up to.
+> Snippets are **illustration only**.
+
+## Summary
+
+| Topic | Decision |
+|---|---|
+| **The guarantee** | **Capabilities are a real security boundary for safe code.** Code in a mod without the `unsafe` or `ffi` capability can use only the authority it is passed. Compiler soundness bugs are therefore security vulnerabilities ([The guarantee: capabilities as a boundary](#the-guarantee-capabilities-as-a-boundary)). |
+| **Stronger isolation** | Crash containment, resource limits and untrusted `unsafe` or native code go in **WASM components** ([Isolation beyond capabilities](#isolation-beyond-capabilities)). |
+| **Information flow** | A **small, fixed set of labels**: `Secret<T>`, `Personal<T>` and `Untrusted<T>`, checked by the compiler ([Information-flow labels](#information-flow-labels)). |
+| **Constant time** | `#[constant_time]` functions are **checked by the compiler**, and the backends preserve constant-time behaviour ([Constant-time code](#constant-time-code)). |
+| **Security fixes** | Advisories inform; taking a fix before its cooldown ends is a **manual, recorded override** ([Supply chain](#supply-chain)). |
 
 ## Problem
 
-Moddil's security pieces are each designed in their own area: capabilities and root authority,
-capability-scoped dependencies and the supply chain, the `unsafe` boundary, trust boundaries and
-secrets between distributed components, and WASM components as a sandbox. What is missing is the
-whole picture: a threat model that says which attackers Moddil defends against, which guarantees it
-makes as a single claim, and the gaps between the pieces (secrets in logs, timing side channels,
-personal data flowing where it should not).
+Moddil's security mechanisms were each designed in their own area: capabilities and root authority,
+capability ceilings on dependencies, the randomised cooldown, the `unsafe` boundary, trust boundaries
+between distributed components, and secrets kept out of logs. Each is useful on its own, but without a
+threat model nobody can say which attackers Moddil defends against, what it promises as a single
+claim, or where the gaps between the pieces are.
 
-## Touched on in
+## Prior art
 
-[`effects-and-capabilities.md`: Authority comes only from root capabilities](effects-and-capabilities.md#authority-comes-only-from-root-capabilities),
-[`packages-and-supply-chain.md`: Capability-scoped dependencies](packages-and-supply-chain.md#capability-scoped-dependencies), [`unsafe.md`](unsafe.md),
-[`distribution.md`](distribution.md) (trust boundaries, secrets), [`interop.md`: WASM components: the sandboxed path](interop.md#wasm-components-the-sandboxed-path),
-[`observability.md`](observability.md) and [`correctness.md`](correctness.md) (personal data).
+| System | What it does | Lesson |
+|---|---|---|
+| **E, Joe-E, Austral, Pony** | Object-capability languages: no ambient authority; references are permissions | Capabilities can be a real boundary inside one process when the language removes ambient authority |
+| **Java SecurityManager** | Runtime permission checks inside the JVM; deprecated for removal | Failed because of ambient authority, reflection and a huge trusted library surface; checks at run time are easy to forget |
+| **Deno** | Process-wide permissions (`--allow-net`) | Coarse, but proves that users accept declared authority |
+| **Rust** | Memory safety; RustSec advisories and `cargo audit`; the `subtle` crate for constant time | Safety without authority control; constant time is best effort because the optimiser may break it |
+| **WASM components** | Memory-isolated modules with explicit imports | Strong isolation at a calling-convention cost |
+| **Jif, FlowCaml** | Information-flow type systems with label lattices | Expressive, but rarely adopted because labels are noisy |
+| **Spectre and its variants** | Speculative execution leaks across boundaries | No language can fully close microarchitectural channels in software |
 
-## Questions to settle
+## Threat model
 
-- The **threat model**: malicious or compromised dependencies, hostile network input, untrusted
-  plugins, insiders, and which of these each mechanism addresses.
-- **Memory safety and authority as one stated guarantee**: what safe Moddil code can never do,
-  whatever its dependencies do.
-- **Secret types**: values that cannot be logged or formatted, are zeroed on drop, and compare in
-  constant time.
-- **Information flow**: tracking personal or sensitive data (taint) through a program, and whether
-  that belongs in types, effects or a lint.
-- **Constant-time code** for cryptography: can the compiler promise not to introduce branches or
-  table lookups on secret data?
-- **Sandboxing untrusted code**: WASM components, capability narrowing, resource limits.
-- **Security response**: advisories, CVEs, how fixes reach users through pinned versions and the
-  randomised cooldown, and who owns the process ([`governance.md`](governance.md)).
+| Attacker | Main defences | Defined in | Not covered |
+|---|---|---|---|
+| **A malicious or compromised dependency** | Capability ceilings per dependency; no ambient authority; no code at fetch or build time; randomised cooldown; audit trail | [`packages-and-supply-chain.md`](packages-and-supply-chain.md), [`effects-and-capabilities.md`](effects-and-capabilities.md) | A dependency granted `unsafe` or `ffi` is trusted with everything |
+| **Hostile input** (network, files, IPC) | Memory safety; `Untrusted<T>`; parse-don't-validate decoding; overflow and bounds traps; typed errors (R3) | [`data.md`](data.md), [`numerics.md`](numerics.md), [`error-handling.md`](error-handling.md) | Algorithmic denial of service, beyond keyed hashing ([Open questions](#open-questions)) |
+| **A hostile client** (browser or app on a machine the attacker controls) | `Untrusted<T>` from `client`; secrets cannot be placed on `client`; server-side validation | [`distribution.md`: Trust, secrets and capabilities](distribution.md#trust-secrets-and-capabilities) | Anything that runs on the client itself |
+| **Untrusted plugins or tenant code** | WASM components with explicit imports and resource limits | [Isolation beyond capabilities](#isolation-beyond-capabilities), [`interop.md`](interop.md) | |
+| **A compromised build or toolchain** | Reproducible builds; hash-pinned sources; pure, sandboxed comptime; double-compiling check of the compiler | [`determinism.md`: Reproducible builds](determinism.md#reproducible-builds), [`comptime.md`](comptime.md), [`bootstrap.md`](bootstrap.md) | A compromised machine that produces both build and check |
+| **Leaks through observability** | `Secret<T>` and `Personal<T>` cannot reach logs, traces or metrics | [`observability.md`: Secrets never reach observability](observability.md#secrets-never-reach-observability) | Leaks through ordinary program output the programmer wrote deliberately |
+| **Timing side channels** | `#[constant_time]` code for secrets | [Constant-time code](#constant-time-code) | Cache and power channels outside constant-time code |
+
+**Out of scope, stated explicitly:** physical access and hardware attacks; Spectre-class speculative
+leaks beyond what constant-time code and opt-in mitigations provide; and malicious code that has been
+granted `unsafe` or `ffi`, which can do anything its process can.
+
+## The guarantee: capabilities as a boundary
+
+**Decision: Moddil's capabilities are a security boundary for safe code, not just an audit aid.**
+
+> Code in a mod that does not hold the `unsafe` or `ffi` capability can perform only the effects it
+> declares, using only the capability values and handlers it is passed. It cannot read or write
+> memory it was not given a reference to, and it cannot obtain authority from anywhere else.
+
+The claim holds given two conditions:
+
+1. **`unsafe` and `ffi` code elsewhere in the program is correct.** Such code is contained and may
+   sit behind safe interfaces ([`unsafe.md`](unsafe.md)), but it is trusted: it is visible in manifests,
+   requires human review by default, and is checked before publishing.
+2. **The compiler is sound.** A soundness bug that lets safe code exceed its authority is a **security
+   vulnerability**, handled with an advisory like any other ([Security response](#security-response)).
+
+What makes the claim possible:
+
+- **No ambient authority.** `main` receives the root capabilities; nothing else can create them
+  ([`effects-and-capabilities.md`: Authority comes only from root capabilities](effects-and-capabilities.md#authority-comes-only-from-root-capabilities)).
+- **No global mutable state** that could smuggle authority between unrelated code.
+- **No reflection that bypasses visibility.** Reflection is static and respects privacy
+  ([`comptime.md`](comptime.md)).
+- **Comptime is pure and sandboxed**: no build scripts, no I/O at compile time.
+- **Effects are checked**, including across mod boundaries, where they are written out.
+- **A closed list of undefined behaviour**, reachable only inside `unsafe`
+  ([`unsafe.md`: The closed list of undefined behaviour](unsafe.md#the-closed-list-of-undefined-behaviour)).
+
+**Why this succeeds where Java's SecurityManager failed:** Java had ambient authority (any code could
+call `new FileInputStream`), unrestricted reflection, and permission checks that libraries had to
+remember to call at run time. Moddil has none of these. Authority is a value, its absence is a
+compile error, and reflection cannot reach private state.
+
+**In practice:**
+
+```rust
+// A third-party template engine, declared with no capabilities in its manifest.
+// It can only use what this call hands it: here, a read-only view of one directory.
+with fs = fs.read_only(theme_dir) {
+    let html = templates::render(&page, &ctx)?;
+}
+```
+
+- **Capability diffs in review:** an upgrade that adds `net` to a logging library shows up in the
+  semantic diff and needs explicit acceptance ([`semantic-vcs.md`](semantic-vcs.md),
+  [`packages-and-supply-chain.md`: Capability-scoped dependencies](packages-and-supply-chain.md#capability-scoped-dependencies)).
+- **Narrow before delegating:** handlers are narrowed (`fs.read_only`, `net.only("api.example.com")`)
+  before untrusted code runs ([`effects-and-capabilities.md`](effects-and-capabilities.md)).
+
+## Isolation beyond capabilities
+
+Capabilities control authority, not resources or crashes. Use a **WASM component** when you need:
+
+- **untrusted native or `unsafe` code** (a C library you have not audited, a plugin from a user);
+- **resource limits**: fuel (instruction budgets) and memory caps for tenant code;
+- **crash containment**: a trap inside the component does not take down the host;
+- **a stable plugin interface** described in WIT ([`interop.md`: WASM components: the sandboxed path](interop.md#wasm-components-the-sandboxed-path)).
+
+The cost is a copy at the boundary for non-scalar data and a calling-convention overhead; inside the
+component, code runs at full speed.
+
+## Information-flow labels
+
+**Decision: a small, fixed set of labels, checked by the compiler.**
+
+| Label | Meaning | Rules |
+|---|---|---|
+| **`Secret<T>`** | Credentials, keys, tokens | Cannot reach logs, traces, metrics, `Debug`, `Display` or serialisation; cannot be placed on `client`; zeroed on drop; `==` is constant time ([Secret handling](#secret-handling)) |
+| **`Personal<T>`** | Personal data: names, emails, addresses, identifiers of people | Cannot reach logs, traces or metrics; may be stored or sent only to placements and stores declared for it in the topology ([`distribution.md`](distribution.md)) |
+| **`Untrusted<T>`** | Data from `client`, peers or other untrusted sources | Must be validated (into a validated newtype, or by explicit checks) before use ([`correctness.md`: Validated newtypes (lightweight refinements)](correctness.md#validated-newtypes-lightweight-refinements)) |
+
+- **Labels nest.** A struct with a `Secret` field cannot be logged as a whole; a derived `Debug`
+  prints the field as redacted ([`values.md`](values.md)).
+- **Declassification is explicit and auditable.** `secret.redacted()`, `personal.hash_for_correlation()`
+  and `personal.declassify(reason: "…")` are ordinary calls that the semantic diff reports
+  ([`semantic-vcs.md`](semantic-vcs.md)) and that a lint can require to be reviewed.
+- **The checks are type-based**, not a separate analysis: the observability effects and the
+  serialisation traits are simply not implemented for labelled types.
+
+```rust
+struct Customer { id: CustomerId, email: Personal<Email>, card_token: Secret<Token> }
+
+log.info(fmt"checkout for {customer.id}");          // ✓
+log.info(fmt"checkout for {customer.email}");       // ✗ compile error: Personal<Email> in a log event
+log.info(fmt"checkout for {customer:?}");           // ✓ prints email and card_token as redacted
+```
+
+## Secret handling
+
+- **Zeroed on drop, guaranteed.** The compiler emits volatile zeroing that the optimiser may not
+  remove, including on error and cancellation paths ([`memory-and-resources.md`](memory-and-resources.md)).
+- **No accidental copies.** `Secret<T>` is never `Copy`; cloning is explicit
+  ([`values.md`](values.md)).
+- **Constant-time equality.** `==` on secrets compares in constant time.
+- **Where secrets come from:** secret-provider handlers (Vault, Kubernetes secrets, cloud KMS), never
+  manifests or source ([`distribution.md`](distribution.md)).
+- **Secrets in recordings:** record and replay must exclude or encrypt secret-typed values
+  ([`observability.md`](observability.md), open there).
+
+## Constant-time code
+
+**Decision: constant-time code is checked by the compiler, and the backends preserve it.**
+
+```rust
+#[constant_time]
+fn verify_mac(expected: &Secret<[u8; 32]>, actual: &[u8; 32]) -> bool {
+    let mut diff = 0u8;
+    for i in 0..32 { diff |= expected.expose()[i] ^ actual[i]; }   // fixed bounds: OK
+    diff == 0
+}
+```
+
+- **Inside a `#[constant_time]` function**, the compiler rejects branches, indexing, division and
+  remainder, early returns and loop bounds that depend on `Secret` values.
+- **The backends preserve it**: secret-dependent selections lower to conditional moves or masked
+  arithmetic, and optimisation passes that could introduce branches or table lookups on those values
+  are disabled for them, in Cranelift and in LLVM.
+- **Testing:** `moddil/test` includes statistical timing tests (dudect style) for
+  `#[constant_time]` functions.
+- `moddil/crypto` is written this way, so applications rarely write constant-time code themselves.
+
+## Supply chain
+
+Decided in [`packages-and-supply-chain.md`](packages-and-supply-chain.md) and summarised here:
+
+- **Capability ceilings** per dependency; capability increases need explicit acceptance.
+- **Hash-pinned sources** in plain git; the source is the release.
+- **No code at fetch or build time**: no build scripts, no install hooks, sandboxed comptime.
+- **Randomised cooldown** of 7–28 days before a new version can be adopted.
+- **An audit trail in git**, recording whether a human or an agent reviewed each version.
+
+**Security fixes (decided): advisories inform; a person or agent decides.**
+
+- `moddil audit` checks the dependency graph against advisory feeds the project chooses (such as
+  OSV) and flags affected versions in every build and in CI.
+- Taking a fixed version before its cooldown ends is a **manual override**, per mod and version,
+  recorded in the manifest so that it shows up in review
+  ([`packages-and-supply-chain.md`: Randomised cooldown](packages-and-supply-chain.md#randomised-cooldown)). Advisories never
+  bypass the cooldown automatically: an attacker who can publish a fake advisory must not be able to
+  push a release straight into every project.
+
+## Memory safety and `unsafe`
+
+- Safe Moddil is memory-safe and free of data races ([`memory-and-resources.md`](memory-and-resources.md),
+  [`concurrency.md`](concurrency.md)).
+- `unsafe` is contained, carries safety contracts, is checked before publishing and needs human review
+  by default ([`unsafe.md`](unsafe.md)).
+- Errors cannot be left unhandled ([R3](requirements.md#firm-requirements-decided)); traps end a task
+  or process with a full trace, never with undefined behaviour ([`error-handling.md`](error-handling.md)).
+
+## Security response
+
+- **Reporting:** a private channel for vulnerabilities in the compiler, the standard mods and the
+  toolchain, with a published disclosure policy and embargo period.
+- **Scope:** compiler soundness bugs that let safe code exceed its authority, bugs in the label checks
+  or constant-time checking, and vulnerabilities in standard mods.
+- **Advisories:** published in OSV format, so `moddil audit` and existing tools can read them.
+- **Ownership** of the process sits with governance ([`governance.md`](governance.md)).
+
+## Fit with the reference examples
+
+| Example | Main threats | Moddil's defences |
+|---|---|---|
+| [Web store](examples/03-web-store.md) | Payment credentials, customer data, hostile clients | `Secret` payment keys; `Personal` customer data kept out of logs; `Untrusted` cart contents validated on the server |
+| [Hashiverse](examples/04-hashiverse.md) | Hostile peers, key theft, timing attacks | `Untrusted` peer data; keys as `Secret` behind a key-locker handler; constant-time crypto |
+| [HFT platform](examples/02-hft-platform.md) | Credential theft, insiders, compromised dependencies | Capability ceilings on market-data and FIX mods; secrets from providers; audit trail |
+| [Multiplayer game](examples/01-multiplayer-game.md) | Cheating clients, malformed packets | Authoritative server; `Untrusted` inputs; parse-don't-validate decoding |
+
+## Open questions
+
+1. **User-defined labels:** are three labels enough, or will domains (health data, export-controlled
+   data) need their own?
+2. **Declassification:** exact syntax, and whether a reason string must be recorded and reviewed.
+3. **Spectre mitigations:** opt-in speculative load hardening for code that handles secrets?
+4. **Constant-time guarantees through LLVM:** how much can be guaranteed without maintaining LLVM
+   patches, and how is it verified (binary analysis in CI)?
+5. **Capability safety of comptime and tests:** comptime is pure; are test helpers and simulation
+   handlers held to the same rules?
+6. **Denial of service inside a process:** memory and CPU budgets per task, or only per component?

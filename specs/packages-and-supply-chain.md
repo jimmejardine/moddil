@@ -145,7 +145,8 @@ github.com/acme/json                  v2 → v3 available (major)
   - it is **deterministic**, so developers and CI agree, and an attacker cannot make anyone's delay
     shorter.
 - **Overrides are explicit**, per mod or per version, e.g. to take a security fix immediately. They
-  are recorded in the manifest, so they show up in review.
+  are recorded in the manifest, so they show up in review. Advisories never bypass the cooldown
+  automatically ([`security.md`: Supply chain](security.md#supply-chain)).
 - **Transitive interaction**: if a new release of A requires B ≥ 1.5 and B 1.5 is still in its
   cooldown, `update` holds A back and says why.
 - How a release's age is established without a central service is open ([Open questions](#open-questions)).
@@ -289,7 +290,8 @@ Working-copy overrides are unpinned by nature, so they are for development only 
   backdated to skip the cooldown. Recommended: measure age from the later of the tag date and when
   this project first saw the tag (recorded by `outdated` and `update`). A first `add` still has to
   trust the tag date.
-- How are security advisories distributed with no central service?
+- How are security advisories distributed with no central service? (Format and process:
+  [`security.md`: Security response](security.md#security-response).)
 - How are typosquatting and look-alike URLs caught without a naming authority?
 - Pre-1.0: is each `0.x` minor a major (Cargo), or does `v0` promise nothing (Go)?
 - Do standard mods ship with the toolchain, or are they fetched like any other mod

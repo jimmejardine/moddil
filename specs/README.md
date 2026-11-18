@@ -40,7 +40,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Type system core](types.md)                                       | 🟠 major questions | [`types.md`](types.md)                                                     |
 | [Modules, visibility and program structure](modules.md)            | 🟡 minor questions | [`modules.md`](modules.md)                                                 |
 | [`unsafe` and the safety boundary](unsafe.md)                      | 🟡 minor questions | [`unsafe.md`](unsafe.md)                                                   |
-| [Security model](security.md)                                      | ⚪ not started     | [`security.md`](security.md)                                               |
+| [Security model](security.md)                                      | 🟡 minor questions | [`security.md`](security.md)                                               |
 | [Numerics and data](numerics.md)                                   | 🟠 major questions | [`numerics.md`](numerics.md), [`units.md`](units.md)                       |
 | [Text and strings](text.md)                                        | 🟡 minor questions | [`text.md`](text.md)                                                       |
 | [Metaprogramming](comptime.md)                                     | 🟡 minor questions | [`comptime.md`](comptime.md)                                               |

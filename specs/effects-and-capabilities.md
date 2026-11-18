@@ -134,6 +134,9 @@ fn load_plugin(p: &Plugin) with fs, fail(PluginError) {
 - Tests and simulations build handlers from simulation values rather than root capabilities, so the same
   code runs against fakes ([`determinism.md`](determinism.md)).
 
+Capabilities are a **security boundary**, not only an audit aid: code in a mod without `unsafe` or
+`ffi` can use only the authority it is passed ([`security.md`: The guarantee: capabilities as a boundary](security.md#the-guarantee-capabilities-as-a-boundary)).
+
 ### Capability values
 
 When code needs **two instances of the same effect at once** (a bridge between two networks, a test

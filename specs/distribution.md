@@ -98,6 +98,9 @@ mod web    { … api::checkout(cart) … }   // here: with remote, fail(RemoteEr
   validated newtype ([`correctness.md`: Validated newtypes (lightweight refinements)](correctness.md#validated-newtypes-lightweight-refinements)).
 - **`Secret<T>`** can never flow to `client`, nor into logs or traces
   ([`observability.md`: Secrets never reach observability](observability.md#secrets-never-reach-observability)).
+- **`Personal<T>`** (personal data) never reaches logs or traces, and may be stored or sent only to
+  placements declared for it. The labels and the threat model are in
+  [`security.md`: Information-flow labels](security.md#information-flow-labels).
 - **Capabilities per component** give least privilege: the compiler knows that `Worker` never uses
   `db`. That **capability graph** is exported to Layer B, which turns it into network and secret
   policies ([Adapter mods](#adapter-mods)).

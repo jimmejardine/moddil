@@ -25,4 +25,5 @@ plan for the community, security response or funding that a long-lived language 
 - **Trademark and the name** "Moddil", the tagline ("armour, not baggage") and the armadillo
   mascot and logo ([`adoption.md`](adoption.md)).
 - **Funding** for the compiler, standard mods and infrastructure.
-- **Security response**: who owns advisories and fixes ([`security.md`](security.md)).
+- **Security response**: who owns advisories and fixes; the process itself is in
+  [`security.md`: Security response](security.md#security-response).

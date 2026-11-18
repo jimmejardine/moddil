@@ -13,6 +13,7 @@
 | **Scoped-borrow aliasing** | A borrow made from a raw pointer is valid for its lexical scope; raw pointers alias freely. |
 | **Strict provenance** | Pointers carry provenance; integer↔pointer conversion is explicit and `unsafe`. |
 | **Checked before publishing** | Debug builds check cheap conditions; the interpreter-based checker must pass before a mod with `unsafe` is published. |
+| **Part of the security model** | Safe code's authority is bounded by its capabilities only if `unsafe` code is correct; that is why `unsafe` is trusted, visible and reviewed ([`security.md`](security.md)). |
 | **Human review by default** | New or changed `unsafe` and `ffi` code needs a human reviewer under the default `vet` policy. |
 
 ## Problem

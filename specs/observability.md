@@ -84,6 +84,7 @@ metric.count("orders.filled", 1, venue: order.venue)
 - A `Secret<T>` value **cannot flow into the arguments of any observability event**. This is a compile
   error, including when the secret is nested inside a struct or an error payload being logged.
 - Explicit projections are allowed and visible: `secret.redacted()`, `secret.hash_for_correlation()`.
+- **`Personal<T>`** (personal data) follows the same rule ([`security.md`: Information-flow labels](security.md#information-flow-labels)).
 - Reviewers no longer need to check every log line for leaked credentials or personal data.
 
 ## Task-aware stacks and the task tree
