@@ -7,13 +7,13 @@ Open questions for a single area live in that area's document (see the [index](R
 areas.
 
 **Strategic questions**
-1. **Primary target domain** for v0? Candidates: systems / infrastructure services; ML and
-   numeric (GPU-heavy); embedded; general applications. The choice reshapes priorities (e.g., GPU is
-   central for ML, peripheral for services).
-2. **Who is the first user?** An agent-assisted team writing services? A numerics group? The answer
-   sets the bar for ergonomics vs guarantees.
+1. **Primary target domain** for v0? **Decided:** backend and infrastructure services, plus fast
+   native modules for Python ([`adoption.md`: First audiences](adoption.md#first-audiences)).
+2. **Who is the first user?** **Decided:** backend and infrastructure teams, and Python teams that
+   need speed ([`adoption.md`: First audiences](adoption.md#first-audiences)).
 3. **Adoption path**: embed in existing C/C++/Rust codebases one module at a time, through C export
-   and the generated Rust bridge ([Interoperability with C and Rust](interop.md))?
+   and the generated Rust bridge ([Interoperability with C and Rust](interop.md))? **Decided**, with
+   Python extension modules and `moddil migrate rust` added ([`adoption.md`: Adopting inside existing codebases](adoption.md#adopting-inside-existing-codebases)).
 4. **Is multi-tier deployment ([Distributed and multi-tier programs](distribution.md)) a v0 goal?** **Decided:** the language layer (components,
    placement, `remote`, contracts, single-process and simulated runs) is v0; images, Compose,
    Kubernetes and skew checks are v1; other adapters later ([`distribution.md`: Staging](distribution.md#staging)).

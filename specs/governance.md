@@ -22,6 +22,7 @@ plan for the community, security response or funding that a long-lived language 
 - **Agents in the process**: agent-written RFCs, implementations and reviews, and how their review
   records are marked.
 - A **code of conduct** and moderation.
-- **Trademark and the name** "Moddil".
+- **Trademark and the name** "Moddil", the tagline ("armour, not baggage") and the armadillo
+  mascot and logo ([`adoption.md`](adoption.md)).
 - **Funding** for the compiler, standard mods and infrastructure.
 - **Security response**: who owns advisories and fixes ([`security.md`](security.md)).

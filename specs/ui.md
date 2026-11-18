@@ -102,7 +102,8 @@ impl Cart {
 
 ## Generated bindings
 
-`moddil bind --lang swift|kotlin|typescript` reads a core's exported items and generates the bindings,
+`moddil bind --lang swift|kotlin|typescript` reads a core's exported items and generates the bindings
+(Python is also a target, and the first one: [`adoption.md`: Python first](adoption.md#python-first)),
 built on the C ABI on native targets ([`interop.md`: The C ABI, both directions](interop.md#the-c-abi-both-directions)) and on WASM exports in the browser.
 
 | Moddil | Swift | Kotlin | TypeScript |
@@ -237,7 +238,7 @@ Moddil does not standardise a UI framework, but nothing stops community mods fro
    types; how are exported traits (implemented by the shell) expressed in each language?
 4. **Live update under a running shell:** can a debug build hot-swap the core while the app stays open
    ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds))?
-5. **More binding languages:** **Python is a priority** for adoption ([`adoption.md`](adoption.md));
-   Hashiverse ships Python wrappers today. C# and .NET later?
+5. **More binding languages:** Python is **decided** as the first binding, in v0
+   ([`adoption.md`: Python first](adoption.md#python-first)). C# and .NET later?
 6. **Platform-API handlers:** adopt the shell-provided handler direction above as the standard way to
    reach device services?

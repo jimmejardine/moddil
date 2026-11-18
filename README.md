@@ -2,6 +2,8 @@
 
 # Moddil
 
+**Moddil: the programming language with armour, not baggage.**
+
 Moddil is a programming language being designed for three shifts happening at once:
 
 - **LLM agents write more of the code**, and humans mostly review and approve it.

@@ -30,7 +30,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Requirements and non-goals](requirements.md)                      | 🟡 minor questions | [`requirements.md`](requirements.md): R1–R3 and non-goals                  |
 | [Reference examples](examples/README.md)                           | 🟠 major questions | [`examples/`](examples/README.md): game, HFT, web store, Hashiverse        |
 | [Surface syntax and paradigms](syntax.md)                          | 🟡 minor questions | [`syntax.md`](syntax.md), [`paradigms.md`](paradigms.md)                   |
-| [Language definition and conformance](definition.md)               | ⚪ not started      | [`definition.md`](definition.md)                                           |
+| [Language definition and conformance](definition.md)               | ⚪ not started     | [`definition.md`](definition.md)                                           |
 | **The language**                                                   |                    |                                                                            |
 | [Effects and capabilities](effects-and-capabilities.md)            | 🟠 major questions | [`effects-and-capabilities.md`](effects-and-capabilities.md)               |
 | [Memory and resource management](memory-and-resources.md)          | 🟡 minor questions | [`memory-and-resources.md`](memory-and-resources.md)                       |
@@ -40,14 +40,14 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Type system core](types.md)                                       | 🟠 major questions | [`types.md`](types.md)                                                     |
 | [Modules, visibility and program structure](modules.md)            | 🟡 minor questions | [`modules.md`](modules.md)                                                 |
 | [`unsafe` and the safety boundary](unsafe.md)                      | 🟡 minor questions | [`unsafe.md`](unsafe.md)                                                   |
-| [Security model](security.md)                                      | ⚪ not started      | [`security.md`](security.md)                                               |
+| [Security model](security.md)                                      | ⚪ not started     | [`security.md`](security.md)                                               |
 | [Numerics and data](numerics.md)                                   | 🟠 major questions | [`numerics.md`](numerics.md), [`units.md`](units.md)                       |
 | [Text and strings](text.md)                                        | 🟡 minor questions | [`text.md`](text.md)                                                       |
 | [Metaprogramming](comptime.md)                                     | 🟡 minor questions | [`comptime.md`](comptime.md)                                               |
 | [Contracts and verification](correctness.md)                       | 🟠 major questions | [`correctness.md`](correctness.md)                                         |
 | **Running programs**                                               |                    |                                                                            |
 | [Concurrency across CPUs](concurrency.md)                          | 🟡 minor questions | [`concurrency.md`](concurrency.md), [`closures.md`](closures.md)           |
-| [Performance model](performance.md)                                | ⚪ not started      | [`performance.md`](performance.md)                                         |
+| [Performance model](performance.md)                                | ⚪ not started     | [`performance.md`](performance.md)                                         |
 | [GPUs and accelerators](accelerators.md)                           | 🟡 minor questions | [`accelerators.md`](accelerators.md)                                       |
 | [Distributed and multi-tier programs](distribution.md)             | 🟡 minor questions | [`distribution.md`](distribution.md)                                       |
 | [Determinism and reproducibility](determinism.md)                  | 🟠 major questions | [`determinism.md`](determinism.md)                                         |
@@ -67,8 +67,8 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [LLMs as first-class programmers](agent-interface.md)              | 🟡 minor questions | [`agent-interface.md`](agent-interface.md)                                 |
 | [Diffs, code review and version control](semantic-vcs.md)          | 🟡 minor questions | [`semantic-vcs.md`](semantic-vcs.md)                                       |
 | [Language evolution](evolution.md)                                 | 🟡 minor questions | [`evolution.md`](evolution.md)                                             |
-| [Adoption](adoption.md)                                            | ⚪ not started      | [`adoption.md`](adoption.md)                                               |
-| [Governance](governance.md)                                        | ⚪ not started      | [`governance.md`](governance.md)                                           |
+| [Adoption](adoption.md)                                            | 🟡 minor questions | [`adoption.md`](adoption.md)                                               |
+| [Governance](governance.md)                                        | ⚪ not started     | [`governance.md`](governance.md)                                           |
 | **The project**                                                    |                    |                                                                            |
 | [Bootstrap compiler and backends](bootstrap.md)                    | 🟠 major questions | [`bootstrap.md`](bootstrap.md) (R1)                                        |
 | [Roadmap and cross-cutting questions](roadmap.md)                  | 🟠 major questions | [`roadmap.md`](roadmap.md)                                                 |

@@ -127,6 +127,9 @@ components. **Cross-compilation ([Cross-compilation and deployment](targets.md))
 | **M3** | **Hashiverse CLI/native client** (example 4, phase A). LLVM release backend. **JSPI lowering for browsers and Node.** |
 | **M4** | Hashiverse **browser** client. Self-hosted stage 1; fixed-point CI; checked-in WASM bootstrap; double-compiling check. |
 
+**Python bindings** (`moddil bind --lang python`, wheels) follow M3, as the first binding target and
+one of the two first audiences ([`adoption.md`: Python first](adoption.md#python-first)). Recommended placement: between M3 and M4.
+
 ## WASM concurrency lowering
 
 Moddil's concurrency semantics (structured tasks, the `suspend` effect, no function colouring, [Concurrency across CPUs](concurrency.md))
