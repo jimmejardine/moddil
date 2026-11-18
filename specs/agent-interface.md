@@ -78,7 +78,8 @@ fn load(path: Path) -> Config ! {fs, fail(LoadError)}     // explicit: public si
 
 ### 5.2 The agent server
 
-The compiler is a library and a service (rationale §2.17). It is exposed over **LSP** for editors and
+The compiler is a library and a service (rationale §2.17; the whole toolchain is in
+[`toolchain.md`](toolchain.md)). It is exposed over **LSP** for editors and
 over **MCP** for agents, from the same front end.
 
 | Kind | Examples |

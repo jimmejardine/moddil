@@ -32,7 +32,7 @@ Status legend:
 | [2.14](#214-build-times)                                  | Build times                            | 🟡 started   | [`build-times.md`](build-times.md)                               |
 | [2.15](#215-cross-compilation-and-deployment)             | Cross-compilation and deployment       | 🟠 questions | [`targets.md`](targets.md), [`freestanding.md`](freestanding.md) |
 | [2.16](#216-package-management-and-supply-chain-security) | Packages and supply-chain security     | 🟡 started   | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)   |
-| [2.17](#217-tooling-uniformity)                           | Tooling uniformity                     | 🟠 questions | [`docs-and-tests.md`](docs-and-tests.md)                         |
+| [2.17](#217-tooling-uniformity)                           | Tooling uniformity                     | 🟠 questions | [`toolchain.md`](toolchain.md), [`docs-and-tests.md`](docs-and-tests.md) |
 | [2.18](#218-llms-as-first-class-programmers)              | LLMs as first-class programmers        | 🟠 questions | [`agent-interface.md`](agent-interface.md)                       |
 | [2.19](#219-diffs-code-review-and-version-control)        | Diffs, code review and version control | 🟡 started   | [`semantic-vcs.md`](semantic-vcs.md)                             |
 | [2.20](#220-language-evolution)                           | Language evolution                     | 🟡 started   | [`evolution.md`](evolution.md)                                   |
@@ -622,11 +622,17 @@ Directions:
 
 ### 2.17 Tooling uniformity
 
-🟠 **questions** · Detail: [`docs-and-tests.md`](docs-and-tests.md); see also [`agent-interface.md`](agent-interface.md)
+🟠 **questions** · Detail: [`toolchain.md`](toolchain.md), [`docs-and-tests.md`](docs-and-tests.md); see also [`agent-interface.md`](agent-interface.md)
 
 One official formatter, test runner, doc generator, package manager, LSP, benchmark harness and
 linter, shipped with the compiler, removes ecosystem fragmentation. The compiler is a library and a
 service, and every tool uses the same front end.
+
+Proposed ([`toolchain.md`](toolchain.md)): one `moddil` binary and one manifest; every tool is a
+client of the warm compiler daemon; a canonical formatter whose only setting is line width; lints
+built into the compiler, with custom lints as pure comptime mods; a task-aware debugger with time
+travel; a built-in profiler; the toolchain version pinned in the manifest and fetched
+automatically; no tool-specific config files.
 
 Decided: docs and tests live next to the code.
 
