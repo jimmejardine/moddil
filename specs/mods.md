@@ -105,7 +105,7 @@ Moddil these are effects, and the test versions are handlers.
 |---|---|---|---|
 | Core-adjacent | `moddil/core-*` | Ships with the compiler; tiny; changes only with editions; usable in the `freestanding` profile ([`freestanding.md`](freestanding.md)) | `core-fmt`, `core-collections` (Vec, Map), `core-text` |
 | Standard | `moddil/*` | Curated, RFC process, capability review, audited, edition-aware | `moddil/net`, `moddil/crypto`, `moddil/gpu` |
-| Community | anyone | Registry rules only (§2.16) | `fastrt`, `hashiverse/protocol` |
+| Community | anyone | Capability ceiling and checked semver ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)) | `fastrt`, `hashiverse/protocol` |
 
 **Promotion path:** a community mod that becomes a de facto standard can be proposed for `moddil/`
 (the Boost → C++ standard library path). Standard mods can also be **deprecated** and moved out,
@@ -165,8 +165,6 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
   dependencies. Which way should Moddil lean?
 - **Distribution**: should standard mods ship with the toolchain, or be fetched and pinned like
   any other mod?
-- **Registry**: one central registry with a `moddil/` namespace, or decentralised (Go-style URLs plus a
-  proxy and checksum database)?
 - **Naming**: is "mod" too easily confused with Rust's `mod` (a module)? The distinction between mod
   and module needs to stay clear in docs and tooling.
 - **Coherence**: how are trait/instance overlap rules (Rust's orphan rule) handled across mods?

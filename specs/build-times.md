@@ -10,7 +10,7 @@ what it forbids; Rust and C++ are slow largely because of what they allow. Moddi
 - lock in the language rules that make fast builds possible (§3), because they cannot be retrofitted;
 - build a query-based, lazy compiler that skips linking in dev builds (§4), supports **live update
   of a running debug program** (§4.1), and caches results in four layers from a warm daemon to signed
-  registry artefacts (§4.2);
+  shared dependency artefacts (§4.2);
 - optimise dependencies by default and keep your own code fast to compile (§5);
 - publish build-time budgets and treat regressions as bugs (§6).
 
@@ -134,7 +134,7 @@ rolling deploys with compiler-checked compatibility between versions (rationale 
 | 1. Compiler daemon | The warm query graph, shared by builds, the language server, tests and live update | rust-analyzer, Bazel server, Gradle daemon |
 | 2. Local content-addressed store | Results on disk; survives restarts; shared across branches and worktrees, so switching branches does not rebuild; garbage-collected by size and age | ccache, sccache, Nix store |
 | 3. Team / CI remote cache | Results uploaded by CI, downloaded by developers | Bazel remote cache, Turborepo, Nx |
-| 4. Registry artefacts | Signed, prebuilt dependency artefacts per mod version, target and profile | Nix binary cache |
+| 4. Trusted shared artefacts | Signed, prebuilt dependency artefacts per mod version, target and profile, from a source the user configures (there is no central registry, [`packages-and-supply-chain.md`](packages-and-supply-chain.md) §4.10) | Nix binary cache |
 
 **Keys and granularity**
 - Key = hash of (the item's canonical AST, the interface artefacts it depends on, toolchain version,
@@ -147,7 +147,7 @@ rolling deploys with compiler-checked compatibility between versions (rationale 
 
 **Trust**
 - A shared cache is a supply-chain risk (cache poisoning).
-- Remote and registry entries are **signed**; only trusted CI writes, developers read.
+- Remote and shared-artefact entries are **signed**; only trusted CI writes, developers read.
 - Builds are reproducible, so independent rebuilders and random sampling can verify hits
   ([`determinism.md`](determinism.md) §6, rationale §2.16).
 
@@ -224,7 +224,8 @@ than for humans:
 3. Live update (§4.1) proposes: bodies, signatures and new items live; layout changes through
    migration hooks or scope restart plus replay. Open: which layout migrations can be automatic, and
    whether production hot upgrades are ever a goal.
-4. How much should the registry serve prebuilt binaries, and what are the trust implications?
+4. How much should trusted shared caches serve prebuilt dependency binaries, and what are the trust
+   implications? (There is no registry: [`packages-and-supply-chain.md`](packages-and-supply-chain.md).)
 5. Can debug-mode dictionary passing and release-mode specialisation produce *identical
    semantics*, so the difference is purely performance? *Proposed answer:* yes, if everything
    layout-dependent lives in the witness table, as Swift does (§3).

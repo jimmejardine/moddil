@@ -26,7 +26,7 @@ and all of them are fast because the daemon is warm.
 
 | Command | Purpose |
 |---|---|
-| `new`, `add`, `update`, `publish`, `audit`, `vet` | Mods and the supply chain ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)) |
+| `new`, `add`, `update`, `outdated`, `vendor`, `publish`, `audit`, `vet` | Mods and the supply chain ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)) |
 | `build`, `run`, `check` | Build, run, and check without code generation ([`build-times.md`](build-times.md)); `run --watch` re-checks and re-runs on save (§11.1) |
 | `test`, `bench` | Attached tests and benchmarks ([`docs-and-tests.md`](docs-and-tests.md)) |
 | `fmt` | Canonical formatter (§3) |

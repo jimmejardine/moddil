@@ -151,7 +151,7 @@ The same source, lockfile and toolchain produce **bit-identical artefacts**:
 - pure, sandboxed comptime ([`comptime.md`](comptime.md));
 - hash-pinned dependencies.
 
-Independent rebuilders verify what the registry publishes (rationale §2.16). The bootstrap fixed point
+Anyone can rebuild a tagged version of a mod and compare the bytes (rationale §2.16). The bootstrap fixed point
 ([`bootstrap.md`](bootstrap.md) §2–§3) uses the same machinery. Prior art: Go toolchains are fully
 reproducible from Go 1.21; Debian Reproducible Builds; Nix and Guix; Bazel's hermetic builds.
 
@@ -215,7 +215,7 @@ real-world evidence for it.
 6. `moddil/runtime-sim` as a first-class standard mod, with CI running the standard library under it.
 7. Record and replay at effect boundaries as a runtime feature; workflow determinism checked by effect
    rows.
-8. Reproducible builds as a requirement of the toolchain and the registry.
+8. Reproducible builds as a requirement of the toolchain and of every mod release.
 
 ## 11. Fit with the reference examples
 

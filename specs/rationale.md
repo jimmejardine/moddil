@@ -31,7 +31,7 @@ Status legend:
 | [2.13](#213-interoperability-with-c-and-rust)             | Interoperability with C and Rust       | 🟠 questions | [`interop.md`](interop.md)                                               |
 | [2.14](#214-build-times)                                  | Build times                            | 🟡 started   | [`build-times.md`](build-times.md)                                       |
 | [2.15](#215-cross-compilation-and-deployment)             | Cross-compilation and deployment       | 🟠 questions | [`targets.md`](targets.md), [`freestanding.md`](freestanding.md)         |
-| [2.16](#216-package-management-and-supply-chain-security) | Packages and supply-chain security     | 🟡 started   | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)           |
+| [2.16](#216-package-management-and-supply-chain-security) | Packages and supply-chain security     | 🟠 questions | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)           |
 | [2.17](#217-tooling-uniformity)                           | Tooling uniformity                     | 🟠 questions | [`toolchain.md`](toolchain.md), [`docs-and-tests.md`](docs-and-tests.md) |
 | [2.18](#218-llms-as-first-class-programmers)              | LLMs as first-class programmers        | 🟠 questions | [`agent-interface.md`](agent-interface.md)                               |
 | [2.19](#219-diffs-code-review-and-version-control)        | Diffs, code review and version control | 🟡 started   | [`semantic-vcs.md`](semantic-vcs.md)                                     |
@@ -550,7 +550,8 @@ Proposed:
 3. Live update (§4.1 there) proposes: bodies, signatures and new items live; layout changes through
    migration hooks or scope restart plus replay. Open: which layout migrations can be automatic, and
    whether production hot upgrades are ever a goal.
-4. How much should the registry serve prebuilt binaries, and what are the trust implications?
+4. How much should trusted shared caches serve prebuilt dependency binaries, and what are the trust
+   implications? (There is no registry: [`packages-and-supply-chain.md`](packages-and-supply-chain.md).)
 5. Can debug-mode dictionary passing and release-mode specialisation produce *identical
    semantics*, so the difference is purely performance? *Proposed answer:* yes, if everything
    layout-dependent lives in the witness table, as Swift does (§3 there).
@@ -599,27 +600,39 @@ Proposed: a freestanding profile for kernels, bootloaders and firmware, verified
 
 ### 2.16 Package management and supply-chain security
 
-🟡 **started** · Detail: [`packages-and-supply-chain.md`](packages-and-supply-chain.md)
+🟠 **questions** · Detail: [`packages-and-supply-chain.md`](packages-and-supply-chain.md)
 
 Package managers made reuse trivially easy, and made the dependency graph the largest attack surface
-in modern software: build-time code execution, ambient authority, and transitive dependencies that
-nobody reviews.
+in modern software: build-time code execution, ambient authority, hijacked accounts publishing
+malicious versions, and transitive dependencies that nobody reviews.
 
-Directions:
+Decided:
 
-- **Capability-scoped dependencies**, enforced by the compiler: a JSON parser that imports `net`
-  fails to build. Upgrades show **capability diffs**.
-- **No arbitrary code at install time**; build logic is declarative or sandboxed in WASM.
-- **Reproducible builds by default**, hash-pinned lockfiles, minimal version selection and a
-  transparency log.
-- **A built-in audit trail**, and a small but broad standard library.
+- **Plain git, nothing else.** Mods live in ordinary git repositories; no registry, mirror, checksum
+  log or index owns names or is needed to build. **Names are URLs** (`github.com/x/y`), with optional
+  vanity domains.
+- **Versions are semver tags, pinned by hash.** The lockfile records a content hash and signing key per
+  mod (trust on first use); vendoring is built in.
+- **One version per major** (the major is in the path, `x/v2`), with **minimal version selection**.
+  **Semver is compiler-checked** at publish and again at update.
+- **Randomised cooldown**: a new version is eligible after 7–28 days, a delay derived from
+  hash(project, dependency, version), so adoption is staggered like a canary. Overrides are explicit.
+- **Capability-scoped dependencies**: a ceiling per mod in the manifest plus capabilities as values;
+  upgrades show **capability diffs**; `ffi` and `unsafe` are high-risk capabilities.
+- **No code at fetch or build time**; **the source is the release** (no tarballs); a **built-in audit
+  trail** recorded in git, saying whether a human or an agent reviewed each version.
 
-**Open questions** (same list as [`packages-and-supply-chain.md`](packages-and-supply-chain.md) §5)
+**Open questions** (same list as [`packages-and-supply-chain.md`](packages-and-supply-chain.md) §7)
 
-- How to handle capabilities through FFI (C code can do anything)? Probably: FFI *is* a capability
-  (`ffi`/`unsafe`) and auditors treat it as high risk.
-- Content-addressed definitions (Unison) vs versioned packages, or both?
-- Central registry vs decentralised (Go's URLs plus proxy)?
+- **Trustworthy release dates.** Tag and commit dates are set by the author, so they can be
+  backdated to skip the cooldown. Recommended: measure age from the later of the tag date and when
+  this project first saw the tag (recorded by `outdated` and `update`). A first `add` still has to
+  trust the tag date.
+- How are security advisories distributed with no central service?
+- How are typosquatting and look-alike URLs caught without a naming authority?
+- Pre-1.0: is each `0.x` minor a major (Cargo), or does `v0` promise nothing (Go)?
+- Do standard mods ship with the toolchain, or are they fetched like any other mod
+  ([`mods.md`](mods.md) §8)?
 
 ---
 
@@ -836,8 +849,6 @@ indexing) are out of scope. Details: [`error-handling.md`](error-handling.md).
   dependencies. Which way should Moddil lean?
 - **Distribution**: should standard mods ship with the toolchain, or be fetched and pinned like
   any other mod?
-- **Registry**: one central registry with a `moddil/` namespace, or decentralised (Go-style URLs plus a
-  proxy and checksum database)?
 - **Naming**: is "mod" too easily confused with Rust's `mod` (a module)? The distinction between mod
   and module needs to stay clear in docs and tooling.
 - **Coherence**: how are trait/instance overlap rules (Rust's orphan rule) handled across mods?
