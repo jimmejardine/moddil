@@ -66,7 +66,8 @@ property of the source.
 - **Two views of the same code**:
   - a **compact view** for writing;
   - a **reviewer view**, used by editors and review tools, that shows inferred effects, types and
-    error sets inline without putting them in the file.
+    error sets inline without putting them in the file, along with the groups each private item
+    inherits ([`docs-and-tests.md`](docs-and-tests.md) §4.1).
 - Humans mostly *read* the reviewer view and *type* the compact one.
 
 ```
@@ -82,7 +83,7 @@ over **MCP** for agents, from the same front end.
 
 | Kind | Examples |
 |---|---|
-| **Queries** | Signatures, effects, error sets and contracts of any definition; the call graph; which tests cover a definition; docs and examples of the **installed** version of each mod ([`docs-and-tests.md`](docs-and-tests.md) §11); `explain` (desugared, effect-annotated views; comptime expansions) |
+| **Queries** | **Overviews first**: mod, then module, then group, then item ([`docs-and-tests.md`](docs-and-tests.md) §4.1); signatures, effects, error sets and contracts of any definition; the call graph; which tests cover a definition; docs and examples of the **installed** version of each mod ([`docs-and-tests.md`](docs-and-tests.md) §11); `explain` (desugared, effect-annotated views; comptime expansions) |
 | **Actions** | Apply a fix; submit a **refactor intent** (rename, move, extract) as an operation rather than text edits ([`semantic-vcs.md`](semantic-vcs.md) §4); run the affected tests ([`build-times.md`](build-times.md) §7); replay a recording and inspect the failing task ([`observability.md`](observability.md) §11) |
 
 ### 5.3 Diagnostics built for agents

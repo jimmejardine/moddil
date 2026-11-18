@@ -9,6 +9,7 @@
 | Rule | One line |
 |---|---|
 | **Docs are checked** | `///` Markdown is parsed into the canonical AST. Parameter names, links and error docs are checked against the code. |
+| **Overviews map the code** | Mod, module (`//!`) and declared-group overviews explain the big picture; required for every public module; every public item joins a group with `@group(…)`, and private items inherit the groups of the items that use them; checked links, cited evidence and a runnable tour keep them current. |
 | **Docs are partly generated** | Effects, capabilities, the error set, contracts, traps and the assurance level are written by the compiler, so they never go stale. |
 | **Examples are tests** | Examples carry expected results (`// => value`), compile in the same build, and run under the deterministic simulation runtime. |
 | **Tests name what they test** | `test "…" for withdraw { }` sits next to its subject, with private access. Tooling knows every test's subject. |
@@ -89,6 +90,101 @@ AST (rationale §2.18) instead of treating it as a comment.
 **Coverage policy** is per mod and can follow its assurance level: for example, every public item
 documented with at least one example at L1 and above.
 
+### 4.1 Overviews: mod, module and group docs
+
+Per-item docs say what one function does. What LLM-generated code most often lacks is the **big
+picture**: what a module is for, how its pieces fit together, and where to start. Moddil treats docs
+as a **map, read top-down** by humans and agents alike, with per-item text the exception rather than
+the rule.
+
+**Three scopes above individual items**, all parsed into the AST like `///`:
+
+| Scope | Where | Answers |
+|---|---|---|
+| **Mod overview** | The mod's root module | What is this package for, and where do I start? |
+| **Module overview** (`//!`) | The top of each module | What does this module do, what are its key concepts and invariants, which items are the entry points? |
+| **Group** | A named theme declared once; items opt in with `@group(…)` | What do these functions do *together*? |
+
+```
+//! # Order matching
+//! Matches incoming orders against the book in price-time priority.
+//!
+//! Concepts: [[OrderBook]], [[Level]], [[Fill]].   Start here: [[match_order]].
+//! Invariant: the book never crosses ([[OrderBook.no_cross]]).
+//!
+//! let book = OrderBook.new()
+//! book.add(bid(100, 5))
+//! match_order(mut book, ask(99, 3))        // => [Fill(99, 3)]     (the tour, run as a test)
+
+/// Each side is a sorted list of levels; orders queue FIFO within a level.
+group levels "Price levels"
+
+/// How fills are computed and reported to the client.
+group fills "Fills and reporting"
+
+@group(levels)
+pub type Level { … }
+
+@group(levels, fills)                  // an item may belong to several groups
+pub fn consume_level(…) { … }
+
+fn remove_empty(…) { … }               // untagged private helper: inherits `levels` and `fills`
+                                       // from its caller `consume_level`
+```
+
+**Groups:**
+- A group is **declared once**, with a free-text title and its `///` doc. Items join it with
+  `@group(name)`, and may belong to **several** groups. Members need not be next to each other, and
+  tagging never re-indents code.
+- Group names are **checked**: a misspelt name is a compile error with "did you mean?"; renaming a
+  group is a refactor intent ([`semantic-vcs.md`](semantic-vcs.md)).
+- **Scope:** groups are local to their module. A `pub group` declared at the mod root can be used by
+  every module in the mod, for themes that span modules (e.g. *Authentication* across `session`,
+  `tokens` and `oauth`).
+- Alternatives considered: free-form string tags (typos silently create new groups, and the group's
+  doc has no home), blocks (one group per item, contiguous members, re-indentation), region markers
+  (positional and unchecked).
+
+**Membership rules:**
+- **Every public item belongs to at least one group**, by an explicit `@group`: functions, types and
+  constants alike. A public item without one is a compile error.
+- **Private items may be tagged explicitly.** An untagged private item **inherits** the groups of the
+  items that use it, computed from the call and reference graph:
+  - the union of its users' groups, transitively (helpers of helpers), as a fixed point through
+    recursion;
+  - a private function inherits from its callers; a private type or constant from the items that
+    refer to it; a function used as a value (a callback) from the function that refers to it;
+  - tests, examples and benchmarks don't count as users;
+  - an explicit tag replaces inheritance;
+  - a private item with no grouped user has no group (it is usually dead code, which the compiler
+    already reports).
+- **Inherited groups are never written in the source.** They are computed, shown in the reviewer view
+  ([`agent-interface.md`](agent-interface.md) §5.1), and served by the language server and agent API
+  ("part of *Price levels* and *Fills and reporting*, via `consume_level`"), so a human or an agent
+  looking at any helper sees which themes it serves.
+
+**Written by people (or agents):** only what cannot be computed: purpose, key concepts, invariants,
+entry points, a short tour, and pitfalls.
+
+**Generated by the compiler:** the member list, effects, capabilities, error sets, and which modules
+this one uses and is used by. The documentation page for a module combines the two.
+
+**Required for the public surface:**
+- every mod, and every module with public items, must have an overview. A missing one is a compile
+  error by default; a mod may relax this (e.g. for prototypes);
+- every public item belongs to a group (above);
+- private items never require their own docs; their group, explicit or inherited, explains them.
+
+**Keeping overviews from drifting:**
+1. **Checked links.** Links such as `[[match_order]]` must resolve and, from an overview, must point
+   at public items. They target definitions, so renames update them.
+2. **Cited evidence.** An invariant stated in prose links to the contract or test that enforces it
+   (`[[OrderBook.no_cross]]`). If the evidence is removed, the link breaks the build.
+3. **A runnable tour.** The overview's example is compiled and run like any other example (§5), so
+   when the main flow changes, the overview fails until it is updated.
+4. **No orphans.** Every public item names a group, so the overviews and groups remain a real map of
+   the module.
+
 ## 5. Examples are tests
 
 - An example line may end with `// => value` (or `// => fail(E)`) as its expected result, like
@@ -165,6 +261,11 @@ function's whole specification and evidence in one place:
 - The compiler API serves the docs, examples, contracts, effects and attached tests of the **installed
   version** of each mod. Agents read exactly the API they compile against, which addresses
   hallucinated and outdated APIs (rationale §2.18).
+- **Groups as context.** For any item, the agent API reports its groups, explicit or inherited
+  (§4.1), so an agent editing a private helper knows which themes it serves.
+- **Overviews first.** Asked to explain a mod, the agent API returns the mod overview, then module
+  overviews, then groups, and drills down to individual items only on request (§4.1). Agents get the
+  theme before the details, and fit within their context.
 - The doc site, language server and agent API all come from the same front end (rationale §2.17).
 - Editors can fold or show tests, notes and benchmarks around a declaration, giving a literate view
   of the code.
@@ -185,6 +286,8 @@ function's whole specification and evidence in one place:
 - Default doc-coverage thresholds per assurance level.
 - Where notes and provenance live: in the source, or in a sidecar keyed by definition ID?
 - Benchmark stability on shared CI machines.
+- Should the semantic diff flag a module whose public interface changed but whose overview wasn't
+  edited?
 
 ## Background
 

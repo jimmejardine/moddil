@@ -637,6 +637,12 @@ Decided: docs and tests live next to the code.
   and benchmarks attach the same way.
 - Only affected tests run, with results cached by content hash.
 - `note` blocks record the *why* for maintainers.
+- **Overviews map the code**: mod, module (`//!`) and group overviews carry the big picture for
+  humans and agents. Overviews are required for every module with public items; groups are declared
+  once (`group levels "Price levels"`) and **every public item** joins at least one with
+  `@group(…)`; private items inherit the groups of the items that use them, shown by the language
+  server rather than written in the source. Links are checked, invariants cite the contract or test
+  behind them, and the tour example runs.
 
 **Open questions** (same list as [`docs-and-tests.md`](docs-and-tests.md) §13)
 
@@ -645,6 +651,8 @@ Decided: docs and tests live next to the code.
 - Default doc-coverage thresholds per assurance level.
 - Where notes and provenance live: in the source, or in a sidecar keyed by definition ID?
 - Benchmark stability on shared CI machines.
+- Should the semantic diff flag a module whose public interface changed but whose overview wasn't
+  edited?
 
 ---
 
