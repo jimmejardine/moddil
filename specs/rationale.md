@@ -33,7 +33,7 @@ Status legend:
 | [2.15](#215-cross-compilation-and-deployment)             | Cross-compilation and deployment       | 🟠 questions | [`targets.md`](targets.md), [`freestanding.md`](freestanding.md) |
 | [2.16](#216-package-management-and-supply-chain-security) | Packages and supply-chain security     | 🟡 started   | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)   |
 | [2.17](#217-tooling-uniformity)                           | Tooling uniformity                     | 🟠 questions | [`docs-and-tests.md`](docs-and-tests.md)                         |
-| [2.18](#218-llms-as-first-class-programmers)              | LLMs as first-class programmers        | 🟡 started   | [`agent-interface.md`](agent-interface.md)                       |
+| [2.18](#218-llms-as-first-class-programmers)              | LLMs as first-class programmers        | 🟠 questions | [`agent-interface.md`](agent-interface.md)                       |
 | [2.19](#219-diffs-code-review-and-version-control)        | Diffs, code review and version control | 🟡 started   | [`semantic-vcs.md`](semantic-vcs.md)                             |
 | [2.20](#220-language-evolution)                           | Language evolution                     | 🟡 started   | [`evolution.md`](evolution.md)                                   |
 
@@ -650,30 +650,39 @@ Decided: docs and tests live next to the code.
 
 ### 2.18 LLMs as first-class programmers
 
-🟡 **started** · Detail: [`agent-interface.md`](agent-interface.md)
+🟠 **questions** · Detail: [`agent-interface.md`](agent-interface.md)
 
 Languages assume the person who writes the code also understands it. In an LLM-heavy workflow the
 writer is a model and the human is the reviewer, architect and approver. Current languages optimise
-for the writer and against the reviewer.
+for the writer and against the reviewer, and a new language also starts with no training data.
 
-Directions:
+Decided:
 
-- **Canonical form**: exactly one formatting, ideally a printed view of a canonical AST.
-- **Local reasoning**: a line can be understood from itself plus the signatures it calls.
-- **Effects and capabilities in signatures** (§2.1), and **contracts next to code** (§2.7).
-- **A machine-first compiler API**: structured diagnostics with machine-applicable fixes and a
-  queryable semantic model.
-- **Intent and provenance**: `note` blocks for the *why* (decided); where provenance lives is open.
-- **A small, stable surface syntax**, and `explain` tooling that shows the expanded view of any
-  expression.
+- **Verbosity is a view**: the source is explicit only at mod boundaries (effects, error sets,
+  contracts, capabilities); a reviewer view shows inferred effects, types and error sets inline.
+- **An agent server**: the compiler is a service over LSP and MCP, for queries (signatures, effects,
+  call graph, test subjects, installed-version docs, `explain`) and actions (fixes, refactor
+  intents, affected tests, replays).
+- **Diagnostics built for agents**: stable codes, one root cause, machine-applicable fixes with a
+  confidence level, relevant signatures inline.
+- **"Did you mean?" everywhere**: suggestions from scope and the installed API, ranked by type;
+  other languages' habits; missing imports; exact hints for renamed APIs (version drift).
+- **The cold start**: familiar syntax, a reference small enough for a model's context, and a
+  corpus of checked examples.
+- **Agent-written code runs safely** (pure comptime, simulated tests, declared capabilities), and
+  humans review semantic diffs, untested changes and mutation scores.
 
-**Open questions** (same list as [`agent-interface.md`](agent-interface.md) §6)
+Directions: provenance in version control (recommended), a prefix-checkable grammar for constrained
+decoding (recommended), translation tools from Rust and TypeScript, `note` blocks for the *why*
+(decided in [`docs-and-tests.md`](docs-and-tests.md)).
 
-- How verbose can a language be before humans reject it, given they will mostly *read* it? Is
-  explicit-but-verbose acceptable if humans rarely type it?
-- Should provenance live in the source, in version control metadata, or in a sidecar?
-- Can the language be designed so that type checking and effect checking are fast enough to run after
-  every token an agent generates (constrained decoding)?
+**Open questions** (same list as [`agent-interface.md`](agent-interface.md) §7)
+
+- Should provenance live in version control (recommended, §6), in the source, or in a sidecar?
+- How far should constrained decoding go: grammar only, or names and types per statement?
+- What size budget should the context-sized reference have, and how is it kept current?
+- Who curates the cross-language synonym tables and foreign-syntax recognisers?
+- Is MCP the right agent protocol long term, or one adapter among several?
 
 ---
 
