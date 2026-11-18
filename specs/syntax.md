@@ -1,6 +1,7 @@
 # Syntax
 
-> **Status:** decided direction, details open. Moddil's surface syntax is **based on Rust**. Every
+> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.21.
+> Moddil's surface syntax is **based on Rust**. Every
 > snippet in these specs follows this document; snippets remain illustrative where a feature's own
 > design is still open.
 

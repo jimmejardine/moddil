@@ -1,6 +1,7 @@
 # Paradigms: Functional, Object-Oriented, and Inheritance
 
-> **Status:** decided direction, details open. Syntax per [`syntax.md`](syntax.md).
+> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.21. Syntax per
+> [`syntax.md`](syntax.md).
 
 ## 1. Summary
 
