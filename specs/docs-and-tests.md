@@ -195,6 +195,8 @@ this one uses and is used by. The documentation page for a module combines the t
   an example that "fetches a URL" gets a simulated network, so docs never flake and never need the
   internet.
 - When a signature changes, broken examples are compile errors immediately, not stale text.
+- Every example has a **Run** button that opens it in the in-browser playground
+  ([`toolchain.md`](toolchain.md) §11.1).
 
 ## 6. Attached tests
 

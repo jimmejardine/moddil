@@ -90,7 +90,7 @@ What replaces it:
 | Key paths (`\Person.name`) | **Later (decided):** field-path values through static reflection, when UI binding and typed query builders need them; closures cover the rest |
 | **Library evolution: a stable binary ABI** for frameworks | **Decided:** the C ABI plus **WASM components (WIT)** are Moddil's stable binary boundaries, for plugins and binary SDKs ([`interop.md`](interop.md)). A Swift-style resilience mode (fields and methods reached through indirection so binaries survive upgrades) is deferred. |
 | Classes with shared mutable references (ARC) | Deliberately not: `Rc` contents are immutable; shared mutation goes through sync cells |
-| Objective-C interop; Playgrounds | Objective-C through C ([`interop.md`](interop.md)); REPL or notebook mode open ([`toolchain.md`](toolchain.md)) |
+| Objective-C interop; Playgrounds | Objective-C through C ([`interop.md`](interop.md)); REPL, script and notebook modes are a non-goal ([`requirements.md`](requirements.md) §2); an in-browser playground replaces Playgrounds ([`toolchain.md`](toolchain.md) §11.1) |
 | Actors, `async`/`await`, typed throws, `some`/`any`, enums with payloads, `defer`, `Codable`, macros | Already covered: tasks and actors, effects, error handling, `impl`/`dyn`, ADTs, RAII and `errdefer`, derives, compile-time code |
 
 ## 6. Open questions

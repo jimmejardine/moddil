@@ -84,8 +84,12 @@ Details: [`error-handling.md`](error-handling.md).
 ## 2. Non-goals (draft)
 
 - Maximum syntactic novelty. Familiar syntax wins unless there is a strong reason.
-- Replacing every language. Scripting, notebooks and quick glue may remain better served elsewhere
-  (open question: is a REPL/script mode desirable?).
+- Replacing every language. Scripting, notebooks and quick glue stay with other languages.
+- **A REPL, script mode or notebook mode (decided).** Moddil is compiled and checked as a whole.
+  Quick experiments use attached tests and examples-as-tests (`moddil test`,
+  [`docs-and-tests.md`](docs-and-tests.md)) and live update in debug builds
+  ([`build-times.md`](build-times.md) §4.1). Quick learning is served by an in-browser playground
+  that re-runs the whole program on every edit ([`toolchain.md`](toolchain.md) §11.1).
 - C++ interop in the language. C++ is reached through C shims ([`interop.md`](interop.md) §10).
 - A custom VCS that replaces Git (tooling on top of Git first).
 - A cloud platform, orchestrator or service mesh. Moddil emits artefacts and manifests for existing
@@ -97,5 +101,4 @@ Details: [`error-handling.md`](error-handling.md).
 
 - R1: should WASI runtimes without stack switching be supported, which would need the
   CPS/Asyncify-style lowering? (Also in [`bootstrap.md`](bootstrap.md) §9.)
-- Non-goals: is a REPL or script mode desirable?
 - Should determinism become R4 ([`determinism.md`](determinism.md) §12)?

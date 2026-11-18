@@ -27,7 +27,7 @@ and all of them are fast because the daemon is warm.
 | Command | Purpose |
 |---|---|
 | `new`, `add`, `update`, `publish`, `audit`, `vet` | Mods and the supply chain ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)) |
-| `build`, `run`, `check` | Build, run, and check without code generation ([`build-times.md`](build-times.md)) |
+| `build`, `run`, `check` | Build, run, and check without code generation ([`build-times.md`](build-times.md)); `run --watch` re-checks and re-runs on save (§11.1) |
 | `test`, `bench` | Attached tests and benchmarks ([`docs-and-tests.md`](docs-and-tests.md)) |
 | `fmt` | Canonical formatter (§3) |
 | `lint`, `fix` | Built-in lints and machine-applicable fixes (§4) |
@@ -128,14 +128,51 @@ human-oriented text.
 Tool latencies follow [`build-times.md`](build-times.md) §6: keystroke to diagnostics under 100 ms;
 `fmt` and `lint` effectively instant on a warm daemon.
 
+### 11.1 Playground: learning without a REPL
+
+A REPL, script mode and notebook mode are non-goals ([`requirements.md`](requirements.md) §2): a
+REPL session would need exceptions to R3, borrow scopes, linear values, task scopes and
+redefinition. Quick, REPL-style learning comes from **compilation fast enough to re-run the whole
+program on every edit**, in an **in-browser playground**:
+
+- **No server.** The compiler itself runs as WASM in the page (it builds to WASM anyway,
+  [`bootstrap.md`](bootstrap.md) §3), and the program compiles to WASM and runs there too.
+- **REPL feel, program semantics.** Every keystroke re-checks the program (diagnostics, with
+  inferred types and effects as hints); every successful build re-runs it. There is no session
+  state, so none of a notebook's hidden-state problems, and no exceptions to the language's rules.
+- **Small in the browser.** The page contains the front end, the MIR interpreter (instant for small
+  programs) and Moddil's own WASM emitter (for speed). LLVM and Cranelift are not needed.
+- **Standard mods** arrive as precompiled interface artefacts and code from the cache
+  ([`build-times.md`](build-times.md) §4.2), loaded lazily.
+- **Effects in the playground:** `fs`, `net`, `time` and `rand` use simulation handlers
+  ([`determinism.md`](determinism.md)): a virtual file system, a simulated network, virtual time
+  and a seeded RNG. Real `fetch` is optional, with the user's consent. Suspension uses JSPI; threads
+  use cross-origin isolation (the playground sets COOP/COEP); kernels use WebGPU.
+- **Shareable and reproducible.** A link encodes the source and the seed. Runs are deterministic, so
+  everyone who opens the link sees exactly the same output.
+- **Learning material:** a guided tour (in the style of the Go tour and the Rust Book); a "Run"
+  button on every documentation example (examples are tests,
+  [`docs-and-tests.md`](docs-and-tests.md) §5); runnable error-explanation pages.
+- **On the desktop**, `moddil run --watch` gives the same loop: re-check and re-run on save, with
+  live update for long-running programs ([`build-times.md`](build-times.md) §4.1).
+- **Costs and risks:** the compiler's download size (estimated in the tens of MB; loaded lazily; to
+  be measured) and compile speed in the browser against the budget above. The playground is a
+  tier-1 target in CI.
+
+Prior art: the TypeScript playground (compiler in the browser); the Go playground and tour, and the
+Rust playground (server-side compilation); Elm reactor; Swift Playgrounds; Zig's WASM build of its
+compiler.
+
 ## 12. Open questions
 
 1. The formatter's line-width setting (§3): accept the single knob, or none at all?
-2. A REPL or notebook mode: worth having, given Moddil's focus?
-3. Editor priority order (§5).
-4. Custom lint mods are pure and sandboxed, but they still cost build time. Do they need limits or
+2. Editor priority order (§5).
+3. Custom lint mods are pure and sandboxed, but they still cost build time. Do they need limits or
    review?
-5. Should `moddil` host third-party subcommands (`cargo-xyz` style), or keep a closed command set?
+4. Should `moddil` host third-party subcommands (`cargo-xyz` style), or keep a closed command set?
+
+Decided: no REPL, script or notebook mode (a non-goal, [`requirements.md`](requirements.md) §2);
+quick learning comes from the in-browser playground (§11.1).
 
 ## Prior art
 
