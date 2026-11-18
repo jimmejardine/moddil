@@ -35,7 +35,7 @@ Status legend:
 | [2.17](#217-tooling-uniformity)                           | Tooling uniformity                     | 🟠 questions | [`toolchain.md`](toolchain.md), [`docs-and-tests.md`](docs-and-tests.md) |
 | [2.18](#218-llms-as-first-class-programmers)              | LLMs as first-class programmers        | 🟠 questions | [`agent-interface.md`](agent-interface.md)                               |
 | [2.19](#219-diffs-code-review-and-version-control)        | Diffs, code review and version control | 🟠 questions | [`semantic-vcs.md`](semantic-vcs.md)                                     |
-| [2.20](#220-language-evolution)                           | Language evolution                     | 🟡 started   | [`evolution.md`](evolution.md)                                           |
+| [2.20](#220-language-evolution)                           | Language evolution                     | 🟠 questions | [`evolution.md`](evolution.md)                                           |
 
 **Other documents**
 
@@ -750,16 +750,29 @@ Decided:
 
 ### 2.20 Language evolution
 
-🟡 **started** · Detail: [`evolution.md`](evolution.md)
+🟠 **questions** · Detail: [`evolution.md`](evolution.md)
 
 Languages either freeze (C) or break their ecosystems (Python 2→3).
 
-Direction: editions from day one, with **automated migrations** in the toolchain that agents can run
-and humans can review as intents (§2.19).
+Decided:
 
-**Open questions** (same list as [`evolution.md`](evolution.md) §4)
+- **Editions per mod**; mods of different editions work together, because mod interface artefacts
+  are edition-neutral. Semantic changes apply only inside a mod that opts into the new edition.
+- **A compatibility promise** within an edition; at most one small edition every three years.
+- **Verified migrations:** `moddil migrate` rewrites code and checks it is equivalent; the change is
+  reviewed with `moddil diff` (§2.19).
+- **Libraries ship migration rules** (`#[deprecated(replace_with = …)]`) applied by `moddil fix`.
+- **No unstable features in published mods** (no nightly-only ecosystem).
+- **A proposal process** that requires a motivating reference example, a migration, and an
+  ecosystem-wide build and test run.
 
-None recorded yet.
+**Open questions** (same list as [`evolution.md`](evolution.md) §5)
+
+- The exact edition cadence.
+- May an edition change runtime semantics at all, or only syntax and defaults?
+- The minimum deprecation window.
+- Governance: a foundation or a core team, and who accepts proposals.
+- Long-term-support toolchains.
 
 ---
 

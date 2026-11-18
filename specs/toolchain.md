@@ -34,7 +34,7 @@ and all of them are fast because the daemon is warm.
 | `doc` | Checked and generated documentation ([`docs-and-tests.md`](docs-and-tests.md)) |
 | `diff`, `log`, `blame` | Semantic report between two Git revisions, with a suggested PR description; definition-level history ([`semantic-vcs.md`](semantic-vcs.md)) |
 | `explain` | Expansions, desugarings, effect sets, error sets, handler stacks |
-| `migrate` | Edition and API migrations ([`evolution.md`](evolution.md)) |
+| `migrate` | Edition migrations, checked equivalent; library replacement rules are applied by `fix` ([`evolution.md`](evolution.md)) |
 | `sim`, `replay` | Deterministic simulation and replay ([`determinism.md`](determinism.md)) |
 | `debug`, `profile` | Debugger (§6) and profiler (§7) |
 | `lsp`, `serve` | Language server; tool and agent API ([`agent-interface.md`](agent-interface.md)) |
