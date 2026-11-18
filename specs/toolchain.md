@@ -32,6 +32,7 @@ and all of them are fast because the daemon is warm.
 | `fmt` | Canonical formatter (§3) |
 | `lint`, `fix` | Built-in lints and machine-applicable fixes (§4) |
 | `doc` | Checked and generated documentation ([`docs-and-tests.md`](docs-and-tests.md)) |
+| `diff`, `log`, `blame` | Semantic report between two Git revisions, with a suggested PR description; definition-level history ([`semantic-vcs.md`](semantic-vcs.md)) |
 | `explain` | Expansions, desugarings, effect sets, error sets, handler stacks |
 | `migrate` | Edition and API migrations ([`evolution.md`](evolution.md)) |
 | `sim`, `replay` | Deterministic simulation and replay ([`determinism.md`](determinism.md)) |

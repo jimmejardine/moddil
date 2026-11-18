@@ -34,7 +34,7 @@ Status legend:
 | [2.16](#216-package-management-and-supply-chain-security) | Packages and supply-chain security     | 🟠 questions | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)           |
 | [2.17](#217-tooling-uniformity)                           | Tooling uniformity                     | 🟠 questions | [`toolchain.md`](toolchain.md), [`docs-and-tests.md`](docs-and-tests.md) |
 | [2.18](#218-llms-as-first-class-programmers)              | LLMs as first-class programmers        | 🟠 questions | [`agent-interface.md`](agent-interface.md)                               |
-| [2.19](#219-diffs-code-review-and-version-control)        | Diffs, code review and version control | 🟡 started   | [`semantic-vcs.md`](semantic-vcs.md)                                     |
+| [2.19](#219-diffs-code-review-and-version-control)        | Diffs, code review and version control | 🟠 questions | [`semantic-vcs.md`](semantic-vcs.md)                                     |
 | [2.20](#220-language-evolution)                           | Language evolution                     | 🟡 started   | [`evolution.md`](evolution.md)                                           |
 
 **Other documents**
@@ -718,25 +718,33 @@ decoding (recommended), translation tools from Rust and TypeScript, `note` block
 
 ### 2.19 Diffs, code review and version control
 
-🟡 **started** · Detail: [`semantic-vcs.md`](semantic-vcs.md)
+🟠 **questions** · Detail: [`semantic-vcs.md`](semantic-vcs.md)
 
 Version control works on lines of text, but programs are trees with meaning. Reviewers see noise
 (formatting, renames, moves) and miss signal (a new side effect, a changed error path). As agents
 write more code, review becomes the bottleneck.
 
-Directions:
+Decided:
 
-- **The canonical AST is the diff unit.**
-- **Refactors are recorded as intents** ("rename `foo` → `bar`"), and reviewers approve the intent.
-- **A semantic change summary per PR**, computed by the compiler: API changes, effect and capability
-  deltas, new `unsafe` or FFI, new dependencies.
-- **LLM-written review summaries are checked** against the computed semantic diff.
-- **Definition-level history**, working with Git, not replacing it.
+- **Git is assumed**, with **no required metadata** (no commit trailers, notes or special comments).
+- **`moddil diff` compares any two revisions**: uncommitted work against `HEAD`, a branch against
+  `main`, two tags.
+- **Definition identity is inferred**: qualified names, rename and move detection on canonical ASTs,
+  and a content hash per definition.
+- **A concise report**, most important first: the required **semver bump**; behavioural changes
+  (signatures, effects, capabilities, error sets, contracts, `unsafe`/FFI, wire compatibility);
+  dependencies; refactors collapsed and marked **verified behaviour-preserving** where provable;
+  affected tests.
+- **A suggested PR description** generated from the report, for the user or an LLM to enrich, with
+  `--check-description` flagging unsupported claims.
+- Optional: Git diff and merge drivers, definition-level `log` and `blame`, split suggestions, and
+  CI review policies keyed on semantic change.
 
-**Open questions** (same list as [`semantic-vcs.md`](semantic-vcs.md) §5)
+**Open questions** (same list as [`semantic-vcs.md`](semantic-vcs.md) §7)
 
-- Stable identity for definitions: hash of content (Unison) vs persistent IDs vs name-based?
-- Is a custom VCS layer justified, or can everything be done as Git metadata + tooling?
+- Rename-detection thresholds, and how confidence is shown.
+- How far the optional merge driver should go.
+- Whether `diff` runs affected tests by default or only on request.
 
 ---
 
