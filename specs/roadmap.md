@@ -27,9 +27,9 @@ store, Hashiverse) are the yardstick for every decision. A feature no example ne
 removal.
 
 **Technical questions**
-6. **Bootstrap compiler and back ends — proposed** in [`compiler.md`](compiler.md): stage 0 in
-   Rust, then self-host; Cranelift (debug) + LLVM (release) + own WASM emitter + naga/LLVM for GPU;
-   Wasmtime as the reference WASM runtime first.
+6. **Compiler and back ends — decided** in [`compiler.md`](compiler.md): the compiler is written in
+   Rust, with self-hosting deferred until after v1; Cranelift (debug) + LLVM (release) + own WASM
+   emitter + naga/LLVM for GPU; JSPI as the first WASM lowering; a separate reference interpreter.
 7. **Memory core — decided** in [`memory.md`](memory.md): unique
    ownership, second-class borrows and view types, `.to_rc()` with biased RC, affine + linear
    resources (summary in [Memory: ownership, borrowing and sharing](memory.md)).
@@ -48,14 +48,16 @@ removal.
 
 | Milestone | Contents |
 |---|---|
-| **M0** | Stage 0: parser, type, effect and ownership checker, MIR, interpreter. Small programs run. |
-| **M1** | Cranelift native backend. Own WASM backend producing **WASI components for Wasmtime**, with stack switching (Linux x86_64). |
+| **M0** | The compiler front end in Rust: parser, type, effect and ownership checker, MIR, MIR interpreter. Small programs run. The separate **reference interpreter** starts alongside ([`compiler.md`: Two interpreters](compiler.md#two-interpreters)). |
+| **M1** | Cranelift native backend (Linux, macOS, Windows). Own WASM emitter producing core modules with the **JSPI lowering**, run in Node and browsers. |
 | **M2** | First standard mods written in Moddil; `moddil/runtime` and `moddil/runtime-sim`; LSP prototype. |
-| **M3** | **Hashiverse CLI/native client** (example 4, phase A). LLVM release backend. **JSPI lowering for browsers and Node.** |
-| **M4** | Hashiverse **browser** client. Self-hosted stage 1; fixed-point CI; checked-in WASM bootstrap; double-compiling check. |
+| **M3** | **Hashiverse CLI/native client** (example 4, phase A). LLVM release backend. **Python bindings** (`moddil bind --lang python`, wheels), the first binding target ([`adoption.md`: Python first](adoption.md#python-first)). |
+| **M4** | **A backend service**: the web store API (example 3) with `sql`, HTTP and deterministic simulation; distributed v0 ([Staging: distributed programs](#staging-distributed-programs)). |
+| **M5** | **Browser**: the Hashiverse web client and the game client; Swift, Kotlin and TypeScript bindings ([`ui.md`](ui.md)). WASI components with stack switching once Wasmtime's support leaves Tier 3. |
+| **After v1** | Reconsider self-hosting ([`compiler.md`: Staged bootstrap](compiler.md#staged-bootstrap)). |
 
-**Python bindings** (`moddil bind --lang python`, wheels) follow M3, as the first binding target and
-one of the two first audiences ([`adoption.md`: Python first](adoption.md#python-first)). Recommended placement: between M3 and M4.
+The order puts the two first audiences, Python teams and backend teams, before the browser
+(decided November 2026).
 
 ## Staging: distributed programs
 

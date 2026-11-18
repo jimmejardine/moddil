@@ -136,8 +136,8 @@ REPL session would need exceptions to R3, borrow scopes, linear values, task sco
 redefinition. Quick, REPL-style learning comes from **compilation fast enough to re-run the whole
 program on every edit**, in an **in-browser playground**:
 
-- **No server.** The compiler itself runs as WASM in the page (it builds to WASM anyway,
-  [`compiler.md`: Bootstrapping after self-hosting](compiler.md#bootstrapping-after-self-hosting)), and the program compiles to WASM and runs there too.
+- **No server.** The compiler itself runs as WASM in the page (the Rust compiler built for
+  `wasm32`; [`compiler.md`](compiler.md)), and the program compiles to WASM and runs there too.
 - **REPL feel, program semantics.** Every keystroke re-checks the program (diagnostics, with
   inferred types and effects as hints); every successful build re-runs it. There is no session
   state, so none of a notebook's hidden-state problems, and no exceptions to the language's rules.

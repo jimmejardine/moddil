@@ -1,14 +1,15 @@
 # Compiler and bootstrap
 
-> **Status:** proposal. Answers [`roadmap.md`](roadmap.md) Q6: how the compiler is built, structured and
+> **Status:** decided direction, details open (walked through November 2026). Answers [`roadmap.md`](roadmap.md) Q6: how the compiler is built, structured and
 > bootstrapped, and which backends it uses. Milestones are in [`roadmap.md`: Milestones](roadmap.md#milestones). WASM support facts verified November 2026 ([WASM support: verified status (November 2026)](#wasm-support-verified-status-november-2026) below).
 
 ## Answers in brief
 
-**What do we build the first compiler in?** **Rust.** A Rust "stage 0" compiler implements a core
-subset of Moddil. The compiler is then rewritten in Moddil and compiled by stage 0, and from then on
-it compiles itself. After self-hosting, bootstrapping uses a checked-in WASM build of the compiler
-(Zig's approach), with the Rust stage 0 kept alive to cross-check it.
+**What do we build the compiler in?** **Rust**, at least until v1 (decided). Self-hosting, rewriting
+the compiler in Moddil, is **deferred until after v1**: until then the language is dogfooded through
+the standard mods and the reference examples, not the compiler. If Moddil does self-host later,
+bootstrapping would use a checked-in WASM build of the compiler (Zig's approach), with the Rust
+compiler kept alive to cross-check it ([Staged bootstrap](#staged-bootstrap)).
 
 **Our own backends, or existing ones?** **Existing ones, except WASM.** Moddil owns its front end and
 its mid-level IR (where all the Moddil-specific checking and lowering happens). Cranelift does fast
@@ -16,9 +17,14 @@ debug builds, LLVM does optimised release builds and broad target coverage, `nag
 GPUs, and Moddil writes its **own WASM backend** because WASM is central (R1) and needs proposals that
 LLVM lags on.
 
-**Which WASM runtime first?** **Wasmtime**, the reference runtime for the early milestones. It is the
-only mainstream runtime that implements stack switching today. Browser support (via JSPI) follows
-later.
+**Which WASM lowering first?** **JSPI** (decided). It is a finished standard in every major browser and
+in Node 26, on every operating system. **WASM stack switching** remains the preferred long-term
+lowering and is added for Wasmtime and other WASI hosts once it leaves Tier 3
+([WASM concurrency lowering](#wasm-concurrency-lowering)).
+
+**What is the reference interpreter?** A **separate, small interpreter over the canonical AST**
+(decided), independent of the compiler's MIR, so that the two can check each other
+([Two interpreters](#two-interpreters)).
 
 ---
 
@@ -65,11 +71,16 @@ crates, plus Cranelift for the compiler's own debug builds.
   in Moddil while the compiler is still in Rust.
 - **Fixed-point check**: stage 2 and stage 3 must be bit-identical. This runs in CI, and also checks
   reproducible builds ([Package management and supply-chain security](packages-and-supply-chain.md)).
-- **When to self-host:** not until the core semantics are stable, and **after the Hashiverse client
-  milestone** has proved the language on real code. Self-hosting too early means rewriting the
-  compiler every time the language changes.
+- **When to self-host: deferred until after v1 (decided).** Self-hosting too early means rewriting
+  the compiler every time the language changes, and it competes with the first audiences (Python
+  bindings, backend services; [`adoption.md`](adoption.md)) for effort. Until then the Rust compiler is
+  *the* compiler, and stages 1–3 above describe the eventual plan. TypeScript (now ported to Go),
+  Gleam and Roc show that a language can thrive with a compiler written in another language.
 
 ## Bootstrapping after self-hosting
+
+*Applies only once the compiler is self-hosted (after v1). Until then the Rust compiler is built
+reproducibly with Cargo, and the playground uses the Rust compiler compiled to WASM.*
 
 **Zig's trick, applied to Moddil.** Zig commits a WASM build of its compiler (`zig1.wasm`). Building
 Zig from source then needs only a C compiler and a small WASM-to-C translator. Moddil already has a
@@ -99,6 +110,20 @@ problem, which is exactly the supply-chain concern of [Package management and su
 - **Check-only mode:** type, effect and ownership checking without code generation, powering the
   language server and agents ([LLMs as first-class programmers](agent-interface.md)).
 - **Test impact analysis:** the query graph knows which tests depend on a change, so only those run.
+
+### Two interpreters
+
+| Interpreter | Runs | Used for |
+|---|---|---|
+| **MIR interpreter** (part of the compiler) | Lowered MIR | Compile-time evaluation, fast tests before any backend, the Miri-style `unsafe` checker ([`correctness.md`: A Miri-style checker](correctness.md#a-miri-style-checker)), the playground |
+| **Reference interpreter** (separate) | The canonical AST, directly | The executable form of the language reference ([`definition.md`](definition.md)); written for clarity, not speed |
+
+- **Why two:** if the reference were the compiler's own MIR interpreter, a front-end or lowering bug
+  would change the compiler and the "reference" at the same time, and nothing would notice.
+- **Differential testing:** conformance tests and fuzzed programs run on the reference interpreter,
+  the MIR interpreter and compiled code; any difference in results is a bug in one of them.
+- The reference interpreter covers the safe language and the closed list of undefined behaviour
+  ([`unsafe.md`](unsafe.md)); it does not need to be fast enough for real programs.
 
 ## Backends
 
@@ -142,8 +167,8 @@ are target-independent. The backend chooses how to implement suspension:
 | # | Lowering | Where | Status |
 |---|---|---|---|
 | 1 | Native stacks | Native targets | Always available |
-| 2 | **WASM stack switching** (`cont.new` / `resume` / `suspend`) | Wasmtime (x86_64 Linux), Wasmer; browsers when shipped | **Preferred** WASM lowering; first implemented against Wasmtime |
-| 3 | **WASM + JSPI** | All major browsers, Node ≥ 26 | **Browser baseline today.** Each Moddil task is a separate `WebAssembly.promising` entry with its own suspended WASM stack; switching goes through a JS-side scheduler promise. Slower per switch, but works everywhere now. |
+| 2 | **WASM + JSPI** | All major browsers, Node ≥ 26, every OS | **Built first (decided).** Each Moddil task is a separate `WebAssembly.promising` entry with its own suspended WASM stack; switching goes through a JS-side scheduler promise. Slower per switch, but works everywhere now. |
+| 3 | **WASM stack switching** (`cont.new` / `resume` / `suspend`) | Wasmtime (Tier 3, x86_64 Linux), Wasmer; browsers when shipped | **Preferred long-term** lowering; added for WASI hosts once Wasmtime's support leaves Tier 3 |
 | 4 | CPS / Asyncify-style transform | WASI runtimes without stack switching | **Open question.** Either require a capable runtime, or build this later. |
 
 The dependency on the stack-switching proposal stays isolated in the task/continuation runtime, so
@@ -155,22 +180,24 @@ hosts.
 
 ## Wasmtime as the short-term reference runtime
 
+Wasmtime is the reference runtime for **WASI components and the Component Model**. Concurrency on
+WASI waits for its stack switching to mature; the first WASM lowering is JSPI ([WASM concurrency lowering](#wasm-concurrency-lowering)).
+
 **Why:**
 - It is the only mainstream runtime that implements **stack switching** today, so Moddil builds its
   *intended* concurrency lowering first rather than a workaround.
 - It is the most complete runtime for the **Component Model and WASI 0.3 async** (on by default), with
   GC, exnref and memory64 at Tier 1. This makes it the natural home for WIT interop and capability
   mapping (R1).
-- It is Rust, so it embeds in stage 0. The compiler can use it to run compile-time evaluation, tests,
-  `moddil/runtime-sim`, and later the WASM bootstrap blob ([Bootstrapping after self-hosting](#bootstrapping-after-self-hosting)).
+- It is Rust, so it embeds in the compiler. The compiler can use it to run WASM test builds,
+  `moddil/runtime-sim` on WASM, and, after self-hosting, the WASM bootstrap blob ([Bootstrapping after self-hosting](#bootstrapping-after-self-hosting)).
 - It shares Cranelift with the native debug backend.
 
 **Caveats:**
 - **Stack switching in Wasmtime is Tier 3 and x86_64 Linux only.** Development on Windows needs WSL2
   or Linux CI for that path. Tier 3 means incomplete fuzzing and no C API yet, so expect bugs.
 - Pin a recent Wasmtime version (the docs reference ~47; a local Windows install was 37.0.1).
-- Wasmtime does not cover the browser. Examples 1 and 3, and the Hashiverse web client, wait for
-  lowering 3 (JSPI) at M3/M4.
+- Wasmtime does not cover the browser; JSPI does, from the first WASM milestone.
 
 ## WASM support: verified status (November 2026)
 
@@ -214,4 +241,7 @@ probes on Node v24.16.0 (V8 13.6).
 - Should WASI runtimes without stack switching be supported (lowering 4)?
 - LLVM version pinning and upgrade cadence.
 - Is Moddil-core (the stage 0 subset) small enough to build quickly, yet large enough to write a
-  pleasant compiler in?
+  pleasant compiler in? (Less pressing now that self-hosting is deferred.)
+- When should self-hosting be reconsidered after v1, and what would justify it?
+- JSPI's per-switch cost: is it acceptable for the game's client and the playground, or does the
+  browser need stack switching sooner?

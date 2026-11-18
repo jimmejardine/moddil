@@ -72,7 +72,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Adoption](adoption.md)                                                | 🟡 minor questions | [`adoption.md`](adoption.md)                                               |
 | [Governance](governance.md)                                            | 🟡 minor questions | [`governance.md`](governance.md)                                           |
 | **The project**                                                        |                    |                                                                            |
-| [Compiler and bootstrap](compiler.md)                                  | 🟠 major questions | [`compiler.md`](compiler.md) (R1)                                          |
+| [Compiler and bootstrap](compiler.md)                                  | 🟡 minor questions | [`compiler.md`](compiler.md) (R1)                                          |
 | [Roadmap: milestones, staging and cross-cutting questions](roadmap.md) | 🟠 major questions | [`roadmap.md`](roadmap.md)                                                 |
 | [Prior art](prior-art.md)                                              | reference          | [`prior-art.md`](prior-art.md)                                             |
 

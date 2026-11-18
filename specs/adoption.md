@@ -127,8 +127,8 @@ smooth = rolling_mean(prices, window=50)  # numpy array in, no copy; list or arr
   ways, as with the other bindings ([`ui.md`: Generated bindings](ui.md#generated-bindings)).
 - **The GIL:** Moddil code releases the GIL while it runs, and runs its own tasks on its own executor;
   free-threaded CPython builds are supported where available.
-- **Placement in the roadmap:** Python bindings follow the first native release (M3,
-  [`roadmap.md`: Milestones](roadmap.md#milestones)), before the Swift, Kotlin and TypeScript
+- **Placement in the roadmap:** Python bindings ship at M3, with the first optimised native release
+  ([`roadmap.md`: Milestones](roadmap.md#milestones)), before the Swift, Kotlin and TypeScript
   bindings.
 
 ## Migrating existing code
@@ -207,7 +207,7 @@ Models write well only in languages they have seen. Moddil's plan is in
 
 ## Flagship software
 
-- The **Hashiverse client** (milestones M3 and M4, [`roadmap.md`: Milestones](roadmap.md#milestones)) is the
+- The **Hashiverse client** (milestones M3 and M5, [`roadmap.md`: Milestones](roadmap.md#milestones)) is the
   first real application, and it is used by a real network.
 - The four [reference examples](examples/README.md) are published as complete, idiomatic programs.
 - **A widely used Python package** accelerated with Moddil would do more for adoption than any feature;

@@ -38,9 +38,10 @@ Design constraints this places on the rest of Moddil:
   but ships in **no** browser or Node (Chrome has it behind a flag only); Wasmtime has it at Tier 3 on
   x86_64 Linux. JSPI, however, is standardised and ships in all major browsers and Node ≥ 26.
   **Decision:** the concurrency semantics are target-independent, and the backend picks a lowering:
-  1. **WASM stack switching**: the preferred lowering, built first against **Wasmtime**.
-  2. **JSPI**: the browser and Node baseline until stack switching ships there. Each Moddil task is
-     its own suspended `promising` stack, scheduled from JS.
+  1. **JSPI**: built first (decided November 2026); the browser and Node baseline until stack
+     switching ships there. Each Moddil task is its own suspended `promising` stack, scheduled from JS.
+  2. **WASM stack switching**: the preferred long-term lowering, added for **Wasmtime** and other WASI
+     hosts once their support matures.
   3. **CPS/Asyncify-style transform**: only if WASI runtimes without stack switching must be
      supported (open question).
 

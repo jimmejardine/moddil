@@ -153,8 +153,8 @@ The same source, lockfile and toolchain produce **bit-identical artefacts**:
 - pure, sandboxed comptime ([`comptime.md`](comptime.md));
 - hash-pinned dependencies.
 
-Anyone can rebuild a tagged version of a mod and compare the bytes ([Package management and supply-chain security](packages-and-supply-chain.md)). The bootstrap fixed point
-([`compiler.md`: Staged bootstrap](compiler.md#staged-bootstrap)–[`compiler.md`: Bootstrapping after self-hosting](compiler.md#bootstrapping-after-self-hosting)) uses the same machinery. Prior art: Go toolchains are fully
+Anyone can rebuild a tagged version of a mod and compare the bytes ([Package management and supply-chain security](packages-and-supply-chain.md)). The bootstrap fixed point, once the
+compiler is self-hosted ([`compiler.md`: Staged bootstrap](compiler.md#staged-bootstrap)), will use the same machinery. Prior art: Go toolchains are fully
 reproducible from Go 1.21; Debian Reproducible Builds; Nix and Guix; Bazel's hermetic builds.
 
 Tests run in a shuffled order and print the seed (Go's `-shuffle`), so order dependence is found and

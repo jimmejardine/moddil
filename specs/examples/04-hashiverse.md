@@ -22,8 +22,8 @@ interoperate with a running network built in another language.
 ## Recommendation: client first, server second
 
 **Phase A: Moddil reference client.**
-- **CLI/native client first, browser client second.** The early toolchain targets native and WASI on
-  Wasmtime; the browser needs the JSPI lowering, which comes later (see
+- **CLI/native client first, browser client second.** The native client is milestone M3; the browser
+  client follows at M5, once the backend-service milestone is done (see
   [`../roadmap.md`: Milestones](../roadmap.md#milestones)–[`../compiler.md`: Wasmtime as the short-term reference runtime](../compiler.md#wasmtime-as-the-short-term-reference-runtime)).
 - Smaller scope than a server.
 - Must speak the protocol **on the wire** with existing Rust servers. This is a strong test of

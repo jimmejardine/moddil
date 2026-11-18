@@ -23,7 +23,7 @@ decisions remove the usual obstacles:
 | **Effects** ([Effects and capabilities as a unifying idea](effects-and-capabilities.md)) | The compiler can *check* that contract expressions are pure; most languages can only trust them to be. Effect handlers swap real I/O, time and scheduling for test versions. |
 | **Ownership; immutable rc contents; shared mutation only in sync cells** ([`memory.md`](memory.md)) | No unrestricted aliasing, so a verifier knows what a function can modify (the "frame problem"). This is why Verus, Prusti and Creusot work for Rust and why C/C++ verification is so hard. |
 | **Linear resources** | Typestate: protocols such as "open → write → commit or rollback" checked by the type system. |
-| **MIR interpreter** ([`compiler.md`](compiler.md), [`comptime.md`](comptime.md)) | A Miri-style undefined-behaviour checker, and a reference semantics for testing the backends against each other. |
+| **Two interpreters** ([`compiler.md`: Two interpreters](compiler.md#two-interpreters)) | The MIR interpreter is a Miri-style undefined-behaviour checker; the separate reference interpreter gives a reference semantics for testing the compiler and backends against. |
 | **Deterministic runtime** (`moddil/runtime-sim`, [Determinism and reproducibility](determinism.md)) | Reproducible tests and systematic exploration of task interleavings. |
 | **Comptime and static reflection** | Test-data generators derived from types (`#[derive(Arbitrary)]`); contracts on literals checked at compile time. |
 
