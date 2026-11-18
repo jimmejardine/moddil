@@ -693,7 +693,8 @@ codebases, and a growing Rust ecosystem must be reachable with low friction and 
 > Expanded in [`build-times.md`](build-times.md) (proposal): the language rules that decide build
 > speed (no cycles between mods, explicit interface artefacts, witness tables in debug and
 > specialisation in release), a lazy query-based compiler with a shared cache and no link step in
-> dev builds, optimised dependencies by default, and published budgets.
+> dev builds, live update of a running debug program, four cache layers (daemon, local store, team
+> cache, signed registry artefacts), optimised dependencies by default, and published budgets.
 
 **Problem.** Slow builds damage the edit-compile-test loop for humans, and are worse for LLM agents
 that iterate dozens of times per task.

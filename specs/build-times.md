@@ -8,7 +8,9 @@
 Build speed is decided mostly by **language rules**, not by compiler cleverness. Go is fast because of
 what it forbids; Rust and C++ are slow largely because of what they allow. Moddil should:
 - lock in the language rules that make fast builds possible (§3), because they cannot be retrofitted;
-- build a query-based, lazy, cached compiler that skips linking in dev builds (§4);
+- build a query-based, lazy compiler that skips linking in dev builds (§4), supports **live update
+  of a running debug program** (§4.1), and caches results in four layers from a warm daemon to signed
+  registry artefacts (§4.2);
 - optimise dependencies by default and keep your own code fast to compile (§5);
 - publish build-time budgets and treat regressions as bugs (§6).
 
@@ -73,20 +75,88 @@ Both are workarounds that every serious Rust project rediscovers. Moddil should 
 - **Lazy compilation:** only code reachable from a root (a binary, a test) is analysed and compiled,
   as Zig does. Unused parts of large mods cost nothing.
 - **Parallel at every stage:** mods in DAG order; functions within a mod during code generation.
-- **Content-addressed cache** keyed by (normalised input, toolchain, target, profile):
-  - shared between a developer's machine, the team, CI and a remote cache (as with Bazel or sccache);
-  - safe to share because builds are reproducible ([`determinism.md`](determinism.md) §6);
-  - the registry may serve **prebuilt, signed artefacts** per mod version, target and profile,
-    checked by independent rebuilders (like Nix's binary cache; rationale §2.16).
-- **No link step in dev builds:**
-  - functions are reached through an indirection table, or code runs under an in-process Cranelift
-    JIT;
-  - this also gives **hot reload** of individual function bodies;
-  - alternatively, Zig-style in-place patching of the output binary.
-  - Release builds link normally with `lld` or `mold`, with split debug info.
+- **Content-addressed, layered cache** (§4.2).
+- **No link step in dev builds:** functions are reached through an indirection table and compiled by
+  Cranelift in process, which also enables **live update** (§4.1). Release builds link normally with
+  `lld` or `mold`, with split debug info.
 - **Check-only mode:** type, effect and ownership checking without code generation, powering the
   language server and agents (rationale §2.18).
 - **Test impact analysis:** the query graph knows which tests depend on a change, so only those run.
+
+### 4.1 Live update (debug builds)
+
+Change code while the program keeps running. Release builds may compile slowly; the debug loop must
+not.
+
+**Mechanism**
+- In debug builds every function is called through an **indirection table**. Release builds have no
+  table.
+- A changed function is recompiled by Cranelift into new executable memory, and its table entry is
+  swapped.
+- Updates are applied in **batches at safe points**, the preemption safe points of
+  [`concurrency.md`](concurrency.md) §6.1: all tasks pause briefly, the batch is swapped atomically,
+  and tasks resume.
+- **Frames already running finish on the old code** (Erlang keeps a "current" and an "old" version
+  in the same way). Old code is freed once no task's stack refers to it; stackful tasks make that
+  checkable.
+- Cost: one indirect call per call and no inlining across functions, in debug builds only.
+- There are no mutable globals (state is reached through capabilities), so no hidden global state
+  is left stale.
+
+**What can change while running**
+
+| Change | Live? | How |
+|---|---|---|
+| Function body, same signature | Yes | Swap the table entry |
+| Signature (parameters, effects, error set) | Yes | Recompile the callers incrementally and swap them together in one batch |
+| New functions, types, modules | Yes | Added to the table |
+| Layout of a type with live values | Partly | State held by a service or actor migrates through an explicit `migrate(old) -> new` hook (like Erlang's `code_change`); new fields with defaults migrate automatically. Otherwise the affected task scope restarts. |
+| Effect handlers, scope structure | Restart | The affected scope restarts |
+
+**Restart plus replay.** A restarted scope can rebuild its state by **replaying its recorded effects
+through the new code** ([`determinism.md`](determinism.md) §5). If the replay diverges, the tool
+reports exactly where. Even layout changes then feel live in most development loops.
+
+**Targets**
+- Native: new code in executable memory; table entries swapped.
+- WASM (browser and Wasmtime): calls go through a function table (`call_indirect`). New code is a new
+  module instantiated against the same memory and table, then its entries are swapped in.
+
+**Scope:** debug builds only. Production hot upgrades are a **non-goal for now**; production uses
+rolling deploys with compiler-checked compatibility between versions (rationale §2.10).
+
+### 4.2 Cached builds
+
+**Four layers, nearest first**
+
+| Layer | What it holds | Prior art |
+|---|---|---|
+| 1. Compiler daemon | The warm query graph, shared by builds, the language server, tests and live update | rust-analyzer, Bazel server, Gradle daemon |
+| 2. Local content-addressed store | Results on disk; survives restarts; shared across branches and worktrees, so switching branches does not rebuild; garbage-collected by size and age | ccache, sccache, Nix store |
+| 3. Team / CI remote cache | Results uploaded by CI, downloaded by developers | Bazel remote cache, Turborepo, Nx |
+| 4. Registry artefacts | Signed, prebuilt dependency artefacts per mod version, target and profile | Nix binary cache |
+
+**Keys and granularity**
+- Key = hash of (the item's canonical AST, the interface artefacts it depends on, toolchain version,
+  target, profile, flags).
+- Granularity: per declaration for checking; per function for debug code generation; per mod for
+  release objects, with ThinLTO summaries cached separately.
+- **A hit cannot be stale.** Builds are hermetic by language design: comptime is pure, there are no
+  build scripts and no environment access. Bazel achieves this only when every rule is written
+  carefully; in Moddil it is not optional.
+
+**Trust**
+- A shared cache is a supply-chain risk (cache poisoning).
+- Remote and registry entries are **signed**; only trusted CI writes, developers read.
+- Builds are reproducible, so independent rebuilders and random sampling can verify hits
+  ([`determinism.md`](determinism.md) §6, rationale §2.16).
+
+**Release builds** may be slow. Their optimised artefacts are cached per mod, and profile-guided
+optimisation profiles are just more inputs to the key. Dependencies normally arrive optimised from the
+cache and are never rebuilt locally (§5).
+
+**Visibility:** `moddil build --timings` shows hit and miss rates per layer and, for each miss, which
+input changed.
 
 ## 5. Profiles
 
@@ -129,10 +199,10 @@ than for humans:
 
 | Example | What it needs |
 |---|---|
-| [Game](examples/01-multiplayer-game.md) | Hot reload of game rules and rendering without restarting the client |
+| [Game](examples/01-multiplayer-game.md) | Live update of game rules and rendering in the browser, keeping game state |
 | [HFT](examples/02-hft-platform.md) | A fast dev loop; long release builds are acceptable if cached |
-| [Web store](examples/03-web-store.md) | Large-team iteration; sub-second rebuilds after a one-line change |
-| [Hashiverse](examples/04-hashiverse.md) | Fast hash and crypto code in dev builds without manual overrides; tests in the default profile |
+| [Web store](examples/03-web-store.md) | Large-team iteration; sub-second rebuilds; patching an API handler without dropping sessions; a shared team cache |
+| [Hashiverse](examples/04-hashiverse.md) | Fast hash and crypto code in dev builds without manual overrides; tests in the default profile; live-patching one node of a running simulation |
 
 ## 9. Decisions to lock early (recommendations)
 
@@ -143,13 +213,17 @@ than for humans:
 5. Canonical-AST hashing for cache keys (§3.9).
 6. Optimised dependencies as the default dev profile (§5).
 7. Published budgets, enforced in CI (§6).
+8. Debug builds call through an indirection table; live updates apply in batches at safe points (§4.1).
+9. Hermetic, signed, layered caches (§4.2).
 
 ## 10. Open questions
 
 1. Are cycles allowed between modules inside one mod?
 2. How slow can generic code be in debug builds before it is unacceptable? Should hot generics be
    specialised even in debug builds?
-3. How far should hot reload go: function bodies only, or signature and data-layout changes too?
+3. Live update (§4.1) proposes: bodies, signatures and new items live; layout changes through
+   migration hooks or scope restart plus replay. Open: which layout migrations can be automatic, and
+   whether production hot upgrades are ever a goal.
 4. How much should the registry serve prebuilt binaries, and what are the trust implications?
 
 ## Prior art
@@ -160,6 +234,8 @@ than for humans:
 - Swift: value witness tables, specialisation.
 - OCaml: separate interface files.
 - Jai, D, Delphi: fast compilers.
-- Bazel, Buck2, sccache, Nix binary cache.
+- Bazel, Buck2, sccache, ccache, Turborepo, Nx, Nix binary cache; Gradle daemon.
+- Live update: Erlang/OTP hot code loading; Smalltalk and Lisp images; .NET Hot Reload; JVM HotSwap;
+  Dart/Flutter stateful hot reload; Live++; Rust `subsecond` (Dioxus).
 - `lld`, `mold`.
 - perf.rust-lang.org.
