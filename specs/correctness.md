@@ -124,7 +124,8 @@ shuttle, Coyote, FoundationDB). Every failure replays from a seed ([Determinism 
 ### Differential testing of the compiler
 
 Run generated programs (Csmith, YARPGen style) through the interpreter, Cranelift, LLVM and WASM
-backends; any disagreement is a compiler bug. The interpreter is the reference semantics.
+backends; any disagreement is a compiler bug. The interpreter is the executable form of the
+reference ([`definition.md`](definition.md)).
 
 ## State of the art not to miss (design now, build later)
 
@@ -182,7 +183,8 @@ correctness property.
 
 A mechanised model of Moddil-core (for example in Lean), as WebAssembly (WasmCert), CakeML and
 CompCert have, used to validate the reference interpreter. This keeps "what Moddil means" precise,
-which every other tool here depends on.
+which every other tool here depends on. How the model, the reference and the interpreter relate is
+decided in [`definition.md`: Three artefacts, one meaning](definition.md#three-artefacts-one-meaning).
 
 ### LLMs plus verification
 

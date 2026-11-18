@@ -30,7 +30,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Requirements and non-goals](requirements.md)                      | 🟡 minor questions | [`requirements.md`](requirements.md): R1–R3 and non-goals                  |
 | [Reference examples](examples/README.md)                           | 🟠 major questions | [`examples/`](examples/README.md): game, HFT, web store, Hashiverse        |
 | [Surface syntax and paradigms](syntax.md)                          | 🟡 minor questions | [`syntax.md`](syntax.md), [`paradigms.md`](paradigms.md)                   |
-| [Language definition and conformance](definition.md)               | ⚪ not started     | [`definition.md`](definition.md)                                           |
+| [Language definition and conformance](definition.md)               | 🟡 minor questions | [`definition.md`](definition.md)                                           |
 | **The language**                                                   |                    |                                                                            |
 | [Effects and capabilities](effects-and-capabilities.md)            | 🟠 major questions | [`effects-and-capabilities.md`](effects-and-capabilities.md)               |
 | [Memory and resource management](memory-and-resources.md)          | 🟡 minor questions | [`memory-and-resources.md`](memory-and-resources.md)                       |

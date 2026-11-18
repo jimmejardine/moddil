@@ -38,4 +38,6 @@ removal.
 10. **Minimum viable language**: which language features are in v0 and which come later? (Separate
     from the compiler milestones in [`bootstrap.md`: Milestones](bootstrap.md#milestones).)
 11. **How is the language defined?** A prose reference, a formal semantics, or the MIR interpreter as
-    the executable reference? How are conformance tests organised?
+    the executable reference? How are conformance tests organised? **Decided:** a normative
+    reference with formal core rules, the interpreter as its executable form and a mechanised core
+    model, plus a shared conformance suite ([`definition.md`](definition.md)).
