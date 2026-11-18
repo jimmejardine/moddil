@@ -80,7 +80,7 @@ metric.count("orders.filled", 1, venue: order.venue)
 ## 6. Secrets never reach observability
 
 - `Secret<T>` is the information-flow marking from rationale §2.10 (secrets cannot flow to
-  `@client`).
+  `client`).
 - A `Secret<T>` value **cannot flow into the arguments of any observability event**. This is a compile
   error, including when the secret is nested inside a struct or an error payload being logged.
 - Explicit projections are allowed and visible: `secret.redacted()`, `secret.hash_for_correlation()`.

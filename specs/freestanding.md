@@ -35,19 +35,19 @@ Declared in the binary's or mod's manifest and checked across all dependencies.
 
 ## 3. Entry points and boot
 
-```
-@entry                                   // the reset handler; runs before any runtime exists
-fn reset(board: sink Board) -> never { … }
+```rust
+#[entry]                                 // the reset handler; runs before any runtime exists
+fn reset(board: Board) -> ! { … }
 
-@trap_handler                            // required in freestanding profiles
-fn on_trap(info: let TrapInfo) -> never { log_to_flash(info); system_reset() }
+#[trap_handler]                          // required in freestanding profiles
+fn on_trap(info: &TrapInfo) -> ! { log_to_flash(info); system_reset() }
 ```
 
-- `@entry` replaces `main`.
+- `#[entry]` replaces `main`.
 - A **trap handler is required**: what a trap (class 3, [`error-handling.md`](error-handling.md) §2)
   does on bare metal (halt, reset, record to flash). Omitting it is a compile error.
 - R3 applies to entry points and interrupt handlers: every error is handled.
-- Low-level control: `@section`, `@align`, `@naked` functions, the interrupt calling convention,
+- Low-level control: `#[link_section]`, `#[repr(align(…))]`, `#[naked]` functions, the interrupt calling convention,
   position-independent code, red zone off, and target features (for example, no floating point in
   kernel code).
 - The toolchain **generates the linker script** from a declarative memory map in the manifest.
@@ -74,9 +74,9 @@ Three levels, from nothing to a full scheduler:
 - Interrupt handlers are entry points with a **restricted effect set**, the same mechanism as GPU
   `kernel` code ([`accelerators.md`](accelerators.md)): they cannot suspend or allocate, and must
   handle their errors.
-  ```
-  @interrupt(TIMER0, priority: 2)
-  fn tick(state: let Shared) { state.ticks.with { t -> t += 1 } }
+  ```rust
+  #[interrupt(TIMER0, priority = 2)]
+  fn tick(state: &Shared) { state.ticks.with(|t| *t += 1) }
   ```
 - Data shared between interrupts and the main loop goes through sync cells guarded by critical
   sections. A compile-time **priority-ceiling analysis** (as in Rust's RTIC) makes this deadlock-free
@@ -103,7 +103,7 @@ Three levels, from nothing to a full scheduler:
   driver mod can only touch its own registers (the Tock and Hubris idea), and the capability shows in
   signatures, audits and semantic diffs.
 - **Inline assembly** is an intrinsic behind `unsafe` and an `asm` capability.
-- **Bit-exact layouts:** `@repr(C)`, `@packed`, bitfields in packed structs, and **arbitrary-width
+- **Bit-exact layouts:** `#[repr(C)]`, `#[repr(packed)]`, bitfields in packed structs, and **arbitrary-width
   integers** (`u3`, `i24`, as in Zig).
 
 ## 7. Observability and debugging

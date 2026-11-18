@@ -11,7 +11,7 @@
 | **Comptime is pure** | Code run at compile time has an empty effect set: no `net`, `fs`, `time` or `rand`. It is deterministic, fuel-limited, sandboxed and cached. |
 | **Generics stay bounded** | Generic code is checked against trait bounds where it is defined. Comptime handles values and code generation, not untyped generics. |
 | **Static reflection** | `reflect(T)` describes a type's fields, variants, annotations and generic parameters, read-only. |
-| **Typed generation at the annotation site** | `@derive(serde.Serialize)` calls a comptime function that returns a *typed* trait impl. It is never a token stream and never appears anywhere the annotation isn't. |
+| **Typed generation at the annotation site** | `#[derive(serde::Serialize)]` calls a comptime function that returns a *typed* trait impl. It is never a token stream and never appears anywhere the annotation isn't. |
 | **Tagged string literals for DSLs** | `sql"…"`, `re"…"` and `fmt"…"` are parsed and checked at compile time and produce typed code. There is no new syntax. |
 | **Everything is visible** | Every expansion can be printed as canonical source and appears in semantic diffs. |
 
@@ -93,11 +93,14 @@ macros.
 
 ## 4. Comptime parameters and values
 
+```rust
+fn ring<const N: usize, T>() -> RingBuffer<T, N>          // size known at compile time
+const CRC_TABLE: [u32; 256] = const { crc_table(0xEDB88320) };
+fn pow<const N: u32>(x: f64) -> f64 { … }                  // specialised per N
 ```
-fn ring<comptime N: usize, T>() -> RingBuffer<T, N>      // size known at compile time
-const CRC_TABLE: [u32; 256] = comptime crc_table(0xEDB88320)
-fn pow<comptime n: u32>(x: f64) -> f64 { … }               // specialised per n
-```
+
+Compile-time evaluation uses Rust's spelling ([`syntax.md`](syntax.md)): `const` generic
+parameters, `const fn`, and `const { … }` blocks. "Comptime" remains the name of the concept.
 
 Comptime values cover sizes, constants, lookup tables, format strings and specialisation. A comptime
 value can be anything with a defined compile-time representation. Borrows of compile-time data
@@ -105,8 +108,8 @@ become static data in the binary.
 
 ## 5. Generics are bounded
 
-```
-fn max<T: Ord>(a: let T, b: let T) -> &T                   // the bound is part of the signature
+```rust
+fn max<T: Ord>(a: &T, b: &T) -> &T                         // the bound is part of the signature
 ```
 
 - Generic functions and types declare trait bounds and are **checked once, at their definition**,
@@ -125,7 +128,7 @@ fn max<T: Ord>(a: let T, b: let T) -> &T                   // the bound is part 
 - **Structs**: fields (name, type, annotations, visibility), in declaration order.
 - **Sum types**: variants and their payloads.
 - **Generics**: generic parameters and their bounds.
-- **Annotations** attached to the type and its fields, e.g. `@serde.rename("id")`.
+- **Attributes** attached to the type and its fields, e.g. `#[serde(rename = "id")]`.
 - **Functions**: signature, including parameter modes and effects.
 
 Visibility is respected: comptime code in one mod cannot read the private fields of another mod's
@@ -133,17 +136,17 @@ type unless that type opts in (e.g. by deriving in its own mod).
 
 ## 7. Generation: typed impls at the annotation site
 
-```
-@derive(serde.Serialize, serde.Deserialize, Eq, Hash)
-type Order {
+```rust
+#[derive(serde::Serialize, serde::Deserialize, Eq, Hash)]
+struct Order {
     id: OrderId,
-    @serde.rename("px") price: Price,
+    #[serde(rename = "px")] price: Price,
     qty: Qty,
 }
 ```
 
-- `@derive(X)` calls a comptime function published by a mod, e.g.
-  `serde.Serialize: comptime fn(type) -> Impl<Serialize>`.
+- `#[derive(X)]` calls a compile-time function published by a mod, e.g.
+  `serde::Serialize: const fn(type) -> Impl<Serialize>`.
 - The function builds its result through a **typed construction API** (impls, functions, match
   arms, expressions), not token streams. Output is guaranteed well-formed, and it is type-checked
   against the trait like hand-written code.
@@ -209,9 +212,9 @@ Generated code is ordinary code once expanded:
 
 | Example | Uses |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | `@derive` for network snapshot codecs and delta encoding; comptime struct-of-arrays layouts for ECS components |
+| [Multiplayer game](examples/01-multiplayer-game.md) | `#[derive]` for network snapshot codecs and delta encoding; comptime struct-of-arrays layouts for ECS components |
 | [HFT](examples/02-hft-platform.md) | Exchange codecs (SBE/FIX) generated from embedded schemas; comptime lookup tables; zero-copy accessor views (see [`memory-and-resources.md`](memory-and-resources.md) §6) |
-| [Web store](examples/03-web-store.md) | `sql"…"` checked against the schema; `@derive` for API contracts and validation; `html"…"` templates for the web client |
+| [Web store](examples/03-web-store.md) | `sql"…"` checked against the schema; `#[derive]` for API contracts and validation; `html"…"` templates for the web client |
 | [Hashiverse](examples/04-hashiverse.md) | Wire-protocol codecs that must match existing Rust servers; comptime crypto constant tables; `fmt` for logs |
 
 None of them needed token-level macros.

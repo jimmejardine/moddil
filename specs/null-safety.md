@@ -65,17 +65,17 @@ plus compiler-checked narrowing*, in one of two styles:
     state, e.g. `Conn<Unauthed>` → `Conn<Authed>`.
 
 Illustration only:
-```
-type UserId = newtype u64
-type Port   = u16 in 1..                          // 0 excluded: Port? is still 2 bytes
+```rust
+struct UserId(u64);
+type Port = u16 in 1..;                           // 0 excluded: Port? is still 2 bytes
 
-fn email_of(users: let Map<UserId, User>, id: UserId) -> &str? {
+fn email_of(users: &Map<UserId, User>, id: UserId) -> &str? {
     users.get(id)?.profile?.email                 // optional chaining: absence flows through
 }
 
-fn connect(host: let str, port: Port?) ! {net, fail(NetError)} {
-    let addr = resolve(host) ?? return            // default/early exit on absence
-    let Some(p) = port else { fail(NetError.NoPort) }
+fn connect(host: &str, port: Port?) with net, fail(NetError) {
+    let Some(addr) = resolve(host) else { return };   // early exit on absence
+    let Some(p) = port else { fail(NetError::NoPort) };
     …
 }
 ```

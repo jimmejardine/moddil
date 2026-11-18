@@ -5,9 +5,9 @@
 
 ## 1. Summary
 
-```
-import moddil/units/si.{m, cm, mm, s, ms, kg}
-import moddil/units/information.{MiB}
+```rust
+use moddil::units::si::{m, cm, mm, s, ms, kg};
+use moddil::units::information::MiB;
 
 let length: f64<m> = 100<cm> + 50.5<mm>     // 1.0505 m
 let g              = 9.81<m/s^2>
@@ -98,7 +98,7 @@ unit K:  Temperature
 unit degC = K + 273.15        // affine
 unit B:  Information
 unit MiB = 1048576 B
-unit USD: Currency.USD        // each currency is its own base dimension (§5)
+unit USD: Currency::USD       // each currency is its own base dimension (§5)
 ```
 
 Because `cm` and `m` are declared as related, they **convert automatically**, fixing F#'s main
@@ -121,9 +121,9 @@ weakness.
   differences. `Instant - Instant = Duration`; adding two `degC` points is an error; `degC` to `K`
   applies the offset to points but not to differences.
 - **Unit polymorphism**, as in F#:
-  ```
-  fn sqr<u>(x: f64<u>) -> f64<u^2> { x * x }
-  fn mean<u>(xs: let [f64<u>]) -> f64<u> { … }
+  ```rust
+  fn sqr<U>(x: f64<U>) -> f64<U^2> { x * x }
+  fn mean<U>(xs: &[f64<U>]) -> f64<U> { … }
   ```
 - **Formatting and parsing:** `fmt"{length:<mm>}"` prints in the requested unit; parsing
   `"12.5 km"` returns a `Result`.
@@ -145,11 +145,11 @@ small piece: normalising products of base dimensions with integer exponents.
 
 Unit names are imported like types:
 
-```
-import moddil/units/si.{m, cm, mm, s, ms}
+```rust
+use moddil::units::si::{m, cm, mm, s, ms};
 ```
 
-*Open:* whether a whole unit pack can be imported at once (`import moddil/units/si.*`), given that
+*Open:* whether a whole unit pack can be imported at once (`use moddil::units::si::*`), given that
 glob imports otherwise hurt local reasoning (rationale §2.18).
 
 ## 8. Across tiers

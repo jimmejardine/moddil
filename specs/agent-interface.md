@@ -70,10 +70,10 @@ property of the source.
     inherits ([`docs-and-tests.md`](docs-and-tests.md) §4.1).
 - Humans mostly *read* the reviewer view and *type* the compact one.
 
-```
-fn load(path: Path) -> Config ! {fs, fail(LoadError)}     // explicit: public signature
-    let text = fs.read(path)?          // reviewer view shows:  : String ! {fs, fail(IoError)}
-    parse(text)?                       // reviewer view shows:  : Config ! {fail(ParseError)}
+```rust
+pub fn load(path: Path) -> Config with fs, fail(LoadError)   // explicit: public signature
+    let text = fs.read(path)?;         // reviewer view shows:  : String with fs, fail(IoError)
+    parse(text)?                       // reviewer view shows:  : Config with fail(ParseError)
 ```
 
 ### 5.2 The agent server

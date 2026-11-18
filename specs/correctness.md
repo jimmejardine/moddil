@@ -25,20 +25,20 @@ decisions remove the usual obstacles:
 | **Linear resources** | Typestate: protocols such as "open → write → commit or rollback" checked by the type system. |
 | **MIR interpreter** ([`bootstrap.md`](bootstrap.md), [`comptime.md`](comptime.md)) | A Miri-style undefined-behaviour checker, and a reference semantics for testing the backends against each other. |
 | **Deterministic runtime** (`moddil/runtime-sim`, rationale §2.11) | Reproducible tests and systematic exploration of task interleavings. |
-| **Comptime and static reflection** | Test-data generators derived from types (`@derive(Arbitrary)`); contracts on literals checked at compile time. |
+| **Comptime and static reflection** | Test-data generators derived from types (`#[derive(Arbitrary)]`); contracts on literals checked at compile time. |
 
 ## 3. Easy wins (v1)
 
 ### 3.1 Contracts as syntax
 
-```
+```rust
 fn withdraw(account: &mut Account, amount: Money) -> Money
     requires amount > 0
     requires account.balance >= amount
     ensures  account.balance == old(account.balance) - amount
 { … }
 
-type OrderBook {
+struct OrderBook {
     bids: SortedVec<Level>,
     asks: SortedVec<Level>,
     invariant bids.is_empty() || asks.is_empty() || bids.best() < asks.best()
@@ -59,8 +59,8 @@ type OrderBook {
 type Port = u16 where self >= 1024
 type Price = i64 where self > 0
 
-let p = Port.new(raw)?        // returns Result: invalid input is an error (class 1)
-let q: Port = 8080            // literal checked at comptime
+let p = Port::new(raw)?;      // returns Result: invalid input is an error (class 1)
+let q: Port = 8080;           // literal checked at compile time
 ```
 
 - "Parse, don't validate": once you hold a `Port`, the invariant holds, and it is never checked again.
@@ -70,15 +70,15 @@ let q: Port = 8080            // literal checked at comptime
 
 ### 3.3 Property-based testing, with contracts as free oracles
 
-```
-@test.property
-fn withdraw_never_overdraws(account: Account, amount: Money) {
+```rust
+#[property_test]
+fn withdraw_never_overdraws(mut account: Account, amount: Money) {
     try { withdraw(&mut account, amount) } catch { _ => {} }
 }
 ```
 
 - Built into the test runner (`moddil/prop`), with generators derived from types
-  (`@derive(Arbitrary)`) and automatic **shrinking**, which reduces a failing input to the smallest
+  (`#[derive(Arbitrary)]`) and automatic **shrinking**, which reduces a failing input to the smallest
   case that still fails (QuickCheck, Hypothesis, proptest).
 - **Contracts are oracles.** Any function with contracts can be tested automatically: generate inputs
   that satisfy `requires`, run, check `ensures` and invariants (Eiffel AutoTest). Tests come for free
@@ -170,7 +170,7 @@ tests, so engineers adopt it easily. A Moddil equivalent could run on MIR.
 
 ### 4.6 Information flow
 
-Type-level taint tracking and non-interference: secrets never reach `@client`, and untrusted
+Type-level taint tracking and non-interference: secrets never reach the `client` placement, and untrusted
 input reaches sensitive sinks only after validation (rationale §2.10). This is both a security and a
 correctness property.
 

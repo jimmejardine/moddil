@@ -10,14 +10,14 @@ not be adopted, whatever its other strengths.
 ## Topology
 
 ```
- ┌──────────── @client ────────────┐
+ ┌──────────── client  ────────────┐
  │  web (WASM)   Android   iOS      │
  │  catalog, cart, checkout, account│
  └───────────────┬─────────────────┘
                  │ HTTPS (compiler-generated contract)
                  ▼
  ┌──────────────────────────────────┐        ┌────────────────────┐
- │  @api  (stateless, N instances)  │◄──────►│ @db  (PostgreSQL)  │
+ │  api   (stateless, N instances)  │◄──────►│ db   (PostgreSQL)  │
  │  auth, catalog, cart, orders     │  SQL   └────────────────────┘
  └───────────────┬──────────────────┘
                  │ payments capability only
@@ -27,18 +27,18 @@ not be adopted, whatever its other strengths.
 
 | Placement | Role | Notes |
 |---|---|---|
-| `@client` | UI on web, Android and iOS | Untrusted; offline-tolerant cart |
-| `@api` | Stateless HTTP API, horizontally scaled behind a load balancer | All state lives in `@db` |
-| `@db` | Relational database | Not Moddil code; typed schema in Moddil |
+| `client` | UI on web, Android and iOS | Untrusted; offline-tolerant cart |
+| `api` | Stateless HTTP API, horizontally scaled behind a load balancer | All state lives in `db` |
+| `db` | Relational database | Not Moddil code; typed schema in Moddil |
 
 ## Key flows
 
-1. **Browse**: client queries the catalog → `@api` reads `@db` (with caching) → paginated results.
-2. **Cart**: maintained on the client and synchronised to `@api` when the user is logged in.
-3. **Checkout**: `@api` validates the cart against current prices and stock (never trusting client
+1. **Browse**: client queries the catalog → `api` reads `db` (with caching) → paginated results.
+2. **Cart**: maintained on the client and synchronised to `api` when the user is logged in.
+3. **Checkout**: `api` validates the cart against current prices and stock (never trusting client
    prices), creates the order in a transaction, then calls the payment provider.
 4. **Account**: sign-up and login, sessions/tokens, order history.
-5. **Deploy**: a new `@api` version rolls out while old clients (especially mobile apps that update
+5. **Deploy**: a new `api` version rolls out while old clients (especially mobile apps that update
    slowly) are still in use.
 
 ## Moddil features this stresses
@@ -46,11 +46,11 @@ not be adopted, whatever its other strengths.
 - **Compiler-generated client↔API contracts (§2.10)**: no hand-written OpenAPI. The API is typed once
   and used from all three clients.
 - **Version compatibility (§2.19, §2.10)**: mobile clients can be months old. The compiler must check
-  that a new `@api` still serves every client version still in support, and flag breaking changes in
+  that a new `api` still serves every client version still in support, and flag breaking changes in
   the PR's semantic diff.
-- **Trust boundaries (§2.10)**: prices, totals and stock levels from `@client` are untrusted; secrets
-  (payment keys, DB credentials) cannot flow to `@client`, and the type system enforces it.
-- **Capabilities (§2.16)**: only the checkout module holds the `payments` capability; only `@api` holds
+- **Trust boundaries (§2.10)**: prices, totals and stock levels from `client` are untrusted; secrets
+  (payment keys, DB credentials) cannot flow to `client`, and the type system enforces it.
+- **Capabilities (§2.16)**: only the checkout module holds the `payments` capability; only `api` holds
   `db`. A dependency that suddenly asks for `net` is flagged.
 - **Typed SQL and migrations**: queries checked against the schema at compile time (as in sqlx or
   jOOQ); migrations are versioned and reviewable; transactions are linear resources that must commit
@@ -86,10 +86,10 @@ Initial targets, to be refined:
 - One API definition used by web, Android and iOS clients, with zero hand-written serialisation.
 - A breaking API change fails the build while any supported client version depends on it.
 - Typed SQL: a query that does not match the schema fails to compile.
-- A secret value cannot be returned to `@client`; attempting it is a compile error.
+- A secret value cannot be returned to `client`; attempting it is a compile error.
 - An agent can add a new CRUD entity end to end (schema, migration, API, client model, tests), and
   the semantic diff summarises it accurately.
-- Incremental rebuild after a one-line change in `@api`: well under a second.
+- Incremental rebuild after a one-line change in `api`: well under a second.
 
 ## Mods used
 
@@ -112,4 +112,4 @@ Initial targets, to be refined:
   versions are still in use (deployment metadata)?
 - Is typed SQL a language feature (compile-time evaluation against a schema), or purely a mod using
   §2.6 reflection?
-- Should `@db` be a placement at all, or just an external service with a typed schema?
+- Should `db` be a placement at all, or just an external service with a typed schema?

@@ -24,8 +24,8 @@ has none:
 | Way to reach data | Why it is race-free across tasks |
 |---|---|
 | Owned value | Moved into the task; nobody else has it |
-| `let` borrow / view | Read-only, and the source is frozen until all borrows end |
-| `mut` borrow | Exclusive; lent to exactly one task |
+| `&` borrow / view | Read-only, and the source is frozen until all borrows end |
+| `&mut` borrow | Exclusive; lent to exactly one task |
 | `Rc<T>` | Biased RC is thread-safe; contents are immutable |
 | Sync cell | Thread-safe by definition |
 
@@ -39,30 +39,30 @@ Because children always finish before their parent scope ends, children can **bo
 parent's frame**. This is Rust's `thread::scope`, but it is the only mode, so the `'static` +
 `Arc::clone` dance disappears.
 
-```
-fn total(orders: let [Order]) -> Money ! {spawn} {
-    let (left, right) = orders.split_at(orders.len() / 2)
-    scope { s ->
-        let a = s.spawn { sum(left) }     // shared borrows: many children may read
-        let b = s.spawn { sum(right) }
+```rust
+fn total(orders: &[Order]) -> Money with spawn {
+    let (left, right) = orders.split_at(orders.len() / 2);
+    scope(|s| {
+        let a = s.spawn(|| sum(left));    // shared borrows: many children may read
+        let b = s.spawn(|| sum(right));
         a.join() + b.join()
-    }                                     // children are done here; borrows end
+    })                                    // children are done here; borrows end
 }
 
-fn normalise(prices: mut [Price]) ! {spawn} {
-    let (lo, hi) = prices.split_at_mut(prices.len() / 2)
-    scope { s ->
-        s.spawn { scale(lo) }             // each mut borrow goes to exactly one child
-        s.spawn { scale(hi) }
-    }
+fn normalise(prices: &mut [Price]) with spawn {
+    let (lo, hi) = prices.split_at_mut(prices.len() / 2);
+    scope(|s| {
+        s.spawn(|| scale(lo));            // each &mut borrow goes to exactly one child
+        s.spawn(|| scale(hi));
+    })
 }
 ```
 
 Rules:
 - A child task closure is a **non-escaping closure** relative to its scope, so it may capture
   borrows and views from enclosing frames. See [`closures.md`](closures.md) for closures in general.
-- A shared borrow may be captured by any number of children; a `mut` borrow by exactly one.
-- The parent cannot touch a source lent `mut` to a child until the scope ends.
+- A shared borrow may be captured by any number of children; a `&mut` borrow by exactly one.
+- The parent cannot touch a source lent `&mut` to a child until the scope ends.
 - Passing an `Rc` into children by borrow costs nothing. A child only clones it if it stores the
   `Rc` somewhere that outlives the borrow (e.g. in a value it sends on a channel).
 - Long-lived tasks (e.g. a server's per-connection tasks, children of an accept-loop scope near the
@@ -79,8 +79,8 @@ All shared mutation goes through sync cells ([`memory-and-resources.md`](memory-
   SPSC/MPMC queues.
 - Locks expose their contents through **scoped access**, not storable guards:
 
-```
-config.with { c -> c.max_conns = 100 }     // lock held for the closure only
+```rust
+config.with(|c| c.max_conns = 100);         // lock held for the closure only
 ```
 
 A guard is a view (second-class), so it cannot leak out of the scope or be held across task
@@ -101,28 +101,28 @@ boundaries by accident. Holding a lock across a suspension point is allowed but 
 
 ### 5.1 Data parallelism: `parallel_map`
 
-A worked example. It needs no new language features: structured scopes (§3), `let` borrows
+A worked example. It needs no new language features: structured scopes (§3), shared borrows
 ([`memory-and-resources.md`](memory-and-resources.md) §3), closure parameter modes
 ([`closures.md`](closures.md) §3) and effect polymorphism
 ([`error-handling.md`](error-handling.md) §3) are enough.
 
-```
-let thumbs = photos.parallel_map { p -> render_thumbnail(p) }       // CPU-bound
-let pages  = urls.parallel_map(limit: 32) { u -> http.get(u)? }     // I/O-bound: suspends, can fail
+```rust
+let thumbs = photos.parallel_map(|p| render_thumbnail(p));            // CPU-bound
+let pages  = urls.parallel_map(|u| http.get(u)?, limit: 32);          // I/O-bound: suspends, can fail
 ```
 
 Same shape as `map`; output order matches input order; the lambda's effects flow through.
 
 **Signature**
 
-```
-fn parallel_map<T, U, e>(items: let [T], f: let (let T) -> U ! e) -> Vec<U> ! {spawn} + e
+```rust
+fn parallel_map<T, U, E>(items: &[T], f: impl Fn(&T) -> U with E) -> Vec<U> with spawn, E
 ```
 
-- `items: let [T]` is a read-only borrow, so the collection is **frozen for the whole call**. That
+- `items: &[T]` is a read-only borrow, so the collection is **frozen for the whole call**. That
   the collection is read-only is enforced by the compiler, not presumed.
-- `f: let …` means the closure may be called concurrently, so its captures are read-only.
-- Elements arrive as `let T` borrows; to own part of an element, the lambda copies it or takes an rc.
+- `f: impl Fn…` means the closure may be called concurrently, so its captures are read-only.
+- Elements arrive as `&T` borrows; to own part of an element, the lambda copies it or takes an rc.
 
 **Implementation sketch** (`moddil/collections` or a `moddil/par` mod)
 
@@ -145,9 +145,9 @@ fn parallel_map<T, U, e>(items: let [T], f: let (let T) -> U ! e) -> Vec<U> ! {s
 
 **What the compiler rejects**
 
-```
-var count = 0
-items.parallel_map { x -> count += 1; f(x) }   // error: `count` is mutated inside a `let` closure
+```rust
+let mut count = 0;
+items.parallel_map(|x| { count += 1; f(x) });   // error: `count` is mutated inside an `Fn` closure
 ```
 
 This is a genuine data race. The error suggests `parallel_reduce`, an `Atomic` counter, or `.len()`
@@ -155,8 +155,8 @@ on the result.
 
 **Related operations**
 
-- `parallel_for_each_mut(items: mut [T], f: let (mut T) -> () ! e)`: in-place updates; each child
-  receives its own disjoint `mut` sub-slice (as in §3).
+- `parallel_for_each_mut(items: &mut [T], f: impl Fn(&mut T) with E)`: in-place updates; each
+  child receives its own disjoint `&mut` sub-slice (as in §3).
 - `parallel_reduce(items, identity, f, combine)`: `combine` must be associative. For floating point,
   a **fixed split tree** gives the same result regardless of thread count
   ([`determinism.md`](determinism.md) §2).
@@ -226,9 +226,9 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers (ration
   unless they override it. This is the same placement idea as GPU devices and tiers, one level down
   (thread → core → GPU → machine).
 
-  ```
-  scope(on: pinned(2..4)) { … }
-  s.spawn(on: blocking) { legacy_c_lib.compress(buf) }
+  ```rust
+  scope(|s| { … }, on: pinned(2..4));
+  s.spawn(|| legacy_c_lib.compress(buf), on: blocking);
   ```
 
 - **One I/O reactor** (io_uring, epoll, kqueue or IOCP) is shared by all executors. I/O is an effect,
@@ -290,10 +290,10 @@ reachable.
 
 So async construction is simply a function that suspends:
 
-```
-fn connect(addr: let Addr) -> Conn ! {net, suspend, fail(NetError)} {
-    let socket  = tcp.connect(addr)     // may suspend
-    let session = handshake(socket)     // may suspend or fail; on failure, socket is dropped
+```rust
+fn connect(addr: &Addr) -> Conn with net, suspend, fail(NetError) {
+    let socket  = tcp.connect(addr);    // may suspend
+    let session = handshake(socket)?;   // may suspend or fail; on failure, socket is dropped
     Conn { socket, session }            // the Conn exists only from here, fully formed
 }
 ```
@@ -389,28 +389,28 @@ depends on it is still draining. Moddil orders shutdown by the scope tree instea
   an inner one. This is the same rule as drop order (reverse of construction) and as Erlang/OTP
   supervisors, which terminate children in reverse start order.
 
-```
+```rust
 fn main(sys: System) {
-    scope(stop_on: [SIGINT, SIGTERM], grace: 10.s) { services ->   // layer 1 (outer)
-        services.spawn { db_writer() }
-        services.spawn { dht.maintain() }
+    scope(|services| {                                     // layer 1 (outer)
+        services.spawn(|| db_writer());
+        services.spawn(|| dht.maintain());
 
-        scope { app ->                                             // layer 2 (inner)
-            app.spawn { server.serve() }
-        }
+        scope(|app| {                                      // layer 2 (inner)
+            app.spawn(|| server.serve());
+        });
         // layer 2 has fully finished; only now do db_writer and dht see stop_requested()
-    }
+    }, stop_on: [SIGINT, SIGTERM], grace: 10<s>);
 }
 
-fn serve() ! {net, suspend} {
-    scope { s ->
+fn serve() with net, suspend {
+    scope(|s| {
         loop {
             select {
-                conn = listener.accept() => s.spawn { handle(conn) }
-                stop_requested()         => break      // stop accepting; in-flight handlers finish
+                conn = listener.accept() => s.spawn(|| handle(conn)),
+                _ = stop_requested()     => break,     // stop accepting; in-flight handlers finish
             }
         }
-    }                                                   // waits for in-flight handlers
+    })                                                   // waits for in-flight handlers
 }
 ```
 
@@ -462,26 +462,26 @@ press Enter after Ctrl-C, and programs connect to their own listening socket jus
 6. **Testable.** Stdin, sockets and timers are effects, so the simulation runtime can feed input,
    stop and cancel deterministically ([`determinism.md`](determinism.md)).
 
-```
-fn repl() ! {stdin, stdout, suspend} {
-    let input = stdin.lines()
+```rust
+fn repl() with stdin, stdout, suspend {
+    let input = stdin.lines();
     loop {
         select {
-            line = input.next()  => eval(line?)
-            stop_requested()     => break       // Ctrl-C: the pending read is cancelled; no Enter needed
+            line = input.next()  => eval(line?),
+            _ = stop_requested() => break,      // Ctrl-C: the pending read is cancelled; no Enter needed
         }
     }
 }
 
-fn serve(listener: let Listener) ! {net, suspend} {
-    scope { s ->
+fn serve(listener: &Listener) with net, suspend {
+    scope(|s| {
         loop {
             select {
-                conn = listener.accept() => s.spawn { handle(conn) }
-                stop_requested()         => break      // the pending accept is cancelled; no self-connect
+                conn = listener.accept() => s.spawn(|| handle(conn)),
+                _ = stop_requested()     => break,     // the pending accept is cancelled; no self-connect
             }
         }
-    }
+    })
 }
 ```
 

@@ -69,22 +69,24 @@ Effect handlers are installed **around a block** and apply to everything that ru
 innermost handler wins. This gives test harnesses fine-grained control without passing services
 through constructors.
 
-```
+```rust
 // production main: handlers installed once
-with time = os.clock, rand = os.rng, net = os.net {
+with time = os::clock, rand = os::rng, net = os::net {
     server.run()
 }
 
 // test: six servers in one process, each with its own dependencies
-let sim = Sim.new(seed: 42)
-for node in sim.nodes(6) {
-    with time    = sim.clock(node, skew: node.id * 5.ms),
-         rand    = sim.rng(node),
-         net     = sim.net.endpoint(node),
-         storage = sim.disk(node) {
-        spawn server.run()           // unchanged production code
+let sim = Sim::new(seed: 42);
+scope(|s| {
+    for node in sim.nodes(6) {
+        with time    = sim.clock(node, skew: node.id * 5<ms>),
+             rand    = sim.rng(node),
+             net     = sim.net.endpoint(node),
+             storage = sim.disk(node) {
+            s.spawn(|| server.run());    // unchanged production code
+        }
     }
-}
+});
 ```
 
 What this allows:
@@ -105,8 +107,8 @@ What this allows:
 bridge between networks, a test asserting on two nodes), a handler can also be a **named capability
 value** passed explicitly (Effekt's capability-passing style):
 
-```
-fn bridge(a: net, b: net) { … }
+```rust
+fn bridge(a: &Net, b: &Net) { … }
 ```
 
 These capabilities are **second-class**: like Moddil's borrows, they cannot escape their scope.

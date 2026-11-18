@@ -44,6 +44,8 @@ Status legend:
 | [`requirements.md`](requirements.md)     | Firm requirements R1–R3 in full, and non-goals                         | 🟠 questions | [§5](#5-requirements-and-non-goals)       |
 | [`mods.md`](mods.md)                     | Mods, the core/mod boundary, standard-mod catalogue (R2)               | 🟡 started   | [§5.1](#51-firm-requirements-decided)     |
 | [`bootstrap.md`](bootstrap.md)           | Bootstrap compiler, self-hosting, backends, WASM engine support (R1)   | 🟡 started   | [§5.1](#51-firm-requirements-decided)     |
+| [`syntax.md`](syntax.md)                 | Rust-based syntax, deltas (`with` effects, named/default arguments), inferred private signatures | 🟠 questions | [§0](#0-preamble)                         |
+| [`paradigms.md`](paradigms.md)           | Functional and OO support, no inheritance (traits + delegation), Swift comparison | 🟠 questions | [§0](#0-preamble)                         |
 | [`closures.md`](closures.md)             | Lambdas that borrow, fail and suspend; escaping closures               | 🟠 questions | [§2.8](#28-concurrency-across-cpus)       |
 | [`units.md`](units.md)                   | Units of measure: `100<cm>`, open dimensions, declared units           | 🟡 started   | [§2.5](#25-numerics-and-data)             |
 | [`freestanding.md`](freestanding.md)     | Kernels and firmware: profiles, interrupts, MMIO, emulator testing     | 🟡 started   | [§2.15](#215-cross-compilation-and-deployment) |
@@ -65,6 +67,9 @@ Every serious language exists because it solved something better than what came 
 - **Zig** treated cross-compilation, explicit allocation, and C interop as first-class concerns.
 - **Swift** shipped real-world automatic reference counting and serious C++ interop.
 - **Unison** asked what happens if code is identified by its content rather than by its text.
+
+**Syntax is deliberately not where Moddil innovates:** its surface syntax is Rust's, with a short
+list of justified deltas ([`syntax.md`](syntax.md)). Snippets in every spec follow it.
 
 Moddil should not be a remix of syntax. It is only justified if the *combination* of problems below
 cannot be solved well by evolving an existing language, either because the solutions need guarantees
@@ -152,7 +157,7 @@ Decided:
 
 - **Unique ownership and RAII by default** for every resource, enforced by the compiler. Drop is
   deterministic, never suspends and never fails.
-- **Second-class borrows with no lifetime annotations**: parameter modes `let`, `mut` and `sink`,
+- **Second-class borrows with no lifetime annotations**: parameters are `&T`, `&mut T` or `T` (move),
   plus *view types* for structs and containers that hold borrows.
 - **`.to_rc()` is the only way to share a pointer.** Contents are immutable, and biased reference
   counting keeps it nearly free on the owning thread.
@@ -421,7 +426,7 @@ trust boundaries.
 Decided: *the language owns the program's meaning across boundaries; existing tools own where and
 how it runs.*
 
-- **Layer A, in the language** (v0): components with checked placement (`@client`, `@server`, …); a
+- **Layer A, in the language** (v0): components with checked placement (`client`, `server`, …); a
   `remote` effect that never looks local; wire contracts generated from types with version-skew
   checking; `Untrusted<T>` and `Secret<T>`; whole-system runs in one process or under simulation.
 - **Layer B, thin adapter mods** (v1 onwards): static binaries and OCI images; a topology file;
@@ -646,7 +651,7 @@ Decided: docs and tests live next to the code.
 - **Overviews map the code**: mod, module (`//!`) and group overviews carry the big picture for
   humans and agents. Overviews are required for every module with public items; groups are declared
   once (`group levels "Price levels"`) and **every public item** joins at least one with
-  `@group(…)`; private items inherit the groups of the items that use them, shown by the language
+  `#[group(…)]`; private items inherit the groups of the items that use them, shown by the language
   server rather than written in the source. Links are checked, invariants cite the contract or test
   behind them, and the tour example runs.
 

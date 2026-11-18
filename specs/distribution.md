@@ -47,17 +47,22 @@ it falls on. Adoption must be incremental: a Moddil service is an ordinary servi
 
 ## 4. Layer A: components and placement
 
-```
-component Api    @server { fn checkout(cart: Untrusted<Cart>) -> Order ! {db, payments, fail(CheckoutError)} }
-component Worker @worker { fn send_receipt(order: OrderId) ! {email} }
-component Web    @client { … api.checkout(cart) … }      // ! {remote, fail(RemoteError | CheckoutError)}
+```rust
+#[component(server)]
+mod api    { pub fn checkout(cart: Untrusted<Cart>) -> Order with db, payments, fail(CheckoutError) { … } }
+
+#[component(worker)]
+mod worker { pub fn send_receipt(order: OrderId) with email { … } }
+
+#[component(client)]
+mod web    { … api::checkout(cart) … }   // here: with remote, fail(RemoteError | CheckoutError)
 ```
 
-- A **component** is a unit of code with a **placement**: `@client`, `@server`, `@worker`, `@edge`,
-  or `@peer`.
-- `@peer` covers **symmetric** topologies, where every node is both client and server (Hashiverse).
-- The compiler checks what may live where: `@client` code cannot use `db`; server-only types cannot be
-  sent to the client; secrets cannot cross to `@client` (§7).
+- A **component** is a unit of code with a **placement**: `client`, `server`, `worker`, `edge`,
+  or `peer`.
+- `peer` covers **symmetric** topologies, where every node is both client and server (Hashiverse).
+- The compiler checks what may live where: `client` code cannot use `db`; server-only types cannot be
+  sent to the client; secrets cannot cross to `client` (§7).
 - Placement is one ladder at every scale: thread, core, device ([`accelerators.md`](accelerators.md)
   §4), machine, tier (rationale theme 4).
 
@@ -90,9 +95,9 @@ component Web    @client { … api.checkout(cart) … }      // ! {remote, fail(
 
 ## 7. Trust, secrets and capabilities
 
-- Data arriving from `@client` or `@peer` is **`Untrusted<T>`** until validated, typically into a
+- Data arriving from `client` or `peer` is **`Untrusted<T>`** until validated, typically into a
   validated newtype ([`correctness.md`](correctness.md) §3.2).
-- **`Secret<T>`** can never flow to `@client`, nor into logs or traces
+- **`Secret<T>`** can never flow to `client`, nor into logs or traces
   ([`observability.md`](observability.md) §6).
 - **Capabilities per component** give least privilege: the compiler knows that `Worker` never uses
   `db`. That **capability graph** is exported to Layer B, which turns it into network and secret
@@ -118,7 +123,7 @@ component Web    @client { … api.checkout(cart) … }      // ! {remote, fail(
 
 - **One static binary per deployment unit.** Shared code is compiled once and cached by the build
   ([`build-times.md`](build-times.md)), so many binaries do not mean many full builds.
-- `@client` components compile to WASM for the browser; edge and serverless components can compile to
+- `client` components compile to WASM for the browser; edge and serverless components can compile to
   **WASI components** (R1).
 - **OCI images are built directly** from the binaries, as Go's `ko`, Java's Jib and Nix do: no
   Dockerfile, reproducible, minimal (distroless) images that Docker, Podman or containerd run and any
@@ -200,10 +205,10 @@ guarantees, generated policies and typed requirements — and leaves the rest to
 
 | Example | Uses |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | `@client`, hub and chat components; reliable and unreliable channels distinguished in types; whole match simulated in one process |
+| [Multiplayer game](examples/01-multiplayer-game.md) | `client`, hub and chat components; reliable and unreliable channels distinguished in types; whole match simulated in one process |
 | [HFT](examples/02-hft-platform.md) | Collector, store, research and execution as separate deployment units and binaries; latency-critical paths with no mesh in the way; one strategy mod placed in both research and execution |
 | [Web store](examples/03-web-store.md) | Client, API and database; skew checks against months-old mobile clients; Postgres provisioned by Terraform and bound as a requirement; payment keys as `Secret<T>` |
-| [Hashiverse](examples/04-hashiverse.md) | `@peer` placement; wire compatibility with existing Rust servers via consumed contracts; a single static binary for volunteers |
+| [Hashiverse](examples/04-hashiverse.md) | `peer` placement; wire compatibility with existing Rust servers via consumed contracts; a single static binary for volunteers |
 
 ## 17. Open questions
 

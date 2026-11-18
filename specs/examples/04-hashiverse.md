@@ -43,13 +43,13 @@ interoperate with a running network built in another language.
 
 ```
  ┌───────── browser ─────────┐       ┌───────── native ─────────┐
- │ @client (WASM, Web Worker)│       │ @client (CLI / desktop)   │
+ │ client  (WASM, Web Worker)│       │ client  (CLI / desktop)   │
  │ IndexedDB, key locker     │       │ SQLite, on-disk keys      │
  └────────────┬──────────────┘       └────────────┬─────────────┘
               │ HTTPS RPC (PoW-stamped)           │
               ▼                                   ▼
         ┌───────────────────── P2P network ──────────────────────┐
-        │  @server  @server  @server  …  (Kademlia DHT, volunteers)│
+        │  server   server   server   …  (Kademlia DHT, volunteers)│
         │   existing Rust servers  +  (phase B) Moddil servers     │
         └─────────────────────────────────────────────────────────┘
 ```
@@ -81,7 +81,7 @@ interoperate with a running network built in another language.
   performance, natively and in WASM (SIMD).
 - **Capabilities and untrusted input (§2.16, §2.10).** Every byte from a peer is untrusted. The crypto mods
   must not have `net` or `fs`.
-- **Distributed without a centre (§2.10).** A P2P system has no `@hub`; every node runs the same code.
+- **Distributed without a centre (§2.10).** A P2P system has no `hub`; every node runs the same code.
   This tests whether Moddil's placement model fits symmetric topologies, not just client/server ones.
 
 ## Success criteria

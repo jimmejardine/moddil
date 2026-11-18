@@ -52,16 +52,16 @@ cores and pipelining. Triton showed this reaches near hand-written performance f
 Ordinary pure helper functions that stay within this set can be called from kernels and from CPU
 code alike.
 
-```
-@kernel
-fn matmul<comptime BM: usize, comptime BN: usize, comptime BK: usize>(
-    a: let Matrix<f16>, b: let Matrix<f16>, c: mut Tile<f32, BM, BN>,   // c: this instance's own tile
+```rust
+#[kernel]
+fn matmul<const BM: usize, const BN: usize, const BK: usize>(
+    a: &Matrix<f16>, b: &Matrix<f16>, c: &mut Tile<f32, BM, BN>,         // c: this instance's own tile
 ) {
-    let acc = Tile<f32, BM, BN>.zeros()
+    let mut acc = Tile::<f32, BM, BN>::zeros();
     for k in (0..a.cols).step_by(BK) {
-        acc += a.tile(c.row, k, BM, BK) @ b.tile(k, c.col, BK, BN)       // may map to tensor cores
+        acc += a.tile(c.row, k, BM, BK) @ b.tile(k, c.col, BK, BN);     // may map to tensor cores
     }
-    c.store(acc)
+    c.store(acc);
 }
 ```
 
@@ -92,22 +92,22 @@ code.
 
 Example: a workstation with two GPUs and a 128-core CPU.
 
-```
-fn main(devs: Devices, …) ! {gpu, …} {
-    let g0  = devs.role("physics")?                    // manifest: physics = "cuda:0"
-    let g1  = devs.role("render")?                     //           render  = "cuda:1"
-    let cpu = devs.cpu_pool(cores: 32..128)?           // pseudo-GPU on 96 cores; 32 left for the runtime
+```rust
+fn main(devs: Devices, …) with gpu, … {
+    let g0  = devs.role("physics")?;                   // manifest: physics = "cuda:0"
+    let g1  = devs.role("render")?;                    //           render  = "cuda:1"
+    let cpu = devs.cpu_pool(cores: 32..128)?;          // pseudo-GPU on 96 cores; 32 left for the runtime
 
-    let a = g0.alloc<f32>(n)                           // Buffer<f32, g0>
-    let b = g1.alloc<f32>(n)                           // Buffer<f32, g1>
-    let c = cpu.alloc<f32>(n)                          // Buffer<f32, cpu>: host memory
-    scope { s ->
-        s.launch(g0,  step, mut a)                     // the same kernel on three devices
-        s.launch(g1,  step, mut b)
-        s.launch(cpu, step, mut c)
-        // s.launch(g0, step, mut b)                   // ✗ compile error: b belongs to g1
-    }
-    let a_host = a.to(cpu)?                            // explicit transfer
+    let mut a = g0.alloc::<f32>(n);                    // Buffer<f32, g0>
+    let mut b = g1.alloc::<f32>(n);                    // Buffer<f32, g1>
+    let mut c = cpu.alloc::<f32>(n);                   // Buffer<f32, cpu>: host memory
+    scope(|s| {
+        s.launch(g0,  step, &mut a);                   // the same kernel on three devices
+        s.launch(g1,  step, &mut b);
+        s.launch(cpu, step, &mut c);
+        // s.launch(g0, step, &mut b);                 // ✗ compile error: b belongs to g1
+    });
+    let a_host = a.to(cpu)?;                           // explicit transfer
 }
 ```
 
@@ -125,7 +125,7 @@ CI with only a CPU pool.
 **Brands.** `Buffer<T, g0>` is tied to the *value* `g0` (like Scala's path-dependent types, or the
 "brand" trick in Rust's GhostCell). Mixing buffers from different devices is a compile error, with no
 device indices in the types. When devices are only known dynamically (a `Vec` of devices),
-`.erase()` turns a buffer into `Buffer<T, @gpu>`, and the device is checked at launch. A mismatch is a
+`.erase()` turns a buffer into `Buffer<T, dyn Gpu>`, and the device is checked at launch. A mismatch is a
 bug and traps. The brand mechanism is a general type-system feature to define. It could also tie
 indices to their arena and DMA buffers to their NIC ring.
 
@@ -133,15 +133,15 @@ indices to their arena and DMA buffers to their NIC ring.
 
 | Space | Meaning |
 |---|---|
-| `Buffer<T, dev>` (branded) / `Buffer<T, @gpu>` (erased) | Device memory |
-| `@host` | Ordinary host memory; also the memory of a CPU pool |
-| `@shared` | Unified memory visible to host and device (Apple silicon, some data-centre parts) |
-| `@dma(nic0)` | NIC DMA memory, already used for zero-copy I/O ([`memory-and-resources.md`](memory-and-resources.md) §6) |
+| `Buffer<T, dev>` (branded) / `Buffer<T, dyn Gpu>` (erased) | Device memory |
+| `Buffer<T, Host>` | Ordinary host memory; also the memory of a CPU pool |
+| `Buffer<T, Shared>` | Unified memory visible to host and device (Apple silicon, some data-centre parts) |
+| `Buffer<T, Dma<nic0>>` | NIC DMA memory, already used for zero-copy I/O ([`memory-and-resources.md`](memory-and-resources.md) §6) |
 
 - Buffers are **owned resources**. Dropping one frees it; on a device the drop *enqueues* the free
   behind outstanding work, so it never blocks (drop cannot suspend).
 - Transfers are explicit operations. There is no implicit copying and no aliasing across spaces.
-- `@shared` memory follows the ordinary borrowing rules, so host and device cannot race on it.
+- `Shared` memory follows the ordinary borrowing rules, so host and device cannot race on it.
 
 ## 6. Launches are structured tasks
 
@@ -152,11 +152,11 @@ A kernel launch is a child task in a structured scope ([`concurrency.md`](concur
 - **the end of the scope is the fence**: waiting for GPU work is just leaving the scope;
 - CPU work in the same scope overlaps freely with GPU work.
 
-```
-scope { s ->
-    s.launch(g0, matmul<128, 128, 32>, grid: c.tiles(128, 128), a, b, mut c)
-    prepare_next_batch(mut d)                     // runs on the CPU while the GPU works
-}                                                 // c is readable again here
+```rust
+scope(|s| {
+    s.launch(g0, matmul::<128, 128, 32>, &a, &b, &mut c, grid: c.tiles(128, 128));
+    prepare_next_batch(&mut d);                   // runs on the CPU while the GPU works
+});                                               // c is readable again here
 ```
 
 Streams, queues and events are runtime-handler details (§10). The programmer sees only scopes, which

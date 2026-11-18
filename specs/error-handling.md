@@ -53,7 +53,7 @@ Notes:
 - Bad: `?` inside a closure returns from the closure, not from the function around it (§3.2).
 
 **Effect.** The return type stays `Config`, and failure is in the effect row:
-`fn parse(s) -> Config ! fail(ParseError)`. Raising performs the `fail` effect; a handler further up
+`fn parse(s) -> Config with fail(ParseError)`. Raising performs the `fail` effect; a handler further up
 the stack decides what happens. Because functions can be **generic over effects**, one higher-order
 function works for fallible and infallible callers alike (§3.2). It is the same mechanism as Moddil's
 other effects (rationale §2.1).
@@ -98,11 +98,11 @@ generics) initiative exists to fix exactly this.
 
 With effects, one `map` serves every case:
 
-```
-fn map<A, B, e>(xs: List<A>, f: A -> B ! e) -> List<B> ! e
+```rust
+fn map<A, B, E>(xs: List<A>, f: impl FnMut(A) -> B with E) -> List<B> with E
 
 fn load_all(paths: List<Path>) -> List<Config> {
-    paths.map { p -> parse(p)? }  // `?` propagates through map into load_all's errors
+    paths.map(|p| parse(p)?)      // `?` propagates through map into load_all's errors
 }
 ```
 
@@ -128,7 +128,7 @@ The error set of `load` is inferred as the **union** of what each `?` can forwar
 
 ```
 let config = try { load(p)? } catch {
-    Io(NotFound) => Config.default(),
+    Io(NotFound) => Config::default(),
     // Toml and Invalid are not listed, so they keep propagating
 };
 ```
@@ -151,7 +151,7 @@ Every **entry point** must have an *empty* failure set:
 - `main` (it returns an explicit exit status, never an escaped error);
 - task bodies at spawn;
 - exported and FFI functions and callbacks;
-- tier endpoints (`@server` handlers etc., §2.10);
+- tier endpoints (handlers of `server` components etc., §2.10);
 - effect handlers.
 
 If anything remains, compilation fails, and the error lists each unhandled variant with the chain of

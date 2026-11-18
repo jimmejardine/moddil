@@ -34,7 +34,7 @@ exceptions and compiler-specific ABIs. Swift and Carbon have each spent years on
 - **Zero-overhead calls** in both directions: a call to C is a direct call with the platform C calling
   convention.
 - **Layout-compatible types**: structs, unions, enums and fixed arrays can be declared with C layout
-  (`@repr(C)`); variadic C functions can be called.
+  (`#[repr(C)]`); variadic C functions can be called.
 - **Direct header import** through libclang (as Zig's `@cImport`): types, functions, constants and
   simple macros become raw bindings automatically.
 - **The toolchain compiles C.** C sources of a dependency are compiled by the bundled clang, using the
@@ -44,8 +44,9 @@ exceptions and compiler-specific ABIs. Swift and Carbon have each spent years on
   - cross-compiled to every Moddil target, including WASM (rationale §2.15, R1);
   - run in the build sandbox like any other build step.
 
-```
-import c "sqlite3.h" with overlay "sqlite3.overlay"   // raw bindings + overlay → typed API
+```rust
+#[c_import(header = "sqlite3.h", overlay = "sqlite3.overlay")]   // raw bindings + overlay → typed API
+mod sqlite3;
 ```
 
 ## 4. Annotation overlays
@@ -87,7 +88,7 @@ and turn raw bindings into Moddil types:
 
 ## 7. Export
 
-- Moddil functions and `@repr(C)` types can be **exported with the C ABI**, with a **generated header**.
+- Moddil functions and `#[repr(C)]` types can be **exported with the C ABI**, with a **generated header**.
 - Moddil mods can also be exposed to Rust as a **generated crate** (§8, reverse direction).
 - This is the adoption path: Moddil can be introduced inside existing C, C++ or Rust projects one
   module at a time (rationale §7).
@@ -107,7 +108,7 @@ bridge from one description.**
 | Rust | Moddil |
 |---|---|
 | Owned values, `Box<T>` | Owned values, dropped through the shim |
-| `&T`, `&mut T` | `let`, `mut` borrows |
+| `&T`, `&mut T` | `&T`, `&mut T` (second-class borrows, no lifetimes) |
 | `Option<T>` | `Option<T>` |
 | `Result<T, E>` | `fail(E)` |
 | `String`, `Vec<T>`, slices | Owned Moddil equivalents (moved or copied) or borrowed views |
@@ -117,9 +118,11 @@ bridge from one description.**
 | Panics | Caught in the shim; become traps |
 | `async fn`, `Future` | A bridge mod drives the future from a Moddil task, and the waker reschedules the task, so Rust async code suspends as an ordinary Moddil effect |
 
-```
-import rust "hashiverse-lib" version "1.4"     // generates shim + bindings; the mod needs `ffi`
-let post = hashiverse.Post.decode(bytes)?      // Result<Post, DecodeError> → fail(DecodeError)
+```rust
+#[rust_import(crate = "hashiverse-lib", version = "1.4")]   // generates shim + bindings; the mod needs `ffi`
+mod hashiverse;
+
+let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → fail(DecodeError)
 ```
 
 ## 9. WASM components: the sandboxed path

@@ -9,7 +9,7 @@
 | Rule | One line |
 |---|---|
 | **Docs are checked** | `///` Markdown is parsed into the canonical AST. Parameter names, links and error docs are checked against the code. |
-| **Overviews map the code** | Mod, module (`//!`) and declared-group overviews explain the big picture; required for every public module; every public item joins a group with `@group(…)`, and private items inherit the groups of the items that use them; checked links, cited evidence and a runnable tour keep them current. |
+| **Overviews map the code** | Mod, module (`//!`) and declared-group overviews explain the big picture; required for every public module; every public item joins a group with `#[group(…)]`, and private items inherit the groups of the items that use them; checked links, cited evidence and a runnable tour keep them current. |
 | **Docs are partly generated** | Effects, capabilities, the error set, contracts, traps and the assurance level are written by the compiler, so they never go stale. |
 | **Examples are tests** | Examples carry expected results (`// => value`), compile in the same build, and run under the deterministic simulation runtime. |
 | **Tests name what they test** | `test "…" for withdraw { }` sits next to its subject, with private access. Tooling knows every test's subject. |
@@ -41,23 +41,23 @@ the same file with access to private items, and one `cargo test`. Its limits:
 /// - `amount`: how much to take; must be positive.
 ///
 /// # Example
-/// let acct = Account.open(100)
-/// withdraw(mut acct, 30)                // => 70
-/// withdraw(mut acct, 100)               // => fail(Overdraft)
+/// let mut acct = Account::open(100);
+/// withdraw(&mut acct, 30)               // => 70
+/// withdraw(&mut acct, 100)              // => fail(Overdraft)
 note "Balances are integer cents; see [[ADR-12]] for why we don't use decimals here."
-fn withdraw(account: mut Account, amount: Money) -> Money ! fail(Overdraft)
+fn withdraw(account: &mut Account, amount: Money) -> Money with fail(Overdraft)
     requires amount > 0
     ensures  account.balance == old(account.balance) - amount
 { … }
 
 test "rejects overdraft" for withdraw {
-    let acct = Account.open(10)
-    expect_fail(Overdraft) { withdraw(mut acct, 20) }
+    let mut acct = Account::open(10);
+    expect_fail(Overdraft, || withdraw(&mut acct, 20));
 }
 
 property "never goes negative" for withdraw (acct: Account, amount: Money) {
-    try { withdraw(mut acct, amount) } catch { _ => {} }
-    assert acct.balance >= 0
+    try { withdraw(&mut acct, amount) } catch { _ => {} }
+    assert(acct.balance >= 0);
 }
 
 bench "hot path" for withdraw { … }
@@ -74,7 +74,7 @@ AST (rationale §2.18) instead of treating it as a comment.
 
 **Checked:**
 - documented parameter names must exist, and (per mod policy) every parameter is documented;
-- links such as `[[Account.open]]` must resolve. They point at *definitions*, so a rename updates
+- links such as `[[Account::open]]` must resolve. They point at *definitions*, so a rename updates
   them (rationale §2.19);
 - a hand-written errors section must match the function's actual error set
   ([`error-handling.md`](error-handling.md) §5).
@@ -103,18 +103,18 @@ the rule.
 |---|---|---|
 | **Mod overview** | The mod's root module | What is this package for, and where do I start? |
 | **Module overview** (`//!`) | The top of each module | What does this module do, what are its key concepts and invariants, which items are the entry points? |
-| **Group** | A named theme declared once; items opt in with `@group(…)` | What do these functions do *together*? |
+| **Group** | A named theme declared once; items opt in with `#[group(…)]` | What do these functions do *together*? |
 
 ```
 //! # Order matching
 //! Matches incoming orders against the book in price-time priority.
 //!
 //! Concepts: [[OrderBook]], [[Level]], [[Fill]].   Start here: [[match_order]].
-//! Invariant: the book never crosses ([[OrderBook.no_cross]]).
+//! Invariant: the book never crosses ([[OrderBook::no_cross]]).
 //!
-//! let book = OrderBook.new()
-//! book.add(bid(100, 5))
-//! match_order(mut book, ask(99, 3))        // => [Fill(99, 3)]     (the tour, run as a test)
+//! let mut book = OrderBook::new();
+//! book.add(bid(100, 5));
+//! match_order(&mut book, ask(99, 3))      // => [Fill(99, 3)]     (the tour, run as a test)
 
 /// Each side is a sorted list of levels; orders queue FIFO within a level.
 group levels "Price levels"
@@ -122,10 +122,10 @@ group levels "Price levels"
 /// How fills are computed and reported to the client.
 group fills "Fills and reporting"
 
-@group(levels)
-pub type Level { … }
+#[group(levels)]
+pub struct Level { … }
 
-@group(levels, fills)                  // an item may belong to several groups
+#[group(levels, fills)]                // an item may belong to several groups
 pub fn consume_level(…) { … }
 
 fn remove_empty(…) { … }               // untagged private helper: inherits `levels` and `fills`
@@ -134,7 +134,7 @@ fn remove_empty(…) { … }               // untagged private helper: inherits 
 
 **Groups:**
 - A group is **declared once**, with a free-text title and its `///` doc. Items join it with
-  `@group(name)`, and may belong to **several** groups. Members need not be next to each other, and
+  `#[group(name)]`, and may belong to **several** groups. Members need not be next to each other, and
   tagging never re-indents code.
 - Group names are **checked**: a misspelt name is a compile error with "did you mean?"; renaming a
   group is a refactor intent ([`semantic-vcs.md`](semantic-vcs.md)).
@@ -146,7 +146,7 @@ fn remove_empty(…) { … }               // untagged private helper: inherits 
   (positional and unchecked).
 
 **Membership rules:**
-- **Every public item belongs to at least one group**, by an explicit `@group`: functions, types and
+- **Every public item belongs to at least one group**, by an explicit `#[group]`: functions, types and
   constants alike. A public item without one is a compile error.
 - **Private items may be tagged explicitly.** An untagged private item **inherits** the groups of the
   items that use it, computed from the call and reference graph:
@@ -179,7 +179,7 @@ this one uses and is used by. The documentation page for a module combines the t
 1. **Checked links.** Links such as `[[match_order]]` must resolve and, from an overview, must point
    at public items. They target definitions, so renames update them.
 2. **Cited evidence.** An invariant stated in prose links to the contract or test that enforces it
-   (`[[OrderBook.no_cross]]`). If the evidence is removed, the link breaks the build.
+   (`[[OrderBook::no_cross]]`). If the evidence is removed, the link breaks the build.
 3. **A runnable tour.** The overview's example is compiled and run like any other example (§5), so
    when the main flow changes, the overview fails until it is updated.
 4. **No orphans.** Every public item names a group, so the overviews and groups remain a real map of

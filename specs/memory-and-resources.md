@@ -9,14 +9,14 @@
 | Rule | One line |
 |---|---|
 | **Unique ownership by default** | Every value has one owner; destruction is deterministic (RAII) and cannot be bypassed. |
-| **Move or borrow** | Values are moved, or lent as a shared (`let`) or exclusive (`mut`) borrow. A shared borrow freezes the source. |
+| **Move or borrow** | Values are moved, or lent as a shared (`&`) or exclusive (`&mut`) borrow. A shared borrow freezes the source. |
 | **Borrows are second-class** | Borrows live in parameters, locals and *view types*. They are never stored in owned data. **No lifetime parameters exist.** |
 | **`.to_rc()` to share** | The only way to hold more than one pointer to a value is to convert it to a reference-counted handle. The cost is visible at that point. |
 | **rc is immutable inside** | Shared mutation only through thread-safe *sync cells* (`Mutex`, `Atomic<T>`, …). |
 | **Biased RC** | rc is always thread-safe, and nearly free when it stays on one thread. |
 | **Affine + linear resources** | Ordinary values auto-drop; *linear* values must be explicitly consumed. |
 | **No special constructors** | A value exists only once a literal has supplied every field. "Constructors" are ordinary functions, which may suspend or fail. |
-| **Destructors are rare and infallible** | Drop glue is generated; a hand-written `drop(self: sink Self)` lives with its type and cannot fail or suspend. `defer` follows the same rules; `errdefer` may fail, and its error is suppressed. |
+| **Destructors are rare and infallible** | Drop glue is generated; a hand-written `fn drop(self)` lives with its type and cannot fail or suspend. `defer` follows the same rules; `errdefer` may fail, and its error is suppressed. |
 
 Together these give memory safety and data-race freedom without a GC, without `Send`/`Sync`
 traits and without lifetime annotations ([`concurrency.md`](concurrency.md) §2).
@@ -57,7 +57,7 @@ NIC ring slot. In practice that is mostly low-level mods.
 
 - **It lives with the type.** It implements the core `Drop` trait, and **only the type's own module
   may implement it**, so nobody else can change what dropping your type does.
-- **Signature: `fn drop(self: sink Self)`.** The destructor consumes the value and may
+- **Signature: `fn drop(self)`.** The destructor consumes the value and may
   **destructure** it to move fields out. Destructuring `self` inside `drop` does not call `drop`
   again; fields that are not moved out are dropped by glue afterwards. (Rust's `drop(&mut self)`
   cannot move fields out, which forces `Option::take` and `ManuallyDrop` workarounds.)
@@ -67,11 +67,11 @@ NIC ring slot. In practice that is mostly low-level mods.
 - **A destructor is checked like an entry point** ([`error-handling.md`](error-handling.md) §4.4):
   its failure set must be empty. A fallible call inside it must be handled there (§2.4).
 
-```
+```rust
 impl Drop for Socket {
-    fn drop(self: sink Socket) {
-        let Socket { fd, buf } = self             // move fields out; no recursive drop of Socket
-        let r = c.close(fd)                       // C close can report an error…
+    fn drop(self) {
+        let Socket { fd, buf } = self;            // move fields out; no recursive drop of Socket
+        let r = c::close(fd);                     // C close can report an error…
         if let Err(e) = r { log.warn(fmt"close failed: {e}") }   // …handled here: logged
     }                                             // buf is dropped by glue here
 }
@@ -88,7 +88,8 @@ impl Drop for Socket {
   decides at runtime; the compiler removes it wherever the path is known.
 - **Temporaries are dropped at the end of their statement.** There are no temporary-lifetime-extension
   rules (a known source of surprise in Rust); bind a value with `let` to keep it.
-- `drop(x)` is not special: it is an ordinary function taking `sink`, so it ends `x` early.
+- `drop(x)` is not special: it is an ordinary function taking its argument by value, so it ends
+  `x` early.
 - **Fields are dropped in reverse declaration order**, mirroring the literal that built them (as
   C++ does; Rust drops fields in declaration order).
 
@@ -124,7 +125,7 @@ There are three cases, each with a precise answer:
    empty. The author can:
    - handle it locally, for example log it and continue (as in §2.1);
    - discard it explicitly, with a reason that shows up in review;
-   - or make the type **linear** with an explicit `close() ! fail(E)`, so callers must handle it.
+   - or make the type **linear** with an explicit `close() with fail(E)`, so callers must handle it.
 
    Silently swallowing the error (C++, Rust's `BufWriter`) and `std::terminate` are both impossible.
 2. **Cleanup that fails while an error or cancellation is already in progress.** Only `errdefer`
@@ -139,18 +140,21 @@ There are three cases, each with a precise answer:
 
 ### 3.1 Parameter modes
 
-| Mode | Meaning | Caller's value during the call |
-|---|---|---|
-| `let` | Shared, read-only borrow | Readable, frozen |
-| `mut` | Exclusive borrow | Inaccessible |
-| `sink` | Move (ownership transferred) | Gone |
+Parameter modes use Rust's spelling ([`syntax.md`](syntax.md)); borrows are second-class, so no
+lifetimes appear.
 
-Because a `let` borrow's address cannot be observed or stored, the compiler may pass it **by value or
+| Parameter | Meaning | Caller's value during the call |
+|---|---|---|
+| `x: &T` | Shared, read-only borrow | Readable, frozen |
+| `x: &mut T` | Exclusive borrow | Inaccessible |
+| `x: T` | Move (ownership transferred) | Gone |
+
+Because a shared borrow's address cannot be observed or stored, the compiler may pass it **by value or
 by pointer**, whichever is cheaper (as Swift and Hylo do). Small types travel in registers.
 
 ### 3.2 Rules
 
-- Any number of shared borrows, or exactly one `mut` borrow, at any time (aliasing XOR mutation).
+- Any number of shared borrows, or exactly one `&mut` borrow, at any time (aliasing XOR mutation).
 - A source cannot be mutated, moved or dropped while a borrow of it is live.
 - Checking is **intraprocedural** and flow-sensitive (NLL-style): a borrow ends at its last use.
   Function signatures carry everything a caller needs, so checking stays local and incremental
@@ -166,10 +170,10 @@ A function may return a borrow or a view (§4) derived from its borrowed paramet
 - **Free functions**: the result derives from *all* borrowed parameters (conservative default).
 - **Optional** precision: `-> T from a` names a *parameter*, never an abstract region.
 
-```
-fn get(self: let Map<K, V>, key: let K) -> Option<&V>      // derives from self
-fn longer(a: let str, b: let str) -> &str                   // derives from a and b
-fn first_word(text: let str, sep: let str) -> &str from text
+```rust
+fn get(&self, key: &K) -> Option<&V>                        // derives from self
+fn longer(a: &str, b: &str) -> &str                         // derives from a and b
+fn first_word(text: &str, sep: &str) -> &str from text
 ```
 
 ## 4. View types
@@ -185,18 +189,18 @@ implicit region**, always inferred. It is second-class, like a borrow:
 
 The three common patterns:
 
-```
+```rust
 // Context objects: sources may come from several frames; the view only flows down.
 view AppContext { config: &Config, db: &DbPool, session: &UserSession }
 
 // Custom iterators: the collection is frozen while the iterator is live.
 view RingIter<T> { buf: &[T], idx: usize }
-fn iter(self: let RingBuffer<T>) -> RingIter<T>
+fn iter(&self) -> RingIter<T>
 for x in ring.iter().filter(f).map(g) { … }     // adaptors: view in, view out
-ring.push(1)                                    // ✗ while the iterator is live
+ring.push(1);                                   // ✗ while the iterator is live
 
 // Arena-backed graphs: append-only arena allocates through a shared borrow.
-fn alloc(self: let Arena, n: Node) -> &Node
+fn alloc(&self, n: Node) -> &Node
 view SymbolTable { map: Map<Name, &Node> }
 ```
 
@@ -228,7 +232,7 @@ let back = shared.weak()       // Weak<Node>: does not keep it alive; upgrade() 
 
 - `.to_rc()` **consumes** the owner; the value now lives as long as any `Rc` does.
 - RC cannot collect cycles. Back-edges (parent pointers, doubly-linked `prev`) use `Weak`.
-- Passing an `Rc` as a `let` borrow does **not** touch the count. Only storing a copy does.
+- Passing an `Rc` as a shared borrow (`&Rc<T>`) does **not** touch the count. Only storing a copy does.
 - Compile-time RC elision (Perceus-style) removes inc/dec pairs the compiler can prove redundant.
 
 ### 5.2 rc contents are immutable
@@ -285,7 +289,7 @@ lose the fast path. Instead:
    the owner still holds some is queued to the owner *task*. The runtime drains the queue when it
    resumes the task, and always at task exit (when the owner count must reach zero anyway).
 3. **Rebias on unique transfer.** When a uniquely held rc (owner count 1, shared count 0) moves to
-   another task (a channel send, `sink` into a child), ownership passes to the receiver for free, so
+   another task (a channel send, a move into a child), ownership passes to the receiver for free, so
    pipelines handing objects from stage to stage stay on the fast path.
 4. **Fewer count operations in the first place:** children borrow rcs without touching counts;
    compile-time RC elision (Perceus-style) removes inc/dec pairs; rc contents are immutable, so the
@@ -318,11 +322,11 @@ Goal: data arrives from a NIC (or disk, or GPU) and is consumed without ever bei
 | Handed to another task / thread / queue | **Owning view** `Parsed<T>` = the `Packet` + an offset table; accessors project borrows on demand. Moved, never copied. Safe because it stores offsets, not pointers into itself. | One add per field access |
 | Fan-out to several consumers | `.to_rc()` the packet; each consumer gets an **rc slice** (rc + range). Immutable, so race-free. | One biased-RC inc/dec per consumer |
 
-```
-fn on_rx(pkt: sink Packet) ! {net} {
-    let order = wire::Order.validate(pkt)?   // Parsed<Order>: owns pkt, zero copy
+```rust
+fn on_rx(pkt: Packet) with net {
+    let order = wire::Order::validate(pkt)?; // Parsed<Order>: owns pkt, zero copy
     if order.symbol() == "ESZ6" {            // projection: borrow derived from order
-        strategy_queue.push(order)           // move: the buffer travels, the payload is not copied
+        strategy_queue.push(order);          // move: the buffer travels, the payload is not copied
     }
 }                                            // otherwise order drops → slot back to the NIC ring
 ```
@@ -338,15 +342,17 @@ pressure, not unsafety. The runtime mod should expose ring occupancy, and offer 
 - **Linear (opt-in per type):** a value **must** be consumed by one of its designated operations,
   or the program does not compile. For resources whose finalisation can fail or needs a decision.
 
-```
-linear type Txn { … }
-fn commit(self: sink Txn) -> Result<(), DbError>
-fn rollback(self: sink Txn)
+```rust
+linear struct Txn { … }
+impl Txn {
+    fn commit(self) -> Result<(), DbError>;
+    fn rollback(self);
+}
 
-fn checkout(db: let Db) ! {db, fail(DbError)} {
-    let txn = db.begin()
-    txn.insert(order)?        // ✗ unless the error path also consumes txn
-    txn.commit()?
+fn checkout(db: &Db) with db, fail(DbError) {
+    let txn = db.begin();
+    txn.insert(order)?;       // ✗ unless the error path also consumes txn
+    txn.commit()?;
 }
 ```
 
@@ -411,7 +417,7 @@ out.close()?                         // a flush/close failure surfaces here, not
 | Construct | Allocation | Per-use cost | Thread-safe to share |
 |---|---|---|---|
 | Owned value | Wherever its owner lives | None | Move only |
-| `let` / `mut` borrow | None | None (may be passed by value) | Lent to child tasks |
+| `&` / `&mut` borrow | None | None (may be passed by value) | Lent to child tasks |
 | View type | None | None | Lent to child tasks |
 | Owning view `Parsed<T>` | The underlying buffer | One add per field access | Move only |
 | `Rc<T>` | Header + value | Biased inc/dec on clone/drop; free when borrowed | Yes |
@@ -422,7 +428,7 @@ out.close()?                         // a flush/close failure surfaces here, not
 
 | Example | Where rc appears | Linear resources | Zero-copy views | Gaps |
 |---|---|---|---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | Immutable world snapshots fanned out to N player connections (rc slices); chat room membership | — | Input packets from WebTransport, decoded in place on `@hub` | Entity graphs: use ECS arenas + indices, not rc graphs |
+| [Multiplayer game](examples/01-multiplayer-game.md) | Immutable world snapshots fanned out to N player connections (rc slices); chat room membership | — | Input packets from WebTransport, decoded in place on `hub` | Entity graphs: use ECS arenas + indices, not rc graphs |
 | [HFT](examples/02-hft-platform.md) | Market data fan-out to multiple strategies (rc slices) | Order lifecycle (sent → acked/rejected) is a natural linear candidate | **Core case**: NIC → decode → book → strategy with owning views; zero copy end to end | Order book is single-threaded mutable: owned, not rc |
 | [Web store](examples/03-web-store.md) | Config / DB pool shared across request tasks (or as effects) | DB transactions must commit or roll back | HTTP bodies parsed into views | None found; `AppContext` view or effects cover handler context |
 | [Hashiverse](examples/04-hashiverse.md) | Shared routing table snapshots (`AtomicRc` swap); key material handles | Key-locker unlock sessions? (to evaluate) | RPC packets validated once (PoW-stamped) and passed as owning views | Kademlia routing tables: indices or `AtomicRc` snapshots, not mutable rc graphs |

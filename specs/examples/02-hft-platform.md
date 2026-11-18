@@ -13,13 +13,13 @@ data, time and order routing are effects, and only their handlers differ.
 
 ```
  exchanges ──feeds──►┌──────────────┐  normalised ticks  ┌──────────────┐
-                     │  @collector  │───────────────────►│   @store     │
+                     │  collector   │───────────────────►│   store      │
                      │ feed handlers│                    │ tick DB,     │
                      └──────┬───────┘                    │ columnar     │
                             │ live ticks (multicast/shm) └──────┬───────┘
                             ▼                                   │ historical data
  exchanges ◄─orders──┌──────────────┐                    ┌──────▼───────┐
-                     │  @execution  │  strategy code     │  @research   │
+                     │  execution   │  strategy code     │  research    │
                      │ live algos,  │◄═══ same mod ═════►│ backtests,   │
                      │ risk, gateway│                    │ sims (CPU+GPU)│
                      └──────────────┘                    └──────────────┘
@@ -27,20 +27,20 @@ data, time and order routing are effects, and only their handlers differ.
 
 | Placement | Role | Key property |
 |---|---|---|
-| `@collector` | Connect to exchange feeds, decode, normalise, timestamp, publish | Lowest-latency ingest; never drop data |
-| `@store` | Persist ticks and order books; serve historical queries | Throughput, compression, columnar layout |
-| `@research` | Backtests, parameter sweeps, Monte Carlo, ML | Throughput; CPU clusters and GPUs |
-| `@execution` | Run live strategies, pre-trade risk checks, order gateway | Lowest and most predictable latency |
+| `collector` | Connect to exchange feeds, decode, normalise, timestamp, publish | Lowest-latency ingest; never drop data |
+| `store` | Persist ticks and order books; serve historical queries | Throughput, compression, columnar layout |
+| `research` | Backtests, parameter sweeps, Monte Carlo, ML | Throughput; CPU clusters and GPUs |
+| `execution` | Run live strategies, pre-trade risk checks, order gateway | Lowest and most predictable latency |
 
 ## Key flows
 
 1. **Tick-to-trade**: feed packet arrives → decode → update book → strategy decides → risk check →
    order encoded → sent. The whole path should be measured in microseconds or less, with tight
    tail latency.
-2. **Record**: every tick is also persisted to `@store` with exchange and local timestamps.
-3. **Backtest**: `@research` replays historical data from `@store` through the *same* strategy mod, with
+2. **Record**: every tick is also persisted to `store` with exchange and local timestamps.
+3. **Backtest**: `research` replays historical data from `store` through the *same* strategy mod, with
    simulated time, a simulated order book and a simulated exchange (fills, latency, queue position).
-4. **Promote**: a strategy version that passes research is promoted to `@execution`. The review shows
+4. **Promote**: a strategy version that passes research is promoted to `execution`. The review shows
    its semantic diff (§2.19) and capability set.
 5. **Replay**: a trading day can be replayed bit for bit for post-trade analysis and incident review.
 
@@ -54,7 +54,7 @@ data, time and order routing are effects, and only their handlers differ.
   The strategy code is identical in both. This is the clearest demonstration of why effects belong in
   the core language.
 - **Capabilities (§2.16).** Research code physically cannot reach the live `orders` capability; only a
-  deployment to `@execution` grants it. A third-party analytics mod cannot touch the network.
+  deployment to `execution` grants it. A third-party analytics mod cannot touch the network.
 - **Predictable latency (§2.2).** No GC; arenas and pools; **a "no allocation" effect** that the
   compiler can check on the hot path; no hidden locks; core pinning and NUMA-aware placement.
 - **Lock-free concurrency (§2.8).** SPSC/MPMC rings between feed, strategy and gateway threads;
@@ -78,7 +78,7 @@ Initial targets, to be refined:
   jitter reported, not just the median.
 - Zero heap allocation on the hot path, **checked by the compiler**, not by convention.
 - A backtest over a recorded day and a live replay of that day produce **bit-identical** decisions.
-- Research code cannot be deployed to `@execution` without explicitly granting `orders`; this is
+- Research code cannot be deployed to `execution` without explicitly granting `orders`; this is
   verified by the build.
 - Store ingest keeps up with full-depth feeds of a busy exchange with headroom.
 

@@ -10,13 +10,13 @@ point is a real-time, authoritative-server architecture of the kind used by most
 
 ```
           ┌────────────────────────────── browser ──────────────────────────────┐
-          │  @client  (WASM + WebGPU)                                            │
+          │  client   (WASM + WebGPU)                                            │
           │  input → prediction → render        chat UI                          │
           └───────┬──────────────────────────────────────────┬──────────────────┘
                   │ WebTransport / WebRTC (unreliable+reliable) │ WebSocket
                   ▼                                             ▼
           ┌───────────────┐   room events   ┌────────────────────────────┐
-          │    @hub       │◄───────────────►│   @chat  (N instances)      │
+          │    hub        │◄───────────────►│   chat   (N instances)      │
           │ matchmaking,  │                 │ chatrooms, presence,        │
           │ session route,│                 │ moderation                  │
           │ authoritative │                 └────────────────────────────┘
@@ -26,9 +26,9 @@ point is a real-time, authoritative-server architecture of the kind used by most
 
 | Placement | Role | Scale |
 |---|---|---|
-| `@client` | Input, client-side prediction and interpolation, rendering, chat UI | One per player, untrusted |
-| `@hub` | Matchmaking, session routing, authoritative simulation of matches, state relay | Sharded by match |
-| `@chat` | Chatrooms, presence, moderation, history | Horizontally scaled |
+| `client` | Input, client-side prediction and interpolation, rendering, chat UI | One per player, untrusted |
+| `hub` | Matchmaking, session routing, authoritative simulation of matches, state relay | Sharded by match |
+| `chat` | Chatrooms, presence, moderation, history | Horizontally scaled |
 
 ## Key flows
 
@@ -36,7 +36,7 @@ point is a real-time, authoritative-server architecture of the kind used by most
    and the relevant chatroom.
 2. **Play loop**: client sends inputs at a fixed rate → hub simulates authoritatively at a fixed tick →
    hub sends state snapshots/deltas → client reconciles its prediction.
-3. **Chat**: messages go to `@chat`, are moderated, then fanned out to room members. The hub notifies chat
+3. **Chat**: messages go to `chat`, are moderated, then fanned out to room members. The hub notifies chat
    of match events (e.g. "match started").
 4. **Disconnect/reconnect**: the session survives brief drops; state resynchronises.
 
@@ -50,12 +50,12 @@ point is a real-time, authoritative-server architecture of the kind used by most
   reliable channels must be distinguishable in types (an unreliable send can be lost; the type system
   should say so).
 - **Choreographies (§2.10)**: the join → match → play protocol written once from a global view and
-  projected to `@client`, `@hub` and `@chat`.
-- **Untrusted client (§2.10)**: all data from `@client` is untrusted; the hub is authoritative. Anti-cheat
+  projected to `client`, `hub` and `chat`.
+- **Untrusted client (§2.10)**: all data from `client` is untrusted; the hub is authoritative. Anti-cheat
   starts with the type system refusing to let client-claimed state flow into authoritative state
   without validation.
-- **Shared code across tiers**: game rules and the simulation step run in *both* `@client` (prediction)
-  and `@hub` (authority). They must compile to WASM and native and give **bit-identical results**
+- **Shared code across tiers**: game rules and the simulation step run in *both* `client` (prediction)
+  and `hub` (authority). They must compile to WASM and native and give **bit-identical results**
   (deterministic floating point or fixed point, §2.5).
 - **Structured concurrency (§2.8)**: one task scope per match and per room. When a match ends, all its
   tasks end with it.
