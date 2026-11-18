@@ -26,13 +26,13 @@ subdocument that holds the detail. Then read the Thesis (§1) and the firm requi
 
 ## Notes for LLMs and agents
 
-- Start with `specs/rationale.md`. It holds only an index and a short summary per area. The
+- Start with `specs/overview.md`. It holds only an index and a short summary per area. The
   subdocuments linked from its index are authoritative, and hold the problem statement, prior art,
   decisions and directions in full.
-- **Keep the rationale in sync.** When you change a subdocument:
+- **Keep the overview in sync.** When you change a subdocument:
   - an open question lives in the subdocument's *Open questions* section and is copied into the
-    matching rationale summary, so change both together;
-  - update the area's status in the rationale index if it changed;
+    matching overview summary, so change both together;
+  - update the area's status in the overview index if it changed;
   - a new subdocument needs an index row.
 - Sections marked **Decision** or **Decided**, and the firm requirements **R1–R3**, are settled.
   Don't reopen them unless asked. **Directions** and **Open questions** are still open.
@@ -47,7 +47,7 @@ subdocument that holds the detail. Then read the Thesis (§1) and the firm requi
 
 ```
 specs/
-  rationale.md     why Moddil exists; index, status and summary of every area; start here
+  overview.md      why Moddil exists; index, status and summary of every area; start here
   *.md             subdocuments (memory, concurrency, errors, comptime, mods, bootstrap, …)
   requirements.md  firm requirements R1–R3 and non-goals, in full
   prior-art.md     prior-art matrix across languages, and references
