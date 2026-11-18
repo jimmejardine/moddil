@@ -202,6 +202,8 @@ requires = []                     # pure: no net, fs, ffi
 - **Shared audits**: an organisation can import another's audit records from that organisation's git
   repository.
 - `moddil vet` fails CI when a locked version has no review that satisfies the project's policy.
+- **Security advisories** come from OSV repositories: the project's, on by default, and any others
+  the user lists ([`governance.md`: Security response](governance.md#security-response)).
 - **The default policy requires a human review** for new or changed `unsafe` or `ffi` code in a
   delta; agent reviews are recorded but don't satisfy it ([`unsafe.md`: Review and audit](unsafe.md#review-and-audit)).
 
@@ -279,8 +281,6 @@ Working-copy overrides are unpinned by nature, so they are for development only 
 
 - **Tag signing**: SSH or GPG keys pinned in the lockfile (no service needed), or Sigstore keyless
   signing as an optional extra.
-- **Advisory feeds**: user-configured feeds (e.g. OSV) as optional inputs to `outdated` and `audit`.
-  They are the user's choice, never required to build.
 - **Rebuild attestations**: anyone can publish "I rebuilt v1.4.2 and got these bytes" as signed
   records in their own git repository.
 
@@ -290,8 +290,6 @@ Working-copy overrides are unpinned by nature, so they are for development only 
   backdated to skip the cooldown. Recommended: measure age from the later of the tag date and when
   this project first saw the tag (recorded by `outdated` and `update`). A first `add` still has to
   trust the tag date.
-- How are security advisories distributed with no central service? (Format and process:
-  [`security.md`: Security response](security.md#security-response).)
 - How are typosquatting and look-alike URLs caught without a naming authority?
 - Pre-1.0: is each `0.x` minor a major (Cargo), or does `v0` promise nothing (Go)?
 - Do standard mods ship with the toolchain, or are they fetched like any other mod

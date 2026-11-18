@@ -68,7 +68,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Diffs, code review and version control](semantic-vcs.md)          | 🟡 minor questions | [`semantic-vcs.md`](semantic-vcs.md)                                       |
 | [Language evolution](evolution.md)                                 | 🟡 minor questions | [`evolution.md`](evolution.md)                                             |
 | [Adoption](adoption.md)                                            | 🟡 minor questions | [`adoption.md`](adoption.md)                                               |
-| [Governance](governance.md)                                        | ⚪ not started     | [`governance.md`](governance.md)                                           |
+| [Governance](governance.md)                                        | 🟡 minor questions | [`governance.md`](governance.md)                                           |
 | **The project**                                                    |                    |                                                                            |
 | [Bootstrap compiler and backends](bootstrap.md)                    | 🟠 major questions | [`bootstrap.md`](bootstrap.md) (R1)                                        |
 | [Roadmap and cross-cutting questions](roadmap.md)                  | 🟠 major questions | [`roadmap.md`](roadmap.md)                                                 |

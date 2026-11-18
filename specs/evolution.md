@@ -69,7 +69,7 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
    [`packages-and-supply-chain.md`](packages-and-supply-chain.md)). This avoids Rust's split
    between stable crates and crates that build only on nightly. Experiments live in development
    toolchains and forks, not in the ecosystem.
-7. **Process.** A proposal process (Moddil Evolution, in the spirit of Rust RFCs and Swift
+7. **Process.** A proposal process ([Moddil Evolution](governance.md#moddil-evolution), in the spirit of Rust RFCs and Swift
    Evolution). Every proposal must:
    - cite a reference example that needs it ([`examples/README.md`](examples/README.md));
    - include its migration if it changes anything;
@@ -103,8 +103,7 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
 1. The exact edition cadence.
 2. May an edition change runtime semantics at all, or only syntax and defaults?
 3. The minimum deprecation window.
-4. Governance: a foundation or a core team, and who accepts proposals.
-5. Long-term-support toolchains.
+4. Long-term-support toolchains.
 
 ## Prior art
 
