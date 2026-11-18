@@ -175,8 +175,8 @@ let open_orders = sql"""
 ```
 
 - Errors point *into* the literal: the column of a bad regex token, an unknown SQL column.
-- `sql` checks against a **declared, embedded schema file**, never a live database. The migration
-  tooling keeps that file current.
+- `sql` checks against a **declared, embedded schema file**, never a live database. The file is
+  derived from the migrations ([`data.md`: Databases: migrations-first](data.md#databases-migrations-first)).
 - Interpolations are typed holes, never string concatenation, so `sql` and `html` are
   injection-safe by construction.
 - This replaces most function-like macros (`format!`, `regex!`, `sqlx::query!`, `html!`) without

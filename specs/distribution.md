@@ -84,8 +84,8 @@ mod web    { … api::checkout(cart) … }   // here: with remote, fail(RemoteEr
   protobuf between Moddil components.
 - **Schema evolution rules** are explicit: added fields need defaults or `Option`; removed fields go
   through deprecation; renames are refactor intents ([Diffs, code review and version control](semantic-vcs.md)), not breaking changes.
-- **Skew checking against what is deployed.** The contract of each deployed version is recorded (in
-  the repository or a registry). The compiler compares a change with every version still in service
+- **Skew checking against what is deployed.** The contract of each deployed version is recorded in
+  `contracts.lock` in the repository ([`data.md`: One contract system, in space and time](data.md#one-contract-system-in-space-and-time)). The compiler compares a change with every version still in service
   (including months-old mobile clients) and rejects changes that would break a rolling deploy. The
   semantic diff shows contract changes.
 - **At the edges**, for non-Moddil peers, the compiler generates standard descriptions
@@ -210,10 +210,8 @@ guarantees, generated policies and typed requirements — and leaves the rest to
 
 ## Open questions
 
-- Where deployed contracts are recorded: in the repository (a lock file) or a registry?
 - **Choreographies**: write a multi-party protocol once and project it to each participant — when,
   and how much?
-- Databases as requirements: how schema migrations are versioned and checked alongside code.
 - Independent team deploys: can one team ship its component without rebuilding the world?
 - How much rollout safety (e.g. canary analysis) should Moddil check, versus leave to the platform?
 - How unreliable or unordered channels (game snapshots over WebTransport) are expressed in types.

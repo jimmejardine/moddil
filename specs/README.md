@@ -55,7 +55,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Standard library shape](stdlib.md)                                | 🟡 minor questions | [`stdlib.md`](stdlib.md)                                                   |
 | [Packages and supply-chain security](packages-and-supply-chain.md) | 🟡 minor questions | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)             |
 | [Interoperability with C and Rust](interop.md)                     | 🟡 minor questions | [`interop.md`](interop.md)                                                 |
-| [Data interchange and persistence](data.md)                        | ⚪ not started      | [`data.md`](data.md)                                                       |
+| [Data interchange and persistence](data.md)                        | 🟡 minor questions | [`data.md`](data.md)                                                       |
 | [UI, mobile and the browser](ui.md)                                | ⚪ not started      | [`ui.md`](ui.md)                                                           |
 | **Tools and workflow**                                             |                    |                                                                            |
 | [Tooling uniformity](toolchain.md)                                 | 🟡 minor questions | [`toolchain.md`](toolchain.md), [`docs-and-tests.md`](docs-and-tests.md)   |
