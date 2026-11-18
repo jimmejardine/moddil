@@ -16,7 +16,7 @@ Status legend:
 
 | §                                                         | Area                                   | Status       | Detail                                                                   |
 | --------------------------------------------------------- | -------------------------------------- | ------------ | ------------------------------------------------------------------------ |
-| [2.1](#21-effects-and-capabilities-as-a-unifying-idea)    | Effects and capabilities               | 🟡 started   | [`effects-and-capabilities.md`](effects-and-capabilities.md)             |
+| [2.1](#21-effects-and-capabilities-as-a-unifying-idea)    | Effects and capabilities               | 🟠 questions | [`effects-and-capabilities.md`](effects-and-capabilities.md)             |
 | [2.2](#22-memory-and-resource-management)                 | Memory and resource management         | 🟠 questions | [`memory-and-resources.md`](memory-and-resources.md)                     |
 | [2.3](#23-error-handling)                                 | Error handling                         | 🟠 questions | [`error-handling.md`](error-handling.md)                                 |
 | [2.4](#24-null-and-invalid-states)                        | Null and invalid states                | 🟠 questions | [`null-safety.md`](null-safety.md)                                       |
@@ -121,27 +121,43 @@ Each area below gives only:
 
 ### 2.1 Effects and capabilities as a unifying idea
 
-🟡 **started** · Detail: [`effects-and-capabilities.md`](effects-and-capabilities.md)
+🟠 **questions** · Detail: [`effects-and-capabilities.md`](effects-and-capabilities.md)
 
-Signatures say what a function takes and returns, but not what it *does*: I/O, allocation,
-suspension, failure, nondeterminism, GPU work, unsafe code. One mechanism, effects plus capability
-values, underlies most other areas:
+Signatures say what a function takes and returns, but not what it *does*: I/O, suspension, failure,
+nondeterminism, GPU work, unsafe code. One mechanism, effects plus capability values, underlies most
+other areas:
 
 - suspension without function colouring (§2.8) and GPU-safe kernel subsets (§2.9);
 - resource safety with linear types (§2.2) and visible failure (§2.3);
 - capability-scoped dependencies (§2.16) and reviewable signatures (§2.18, §2.19);
 - handlers that swap real I/O for fakes in tests (§2.11) and provide implicit context.
 
-Direction: effects inferred inside a module and explicit at boundaries; capabilities as values;
-handlers compiled to zero-cost code where possible.
+Decided:
 
-**Open questions** (same list as [`effects-and-capabilities.md`](effects-and-capabilities.md) §5)
+- **Effects are interfaces; handlers are scoped implementations** (`with time = sim.clock(n) { … }`),
+  inherited by spawned tasks. A hybrid design: scoped handlers by default, **second-class capability
+  values** when two instances are needed at once.
+- **Handler tiers**: user effects get function-like (tail-resumptive) and abortive handlers;
+  one-shot continuations are reserved for core and standard effects (`suspend`, generators); never
+  multi-shot, which would duplicate linear values.
+- **Authority comes only from root capabilities** that `main` receives; libraries perform, wrap and
+  narrow effects but never create authority. No ambient authority.
+- **Inferred inside a module, explicit on `pub` signatures**, with **no aliases**; effects are coarse,
+  with finer limits from narrowing handlers. Allocation, bugs and non-termination are not effects.
+- **Unannotated closure parameters are implicitly effect-polymorphic.**
+- Drop, comptime, kernels, workflows and freestanding profiles are all effect-set constraints.
+- Statically known handlers compile to direct calls.
 
-- Can effect systems be made ergonomic for mainstream programmers? No mainstream language has done
-  it yet; this is both the biggest risk and the biggest opportunity.
-- Effect system design: row-polymorphic (Koka) vs capability-passing vs hybrid.
-  [`determinism.md`](determinism.md) §4 recommends a hybrid: scoped handlers plus second-class
-  capability values.
+**Open questions** (same list as [`effects-and-capabilities.md`](effects-and-capabilities.md) §7)
+
+- Without aliases, do public signatures of high-level functions (a request handler with `net`,
+  `fs`, `time`, `rand`, `suspend` and `fail(…)`) become too long? Revisit once the reference
+  examples are written in Moddil.
+- Should generators (`yield`) be a standard one-shot effect, and should user effects ever get
+  one-shot continuations?
+- Is `spawn` a separate effect from `suspend`, or implied by it?
+- How exactly are effect requirements and handler stacks surfaced, so that dynamic handler lookup is
+  never surprising (LSP, `explain`)?
 
 ---
 

@@ -35,7 +35,8 @@ here with its reason (§3). A Rust programmer should be able to read Moddil code
 | Delta | Example | Why |
 |---|---|---|
 | **Effects in signatures, keyword `with`** (decided) | `fn fetch(id: UserId) -> User with net, fail(HttpError)` | Effects are core semantics ([`effects-and-capabilities.md`](effects-and-capabilities.md)). `with` reads naturally and leaves `!` as the never type. |
-| Effect variables | `fn map<T, U, E>(xs: &[T], f: impl FnMut(&T) -> U with E) -> Vec<U> with E` | Effect polymorphism ([`error-handling.md`](error-handling.md) §3.2) |
+| Effect declarations | `effect time { fn now() -> Instant }` | User-defined effects ([`effects-and-capabilities.md`](effects-and-capabilities.md) §4.1) |
+| Effect variables | `fn map<T, U, E>(xs: &[T], f: impl FnMut(&T) -> U with E) -> Vec<U> with E` | Effect polymorphism ([`error-handling.md`](error-handling.md) §3.2); written only to name or constrain: an unannotated closure parameter is implicitly polymorphic ([`effects-and-capabilities.md`](effects-and-capabilities.md) §4.7) |
 | Handler blocks | `with time = sim.clock(node), net = sim.net.endpoint(node) { … }` | Installing effect handlers ([`determinism.md`](determinism.md) §4); the same keyword as in signatures |
 | **Named and default arguments** (decided) | `urls.parallel_map(\|u\| fetch(u)?, limit: 32)`; `fn connect(host: &str, port: u16 = 443)` | Readability at call sites (Swift, Kotlin, Python). Positional arguments come first, then named ones. |
 | Expression-level optional chaining | `try { users.get(id)?.profile?.email }` | `?` always propagates, as in Rust (inside a function returning `Option`, the chain works as is). A `try` block keeps the chain inside one expression, giving Swift-style chaining without a new operator ([`null-safety.md`](null-safety.md)). |

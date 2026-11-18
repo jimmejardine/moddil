@@ -113,9 +113,9 @@ fn bridge(a: &Net, b: &Net) { … }
 
 These capabilities are **second-class**: like Moddil's borrows, they cannot escape their scope.
 
-**Recommended:** a hybrid effect design. Effects appear in signatures; handlers are installed by scope
-by default; explicit capability values are used where needed. This would answer rationale §7's open
-question on effect-system design.
+**Decided:** a hybrid effect design. Effects appear in signatures; handlers are installed by scope
+by default; explicit capability values are used where needed
+([`effects-and-capabilities.md`](effects-and-capabilities.md) §4).
 
 **Performance:** handlers known at compile time (as in production `main`) become direct calls
 (monomorphisation or Koka-style evidence passing). Production pays nothing for testability.
