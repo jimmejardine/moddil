@@ -8,49 +8,56 @@
 
 Status legend:
 
-- 🟡 **started**: brainstorm or proposal; nothing is decided yet.
-- 🟠 **questions**: the direction is decided; open questions remain.
-- 🟢 **complete**: decided, with no open questions.
+| Marker                 | Meaning                                                                                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| ⚪ **not started**     | No content beyond a heading                                                                                                |
+| 🔴 **superficial**     | A brainstorm or stub; little is decided                                                                                    |
+| 🟠 **major questions** | A direction exists, but open questions could still change the core design, or the document is a proposal not yet confirmed |
+| 🟡 **minor questions** | Decided; the remaining questions are details                                                                               |
+| 🟢 **complete**        | Decided, with no open questions                                                                                            |
+
+Rule of thumb: 🟠 if an open question could change language semantics or a requirement, or the
+document is still a proposal; 🟡 if what is left is detail, tooling or operations.
 
 **Problem areas** (each links to its summary below)
 
-| §                                                         | Area                                   | Status       | Detail                                                                   |
-| --------------------------------------------------------- | -------------------------------------- | ------------ | ------------------------------------------------------------------------ |
-| [2.1](#21-effects-and-capabilities-as-a-unifying-idea)    | Effects and capabilities               | 🟠 questions | [`effects-and-capabilities.md`](effects-and-capabilities.md)             |
-| [2.2](#22-memory-and-resource-management)                 | Memory and resource management         | 🟠 questions | [`memory-and-resources.md`](memory-and-resources.md)                     |
-| [2.3](#23-error-handling)                                 | Error handling                         | 🟠 questions | [`error-handling.md`](error-handling.md)                                 |
-| [2.4](#24-null-and-invalid-states)                        | Null and invalid states                | 🟠 questions | [`null-safety.md`](null-safety.md)                                       |
-| [2.5](#25-numerics-and-data)                              | Numerics and data                      | 🟡 started   | [`numerics.md`](numerics.md), [`units.md`](units.md)                     |
-| [2.6](#26-metaprogramming)                                | Metaprogramming                        | 🟠 questions | [`comptime.md`](comptime.md)                                             |
-| [2.7](#27-correctness-tooling-contracts-and-verification) | Contracts and verification             | 🟡 started   | [`correctness.md`](correctness.md)                                       |
-| [2.8](#28-concurrency-across-cpus)                        | Concurrency across CPUs                | 🟠 questions | [`concurrency.md`](concurrency.md), [`closures.md`](closures.md)         |
-| [2.9](#29-concurrency-across-gpus-and-accelerators)       | GPUs and accelerators                  | 🟠 questions | [`accelerators.md`](accelerators.md)                                     |
-| [2.10](#210-distributed-and-multi-tier-programs)          | Distributed and multi-tier programs    | 🟠 questions | [`distribution.md`](distribution.md)                                     |
-| [2.11](#211-determinism-and-reproducibility)              | Determinism and reproducibility        | 🟡 started   | [`determinism.md`](determinism.md)                                       |
-| [2.12](#212-observability-and-debuggability)              | Observability and debuggability        | 🟠 questions | [`observability.md`](observability.md)                                   |
-| [2.13](#213-interoperability-with-c-and-rust)             | Interoperability with C and Rust       | 🟠 questions | [`interop.md`](interop.md)                                               |
-| [2.14](#214-build-times)                                  | Build times                            | 🟡 started   | [`build-times.md`](build-times.md)                                       |
-| [2.15](#215-cross-compilation-and-deployment)             | Cross-compilation and deployment       | 🟠 questions | [`targets.md`](targets.md), [`freestanding.md`](freestanding.md)         |
-| [2.16](#216-package-management-and-supply-chain-security) | Packages and supply-chain security     | 🟠 questions | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)           |
-| [2.17](#217-tooling-uniformity)                           | Tooling uniformity                     | 🟠 questions | [`toolchain.md`](toolchain.md), [`docs-and-tests.md`](docs-and-tests.md) |
-| [2.18](#218-llms-as-first-class-programmers)              | LLMs as first-class programmers        | 🟠 questions | [`agent-interface.md`](agent-interface.md)                               |
-| [2.19](#219-diffs-code-review-and-version-control)        | Diffs, code review and version control | 🟠 questions | [`semantic-vcs.md`](semantic-vcs.md)                                     |
-| [2.20](#220-language-evolution)                           | Language evolution                     | 🟠 questions | [`evolution.md`](evolution.md)                                           |
+| §                                                         | Area                                   | Status             | Detail                                                                   |
+| --------------------------------------------------------- | -------------------------------------- | ------------------ | ------------------------------------------------------------------------ |
+| [2.1](#21-effects-and-capabilities-as-a-unifying-idea)    | Effects and capabilities               | 🟠 major questions | [`effects-and-capabilities.md`](effects-and-capabilities.md)             |
+| [2.2](#22-memory-and-resource-management)                 | Memory and resource management         | 🟡 minor questions | [`memory-and-resources.md`](memory-and-resources.md)                     |
+| [2.3](#23-error-handling)                                 | Error handling                         | 🟠 major questions | [`error-handling.md`](error-handling.md)                                 |
+| [2.4](#24-null-and-invalid-states)                        | Null and invalid states                | 🟡 minor questions | [`null-safety.md`](null-safety.md)                                       |
+| [2.5](#25-numerics-and-data)                              | Numerics and data                      | 🔴 superficial     | [`numerics.md`](numerics.md), [`units.md`](units.md)                     |
+| [2.6](#26-metaprogramming)                                | Metaprogramming                        | 🟡 minor questions | [`comptime.md`](comptime.md)                                             |
+| [2.7](#27-correctness-tooling-contracts-and-verification) | Contracts and verification             | 🟠 major questions | [`correctness.md`](correctness.md)                                       |
+| [2.8](#28-concurrency-across-cpus)                        | Concurrency across CPUs                | 🟡 minor questions | [`concurrency.md`](concurrency.md), [`closures.md`](closures.md)         |
+| [2.9](#29-concurrency-across-gpus-and-accelerators)       | GPUs and accelerators                  | 🟡 minor questions | [`accelerators.md`](accelerators.md)                                     |
+| [2.10](#210-distributed-and-multi-tier-programs)          | Distributed and multi-tier programs    | 🟡 minor questions | [`distribution.md`](distribution.md)                                     |
+| [2.11](#211-determinism-and-reproducibility)              | Determinism and reproducibility        | 🟠 major questions | [`determinism.md`](determinism.md)                                       |
+| [2.12](#212-observability-and-debuggability)              | Observability and debuggability        | 🟡 minor questions | [`observability.md`](observability.md)                                   |
+| [2.13](#213-interoperability-with-c-and-rust)             | Interoperability with C and Rust       | 🟡 minor questions | [`interop.md`](interop.md)                                               |
+| [2.14](#214-build-times)                                  | Build times                            | 🟠 major questions | [`build-times.md`](build-times.md)                                       |
+| [2.15](#215-cross-compilation-and-deployment)             | Cross-compilation and deployment       | 🟡 minor questions | [`targets.md`](targets.md), [`freestanding.md`](freestanding.md)         |
+| [2.16](#216-package-management-and-supply-chain-security) | Packages and supply-chain security     | 🟡 minor questions | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)           |
+| [2.17](#217-tooling-uniformity)                           | Tooling uniformity                     | 🟡 minor questions | [`toolchain.md`](toolchain.md), [`docs-and-tests.md`](docs-and-tests.md) |
+| [2.18](#218-llms-as-first-class-programmers)              | LLMs as first-class programmers        | 🟡 minor questions | [`agent-interface.md`](agent-interface.md)                               |
+| [2.19](#219-diffs-code-review-and-version-control)        | Diffs, code review and version control | 🟡 minor questions | [`semantic-vcs.md`](semantic-vcs.md)                                     |
+| [2.20](#220-language-evolution)                           | Language evolution                     | 🟡 minor questions | [`evolution.md`](evolution.md)                                           |
 
 **Other documents**
 
-| Document                                 | Covers                                                                 | Status       | Summary here                              |
-| ---------------------------------------- | ---------------------------------------------------------------------- | ------------ | ----------------------------------------- |
-| [`requirements.md`](requirements.md)     | Firm requirements R1–R3 in full, and non-goals                         | 🟠 questions | [§5](#5-requirements-and-non-goals)       |
-| [`mods.md`](mods.md)                     | Mods, the core/mod boundary, standard-mod catalogue (R2)               | 🟡 started   | [§5.1](#51-firm-requirements-decided)     |
-| [`bootstrap.md`](bootstrap.md)           | Bootstrap compiler, self-hosting, backends, WASM engine support (R1)   | 🟡 started   | [§5.1](#51-firm-requirements-decided)     |
-| [`syntax.md`](syntax.md)                 | Rust-based syntax, deltas (`with` effects, named/default arguments), inferred private signatures | 🟠 questions | [§0](#0-preamble)                         |
-| [`paradigms.md`](paradigms.md)           | Functional and OO support, no inheritance (traits + delegation), Swift comparison | 🟠 questions | [§0](#0-preamble)                         |
-| [`closures.md`](closures.md)             | Lambdas that borrow, fail and suspend; escaping closures               | 🟠 questions | [§2.8](#28-concurrency-across-cpus)       |
-| [`units.md`](units.md)                   | Units of measure: `100<cm>`, open dimensions, declared units           | 🟡 started   | [§2.5](#25-numerics-and-data)             |
-| [`freestanding.md`](freestanding.md)     | Kernels and firmware: profiles, interrupts, MMIO, emulator testing     | 🟡 started   | [§2.15](#215-cross-compilation-and-deployment) |
-| [`prior-art.md`](prior-art.md)           | Prior-art matrix across languages, and the reference list              | reference    | [§6](#6-prior-art-matrix)                 |
-| [`examples/`](examples/README.md)        | Four reference systems used to test every decision                     | 🟡 started   | [§7](#7-open-questions-and-next-steps-for-moddil) |
+| Document                             | Covers                                                                                                                                                                                                  | Status             | Summary here                                      |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------- |
+| [`requirements.md`](requirements.md) | Firm requirements R1–R3 in full; non-goals (including no REPL: an in-browser playground instead)                                                                                                        | 🟡 minor questions | [§5](#5-requirements-and-non-goals)               |
+| [`mods.md`](mods.md)                 | Mods, the core/mod boundary, standard-mod catalogue (R2)                                                                                                                                                | 🟠 major questions | [§5.1](#51-firm-requirements-decided)             |
+| [`bootstrap.md`](bootstrap.md)       | Bootstrap compiler, self-hosting, backends, WASM engine support (R1)                                                                                                                                    | 🟠 major questions | [§5.1](#51-firm-requirements-decided)             |
+| [`syntax.md`](syntax.md)             | Rust-based syntax; deltas (`with` effects, named, default and name-only arguments); `Option<T>` only; one `where` refinement form; contracts as clauses; anonymous records; inferred private signatures | 🟡 minor questions | [§0](#0-preamble)                                 |
+| [`paradigms.md`](paradigms.md)       | Functional and OO support; no inheritance (traits plus delegation); eager with lazy iterators; GATs now, HKTs later; C ABI plus WASM components as the stable binary boundary; Swift comparison         | 🟡 minor questions | [§0](#0-preamble)                                 |
+| [`closures.md`](closures.md)         | Lambdas that borrow, fail and suspend; Rust `Fn` traits without lifetimes; stored closures as `Box<dyn Fn … with …>`                                                                                    | 🟡 minor questions | [§2.8](#28-concurrency-across-cpus)               |
+| [`units.md`](units.md)               | Units of measure: `100<cm>`, open dimensions, declared units                                                                                                                                            | 🟠 major questions | [§2.5](#25-numerics-and-data)                     |
+| [`freestanding.md`](freestanding.md) | Kernels and firmware: profiles, interrupts, MMIO, emulator testing                                                                                                                                      | 🟠 major questions | [§2.15](#215-cross-compilation-and-deployment)    |
+| [`prior-art.md`](prior-art.md)       | Prior-art matrix across languages, and the reference list                                                                                                                                               | reference          | [§6](#6-prior-art-matrix)                         |
+| [`examples/`](examples/README.md)    | Four reference systems used to test every decision                                                                                                                                                      | 🟠 major questions | [§7](#7-open-questions-and-next-steps-for-moddil) |
 
 ---
 
@@ -121,7 +128,7 @@ Each area below gives only:
 
 ### 2.1 Effects and capabilities as a unifying idea
 
-🟠 **questions** · Detail: [`effects-and-capabilities.md`](effects-and-capabilities.md)
+🟠 **major questions** · Detail: [`effects-and-capabilities.md`](effects-and-capabilities.md)
 
 Signatures say what a function takes and returns, but not what it *does*: I/O, suspension, failure,
 nondeterminism, GPU work, unsafe code. One mechanism, effects plus capability values, underlies most
@@ -163,7 +170,7 @@ Decided:
 
 ### 2.2 Memory and resource management
 
-🟠 **questions** · Detail: [`memory-and-resources.md`](memory-and-resources.md)
+🟡 **minor questions** · Detail: [`memory-and-resources.md`](memory-and-resources.md)
 
 Every existing approach trades something away: manual management is unsafe, tracing GC costs pauses
 and memory, RAII is unenforced, reference counting is slow when atomic, and Rust's lifetimes leak
@@ -197,7 +204,7 @@ Decided:
 
 ### 2.3 Error handling
 
-🟠 **questions** · Detail: [`error-handling.md`](error-handling.md)
+🟠 **major questions** · Detail: [`error-handling.md`](error-handling.md)
 
 Exceptions hide control flow, error codes get ignored, `Result` types are noisy, and panics are
 coarse. Composing error types across libraries is painful.
@@ -234,7 +241,7 @@ Still a direction: errors as an effect (`fail(E)`) with inferred error sets.
 
 ### 2.4 Null and invalid states
 
-🟠 **questions** · Detail: [`null-safety.md`](null-safety.md)
+🟡 **minor questions** · Detail: [`null-safety.md`](null-safety.md)
 
 Null references are the best-known case of a wider problem: types that admit values the domain does
 not (unchosen zero values, unchecked ranges, mixed-up IDs, objects used in the wrong state).
@@ -261,7 +268,7 @@ Decided:
 
 ### 2.5 Numerics and data
 
-🟡 **started** · Detail: [`numerics.md`](numerics.md), [`units.md`](units.md) (units of measure)
+🔴 **superficial** · Detail: [`numerics.md`](numerics.md), [`units.md`](units.md) (units of measure)
 
 Silent integer overflow, undefined behaviour, floating-point surprises and no units.
 
@@ -292,7 +299,7 @@ None recorded yet. Units of measure have their own list in [`units.md`](units.md
 
 ### 2.6 Metaprogramming
 
-🟠 **questions** · Detail: [`comptime.md`](comptime.md)
+🟡 **minor questions** · Detail: [`comptime.md`](comptime.md)
 
 Macros are powerful but break tooling, readability, caching and LLM understanding, and proc macros
 run arbitrary code at build time.
@@ -328,7 +335,7 @@ Decided:
 
 ### 2.7 Correctness tooling: contracts and verification
 
-🟡 **started** · Detail: [`correctness.md`](correctness.md)
+🟠 **major questions** · Detail: [`correctness.md`](correctness.md)
 
 Tests show the presence of bugs, not their absence, and specifications live in comments or nowhere.
 
@@ -353,7 +360,7 @@ Proposed:
 
 ### 2.8 Concurrency across CPUs
 
-🟠 **questions** · Detail: [`concurrency.md`](concurrency.md), [`closures.md`](closures.md) (lambdas)
+🟡 **minor questions** · Detail: [`concurrency.md`](concurrency.md), [`closures.md`](closures.md) (lambdas)
 
 Shared-memory parallelism is still the source of the hardest bugs, async has split ecosystems into
 sync and async halves, and cancellation is an afterthought almost everywhere.
@@ -400,7 +407,7 @@ Decided:
 
 ### 2.9 Concurrency across GPUs and accelerators
 
-🟠 **questions** · Detail: [`accelerators.md`](accelerators.md)
+🟡 **minor questions** · Detail: [`accelerators.md`](accelerators.md)
 
 GPU programming is fragmented by vendor, uses a different language from host code, and leaves data
 movement between memory spaces manual and unchecked.
@@ -431,7 +438,7 @@ Decided:
 
 ### 2.10 Distributed and multi-tier programs
 
-🟠 **questions** · Detail: [`distribution.md`](distribution.md)
+🟡 **minor questions** · Detail: [`distribution.md`](distribution.md)
 
 Almost no real system is one process. Today a feature spans several codebases and languages, held
 together by hand-maintained contracts that drift, with mixed versions in production and implicit
@@ -462,7 +469,7 @@ how it runs.*
 
 ### 2.11 Determinism and reproducibility
 
-🟡 **started** · Detail: [`determinism.md`](determinism.md)
+🟠 **major questions** · Detail: [`determinism.md`](determinism.md)
 
 Concurrent and distributed bugs are hard to reproduce.
 
@@ -487,7 +494,7 @@ Proposed:
 
 ### 2.12 Observability and debuggability
 
-🟠 **questions** · Detail: [`observability.md`](observability.md)
+🟡 **minor questions** · Detail: [`observability.md`](observability.md)
 
 Optimised code is hard to debug, async stacks are unreadable, tracing is bolted on, logging is slow
 and stringly typed, secrets leak into logs, and production bugs cannot be reproduced.
@@ -516,7 +523,7 @@ Decided:
 
 ### 2.13 Interoperability with C and Rust
 
-🟠 **questions** · Detail: [`interop.md`](interop.md)
+🟡 **minor questions** · Detail: [`interop.md`](interop.md)
 
 Nobody adopts a language that cannot use existing code, yet C headers carry no ownership or
 nullability information, C++ interop is very expensive, and Rust has no stable ABI.
@@ -544,7 +551,7 @@ Decided:
 
 ### 2.14 Build times
 
-🟡 **started** · Detail: [`build-times.md`](build-times.md)
+🟠 **major questions** · Detail: [`build-times.md`](build-times.md)
 
 Slow builds damage the edit-compile-test loop for humans, and are worse for agents that iterate
 dozens of times per task.
@@ -578,7 +585,7 @@ Proposed:
 
 ### 2.15 Cross-compilation and deployment
 
-🟠 **questions** · Detail: [`targets.md`](targets.md), [`freestanding.md`](freestanding.md) (bare metal; proposal)
+🟡 **minor questions** · Detail: [`targets.md`](targets.md), [`freestanding.md`](freestanding.md) (bare metal; proposal)
 
 Shared libraries make deployment fragile, and building for another OS usually needs that OS, a VM
 or a hand-assembled sysroot.
@@ -616,7 +623,7 @@ Proposed: a freestanding profile for kernels, bootloaders and firmware, verified
 
 ### 2.16 Package management and supply-chain security
 
-🟠 **questions** · Detail: [`packages-and-supply-chain.md`](packages-and-supply-chain.md)
+🟡 **minor questions** · Detail: [`packages-and-supply-chain.md`](packages-and-supply-chain.md)
 
 Package managers made reuse trivially easy, and made the dependency graph the largest attack surface
 in modern software: build-time code execution, ambient authority, hijacked accounts publishing
@@ -656,7 +663,7 @@ Decided:
 
 ### 2.17 Tooling uniformity
 
-🟠 **questions** · Detail: [`toolchain.md`](toolchain.md), [`docs-and-tests.md`](docs-and-tests.md); see also [`agent-interface.md`](agent-interface.md)
+🟡 **minor questions** · Detail: [`toolchain.md`](toolchain.md), [`docs-and-tests.md`](docs-and-tests.md); see also [`agent-interface.md`](agent-interface.md)
 
 One official formatter, test runner, doc generator, package manager, LSP, benchmark harness and
 linter, shipped with the compiler, removes ecosystem fragmentation. The compiler is a library and a
@@ -698,7 +705,7 @@ Decided: docs and tests live next to the code.
 
 ### 2.18 LLMs as first-class programmers
 
-🟠 **questions** · Detail: [`agent-interface.md`](agent-interface.md)
+🟡 **minor questions** · Detail: [`agent-interface.md`](agent-interface.md)
 
 Languages assume the person who writes the code also understands it. In an LLM-heavy workflow the
 writer is a model and the human is the reviewer, architect and approver. Current languages optimise
@@ -736,7 +743,7 @@ decoding (recommended), translation tools from Rust and TypeScript, `note` block
 
 ### 2.19 Diffs, code review and version control
 
-🟠 **questions** · Detail: [`semantic-vcs.md`](semantic-vcs.md)
+🟡 **minor questions** · Detail: [`semantic-vcs.md`](semantic-vcs.md)
 
 Version control works on lines of text, but programs are trees with meaning. Reviewers see noise
 (formatting, renames, moves) and miss signal (a new side effect, a changed error path). As agents
@@ -768,7 +775,7 @@ Decided:
 
 ### 2.20 Language evolution
 
-🟠 **questions** · Detail: [`evolution.md`](evolution.md)
+🟡 **minor questions** · Detail: [`evolution.md`](evolution.md)
 
 Languages either freeze (C) or break their ecosystems (Python 2→3).
 
