@@ -46,7 +46,7 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
 | Artefact | Role |
 |---|---|
 | **The reference** | **Normative.** Prose, with formal rules for the core (types, effects, borrows and evaluation). |
-| **The reference interpreter** | The executable form of the reference: the MIR interpreter, also used for comptime and the unsafe checker ([`bootstrap.md`](bootstrap.md), [`unsafe.md`: Checking](unsafe.md#checking)). Tested against the reference. |
+| **The reference interpreter** | The executable form of the reference: the MIR interpreter, also used for comptime and the unsafe checker ([`compiler.md`](compiler.md), [`unsafe.md`: Checking](unsafe.md#checking)). Tested against the reference. |
 | **The core model** | A mechanised model of the core (for example in Lean) that proves the core rules sound and validates the interpreter ([`correctness.md`: A formal semantics of the core](correctness.md#a-formal-semantics-of-the-core)). |
 
 - **Any disagreement between them is a bug.** The reference decides the intended meaning (changing it
@@ -105,7 +105,7 @@ fn leak() -> int { counter.tick() }   //~ E0601
 
 - Organised **by feature and edition**, like Test262.
 - Tests are ordinary Moddil files with **inline expectations**: `// =>` for values (as in
-  [`docs-and-tests.md`](docs-and-tests.md)), `//~ E0601` for diagnostics, `//~ trap` for traps.
+  [`docs.md`](docs.md)), `//~ E0601` for diagnostics, `//~ trap` for traps.
 - **Diagnostic codes are part of conformance; message wording is not**, so implementations may
   word errors their own way.
 - Determinism ([`determinism.md`](determinism.md)) makes expected outputs exact, including for
@@ -114,7 +114,7 @@ fn leak() -> int { counter.tick() }   //~ E0601
 ### Written with the compiler
 
 - The design documents stay as they are; the reference grows as the stage-0 compiler does
-  ([`bootstrap.md`](bootstrap.md)).
+  ([`compiler.md`](compiler.md)).
 - **A feature is done only when it has reference paragraphs and conformance tests**, as well as an
   implementation.
 - The reference is complete for an edition when that edition ships.

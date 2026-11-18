@@ -42,7 +42,7 @@ claim, or where the gaps between the pieces are.
 | **Hostile input** (network, files, IPC) | Memory safety; `Untrusted<T>`; parse-don't-validate decoding; overflow and bounds traps; typed errors (R3) | [`data.md`](data.md), [`numerics.md`](numerics.md), [`error-handling.md`](error-handling.md) | Algorithmic denial of service, beyond keyed hashing ([Open questions](#open-questions)) |
 | **A hostile client** (browser or app on a machine the attacker controls) | `Untrusted<T>` from `client`; secrets cannot be placed on `client`; server-side validation | [`distribution.md`: Trust, secrets and capabilities](distribution.md#trust-secrets-and-capabilities) | Anything that runs on the client itself |
 | **Untrusted plugins or tenant code** | WASM components with explicit imports and resource limits | [Isolation beyond capabilities](#isolation-beyond-capabilities), [`interop.md`](interop.md) | |
-| **A compromised build or toolchain** | Reproducible builds; hash-pinned sources; pure, sandboxed comptime; double-compiling check of the compiler | [`determinism.md`: Reproducible builds](determinism.md#reproducible-builds), [`comptime.md`](comptime.md), [`bootstrap.md`](bootstrap.md) | A compromised machine that produces both build and check |
+| **A compromised build or toolchain** | Reproducible builds; hash-pinned sources; pure, sandboxed comptime; double-compiling check of the compiler | [`determinism.md`: Reproducible builds](determinism.md#reproducible-builds), [`comptime.md`](comptime.md), [`compiler.md`](compiler.md) | A compromised machine that produces both build and check |
 | **Leaks through observability** | `Secret<T>` and `Personal<T>` cannot reach logs, traces or metrics | [`observability.md`: Secrets never reach observability](observability.md#secrets-never-reach-observability) | Leaks through ordinary program output the programmer wrote deliberately |
 | **Timing side channels** | `#[constant_time]` code for secrets | [Constant-time code](#constant-time-code) | Cache and power channels outside constant-time code |
 
@@ -140,7 +140,7 @@ log.info(fmt"checkout for {customer:?}");           // ✓ prints email and card
 ## Secret handling
 
 - **Zeroed on drop, guaranteed.** The compiler emits volatile zeroing that the optimiser may not
-  remove, including on error and cancellation paths ([`memory-and-resources.md`](memory-and-resources.md)).
+  remove, including on error and cancellation paths ([`memory.md`](memory.md)).
 - **No accidental copies.** `Secret<T>` is never `Copy`; cloning is explicit
   ([`values.md`](values.md)).
 - **Constant-time equality.** `==` on secrets compares in constant time.
@@ -193,7 +193,7 @@ Decided in [`packages-and-supply-chain.md`](packages-and-supply-chain.md) and su
 
 ## Memory safety and `unsafe`
 
-- Safe Moddil is memory-safe and free of data races ([`memory-and-resources.md`](memory-and-resources.md),
+- Safe Moddil is memory-safe and free of data races ([`memory.md`](memory.md),
   [`concurrency.md`](concurrency.md)).
 - `unsafe` is contained, carries safety contracts, is checked before publishing and needs human review
   by default ([`unsafe.md`](unsafe.md)).

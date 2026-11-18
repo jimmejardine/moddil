@@ -104,7 +104,7 @@ fn main(args: Args, env: Env, files: FsRoot, net: NetRoot, clock: Clock) -> Exit
 
 - SIGINT and SIGTERM (and Windows Ctrl-C and close events) become a **stop** on `main`'s root scope,
   escalating to cancel after the grace deadline; a second signal exits immediately
-  ([`concurrency.md`: Cancellation and shutdown](concurrency.md#cancellation-and-shutdown)).
+  ([Cancellation and shutdown](#cancellation-and-shutdown)).
 - **Other signals** (SIGHUP, SIGUSR1, SIGUSR2) arrive as a typed stream from `Signals`, which a task
   can `select` on. There are never asynchronous signal handlers.
 
@@ -152,10 +152,10 @@ scope(isolate: true, |s| {
 
 - When a task in an isolated scope traps:
   - the scope's tasks are cancelled and **unwound**, running their drops (which are infallible
-    and never suspend, [`memory-and-resources.md`: Destructors](memory-and-resources.md#destructors));
+    and never suspend, [`resources.md`: Destructors](resources.md#destructors));
   - **sync cells** held at the time are **poisoned**; later access fails with `Poisoned`;
   - **linear values** are discarded with their `abandon` operation
-    ([`memory-and-resources.md`: Resources: affine and linear](memory-and-resources.md#resources-affine-and-linear));
+    ([`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear));
   - the parent receives **`fail(Trapped)`** with the trace.
 - A trap inside `drop` or `abandon` still terminates the process. Shared rc data is immutable, so a
   trap cannot leave it half-updated.
@@ -167,6 +167,181 @@ scope(isolate: true, |s| {
   created in `main`, or in context effects.
 - So there are no initialisation-order problems, no hidden shared state, and simulations stay
   deterministic. Sync cells exist only inside values ([`concurrency.md`](concurrency.md)).
+
+## Cancellation and shutdown
+
+### Why cancellation has to exist
+
+In servers and interactive programs, work regularly becomes unwanted before it finishes:
+
+| Cause | Example |
+|---|---|
+| Sibling failure | A request fans out to three services; one fails, so the other results are useless |
+| Deadlines | The caller's 200 ms budget has expired |
+| The requester left | The client disconnected, or the user navigated away |
+| Racing | Hedged requests: ask two replicas, take the first answer, stop the other |
+| Shutdown | Ctrl-C, or SIGTERM during a rolling deploy |
+
+Without cancellation that work keeps running and holding resources (Go's goroutine leaks before
+`context.Context`).
+
+**Two designs Moddil rejects:**
+- **Explicit tokens** (C#'s `CancellationToken`, Go's `context.Context`) must be threaded through
+  every call. People forget, libraries ignore them, and signatures get noisier.
+- **Asynchronous killing** (.NET's `Thread.Abort`, Java's `Thread.stop`) was removed from both
+  platforms: stopping code at an arbitrary instruction breaks invariants halfway through an update.
+
+### The model: implicit and cooperative
+
+- **A task's scope is its cancellation token.** It is carried by structured concurrency (as in Trio,
+  Kotlin and Swift); nothing is passed through signatures.
+- **Cancellation is observed only at suspension points.** Suspension is an effect, so every place a
+  task can pause is known: I/O, joining children, locks, timers, channels. When a task is cancelled,
+  its next suspension point returns a **`Cancelled` outcome** instead of a value. Code between
+  suspension points is never interrupted, so invariants are never torn.
+- **The cancellation path is an ordinary, checked exit path:**
+  - drops, `defer` and `errdefer` run ([`resources.md`: When drops run](resources.md#when-drops-run)–[`resources.md`: `defer` and `errdefer`](resources.md#defer-and-errdefer));
+  - **linear values must be consumed on it**, exactly as on error paths, typically with
+    `errdefer txn.rollback()`;
+  - cleanup on this path **may suspend** (a rollback needs the network) inside a **shielded,
+    deadline-bounded scope**: it is not itself cancelled midway, and it cannot hang for ever.
+- `Cancelled` is a distinct outcome, not an error ([`error-handling.md`: Tasks and concurrency](error-handling.md#tasks-and-concurrency));
+  it is accounted for at the join.
+- **Long pure-compute loops** have no suspension points. They call a cheap `checkpoint()` (a
+  suspension point that observes cancellation); a lint flags long loops in cancellable tasks without
+  one. Preemption safe points ([Tasks, threads and executors](runtime.md#tasks-threads-and-executors)) only yield the thread; they never deliver cancellation, because
+  that would interrupt code between effect operations.
+- **Blocking FFI calls** cannot be interrupted. They run on the `blocking` executor ([Tasks, threads and executors](runtime.md#tasks-threads-and-executors)); the scope
+  waits for them, or detaches the OS thread if the function's overlay allows it
+  ([`interop.md`: Annotation overlays](interop.md#annotation-overlays)).
+
+### Two levels: stop, then cancel
+
+| | **Stop** (graceful) | **Cancel** (hard, still cooperative) |
+|---|---|---|
+| Trigger | Ctrl-C / SIGTERM, deploy drain, a parent asks | Grace deadline expired, sibling failed, request deadline, racing |
+| Observed | Only where code asks, e.g. `stop_requested()` in a `select` | At every suspension point (`Cancelled`) |
+| Typical reaction | Stop taking new work, finish current work, say goodbye to peers, persist state | Abort current work, run cleanup |
+| Like | Go's `http.Server.Shutdown`; Hashiverse's shutdown token | Trio / Kotlin / Swift cancellation |
+
+- Signals are not asynchronous handlers: the runtime mod turns SIGINT and SIGTERM into a **stop**
+  event on `main`'s root scope.
+- If the scope has not finished when its **grace deadline** expires, stop escalates to cancel.
+- A **second signal** exits the process immediately; the OS reclaims everything.
+
+### Layered shutdown: innermost first
+
+A naive shared token tells everyone to stop at once, so a service can shut down while code that
+depends on it is still draining. Moddil orders shutdown by the scope tree instead:
+
+- **Services provided as effect handlers cannot disappear early.** A handler (database pool, logger,
+  DHT client) is installed by an outer scope, and a scope cannot end until everything inside it has
+  finished, so no child outlives a handler it uses.
+- **Scopes are shutdown layers.** Stop (and later cancel) is delivered to the **innermost layer
+  first**. Outer layers keep **operating completely normally** (serving requests, accepting writes)
+  while inner layers drain. Only when an inner layer has finished does the next layer out receive
+  stop.
+- **Tasks within one layer are peers** and stop together: thousands of connection handlers drain
+  concurrently.
+- Dependencies are expressed by **nesting**: services in an outer scope, the code that uses them in
+  an inner one. This is the same rule as drop order (reverse of construction) and as Erlang/OTP
+  supervisors, which terminate children in reverse start order.
+
+```rust
+fn main(net: NetRoot) {                                    // declares only the roots it uses
+    scope(|services| {                                     // layer 1 (outer)
+        services.spawn(|| db_writer());
+        services.spawn(|| dht.maintain());
+
+        scope(|app| {                                      // layer 2 (inner)
+            app.spawn(|| server.serve());
+        });
+        // layer 2 has fully finished; only now do db_writer and dht see stop_requested()
+    }, stop_on: [SIGINT, SIGTERM], grace: 10<s>);
+}
+
+fn serve() with net, suspend {
+    scope(|s| {
+        loop {
+            select {
+                conn = listener.accept() => s.spawn(|| handle(conn)),
+                _ = stop_requested()     => break,     // stop accepting; in-flight handlers finish
+            }
+        }
+    })                                                   // waits for in-flight handlers
+}
+```
+
+On Ctrl-C:
+1. `serve` stops accepting; in-flight handlers finish, still using `db_writer` and `dht`, which are
+   running normally.
+2. Layer 2 ends.
+3. `db_writer` flushes and `dht` persists its routing table, then they end.
+4. `main` returns an exit status.
+
+If the grace deadline expires first, cancellation proceeds in the same inner-to-outer order, so each
+layer's shielded cleanup still finds the outer services alive.
+
+### Cancelling I/O: no "press Enter", no self-connect
+
+**The problem elsewhere.** In Rust, a task reading stdin, or a thread in a blocking `accept`, sits
+inside a blocking system call. A shutdown signal cannot reach it until the call returns, so users
+press Enter after Ctrl-C, and programs connect to their own listening socket just to wake it up.
+- Even `tokio::io::stdin` reads on a background blocking thread: stdin can't portably be made
+  non-blocking (setting `O_NONBLOCK` on a shared terminal affects other processes; Windows console
+  and anonymous-pipe handles don't support overlapped I/O).
+- `select!` adds a second trap: each operation must be checked for *cancel-safety*, because some
+  (such as `read_line`) lose data already read when they lose the race.
+
+**Moddil's rules:**
+1. **Every I/O operation is a suspension point and a cancellation point.** `accept`, `read`,
+   `read_line`, `recv` and timers are effect operations handled by the runtime's reactor ([Tasks, threads and executors](runtime.md#tasks-threads-and-executors)),
+   never blocking system calls on a thread. A stop that wins a `select`, or a hard cancel, removes
+   the pending operation and the task continues **immediately**.
+2. **The runtime cancels at the OS level** ([Runtime contract](runtime.md#runtime-contract)): io_uring cancel requests, removing interest from
+   epoll or kqueue, `CancelIoEx` on Windows. An operation that completes in a race with its
+   cancellation keeps its result (rule 4).
+3. **Hard sources are handled once, in the runtime, per platform:**
+
+   | Source | Strategy |
+   |---|---|
+   | Unix terminals and pipes | Wait for readiness, then read only what is available, so a read never blocks; never set `O_NONBLOCK` on a shared descriptor. Cancelling means no longer waiting. |
+   | Linux with io_uring | A read on stdin can be cancelled (io_uring interrupts its worker), or use the readiness path. |
+   | Windows console | Wait on the console input handle together with a cancel event; read only when input is signalled. |
+   | Windows anonymous pipes | A thread on the `blocking` executor, interrupted with `CancelSynchronousIo`. |
+   | Devices and FFI calls the OS cannot interrupt | The `blocking` executor; the scope waits, or detaches the thread if the function's overlay allows it ([`interop.md`: Annotation overlays](interop.md#annotation-overlays)). This is the **only** documented exception. |
+
+4. **Standard I/O is always cancel-safe.** Buffers belong to the reader or stream object, not to the
+   in-flight operation, so a cancelled `read_line` loses nothing: partial data stays in the reader for
+   the next call. A `select` cancels its losing branches, and with cancel-safe operations that is
+   always correct. There is no per-method "is this cancel-safe?" to look up.
+5. **Ctrl-C itself.** In normal (cooked) terminal mode, SIGINT becomes a stop event on the root scope
+   ([Two levels: stop, then cancel](#two-levels-stop-then-cancel)). In raw mode (full-screen terminal apps) it arrives as a key event from the terminal API.
+6. **Testable.** Stdin, sockets and timers are effects, so the simulation runtime can feed input,
+   stop and cancel deterministically ([`determinism.md`](determinism.md)).
+
+```rust
+fn repl() with stdin, stdout, suspend {
+    let input = stdin.lines();
+    loop {
+        select {
+            line = input.next()  => eval(line?),
+            _ = stop_requested() => break,      // Ctrl-C: the pending read is cancelled; no Enter needed
+        }
+    }
+}
+
+fn serve(listener: &Listener) with net, suspend {
+    scope(|s| {
+        loop {
+            select {
+                conn = listener.accept() => s.spawn(|| handle(conn)),
+                _ = stop_requested()     => break,     // the pending accept is cancelled; no self-connect
+            }
+        }
+    })
+}
+```
 
 ## Fit check against the reference examples
 

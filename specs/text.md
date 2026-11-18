@@ -46,10 +46,10 @@ are well known:
 | Type | What it is | Typical use |
 |---|---|---|
 | `str` | An unsized run of valid UTF-8 | Only behind a pointer |
-| `&str` | A second-class borrow of a `str` ([`memory-and-resources.md`](memory-and-resources.md)) | Parameters and locals |
+| `&str` | A second-class borrow of a `str` ([`memory.md`](memory.md)) | Parameters and locals |
 | `String` | Owned, growable UTF-8 | Building and storing text |
 | `Rc<str>` | Shared, immutable text | Text held by many owners: keys, interned names |
-| `RcStr` | A slice of a shared, reference-counted buffer | Zero-copy parsing of I/O buffers ([`memory-and-resources.md`: Zero-copy I/O](memory-and-resources.md#zero-copy-io)) |
+| `RcStr` | A slice of a shared, reference-counted buffer | Zero-copy parsing of I/O buffers ([`memory.md`: Zero-copy I/O](memory.md#zero-copy-io)) |
 | `char` | A Unicode scalar value (U+0000 to U+10FFFF, excluding surrogates) | Single characters |
 
 Cost stays visible, as everywhere in Moddil ([`values.md`](values.md)):
@@ -75,7 +75,7 @@ Swift and C++ standard libraries store 15).
 - **Why:** most strings in services and agents' code are short (keys, identifiers, field names,
   small numbers formatted as text), and avoiding an allocation for each is a large, broad win.
 - **It costs little here.** In Rust, SSO is awkward because code may hold a pointer into a `String`
-  while the `String` moves. Moddil's borrows are second-class ([`memory-and-resources.md`](memory-and-resources.md)),
+  while the `String` moves. Moddil's borrows are second-class ([`memory.md`](memory.md)),
   so no borrow of the bytes outlives a move, and an inline string can move freely.
 - **Cost stays visible:** growing past the inline capacity allocates, exactly as growing a heap
   string does; `String::with_capacity(n)` still reserves up front. `capacity()` is never less than
@@ -110,7 +110,7 @@ Swift and C++ standard libraries store 15).
   `.graphemes()` (user-perceived characters, from `moddil/text`, because the Unicode tables are
   large). Counting characters is `s.chars().count()`, visibly O(n).
 - **A position belongs to its string, by type (decided).** A `StrPos` is a view
-  ([`memory-and-resources.md`: View types](memory-and-resources.md#view-types)) derived from a borrow of
+  ([`memory.md`: View types](memory.md#view-types)) derived from a borrow of
   the string it was found in, in the same way an accelerator buffer is branded with its device
   ([`accelerators.md`](accelerators.md)). The compiler therefore rejects:
   - using a position from one string to slice another;

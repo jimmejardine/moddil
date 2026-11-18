@@ -34,7 +34,7 @@ Design constraints this places on the rest of Moddil:
 - **Memory model**: Moddil has no global tracing GC, so linear memory is the natural fit. The WASM GC
   proposal is an optional optimisation for interop with JS objects, not a dependency.
 - **Concurrency without function colouring ([Concurrency across CPUs](concurrency.md))** needs suspendable stacks. *Revised after checking
-  engine support (Nov 2026; see [`bootstrap.md`: WASM concurrency lowering](bootstrap.md#wasm-concurrency-lowering) and [`bootstrap.md`: WASM support: verified status (November 2026)](bootstrap.md#wasm-support-verified-status-november-2026)):* stack switching is Phase 3
+  engine support (Nov 2026; see [`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering) and [`compiler.md`: WASM support: verified status (November 2026)](compiler.md#wasm-support-verified-status-november-2026)):* stack switching is Phase 3
   but ships in **no** browser or Node (Chrome has it behind a flag only); Wasmtime has it at Tier 3 on
   x86_64 Linux. JSPI, however, is standardised and ships in all major browsers and Node ≥ 26.
   **Decision:** the concurrency semantics are target-independent, and the backend picks a lowering:
@@ -48,7 +48,7 @@ Design constraints this places on the rest of Moddil:
   changes stay local.
 - **Threads**: shared memory + atomics are available but restricted in browsers (cross-origin
   isolation). Structured concurrency must degrade gracefully to a single thread; on a single thread
-  every biased-RC operation takes the cheap owner path ([`concurrency.md`: Runtime contract](concurrency.md#runtime-contract)).
+  every biased-RC operation takes the cheap owner path ([`runtime.md`: Runtime contract](runtime.md#runtime-contract)).
 - **Exceptions, SIMD, tail calls**: use the standard proposals (exception handling, 128-bit SIMD,
   tail calls) where available; error handling ([Error handling](error-handling.md)) must not depend on unwinding.
 - **GPU ([Concurrency across GPUs and accelerators](accelerators.md))** in the browser goes through WebGPU/WGSL, so kernel lowering needs a WGSL path.
@@ -69,7 +69,7 @@ STL/Boost); anyone can write and publish their own (for example, a tokio-style r
   **handlers**. Every library therefore works with every runtime, which avoids Rust's tokio/async-std
   split.
 
-Details: [`mods.md`](mods.md).
+Details: [`stdlib.md`](stdlib.md).
 
 ### R3. No crash from an unhandled error.
 
@@ -88,7 +88,7 @@ Details: [`error-handling.md`](error-handling.md).
 - Replacing every language. Scripting, notebooks and quick glue stay with other languages.
 - **A REPL, script mode or notebook mode (decided).** Moddil is compiled and checked as a whole.
   Quick experiments use attached tests and examples-as-tests (`moddil test`,
-  [`docs-and-tests.md`](docs-and-tests.md)) and live update in debug builds
+  [`docs.md`](docs.md)) and live update in debug builds
   ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds)). Quick learning is served by an in-browser playground
   that re-runs the whole program on every edit ([`toolchain.md`: Playground: learning without a REPL](toolchain.md#playground-learning-without-a-repl)).
 - C++ interop in the language. C++ is reached through C shims ([`interop.md`: C++ through C shims](interop.md#c-through-c-shims)).
@@ -101,5 +101,5 @@ Details: [`error-handling.md`](error-handling.md).
 ## Open questions
 
 - R1: should WASI runtimes without stack switching be supported, which would need the
-  CPS/Asyncify-style lowering? (Also in [`bootstrap.md`: Risks and open questions](bootstrap.md#risks-and-open-questions).)
+  CPS/Asyncify-style lowering? (Also in [`compiler.md`: Risks and open questions](compiler.md#risks-and-open-questions).)
 - Should determinism become R4 ([`determinism.md`: Open questions](determinism.md#open-questions))?

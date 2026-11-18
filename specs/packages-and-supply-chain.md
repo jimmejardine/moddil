@@ -52,6 +52,32 @@ largest attack surface in modern software:
 
 ## Decisions
 
+### What a mod is
+
+A mod is the unit of:
+- **Versioning**: semver, with editions for the language ([Language evolution](evolution.md)).
+- **Compilation and caching** ([Build times](build-times.md)): interface hash vs implementation hash (see
+  [`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)).
+- **Capabilities** ([Package management and supply-chain security](packages-and-supply-chain.md)): the manifest declares which capabilities the mod may require (`net`, `fs`,
+  `ffi`, `gpu`, `unsafe`, …). The compiler rejects any use beyond them.
+- **Targets**: native, WASM (R1), GPU-kernel-safe, and so on. A mod declares which targets it supports.
+- **Audit** ([Package management and supply-chain security](packages-and-supply-chain.md)): reviews and attestations attach to a mod version.
+
+Illustrative manifest (syntax not decided):
+
+```toml
+[mod]
+name = "moddil/net"
+version = "0.3.0"
+edition = "2027"
+
+[capabilities]
+requires = ["net", "time"]
+
+[targets]
+supported = ["native", "wasm-wasi", "wasm-browser"]
+```
+
 ### Hosting: plain git
 
 - A mod is a directory in a git repository. **There is no central service**: no registry, mirror,
@@ -209,7 +235,7 @@ requires = []                     # pure: no net, fs, ffi
 
 ### A broad standard library
 
-A broad set of `moddil/` mods reduces trivial third-party dependencies ([`mods.md`: Initial standard-mod catalogue](mods.md#initial-standard-mod-catalogue)).
+A broad set of `moddil/` mods reduces trivial third-party dependencies ([`stdlib.md`: Initial standard-mod catalogue](stdlib.md#initial-standard-mod-catalogue)).
 **Decided:** broad, as separately versioned mods that are pinned like any other dependency
 ([`stdlib.md`: Batteries and tiers](stdlib.md#batteries-and-tiers)).
 
@@ -292,8 +318,10 @@ Working-copy overrides are unpinned by nature, so they are for development only 
   trust the tag date.
 - How are typosquatting and look-alike URLs caught without a naming authority?
 - Pre-1.0: is each `0.x` minor a major (Cargo), or does `v0` promise nothing (Go)?
-- Do standard mods ship with the toolchain, or are they fetched like any other mod
-  ([`mods.md`: Open questions](mods.md#open-questions))?
+- ~~Do standard mods ship with the toolchain?~~ **Resolved:** only `moddil/core-*` does
+  ([`stdlib.md`: Distribution and versioning](stdlib.md#distribution-and-versioning)).
+- **Naming**: is "mod" too easily confused with Rust's `mod` (a module)? The distinction between mod
+  and module needs to stay clear in docs and tooling.
 
 ## Prior art
 

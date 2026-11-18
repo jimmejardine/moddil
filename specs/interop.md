@@ -39,7 +39,7 @@ exceptions and compiler-specific ABIs. Swift and Carbon have each spent years on
 - **Direct header import** through libclang (as Zig's `@cImport`): types, functions, constants and
   simple macros become raw bindings automatically.
 - **The toolchain compiles C.** C sources of a dependency are compiled by the bundled clang, using the
-  LLVM Moddil already ships ([`bootstrap.md`](bootstrap.md)):
+  LLVM Moddil already ships ([`compiler.md`](compiler.md)):
   - hermetic and reproducible: declared inputs only, the same compiler on every machine ([Package management and supply-chain security](packages-and-supply-chain.md));
   - cross-compiled to every Moddil target, including WASM ([Cross-compilation and deployment](targets.md), R1);
   - run in the build sandbox like any other build step.
@@ -57,11 +57,11 @@ and turn raw bindings into Moddil types:
 | C fact | Overlay says | Moddil result |
 |---|---|---|
 | Who frees a returned pointer | owned / borrowed / linear | Owned: a Moddil type whose drop calls the C free function. Borrowed: a view. Linear: when freeing can fail (e.g. a close that reports errors). |
-| Can a pointer be null | nullable | `Option<…>` ([Null and invalid states](null-safety.md)) |
+| Can a pointer be null | nullable | `Option<…>` ([`types.md`: Optional values and invalid states](types.md#optional-values-and-invalid-states)) |
 | How errors are reported | errno, negative return, out-parameter | `fail(E)` with a typed error |
-| Can the call block | `blocking` | The runtime moves the call off its workers to a blocking pool, so one slow C call can't stall the scheduler. Such calls are the one exception to promptly cancellable I/O ([`concurrency.md`: Cancelling I/O: no "press Enter", no self-connect](concurrency.md#cancelling-io-no-press-enter-no-self-connect)). |
+| Can the call block | `blocking` | The runtime moves the call off its workers to a blocking pool, so one slow C call can't stall the scheduler. Such calls are the one exception to promptly cancellable I/O ([`lifecycle.md`: Cancelling I/O: no "press Enter", no self-connect](lifecycle.md#cancelling-io-no-press-enter-no-self-connect)). |
 | Thread requirements | thread-affine, not thread-safe | Pinned tasks; values that can't be sent are wrapped accordingly |
-| What it touches | capabilities (`fs`, `net`, …) | Checked like Moddil code ([`mods.md`: What a mod is](mods.md#what-a-mod-is)) |
+| What it touches | capabilities (`fs`, `net`, …) | Checked like Moddil code ([`packages-and-supply-chain.md`: What a mod is](packages-and-supply-chain.md#what-a-mod-is)) |
 
 - Overlays live in a **shared repository**, versioned against library versions, like TypeScript's
   DefinitelyTyped, so each C library is annotated once for everyone.
@@ -84,7 +84,7 @@ and turn raw bindings into Moddil types:
   escape into C.
 - Nothing unwinds across the boundary in either direction.
 - Borrowed data passed to a callback follows the ordinary borrow and view rules
-  ([`memory-and-resources.md`: Borrowing](memory-and-resources.md#borrowing)–[`memory-and-resources.md`: View types](memory-and-resources.md#view-types)); a callback cannot keep it.
+  ([`memory.md`: Borrowing](memory.md#borrowing)–[`memory.md`: View types](memory.md#view-types)); a callback cannot keep it.
 
 ## Export
 

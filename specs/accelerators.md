@@ -136,7 +136,7 @@ indices to their arena and DMA buffers to their NIC ring.
 | `Buffer<T, dev>` (branded) / `Buffer<T, dyn Gpu>` (erased) | Device memory |
 | `Buffer<T, Host>` | Ordinary host memory; also the memory of a CPU pool |
 | `Buffer<T, Shared>` | Unified memory visible to host and device (Apple silicon, some data-centre parts) |
-| `Buffer<T, Dma<nic0>>` | NIC DMA memory, already used for zero-copy I/O ([`memory-and-resources.md`: Zero-copy I/O](memory-and-resources.md#zero-copy-io)) |
+| `Buffer<T, Dma<nic0>>` | NIC DMA memory, already used for zero-copy I/O ([`memory.md`: Zero-copy I/O](memory.md#zero-copy-io)) |
 
 - Buffers are **owned resources**. Dropping one frees it; on a device the drop *enqueues* the free
   behind outstanding work, so it never blocks (drop cannot suspend).
@@ -202,7 +202,7 @@ and forgetting a fence.
 
 - `gpu` is an effect. **Handler mods** implement it: WebGPU (via wgpu), Vulkan, Metal, CUDA, ROCm
   and a **CPU simulator**. Libraries work with every handler ([R2](requirements.md#firm-requirements-decided)).
-- **Lowering** reuses existing tools, as in [`bootstrap.md`](bootstrap.md): naga for
+- **Lowering** reuses existing tools, as in [`compiler.md`](compiler.md): naga for
   WGSL/SPIR-V/MSL/HLSL; LLVM NVPTX and AMDGPU for CUDA- and ROCm-class targets; MLIR later if
   tensor-level optimisation needs it.
 - **Order:**

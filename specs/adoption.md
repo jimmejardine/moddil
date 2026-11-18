@@ -45,7 +45,7 @@ and leaves the baggage behind.
 
 | Armour kept | Baggage dropped |
 |---|---|
-| Memory safety and data-race freedom without a GC ([`memory-and-resources.md`](memory-and-resources.md)) | Lifetime annotations: borrows are second-class ([`memory-and-resources.md`: Borrowing](memory-and-resources.md#borrowing)) |
+| Memory safety and data-race freedom without a GC ([`memory.md`](memory.md)) | Lifetime annotations: borrows are second-class ([`memory.md`: Borrowing](memory.md#borrowing)) |
 | No crash from an unhandled error ([R3](requirements.md#firm-requirements-decided)) | `async`/`.await` and coloured functions: suspension is an effect ([`concurrency.md`](concurrency.md)) |
 | Effects and capabilities in signatures ([`effects-and-capabilities.md`](effects-and-capabilities.md)) | `Send`, `Sync`, `Pin`, `'static` and `move` ([`concurrency.md`: No `Send` / `Sync`](concurrency.md#no-send--sync), [`closures.md`](closures.md)) |
 | Checked contracts and refinements ([`correctness.md`](correctness.md)) | `macro_rules!` and procedural macros: comptime instead ([`comptime.md`](comptime.md)) |
@@ -128,7 +128,7 @@ smooth = rolling_mean(prices, window=50)  # numpy array in, no copy; list or arr
 - **The GIL:** Moddil code releases the GIL while it runs, and runs its own tasks on its own executor;
   free-threaded CPython builds are supported where available.
 - **Placement in the roadmap:** Python bindings follow the first native release (M3,
-  [`bootstrap.md`: Milestones](bootstrap.md#milestones)), before the Swift, Kotlin and TypeScript
+  [`roadmap.md`: Milestones](roadmap.md#milestones)), before the Swift, Kotlin and TypeScript
   bindings.
 
 ## Migrating existing code
@@ -207,7 +207,7 @@ Models write well only in languages they have seen. Moddil's plan is in
 
 ## Flagship software
 
-- The **Hashiverse client** (milestones M3 and M4, [`bootstrap.md`: Milestones](bootstrap.md#milestones)) is the
+- The **Hashiverse client** (milestones M3 and M4, [`roadmap.md`: Milestones](roadmap.md#milestones)) is the
   first real application, and it is used by a real network.
 - The four [reference examples](examples/README.md) are published as complete, idiomatic programs.
 - **A widely used Python package** accelerated with Moddil would do more for adoption than any feature;

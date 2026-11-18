@@ -15,10 +15,10 @@
 | D6 | **Integer division traps, as in Rust**: `x / 0`, `x % 0`, `MIN / -1`. Same crash class as out-of-memory. |
 | D7 | **Indexing traps on out-of-bounds**; `get(i)` returns `Option`. Bounds checks are elided where the compiler proves the index is in range. |
 | D8 | **Resource exhaustion and faults are crashes**, not R3 violations: out of memory, stack overflow, `unreachable`, native FFI faults. |
-| D9 | **Drop cannot fail or suspend**: a drop implementation has an empty effect set, checked by the compiler. Cleanup that can fail is a linear type with an explicit `close`/`commit` ([Cleanup](#cleanup)). |
-| D10 | **Cleanup failures during error handling are suppressed, not lost**: they are attached to the primary error (as in Java's try-with-resources), never replace it and never terminate ([Cleanup](#cleanup)). |
-| D11 | **`defer` is infallible; `errdefer` may fail.** `defer` follows drop's rules (no fail, no suspend); `errdefer` runs on error and cancellation exits, and its failure is suppressed ([Cleanup](#cleanup)). |
-| D12 | **A destructor is checked like an entry point**: its failure set must be empty, so a fallible call inside `drop` must be handled there (logged, explicitly discarded, or the type made linear) ([Cleanup that can fail (D9, D10)](#cleanup-that-can-fail-d9-d10)). |
+| D9 | **Drop cannot fail or suspend**: a drop implementation has an empty effect set, checked by the compiler. Cleanup that can fail is a linear type with an explicit `close`/`commit` ([`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)). |
+| D10 | **Cleanup failures during error handling are suppressed, not lost**: they are attached to the primary error (as in Java's try-with-resources), never replace it and never terminate ([`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)). |
+| D11 | **`defer` is infallible; `errdefer` may fail.** `defer` follows drop's rules (no fail, no suspend); `errdefer` runs on error and cancellation exits, and its failure is suppressed ([`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)). |
+| D12 | **A destructor is checked like an entry point**: its failure set must be empty, so a fallible call inside `drop` must be handled there (logged, explicitly discarded, or the type made linear) ([`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)). |
 
 ## Three outcome classes
 
@@ -260,58 +260,6 @@ scope that opts into isolation is unwound on this rare path instead, running dro
 sync cells and abandoning linear values
 ([`lifecycle.md`: Traps: the process by default, isolated scopes on request](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)).
 
-## Cleanup
-
-- RAII / linear types ([Memory and resource management](memory-and-resources.md)) clean up on every path.
-- **`defer`** (Zig, Go, Swift): cleanup on every exit. It must be infallible and non-suspending (D11).
-- **`errdefer`** (Zig): cleanup that runs only when the scope exits with an error **or is cancelled**,
-  for example rolling back a half-built structure. It may fail; the failure is suppressed (D10).
-- Destructors, drop order, `defer` and `errdefer` are specified in
-  [`memory-and-resources.md`: Destructors](memory-and-resources.md#destructors)–[`memory-and-resources.md`: If a destructor "errors"](memory-and-resources.md#if-a-destructor-errors).
-
-```
-let file = fs.create(tmp)?;
-errdefer fs.remove(tmp);       // only if something below fails
-write_header(file)?;
-write_body(file)?;
-fs.rename(tmp, final)?;
-```
-
-### Cleanup that can fail (D9, D10)
-
-C++ shows what goes wrong otherwise:
-- a destructor that throws during unwinding calls `std::terminate`, and since C++11 destructors are
-  implicitly `noexcept`;
-- so libraries swallow real cleanup errors (a failed flush on `fclose`), and data loss goes
-  unreported.
-
-Moddil avoids both:
-- **Drop has an empty effect set (D9).** It cannot fail, so there is nothing to throw. Fallible
-  cleanup is a linear type, which must be consumed explicitly on every path, so its error is always
-  reported ([`memory-and-resources.md`: Cleanup that can fail (why drop cannot)](memory-and-resources.md#cleanup-that-can-fail-why-drop-cannot)).
-- **No unwinding for errors** ([Performance: why C++ exceptions are slow, and why Moddil's errors aren't](#performance-why-c-exceptions-are-slow-and-why-moddils-errors-arent)), so no error is in flight while drops run.
-- **Suppressed errors (D10).** When an error path consumes a linear value and that cleanup also
-  fails, the cleanup error is attached to the primary error:
-  - the primary error stays the one that propagates and is matched on;
-  - suppressed errors appear in traces ([Traces](#traces)), in the language server ([Language server support](#language-server-support)) and in logs;
-  - they can be read from the error value (exact API open), as Java's `getSuppressed()` allows;
-  - a failure inside an `errdefer` body is suppressed in this way automatically.
-
-```
-let txn = db.begin()?
-errdefer txn.rollback()        // consumes txn on error paths; a rollback failure is suppressed
-txn.insert(order)?             // fails: the insert error propagates, with any rollback error attached
-txn.commit()?
-```
-
-- **Traps inside drop** (class 3) terminate with a full trace (D8).
-
-**If a destructor "errors", specifically:**
-1. A fallible call inside `drop` does not compile unless handled there (D12): logged, explicitly
-   discarded with a reason, or the type is made linear.
-2. Cleanup failing while an error or cancellation is in progress is suppressed onto it (D10).
-3. A trap inside `drop` terminates the process; remaining drops do not run; a second trap aborts.
-
 ## State of the art: what to take, what to avoid
 
 | Source | Take | Avoid / lesson |
@@ -320,8 +268,8 @@ txn.commit()?
 | **Zig** | Inferred error sets; `try`/`catch`; **`errdefer`**; **error return traces** | No payloads on errors |
 | **Swift** | Visible `try` at call sites; typed throws (Swift 6, SE-0413); return-channel implementation; `rethrows` | Untyped `throws` by default (fixed late) |
 | **Midori** (Joe Duffy, *The Error Model*) | Errors vs bugs split; abandonment; marked call sites; checked exceptions done right | — (the key reading) |
-| **C++** | `std::expected` (C++23); P0709 static exceptions | Table-based exceptions ([Performance: why C++ exceptions are slow, and why Moddil's errors aren't](#performance-why-c-exceptions-are-slow-and-why-moddils-errors-arent)); throwing destructors call `std::terminate`, so cleanup errors get swallowed ([Cleanup that can fail (D9, D10)](#cleanup-that-can-fail-d9-d10)) |
-| **Java try-with-resources** | **Suppressed exceptions**: a failing `close` is attached to the primary error ([Cleanup that can fail (D9, D10)](#cleanup-that-can-fail-d9-d10)) | — |
+| **C++** | `std::expected` (C++23); P0709 static exceptions | Table-based exceptions ([Performance: why C++ exceptions are slow, and why Moddil's errors aren't](#performance-why-c-exceptions-are-slow-and-why-moddils-errors-arent)); throwing destructors call `std::terminate`, so cleanup errors get swallowed ([`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)) |
+| **Java try-with-resources** | **Suppressed exceptions**: a failing `close` is attached to the primary error ([`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)) | — |
 | **Roc / OCaml polymorphic variants** | **Open structural unions with payloads, inferred** | — |
 | **Koka / Effekt / OCaml 5** | Errors as effects; handlers; effect polymorphism | Resumable handlers for ordinary errors (cost) |
 | **Common Lisp conditions** | Restarts: recovery decided by the handler without unwinding | Complexity |
@@ -370,8 +318,8 @@ The problem and the state of the art that led to this design.
   propagate; inferred error sets (Zig) to reduce boilerplate; mandatory handling; error return traces
   for free; a clear split between *recoverable errors* and *bugs* (contract violations → abort the
   task, not the process, in structured concurrency). Error propagation must also respect linear
-  values ([Memory and resource management](memory-and-resources.md)): a path that propagates an error while holding an open transaction has to consume it.
-  Absence is *not* an error: "not found" is an `Option` ([Null and invalid states](null-safety.md)), and `or_fail` converts explicitly.
+  values ([Memory: ownership, borrowing and sharing](memory.md)): a path that propagates an error while holding an open transaction has to consume it.
+  Absence is *not* an error: "not found" is an `Option` ([`types.md`: Optional values and invalid states](types.md#optional-values-and-invalid-states)), and `or_fail` converts explicitly.
 
 ## References
 

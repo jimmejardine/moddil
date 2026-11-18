@@ -78,7 +78,7 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
      Swift's source-compatibility suite). Reproducible builds and the shared cache
      ([`build-times.md`: Cached builds](build-times.md#cached-builds)) keep this cheap.
 8. **Standard mods** follow semver, with the bump computed by `moddil diff`. They remove items only
-   across editions, always with replacement rules ([`mods.md`](mods.md)).
+   across editions, always with replacement rules ([`stdlib.md`](stdlib.md)).
 9. **Agents and training data.**
    - The surface syntax stays small and stable ([`syntax.md`](syntax.md)).
    - Editions, deprecations and migration rules are machine-readable through the agent API
@@ -86,7 +86,7 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
    - The compiler recognises constructs from older editions and offers the machine-applicable fix,
      so models trained on older code still converge quickly.
 10. **Binary and wire compatibility.** There is no stable native ABI; artefacts are rebuilt from
-    source through the caches ([`paradigms.md`](paradigms.md)). WIT components and wire contracts are
+    source through the caches ([`types.md`](types.md)). WIT components and wire contracts are
     versioned and checked for compatibility ([`distribution.md`](distribution.md)).
 
 ## Fit with the reference examples

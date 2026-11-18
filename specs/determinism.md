@@ -36,7 +36,7 @@ What it enables:
 
 ## Deterministic simulation testing
 
-`moddil/runtime-sim` ([`concurrency.md`: Runtime contract](concurrency.md#runtime-contract)) provides:
+`moddil/runtime-sim` ([`runtime.md`: Runtime contract](runtime.md#runtime-contract)) provides:
 - a **seeded, single-threaded scheduler**;
 - **virtual time**, advanced **only when every task is blocked** (quiescence), jumping straight to the
   next timer, so hours of simulated time run in milliseconds;
@@ -154,7 +154,7 @@ The same source, lockfile and toolchain produce **bit-identical artefacts**:
 - hash-pinned dependencies.
 
 Anyone can rebuild a tagged version of a mod and compare the bytes ([Package management and supply-chain security](packages-and-supply-chain.md)). The bootstrap fixed point
-([`bootstrap.md`: Staged bootstrap](bootstrap.md#staged-bootstrap)–[`bootstrap.md`: Bootstrapping after self-hosting](bootstrap.md#bootstrapping-after-self-hosting)) uses the same machinery. Prior art: Go toolchains are fully
+([`compiler.md`: Staged bootstrap](compiler.md#staged-bootstrap)–[`compiler.md`: Bootstrapping after self-hosting](compiler.md#bootstrapping-after-self-hosting)) uses the same machinery. Prior art: Go toolchains are fully
 reproducible from Go 1.21; Debian Reproducible Builds; Nix and Guix; Bazel's hermetic builds.
 
 Tests run in a shuffled order and print the seed (Go's `-shuffle`), so order dependence is found and

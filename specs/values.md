@@ -1,7 +1,7 @@
 # Values: Copy, Clone and Equality
 
 > **Status:** decided direction, details open. Listed in the [index](README.md). Builds on
-> [`memory-and-resources.md`](memory-and-resources.md). Snippets are **illustration only**.
+> [`memory.md`](memory.md). Snippets are **illustration only**.
 
 ## Summary
 
@@ -49,7 +49,7 @@
 ### Moves by default
 
 Assignment, argument passing and returning **move** a value: the source can't be used afterwards
-([`memory-and-resources.md`](memory-and-resources.md)). `Copy` types are the only exception.
+([`memory.md`](memory.md)). `Copy` types are the only exception.
 
 ### Opt-in `Copy`, with a size cap
 
@@ -74,7 +74,7 @@ Assignment, argument passing and returning **move** a value: the source can't be
   independent value with the same contents**. Its cost grows with the value.
 - A derived `Clone` duplicates the **owned** parts field by field and **shares** any `Rc` fields.
   This is safe, and observably the same as copying, because rc contents are immutable
-  ([`memory-and-resources.md`](memory-and-resources.md)).
+  ([`memory.md`](memory.md)).
 - Linear types do not derive `Clone` (a second copy would be a second obligation); they may
   implement it by hand where that makes sense. Sync cells are never `Clone`.
 

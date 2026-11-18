@@ -1,7 +1,8 @@
-# Memory and Resources
+# Memory: ownership, borrowing and sharing
 
 > **Status:** decided direction, details open. Indexed in [`README.md`](README.md) and is the
-> foundation for CPU concurrency in [`concurrency.md`](concurrency.md). Snippets are **illustration
+> foundation for CPU concurrency in [`concurrency.md`](concurrency.md). Destruction, cleanup and linear
+> types are in [`resources.md`](resources.md). Snippets are **illustration
 > only**; no syntax is committed.
 
 ## Summary
@@ -14,9 +15,9 @@
 | **`.to_rc()` to share** | The only way to hold more than one pointer to a value is to convert it to a reference-counted handle. The cost is visible at that point. |
 | **rc is immutable inside** | Shared mutation only through thread-safe *sync cells* (`Mutex`, `Atomic<T>`, …). |
 | **Biased RC** | rc is always thread-safe, and nearly free when it stays on one thread. |
-| **Affine + linear resources** | Ordinary values auto-drop; *linear* values must be explicitly consumed. |
+| **Affine + linear resources** | Ordinary values auto-drop; *linear* values must be explicitly consumed ([`resources.md`](resources.md)). |
 | **No special constructors** | A value exists only once a literal has supplied every field. "Constructors" are ordinary functions, which may suspend or fail. |
-| **Destructors are rare and infallible** | Drop glue is generated; a hand-written `fn drop(self)` lives with its type and cannot fail or suspend. `defer` follows the same rules; `errdefer` may fail, and its error is suppressed. |
+| **Destructors are rare and infallible** | Drop glue is generated; a hand-written `fn drop(self)` lives with its type and cannot fail or suspend. `defer` follows the same rules; `errdefer` may fail, and its error is suppressed ([`resources.md`](resources.md)). |
 
 Together these give memory safety and data-race freedom without a GC, without `Send`/`Sync`
 traits and without lifetime annotations ([`concurrency.md`: No `Send` / `Sync`](concurrency.md#no-send--sync)).
@@ -31,7 +32,7 @@ traits and without lifetime annotations ([`concurrency.md`: No `Send` / `Sync`](
 - Moving transfers ownership; the source can no longer be used (checked at compile time).
 - **There are no special constructors.**
   - A value comes into existence only through a literal that supplies every field, e.g.
-    `Conn { socket, session }`. This follows from definite initialisation ([Null and invalid states](null-safety.md)).
+    `Conn { socket, session }`. This follows from definite initialisation ([`types.md`: Optional values and invalid states](types.md#optional-values-and-invalid-states)).
   - The literal is pure: it cannot suspend or fail.
   - With private fields, only the type's own module can write the literal, so its creator
     functions enforce the invariants.
@@ -39,102 +40,13 @@ traits and without lifetime annotations ([`concurrency.md`: No `Send` / `Sync`](
     acquire resources.
   - There is no `this` before the literal, so a partially constructed object can never be observed.
   - If creation fails or is cancelled midway, the resources acquired so far are owned locals and
-    are dropped. Linear ones must be consumed on that path ([Resources: affine and linear](#resources-affine-and-linear)).
+    are dropped. Linear ones must be consumed on that path ([Resources: affine and linear](resources.md#resources-affine-and-linear)).
   - The asymmetry is deliberate: creation may suspend, drop may not. Async teardown is a linear
-    type's explicit `close` or `commit` ([Resources: affine and linear](#resources-affine-and-linear), [`concurrency.md`: Construction may suspend; drop may not](concurrency.md#construction-may-suspend-drop-may-not)).
+    type's explicit `close` or `commit` ([Resources: affine and linear](resources.md#resources-affine-and-linear), [`resources.md`: Construction may suspend; drop may not](resources.md#construction-may-suspend-drop-may-not)).
 - **Drop must not suspend and must not fail.** The compiler checks this: a drop implementation has
-  an empty effect set. Finalisation that can fail or needs a decision is a linear type ([Resources: affine and linear](#resources-affine-and-linear), [Cleanup that can fail (why drop cannot)](#cleanup-that-can-fail-why-drop-cannot)).
+  an empty effect set. Finalisation that can fail or needs a decision is a linear type ([Resources: affine and linear](resources.md#resources-affine-and-linear), [`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)).
 - Unique ownership covers more than people expect: singly linked lists, trees, ASTs with owned
   children and builder patterns need no rc at all.
-
-### Destructors
-
-**Most types never write one.** The compiler generates *drop glue*: dropping a value drops each of
-its fields. A struct of `String`, `Vec` and `File` needs no code at all.
-
-A **hand-written destructor** is only for a type that owns a raw resource: a C handle, raw memory, a
-NIC ring slot. In practice that is mostly low-level mods.
-
-- **It lives with the type.** It implements the core `Drop` trait, and **only the type's own module
-  may implement it**, so nobody else can change what dropping your type does.
-- **Signature: `fn drop(self)`.** The destructor consumes the value and may
-  **destructure** it to move fields out. Destructuring `self` inside `drop` does not call `drop`
-  again; fields that are not moved out are dropped by glue afterwards. (Rust's `drop(&mut self)`
-  cannot move fields out, which forces `Option::take` and `ManuallyDrop` workarounds.)
-- **Effect set: empty**, checked by the compiler (no `fail`, `suspend` or I/O). Two things are still
-  allowed: freeing memory, and the write-only observability effects `log`, `span` and `metric`
-  ([`observability.md`: Observability effects](observability.md#observability-effects)), so a destructor can report a problem.
-- **A destructor is checked like an entry point** ([`error-handling.md`: Entry points must handle everything (R3)](error-handling.md#entry-points-must-handle-everything-r3)):
-  its failure set must be empty. A fallible call inside it must be handled there ([If a destructor "errors"](#if-a-destructor-errors)).
-
-```rust
-impl Drop for Socket {
-    fn drop(self) {
-        let Socket { fd, buf } = self;            // move fields out; no recursive drop of Socket
-        let r = c::close(fd);                     // C close can report an error…
-        if let Err(e) = r { log.warn(fmt"close failed: {e}") }   // …handled here: logged
-    }                                             // buf is dropped by glue here
-}
-```
-
-### When drops run
-
-- At the end of a scope, in **reverse declaration order**.
-- When a variable is reassigned: the old value is dropped.
-- On every exit path: early `return`, `?` propagation, and cancellation
-  ([`concurrency.md`: Cancellation and shutdown](concurrency.md#cancellation-and-shutdown)).
-- When the last `Rc` is released, on whichever thread or task releases it ([Biased reference counting](#biased-reference-counting)).
-- **A moved-from value is never dropped.** If a value is moved on only some paths, a hidden drop flag
-  decides at runtime; the compiler removes it wherever the path is known.
-- **Temporaries are dropped at the end of their statement.** There are no temporary-lifetime-extension
-  rules (a known source of surprise in Rust); bind a value with `let` to keep it.
-- `drop(x)` is not special: it is an ordinary function taking its argument by value, so it ends
-  `x` early.
-- **Fields are dropped in reverse declaration order**, mirroring the literal that built them (as
-  C++ does; Rust drops fields in declaration order).
-
-### `defer` and `errdefer`
-
-RAII covers resources that have a type. `defer` covers one-off cleanup that doesn't deserve one:
-restoring a flag, decrementing a gauge, releasing a lock obtained through FFI.
-
-```
-defer { metrics.in_flight.dec() }        // runs on every exit: success, error, cancellation
-errdefer fs.remove(tmp)                  // runs only on error and cancellation exits
-```
-
-- `defer` blocks, `errdefer` blocks and drops share one **last-in, first-out order** by declaration
-  point, so cleanup always unwinds in the reverse of setup.
-- **`defer` follows drop's rules**: an empty effect set, so it cannot fail or suspend. `defer f.close()`
-  on a fallible `close` is rejected, which steers you to an explicit `close()?` or a linear type. This
-  closes Go's `defer f.Close()` hole at compile time.
-- **`errdefer` may fail.** It only runs on paths that already carry a primary error or cancellation,
-  so its own failure is **suppressed** onto that outcome ([`error-handling.md`](error-handling.md)
-  D10). On cancellation paths it may also suspend, inside a shielded, deadline-bounded scope
-  ([`concurrency.md`: Cancellation and shutdown](concurrency.md#cancellation-and-shutdown)). It is where fallible cleanup such as `txn.rollback()`
-  belongs.
-- A `defer` or `errdefer` body **borrows what it mentions until the scope ends**, so the borrow
-  checker rejects moving `x` away and then cleaning up `x`.
-
-### If a destructor "errors"
-
-There are three cases, each with a precise answer:
-
-1. **A fallible operation inside `drop`** (e.g. C's `close()` returns an error code). It does not
-   compile unless it is dealt with inside the destructor, because a destructor's failure set must be
-   empty. The author can:
-   - handle it locally, for example log it and continue (as in [Destructors](#destructors));
-   - discard it explicitly, with a reason that shows up in review;
-   - or make the type **linear** with an explicit `close() with fail(E)`, so callers must handle it.
-
-   Silently swallowing the error (C++, Rust's `BufWriter`) and `std::terminate` are both impossible.
-2. **Cleanup that fails while an error or cancellation is already in progress.** Only `errdefer`
-   bodies and explicit cleanup on those paths can fail; their errors are **suppressed** onto the
-   primary outcome: never lost, never fatal ([Cleanup that can fail (why drop cannot)](#cleanup-that-can-fail-why-drop-cannot)).
-3. **A trap inside `drop`** (out-of-bounds, division by zero, out of memory, an FFI fault). This is a
-   class-3 crash ([`error-handling.md`: Three outcome classes](error-handling.md#three-outcome-classes)): the process terminates with a full
-   trace and flight-recorder dump; **remaining drops do not run**, because there is no unwinding; a
-   trap while already handling a trap aborts immediately.
 
 ## Borrowing
 
@@ -273,10 +185,10 @@ Notes:
   count ([`concurrency.md`: Tasks and borrowing](concurrency.md#tasks-and-borrowing)), removing most of the clones Rust needs for
   `'static` spawns.
 - The merge-queue poll is part of the runtime-handler contract ([R2](requirements.md#firm-requirements-decided),
-  [`concurrency.md`: Runtime contract](concurrency.md#runtime-contract)). On single-threaded WASM every count is the owner count.
+  [`runtime.md`: Runtime contract](runtime.md#runtime-contract)). On single-threaded WASM every count is the owner count.
 
 **Proposed: bias to the owner task, not the owner thread.** Tasks migrate between worker threads
-([`concurrency.md`: Tasks, threads and executors](concurrency.md#tasks-threads-and-executors)), and with a thread id in the header a migrated task would
+([`runtime.md`: Tasks, threads and executors](runtime.md#tasks-threads-and-executors)), and with a thread id in the header a migrated task would
 lose the fast path. Instead:
 
 1. **The header stores the owner *task* id.** Only the owning task touches the non-atomic owner
@@ -300,7 +212,7 @@ lose the fast path. Instead:
 The remaining slow case is an rc used heavily by many tasks at once (cache-line contention), which
 biasing never addressed; borrowing does.
 - An rc's destructor runs on **whichever thread drops the last reference**. Destructors must not
-  rely on thread identity. This is one reason linear values cannot be rc'd ([Resources: affine and linear](#resources-affine-and-linear)).
+  rely on thread identity. This is one reason linear values cannot be rc'd ([Resources: affine and linear](resources.md#resources-affine-and-linear)).
 
 ## Zero-copy I/O
 
@@ -335,86 +247,6 @@ fn on_rx(pkt: Packet) with net {
 pressure, not unsafety. The runtime mod should expose ring occupancy, and offer an explicit
 `.detach()` that copies the payload out for long-term storage.
 
-## Resources: affine and linear
-
-- **Affine (default):** a value is used at most once and dropped automatically. Files, sockets,
-  buffers, lock guards.
-- **Linear (opt-in per type):** a value **must** be consumed by one of its designated operations,
-  or the program does not compile. For resources whose finalisation can fail or needs a decision.
-
-```rust
-linear struct Txn { … }
-impl Txn {
-    fn commit(self) -> Result<(), DbError>;
-    fn rollback(self);
-}
-
-fn checkout(db: &Db) with db, fail(DbError) {
-    let txn = db.begin();
-    txn.insert(order)?;       // ✗ unless the error path also consumes txn
-    txn.commit()?;
-}
-```
-
-Rules:
-- Linear values **cannot be `.to_rc()`'d**: the last-drop point of an rc is not known statically,
-  and it may be on any thread.
-- Every control-flow path, including error propagation, must consume a linear value. Error
-  propagation (`?`) on a path holding a linear value requires an explicit handler for it
-  (exact syntax open; see [Error handling](error-handling.md)).
-- **Cancellation paths are checked like error paths**: a task observes cancellation only at a
-  suspension point, and must consume its linear values on that path too, typically with
-  `errdefer txn.rollback()` ([`concurrency.md`: Cancellation and shutdown](concurrency.md#cancellation-and-shutdown)).
-- **Every linear type has an `abandon` operation**: infallible and non-suspending (for a
-  transaction, drop the connection so the database rolls back). It runs only when an isolated
-  scope traps ([`lifecycle.md`: Traps: the process by default, isolated scopes on request](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)).
-
-### Cleanup that can fail (why drop cannot)
-
-**The problem in C++.**
-- Destructors run during stack unwinding. If one throws while another exception is in flight, C++
-  cannot carry two exceptions and calls `std::terminate`.
-- Since C++11, destructors are implicitly `noexcept`, so a throw terminates even when nothing else
-  is in flight. The rule is enforced at runtime, by killing the process.
-- Cleanup can genuinely fail: `fclose` flushing to a full disk, a network filesystem reporting a
-  write error on close, a commit. Because destructors can't report it, libraries swallow the error,
-  and the program believes its data was written.
-- A throwing member destructor can leave the remaining members and bases uncleaned.
-
-**Elsewhere.**
-- Rust: `Drop` cannot return an error, a panic in drop while already panicking aborts, and
-  `BufWriter` silently discards flush errors on drop.
-- Go: `defer f.Close()` routinely ignores the error.
-- Java: try-with-resources is the best mainstream answer. It records a failing `close` as a
-  *suppressed* exception on the primary one.
-
-**Moddil's rules.**
-1. **Drop has an empty effect set, checked by the compiler.** A drop implementation cannot fail,
-   suspend, or call anything that does. C++'s `noexcept` becomes a compile error, not a
-   `std::terminate`.
-2. **Fallible cleanup is a linear type.** Written files, buffered writers, transactions and TLS
-   streams must be explicitly consumed (`close`, `commit`, `rollback`, `abort`). These are ordinary
-   functions that may fail and suspend. Since every path must consume the value, the cleanup error
-   is always reported.
-3. **Errors do not unwind.** `fail` is compiled to the return channel
-   ([`error-handling.md`: Performance: why C++ exceptions are slow, and why Moddil's errors aren't](error-handling.md#performance-why-c-exceptions-are-slow-and-why-moddils-errors-arent), [`error-handling.md`: Strawman (not yet decided)](error-handling.md#strawman-not-yet-decided)), so no error is "in flight" while drops run.
-   The double-fault mechanism does not exist.
-4. **Two errors at once are explicit, and nothing is lost.** On an error path, a linear value is
-   consumed by an `errdefer` (or a handler). If that cleanup fails too, its error is attached to the
-   primary error as **suppressed** rather than replacing it or terminating
-   ([`error-handling.md`: Cleanup](error-handling.md#cleanup)).
-5. **Traps inside drop are crashes** (class 3: out of memory, ÷ 0, out of bounds). They terminate
-   with a full trace, as in Rust. They are honest, never silently swallowed.
-6. **No flush-on-drop trap.** A drop cannot call a fallible `flush`, so a type like Rust's
-   `BufWriter` must be linear, or its author must discard the error explicitly and visibly.
-
-```
-let out = fs.create(path)?           // linear: must be closed or aborted
-errdefer out.abort()                 // consumes out on error paths; if abort fails, its error is suppressed
-out.write(data)?
-out.close()?                         // a flush/close failure surfaces here, not in a destructor
-```
-
 ## Cost table
 
 The full cost model, including calls, effects and checks, is in
@@ -448,7 +280,6 @@ No case required first-class references with explicit lifetimes.
   and arenas? Does an `Rc` remember its allocator? (Proposed answer in
   [`freestanding.md`: Memory without an operating system](freestanding.md#memory-without-an-operating-system).)
 - Should `Weak` be core or a mod? (It needs header support, so probably core.)
-- Linear values on error paths: what is the least noisy explicit handling?
 - Can the borrow check give diagnostics good enough for LLM agents ([LLMs as first-class programmers](agent-interface.md)) — e.g.
   machine-applicable "insert `.to_rc()` here" fixes?
 - Is there still a place for an optional per-task/per-actor collector, or does this model make it

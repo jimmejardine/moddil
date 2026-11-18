@@ -55,7 +55,7 @@ data, time and order routing are effects, and only their handlers differ.
   the core language.
 - **Capabilities ([Package management and supply-chain security](../packages-and-supply-chain.md)).** Research code physically cannot reach the live `orders` capability; only a
   deployment to `execution` grants it. A third-party analytics mod cannot touch the network.
-- **Predictable latency ([Memory and resource management](../memory-and-resources.md)).** No GC; arenas and pools; **`#[no_alloc]` and `#[no_lock]`** that the
+- **Predictable latency ([Memory: ownership, borrowing and sharing](../memory.md)).** No GC; arenas and pools; **`#[no_alloc]` and `#[no_lock]`** that the
   compiler checks on the hot path ([`performance.md`: Hot-path guarantees](../performance.md#hot-path-guarantees)); no hidden locks; core pinning and NUMA-aware placement.
 - **Lock-free concurrency ([Concurrency across CPUs](../concurrency.md)).** SPSC/MPMC rings between feed, strategy and gateway threads;
   thread-per-core designs; busy-polling.

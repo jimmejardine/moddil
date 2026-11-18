@@ -1,7 +1,7 @@
-# Docs, Examples and Tests Next to the Code
+# Docs next to the code
 
 > **Status:** decided direction, details open. Expands [Tooling uniformity](toolchain.md) and [LLMs as first-class programmers](agent-interface.md),
-> and gives the tools of [`correctness.md`](correctness.md) one place to live. Snippets are
+> Examples, tests and benchmarks are in [`testing.md`](testing.md). Snippets are
 > **illustration only**; no syntax is committed.
 
 ## Summary
@@ -11,12 +11,8 @@
 | **Docs are checked** | `///` Markdown is parsed into the canonical AST. Parameter names, links and error docs are checked against the code. |
 | **Overviews map the code** | Mod, module (`//!`) and declared-group overviews explain the big picture; required for every public module; every public item joins a group with `#[group(…)]`, and private items inherit the groups of the items that use them; checked links, cited evidence and a runnable tour keep them current. |
 | **Docs are partly generated** | Effects, capabilities, the error set, contracts, traps and the assurance level are written by the compiler, so they never go stale. |
-| **Examples are tests** | Examples carry expected results (`// => value`), compile in the same build, and run under the deterministic simulation runtime. |
-| **Tests name what they test** | `test "…" for withdraw { }` sits next to its subject, with private access. Tooling knows every test's subject. |
-| **Correctness tools attach the same way** | Property tests, fuzz targets, snapshots, interleaving tests, model-checking harnesses and proofs all attach to a subject. Contracts become tests automatically. |
-| **Only affected tests run** | Test impact analysis plus results cached by content hash. |
+| **Examples are tests** | Examples in docs are checked and run as tests ([`testing.md`: Examples are tests](testing.md#examples-are-tests)). |
 | **Two audiences** | `///` is for users of an API; `note` is for maintainers (why). |
-| **Benchmarks attach too** | `bench "…" for f { }`; performance deltas appear in semantic diffs. |
 
 ## What Rust gets right, and where it stops
 
@@ -85,7 +81,7 @@ AST ([LLMs as first-class programmers](agent-interface.md)) instead of treating 
 - contracts (`requires`, `ensures`, invariants; [`correctness.md`: Contracts as syntax](correctness.md#contracts-as-syntax));
 - traps the function can raise (bounds, division, `unreachable`), or a proof that it raises none
   (assurance level L1, [`correctness.md`: Assurance levels per mod](correctness.md#assurance-levels-per-mod));
-- attached tests, properties and benchmarks, with mutation scores ([Correctness tools in the same place](#correctness-tools-in-the-same-place)).
+- attached tests, properties and benchmarks, with mutation scores ([Correctness tools in the same place](testing.md#correctness-tools-in-the-same-place)).
 
 **Coverage policy** is per mod and can follow its assurance level: for example, every public item
 documented with at least one example at L1 and above.
@@ -180,66 +176,10 @@ this one uses and is used by. The documentation page for a module combines the t
    at public items. They target definitions, so renames update them.
 2. **Cited evidence.** An invariant stated in prose links to the contract or test that enforces it
    (`[[OrderBook::no_cross]]`). If the evidence is removed, the link breaks the build.
-3. **A runnable tour.** The overview's example is compiled and run like any other example ([Examples are tests](#examples-are-tests)), so
+3. **A runnable tour.** The overview's example is compiled and run like any other example ([Examples are tests](testing.md#examples-are-tests)), so
    when the main flow changes, the overview fails until it is updated.
 4. **No orphans.** Every public item names a group, so the overviews and groups remain a real map of
    the module.
-
-## Examples are tests
-
-- An example line may end with `// => value` (or `// => fail(E)`) as its expected result, like
-  Python's and Elixir's doctests and Go's `// Output:`. Larger values use snapshot-style expected
-  output stored next to the example.
-- Examples compile **in the same build** as the mod, so they are fast and can use private helpers.
-- Examples run under the **deterministic simulation runtime** ([`determinism.md`](determinism.md)):
-  an example that "fetches a URL" gets a simulated network, so docs never flake and never need the
-  internet.
-- When a signature changes, broken examples are compile errors immediately, not stale text.
-- Every example has a **Run** button that opens it in the in-browser playground
-  ([`toolchain.md`: Playground: learning without a REPL](toolchain.md#playground-learning-without-a-repl)).
-
-## Attached tests
-
-- `test "name" for subject { … }` sits next to its subject (like Zig's `test` blocks and Pyret's
-  `where:` clauses) and can see private items in its module.
-- Tests without a single subject are module-level `test "name" { … }` blocks; larger scenarios live in
-  separate integration-test modules.
-- **Tooling knows each test's subject**:
-  - "which tests cover `withdraw`?" is a query;
-  - the semantic diff ([Diffs, code review and version control](semantic-vcs.md)) reports "**`withdraw` changed, but none of its tests did**",
-    a sharp signal when reviewing agent-written changes.
-- **Tests use effect handlers, not mocks.** The simulation runtime is the default: virtual time,
-  seeded randomness, simulated network and filesystem. Fakes are scoped handlers
-  ([`determinism.md`: Handlers are scoped, not global](determinism.md#handlers-are-scoped-not-global)), not global monkey-patching.
-- Tests, examples, notes and benchmarks are **excluded from the mod's interface hash and from release
-  artefacts**, so editing a test never rebuilds dependents ([`build-times.md`](build-times.md)).
-
-## Correctness tools in the same place
-
-The tools of [`correctness.md`](correctness.md) attach to subjects in the same way, so a reader sees a
-function's whole specification and evidence in one place:
-
-| Block / mechanism | What it is | See |
-|---|---|---|
-| `property "…" for f` | Property-based test; generators derived from types, automatic shrinking | [`correctness.md`: Property-based testing, with contracts as free oracles](correctness.md#property-based-testing-with-contracts-as-free-oracles) |
-| **Contracts as implicit tests** | Every function with contracts gets an automatic property test: generate inputs satisfying `requires`, check `ensures` and invariants (Eiffel AutoTest). Listed in the docs. | [`correctness.md`: Property-based testing, with contracts as free oracles](correctness.md#property-based-testing-with-contracts-as-free-oracles) |
-| `fuzz "…" for f` | Coverage-guided fuzz target; failing inputs are saved as attached regression tests | [`correctness.md`: Fuzzing, doc tests and snapshot tests](correctness.md#fuzzing-doc-tests-and-snapshot-tests) |
-| Snapshot expectations | For comptime expansions and generated code | [`correctness.md`: Fuzzing, doc tests and snapshot tests](correctness.md#fuzzing-doc-tests-and-snapshot-tests) |
-| `test.interleavings "…" for f` | Explores task interleavings under the simulation runtime | [`correctness.md`: Systematic concurrency testing](correctness.md#systematic-concurrency-testing) |
-| Model-checking harnesses, `proof` blocks | Bounded model checking and deductive proofs; erased from builds | [`correctness.md`: Proofs in Moddil itself](correctness.md#proofs-in-moddil-itself), [`correctness.md`: Bounded model checking](correctness.md#bounded-model-checking) |
-| **Mutation score per declaration** | How many deliberate bugs in `f` its tests catch: test *strength*, not just presence. Shown in docs and PR summaries. | [`correctness.md`: Mutation testing](correctness.md#mutation-testing) |
-| Miri-style mode | A test-runner mode that runs tests on the interpreter with extra checks | [`correctness.md`: A Miri-style checker](correctness.md#a-miri-style-checker) |
-
-## Test impact and caching
-
-- Builds are content-addressed, and the compiler knows the call graph and every test's subject. So
-  `moddil test` runs **only the tests whose inputs changed** ([`build-times.md`: Compiler architecture](build-times.md#compiler-architecture)).
-- Results are **cached by hash**, locally or in a shared remote cache, and reused across machines and
-  CI runs.
-- Under the simulation runtime tests are deterministic, so a cached pass is trustworthy. Tests that
-  use real effects are marked and re-run according to policy.
-- For agents iterating dozens of times per task, this turns "run the tests" from minutes into
-  seconds.
 
 ## Maintainer notes
 
@@ -249,14 +189,6 @@ function's whole specification and evidence in one place:
 - They are shown to maintainers, reviewers and agents, and kept out of user-facing API docs.
 - This is the "intent" half of [LLMs as first-class programmers](agent-interface.md); where *provenance* (human or agent, model version)
   lives is still open there.
-
-## Benchmarks
-
-- `bench "…" for f { … }` attaches a benchmark to its subject (Criterion-style statistics).
-- Results are recorded per build hash, so the semantic diff can report **performance deltas** for
-  changed functions ([Diffs, code review and version control](semantic-vcs.md)).
-- Noise handling: repeated runs, confidence intervals, and dedicated or pinned machines for
-  benchmarks that gate merges.
 
 ## For agents and tools
 
@@ -283,11 +215,8 @@ function's whole specification and evidence in one place:
 
 ## Open questions
 
-- Syntax for attaching tests to methods, trait implementations and generic instantiations.
-- Shared fixtures and test-only helpers: how they are declared and kept out of release builds.
 - Default doc-coverage thresholds per assurance level.
 - Where notes and provenance live: in the source, or in a sidecar keyed by definition ID?
-- Benchmark stability on shared CI machines.
 - Should the semantic diff flag a module whose public interface changed but whose overview wasn't
   edited?
 

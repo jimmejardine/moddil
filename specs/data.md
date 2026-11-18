@@ -97,7 +97,7 @@ struct Order {
 ### Parse, don't validate
 
 - Decoding untrusted bytes produces **validated types**: refinements and newtypes
-  ([`null-safety.md`](null-safety.md), [`correctness.md`](correctness.md)). An `Order` with a
+  ([`types.md`](types.md), [`correctness.md`](correctness.md)). An `Order` with a
   negative quantity never exists.
 - Failures are typed: `fail(DecodeError)`, with the path to the bad field (`orders[3].qty`).
 - This is the untrusted-data rule of [`distribution.md`: Trust, secrets and capabilities](distribution.md#trust-secrets-and-capabilities)
@@ -107,7 +107,7 @@ struct Order {
 
 Validated data can be read in place, without copying: generated accessor views, owning views
 (`Parsed<T>`) and rc slices, as described in
-[`memory-and-resources.md`: Zero-copy I/O](memory-and-resources.md#zero-copy-io). The binary format,
+[`memory.md`: Zero-copy I/O](memory.md#zero-copy-io). The binary format,
 and SBE- and FlatBuffers-style layouts, support generated views.
 
 ### Databases: migrations-first
@@ -145,7 +145,7 @@ fn place(order: Order) -> OrderId with db, fail(DbError) {
 - `db` is a **context effect** provided by `moddil/sql`; a connection pool is its handler
   ([`effects-and-capabilities.md`](effects-and-capabilities.md)).
 - **Transactions are linear values**: they must be committed or rolled back
-  ([`memory-and-resources.md`: Resources: affine and linear](memory-and-resources.md#resources-affine-and-linear)).
+  ([`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear)).
 
 ### Local storage
 

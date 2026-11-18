@@ -1,6 +1,6 @@
 # Closures and Lambdas
 
-> **Status:** mostly follows from decided direction in [`memory-and-resources.md`](memory-and-resources.md),
+> **Status:** mostly follows from decided direction in [`memory.md`](memory.md),
 > [`concurrency.md`](concurrency.md) and [`error-handling.md`](error-handling.md). Open points are
 > marked. Syntax follows [`syntax.md`](syntax.md) (Rust-based).
 
@@ -31,7 +31,7 @@ fn sync_all(index: &Map<Path, Meta>, cache: &mut Cache) -> u64 {
 
 | Rust pain | Cause | Moddil |
 |---|---|---|
-| `\|x\| async move { … }` cannot borrow its argument or its captures; higher-ranked lifetimes on futures; async closures only stable since 1.85; still no way to say "the returned future is `Send`" | Async means returning a future value, so every async closure returns a state machine with lifetimes | Suspension is an **effect** ([Effects and capabilities as a unifying idea](effects-and-capabilities.md), [`concurrency.md`: Construction may suspend; drop may not](concurrency.md#construction-may-suspend-drop-may-not)). A suspending lambda is an ordinary lambda with `suspend` in its effects. There is no future type, so no extra lifetimes. |
+| `\|x\| async move { … }` cannot borrow its argument or its captures; higher-ranked lifetimes on futures; async closures only stable since 1.85; still no way to say "the returned future is `Send`" | Async means returning a future value, so every async closure returns a state machine with lifetimes | Suspension is an **effect** ([Effects and capabilities as a unifying idea](effects-and-capabilities.md), [`resources.md`: Construction may suspend; drop may not](resources.md#construction-may-suspend-drop-may-not)). A suspending lambda is an ordinary lambda with `suspend` in its effects. There is no future type, so no extra lifetimes. |
 | Separate APIs: `for_each`, `try_for_each`, `StreamExt::for_each`, `for_each_concurrent` | APIs are coloured by `Result` and `async` | **One `visit`**, generic over the closure's effects ([`error-handling.md`: Why `Result`-only languages duplicate higher-order APIs](error-handling.md#why-result-only-languages-duplicate-higher-order-apis)) |
 | `?` inside a closure exits the closure, not the enclosing function | `Result` is a value | `fail` is an effect, so `?` propagates through `visit` to the caller |
 | `'static`, `move` and `Arc::clone` for spawned closures | Tasks can outlive their spawner | Structured concurrency: child closures are non-escaping and borrow freely ([`concurrency.md`: Tasks and borrowing](concurrency.md#tasks-and-borrowing)) |
@@ -39,7 +39,7 @@ fn sync_all(index: &Map<Path, Meta>, cache: &mut Cache) -> u64 {
 | A closure that touches `self` conflicts with iterating `self.items` | Captures and method calls borrow the whole of `self` | Closures capture individual field paths; methods can declare the fields they touch ([Capturing parts of `self`](#capturing-parts-of-self)) |
 | `Fn`/`FnMut`/`FnOnce` bounds tangled with `'static`, `Send` and lifetimes | Closure traits carry lifetime and thread-safety obligations | The same three traits, with the same meaning, but no lifetimes, `Send` or `'static` ([Closure parameters: `Fn`, `FnMut`, `FnOnce`](#closure-parameters-fn-fnmut-fnonce)) |
 | `Box<dyn Fn …>`; `impl Trait` not allowed in struct fields | Storing closures needs type erasure | Storing a closure is explicit (`Box<dyn Fn …>`), and its type names its effects ([Stored (escaping) closures](#stored-escaping-closures)) |
-| Every async closure becomes its own state machine; future sizes bloat | Stackless async | With stack switching, a suspended lambda's frame sits on the task's stack ([`bootstrap.md`: WASM concurrency lowering](bootstrap.md#wasm-concurrency-lowering)) |
+| Every async closure becomes its own state machine; future sizes bloat | Stackless async | With stack switching, a suspended lambda's frame sits on the task's stack ([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)) |
 
 ## Closure parameters: `Fn`, `FnMut`, `FnOnce`
 
@@ -61,7 +61,7 @@ needed.
 - A closure passed as an `impl Fn…` parameter is **non-escaping** (Swift's model): it is
   second-class, like a borrow, and cannot be stored, returned or sent to detached work. In exchange
   it may capture shared and mutable borrows and views
-  ([`memory-and-resources.md`: Rules](memory-and-resources.md#rules), [`memory-and-resources.md`: View types](memory-and-resources.md#view-types)).
+  ([`memory.md`: Rules](memory.md#rules), [`memory.md`: View types](memory.md#view-types)).
 - To keep a closure, a function takes `Box<dyn Fn…>` instead ([Stored (escaping) closures](#stored-escaping-closures)). Its captures must then be owned.
 - **Zero cost:** no allocation. In release builds the closure is inlined or specialised; in debug
   builds it is passed with a witness table ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)).
@@ -104,7 +104,7 @@ fn refresh(&mut self) {
   disjoint fields do not conflict.
 - A method called from inside the closure normally borrows the whole of `self`. Methods can declare
   the fields they touch, so that `self.add_to_total(x)` can also be called while `self.items` is
-  being visited (view types, [`memory-and-resources.md`: View types](memory-and-resources.md#view-types)).
+  being visited (view types, [`memory.md`: View types](memory.md#view-types)).
 - *Open:* the exact syntax and rules for methods that declare their fields.
 
 ## Control flow out of a lambda
@@ -145,7 +145,7 @@ fn on_message(&mut self, h: Handler) { self.handlers.push(h) }
 
 ## Seeing suspension points
 
-There is no `await` keyword; suspension is implicit ([`concurrency.md`: Construction may suspend; drop may not](concurrency.md#construction-may-suspend-drop-may-not)).
+There is no `await` keyword; suspension is implicit ([`resources.md`: Construction may suspend; drop may not](resources.md#construction-may-suspend-drop-may-not)).
 Reviewers may still want to see where a lambda can suspend, because state in sync cells can change
 across a suspension and a lock might be held across it.
 

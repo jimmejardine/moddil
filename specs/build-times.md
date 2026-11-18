@@ -8,7 +8,7 @@
 Build speed is decided mostly by **language rules**, not by compiler cleverness. Go is fast because of
 what it forbids; Rust and C++ are slow largely because of what they allow. Moddil should:
 - lock in the language rules that make fast builds possible ([Language rules that decide build speed](#language-rules-that-decide-build-speed)), because they cannot be retrofitted;
-- build a query-based, lazy compiler that skips linking in dev builds ([Compiler architecture](#compiler-architecture)), supports **live update
+- build a query-based, lazy compiler that skips linking in dev builds ([Compiler architecture](compiler.md#compiler-architecture)), supports **live update
   of a running debug program** ([Live update (debug builds)](#live-update-debug-builds)), and caches results in four layers from a warm daemon to signed
   shared dependency artefacts ([Cached builds](#cached-builds));
 - optimise dependencies by default and keep your own code fast to compile ([Profiles](#profiles));
@@ -69,23 +69,7 @@ Both are workarounds that every serious Rust project rediscovers. Moddil should 
 9. **Cache keys are hashes of the canonical AST**, not of text, so formatting and comment changes
    invalidate nothing ([LLMs as first-class programmers](agent-interface.md), [Diffs, code review and version control](semantic-vcs.md)).
 
-## Compiler architecture
-
-- **Query-based and demand-driven** (Salsa, as in rust-analyzer), with dependencies tracked down to
-  individual **declarations** (Zig's incremental compilation goes to the same granularity). Only
-  queries whose inputs actually changed are recomputed.
-- **Lazy compilation:** only code reachable from a root (a binary, a test) is analysed and compiled,
-  as Zig does. Unused parts of large mods cost nothing.
-- **Parallel at every stage:** mods in DAG order; functions within a mod during code generation.
-- **Content-addressed, layered cache** ([Cached builds](#cached-builds)).
-- **No link step in dev builds:** functions are reached through an indirection table and compiled by
-  Cranelift in process, which also enables **live update** ([Live update (debug builds)](#live-update-debug-builds)). Release builds link normally with
-  `lld` or `mold`, with split debug info.
-- **Check-only mode:** type, effect and ownership checking without code generation, powering the
-  language server and agents ([LLMs as first-class programmers](agent-interface.md)).
-- **Test impact analysis:** the query graph knows which tests depend on a change, so only those run.
-
-### Live update (debug builds)
+## Live update (debug builds)
 
 Change code while the program keeps running. Release builds may compile slowly; the debug loop must
 not.
@@ -96,7 +80,7 @@ not.
 - A changed function is recompiled by Cranelift into new executable memory, and its table entry is
   swapped.
 - Updates are applied in **batches at safe points**, the preemption safe points of
-  [`concurrency.md`: Tasks, threads and executors](concurrency.md#tasks-threads-and-executors): all tasks pause briefly, the batch is swapped atomically,
+  [`runtime.md`: Tasks, threads and executors](runtime.md#tasks-threads-and-executors): all tasks pause briefly, the batch is swapped atomically,
   and tasks resume.
 - **Frames already running finish on the old code** (Erlang keeps a "current" and an "old" version
   in the same way). Old code is freed once no task's stack refers to it; stackful tasks make that
@@ -127,7 +111,7 @@ reports exactly where. Even layout changes then feel live in most development lo
 **Scope:** debug builds only. Production hot upgrades are a **non-goal for now**; production uses
 rolling deploys with compiler-checked compatibility between versions ([Distributed and multi-tier programs](distribution.md)).
 
-### Cached builds
+## Cached builds
 
 **Four layers, nearest first**
 

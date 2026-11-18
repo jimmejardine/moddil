@@ -50,7 +50,7 @@
 | Calling an `unsafe fn`, including raw FFI bindings ([`interop.md`](interop.md)) | Its preconditions must be met by the caller |
 | Implementing an `unsafe trait` | The implementation must uphold the trait's invariant |
 | Converting between integers and pointers | Provenance must be preserved (see [Strict provenance](#strict-provenance)) |
-| Forgetting a linear value | It discharges an obligation without fulfilling it ([`memory-and-resources.md`](memory-and-resources.md)) |
+| Forgetting a linear value | It discharges an obligation without fulfilling it ([`memory.md`](memory.md)) |
 | Unchecked operations (`get_unchecked`, `assume_init`) | They skip a check the caller must have made |
 | GPU scatter writes ([`accelerators.md`](accelerators.md)) | Writes may race |
 | Inline assembly (also needs the `asm` capability, [`freestanding.md`](freestanding.md)) | The compiler can't see what it does |
@@ -112,7 +112,7 @@ specified in [`error-handling.md`](error-handling.md) and [`numerics.md`](numeri
 ### Aliasing: the scoped-borrow model
 
 Moddil's borrows are **second-class**: they cannot be stored, so every borrow has a lexical scope
-([`memory-and-resources.md`: Borrowing](memory-and-resources.md#borrowing)). That makes the aliasing
+([`memory.md`: Borrowing](memory.md#borrowing)). That makes the aliasing
 rules much simpler than Rust's:
 
 - **Raw pointers alias freely.** Any number of raw pointers may point at the same memory, and the
@@ -122,7 +122,7 @@ rules much simpler than Rust's:
   - While a `&` is in scope, **no write** to that memory may happen.
 - The optimiser may assume `noalias` for borrows during their scope, as it does for safe code.
 - Views and owning views follow the borrow they were made from
-  ([`memory-and-resources.md`: View types](memory-and-resources.md#view-types)).
+  ([`memory.md`: View types](memory.md#view-types)).
 
 ```rust
 unsafe("p is valid and uniquely owned here") {
@@ -144,7 +144,7 @@ unsafe("p is valid and uniquely owned here") {
 
 An `unsafe trait` has an invariant the compiler can't check, so implementing it needs `unsafe impl`.
 Example: **`FromBytes`**, "every bit pattern of the right size is a valid value", which zero-copy
-views rely on ([`memory-and-resources.md`: Zero-copy I/O](memory-and-resources.md#zero-copy-io)).
+views rely on ([`memory.md`: Zero-copy I/O](memory.md#zero-copy-io)).
 Derives can implement it safely when they can check the invariant from the type's fields.
 
 ### Checking
@@ -173,7 +173,7 @@ Derives can implement it safely when they can check the invariant from the type'
 
 The goal is that **almost no application mod needs `unsafe`**. Collections, sync cells, allocators,
 runtimes and FFI wrappers live in audited standard mods
-([`mods.md`: Initial standard-mod catalogue](mods.md#initial-standard-mod-catalogue)), so
+([`stdlib.md`: Initial standard-mod catalogue](stdlib.md#initial-standard-mod-catalogue)), so
 applications get their performance without holding the capability.
 
 ## Fit check against the reference examples

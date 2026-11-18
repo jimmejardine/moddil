@@ -122,7 +122,7 @@ built on the C ABI on native targets ([`interop.md`: The C ABI, both directions]
 
 - **Cancellation crosses both ways.** Cancelling a Swift `Task`, a Kotlin coroutine or an
   `AbortSignal` cancels the Moddil task; the Moddil task's cancellation rules apply
-  ([`concurrency.md`: Cancellation and shutdown](concurrency.md#cancellation-and-shutdown)).
+  ([`lifecycle.md`: Cancellation and shutdown](lifecycle.md#cancellation-and-shutdown)).
 - **Errors are typed and complete.** Every `fail` type in an exported signature becomes a typed error
   on the other side. Nothing unwinds across the boundary; traps abort the task, which the binding
   reports as a distinct "core failed" error ([`error-handling.md`](error-handling.md)).
@@ -163,7 +163,7 @@ TypeScript UI.
 - **JS values are opaque handles** (`externref`), with no copying until a value is converted to a
   Moddil type.
 - **Promises suspend.** Calling a Promise-returning API suspends the Moddil task through JSPI until
-  the Promise settles; rejection becomes a typed failure ([`bootstrap.md`: WASM concurrency lowering](bootstrap.md#wasm-concurrency-lowering)).
+  the Promise settles; rejection becomes a typed failure ([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)).
 - **Browser access is an effect.** Touching the DOM or calling JavaScript performs the **`dom`
   effect**:
   - it is visible in signatures, so a reviewer can see which code touches the page;
@@ -173,7 +173,7 @@ TypeScript UI.
 - **Workers:** a core can run in a Web Worker (as Hashiverse's does), with the generated TypeScript
   bindings marshalling calls through `postMessage`.
 - **Packaging:** output is an ES module plus generated `.d.ts` types, usable from any bundler (Vite,
-  webpack, esbuild) ([`bootstrap.md`](bootstrap.md)). Binary size and start-up time are tracked as
+  webpack, esbuild) ([`compiler.md`](compiler.md)). Binary size and start-up time are tracked as
   release metrics for the game and web store.
 
 ## Mobile packaging

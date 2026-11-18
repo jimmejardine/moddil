@@ -24,7 +24,7 @@ interoperate with a running network built in another language.
 **Phase A: Moddil reference client.**
 - **CLI/native client first, browser client second.** The early toolchain targets native and WASI on
   Wasmtime; the browser needs the JSPI lowering, which comes later (see
-  [`../bootstrap.md`: Milestones](../bootstrap.md#milestones)–[`../bootstrap.md`: Wasmtime as the short-term reference runtime](../bootstrap.md#wasmtime-as-the-short-term-reference-runtime)).
+  [`../roadmap.md`: Milestones](../roadmap.md#milestones)–[`../compiler.md`: Wasmtime as the short-term reference runtime](../compiler.md#wasmtime-as-the-short-term-reference-runtime)).
 - Smaller scope than a server.
 - Must speak the protocol **on the wire** with existing Rust servers. This is a strong test of
   compiler-checked wire contracts against a protocol Moddil does not own ([Interoperability with C and Rust](../interop.md), [Distributed and multi-tier programs](../distribution.md)).

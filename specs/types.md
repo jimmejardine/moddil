@@ -8,7 +8,7 @@
 
 | Topic | Decision |
 |---|---|
-| **Baseline** | Rust's type system: structs, enums with payloads, traits, generics with bounds, associated types, GATs. **No lifetimes**, because borrows are second-class ([`memory-and-resources.md`](memory-and-resources.md)). |
+| **Baseline** | Rust's type system: structs, enums with payloads, traits, generics with bounds, associated types, GATs. **No lifetimes**, because borrows are second-class ([`memory.md`](memory.md)). |
 | **Subtyping** | **None.** No variance rules. A short, fixed list of implicit coercions; every other conversion is explicit ([No subtyping](#no-subtyping)). |
 | **Coherence** | **Exactly one impl per trait and type in any program.** Rust's orphan rule, plus: the application mod and mods from the same repository may write any impl, and declared **bridge mods** may join two other mods ([Coherence: one impl per trait and type](#coherence-one-impl-per-trait-and-type)). |
 | **Specialisation** | **Restricted form in v0.** Overlapping impls only when one is strictly more specific, and only beside the impl it specialises ([Specialisation](#specialisation)). |
@@ -16,7 +16,9 @@
 | **`dyn`** | **Swift-style existentials.** Any trait can be used as `dyn`; generic methods dispatch through the witness table ([`dyn`: existentials](#dyn-existentials)). |
 | **Sum types** | Exhaustive `match`; `#[non_exhaustive]` for public enums that may grow ([Sum types and exhaustiveness](#sum-types-and-exhaustiveness)). |
 | **Inference** | Local only. Private signatures may be inferred and generalised within a mod; nothing is inferred across a mod boundary ([Inference](#inference)). |
-| **Higher-kinded types** | Not now; GATs cover the known needs ([`paradigms.md`](paradigms.md)). |
+| **Optional values** | No null in safe code: `Option<T>` only, no `T?` sugar; definite initialisation; guaranteed niches ([Optional values and invalid states](#optional-values-and-invalid-states)). |
+| **Paradigms** | Functional and object-oriented styles both supported; no inheritance, traits plus delegation instead ([Paradigms: functional and object-oriented](#paradigms-functional-and-object-oriented)). |
+| **Higher-kinded types** | Not now; GATs cover the known needs ([Paradigms: functional and object-oriented](#paradigms-functional-and-object-oriented)). |
 
 ## Problem
 
@@ -44,6 +46,13 @@ either gets painfully wrong for an ecosystem or leaves unstable:
 | **OCaml** | Modules and functors instead of type classes | Explicit instance passing is fully local, but verbose for everyday operations like `==` and hashing |
 | **Go** | Structural interfaces, no explicit impls | No coherence problem, but no associated types, and accidental conformance |
 
+Further reading: Hoare, "Null References: The Billion Dollar Mistake" (QCon 2009); Swift `Optional`;
+Kotlin null safety; TypeScript `strictNullChecks`; Dart sound null safety; C# 8 nullable reference
+types; Java Valhalla null-restricted types and JSpecify; Rust niche optimisation and pattern types;
+F* and Liquid Haskell refinement types; typestate (Strom and Yemini, 1986). Kotlin `by` delegation
+and Go embedding; Scala and Swift traits and protocols with default implementations; Haskell and
+Koka (purity, effects); Lean 4 and Koka (Perceus reuse).
+
 ## Kinds of type
 
 This document defines the rules; the types themselves are mostly defined elsewhere.
@@ -59,8 +68,8 @@ This document defines the rules; the types themselves are mostly defined elsewhe
 | `!` | The never type |
 | Refinements `u16 where self >= 1024` | A validated newtype over a base type ([`correctness.md`: Validated newtypes (lightweight refinements)](correctness.md#validated-newtypes-lightweight-refinements)) |
 | Unit quantities `f64<m/s>` | Dimensions are type-level ([`units.md`: Dimensions: the SI vector and an open set](units.md#dimensions-the-si-vector-and-an-open-set)) |
-| `&T`, `&mut T`, view types | Second-class borrows ([`memory-and-resources.md`: View types](memory-and-resources.md#view-types)) |
-| `linear struct` | Must be consumed explicitly ([`memory-and-resources.md`: Resources: affine and linear](memory-and-resources.md#resources-affine-and-linear)) |
+| `&T`, `&mut T`, view types | Second-class borrows ([`memory.md`: View types](memory.md#view-types)) |
+| `linear struct` | Must be consumed explicitly ([`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear)) |
 | `dyn Trait` | An existential, always behind a pointer ([`dyn`: existentials](#dyn-existentials)) |
 
 ## No subtyping
@@ -97,9 +106,9 @@ As in Rust, with the omissions that follow from other decisions:
 
 - **Supertraits and default methods**; associated types and associated consts.
 - **Generic associated types** (lending iterators, collection families). **Higher-kinded types are
-  deferred** ([`paradigms.md`](paradigms.md)).
+  deferred**.
 - **No inheritance.** Delegation (`#[delegate(Trait)]`) forwards a trait's methods to a field
-  ([`paradigms.md`](paradigms.md)).
+  ([Multiple inheritance](#multiple-inheritance)).
 - **Derives** (`#[derive(Eq, Hash, …)]`) are comptime code ([`comptime.md`](comptime.md)); what they
   generate for equality, hashing and copying is settled in [`values.md`](values.md).
 - **No `Send` or `Sync`**, and no other auto traits: every type is sendable
@@ -275,13 +284,105 @@ Operators are traits, as in Rust: `a + b` calls `Add::add`, `a[i]` calls `Index:
 ## Sum types and exhaustiveness
 
 - `match` must be **exhaustive**, as in Rust; so must `let … else` and `if let` chains used as
-  expressions ([`null-safety.md`](null-safety.md)).
+  expressions.
 - **`#[non_exhaustive]`** on a public enum means other mods must include a wildcard arm. Adding a
   variant to an exhaustive public enum is a breaking change, and the compiler's semver check reports
   it ([`packages-and-supply-chain.md`: Semver is checked by the compiler](packages-and-supply-chain.md#semver-is-checked-by-the-compiler)).
 - **Refinements in patterns:** matching on a refinement's base value narrows it (`n if n >= 1024`
   binds a `u16`; converting to `Port` remains explicit, or proven automatically where
   [`correctness.md`: Refinement types with automatic proofs](correctness.md#refinement-types-with-automatic-proofs) applies).
+
+## Optional values and invalid states
+
+Absence and invalid states are handled by the type system, not by runtime checks.
+
+### Why null is a problem
+
+Null references (Hoare's "billion-dollar mistake"). More generally: types that admit
+values the domain does not, such as zero values nobody chose, unchecked ranges, mixed-up IDs, and
+objects used in the wrong state.
+
+### How other languages handle absence
+
+Every language that has tackled null is converging on *absence in the type,
+plus compiler-checked narrowing*, in one of two styles:
+
+| Style | Languages | Strength | Weakness |
+|---|---|---|---|
+| Wrapper sum type `Option<T>` | Rust, Haskell (`Maybe`), OCaml, Scala, Zig (`?T`) | Ordinary type; composes; nests (`Option<Option<T>>` ≠ `Option<T>`) | Ceremony without sugar |
+| Nullable union `T \| null` + flow typing | Kotlin, TypeScript (`strictNullChecks`), Dart 3, C# 8, Java (Valhalla null-restricted types, JSpecify) | Ergonomic; can be retrofitted onto a language with null | `T??` collapses to `T?`: "absent" vs "present but null" is lost |
+
+- **Swift** is the synthesis most new designs copy. `T?` is sugar for a real `Optional<T>` sum type,
+  so it nests correctly, and it adds `if let`, `guard let`, optional chaining `a?.b` and `x ?? d`.
+- **Rust** has exactly one `Option`, kept separate from `Result`: absence is a normal outcome,
+  failure is an error.
+  - Raw pointers can be null only in `unsafe` code.
+  - The **niche optimisation** makes `Option<&T>` pointer-sized, with `None` as address 0.
+  - Ergonomics keep improving: `?` on `Option`, `let … else`, `if let` chains (2024 edition).
+  - The *pattern types* work (`u32 is 1..`) generalises niches.
+- **The frontier is invalid states in general:**
+  - definite initialisation (no Go-style zero values);
+  - refinement types (Liquid Haskell, F*);
+  - newtypes;
+  - typestate.
+
+### Decision: no null, and no invalid states
+
+- **No null in safe code.** Absence is `Option<T>` = `None | Some(T)`. It is an ordinary sum type in a
+  core-adjacent mod (R2); the compiler adds only sugar and layout guarantees.
+- **`Option<T>` only, as in Rust** (decided; [`syntax.md`](syntax.md)). There is no `T?` sugar.
+  Nesting is explicit: `Option<Option<T>>`. It comes with:
+  - exhaustive `match`, `if let` and `let … else`;
+  - `?`, which always **propagates** `None`, as in Rust. Inside a function returning `Option`,
+    `a?.b?.c` works directly;
+  - **expression-level chaining** through a `try` block: `try { a?.b?.c }` yields an `Option`
+    without leaving the function (Swift's chaining, with no new operator);
+  - defaulting with `x.unwrap_or(d)` and `x.unwrap_or_else(|| …)`.
+
+  There is no implicit unwrap. `unwrap()` is an explicit, visible panic point.
+- **Absence is data; failure is an effect.** `fail(E)` ([Error handling](error-handling.md)) plays the role of Rust's `Result`,
+  so `Option` is the only "maybe" type in everyday code.
+  - `opt.or_fail(e)` turns absence into failure.
+  - Catching a failure can produce an `Option`.
+- **Guaranteed niches:** `Option<&T>`, `Option<Rc<T>>`, owned pointers, non-zero and range-typed
+  integers, and enums with spare values are all the same size as `T`. Nullable C pointers import as
+  `Option<…>` ([Interoperability with C and Rust](interop.md)).
+- **Fits the ownership model:**
+  - `Option<&T>`, or an `Option` holding a view, is itself a view
+    ([`memory.md`: View types](memory.md#view-types)).
+  - Moving out of an `Option` is an ordinary move (`take()`).
+- **Definite initialisation:** no zero values, and no reads of uninitialised memory in safe code.
+  Values are created only by literals that supply every field; there are no special constructors
+  ([`memory.md`: Ownership and RAII](memory.md#ownership-and-raii)).
+- **Invalid states beyond null:**
+  - **Cheap newtypes:** zero-cost and distinct, with no implicit conversion (`UserId` ≠ `OrderId`).
+  - **Range refinements** (`u32 where self in 1..`): values that are excluded become free niches for
+    `Option`. This is the same `where` form as other refinements (decided).
+  - **Refinement types** (`Int where 0 <= self < 100`): checked statically where provable,
+    dynamically otherwise. They share machinery with contracts ([Correctness tooling: contracts and verification](correctness.md)).
+  - **Typestate through linear types** ([Memory: ownership, borrowing and sharing](memory.md)): states are types, and transitions consume the old
+    state, e.g. `Conn<Unauthed>` → `Conn<Authed>`.
+
+Illustration only:
+```rust
+struct UserId(u64);
+type Port = u16 where self in 1..;                // 0 excluded: Option<Port> is still 2 bytes
+
+fn email_of(users: &Map<UserId, User>, id: UserId) -> Option<&str> {
+    users.get(id)?.profile?.email                 // `?` propagates None out of email_of
+}
+
+fn greeting(users: &Map<UserId, User>, id: UserId) -> String {
+    let email = try { users.get(id)?.profile?.email };   // chaining within one expression
+    fmt"Hello {email.unwrap_or("guest")}"
+}
+
+fn connect(host: &str, port: Option<Port>) with net, fail(NetError) {
+    let Some(addr) = resolve(host) else { return };   // early exit on absence
+    let Some(p) = port else { fail(NetError::NoPort) };
+    …
+}
+```
 
 ## Inference
 
@@ -291,6 +392,83 @@ Operators are traits, as in Rust: `a + b` calls `Add::add`, `a[i]` calls `Index:
   ([Generics](#generics)).
 - **Nothing is inferred across a mod boundary.** Public signatures, effects and error sets are written
   out and recorded in the interface artefact (rule 2), so editing a body never re-checks dependents.
+
+## Paradigms: functional and object-oriented
+
+### Paradigms in brief
+
+| Question | Answer |
+|---|---|
+| Functional programming? | **Yes, strongly.** Closures, immutability by default, algebraic data types, pattern matching, iterators, and purity tracked by effects. |
+| Object-oriented programming? | **Yes, the useful parts:** encapsulation, methods, interfaces (traits), static and dynamic polymorphism, actors. |
+| Inheritance? | **No class inheritance**, single or multiple. Traits with supertraits and default methods, plus delegation, cover the use cases. Trait rules are in [`types.md`](types.md). |
+
+### Functional programming
+
+- **First-class functions and closures**, including closures that fail and suspend
+  ([`closures.md`](closures.md)).
+- **Immutable by default:** `let` bindings, and shared data (`Rc`) is always immutable
+  ([`memory.md`: Sharing: `.to_rc()`](memory.md#sharing-to_rc)).
+- **Algebraic data types** (`enum` with payloads) and exhaustive `match`.
+- **Iterators and combinators**, with one `map`/`filter`/`fold` for pure, fallible and suspending
+  functions (effect polymorphism, [`error-handling.md`: Why `Result`-only languages duplicate higher-order APIs](error-handling.md#why-result-only-languages-duplicate-higher-order-apis)).
+- **Purity is tracked by effects:** a function with an empty effect set is pure, and the compiler
+  knows it. Few languages outside Haskell and Koka can say this.
+- **Algebraic effect handlers** ([`determinism.md`: Handlers are scoped, not global](determinism.md#handlers-are-scoped-not-global)).
+- **Persistent collections** in `moddil/collections`.
+- **Functional updates in place:** compile-time reference-count elision with reuse (Perceus style)
+  turns "build a new value" into an in-place update when the old one is no longer used.
+- **Guaranteed tail calls** with `become f(x)` (Rust's accepted design; WASM tail calls are standard).
+- **Laziness (decided):** evaluation is eager. Iterators are lazy, as in Rust, and a `Lazy<T>`
+  library type computes a value once, on first use.
+- **Higher-kinded types (decided): not now.** Generic associated types (GATs), as in Rust, cover
+  the concrete needs (lending iterators, collection families). HKTs are revisited later; adding
+  them is backwards compatible. Rationale: they clash with ownership and lifetimes, monadic
+  `bind` breaks `?`/`return`/`break` inside closures, inference gets harder, and Moddil's effects
+  already provide what monads give Haskell (errors, state, async).
+
+### Object-oriented programming
+
+| OOP idea | Moddil |
+|---|---|
+| Encapsulation | Privacy per module; values come into existence only through literals the module controls ([`memory.md`: Ownership and RAII](memory.md#ownership-and-raii)) |
+| Methods | `impl` blocks with `&self`, `&mut self`, `self` |
+| Interfaces | Traits, with default methods and supertraits |
+| Polymorphism | Static (generics) and dynamic (`dyn Trait`) |
+| Objects with identity and a mailbox | Actors: a task owning its state plus a channel, as a library pattern ([`concurrency.md`: Patterns the model makes easy](concurrency.md#patterns-the-model-makes-easy)) |
+| Inheritance hierarchies | Not supported ([Multiple inheritance](#multiple-inheritance)) |
+
+### Multiple inheritance
+
+**No class inheritance.** Rust, Go and Zig made the same choice. Inheritance couples
+implementations tightly, and multiple inheritance adds the diamond problem for state.
+
+What replaces it:
+
+1. **Traits with several supertraits and default methods.** This gives multiple inheritance of
+   *behaviour*, with no shared state to conflict:
+   ```rust
+   trait Shape: Area + Perimeter + Display {
+       fn describe(&self) -> String { fmt"{self}: area {self.area()}" }   // default method
+   }
+   ```
+2. **Delegation** replaces implementation inheritance. An attribute forwards a trait's methods to a
+   field (Kotlin's `by`):
+   ```rust
+   struct AuditedFile {
+       #[delegate(Read, Write)]
+       inner: File,
+       log: AuditLog,
+   }
+   impl Write for AuditedFile {
+       fn write(&mut self, buf: &[u8]) -> usize with fs, fail(IoError) {
+           self.log.record(buf.len());
+           self.inner.write(buf)      // override one method; the rest are delegated
+       }
+   }
+   ```
+3. **Default methods act as mixins:** a trait can supply reusable behaviour to every type that
+   implements its required methods.
 
 ## Open questions
 
@@ -306,10 +484,13 @@ Operators are traits, as in Rust: `a + b` calls `Add::add`, `a[i]` calls `Index:
 5. **Default type parameters** (`HashMap<K, V, S = RandomState>`): keep Rust's form, or drop it now
    that named arguments exist ([`syntax.md`](syntax.md))?
 6. **Trait aliases** (`trait Num = Add + Sub + Mul + Copy`).
-7. Revisit **higher-kinded types** once GAT-based libraries show what is missing ([`paradigms.md`](paradigms.md)).
+7. Revisit **higher-kinded types** once GAT-based libraries show what is missing ([Paradigms: functional and object-oriented](#paradigms-functional-and-object-oriented)).
 8. **How far operator overloading goes:** may operator traits fail or suspend (`a + b` on big numbers
    that allocate)? Should comparison chaining (`a < b < c`) exist?
 9. **Can `==` differ from `Eq`?** Rust's `PartialEq` allows it (floats); Moddil's equality rules are
    in [`values.md`](values.md). Is a separate overloadable `==` ever needed?
 10. **Guidance against surprising overloads:** a lint or review rule (for people and agents) that
     operators keep their arithmetic meaning, as the `+` on strings is absent ([`text.md`](text.md)).
+11. **Refinements: static or dynamic?** How much refinement checking is done at compile time, and what
+    does it cost in build time ([`build-times.md`](build-times.md))?
+12. **Niche packing:** how far should layout optimisation of nested options (`Option<Option<T>>`) go?

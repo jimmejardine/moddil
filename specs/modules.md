@@ -49,7 +49,7 @@
 - **The file tree is the module tree.** `src/book/levels.mdl` is the module `book::levels`. There are
   no `mod foo;` declarations to keep in sync.
 - A file's `//!` doc comment is the module's overview
-  ([`docs-and-tests.md`: Overviews: mod, module and group docs](docs-and-tests.md#overviews-mod-module-and-group-docs)).
+  ([`docs.md`: Overviews: mod, module and group docs](docs.md#overviews-mod-module-and-group-docs)).
 
 ### Three visibility levels
 
@@ -67,7 +67,7 @@ cover real needs.
 - A `pub` item **writes its full signature**: parameter and return types, effects, error sets and
   contracts ([`syntax.md`](syntax.md), [`effects-and-capabilities.md`](effects-and-capabilities.md)).
 - A `pub` item **belongs to a group**
-  ([`docs-and-tests.md`: Overviews: mod, module and group docs](docs-and-tests.md#overviews-mod-module-and-group-docs)).
+  ([`docs.md`: Overviews: mod, module and group docs](docs.md#overviews-mod-module-and-group-docs)).
 - The `pub` items form the mod's **interface artefact**
   ([`build-times.md`](build-times.md)), and the **semver check** compares them between versions
   ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)).
@@ -116,7 +116,7 @@ fn open_socket() -> Socket with net {
 - **`moddil check` type-checks every branch against every tier-1 target**
   ([`targets.md`: Target names and tiers](targets.md#target-names-and-tiers)), so platform code
   cannot rot unnoticed.
-- Test-only code is written as attached tests ([`docs-and-tests.md`](docs-and-tests.md)), not
+- Test-only code is written as attached tests ([`docs.md`](docs.md)), not
   `#[cfg(test)]` modules.
 
 ### No feature flags

@@ -75,7 +75,7 @@ with time = sim.clock(node) {          // installs a handler for this block
 | Kind | Effects | Notes |
 |---|---|---|
 | **Core** | `fail(E)`, `suspend`, `spawn` | Defined by the language ([`error-handling.md`](error-handling.md), [`concurrency.md`](concurrency.md)) |
-| **Standard** | `time`, `rand`, `net`, `fs`, `env`, `process`, `gpu`, `remote`, `introspect`, `locale`, `dom` | Interfaces in standard mods; handlers in runtime and simulation mods ([`mods.md`: Pluggable runtimes without ecosystem splits](mods.md#pluggable-runtimes-without-ecosystem-splits)) |
+| **Standard** | `time`, `rand`, `net`, `fs`, `env`, `process`, `gpu`, `remote`, `introspect`, `locale`, `dom` | Interfaces in standard mods; handlers in runtime and simulation mods ([`runtime.md`: Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)) |
 | **Capabilities with no handler to swap** | `ffi`, `unsafe` | Declared and visible to every consumer; treated as high risk ([`interop.md`: The safety boundary](interop.md#the-safety-boundary)) |
 | **Ambient, write-only** | `log`, `span`, `metric` | Never written in signatures; cannot feed values back ([`observability.md`](observability.md)) |
 | **User-defined** | anything | Context such as a database pool, configuration, feature flags ([Directions (not yet decided)](#directions-not-yet-decided)) |
@@ -95,10 +95,10 @@ signatures short ([Signatures and inference](#signatures-and-inference)).
 |---|---|---|---|
 | **Tail-resumptive** | Return a value to the caller, like a function | Anyone | A direct (or indirect) call |
 | **Abortive** | Never resume; unwind to the handler, like an exception | Anyone | An ordinary return (`fail`, [`error-handling.md`: Results and effects](error-handling.md#results-and-effects)) |
-| **One-shot continuation** | Capture the rest of the computation and resume it **once**, later | Core and standard effects only: `suspend`, generators | Stack switching ([`concurrency.md`: Runtime contract](concurrency.md#runtime-contract), [`bootstrap.md`: WASM concurrency lowering](bootstrap.md#wasm-concurrency-lowering)) |
+| **One-shot continuation** | Capture the rest of the computation and resume it **once**, later | Core and standard effects only: `suspend`, generators | Stack switching ([`runtime.md`: Runtime contract](runtime.md#runtime-contract), [`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)) |
 
 - **No multi-shot resumption**, ever. Resuming twice would run the rest of the computation twice,
-  duplicating linear values and running drops twice ([`memory-and-resources.md`](memory-and-resources.md)).
+  duplicating linear values and running drops twice ([`memory.md`](memory.md)).
 - Almost every use (I/O, context, mocking, simulation, recording) is tail-resumptive, so user
   effects are cheap and easy to reason about.
 
@@ -199,7 +199,7 @@ diagnostics.
   monomorphisation or Koka-style evidence passing. Production pays nothing for testability.
 - **Abortive handlers** compile to ordinary returns ([`error-handling.md`: Results and effects](error-handling.md#results-and-effects)).
 - **One-shot continuations** use stack switching natively and WASM stack switching or JSPI in the
-  browser ([`bootstrap.md`: WASM concurrency lowering](bootstrap.md#wasm-concurrency-lowering)).
+  browser ([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)).
 - **Dynamic handlers** (tests, simulations) pass a hidden handler argument, which is cheap enough for
   tests.
 

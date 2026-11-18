@@ -196,11 +196,7 @@ guarantees, generated policies and typed requirements — and leaves the rest to
 
 ## Staging
 
-| Stage | Delivers |
-|---|---|
-| **v0** | Layer A: components, placement, the `remote` effect, generated contracts, single-process mode and simulation |
-| **v1** | OCI images, Compose and Kubernetes adapters, skew checking against deployed contracts |
-| **Later** | Nomad and WASI-platform adapters, generated policies, Temporal/Restate workflow handlers, choreographies |
+What ships in v0, v1 and later is in [`roadmap.md`: Staging: distributed programs](roadmap.md#staging-distributed-programs).
 
 ## Fit check against the reference examples
 

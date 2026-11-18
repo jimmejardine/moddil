@@ -1,13 +1,14 @@
-# Standard library shape
+# Standard library and mods
 
 > **Status:** decided direction, details open. Listed in the [index](README.md). The catalogue of
-> standard mods is in [`mods.md`: Initial standard-mod catalogue](mods.md#initial-standard-mod-catalogue); this document defines the shape of the
+> standard mods is in [Initial standard-mod catalogue](#initial-standard-mod-catalogue); this document defines the shape of the
 > core interfaces they share. Snippets are **illustration only**.
 
 ## Summary
 
 | Topic | Decision |
 |---|---|
+| **Small core (R2)** | The core holds only what the compiler must check, what other mods need defined, or what cannot be expressed efficiently in a mod; everything else is a mod ([Small core, functionality in mods (R2)](#small-core-functionality-in-mods-r2)). |
 | **Batteries** | **Broad, as separate mods.** Coverage at Go's level (networking, HTTP, crypto, serialisation, SQL, time, testing), delivered as many independently versioned `moddil/*` mods. Only the small `moddil/core-*` set is tied to the compiler ([Batteries and tiers](#batteries-and-tiers)). |
 | **Distribution** | `core-*` ships with the compiler and changes only with editions. Every other `moddil/*` mod is fetched, hash-pinned and upgraded like any dependency ([Distribution and versioning](#distribution-and-versioning)). |
 | **Iteration** | **One external `Iterator` protocol.** `next` may carry effects, so an iterator that suspends is also an async stream: there is no separate `Stream` trait ([Iteration](#iteration)). |
@@ -40,15 +41,63 @@ the ecosystem splits, and the split is permanent:
 | **Zig** | Allocators passed explicitly; small `std.io` | Explicit cost; less convenient defaults |
 | **tokio-uring, monoio** | Owned buffers for io_uring | Needed in Rust because a future can be dropped while the kernel still writes into the buffer |
 
+## Small core, functionality in mods (R2)
+
+The Moddil **core language is very small**. Almost all functionality, including collections,
+networking, crypto, runtimes, GPU support and UI, comes from **mods**:
+
+- **Mod**: Moddil's unit of distribution, like a Rust crate or a Go module. A mod has a name, a
+  version, a manifest, and one or more modules.
+- **Module**: a namespace/file unit *inside* a mod.
+- **Standard mods**: mods published under the `moddil/` namespace by the project itself. They play the
+  role of the C++ STL and Boost combined, or Rust's `std` plus the handful of crates everyone uses
+  (`serde`, `tokio`, `regex`, …).
+- **Community mods**: anyone can write and publish mods, including alternatives to standard ones
+  (a different runtime, a different collections library).
+
+Why a small core:
+- **The language stays learnable**, for humans and LLMs ([LLMs as first-class programmers](agent-interface.md)). The stable surface is small.
+- **Evolution happens in libraries**, which can be versioned, forked and replaced. The core changes
+  rarely ([Language evolution](evolution.md)).
+- **Build times** ([Build times](build-times.md)): the core does not drag in code you don't use.
+- **No privileged magic**: if a standard mod can do it, a community mod can do it too.
+
+### The core / mod boundary
+
+Something belongs in the **core** only if at least one of these is true:
+
+1. **The compiler must check it.** Guarantees that a library cannot enforce: ownership and linearity,
+   effects, capabilities, placement, contracts.
+2. **Other mods need it to be defined at all.** Primitive types, modules, generics, compile-time
+   evaluation and reflection.
+3. **It cannot be expressed efficiently in a mod.** Intrinsics, the C ABI, SIMD primitives, atomics.
+
+Candidate core list (to be argued over):
+
+| Core | Why core |
+|---|---|
+| Primitive types, structs, sum types, generics | Needed to define anything |
+| Ownership, borrowing / linearity | Compiler-checked ([Memory: ownership, borrowing and sharing](memory.md)) |
+| Effects and handlers (definition and checking) | Compiler-checked; the extension mechanism for everything else ([Effects and capabilities as a unifying idea](effects-and-capabilities.md)) |
+| Capabilities | Compiler-checked ([Package management and supply-chain security](packages-and-supply-chain.md)) |
+| Placement annotations | Compiler-checked ([Concurrency across GPUs and accelerators](accelerators.md), [Distributed and multi-tier programs](distribution.md)) |
+| Structured concurrency *interface* (task scopes, cancellation, the `suspend` effect) | Compiler-checked; must be shared by all runtimes |
+| Contracts | Compiler-checked ([Correctness tooling: contracts and verification](correctness.md)) |
+| Compile-time evaluation, static reflection | Needed to define mods ([Metaprogramming](comptime.md)) |
+| Intrinsics: atomics, SIMD primitives, C ABI / FFI | Not expressible otherwise |
+
+Everything else is a mod, **including the scheduler, the allocator implementations, I/O and the
+async runtime**.
+
 ## Batteries and tiers
 
 **Decision: broad batteries, delivered as separate mods.**
 
-| Tier | Contents | Tied to |
-|---|---|---|
-| **`moddil/core-*`** | Primitives, `Option`/`Result`, slices, `str`, `char`, `Iterator`, formatting traits, conversion traits; with an allocator: `Vec`, `String`, `Box`, `Rc` and the core collections | The compiler and the edition; usable in the freestanding profiles ([`freestanding.md`: Profiles](freestanding.md#profiles)) |
-| **`moddil/*`** | Everything else in the [catalogue](mods.md#initial-standard-mod-catalogue): `io`, `fs`, `net`, `time`, `text`, `i18n`, `serde`, `sql`, `crypto`, `sync`, `test`, … | Nothing: each mod has its own version |
-| **Community** | Anything else | Nothing |
+| Tier | Contents | Bar | Tied to |
+|---|---|---|---|
+| **`moddil/core-*`** | Primitives, `Option`/`Result`, slices, `str`, `char`, `Iterator`, formatting traits, conversion traits; with an allocator: `Vec`, `String`, `Box`, `Rc` and the core collections | Tiny; changes only with editions; usable in the freestanding profiles ([`freestanding.md`: Profiles](freestanding.md#profiles)) | The compiler and the edition |
+| **`moddil/*`** | Everything else in the [catalogue](#initial-standard-mod-catalogue): `io`, `fs`, `net`, `time`, `text`, `i18n`, `serde`, `sql`, `crypto`, `sync`, `test`, … | Curated, RFC process, capability review, audited, edition-aware ([`governance.md`](governance.md)) | Nothing: each mod has its own version |
+| **Community** | Anything else, including alternatives to standard mods (`fastrt`, `hashiverse/protocol`) | Capability ceiling and checked semver ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)) | Nothing |
 
 A mod belongs in `moddil/*` when at least one of these holds:
 
@@ -59,7 +108,49 @@ A mod belongs in `moddil/*` when at least one of these holds:
    `log` and `span` effects, HTTP types).
 
 Unused mods cost nothing: they are not fetched, compiled or linked. Standard mods can be deprecated and
-moved out without a compiler release ([`mods.md`: Tiers of mods](mods.md#tiers-of-mods)).
+moved out without a compiler release.
+
+**Promotion path:** a community mod that becomes a de facto standard can be proposed for `moddil/`
+(the Boost → C++ standard library path). Standard mods can also be **deprecated** and moved out,
+which a monolithic std cannot easily do.
+
+## Initial standard-mod catalogue
+
+This list is driven by the four reference examples in [`examples/`](examples/README.md).
+Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
+
+| Mod | Contents | Needed by |
+|---|---|---|
+| `moddil/collections` | Vec, Map, Set, deque, ring buffers, persistent collections | G H W X |
+| `moddil/text` | Unicode algorithms (graphemes, normalisation, case folding), regex ([`text.md`](text.md)) | G W X |
+| `moddil/i18n` | The `locale` effect: localised numbers, dates, plurals, collation, MessageFormat 2 ([`text.md`: Localisation: the `locale` effect](text.md#localisation-the-locale-effect)) | G W X |
+| `moddil/serde` | Serialisation framework; binary and JSON formats; schema evolution; zero-copy validated views ([`memory.md`: Zero-copy I/O](memory.md#zero-copy-io)) | G H W X |
+| `moddil/fs` / `moddil/io` | Files, streams, buffers | H W X |
+| `moddil/net` | TCP, UDP, TLS, HTTP/1-2-3, WebSocket, WebTransport | G H W X |
+| `moddil/rpc` | Compiler-generated wire contracts, version compatibility ([Distributed and multi-tier programs](distribution.md), [`distribution.md`](distribution.md)) | G H W X |
+| `moddil/deploy-*` | Adapters from the topology file to Compose, Kubernetes, Nomad, systemd; discovery and secret-provider handlers ([`distribution.md`: Adapter mods](distribution.md#adapter-mods)) | G H W X |
+| `moddil/time` | Clocks, monotonic time, time zones, high-resolution timestamps | G H W X |
+| `moddil/runtime`, `-wasm`, `-sim` | Effect handlers for scheduling and I/O ([Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)) | G H W X |
+| `moddil/sync` | Sync cells (`Atomic<T>`, `AtomicRc<T>`, `Mutex`, `RwLock`), channels, lock-free queues (SPSC/MPMC) ([`concurrency.md`: Shared mutable state](concurrency.md#shared-mutable-state)) | G H X |
+| `moddil/alloc` | Arenas, pools, bump allocators, allocator capability | G H |
+| `moddil/crypto` | Ed25519, ML-DSA, FN-DSA, Blake2/3, SHA-2/3, ChaCha20-Poly1305, TLS primitives | W X |
+| `moddil/simd`, `moddil/tensor` | Portable SIMD; n-d arrays and tensor expressions compiled to graphs or kernels ([`accelerators.md`: Level 1: tensor expressions](accelerators.md#level-1-tensor-expressions)) | G H X |
+| `moddil/gpu` | Devices, buffers, launches; WebGPU/Vulkan/Metal/CUDA/ROCm and CPU-simulator handlers ([`accelerators.md`](accelerators.md)) | G H |
+| `moddil/decimal` | `Fixed<S>` fixed-point (scale in the type) and `BigDecimal` ([`numerics.md`: Decimals for money](numerics.md#decimals-for-money)) | H W |
+| `moddil/num` | `BigInt`, `Rational` | X |
+| `moddil/units` | Unit packs: `si`, `information`, `currency`, `angle` ([`units.md`](units.md)) | G H W X |
+| `moddil/alloc` | Allocator-backed collections and `Rc`, without an OS (`freestanding-alloc` profile) | all |
+| `moddil/rt-embedded` | Bare-metal scheduler handler with static task slots ([`freestanding.md`: Concurrency without a runtime](freestanding.md#concurrency-without-a-runtime)) | embedded |
+| `moddil/hal` | Hardware effects (`gpio`, `uart`, `timer`, `mmio`), SVD-generated register views, simulation handlers | embedded |
+| `moddil/sql` | Typed SQL, schemas, migrations, connection pools | H W |
+| `moddil/timeseries` | Columnar storage, compression, tick data | H |
+| `moddil/sim` | Deterministic simulation: network, time, faults ([Determinism and reproducibility](determinism.md)) | G H W X |
+| `moddil/test`, `moddil/prop`, `moddil/bench` | Test runner, property-based testing, fuzzing, mutation testing, benchmarks ([`correctness.md`](correctness.md), [`docs.md`](docs.md)) | G H W X |
+| `moddil/verify` | Verifier front end: proof obligations, SMT back ends, assurance levels (open: core tool or mod) | H X |
+| `moddil/log`, `moddil/trace` | Handlers for the write-only `log`/`span`/`metric` effects: pretty output, OTLP, Prometheus, flight recorder ([`observability.md`](observability.md)) | G H W X |
+| `moddil/web` | Bindings generated from WebIDL; the `dom` effect and a simulated DOM; JS interop for `wasm32-browser` ([`ui.md`: The browser](ui.md#the-browser)) | G W X |
+| `moddil/storage` | Key-value storage: SQLite, IndexedDB, files | W X |
+| `moddil/dht`, `moddil/pow` | Kademlia DHT, proof-of-work | X (probably community mods, not standard) |
 
 ## Distribution and versioning
 
@@ -113,7 +204,7 @@ trait Iterator {
 
   There is no `Stream`, `AsyncIterator` or `StreamExt`, and no second copy of any adaptor.
 - **Iterators are views.** An iterator borrows its collection, which is frozen while the iterator
-  lives ([`memory-and-resources.md`: View types](memory-and-resources.md#view-types)). Adaptors take a view and return a view.
+  lives ([`memory.md`: View types](memory.md#view-types)). Adaptors take a view and return a view.
 - **Lending iterators** (items that borrow from the iterator itself, such as windows over a buffer)
   use generic associated types ([`types.md`: Traits](types.md#traits)).
 - **Internal iteration stays.** Collections also offer `visit`, which takes a closure
@@ -152,7 +243,7 @@ gen fn read_records(file: &mut File) -> Record {          // an iterator of Reco
   fails the `next()` call that reached it.
 - A **linear** value held across a `yield` must be consumed on every path, including the one where
   the consumer stops early and drops the generator
-  ([`memory-and-resources.md`: Resources: affine and linear](memory-and-resources.md#resources-affine-and-linear)); the compiler rejects a generator that could
+  ([`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear)); the compiler rejects a generator that could
   abandon one.
 
 ## Collections
@@ -202,15 +293,15 @@ follow Rust's `std::io`.
   freeing the buffer under the kernel, which is why Rust's io_uring libraries take owned buffers.
   In Moddil:
   - a task cannot be dropped while suspended; cancellation is cooperative and runs the task to its
-    suspension point ([`concurrency.md`: Cancellation and shutdown](concurrency.md#cancellation-and-shutdown));
+    suspension point ([`lifecycle.md`: Cancellation and shutdown](lifecycle.md#cancellation-and-shutdown));
   - the runtime cancels the operation at the OS level and **waits for the kernel to release the
-    buffer** before the `read` call returns ([`concurrency.md`: Cancelling I/O: no "press Enter", no self-connect](concurrency.md#cancelling-io-no-press-enter-no-self-connect));
+    buffer** before the `read` call returns ([`lifecycle.md`: Cancelling I/O: no "press Enter", no self-connect](lifecycle.md#cancelling-io-no-press-enter-no-self-connect));
   - the borrow on `buf` therefore ends only after the kernel is done with it.
 - **Closing can fail, so it is explicit.** Files open for writing and buffered writers are linear:
   they must be `close`d or `abort`ed, and a flush error cannot be lost in a destructor
-  ([`memory-and-resources.md`: Resources: affine and linear](memory-and-resources.md#resources-affine-and-linear)).
+  ([`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear)).
 - **Zero-copy reads** hand out `Bytes` and `RcStr` slices of the runtime's buffers
-  ([`memory-and-resources.md`: Zero-copy I/O](memory-and-resources.md#zero-copy-io), [`text.md`](text.md)).
+  ([`memory.md`: Zero-copy I/O](memory.md#zero-copy-io), [`text.md`](text.md)).
 - **Where I/O comes from:** `fs` and `net` are effects. Handlers live in the runtime mods (`moddil/runtime`
   for epoll, kqueue, io_uring and IOCP; `-wasm` for WASI and the browser; `-sim` for simulation), so
   the same code runs in production, in the browser and in deterministic tests
@@ -224,7 +315,7 @@ follow Rust's `std::io`.
 | `Default` | As in Rust |
 | `Display`, `Debug` | [`text.md`: Formatting](text.md#formatting) |
 | `Clone`, `Copy`, `Eq`, `Ord`, `Hash` | [`values.md`](values.md) |
-| `Drop` | Cannot suspend or fail ([`concurrency.md`: Construction may suspend; drop may not](concurrency.md#construction-may-suspend-drop-may-not)) |
+| `Drop` | Cannot suspend or fail ([`resources.md`: Construction may suspend; drop may not](resources.md#construction-may-suspend-drop-may-not)) |
 | `Fn`, `FnMut`, `FnOnce` | [`closures.md`](closures.md) |
 
 ## Fit with the reference examples

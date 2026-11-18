@@ -95,7 +95,7 @@ metric.count("orders.filled", 1, venue: order.venue)
   blocked on** (network, a lock, a channel, a GPU join, a timer), with how long it has waited.
 - **Deadlock reports** come from the same data: a cycle of tasks blocked on each other's locks or
   channels.
-- Runtime handler mods expose this data ([`concurrency.md`: Runtime contract](concurrency.md#runtime-contract)).
+- Runtime handler mods expose this data ([`runtime.md`: Runtime contract](runtime.md#runtime-contract)).
 
 ## Flight recorder and replay
 

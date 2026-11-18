@@ -52,7 +52,7 @@ One toolchain download contains everything needed for every tier-1 target:
   stubs;
 - the bundled clang that compiles C dependencies ([`interop.md`: The C ABI, both directions](interop.md#the-c-abi-both-directions)).
 
-This matches the backend plan in [`bootstrap.md`: Backends](bootstrap.md#backends).
+This matches the backend plan in [`compiler.md`: Backends](compiler.md#backends).
 
 ```
 # on Windows

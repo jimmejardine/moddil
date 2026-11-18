@@ -21,9 +21,9 @@ decisions remove the usual obstacles:
 | Existing decision | What it gives correctness tooling |
 |---|---|
 | **Effects** ([Effects and capabilities as a unifying idea](effects-and-capabilities.md)) | The compiler can *check* that contract expressions are pure; most languages can only trust them to be. Effect handlers swap real I/O, time and scheduling for test versions. |
-| **Ownership; immutable rc contents; shared mutation only in sync cells** ([`memory-and-resources.md`](memory-and-resources.md)) | No unrestricted aliasing, so a verifier knows what a function can modify (the "frame problem"). This is why Verus, Prusti and Creusot work for Rust and why C/C++ verification is so hard. |
+| **Ownership; immutable rc contents; shared mutation only in sync cells** ([`memory.md`](memory.md)) | No unrestricted aliasing, so a verifier knows what a function can modify (the "frame problem"). This is why Verus, Prusti and Creusot work for Rust and why C/C++ verification is so hard. |
 | **Linear resources** | Typestate: protocols such as "open → write → commit or rollback" checked by the type system. |
-| **MIR interpreter** ([`bootstrap.md`](bootstrap.md), [`comptime.md`](comptime.md)) | A Miri-style undefined-behaviour checker, and a reference semantics for testing the backends against each other. |
+| **MIR interpreter** ([`compiler.md`](compiler.md), [`comptime.md`](comptime.md)) | A Miri-style undefined-behaviour checker, and a reference semantics for testing the backends against each other. |
 | **Deterministic runtime** (`moddil/runtime-sim`, [Determinism and reproducibility](determinism.md)) | Reproducible tests and systematic exploration of task interleavings. |
 | **Comptime and static reflection** | Test-data generators derived from types (`#[derive(Arbitrary)]`); contracts on literals checked at compile time. |
 
@@ -93,7 +93,7 @@ fn withdraw_never_overdraws(mut account: Account, amount: Money) {
   targets look like tests, and failing inputs are saved as regression tests.
 - **Doc tests**: examples in documentation are compiled and run (Rust). In Moddil they carry
   expected results and run under the simulation runtime; all of this section's tools attach to the
-  declaration they test ([`docs-and-tests.md`](docs-and-tests.md)).
+  declaration they test ([`docs.md`](docs.md)).
 - **Snapshot / golden tests** (`insta`), useful for generated code and comptime expansions.
 
 ### Mutation testing

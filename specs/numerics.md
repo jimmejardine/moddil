@@ -149,7 +149,7 @@ let notional = (price * qty).rescale::<2>(Round::HalfEven)   // Fixed<2>
 
 ### SIMD and tensors
 
-- **`Simd<T, N>` and mask types are core primitives** ([`mods.md`: The core / mod boundary](mods.md#the-core--mod-boundary)), with portable
+- **`Simd<T, N>` and mask types are core primitives** ([`stdlib.md`: The core / mod boundary](stdlib.md#the-core--mod-boundary)), with portable
   lane-wise arithmetic, comparisons and shuffles that lower to the target's vector instructions.
 - Higher-level operations live in `moddil/simd`; n-dimensional arrays and tensor expressions in
   `moddil/tensor` ([`accelerators.md`: Level 1: tensor expressions](accelerators.md#level-1-tensor-expressions)).
@@ -161,7 +161,7 @@ let notional = (price * qty).rescale::<2>(Round::HalfEven)   // Fixed<2>
 - **Packed structs and bitfields** with arbitrary-width integers
   ([`freestanding.md`: Hardware access](freestanding.md#hardware-access)).
 - **Endian types** `u16be`, `u32le` and so on, for wire formats and zero-copy views over network
-  buffers ([`memory-and-resources.md`: Zero-copy I/O](memory-and-resources.md#zero-copy-io)). Arithmetic converts to the
+  buffers ([`memory.md`: Zero-copy I/O](memory.md#zero-copy-io)). Arithmetic converts to the
   native type; the stored bytes are always in the declared order.
 - **Struct of arrays**: `Soa<T>` in `moddil/collections` is derived at compile time from `T`'s fields
   (as Zig's `MultiArrayList`), so `orders.price` is one contiguous column. No language feature is

@@ -1,6 +1,7 @@
-# Bootstrapping and Backends
+# Compiler and bootstrap
 
-> **Status:** proposal. Answers [Open Questions and Next Steps for Moddil](roadmap.md) Q6. WASM support facts verified November 2026 ([WASM support: verified status (November 2026)](#wasm-support-verified-status-november-2026) below).
+> **Status:** proposal. Answers [`roadmap.md`](roadmap.md) Q6: how the compiler is built, structured and
+> bootstrapped, and which backends it uses. Milestones are in [`roadmap.md`: Milestones](roadmap.md#milestones). WASM support facts verified November 2026 ([WASM support: verified status (November 2026)](#wasm-support-verified-status-november-2026) below).
 
 ## Answers in brief
 
@@ -83,6 +84,22 @@ problem, which is exactly the supply-chain concern of [Package management and su
 - Optional third path: a **C backend** (as Nim has and as Zig's CBE provides). It also helps port to
   unusual platforms.
 
+## Compiler architecture
+
+- **Query-based and demand-driven** (Salsa, as in rust-analyzer), with dependencies tracked down to
+  individual **declarations** (Zig's incremental compilation goes to the same granularity). Only
+  queries whose inputs actually changed are recomputed.
+- **Lazy compilation:** only code reachable from a root (a binary, a test) is analysed and compiled,
+  as Zig does. Unused parts of large mods cost nothing.
+- **Parallel at every stage:** mods in DAG order; functions within a mod during code generation.
+- **Content-addressed, layered cache** ([Cached builds](build-times.md#cached-builds)).
+- **No link step in dev builds:** functions are reached through an indirection table and compiled by
+  Cranelift in process, which also enables **live update** ([Live update (debug builds)](build-times.md#live-update-debug-builds)). Release builds link normally with
+  `lld` or `mold`, with split debug info.
+- **Check-only mode:** type, effect and ownership checking without code generation, powering the
+  language server and agents ([LLMs as first-class programmers](agent-interface.md)).
+- **Test impact analysis:** the query graph knows which tests depend on a change, so only those run.
+
 ## Backends
 
 ```
@@ -116,19 +133,6 @@ problem, which is exactly the supply-chain concern of [Package management and su
 **Linkers:** `lld` or `mold` for native code; `wasm-ld` or a Moddil linker for WASM modules and
 components. **Cross-compilation ([Cross-compilation and deployment](targets.md)):** LLVM plus bundled libc/sysroots, as Zig does
 ([`targets.md`](targets.md)).
-
-## Milestones
-
-| Milestone | Contents |
-|---|---|
-| **M0** | Stage 0: parser, type, effect and ownership checker, MIR, interpreter. Small programs run. |
-| **M1** | Cranelift native backend. Own WASM backend producing **WASI components for Wasmtime**, with stack switching (Linux x86_64). |
-| **M2** | First standard mods written in Moddil; `moddil/runtime` and `moddil/runtime-sim`; LSP prototype. |
-| **M3** | **Hashiverse CLI/native client** (example 4, phase A). LLVM release backend. **JSPI lowering for browsers and Node.** |
-| **M4** | Hashiverse **browser** client. Self-hosted stage 1; fixed-point CI; checked-in WASM bootstrap; double-compiling check. |
-
-**Python bindings** (`moddil bind --lang python`, wheels) follow M3, as the first binding target and
-one of the two first audiences ([`adoption.md`: Python first](adoption.md#python-first)). Recommended placement: between M3 and M4.
 
 ## WASM concurrency lowering
 

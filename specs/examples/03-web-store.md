@@ -54,7 +54,7 @@ not be adopted, whatever its other strengths.
   `db`. A dependency that suddenly asks for `net` is flagged.
 - **Typed SQL and migrations**: queries checked against the schema at compile time (as in sqlx or
   jOOQ); migrations are versioned and reviewable; transactions are linear resources that must commit
-  or roll back ([Memory and resource management](../memory-and-resources.md)).
+  or roll back ([Memory: ownership, borrowing and sharing](../memory.md)).
 - **Error handling ([Error handling](../error-handling.md))**: clear, typed errors from DB to HTTP response to UI.
 - **LLM-friendliness ([LLMs as first-class programmers](../agent-interface.md))**: most store code is CRUD that agents will write. It should be easy to
   generate, review and test, with contracts and property tests next to the code.

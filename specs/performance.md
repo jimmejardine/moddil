@@ -47,7 +47,7 @@ copy whose size grows with the data.**
 | `Copy` value | The same | Types are `Copy` only below a size cap ([`values.md`: Opt-in `Copy`, with a size cap](values.md#opt-in-copy-with-a-size-cap)) |
 | `.clone()` | A deep copy | Explicit, and proportional to the data ([`values.md`](values.md)) |
 | Borrow, view type | A pointer, or the value itself when small | None |
-| `Rc<T>` | Header plus value on the heap | `.to_rc()` allocates; `.share()` is a biased increment; borrowing an rc is free ([`memory-and-resources.md`: Cost table](memory-and-resources.md#cost-table)) |
+| `Rc<T>` | Header plus value on the heap | `.to_rc()` allocates; `.share()` is a biased increment; borrowing an rc is free ([`memory.md`: Cost table](memory.md#cost-table)) |
 | Sync cell | Inline atomic or lock | One atomic operation or lock acquisition, always visible as a method call |
 | Static call | A direct call, often inlined | None |
 | Generic call | Debug: a witness-table call; release: a specialised copy | Debug: indirect calls; release: none, at a code-size cost ([`types.md`: Generics](types.md#generics)) |
@@ -55,7 +55,7 @@ copy whose size grows with the data.**
 | Non-escaping closure | Inlined or specialised | None ([`closures.md`](closures.md)) |
 | `Box<dyn Fn …>` | A heap allocation and an indirect call | Allocation at creation, an indirect call per use |
 | Effect operation | A call to the installed handler | Static handlers are inlined; dynamic handlers are an indirect call ([`effects-and-capabilities.md`: Compilation](effects-and-capabilities.md#compilation)) |
-| `suspend` and resume | A stack switch | Roughly a function call plus register save and restore ([`bootstrap.md`: WASM concurrency lowering](bootstrap.md#wasm-concurrency-lowering)) |
+| `suspend` and resume | A stack switch | Roughly a function call plus register save and restore ([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)) |
 | Bounds and overflow checks | A compare and a branch to a trap | Usually 1–5% in integer-heavy code, less after elision ([Checks and their elision](#checks-and-their-elision)) |
 | `fmt"…"` into a `String` | Formatting plus an allocation if longer than the inline capacity | Writing into an existing buffer avoids the allocation ([`text.md`](text.md)) |
 | `remote` call | Serialisation and a network round trip | Always an explicit effect ([`distribution.md`](distribution.md)) |
@@ -150,7 +150,7 @@ fn feed_handler(rx: &RxQueue) with net, suspend, fail(NetError) {
 
 - **The wait mode is the handler's configuration, not the code's.**
   - *Busy-poll*: `recv` spins on the descriptor ring on a `pinned` executor, which already offers
-    busy-polling and real-time priority ([`concurrency.md`: Tasks, threads and executors](concurrency.md#tasks-threads-and-executors)).
+    busy-polling and real-time priority ([`runtime.md`: Tasks, threads and executors](runtime.md#tasks-threads-and-executors)).
     Each spin is a cancellation checkpoint, so stop and cancel still work.
   - *Interrupt*: the handler arms the queue's interrupt, registers its eventfd with the shared I/O
     reactor and suspends the task. The interrupt wakes the task, which drains the ring in a batch and
@@ -161,7 +161,7 @@ fn feed_handler(rx: &RxQueue) with net, suspend, fail(NetError) {
     code change.
 - **Packets are owned DMA buffers.** A `Packet` is a unique value over a DMA-pool slot, typed by its
   memory space; dropping it returns the slot to the ring; validation yields zero-copy views
-  ([`memory-and-resources.md`: Zero-copy I/O](memory-and-resources.md#zero-copy-io), [`accelerators.md`](accelerators.md)).
+  ([`memory.md`: Zero-copy I/O](memory.md#zero-copy-io), [`accelerators.md`](accelerators.md)).
 - **`unsafe` lives in one small mod.** Descriptor rings, the AF_XDP UMEM mapping, volatile access and
   DPDK or ef_vi bindings use `unsafe` (and `ffi`), with safety contracts, `FromBytes` descriptors,
   the checker and human review ([`unsafe.md`](unsafe.md)). Applications hold neither capability.
@@ -262,4 +262,4 @@ fn bench_on_tick(b: &mut Bencher) {
 4. **Automatic layout:** should the compiler ever choose a struct-of-arrays layout on its own, guided
    by a profile?
 5. **Real-time scheduling:** what guarantees can pinned executors give
-   ([`concurrency.md`: Tasks, threads and executors](concurrency.md#tasks-threads-and-executors))?
+   ([`runtime.md`: Tasks, threads and executors](runtime.md#tasks-threads-and-executors))?

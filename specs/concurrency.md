@@ -1,7 +1,7 @@
 # Concurrency across CPUs
 
 > **Status:** decided direction, details open. Indexed in [`README.md`](README.md) and builds on
-> [`memory-and-resources.md`](memory-and-resources.md). GPUs and other accelerators, which reuse these
+> [`memory.md`](memory.md). GPUs and other accelerators, which reuse these
 > rules for kernel launches, are in [`accelerators.md`](accelerators.md). Snippets are
 > **illustration only**.
 
@@ -9,12 +9,12 @@
 
 Moddil gets **data-race freedom by construction** from three ingredients:
 
-1. The memory model ([`memory-and-resources.md`](memory-and-resources.md)): unique ownership,
+1. The memory model ([`memory.md`](memory.md)): unique ownership,
    second-class borrows and views, immutable thread-safe `Rc`, shared mutation only through sync
    cells.
 2. **Structured concurrency as the only way to start a task**: every task has a parent scope and
    finishes before that scope ends.
-3. **Suspension is an effect**, not a function colour (Concurrency across CPUs, [Effects and capabilities as a unifying idea](effects-and-capabilities.md)).
+3. **Suspension is an effect**, not a function colour ([Effects and capabilities as a unifying idea](effects-and-capabilities.md)).
 
 ## No `Send` / `Sync`
 
@@ -71,7 +71,7 @@ Rules:
 
 ## Shared mutable state
 
-All shared mutation goes through sync cells ([`memory-and-resources.md`: rc contents are immutable](memory-and-resources.md#rc-contents-are-immutable)):
+All shared mutation goes through sync cells ([`memory.md`: rc contents are immutable](memory.md#rc-contents-are-immutable)):
 
 - **Core intrinsics:** atomic loads/stores/RMW with explicit memory orderings, fences.
 - **`moddil/sync`:** `Atomic<T>`, `AtomicRc<T>`, `Mutex<T>`, `RwLock<T>`, channels, lock-free
@@ -92,16 +92,16 @@ boundaries by accident. Holding a lock across a suspension point is allowed but 
 |---|---|
 | Fork/join data parallelism | Split borrows; children in a scope ([Tasks and borrowing](#tasks-and-borrowing)); see [Data parallelism: `parallel_map`](#data-parallelism-parallel_map) for `parallel_map` |
 | Read-mostly shared config | `AtomicRc<Config>`; readers take a snapshot `Rc`, writers swap |
-| Pipelines (e.g. NIC → decode → strategy) | Owned values / owning views moved through SPSC queues; zero copy ([`memory-and-resources.md`: Zero-copy I/O](memory-and-resources.md#zero-copy-io)) |
+| Pipelines (e.g. NIC → decode → strategy) | Owned values / owning views moved through SPSC queues; zero copy ([`memory.md`: Zero-copy I/O](memory.md#zero-copy-io)) |
 | Fan-out of immutable data | rc slices |
 | Actors | A task owning its state, plus a channel; a library pattern, not a language feature |
-| Thread-per-core / sharded state | Each shard owns its data; cross-shard work is messages; `pinned` executors ([Tasks, threads and executors](#tasks-threads-and-executors)) |
+| Thread-per-core / sharded state | Each shard owns its data; cross-shard work is messages; `pinned` executors ([Tasks, threads and executors](runtime.md#tasks-threads-and-executors)) |
 | GPU offload | A kernel launch is a child task borrowing its buffers; the scope end is the fence ([`accelerators.md`: Launches are structured tasks](accelerators.md#launches-are-structured-tasks)) |
 
 ### Data parallelism: `parallel_map`
 
 A worked example. It needs no new language features: structured scopes ([Tasks and borrowing](#tasks-and-borrowing)), shared borrows
-([`memory-and-resources.md`: Borrowing](memory-and-resources.md#borrowing)), closure parameter modes
+([`memory.md`: Borrowing](memory.md#borrowing)), closure parameter modes
 ([`closures.md`: Closure parameters: `Fn`, `FnMut`, `FnOnce`](closures.md#closure-parameters-fn-fnmut-fnonce)) and effect polymorphism
 ([`error-handling.md`: Results and effects](error-handling.md#results-and-effects)) are enough.
 
@@ -129,7 +129,7 @@ fn parallel_map<T, U, E>(items: &[T], f: impl Fn(&T) -> U with E) -> Vec<U> with
   children in a scope until a minimum grain size, which balances uneven per-element cost better than
   fixed chunks.
 - **Output:** pre-allocated as uninitialised slots that must each be written exactly once (a linear
-  type, [`memory-and-resources.md`: Resources: affine and linear](memory-and-resources.md#resources-affine-and-linear)). It is split in step with the input,
+  type, [`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear)). It is split in step with the input,
   so each child writes its own disjoint range: no locks, no copying, and the type system checks that
   every slot is filled. The one piece of `unsafe` lives in an audited place in the standard library,
   never in user code.
@@ -176,313 +176,17 @@ use `?`. None of that applies here.
 **Later:** a lambda that is safe to run as a GPU kernel could let the same call dispatch to a GPU
 ([`accelerators.md`](accelerators.md)).
 
-## Runtime contract
-
-Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](requirements.md#firm-requirements-decided),
-[`mods.md`: The core / mod boundary](mods.md#the-core--mod-boundary)). The memory model adds obligations for runtime handlers:
-
-- **Biased-RC merge queue:** objects whose last shared reference was dropped elsewhere are queued
-  to their owner. *Proposed* ([`memory-and-resources.md`: Biased reference counting](memory-and-resources.md#biased-reference-counting)): the owner
-  is a **task**, and the runtime drains a task's queue when it resumes the task and at task exit.
-- **Task migration:** with task-biased RC (proposed), a task moved by work stealing keeps its fast
-  path; migration costs nothing. With thread-biased RC it would become a non-owner on its new thread
-  (correct, but slower).
-- **Single-threaded targets** (browser WASM without cross-origin isolation, [R1](requirements.md#firm-requirements-decided)): every rc
-  operation is an owner operation; scopes still work, with children interleaved on one thread.
-- **Deterministic simulation** (`moddil/runtime-sim`, [Determinism and reproducibility](determinism.md)): the scheduler is a handler, so
-  interleavings are seed-controlled and replayable.
-  See [`determinism.md`](determinism.md) for the simulation runtime, virtual time and record/replay.
-- **Observability:** runtimes expose the task tree and each task's blocked-on effect operation to
-  spans and to the `introspect` capability ([`observability.md`: Task-aware stacks and the task tree](observability.md#task-aware-stacks-and-the-task-tree), [`observability.md`: Live introspection](observability.md#live-introspection)).
-- **Cancellable I/O:** every pending I/O operation must be cancellable promptly at the OS level
-  (io_uring cancel, epoll/kqueue deregistration, `CancelIoEx`), using per-platform strategies for
-  terminals and pipes; results that complete in a race with cancellation are retained, so standard
-  I/O stays cancel-safe ([Cancelling I/O: no "press Enter", no self-connect](#cancelling-io-no-press-enter-no-self-connect)).
-
-### Tasks, threads and executors
-
-**Tasks are the only programming model; threads are an execution resource.**
-
-- Everything concurrent is a **task**: a stackful coroutine, implemented with stack switching
-  ([`bootstrap.md`: WASM concurrency lowering](bootstrap.md#wasm-concurrency-lowering)). There is **no thread API in user code**, as with Go
-  goroutines, Java virtual threads and Erlang processes.
-- Scheduling is M:N: any task may run on any worker thread of its executor.
-- The same code runs single-threaded (browser WASM), on a work-stealing pool, or pinned to a core.
-  Nothing is marked async or sync (suspension is an effect, [Construction may suspend; drop may not](#construction-may-suspend-drop-may-not)).
-
-**One runtime per process, many executors.** The runtime is the scheduler handler installed in
-`main` (or `runtime-sim` in tests). Inside it, **executors** are pools of OS threads with a policy:
-
-| Executor | Policy | Typical use |
-|---|---|---|
-| `default` | Work-stealing, one thread per core | Normal CPU and I/O tasks |
-| `blocking` | Grows on demand | Blocking FFI and system calls (tokio's `spawn_blocking`; Go hands off its processor during syscalls) |
-| `pinned(cores)` | One thread per core, no stealing, optional busy-polling and real-time priority | HFT hot path; shard-per-core designs (Seastar, Glommio) |
-| `affine(main)` | One dedicated thread | Thread-affine resources: GUI main thread, GL contexts, C libraries with thread-local state |
-
-- Executors are configured in code or in the deployment manifest ([Distributed and multi-tier programs](distribution.md)).
-- **Placement:** a scope or spawn chooses its executor; children inherit their parent's executor
-  unless they override it. This is the same placement idea as GPU devices and tiers, one level down
-  (thread → core → GPU → machine).
-
-  ```rust
-  scope(|s| { … }, on: pinned(2..4));
-  s.spawn(|| legacy_c_lib.compress(buf), on: blocking);
-  ```
-
-- **One I/O reactor** (io_uring, epoll, kqueue or IOCP) is shared by all executors. I/O is an effect,
-  so there are no runtime-specific I/O types (as tokio's `TcpStream` is), no "cannot start a runtime
-  from within a runtime", and no nested `block_on`.
-
-**Where coroutines and threads genuinely differ:**
-
-| Issue | Moddil's answer |
-|---|---|
-| A task blocks its OS thread | All I/O goes through effects, so safe code cannot block. FFI functions are declared `blocking` and run on the `blocking` executor automatically. |
-| A long CPU loop never yields | **Recommended:** preemption at compiler-inserted safe points in loops and function entries (a cheap flag check), as in Go 1.14+ and Erlang. `pinned` executors can disable it. See [Open questions](#open-questions). |
-| Thread identity, thread-local storage | Tasks migrate, so safe code has no thread-local storage. Task-local context comes from effects and handlers. Thread-affine resources require the `affine` executor (a capability). |
-| Stack memory | Native: large virtual reservations, committed lazily, with guard pages. Go-style stack copying is impossible because borrows point into frames. *Open:* very many tasks on wasm32 are limited by address space. |
-| Biased RC after migration | See the task-biased proposal in [`memory-and-resources.md`: Biased reference counting](memory-and-resources.md#biased-reference-counting): migration costs nothing. `pinned` executors never migrate anyway. |
-| Switch cost | Task switch: tens of nanoseconds. OS thread switch: microseconds. |
-| Priorities, real time | OS thread priorities per executor. Task priorities within an executor are open ([Open questions](#open-questions)). |
-
-**Targets:** on browser WASM without cross-origin isolation, all executors collapse onto one thread;
-with it, Web Workers add threads. GPU devices act as executors for kernel tasks
-([`accelerators.md`](accelerators.md)). Under `runtime-sim` the whole runtime is one deterministic
-thread; executor placement is recorded and simulated ([`determinism.md`](determinism.md)).
-
 ## Open questions
 
-- **Preemption:** guaranteed (BEAM-style, via compiler-inserted yield points) or cooperative?
-  Affects tail latency (HFT, game tick) and fairness. *Recommended* ([Tasks, threads and executors](#tasks-threads-and-executors)): compiler-inserted safe
-  points in loops and function entries, which `pinned` executors can disable.
+Runtime questions (preemption, priorities) are in [`runtime.md`: Open questions](runtime.md#open-questions); async drop
+in [`resources.md`: Open questions](resources.md#open-questions).
+
 - ~~**Cancellation and linear values.**~~ Resolved: cancellation is cooperative and observed only at
-  suspension points, and the cancellation path must consume linear values like the error path ([Cancellation and shutdown](#cancellation-and-shutdown)).
+  suspension points, and the cancellation path must consume linear values like the error path ([Cancellation and shutdown](lifecycle.md#cancellation-and-shutdown)).
 - **Deadlock:** this model prevents data races, not deadlocks. Lock ordering by type? A lint? Lock
   levels (as in some kernels)? Or steer toward message passing?
-- **Async drop:** drop may not suspend ([Construction may suspend; drop may not](#construction-may-suspend-drop-may-not)). Is that enough for resources whose clean shutdown needs
-  I/O (e.g. flushing a TLS stream)? Probably: they become linear with an explicit `close`.
-- **Priority inversion** under the scheduler effect: does the core effect interface carry priority?
 - **Long-lived tasks:** what is the idiomatic shape for a server's top-level scope (accept loop with
   per-connection children) so that it reads naturally, not as a workaround for "no fire-and-forget"?
-
-## Construction may suspend; drop may not
-
-**The problem elsewhere.** C#, JavaScript, Python, Java and C++ all forbid async constructors:
-1. `new T()` must produce a `T` synchronously. An async constructor would make it produce a
-   `Task<T>` or a promise instead.
-2. The object is allocated before the constructor runs, which only initialises `this`. An `async`
-   body is rewritten into a separate state machine, and that cannot initialise `this` or its
-   `readonly` fields.
-3. A constructor suspended at an `await` would expose a half-built `this` to anything that already
-   holds it (event handlers, virtual calls, stored references).
-4. Even if it were allowed, async colouring would spread to every `new` and every caller.
-
-The usual workarounds are a static `CreateAsync()` factory, a two-phase `InitAsync()` that leaves a
-usable-but-invalid object in between, and `Lazy<Task<T>>`. Each is awkward or leaves invalid states
-reachable.
-
-**Moddil's answer.** Two decisions remove the problem rather than working around it:
-- **No special constructors** ([`memory-and-resources.md`: Ownership and RAII](memory-and-resources.md#ownership-and-raii)). A value
-  exists only once an all-fields literal has been evaluated. Creators are ordinary functions.
-- **Suspension is an effect, not a colour** ([Summary](#summary)).
-
-So async construction is simply a function that suspends:
-
-```rust
-fn connect(addr: &Addr) -> Conn with net, suspend, fail(NetError) {
-    let socket  = tcp.connect(addr);    // may suspend
-    let session = handshake(socket)?;   // may suspend or fail; on failure, socket is dropped
-    Conn { socket, session }            // the Conn exists only from here, fully formed
-}
-```
-
-- Callers do not change colour; their signatures gain the effects, which are inferred inside a
-  module.
-- There is never a partial object. Before the literal there are only owned locals, and failure or
-  cancellation drops them (or requires linear ones to be consumed).
-- **Long-lived services** (the dependency-injection case) are built by suspending functions at the
-  top of a structured scope, or provided as effect handlers. Nothing like `Lazy<Task<T>>` is needed.
-
-**Drop never suspends.** Destruction runs on every exit path, including cancellation and traps, so
-it must be immediate and infallible. A resource whose teardown needs I/O is a **linear type** with an
-explicit `close()` or `commit()`, which may suspend and fail like any other function
-([`memory-and-resources.md`: Resources: affine and linear](memory-and-resources.md#resources-affine-and-linear)).
-
-## Cancellation and shutdown
-
-### Why cancellation has to exist
-
-In servers and interactive programs, work regularly becomes unwanted before it finishes:
-
-| Cause | Example |
-|---|---|
-| Sibling failure | A request fans out to three services; one fails, so the other results are useless |
-| Deadlines | The caller's 200 ms budget has expired |
-| The requester left | The client disconnected, or the user navigated away |
-| Racing | Hedged requests: ask two replicas, take the first answer, stop the other |
-| Shutdown | Ctrl-C, or SIGTERM during a rolling deploy |
-
-Without cancellation that work keeps running and holding resources (Go's goroutine leaks before
-`context.Context`).
-
-**Two designs Moddil rejects:**
-- **Explicit tokens** (C#'s `CancellationToken`, Go's `context.Context`) must be threaded through
-  every call. People forget, libraries ignore them, and signatures get noisier.
-- **Asynchronous killing** (.NET's `Thread.Abort`, Java's `Thread.stop`) was removed from both
-  platforms: stopping code at an arbitrary instruction breaks invariants halfway through an update.
-
-### The model: implicit and cooperative
-
-- **A task's scope is its cancellation token.** It is carried by structured concurrency (as in Trio,
-  Kotlin and Swift); nothing is passed through signatures.
-- **Cancellation is observed only at suspension points.** Suspension is an effect, so every place a
-  task can pause is known: I/O, joining children, locks, timers, channels. When a task is cancelled,
-  its next suspension point returns a **`Cancelled` outcome** instead of a value. Code between
-  suspension points is never interrupted, so invariants are never torn.
-- **The cancellation path is an ordinary, checked exit path:**
-  - drops, `defer` and `errdefer` run ([`memory-and-resources.md`: When drops run](memory-and-resources.md#when-drops-run)–[`memory-and-resources.md`: `defer` and `errdefer`](memory-and-resources.md#defer-and-errdefer));
-  - **linear values must be consumed on it**, exactly as on error paths, typically with
-    `errdefer txn.rollback()`;
-  - cleanup on this path **may suspend** (a rollback needs the network) inside a **shielded,
-    deadline-bounded scope**: it is not itself cancelled midway, and it cannot hang for ever.
-- `Cancelled` is a distinct outcome, not an error ([`error-handling.md`: Tasks and concurrency](error-handling.md#tasks-and-concurrency));
-  it is accounted for at the join.
-- **Long pure-compute loops** have no suspension points. They call a cheap `checkpoint()` (a
-  suspension point that observes cancellation); a lint flags long loops in cancellable tasks without
-  one. Preemption safe points ([Tasks, threads and executors](#tasks-threads-and-executors)) only yield the thread; they never deliver cancellation, because
-  that would interrupt code between effect operations.
-- **Blocking FFI calls** cannot be interrupted. They run on the `blocking` executor ([Tasks, threads and executors](#tasks-threads-and-executors)); the scope
-  waits for them, or detaches the OS thread if the function's overlay allows it
-  ([`interop.md`: Annotation overlays](interop.md#annotation-overlays)).
-
-### Two levels: stop, then cancel
-
-| | **Stop** (graceful) | **Cancel** (hard, still cooperative) |
-|---|---|---|
-| Trigger | Ctrl-C / SIGTERM, deploy drain, a parent asks | Grace deadline expired, sibling failed, request deadline, racing |
-| Observed | Only where code asks, e.g. `stop_requested()` in a `select` | At every suspension point (`Cancelled`) |
-| Typical reaction | Stop taking new work, finish current work, say goodbye to peers, persist state | Abort current work, run cleanup |
-| Like | Go's `http.Server.Shutdown`; Hashiverse's shutdown token | Trio / Kotlin / Swift cancellation |
-
-- Signals are not asynchronous handlers: the runtime mod turns SIGINT and SIGTERM into a **stop**
-  event on `main`'s root scope.
-- If the scope has not finished when its **grace deadline** expires, stop escalates to cancel.
-- A **second signal** exits the process immediately; the OS reclaims everything.
-
-### Layered shutdown: innermost first
-
-A naive shared token tells everyone to stop at once, so a service can shut down while code that
-depends on it is still draining. Moddil orders shutdown by the scope tree instead:
-
-- **Services provided as effect handlers cannot disappear early.** A handler (database pool, logger,
-  DHT client) is installed by an outer scope, and a scope cannot end until everything inside it has
-  finished, so no child outlives a handler it uses.
-- **Scopes are shutdown layers.** Stop (and later cancel) is delivered to the **innermost layer
-  first**. Outer layers keep **operating completely normally** (serving requests, accepting writes)
-  while inner layers drain. Only when an inner layer has finished does the next layer out receive
-  stop.
-- **Tasks within one layer are peers** and stop together: thousands of connection handlers drain
-  concurrently.
-- Dependencies are expressed by **nesting**: services in an outer scope, the code that uses them in
-  an inner one. This is the same rule as drop order (reverse of construction) and as Erlang/OTP
-  supervisors, which terminate children in reverse start order.
-
-```rust
-fn main(net: NetRoot) {                                    // declares only the roots it uses
-    scope(|services| {                                     // layer 1 (outer)
-        services.spawn(|| db_writer());
-        services.spawn(|| dht.maintain());
-
-        scope(|app| {                                      // layer 2 (inner)
-            app.spawn(|| server.serve());
-        });
-        // layer 2 has fully finished; only now do db_writer and dht see stop_requested()
-    }, stop_on: [SIGINT, SIGTERM], grace: 10<s>);
-}
-
-fn serve() with net, suspend {
-    scope(|s| {
-        loop {
-            select {
-                conn = listener.accept() => s.spawn(|| handle(conn)),
-                _ = stop_requested()     => break,     // stop accepting; in-flight handlers finish
-            }
-        }
-    })                                                   // waits for in-flight handlers
-}
-```
-
-On Ctrl-C:
-1. `serve` stops accepting; in-flight handlers finish, still using `db_writer` and `dht`, which are
-   running normally.
-2. Layer 2 ends.
-3. `db_writer` flushes and `dht` persists its routing table, then they end.
-4. `main` returns an exit status.
-
-If the grace deadline expires first, cancellation proceeds in the same inner-to-outer order, so each
-layer's shielded cleanup still finds the outer services alive.
-
-### Cancelling I/O: no "press Enter", no self-connect
-
-**The problem elsewhere.** In Rust, a task reading stdin, or a thread in a blocking `accept`, sits
-inside a blocking system call. A shutdown signal cannot reach it until the call returns, so users
-press Enter after Ctrl-C, and programs connect to their own listening socket just to wake it up.
-- Even `tokio::io::stdin` reads on a background blocking thread: stdin can't portably be made
-  non-blocking (setting `O_NONBLOCK` on a shared terminal affects other processes; Windows console
-  and anonymous-pipe handles don't support overlapped I/O).
-- `select!` adds a second trap: each operation must be checked for *cancel-safety*, because some
-  (such as `read_line`) lose data already read when they lose the race.
-
-**Moddil's rules:**
-1. **Every I/O operation is a suspension point and a cancellation point.** `accept`, `read`,
-   `read_line`, `recv` and timers are effect operations handled by the runtime's reactor ([Tasks, threads and executors](#tasks-threads-and-executors)),
-   never blocking system calls on a thread. A stop that wins a `select`, or a hard cancel, removes
-   the pending operation and the task continues **immediately**.
-2. **The runtime cancels at the OS level** ([Runtime contract](#runtime-contract)): io_uring cancel requests, removing interest from
-   epoll or kqueue, `CancelIoEx` on Windows. An operation that completes in a race with its
-   cancellation keeps its result (rule 4).
-3. **Hard sources are handled once, in the runtime, per platform:**
-
-   | Source | Strategy |
-   |---|---|
-   | Unix terminals and pipes | Wait for readiness, then read only what is available, so a read never blocks; never set `O_NONBLOCK` on a shared descriptor. Cancelling means no longer waiting. |
-   | Linux with io_uring | A read on stdin can be cancelled (io_uring interrupts its worker), or use the readiness path. |
-   | Windows console | Wait on the console input handle together with a cancel event; read only when input is signalled. |
-   | Windows anonymous pipes | A thread on the `blocking` executor, interrupted with `CancelSynchronousIo`. |
-   | Devices and FFI calls the OS cannot interrupt | The `blocking` executor; the scope waits, or detaches the thread if the function's overlay allows it ([`interop.md`: Annotation overlays](interop.md#annotation-overlays)). This is the **only** documented exception. |
-
-4. **Standard I/O is always cancel-safe.** Buffers belong to the reader or stream object, not to the
-   in-flight operation, so a cancelled `read_line` loses nothing: partial data stays in the reader for
-   the next call. A `select` cancels its losing branches, and with cancel-safe operations that is
-   always correct. There is no per-method "is this cancel-safe?" to look up.
-5. **Ctrl-C itself.** In normal (cooked) terminal mode, SIGINT becomes a stop event on the root scope
-   ([Two levels: stop, then cancel](#two-levels-stop-then-cancel)). In raw mode (full-screen terminal apps) it arrives as a key event from the terminal API.
-6. **Testable.** Stdin, sockets and timers are effects, so the simulation runtime can feed input,
-   stop and cancel deterministically ([`determinism.md`](determinism.md)).
-
-```rust
-fn repl() with stdin, stdout, suspend {
-    let input = stdin.lines();
-    loop {
-        select {
-            line = input.next()  => eval(line?),
-            _ = stop_requested() => break,      // Ctrl-C: the pending read is cancelled; no Enter needed
-        }
-    }
-}
-
-fn serve(listener: &Listener) with net, suspend {
-    scope(|s| {
-        loop {
-            select {
-                conn = listener.accept() => s.spawn(|| handle(conn)),
-                _ = stop_requested()     => break,     // the pending accept is cancelled; no self-connect
-            }
-        }
-    })
-}
-```
 
 ## Background
 

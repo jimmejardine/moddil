@@ -85,6 +85,18 @@ The proposal process sketched in [`evolution.md`](evolution.md), formalised:
   Apache-2.0**.
 - Contributors **sign off** each commit under the Developer Certificate of Origin. There is no CLA.
 
+### Standard mods
+
+The `moddil/*` mods ([`stdlib.md`](stdlib.md)) follow these rules on top of the general process:
+
+- **RFCs** for new standard mods and breaking changes.
+- **Capability review**: any increase in a standard mod's declared capabilities needs review.
+- **Audit trail** ([Package management and supply-chain security](packages-and-supply-chain.md)): standard mod releases are reproducibly built, signed, and reviewed. The
+  review record says whether the reviewer was a human or an agent.
+- **Wrappers are allowed**: a mod may wrap a C or Rust library ([`interop.md`](interop.md)),
+  but it carries the `ffi` capability, which is visible to every consumer.
+- **Editions**: standard mods follow language editions, with automated migrations ([Language evolution](evolution.md)).
+
 ### Code of conduct
 
 - **Contributor Covenant 2.1.**

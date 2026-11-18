@@ -2,7 +2,7 @@
 
 > **Status:** proposal. Covers kernels, bootloaders, hypervisors and microcontroller firmware: code
 > with no operating system underneath. Related: [`targets.md`](targets.md) (hosted targets),
-> [`concurrency.md`](concurrency.md), [`memory-and-resources.md`](memory-and-resources.md).
+> [`concurrency.md`](concurrency.md), [`memory.md`](memory.md).
 > Syntax is illustrative.
 
 ## Summary
@@ -30,7 +30,7 @@ Declared in the binary's or mod's manifest and checked across all dependencies.
 
 - The standard library is layered: `moddil/core-*` → `moddil/alloc` → the OS-backed standard
   library (the same split as Rust's `core`, `alloc` and `std`).
-- Mod manifests already declare supported targets ([`mods.md`: What a mod is](mods.md#what-a-mod-is)). A dependency that needs
+- Mod manifests already declare supported targets ([`packages-and-supply-chain.md`: What a mod is](packages-and-supply-chain.md#what-a-mod-is)). A dependency that needs
   an unavailable effect is a build error naming the effect and the dependency path that requires it.
 
 ## Entry points and boot
@@ -54,7 +54,7 @@ fn on_trap(info: &TrapInfo) -> ! { log_to_flash(info); system_reset() }
 
 ## Memory without an operating system
 
-- Allocation is a capability ([Memory and resource management](memory-and-resources.md)).
+- Allocation is a capability ([Memory: ownership, borrowing and sharing](memory.md)).
 - **In freestanding profiles allocation is fallible by default:** it fails with `OutOfMemory`
   (class 1) rather than trapping, as in Zig and the Linux kernel's Rust code.
 - Strategies, chosen by the program:
@@ -63,7 +63,7 @@ fn on_trap(info: &TrapInfo) -> ! { log_to_flash(info); system_reset() }
   - a program-supplied heap allocator (TLSF, linked list).
 - `Rc` exists only when an allocator is available. On a single core, biased reference counting
   reduces to plain owner counts.
-- **Proposed answer** to the allocator question in [`memory-and-resources.md`: Open questions](memory-and-resources.md#open-questions): an `Rc` records its allocator only when it is not the default one; arenas stay borrow-based.
+- **Proposed answer** to the allocator question in [`memory.md`: Open questions](memory.md#open-questions): an `Rc` records its allocator only when it is not the default one; arenas stay borrow-based.
 
 ## Concurrency without a runtime
 
@@ -90,7 +90,7 @@ Three levels, from nothing to a full scheduler:
 - Structured concurrency still holds: the root scope lasts as long as the program.
 
 **L2: freestanding with an allocator and a full scheduler.** Executors behave as in hosted mode
-([`concurrency.md`: Tasks, threads and executors](concurrency.md#tasks-threads-and-executors)), minus the OS I/O reactor.
+([`runtime.md`: Tasks, threads and executors](runtime.md#tasks-threads-and-executors)), minus the OS I/O reactor.
 
 ## Hardware access
 

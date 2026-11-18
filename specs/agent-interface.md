@@ -67,7 +67,7 @@ property of the source.
   - a **compact view** for writing;
   - a **reviewer view**, used by editors and review tools, that shows inferred effects, types and
     error sets inline without putting them in the file, along with the groups each private item
-    inherits ([`docs-and-tests.md`: Overviews: mod, module and group docs](docs-and-tests.md#overviews-mod-module-and-group-docs)).
+    inherits ([`docs.md`: Overviews: mod, module and group docs](docs.md#overviews-mod-module-and-group-docs)).
 - Humans mostly *read* the reviewer view and *type* the compact one.
 
 ```rust
@@ -84,7 +84,7 @@ over **MCP** for agents, from the same front end.
 
 | Kind | Examples |
 |---|---|
-| **Queries** | **Overviews first**: mod, then module, then group, then item ([`docs-and-tests.md`: Overviews: mod, module and group docs](docs-and-tests.md#overviews-mod-module-and-group-docs)); signatures, effects, error sets and contracts of any definition; the call graph; which tests cover a definition; docs and examples of the **installed** version of each mod ([`docs-and-tests.md`: For agents and tools](docs-and-tests.md#for-agents-and-tools)); `explain` (desugared, effect-annotated views; comptime expansions) |
+| **Queries** | **Overviews first**: mod, then module, then group, then item ([`docs.md`: Overviews: mod, module and group docs](docs.md#overviews-mod-module-and-group-docs)); signatures, effects, error sets and contracts of any definition; the call graph; which tests cover a definition; docs and examples of the **installed** version of each mod ([`docs.md`: For agents and tools](docs.md#for-agents-and-tools)); `explain` (desugared, effect-annotated views; comptime expansions) |
 | **Actions** | Apply a fix; submit a **refactor intent** (rename, move, extract) as an operation rather than text edits ([`semantic-vcs.md`: Decisions](semantic-vcs.md#decisions)); run the affected tests ([`build-times.md`: Agents](build-times.md#agents)); replay a recording and inspect the failing task ([`observability.md`: For agents](observability.md#for-agents)) |
 
 ### Diagnostics built for agents
@@ -131,7 +131,7 @@ may be Moddil's largest adoption risk. Measures:
   the whole core language plus the signatures of the standard mods, small enough to load into a
   model's context.
 - **A checked example corpus**: every doc example compiles and runs
-  ([`docs-and-tests.md`: Examples are tests](docs-and-tests.md#examples-are-tests)), and the corpus is published for retrieval and
+  ([`testing.md`: Examples are tests](testing.md#examples-are-tests)), and the corpus is published for retrieval and
   training.
 - The tight feedback loop ([Diagnostics built for agents](#diagnostics-built-for-agents), ["Did you mean?"](#did-you-mean)) is the safety net when a model guesses wrong.
 
@@ -147,10 +147,10 @@ So an agent can build and test code without being able to reach the network or t
 
 Every change can be reviewed through:
 - a **semantic diff**: API, effect, capability and contract changes ([`semantic-vcs.md`](semantic-vcs.md));
-- "**this changed, but its tests didn't**" ([`docs-and-tests.md`: Attached tests](docs-and-tests.md#attached-tests));
+- "**this changed, but its tests didn't**" ([`testing.md`: Attached tests](testing.md#attached-tests));
 - **mutation scores** per changed declaration ([`correctness.md`](correctness.md));
 - an LLM-written summary that is **checked against the semantic diff**;
-- `note` blocks recording *why* ([`docs-and-tests.md`: Maintainer notes](docs-and-tests.md#maintainer-notes)).
+- `note` blocks recording *why* ([`docs.md`: Maintainer notes](docs.md#maintainer-notes)).
 
 ## Directions (not yet decided)
 

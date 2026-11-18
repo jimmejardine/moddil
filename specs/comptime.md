@@ -213,7 +213,7 @@ Generated code is ordinary code once expanded:
 | Example | Uses |
 |---|---|
 | [Multiplayer game](examples/01-multiplayer-game.md) | `#[derive]` for network snapshot codecs and delta encoding; comptime struct-of-arrays layouts for ECS components |
-| [HFT](examples/02-hft-platform.md) | Exchange codecs (SBE/FIX) generated from embedded schemas; comptime lookup tables; zero-copy accessor views (see [`memory-and-resources.md`: Zero-copy I/O](memory-and-resources.md#zero-copy-io)) |
+| [HFT](examples/02-hft-platform.md) | Exchange codecs (SBE/FIX) generated from embedded schemas; comptime lookup tables; zero-copy accessor views (see [`memory.md`: Zero-copy I/O](memory.md#zero-copy-io)) |
 | [Web store](examples/03-web-store.md) | `sql"…"` checked against the schema; `#[derive]` for API contracts and validation; `html"…"` templates for the web client |
 | [Hashiverse](examples/04-hashiverse.md) | Wire-protocol codecs that must match existing Rust servers; comptime crypto constant tables; `fmt` for logs |
 

@@ -1,7 +1,7 @@
 # The Toolchain
 
 > **Status:** proposal. Indexed in [`README.md`](README.md). Docs and tests are detailed in
-> [`docs-and-tests.md`](docs-and-tests.md); the agent-facing API in
+> [`docs.md`](docs.md); the agent-facing API in
 > [`agent-interface.md`](agent-interface.md); packages in
 > [`packages-and-supply-chain.md`](packages-and-supply-chain.md). Commands are illustrative.
 
@@ -28,10 +28,10 @@ and all of them are fast because the daemon is warm.
 |---|---|
 | `new`, `add`, `update`, `outdated`, `vendor`, `publish`, `audit`, `vet` | Mods and the supply chain ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)) |
 | `build`, `run`, `check` | Build, run, and check without code generation ([`build-times.md`](build-times.md)); `run --watch` re-checks and re-runs on save ([Playground: learning without a REPL](#playground-learning-without-a-repl)) |
-| `test`, `bench` | Attached tests and benchmarks ([`docs-and-tests.md`](docs-and-tests.md)) |
+| `test`, `bench` | Attached tests and benchmarks ([`docs.md`](docs.md)) |
 | `fmt` | Canonical formatter ([Formatter](#formatter)) |
 | `lint`, `fix` | Built-in lints and machine-applicable fixes ([Linter](#linter)) |
-| `doc` | Checked and generated documentation ([`docs-and-tests.md`](docs-and-tests.md)) |
+| `doc` | Checked and generated documentation ([`docs.md`](docs.md)) |
 | `diff`, `log`, `blame` | Semantic report between two Git revisions, with a suggested PR description; definition-level history ([`semantic-vcs.md`](semantic-vcs.md)) |
 | `explain` | Expansions, desugarings, effect sets, error sets, handler stacks |
 | `migrate` | Edition migrations, checked equivalent; library replacement rules are applied by `fix` ([`evolution.md`](evolution.md)) |
@@ -95,7 +95,7 @@ human-oriented text.
 - A built-in **sampling profiler**, task-aware, producing flame graphs.
 - **Allocation profiling** through the allocator capability.
 - Counters for slow-path reference-count operations
-  ([`memory-and-resources.md`: Biased reference counting](memory-and-resources.md#biased-reference-counting)).
+  ([`memory.md`: Biased reference counting](memory.md#biased-reference-counting)).
 - Effect-level tracing ([`observability.md`](observability.md)).
 - Build profiling with `moddil build --timings` ([`build-times.md`: Budgets](build-times.md#budgets)).
 
@@ -105,7 +105,7 @@ human-oriented text.
   ([`targets.md`](targets.md)).
 - **The toolchain version is pinned in the manifest and fetched automatically** (like Go's
   `toolchain` directive since Go 1.21: rustup, but built in).
-- Toolchains are reproducible and verifiable ([`bootstrap.md`](bootstrap.md),
+- Toolchains are reproducible and verifiable ([`compiler.md`](compiler.md),
   [`determinism.md`: Reproducible builds](determinism.md#reproducible-builds)).
 
 ## Configuration
@@ -137,7 +137,7 @@ redefinition. Quick, REPL-style learning comes from **compilation fast enough to
 program on every edit**, in an **in-browser playground**:
 
 - **No server.** The compiler itself runs as WASM in the page (it builds to WASM anyway,
-  [`bootstrap.md`: Bootstrapping after self-hosting](bootstrap.md#bootstrapping-after-self-hosting)), and the program compiles to WASM and runs there too.
+  [`compiler.md`: Bootstrapping after self-hosting](compiler.md#bootstrapping-after-self-hosting)), and the program compiles to WASM and runs there too.
 - **REPL feel, program semantics.** Every keystroke re-checks the program (diagnostics, with
   inferred types and effects as hints); every successful build re-runs it. There is no session
   state, so none of a notebook's hidden-state problems, and no exceptions to the language's rules.
@@ -153,7 +153,7 @@ program on every edit**, in an **in-browser playground**:
   everyone who opens the link sees exactly the same output.
 - **Learning material:** a guided tour (in the style of the Go tour and the Rust Book); a "Run"
   button on every documentation example (examples are tests,
-  [`docs-and-tests.md`: Examples are tests](docs-and-tests.md#examples-are-tests)); runnable error-explanation pages.
+  [`testing.md`: Examples are tests](testing.md#examples-are-tests)); runnable error-explanation pages.
 - **On the desktop**, `moddil run --watch` gives the same loop: re-check and re-run on save, with
   live update for long-running programs ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds)).
 - **Costs and risks:** the compiler's download size (estimated in the tens of MB; loaded lazily; to

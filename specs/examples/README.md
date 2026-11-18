@@ -29,7 +29,7 @@ Rows link to each area's document; all areas are listed in the [index](../README
 | Problem area | Game | HFT | Store | Hashiverse |
 |---|---|---|---|---|
 | [Effects and handlers](../effects-and-capabilities.md) | ○ | ● (sim ↔ live) | ○ | ● (pluggable transport/time/storage) |
-| [Memory / resources](../memory-and-resources.md) | ○ | ● (zero-alloc hot path) | ○ | ○ |
+| [Memory / resources](../memory.md) | ○ | ● (zero-alloc hot path) | ○ | ○ |
 | [Error handling](../error-handling.md) | ○ | ● | ○ | ○ |
 | [Numerics](../numerics.md) | ○ | ● (decimal, SIMD) | ○ (money) | ○ (crypto) |
 | [Contracts / verification](../correctness.md) | | ● (risk checks) | ○ | ○ |
@@ -50,7 +50,7 @@ example are not enough, a fifth GPU-heavy example (e.g. ML inference) may be add
 
 ## Coverage: examples × standard mods
 
-See [`../mods.md`: Initial standard-mod catalogue](../mods.md#initial-standard-mod-catalogue) for the full catalogue. Mods marked **new** are example-specific
+See [`../stdlib.md`: Initial standard-mod catalogue](../stdlib.md#initial-standard-mod-catalogue) for the full catalogue. Mods marked **new** are example-specific
 mods the example would create.
 
 | Mod | Game | HFT | Store | Hashiverse |
@@ -70,16 +70,4 @@ mods the example would create.
 | `moddil/storage` | | | ○ | ● |
 | **new** | `game/netcode`, `game/chat` | `hft/marketdata`, `hft/risk`, `hft/fix` | `store/catalog`, `store/payments` | `hashiverse/protocol`, `moddil/dht`?, `moddil/pow`? |
 
-## Proposed order
-
-1. **Hashiverse client.** A real protocol with real users, with existing Rust servers to interoperate
-   against. It exercises WASM, interop, crypto and effects-as-pluggable-traits. The CLI/native client
-   comes first and the browser client follows once JSPI lowering exists
-   ([`../bootstrap.md`: Milestones](../bootstrap.md#milestones)).
-2. **Multiplayer game.** Multi-tier, browser, real-time, WebGPU.
-3. **Web store.** Everyday ergonomics, databases and the mobile question.
-4. **HFT platform.** The hardest latency requirements and the flagship "same code in simulation and live"
-   demonstration.
-
-The order is open for discussion. HFT has the strongest single demonstration of effects, but the
-largest scope.
+The order in which the examples are built is in [`roadmap.md`: Order of the reference examples](../roadmap.md#order-of-the-reference-examples).
