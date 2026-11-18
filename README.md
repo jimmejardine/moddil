@@ -1,3 +1,5 @@
+<img src="moddil.png" alt="Moddil logo" align="right" width="150">
+
 # Moddil
 
 Moddil is a programming language being designed for three shifts happening at once:
