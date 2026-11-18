@@ -19,6 +19,7 @@
 | [`distribution.md`](distribution.md)                 | Components, placement, `remote` effect, contracts and skew checks; images and adapters to existing platforms (§2.10) | Decided direction                 |
 | [`interop.md`](interop.md)                           | C ABI and Rust only: header import, overlays, generated Rust bridge, components, C++ via shims (§2.13)           | Decided direction                     |
 | [`docs-and-tests.md`](docs-and-tests.md)             | Checked and generated docs, examples as tests, attached tests and benchmarks, notes (§2.17, §2.18)               | Decided direction                     |
+| [`targets.md`](targets.md)                           | Cross-compilation from any host, static builds, libc strategy, signing and packaging (§2.15)                       | Decided direction                     |
 | [`mods.md`](mods.md)                                 | Mods, the core/mod boundary, standard-mod catalogue (R2)                                                         | Decided direction                     |
 | [`error-handling.md`](error-handling.md)             | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§2.3)                              | Partly decided; survey                |
 | [`correctness.md`](correctness.md)                   | Contracts, validated newtypes, property testing, fuzzing, verification, assurance levels (§2.7)                  | Proposal                              |
@@ -739,11 +740,36 @@ that iterate dozens of times per task.
 
 ### 2.15 Cross-compilation and deployment
 
-- **State of the art.** Zig (cross-compile to anything from anything, bundled libc), Go (static
-  binaries, `GOOS`/`GOARCH`).
-- **Directions.** Cross-compilation as a default capability of the toolchain; static binaries;
-  WebAssembly (with the component model / WASI) as a **required** first-class target, which also
-  fits the capability model naturally (see §5.1, R1).
+**Problem.** Shared libraries make deployment fragile: the right versions must be installed on every
+machine ("dependency hell"), and building for another OS usually needs that OS, a VM, Docker images
+or hand-assembled sysroots.
+
+**State of the art.** Zig cross-compiles anything to anything from one download (bundled musl,
+mingw-w64, glibc stubs per version, macOS stubs); Go builds static Linux binaries with no libc via
+`GOOS`/`GOARCH`; Rust needs extra tools (`cross`, `cargo-zigbuild`, `cargo-xwin`); rcodesign signs and
+notarises macOS binaries from Linux or Windows.
+
+**Decision** (detail: [`targets.md`](targets.md)).
+- **Every toolchain is a cross-compiler** for every tier-1 target, with zero setup: Linux, macOS and
+  Windows binaries from any of them, plus WASM (R1).
+- **Static by default**, meaning *static except the OS's own mandatory surface*: no third-party shared
+  libraries ever. Linux binaries are fully static; Windows uses only system DLLs; macOS links only
+  `libSystem` (Apple supports nothing else).
+- **No libc where the OS allows**: Moddil's standard library uses raw system calls on Linux and Win32
+  on Windows, with its own DNS resolver. libc comes in only when C code is linked (static musl on
+  Linux).
+- **Opt-in dynamic glibc targets** with a pinned minimum version (`linux-x86_64-gnu.2.28`) for programs
+  that must load system drivers (CUDA, Vulkan) or NSS modules.
+- **Byte-identical output on any host**, so build caches are shared across operating systems and
+  releases can be verified (§2.16).
+- **Signing and packaging from any host** (Authenticode; macOS ad-hoc, Developer ID and
+  notarisation; OCI images), with keys supplied as capabilities at release time.
+- Cross-built binaries run locally through WSL2, QEMU user mode and Wasmtime; macOS through remote
+  runners.
+
+**Open questions** (more in [`targets.md`](targets.md) §13).
+- Licensing review of bundling macOS headers and link stubs.
+- Scope of iOS and Android packaging; which tier-2 targets to support.
 
 ---
 
@@ -1162,6 +1188,7 @@ removal.
 - `specs/interop.md`: C ABI and Rust interop, overlays, generated bridge, C++ via shims (§2.13)
 - `specs/distribution.md`: components, `remote`, contracts and skew, topology, adapters (§2.10)
 - `specs/docs-and-tests.md`: docs, examples, attached tests and benchmarks, notes (§2.17, §2.18)
+- `specs/targets.md`: cross-compilation, static builds, libc strategy, signing (§2.15)
 - `specs/mods.md`: mods, core/mod boundary, standard-mod catalogue (R2)
 - `specs/error-handling.md`: `?`, try blocks, R3, outcome classes, traces (§2.3); survey of prior art
 - `specs/correctness.md`: contracts, testing and verification (§2.7); proposal
@@ -1219,6 +1246,8 @@ removal.
 - **Interop:** Zig `@cImport` / `zig cc`; Swift C++ interoperability; Carbon language goals; `cxx`;
   `crubit`; Rust `crabi` proposal; Mozilla UniFFI; ICU4X Diplomat; `wit-bindgen`; RLBox.
 - **Determinism:** FoundationDB simulation testing; TigerBeetle VOPR; `rr`.
+- **Cross-compilation:** Zig (`zig cc`, bundled libcs); Go (`GOOS`/`GOARCH`); `cargo-zigbuild`;
+  `cargo-xwin`; osxcross; musl; mingw-w64; rcodesign (apple-codesign).
 - **Observability:** OpenTelemetry; W3C Trace Context; Rust `tracing`; Java Flight Recorder; BEAM
   observer and recon; defmt; Yang et al., *NanoLog* (USENIX ATC 2018); Pernosco; WinDbg TTD;
   tokio-console.

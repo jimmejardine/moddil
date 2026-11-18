@@ -212,6 +212,9 @@ and forgetting a fence.
 - **Feature tiers** (subgroups, f16, tensor cores, shared-memory size) are target capabilities checked
   at compile time. A kernel that needs tensor cores cannot be built for a target without them; a
   schedule can provide a fallback.
+- **Linking:** GPU drivers (CUDA's `libcuda`, the Vulkan loader) are installed per machine and loaded
+  dynamically, so GPU programs on Linux use a dynamic glibc target with a pinned minimum version;
+  everything else in them stays static ([`targets.md`](targets.md) §7).
 - The **CPU simulator** runs kernels deterministically on the CPU. It gives GPU-free tests and CI,
   race detection (§7), and lets the same kernels run on servers without GPUs.
 

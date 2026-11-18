@@ -114,7 +114,8 @@ problem, which is exactly the supply-chain concern of §2.16. Mitigations:
 | Native backends of our own | Faster compiles, full control | **Not now** | Go and Zig did this at great cost; revisit only if Cranelift + LLVM block the build-time goals |
 
 **Linkers:** `lld` or `mold` for native code; `wasm-ld` or a Moddil linker for WASM modules and
-components. **Cross-compilation (§2.15):** LLVM plus bundled libc/sysroots, as Zig does.
+components. **Cross-compilation (§2.15):** LLVM plus bundled libc/sysroots, as Zig does
+([`targets.md`](targets.md)).
 
 ## 5. Milestones
 
