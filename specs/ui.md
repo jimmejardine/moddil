@@ -237,6 +237,7 @@ Moddil does not standardise a UI framework, but nothing stops community mods fro
    types; how are exported traits (implemented by the shell) expressed in each language?
 4. **Live update under a running shell:** can a debug build hot-swap the core while the app stays open
    ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds))?
-5. **More binding languages:** C# and .NET, and Python (Hashiverse ships Python wrappers today)?
+5. **More binding languages:** **Python is a priority** for adoption ([`adoption.md`](adoption.md));
+   Hashiverse ships Python wrappers today. C# and .NET later?
 6. **Platform-API handlers:** adopt the shell-provided handler direction above as the standard way to
    reach device services?

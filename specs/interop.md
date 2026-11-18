@@ -160,7 +160,10 @@ let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → 
 - How far can generics cross the Rust bridge beyond explicit instantiations?
 - If crABI stabilises, can the bridge use it instead of the C ABI?
 - Overlay distribution and trust: who may publish overlays, and how are they audited?
-- Python interop (raised in the HFT example): out of scope, or through Python's C API as a mod?
+- **Python, both directions.** Consuming Moddil from Python (`moddil bind --lang python` producing a
+  native extension module and wheels, as PyO3 and maturin do) is a priority for adoption
+  ([`adoption.md`](adoption.md)). Calling Python from Moddil (raised in the HFT example): out of scope,
+  or through Python's C API as a mod?
 - Size of the bundled clang in the toolchain download.
 
 ## Background

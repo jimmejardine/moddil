@@ -97,6 +97,19 @@ let y = add(1.5, 2.25);   // f64
   println(fmt"{b.min}..{b.max}");
   ```
 
+## Patterns and control flow
+
+As in Rust, unless a delta says otherwise:
+
+| Construct | Moddil | Notes |
+|---|---|---|
+| `match` | Exhaustive, with guards (`x if x > 0`), or-patterns (`A \| B`), ranges, slice patterns (`[first, .., last]`), bindings (`n @ 1..=9`) | Exhaustiveness rules in [`types.md`: Sum types and exhaustiveness](types.md#sum-types-and-exhaustiveness) |
+| Conditional binding | `if let`, `if let` chains (`if let Some(x) = a && x > 0`), `while let`, `let … else` | |
+| Loops | `loop`, `while`, `for x in iter`; `break value` from `loop`; labelled `break` and `continue` | `for` uses `IntoIterator`, including effectful iterators ([`stdlib.md`: Iteration](stdlib.md#iteration)) |
+| Expressions | `if`, `match` and blocks are expressions; the last expression is the value | |
+| Binding modes | Matching through a borrow binds borrows (`&T` in, `&T` fields out) | No lifetimes involved: the bindings are second-class like any borrow ([`memory-and-resources.md`: Borrowing](memory-and-resources.md#borrowing)) |
+| Evaluation order | Left to right, specified | [`determinism.md`: Sources of nondeterminism](determinism.md#sources-of-nondeterminism) |
+
 ## Named and default arguments
 
 - Any parameter may be passed by name: `connect(host, port: 8443)`.
@@ -115,6 +128,10 @@ let y = add(1.5, 2.25);   // f64
 ## Open questions
 
 1. Default arguments on trait methods and their implementations ([Named and default arguments](#named-and-default-arguments)).
+2. Patterns: should refinements be usable as patterns (`match port { p: Port => … }`), and are
+   named-argument records destructurable by name ([Patterns and control flow](#patterns-and-control-flow))?
+3. Do any of Rust's binding-mode subtleties (the 2024 edition changes to `ref` and `&` in patterns)
+   need to exist without lifetimes, or can the rules be simpler?
 
 Decided in this round: name-only parameters (opt-in, [Named and default arguments](#named-and-default-arguments)); anonymous records without width subtyping
 ([Inference: "generic on the fly"](#inference-generic-on-the-fly)); one refinement form, `where` ([Deltas from Rust (and why)](#deltas-from-rust-and-why)); contracts as clauses ([Deltas from Rust (and why)](#deltas-from-rust-and-why)); `Option<T>` only, with

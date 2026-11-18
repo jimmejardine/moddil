@@ -258,6 +258,20 @@ Rules (proposal, to be settled in detail):
 - `dyn Trait` is unsized and always lives behind a pointer: `&dyn`, `&mut dyn`, `Box<dyn>`, or an rc.
 - Associated types must be fixed to be used: `dyn Iterator<Item = u8>`.
 
+## Operators
+
+Operators are traits, as in Rust: `a + b` calls `Add::add`, `a[i]` calls `Index::index`, `-a` calls
+`Neg::neg`. There are no user-defined operator symbols.
+
+- Moddil's extra operators are traits too: the wrapping operators (`+%`, `-%`, `*%`;
+  [`numerics.md`](numerics.md)) and matrix multiply (`@`; [`accelerators.md`](accelerators.md)).
+- **Output types follow the operands.** `f64<m> / f64<s>` is `f64<m/s>`: the `Output` associated
+  type is computed at compile time from the unit dimensions ([`units.md`: Arithmetic, conversion and polymorphism](units.md#arithmetic-conversion-and-polymorphism)).
+  The same holds for `Fixed<S>` scales ([`numerics.md`: Decimals for money](numerics.md#decimals-for-money)).
+- `==` and `<` come from `Eq` and `Ord` ([`values.md`: Equality and ordering traits](values.md#equality-and-ordering-traits)).
+- Operators may perform effects only if the trait allows it; the standard operator traits are
+  pure apart from traps (open question 8).
+
 ## Sum types and exhaustiveness
 
 - `match` must be **exhaustive**, as in Rust; so must `let … else` and `if let` chains used as
@@ -293,3 +307,9 @@ Rules (proposal, to be settled in detail):
    that named arguments exist ([`syntax.md`](syntax.md))?
 6. **Trait aliases** (`trait Num = Add + Sub + Mul + Copy`).
 7. Revisit **higher-kinded types** once GAT-based libraries show what is missing ([`paradigms.md`](paradigms.md)).
+8. **How far operator overloading goes:** may operator traits fail or suspend (`a + b` on big numbers
+   that allocate)? Should comparison chaining (`a < b < c`) exist?
+9. **Can `==` differ from `Eq`?** Rust's `PartialEq` allows it (floats); Moddil's equality rules are
+   in [`values.md`](values.md). Is a separate overloadable `==` ever needed?
+10. **Guidance against surprising overloads:** a lint or review rule (for people and agents) that
+    operators keep their arithmetic meaning, as the `+` on strings is absent ([`text.md`](text.md)).

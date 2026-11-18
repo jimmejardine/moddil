@@ -171,6 +171,11 @@ compiler.
 3. Custom lint mods are pure and sandboxed, but they still cost build time. Do they need limits or
    review?
 4. Should `moddil` host third-party subcommands (`cargo-xyz` style), or keep a closed command set?
+5. **Diagnostics for people:** the structured form is designed for agents
+   ([`agent-interface.md`: Diagnostics built for agents](agent-interface.md#diagnostics-built-for-agents)); what is the human rendering's style guide (one
+   primary message plus notes, source snippets, suggested fixes), and how are the hardest errors
+   (effects, borrows, coherence) explained? Should each error code have a long explanation, as
+   `rustc --explain` does?
 
 Decided: no REPL, script or notebook mode (a non-goal, [`requirements.md`: Non-goals (draft)](requirements.md#non-goals-draft));
 quick learning comes from the in-browser playground ([Playground: learning without a REPL](#playground-learning-without-a-repl)).
