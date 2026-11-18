@@ -417,6 +417,9 @@ out.close()?                         // a flush/close failure surfaces here, not
 
 ## Cost table
 
+The full cost model, including calls, effects and checks, is in
+[`performance.md`: A published cost model](performance.md#a-published-cost-model).
+
 | Construct | Allocation | Per-use cost | Thread-safe to share |
 |---|---|---|---|
 | Owned value | Wherever its owner lives | None | Move only |

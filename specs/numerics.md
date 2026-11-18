@@ -67,6 +67,8 @@
 - **Cost**: typically 1–5% in integer-heavy code before optimisation. Checks are removed where
   range analysis or refinements prove that overflow can't happen (loop counters bounded by a
   length, values of `type Percent = u8 where self <= 100`).
+- **No global opt-out:** no build profile turns overflow checks off; `moddil perf checks` reports the
+  ones that remain ([`performance.md`: Checks and their elision](performance.md#checks-and-their-elision)).
 
 ### Indices and lengths are signed
 

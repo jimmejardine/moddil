@@ -47,7 +47,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Contracts and verification](correctness.md)                       | 🟠 major questions | [`correctness.md`](correctness.md)                                         |
 | **Running programs**                                               |                    |                                                                            |
 | [Concurrency across CPUs](concurrency.md)                          | 🟡 minor questions | [`concurrency.md`](concurrency.md), [`closures.md`](closures.md)           |
-| [Performance model](performance.md)                                | ⚪ not started     | [`performance.md`](performance.md)                                         |
+| [Performance model](performance.md)                                | 🟡 minor questions | [`performance.md`](performance.md)                                         |
 | [GPUs and accelerators](accelerators.md)                           | 🟡 minor questions | [`accelerators.md`](accelerators.md)                                       |
 | [Distributed and multi-tier programs](distribution.md)             | 🟡 minor questions | [`distribution.md`](distribution.md)                                       |
 | [Determinism and reproducibility](determinism.md)                  | 🟠 major questions | [`determinism.md`](determinism.md)                                         |

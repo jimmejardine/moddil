@@ -129,7 +129,8 @@ simulations; `moddil explain` shows the installed handlers.
 
 Because every source of nondeterminism is an effect, **logging effect results at handler boundaries
 is enough to replay an execution exactly**. It works like `rr`, but at the language level, so it is
-portable and much cheaper.
+portable and much cheaper. Recorded runs also supply reproducible PGO profiles
+([`performance.md`: Optimisation control](performance.md#optimisation-control)).
 
 Uses:
 - reproducing production incidents;

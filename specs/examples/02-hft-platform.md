@@ -55,8 +55,8 @@ data, time and order routing are effects, and only their handlers differ.
   the core language.
 - **Capabilities ([Package management and supply-chain security](../packages-and-supply-chain.md)).** Research code physically cannot reach the live `orders` capability; only a
   deployment to `execution` grants it. A third-party analytics mod cannot touch the network.
-- **Predictable latency ([Memory and resource management](../memory-and-resources.md)).** No GC; arenas and pools; **a "no allocation" effect** that the
-  compiler can check on the hot path; no hidden locks; core pinning and NUMA-aware placement.
+- **Predictable latency ([Memory and resource management](../memory-and-resources.md)).** No GC; arenas and pools; **`#[no_alloc]` and `#[no_lock]`** that the
+  compiler checks on the hot path ([`performance.md`: Hot-path guarantees](../performance.md#hot-path-guarantees)); no hidden locks; core pinning and NUMA-aware placement.
 - **Lock-free concurrency ([Concurrency across CPUs](../concurrency.md)).** SPSC/MPMC rings between feed, strategy and gateway threads;
   thread-per-core designs; busy-polling.
 - **C/C++ interop ([Interoperability with C and Rust](../interop.md)).** Kernel-bypass NIC libraries (e.g. DPDK, ef_vi/Onload-style APIs), exchange
@@ -101,8 +101,9 @@ Initial targets, to be refined:
 
 ## Open questions
 
-- Can a "no allocation" or "bounded latency" property be an effect the compiler checks, as part of
-  the effect system rather than an external linter?
+- ~~Can a "no allocation" or "bounded latency" property be an effect the compiler checks?~~
+  **Resolved:** checked attributes, `#[no_alloc]` and `#[no_lock]`, not effects; bounded latency is still
+  open ([`performance.md`: Hot-path guarantees](../performance.md#hot-path-guarantees)).
 - How exactly do simulated-exchange semantics (queue position, partial fills, latency models) live
   alongside the real gateway behind one effect interface?
 - How far should Moddil go in controlling hardware (core pinning, NUMA, huge pages): runtime mod or

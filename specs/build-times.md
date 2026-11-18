@@ -170,6 +170,7 @@ Hashiverse needed a manual override to get this; in Moddil it is the default. Pe
 available (for example, optimising one hot mod of your own in dev builds).
 
 Other profiles: `release` (full optimisation, LTO), `profiling` (release plus debug info), `fuzz`.
+PGO from recorded runs and the debug-build speed target are in [`performance.md`: Optimisation control](performance.md#optimisation-control).
 
 ## Budgets
 
