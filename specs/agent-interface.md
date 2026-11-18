@@ -62,7 +62,7 @@ The source is a printed view of a canonical AST, so how much is shown is a choic
 property of the source.
 - **Explicit in the source** only where readers need it: at **mod boundaries**, public signatures
   state effects, error sets, contracts and capabilities ([Effects and capabilities as a unifying idea](effects-and-capabilities.md), [Error handling](error-handling.md), [Correctness tooling: contracts and verification](correctness.md)).
-- **Inferred inside** a module: local effects, error sets and types.
+- **Inferred inside** a mod: local effects, error sets and types ([`modules.md`](modules.md#the-mod-boundary-is-where-things-become-explicit)).
 - **Two views of the same code**:
   - a **compact view** for writing;
   - a **reviewer view**, used by editors and review tools, that shows inferred effects, types and

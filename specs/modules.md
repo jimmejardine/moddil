@@ -1,23 +1,171 @@
-# Modules, visibility and program structure
+# Modules, Visibility and Program Structure
 
-> **Status:** not started. Nothing is decided yet; this page records the problem and the
-> questions to settle. Listed in the [index](README.md).
+> **Status:** decided direction, details open. Listed in the [index](README.md). Snippets are
+> **illustration only**.
+
+## Summary
+
+| Rule | One line |
+|---|---|
+| **The file tree is the module tree** | `src/book/levels.mdl` is module `book::levels`; there are no `mod foo;` declarations. |
+| **Three visibility levels** | Private (this module), `pub(mod)` (any module in this mod), `pub` (exported from the mod). |
+| **The mod boundary is where things become explicit** | `pub` items write full signatures, belong to groups and are semver-checked; everything else is inferred. |
+| **Cycles inside a mod, a DAG between mods** | Modules of one mod may refer to each other freely; mods never form cycles. |
+| **No glob imports, except preludes** | `use a::b::{c, d}`; `use x::*` only for a mod's declared `prelude`. |
+| **Conditional code is comptime `if`** | Branches on `target` and `profile` are ordinary code, type-checked for every tier-1 target. |
+| **No feature flags** | Optional functionality ships as separate mods. |
+| **Library and executables** | The manifest names the library root and any executables. |
 
 ## Problem
 
-The mod boundary already carries a lot of meaning (explicit effects, capability ceilings, required
-groups, semver checks), but the module system itself is still Rust's by default: visibility levels,
-how files map to modules, and how code varies by target are undecided.
+- The **mod boundary** already carries a lot of meaning: explicit effects, capability ceilings,
+  required groups and semver checks. But the module system inside a mod is undecided.
+- **`#[cfg]` rot**: in Rust, code excluded by `#[cfg]` is never type-checked on the developer's
+  machine, so platform code breaks silently.
+- **Feature flags**: Cargo's additive features are unified across the whole dependency graph, so
+  features get enabled behind a mod's back, and the number of combinations to test is 2^n.
+- **Glob imports** make code non-local: a reader, or an agent, can't tell where a name comes from
+  without looking elsewhere.
+- **Visibility sprawl**: Rust code fills up with `pub(crate)`, and its five levels are more than
+  most code needs.
 
-## Touched on in
+## State of the art
 
-[`syntax.md`: Mapping](syntax.md#mapping), [`docs-and-tests.md`: Overviews: mod, module and group docs](docs-and-tests.md#overviews-mod-module-and-group-docs),
-[`build-times.md`: Open questions](build-times.md#open-questions), [`mods.md`](mods.md).
+| Topic | Rust | Go | Swift | Zig | Python / TypeScript |
+|---|---|---|---|---|---|
+| **Visibility** | Private, `pub(super)`, `pub(in path)`, `pub(crate)`, `pub` | Capitalised names are exported; everything is visible inside a package | `private`, `fileprivate`, `internal` (default), `public`, `open` | `pub` or file-private | Conventions (`_name`) / `export` |
+| **Files and modules** | One file per module, each declared with `mod foo;` | A directory is a package; its files merge | Files merge into a module | A file is a struct-like namespace | The file tree is the module tree |
+| **Cycles** | Allowed inside a crate, forbidden between crates | Forbidden between packages | Allowed inside a module | Allowed | Allowed (with runtime pitfalls) |
+| **Conditional code** | `#[cfg(...)]`; excluded code is not checked | Build tags and `_linux.go` suffixes | `#if os(...)` | Ordinary `comptime if` on `builtin` | Runtime checks |
+| **Optional parts** | Additive features, unified across the graph | Separate modules | Separate packages | Build options | Extras / optional peer dependencies |
+| **Glob imports** | `use x::*` | Dot-imports, discouraged | Whole-module imports | `usingnamespace` (being removed) | `from x import *` / `export *` |
 
-## Questions to settle
+## Decisions
 
-- Visibility levels (`pub`, `pub(mod)`, private) and what each exposes.
-- Are cycles allowed between modules inside one mod?
-- Conditional compilation per target and profile, and Cargo-style feature flags.
-- The exact meaning of the mod boundary for effects, groups, capabilities and semver. (Its meaning
-  for trait impls, including bridge mods, is in [`types.md`: Coherence: one impl per trait and type](types.md#coherence-one-impl-per-trait-and-type).)
+### Mods and modules
+
+- A **mod** is the unit of distribution (a package); a **module** is a namespace and file unit inside
+  a mod ([`requirements.md`](requirements.md)).
+- **The file tree is the module tree.** `src/book/levels.mdl` is the module `book::levels`. There are
+  no `mod foo;` declarations to keep in sync.
+- A file's `//!` doc comment is the module's overview
+  ([`docs-and-tests.md`: Overviews: mod, module and group docs](docs-and-tests.md#overviews-mod-module-and-group-docs)).
+
+### Three visibility levels
+
+| Level | Written | Visible to | Signature |
+|---|---|---|---|
+| **Private** (default) | `fn f` | This module | Inferred |
+| **Mod-wide** | `pub(mod) fn f` | Every module in this mod | Inferred |
+| **Exported** | `pub fn f` | Every mod that depends on this one | Written out in full |
+
+There is no `pub(super)` or `pub(in path)`: a mod is small enough that "this module" and "this mod"
+cover real needs.
+
+### The mod boundary is where things become explicit
+
+- A `pub` item **writes its full signature**: parameter and return types, effects, error sets and
+  contracts ([`syntax.md`](syntax.md), [`effects-and-capabilities.md`](effects-and-capabilities.md)).
+- A `pub` item **belongs to a group**
+  ([`docs-and-tests.md`: Overviews: mod, module and group docs](docs-and-tests.md#overviews-mod-module-and-group-docs)).
+- The `pub` items form the mod's **interface artefact**
+  ([`build-times.md`](build-times.md)), and the **semver check** compares them between versions
+  ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)).
+- **Private and `pub(mod)` items are inferred**: types, effects and error sets, so code inside a mod
+  stays as light as a scripting language's.
+- The **capability ceiling** applies to the whole mod.
+- A `pub` item may not expose a type that is less visible than itself (no private types in public
+  signatures).
+
+### Cycles
+
+- **Inside a mod, modules may refer to each other in cycles.** The compiler resolves names per
+  declaration (query-based), so cycles cost nothing, and mutual recursion across files stays natural.
+- **Between mods, cycles are forbidden**: mods form a DAG and build in parallel
+  ([`build-times.md`](build-times.md)).
+
+### Imports
+
+```rust
+use moddil::collections::{HashMap, OrderedMap}
+use crate::book::levels::Level
+pub use crate::book::levels::Level as PriceLevel     // re-export: a facade for users
+use moddil::units::si::prelude::*                     // allowed: a declared prelude
+```
+
+- Imports name what they bring in.
+- **`pub use` re-exports** let a mod present a facade over its internal layout.
+- **No glob imports**, with one exception: a mod may declare **one `prelude` module**, which can be
+  imported with `*`. This keeps unit packs and similar vocabularies convenient
+  ([`units.md`: Imports](units.md#imports)) while ordinary code stays local.
+
+### Conditional code is comptime `if`
+
+```rust
+fn open_socket() -> Socket with net {
+    if comptime target.os == Os::Linux {
+        linux::open_with_io_uring()
+    } else {
+        portable::open()
+    }
+}
+```
+
+- Platform- and profile-specific code is an ordinary comptime `if` on the `target` and `profile`
+  values ([`comptime.md`](comptime.md)), not an attribute that hides code.
+- **`moddil check` type-checks every branch against every tier-1 target**
+  ([`targets.md`: Target names and tiers](targets.md#target-names-and-tiers)), so platform code
+  cannot rot unnoticed.
+- Test-only code is written as attached tests ([`docs-and-tests.md`](docs-and-tests.md)), not
+  `#[cfg(test)]` modules.
+
+### No feature flags
+
+- There are **no Cargo-style features.** Optional functionality ships as **separate mods**, often in
+  the same repository with path-prefixed tags (`acme/json` and `acme/json-serde`;
+  [`packages-and-supply-chain.md`](packages-and-supply-chain.md)).
+- This means:
+  - **no feature unification**: nothing is switched on behind a mod's back;
+  - **no 2^n test matrix**: each mod is built and tested one way;
+  - **capability ceilings stay per mod**: an optional networking extension is its own mod with its
+    own `net` ceiling.
+
+### Library and executables
+
+- The manifest names the mod's **library root** (if any) and its **executables**, each with its own
+  `main` ([`lifecycle.md`](lifecycle.md)). A mod may have both.
+
+```toml
+# manifest (illustration only)
+[mod]
+name = "github.com/acme/matcher"
+
+[lib]
+root = "src/lib.mdl"
+
+[[exe]]
+name = "matcher"
+main = "src/bin/matcher.mdl"
+```
+
+## Fit check against the reference examples
+
+| Example | Uses |
+|---|---|
+| [Multiplayer game](examples/01-multiplayer-game.md) | Shared simulation mod used by the WASM client and native server executables; comptime `if` for platform input and rendering |
+| [HFT](examples/02-hft-platform.md) | `pub(mod)` internals of the matching engine; Linux-only kernel-bypass paths checked on every developer's machine |
+| [Web store](examples/03-web-store.md) | Separate mods instead of features (`store-core`, `store-payments`), each with its own capability ceiling |
+| [Hashiverse](examples/04-hashiverse.md) | One repository holding the protocol, client and server mods; a `pub use` facade for the protocol API |
+
+## Open questions
+
+- Should a file be able to contain more than one module (inline `mod x { … }` blocks)?
+- Is `pub(mod)` the right spelling, or should it be a word such as `internal`?
+- How are platform-specific *dependencies* declared without features (per-target dependency lists
+  in the manifest)?
+
+## Prior art
+
+Rust modules and visibility; Go packages, build tags and modules; Swift access control; Zig's file
+namespaces and `comptime` conditional code; Cargo features and the feature-unification problem;
+Python and TypeScript module systems.

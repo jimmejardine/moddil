@@ -21,6 +21,7 @@ here with its reason ([Deltas from Rust (and why)](#deltas-from-rust-and-why)). 
 | Generics and bounds | `fn max<T: Ord>(a: &T, b: &T) -> &T`, `where` clauses | Bounds checked at the definition ([`comptime.md`: Generics are bounded](comptime.md#generics-are-bounded)) |
 | Attributes | `#[derive(…)]`, `#[repr(C)]`, `#[entry]`, `#[interrupt(…)]`, `#[component(server)]`, `#[group(…)]` | As in Rust; Moddil-specific features use attributes rather than new syntax |
 | Modules and imports | `use moddil::units::si::{m, cm};`, `::` paths | As in Rust |
+| Visibility | `fn f` (this module), `pub(mod) fn f` (this mod), `pub fn f` (exported) | No `pub(super)` or `pub(in path)` ([`modules.md`](modules.md#three-visibility-levels)) |
 | Closures | `\|x\| expr`, `\|x\| { … }`; `impl Fn`, `impl FnMut`, `impl FnOnce`; `Box<dyn Fn…>` | **No `move`**: captures are inferred ([`closures.md`](closures.md)) |
 | Concurrency | `scope(\|s\| { s.spawn(\|\| …); })` | Like `std::thread::scope`; the only way to start a task ([`concurrency.md`](concurrency.md)) |
 | Labelled exits | `'label: { … break 'label value … }` | As in Rust |

@@ -11,7 +11,7 @@
 | **Handler tiers** | User effects get function-like (tail-resumptive) and abortive handlers. One-shot continuations are reserved for core and standard effects (`suspend`, generators). Resuming twice is never allowed. |
 | **Authority comes only from root capabilities** | `main` receives `System` and `Devices`; real OS handlers are built only from those. Libraries perform, wrap and narrow effects, but never create authority. |
 | **Capability values for two at once** | A handler can also be passed as a second-class value (`fn bridge(a: &Net, b: &Net)`). |
-| **Inferred inside, explicit at `pub`** | Effects are inferred inside a module and written on public signatures; no aliases. |
+| **Inferred inside, explicit at `pub`** | Effects are inferred inside a mod and written on `pub` signatures; no aliases. |
 | **Implicit effect polymorphism** | An unannotated closure parameter means "whatever `f` does, I do too"; `with E` is written only to name or constrain. |
 | **One mechanism for restricted code** | Drop, kernels, comptime, workflows and freestanding profiles are all effect-set constraints. |
 | **Zero cost when handlers are known** | Effect operations compile to direct calls; abortive handlers to ordinary returns. |
@@ -147,7 +147,7 @@ keeps them cheap and guarantees the handler outlives its uses.
 
 ### Signatures and inference
 
-- **Inferred inside a module**, **explicit on `pub` signatures** ([LLMs as first-class programmers](agent-interface.md)). The reviewer view
+- **Inferred inside a mod**, **explicit on `pub` signatures** ([LLMs as first-class programmers](agent-interface.md)). The reviewer view
   shows inferred effects inline ([`agent-interface.md`: Verbosity is a view](agent-interface.md#verbosity-is-a-view)).
 - An effect set is a **set**: order doesn't matter, and a function with fewer effects can be used
   where more are allowed.

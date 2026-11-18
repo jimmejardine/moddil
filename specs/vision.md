@@ -57,7 +57,7 @@ schedule onto heterogeneous hardware, easier to split safely across machines, an
 When the problem areas are laid side by side, four ideas keep recurring:
 
 1. **Explicitness that machines enforce.** Effects, capabilities, resources, memory spaces and errors
-   are *in the types*, checked by the compiler, and mostly inferred inside a module. Explicit for the
+   are *in the types*, checked by the compiler, and mostly inferred inside a mod. Explicit for the
    reader; cheap for the writer (especially when the writer is a model).
 
 2. **One canonical representation.** A single formatting and a canonical AST give smaller diffs,

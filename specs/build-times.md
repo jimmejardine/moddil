@@ -37,8 +37,8 @@ Both are workarounds that every serious Rust project rediscovers. Moddil should 
 
 **Recommended** to lock early; each is very hard to add later.
 
-1. **No cycles between mods** (as in Go). Mods form a DAG and compile in parallel. *Open:* are cycles
-   allowed between modules inside a single mod?
+1. **No cycles between mods** (as in Go). Mods form a DAG and compile in parallel. Cycles between
+   modules inside a mod are allowed ([`modules.md`: Cycles](modules.md#cycles)).
 2. **Explicit interfaces at mod boundaries.** Public signatures, effects and error sets are written
    out; nothing is inferred across mods (consistent with [`error-handling.md`: Error types](error-handling.md#error-types)).
    Each mod produces a small **interface artefact** (like OCaml's `.mli` or Go's export data).
@@ -220,18 +220,17 @@ than for humans:
 
 ## Open questions
 
-1. Are cycles allowed between modules inside one mod?
-2. How slow can generic code be in debug builds before it is unacceptable? Should hot generics be
+1. How slow can generic code be in debug builds before it is unacceptable? Should hot generics be
    specialised even in debug builds?
-3. Live update ([Live update (debug builds)](#live-update-debug-builds)) proposes: bodies, signatures and new items live; layout changes through
+2. Live update ([Live update (debug builds)](#live-update-debug-builds)) proposes: bodies, signatures and new items live; layout changes through
    migration hooks or scope restart plus replay. Open: which layout migrations can be automatic, and
    whether production hot upgrades are ever a goal.
-4. How much should trusted shared caches serve prebuilt dependency binaries, and what are the trust
+3. How much should trusted shared caches serve prebuilt dependency binaries, and what are the trust
    implications? (There is no registry: [`packages-and-supply-chain.md`](packages-and-supply-chain.md).)
-5. Can debug-mode dictionary passing and release-mode specialisation produce *identical
+4. Can debug-mode dictionary passing and release-mode specialisation produce *identical
    semantics*, so the difference is purely performance? *Proposed answer:* yes, if everything
    layout-dependent lives in the witness table, as Swift does ([Language rules that decide build speed](#language-rules-that-decide-build-speed)).
-6. What is the budget? *Proposed:* < 100 ms keystroke to diagnostics, < 1 s from a function-body
+5. What is the budget? *Proposed:* < 100 ms keystroke to diagnostics, < 1 s from a function-body
    edit to a runnable test regardless of project size ([Budgets](#budgets)).
 
 ## Background

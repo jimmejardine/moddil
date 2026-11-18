@@ -148,8 +148,9 @@ Unit names are imported like types:
 use moddil::units::si::{m, cm, mm, s, ms};
 ```
 
-*Open:* whether a whole unit pack can be imported at once (`use moddil::units::si::*`), given that
-glob imports otherwise hurt local reasoning ([LLMs as first-class programmers](agent-interface.md)).
+A whole unit pack can be imported through its declared prelude
+(`use moddil::units::si::prelude::*`). Other glob imports are not allowed
+([`modules.md`: Imports](modules.md#imports)).
 
 ## Across tiers
 
@@ -169,11 +170,10 @@ seconds, the other expected newton-seconds.
 ## Open questions
 
 1. Confirm the lexing rule: no space between a literal and its `<unit>`.
-2. Glob imports of unit packs ([Imports](#imports)).
-3. Angles: are radians and degrees units of a dimensionless-but-distinct "angle" kind?
-4. Rational exponents (`m^(1/2)`), needed for some formulas: allow, or only integers?
-5. The common-unit rule for unannotated mixed expressions: finer unit, or left operand?
-6. Integer representations with fractional scales (for example `i64<mm>` from `cm`): exact-only
+2. Angles: are radians and degrees units of a dimensionless-but-distinct "angle" kind?
+3. Rational exponents (`m^(1/2)`), needed for some formulas: allow, or only integers?
+4. The common-unit rule for unannotated mixed expressions: finer unit, or left operand?
+5. Integer representations with fractional scales (for example `i64<mm>` from `cm`): exact-only
    conversion, or a fixed-point scale in the type?
 
 ## Prior art

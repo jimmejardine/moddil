@@ -37,7 +37,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Error handling](error-handling.md)                                | 🟠 major questions | [`error-handling.md`](error-handling.md)                                   |
 | [Null and invalid states](null-safety.md)                          | 🟡 minor questions | [`null-safety.md`](null-safety.md)                                         |
 | [Type system core](types.md)                                       | 🟠 major questions | [`types.md`](types.md)                                                     |
-| [Modules, visibility and program structure](modules.md)            | ⚪ not started      | [`modules.md`](modules.md)                                                 |
+| [Modules, visibility and program structure](modules.md)            | 🟡 minor questions | [`modules.md`](modules.md)                                                 |
 | [`unsafe` and the safety boundary](unsafe.md)                      | ⚪ not started      | [`unsafe.md`](unsafe.md)                                                   |
 | [Numerics and data](numerics.md)                                   | 🟠 major questions | [`numerics.md`](numerics.md), [`units.md`](units.md)                       |
 | [Text and strings](text.md)                                        | ⚪ not started      | [`text.md`](text.md)                                                       |
