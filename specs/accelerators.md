@@ -1,6 +1,6 @@
 # GPUs and Accelerators
 
-> **Status:** decided direction, details open. Expands [`overview.md`: Concurrency across GPUs and accelerators](overview.md#concurrency-across-gpus-and-accelerators) and extends
+> **Status:** decided direction, details open. Indexed in [`README.md`](README.md) and extends
 > [`concurrency.md`](concurrency.md) from CPUs to devices. Snippets are **illustration only**; no
 > syntax is committed.
 
@@ -47,7 +47,7 @@ cores and pipelining. Triton showed this reaches near hand-written performance f
 - no `Rc`;
 - no suspension, I/O or `fail` (faults are traps, [Errors](#errors));
 - **always specialised** to concrete types. This is the one exception to dictionary-passing generics
-  in debug builds ([overview: Build times](overview.md#build-times)), because GPUs cannot call through dictionaries efficiently.
+  in debug builds ([Build times](build-times.md)), because GPUs cannot call through dictionaries efficiently.
 
 Ordinary pure helper functions that stay within this set can be called from kernels and from CPU
 code alike.
@@ -81,13 +81,13 @@ code.
   don't fight.
 - **Roles and requirements.** Code asks for what it needs rather than which card:
   `devs.role("physics")`, or `devs.pick(min_mem: 16.GiB, features: [f16])`. A **deployment
-  manifest** binds roles to hardware (the same split as [overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)). `main` and tests may also
+  manifest** binds roles to hardware (the same split as [Distributed and multi-tier programs](distribution.md)). `main` and tests may also
   select directly.
 - **Device-to-device copies** are always an explicit `.to(device)`. The runtime chooses the path:
   NVLink, PCIe peer-to-peer, or staging through host memory (consumer cards often have no NVLink and
   may not support peer-to-peer).
 - **Remote devices** (a GPU on another machine) are reached only through the `remote` effect
-  ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)). Device placement is the bottom rung of the placement ladder: thread, core,
+  ([Distributed and multi-tier programs](distribution.md)). Device placement is the bottom rung of the placement ladder: thread, core,
   device, machine, tier.
 
 Example: a workstation with two GPUs and a 128-core CPU.
@@ -174,7 +174,7 @@ and forgetting a fence.
   - scoped shared memory with barriers, where the compiler checks the barrier structure (e.g. not
     inside divergent control flow).
 - **Arbitrary scatter writes** (`out[idx[i]] = …`) cannot be proven race-free. They require an
-  `unsafe` block, which is visible in capabilities and review ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security), [overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control)).
+  `unsafe` block, which is visible in capabilities and review ([Package management and supply-chain security](packages-and-supply-chain.md), [Diffs, code review and version control](semantic-vcs.md)).
 - **The CPU-simulator handler includes a race detector**, so unsafe kernels can be checked in tests
   and CI.
 
@@ -201,7 +201,7 @@ and forgetting a fence.
 ## Runtimes and backends
 
 - `gpu` is an effect. **Handler mods** implement it: WebGPU (via wgpu), Vulkan, Metal, CUDA, ROCm
-  and a **CPU simulator**. Libraries work with every handler (overview R2).
+  and a **CPU simulator**. Libraries work with every handler ([R2](requirements.md#firm-requirements-decided)).
 - **Lowering** reuses existing tools, as in [`bootstrap.md`](bootstrap.md): naga for
   WGSL/SPIR-V/MSL/HLSL; LLVM NVPTX and AMDGPU for CUDA- and ROCm-class targets; MLIR later if
   tensor-level optimisation needs it.
@@ -246,7 +246,7 @@ Following [`error-handling.md`](error-handling.md):
 ## Open questions
 
 - **Autodiff:** a comptime transformation (as Slang and Enzyme do) or a feature of `moddil/tensor`?
-- **Multi-GPU collectives** (all-reduce etc.): a library built on placement ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs))?
+- **Multi-GPU collectives** (all-reduce etc.): a library built on placement ([Distributed and multi-tier programs](distribution.md))?
 - Should tensor/array syntax become core, or stay in a mod?
 - How close can the CPU simulator get to bit-exact results with GPU floating point?
 - WebGPU feature gaps (subgroups, f16) and their fallbacks.
@@ -256,7 +256,7 @@ Following [`error-handling.md`](error-handling.md):
 
 ## Background
 
-The problem and the state of the art that led to this design. (Moved from the overview.)
+The problem and the state of the art that led to this design.
 
 **Problem.** GPU programming is fragmented by vendor, uses a different language (or dialect) from host
 code, and makes data movement between memory spaces manual and error-prone. Most programmers never

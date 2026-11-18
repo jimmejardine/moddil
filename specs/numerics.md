@@ -1,6 +1,6 @@
 # Numerics and Data
 
-> **Status:** decided direction, open questions remain. Expands [`overview.md`: Numerics and data](overview.md#numerics-and-data).
+> **Status:** decided direction, open questions remain. Indexed in [`README.md`](README.md).
 > Units of measure are a separate proposal in [`units.md`](units.md). Snippets are **illustration only**.
 
 ## Summary

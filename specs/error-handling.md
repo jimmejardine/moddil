@@ -1,7 +1,7 @@
 # Error Handling
 
-> **Status:** survey + partial decisions. Expands [`overview.md`: Error handling](overview.md#error-handling) and defines
-> requirement **R3** ([overview: Firm requirements (decided)](overview.md#firm-requirements-decided)). Decisions made so far are marked **Decided**; everything else is open.
+> **Status:** survey + partial decisions. Indexed in [`README.md`](README.md) and defines
+> requirement **R3** ([Firm requirements (decided)](requirements.md#firm-requirements-decided)). Decisions made so far are marked **Decided**; everything else is open.
 
 ## Decisions so far
 
@@ -10,7 +10,7 @@
 | D1 | **Rust-style `?`** for propagation. Chained `?` propagates at every step. |
 | D2 | **Try blocks**: `try { … }` is an expression that scopes `?`. |
 | D3 | **R3: no crash from an unhandled, language-known error.** An unhandled error at any entry point or call site is a **compile-time error**. |
-| D4 | **No fire-and-forget tasks.** Every spawned task is awaited by its enclosing scope (structured concurrency, [overview: Concurrency across CPUs](overview.md#concurrency-across-cpus)). |
+| D4 | **No fire-and-forget tasks.** Every spawned task is awaited by its enclosing scope (structured concurrency, [Concurrency across CPUs](concurrency.md)). |
 | D5 | **Integer overflow traps, in every build** (as in Swift). Wrapping is explicit: `+%`, `-%`, `*%` or `Wrapping<T>` ([`numerics.md`: Overflow traps](numerics.md#overflow-traps)). Floats follow IEEE 754 (NaN, ±∞). |
 | D6 | **Integer division traps, as in Rust**: `x / 0`, `x % 0`, `MIN / -1`. Same crash class as out-of-memory. |
 | D7 | **Indexing traps on out-of-bounds**; `get(i)` returns `Option`. Bounds checks are elided where the compiler proves the index is in range. |
@@ -41,7 +41,7 @@ Notes:
   never silent. Checks cost typically 1–5% and are elided where range analysis or refinements prove
   safety. Wrapping (`+%`, `Wrapping<T>`), `checked_*` and `saturating_*` are explicit
   ([`numerics.md`: Overflow traps](numerics.md#overflow-traps)).
-- **Open:** do failed contract assertions ([overview: Correctness tooling: contracts and verification](overview.md#correctness-tooling-contracts-and-verification)) trap (class 3), or raise an error (class 1)?
+- **Open:** do failed contract assertions ([Correctness tooling: contracts and verification](correctness.md)) trap (class 3), or raise an error (class 1)?
   [`correctness.md`: Decisions to lock early](correctness.md#decisions-to-lock-early) recommends trapping, with untrusted input handled by
   validated newtypes that return errors.
 
@@ -58,7 +58,7 @@ Notes:
 `fn parse(s) -> Config with fail(ParseError)`. Raising performs the `fail` effect; a handler further up
 the stack decides what happens. Because functions can be **generic over effects**, one higher-order
 function works for fallible and infallible callers alike ([Why `Result`-only languages duplicate higher-order APIs](#why-result-only-languages-duplicate-higher-order-apis)). It is the same mechanism as Moddil's
-other effects ([overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea)).
+other effects ([Effects and capabilities as a unifying idea](effects-and-capabilities.md)).
 
 **Moddil has both, linked:**
 ```
@@ -153,7 +153,7 @@ Every **entry point** must have an *empty* failure set:
 - `main` (it returns an explicit exit status, never an escaped error);
 - task bodies at spawn;
 - exported and FFI functions and callbacks;
-- tier endpoints (handlers of `server` components etc., [overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs));
+- tier endpoints (handlers of `server` components etc., [Distributed and multi-tier programs](distribution.md));
 - effect handlers.
 
 If anything remains, compilation fails, and the error lists each unhandled variant with the chain of
@@ -161,7 +161,7 @@ If anything remains, compilation fails, and the error lists each unhandled varia
 
 **Ignored results:** dropping a `Result` silently is a compile error (not a warning, as `must_use` is
 in Rust). *Open:* is an explicit discard allowed at all, and should it require a reason string, such
-as `discard(r, "best-effort cache warm")`, so it is visible in reviews and semantic diffs ([overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control))?
+as `discard(r, "best-effort cache warm")`, so it is visible in reviews and semantic diffs ([Diffs, code review and version control](semantic-vcs.md))?
 
 ### Tasks and concurrency
 
@@ -181,8 +181,8 @@ inference:
 - Unlike Rust, no `From` conversions are needed to combine errors from different sources; the sets
   simply union.
 - **Explicit at mod boundaries.** Public functions of a mod declare their error set (consistent with
-  [overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea) and [overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)). Inference stays local, which helps incremental builds ([overview: Build times](overview.md#build-times)) and makes
-  semantic diffs meaningful ("`parse()` can now fail with `Io`", [overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control)).
+  [Effects and capabilities as a unifying idea](effects-and-capabilities.md) and [LLMs as first-class programmers](agent-interface.md)). Inference stays local, which helps incremental builds ([Build times](build-times.md)) and makes
+  semantic diffs meaningful ("`parse()` can now fail with `Io`", [Diffs, code review and version control](semantic-vcs.md)).
 - Named error types are still possible for documentation and reuse.
 
 *Open:* how to attach context (`.context("loading config")`, as in `anyhow`) without losing the
@@ -198,7 +198,7 @@ structured variant?
 - **Origin capture** (Rust's `Backtrace`): opt-in per error type or in debug builds, since a full stack
   walk is expensive.
 - **Async-aware:** traces include the chain of task spawn sites; across tiers they link through trace
-  IDs ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs), [overview: Observability and debuggability](overview.md#observability-and-debuggability)).
+  IDs ([Distributed and multi-tier programs](distribution.md), [Observability and debuggability](observability.md)).
 - **Traps (class 3)** always capture a full trace.
 - Traces join the task-aware stacks and flight-recorder dumps described in
   [`observability.md`: Task-aware stacks and the task tree](observability.md#task-aware-stacks-and-the-task-tree)–[`observability.md`: Flight recorder and replay](observability.md#flight-recorder-and-replay).
@@ -262,7 +262,7 @@ this rare path. *Open.*
 
 ## Cleanup
 
-- RAII / linear types ([overview: Memory and resource management](overview.md#memory-and-resource-management)) clean up on every path.
+- RAII / linear types ([Memory and resource management](memory-and-resources.md)) clean up on every path.
 - **`defer`** (Zig, Go, Swift): cleanup on every exit. It must be infallible and non-suspending (D11).
 - **`errdefer`** (Zig): cleanup that runs only when the scope exits with an error **or is cancelled**,
   for example rolling back a half-built structure. It may fail; the failure is suppressed (D10).
@@ -357,13 +357,13 @@ txn.commit()?
 5. Should a resumable recovery effect ("retry"/"default") exist as a separate effect?
 6. How is context attached to structured errors ([Error types](#error-types))?
 7. Is `Option` part of the same machinery (`?` on `Option`, as in Rust)?
-8. Should errors from the `remote` effect ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)) have a standard shape (timeout, unreachable,
+8. Should errors from the `remote` effect ([Distributed and multi-tier programs](distribution.md)) have a standard shape (timeout, unreachable,
    incompatible version), and how are errors serialised across tiers?
 9. Checked-exception fatigue (Java) vs inference: how much of an error set should be inferred?
 
 ## Background
 
-The problem and the state of the art that led to this design. (Moved from the overview.)
+The problem and the state of the art that led to this design.
 
 - **Problem.** Exceptions hide control flow; error codes get ignored; `Result` types are explicit but
   noisy; panics/abort are coarse. Composing error types across libraries is painful (Rust's
@@ -374,8 +374,8 @@ The problem and the state of the art that led to this design. (Moved from the ov
   propagate; inferred error sets (Zig) to reduce boilerplate; mandatory handling; error return traces
   for free; a clear split between *recoverable errors* and *bugs* (contract violations → abort the
   task, not the process, in structured concurrency). Error propagation must also respect linear
-  values ([overview: Memory and resource management](overview.md#memory-and-resource-management)): a path that propagates an error while holding an open transaction has to consume it.
-  Absence is *not* an error: "not found" is an `Option` ([overview: Null and invalid states](overview.md#null-and-invalid-states)), and `or_fail` converts explicitly.
+  values ([Memory and resource management](memory-and-resources.md)): a path that propagates an error while holding an open transaction has to consume it.
+  Absence is *not* an error: "not found" is an `Option` ([Null and invalid states](null-safety.md)), and `or_fail` converts explicitly.
 
 ## References
 

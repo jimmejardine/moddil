@@ -1,6 +1,6 @@
 # Effects and Capabilities
 
-> **Status:** decided direction, open questions remain. Expands [`overview.md`: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea).
+> **Status:** decided direction, open questions remain. Indexed in [`README.md`](README.md).
 > Snippets are **illustration only**.
 
 ## Summary
@@ -147,7 +147,7 @@ keeps them cheap and guarantees the handler outlives its uses.
 
 ### Signatures and inference
 
-- **Inferred inside a module**, **explicit on `pub` signatures** ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)). The reviewer view
+- **Inferred inside a module**, **explicit on `pub` signatures** ([LLMs as first-class programmers](agent-interface.md)). The reviewer view
   shows inferred effects inline ([`agent-interface.md`: Verbosity is a view](agent-interface.md#verbosity-is-a-view)).
 - An effect set is a **set**: order doesn't matter, and a function with fewer effects can be used
   where more are allowed.

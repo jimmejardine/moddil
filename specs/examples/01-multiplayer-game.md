@@ -44,24 +44,24 @@ point is a real-time, authoritative-server architecture of the kind used by most
 
 - **WASM in the browser (R1)**: binary size, start-up time, stack switching + JSPI for suspending on
   browser APIs.
-- **GPU ([overview: Concurrency across GPUs and accelerators](../overview.md#concurrency-across-gpus-and-accelerators))**: rendering and possibly particle/physics kernels through the WebGPU/WGSL path. The same
+- **GPU ([Concurrency across GPUs and accelerators](../accelerators.md))**: rendering and possibly particle/physics kernels through the WebGPU/WGSL path. The same
   kernel code could run server-side for authoritative physics.
-- **Placement and the `remote` effect ([overview: Distributed and multi-tier programs](../overview.md#distributed-and-multi-tier-programs))**: the client/hub/chat split in one program. Unreliable vs
+- **Placement and the `remote` effect ([Distributed and multi-tier programs](../distribution.md))**: the client/hub/chat split in one program. Unreliable vs
   reliable channels must be distinguishable in types (an unreliable send can be lost; the type system
   should say so).
-- **Choreographies ([overview: Distributed and multi-tier programs](../overview.md#distributed-and-multi-tier-programs))**: the join → match → play protocol written once from a global view and
+- **Choreographies ([Distributed and multi-tier programs](../distribution.md))**: the join → match → play protocol written once from a global view and
   projected to `client`, `hub` and `chat`.
-- **Untrusted client ([overview: Distributed and multi-tier programs](../overview.md#distributed-and-multi-tier-programs))**: all data from `client` is untrusted; the hub is authoritative. Anti-cheat
+- **Untrusted client ([Distributed and multi-tier programs](../distribution.md))**: all data from `client` is untrusted; the hub is authoritative. Anti-cheat
   starts with the type system refusing to let client-claimed state flow into authoritative state
   without validation.
 - **Shared code across tiers**: game rules and the simulation step run in *both* `client` (prediction)
   and `hub` (authority). They must compile to WASM and native and give **bit-identical results**
-  (deterministic floating point or fixed point, [overview: Numerics and data](../overview.md#numerics-and-data)).
-- **Structured concurrency ([overview: Concurrency across CPUs](../overview.md#concurrency-across-cpus))**: one task scope per match and per room. When a match ends, all its
+  (deterministic floating point or fixed point, [Numerics and data](../numerics.md)).
+- **Structured concurrency ([Concurrency across CPUs](../concurrency.md))**: one task scope per match and per room. When a match ends, all its
   tasks end with it.
-- **Deterministic simulation ([overview: Determinism and reproducibility](../overview.md#determinism-and-reproducibility))**: run hub + chat + N simulated clients in one process, with
+- **Deterministic simulation ([Determinism and reproducibility](../determinism.md))**: run hub + chat + N simulated clients in one process, with
   simulated latency, packet loss and disconnects, replayable from a seed.
-- **Hot reload ([overview: Build times](../overview.md#build-times))**: change game rules or rendering without restarting the client.
+- **Hot reload ([Build times](../build-times.md))**: change game rules or rendering without restarting the client.
 
 ## Success criteria
 
@@ -86,7 +86,7 @@ Initial targets, to be refined:
 ## Interop and non-Moddil parts
 
 - Browser APIs (WebGPU, WebTransport, WebRTC, input, audio) through `moddil/web`.
-- Possibly an existing physics engine (C/C++/Rust) compiled to WASM and linked as a component ([overview: Interoperability with C and Rust](../overview.md#interoperability-with-c-and-rust), R1).
+- Possibly an existing physics engine (C/C++/Rust) compiled to WASM and linked as a component ([Interoperability with C and Rust](../interop.md), R1).
 - Authentication through a standard identity provider (OAuth/OIDC).
 
 ## Open questions

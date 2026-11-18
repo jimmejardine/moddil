@@ -1,6 +1,6 @@
 # Null and Invalid States
 
-> **Status:** decided direction, details open. Expands [`overview.md`: Null and invalid states](overview.md#null-and-invalid-states).
+> **Status:** decided direction, details open. Indexed in [`README.md`](README.md).
 
 ## Problem
 
@@ -46,13 +46,13 @@ plus compiler-checked narrowing*, in one of two styles:
   - defaulting with `x.unwrap_or(d)` and `x.unwrap_or_else(|| …)`.
 
   There is no implicit unwrap. `unwrap()` is an explicit, visible panic point.
-- **Absence is data; failure is an effect.** `fail(E)` ([overview: Error handling](overview.md#error-handling)) plays the role of Rust's `Result`,
+- **Absence is data; failure is an effect.** `fail(E)` ([Error handling](error-handling.md)) plays the role of Rust's `Result`,
   so `Option` is the only "maybe" type in everyday code.
   - `opt.or_fail(e)` turns absence into failure.
   - Catching a failure can produce an `Option`.
 - **Guaranteed niches:** `Option<&T>`, `Option<Rc<T>>`, owned pointers, non-zero and range-typed
   integers, and enums with spare values are all the same size as `T`. Nullable C pointers import as
-  `Option<…>` ([overview: Interoperability with C and Rust](overview.md#interoperability-with-c-and-rust)).
+  `Option<…>` ([Interoperability with C and Rust](interop.md)).
 - **Fits the ownership model:**
   - `Option<&T>`, or an `Option` holding a view, is itself a view
     ([`memory-and-resources.md`: View types](memory-and-resources.md#view-types)).
@@ -65,8 +65,8 @@ plus compiler-checked narrowing*, in one of two styles:
   - **Range refinements** (`u32 where self in 1..`): values that are excluded become free niches for
     `Option`. This is the same `where` form as other refinements (decided).
   - **Refinement types** (`Int where 0 <= self < 100`): checked statically where provable,
-    dynamically otherwise. They share machinery with contracts ([overview: Correctness tooling: contracts and verification](overview.md#correctness-tooling-contracts-and-verification)).
-  - **Typestate through linear types** ([overview: Memory and resource management](overview.md#memory-and-resource-management)): states are types, and transitions consume the old
+    dynamically otherwise. They share machinery with contracts ([Correctness tooling: contracts and verification](correctness.md)).
+  - **Typestate through linear types** ([Memory and resource management](memory-and-resources.md)): states are types, and transitions consume the old
     state, e.g. `Conn<Unauthed>` → `Conn<Authed>`.
 
 Illustration only:
@@ -95,7 +95,7 @@ fn connect(host: &str, port: Option<Port>) with net, fail(NetError) {
 - ~~What does postfix `?` mean?~~ **Resolved:** it propagates, as in Rust (`None`, or a failure
   through the `fail` effect, [`error-handling.md`](error-handling.md)). Swift-style chaining within
   an expression is `try { a?.b?.c }`.
-- How much refinement checking is static vs dynamic, and what does it cost in compile time ([overview: Build times](overview.md#build-times))?
+- How much refinement checking is static vs dynamic, and what does it cost in compile time ([Build times](build-times.md))?
 - Layout of nested options (`Option<Option<T>>`): how far should niche packing go?
 
 ## Prior art

@@ -1,6 +1,6 @@
 # Interoperability with C and Rust
 
-> **Status:** decided direction, details open. Expands [`overview.md`: Interoperability with C and Rust](overview.md#interoperability-with-c-and-rust).
+> **Status:** decided direction, details open. Indexed in [`README.md`](README.md).
 > Snippets are **illustration only**; no syntax is committed.
 
 ## Summary
@@ -39,8 +39,8 @@ exceptions and compiler-specific ABIs. Swift and Carbon have each spent years on
   simple macros become raw bindings automatically.
 - **The toolchain compiles C.** C sources of a dependency are compiled by the bundled clang, using the
   LLVM Moddil already ships ([`bootstrap.md`](bootstrap.md)):
-  - hermetic and reproducible: declared inputs only, the same compiler on every machine ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security));
-  - cross-compiled to every Moddil target, including WASM ([overview: Cross-compilation and deployment](overview.md#cross-compilation-and-deployment), R1);
+  - hermetic and reproducible: declared inputs only, the same compiler on every machine ([Package management and supply-chain security](packages-and-supply-chain.md));
+  - cross-compiled to every Moddil target, including WASM ([Cross-compilation and deployment](targets.md), R1);
   - run in the build sandbox like any other build step.
 
 ```rust
@@ -56,7 +56,7 @@ and turn raw bindings into Moddil types:
 | C fact | Overlay says | Moddil result |
 |---|---|---|
 | Who frees a returned pointer | owned / borrowed / linear | Owned: a Moddil type whose drop calls the C free function. Borrowed: a view. Linear: when freeing can fail (e.g. a close that reports errors). |
-| Can a pointer be null | nullable | `Option<…>` ([overview: Null and invalid states](overview.md#null-and-invalid-states)) |
+| Can a pointer be null | nullable | `Option<…>` ([Null and invalid states](null-safety.md)) |
 | How errors are reported | errno, negative return, out-parameter | `fail(E)` with a typed error |
 | Can the call block | `blocking` | The runtime moves the call off its workers to a blocking pool, so one slow C call can't stall the scheduler. Such calls are the one exception to promptly cancellable I/O ([`concurrency.md`: Cancelling I/O: no "press Enter", no self-connect](concurrency.md#cancelling-io-no-press-enter-no-self-connect)). |
 | Thread requirements | thread-affine, not thread-safe | Pinned tasks; values that can't be sent are wrapped accordingly |
@@ -70,7 +70,7 @@ and turn raw bindings into Moddil types:
 
 - **Raw bindings are `unsafe`.** Safe wrappers are ordinary mods built on them.
 - Any mod that uses foreign code declares the **`ffi` capability**. It appears in signatures, package
-  audits and semantic diffs ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security), [overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control)): "`foo` 1.5 now uses `ffi`" is flagged on
+  audits and semantic diffs ([Package management and supply-chain security](packages-and-supply-chain.md), [Diffs, code review and version control](semantic-vcs.md)): "`foo` 1.5 now uses `ffi`" is flagged on
   upgrade.
 - Faults in foreign code are traps (class 3; [`error-handling.md`](error-handling.md) D8).
 - Foreign code is **outside record and replay** unless it is wrapped by effects; the recorder flags it
@@ -90,7 +90,7 @@ and turn raw bindings into Moddil types:
 - Moddil functions and `#[repr(C)]` types can be **exported with the C ABI**, with a **generated header**.
 - Moddil mods can also be exposed to Rust as a **generated crate** ([Rust: the generated bridge](#rust-the-generated-bridge), reverse direction).
 - This is the adoption path: Moddil can be introduced inside existing C, C++ or Rust projects one
-  module at a time ([overview: Open Questions and Next Steps for Moddil](overview.md#open-questions-and-next-steps-for-moddil)).
+  module at a time ([Open Questions and Next Steps for Moddil](roadmap.md)).
 
 ## Rust: the generated bridge
 
@@ -127,7 +127,7 @@ let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → 
 ## WASM components: the sandboxed path
 
 - C and Rust code compiled to WASM can be linked as **components**, with interfaces in **WIT**, which
-  Moddil maps to and from automatically (overview R1). Rust has strong tooling for this
+  Moddil maps to and from automatically ([R1](requirements.md#firm-requirements-decided)). Rust has strong tooling for this
   (`wit-bindgen`).
 - It costs copying at the boundary (the canonical ABI), so it isn't zero-copy.
 - In return, the foreign code is **isolated**: it can reach only the capabilities it is given, as
@@ -164,7 +164,7 @@ let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → 
 
 ## Background
 
-The problem and the state of the art that led to this design. (Moved from the overview.)
+The problem and the state of the art that led to this design.
 
 **Problem.** Nobody adopts a language that can't use existing code. Decades of C libraries, huge C++
 codebases, and a growing Rust ecosystem must be reachable with low friction and low overhead.

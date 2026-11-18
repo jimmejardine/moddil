@@ -1,6 +1,6 @@
 # Language Evolution
 
-> **Status:** decided direction, details open. Expands [`overview.md`: Language evolution](overview.md#language-evolution).
+> **Status:** decided direction, details open. Indexed in [`README.md`](README.md).
 
 ## Problem
 

@@ -1,6 +1,6 @@
 # Concurrency across CPUs
 
-> **Status:** decided direction, details open. Expands [`overview.md`: Concurrency across CPUs](overview.md#concurrency-across-cpus) and builds on
+> **Status:** decided direction, details open. Indexed in [`README.md`](README.md) and builds on
 > [`memory-and-resources.md`](memory-and-resources.md). GPUs and other accelerators, which reuse these
 > rules for kernel launches, are in [`accelerators.md`](accelerators.md). Snippets are
 > **illustration only**.
@@ -14,7 +14,7 @@ Moddil gets **data-race freedom by construction** from three ingredients:
    cells.
 2. **Structured concurrency as the only way to start a task**: every task has a parent scope and
    finishes before that scope ends.
-3. **Suspension is an effect**, not a function colour ([overview: Concurrency across CPUs](overview.md#concurrency-across-cpus), [overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea)).
+3. **Suspension is an effect**, not a function colour (Concurrency across CPUs, [Effects and capabilities as a unifying idea](effects-and-capabilities.md)).
 
 ## No `Send` / `Sync`
 
@@ -31,7 +31,7 @@ has none:
 
 So **every type is sendable**, and there are no auto traits to learn, infer, or get wrong in
 generic bounds. The one exception is `unsafe` code, which must uphold these rules itself (and is
-visible in capabilities, [overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)).
+visible in capabilities, [Package management and supply-chain security](packages-and-supply-chain.md)).
 
 ## Tasks and borrowing
 
@@ -67,7 +67,7 @@ Rules:
   `Rc` somewhere that outlives the borrow (e.g. in a value it sends on a channel).
 - Long-lived tasks (e.g. a server's per-connection tasks, children of an accept-loop scope near the
   top of `main`) still borrow from that top-level frame, or receive owned values and `Rc`s.
-- Cancellation and errors propagate through scopes as defined by the language ([overview: Concurrency across CPUs](overview.md#concurrency-across-cpus)).
+- Cancellation and errors propagate through scopes as defined by the language (Concurrency across CPUs).
 
 ## Shared mutable state
 
@@ -178,7 +178,7 @@ use `?`. None of that applies here.
 
 ## Runtime contract
 
-Scheduling is a core **effect**; runtimes are mods that provide handlers (overview R2,
+Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](requirements.md#firm-requirements-decided),
 [`mods.md`: The core / mod boundary](mods.md#the-core--mod-boundary)). The memory model adds obligations for runtime handlers:
 
 - **Biased-RC merge queue:** objects whose last shared reference was dropped elsewhere are queued
@@ -187,9 +187,9 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers (overvi
 - **Task migration:** with task-biased RC (proposed), a task moved by work stealing keeps its fast
   path; migration costs nothing. With thread-biased RC it would become a non-owner on its new thread
   (correct, but slower).
-- **Single-threaded targets** (browser WASM without cross-origin isolation, overview R1): every rc
+- **Single-threaded targets** (browser WASM without cross-origin isolation, [R1](requirements.md#firm-requirements-decided)): every rc
   operation is an owner operation; scopes still work, with children interleaved on one thread.
-- **Deterministic simulation** (`moddil/runtime-sim`, [overview: Determinism and reproducibility](overview.md#determinism-and-reproducibility)): the scheduler is a handler, so
+- **Deterministic simulation** (`moddil/runtime-sim`, [Determinism and reproducibility](determinism.md)): the scheduler is a handler, so
   interleavings are seed-controlled and replayable.
   See [`determinism.md`](determinism.md) for the simulation runtime, virtual time and record/replay.
 - **Observability:** runtimes expose the task tree and each task's blocked-on effect operation to
@@ -220,7 +220,7 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers (overvi
 | `pinned(cores)` | One thread per core, no stealing, optional busy-polling and real-time priority | HFT hot path; shard-per-core designs (Seastar, Glommio) |
 | `affine(main)` | One dedicated thread | Thread-affine resources: GUI main thread, GL contexts, C libraries with thread-local state |
 
-- Executors are configured in code or in the deployment manifest ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)).
+- Executors are configured in code or in the deployment manifest ([Distributed and multi-tier programs](distribution.md)).
 - **Placement:** a scope or spawn chooses its executor; children inherit their parent's executor
   unless they override it. This is the same placement idea as GPU devices and tiers, one level down
   (thread → core → GPU → machine).
@@ -486,7 +486,7 @@ fn serve(listener: &Listener) with net, suspend {
 
 ## Background
 
-The problem and the state of the art that led to this design. (Moved from the overview.)
+The problem and the state of the art that led to this design.
 
 **Problem.** Shared-memory parallelism is still the main source of the hardest bugs: data races,
 deadlocks, priority inversion, and memory-ordering mistakes. Async programming has split many
@@ -522,7 +522,7 @@ ecosystems into "sync" and "async" halves.
 **Directions.**
 - Actors, channels and thread-per-core sharding as library patterns built on these primitives, not
   as the only model.
-- Deterministic scheduling mode for tests (see [overview: Determinism and reproducibility](overview.md#determinism-and-reproducibility)).
+- Deterministic scheduling mode for tests (see [Determinism and reproducibility](determinism.md)).
 - Lints for holding a lock across a suspension point.
 
 ## Prior art

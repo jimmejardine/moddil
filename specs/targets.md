@@ -1,6 +1,6 @@
 # Targets, Cross-compilation and Static Builds
 
-> **Status:** decided direction, details open. Expands [`overview.md`: Cross-compilation and deployment](overview.md#cross-compilation-and-deployment).
+> **Status:** decided direction, details open. Indexed in [`README.md`](README.md).
 > Commands, target names and file formats are **illustration only**.
 
 ## Summary
@@ -117,7 +117,7 @@ This requires:
 Two payoffs:
 - build caches are shared across developers on different operating systems
   ([`build-times.md`](build-times.md));
-- anyone can rebuild a release and check that it matches ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)).
+- anyone can rebuild a release and check that it matches ([Package management and supply-chain security](packages-and-supply-chain.md)).
 
 ## Signing and packaging from any host
 
@@ -126,7 +126,7 @@ Two payoffs:
 | **Windows** | Authenticode signing (avoids SmartScreen warnings) |
 | **macOS** | Ad-hoc signature by default (Apple silicon refuses to run unsigned code); Developer ID signing and notarisation for distribution, from any host (rcodesign-style); universal binaries |
 | **Linux** | Archives, OCI images built directly ([`distribution.md`: Layer B: artefacts](distribution.md#layer-b-artefacts)); distribution packages through adapters |
-| **All** | Release archives with SBOM and provenance ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)) |
+| **All** | Release archives with SBOM and provenance ([Package management and supply-chain security](packages-and-supply-chain.md)) |
 
 Signing keys and Apple credentials are **capabilities supplied at release time**, never stored in the
 build or the repository.

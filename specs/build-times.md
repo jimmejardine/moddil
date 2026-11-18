@@ -1,6 +1,6 @@
 # Build Times
 
-> **Status:** proposal. Expands [`overview.md`: Build times](overview.md#build-times). Nothing here is decided;
+> **Status:** proposal. Indexed in [`README.md`](README.md). Nothing here is decided;
 > recommendations are marked **Recommended**. Numbers in [Budgets](#budgets) are initial targets.
 
 ## Summary
@@ -52,7 +52,7 @@ Both are workarounds that every serious Rust project rediscovers. Moddil should 
    - Debug: one copy of the code, receiving a hidden **witness table** of type information and
      operations (size, alignment, copy, drop, trait methods).
    - Release: a specialised copy per type (monomorphisation).
-   - This answers [overview: Build times](overview.md#build-times)'s open question: the semantics are identical as long as everything
+   - This answers Build times's open question: the semantics are identical as long as everything
      layout-dependent lives in the witness table. Swift's value witness tables show this works at
      scale.
    - Risk: generic-heavy code (iterators, collections) can be much slower in debug builds.
@@ -65,7 +65,7 @@ Both are workarounds that every serious Rust project rediscovers. Moddil should 
 8. **Trait implementations are checked locally** (an orphan-style coherence rule), with no global
    search across all mods.
 9. **Cache keys are hashes of the canonical AST**, not of text, so formatting and comment changes
-   invalidate nothing ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers), [overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control)).
+   invalidate nothing ([LLMs as first-class programmers](agent-interface.md), [Diffs, code review and version control](semantic-vcs.md)).
 
 ## Compiler architecture
 
@@ -80,7 +80,7 @@ Both are workarounds that every serious Rust project rediscovers. Moddil should 
   Cranelift in process, which also enables **live update** ([Live update (debug builds)](#live-update-debug-builds)). Release builds link normally with
   `lld` or `mold`, with split debug info.
 - **Check-only mode:** type, effect and ownership checking without code generation, powering the
-  language server and agents ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)).
+  language server and agents ([LLMs as first-class programmers](agent-interface.md)).
 - **Test impact analysis:** the query graph knows which tests depend on a change, so only those run.
 
 ### Live update (debug builds)
@@ -123,7 +123,7 @@ reports exactly where. Even layout changes then feel live in most development lo
   module instantiated against the same memory and table, then its entries are swapped in.
 
 **Scope:** debug builds only. Production hot upgrades are a **non-goal for now**; production uses
-rolling deploys with compiler-checked compatibility between versions ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)).
+rolling deploys with compiler-checked compatibility between versions ([Distributed and multi-tier programs](distribution.md)).
 
 ### Cached builds
 
@@ -149,7 +149,7 @@ rolling deploys with compiler-checked compatibility between versions ([overview:
 - A shared cache is a supply-chain risk (cache poisoning).
 - Remote and shared-artefact entries are **signed**; only trusted CI writes, developers read.
 - Builds are reproducible, so independent rebuilders and random sampling can verify hits
-  ([`determinism.md`: Reproducible builds](determinism.md#reproducible-builds), [overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)).
+  ([`determinism.md`: Reproducible builds](determinism.md#reproducible-builds), [Package management and supply-chain security](packages-and-supply-chain.md)).
 
 **Release builds** may be slow. Their optimised artefacts are cached per mod, and profile-guided
 optimisation profiles are just more inputs to the key. Dependencies normally arrive optimised from the
@@ -188,7 +188,7 @@ Supporting tools:
 
 ## Agents
 
-Agents rebuild dozens of times per task ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)), so the following matter even more for them
+Agents rebuild dozens of times per task ([LLMs as first-class programmers](agent-interface.md)), so the following matter even more for them
 than for humans:
 - check-only mode for fast feedback on types, effects and ownership;
 - test impact analysis;
@@ -234,7 +234,7 @@ than for humans:
 
 ## Background
 
-The problem and the state of the art that led to this design. (Moved from the overview.)
+The problem and the state of the art that led to this design.
 
 **Problem.** Slow builds damage the edit-compile-test loop for humans, and are worse for LLM agents
 that iterate dozens of times per task.

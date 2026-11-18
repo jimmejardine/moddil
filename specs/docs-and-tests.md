@@ -1,6 +1,6 @@
 # Docs, Examples and Tests Next to the Code
 
-> **Status:** decided direction, details open. Expands [`overview.md`: Tooling uniformity](overview.md#tooling-uniformity) and [`overview.md`: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers),
+> **Status:** decided direction, details open. Expands [Tooling uniformity](toolchain.md) and [LLMs as first-class programmers](agent-interface.md),
 > and gives the tools of [`correctness.md`](correctness.md) one place to live. Snippets are
 > **illustration only**; no syntax is committed.
 
@@ -70,12 +70,12 @@ properties and benchmarks attached to it, its mutation score, and the mod's assu
 ## Docs are checked and partly generated
 
 `///` stays, because it is familiar and LLM-friendly, but the compiler parses it into the canonical
-AST ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)) instead of treating it as a comment.
+AST ([LLMs as first-class programmers](agent-interface.md)) instead of treating it as a comment.
 
 **Checked:**
 - documented parameter names must exist, and (per mod policy) every parameter is documented;
 - links such as `[[Account::open]]` must resolve. They point at *definitions*, so a rename updates
-  them ([overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control));
+  them ([Diffs, code review and version control](semantic-vcs.md));
 - a hand-written errors section must match the function's actual error set
   ([`error-handling.md`: Error types](error-handling.md#error-types)).
 
@@ -206,7 +206,7 @@ this one uses and is used by. The documentation page for a module combines the t
   separate integration-test modules.
 - **Tooling knows each test's subject**:
   - "which tests cover `withdraw`?" is a query;
-  - the semantic diff ([overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control)) reports "**`withdraw` changed, but none of its tests did**",
+  - the semantic diff ([Diffs, code review and version control](semantic-vcs.md)) reports "**`withdraw` changed, but none of its tests did**",
     a sharp signal when reviewing agent-written changes.
 - **Tests use effect handlers, not mocks.** The simulation runtime is the default: virtual time,
   seeded randomness, simulated network and filesystem. Fakes are scoped handlers
@@ -247,14 +247,14 @@ function's whole specification and evidence in one place:
   linked issues and design records.
 - Notes are attached to declarations in the AST, so they survive moves and renames, unlike comments.
 - They are shown to maintainers, reviewers and agents, and kept out of user-facing API docs.
-- This is the "intent" half of [overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers); where *provenance* (human or agent, model version)
+- This is the "intent" half of [LLMs as first-class programmers](agent-interface.md); where *provenance* (human or agent, model version)
   lives is still open there.
 
 ## Benchmarks
 
 - `bench "…" for f { … }` attaches a benchmark to its subject (Criterion-style statistics).
 - Results are recorded per build hash, so the semantic diff can report **performance deltas** for
-  changed functions ([overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control)).
+  changed functions ([Diffs, code review and version control](semantic-vcs.md)).
 - Noise handling: repeated runs, confidence intervals, and dedicated or pinned machines for
   benchmarks that gate merges.
 
@@ -262,13 +262,13 @@ function's whole specification and evidence in one place:
 
 - The compiler API serves the docs, examples, contracts, effects and attached tests of the **installed
   version** of each mod. Agents read exactly the API they compile against, which addresses
-  hallucinated and outdated APIs ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)).
+  hallucinated and outdated APIs ([LLMs as first-class programmers](agent-interface.md)).
 - **Groups as context.** For any item, the agent API reports its groups, explicit or inherited
   ([Overviews: mod, module and group docs](#overviews-mod-module-and-group-docs)), so an agent editing a private helper knows which themes it serves.
 - **Overviews first.** Asked to explain a mod, the agent API returns the mod overview, then module
   overviews, then groups, and drills down to individual items only on request ([Overviews: mod, module and group docs](#overviews-mod-module-and-group-docs)). Agents get the
   theme before the details, and fit within their context.
-- The doc site, language server and agent API all come from the same front end ([overview: Tooling uniformity](overview.md#tooling-uniformity)).
+- The doc site, language server and agent API all come from the same front end ([Tooling uniformity](toolchain.md)).
 - Editors can fold or show tests, notes and benchmarks around a declaration, giving a literate view
   of the code.
 
@@ -293,7 +293,7 @@ function's whole specification and evidence in one place:
 
 ## Background
 
-Tooling uniformity ([overview: Tooling uniformity](overview.md#tooling-uniformity)), which this document builds on.
+Tooling uniformity ([Tooling uniformity](toolchain.md)), which this document builds on.
 
 - **Lesson from Go and Rust.** One official formatter, test runner, doc generator, package manager,
   LSP, benchmark harness and linter, shipped with the compiler, removes endless ecosystem fragmentation.

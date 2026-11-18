@@ -41,34 +41,34 @@ data, time and order routing are effects, and only their handlers differ.
 3. **Backtest**: `research` replays historical data from `store` through the *same* strategy mod, with
    simulated time, a simulated order book and a simulated exchange (fills, latency, queue position).
 4. **Promote**: a strategy version that passes research is promoted to `execution`. The review shows
-   its semantic diff ([overview: Diffs, code review and version control](../overview.md#diffs-code-review-and-version-control)) and capability set.
+   its semantic diff ([Diffs, code review and version control](../semantic-vcs.md)) and capability set.
 5. **Replay**: a trading day can be replayed bit for bit for post-trade analysis and incident review.
 
 ## Moddil features this stresses
 
-- **Effects and handlers as the core architecture ([overview: Effects and capabilities as a unifying idea](../overview.md#effects-and-capabilities-as-a-unifying-idea), [overview: Determinism and reproducibility](../overview.md#determinism-and-reproducibility)).** A strategy is written against
+- **Effects and handlers as the core architecture ([Effects and capabilities as a unifying idea](../effects-and-capabilities.md), [Determinism and reproducibility](../determinism.md)).** A strategy is written against
   effects such as `market_data`, `clock` and `orders`:
   - live handlers: kernel-bypass feed, hardware clock, exchange gateway;
   - research handlers: historical replay, simulated clock, simulated exchange.
 
   The strategy code is identical in both. This is the clearest demonstration of why effects belong in
   the core language.
-- **Capabilities ([overview: Package management and supply-chain security](../overview.md#package-management-and-supply-chain-security)).** Research code physically cannot reach the live `orders` capability; only a
+- **Capabilities ([Package management and supply-chain security](../packages-and-supply-chain.md)).** Research code physically cannot reach the live `orders` capability; only a
   deployment to `execution` grants it. A third-party analytics mod cannot touch the network.
-- **Predictable latency ([overview: Memory and resource management](../overview.md#memory-and-resource-management)).** No GC; arenas and pools; **a "no allocation" effect** that the
+- **Predictable latency ([Memory and resource management](../memory-and-resources.md)).** No GC; arenas and pools; **a "no allocation" effect** that the
   compiler can check on the hot path; no hidden locks; core pinning and NUMA-aware placement.
-- **Lock-free concurrency ([overview: Concurrency across CPUs](../overview.md#concurrency-across-cpus)).** SPSC/MPMC rings between feed, strategy and gateway threads;
+- **Lock-free concurrency ([Concurrency across CPUs](../concurrency.md)).** SPSC/MPMC rings between feed, strategy and gateway threads;
   thread-per-core designs; busy-polling.
-- **C/C++ interop ([overview: Interoperability with C and Rust](../overview.md#interoperability-with-c-and-rust)).** Kernel-bypass NIC libraries (e.g. DPDK, ef_vi/Onload-style APIs), exchange
+- **C/C++ interop ([Interoperability with C and Rust](../interop.md)).** Kernel-bypass NIC libraries (e.g. DPDK, ef_vi/Onload-style APIs), exchange
   SDKs and FIX engines are typically C/C++. Calls must be zero-overhead.
-- **GPU ([overview: Concurrency across GPUs and accelerators](../overview.md#concurrency-across-gpus-and-accelerators)).** Research-side simulations, option pricing, ML training and inference.
-- **Numerics ([overview: Numerics and data](../overview.md#numerics-and-data)).** Fixed-point/decimal prices, units (price vs quantity vs notional), SIMD for
+- **GPU ([Concurrency across GPUs and accelerators](../accelerators.md)).** Research-side simulations, option pricing, ML training and inference.
+- **Numerics ([Numerics and data](../numerics.md)).** Fixed-point/decimal prices, units (price vs quantity vs notional), SIMD for
   book updates and analytics, defined overflow behaviour.
-- **Contracts ([overview: Correctness tooling: contracts and verification](../overview.md#correctness-tooling-contracts-and-verification)).** Pre-trade risk limits as contracts: position limits, price collars, rate limits.
+- **Contracts ([Correctness tooling: contracts and verification](../correctness.md)).** Pre-trade risk limits as contracts: position limits, price collars, rate limits.
   These are checked at runtime, and ideally proven for the risk module.
-- **Error handling ([overview: Error handling](../overview.md#error-handling)).** No unexpected panics in the trading path; failures are explicit and
+- **Error handling ([Error handling](../error-handling.md)).** No unexpected panics in the trading path; failures are explicit and
   handled (e.g. a kill switch on any unknown state).
-- **Review and audit ([overview: LLMs as first-class programmers](../overview.md#llms-as-first-class-programmers), [overview: Diffs, code review and version control](../overview.md#diffs-code-review-and-version-control)).** Every change to a live algo is reviewed against a semantic diff;
+- **Review and audit ([LLMs as first-class programmers](../agent-interface.md), [Diffs, code review and version control](../semantic-vcs.md)).** Every change to a live algo is reviewed against a semantic diff;
   provenance (who or what wrote it, which model) is recorded for compliance.
 
 ## Success criteria

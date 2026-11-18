@@ -3,11 +3,11 @@
 Checks:
 - every relative Markdown link in specs/ (file and #heading anchor) resolves, using GitHub's
   heading-slug rules (also understood by Obsidian's "GFM Heading Links" plugin);
-- every status in the overview's Contents table matches the status line under that section.
+- every document in specs/ is listed in the index table of specs/README.md.
 
 Usage (from the repository root):
     python tools/check_spec_links.py            # check only
-    python tools/check_spec_links.py --align    # also re-align the overview's Contents table
+    python tools/check_spec_links.py --align    # also re-align the index table in specs/README.md
 
 Exit code is 1 if any problem is found, so it can run in CI or a pre-commit hook.
 """
@@ -66,30 +66,25 @@ for p, t in texts.items():
             bad += 1; print("BAD ANCHOR", p.relative_to(SPECS), f"{path}#{anchor}")
 print("link problems:", bad)
 
-# ---- overview contents: statuses match the section status lines; realign
-ov = SPECS / "overview.md"
+# ---- index: every document is listed; re-align the index table
+ov = SPECS / "README.md"
 raw = open(ov, encoding="utf-8", newline="").read()
 nl = "\r\n" if "\r\n" in raw else "\n"
 lines = raw.split(nl)
-i = next(k for k, l in enumerate(lines) if l.startswith("| Section "))
+i = next(k for k, l in enumerate(lines) if l.startswith("| Area "))
 j = i
-while lines[j].startswith("|"):
+while j < len(lines) and lines[j].startswith("|"):
     j += 1
 rows = [[c.strip() for c in l.strip().strip("|").split("|")] for l in lines[i:j]]
-status_re = re.compile(r"(⚪ not started|🔴 superficial|🟠 major questions|🟡 minor questions|🟢 complete|reference)")
-text = nl.join(lines)
-hmap = {slug(h): h for h in headings(text.replace(nl, "\n"))}
+index_text = nl.join(lines[i:j])
 mism = 0
-for r in rows[2:]:
-    a = re.search(r"\]\(#([^)]+)\)", r[0]).group(1)
-    if r[1] == "—":
+for p in sorted(texts):
+    relp = p.relative_to(SPECS).as_posix()
+    if relp == "README.md" or (relp.startswith("examples/") and relp != "examples/README.md"):
         continue
-    h = hmap.get(a)
-    idx = text.index(next(l for l in lines if re.match(r"^#{2,3} " + re.escape(h) + r"\s*$", l)))
-    sm = status_re.search(text[idx:idx + 600].replace("**", ""))
-    if not sm or sm.group(1) != r[1]:
-        mism += 1; print("STATUS MISMATCH", h, r[1], "vs", sm and sm.group(1))
-print("status mismatches:", mism)
+    if f"]({relp})" not in index_text:
+        mism += 1; print("NOT IN INDEX:", relp)
+print("unindexed documents:", mism)
 
 
 def dw(s):

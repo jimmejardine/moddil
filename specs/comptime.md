@@ -1,6 +1,6 @@
 # Compile-time Evaluation (instead of Macros)
 
-> **Status:** decided direction, details open. Expands [`overview.md`: Metaprogramming](overview.md#metaprogramming).
+> **Status:** decided direction, details open. Indexed in [`README.md`](README.md).
 > Snippets are **illustration only**; no syntax is committed.
 
 ## Summary
@@ -51,8 +51,8 @@ Zig has no macro language. It has one idea: ordinary Zig code can be evaluated b
 **Gaps that matter for Moddil:**
 - **Duck-typed generics.** `anytype` and comptime `type` parameters have no declared bounds. As with
   C++ templates, errors appear at instantiation, deep inside library code, and a signature does not
-  say what it requires. That conflicts with local reasoning ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)) and with debug-mode
-  dictionary passing ([overview: Build times](overview.md#build-times)).
+  say what it requires. That conflicts with local reasoning ([LLMs as first-class programmers](agent-interface.md)) and with debug-mode
+  dictionary passing ([Build times](build-times.md)).
 - **Lazy analysis.** Code that is never instantiated is never checked.
 - **No generated declarations.** `@Type` cannot create methods or attach an implementation to an
   existing type, so there is no `derive`. Consumers reflect at the call site instead.
@@ -75,21 +75,21 @@ macros.
 ## Evaluation model
 
 - Comptime code is **ordinary Moddil**: the same syntax, types, ownership rules and standard mods.
-- It must have an **empty effect set**, which the effect system checks ([overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea)).
+- It must have an **empty effect set**, which the effect system checks ([Effects and capabilities as a unifying idea](effects-and-capabilities.md)).
   - Allocation within the evaluator is allowed.
   - `fail` becomes a compile error.
   - Every other effect is rejected.
 - **Deterministic**: the same inputs always give the same output.
 - **Fuel-limited**: a default step budget, raisable per call site with a visible annotation.
 - **Errors**: `compile_error(msg, span)` reports a diagnostic at a source location chosen by the
-  comptime code, such as a position inside a literal. Diagnostics are structured, for agents ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)).
+  comptime code, such as a position inside a literal. Diagnostics are structured, for agents ([LLMs as first-class programmers](agent-interface.md)).
 - **Sandboxed**: the evaluator has no ambient authority (R1 makes WASM the natural sandbox; see [Open questions](#open-questions)).
 - **Cached** by a hash of the function, its arguments and the reflected inputs it read. This makes it
-  fit the query-based, content-addressed compiler of [overview: Build times](overview.md#build-times).
+  fit the query-based, content-addressed compiler of [Build times](build-times.md).
 - **External inputs** (schemas, IDL files, protocol definitions) come only through `embed("path")`.
   - Embedded files are declared in the mod manifest.
   - They are hashed into the cache key.
-  - They are visible to audits ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)).
+  - They are visible to audits ([Package management and supply-chain security](packages-and-supply-chain.md)).
 
 ## Comptime parameters and values
 
@@ -119,7 +119,7 @@ fn max<T: Ord>(a: &T, b: &T) -> &T                         // the bound is part 
 - This preserves:
   - local reasoning: a signature tells you what is required;
   - debug builds with dictionary passing and release builds with specialisation, with identical
-    semantics ([overview: Build times](overview.md#build-times));
+    semantics ([Build times](build-times.md));
   - errors that point at the call site, not into library internals.
 
 ## Static reflection
@@ -155,8 +155,8 @@ struct Order {
 - Comptime functions can also return **types** (Zig-style, e.g. a struct-of-arrays layout computed
   from a struct), constants and specialised functions.
 - **Visible expansion:**
-  - `moddil explain Order` prints the generated impls as canonical source ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)).
-  - Expansions are part of the semantic diff ([overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control)), so a derive version bump that changes generated
+  - `moddil explain Order` prints the generated impls as canonical source ([LLMs as first-class programmers](agent-interface.md)).
+  - Expansions are part of the semantic diff ([Diffs, code review and version control](semantic-vcs.md)), so a derive version bump that changes generated
     code shows up in review.
 
 ## Tagged string literals (embedded DSLs)
@@ -193,7 +193,7 @@ Generated code is ordinary code once expanded:
 ## Security and supply chain
 
 - No code runs at build time with ambient authority. Comptime is pure and sandboxed, unlike
-  `build.rs`, proc macros or `postinstall` ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)).
+  `build.rs`, proc macros or `postinstall` ([Package management and supply-chain security](packages-and-supply-chain.md)).
 - External inputs are declared (`embed`), hashed and auditable.
 - A malicious derive can still generate bad *code*. That code is visible in `explain` and in diffs,
   and is limited to the capabilities the consuming mod declares.
@@ -204,7 +204,7 @@ Generated code is ordinary code once expanded:
 |---|---|
 | New syntax forms (`tokio::select!`, `html!`, `json!`) | Language features where fundamental (select is part of the structured-concurrency API); otherwise tagged literals or plain functions |
 | `vec![a, b, c]` and other variadic sugar | Array/collection literals; comptime variadic parameters |
-| Attribute macros that rewrite a function body (`#[tokio::main]`, `#[async_trait]`) | Not needed: effects remove function colouring and runtime selection happens in `main` (overview R2) |
+| Attribute macros that rewrite a function body (`#[tokio::main]`, `#[async_trait]`) | Not needed: effects remove function colouring and runtime selection happens in `main` ([R2](requirements.md#firm-requirements-decided)) |
 | Generating items at arbitrary places, or names chosen by the macro | Not possible: generation only at the annotation site, through the typed API |
 | Token-level tricks | Not possible, by design |
 
@@ -228,13 +228,13 @@ None of them needed token-level macros.
   - a hybrid of the two.
 - **Allocation:** what allocator does comptime use, and how does comptime data become static data in
   the binary?
-- **Budget:** what is the default fuel and the per-mod compile-time budget ([overview: Build times](overview.md#build-times))?
+- **Budget:** what is the default fuel and the per-mod compile-time budget ([Build times](build-times.md))?
 - **Ordering:** can one derive depend on another's output (e.g. `Hash` relying on `Eq`), and how are
   cycles detected?
 - **Reflection and privacy:** exactly which private details may a derive in another mod see?
 - **IDE responsiveness:** comptime must be incremental enough to run on every keystroke for agents
-  ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)).
-- **Construction API:** how expressive is it, and does it stay stable across editions ([overview: Language evolution](overview.md#language-evolution))?
+  ([LLMs as first-class programmers](agent-interface.md)).
+- **Construction API:** how expressive is it, and does it stay stable across editions ([Language evolution](evolution.md))?
 
 ## Prior art
 

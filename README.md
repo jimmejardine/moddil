@@ -20,20 +20,20 @@ illustration only and do not commit to any syntax.
 
 ## Start here
 
-Read [`specs/overview.md`](specs/overview.md) first. Its **index** at the top lists every problem
-area with a status (⚪ not started, 🔴 superficial, 🟠 major questions, 🟡 minor questions,
-🟢 complete), and links to a short summary and to the subdocument that holds the detail. Then read the [Thesis](specs/overview.md#thesis) and the [firm requirements](specs/overview.md#firm-requirements-decided).
+Read [`specs/README.md`](specs/README.md) first. It is the **index**: every area with a status
+(⚪ not started, 🔴 superficial, 🟠 major questions, 🟡 minor questions, 🟢 complete) and a link to
+the document that holds its detail. Then read [Why Moddil](specs/vision.md) for the thesis, and the
+[firm requirements](specs/requirements.md#firm-requirements-decided).
 
 ## Notes for LLMs and agents
 
-- Start with `specs/overview.md`. It holds only an index and a short summary per area. The
-  subdocuments linked from its index are authoritative, and hold the problem statement, prior art,
-  decisions and directions in full.
-- **Keep the overview in sync.** When you change a subdocument:
-  - an open question lives in the subdocument's *Open questions* section and is copied into the
-    matching overview summary, so change both together;
-  - update the area's status in the overview index if it changed;
-  - a new subdocument needs an index row.
+- Start with `specs/README.md`. It holds only the index. Each area's document is authoritative and
+  holds its problem statement, prior art, decisions, directions and open questions in full.
+- **Statuses live only in the index table; open questions live only in the area's document.**
+  Nothing is copied between them. A new document needs an index row.
+- **Link by heading name, never by section number**, and run `python tools/check_spec_links.py`
+  after editing; it fails on any broken link or unindexed document (see
+  [Working on these specs](specs/README.md#working-on-these-specs)).
 - Sections marked **Decision** or **Decided**, and the firm requirements **R1–R3**, are settled.
   Don't reopen them unless asked. **Directions** and **Open questions** are still open.
 - The four reference systems in [`specs/examples/`](specs/examples/README.md) are the yardstick: a
@@ -47,9 +47,13 @@ area with a status (⚪ not started, 🔴 superficial, 🟠 major questions, �
 
 ```
 specs/
-  overview.md      why Moddil exists; index, status and summary of every area; start here
-  *.md             subdocuments (memory, concurrency, errors, comptime, mods, bootstrap, …)
+  README.md        the index: every area, its status and its documents; start here
+  vision.md        why Moddil exists: preamble, thesis, cross-cutting themes, tensions
+  roadmap.md       strategic and technical questions that span areas
   requirements.md  firm requirements R1–R3 and non-goals, in full
+  *.md             one document per area (memory, concurrency, errors, comptime, mods, …)
   prior-art.md     prior-art matrix across languages, and references
   examples/        four reference systems used to test every decision
+tools/
+  check_spec_links.py   link and index checker for specs/
 ```

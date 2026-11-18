@@ -1,6 +1,6 @@
 # Distributed and Multi-tier Programs
 
-> **Status:** decided direction, details open. Expands [`overview.md`: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs).
+> **Status:** decided direction, details open. Indexed in [`README.md`](README.md).
 > Snippets and file formats are **illustration only**; no syntax is committed.
 
 ## Summary
@@ -43,7 +43,7 @@ it falls on. Adoption must be incremental: a Moddil service is an ordinary servi
 |---|---|---|
 | **A. Language** | Components and placement; the `remote` effect; generated contracts and skew checks; trust, secrets and capabilities; structured concurrency across machines; whole-system simulation | **Do it.** Only a compiler can, and most of it reuses existing decisions. |
 | **B. Artefacts and adapters** | Static binaries, WASM and OCI images; a topology file; adapter mods emitting Compose, Kubernetes, Nomad, systemd and WASI-platform formats; discovery, secret and policy integration | **Do it thinly**, as ordinary mods (R2). |
-| **C. Infrastructure** | Orchestration, scheduling, autoscaling, service mesh, load balancing, provisioning, secret storage, rollout strategy | **Never.** Kubernetes, Nomad, Consul, Vault, Terraform and Argo own these (non-goals, [overview: Non-goals (draft)](overview.md#non-goals-draft)). |
+| **C. Infrastructure** | Orchestration, scheduling, autoscaling, service mesh, load balancing, provisioning, secret storage, rollout strategy | **Never.** Kubernetes, Nomad, Consul, Vault, Terraform and Argo own these (non-goals, [Non-goals (draft)](requirements.md#non-goals-draft)). |
 
 ## Layer A: components and placement
 
@@ -63,7 +63,7 @@ mod web    { … api::checkout(cart) … }   // here: with remote, fail(RemoteEr
 - `peer` covers **symmetric** topologies, where every node is both client and server (Hashiverse).
 - The compiler checks what may live where: `client` code cannot use `db`; server-only types cannot be
   sent to the client; secrets cannot cross to `client` ([Trust, secrets and capabilities](#trust-secrets-and-capabilities)).
-- Placement is one ladder at every scale: thread, core, device ([`accelerators.md`: Devices and addressing](accelerators.md#devices-and-addressing)), machine, tier (overview theme 4).
+- Placement is one ladder at every scale: thread, core, device ([`accelerators.md`: Devices and addressing](accelerators.md#devices-and-addressing)), machine, tier ([cross-cutting theme 4](vision.md#cross-cutting-themes)).
 
 ## The `remote` effect
 
@@ -83,7 +83,7 @@ mod web    { … api::checkout(cart) … }   // here: with remote, fail(RemoteEr
 - Contracts are **generated from the types** at each boundary. There is no hand-written OpenAPI or
   protobuf between Moddil components.
 - **Schema evolution rules** are explicit: added fields need defaults or `Option`; removed fields go
-  through deprecation; renames are refactor intents ([overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control)), not breaking changes.
+  through deprecation; renames are refactor intents ([Diffs, code review and version control](semantic-vcs.md)), not breaking changes.
 - **Skew checking against what is deployed.** The contract of each deployed version is recorded (in
   the repository or a registry). The compiler compares a change with every version still in service
   (including months-old mobile clients) and rejects changes that would break a rolling deploy. The
@@ -127,7 +127,7 @@ mod web    { … api::checkout(cart) … }   // here: with remote, fail(RemoteEr
 - **OCI images are built directly** from the binaries, as Go's `ko`, Java's Jib and Nix do: no
   Dockerfile, reproducible, minimal (distroless) images that Docker, Podman or containerd run and any
   registry stores.
-- Each artefact comes with an SBOM and build provenance ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)).
+- Each artefact comes with an SBOM and build provenance ([Package management and supply-chain security](packages-and-supply-chain.md)).
 
 ## The topology file
 
@@ -220,7 +220,7 @@ guarantees, generated policies and typed requirements — and leaves the rest to
 
 ## Background
 
-The problem and the state of the art that led to this design. (Moved from the overview. Why earlier
+The problem and the state of the art that led to this design. (Why earlier
 attempts stayed niche is in [Is it worth it? Lessons first](#is-it-worth-it-lessons-first).)
 
 **Problem.** Almost no real system is one process. A single feature, such as "user uploads a photo",

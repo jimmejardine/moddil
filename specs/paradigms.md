@@ -1,6 +1,6 @@
 # Paradigms: Functional, Object-Oriented, and Inheritance
 
-> **Status:** decided direction, details open. Expands [`overview.md`: Surface syntax and paradigms](overview.md#surface-syntax-and-paradigms). Syntax per
+> **Status:** decided direction, details open. Expands [Surface syntax and paradigms](syntax.md). Syntax per
 > [`syntax.md`](syntax.md).
 
 ## Summary

@@ -1,6 +1,6 @@
 # Memory and Resources
 
-> **Status:** decided direction, details open. Expands [`overview.md`: Memory and resource management](overview.md#memory-and-resource-management) and is the
+> **Status:** decided direction, details open. Indexed in [`README.md`](README.md) and is the
 > foundation for CPU concurrency in [`concurrency.md`](concurrency.md). Snippets are **illustration
 > only**; no syntax is committed.
 
@@ -31,7 +31,7 @@ traits and without lifetime annotations ([`concurrency.md`: No `Send` / `Sync`](
 - Moving transfers ownership; the source can no longer be used (checked at compile time).
 - **There are no special constructors.**
   - A value comes into existence only through a literal that supplies every field, e.g.
-    `Conn { socket, session }`. This follows from definite initialisation ([overview: Null and invalid states](overview.md#null-and-invalid-states)).
+    `Conn { socket, session }`. This follows from definite initialisation ([Null and invalid states](null-safety.md)).
   - The literal is pure: it cannot suspend or fail.
   - With private fields, only the type's own module can write the literal, so its creator
     functions enforce the invariants.
@@ -158,7 +158,7 @@ by pointer**, whichever is cheaper (as Swift and Hylo do). Small types travel in
 - A source cannot be mutated, moved or dropped while a borrow of it is live.
 - Checking is **intraprocedural** and flow-sensitive (NLL-style): a borrow ends at its last use.
   Function signatures carry everything a caller needs, so checking stays local and incremental
-  ([overview: Build times](overview.md#build-times)).
+  ([Build times](build-times.md)).
 - **Non-escaping closures** may capture borrows (Swift's model). Escaping closures capture by move
   or rc. Details in [`closures.md`](closures.md).
 
@@ -205,7 +205,7 @@ view SymbolTable { map: Map<Name, &Node> }
 ```
 
 An alternative to context objects that fits Moddil especially well: things like `Config` and
-`DbPool` can be **effects/capabilities** provided by a handler higher up ([overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea)), giving
+`DbPool` can be **effects/capabilities** provided by a handler higher up ([Effects and capabilities as a unifying idea](effects-and-capabilities.md)), giving
 implicit context with no parameter threading, still visible in signatures.
 
 ### Known limitations (accepted)
@@ -272,7 +272,7 @@ Notes:
   is unchanged). Moddil mitigates this differently: child tasks *borrow* an rc without touching its
   count ([`concurrency.md`: Tasks and borrowing](concurrency.md#tasks-and-borrowing)), removing most of the clones Rust needs for
   `'static` spawns.
-- The merge-queue poll is part of the runtime-handler contract (overview R2,
+- The merge-queue poll is part of the runtime-handler contract ([R2](requirements.md#firm-requirements-decided),
   [`concurrency.md`: Runtime contract](concurrency.md#runtime-contract)). On single-threaded WASM every count is the owner count.
 
 **Proposed: bias to the owner task, not the owner thread.** Tasks migrate between worker threads
@@ -308,12 +308,12 @@ Goal: data arrives from a NIC (or disk, or GPU) and is consumed without ever bei
 
 1. **The buffer is an owned resource.** The NIC DMA-writes into pool memory (io_uring provided
    buffers, AF_XDP UMEM, DPDK mbufs). The runtime/net mod hands out a `Packet`: a unique value whose
-   type carries its memory space (e.g. `Buffer<@dma(nic0)>`, [overview: Concurrency across GPUs and accelerators](overview.md#concurrency-across-gpus-and-accelerators)). Dropping it returns
+   type carries its memory space (e.g. `Buffer<@dma(nic0)>`, [Concurrency across GPUs and accelerators](accelerators.md)). Dropping it returns
    the slot to the ring. Moving it moves a pointer and a length.
 2. **Validate once, access in place.** `moddil/serde` uses compile-time reflection to generate
    accessor views over the bytes (FlatBuffers / Cap'n Proto / SBE style). Validation happens once at
    the boundary and produces a validated type, which also implements the untrusted-data rule of
-   [overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs).
+   [Distributed and multi-tier programs](distribution.md).
 3. **Choose a carrier:**
 
 | Case | Carrier | Cost |
@@ -361,7 +361,7 @@ Rules:
   and it may be on any thread.
 - Every control-flow path, including error propagation, must consume a linear value. Error
   propagation (`?`) on a path holding a linear value requires an explicit handler for it
-  (exact syntax open; see [overview: Error handling](overview.md#error-handling)).
+  (exact syntax open; see [Error handling](error-handling.md)).
 - **Cancellation paths are checked like error paths**: a task observes cancellation only at a
   suspension point, and must consume its linear values on that path too, typically with
   `errdefer txn.rollback()` ([`concurrency.md`: Cancellation and shutdown](concurrency.md#cancellation-and-shutdown)).
@@ -443,14 +443,14 @@ No case required first-class references with explicit lifetimes.
   [`freestanding.md`: Memory without an operating system](freestanding.md#memory-without-an-operating-system).)
 - Should `Weak` be core or a mod? (It needs header support, so probably core.)
 - Linear values on error paths: what is the least noisy explicit handling?
-- Can the borrow check give diagnostics good enough for LLM agents ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)) — e.g.
+- Can the borrow check give diagnostics good enough for LLM agents ([LLMs as first-class programmers](agent-interface.md)) — e.g.
   machine-applicable "insert `.to_rc()` here" fixes?
 - Is there still a place for an optional per-task/per-actor collector, or does this model make it
   unnecessary?
 
 ## Background
 
-The problem and the state of the art that led to this design. (Moved from the overview.)
+The problem and the state of the art that led to this design.
 
 **Problem.** Every approach trades something away:
 
@@ -485,7 +485,7 @@ The problem and the state of the art that led to this design. (Moved from the ov
 - **Allocators as a capability**: the allocator is visible (Zig-style), and per-scope arenas are cheap
   and idiomatic.
 - Machine-applicable diagnostics for the borrow check (e.g. "insert `.to_rc()` here"), aimed at
-  agents ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)).
+  agents ([LLMs as first-class programmers](agent-interface.md)).
 
 ## Prior art
 

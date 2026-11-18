@@ -23,29 +23,29 @@ Success criteria → Mods used → Interop and non-Moddil parts → Open questio
 
 ## Coverage: examples × problem areas
 
-Rows link to the matching sections of [`../overview.md`](../overview.md).
+Rows link to each area's document; all areas are listed in the [index](../README.md).
 ● = central to the example · ○ = exercised · blank = not significant.
 
 | Problem area | Game | HFT | Store | Hashiverse |
 |---|---|---|---|---|
-| [Effects and handlers](../overview.md#effects-and-capabilities-as-a-unifying-idea) | ○ | ● (sim ↔ live) | ○ | ● (pluggable transport/time/storage) |
-| [Memory / resources](../overview.md#memory-and-resource-management) | ○ | ● (zero-alloc hot path) | ○ | ○ |
-| [Error handling](../overview.md#error-handling) | ○ | ● | ○ | ○ |
-| [Numerics](../overview.md#numerics-and-data) | ○ | ● (decimal, SIMD) | ○ (money) | ○ (crypto) |
-| [Contracts / verification](../overview.md#correctness-tooling-contracts-and-verification) | | ● (risk checks) | ○ | ○ |
-| [CPU concurrency](../overview.md#concurrency-across-cpus) | ● | ● | ○ | ● (parallel PoW) |
-| [GPU](../overview.md#concurrency-across-gpus-and-accelerators) | ● (WebGPU) | ● (research) | | |
-| [Distributed / multi-tier](../overview.md#distributed-and-multi-tier-programs) | ● | ● | ● | ● (P2P) |
-| [Deterministic simulation](../overview.md#determinism-and-reproducibility) | ● | ● | ○ | ● |
-| [C/C++/Rust interop](../overview.md#interoperability-with-c-and-rust) | ○ | ● (kernel bypass, exchange SDKs) | ○ (mobile platform APIs) | ● (existing Rust code) |
-| [Build times](../overview.md#build-times) | ○ | ○ | ● (large app team) | ○ |
-| [Supply chain / capabilities](../overview.md#package-management-and-supply-chain-security) | ○ | ● (`order` capability) | ● (`payments`) | ● (untrusted peers) |
-| [LLM-friendliness](../overview.md#llms-as-first-class-programmers) | ○ | ○ | ● (CRUD volume) | ○ |
-| [Semantic diffs / review](../overview.md#diffs-code-review-and-version-control) | ○ | ● (audited algos) | ● | ○ |
+| [Effects and handlers](../effects-and-capabilities.md) | ○ | ● (sim ↔ live) | ○ | ● (pluggable transport/time/storage) |
+| [Memory / resources](../memory-and-resources.md) | ○ | ● (zero-alloc hot path) | ○ | ○ |
+| [Error handling](../error-handling.md) | ○ | ● | ○ | ○ |
+| [Numerics](../numerics.md) | ○ | ● (decimal, SIMD) | ○ (money) | ○ (crypto) |
+| [Contracts / verification](../correctness.md) | | ● (risk checks) | ○ | ○ |
+| [CPU concurrency](../concurrency.md) | ● | ● | ○ | ● (parallel PoW) |
+| [GPU](../accelerators.md) | ● (WebGPU) | ● (research) | | |
+| [Distributed / multi-tier](../distribution.md) | ● | ● | ● | ● (P2P) |
+| [Deterministic simulation](../determinism.md) | ● | ● | ○ | ● |
+| [C/C++/Rust interop](../interop.md) | ○ | ● (kernel bypass, exchange SDKs) | ○ (mobile platform APIs) | ● (existing Rust code) |
+| [Build times](../build-times.md) | ○ | ○ | ● (large app team) | ○ |
+| [Supply chain / capabilities](../packages-and-supply-chain.md) | ○ | ● (`order` capability) | ● (`payments`) | ● (untrusted peers) |
+| [LLM-friendliness](../agent-interface.md) | ○ | ○ | ● (CRUD volume) | ○ |
+| [Semantic diffs / review](../semantic-vcs.md) | ○ | ● (audited algos) | ● | ○ |
 | R1 WASM | ● (browser client) | | ● (web client) | ● (browser client) |
 | Mobile (iOS/Android) | | | ● | |
 
-No problem area is left unexercised. [GPU](../overview.md#concurrency-across-gpus-and-accelerators) is the thinnest; if research workloads in the HFT
+No problem area is left unexercised. [GPU](../accelerators.md) is the thinnest; if research workloads in the HFT
 example are not enough, a fifth GPU-heavy example (e.g. ML inference) may be added.
 
 ## Coverage: examples × standard mods

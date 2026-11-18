@@ -1,6 +1,6 @@
 # Determinism and Reproducibility
 
-> **Status:** proposal. Expands [`overview.md`: Determinism and reproducibility](overview.md#determinism-and-reproducibility). Nothing here is decided;
+> **Status:** proposal. Indexed in [`README.md`](README.md). Nothing here is decided;
 > recommendations are marked **Recommended**. Syntax is illustrative.
 
 ## The principle
@@ -43,7 +43,7 @@ What it enables:
 - a **simulated disk** with faults: torn writes, an `fsync` that lies, full disks;
 - **fault-injection points** (FoundationDB's `BUGGIFY`) as an effect that does nothing in production.
 
-**Whole systems in one process:** every placement or tier ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)) becomes a simulated node.
+**Whole systems in one process:** every placement or tier ([Distributed and multi-tier programs](distribution.md)) becomes a simulated node.
 This covers all four [reference examples](examples/README.md).
 
 **Searching for bugs:**
@@ -141,7 +141,7 @@ Recording can be selective per scope or task to control volume.
 
 **Durable execution.** Temporal and Restate rely on deterministic replay of workflow code, and can
 only check it at runtime. In Moddil a workflow's effect row may contain only replayable effects, so
-**workflow determinism is checked by the compiler** (durable workflows, [overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)).
+**workflow determinism is checked by the compiler** (durable workflows, [Distributed and multi-tier programs](distribution.md)).
 
 ## Reproducible builds
 
@@ -151,7 +151,7 @@ The same source, lockfile and toolchain produce **bit-identical artefacts**:
 - pure, sandboxed comptime ([`comptime.md`](comptime.md));
 - hash-pinned dependencies.
 
-Anyone can rebuild a tagged version of a mod and compare the bytes ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)). The bootstrap fixed point
+Anyone can rebuild a tagged version of a mod and compare the bytes ([Package management and supply-chain security](packages-and-supply-chain.md)). The bootstrap fixed point
 ([`bootstrap.md`: Staged bootstrap](bootstrap.md#staged-bootstrap)–[`bootstrap.md`: Bootstrapping after self-hosting](bootstrap.md#bootstrapping-after-self-hosting)) uses the same machinery. Prior art: Go toolchains are fully
 reproducible from Go 1.21; Debian Reproducible Builds; Nix and Guix; Bazel's hermetic builds.
 
@@ -237,7 +237,7 @@ real-world evidence for it.
 
 ## Background
 
-The problem and the state of the art that led to this design. (Moved from the overview.)
+The problem and the state of the art that led to this design.
 
 - **Problem.** Concurrent and distributed bugs are hard to reproduce.
 - **State of the art.** FoundationDB and TigerBeetle deterministic simulation testing; `rr` record and

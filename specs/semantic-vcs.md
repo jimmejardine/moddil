@@ -1,6 +1,6 @@
 # Diffs, Code Review and Version Control
 
-> **Status:** decided direction, details open. Expands [`overview.md`: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control).
+> **Status:** decided direction, details open. Indexed in [`README.md`](README.md).
 
 ## Problem
 

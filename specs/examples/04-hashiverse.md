@@ -27,17 +27,17 @@ interoperate with a running network built in another language.
   [`../bootstrap.md`: Milestones](../bootstrap.md#milestones)–[`../bootstrap.md`: Wasmtime as the short-term reference runtime](../bootstrap.md#wasmtime-as-the-short-term-reference-runtime)).
 - Smaller scope than a server.
 - Must speak the protocol **on the wire** with existing Rust servers. This is a strong test of
-  compiler-checked wire contracts against a protocol Moddil does not own ([overview: Interoperability with C and Rust](../overview.md#interoperability-with-c-and-rust), [overview: Distributed and multi-tier programs](../overview.md#distributed-and-multi-tier-programs)).
+  compiler-checked wire contracts against a protocol Moddil does not own ([Interoperability with C and Rust](../interop.md), [Distributed and multi-tier programs](../distribution.md)).
 - Exercises WASM in the browser (R1): Web Worker, IndexedDB storage, in-browser key management.
-- Exercises CPU-heavy, parallel proof-of-work ([overview: Concurrency across CPUs](../overview.md#concurrency-across-cpus)) and crypto performance (SIMD, [overview: Numerics and data](../overview.md#numerics-and-data)).
-- Can start by calling `hashiverse-lib` through the C ABI ([overview: Interoperability with C and Rust](../overview.md#interoperability-with-c-and-rust)), then replace pieces with native
+- Exercises CPU-heavy, parallel proof-of-work ([Concurrency across CPUs](../concurrency.md)) and crypto performance (SIMD, [Numerics and data](../numerics.md)).
+- Can start by calling `hashiverse-lib` through the C ABI ([Interoperability with C and Rust](../interop.md)), then replace pieces with native
   Moddil one module at a time. That is exactly the incremental adoption path Moddil promises.
 
 **Phase B: Moddil reference server.**
 - Long-running and exposed to untrusted peers on the open internet.
 - DHT routing and maintenance, storage, DDoS protection, PoW verification.
 - Mixed-version P2P compatibility: the network always contains many server versions.
-- Packaged as a static binary or container ([overview: Cross-compilation and deployment](../overview.md#cross-compilation-and-deployment)) for volunteers to run.
+- Packaged as a static binary or container ([Cross-compilation and deployment](../targets.md)) for volunteers to run.
 
 ## Topology
 
@@ -64,24 +64,24 @@ interoperate with a running network built in another language.
 
 ## Moddil features this stresses
 
-- **Effects as built-in pluggable traits ([overview: Effects and capabilities as a unifying idea](../overview.md#effects-and-capabilities-as-a-unifying-idea)).** Hashiverse already does by hand what Moddil wants
+- **Effects as built-in pluggable traits ([Effects and capabilities as a unifying idea](../effects-and-capabilities.md)).** Hashiverse already does by hand what Moddil wants
   to make standard: transport, time, storage and key management are swappable traits with production
   and test implementations. In Moddil these become effects, and the implementations become handlers:
   `net` → HTTPS or in-memory; `time` → real or simulated; `storage` → IndexedDB, SQLite or memory;
   `keys` → browser locker or disk. This is concrete evidence for the effects design, drawn from a real
   codebase.
-- **Deterministic simulation ([overview: Determinism and reproducibility](../overview.md#determinism-and-reproducibility)).** Hashiverse's test harness (one primary, several secondary servers
+- **Deterministic simulation ([Determinism and reproducibility](../determinism.md)).** Hashiverse's test harness (one primary, several secondary servers
   and many clients in one process) is exactly what `moddil/runtime-sim` should provide out of the box,
   with seeded replay and fault injection added.
 - **WASM (R1).** Browser client in a Web Worker; Moddil's runtime-wasm with stack switching should remove
   the need for a separate worker-proxy layer written in TypeScript.
-- **Interop with Rust ([overview: Interoperability with C and Rust](../overview.md#interoperability-with-c-and-rust)).** Calling `hashiverse-lib` from Moddil during migration; wire
+- **Interop with Rust ([Interoperability with C and Rust](../interop.md)).** Calling `hashiverse-lib` from Moddil during migration; wire
   compatibility with Rust servers permanently.
-- **Crypto and PoW performance ([overview: Numerics and data](../overview.md#numerics-and-data), [overview: Concurrency across CPUs](../overview.md#concurrency-across-cpus)).** Hash chains and signature checks must match Rust
+- **Crypto and PoW performance ([Numerics and data](../numerics.md), [Concurrency across CPUs](../concurrency.md)).** Hash chains and signature checks must match Rust
   performance, natively and in WASM (SIMD).
-- **Capabilities and untrusted input ([overview: Package management and supply-chain security](../overview.md#package-management-and-supply-chain-security), [overview: Distributed and multi-tier programs](../overview.md#distributed-and-multi-tier-programs)).** Every byte from a peer is untrusted. The crypto mods
+- **Capabilities and untrusted input ([Package management and supply-chain security](../packages-and-supply-chain.md), [Distributed and multi-tier programs](../distribution.md)).** Every byte from a peer is untrusted. The crypto mods
   must not have `net` or `fs`.
-- **Distributed without a centre ([overview: Distributed and multi-tier programs](../overview.md#distributed-and-multi-tier-programs)).** A P2P system has no `hub`; every node runs the same code.
+- **Distributed without a centre ([Distributed and multi-tier programs](../distribution.md)).** A P2P system has no `hub`; every node runs the same code.
   This tests whether Moddil's placement model fits symmetric topologies, not just client/server ones.
 
 ## Success criteria

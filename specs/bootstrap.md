@@ -1,6 +1,6 @@
 # Bootstrapping and Backends
 
-> **Status:** proposal. Answers [overview: Open Questions and Next Steps for Moddil](overview.md#open-questions-and-next-steps-for-moddil) Q6. WASM support facts verified November 2026 ([WASM support: verified status (November 2026)](#wasm-support-verified-status-november-2026) below).
+> **Status:** proposal. Answers [Open Questions and Next Steps for Moddil](roadmap.md) Q6. WASM support facts verified November 2026 ([WASM support: verified status (November 2026)](#wasm-support-verified-status-november-2026) below).
 
 ## Answers in brief
 
@@ -28,9 +28,9 @@ later.
   - `cranelift`: fast code generation for debug builds.
   - `wasmtime`: the WASM runtime ([Risks and open questions](#risks-and-open-questions)), embeddable in the compiler.
   - `wasm-encoder`, `wasmparser`, `wit-parser`, `wit-component`: WASM and Component Model (R1).
-  - `naga`: shader translation between WGSL, SPIR-V, MSL and HLSL ([overview: Concurrency across GPUs and accelerators](overview.md#concurrency-across-gpus-and-accelerators)).
+  - `naga`: shader translation between WGSL, SPIR-V, MSL and HLSL ([Concurrency across GPUs and accelerators](accelerators.md)).
   - `gimli`: DWARF debug info.
-  - `salsa`: query-based incremental compilation, as used by rust-analyzer ([overview: Build times](overview.md#build-times), compiler-as-a-service [overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)).
+  - `salsa`: query-based incremental compilation, as used by rust-analyzer ([Build times](build-times.md), compiler-as-a-service [LLMs as first-class programmers](agent-interface.md)).
   - `inkwell` / `llvm-sys`: LLVM.
   - `tower-lsp`, `ariadne`/`codespan-reporting`, `logos`: language server, diagnostics, lexing.
 - **Familiarity.** The project owner works in Rust daily (Hashiverse).
@@ -58,12 +58,12 @@ crates, plus Cranelift for the compiler's own debug builds.
 
 - **Stage 0** implements **Moddil-core**: the subset needed to write a compiler. That is types, sum
   types, generics, ownership, modules and mods, basic effects and handlers. It is not the full language.
-- Stage 0 includes an **interpreter for MIR** (the mid-level IR, [Backends](#backends)). Compile-time evaluation ([overview: Metaprogramming](overview.md#metaprogramming))
+- Stage 0 includes an **interpreter for MIR** (the mid-level IR, [Backends](#backends)). Compile-time evaluation ([Metaprogramming](comptime.md))
   needs one anyway, and it lets the language run tests before any backend exists.
 - **Dogfood early.** Write the first standard mods (`moddil/collections`, `text`, `serde`, `test`)
   in Moddil while the compiler is still in Rust.
 - **Fixed-point check**: stage 2 and stage 3 must be bit-identical. This runs in CI, and also checks
-  reproducible builds ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)).
+  reproducible builds ([Package management and supply-chain security](packages-and-supply-chain.md)).
 - **When to self-host:** not until the core semantics are stable, and **after the Hashiverse client
   milestone** has proved the language on real code. Self-hosting too early means rewriting the
   compiler every time the language changes.
@@ -76,7 +76,7 @@ first-class WASM target (R1), so it can do the same: `bootstrap/moddil1.wasm` pl
 (Wasmtime, or a `wasm2c` path).
 
 **Trusting trust.** A checked-in binary raises Ken Thompson's "Reflections on Trusting Trust"
-problem, which is exactly the supply-chain concern of [overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security). Mitigations:
+problem, which is exactly the supply-chain concern of [Package management and supply-chain security](packages-and-supply-chain.md). Mitigations:
 - The WASM blob must be **reproducible**: anyone can rebuild it from source and get the same bytes.
 - Keep the **Rust stage 0 buildable** so the compiler can be built by two independent paths and the
   results compared (**diverse double-compiling**, David A. Wheeler).
@@ -86,7 +86,7 @@ problem, which is exactly the supply-chain concern of [overview: Package managem
 ## Backends
 
 ```
- source ─► parse ─► canonical AST (see overview: LLMs, diffs)
+ source ─► parse ─► canonical AST (agent-interface.md, semantic-vcs.md)
                        │
                        ▼
         names · types · effects · ownership · placement · capabilities
@@ -105,7 +105,7 @@ problem, which is exactly the supply-chain concern of [overview: Package managem
 | Backend | Role | Own or reuse | Notes |
 |---|---|---|---|
 | **MIR + front end** | All Moddil-specific semantics | **Own** | This is where the language's value lies |
-| MIR interpreter | Compile-time evaluation, fast tests | **Own** | Needed anyway for [overview: Metaprogramming](overview.md#metaprogramming) |
+| MIR interpreter | Compile-time evaluation, fast tests | **Own** | Needed anyway for [Metaprogramming](comptime.md) |
 | **Cranelift** | Debug/dev builds | Reuse | Fast compile; x86-64, AArch64, RISC-V 64, s390x |
 | **LLVM** | Release builds; iOS/Android/embedded; mature optimisation | Reuse | Pin one version; use via the C API / `inkwell` |
 | **WASM** | Browser, Node, WASI, components, bootstrap | **Own** emitter (`wasm-encoder`) + Binaryen `wasm-opt` | WASM is simple; needs stack switching, JSPI glue, exnref, GC and Component Model earlier than LLVM provides them; binary size matters |
@@ -114,7 +114,7 @@ problem, which is exactly the supply-chain concern of [overview: Package managem
 | Native backends of our own | Faster compiles, full control | **Not now** | Go and Zig did this at great cost; revisit only if Cranelift + LLVM block the build-time goals |
 
 **Linkers:** `lld` or `mold` for native code; `wasm-ld` or a Moddil linker for WASM modules and
-components. **Cross-compilation ([overview: Cross-compilation and deployment](overview.md#cross-compilation-and-deployment)):** LLVM plus bundled libc/sysroots, as Zig does
+components. **Cross-compilation ([Cross-compilation and deployment](targets.md)):** LLVM plus bundled libc/sysroots, as Zig does
 ([`targets.md`](targets.md)).
 
 ## Milestones
@@ -129,7 +129,7 @@ components. **Cross-compilation ([overview: Cross-compilation and deployment](ov
 
 ## WASM concurrency lowering
 
-Moddil's concurrency semantics (structured tasks, the `suspend` effect, no function colouring, [overview: Concurrency across CPUs](overview.md#concurrency-across-cpus))
+Moddil's concurrency semantics (structured tasks, the `suspend` effect, no function colouring, [Concurrency across CPUs](concurrency.md))
 are target-independent. The backend chooses how to implement suspension:
 
 | # | Lowering | Where | Status |

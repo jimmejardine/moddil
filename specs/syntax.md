@@ -1,6 +1,6 @@
 # Syntax
 
-> **Status:** decided direction, details open. Expands [`overview.md`: Surface syntax and paradigms](overview.md#surface-syntax-and-paradigms).
+> **Status:** decided direction, details open. Indexed in [`README.md`](README.md).
 > Moddil's surface syntax is **based on Rust**. Every
 > snippet in these specs follows this document; snippets remain illustrative where a feature's own
 > design is still open.

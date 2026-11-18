@@ -1,6 +1,6 @@
 # LLMs as First-Class Programmers: the Agent Interface
 
-> **Status:** decided direction, open questions remain. Expands [`overview.md`: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers).
+> **Status:** decided direction, open questions remain. Indexed in [`README.md`](README.md).
 > Snippets and message formats are **illustration only**.
 
 ## Summary
@@ -61,7 +61,7 @@ languages optimise for the writer and against the reviewer.
 The source is a printed view of a canonical AST, so how much is shown is a choice of view, not a
 property of the source.
 - **Explicit in the source** only where readers need it: at **mod boundaries**, public signatures
-  state effects, error sets, contracts and capabilities ([overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea), [overview: Error handling](overview.md#error-handling), [overview: Correctness tooling: contracts and verification](overview.md#correctness-tooling-contracts-and-verification)).
+  state effects, error sets, contracts and capabilities ([Effects and capabilities as a unifying idea](effects-and-capabilities.md), [Error handling](error-handling.md), [Correctness tooling: contracts and verification](correctness.md)).
 - **Inferred inside** a module: local effects, error sets and types.
 - **Two views of the same code**:
   - a **compact view** for writing;
@@ -78,7 +78,7 @@ pub fn load(path: Path) -> Config with fs, fail(LoadError)   // explicit: public
 
 ### The agent server
 
-The compiler is a library and a service ([overview: Tooling uniformity](overview.md#tooling-uniformity); the whole toolchain is in
+The compiler is a library and a service ([Tooling uniformity](toolchain.md); the whole toolchain is in
 [`toolchain.md`](toolchain.md)). It is exposed over **LSP** for editors and
 over **MCP** for agents, from the same front end.
 
@@ -139,7 +139,7 @@ may be Moddil's largest adoption risk. Measures:
 
 - Comptime is pure and sandboxed ([`comptime.md`](comptime.md)).
 - Tests run under the simulation runtime by default ([`determinism.md`](determinism.md)).
-- A program can use only the capabilities it declares ([overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea), [overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)).
+- A program can use only the capabilities it declares ([Effects and capabilities as a unifying idea](effects-and-capabilities.md), [Package management and supply-chain security](packages-and-supply-chain.md)).
 
 So an agent can build and test code without being able to reach the network or the disk.
 
@@ -164,7 +164,7 @@ Every change can be reviewed through:
   statement, not per token, which local inference makes cheap.
 - **Translation tools** from Rust and TypeScript, to seed code and port projects.
 - **A small, stable surface syntax** that changes rarely, so training data stays valid; editions
-  handle evolution ([overview: Language evolution](overview.md#language-evolution)).
+  handle evolution ([Language evolution](evolution.md)).
 
 ## Open questions
 

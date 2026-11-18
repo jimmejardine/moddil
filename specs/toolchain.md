@@ -1,6 +1,6 @@
 # The Toolchain
 
-> **Status:** proposal. Expands [`overview.md`: Tooling uniformity](overview.md#tooling-uniformity). Docs and tests are detailed in
+> **Status:** proposal. Indexed in [`README.md`](README.md). Docs and tests are detailed in
 > [`docs-and-tests.md`](docs-and-tests.md); the agent-facing API in
 > [`agent-interface.md`](agent-interface.md); packages in
 > [`packages-and-supply-chain.md`](packages-and-supply-chain.md). Commands are illustrative.
@@ -47,7 +47,7 @@ human-oriented text.
 ## Formatter
 
 - **Canonical.** Like `gofmt` and Black, the formatter has no style options. Source text is a print
-  of the canonical AST ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers), [overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control)), so formatting never appears in a diff.
+  of the canonical AST ([LLMs as first-class programmers](agent-interface.md), [Diffs, code review and version control](semantic-vcs.md)), so formatting never appears in a diff.
 - Comments and blank-line grouping are part of the AST and are preserved.
 - `moddil fmt --check` runs in CI; editors format on save.
 - **One setting, recommended:** a project-wide line width in the manifest (default 120). Teams
@@ -74,7 +74,7 @@ human-oriented text.
   - inlay hints at suspension points ([`closures.md`: Seeing suspension points](closures.md#seeing-suspension-points));
   - the active handler stack in tests and simulations ([`determinism.md`: Handlers are scoped, not global](determinism.md#handlers-are-scoped-not-global));
   - `explain` expansions inline;
-  - a semantic diff view ([overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control)).
+  - a semantic diff view ([Diffs, code review and version control](semantic-vcs.md)).
 - An official **tree-sitter grammar** for syntax highlighting elsewhere (GitHub, other editors and
   tools).
 - Official editor integrations: VS Code, Zed, Neovim and JetBrains (via LSP). Priority order is open.

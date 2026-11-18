@@ -1,6 +1,6 @@
 # Units of Measure
 
-> **Status:** proposal. Expands [`overview.md`: Numerics and data](overview.md#numerics-and-data). Recommendations are marked
+> **Status:** proposal. Expands [Numerics and data](numerics.md). Recommendations are marked
 > **Recommended**; syntax follows the recommendation but is not final.
 
 ## Summary
@@ -43,7 +43,7 @@ F#'s weaknesses, which Moddil addresses ([Declaring units](#declaring-units)):
 - No affine units (°C vs K).
 
 **Recommended:** adopt the F# form as Moddil's single syntax for units in types and literals. It is
-consistent with Moddil's generic syntax and gives compound units for free. One form only ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)); the suffix form `100cm` is not used.
+consistent with Moddil's generic syntax and gives compound units for free. One form only ([LLMs as first-class programmers](agent-interface.md)); the suffix form `100cm` is not used.
 
 **Lexing rule:** a `<` immediately after a numeric literal (no space) starts a unit. The canonical
 formatter always puts spaces around the comparison operator, so `100 < limit` is never ambiguous.
@@ -149,11 +149,11 @@ use moddil::units::si::{m, cm, mm, s, ms};
 ```
 
 *Open:* whether a whole unit pack can be imported at once (`use moddil::units::si::*`), given that
-glob imports otherwise hurt local reasoning ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)).
+glob imports otherwise hurt local reasoning ([LLMs as first-class programmers](agent-interface.md)).
 
 ## Across tiers
 
-Wire contracts ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)) carry units, so a unit mismatch between services is a compile
+Wire contracts ([Distributed and multi-tier programs](distribution.md)) carry units, so a unit mismatch between services is a compile
 error. The 1999 Mars Climate Orbiter was lost to exactly this: one system produced pound-force
 seconds, the other expected newton-seconds.
 

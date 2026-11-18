@@ -1,6 +1,6 @@
 # Packages and Supply-Chain Security
 
-> **Status:** decided direction, open questions remain. Expands [`overview.md`: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security).
+> **Status:** decided direction, open questions remain. Indexed in [`README.md`](README.md).
 > Manifest syntax, commands and file formats are **illustration only**.
 
 ## Summary
@@ -150,7 +150,7 @@ github.com/acme/json                  v2 → v3 available (major)
 
 ### Capability-scoped dependencies
 
-Two layers, both enforced by the compiler ([overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea)):
+Two layers, both enforced by the compiler ([Effects and capabilities as a unifying idea](effects-and-capabilities.md)):
 - **A ceiling per mod**: the manifest declares the capabilities the mod may use (`net`, `fs`, `env`,
   `spawn`, `time`, `ffi`, `unsafe`, …). A JSON parser that uses `net` fails to build.
 - **Authority flows as values** (object capabilities): a library only gets the capabilities its
