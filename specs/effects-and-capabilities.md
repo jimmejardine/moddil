@@ -1,9 +1,9 @@
 # Effects and Capabilities
 
-> **Status:** decided direction, open questions remain. Expands [`overview.md`](overview.md) §2.1.
+> **Status:** decided direction, open questions remain. Expands [`overview.md`: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea).
 > Snippets are **illustration only**.
 
-## 1. Summary
+## Summary
 
 | Rule | One line |
 |---|---|
@@ -16,19 +16,19 @@
 | **One mechanism for restricted code** | Drop, kernels, comptime, workflows and freestanding profiles are all effect-set constraints. |
 | **Zero cost when handlers are known** | Effect operations compile to direct calls; abortive handlers to ordinary returns. |
 
-## 2. Problem
+## Problem
 
 - **Signatures say what a function takes and returns, but not what it *does***: I/O, suspension,
   failure, nondeterminism, GPU work, unsafe code. A reviewer has to read the whole body, and every
   function it calls.
 - **Ambient authority**: any function anywhere can open a socket or read `~/.ssh`
-  ([`packages-and-supply-chain.md`](packages-and-supply-chain.md) §2).
+  ([`packages-and-supply-chain.md`: Problem](packages-and-supply-chain.md#problem)).
 - **Coloured functions**: `async`, `Result` and `const` each split APIs into copies
-  ([`error-handling.md`](error-handling.md) §3.2, [`closures.md`](closures.md) §2).
+  ([`error-handling.md`: Why `Result`-only languages duplicate higher-order APIs](error-handling.md#why-result-only-languages-duplicate-higher-order-apis), [`closures.md`: Rust pain points and Moddil's answers](closures.md#rust-pain-points-and-moddils-answers)).
 - **Testability by hand**: mocking frameworks, `Context` objects threaded through every call, and
   hand-written "provider" traits (Hashiverse's `TimeProvider`, `TransportFactory`, `ClientStorage`).
 
-## 3. State of the art
+## State of the art
 
 | System | What it does well | Limits |
 |---|---|---|
@@ -43,9 +43,9 @@
 | **Java checked exceptions** | Failure in signatures | The lesson: no polymorphism, so lambdas and generics broke, and people wrapped everything in unchecked exceptions |
 | **E, Austral, WASI** | Object capabilities: authority only by holding a reference | Austral and E are small; WASI covers the host boundary only |
 
-## 4. Decisions
+## Decisions
 
-### 4.1 Effects are interfaces; handlers are scoped implementations
+### Effects are interfaces; handlers are scoped implementations
 
 ```rust
 effect time {
@@ -62,7 +62,7 @@ with time = sim.clock(node) {          // installs a handler for this block
 ```
 
 - A handler is installed **around a block**, and the innermost one wins
-  ([`determinism.md`](determinism.md) §4).
+  ([`determinism.md`: Handlers are scoped, not global](determinism.md#handlers-are-scoped-not-global)).
 - Spawned tasks **inherit** their scope's handlers; structured concurrency guarantees the handlers
   outlive them.
 - A handler can **interpose**: forward to the enclosing handler while recording, delaying, failing
@@ -70,15 +70,15 @@ with time = sim.clock(node) {          // installs a handler for this block
 - This is compiler-checked dependency injection. It replaces mocking frameworks, `Context` objects
   and hand-written provider traits.
 
-### 4.2 The effect catalogue
+### The effect catalogue
 
 | Kind | Effects | Notes |
 |---|---|---|
 | **Core** | `fail(E)`, `suspend`, `spawn` | Defined by the language ([`error-handling.md`](error-handling.md), [`concurrency.md`](concurrency.md)) |
-| **Standard** | `time`, `rand`, `net`, `fs`, `env`, `process`, `gpu`, `remote`, `introspect` | Interfaces in standard mods; handlers in runtime and simulation mods ([`mods.md`](mods.md) §4) |
-| **Capabilities with no handler to swap** | `ffi`, `unsafe` | Declared and visible to every consumer; treated as high risk ([`interop.md`](interop.md) §5) |
+| **Standard** | `time`, `rand`, `net`, `fs`, `env`, `process`, `gpu`, `remote`, `introspect` | Interfaces in standard mods; handlers in runtime and simulation mods ([`mods.md`: Pluggable runtimes without ecosystem splits](mods.md#pluggable-runtimes-without-ecosystem-splits)) |
+| **Capabilities with no handler to swap** | `ffi`, `unsafe` | Declared and visible to every consumer; treated as high risk ([`interop.md`: The safety boundary](interop.md#the-safety-boundary)) |
 | **Ambient, write-only** | `log`, `span`, `metric` | Never written in signatures; cannot feed values back ([`observability.md`](observability.md)) |
-| **User-defined** | anything | Context such as a database pool, configuration, feature flags (§6) |
+| **User-defined** | anything | Context such as a database pool, configuration, feature flags ([Directions (not yet decided)](#directions-not-yet-decided)) |
 
 **Not effects:**
 - **allocation**: a capability chosen per profile ([`freestanding.md`](freestanding.md));
@@ -87,22 +87,22 @@ with time = sim.clock(node) {          // installs a handler for this block
 
 **Effects are coarse.** There is one `fs`, not `fs.read` and `fs.write`. Finer limits come from
 **narrowing a handler** (`fs.read_only("/data")`), not from more effect names. This keeps
-signatures short (§4.6).
+signatures short ([Signatures and inference](#signatures-and-inference)).
 
-### 4.3 Handler tiers
+### Handler tiers
 
 | Tier | What the handler can do | Who can define it | Compiles to |
 |---|---|---|---|
 | **Tail-resumptive** | Return a value to the caller, like a function | Anyone | A direct (or indirect) call |
-| **Abortive** | Never resume; unwind to the handler, like an exception | Anyone | An ordinary return (`fail`, [`error-handling.md`](error-handling.md) §3) |
-| **One-shot continuation** | Capture the rest of the computation and resume it **once**, later | Core and standard effects only: `suspend`, generators | Stack switching ([`concurrency.md`](concurrency.md) §6, [`bootstrap.md`](bootstrap.md) §6) |
+| **Abortive** | Never resume; unwind to the handler, like an exception | Anyone | An ordinary return (`fail`, [`error-handling.md`: Results and effects](error-handling.md#results-and-effects)) |
+| **One-shot continuation** | Capture the rest of the computation and resume it **once**, later | Core and standard effects only: `suspend`, generators | Stack switching ([`concurrency.md`: Runtime contract](concurrency.md#runtime-contract), [`bootstrap.md`: WASM concurrency lowering](bootstrap.md#wasm-concurrency-lowering)) |
 
 - **No multi-shot resumption**, ever. Resuming twice would run the rest of the computation twice,
   duplicating linear values and running drops twice ([`memory-and-resources.md`](memory-and-resources.md)).
 - Almost every use (I/O, context, mocking, simulation, recording) is tail-resumptive, so user
   effects are cheap and easy to reason about.
 
-### 4.4 Authority comes only from root capabilities
+### Authority comes only from root capabilities
 
 ```rust
 fn main(sys: System, devs: Devices) {
@@ -125,7 +125,7 @@ fn load_plugin(p: &Plugin) with fs, fail(PluginError) {
   only from them, so a library can never create a network or file-system handler of its own.
 - A library may:
   - **perform** the effects its signature declares (and its mod's ceiling allows,
-    [`packages-and-supply-chain.md`](packages-and-supply-chain.md) §4.8);
+    [`packages-and-supply-chain.md`: Capability-scoped dependencies](packages-and-supply-chain.md#capability-scoped-dependencies));
   - **interpose** on a handler already in scope;
   - **narrow** a handler before passing control on.
 - So there is **no ambient authority**: what code can do is bounded by its signature, its mod's
@@ -133,7 +133,7 @@ fn load_plugin(p: &Plugin) with fs, fail(PluginError) {
 - Tests and simulations build handlers from simulation values rather than `System`, so the same
   code runs against fakes ([`determinism.md`](determinism.md)).
 
-### 4.5 Capability values
+### Capability values
 
 When code needs **two instances of the same effect at once** (a bridge between two networks, a test
 asserting on two nodes), a handler is passed as a value (Effekt's capability-passing style):
@@ -145,17 +145,17 @@ fn bridge(a: &Net, b: &Net) with suspend { … }
 These values are **second-class**: like Moddil's borrows, they cannot escape their scope, which
 keeps them cheap and guarantees the handler outlives its uses.
 
-### 4.6 Signatures and inference
+### Signatures and inference
 
-- **Inferred inside a module**, **explicit on `pub` signatures** (overview §2.18). The reviewer view
-  shows inferred effects inline ([`agent-interface.md`](agent-interface.md) §5.1).
+- **Inferred inside a module**, **explicit on `pub` signatures** ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)). The reviewer view
+  shows inferred effects inline ([`agent-interface.md`: Verbosity is a view](agent-interface.md#verbosity-is-a-view)).
 - An effect set is a **set**: order doesn't matter, and a function with fewer effects can be used
   where more are allowed.
 - **No effect aliases.** Every effect is listed in a public signature, so a reader never has to look
-  up what `io` means. Coarse effects (§4.2) keep the lists short; whether they stay short enough is
-  open (§7).
+  up what `io` means. Coarse effects ([The effect catalogue](#the-effect-catalogue)) keep the lists short; whether they stay short enough is
+  open ([Open questions](#open-questions)).
 
-### 4.7 Effect polymorphism
+### Effect polymorphism
 
 An **unannotated closure parameter is implicitly polymorphic**: the function performs whatever the
 closure performs.
@@ -172,45 +172,45 @@ visit(&orders, |o| total += o.qty)              // this one is pure
 - `with E` is written only to **name or constrain** the effects, e.g. to say that two closures share
   effects, or that `f` must not suspend:
   `fn map<T, U, E>(xs: &[T], f: impl FnMut(&T) -> U with E) -> Vec<U> with E`.
-- **Stored closures state their effects** ([`closures.md`](closures.md) §8):
+- **Stored closures state their effects** ([`closures.md`: Stored (escaping) closures](closures.md#stored-escaping-closures)):
   `Box<dyn Fn(Event) with suspend, fail(HandlerError)>`.
 - This generalises Swift's `rethrows` to every effect, and avoids Java's checked-exception trap.
 
-### 4.8 Restricted code is one mechanism
+### Restricted code is one mechanism
 
 | Context | Allowed effects |
 |---|---|
 | `drop` | None ([`error-handling.md`](error-handling.md) D9) |
 | Comptime | None: pure and sandboxed ([`comptime.md`](comptime.md)) |
 | GPU kernels | A restricted set: no suspension, no allocation, no I/O ([`accelerators.md`](accelerators.md)) |
-| Durable workflows | Replayable effects only ([`determinism.md`](determinism.md) §5) |
+| Durable workflows | Replayable effects only ([`determinism.md`: Record and replay](determinism.md#record-and-replay)) |
 | Freestanding profiles | No OS effects ([`freestanding.md`](freestanding.md)) |
 
 Each is an effect-set constraint, checked by the same compiler pass and reported with the same
 diagnostics.
 
-### 4.9 Compilation
+### Compilation
 
 - **Handlers known statically** (production `main`): effect operations become direct calls, by
   monomorphisation or Koka-style evidence passing. Production pays nothing for testability.
-- **Abortive handlers** compile to ordinary returns ([`error-handling.md`](error-handling.md) §3).
+- **Abortive handlers** compile to ordinary returns ([`error-handling.md`: Results and effects](error-handling.md#results-and-effects)).
 - **One-shot continuations** use stack switching natively and WASM stack switching or JSPI in the
-  browser ([`bootstrap.md`](bootstrap.md) §6).
+  browser ([`bootstrap.md`: WASM concurrency lowering](bootstrap.md#wasm-concurrency-lowering)).
 - **Dynamic handlers** (tests, simulations) pass a hidden handler argument, which is cheap enough for
   tests.
 
-### 4.10 Ergonomics: the biggest risk
+### Ergonomics: the biggest risk
 
 No mainstream language has made a typed effect system popular. The measures:
 - **Inference** inside modules; effects are written only at `pub` boundaries.
-- **Implicit polymorphism** for closures (§4.7), so higher-order code reads like Rust.
+- **Implicit polymorphism** for closures ([Effect polymorphism](#effect-polymorphism)), so higher-order code reads like Rust.
 - **Ambient observability**: logging never pollutes signatures.
 - **Coarse effects**, with narrowing done by handlers.
 - **The reviewer view** shows inferred effects without putting them in the file.
 - **Agent-grade diagnostics**, e.g. "`parse` performs `net` (via `fetch_schema`, line 40), which
   `acme/json`'s ceiling does not allow".
 
-## 5. Fit check against the reference examples
+## Fit check against the reference examples
 
 | Example | Uses |
 |---|---|
@@ -219,13 +219,13 @@ No mainstream language has made a typed effect system popular. The measures:
 | [Web store](examples/03-web-store.md) | A user-defined `db` context effect instead of threading a pool; narrowed `fs` for uploads |
 | [Hashiverse](examples/04-hashiverse.md) | `TimeProvider`, `TransportFactory` and `ClientStorage` become effects; the in-memory transport becomes a handler |
 
-## 6. Directions (not yet decided)
+## Directions (not yet decided)
 
 - **Generators** as a standard one-shot `yield` effect, so iterators can be written as loops.
 - **Context effects** in place of `Context` objects: a database pool, configuration or a request ID
   provided by a handler.
 
-## 7. Open questions
+## Open questions
 
 - Without aliases, do public signatures of high-level functions (a request handler with `net`,
   `fs`, `time`, `rand`, `suspend` and `fail(…)`) become too long? Revisit once the reference

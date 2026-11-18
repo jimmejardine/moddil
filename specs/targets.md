@@ -1,9 +1,9 @@
 # Targets, Cross-compilation and Static Builds
 
-> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.15.
+> **Status:** decided direction, details open. Expands [`overview.md`: Cross-compilation and deployment](overview.md#cross-compilation-and-deployment).
 > Commands, target names and file formats are **illustration only**.
 
-## 1. Summary
+## Summary
 
 | Rule | One line |
 |---|---|
@@ -14,9 +14,9 @@
 | **Byte-identical output on any host** | The same inputs produce the same bytes whatever OS builds them: shared caches and verifiable releases. |
 | **Sign and package from any host** | Authenticode for Windows; ad-hoc, Developer ID and notarisation for macOS; OCI images; archives. |
 | **Run what you cross-built** | WSL2, QEMU user mode and Wasmtime locally; remote runners for macOS. |
-| **Bare metal is separate** | Kernels and firmware use the freestanding profile; a bare-metal target is tier 1 only if an emulator runs its tests in CI ([`freestanding.md`](freestanding.md) §9). |
+| **Bare metal is separate** | Kernels and firmware use the freestanding profile; a bare-metal target is tier 1 only if an emulator runs its tests in CI ([`freestanding.md`: Verifying the platform in emulators](freestanding.md#verifying-the-platform-in-emulators)). |
 
-## 2. State of the art
+## State of the art
 
 **Problem.** Shared libraries make deployment fragile: the right versions must be installed on every
 machine ("dependency hell"), and building for another OS usually needs that OS, a VM, Docker images
@@ -30,11 +30,11 @@ or hand-assembled sysroots.
 | **Nix** | Reproducible cross builds of whole dependency trees | Steep learning curve; Linux and macOS hosts only |
 | **rcodesign** (apple-codesign) | Signs and notarises macOS binaries from Linux or Windows | Still needs an Apple Developer account |
 
-## 3. What "static" means on each OS
+## What "static" means on each OS
 
 | Target | Fully static? | Mandatory dynamic surface |
 |---|---|---|
-| **Linux** | **Yes.** The system-call interface is stable, so Moddil needs no libc at all (as Go) | GPU drivers (`libcuda`, the Vulkan loader), which are tied to the installed kernel driver (§7) |
+| **Linux** | **Yes.** The system-call interface is stable, so Moddil needs no libc at all (as Go) | GPU drivers (`libcuda`, the Vulkan loader), which are tied to the installed kernel driver ([Dynamic glibc targets](#dynamic-glibc-targets)) |
 | **Windows** | Effectively yes. No C runtime is needed | System DLLs (`kernel32`, `ntdll`, `ws2_32`), always present |
 | **macOS** | **No.** Apple does not support a static `libSystem`, and the system-call interface is not stable | `libSystem.dylib`, always present |
 | **WASM** | Inherently | Imports only (R1) |
@@ -43,16 +43,16 @@ or hand-assembled sysroots.
 third-party shared library being installed, which removes the "dependency hell" of distribution
 packages, version mismatches and `LD_LIBRARY_PATH`.
 
-## 4. Every toolchain is a cross-compiler
+## Every toolchain is a cross-compiler
 
 One toolchain download contains everything needed for every tier-1 target:
 - LLVM for optimised builds, and Cranelift for fast development builds ([`build-times.md`](build-times.md));
 - `lld`, which writes all four binary formats (ELF, Mach-O, COFF, WASM);
 - musl and mingw-w64 sources, glibc stubs per supported version, and minimal macOS headers and link
   stubs;
-- the bundled clang that compiles C dependencies ([`interop.md`](interop.md) §3).
+- the bundled clang that compiles C dependencies ([`interop.md`: The C ABI, both directions](interop.md#the-c-abi-both-directions)).
 
-This matches the backend plan in [`bootstrap.md`](bootstrap.md) §4.
+This matches the backend plan in [`bootstrap.md`: Backends](bootstrap.md#backends).
 
 ```
 # on Windows
@@ -64,14 +64,14 @@ moddil build --target windows-x86_64         # PE/COFF executable
 moddil build --target wasm32-wasi            # WASI component
 ```
 
-## 5. Target names and tiers
+## Target names and tiers
 
 Targets are named `os-arch[-abi][.version]`:
 
 | Example | Meaning |
 |---|---|
 | `linux-x86_64`, `linux-aarch64` | Static Linux, no libc |
-| `linux-x86_64-gnu.2.28` | Dynamic glibc, runs on glibc ≥ 2.28 (§7) |
+| `linux-x86_64-gnu.2.28` | Dynamic glibc, runs on glibc ≥ 2.28 ([Dynamic glibc targets](#dynamic-glibc-targets)) |
 | `windows-x86_64`, `windows-aarch64` | Windows, system DLLs only |
 | `macos-aarch64`, `macos-x86_64`, `macos-universal` | macOS; universal = both architectures in one file |
 | `wasm32-wasi`, `wasm32-browser` | WASM (R1) |
@@ -81,21 +81,21 @@ Targets are named `os-arch[-abi][.version]`:
 - **Tier 1** targets are built and tested in CI on every change: Linux (x86-64, ARM64), Windows
   (x86-64), macOS (ARM64, x86-64), WASM (WASI and browser, R1).
 - **Tier 2** targets build but are tested less often (e.g. Windows on ARM, FreeBSD, RISC-V); the list
-  is open (§13).
+  is open ([Open questions](#open-questions)).
 
-## 6. The libc strategy
+## The libc strategy
 
 - Moddil's standard library has its **own system layer per OS**: raw system calls on Linux, Win32 on
   Windows, `libSystem` on macOS, WASI imports on WASM. Pure Moddil programs therefore have no libc on
   Linux or Windows.
 - **DNS** is resolved by Moddil's own resolver (reading `resolv.conf` and `hosts`), as Go does, so
   static Linux binaries do not need glibc's NSS. An opt-in handler can use the system resolver
-  instead (§7).
+  instead ([Dynamic glibc targets](#dynamic-glibc-targets)).
 - The memory allocator is built in.
 - **When C code is linked** ([`interop.md`](interop.md)), libc comes in: static musl on Linux,
   mingw-w64 on Windows, `libSystem` on macOS.
 
-## 7. Dynamic glibc targets
+## Dynamic glibc targets
 
 Some programs must load libraries that only exist on the machine they run on:
 - GPU drivers: CUDA's `libcuda`, the Vulkan loader, OpenGL ([`accelerators.md`](accelerators.md));
@@ -106,7 +106,7 @@ target with a pinned minimum version**, e.g. `linux-x86_64-gnu.2.28`, built agai
 that version (Zig's approach). The binary runs on any distribution with glibc 2.28 or newer.
 Everything else in it is still linked statically; only glibc and the drivers are dynamic.
 
-## 8. Byte-identical output on any host
+## Byte-identical output on any host
 
 Building `linux-x86_64` on Windows produces **the same bytes** as building it on Linux or macOS.
 This requires:
@@ -117,21 +117,21 @@ This requires:
 Two payoffs:
 - build caches are shared across developers on different operating systems
   ([`build-times.md`](build-times.md));
-- anyone can rebuild a release and check that it matches (overview §2.16).
+- anyone can rebuild a release and check that it matches ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)).
 
-## 9. Signing and packaging from any host
+## Signing and packaging from any host
 
 | Platform | What the toolchain does |
 |---|---|
 | **Windows** | Authenticode signing (avoids SmartScreen warnings) |
 | **macOS** | Ad-hoc signature by default (Apple silicon refuses to run unsigned code); Developer ID signing and notarisation for distribution, from any host (rcodesign-style); universal binaries |
-| **Linux** | Archives, OCI images built directly ([`distribution.md`](distribution.md) §10); distribution packages through adapters |
-| **All** | Release archives with SBOM and provenance (overview §2.16) |
+| **Linux** | Archives, OCI images built directly ([`distribution.md`: Layer B: artefacts](distribution.md#layer-b-artefacts)); distribution packages through adapters |
+| **All** | Release archives with SBOM and provenance ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)) |
 
 Signing keys and Apple credentials are **capabilities supplied at release time**, never stored in the
 build or the repository.
 
-## 10. Running and testing cross builds
+## Running and testing cross builds
 
 | Host → target | How to run it |
 |---|---|
@@ -145,15 +145,15 @@ build or the repository.
 - Most tests are target-independent under the simulation runtime ([`determinism.md`](determinism.md)),
   so only OS-facing code needs real target runs.
 
-## 11. Mobile
+## Mobile
 
 - **Android:** an NDK-compatible sysroot, bundled or fetched on first use; Moddil produces shared
   libraries for apps.
 - **iOS:** Moddil produces static libraries or frameworks; final app packaging needs Apple's tools.
 - This matches the web store's "shared logic, native UI shells" approach
-  ([`examples/03-web-store.md`](examples/03-web-store.md)). Scope is open (§13).
+  ([`examples/03-web-store.md`](examples/03-web-store.md)). Scope is open ([Open questions](#open-questions)).
 
-## 12. Fit check against the reference examples
+## Fit check against the reference examples
 
 | Example | Uses |
 |---|---|
@@ -162,7 +162,7 @@ build or the repository.
 | [Web store](examples/03-web-store.md) | OCI images built on any host; shared-logic libraries for Android and iOS |
 | [Hashiverse](examples/04-hashiverse.md) | One CI host producing static volunteer binaries for Linux, Windows and macOS, signed for each |
 
-## 13. Open questions
+## Open questions
 
 - **Licensing review** of bundling macOS headers and link stubs.
 - Notarising from CI without a Mac, and how Apple credentials are held.

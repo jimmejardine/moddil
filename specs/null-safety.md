@@ -1,14 +1,14 @@
 # Null and Invalid States
 
-> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.4.
+> **Status:** decided direction, details open. Expands [`overview.md`: Null and invalid states](overview.md#null-and-invalid-states).
 
-## 1. Problem
+## Problem
 
 Null references (Hoare's "billion-dollar mistake"). More generally: types that admit
 values the domain does not, such as zero values nobody chose, unchecked ranges, mixed-up IDs, and
 objects used in the wrong state.
 
-## 2. State of the art
+## State of the art
 
 Every language that has tackled null is converging on *absence in the type,
 plus compiler-checked narrowing*, in one of two styles:
@@ -32,7 +32,7 @@ plus compiler-checked narrowing*, in one of two styles:
   - newtypes;
   - typestate.
 
-## 3. Decision
+## Decision
 
 - **No null in safe code.** Absence is `Option<T>` = `None | Some(T)`. It is an ordinary sum type in a
   core-adjacent mod (R2); the compiler adds only sugar and layout guarantees.
@@ -46,27 +46,27 @@ plus compiler-checked narrowing*, in one of two styles:
   - defaulting with `x.unwrap_or(d)` and `x.unwrap_or_else(|| …)`.
 
   There is no implicit unwrap. `unwrap()` is an explicit, visible panic point.
-- **Absence is data; failure is an effect.** `fail(E)` (overview §2.3) plays the role of Rust's `Result`,
+- **Absence is data; failure is an effect.** `fail(E)` ([overview: Error handling](overview.md#error-handling)) plays the role of Rust's `Result`,
   so `Option` is the only "maybe" type in everyday code.
   - `opt.or_fail(e)` turns absence into failure.
   - Catching a failure can produce an `Option`.
 - **Guaranteed niches:** `Option<&T>`, `Option<Rc<T>>`, owned pointers, non-zero and range-typed
   integers, and enums with spare values are all the same size as `T`. Nullable C pointers import as
-  `Option<…>` (overview §2.13).
+  `Option<…>` ([overview: Interoperability with C and Rust](overview.md#interoperability-with-c-and-rust)).
 - **Fits the ownership model:**
   - `Option<&T>`, or an `Option` holding a view, is itself a view
-    ([`memory-and-resources.md`](memory-and-resources.md) §4).
+    ([`memory-and-resources.md`: View types](memory-and-resources.md#view-types)).
   - Moving out of an `Option` is an ordinary move (`take()`).
 - **Definite initialisation:** no zero values, and no reads of uninitialised memory in safe code.
   Values are created only by literals that supply every field; there are no special constructors
-  ([`memory-and-resources.md`](memory-and-resources.md) §2).
+  ([`memory-and-resources.md`: Ownership and RAII](memory-and-resources.md#ownership-and-raii)).
 - **Invalid states beyond null:**
   - **Cheap newtypes:** zero-cost and distinct, with no implicit conversion (`UserId` ≠ `OrderId`).
   - **Range refinements** (`u32 where self in 1..`): values that are excluded become free niches for
     `Option`. This is the same `where` form as other refinements (decided).
   - **Refinement types** (`Int where 0 <= self < 100`): checked statically where provable,
-    dynamically otherwise. They share machinery with contracts (overview §2.7).
-  - **Typestate through linear types** (overview §2.2): states are types, and transitions consume the old
+    dynamically otherwise. They share machinery with contracts ([overview: Correctness tooling: contracts and verification](overview.md#correctness-tooling-contracts-and-verification)).
+  - **Typestate through linear types** ([overview: Memory and resource management](overview.md#memory-and-resource-management)): states are types, and transitions consume the old
     state, e.g. `Conn<Unauthed>` → `Conn<Authed>`.
 
 Illustration only:
@@ -90,12 +90,12 @@ fn connect(host: &str, port: Option<Port>) with net, fail(NetError) {
 }
 ```
 
-## 4. Open questions
+## Open questions
 
 - ~~What does postfix `?` mean?~~ **Resolved:** it propagates, as in Rust (`None`, or a failure
   through the `fail` effect, [`error-handling.md`](error-handling.md)). Swift-style chaining within
   an expression is `try { a?.b?.c }`.
-- How much refinement checking is static vs dynamic, and what does it cost in compile time (overview §2.14)?
+- How much refinement checking is static vs dynamic, and what does it cost in compile time ([overview: Build times](overview.md#build-times))?
 - Layout of nested options (`Option<Option<T>>`): how far should niche packing go?
 
 ## Prior art

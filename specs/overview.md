@@ -21,50 +21,51 @@ document is still a proposal; 🟡 if what is left is detail, tooling or operati
 
 **Contents** (each row links to its section; detail documents are authoritative)
 
-| §                                                         | Section                                | Status             | Detail                                                                                                                                              |
-| --------------------------------------------------------- | -------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [0](#0-preamble)                                          | Preamble                               | —                  | —                                                                                                                                                   |
-| [1](#1-thesis)                                            | Thesis                                 | —                  | —                                                                                                                                                   |
-| [2.1](#21-effects-and-capabilities-as-a-unifying-idea)    | Effects and capabilities               | 🟠 major questions | [`effects-and-capabilities.md`](effects-and-capabilities.md)                                                                                        |
-| [2.2](#22-memory-and-resource-management)                 | Memory and resource management         | 🟡 minor questions | [`memory-and-resources.md`](memory-and-resources.md)                                                                                                |
-| [2.3](#23-error-handling)                                 | Error handling                         | 🟠 major questions | [`error-handling.md`](error-handling.md)                                                                                                            |
-| [2.4](#24-null-and-invalid-states)                        | Null and invalid states                | 🟡 minor questions | [`null-safety.md`](null-safety.md)                                                                                                                  |
-| [2.5](#25-numerics-and-data)                              | Numerics and data                      | 🟠 major questions | [`numerics.md`](numerics.md), [`units.md`](units.md)                                                                                                |
-| [2.6](#26-metaprogramming)                                | Metaprogramming                        | 🟡 minor questions | [`comptime.md`](comptime.md)                                                                                                                        |
-| [2.7](#27-correctness-tooling-contracts-and-verification) | Contracts and verification             | 🟠 major questions | [`correctness.md`](correctness.md)                                                                                                                  |
-| [2.8](#28-concurrency-across-cpus)                        | Concurrency across CPUs                | 🟡 minor questions | [`concurrency.md`](concurrency.md), [`closures.md`](closures.md)                                                                                    |
-| [2.9](#29-concurrency-across-gpus-and-accelerators)       | GPUs and accelerators                  | 🟡 minor questions | [`accelerators.md`](accelerators.md)                                                                                                                |
-| [2.10](#210-distributed-and-multi-tier-programs)          | Distributed and multi-tier programs    | 🟡 minor questions | [`distribution.md`](distribution.md)                                                                                                                |
-| [2.11](#211-determinism-and-reproducibility)              | Determinism and reproducibility        | 🟠 major questions | [`determinism.md`](determinism.md)                                                                                                                  |
-| [2.12](#212-observability-and-debuggability)              | Observability and debuggability        | 🟡 minor questions | [`observability.md`](observability.md)                                                                                                              |
-| [2.13](#213-interoperability-with-c-and-rust)             | Interoperability with C and Rust       | 🟡 minor questions | [`interop.md`](interop.md)                                                                                                                          |
-| [2.14](#214-build-times)                                  | Build times                            | 🟠 major questions | [`build-times.md`](build-times.md)                                                                                                                  |
-| [2.15](#215-cross-compilation-and-deployment)             | Cross-compilation and deployment       | 🟡 minor questions | [`targets.md`](targets.md), [`freestanding.md`](freestanding.md)                                                                                    |
-| [2.16](#216-package-management-and-supply-chain-security) | Packages and supply-chain security     | 🟡 minor questions | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)                                                                                      |
-| [2.17](#217-tooling-uniformity)                           | Tooling uniformity                     | 🟡 minor questions | [`toolchain.md`](toolchain.md), [`docs-and-tests.md`](docs-and-tests.md)                                                                            |
-| [2.18](#218-llms-as-first-class-programmers)              | LLMs as first-class programmers        | 🟡 minor questions | [`agent-interface.md`](agent-interface.md)                                                                                                          |
-| [2.19](#219-diffs-code-review-and-version-control)        | Diffs, code review and version control | 🟡 minor questions | [`semantic-vcs.md`](semantic-vcs.md)                                                                                                                |
-| [2.20](#220-language-evolution)                           | Language evolution                     | 🟡 minor questions | [`evolution.md`](evolution.md)                                                                                                                      |
-| [2.21](#221-surface-syntax-and-paradigms)                 | Surface syntax and paradigms           | 🟡 minor questions | [`syntax.md`](syntax.md), [`paradigms.md`](paradigms.md)                                                                                            |
-| [2.22](#222-type-system-core)                             | Type system core                       | ⚪ not started     | —                                                                                                                                                   |
-| [2.23](#223-modules-visibility-and-program-structure)     | Modules, visibility and program structure | ⚪ not started     | —                                                                                                                                                   |
-| [2.24](#224-unsafe-and-the-safety-boundary)               | `unsafe` and the safety boundary       | ⚪ not started     | —                                                                                                                                                   |
-| [2.25](#225-text-and-strings)                             | Text and strings                       | ⚪ not started     | —                                                                                                                                                   |
-| [2.26](#226-values-copy-clone-and-equality)               | Values: copy, clone and equality       | ⚪ not started     | —                                                                                                                                                   |
-| [2.27](#227-standard-library-shape)                       | Standard library shape                 | ⚪ not started     | —                                                                                                                                                   |
-| [2.28](#228-data-interchange-and-persistence)             | Data interchange and persistence       | ⚪ not started     | —                                                                                                                                                   |
-| [2.29](#229-ui-mobile-and-the-browser)                    | UI, mobile and the browser             | ⚪ not started     | —                                                                                                                                                   |
-| [2.30](#230-program-lifecycle)                            | Program lifecycle                      | ⚪ not started     | —                                                                                                                                                   |
-| [3](#3-cross-cutting-themes)                              | Cross-cutting themes                   | —                  | —                                                                                                                                                   |
-| [4](#4-tensions-and-trade-offs)                           | Tensions and trade-offs                | —                  | —                                                                                                                                                   |
-| [5.1](#51-firm-requirements-decided)                      | Firm requirements (R1–R3)              | 🟠 major questions | [`requirements.md`](requirements.md), [`bootstrap.md`](bootstrap.md) (R1), [`mods.md`](mods.md) (R2), [`error-handling.md`](error-handling.md) (R3) |
-| [5.2](#52-non-goals-draft)                                | Non-goals                              | 🟡 minor questions | [`requirements.md`](requirements.md)                                                                                                                |
-| [6](#6-prior-art-matrix)                                  | Prior-art matrix                       | reference          | [`prior-art.md`](prior-art.md)                                                                                                                      |
-| [7](#7-open-questions-and-next-steps-for-moddil)          | Open questions and next steps          | 🟠 major questions | [`examples/README.md`](examples/README.md) (reference systems)                                                                                      |
+| Section                                                                                | Status             | Detail                                                                                                                                              |
+| -------------------------------------------------------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Preamble](#preamble)                                                                  | —                  | —                                                                                                                                                   |
+| [Thesis](#thesis)                                                                      | —                  | —                                                                                                                                                   |
+| [Effects and capabilities](#effects-and-capabilities-as-a-unifying-idea)               | 🟠 major questions | [`effects-and-capabilities.md`](effects-and-capabilities.md)                                                                                        |
+| [Memory and resource management](#memory-and-resource-management)                      | 🟡 minor questions | [`memory-and-resources.md`](memory-and-resources.md)                                                                                                |
+| [Error handling](#error-handling)                                                      | 🟠 major questions | [`error-handling.md`](error-handling.md)                                                                                                            |
+| [Null and invalid states](#null-and-invalid-states)                                    | 🟡 minor questions | [`null-safety.md`](null-safety.md)                                                                                                                  |
+| [Numerics and data](#numerics-and-data)                                                | 🟠 major questions | [`numerics.md`](numerics.md), [`units.md`](units.md)                                                                                                |
+| [Metaprogramming](#metaprogramming)                                                    | 🟡 minor questions | [`comptime.md`](comptime.md)                                                                                                                        |
+| [Contracts and verification](#correctness-tooling-contracts-and-verification)          | 🟠 major questions | [`correctness.md`](correctness.md)                                                                                                                  |
+| [Concurrency across CPUs](#concurrency-across-cpus)                                    | 🟡 minor questions | [`concurrency.md`](concurrency.md), [`closures.md`](closures.md)                                                                                    |
+| [GPUs and accelerators](#concurrency-across-gpus-and-accelerators)                     | 🟡 minor questions | [`accelerators.md`](accelerators.md)                                                                                                                |
+| [Distributed and multi-tier programs](#distributed-and-multi-tier-programs)            | 🟡 minor questions | [`distribution.md`](distribution.md)                                                                                                                |
+| [Determinism and reproducibility](#determinism-and-reproducibility)                    | 🟠 major questions | [`determinism.md`](determinism.md)                                                                                                                  |
+| [Observability and debuggability](#observability-and-debuggability)                    | 🟡 minor questions | [`observability.md`](observability.md)                                                                                                              |
+| [Interoperability with C and Rust](#interoperability-with-c-and-rust)                  | 🟡 minor questions | [`interop.md`](interop.md)                                                                                                                          |
+| [Build times](#build-times)                                                            | 🟠 major questions | [`build-times.md`](build-times.md)                                                                                                                  |
+| [Cross-compilation and deployment](#cross-compilation-and-deployment)                  | 🟡 minor questions | [`targets.md`](targets.md), [`freestanding.md`](freestanding.md)                                                                                    |
+| [Packages and supply-chain security](#package-management-and-supply-chain-security)    | 🟡 minor questions | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)                                                                                      |
+| [Tooling uniformity](#tooling-uniformity)                                              | 🟡 minor questions | [`toolchain.md`](toolchain.md), [`docs-and-tests.md`](docs-and-tests.md)                                                                            |
+| [LLMs as first-class programmers](#llms-as-first-class-programmers)                    | 🟡 minor questions | [`agent-interface.md`](agent-interface.md)                                                                                                          |
+| [Diffs, code review and version control](#diffs-code-review-and-version-control)       | 🟡 minor questions | [`semantic-vcs.md`](semantic-vcs.md)                                                                                                                |
+| [Language evolution](#language-evolution)                                              | 🟡 minor questions | [`evolution.md`](evolution.md)                                                                                                                      |
+| [Surface syntax and paradigms](#surface-syntax-and-paradigms)                          | 🟡 minor questions | [`syntax.md`](syntax.md), [`paradigms.md`](paradigms.md)                                                                                            |
+| [Type system core](#type-system-core)                                                  | ⚪ not started     | —                                                                                                                                                   |
+| [Modules, visibility and program structure](#modules-visibility-and-program-structure) | ⚪ not started     | —                                                                                                                                                   |
+| [`unsafe` and the safety boundary](#unsafe-and-the-safety-boundary)                    | ⚪ not started     | —                                                                                                                                                   |
+| [Text and strings](#text-and-strings)                                                  | ⚪ not started     | —                                                                                                                                                   |
+| [Values: copy, clone and equality](#values-copy-clone-and-equality)                    | ⚪ not started     | —                                                                                                                                                   |
+| [Standard library shape](#standard-library-shape)                                      | ⚪ not started     | —                                                                                                                                                   |
+| [Data interchange and persistence](#data-interchange-and-persistence)                  | ⚪ not started     | —                                                                                                                                                   |
+| [UI, mobile and the browser](#ui-mobile-and-the-browser)                               | ⚪ not started     | —                                                                                                                                                   |
+| [Program lifecycle](#program-lifecycle)                                                | ⚪ not started     | —                                                                                                                                                   |
+| [Cross-cutting themes](#cross-cutting-themes)                                          | —                  | —                                                                                                                                                   |
+| [Tensions and trade-offs](#tensions-and-trade-offs)                                    | —                  | —                                                                                                                                                   |
+| [Firm requirements (R1–R3)](#firm-requirements-decided)                                | 🟠 major questions | [`requirements.md`](requirements.md), [`bootstrap.md`](bootstrap.md) (R1), [`mods.md`](mods.md) (R2), [`error-handling.md`](error-handling.md) (R3) |
+| [Non-goals](#non-goals-draft)                                                          | 🟡 minor questions | [`requirements.md`](requirements.md)                                                                                                                |
+| [Prior-art matrix](#prior-art-matrix)                                                  | reference          | [`prior-art.md`](prior-art.md)                                                                                                                      |
+| [Open questions and next steps](#open-questions-and-next-steps-for-moddil)             | 🟠 major questions | [`examples/README.md`](examples/README.md) (reference systems)                                                                                      |
+| [Working on these specs](#working-on-these-specs)                                      | —                  | [`tools/check_spec_links.py`](../tools/check_spec_links.py)                                                                                         |
 
 ---
 
-## 0. Preamble
+## Preamble
 
 Every serious language exists because it solved something better than what came before it:
 
@@ -91,7 +92,7 @@ illustrates a point.
 
 ---
 
-## 1. Thesis
+## Thesis
 
 Three shifts are happening together, and no existing language was designed for all of them:
 
@@ -116,7 +117,7 @@ schedule onto heterogeneous hardware, easier to split safely across machines, an
 
 ---
 
-## 2. Problem Areas
+## Problem Areas
 
 The areas are ordered from the language core outward: semantics (effects, memory, errors, types, numerics, metaprogramming, correctness), then execution (CPU, GPU, distributed, determinism, observability), then the surrounding system (interop, builds, deployment, packages, tooling), and finally the human and agent workflow (LLMs, review, evolution). The order reflects dependencies, not priority: every area matters equally. Effects come first because most other areas build on them. Areas 2.22–2.30 came out of a gap review and are not started yet; each will get a subdocument when it is worked on.
 
@@ -129,7 +130,7 @@ Each area below gives only:
 
 ---
 
-### 2.1 Effects and capabilities as a unifying idea
+### Effects and capabilities as a unifying idea
 
 🟠 **major questions** · Detail: [`effects-and-capabilities.md`](effects-and-capabilities.md)
 
@@ -137,10 +138,10 @@ Signatures say what a function takes and returns, but not what it *does*: I/O, s
 nondeterminism, GPU work, unsafe code. One mechanism, effects plus capability values, underlies most
 other areas:
 
-- suspension without function colouring (§2.8) and GPU-safe kernel subsets (§2.9);
-- resource safety with linear types (§2.2) and visible failure (§2.3);
-- capability-scoped dependencies (§2.16) and reviewable signatures (§2.18, §2.19);
-- handlers that swap real I/O for fakes in tests (§2.11) and provide implicit context.
+- suspension without function colouring ([Concurrency across CPUs](#concurrency-across-cpus)) and GPU-safe kernel subsets ([Concurrency across GPUs and accelerators](#concurrency-across-gpus-and-accelerators));
+- resource safety with linear types ([Memory and resource management](#memory-and-resource-management)) and visible failure ([Error handling](#error-handling));
+- capability-scoped dependencies ([Package management and supply-chain security](#package-management-and-supply-chain-security)) and reviewable signatures ([LLMs as first-class programmers](#llms-as-first-class-programmers), [Diffs, code review and version control](#diffs-code-review-and-version-control));
+- handlers that swap real I/O for fakes in tests ([Determinism and reproducibility](#determinism-and-reproducibility)) and provide implicit context.
 
 Decided:
 
@@ -158,7 +159,7 @@ Decided:
 - Drop, comptime, kernels, workflows and freestanding profiles are all effect-set constraints.
 - Statically known handlers compile to direct calls.
 
-**Open questions** (same list as [`effects-and-capabilities.md`](effects-and-capabilities.md) §7)
+**Open questions** (same list as [`effects-and-capabilities.md`: Open questions](effects-and-capabilities.md#open-questions))
 
 - Without aliases, do public signatures of high-level functions (a request handler with `net`,
   `fs`, `time`, `rand`, `suspend` and `fail(…)`) become too long? Revisit once the reference
@@ -171,7 +172,7 @@ Decided:
 
 ---
 
-### 2.2 Memory and resource management
+### Memory and resource management
 
 🟡 **minor questions** · Detail: [`memory-and-resources.md`](memory-and-resources.md)
 
@@ -190,22 +191,22 @@ Decided:
 - **Affine by default, linear on request**: transactions and fallible `close` must be consumed.
 - **Zero-copy I/O** by moving owned buffers and parsing through views.
 
-**Open questions** (same list as [`memory-and-resources.md`](memory-and-resources.md) §10)
+**Open questions** (same list as [`memory-and-resources.md`: Open questions](memory-and-resources.md#open-questions))
 
 - Exact syntax for parameter modes, views and `from`.
 - Allocators: how does the allocator capability (Zig-style) interact with `.to_rc()`
   and arenas? Does an `Rc` remember its allocator? (Proposed answer in
-  [`freestanding.md`](freestanding.md) §4.)
+  [`freestanding.md`: Memory without an operating system](freestanding.md#memory-without-an-operating-system).)
 - Should `Weak` be core or a mod? (It needs header support, so probably core.)
 - Linear values on error paths: what is the least noisy explicit handling?
-- Can the borrow check give diagnostics good enough for LLM agents (§2.18) — e.g.
+- Can the borrow check give diagnostics good enough for LLM agents ([LLMs as first-class programmers](#llms-as-first-class-programmers)) — e.g.
   machine-applicable "insert `.to_rc()` here" fixes?
 - Is there still a place for an optional per-task/per-actor collector, or does this model make it
   unnecessary?
 
 ---
 
-### 2.3 Error handling
+### Error handling
 
 🟠 **major questions** · Detail: [`error-handling.md`](error-handling.md)
 
@@ -215,7 +216,7 @@ coarse. Composing error types across libraries is painful.
 Decided:
 
 - Rust-style `?` and try blocks; errors do not unwind.
-- **R3** (§5.1): no unhandled errors, checked at every entry point.
+- **R3** ([Firm requirements (decided)](#firm-requirements-decided)): no unhandled errors, checked at every entry point.
 - A clear split between recoverable errors and bugs (traps).
 - **Cleanup cannot fail silently or fatally**: drop has an empty effect set; cleanup that can fail
   is a linear type with an explicit `close`/`commit`; a second error on an error path is
@@ -223,26 +224,26 @@ Decided:
 
 Still a direction: errors as an effect (`fail(E)`) with inferred error sets.
 
-**Open questions** (same list as [`error-handling.md`](error-handling.md) §12)
+**Open questions** (same list as [`error-handling.md`: Open questions](error-handling.md#open-questions))
 
-1. Are explicit discards of errors allowed, and do they need a reason (§4.4 there)?
-2. Do failed contract assertions trap or raise an error (§2 there)? (Recommendation: trap; see
-   [`correctness.md`](correctness.md) §5.)
-3. Task scopes: first error and cancel siblings, or collect all errors (§4.5 there)?
-4. Can a trap terminate only its task rather than the process, and how are its resources freed (§8 there)?
+1. Are explicit discards of errors allowed, and do they need a reason ([`error-handling.md`: Entry points must handle everything (R3)](error-handling.md#entry-points-must-handle-everything-r3))?
+2. Do failed contract assertions trap or raise an error ([`error-handling.md`: Three outcome classes](error-handling.md#three-outcome-classes))? (Recommendation: trap; see
+   [`correctness.md`: Decisions to lock early](correctness.md#decisions-to-lock-early).)
+3. Task scopes: first error and cancel siblings, or collect all errors ([`error-handling.md`: Tasks and concurrency](error-handling.md#tasks-and-concurrency))?
+4. Can a trap terminate only its task rather than the process, and how are its resources freed ([`error-handling.md`: Performance: why C++ exceptions are slow, and why Moddil's errors aren't](error-handling.md#performance-why-c-exceptions-are-slow-and-why-moddils-errors-arent))?
    If so, linear types would also need an infallible, non-suspending `abandon` for that path (e.g. a
    transaction drops its connection so the database rolls back). Cancellation does not need it
-   ([`concurrency.md`](concurrency.md) §9).
+   ([`concurrency.md`: Cancellation and shutdown](concurrency.md#cancellation-and-shutdown)).
 5. Should a resumable recovery effect ("retry"/"default") exist as a separate effect?
-6. How is context attached to structured errors (§5 there)?
+6. How is context attached to structured errors ([`error-handling.md`: Error types](error-handling.md#error-types))?
 7. Is `Option` part of the same machinery (`?` on `Option`, as in Rust)?
-8. Should errors from the `remote` effect (§2.10) have a standard shape (timeout, unreachable,
+8. Should errors from the `remote` effect ([Distributed and multi-tier programs](#distributed-and-multi-tier-programs)) have a standard shape (timeout, unreachable,
    incompatible version), and how are errors serialised across tiers?
 9. Checked-exception fatigue (Java) vs inference: how much of an error set should be inferred?
 
 ---
 
-### 2.4 Null and invalid states
+### Null and invalid states
 
 🟡 **minor questions** · Detail: [`null-safety.md`](null-safety.md)
 
@@ -260,16 +261,16 @@ Decided:
 - **Beyond null**: cheap newtypes, pattern/range types, refinement types, and typestate through
   linear types.
 
-**Open questions** (same list as [`null-safety.md`](null-safety.md) §4)
+**Open questions** (same list as [`null-safety.md`: Open questions](null-safety.md#open-questions))
 
 - ~~What does postfix `?` mean?~~ **Resolved:** it propagates, as in Rust; chaining within an
   expression is `try { a?.b?.c }` ([`null-safety.md`](null-safety.md)).
-- How much refinement checking is static vs dynamic, and what does it cost in compile time (§2.14)?
+- How much refinement checking is static vs dynamic, and what does it cost in compile time ([Build times](#build-times))?
 - Layout of nested options (`Option<Option<T>>`): how far should niche packing go?
 
 ---
 
-### 2.5 Numerics and data
+### Numerics and data
 
 🟠 **major questions** · Detail: [`numerics.md`](numerics.md), [`units.md`](units.md) (units of measure)
 
@@ -287,17 +288,17 @@ floating-point surprises, floats used for money, and no units.
 - Proposed: F#-style units of measure (`100<cm>`, `f64<m/s>`) with an open set of dimensions
   ([`units.md`](units.md)).
 
-**Open questions** (same list as [`numerics.md`](numerics.md) §8)
+**Open questions** (same list as [`numerics.md`: Open questions](numerics.md#open-questions))
 
 - How are units written on parameterised types (`Fixed<4>` in US dollars: `Fixed<4><USD>`?)?
 - Should `Fixed` and `BigDecimal` have a default rounding mode, or must it always be stated?
 - Should overflow checks ever be disabled per mod or per block (an `unchecked` region), or only
   replaced by explicit `+%`?
 
-**Open questions** (same list as [`units.md`](units.md) §10)
+**Open questions** (same list as [`units.md`: Open questions](units.md#open-questions))
 
 1. Confirm the lexing rule: no space between a literal and its `<unit>`.
-2. Glob imports of unit packs (§7 there).
+2. Glob imports of unit packs ([`units.md`: Imports](units.md#imports)).
 3. Angles: are radians and degrees units of a dimensionless-but-distinct "angle" kind?
 4. Rational exponents (`m^(1/2)`), needed for some formulas: allow, or only integers?
 5. The common-unit rule for unannotated mixed expressions: finer unit, or left operand?
@@ -306,7 +307,7 @@ floating-point surprises, floats used for money, and no units.
 
 ---
 
-### 2.6 Metaprogramming
+### Metaprogramming
 
 🟡 **minor questions** · Detail: [`comptime.md`](comptime.md)
 
@@ -323,7 +324,7 @@ Decided:
 - **Tagged string literals for DSLs** (`fmt"…"`, `re"…"`, `sql"…"`), checked at compile time.
 - Every expansion is visible through `explain` and in semantic diffs.
 
-**Open questions** (same list as [`comptime.md`](comptime.md) §13)
+**Open questions** (same list as [`comptime.md`: Open questions](comptime.md#open-questions))
 
 - **Where does comptime run?** Options:
   - an interpreter inside the compiler (Zig; fast start, slow for heavy work);
@@ -332,17 +333,17 @@ Decided:
   - a hybrid of the two.
 - **Allocation:** what allocator does comptime use, and how does comptime data become static data in
   the binary?
-- **Budget:** what is the default fuel and the per-mod compile-time budget (§2.14)?
+- **Budget:** what is the default fuel and the per-mod compile-time budget ([Build times](#build-times))?
 - **Ordering:** can one derive depend on another's output (e.g. `Hash` relying on `Eq`), and how are
   cycles detected?
 - **Reflection and privacy:** exactly which private details may a derive in another mod see?
 - **IDE responsiveness:** comptime must be incremental enough to run on every keystroke for agents
-  (§2.18).
-- **Construction API:** how expressive is it, and does it stay stable across editions (§2.20)?
+  ([LLMs as first-class programmers](#llms-as-first-class-programmers)).
+- **Construction API:** how expressive is it, and does it stay stable across editions ([Language evolution](#language-evolution))?
 
 ---
 
-### 2.7 Correctness tooling: contracts and verification
+### Correctness tooling: contracts and verification
 
 🟠 **major questions** · Detail: [`correctness.md`](correctness.md)
 
@@ -356,7 +357,7 @@ Proposed:
 - **Designed for now, built later**: proofs written in Moddil itself (SMT-backed), assurance levels
   per mod, refinement types and model checking.
 
-**Open questions** (same list as [`correctness.md`](correctness.md) §7)
+**Open questions** (same list as [`correctness.md`: Open questions](correctness.md#open-questions))
 
 1. Is the verifier part of the core toolchain or a mod (`moddil/verify`)?
 2. Which SMT solver(s), and how are solver versions pinned for reproducible proofs?
@@ -367,7 +368,7 @@ Proposed:
 
 ---
 
-### 2.8 Concurrency across CPUs
+### Concurrency across CPUs
 
 🟡 **minor questions** · Detail: [`concurrency.md`](concurrency.md), [`closures.md`](closures.md) (lambdas)
 
@@ -376,7 +377,7 @@ sync and async halves, and cancellation is an afterthought almost everywhere.
 
 Decided:
 
-- **Data-race freedom by construction**, built on §2.2: owned values move into tasks, shared borrows
+- **Data-race freedom by construction**, built on [Memory and resource management](#memory-and-resource-management): owned values move into tasks, shared borrows
   are lent to many children, `mut` to exactly one, and the only shared mutable state is sync cells.
   There are **no `Send`/`Sync` traits**.
 - **Structured concurrency is the only way to start a task**, so children can borrow from their
@@ -390,31 +391,31 @@ Decided:
 - Closures are non-escaping by default and may borrow, fail and suspend
   ([`closures.md`](closures.md)).
 
-**Open questions** (same list as [`concurrency.md`](concurrency.md) §7)
+**Open questions** (same list as [`concurrency.md`: Open questions](concurrency.md#open-questions))
 
 - **Preemption:** guaranteed (BEAM-style, via compiler-inserted yield points) or cooperative?
-  Affects tail latency (HFT, game tick) and fairness. *Recommended* (§6.1 there): compiler-inserted safe
+  Affects tail latency (HFT, game tick) and fairness. *Recommended* ([`concurrency.md`: Tasks, threads and executors](concurrency.md#tasks-threads-and-executors)): compiler-inserted safe
   points in loops and function entries, which `pinned` executors can disable.
 - ~~**Cancellation and linear values.**~~ Resolved: cancellation is cooperative and observed only at
-  suspension points, and the cancellation path must consume linear values like the error path (§9 there).
+  suspension points, and the cancellation path must consume linear values like the error path ([`concurrency.md`: Cancellation and shutdown](concurrency.md#cancellation-and-shutdown)).
 - **Deadlock:** this model prevents data races, not deadlocks. Lock ordering by type? A lint? Lock
   levels (as in some kernels)? Or steer toward message passing?
-- **Async drop:** drop may not suspend (§8 there). Is that enough for resources whose clean shutdown needs
+- **Async drop:** drop may not suspend ([`concurrency.md`: Construction may suspend; drop may not](concurrency.md#construction-may-suspend-drop-may-not)). Is that enough for resources whose clean shutdown needs
   I/O (e.g. flushing a TLS stream)? Probably: they become linear with an explicit `close`.
 - **Priority inversion** under the scheduler effect: does the core effect interface carry priority?
 - **Long-lived tasks:** what is the idiomatic shape for a server's top-level scope (accept loop with
   per-connection children) so that it reads naturally, not as a workaround for "no fire-and-forget"?
 
-**Open questions** (same list as [`closures.md`](closures.md) §11)
+**Open questions** (same list as [`closures.md`: Open questions](closures.md#open-questions))
 
-1. Non-local `return` and labelled `break` from non-escaping lambdas (§7 there).
-2. Default closure parameter mode, stated or inferred (§3 there).
-3. Showing suspension points: inlay hints or an `await` marker (§9 there).
-4. Rules and syntax for methods that declare which fields of `self` they touch (§6 there).
+1. Non-local `return` and labelled `break` from non-escaping lambdas ([`closures.md`: Control flow out of a lambda](closures.md#control-flow-out-of-a-lambda)).
+2. Default closure parameter mode, stated or inferred ([`closures.md`: Closure parameters: `Fn`, `FnMut`, `FnOnce`](closures.md#closure-parameters-fn-fnmut-fnonce)).
+3. Showing suspension points: inlay hints or an `await` marker ([`closures.md`: Seeing suspension points](closures.md#seeing-suspension-points)).
+4. Rules and syntax for methods that declare which fields of `self` they touch ([`closures.md`: Capturing parts of `self`](closures.md#capturing-parts-of-self)).
 
 ---
 
-### 2.9 Concurrency across GPUs and accelerators
+### Concurrency across GPUs and accelerators
 
 🟡 **minor questions** · Detail: [`accelerators.md`](accelerators.md)
 
@@ -432,10 +433,10 @@ Decided:
 - **Algorithm and schedule are separate**; schedules are comptime data per target.
 - **Runtimes are mods**: WebGPU first, CUDA second, plus a CPU simulator for tests.
 
-**Open questions** (same list as [`accelerators.md`](accelerators.md) §14)
+**Open questions** (same list as [`accelerators.md`: Open questions](accelerators.md#open-questions))
 
 - **Autodiff:** a comptime transformation (as Slang and Enzyme do) or a feature of `moddil/tensor`?
-- **Multi-GPU collectives** (all-reduce etc.): a library built on placement (§2.10)?
+- **Multi-GPU collectives** (all-reduce etc.): a library built on placement ([Distributed and multi-tier programs](#distributed-and-multi-tier-programs))?
 - Should tensor/array syntax become core, or stay in a mod?
 - How close can the CPU simulator get to bit-exact results with GPU floating point?
 - WebGPU feature gaps (subgroups, f16) and their fallbacks.
@@ -445,7 +446,7 @@ Decided:
 
 ---
 
-### 2.10 Distributed and multi-tier programs
+### Distributed and multi-tier programs
 
 🟡 **minor questions** · Detail: [`distribution.md`](distribution.md)
 
@@ -462,9 +463,9 @@ how it runs.*
 - **Layer B, thin adapter mods** (v1 onwards): static binaries and OCI images; a topology file;
   adapters that emit Compose, Kubernetes, Nomad and systemd formats.
 - **Infrastructure is bound, never provisioned.**
-- **Layer C, never**: orchestration, autoscaling, service mesh, provisioning (non-goals, §5.2).
+- **Layer C, never**: orchestration, autoscaling, service mesh, provisioning (non-goals, [Non-goals (draft)](#non-goals-draft)).
 
-**Open questions** (same list as [`distribution.md`](distribution.md) §17)
+**Open questions** (same list as [`distribution.md`: Open questions](distribution.md#open-questions))
 
 - Where deployed contracts are recorded: in the repository (a lock file) or a registry?
 - **Choreographies**: write a multi-party protocol once and project it to each participant — when,
@@ -476,7 +477,7 @@ how it runs.*
 
 ---
 
-### 2.11 Determinism and reproducibility
+### Determinism and reproducibility
 
 🟠 **major questions** · Detail: [`determinism.md`](determinism.md)
 
@@ -490,7 +491,7 @@ Proposed:
 - **Scoped handlers** for per-node and per-subsystem injection.
 - **Record and replay**, and **reproducible builds**.
 
-**Open questions** (same list as [`determinism.md`](determinism.md) §12)
+**Open questions** (same list as [`determinism.md`: Open questions](determinism.md#open-questions))
 
 1. Should this become R4?
 2. Insertion-ordered maps by default, or seeded hash order?
@@ -501,7 +502,7 @@ Proposed:
 
 ---
 
-### 2.12 Observability and debuggability
+### Observability and debuggability
 
 🟡 **minor questions** · Detail: [`observability.md`](observability.md)
 
@@ -519,7 +520,7 @@ Decided:
   behind a capability.
 - **Release builds stay debuggable.**
 
-**Open questions** (same list as [`observability.md`](observability.md) §13)
+**Open questions** (same list as [`observability.md`: Open questions](observability.md#open-questions))
 
 - **Continuous profiling** as a handler, with time attributed by effect (network, locks, GPU)?
 - Sampling policy for spans and recordings.
@@ -530,7 +531,7 @@ Decided:
 
 ---
 
-### 2.13 Interoperability with C and Rust
+### Interoperability with C and Rust
 
 🟡 **minor questions** · Detail: [`interop.md`](interop.md)
 
@@ -547,7 +548,7 @@ Decided:
 - **WASM components** are the sandboxed path for untrusted code.
 - **Foreign code is visible**: raw bindings are `unsafe`, and `ffi` is a capability.
 
-**Open questions** (same list as [`interop.md`](interop.md) §12)
+**Open questions** (same list as [`interop.md`: Open questions](interop.md#open-questions))
 
 - How stable is rustdoc's JSON format, and how much generator maintenance follows Rust releases?
 - How far can generics cross the Rust bridge beyond explicit instantiations?
@@ -558,7 +559,7 @@ Decided:
 
 ---
 
-### 2.14 Build times
+### Build times
 
 🟠 **major questions** · Detail: [`build-times.md`](build-times.md)
 
@@ -574,25 +575,25 @@ Proposed:
 - **Live update** of a running debug program.
 - **Four cache layers**, optimised dependencies by default, and **published budgets**.
 
-**Open questions** (same list as [`build-times.md`](build-times.md) §10)
+**Open questions** (same list as [`build-times.md`: Open questions](build-times.md#open-questions))
 
 1. Are cycles allowed between modules inside one mod?
 2. How slow can generic code be in debug builds before it is unacceptable? Should hot generics be
    specialised even in debug builds?
-3. Live update (§4.1 there) proposes: bodies, signatures and new items live; layout changes through
+3. Live update ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds)) proposes: bodies, signatures and new items live; layout changes through
    migration hooks or scope restart plus replay. Open: which layout migrations can be automatic, and
    whether production hot upgrades are ever a goal.
 4. How much should trusted shared caches serve prebuilt dependency binaries, and what are the trust
    implications? (There is no registry: [`packages-and-supply-chain.md`](packages-and-supply-chain.md).)
 5. Can debug-mode dictionary passing and release-mode specialisation produce *identical
    semantics*, so the difference is purely performance? *Proposed answer:* yes, if everything
-   layout-dependent lives in the witness table, as Swift does (§3 there).
+   layout-dependent lives in the witness table, as Swift does ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)).
 6. What is the budget? *Proposed:* < 100 ms keystroke to diagnostics, < 1 s from a function-body
-   edit to a runnable test regardless of project size (§6 there).
+   edit to a runnable test regardless of project size ([`build-times.md`: Budgets](build-times.md#budgets)).
 
 ---
 
-### 2.15 Cross-compilation and deployment
+### Cross-compilation and deployment
 
 🟡 **minor questions** · Detail: [`targets.md`](targets.md), [`freestanding.md`](freestanding.md) (bare metal; proposal)
 
@@ -611,7 +612,7 @@ Decided:
 Proposed: a freestanding profile for kernels, bootloaders and firmware, verified in emulators
 ([`freestanding.md`](freestanding.md)).
 
-**Open questions** (same list as [`targets.md`](targets.md) §13)
+**Open questions** (same list as [`targets.md`: Open questions](targets.md#open-questions))
 
 - **Licensing review** of bundling macOS headers and link stubs.
 - Notarising from CI without a Mac, and how Apple credentials are held.
@@ -620,17 +621,17 @@ Proposed: a freestanding profile for kernels, bootloaders and firmware, verified
 - The default CPU feature level per architecture.
 - Which glibc versions to ship stubs for.
 
-**Open questions** (same list as [`freestanding.md`](freestanding.md) §11)
+**Open questions** (same list as [`freestanding.md`: Open questions](freestanding.md#open-questions))
 
-1. Add a fifth, embedded reference example (§9.4 there)?
+1. Add a fifth, embedded reference example ([`freestanding.md`: Proving the profile end to end](freestanding.md#proving-the-profile-end-to-end))?
 2. Should `moddil/rt-embedded` default to preemptive or cooperative scheduling?
 3. Does stack-depth analysis apply to all freestanding code, or only to L1 tasks?
-4. Tier assignments for bare-metal targets ([`targets.md`](targets.md) §5).
+4. Tier assignments for bare-metal targets ([`targets.md`: Target names and tiers](targets.md#target-names-and-tiers)).
 5. Floating point in interrupt handlers (lazy FPU state saving).
 
 ---
 
-### 2.16 Package management and supply-chain security
+### Package management and supply-chain security
 
 🟡 **minor questions** · Detail: [`packages-and-supply-chain.md`](packages-and-supply-chain.md)
 
@@ -656,7 +657,7 @@ Decided:
 - **Local sources**: local git repositories (still hash-pinned), user-level source overrides to
   mirrors or clones, and `moddil.work` workspaces for live working copies during development.
 
-**Open questions** (same list as [`packages-and-supply-chain.md`](packages-and-supply-chain.md) §7)
+**Open questions** (same list as [`packages-and-supply-chain.md`: Open questions](packages-and-supply-chain.md#open-questions))
 
 - **Trustworthy release dates.** Tag and commit dates are set by the author, so they can be
   backdated to skip the cooldown. Recommended: measure age from the later of the tag date and when
@@ -666,11 +667,11 @@ Decided:
 - How are typosquatting and look-alike URLs caught without a naming authority?
 - Pre-1.0: is each `0.x` minor a major (Cargo), or does `v0` promise nothing (Go)?
 - Do standard mods ship with the toolchain, or are they fetched like any other mod
-  ([`mods.md`](mods.md) §8)?
+  ([`mods.md`: Open questions](mods.md#open-questions))?
 
 ---
 
-### 2.17 Tooling uniformity
+### Tooling uniformity
 
 🟡 **minor questions** · Detail: [`toolchain.md`](toolchain.md), [`docs-and-tests.md`](docs-and-tests.md); see also [`agent-interface.md`](agent-interface.md)
 
@@ -700,7 +701,7 @@ Decided: docs and tests live next to the code.
   server rather than written in the source. Links are checked, invariants cite the contract or test
   behind them, and the tour example runs.
 
-**Open questions** (same list as [`docs-and-tests.md`](docs-and-tests.md) §13)
+**Open questions** (same list as [`docs-and-tests.md`: Open questions](docs-and-tests.md#open-questions))
 
 - Syntax for attaching tests to methods, trait implementations and generic instantiations.
 - Shared fixtures and test-only helpers: how they are declared and kept out of release builds.
@@ -712,7 +713,7 @@ Decided: docs and tests live next to the code.
 
 ---
 
-### 2.18 LLMs as first-class programmers
+### LLMs as first-class programmers
 
 🟡 **minor questions** · Detail: [`agent-interface.md`](agent-interface.md)
 
@@ -740,9 +741,9 @@ Directions: provenance in version control (recommended), a prefix-checkable gram
 decoding (recommended), translation tools from Rust and TypeScript, `note` blocks for the *why*
 (decided in [`docs-and-tests.md`](docs-and-tests.md)).
 
-**Open questions** (same list as [`agent-interface.md`](agent-interface.md) §7)
+**Open questions** (same list as [`agent-interface.md`: Open questions](agent-interface.md#open-questions))
 
-- Should provenance live in version control (recommended, §6), in the source, or in a sidecar?
+- Should provenance live in version control (recommended, [Prior-Art Matrix](#prior-art-matrix)), in the source, or in a sidecar?
 - How far should constrained decoding go: grammar only, or names and types per statement?
 - What size budget should the context-sized reference have, and how is it kept current?
 - Who curates the cross-language synonym tables and foreign-syntax recognisers?
@@ -750,7 +751,7 @@ decoding (recommended), translation tools from Rust and TypeScript, `note` block
 
 ---
 
-### 2.19 Diffs, code review and version control
+### Diffs, code review and version control
 
 🟡 **minor questions** · Detail: [`semantic-vcs.md`](semantic-vcs.md)
 
@@ -774,7 +775,7 @@ Decided:
 - Optional: Git diff and merge drivers, definition-level `log` and `blame`, split suggestions, and
   CI review policies keyed on semantic change.
 
-**Open questions** (same list as [`semantic-vcs.md`](semantic-vcs.md) §7)
+**Open questions** (same list as [`semantic-vcs.md`: Open questions](semantic-vcs.md#open-questions))
 
 - Rename-detection thresholds, and how confidence is shown.
 - How far the optional merge driver should go.
@@ -782,7 +783,7 @@ Decided:
 
 ---
 
-### 2.20 Language evolution
+### Language evolution
 
 🟡 **minor questions** · Detail: [`evolution.md`](evolution.md)
 
@@ -794,13 +795,13 @@ Decided:
   are edition-neutral. Semantic changes apply only inside a mod that opts into the new edition.
 - **A compatibility promise** within an edition; at most one small edition every three years.
 - **Verified migrations:** `moddil migrate` rewrites code and checks it is equivalent; the change is
-  reviewed with `moddil diff` (§2.19).
+  reviewed with `moddil diff` ([Diffs, code review and version control](#diffs-code-review-and-version-control)).
 - **Libraries ship migration rules** (`#[deprecated(replace_with = …)]`) applied by `moddil fix`.
 - **No unstable features in published mods** (no nightly-only ecosystem).
 - **A proposal process** that requires a motivating reference example, a migration, and an
   ecosystem-wide build and test run.
 
-**Open questions** (same list as [`evolution.md`](evolution.md) §5)
+**Open questions** (same list as [`evolution.md`: Open questions](evolution.md#open-questions))
 
 - The exact edition cadence.
 - May an edition change runtime semantics at all, or only syntax and defaults?
@@ -810,7 +811,7 @@ Decided:
 
 ---
 
-### 2.21 Surface syntax and paradigms
+### Surface syntax and paradigms
 
 🟡 **minor questions** · Detail: [`syntax.md`](syntax.md), [`paradigms.md`](paradigms.md)
 
@@ -835,7 +836,7 @@ Decided:
 - **Stable binary boundaries**: the C ABI and WASM components; a Swift-style resilience mode is
   deferred.
 
-**Open questions** (same lists as [`syntax.md`](syntax.md) §6 and [`paradigms.md`](paradigms.md) §6)
+**Open questions** (same lists as [`syntax.md`: Open questions](syntax.md#open-questions) and [`paradigms.md`: Open questions](paradigms.md#open-questions))
 
 - Default arguments on trait methods and their implementations.
 - Revisit higher-kinded types once GAT-based libraries show what is missing.
@@ -844,7 +845,7 @@ Decided:
 
 ---
 
-### 2.22 Type system core
+### Type system core
 
 ⚪ **not started** · Detail: none yet
 
@@ -853,19 +854,19 @@ been decided in their own right, and several other areas depend on them: coheren
 two mods can implement the same trait for the same type, and the generics strategy decides both
 build times and debug-build speed.
 
-**Touched on in:** [`syntax.md`](syntax.md) §2, [`paradigms.md`](paradigms.md),
-[`comptime.md`](comptime.md) §5, [`build-times.md`](build-times.md) §3, [`mods.md`](mods.md) §8.
+**Touched on in:** [`syntax.md`: Mapping](syntax.md#mapping), [`paradigms.md`](paradigms.md),
+[`comptime.md`: Generics are bounded](comptime.md#generics-are-bounded), [`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed), [`mods.md`: Open questions](mods.md#open-questions).
 
 **Questions to settle:**
 
 - Traits and **coherence across mods**: Rust's orphan rule, or something looser?
-- Associated types and GATs (higher-kinded types are deferred, §2.21).
+- Associated types and GATs (higher-kinded types are deferred, [Surface syntax and paradigms](#surface-syntax-and-paradigms)).
 - Generics compiled by monomorphisation, dictionary passing, or both by build profile.
 - Variance, `dyn` safety, and exhaustiveness checking of sum types.
 
 ---
 
-### 2.23 Modules, visibility and program structure
+### Modules, visibility and program structure
 
 ⚪ **not started** · Detail: none yet
 
@@ -873,8 +874,8 @@ The mod boundary already carries a lot of meaning (explicit effects, capability 
 groups, semver checks), but the module system itself is still Rust's by default: visibility levels,
 how files map to modules, and how code varies by target are undecided.
 
-**Touched on in:** [`syntax.md`](syntax.md) §2, [`docs-and-tests.md`](docs-and-tests.md) §4.1,
-[`build-times.md`](build-times.md) §10, [`mods.md`](mods.md).
+**Touched on in:** [`syntax.md`: Mapping](syntax.md#mapping), [`docs-and-tests.md`: Overviews: mod, module and group docs](docs-and-tests.md#overviews-mod-module-and-group-docs),
+[`build-times.md`: Open questions](build-times.md#open-questions), [`mods.md`](mods.md).
 
 **Questions to settle:**
 
@@ -885,7 +886,7 @@ how files map to modules, and how code varies by target are undecided.
 
 ---
 
-### 2.24 `unsafe` and the safety boundary
+### `unsafe` and the safety boundary
 
 ⚪ **not started** · Detail: none yet
 
@@ -894,8 +895,8 @@ undefined: what undefined behaviour remains inside it, what aliasing rules raw p
 and what the Miri-style checker actually checks.
 
 **Touched on in:** [`memory-and-resources.md`](memory-and-resources.md),
-[`interop.md`](interop.md) §5, [`correctness.md`](correctness.md),
-[`effects-and-capabilities.md`](effects-and-capabilities.md) §4.2.
+[`interop.md`: The safety boundary](interop.md#the-safety-boundary), [`correctness.md`](correctness.md),
+[`effects-and-capabilities.md`: The effect catalogue](effects-and-capabilities.md#the-effect-catalogue).
 
 **Questions to settle:**
 
@@ -906,15 +907,15 @@ and what the Miri-style checker actually checks.
 
 ---
 
-### 2.25 Text and strings
+### Text and strings
 
 ⚪ **not started** · Detail: none yet
 
 Every reference example, and almost every program an agent writes, handles text, yet string types,
 encoding guarantees and formatting have no design of their own.
 
-**Touched on in:** [`memory-and-resources.md`](memory-and-resources.md) §6 (rc slices),
-[`comptime.md`](comptime.md) §8 (`fmt"…"`), [`mods.md`](mods.md) §6 (`moddil/text`).
+**Touched on in:** [`memory-and-resources.md`: Zero-copy I/O](memory-and-resources.md#zero-copy-io) (rc slices),
+[`comptime.md`: Tagged string literals (embedded DSLs)](comptime.md#tagged-string-literals-embedded-dsls) (`fmt"…"`), [`mods.md`: Initial standard-mod catalogue](mods.md#initial-standard-mod-catalogue) (`moddil/text`).
 
 **Questions to settle:**
 
@@ -925,33 +926,33 @@ encoding guarantees and formatting have no design of their own.
 
 ---
 
-### 2.26 Values: copy, clone and equality
+### Values: copy, clone and equality
 
 ⚪ **not started** · Detail: none yet
 
-The theme "cost is visible" (§3) has not yet been applied to everyday values: which types copy
+The theme "cost is visible" ([Cross-Cutting Themes](#cross-cutting-themes)) has not yet been applied to everyday values: which types copy
 implicitly, whether duplicating a value is always explicit, and how equality, hashing and ordering
 are defined and derived.
 
 **Touched on in:** [`memory-and-resources.md`](memory-and-resources.md),
-[`paradigms.md`](paradigms.md), [`numerics.md`](numerics.md) §4.6 (float ordering).
+[`paradigms.md`](paradigms.md), [`numerics.md`: Floats](numerics.md#floats) (float ordering).
 
 **Questions to settle:**
 
 - Which types copy implicitly (a `Copy`-like rule), and whether `clone` is always explicit.
 - Derived `Eq`, `Hash` and `Ord`; structural vs nominal equality.
-- Hashing and determinism (seeded hashing, [`determinism.md`](determinism.md) §2).
+- Hashing and determinism (seeded hashing, [`determinism.md`: Sources of nondeterminism](determinism.md#sources-of-nondeterminism)).
 
 ---
 
-### 2.27 Standard library shape
+### Standard library shape
 
 ⚪ **not started** · Detail: none yet
 
 The catalogue of standard mods exists, but not the shape of their core interfaces, which every
 library builds on.
 
-**Touched on in:** [`mods.md`](mods.md) §6, §8.
+**Touched on in:** [`mods.md`: Initial standard-mod catalogue](mods.md#initial-standard-mod-catalogue), [`mods.md`: Open questions](mods.md#open-questions).
 
 **Questions to settle:**
 
@@ -962,7 +963,7 @@ library builds on.
 
 ---
 
-### 2.28 Data interchange and persistence
+### Data interchange and persistence
 
 ⚪ **not started** · Detail: none yet
 
@@ -970,7 +971,7 @@ Serialisation, schema evolution and databases appear in several places (standard
 contracts, the web store), but there is no single design for how data leaves and re-enters a
 program.
 
-**Touched on in:** [`mods.md`](mods.md) §6 (`moddil/serde`, `moddil/sql`),
+**Touched on in:** [`mods.md`: Initial standard-mod catalogue](mods.md#initial-standard-mod-catalogue) (`moddil/serde`, `moddil/sql`),
 [`distribution.md`](distribution.md) (contracts), [`examples/03-web-store.md`](examples/03-web-store.md).
 
 **Questions to settle:**
@@ -982,7 +983,7 @@ program.
 
 ---
 
-### 2.29 UI, mobile and the browser
+### UI, mobile and the browser
 
 ⚪ **not started** · Detail: none yet
 
@@ -990,8 +991,8 @@ Two reference examples need user interfaces, and the browser is a required targe
 no decision on how Moddil builds UIs, or how it talks to JavaScript and the DOM. Interop covers C and
 Rust only.
 
-**Touched on in:** §7 Q5, [`examples/03-web-store.md`](examples/03-web-store.md),
-[`examples/01-multiplayer-game.md`](examples/01-multiplayer-game.md), [`targets.md`](targets.md) §11.
+**Touched on in:** [Open Questions and Next Steps for Moddil](#open-questions-and-next-steps-for-moddil) Q5, [`examples/03-web-store.md`](examples/03-web-store.md),
+[`examples/01-multiplayer-game.md`](examples/01-multiplayer-game.md), [`targets.md`: Mobile](targets.md#mobile).
 
 **Questions to settle:**
 
@@ -1001,7 +1002,7 @@ Rust only.
 
 ---
 
-### 2.30 Program lifecycle
+### Program lifecycle
 
 ⚪ **not started** · Detail: none yet
 
@@ -1009,9 +1010,9 @@ How a program starts, is configured and stops is spread across several areas: ro
 arrive in `main`, shutdown is layered, and traps terminate something. These pieces need one coherent
 design.
 
-**Touched on in:** [`concurrency.md`](concurrency.md) §9 (shutdown),
-[`effects-and-capabilities.md`](effects-and-capabilities.md) §4.4 (root capabilities),
-[`error-handling.md`](error-handling.md) §2 (traps).
+**Touched on in:** [`concurrency.md`: Cancellation and shutdown](concurrency.md#cancellation-and-shutdown) (shutdown),
+[`effects-and-capabilities.md`: Authority comes only from root capabilities](effects-and-capabilities.md#authority-comes-only-from-root-capabilities) (root capabilities),
+[`error-handling.md`: Three outcome classes](error-handling.md#three-outcome-classes) (traps).
 
 **Questions to settle:**
 
@@ -1022,7 +1023,7 @@ design.
 
 ---
 
-## 3. Cross-Cutting Themes
+## Cross-Cutting Themes
 
 When the problem areas are laid side by side, four ideas keep recurring:
 
@@ -1041,7 +1042,7 @@ When the problem areas are laid side by side, four ideas keep recurring:
 
 4. **Placement is one concept at every scale.** Thread → core → GPU → machine → tier: work is placed
    and coordinated by the same structured-concurrency model, and *where data lives* is part of its
-   type, whether that is GPU memory (§2.9) or a client browser (§2.10). Algorithms are separate from
+   type, whether that is GPU memory ([Concurrency across GPUs and accelerators](#concurrency-across-gpus-and-accelerators)) or a client browser ([Distributed and multi-tier programs](#distributed-and-multi-tier-programs)). Algorithms are separate from
    schedules, and logical programs are separate from physical topologies. Crossing a boundary is
    always explicit.
 
@@ -1050,7 +1051,7 @@ important as the binaries it produces.
 
 ---
 
-## 4. Tensions and Trade-offs
+## Tensions and Trade-offs
 
 Being honest about where goals collide:
 
@@ -1060,7 +1061,7 @@ Being honest about where goals collide:
 | Compile-time safety vs build speed                 | Borrow checking, effect inference and verification all cost time. Keep the expensive checks incremental and per-module. Second-class borrows help: the borrow check is local to each function. |
 | No lifetimes vs expressiveness                     | Second-class borrows and view types remove lifetime annotations, but lose structs with several independent lifetimes and borrows stored in long-lived data. Owning views, rc and indices fill the gap. |
 | Visible sharing vs single-threaded convenience     | rc contents are immutable and shared mutation needs sync cells, so a mutable graph used by one thread still pays (cheap) atomic costs. Arenas, indices and library collections are the idiomatic answer. |
-| Monomorphisation vs build time vs runtime speed    | Dual-mode generics (§2.14) is promising but unproven at scale.                                                                                                                                    |
+| Monomorphisation vs build time vs runtime speed    | Dual-mode generics ([Build times](#build-times)) is promising but unproven at scale.                                                                                                                                    |
 | Strict capabilities vs ergonomics                  | Passing capabilities everywhere is tedious. Need good defaults (e.g., `main` receives all; libraries receive nothing unless asked).                                                              |
 | Canonical syntax vs expressiveness                 | One way to do things limits DSLs and clever code, which is usually good, and sometimes painful.                                                                                                  |
 | Easy interop vs safety guarantees                  | Every FFI call weakens guarantees. Making it visible is the compromise.                                                                                                                          |
@@ -1076,11 +1077,11 @@ Being honest about where goals collide:
 
 ---
 
-## 5. Requirements and Non-Goals
+## Requirements and Non-Goals
 
 Full text: [`requirements.md`](requirements.md).
 
-### 5.1 Firm requirements (decided)
+### Firm requirements (decided)
 
 🟠 **major questions** · Detail: [`requirements.md`](requirements.md), [`bootstrap.md`](bootstrap.md) (R1), [`mods.md`](mods.md) (R2), [`error-handling.md`](error-handling.md) (R3)
 
@@ -1088,10 +1089,10 @@ These are no longer open for debate. Every other design decision must be compati
 
 **R1. WebAssembly is a first-class compilation target.** WASM is a tier-one target from the first
 release, tested in CI like native targets: core WASM, WASI and the Component Model, and the browser.
-It is needed for multi-tier programs (§2.10), it fits the capability model (§2.1, §2.16), and it is
+It is needed for multi-tier programs ([Distributed and multi-tier programs](#distributed-and-multi-tier-programs)), it fits the capability model ([Effects and capabilities as a unifying idea](#effects-and-capabilities-as-a-unifying-idea), [Package management and supply-chain security](#package-management-and-supply-chain-security)), and it is
 the sandbox for untrusted code. Concurrency semantics are target-independent; the backend lowers
 suspension to stack switching (preferred), JSPI (the browser baseline) or a CPS transform. Details:
-[`requirements.md`](requirements.md) §1 and [`bootstrap.md`](bootstrap.md).
+[`requirements.md`: Firm requirements (decided)](requirements.md#firm-requirements-decided) and [`bootstrap.md`](bootstrap.md).
 
 **R2. Small core; functionality lives in mods.** The core language is deliberately very small.
 Collections, networking, crypto, the async runtime, GPU support and UI are provided by **mods**
@@ -1105,16 +1106,16 @@ unhandled error at any entry point, or a silently dropped result, is a compile-t
 are no fire-and-forget tasks. Traps (out of memory, stack overflow, division by zero, out-of-bounds
 indexing) are out of scope. Details: [`error-handling.md`](error-handling.md).
 
-**Open questions** (same list as [`requirements.md`](requirements.md) §3)
+**Open questions** (same list as [`requirements.md`: Open questions](requirements.md#open-questions))
 
 - R1: should WASI runtimes without stack switching be supported, which would need the
-  CPS/Asyncify-style lowering? (Also in [`bootstrap.md`](bootstrap.md) §9.)
-- Should determinism become R4 ([`determinism.md`](determinism.md) §12)?
+  CPS/Asyncify-style lowering? (Also in [`bootstrap.md`: Risks and open questions](bootstrap.md#risks-and-open-questions).)
+- Should determinism become R4 ([`determinism.md`: Open questions](determinism.md#open-questions))?
 
-**Open questions** (same list as [`mods.md`](mods.md) §8)
+**Open questions** (same list as [`mods.md`: Open questions](mods.md#open-questions))
 
 - **How many batteries?** Go ships a broad standard library (HTTP, crypto, JSON); Rust ships a minimal
-  one. With strong supply-chain controls (§2.16), a broad `moddil/` set reduces risky third-party
+  one. With strong supply-chain controls ([Package management and supply-chain security](#package-management-and-supply-chain-security)), a broad `moddil/` set reduces risky third-party
   dependencies. Which way should Moddil lean?
 - **Distribution**: should standard mods ship with the toolchain, or be fetched and pinned like
   any other mod?
@@ -1122,7 +1123,7 @@ indexing) are out of scope. Details: [`error-handling.md`](error-handling.md).
   and module needs to stay clear in docs and tooling.
 - **Coherence**: how are trait/instance overlap rules (Rust's orphan rule) handled across mods?
 
-**Open questions** (same list as [`bootstrap.md`](bootstrap.md) §9)
+**Open questions** (same list as [`bootstrap.md`: Risks and open questions](bootstrap.md#risks-and-open-questions))
 
 - Stack switching may change shape before standardisation, or arrive late in Safari.
 - Should the MIR be designed so that MLIR can consume it later (GPU/tensor work)?
@@ -1132,7 +1133,7 @@ indexing) are out of scope. Details: [`error-handling.md`](error-handling.md).
 - Is Moddil-core (the stage 0 subset) small enough to build quickly, yet large enough to write a
   pleasant compiler in?
 
-### 5.2 Non-goals (draft)
+### Non-goals (draft)
 
 🟡 **minor questions** · Detail: [`requirements.md`](requirements.md)
 
@@ -1141,9 +1142,9 @@ indexing) are out of scope. Details: [`error-handling.md`](error-handling.md).
 - **A REPL, script mode or notebook mode (decided).** Moddil is compiled and checked as a whole.
   Quick experiments use attached tests and examples-as-tests (`moddil test`,
   [`docs-and-tests.md`](docs-and-tests.md)) and live update in debug builds
-  ([`build-times.md`](build-times.md) §4.1). Quick learning is served by an in-browser playground
-  that re-runs the whole program on every edit ([`toolchain.md`](toolchain.md) §11.1).
-- C++ interop in the language. C++ is reached through C shims ([`interop.md`](interop.md) §10).
+  ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds)). Quick learning is served by an in-browser playground
+  that re-runs the whole program on every edit ([`toolchain.md`: Playground: learning without a REPL](toolchain.md#playground-learning-without-a-repl)).
+- C++ interop in the language. C++ is reached through C shims ([`interop.md`: C++ through C shims](interop.md#c-through-c-shims)).
 - A custom VCS that replaces Git (tooling on top of Git first).
 - A cloud platform, orchestrator or service mesh. Moddil emits artefacts and manifests for existing
   ones.
@@ -1152,7 +1153,7 @@ indexing) are out of scope. Details: [`error-handling.md`](error-handling.md).
 
 ---
 
-## 6. Prior-Art Matrix
+## Prior-Art Matrix
 
 reference · Detail: [`prior-art.md`](prior-art.md)
 
@@ -1167,11 +1168,11 @@ with effects and capabilities as a unifying mechanism, are where the opportunity
 
 ---
 
-## 7. Open Questions and Next Steps for Moddil
+## Open Questions and Next Steps for Moddil
 
 🟠 **major questions** · Detail: [`examples/README.md`](examples/README.md)
 
-Open questions for a single area are listed under that area in §2. The questions here cut across
+Open questions for a single area are listed under that area in [Problem Areas](#problem-areas). The questions here cut across
 areas.
 
 **Strategic questions**
@@ -1181,10 +1182,10 @@ areas.
 2. **Who is the first user?** An agent-assisted team writing services? A numerics group? The answer
    sets the bar for ergonomics vs guarantees.
 3. **Adoption path**: embed in existing C/C++/Rust codebases one module at a time, through C export
-   and the generated Rust bridge (§2.13)?
-4. **Is multi-tier deployment (§2.10) a v0 goal?** **Decided:** the language layer (components,
+   and the generated Rust bridge ([Interoperability with C and Rust](#interoperability-with-c-and-rust))?
+4. **Is multi-tier deployment ([Distributed and multi-tier programs](#distributed-and-multi-tier-programs)) a v0 goal?** **Decided:** the language layer (components,
    placement, `remote`, contracts, single-process and simulated runs) is v0; images, Compose,
-   Kubernetes and skew checks are v1; other adapters later ([`distribution.md`](distribution.md) §15).
+   Kubernetes and skew checks are v1; other adapters later ([`distribution.md`: Staging](distribution.md#staging)).
 5. **Mobile and UI**: shared logic under native UI shells, or a Moddil UI mod? See
    [`examples/03-web-store.md`](examples/03-web-store.md).
 
@@ -1198,12 +1199,40 @@ removal.
    Wasmtime as the reference WASM runtime first.
 7. **Memory core — decided** in [`memory-and-resources.md`](memory-and-resources.md): unique
    ownership, second-class borrows and view types, `.to_rc()` with biased RC, affine + linear
-   resources (summary in §2.2).
+   resources (summary in [Memory and resource management](#memory-and-resource-management)).
 8. Effect system design. **Decided:** a hybrid of scoped handlers and second-class capability
-   values ([`effects-and-capabilities.md`](effects-and-capabilities.md), §2.1).
+   values ([`effects-and-capabilities.md`](effects-and-capabilities.md), [Effects and capabilities as a unifying idea](#effects-and-capabilities-as-a-unifying-idea)).
 9. Canonical AST storage: text with canonical printing, or a structured store (Unison-style) with text
    as a view?
 10. **Minimum viable language**: which language features are in v0 and which come later? (Separate
-    from the compiler milestones in [`bootstrap.md`](bootstrap.md) §5.)
+    from the compiler milestones in [`bootstrap.md`: Milestones](bootstrap.md#milestones).)
 11. **How is the language defined?** A prose reference, a formal semantics, or the MIR interpreter as
     the executable reference? How are conformance tests organised?
+
+---
+
+## Working on these specs
+
+For people and LLM agents editing the specs:
+
+- **Link by heading name, not by number.** Sections are not numbered, so they can be reordered and
+  rewritten freely. Cross-reference with a heading link: `[Live update (debug builds)](build-times.md#live-update-debug-builds)`
+  in another document, or `[Error handling](#error-handling)` within this one. Anchors follow
+  GitHub's slug rules (lower-case, punctuation removed, spaces become hyphens). Stable identifiers
+  that are not positions (R1–R3, D1–D10, example file numbers) stay as they are.
+- **Run the link checker after every edit:**
+
+  ```text
+  python tools/check_spec_links.py            # check only; exit code 1 on any problem
+  python tools/check_spec_links.py --align    # also re-align this document's Contents table
+  ```
+
+  It checks that every relative link (file and heading anchor) in `specs/` resolves, and that each
+  status in the [Contents](#index) table matches the status line under its section. Renaming a
+  heading breaks the links to it; the checker lists them.
+- **Keep statuses in two places in step:** the Contents table and the status line under each section
+  (`🟡 **minor questions** · Detail: …`), using the legend at the top.
+- **Detail documents are authoritative.** This overview summarises; when a decision changes, update
+  the detail document first, then its summary here.
+- **Code blocks are illustrative** and follow [`syntax.md`](syntax.md) (Rust-based syntax).
+

@@ -1,9 +1,9 @@
 # Paradigms: Functional, Object-Oriented, and Inheritance
 
-> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.21. Syntax per
+> **Status:** decided direction, details open. Expands [`overview.md`: Surface syntax and paradigms](overview.md#surface-syntax-and-paradigms). Syntax per
 > [`syntax.md`](syntax.md).
 
-## 1. Summary
+## Summary
 
 | Question | Answer |
 |---|---|
@@ -11,18 +11,18 @@
 | Object-oriented programming? | **Yes, the useful parts:** encapsulation, methods, interfaces (traits), static and dynamic polymorphism, actors. |
 | Inheritance? | **No class inheritance**, single or multiple. Traits with supertraits and default methods, plus delegation, cover the use cases. |
 
-## 2. Functional programming
+## Functional programming
 
 - **First-class functions and closures**, including closures that fail and suspend
   ([`closures.md`](closures.md)).
 - **Immutable by default:** `let` bindings, and shared data (`Rc`) is always immutable
-  ([`memory-and-resources.md`](memory-and-resources.md) §5).
+  ([`memory-and-resources.md`: Sharing: `.to_rc()`](memory-and-resources.md#sharing-to_rc)).
 - **Algebraic data types** (`enum` with payloads) and exhaustive `match`.
 - **Iterators and combinators**, with one `map`/`filter`/`fold` for pure, fallible and suspending
-  functions (effect polymorphism, [`error-handling.md`](error-handling.md) §3.2).
+  functions (effect polymorphism, [`error-handling.md`: Why `Result`-only languages duplicate higher-order APIs](error-handling.md#why-result-only-languages-duplicate-higher-order-apis)).
 - **Purity is tracked by effects:** a function with an empty effect set is pure, and the compiler
   knows it. Few languages outside Haskell and Koka can say this.
-- **Algebraic effect handlers** ([`determinism.md`](determinism.md) §4).
+- **Algebraic effect handlers** ([`determinism.md`: Handlers are scoped, not global](determinism.md#handlers-are-scoped-not-global)).
 - **Persistent collections** in `moddil/collections`.
 - **Functional updates in place:** compile-time reference-count elision with reuse (Perceus style)
   turns "build a new value" into an in-place update when the old one is no longer used.
@@ -35,18 +35,18 @@
   `bind` breaks `?`/`return`/`break` inside closures, inference gets harder, and Moddil's effects
   already provide what monads give Haskell (errors, state, async).
 
-## 3. Object-oriented programming
+## Object-oriented programming
 
 | OOP idea | Moddil |
 |---|---|
-| Encapsulation | Privacy per module; values come into existence only through literals the module controls ([`memory-and-resources.md`](memory-and-resources.md) §2) |
+| Encapsulation | Privacy per module; values come into existence only through literals the module controls ([`memory-and-resources.md`: Ownership and RAII](memory-and-resources.md#ownership-and-raii)) |
 | Methods | `impl` blocks with `&self`, `&mut self`, `self` |
 | Interfaces | Traits, with default methods and supertraits |
 | Polymorphism | Static (generics) and dynamic (`dyn Trait`) |
-| Objects with identity and a mailbox | Actors: a task owning its state plus a channel, as a library pattern ([`concurrency.md`](concurrency.md) §5) |
-| Inheritance hierarchies | Not supported (§4) |
+| Objects with identity and a mailbox | Actors: a task owning its state plus a channel, as a library pattern ([`concurrency.md`: Patterns the model makes easy](concurrency.md#patterns-the-model-makes-easy)) |
+| Inheritance hierarchies | Not supported ([Multiple inheritance](#multiple-inheritance)) |
 
-## 4. Multiple inheritance
+## Multiple inheritance
 
 **No class inheritance.** Rust, Go and Zig made the same choice. Inheritance couples
 implementations tightly, and multiple inheritance adds the diamond problem for state.
@@ -78,12 +78,12 @@ What replaces it:
 3. **Default methods act as mixins:** a trait can supply reusable behaviour to every type that
    implements its required methods.
 
-## 5. What Swift has that we lack
+## What Swift has that we lack
 
 | Swift feature | Moddil |
 |---|---|
-| Argument labels and default parameter values | **Adopted:** named and default arguments ([`syntax.md`](syntax.md) §5) |
-| Optional chaining `a?.b?.c` | **Adopted** ([`syntax.md`](syntax.md) §3) |
+| Argument labels and default parameter values | **Adopted:** named and default arguments ([`syntax.md`: Named and default arguments](syntax.md#named-and-default-arguments)) |
+| Optional chaining `a?.b?.c` | **Adopted** ([`syntax.md`: Deltas from Rust (and why)](syntax.md#deltas-from-rust-and-why)) |
 | Computed properties | **Not adopted (decided):** methods only, so a call is visibly a call and cost and effects are never hidden behind a field-like read |
 | Property observers (`willSet`, `didSet`) | Not adopted: hidden control flow |
 | Property wrappers, `@dynamicMemberLookup` | Not adopted: compile-time derives cover the useful cases, and dynamic lookup harms local reasoning |
@@ -91,10 +91,10 @@ What replaces it:
 | Key paths (`\Person.name`) | **Later (decided):** field-path values through static reflection, when UI binding and typed query builders need them; closures cover the rest |
 | **Library evolution: a stable binary ABI** for frameworks | **Decided:** the C ABI plus **WASM components (WIT)** are Moddil's stable binary boundaries, for plugins and binary SDKs ([`interop.md`](interop.md)). A Swift-style resilience mode (fields and methods reached through indirection so binaries survive upgrades) is deferred. |
 | Classes with shared mutable references (ARC) | Deliberately not: `Rc` contents are immutable; shared mutation goes through sync cells |
-| Objective-C interop; Playgrounds | Objective-C through C ([`interop.md`](interop.md)); REPL, script and notebook modes are a non-goal ([`requirements.md`](requirements.md) §2); an in-browser playground replaces Playgrounds ([`toolchain.md`](toolchain.md) §11.1) |
+| Objective-C interop; Playgrounds | Objective-C through C ([`interop.md`](interop.md)); REPL, script and notebook modes are a non-goal ([`requirements.md`: Non-goals (draft)](requirements.md#non-goals-draft)); an in-browser playground replaces Playgrounds ([`toolchain.md`: Playground: learning without a REPL](toolchain.md#playground-learning-without-a-repl)) |
 | Actors, `async`/`await`, typed throws, `some`/`any`, enums with payloads, `defer`, `Codable`, macros | Already covered: tasks and actors, effects, error handling, `impl`/`dyn`, ADTs, RAII and `errdefer`, derives, compile-time code |
 
-## 6. Open questions
+## Open questions
 
 1. Revisit higher-kinded types once GAT-based libraries show what is missing.
 2. A Swift-style resilience mode for native binary libraries.
@@ -104,4 +104,4 @@ What replaces it:
 
 Rust (traits, no inheritance); Go (embedding); Kotlin (`by` delegation); Scala and Swift (traits and
 protocols with default implementations); Haskell and Koka (purity, effects); Lean 4 and Koka (Perceus
-reuse); Swift (the features in §5).
+reuse); Swift (the features in [What Swift has that we lack](#what-swift-has-that-we-lack)).

@@ -1,6 +1,6 @@
 # LLMs as First-Class Programmers: the Agent Interface
 
-> **Status:** decided direction, open questions remain. Expands [`overview.md`](overview.md) §2.18.
+> **Status:** decided direction, open questions remain. Expands [`overview.md`: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers).
 > Snippets and message formats are **illustration only**.
 
 ## Summary
@@ -15,13 +15,13 @@
 | **Agent-written code runs safely** | Pure comptime, simulated tests and declared capabilities. |
 | **A review surface for humans** | Semantic diffs, untested changes, mutation scores and checked summaries. |
 
-## 1. Problem
+## Problem
 
 Languages assume the person who writes the code also understands it. In an LLM-heavy
 workflow, the writer is a model and the human is the *reviewer, architect and approver*. Current
 languages optimise for the writer and against the reviewer.
 
-## 2. What LLMs struggle with today
+## What LLMs struggle with today
 
 - **Non-local semantics**: implicit conversions, overload resolution, operator overloading, Scala
   implicits, C++ ADL, monkey patching, global state. A model (and a human) has to see far away to
@@ -33,16 +33,16 @@ languages optimise for the writer and against the reviewer.
 - **Hallucinated APIs**: names that look plausible but don't exist. Fast and precise feedback is the cure.
 - **Version drift**: the model learned an old API; nothing tells it the API changed.
 - **A new language starts cold**: models write well in languages they have seen millions of examples
-  of. Moddil starts with none (§5.5).
+  of. Moddil starts with none ([Solving the cold start](#solving-the-cold-start)).
 
-## 3. What humans struggle with when reviewing LLM code
+## What humans struggle with when reviewing LLM code
 
 - "What does this change *actually* do?" Side effects are invisible in signatures.
 - "Is this safe?" Nothing marks which code touches the network, filesystem, or `unsafe`.
 - "Why was it written like this?" Intent is lost; only the result remains.
 - Big diffs from mechanical changes hide the few lines that matter.
 
-## 4. State of the art
+## State of the art
 
 - **Go**: one formatter, a small language, few ways to do things. LLMs write Go well.
 - **Rust and Elm**: precise, structured compiler errors with suggested fixes; strong types catch
@@ -54,20 +54,20 @@ languages optimise for the writer and against the reviewer.
 - **Constrained decoding**: grammar-constrained generation (Outlines, llama.cpp grammars) and research
   on type-constrained decoding.
 
-## 5. Decisions
+## Decisions
 
-### 5.1 Verbosity is a view
+### Verbosity is a view
 
 The source is a printed view of a canonical AST, so how much is shown is a choice of view, not a
 property of the source.
 - **Explicit in the source** only where readers need it: at **mod boundaries**, public signatures
-  state effects, error sets, contracts and capabilities (overview §2.1, §2.3, §2.7).
+  state effects, error sets, contracts and capabilities ([overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea), [overview: Error handling](overview.md#error-handling), [overview: Correctness tooling: contracts and verification](overview.md#correctness-tooling-contracts-and-verification)).
 - **Inferred inside** a module: local effects, error sets and types.
 - **Two views of the same code**:
   - a **compact view** for writing;
   - a **reviewer view**, used by editors and review tools, that shows inferred effects, types and
     error sets inline without putting them in the file, along with the groups each private item
-    inherits ([`docs-and-tests.md`](docs-and-tests.md) §4.1).
+    inherits ([`docs-and-tests.md`: Overviews: mod, module and group docs](docs-and-tests.md#overviews-mod-module-and-group-docs)).
 - Humans mostly *read* the reviewer view and *type* the compact one.
 
 ```rust
@@ -76,27 +76,27 @@ pub fn load(path: Path) -> Config with fs, fail(LoadError)   // explicit: public
     parse(text)?                       // reviewer view shows:  : Config with fail(ParseError)
 ```
 
-### 5.2 The agent server
+### The agent server
 
-The compiler is a library and a service (overview §2.17; the whole toolchain is in
+The compiler is a library and a service ([overview: Tooling uniformity](overview.md#tooling-uniformity); the whole toolchain is in
 [`toolchain.md`](toolchain.md)). It is exposed over **LSP** for editors and
 over **MCP** for agents, from the same front end.
 
 | Kind | Examples |
 |---|---|
-| **Queries** | **Overviews first**: mod, then module, then group, then item ([`docs-and-tests.md`](docs-and-tests.md) §4.1); signatures, effects, error sets and contracts of any definition; the call graph; which tests cover a definition; docs and examples of the **installed** version of each mod ([`docs-and-tests.md`](docs-and-tests.md) §11); `explain` (desugared, effect-annotated views; comptime expansions) |
-| **Actions** | Apply a fix; submit a **refactor intent** (rename, move, extract) as an operation rather than text edits ([`semantic-vcs.md`](semantic-vcs.md) §4); run the affected tests ([`build-times.md`](build-times.md) §7); replay a recording and inspect the failing task ([`observability.md`](observability.md) §11) |
+| **Queries** | **Overviews first**: mod, then module, then group, then item ([`docs-and-tests.md`: Overviews: mod, module and group docs](docs-and-tests.md#overviews-mod-module-and-group-docs)); signatures, effects, error sets and contracts of any definition; the call graph; which tests cover a definition; docs and examples of the **installed** version of each mod ([`docs-and-tests.md`: For agents and tools](docs-and-tests.md#for-agents-and-tools)); `explain` (desugared, effect-annotated views; comptime expansions) |
+| **Actions** | Apply a fix; submit a **refactor intent** (rename, move, extract) as an operation rather than text edits ([`semantic-vcs.md`: Decisions](semantic-vcs.md#decisions)); run the affected tests ([`build-times.md`: Agents](build-times.md#agents)); replay a recording and inspect the failing task ([`observability.md`: For agents](observability.md#for-agents)) |
 
-### 5.3 Diagnostics built for agents
+### Diagnostics built for agents
 
 - **Stable codes**, each with an offline explanation.
 - **One root cause** per diagnostic, not a cascade of follow-on errors.
 - **Machine-applicable fixes**, each with a **confidence** level.
 - **Relevant context inline**: the signatures, effects or contracts involved are included, so the
   agent doesn't need another lookup.
-- **Streamed early**, as soon as each check finishes ([`build-times.md`](build-times.md) §7).
+- **Streamed early**, as soon as each check finishes ([`build-times.md`: Agents](build-times.md#agents)).
 
-### 5.4 "Did you mean?"
+### "Did you mean?"
 
 Cheap to build, because the query-based compiler already indexes every name, and unusually useful
 because of earlier decisions:
@@ -121,7 +121,7 @@ error[E0425]: no function `length` on `String`
 Every suggestion is a structured fix with a confidence level. The compiler **never applies one
 silently**: agents and humans choose.
 
-### 5.5 Solving the cold start
+### Solving the cold start
 
 LLMs write well in languages they have seen often; a new language starts with no training data. This
 may be Moddil's largest adoption risk. Measures:
@@ -131,28 +131,28 @@ may be Moddil's largest adoption risk. Measures:
   the whole core language plus the signatures of the standard mods, small enough to load into a
   model's context.
 - **A checked example corpus**: every doc example compiles and runs
-  ([`docs-and-tests.md`](docs-and-tests.md) §5), and the corpus is published for retrieval and
+  ([`docs-and-tests.md`: Examples are tests](docs-and-tests.md#examples-are-tests)), and the corpus is published for retrieval and
   training.
-- The tight feedback loop (§5.3, §5.4) is the safety net when a model guesses wrong.
+- The tight feedback loop ([Diagnostics built for agents](#diagnostics-built-for-agents), ["Did you mean?"](#did-you-mean)) is the safety net when a model guesses wrong.
 
-### 5.6 Agent-written code runs safely
+### Agent-written code runs safely
 
 - Comptime is pure and sandboxed ([`comptime.md`](comptime.md)).
 - Tests run under the simulation runtime by default ([`determinism.md`](determinism.md)).
-- A program can use only the capabilities it declares (overview §2.1, §2.16).
+- A program can use only the capabilities it declares ([overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea), [overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)).
 
 So an agent can build and test code without being able to reach the network or the disk.
 
-### 5.7 A review surface for humans
+### A review surface for humans
 
 Every change can be reviewed through:
 - a **semantic diff**: API, effect, capability and contract changes ([`semantic-vcs.md`](semantic-vcs.md));
-- "**this changed, but its tests didn't**" ([`docs-and-tests.md`](docs-and-tests.md) §6);
+- "**this changed, but its tests didn't**" ([`docs-and-tests.md`: Attached tests](docs-and-tests.md#attached-tests));
 - **mutation scores** per changed declaration ([`correctness.md`](correctness.md));
 - an LLM-written summary that is **checked against the semantic diff**;
-- `note` blocks recording *why* ([`docs-and-tests.md`](docs-and-tests.md) §9).
+- `note` blocks recording *why* ([`docs-and-tests.md`: Maintainer notes](docs-and-tests.md#maintainer-notes)).
 
-## 6. Directions (not yet decided)
+## Directions (not yet decided)
 
 - **Provenance in version control.** *Recommended:* commit trailers record who or what wrote a change
   (model, version, session or prompt reference, approving human), and a per-definition index is
@@ -164,11 +164,11 @@ Every change can be reviewed through:
   statement, not per token, which local inference makes cheap.
 - **Translation tools** from Rust and TypeScript, to seed code and port projects.
 - **A small, stable surface syntax** that changes rarely, so training data stays valid; editions
-  handle evolution (overview §2.20).
+  handle evolution ([overview: Language evolution](overview.md#language-evolution)).
 
-## 7. Open questions
+## Open questions
 
-- Should provenance live in version control (recommended, §6), in the source, or in a sidecar?
+- Should provenance live in version control (recommended, [Directions (not yet decided)](#directions-not-yet-decided)), in the source, or in a sidecar?
 - How far should constrained decoding go: grammar only, or names and types per statement?
 - What size budget should the context-sized reference have, and how is it kept current?
 - Who curates the cross-language synonym tables and foreign-syntax recognisers?

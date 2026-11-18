@@ -22,7 +22,7 @@ illustration only and do not commit to any syntax.
 
 Read [`specs/overview.md`](specs/overview.md) first. Its **index** at the top lists every problem
 area with a status (⚪ not started, 🔴 superficial, 🟠 major questions, 🟡 minor questions,
-🟢 complete), and links to a short summary and to the subdocument that holds the detail. Then read the Thesis (§1) and the firm requirements (§5).
+🟢 complete), and links to a short summary and to the subdocument that holds the detail. Then read the [Thesis](specs/overview.md#thesis) and the [firm requirements](specs/overview.md#firm-requirements-decided).
 
 ## Notes for LLMs and agents
 

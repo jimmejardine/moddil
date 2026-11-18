@@ -1,9 +1,9 @@
 # Prior Art: Matrix and References
 
-> **Status:** reference material. Moved from [`overview.md`](overview.md) §6 and its appendix. Each spec also has its own
+> **Status:** reference material. Moved from [`overview.md`: Prior-Art Matrix](overview.md#prior-art-matrix) and its appendix. Each spec also has its own
 > prior-art list.
 
-## 1. Prior-art matrix
+## Prior-art matrix
 
 Legend: ✓ strong · ◐ partial · ✗ weak/absent. These are rough judgements, intended as a starting
 point for debate.
@@ -32,7 +32,7 @@ only in niches (Erlang, Unison, Ballerina/Wing, research multitier and choreogra
 none of those combine it with systems-level performance or GPU support. Those three columns, together
 with effects and capabilities as a unifying mechanism, are where the opportunity is largest.
 
-## 2. References
+## References
 
 *To be expanded with links during research.*
 

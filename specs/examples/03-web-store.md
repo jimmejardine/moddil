@@ -43,22 +43,22 @@ not be adopted, whatever its other strengths.
 
 ## Moddil features this stresses
 
-- **Compiler-generated client↔API contracts (§2.10)**: no hand-written OpenAPI. The API is typed once
+- **Compiler-generated client↔API contracts ([overview: Distributed and multi-tier programs](../overview.md#distributed-and-multi-tier-programs))**: no hand-written OpenAPI. The API is typed once
   and used from all three clients.
-- **Version compatibility (§2.19, §2.10)**: mobile clients can be months old. The compiler must check
+- **Version compatibility ([overview: Diffs, code review and version control](../overview.md#diffs-code-review-and-version-control), [overview: Distributed and multi-tier programs](../overview.md#distributed-and-multi-tier-programs))**: mobile clients can be months old. The compiler must check
   that a new `api` still serves every client version still in support, and flag breaking changes in
   the PR's semantic diff.
-- **Trust boundaries (§2.10)**: prices, totals and stock levels from `client` are untrusted; secrets
+- **Trust boundaries ([overview: Distributed and multi-tier programs](../overview.md#distributed-and-multi-tier-programs))**: prices, totals and stock levels from `client` are untrusted; secrets
   (payment keys, DB credentials) cannot flow to `client`, and the type system enforces it.
-- **Capabilities (§2.16)**: only the checkout module holds the `payments` capability; only `api` holds
+- **Capabilities ([overview: Package management and supply-chain security](../overview.md#package-management-and-supply-chain-security))**: only the checkout module holds the `payments` capability; only `api` holds
   `db`. A dependency that suddenly asks for `net` is flagged.
 - **Typed SQL and migrations**: queries checked against the schema at compile time (as in sqlx or
   jOOQ); migrations are versioned and reviewable; transactions are linear resources that must commit
-  or roll back (§2.2).
-- **Error handling (§2.3)**: clear, typed errors from DB to HTTP response to UI.
-- **LLM-friendliness (§2.18)**: most store code is CRUD that agents will write. It should be easy to
+  or roll back ([overview: Memory and resource management](../overview.md#memory-and-resource-management)).
+- **Error handling ([overview: Error handling](../overview.md#error-handling))**: clear, typed errors from DB to HTTP response to UI.
+- **LLM-friendliness ([overview: LLMs as first-class programmers](../overview.md#llms-as-first-class-programmers))**: most store code is CRUD that agents will write. It should be easy to
   generate, review and test, with contracts and property tests next to the code.
-- **Build times (§2.14)**: a typical product team iterates many times a day.
+- **Build times ([overview: Build times](../overview.md#build-times))**: a typical product team iterates many times a day.
 - **Mobile**: see below.
 
 ## The mobile question
@@ -77,7 +77,7 @@ The web client is covered by WASM (R1). Android and iOS raise new requirements:
   3. **Web everywhere**: the web client wrapped in a native shell (Capacitor/Tauri-style).
 
 **Recommendation:** start with option 1 (shared logic plus thin native UI shells). It needs C-ABI
-export (§2.13) and binding generation for Swift and Kotlin, both of which Moddil needs anyway. A
+export ([overview: Interoperability with C and Rust](../overview.md#interoperability-with-c-and-rust)) and binding generation for Swift and Kotlin, both of which Moddil needs anyway. A
 `moddil/ui` can follow later as a community or standard mod.
 
 ## Success criteria
@@ -111,5 +111,5 @@ Initial targets, to be refined:
 - How far back must API compatibility checking go, and how does the compiler know which client
   versions are still in use (deployment metadata)?
 - Is typed SQL a language feature (compile-time evaluation against a schema), or purely a mod using
-  §2.6 reflection?
+  [overview: Metaprogramming](../overview.md#metaprogramming) reflection?
 - Should `db` be a placement at all, or just an external service with a typed schema?

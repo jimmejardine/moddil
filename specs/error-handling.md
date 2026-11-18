@@ -1,26 +1,26 @@
 # Error Handling
 
-> **Status:** survey + partial decisions. Expands [`overview.md`](overview.md) §2.3 and defines
-> requirement **R3** (§5.1). Decisions made so far are marked **Decided**; everything else is open.
+> **Status:** survey + partial decisions. Expands [`overview.md`: Error handling](overview.md#error-handling) and defines
+> requirement **R3** ([overview: Firm requirements (decided)](overview.md#firm-requirements-decided)). Decisions made so far are marked **Decided**; everything else is open.
 
-## 1. Decisions so far
+## Decisions so far
 
 | # | Decision |
 |---|---|
 | D1 | **Rust-style `?`** for propagation. Chained `?` propagates at every step. |
 | D2 | **Try blocks**: `try { … }` is an expression that scopes `?`. |
 | D3 | **R3: no crash from an unhandled, language-known error.** An unhandled error at any entry point or call site is a **compile-time error**. |
-| D4 | **No fire-and-forget tasks.** Every spawned task is awaited by its enclosing scope (structured concurrency, §2.8). |
-| D5 | **Integer overflow traps, in every build** (as in Swift). Wrapping is explicit: `+%`, `-%`, `*%` or `Wrapping<T>` ([`numerics.md`](numerics.md) §4.2). Floats follow IEEE 754 (NaN, ±∞). |
+| D4 | **No fire-and-forget tasks.** Every spawned task is awaited by its enclosing scope (structured concurrency, [overview: Concurrency across CPUs](overview.md#concurrency-across-cpus)). |
+| D5 | **Integer overflow traps, in every build** (as in Swift). Wrapping is explicit: `+%`, `-%`, `*%` or `Wrapping<T>` ([`numerics.md`: Overflow traps](numerics.md#overflow-traps)). Floats follow IEEE 754 (NaN, ±∞). |
 | D6 | **Integer division traps, as in Rust**: `x / 0`, `x % 0`, `MIN / -1`. Same crash class as out-of-memory. |
 | D7 | **Indexing traps on out-of-bounds**; `get(i)` returns `Option`. Bounds checks are elided where the compiler proves the index is in range. |
 | D8 | **Resource exhaustion and faults are crashes**, not R3 violations: out of memory, stack overflow, `unreachable`, native FFI faults. |
-| D9 | **Drop cannot fail or suspend**: a drop implementation has an empty effect set, checked by the compiler. Cleanup that can fail is a linear type with an explicit `close`/`commit` (§9). |
-| D10 | **Cleanup failures during error handling are suppressed, not lost**: they are attached to the primary error (as in Java's try-with-resources), never replace it and never terminate (§9). |
-| D11 | **`defer` is infallible; `errdefer` may fail.** `defer` follows drop's rules (no fail, no suspend); `errdefer` runs on error and cancellation exits, and its failure is suppressed (§9). |
-| D12 | **A destructor is checked like an entry point**: its failure set must be empty, so a fallible call inside `drop` must be handled there (logged, explicitly discarded, or the type made linear) (§9.1). |
+| D9 | **Drop cannot fail or suspend**: a drop implementation has an empty effect set, checked by the compiler. Cleanup that can fail is a linear type with an explicit `close`/`commit` ([Cleanup](#cleanup)). |
+| D10 | **Cleanup failures during error handling are suppressed, not lost**: they are attached to the primary error (as in Java's try-with-resources), never replace it and never terminate ([Cleanup](#cleanup)). |
+| D11 | **`defer` is infallible; `errdefer` may fail.** `defer` follows drop's rules (no fail, no suspend); `errdefer` runs on error and cancellation exits, and its failure is suppressed ([Cleanup](#cleanup)). |
+| D12 | **A destructor is checked like an entry point**: its failure set must be empty, so a fallible call inside `drop` must be handled there (logged, explicitly discarded, or the type made linear) ([Cleanup that can fail (D9, D10)](#cleanup-that-can-fail-d9-d10)). |
 
-## 2. Three outcome classes
+## Three outcome classes
 
 | Class | Examples | Handling | Checked by |
 |---|---|---|---|
@@ -40,25 +40,25 @@ Notes:
 - **Overflow (D5)** traps in every build, so debug and release behave the same and wrong values are
   never silent. Checks cost typically 1–5% and are elided where range analysis or refinements prove
   safety. Wrapping (`+%`, `Wrapping<T>`), `checked_*` and `saturating_*` are explicit
-  ([`numerics.md`](numerics.md) §4.2).
-- **Open:** do failed contract assertions (§2.7) trap (class 3), or raise an error (class 1)?
-  [`correctness.md`](correctness.md) §5 recommends trapping, with untrusted input handled by
+  ([`numerics.md`: Overflow traps](numerics.md#overflow-traps)).
+- **Open:** do failed contract assertions ([overview: Correctness tooling: contracts and verification](overview.md#correctness-tooling-contracts-and-verification)) trap (class 3), or raise an error (class 1)?
+  [`correctness.md`: Decisions to lock early](correctness.md#decisions-to-lock-early) recommends trapping, with untrusted input handled by
   validated newtypes that return errors.
 
-## 3. Results and effects
+## Results and effects
 
-### 3.1 The difference
+### The difference
 
 **`Result` (value).** The error is part of the return type: `fn parse(s) -> Result<Config, ParseError>`.
 - Good: it is data. You can store it, collect it, or send it between tasks.
 - Bad: making a function fallible changes its return type, and that spreads to every caller.
-- Bad: `?` inside a closure returns from the closure, not from the function around it (§3.2).
+- Bad: `?` inside a closure returns from the closure, not from the function around it ([Why `Result`-only languages duplicate higher-order APIs](#why-result-only-languages-duplicate-higher-order-apis)).
 
 **Effect.** The return type stays `Config`, and failure is in the effect row:
 `fn parse(s) -> Config with fail(ParseError)`. Raising performs the `fail` effect; a handler further up
 the stack decides what happens. Because functions can be **generic over effects**, one higher-order
-function works for fallible and infallible callers alike (§3.2). It is the same mechanism as Moddil's
-other effects (overview §2.1).
+function works for fallible and infallible callers alike ([Why `Result`-only languages duplicate higher-order APIs](#why-result-only-languages-duplicate-higher-order-apis)). It is the same mechanism as Moddil's
+other effects ([overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea)).
 
 **Moddil has both, linked:**
 ```
@@ -71,7 +71,7 @@ through the return channel (as with Koka's evidence passing and Swift's typed th
 recovery ("retry", "use a default") would be a *separate* effect, so ordinary errors never pay for
 it.
 
-### 3.2 Why `Result`-only languages duplicate higher-order APIs
+### Why `Result`-only languages duplicate higher-order APIs
 
 In Rust, `?` inside a closure exits the closure:
 
@@ -111,9 +111,9 @@ fn load_all(paths: List<Path>) -> List<Config> {
 The cost: `map` is compiled per combination of effects (monomorphised, as Rust does with generics) or
 receives a hidden handler argument (Koka). The happy path stays at Rust speed.
 
-## 4. Propagation, matching and try blocks
+## Propagation, matching and try blocks
 
-### 4.1 Chained `?`
+### Chained `?`
 
 ```
 fn load(path) -> Config {                     // error set inferred
@@ -126,7 +126,7 @@ fn load(path) -> Config {                     // error set inferred
 The error set of `load` is inferred as the **union** of what each `?` can forward:
 `Io | Toml{line} | Invalid{field}`. Chains like `a()?.b()?.c()?` work the same way.
 
-### 4.2 Matching removes what it handles
+### Matching removes what it handles
 
 ```
 let config = try { load(p)? } catch {
@@ -139,7 +139,7 @@ let config = try { load(p)? } catch {
 - The inferred error set after the catch is the original set **minus** the handled cases.
 - `match` on a reified `Result` works too, with exhaustiveness checking.
 
-### 4.3 Try blocks
+### Try blocks
 
 - `try { … }` evaluates to `Result<T, E>`, where `E` is inferred from the `?`s inside it.
 - `try { … } catch { … }` is shorthand for matching that result.
@@ -147,13 +147,13 @@ let config = try { load(p)? } catch {
   of a try block can always be inferred (a known problem for Rust's unstable `try_blocks`; open
   unions avoid most of it).
 
-### 4.4 Entry points must handle everything (R3)
+### Entry points must handle everything (R3)
 
 Every **entry point** must have an *empty* failure set:
 - `main` (it returns an explicit exit status, never an escaped error);
 - task bodies at spawn;
 - exported and FFI functions and callbacks;
-- tier endpoints (handlers of `server` components etc., §2.10);
+- tier endpoints (handlers of `server` components etc., [overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs));
 - effect handlers.
 
 If anything remains, compilation fails, and the error lists each unhandled variant with the chain of
@@ -161,9 +161,9 @@ If anything remains, compilation fails, and the error lists each unhandled varia
 
 **Ignored results:** dropping a `Result` silently is a compile error (not a warning, as `must_use` is
 in Rust). *Open:* is an explicit discard allowed at all, and should it require a reason string, such
-as `discard(r, "best-effort cache warm")`, so it is visible in reviews and semantic diffs (§2.19)?
+as `discard(r, "best-effort cache warm")`, so it is visible in reviews and semantic diffs ([overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control))?
 
-### 4.5 Tasks and concurrency
+### Tasks and concurrency
 
 - No fire-and-forget (D4). Long-running background work (servers, pollers) is a child of a long-lived
   scope, typically the service's root scope, whose handler supervises and restarts it.
@@ -172,7 +172,7 @@ as `discard(r, "best-effort cache warm")`, so it is visible in reviews and seman
   `except*`, Trio, Swift `ThrowingTaskGroup`). *Open:* first error plus cancel siblings, or collect all?
 - **Cancellation** is a distinct outcome, not an error, but it must still be accounted for at the join.
 
-## 5. Error types
+## Error types
 
 **Inferred open unions with payloads** (Roc, OCaml polymorphic variants), combined with Zig-style
 inference:
@@ -181,14 +181,14 @@ inference:
 - Unlike Rust, no `From` conversions are needed to combine errors from different sources; the sets
   simply union.
 - **Explicit at mod boundaries.** Public functions of a mod declare their error set (consistent with
-  overview §2.1 and §2.18). Inference stays local, which helps incremental builds (§2.14) and makes
-  semantic diffs meaningful ("`parse()` can now fail with `Io`", §2.19).
+  [overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea) and [overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)). Inference stays local, which helps incremental builds ([overview: Build times](overview.md#build-times)) and makes
+  semantic diffs meaningful ("`parse()` can now fail with `Io`", [overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control)).
 - Named error types are still possible for documentation and reuse.
 
 *Open:* how to attach context (`.context("loading config")`, as in `anyhow`) without losing the
 structured variant?
 
-## 6. Traces
+## Traces
 
 - **Error return traces** (Zig): each `?` that forwards an error records its location, giving the
   exact path from origin to handler, which is more useful than a classic stack trace for propagated
@@ -198,12 +198,12 @@ structured variant?
 - **Origin capture** (Rust's `Backtrace`): opt-in per error type or in debug builds, since a full stack
   walk is expensive.
 - **Async-aware:** traces include the chain of task spawn sites; across tiers they link through trace
-  IDs (§2.10, §2.12).
+  IDs ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs), [overview: Observability and debuggability](overview.md#observability-and-debuggability)).
 - **Traps (class 3)** always capture a full trace.
 - Traces join the task-aware stacks and flight-recorder dumps described in
-  [`observability.md`](observability.md) §7–§8.
+  [`observability.md`: Task-aware stacks and the task tree](observability.md#task-aware-stacks-and-the-task-tree)–[`observability.md`: Flight recorder and replay](observability.md#flight-recorder-and-replay).
 
-## 7. Language server support
+## Language server support
 
 The compiler must compute every function's error set to enforce R3, so the language server only has
 to query it:
@@ -218,7 +218,7 @@ Hard cases:
 - **Function values, trait objects, FFI:** the error set must be declared in the interface type.
 - **Generics:** expressed with effect variables ("whatever errors `f` has").
 
-## 8. Performance: why C++ exceptions are slow, and why Moddil's errors aren't
+## Performance: why C++ exceptions are slow, and why Moddil's errors aren't
 
 **C++ ("zero-cost" table-based exceptions, Itanium ABI):**
 
@@ -260,14 +260,14 @@ process, its resources must be freed without unwinding each frame. Options: reso
 scope or region, so the whole region is released at once (Erlang, Midori), or unwinding used only on
 this rare path. *Open.*
 
-## 9. Cleanup
+## Cleanup
 
-- RAII / linear types (§2.2) clean up on every path.
+- RAII / linear types ([overview: Memory and resource management](overview.md#memory-and-resource-management)) clean up on every path.
 - **`defer`** (Zig, Go, Swift): cleanup on every exit. It must be infallible and non-suspending (D11).
 - **`errdefer`** (Zig): cleanup that runs only when the scope exits with an error **or is cancelled**,
   for example rolling back a half-built structure. It may fail; the failure is suppressed (D10).
 - Destructors, drop order, `defer` and `errdefer` are specified in
-  [`memory-and-resources.md`](memory-and-resources.md) §2.1–§2.4.
+  [`memory-and-resources.md`: Destructors](memory-and-resources.md#destructors)–[`memory-and-resources.md`: If a destructor "errors"](memory-and-resources.md#if-a-destructor-errors).
 
 ```
 let file = fs.create(tmp)?;
@@ -277,7 +277,7 @@ write_body(file)?;
 fs.rename(tmp, final)?;
 ```
 
-### 9.1 Cleanup that can fail (D9, D10)
+### Cleanup that can fail (D9, D10)
 
 C++ shows what goes wrong otherwise:
 - a destructor that throws during unwinding calls `std::terminate`, and since C++11 destructors are
@@ -288,12 +288,12 @@ C++ shows what goes wrong otherwise:
 Moddil avoids both:
 - **Drop has an empty effect set (D9).** It cannot fail, so there is nothing to throw. Fallible
   cleanup is a linear type, which must be consumed explicitly on every path, so its error is always
-  reported ([`memory-and-resources.md`](memory-and-resources.md) §7.1).
-- **No unwinding for errors** (§8), so no error is in flight while drops run.
+  reported ([`memory-and-resources.md`: Cleanup that can fail (why drop cannot)](memory-and-resources.md#cleanup-that-can-fail-why-drop-cannot)).
+- **No unwinding for errors** ([Performance: why C++ exceptions are slow, and why Moddil's errors aren't](#performance-why-c-exceptions-are-slow-and-why-moddils-errors-arent)), so no error is in flight while drops run.
 - **Suppressed errors (D10).** When an error path consumes a linear value and that cleanup also
   fails, the cleanup error is attached to the primary error:
   - the primary error stays the one that propagates and is matched on;
-  - suppressed errors appear in traces (§6), in the language server (§7) and in logs;
+  - suppressed errors appear in traces ([Traces](#traces)), in the language server ([Language server support](#language-server-support)) and in logs;
   - they can be read from the error value (exact API open), as Java's `getSuppressed()` allows;
   - a failure inside an `errdefer` body is suppressed in this way automatically.
 
@@ -312,7 +312,7 @@ txn.commit()?
 2. Cleanup failing while an error or cancellation is in progress is suppressed onto it (D10).
 3. A trap inside `drop` terminates the process; remaining drops do not run; a second trap aborts.
 
-## 10. State of the art: what to take, what to avoid
+## State of the art: what to take, what to avoid
 
 | Source | Take | Avoid / lesson |
 |---|---|---|
@@ -320,8 +320,8 @@ txn.commit()?
 | **Zig** | Inferred error sets; `try`/`catch`; **`errdefer`**; **error return traces** | No payloads on errors |
 | **Swift** | Visible `try` at call sites; typed throws (Swift 6, SE-0413); return-channel implementation; `rethrows` | Untyped `throws` by default (fixed late) |
 | **Midori** (Joe Duffy, *The Error Model*) | Errors vs bugs split; abandonment; marked call sites; checked exceptions done right | — (the key reading) |
-| **C++** | `std::expected` (C++23); P0709 static exceptions | Table-based exceptions (§8); throwing destructors call `std::terminate`, so cleanup errors get swallowed (§9.1) |
-| **Java try-with-resources** | **Suppressed exceptions**: a failing `close` is attached to the primary error (§9.1) | — |
+| **C++** | `std::expected` (C++23); P0709 static exceptions | Table-based exceptions ([Performance: why C++ exceptions are slow, and why Moddil's errors aren't](#performance-why-c-exceptions-are-slow-and-why-moddils-errors-arent)); throwing destructors call `std::terminate`, so cleanup errors get swallowed ([Cleanup that can fail (D9, D10)](#cleanup-that-can-fail-d9-d10)) |
+| **Java try-with-resources** | **Suppressed exceptions**: a failing `close` is attached to the primary error ([Cleanup that can fail (D9, D10)](#cleanup-that-can-fail-d9-d10)) | — |
 | **Roc / OCaml polymorphic variants** | **Open structural unions with payloads, inferred** | — |
 | **Koka / Effekt / OCaml 5** | Errors as effects; handlers; effect polymorphism | Resumable handlers for ordinary errors (cost) |
 | **Common Lisp conditions** | Restarts: recovery decided by the handler without unwinding | Complexity |
@@ -333,7 +333,7 @@ txn.commit()?
 | **Kotlin "rich errors"** (announced 2025, in design) | Evidence that mainstream languages are converging on union error types | Status uncertain |
 | **SPARK Ada, Pony, Elm, Koka** | Compile-time "every error handled" (prior art for R3) | Pony's `x / 0 = 0` (Moddil traps instead, D6) |
 
-## 11. Strawman (not yet decided)
+## Strawman (not yet decided)
 
 - `?` and `try {}` (decided), with `catch` that handles listed variants and propagates the rest.
 - `fail(E)` as an effect underneath; `Result` as its value form.
@@ -344,20 +344,20 @@ txn.commit()?
 - Aggregated errors in task scopes; cancellation as a separate outcome.
 - Traps (class 3) terminate the process by default.
 
-## 12. Open questions
+## Open questions
 
-1. Are explicit discards of errors allowed, and do they need a reason (§4.4)?
-2. Do failed contract assertions trap or raise an error (§2)? (Recommendation: trap; see
-   [`correctness.md`](correctness.md) §5.)
-3. Task scopes: first error and cancel siblings, or collect all errors (§4.5)?
-4. Can a trap terminate only its task rather than the process, and how are its resources freed (§8)?
+1. Are explicit discards of errors allowed, and do they need a reason ([Entry points must handle everything (R3)](#entry-points-must-handle-everything-r3))?
+2. Do failed contract assertions trap or raise an error ([Three outcome classes](#three-outcome-classes))? (Recommendation: trap; see
+   [`correctness.md`: Decisions to lock early](correctness.md#decisions-to-lock-early).)
+3. Task scopes: first error and cancel siblings, or collect all errors ([Tasks and concurrency](#tasks-and-concurrency))?
+4. Can a trap terminate only its task rather than the process, and how are its resources freed ([Performance: why C++ exceptions are slow, and why Moddil's errors aren't](#performance-why-c-exceptions-are-slow-and-why-moddils-errors-arent))?
    If so, linear types would also need an infallible, non-suspending `abandon` for that path (e.g. a
    transaction drops its connection so the database rolls back). Cancellation does not need it
-   ([`concurrency.md`](concurrency.md) §9).
+   ([`concurrency.md`: Cancellation and shutdown](concurrency.md#cancellation-and-shutdown)).
 5. Should a resumable recovery effect ("retry"/"default") exist as a separate effect?
-6. How is context attached to structured errors (§5)?
+6. How is context attached to structured errors ([Error types](#error-types))?
 7. Is `Option` part of the same machinery (`?` on `Option`, as in Rust)?
-8. Should errors from the `remote` effect (§2.10) have a standard shape (timeout, unreachable,
+8. Should errors from the `remote` effect ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)) have a standard shape (timeout, unreachable,
    incompatible version), and how are errors serialised across tiers?
 9. Checked-exception fatigue (Java) vs inference: how much of an error set should be inferred?
 
@@ -374,8 +374,8 @@ The problem and the state of the art that led to this design. (Moved from the ov
   propagate; inferred error sets (Zig) to reduce boilerplate; mandatory handling; error return traces
   for free; a clear split between *recoverable errors* and *bugs* (contract violations → abort the
   task, not the process, in structured concurrency). Error propagation must also respect linear
-  values (overview §2.2): a path that propagates an error while holding an open transaction has to consume it.
-  Absence is *not* an error: "not found" is an `Option` (overview §2.4), and `or_fail` converts explicitly.
+  values ([overview: Memory and resource management](overview.md#memory-and-resource-management)): a path that propagates an error while holding an open transaction has to consume it.
+  Absence is *not* an error: "not found" is an `Option` ([overview: Null and invalid states](overview.md#null-and-invalid-states)), and `or_fail` converts explicitly.
 
 ## References
 

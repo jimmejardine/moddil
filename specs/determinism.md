@@ -1,25 +1,25 @@
 # Determinism and Reproducibility
 
-> **Status:** proposal. Expands [`overview.md`](overview.md) §2.11. Nothing here is decided;
+> **Status:** proposal. Expands [`overview.md`: Determinism and reproducibility](overview.md#determinism-and-reproducibility). Nothing here is decided;
 > recommendations are marked **Recommended**. Syntax is illustrative.
 
-## 1. The principle
+## The principle
 
 **Recommended:** *the core language is deterministic, and every source of nondeterminism enters
 through an effect.*
 
 Pure code run under deterministic handlers then produces **bit-identical** results on every target.
 Everything in this document either follows from that principle or lists an exception. Candidate for a
-firm requirement, **R4: deterministic by construction** (open, see §9).
+firm requirement, **R4: deterministic by construction** (open, see [Costs](#costs)).
 
 What it enables:
-- deterministic simulation testing of whole systems (§3);
-- exact record and replay of production runs (§5);
-- statically checked durable workflows (§5);
+- deterministic simulation testing of whole systems ([Deterministic simulation testing](#deterministic-simulation-testing));
+- exact record and replay of production runs ([Record and replay](#record-and-replay));
+- statically checked durable workflows ([Record and replay](#record-and-replay));
 - cross-platform lockstep, such as a game simulation running identically in the browser and on the
-  server (§7).
+  server ([Cross-platform determinism](#cross-platform-determinism)).
 
-## 2. Sources of nondeterminism
+## Sources of nondeterminism
 
 | Source | Typical languages | Moddil proposal |
 |---|---|---|
@@ -29,13 +29,13 @@ What it enables:
 | Hash-map iteration order | Rust randomises the seed; Go deliberately randomises iteration | The hash seed comes from the `rand` effect: protection against hash-flooding in production, a fixed seed in simulation. **Open:** should maps iterate in insertion order by default (Python, JavaScript)? |
 | Pointer addresses | Observable (hashing or sorting by address) | Safe code cannot turn an address into an integer |
 | Floating point | FMA contraction, x87 extended precision, fast-math reordering, flush-to-zero, differing `libm`, WASM NaN bit patterns, relaxed SIMD | **Strict IEEE 754 by default**: no implicit FMA, no reordering. A deterministic `moddil/math` with correctly rounded functions (CORE-MATH style). NaN canonicalisation where observable. Fast-math and relaxed SIMD only by explicit opt-in, **marked nondeterministic** so they are excluded from replayable code. |
-| Platform integer width | `usize` is 32-bit on wasm32, 64-bit natively | `int` (lengths, indices, counts) is 64-bit on every target ([`numerics.md`](numerics.md) §4.1). `usize` exists only for FFI and memory-level code, and a lint flags it in cross-target code. |
+| Platform integer width | `usize` is 32-bit on wasm32, 64-bit natively | `int` (lengths, indices, counts) is 64-bit on every target ([`numerics.md`: Integer types](numerics.md#integer-types)). `usize` exists only for FFI and memory-level code, and a lint flags it in cross-target code. |
 | Parallel float reductions, GPU atomics | Order of additions varies | Deterministic reductions by default where cheap; GPU determinism opt-in (cf. PyTorch `use_deterministic_algorithms`) |
 | Native FFI | Anything | Behind the `ffi` capability; outside the guarantee unless modelled |
 
-## 3. Deterministic simulation testing
+## Deterministic simulation testing
 
-`moddil/runtime-sim` ([`concurrency.md`](concurrency.md) §6) provides:
+`moddil/runtime-sim` ([`concurrency.md`: Runtime contract](concurrency.md#runtime-contract)) provides:
 - a **seeded, single-threaded scheduler**;
 - **virtual time**, advanced **only when every task is blocked** (quiescence), jumping straight to the
   next timer, so hours of simulated time run in milliseconds;
@@ -43,7 +43,7 @@ What it enables:
 - a **simulated disk** with faults: torn writes, an `fsync` that lies, full disks;
 - **fault-injection points** (FoundationDB's `BUGGIFY`) as an effect that does nothing in production.
 
-**Whole systems in one process:** every placement or tier (overview §2.10) becomes a simulated node.
+**Whole systems in one process:** every placement or tier ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)) becomes a simulated node.
 This covers all four [reference examples](examples/README.md).
 
 **Searching for bugs:**
@@ -58,12 +58,12 @@ nondeterminism, caught immediately (TigerBeetle does this).
 **Limits:**
 - A single-threaded simulation cannot explore weak-memory behaviour. Moddil code is data-race free,
   but the internals of sync cells and the runtime need Loom-style model checking in the standard
-  library ([`correctness.md`](correctness.md) §3.7).
+  library ([`correctness.md`: Systematic concurrency testing](correctness.md#systematic-concurrency-testing)).
 - Non-Moddil peers (for example Hashiverse's Rust servers) only take part if compiled to WASM
   components and run under a deterministic host.
 - Prior art for whole unmodified systems: Antithesis, a deterministic hypervisor.
 
-## 4. Handlers are scoped, not global
+## Handlers are scoped, not global
 
 Effect handlers are installed **around a block** and apply to everything that runs inside it; the
 innermost handler wins. This gives test harnesses fine-grained control without passing services
@@ -115,7 +115,7 @@ These capabilities are **second-class**: like Moddil's borrows, they cannot esca
 
 **Decided:** a hybrid effect design. Effects appear in signatures; handlers are installed by scope
 by default; explicit capability values are used where needed
-([`effects-and-capabilities.md`](effects-and-capabilities.md) §4).
+([`effects-and-capabilities.md`: Decisions](effects-and-capabilities.md#decisions)).
 
 **Performance:** handlers known at compile time (as in production `main`) become direct calls
 (monomorphisation or Koka-style evidence passing). Production pays nothing for testability.
@@ -124,7 +124,7 @@ by default; explicit capability values are used where needed
 language server shows the effect requirements at a call site and the handler stack in tests and
 simulations; `moddil explain` shows the installed handlers.
 
-## 5. Record and replay
+## Record and replay
 
 Because every source of nondeterminism is an effect, **logging effect results at handler boundaries
 is enough to replay an execution exactly**. It works like `rr`, but at the language level, so it is
@@ -141,9 +141,9 @@ Recording can be selective per scope or task to control volume.
 
 **Durable execution.** Temporal and Restate rely on deterministic replay of workflow code, and can
 only check it at runtime. In Moddil a workflow's effect row may contain only replayable effects, so
-**workflow determinism is checked by the compiler** (durable workflows, overview §2.10).
+**workflow determinism is checked by the compiler** (durable workflows, [overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)).
 
-## 6. Reproducible builds
+## Reproducible builds
 
 The same source, lockfile and toolchain produce **bit-identical artefacts**:
 - no timestamps or build paths in outputs (path remapping);
@@ -151,20 +151,20 @@ The same source, lockfile and toolchain produce **bit-identical artefacts**:
 - pure, sandboxed comptime ([`comptime.md`](comptime.md));
 - hash-pinned dependencies.
 
-Anyone can rebuild a tagged version of a mod and compare the bytes (overview §2.16). The bootstrap fixed point
-([`bootstrap.md`](bootstrap.md) §2–§3) uses the same machinery. Prior art: Go toolchains are fully
+Anyone can rebuild a tagged version of a mod and compare the bytes ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)). The bootstrap fixed point
+([`bootstrap.md`: Staged bootstrap](bootstrap.md#staged-bootstrap)–[`bootstrap.md`: Bootstrapping after self-hosting](bootstrap.md#bootstrapping-after-self-hosting)) uses the same machinery. Prior art: Go toolchains are fully
 reproducible from Go 1.21; Debian Reproducible Builds; Nix and Guix; Bazel's hermetic builds.
 
 Tests run in a shuffled order and print the seed (Go's `-shuffle`), so order dependence is found and
 reproducible.
 
-## 7. Cross-platform determinism
+## Cross-platform determinism
 
 Bit-identical results across x86, ARM, WASM and (opt-in) GPU, for game lockstep
 ([game example](examples/01-multiplayer-game.md)), HFT replay on different hardware, and consensus
-systems. It follows from §2: strict floating point, deterministic math, and fixed-width integers.
+systems. It follows from [Sources of nondeterminism](#sources-of-nondeterminism): strict floating point, deterministic math, and fixed-width integers.
 
-## 8. Prior art: Hashiverse
+## Prior art: Hashiverse
 
 [Hashiverse](examples/04-hashiverse.md) already applies the core idea by hand, and is the strongest
 real-world evidence for it.
@@ -196,7 +196,7 @@ real-world evidence for it.
 6. **Next steps Hashiverse doesn't have yet,** and a Moddil port gets for free: seeded scheduling,
    record and replay, and the determinism self-check.
 
-## 9. Costs
+## Costs
 
 - Strict floating point forbids implicit FMA and fast-math, so some numeric code is slower. Fast-math
   is an explicit, visible opt-in.
@@ -204,20 +204,20 @@ real-world evidence for it.
 - A simulation is only as faithful as its models.
 - Insertion-ordered maps, if chosen, cost a little memory.
 
-## 10. Decisions to lock early (recommendations)
+## Decisions to lock early (recommendations)
 
-1. The principle in §1, possibly as firm requirement **R4: deterministic by construction**.
+1. The principle in [The principle](#the-principle), possibly as firm requirement **R4: deterministic by construction**.
 2. Specified evaluation and drop order.
 3. Strict IEEE floating point by default; deterministic `moddil/math`; nondeterministic floating
    point opt-in and visible.
 4. Hash seeding via the `rand` effect; whether maps iterate in insertion order by default.
-5. A hybrid effect design: scoped handlers plus second-class capability values (§4).
+5. A hybrid effect design: scoped handlers plus second-class capability values ([Handlers are scoped, not global](#handlers-are-scoped-not-global)).
 6. `moddil/runtime-sim` as a first-class standard mod, with CI running the standard library under it.
 7. Record and replay at effect boundaries as a runtime feature; workflow determinism checked by effect
    rows.
 8. Reproducible builds as a requirement of the toolchain and of every mod release.
 
-## 11. Fit with the reference examples
+## Fit with the reference examples
 
 | Example | What determinism gives it |
 |---|---|
@@ -226,7 +226,7 @@ real-world evidence for it.
 | [Web store](examples/03-web-store.md) | Simulated rolling deploys with mixed versions; reproducible order-flow tests |
 | [Hashiverse](examples/04-hashiverse.md) | The existing harness, plus deterministic randomness and interleavings, record and replay, and the self-check |
 
-## 12. Open questions
+## Open questions
 
 1. Should this become R4?
 2. Insertion-ordered maps by default, or seeded hash order?

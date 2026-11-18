@@ -1,14 +1,14 @@
 # Diffs, Code Review and Version Control
 
-> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.19.
+> **Status:** decided direction, details open. Expands [`overview.md`: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control).
 
-## 1. Problem
+## Problem
 
 Version control operates on lines of text, but programs are trees with meaning. Reviewers
 see noise (formatting, renames, moved code) and miss signal (a new side effect, a changed error path, a
 performance regression). As agents produce more code, review becomes the bottleneck.
 
-## 2. State of the art
+## State of the art
 
 - **Git**: universal, fast, but line-based and snapshot-based; merges are textual.
 - **Difftastic / SemanticDiff / GumTree**: AST-aware diffs that ignore formatting and track moves.
@@ -19,7 +19,7 @@ performance regression). As agents produce more code, review becomes the bottlen
 - **Refactoring-aware review tools** (RefactoringMiner, IDE "show refactors") detect renames and moves.
 - **cargo-semver-checks**: computes whether a Rust API change is breaking.
 
-## 3. What still hurts
+## What still hurts
 
 - A rename across 200 files is a 200-file diff.
 - Reformatting obscures history (`git blame` breaks).
@@ -28,7 +28,7 @@ performance regression). As agents produce more code, review becomes the bottlen
   allocation or complexity change?"
 - Merge conflicts on code that is semantically independent.
 
-## 4. Decisions
+## Decisions
 
 - **Git is assumed.** There is no custom version control system and **no required metadata**: no
   commit trailers, git notes or special comments. Everything works on any Git repository, branch or
@@ -46,14 +46,14 @@ performance regression). As agents produce more code, review becomes the bottlen
 - **Definition identity is inferred, not stored:**
   - the **fully qualified name** of each definition;
   - **rename and move detection** by matching canonical ASTs (GumTree and RefactoringMiner style),
-    since formatting is canonical ([`toolchain.md`](toolchain.md) §3);
+    since formatting is canonical ([`toolchain.md`: Formatter](toolchain.md#formatter));
   - a **content hash per definition** (the same hash as the build-cache key,
-    [`build-times.md`](build-times.md) §3.9) for instant "unchanged" checks.
+    [`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)) for instant "unchanged" checks.
 
   Inferred renames are labelled as inferred; ambiguous matches are shown as a removal plus an
   addition.
 
-## 5. The report
+## The report
 
 Concise by default, most important first:
 
@@ -62,7 +62,7 @@ Concise by default, most important first:
    count as breaking.
 2. **Behavioural changes**, per definition: signatures; effects, capabilities and error sets;
    contracts; new `unsafe` or FFI; changes to derive and compile-time expansions
-   ([`comptime.md`](comptime.md) §7); wire-contract compatibility across tiers
+   ([`comptime.md`: Generation: typed impls at the annotation site](comptime.md#generation-typed-impls-at-the-annotation-site)); wire-contract compatibility across tiers
    ([`distribution.md`](distribution.md)).
 3. **Dependencies:** added, removed or upgraded, with their capability changes
    ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)).
@@ -70,7 +70,7 @@ Concise by default, most important first:
    identical after applying the detected renames, the refactor is marked **verified
    behaviour-preserving**, and reviewers can skip it.
 5. **Tests:** affected tests and, optionally, their results; optional mutation-score
-   ([`correctness.md`](correctness.md) §3.5) and benchmark changes.
+   ([`correctness.md`: Mutation testing](correctness.md#mutation-testing)) and benchmark changes.
 6. **Suggested description:** a ready-to-paste **PR or commit description** generated from the
    report: summary, breaking changes, risk notes, testing. The user or an LLM edits and enriches it.
    Every statement maps to report items, so the description starts from facts, and
@@ -109,7 +109,7 @@ Suggested description
 Output formats: terminal, **Markdown** (for pasting into a PR), and **JSON** (for agents and CI).
 `--detail` expands any section into a per-definition semantic diff.
 
-## 6. Built on the report (optional, opt-in)
+## Built on the report (optional, opt-in)
 
 - **Git integration without metadata:**
   - a `.gitattributes` diff driver or difftool, so `git diff` can show the semantic view;
@@ -125,7 +125,7 @@ Output formats: terminal, **Markdown** (for pasting into a PR), and **JSON** (fo
   review" or "a semver-major change needs an API owner": CODEOWNERS keyed on *semantic* change rather
   than file paths.
 
-## 7. Open questions
+## Open questions
 
 - Rename-detection thresholds, and how confidence is shown.
 - How far the optional merge driver should go.

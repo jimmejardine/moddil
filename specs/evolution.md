@@ -1,8 +1,8 @@
 # Language Evolution
 
-> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.20.
+> **Status:** decided direction, details open. Expands [`overview.md`: Language evolution](overview.md#language-evolution).
 
-## 1. Problem
+## Problem
 
 Languages either freeze (C) or break their ecosystems (Python 2→3). The failures are instructive:
 
@@ -16,7 +16,7 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
 | Swift 1 → 3 | Repeated source-breaking churn |
 | Go | Ten years to add generics, because the compatibility promise left no room to change |
 
-## 2. State of the art
+## State of the art
 
 - **Rust editions:** chosen per crate; crates of different editions interoperate in one build;
   `cargo fix --edition` migrates; a three-year cadence (2015, 2018, 2021, 2024); **crater** builds
@@ -32,11 +32,11 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
   Java; Go's inline-directed fixes.
 - **Unison:** code addressed by content hash, so existing code never breaks.
 
-## 3. Decisions
+## Decisions
 
 1. **Editions per mod**, declared in the manifest (`edition = "2027"`).
    - Mods of different editions **work together in one program**. This is guaranteed because a mod's
-     **interface artefact is edition-neutral** ([`build-times.md`](build-times.md) §3.2).
+     **interface artefact is edition-neutral** ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)).
    - An edition may change syntax, defaults, lints and name resolution. It may change semantics only
      **inside a mod, and only when that mod moves to the new edition** (Go 1.22's loop variable is
      the model).
@@ -76,7 +76,7 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
    - pass an **ecosystem run**: build and test a **corpus of public mods** (a list kept in a public
      git repository, which authors opt into) from their tags with the new toolchain (Rust's crater,
      Swift's source-compatibility suite). Reproducible builds and the shared cache
-     ([`build-times.md`](build-times.md) §4.2) keep this cheap.
+     ([`build-times.md`: Cached builds](build-times.md#cached-builds)) keep this cheap.
 8. **Standard mods** follow semver, with the bump computed by `moddil diff`. They remove items only
    across editions, always with replacement rules ([`mods.md`](mods.md)).
 9. **Agents and training data.**
@@ -89,7 +89,7 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
     source through the caches ([`paradigms.md`](paradigms.md)). WIT components and wire contracts are
     versioned and checked for compatibility ([`distribution.md`](distribution.md)).
 
-## 4. Fit with the reference examples
+## Fit with the reference examples
 
 | Example | What evolution means for it |
 |---|---|
@@ -98,7 +98,7 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
 | [Web store](examples/03-web-store.md) | A large codebase moves edition with `moddil migrate`; library upgrades applied with `moddil fix` |
 | [Hashiverse](examples/04-hashiverse.md) | Long-lived volunteer nodes run mixed versions, so wire compatibility matters more than source compatibility |
 
-## 5. Open questions
+## Open questions
 
 1. The exact edition cadence.
 2. May an edition change runtime semantics at all, or only syntax and defaults?

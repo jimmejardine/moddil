@@ -1,8 +1,8 @@
 # Requirements and Non-Goals
 
-> **Status:** R1–R3 are decided. The non-goals are a draft. Expands [`overview.md`](overview.md) §5.
+> **Status:** R1–R3 are decided. The non-goals are a draft. Expands [`overview.md`: Requirements and Non-Goals](overview.md#requirements-and-non-goals).
 
-## 1. Firm requirements (decided)
+## Firm requirements (decided)
 
 These are no longer open for debate. Every other design decision must be compatible with them.
 
@@ -10,15 +10,15 @@ These are no longer open for debate. Every other design decision must be compati
 
 WASM is not a port done later. It is a tier-one target from the first release, tested in CI like
 native targets. Reasons:
-- **Multi-tier programs (overview §2.10)** need it: the browser tier compiles to WASM, and edge/serverless
+- **Multi-tier programs ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs))** need it: the browser tier compiles to WASM, and edge/serverless
   platforms increasingly run WASM components.
-- **It fits the capability model (overview §2.16, §2.1).** A WASM module has no ambient authority; it can only
+- **It fits the capability model ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security), [overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea)).** A WASM module has no ambient authority; it can only
   call the imports it is given. WASI and the Component Model are object-capability systems.
-- **It is the sandbox for untrusted code**: build-time logic and compile-time evaluation (overview §2.14, §2.6),
-  package build steps (overview §2.16), plugins, and even imported C libraries compiled to WASM and isolated
-  (as RLBox does in Firefox, overview §2.13).
+- **It is the sandbox for untrusted code**: build-time logic and compile-time evaluation ([overview: Build times](overview.md#build-times), [overview: Metaprogramming](overview.md#metaprogramming)),
+  package build steps ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)), plugins, and even imported C libraries compiled to WASM and isolated
+  (as RLBox does in Firefox, [overview: Interoperability with C and Rust](overview.md#interoperability-with-c-and-rust)).
 - **Portability and determinism**: one artefact that runs anywhere, with deterministic execution
-  available for simulation testing (overview §2.11).
+  available for simulation testing ([overview: Determinism and reproducibility](overview.md#determinism-and-reproducibility)).
 
 What "first-class" means in practice:
 - **Targets**: core WASM (`wasm32`, later `wasm64`/memory64), **WASI preview 2+ and the Component
@@ -33,8 +33,8 @@ What "first-class" means in practice:
 Design constraints this places on the rest of Moddil:
 - **Memory model**: Moddil has no global tracing GC, so linear memory is the natural fit. The WASM GC
   proposal is an optional optimisation for interop with JS objects, not a dependency.
-- **Concurrency without function colouring (overview §2.8)** needs suspendable stacks. *Revised after checking
-  engine support (Nov 2026; see [`bootstrap.md`](bootstrap.md) §6 and §8):* stack switching is Phase 3
+- **Concurrency without function colouring ([overview: Concurrency across CPUs](overview.md#concurrency-across-cpus))** needs suspendable stacks. *Revised after checking
+  engine support (Nov 2026; see [`bootstrap.md`: WASM concurrency lowering](bootstrap.md#wasm-concurrency-lowering) and [`bootstrap.md`: WASM support: verified status (November 2026)](bootstrap.md#wasm-support-verified-status-november-2026)):* stack switching is Phase 3
   but ships in **no** browser or Node (Chrome has it behind a flag only); Wasmtime has it at Tier 3 on
   x86_64 Linux. JSPI, however, is standardised and ships in all major browsers and Node ≥ 26.
   **Decision:** the concurrency semantics are target-independent, and the backend picks a lowering:
@@ -48,11 +48,11 @@ Design constraints this places on the rest of Moddil:
   changes stay local.
 - **Threads**: shared memory + atomics are available but restricted in browsers (cross-origin
   isolation). Structured concurrency must degrade gracefully to a single thread; on a single thread
-  every biased-RC operation takes the cheap owner path ([`concurrency.md`](concurrency.md) §6).
+  every biased-RC operation takes the cheap owner path ([`concurrency.md`: Runtime contract](concurrency.md#runtime-contract)).
 - **Exceptions, SIMD, tail calls**: use the standard proposals (exception handling, 128-bit SIMD,
-  tail calls) where available; error handling (overview §2.3) must not depend on unwinding.
-- **GPU (overview §2.9)** in the browser goes through WebGPU/WGSL, so kernel lowering needs a WGSL path.
-- **FFI (overview §2.13)** on WASM means C code compiled to WASM and linked as components, not native calls.
+  tail calls) where available; error handling ([overview: Error handling](overview.md#error-handling)) must not depend on unwinding.
+- **GPU ([overview: Concurrency across GPUs and accelerators](overview.md#concurrency-across-gpus-and-accelerators))** in the browser goes through WebGPU/WGSL, so kernel lowering needs a WGSL path.
+- **FFI ([overview: Interoperability with C and Rust](overview.md#interoperability-with-c-and-rust))** on WASM means C code compiled to WASM and linked as components, not native calls.
 
 ### R2. Small core; functionality lives in mods.
 
@@ -82,24 +82,24 @@ as in Rust.
 
 Details: [`error-handling.md`](error-handling.md).
 
-## 2. Non-goals (draft)
+## Non-goals (draft)
 
 - Maximum syntactic novelty. Familiar syntax wins unless there is a strong reason.
 - Replacing every language. Scripting, notebooks and quick glue stay with other languages.
 - **A REPL, script mode or notebook mode (decided).** Moddil is compiled and checked as a whole.
   Quick experiments use attached tests and examples-as-tests (`moddil test`,
   [`docs-and-tests.md`](docs-and-tests.md)) and live update in debug builds
-  ([`build-times.md`](build-times.md) §4.1). Quick learning is served by an in-browser playground
-  that re-runs the whole program on every edit ([`toolchain.md`](toolchain.md) §11.1).
-- C++ interop in the language. C++ is reached through C shims ([`interop.md`](interop.md) §10).
+  ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds)). Quick learning is served by an in-browser playground
+  that re-runs the whole program on every edit ([`toolchain.md`: Playground: learning without a REPL](toolchain.md#playground-learning-without-a-repl)).
+- C++ interop in the language. C++ is reached through C shims ([`interop.md`: C++ through C shims](interop.md#c-through-c-shims)).
 - A custom VCS that replaces Git (tooling on top of Git first).
 - A cloud platform, orchestrator or service mesh. Moddil emits artefacts and manifests for existing
   ones.
 - Transparent remote calls.
 - Runtime reflection / dynamic metaprogramming.
 
-## 3. Open questions
+## Open questions
 
 - R1: should WASI runtimes without stack switching be supported, which would need the
-  CPS/Asyncify-style lowering? (Also in [`bootstrap.md`](bootstrap.md) §9.)
-- Should determinism become R4 ([`determinism.md`](determinism.md) §12)?
+  CPS/Asyncify-style lowering? (Also in [`bootstrap.md`: Risks and open questions](bootstrap.md#risks-and-open-questions).)
+- Should determinism become R4 ([`determinism.md`: Open questions](determinism.md#open-questions))?

@@ -1,10 +1,10 @@
 # GPUs and Accelerators
 
-> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.9 and extends
+> **Status:** decided direction, details open. Expands [`overview.md`: Concurrency across GPUs and accelerators](overview.md#concurrency-across-gpus-and-accelerators) and extends
 > [`concurrency.md`](concurrency.md) from CPUs to devices. Snippets are **illustration only**; no
 > syntax is committed.
 
-## 1. Summary
+## Summary
 
 | Rule | One line |
 |---|---|
@@ -18,7 +18,7 @@
 | **Schedules are comptime data** | Algorithm and schedule are separate. Autotuning is an offline tool whose output is embedded. |
 | **Runtimes are mods** | The `gpu` effect is handled by WebGPU, Vulkan, Metal, CUDA, ROCm and CPU-simulator mods. WebGPU comes first, then CUDA. |
 
-## 2. The accelerator spectrum
+## The accelerator spectrum
 
 "Accelerator" covers four quite different kinds of hardware:
 
@@ -33,11 +33,11 @@
 program instance computes this output tile". The compiler handles threads, shared memory, tensor
 cores and pipelining. Triton showed this reaches near hand-written performance for most kernels.
 
-## 3. Three levels, one language
+## Three levels, one language
 
 | Level | You write | Lowers to | Audience |
 |---|---|---|---|
-| **1. Tensor expressions** (`moddil/tensor`, §8) | Array maths: `softmax(q @ k.T) @ v` | A graph built at comptime → StableHLO/XLA, ONNX, Core ML, OpenVINO; or generated tile kernels | Most users: ML, simulation, numerics |
+| **1. Tensor expressions** (`moddil/tensor`, [Level 1: tensor expressions](#level-1-tensor-expressions)) | Array maths: `softmax(q @ k.T) @ v` | A graph built at comptime → StableHLO/XLA, ONNX, Core ML, OpenVINO; or generated tile kernels | Most users: ML, simulation, numerics |
 | **2. Tile kernels** (default) | One program instance per output tile: load, compute, store tiles | PTX/AMDGPU via LLVM; WGSL/SPIR-V/MSL via naga; CPU SIMD | Kernel authors |
 | **3. SIMT kernels** | Threads, scoped shared memory, barriers, subgroup/warp operations | Same backends | Experts; the escape hatch |
 
@@ -45,9 +45,9 @@ cores and pipelining. Triton showed this reaches near hand-written performance f
 - no heap allocation, except **scoped shared memory** sized at comptime;
 - no recursion;
 - no `Rc`;
-- no suspension, I/O or `fail` (faults are traps, §11);
+- no suspension, I/O or `fail` (faults are traps, [Errors](#errors));
 - **always specialised** to concrete types. This is the one exception to dictionary-passing generics
-  in debug builds (overview §2.14), because GPUs cannot call through dictionaries efficiently.
+  in debug builds ([overview: Build times](overview.md#build-times)), because GPUs cannot call through dictionaries efficiently.
 
 Ordinary pure helper functions that stay within this set can be called from kernels and from CPU
 code alike.
@@ -65,7 +65,7 @@ fn matmul<const BM: usize, const BN: usize, const BK: usize>(
 }
 ```
 
-## 4. Devices and addressing
+## Devices and addressing
 
 Device indices are facts about one machine at run time, so they never appear in types or in library
 code.
@@ -81,13 +81,13 @@ code.
   don't fight.
 - **Roles and requirements.** Code asks for what it needs rather than which card:
   `devs.role("physics")`, or `devs.pick(min_mem: 16.GiB, features: [f16])`. A **deployment
-  manifest** binds roles to hardware (the same split as overview §2.10). `main` and tests may also
+  manifest** binds roles to hardware (the same split as [overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)). `main` and tests may also
   select directly.
 - **Device-to-device copies** are always an explicit `.to(device)`. The runtime chooses the path:
   NVLink, PCIe peer-to-peer, or staging through host memory (consumer cards often have no NVLink and
   may not support peer-to-peer).
 - **Remote devices** (a GPU on another machine) are reached only through the `remote` effect
-  (overview §2.10). Device placement is the bottom rung of the placement ladder: thread, core,
+  ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)). Device placement is the bottom rung of the placement ladder: thread, core,
   device, machine, tier.
 
 Example: a workstation with two GPUs and a 128-core CPU.
@@ -129,23 +129,23 @@ device indices in the types. When devices are only known dynamically (a `Vec` of
 bug and traps. The brand mechanism is a general type-system feature to define. It could also tie
 indices to their arena and DMA buffers to their NIC ring.
 
-## 5. Memory spaces and buffers
+## Memory spaces and buffers
 
 | Space | Meaning |
 |---|---|
 | `Buffer<T, dev>` (branded) / `Buffer<T, dyn Gpu>` (erased) | Device memory |
 | `Buffer<T, Host>` | Ordinary host memory; also the memory of a CPU pool |
 | `Buffer<T, Shared>` | Unified memory visible to host and device (Apple silicon, some data-centre parts) |
-| `Buffer<T, Dma<nic0>>` | NIC DMA memory, already used for zero-copy I/O ([`memory-and-resources.md`](memory-and-resources.md) §6) |
+| `Buffer<T, Dma<nic0>>` | NIC DMA memory, already used for zero-copy I/O ([`memory-and-resources.md`: Zero-copy I/O](memory-and-resources.md#zero-copy-io)) |
 
 - Buffers are **owned resources**. Dropping one frees it; on a device the drop *enqueues* the free
   behind outstanding work, so it never blocks (drop cannot suspend).
 - Transfers are explicit operations. There is no implicit copying and no aliasing across spaces.
 - `Shared` memory follows the ordinary borrowing rules, so host and device cannot race on it.
 
-## 6. Launches are structured tasks
+## Launches are structured tasks
 
-A kernel launch is a child task in a structured scope ([`concurrency.md`](concurrency.md) §3):
+A kernel launch is a child task in a structured scope ([`concurrency.md`: Tasks and borrowing](concurrency.md#tasks-and-borrowing)):
 - inputs are lent as shared (`let`) borrows, outputs as exclusive (`mut`) borrows;
 - while the launch runs, the CPU can read the inputs but cannot write them, and cannot touch the
   outputs at all;
@@ -159,11 +159,11 @@ scope(|s| {
 });                                               // c is readable again here
 ```
 
-Streams, queues and events are runtime-handler details (§10). The programmer sees only scopes, which
+Streams, queues and events are runtime-handler details ([Runtimes and backends](#runtimes-and-backends)). The programmer sees only scopes, which
 removes the classic bugs: using a buffer before its kernel finished, freeing it while it is in use,
 and forgetting a fence.
 
-## 7. Race freedom inside kernels
+## Race freedom inside kernels
 
 - **Tile kernels:** each program instance receives its own **disjoint output tile**: the GPU
   equivalent of `split_at_mut`. Inputs are shared read-only. So tile kernels are race-free by
@@ -174,11 +174,11 @@ and forgetting a fence.
   - scoped shared memory with barriers, where the compiler checks the barrier structure (e.g. not
     inside divergent control flow).
 - **Arbitrary scatter writes** (`out[idx[i]] = …`) cannot be proven race-free. They require an
-  `unsafe` block, which is visible in capabilities and review (overview §2.16, §2.19).
+  `unsafe` block, which is visible in capabilities and review ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security), [overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control)).
 - **The CPU-simulator handler includes a race detector**, so unsafe kernels can be checked in tests
   and CI.
 
-## 8. Level 1: tensor expressions
+## Level 1: tensor expressions
 
 - `moddil/tensor` provides n-dimensional arrays and operations.
 - A tensor function is a pure function over tensors. **Comptime builds its dataflow graph**
@@ -189,16 +189,16 @@ and forgetting a fence.
   - lowered to generated tile kernels for GPUs and CPU pools.
 - Tensor types live in a mod, not the core language (R2).
 
-## 9. Algorithm and schedule
+## Algorithm and schedule
 
 - A **schedule** (tile sizes, pipeline stages, vector widths, per-target variants) is comptime data
   attached to a kernel or tensor function per target, separate from the algorithm (the Halide idea).
 - LLMs and humans can propose schedules without touching the algorithm, and review them separately.
 - **Autotuning** must run on real hardware, so it cannot be pure comptime. It is an **offline tool**
   that writes a schedule file; the build `embed`s that file, which is declared and hashed
-  ([`comptime.md`](comptime.md) §3). Builds stay pure and reproducible.
+  ([`comptime.md`: Evaluation model](comptime.md#evaluation-model)). Builds stay pure and reproducible.
 
-## 10. Runtimes and backends
+## Runtimes and backends
 
 - `gpu` is an effect. **Handler mods** implement it: WebGPU (via wgpu), Vulkan, Metal, CUDA, ROCm
   and a **CPU simulator**. Libraries work with every handler (overview R2).
@@ -214,11 +214,11 @@ and forgetting a fence.
   schedule can provide a fallback.
 - **Linking:** GPU drivers (CUDA's `libcuda`, the Vulkan loader) are installed per machine and loaded
   dynamically, so GPU programs on Linux use a dynamic glibc target with a pinned minimum version;
-  everything else in them stays static ([`targets.md`](targets.md) §7).
+  everything else in them stays static ([`targets.md`: Dynamic glibc targets](targets.md#dynamic-glibc-targets)).
 - The **CPU simulator** runs kernels deterministically on the CPU. It gives GPU-free tests and CI,
-  race detection (§7), and lets the same kernels run on servers without GPUs.
+  race detection ([Race freedom inside kernels](#race-freedom-inside-kernels)), and lets the same kernels run on servers without GPUs.
 
-## 11. Errors
+## Errors
 
 Following [`error-handling.md`](error-handling.md):
 - **Device out of memory, device lost, unsupported feature:** ordinary `fail` errors at allocation,
@@ -226,15 +226,15 @@ Following [`error-handling.md`](error-handling.md):
 - **Faults inside a kernel** (out-of-bounds, unreachable, ÷ 0): class-3 traps, reported at the join
   with the kernel and the program instance that faulted.
 
-## 12. Other accelerators
+## Other accelerators
 
-- **NPUs and TPUs:** only through level 1 (§8).
+- **NPUs and TPUs:** only through level 1 ([Level 1: tensor expressions](#level-1-tensor-expressions)).
 - **FPGAs and fixed-function engines:** through FFI, the `ffi` capability and owned DMA buffers. Their
   drivers are mods.
 - **CPU vector units:** `moddil/simd` for direct use; tile kernels can also lower to them via the CPU
   pool.
 
-## 13. Fit check against the reference examples
+## Fit check against the reference examples
 
 | Example | Uses |
 |---|---|
@@ -243,10 +243,10 @@ Following [`error-handling.md`](error-handling.md):
 | [Web store](examples/03-web-store.md) | None needed |
 | [Hashiverse](examples/04-hashiverse.md) | Possibly proof-of-work on a GPU or CPU pool (to evaluate) |
 
-## 14. Open questions
+## Open questions
 
 - **Autodiff:** a comptime transformation (as Slang and Enzyme do) or a feature of `moddil/tensor`?
-- **Multi-GPU collectives** (all-reduce etc.): a library built on placement (overview §2.10)?
+- **Multi-GPU collectives** (all-reduce etc.): a library built on placement ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs))?
 - Should tensor/array syntax become core, or stay in a mod?
 - How close can the CPU simulator get to bit-exact results with GPU floating point?
 - WebGPU feature gaps (subgroups, f16) and their fallbacks.

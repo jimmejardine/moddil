@@ -1,35 +1,35 @@
 # Correctness: Contracts, Testing and Verification
 
-> **Status:** proposal. Expands [`overview.md`](overview.md) §2.7. Nothing here is decided yet;
+> **Status:** proposal. Expands [`overview.md`: Correctness tooling: contracts and verification](overview.md#correctness-tooling-contracts-and-verification). Nothing here is decided yet;
 > recommendations are marked **Recommended**. Syntax is illustrative.
 
-## 1. Summary
+## Summary
 
 Moddil should make correctness tooling **cheap by default and deep on demand**:
 - **v1 (easy wins):** contracts as syntax, validated newtypes, built-in property testing and fuzzing,
   mutation testing, a Miri-style checker, systematic concurrency testing, and differential testing of
-  the compiler's backends (§3).
+  the compiler's backends ([Easy wins (v1)](#easy-wins-v1)).
 - **Designed in now, built later:** proofs written in Moddil itself (SMT-backed), refinement types,
-  bounded model checking, protocol verification, and assurance levels per mod (§4).
-- A handful of **decisions must be locked early**, because they are expensive to retrofit (§5).
+  bounded model checking, protocol verification, and assurance levels per mod ([State of the art not to miss (design now, build later)](#state-of-the-art-not-to-miss-design-now-build-later)).
+- A handful of **decisions must be locked early**, because they are expensive to retrofit ([Decisions to lock early](#decisions-to-lock-early)).
 
-## 2. Why Moddil is unusually well placed
+## Why Moddil is unusually well placed
 
 Most languages bolt verification on afterwards and fight their own semantics. Several Moddil
 decisions remove the usual obstacles:
 
 | Existing decision | What it gives correctness tooling |
 |---|---|
-| **Effects** (overview §2.1) | The compiler can *check* that contract expressions are pure; most languages can only trust them to be. Effect handlers swap real I/O, time and scheduling for test versions. |
+| **Effects** ([overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea)) | The compiler can *check* that contract expressions are pure; most languages can only trust them to be. Effect handlers swap real I/O, time and scheduling for test versions. |
 | **Ownership; immutable rc contents; shared mutation only in sync cells** ([`memory-and-resources.md`](memory-and-resources.md)) | No unrestricted aliasing, so a verifier knows what a function can modify (the "frame problem"). This is why Verus, Prusti and Creusot work for Rust and why C/C++ verification is so hard. |
 | **Linear resources** | Typestate: protocols such as "open → write → commit or rollback" checked by the type system. |
 | **MIR interpreter** ([`bootstrap.md`](bootstrap.md), [`comptime.md`](comptime.md)) | A Miri-style undefined-behaviour checker, and a reference semantics for testing the backends against each other. |
-| **Deterministic runtime** (`moddil/runtime-sim`, overview §2.11) | Reproducible tests and systematic exploration of task interleavings. |
+| **Deterministic runtime** (`moddil/runtime-sim`, [overview: Determinism and reproducibility](overview.md#determinism-and-reproducibility)) | Reproducible tests and systematic exploration of task interleavings. |
 | **Comptime and static reflection** | Test-data generators derived from types (`#[derive(Arbitrary)]`); contracts on literals checked at compile time. |
 
-## 3. Easy wins (v1)
+## Easy wins (v1)
 
-### 3.1 Contracts as syntax
+### Contracts as syntax
 
 ```rust
 fn withdraw(account: &mut Account, amount: Money) -> Money
@@ -50,11 +50,11 @@ struct OrderBook {
   ([`syntax.md`](syntax.md)).
 - **Contract expressions must be pure**, checked by the effect system.
 - Contracts are part of the **mod interface**: shown by the language server, included in generated
-  docs, subject to semver, and visible in semantic diffs (overview §2.19). A trait impl may weaken
+  docs, subject to semver, and visible in semantic diffs ([overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control)). A trait impl may weaken
   preconditions and strengthen postconditions, never the reverse (Liskov).
-- Runtime checking policy: see §5.
+- Runtime checking policy: see [Decisions to lock early](#decisions-to-lock-early).
 
-### 3.2 Validated newtypes (lightweight refinements)
+### Validated newtypes (lightweight refinements)
 
 ```
 type Port = u16 where self >= 1024
@@ -71,7 +71,7 @@ let q: Port = 8080;           // literal checked at compile time
 - These are the natural boundary between *errors* (bad input) and *bugs* (a broken contract inside
   trusted code).
 
-### 3.3 Property-based testing, with contracts as free oracles
+### Property-based testing, with contracts as free oracles
 
 ```rust
 #[property_test]
@@ -87,7 +87,7 @@ fn withdraw_never_overdraws(mut account: Account, amount: Money) {
   that satisfy `requires`, run, check `ensures` and invariants (Eiffel AutoTest). Tests come for free
   from specifications.
 
-### 3.4 Fuzzing, doc tests and snapshot tests
+### Fuzzing, doc tests and snapshot tests
 
 - **Coverage-guided fuzzing** in the standard test runner (Go `go test -fuzz`, cargo-fuzz): fuzz
   targets look like tests, and failing inputs are saved as regression tests.
@@ -96,38 +96,38 @@ fn withdraw_never_overdraws(mut account: Account, amount: Money) {
   declaration they test ([`docs-and-tests.md`](docs-and-tests.md)).
 - **Snapshot / golden tests** (`insta`), useful for generated code and comptime expansions.
 
-### 3.5 Mutation testing
+### Mutation testing
 
 The tool makes small deliberate changes (`<` to `<=`, deleting a statement, swapping a branch) and
 checks that some test fails (cargo-mutants, PIT, Stryker). A surviving mutant points at an untested
 behaviour.
 
 This matters more than usual for Moddil: **LLM-written tests are often weak or tautological**
-(overview §2.18). Mutation scores give reviewers an objective measure of whether a PR's tests
+([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)). Mutation scores give reviewers an objective measure of whether a PR's tests
 actually test anything, and can be shown in the PR summary.
 
-### 3.6 A Miri-style checker
+### A Miri-style checker
 
 Run tests on the MIR interpreter with extra checks: `unsafe` code obeying aliasing and validity rules,
 FFI boundaries, use of uninitialised memory (Rust's Miri). This is nearly free, since the interpreter
 exists for comptime.
 
-### 3.7 Systematic concurrency testing
+### Systematic concurrency testing
 
-See also [`determinism.md`](determinism.md) §3.
+See also [`determinism.md`: Deterministic simulation testing](determinism.md#deterministic-simulation-testing).
 
 Because scheduling is an effect, `runtime-sim` can explore task interleavings: random, PCT (a
 probabilistic strategy with good bug-finding guarantees), or exhaustive for small tests (Loom,
-shuttle, Coyote, FoundationDB). Every failure replays from a seed (overview §2.11).
+shuttle, Coyote, FoundationDB). Every failure replays from a seed ([overview: Determinism and reproducibility](overview.md#determinism-and-reproducibility)).
 
-### 3.8 Differential testing of the compiler
+### Differential testing of the compiler
 
 Run generated programs (Csmith, YARPGen style) through the interpreter, Cranelift, LLVM and WASM
 backends; any disagreement is a compiler bug. The interpreter is the reference semantics.
 
-## 4. State of the art not to miss (design now, build later)
+## State of the art not to miss (design now, build later)
 
-### 4.1 Proofs in Moddil itself
+### Proofs in Moddil itself
 
 Deductive verification in the same language and toolchain, as Verus (Rust), Dafny, SPARK, Prusti and
 Creusot do:
@@ -139,7 +139,7 @@ Creusot do:
 Verus's linear ghost permissions are a particularly good fit for Moddil's ownership model.
 **Recommended:** reserve the syntax and erasure semantics now, even if the verifier ships much later.
 
-### 4.2 Assurance levels per mod
+### Assurance levels per mod
 
 Following SPARK's graded levels (Stone, Bronze, Silver, Gold, Platinum), a mod declares how far it is
 verified:
@@ -150,54 +150,54 @@ verified:
 | **L1** | **No traps**, proven: no division by zero, out-of-bounds index or `unreachable` reachable. This complements R3: errors are handled, *and* nothing crashes. |
 | **L2** | Functional correctness proven against the contracts |
 
-The level is part of mod metadata and the audit trail (overview §2.16), so a dependency's assurance
+The level is part of mod metadata and the audit trail ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)), so a dependency's assurance
 is visible before you depend on it. The HFT risk module (example 2) would target L2.
 
-### 4.3 Refinement types with automatic proofs
+### Refinement types with automatic proofs
 
 Liquid Haskell, Flux (for Rust) and F\* attach logical predicates to types and prove them
 automatically, without proof scripts. In Moddil this drives **bounds-check elision** (error-handling
-D7) and index safety, and generalises §3.2's `where` clauses from runtime checks to static proofs.
+D7) and index safety, and generalises [Validated newtypes (lightweight refinements)](#validated-newtypes-lightweight-refinements)'s `where` clauses from runtime checks to static proofs.
 
-### 4.4 Bounded model checking
+### Bounded model checking
 
 Kani (Rust, via CBMC) proves a property for *all* inputs up to a bound. Its proof harnesses look like
 tests, so engineers adopt it easily. A Moddil equivalent could run on MIR.
 
-### 4.5 Protocol and distributed verification
+### Protocol and distributed verification
 
-- **Choreographies and session types** (overview §2.10) are deadlock-free by construction.
+- **Choreographies and session types** ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)) are deadlock-free by construction.
 - **TLA+** and **P** (used at AWS and Microsoft) model-check distributed protocols. Moddil
-  choreographies could be exported to such a checker, and deterministic simulation (§2.11) gives a
+  choreographies could be exported to such a checker, and deterministic simulation ([overview: Determinism and reproducibility](overview.md#determinism-and-reproducibility)) gives a
   cheaper complement.
 
-### 4.6 Information flow
+### Information flow
 
 Type-level taint tracking and non-interference: secrets never reach the `client` placement, and untrusted
-input reaches sensitive sinks only after validation (overview §2.10). This is both a security and a
+input reaches sensitive sinks only after validation ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)). This is both a security and a
 correctness property.
 
-### 4.7 A formal semantics of the core
+### A formal semantics of the core
 
 A mechanised model of Moddil-core (for example in Lean), as WebAssembly (WasmCert), CakeML and
 CompCert have, used to validate the reference interpreter. This keeps "what Moddil means" precise,
 which every other tool here depends on.
 
-### 4.8 LLMs plus verification
+### LLMs plus verification
 
 Agents can now write code *and* its proofs, with the verifier as the arbiter ("vericoding"). The
 spec is what the human reviews; the proof certifies that the code meets it. To support this:
 - verifier output must be **structured**: failing obligations, counterexamples, and suggested
-  invariants, in a form agents can act on (overview §2.18);
+  invariants, in a form agents can act on ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers));
 - **spec inference**: tools or LLMs propose candidate contracts and invariants (Daikon-style), and
   humans approve them.
 
-### 4.9 Static analysers
+### Static analysers
 
 Abstract-interpretation tools (Infer, Astrée, IKOS) can be added later as tooling. They don't
 require language design decisions beyond a well-specified MIR.
 
-## 5. Decisions to lock early
+## Decisions to lock early
 
 These are cheap now and expensive to change once code exists.
 
@@ -213,9 +213,9 @@ These are cheap now and expensive to change once code exists.
 5. **Release-build checking policy, per mod**: `all`, `preconditions` (the Ada and Eiffel default),
    or `none`. **Recommended default:** preconditions on public mod functions stay on in release
    builds; internal contracts are checked in debug builds only, unless the mod opts in.
-6. **Assurance levels** as mod metadata (§4.2).
+6. **Assurance levels** as mod metadata ([Assurance levels per mod](#assurance-levels-per-mod)).
 
-## 6. Fit with the reference examples
+## Fit with the reference examples
 
 | Example | What correctness tooling gives it |
 |---|---|
@@ -224,7 +224,7 @@ These are cheap now and expensive to change once code exists.
 | [Web store](examples/03-web-store.md) | Validated newtypes for money, IDs and quantities; contracts on checkout; property tests on pricing |
 | [Hashiverse](examples/04-hashiverse.md) | Fuzzing the wire protocol against the Rust implementation; contracts and L1 on crypto and PoW code |
 
-## 7. Open questions
+## Open questions
 
 1. Is the verifier part of the core toolchain or a mod (`moddil/verify`)?
 2. Which SMT solver(s), and how are solver versions pinned for reproducible proofs?

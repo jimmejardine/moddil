@@ -1,9 +1,9 @@
 # Interoperability with C and Rust
 
-> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.13.
+> **Status:** decided direction, details open. Expands [`overview.md`: Interoperability with C and Rust](overview.md#interoperability-with-c-and-rust).
 > Snippets are **illustration only**; no syntax is committed.
 
-## 1. Summary
+## Summary
 
 | Rule | One line |
 |---|---|
@@ -16,20 +16,20 @@
 | **Foreign code is visible** | Raw bindings are `unsafe`; using them needs the `ffi` capability, which shows in signatures, audits and semantic diffs. |
 | **Callbacks are entry points** | Code called from C must handle all errors (R3); nothing unwinds across the boundary. |
 
-## 2. Scope: why C and Rust only
+## Scope: why C and Rust only
 
 C++ interop is the most expensive interop feature a language can take on: templates, overloading,
 exceptions and compiler-specific ABIs. Swift and Carbon have each spent years on it. Moddil does not.
 
 | Need | Typical form | Covered by |
 |---|---|---|
-| Exchange SDKs, FIX engines (HFT) | Often C++ only | A thin **C shim** (§10) |
-| Game physics engines | Mixed: some C (e.g. Box2D v3), some C++ | C APIs where they exist; shims otherwise; or compiled to WASM and linked as a component (§9) |
-| CUDA libraries, LLVM, SQLite, OpenSSL, DPDK, libpq | C APIs | Direct (§3) |
+| Exchange SDKs, FIX engines (HFT) | Often C++ only | A thin **C shim** ([C++ through C shims](#c-through-c-shims)) |
+| Game physics engines | Mixed: some C (e.g. Box2D v3), some C++ | C APIs where they exist; shims otherwise; or compiled to WASM and linked as a component ([WASM components: the sandboxed path](#wasm-components-the-sandboxed-path)) |
+| CUDA libraries, LLVM, SQLite, OpenSSL, DPDK, libpq | C APIs | Direct ([The C ABI, both directions](#the-c-abi-both-directions)) |
 | Mobile platform APIs (web store) | iOS: Objective-C/Swift; Android: Java/Kotlin | Still C underneath: JNI is a C ABI, the Objective-C runtime has a C API, and Swift can export C functions (`@_cdecl`). Platform mods wrap them. |
-| The Rust ecosystem, existing Rust code (Hashiverse) | Rust crates | The generated bridge (§8) or components (§9) |
+| The Rust ecosystem, existing Rust code (Hashiverse) | Rust crates | The generated bridge ([Rust: the generated bridge](#rust-the-generated-bridge)) or components ([WASM components: the sandboxed path](#wasm-components-the-sandboxed-path)) |
 
-## 3. The C ABI, both directions
+## The C ABI, both directions
 
 - **Zero-overhead calls** in both directions: a call to C is a direct call with the platform C calling
   convention.
@@ -39,9 +39,8 @@ exceptions and compiler-specific ABIs. Swift and Carbon have each spent years on
   simple macros become raw bindings automatically.
 - **The toolchain compiles C.** C sources of a dependency are compiled by the bundled clang, using the
   LLVM Moddil already ships ([`bootstrap.md`](bootstrap.md)):
-  - hermetic and reproducible: declared inputs only, the same compiler on every machine (overview
-    §2.16);
-  - cross-compiled to every Moddil target, including WASM (overview §2.15, R1);
+  - hermetic and reproducible: declared inputs only, the same compiler on every machine ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security));
+  - cross-compiled to every Moddil target, including WASM ([overview: Cross-compilation and deployment](overview.md#cross-compilation-and-deployment), R1);
   - run in the build sandbox like any other build step.
 
 ```rust
@@ -49,7 +48,7 @@ exceptions and compiler-specific ABIs. Swift and Carbon have each spent years on
 mod sqlite3;
 ```
 
-## 4. Annotation overlays
+## Annotation overlays
 
 C headers say nothing about ownership, nullability, errors, blocking or threads. **Overlays** add it,
 and turn raw bindings into Moddil types:
@@ -57,43 +56,43 @@ and turn raw bindings into Moddil types:
 | C fact | Overlay says | Moddil result |
 |---|---|---|
 | Who frees a returned pointer | owned / borrowed / linear | Owned: a Moddil type whose drop calls the C free function. Borrowed: a view. Linear: when freeing can fail (e.g. a close that reports errors). |
-| Can a pointer be null | nullable | `Option<…>` (overview §2.4) |
+| Can a pointer be null | nullable | `Option<…>` ([overview: Null and invalid states](overview.md#null-and-invalid-states)) |
 | How errors are reported | errno, negative return, out-parameter | `fail(E)` with a typed error |
-| Can the call block | `blocking` | The runtime moves the call off its workers to a blocking pool, so one slow C call can't stall the scheduler. Such calls are the one exception to promptly cancellable I/O ([`concurrency.md`](concurrency.md) §9.5). |
+| Can the call block | `blocking` | The runtime moves the call off its workers to a blocking pool, so one slow C call can't stall the scheduler. Such calls are the one exception to promptly cancellable I/O ([`concurrency.md`: Cancelling I/O: no "press Enter", no self-connect](concurrency.md#cancelling-io-no-press-enter-no-self-connect)). |
 | Thread requirements | thread-affine, not thread-safe | Pinned tasks; values that can't be sent are wrapped accordingly |
-| What it touches | capabilities (`fs`, `net`, …) | Checked like Moddil code ([`mods.md`](mods.md) §2) |
+| What it touches | capabilities (`fs`, `net`, …) | Checked like Moddil code ([`mods.md`: What a mod is](mods.md#what-a-mod-is)) |
 
 - Overlays live in a **shared repository**, versioned against library versions, like TypeScript's
   DefinitelyTyped, so each C library is annotated once for everyone.
 - An overlay is reviewable code: a wrong overlay is a bug in a specific, auditable place.
 
-## 5. The safety boundary
+## The safety boundary
 
 - **Raw bindings are `unsafe`.** Safe wrappers are ordinary mods built on them.
 - Any mod that uses foreign code declares the **`ffi` capability**. It appears in signatures, package
-  audits and semantic diffs (overview §2.16, §2.19): "`foo` 1.5 now uses `ffi`" is flagged on
+  audits and semantic diffs ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security), [overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control)): "`foo` 1.5 now uses `ffi`" is flagged on
   upgrade.
 - Faults in foreign code are traps (class 3; [`error-handling.md`](error-handling.md) D8).
 - Foreign code is **outside record and replay** unless it is wrapped by effects; the recorder flags it
-  ([`determinism.md`](determinism.md) §5, [`observability.md`](observability.md) §8).
+  ([`determinism.md`: Record and replay](determinism.md#record-and-replay), [`observability.md`: Flight recorder and replay](observability.md#flight-recorder-and-replay)).
 
-## 6. Callbacks into Moddil
+## Callbacks into Moddil
 
 - A Moddil function passed to C as a callback is an **entry point**
-  ([`error-handling.md`](error-handling.md) §4.4): its failure set must be empty, so no Moddil error can
+  ([`error-handling.md`: Entry points must handle everything (R3)](error-handling.md#entry-points-must-handle-everything-r3)): its failure set must be empty, so no Moddil error can
   escape into C.
 - Nothing unwinds across the boundary in either direction.
 - Borrowed data passed to a callback follows the ordinary borrow and view rules
-  ([`memory-and-resources.md`](memory-and-resources.md) §3–§4); a callback cannot keep it.
+  ([`memory-and-resources.md`: Borrowing](memory-and-resources.md#borrowing)–[`memory-and-resources.md`: View types](memory-and-resources.md#view-types)); a callback cannot keep it.
 
-## 7. Export
+## Export
 
 - Moddil functions and `#[repr(C)]` types can be **exported with the C ABI**, with a **generated header**.
-- Moddil mods can also be exposed to Rust as a **generated crate** (§8, reverse direction).
+- Moddil mods can also be exposed to Rust as a **generated crate** ([Rust: the generated bridge](#rust-the-generated-bridge), reverse direction).
 - This is the adoption path: Moddil can be introduced inside existing C, C++ or Rust projects one
-  module at a time (overview §7).
+  module at a time ([overview: Open Questions and Next Steps for Moddil](overview.md#open-questions-and-next-steps-for-moddil)).
 
-## 8. Rust: the generated bridge
+## Rust: the generated bridge
 
 Rust has **no stable ABI**: layouts, generics, trait objects and `Result` cannot cross a boundary
 directly. Rust's experimental interoperable ABI (crABI) is tracked but not depended on. Moddil uses
@@ -125,7 +124,7 @@ mod hashiverse;
 let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → fail(DecodeError)
 ```
 
-## 9. WASM components: the sandboxed path
+## WASM components: the sandboxed path
 
 - C and Rust code compiled to WASM can be linked as **components**, with interfaces in **WIT**, which
   Moddil maps to and from automatically (overview R1). Rust has strong tooling for this
@@ -135,7 +134,7 @@ let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → 
   RLBox does for C libraries in Firefox.
 - It is the natural path for **untrusted crates**, for plugins, and for the **browser**.
 
-## 10. C++ through C shims
+## C++ through C shims
 
 - C++ libraries are wrapped by a thin `extern "C"` layer, written in C++, that exposes a C API.
   Moddil then imports that like any C library.
@@ -145,7 +144,7 @@ let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → 
   instantiations) may exist as an optional tool (standard or community). It is tooling, not part of
   the language or compiler.
 
-## 11. Fit check against the reference examples
+## Fit check against the reference examples
 
 | Example | Uses |
 |---|---|
@@ -154,7 +153,7 @@ let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → 
 | [Web store](examples/03-web-store.md) | PostgreSQL through libpq or a native mod; mobile platform APIs through JNI and the Objective-C/Swift C surface |
 | [Hashiverse](examples/04-hashiverse.md) | The generated Rust bridge to `hashiverse-lib` during migration, replaced module by module by native Moddil |
 
-## 12. Open questions
+## Open questions
 
 - How stable is rustdoc's JSON format, and how much generator maintenance follows Rust releases?
 - How far can generics cross the Rust bridge beyond explicit instantiations?

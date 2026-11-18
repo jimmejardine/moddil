@@ -23,34 +23,34 @@ Success criteria → Mods used → Interop and non-Moddil parts → Open questio
 
 ## Coverage: examples × problem areas
 
-Section numbers refer to [`../overview.md`](../overview.md).
+Rows link to the matching sections of [`../overview.md`](../overview.md).
 ● = central to the example · ○ = exercised · blank = not significant.
 
 | Problem area | Game | HFT | Store | Hashiverse |
 |---|---|---|---|---|
-| §2.1 Effects and handlers | ○ | ● (sim ↔ live) | ○ | ● (pluggable transport/time/storage) |
-| §2.2 Memory / resources | ○ | ● (zero-alloc hot path) | ○ | ○ |
-| §2.3 Error handling | ○ | ● | ○ | ○ |
-| §2.5 Numerics | ○ | ● (decimal, SIMD) | ○ (money) | ○ (crypto) |
-| §2.7 Contracts / verification | | ● (risk checks) | ○ | ○ |
-| §2.8 CPU concurrency | ● | ● | ○ | ● (parallel PoW) |
-| §2.9 GPU | ● (WebGPU) | ● (research) | | |
-| §2.10 Distributed / multi-tier | ● | ● | ● | ● (P2P) |
-| §2.11 Deterministic simulation | ● | ● | ○ | ● |
-| §2.13 C/C++/Rust interop | ○ | ● (kernel bypass, exchange SDKs) | ○ (mobile platform APIs) | ● (existing Rust code) |
-| §2.14 Build times | ○ | ○ | ● (large app team) | ○ |
-| §2.16 Supply chain / capabilities | ○ | ● (`order` capability) | ● (`payments`) | ● (untrusted peers) |
-| §2.18 LLM-friendliness | ○ | ○ | ● (CRUD volume) | ○ |
-| §2.19 Semantic diffs / review | ○ | ● (audited algos) | ● | ○ |
+| [Effects and handlers](../overview.md#effects-and-capabilities-as-a-unifying-idea) | ○ | ● (sim ↔ live) | ○ | ● (pluggable transport/time/storage) |
+| [Memory / resources](../overview.md#memory-and-resource-management) | ○ | ● (zero-alloc hot path) | ○ | ○ |
+| [Error handling](../overview.md#error-handling) | ○ | ● | ○ | ○ |
+| [Numerics](../overview.md#numerics-and-data) | ○ | ● (decimal, SIMD) | ○ (money) | ○ (crypto) |
+| [Contracts / verification](../overview.md#correctness-tooling-contracts-and-verification) | | ● (risk checks) | ○ | ○ |
+| [CPU concurrency](../overview.md#concurrency-across-cpus) | ● | ● | ○ | ● (parallel PoW) |
+| [GPU](../overview.md#concurrency-across-gpus-and-accelerators) | ● (WebGPU) | ● (research) | | |
+| [Distributed / multi-tier](../overview.md#distributed-and-multi-tier-programs) | ● | ● | ● | ● (P2P) |
+| [Deterministic simulation](../overview.md#determinism-and-reproducibility) | ● | ● | ○ | ● |
+| [C/C++/Rust interop](../overview.md#interoperability-with-c-and-rust) | ○ | ● (kernel bypass, exchange SDKs) | ○ (mobile platform APIs) | ● (existing Rust code) |
+| [Build times](../overview.md#build-times) | ○ | ○ | ● (large app team) | ○ |
+| [Supply chain / capabilities](../overview.md#package-management-and-supply-chain-security) | ○ | ● (`order` capability) | ● (`payments`) | ● (untrusted peers) |
+| [LLM-friendliness](../overview.md#llms-as-first-class-programmers) | ○ | ○ | ● (CRUD volume) | ○ |
+| [Semantic diffs / review](../overview.md#diffs-code-review-and-version-control) | ○ | ● (audited algos) | ● | ○ |
 | R1 WASM | ● (browser client) | | ● (web client) | ● (browser client) |
 | Mobile (iOS/Android) | | | ● | |
 
-No problem area is left unexercised. §2.9 GPU is the thinnest; if research workloads in the HFT
+No problem area is left unexercised. [GPU](../overview.md#concurrency-across-gpus-and-accelerators) is the thinnest; if research workloads in the HFT
 example are not enough, a fifth GPU-heavy example (e.g. ML inference) may be added.
 
 ## Coverage: examples × standard mods
 
-See [`../mods.md`](../mods.md) §6 for the full catalogue. Mods marked **new** are example-specific
+See [`../mods.md`: Initial standard-mod catalogue](../mods.md#initial-standard-mod-catalogue) for the full catalogue. Mods marked **new** are example-specific
 mods the example would create.
 
 | Mod | Game | HFT | Store | Hashiverse |
@@ -76,7 +76,7 @@ mods the example would create.
 1. **Hashiverse client.** A real protocol with real users, with existing Rust servers to interoperate
    against. It exercises WASM, interop, crypto and effects-as-pluggable-traits. The CLI/native client
    comes first and the browser client follows once JSPI lowering exists
-   ([`../bootstrap.md`](../bootstrap.md) §5).
+   ([`../bootstrap.md`: Milestones](../bootstrap.md#milestones)).
 2. **Multiplayer game.** Multi-tier, browser, real-time, WebGPU.
 3. **Web store.** Everyday ergonomics, databases and the mobile question.
 4. **HFT platform.** The hardest latency requirements and the flagship "same code in simulation and live"

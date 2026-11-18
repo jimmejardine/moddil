@@ -1,9 +1,9 @@
 # Units of Measure
 
-> **Status:** proposal. Expands [`overview.md`](overview.md) §2.5. Recommendations are marked
+> **Status:** proposal. Expands [`overview.md`: Numerics and data](overview.md#numerics-and-data). Recommendations are marked
 > **Recommended**; syntax follows the recommendation but is not final.
 
-## 1. Summary
+## Summary
 
 ```rust
 use moddil::units::si::{m, cm, mm, s, ms, kg};
@@ -22,7 +22,7 @@ let budget         = 64<MiB>
 - The set of dimensions and units is **open**: any mod can declare new ones.
 - Related units convert automatically (`cm` + `mm`); different dimensions never do.
 
-## 2. Why F#'s `100.0<cm>` syntax
+## Why F#'s `100.0<cm>` syntax
 
 F# (Andrew Kennedy's design) treats units as types:
 
@@ -38,19 +38,18 @@ F# (Andrew Kennedy's design) treats units as types:
   suffix form such as `100cm` would have).
 - **Erased at runtime.**
 
-F#'s weaknesses, which Moddil addresses (§4):
+F#'s weaknesses, which Moddil addresses ([Declaring units](#declaring-units)):
 - `cm` and `m` are unrelated measures; you convert by multiplying by constants such as `100.0<cm/m>`.
 - No affine units (°C vs K).
 
 **Recommended:** adopt the F# form as Moddil's single syntax for units in types and literals. It is
-consistent with Moddil's generic syntax and gives compound units for free. One form only (overview
-§2.18); the suffix form `100cm` is not used.
+consistent with Moddil's generic syntax and gives compound units for free. One form only ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)); the suffix form `100cm` is not used.
 
 **Lexing rule:** a `<` immediately after a numeric literal (no space) starts a unit. The canonical
 formatter always puts spaces around the comparison operator, so `100 < limit` is never ambiguous.
 Swift uses similar whitespace-sensitive operator lexing.
 
-## 3. Dimensions: the SI vector and an open set
+## Dimensions: the SI vector and an open set
 
 **The SI vector.** A dimension can be represented as a vector of exponents over the seven SI base
 dimensions: length L, mass M, time T, electric current I, temperature Θ, amount of substance N,
@@ -82,7 +81,7 @@ exponents**: F#'s free abelian group, rather than a fixed seven-element vector.
 - The SI dimensions are simply the first such declarations, in `moddil/units/si`.
 - Derived dimensions are expressions: `dimension Velocity = Length / Time`.
 
-## 4. Declaring units
+## Declaring units
 
 A unit has a dimension and a scale relative to that dimension's base unit, plus an offset for affine
 units:
@@ -98,13 +97,13 @@ unit K:  Temperature
 unit degC = K + 273.15        // affine
 unit B:  Information
 unit MiB = 1048576 B
-unit USD: Currency::USD       // each currency is its own base dimension (§5)
+unit USD: Currency::USD       // each currency is its own base dimension (see below)
 ```
 
 Because `cm` and `m` are declared as related, they **convert automatically**, fixing F#'s main
 weakness.
 
-## 5. Arithmetic, conversion and polymorphism
+## Arithmetic, conversion and polymorphism
 
 - `+`, `-` and comparisons require the **same dimension**. Units within a dimension are converted to
   a common unit: the expected type's unit if annotated, otherwise the finer of the two.
@@ -128,7 +127,7 @@ weakness.
 - **Formatting and parsing:** `fmt"{length:<mm>}"` prints in the requested unit; parsing
   `"12.5 km"` returns a `Result`.
 
-## 6. Core and mods
+## Core and mods
 
 Per R2 (small core):
 
@@ -141,7 +140,7 @@ Per R2 (small core):
 Unit algebra has to be in the core because unit variables are inferred by the type checker. It is a
 small piece: normalising products of base dimensions with integer exponents.
 
-## 7. Imports
+## Imports
 
 Unit names are imported like types:
 
@@ -150,15 +149,15 @@ use moddil::units::si::{m, cm, mm, s, ms};
 ```
 
 *Open:* whether a whole unit pack can be imported at once (`use moddil::units::si::*`), given that
-glob imports otherwise hurt local reasoning (overview §2.18).
+glob imports otherwise hurt local reasoning ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)).
 
-## 8. Across tiers
+## Across tiers
 
-Wire contracts (overview §2.10) carry units, so a unit mismatch between services is a compile
+Wire contracts ([overview: Distributed and multi-tier programs](overview.md#distributed-and-multi-tier-programs)) carry units, so a unit mismatch between services is a compile
 error. The 1999 Mars Climate Orbiter was lost to exactly this: one system produced pound-force
 seconds, the other expected newton-seconds.
 
-## 9. Fit with the reference examples
+## Fit with the reference examples
 
 | Example | Units |
 |---|---|
@@ -167,10 +166,10 @@ seconds, the other expected newton-seconds.
 | [Web store](examples/03-web-store.md) | Money per currency; shipping weights and dimensions |
 | [Hashiverse](examples/04-hashiverse.md) | `500<ms>` durations and `64<MiB>` sizes, where today raw integer types (`TimeMillis`, `DurationMillis`) are used |
 
-## 10. Open questions
+## Open questions
 
 1. Confirm the lexing rule: no space between a literal and its `<unit>`.
-2. Glob imports of unit packs (§7).
+2. Glob imports of unit packs ([Imports](#imports)).
 3. Angles: are radians and degrees units of a dimensionless-but-distinct "angle" kind?
 4. Rational exponents (`m^(1/2)`), needed for some formulas: allow, or only integers?
 5. The common-unit rule for unannotated mixed expressions: finer unit, or left operand?

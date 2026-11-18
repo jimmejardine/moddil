@@ -1,6 +1,6 @@
 # Bootstrapping and Backends
 
-> **Status:** proposal. Answers overview §7 Q6. WASM support facts verified November 2026 (§8 below).
+> **Status:** proposal. Answers [overview: Open Questions and Next Steps for Moddil](overview.md#open-questions-and-next-steps-for-moddil) Q6. WASM support facts verified November 2026 ([WASM support: verified status (November 2026)](#wasm-support-verified-status-november-2026) below).
 
 ## Answers in brief
 
@@ -21,16 +21,16 @@ later.
 
 ---
 
-## 1. Stage 0 language: Rust
+## Stage 0 language: Rust
 
 **Why Rust:**
 - **Ecosystem fit.** Most of the infrastructure Moddil needs already exists as Rust crates:
   - `cranelift`: fast code generation for debug builds.
-  - `wasmtime`: the WASM runtime (§9), embeddable in the compiler.
+  - `wasmtime`: the WASM runtime ([Risks and open questions](#risks-and-open-questions)), embeddable in the compiler.
   - `wasm-encoder`, `wasmparser`, `wit-parser`, `wit-component`: WASM and Component Model (R1).
-  - `naga`: shader translation between WGSL, SPIR-V, MSL and HLSL (§2.9).
+  - `naga`: shader translation between WGSL, SPIR-V, MSL and HLSL ([overview: Concurrency across GPUs and accelerators](overview.md#concurrency-across-gpus-and-accelerators)).
   - `gimli`: DWARF debug info.
-  - `salsa`: query-based incremental compilation, as used by rust-analyzer (§2.14, compiler-as-a-service §2.18).
+  - `salsa`: query-based incremental compilation, as used by rust-analyzer ([overview: Build times](overview.md#build-times), compiler-as-a-service [overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)).
   - `inkwell` / `llvm-sys`: LLVM.
   - `tower-lsp`, `ariadne`/`codespan-reporting`, `logos`: language server, diagnostics, lexing.
 - **Familiarity.** The project owner works in Rust daily (Hashiverse).
@@ -46,7 +46,7 @@ later.
 **Accepted cost:** stage 0 itself builds at Rust speed. Mitigate with a workspace split into many small
 crates, plus Cranelift for the compiler's own debug builds.
 
-## 2. Staged bootstrap
+## Staged bootstrap
 
 ```
  stage 0  (Rust)     compiles Moddil-core ───────────────┐
@@ -58,17 +58,17 @@ crates, plus Cranelift for the compiler's own debug builds.
 
 - **Stage 0** implements **Moddil-core**: the subset needed to write a compiler. That is types, sum
   types, generics, ownership, modules and mods, basic effects and handlers. It is not the full language.
-- Stage 0 includes an **interpreter for MIR** (the mid-level IR, §4). Compile-time evaluation (§2.6)
+- Stage 0 includes an **interpreter for MIR** (the mid-level IR, [Backends](#backends)). Compile-time evaluation ([overview: Metaprogramming](overview.md#metaprogramming))
   needs one anyway, and it lets the language run tests before any backend exists.
 - **Dogfood early.** Write the first standard mods (`moddil/collections`, `text`, `serde`, `test`)
   in Moddil while the compiler is still in Rust.
 - **Fixed-point check**: stage 2 and stage 3 must be bit-identical. This runs in CI, and also checks
-  reproducible builds (§2.16).
+  reproducible builds ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)).
 - **When to self-host:** not until the core semantics are stable, and **after the Hashiverse client
   milestone** has proved the language on real code. Self-hosting too early means rewriting the
   compiler every time the language changes.
 
-## 3. Bootstrapping after self-hosting
+## Bootstrapping after self-hosting
 
 **Zig's trick, applied to Moddil.** Zig commits a WASM build of its compiler (`zig1.wasm`). Building
 Zig from source then needs only a C compiler and a small WASM-to-C translator. Moddil already has a
@@ -76,17 +76,17 @@ first-class WASM target (R1), so it can do the same: `bootstrap/moddil1.wasm` pl
 (Wasmtime, or a `wasm2c` path).
 
 **Trusting trust.** A checked-in binary raises Ken Thompson's "Reflections on Trusting Trust"
-problem, which is exactly the supply-chain concern of §2.16. Mitigations:
+problem, which is exactly the supply-chain concern of [overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security). Mitigations:
 - The WASM blob must be **reproducible**: anyone can rebuild it from source and get the same bytes.
 - Keep the **Rust stage 0 buildable** so the compiler can be built by two independent paths and the
   results compared (**diverse double-compiling**, David A. Wheeler).
 - Optional third path: a **C backend** (as Nim has and as Zig's CBE provides). It also helps port to
   unusual platforms.
 
-## 4. Backends
+## Backends
 
 ```
- source ─► parse ─► canonical AST (§2.18, §2.19)
+ source ─► parse ─► canonical AST (see overview: LLMs, diffs)
                        │
                        ▼
         names · types · effects · ownership · placement · capabilities
@@ -105,7 +105,7 @@ problem, which is exactly the supply-chain concern of §2.16. Mitigations:
 | Backend | Role | Own or reuse | Notes |
 |---|---|---|---|
 | **MIR + front end** | All Moddil-specific semantics | **Own** | This is where the language's value lies |
-| MIR interpreter | Compile-time evaluation, fast tests | **Own** | Needed anyway for §2.6 |
+| MIR interpreter | Compile-time evaluation, fast tests | **Own** | Needed anyway for [overview: Metaprogramming](overview.md#metaprogramming) |
 | **Cranelift** | Debug/dev builds | Reuse | Fast compile; x86-64, AArch64, RISC-V 64, s390x |
 | **LLVM** | Release builds; iOS/Android/embedded; mature optimisation | Reuse | Pin one version; use via the C API / `inkwell` |
 | **WASM** | Browser, Node, WASI, components, bootstrap | **Own** emitter (`wasm-encoder`) + Binaryen `wasm-opt` | WASM is simple; needs stack switching, JSPI glue, exnref, GC and Component Model earlier than LLVM provides them; binary size matters |
@@ -114,10 +114,10 @@ problem, which is exactly the supply-chain concern of §2.16. Mitigations:
 | Native backends of our own | Faster compiles, full control | **Not now** | Go and Zig did this at great cost; revisit only if Cranelift + LLVM block the build-time goals |
 
 **Linkers:** `lld` or `mold` for native code; `wasm-ld` or a Moddil linker for WASM modules and
-components. **Cross-compilation (§2.15):** LLVM plus bundled libc/sysroots, as Zig does
+components. **Cross-compilation ([overview: Cross-compilation and deployment](overview.md#cross-compilation-and-deployment)):** LLVM plus bundled libc/sysroots, as Zig does
 ([`targets.md`](targets.md)).
 
-## 5. Milestones
+## Milestones
 
 | Milestone | Contents |
 |---|---|
@@ -127,9 +127,9 @@ components. **Cross-compilation (§2.15):** LLVM plus bundled libc/sysroots, as 
 | **M3** | **Hashiverse CLI/native client** (example 4, phase A). LLVM release backend. **JSPI lowering for browsers and Node.** |
 | **M4** | Hashiverse **browser** client. Self-hosted stage 1; fixed-point CI; checked-in WASM bootstrap; double-compiling check. |
 
-## 6. WASM concurrency lowering
+## WASM concurrency lowering
 
-Moddil's concurrency semantics (structured tasks, the `suspend` effect, no function colouring, §2.8)
+Moddil's concurrency semantics (structured tasks, the `suspend` effect, no function colouring, [overview: Concurrency across CPUs](overview.md#concurrency-across-cpus))
 are target-independent. The backend chooses how to implement suspension:
 
 | # | Lowering | Where | Status |
@@ -146,7 +146,7 @@ Output formats: **core modules plus generated JS glue** for browsers and Node (w
 components natively); **components** (WIT interfaces, WASI 0.2/0.3) for Wasmtime and other component
 hosts.
 
-## 7. Wasmtime as the short-term reference runtime
+## Wasmtime as the short-term reference runtime
 
 **Why:**
 - It is the only mainstream runtime that implements **stack switching** today, so Moddil builds its
@@ -155,7 +155,7 @@ hosts.
   GC, exnref and memory64 at Tier 1. This makes it the natural home for WIT interop and capability
   mapping (R1).
 - It is Rust, so it embeds in stage 0. The compiler can use it to run compile-time evaluation, tests,
-  `moddil/runtime-sim`, and later the WASM bootstrap blob (§3).
+  `moddil/runtime-sim`, and later the WASM bootstrap blob ([Bootstrapping after self-hosting](#bootstrapping-after-self-hosting)).
 - It shares Cranelift with the native debug backend.
 
 **Caveats:**
@@ -165,7 +165,7 @@ hosts.
 - Wasmtime does not cover the browser. Examples 1 and 3, and the Hashiverse web client, wait for
   lowering 3 (JSPI) at M3/M4.
 
-## 8. WASM support: verified status (November 2026)
+## WASM support: verified status (November 2026)
 
 Sources: [WebAssembly proposals](https://github.com/WebAssembly/proposals),
 [webassembly.org features data](https://github.com/WebAssembly/website/blob/main/features.json),
@@ -193,13 +193,13 @@ probes on Node v24.16.0 (V8 13.6).
   `cont.new` ("Invalid opcode 0xe0"), so the prototype in this V8 version is incomplete.
 
 **Consequences:**
-- Do not assume stack switching in browsers or Node yet; JSPI is the browser baseline (§6).
+- Do not assume stack switching in browsers or Node yet; JSPI is the browser baseline ([WASM concurrency lowering](#wasm-concurrency-lowering)).
 - Memory64 is not available in Safari: `wasm32` is the browser default.
 - Browser threads need cross-origin isolation (COOP/COEP headers).
 - The Component Model is only Phase 1 and absent from browsers, so emit core modules + JS glue for the
   web.
 
-## 9. Risks and open questions
+## Risks and open questions
 
 - Stack switching may change shape before standardisation, or arrive late in Safari.
 - Should the MIR be designed so that MLIR can consume it later (GPU/tensor work)?

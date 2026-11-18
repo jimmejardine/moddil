@@ -1,9 +1,9 @@
 # Packages and Supply-Chain Security
 
-> **Status:** decided direction, open questions remain. Expands [`overview.md`](overview.md) §2.16.
+> **Status:** decided direction, open questions remain. Expands [`overview.md`: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security).
 > Manifest syntax, commands and file formats are **illustration only**.
 
-## 1. Summary
+## Summary
 
 | Rule | One line |
 |---|---|
@@ -17,9 +17,9 @@
 | **No code at fetch or build time** | A declarative manifest plus pure comptime; no install scripts and no `build.rs`. |
 | **The source is the release** | No tarballs or uploaded artefacts that could differ from the repository. |
 | **Audit trail in git** | Reviews of dependency versions are recorded in the consumer's repository, saying whether a human or an agent reviewed them. |
-| **Local sources** | Local git repositories, user-level source overrides, and `moddil.work` workspaces for live working copies; hashes still enforced for tagged versions (§4.13). |
+| **Local sources** | Local git repositories, user-level source overrides, and `moddil.work` workspaces for live working copies; hashes still enforced for tagged versions ([Local repositories and working copies](#local-repositories-and-working-copies)). |
 
-## 2. Problem
+## Problem
 
 Package managers made code reuse trivially easy, and in doing so made the dependency graph the
 largest attack surface in modern software:
@@ -36,7 +36,7 @@ largest attack surface in modern software:
 - **Typosquatting**, account takeover and maintainer burnout.
 - **Transitive dependency counts** in the hundreds or thousands that nobody reviews.
 
-## 3. State of the art
+## State of the art
 
 | System | What it does well | Limits |
 |---|---|---|
@@ -50,18 +50,18 @@ largest attack surface in modern software:
 | **pnpm `minimumReleaseAge`, uv `exclude-newer`** | A release cooldown: ignore versions newer than a cut-off | One fixed delay for everyone |
 | **Sigstore, SLSA, trusted publishing** | Signing, provenance, and publishing from CI without long-lived tokens | Need central services |
 
-## 4. Decisions
+## Decisions
 
-### 4.1 Hosting: plain git
+### Hosting: plain git
 
 - A mod is a directory in a git repository. **There is no central service**: no registry, mirror,
   checksum log or index. Nothing owns names, and nothing has to be up for a build to work.
 - Fetching a version is a shallow fetch of the tagged tree, not a clone of the history.
 - **Private mods** use ordinary git credentials; there's nothing extra to configure.
 - **Repositories that disappear** (deleted, renamed, force-pushed) are handled by vendoring
-  (§4.5). Teams that want a cache run an ordinary git mirror of their own.
+  ([Lockfile and vendoring](#lockfile-and-vendoring)). Teams that want a cache run an ordinary git mirror of their own.
 
-### 4.2 Names are URLs
+### Names are URLs
 
 - A mod's name is where it lives: `github.com/jimme/hashiverse-protocol`, `git.example.com/team/ledger`.
   Names are unambiguous, and no naming authority is needed.
@@ -71,7 +71,7 @@ largest attack surface in modern software:
 - In these specs, `moddil/…` is shorthand for the standard mods under the project's own domain
   (illustration only).
 
-### 4.3 Versions and majors
+### Versions and majors
 
 - **A version is a git tag**: `v1.4.2`, or `protocol/v1.4.2` for one of several mods in the same
   repository.
@@ -82,7 +82,7 @@ largest attack surface in modern software:
   version nobody asked for.
 
 **Why this doesn't make upgrading harder:**
-- **Within a major, upgrades are free.** Any mod can raise the minimum, and semver (checked, §4.4)
+- **Within a major, upgrades are free.** Any mod can raise the minimum, and semver (checked, [Semver is checked by the compiler](#semver-is-checked-by-the-compiler))
   guarantees nothing breaks.
 - **Across majors, migration is gradual.** `x` and `x/v2` are different mods, so library A can stay on
   v1 while library B moves to v2, and both build together. The ecosystem never has to upgrade in
@@ -92,10 +92,10 @@ largest attack surface in modern software:
   unchanged types, so they *are* the same type.
 - **Migration is mechanical.** Renames and moves are inferred from the two versions
   ([`semantic-vcs.md`](semantic-vcs.md)), and libraries can ship replacement rules
-  ([`evolution.md`](evolution.md) §3), so `moddil migrate` and `moddil fix` can upgrade consumers from
+  ([`evolution.md`: Decisions](evolution.md#decisions)), so `moddil migrate` and `moddil fix` can upgrade consumers from
   v1 to v2.
 
-### 4.4 Semver is checked by the compiler
+### Semver is checked by the compiler
 
 - `moddil publish` compares the new version's public API, effects, error sets and capabilities with
   the previous tag. It **refuses a breaking change without a major bump**, then creates a signed tag.
@@ -104,7 +104,7 @@ largest attack surface in modern software:
 - Within a major, the semver promise is therefore a guarantee rather than a hope, which is what makes
   one-version-per-major painless.
 
-### 4.5 Lockfile and vendoring
+### Lockfile and vendoring
 
 - The lockfile records, per mod: the version, the commit, a **content hash** of the normalised tree,
   and the key that signed the tag.
@@ -120,7 +120,7 @@ github.com/jimme/hashiverse-protocol  v1.4.2  commit 3f9c1e…  tree sha256:9b1d
 moddil.dev/net                        v0.3.0  commit a71b02…  tree sha256:44e0…  key ssh-ed25519:AAAD…
 ```
 
-### 4.6 Discovering new versions
+### Discovering new versions
 
 `moddil outdated` runs `git ls-remote --tags` for every dependency in parallel (one round trip each,
 with no clone) and reports:
@@ -132,7 +132,7 @@ github.com/acme/json                  v2.1.0 → v2.2.0   eligible   capability 
 github.com/acme/json                  v2 → v3 available (major)
 ```
 
-### 4.7 Randomised cooldown
+### Randomised cooldown
 
 - A new version is not eligible for `add` or `update` until it is **7–28 days** old.
 - The delay is `7 + hash(project, dependency, version) mod 22` days:
@@ -146,11 +146,11 @@ github.com/acme/json                  v2 → v3 available (major)
   are recorded in the manifest, so they show up in review.
 - **Transitive interaction**: if a new release of A requires B ≥ 1.5 and B 1.5 is still in its
   cooldown, `update` holds A back and says why.
-- How a release's age is established without a central service is open (§7).
+- How a release's age is established without a central service is open ([Open questions](#open-questions)).
 
-### 4.8 Capability-scoped dependencies
+### Capability-scoped dependencies
 
-Two layers, both enforced by the compiler (overview §2.1):
+Two layers, both enforced by the compiler ([overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea)):
 - **A ceiling per mod**: the manifest declares the capabilities the mod may use (`net`, `fs`, `env`,
   `spawn`, `time`, `ffi`, `unsafe`, …). A JSON parser that uses `net` fails to build.
 - **Authority flows as values** (object capabilities): a library only gets the capabilities its
@@ -159,7 +159,7 @@ Two layers, both enforced by the compiler (overview §2.1):
 - **Capability diffs on upgrade**: "`acme/json` 2.1 → 2.2 now requests `net`" is shown by `outdated`
   and `update`, and needs an explicit acceptance.
 - **FFI is a capability.** C code can do anything, so `ffi` and `unsafe` are declared, visible to
-  every consumer, and treated as high risk by audits ([`interop.md`](interop.md) §5).
+  every consumer, and treated as high risk by audits ([`interop.md`: The safety boundary](interop.md#the-safety-boundary)).
 
 ```toml
 # manifest (illustration only)
@@ -174,39 +174,38 @@ requires = []                     # pure: no net, fs, ffi
 "moddil.dev/text" = "0.4.1"
 ```
 
-### 4.9 No code at fetch or build time
+### No code at fetch or build time
 
 - Fetching only downloads and checks hashes. Nothing runs.
 - Build logic is the declarative manifest plus **pure, sandboxed comptime**
-  ([`comptime.md`](comptime.md) §10), which replaces proc macros and code generators.
+  ([`comptime.md`: Security and supply chain](comptime.md#security-and-supply-chain)), which replaces proc macros and code generators.
 - C dependencies are compiled by the bundled clang from declared inputs
-  ([`interop.md`](interop.md) §3), so there is no need for `build.rs`.
+  ([`interop.md`: The C ABI, both directions](interop.md#the-c-abi-both-directions)), so there is no need for `build.rs`.
 
-### 4.10 The source is the release
+### The source is the release
 
 - A version **is** its tagged tree. There are no tarballs or uploaded artefacts, so nothing can differ
   from the repository, which is exactly what `xz-utils` exploited.
 - Prebuilt artefacts come only from caches the user chooses to trust
-  ([`build-times.md`](build-times.md) §4.2). Builds are byte-identical on any host
-  ([`targets.md`](targets.md) §8), so anyone can rebuild a tagged version and compare.
+  ([`build-times.md`: Cached builds](build-times.md#cached-builds)). Builds are byte-identical on any host
+  ([`targets.md`: Byte-identical output on any host](targets.md#byte-identical-output-on-any-host)), so anyone can rebuild a tagged version and compare.
 
-### 4.11 Audit trail in git
+### Audit trail in git
 
 - **Reviews live in the consumer's repository** (cargo-vet style): "`acme/json` v2.2.0 reviewed for
   `safe-to-run`, by whom, and whether by a human or an agent".
 - **Delta reviews**: reviewing 2.1 → 2.2 is enough when 2.1 is already trusted. The semantic diff
-  focuses the review on API, effect and capability changes ([`agent-interface.md`](agent-interface.md)
-  §5.7).
+  focuses the review on API, effect and capability changes ([`agent-interface.md`: A review surface for humans](agent-interface.md#a-review-surface-for-humans)).
 - **Shared audits**: an organisation can import another's audit records from that organisation's git
   repository.
 - `moddil vet` fails CI when a locked version has no review that satisfies the project's policy.
 
-### 4.12 A broad standard library
+### A broad standard library
 
-A broad set of `moddil/` mods reduces trivial third-party dependencies ([`mods.md`](mods.md) §6). How
-broad is still open there (§8).
+A broad set of `moddil/` mods reduces trivial third-party dependencies ([`mods.md`: Initial standard-mod catalogue](mods.md#initial-standard-mod-catalogue)). How
+broad is still open there ([`mods.md`: Open questions](mods.md#open-questions)).
 
-### 4.13 Local repositories and working copies
+### Local repositories and working copies
 
 Git fetches from local paths and `file://` URLs as readily as from remote hosts. Moddil uses that
 for three different needs, without weakening hash pinning or the rule that names are URLs.
@@ -249,19 +248,19 @@ use = ["../hashiverse/protocol", "."]
 
 - The listed directories replace the corresponding mods with their working trees, uncommitted edits
   included. They rebuild incrementally and live-update in debug builds
-  ([`build-times.md`](build-times.md) §4.1).
+  ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds)).
 - **Visible and contained:** builds report "workspace overrides active"; the lockfile is not
   rewritten from them; `moddil publish` and `moddil vet` refuse while they are active; `moddil diff`
   lists them ([`semantic-vcs.md`](semantic-vcs.md)).
-- Capability ceilings (§4.8) still apply to overridden mods.
+- Capability ceilings ([Capability-scoped dependencies](#capability-scoped-dependencies)) still apply to overridden mods.
 
 **Monorepos:** several mods in one repository refer to each other by relative path inside that
-repository and act as one workspace; releases use path-prefixed tags (`protocol/v1.4.2`, §4.3).
+repository and act as one workspace; releases use path-prefixed tags (`protocol/v1.4.2`, [Versions and majors](#versions-and-majors)).
 
 **Security:** local paths and source overrides never bypass hash checking for tagged versions.
 Working-copy overrides are unpinned by nature, so they are for development only and always reported.
 
-## 5. Fit check against the reference examples
+## Fit check against the reference examples
 
 | Example | Uses |
 |---|---|
@@ -270,7 +269,7 @@ Working-copy overrides are unpinned by nature, so they are for development only 
 | [Web store](examples/03-web-store.md) | Capability diffs on upgrades of payment and auth mods; shared audits across teams |
 | [Hashiverse](examples/04-hashiverse.md) | `hashiverse/protocol` published from its own repository; no central service, in keeping with a decentralised project |
 
-## 6. Directions (not yet decided)
+## Directions (not yet decided)
 
 - **Tag signing**: SSH or GPG keys pinned in the lockfile (no service needed), or Sigstore keyless
   signing as an optional extra.
@@ -279,7 +278,7 @@ Working-copy overrides are unpinned by nature, so they are for development only 
 - **Rebuild attestations**: anyone can publish "I rebuilt v1.4.2 and got these bytes" as signed
   records in their own git repository.
 
-## 7. Open questions
+## Open questions
 
 - **Trustworthy release dates.** Tag and commit dates are set by the author, so they can be
   backdated to skip the cooldown. Recommended: measure age from the later of the tag date and when
@@ -289,7 +288,7 @@ Working-copy overrides are unpinned by nature, so they are for development only 
 - How are typosquatting and look-alike URLs caught without a naming authority?
 - Pre-1.0: is each `0.x` minor a major (Cargo), or does `v0` promise nothing (Go)?
 - Do standard mods ship with the toolchain, or are they fetched like any other mod
-  ([`mods.md`](mods.md) §8)?
+  ([`mods.md`: Open questions](mods.md#open-questions))?
 
 ## Prior art
 

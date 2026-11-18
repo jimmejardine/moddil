@@ -1,9 +1,9 @@
 # Compile-time Evaluation (instead of Macros)
 
-> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.6.
+> **Status:** decided direction, details open. Expands [`overview.md`: Metaprogramming](overview.md#metaprogramming).
 > Snippets are **illustration only**; no syntax is committed.
 
-## 1. Summary
+## Summary
 
 | Rule | One line |
 |---|---|
@@ -15,12 +15,12 @@
 | **Tagged string literals for DSLs** | `sql"…"`, `re"…"` and `fmt"…"` are parsed and checked at compile time and produce typed code. There is no new syntax. |
 | **Everything is visible** | Every expansion can be printed as canonical source and appears in semantic diffs. |
 
-## 2. Background
+## Background
 
 **Problem.** Macros are powerful but break tooling, readability, caching and LLM understanding
 (C preprocessor, C++ templates, Rust proc macros). Proc macros also run arbitrary code at build time.
 
-### 2.1 How Zig does it
+### How Zig does it
 
 Zig has no macro language. It has one idea: ordinary Zig code can be evaluated by the compiler.
 
@@ -51,13 +51,13 @@ Zig has no macro language. It has one idea: ordinary Zig code can be evaluated b
 **Gaps that matter for Moddil:**
 - **Duck-typed generics.** `anytype` and comptime `type` parameters have no declared bounds. As with
   C++ templates, errors appear at instantiation, deep inside library code, and a signature does not
-  say what it requires. That conflicts with local reasoning (overview §2.18) and with debug-mode
-  dictionary passing (§2.14).
+  say what it requires. That conflicts with local reasoning ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)) and with debug-mode
+  dictionary passing ([overview: Build times](overview.md#build-times)).
 - **Lazy analysis.** Code that is never instantiated is never checked.
 - **No generated declarations.** `@Type` cannot create methods or attach an implementation to an
   existing type, so there is no `derive`. Consumers reflect at the call site instead.
 
-### 2.2 How Rust does it
+### How Rust does it
 
 | | `macro_rules!` | Proc macros (derive, attribute, function-like) |
 |---|---|---|
@@ -67,31 +67,31 @@ Zig has no macro language. It has one idea: ordinary Zig code can be evaluated b
 
 `sqlx::query!` is the extreme case: it connects to a live database during compilation.
 
-### 2.3 Others
+### Others
 
 C++ `constexpr` and C++26 static reflection; Swift's sandboxed, typed macros; Lisp/Racket
 macros.
 
-## 3. Evaluation model
+## Evaluation model
 
 - Comptime code is **ordinary Moddil**: the same syntax, types, ownership rules and standard mods.
-- It must have an **empty effect set**, which the effect system checks (overview §2.1).
+- It must have an **empty effect set**, which the effect system checks ([overview: Effects and capabilities as a unifying idea](overview.md#effects-and-capabilities-as-a-unifying-idea)).
   - Allocation within the evaluator is allowed.
   - `fail` becomes a compile error.
   - Every other effect is rejected.
 - **Deterministic**: the same inputs always give the same output.
 - **Fuel-limited**: a default step budget, raisable per call site with a visible annotation.
 - **Errors**: `compile_error(msg, span)` reports a diagnostic at a source location chosen by the
-  comptime code, such as a position inside a literal. Diagnostics are structured, for agents (§2.18).
-- **Sandboxed**: the evaluator has no ambient authority (R1 makes WASM the natural sandbox; see §13).
+  comptime code, such as a position inside a literal. Diagnostics are structured, for agents ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)).
+- **Sandboxed**: the evaluator has no ambient authority (R1 makes WASM the natural sandbox; see [Open questions](#open-questions)).
 - **Cached** by a hash of the function, its arguments and the reflected inputs it read. This makes it
-  fit the query-based, content-addressed compiler of §2.14.
+  fit the query-based, content-addressed compiler of [overview: Build times](overview.md#build-times).
 - **External inputs** (schemas, IDL files, protocol definitions) come only through `embed("path")`.
   - Embedded files are declared in the mod manifest.
   - They are hashed into the cache key.
-  - They are visible to audits (§2.16).
+  - They are visible to audits ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)).
 
-## 4. Comptime parameters and values
+## Comptime parameters and values
 
 ```rust
 fn ring<const N: usize, T>() -> RingBuffer<T, N>          // size known at compile time
@@ -106,7 +106,7 @@ Comptime values cover sizes, constants, lookup tables, format strings and specia
 value can be anything with a defined compile-time representation. Borrows of compile-time data
 become static data in the binary.
 
-## 5. Generics are bounded
+## Generics are bounded
 
 ```rust
 fn max<T: Ord>(a: &T, b: &T) -> &T                         // the bound is part of the signature
@@ -119,10 +119,10 @@ fn max<T: Ord>(a: &T, b: &T) -> &T                         // the bound is part 
 - This preserves:
   - local reasoning: a signature tells you what is required;
   - debug builds with dictionary passing and release builds with specialisation, with identical
-    semantics (§2.14);
+    semantics ([overview: Build times](overview.md#build-times));
   - errors that point at the call site, not into library internals.
 
-## 6. Static reflection
+## Static reflection
 
 `reflect(T)` returns a read-only description of `T`:
 - **Structs**: fields (name, type, annotations, visibility), in declaration order.
@@ -134,7 +134,7 @@ fn max<T: Ord>(a: &T, b: &T) -> &T                         // the bound is part 
 Visibility is respected: comptime code in one mod cannot read the private fields of another mod's
 type unless that type opts in (e.g. by deriving in its own mod).
 
-## 7. Generation: typed impls at the annotation site
+## Generation: typed impls at the annotation site
 
 ```rust
 #[derive(serde::Serialize, serde::Deserialize, Eq, Hash)]
@@ -155,11 +155,11 @@ struct Order {
 - Comptime functions can also return **types** (Zig-style, e.g. a struct-of-arrays layout computed
   from a struct), constants and specialised functions.
 - **Visible expansion:**
-  - `moddil explain Order` prints the generated impls as canonical source (§2.18).
-  - Expansions are part of the semantic diff (§2.19), so a derive version bump that changes generated
+  - `moddil explain Order` prints the generated impls as canonical source ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)).
+  - Expansions are part of the semantic diff ([overview: Diffs, code review and version control](overview.md#diffs-code-review-and-version-control)), so a derive version bump that changes generated
     code shows up in review.
 
-## 8. Tagged string literals (embedded DSLs)
+## Tagged string literals (embedded DSLs)
 
 A literal with a prefix, `prefix"…"`, calls the comptime function `prefix` in scope. The function
 receives the literal text plus any interpolated expressions as **typed holes**, and returns typed
@@ -182,7 +182,7 @@ let open_orders = sql"""
 - This replaces most function-like macros (`format!`, `regex!`, `sqlx::query!`, `html!`) without
   adding syntax.
 
-## 9. Interaction with ownership, effects and capabilities
+## Interaction with ownership, effects and capabilities
 
 Generated code is ordinary code once expanded:
 - it is checked for borrows, linearity, effects and capabilities like anything hand-written;
@@ -190,15 +190,15 @@ Generated code is ordinary code once expanded:
   must declare `net`;
 - generated effects and capabilities appear in signatures and PR summaries like any others.
 
-## 10. Security and supply chain
+## Security and supply chain
 
 - No code runs at build time with ambient authority. Comptime is pure and sandboxed, unlike
-  `build.rs`, proc macros or `postinstall` (§2.16).
+  `build.rs`, proc macros or `postinstall` ([overview: Package management and supply-chain security](overview.md#package-management-and-supply-chain-security)).
 - External inputs are declared (`embed`), hashed and auditable.
 - A malicious derive can still generate bad *code*. That code is visible in `explain` and in diffs,
   and is limited to the capabilities the consuming mod declares.
 
-## 11. What we give up
+## What we give up
 
 | Rust feature | Moddil answer |
 |---|---|
@@ -208,18 +208,18 @@ Generated code is ordinary code once expanded:
 | Generating items at arbitrary places, or names chosen by the macro | Not possible: generation only at the annotation site, through the typed API |
 | Token-level tricks | Not possible, by design |
 
-## 12. Fit check against the reference examples
+## Fit check against the reference examples
 
 | Example | Uses |
 |---|---|
 | [Multiplayer game](examples/01-multiplayer-game.md) | `#[derive]` for network snapshot codecs and delta encoding; comptime struct-of-arrays layouts for ECS components |
-| [HFT](examples/02-hft-platform.md) | Exchange codecs (SBE/FIX) generated from embedded schemas; comptime lookup tables; zero-copy accessor views (see [`memory-and-resources.md`](memory-and-resources.md) §6) |
+| [HFT](examples/02-hft-platform.md) | Exchange codecs (SBE/FIX) generated from embedded schemas; comptime lookup tables; zero-copy accessor views (see [`memory-and-resources.md`: Zero-copy I/O](memory-and-resources.md#zero-copy-io)) |
 | [Web store](examples/03-web-store.md) | `sql"…"` checked against the schema; `#[derive]` for API contracts and validation; `html"…"` templates for the web client |
 | [Hashiverse](examples/04-hashiverse.md) | Wire-protocol codecs that must match existing Rust servers; comptime crypto constant tables; `fmt` for logs |
 
 None of them needed token-level macros.
 
-## 13. Open questions
+## Open questions
 
 - **Where does comptime run?** Options:
   - an interpreter inside the compiler (Zig; fast start, slow for heavy work);
@@ -228,13 +228,13 @@ None of them needed token-level macros.
   - a hybrid of the two.
 - **Allocation:** what allocator does comptime use, and how does comptime data become static data in
   the binary?
-- **Budget:** what is the default fuel and the per-mod compile-time budget (§2.14)?
+- **Budget:** what is the default fuel and the per-mod compile-time budget ([overview: Build times](overview.md#build-times))?
 - **Ordering:** can one derive depend on another's output (e.g. `Hash` relying on `Eq`), and how are
   cycles detected?
 - **Reflection and privacy:** exactly which private details may a derive in another mod see?
 - **IDE responsiveness:** comptime must be incremental enough to run on every keystroke for agents
-  (§2.18).
-- **Construction API:** how expressive is it, and does it stay stable across editions (§2.20)?
+  ([overview: LLMs as first-class programmers](overview.md#llms-as-first-class-programmers)).
+- **Construction API:** how expressive is it, and does it stay stable across editions ([overview: Language evolution](overview.md#language-evolution))?
 
 ## Prior art
 
