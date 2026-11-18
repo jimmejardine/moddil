@@ -20,9 +20,9 @@ illustration only and do not commit to any syntax.
 
 ## Start here
 
-Read [`specs/rationale.md`](specs/rationale.md) first. Its **index** at the top lists every problem
-area with a status (🟡 started, 🟠 questions, 🟢 complete), and links to a short summary and to the
-subdocument that holds the detail. Then read the Thesis (§1) and the firm requirements (§5).
+Read [`specs/overview.md`](specs/overview.md) first. Its **index** at the top lists every problem
+area with a status (⚪ not started, 🔴 superficial, 🟠 major questions, 🟡 minor questions,
+🟢 complete), and links to a short summary and to the subdocument that holds the detail. Then read the Thesis (§1) and the firm requirements (§5).
 
 ## Notes for LLMs and agents
 
