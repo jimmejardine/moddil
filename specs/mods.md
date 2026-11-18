@@ -162,11 +162,10 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 
 ## Open questions
 
-- **How many batteries?** Go ships a broad standard library (HTTP, crypto, JSON); Rust ships a minimal
-  one. With strong supply-chain controls ([Package management and supply-chain security](packages-and-supply-chain.md)), a broad `moddil/` set reduces risky third-party
-  dependencies. Which way should Moddil lean?
-- **Distribution**: should standard mods ship with the toolchain, or be fetched and pinned like
-  any other mod?
+- ~~**How many batteries?**~~ **Resolved:** broad, as many separately versioned `moddil/*` mods
+  ([`stdlib.md`: Batteries and tiers](stdlib.md#batteries-and-tiers)).
+- ~~**Distribution**~~ **Resolved:** `moddil/core-*` ships with the compiler; every other standard
+  mod is fetched and pinned like any dependency ([`stdlib.md`: Distribution and versioning](stdlib.md#distribution-and-versioning)).
 - **Naming**: is "mod" too easily confused with Rust's `mod` (a module)? The distinction between mod
   and module needs to stay clear in docs and tooling.
 - ~~**Coherence**: how are trait/instance overlap rules (Rust's orphan rule) handled across mods?~~

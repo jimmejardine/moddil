@@ -206,8 +206,9 @@ requires = []                     # pure: no net, fs, ffi
 
 ### A broad standard library
 
-A broad set of `moddil/` mods reduces trivial third-party dependencies ([`mods.md`: Initial standard-mod catalogue](mods.md#initial-standard-mod-catalogue)). How
-broad is still open there ([`mods.md`: Open questions](mods.md#open-questions)).
+A broad set of `moddil/` mods reduces trivial third-party dependencies ([`mods.md`: Initial standard-mod catalogue](mods.md#initial-standard-mod-catalogue)).
+**Decided:** broad, as separately versioned mods that are pinned like any other dependency
+([`stdlib.md`: Batteries and tiers](stdlib.md#batteries-and-tiers)).
 
 ### Local repositories and working copies
 

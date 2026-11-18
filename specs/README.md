@@ -52,7 +52,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Observability and debuggability](observability.md)                | 🟡 minor questions | [`observability.md`](observability.md)                                     |
 | **Library and ecosystem**                                          |                    |                                                                            |
 | [Mods and the standard catalogue](mods.md)                         | 🟠 major questions | [`mods.md`](mods.md) (R2)                                                  |
-| [Standard library shape](stdlib.md)                                | ⚪ not started     | [`stdlib.md`](stdlib.md)                                                   |
+| [Standard library shape](stdlib.md)                                | 🟡 minor questions | [`stdlib.md`](stdlib.md)                                                   |
 | [Packages and supply-chain security](packages-and-supply-chain.md) | 🟡 minor questions | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)             |
 | [Interoperability with C and Rust](interop.md)                     | 🟡 minor questions | [`interop.md`](interop.md)                                                 |
 | [Data interchange and persistence](data.md)                        | ⚪ not started     | [`data.md`](data.md)                                                       |
