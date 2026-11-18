@@ -25,6 +25,7 @@ here with its reason (§3). A Rust programmer should be able to read Moddil code
 | Labelled exits | `'label: { … break 'label value … }` | As in Rust |
 | Compile-time evaluation | `const fn`, `const { … }` blocks, `<const N: usize>` | Rust's spelling for the comptime concept ([`comptime.md`](comptime.md)) |
 | Errors | `?`, `try { … }`, `Result`, `Option` | As in Rust, with `try … catch` sugar ([`error-handling.md`](error-handling.md) §4) |
+| Optional values | `Option<T>` only (decided); no `T?` sugar; `x.unwrap_or(d)` rather than `x ?? d` | As in Rust; one canonical spelling, and no clash with the `?` operator |
 | Prefix literals | `sql"…"`, `re"…"`, `fmt"…"` | Rust already has `b"…"` and `r"…"`; Moddil lets mods define prefixes ([`comptime.md`](comptime.md) §8) |
 | Never type | `-> !` | As in Rust |
 | Dynamic dispatch | `dyn Trait` | As in Rust |
@@ -37,11 +38,11 @@ here with its reason (§3). A Rust programmer should be able to read Moddil code
 | Effect variables | `fn map<T, U, E>(xs: &[T], f: impl FnMut(&T) -> U with E) -> Vec<U> with E` | Effect polymorphism ([`error-handling.md`](error-handling.md) §3.2) |
 | Handler blocks | `with time = sim.clock(node), net = sim.net.endpoint(node) { … }` | Installing effect handlers ([`determinism.md`](determinism.md) §4); the same keyword as in signatures |
 | **Named and default arguments** (decided) | `urls.parallel_map(\|u\| fetch(u)?, limit: 32)`; `fn connect(host: &str, port: u16 = 443)` | Readability at call sites (Swift, Kotlin, Python). Positional arguments come first, then named ones. |
-| Optional chaining | `users.get(id)?.profile?.email` | From Swift; fits `?` ([`null-safety.md`](null-safety.md)) |
-| Optional types | `T?` as sugar for `Option<T>` | Proposed in [`null-safety.md`](null-safety.md) (open there) |
+| Expression-level optional chaining | `try { users.get(id)?.profile?.email }` | `?` always propagates, as in Rust (inside a function returning `Option`, the chain works as is). A `try` block keeps the chain inside one expression, giving Swift-style chaining without a new operator ([`null-safety.md`](null-safety.md)). |
 | Units of measure | `100<cm>`, `f64<m/s>` | Type-level units ([`units.md`](units.md)) |
-| Refinements | `type Port = u16 where self >= 1024` | Validated newtypes ([`correctness.md`](correctness.md) §3.2). *Open:* unify with `null-safety.md`'s `u16 in 1..` |
-| Contracts | `requires …`, `ensures …`, `invariant …` clauses | [`correctness.md`](correctness.md) §3.1 |
+| Refinements (decided: one form) | `type Port = u16 where self >= 1024`; ranges as `type Port = u16 where self in 1..` | Validated newtypes ([`correctness.md`](correctness.md) §3.2). The compiler recognises range predicates and uses excluded values as layout niches, so `Option<Port>` stays 2 bytes ([`null-safety.md`](null-safety.md)). |
+| Contracts (decided: clauses) | `requires …`, `ensures …`, `invariant …` after the signature, positioned like `where` | First-class syntax for docs, tooling and verification ([`correctness.md`](correctness.md) §3.1) |
+| Anonymous records (decided) | `fn bounds(xs: &[f64]) -> { min: f64, max: f64 }` | §4 |
 | Linear and view types | `linear struct Txn { … }`, `view RingIter<T> { … }` | [`memory-and-resources.md`](memory-and-resources.md) §4, §7 |
 | Matrix multiply | `a @ b` | Tensor code ([`accelerators.md`](accelerators.md)) |
 | Structured `select` | `select { conn = listener.accept() => …, _ = stop_requested() => break, }` | A language construct, not a macro ([`concurrency.md`](concurrency.md)) |
@@ -75,7 +76,18 @@ let y = add(1.5, 2.25);   // f64
   annotation.
 - Inferred bounds are still bounds, checked once ([`comptime.md`](comptime.md) §5).
 - **Structural typing** (TypeScript's object shapes) is not the default: Moddil types are nominal,
-  with traits. *Open:* anonymous records for local data shaping.
+  with traits.
+- **Anonymous records (decided):** `{ min: f64, max: f64 }` is a type that needs no declaration.
+  Two records with the same field names and types are the same type. There is **no width
+  subtyping**: a record with extra fields is not accepted where fewer are expected, so records
+  behave like tuples with named fields.
+  ```rust
+  fn bounds(xs: &[f64]) -> { min: f64, max: f64 } {
+      { min: xs.min(), max: xs.max() }
+  }
+  let b = bounds(&prices);
+  println(fmt"{b.min}..{b.max}");
+  ```
 
 ## 5. Named and default arguments
 
@@ -84,16 +96,21 @@ let y = add(1.5, 2.25);   // f64
 - Positional arguments come first, named arguments after, in any order.
 - Defaults are part of the public interface, under semver and in semantic diffs
   ([`semantic-vcs.md`](semantic-vcs.md)).
-- *Open:* whether a parameter can be declared name-only (as with Swift labels), and how defaults
-  interact with trait methods.
+- **Name-only parameters (decided, opt-in):** parameters after a `*` must be passed by name, as in
+  Python. A lint suggests this for `bool` parameters, so `resize(w, h, true)` cannot happen:
+  ```rust
+  fn resize(w: u32, h: u32, *, keep_aspect: bool = false) { … }
+  resize(800, 600, keep_aspect: true);
+  ```
+- *Open:* how defaults interact with trait methods and their implementations.
 
 ## 6. Open questions
 
-1. Name-only parameters (§5).
-2. Anonymous structural records (§4).
-3. One refinement syntax (`where self …` vs `in 1..`).
-4. Contracts as attributes (`#[requires(…)]`) or as clauses (current).
-5. `T?` sugar vs plain `Option<T>`.
+1. Default arguments on trait methods and their implementations (§5).
+
+Decided in this round: name-only parameters (opt-in, §5); anonymous records without width subtyping
+(§4); one refinement form, `where` (§3); contracts as clauses (§3); `Option<T>` only, with
+expression-level chaining through `try { }` (§2, §3).
 
 ## Prior art
 

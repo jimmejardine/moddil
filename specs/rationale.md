@@ -225,8 +225,9 @@ not (unchosen zero values, unchecked ranges, mixed-up IDs, objects used in the w
 
 Decided:
 
-- **No null in safe code.** Absence is `Option<T>`, an ordinary sum type in a mod, with Swift-style
-  sugar: `T?`, `if let`, `let … else`, `a?.b`, `x ?? d`. There is no implicit unwrap.
+- **No null in safe code.** Absence is `Option<T>` (no `T?` sugar), an ordinary sum type in a mod,
+  with `if let`, `let … else`, `?` (propagates, as in Rust), `try { a?.b?.c }` for chaining within an
+  expression, and `unwrap_or`. There is no implicit unwrap.
 - **Absence is data; failure is an effect**, so `Option` is the only "maybe" type in everyday code.
 - **Guaranteed niches**: `Option<&T>`, `Option<Rc<T>>` and range-typed integers cost no extra space.
 - **Definite initialisation**: no zero values and no uninitialised reads.
@@ -235,13 +236,10 @@ Decided:
 
 **Open questions** (same list as [`null-safety.md`](null-safety.md) §4)
 
-- **What does postfix `?` mean?** In Rust it propagates `None`/`Err`; in Swift it is chaining.
-  - If `fail` is an effect, failure may propagate implicitly. The `call()?` in the snippets of
-    [`memory-and-resources.md`](memory-and-resources.md) would then disappear.
-  - Separately: should `opt?` inside a function returning `T?` propagate `None`?
-  - Resolve together with §2.3.
+- ~~What does postfix `?` mean?~~ **Resolved:** it propagates, as in Rust; chaining within an
+  expression is `try { a?.b?.c }` ([`null-safety.md`](null-safety.md)).
 - How much refinement checking is static vs dynamic, and what does it cost in compile time (§2.14)?
-- Layout of nested options (`T??`): how far should niche packing go?
+- Layout of nested options (`Option<Option<T>>`): how far should niche packing go?
 
 ---
 

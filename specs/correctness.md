@@ -46,7 +46,8 @@ struct OrderBook {
 ```
 
 - `requires`, `ensures`, `invariant`, and `old(expr)` in postconditions (Eiffel, Ada 2012, SPARK,
-  Dafny).
+  Dafny). **Decided:** contracts are clauses after the signature, not attributes
+  ([`syntax.md`](syntax.md)).
 - **Contract expressions must be pure**, checked by the effect system.
 - Contracts are part of the **mod interface**: shown by the language server, included in generated
   docs, subject to semver, and visible in semantic diffs (rationale §2.19). A trait impl may weaken
@@ -63,6 +64,8 @@ let p = Port::new(raw)?;      // returns Result: invalid input is an error (clas
 let q: Port = 8080;           // literal checked at compile time
 ```
 
+- **Decided:** `where` is the only refinement form; ranges are written `where self in 1..`
+  ([`syntax.md`](syntax.md)).
 - "Parse, don't validate": once you hold a `Port`, the invariant holds, and it is never checked again.
 - Construction from untrusted input returns a `Result`, so R3 forces callers to handle bad input.
 - These are the natural boundary between *errors* (bad input) and *bugs* (a broken contract inside

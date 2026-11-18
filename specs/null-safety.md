@@ -36,10 +36,14 @@ plus compiler-checked narrowing*, in one of two styles:
 
 - **No null in safe code.** Absence is `Option<T>` = `None | Some(T)`. It is an ordinary sum type in a
   core-adjacent mod (R2); the compiler adds only sugar and layout guarantees.
-- **Swift-style sugar:** `T?` means `Option<T>`, and nests (`T??` ≠ `T?`). It comes with:
+- **`Option<T>` only, as in Rust** (decided; [`syntax.md`](syntax.md)). There is no `T?` sugar.
+  Nesting is explicit: `Option<Option<T>>`. It comes with:
   - exhaustive `match`, `if let` and `let … else`;
-  - optional chaining `a?.b`;
-  - defaulting `x ?? d`.
+  - `?`, which always **propagates** `None`, as in Rust. Inside a function returning `Option`,
+    `a?.b?.c` works directly;
+  - **expression-level chaining** through a `try` block: `try { a?.b?.c }` yields an `Option`
+    without leaving the function (Swift's chaining, with no new operator);
+  - defaulting with `x.unwrap_or(d)` and `x.unwrap_or_else(|| …)`.
 
   There is no implicit unwrap. `unwrap()` is an explicit, visible panic point.
 - **Absence is data; failure is an effect.** `fail(E)` (rationale §2.3) plays the role of Rust's `Result`,
@@ -58,7 +62,8 @@ plus compiler-checked narrowing*, in one of two styles:
   ([`memory-and-resources.md`](memory-and-resources.md) §2).
 - **Invalid states beyond null:**
   - **Cheap newtypes:** zero-cost and distinct, with no implicit conversion (`UserId` ≠ `OrderId`).
-  - **Pattern/range types** (`u32 in 1..`): values that are excluded become free niches for `Option`.
+  - **Range refinements** (`u32 where self in 1..`): values that are excluded become free niches for
+    `Option`. This is the same `where` form as other refinements (decided).
   - **Refinement types** (`Int where 0 <= self < 100`): checked statically where provable,
     dynamically otherwise. They share machinery with contracts (rationale §2.7).
   - **Typestate through linear types** (rationale §2.2): states are types, and transitions consume the old
@@ -67,13 +72,18 @@ plus compiler-checked narrowing*, in one of two styles:
 Illustration only:
 ```rust
 struct UserId(u64);
-type Port = u16 in 1..;                           // 0 excluded: Port? is still 2 bytes
+type Port = u16 where self in 1..;                // 0 excluded: Option<Port> is still 2 bytes
 
-fn email_of(users: &Map<UserId, User>, id: UserId) -> &str? {
-    users.get(id)?.profile?.email                 // optional chaining: absence flows through
+fn email_of(users: &Map<UserId, User>, id: UserId) -> Option<&str> {
+    users.get(id)?.profile?.email                 // `?` propagates None out of email_of
 }
 
-fn connect(host: &str, port: Port?) with net, fail(NetError) {
+fn greeting(users: &Map<UserId, User>, id: UserId) -> String {
+    let email = try { users.get(id)?.profile?.email };   // chaining within one expression
+    fmt"Hello {email.unwrap_or("guest")}"
+}
+
+fn connect(host: &str, port: Option<Port>) with net, fail(NetError) {
     let Some(addr) = resolve(host) else { return };   // early exit on absence
     let Some(p) = port else { fail(NetError::NoPort) };
     …
@@ -82,13 +92,11 @@ fn connect(host: &str, port: Port?) with net, fail(NetError) {
 
 ## 4. Open questions
 
-- **What does postfix `?` mean?** In Rust it propagates `None`/`Err`; in Swift it is chaining.
-  - If `fail` is an effect, failure may propagate implicitly. The `call()?` in the snippets of
-    [`memory-and-resources.md`](memory-and-resources.md) would then disappear.
-  - Separately: should `opt?` inside a function returning `T?` propagate `None`?
-  - Resolve together with rationale §2.3.
+- ~~What does postfix `?` mean?~~ **Resolved:** it propagates, as in Rust (`None`, or a failure
+  through the `fail` effect, [`error-handling.md`](error-handling.md)). Swift-style chaining within
+  an expression is `try { a?.b?.c }`.
 - How much refinement checking is static vs dynamic, and what does it cost in compile time (rationale §2.14)?
-- Layout of nested options (`T??`): how far should niche packing go?
+- Layout of nested options (`Option<Option<T>>`): how far should niche packing go?
 
 ## Prior art
 

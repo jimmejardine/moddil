@@ -26,7 +26,13 @@
 - **Functional updates in place:** compile-time reference-count elision with reuse (Perceus style)
   turns "build a new value" into an in-place update when the old one is no longer used.
 - **Guaranteed tail calls** with `become f(x)` (Rust's accepted design; WASM tail calls are standard).
-- Not included: laziness by default, and higher-kinded types (as in Rust). *Open.*
+- **Laziness (decided):** evaluation is eager. Iterators are lazy, as in Rust, and a `Lazy<T>`
+  library type computes a value once, on first use.
+- **Higher-kinded types (decided): not now.** Generic associated types (GATs), as in Rust, cover
+  the concrete needs (lending iterators, collection families). HKTs are revisited later; adding
+  them is backwards compatible. Rationale: they clash with ownership and lifetimes, monadic
+  `bind` breaks `?`/`return`/`break` inside closures, inference gets harder, and Moddil's effects
+  already provide what monads give Haskell (errors, state, async).
 
 ## 3. Object-oriented programming
 
@@ -77,23 +83,21 @@ What replaces it:
 |---|---|
 | Argument labels and default parameter values | **Adopted:** named and default arguments ([`syntax.md`](syntax.md) §5) |
 | Optional chaining `a?.b?.c` | **Adopted** ([`syntax.md`](syntax.md) §3) |
-| Computed properties | *Open*; getter methods cover most uses |
+| Computed properties | **Not adopted (decided):** methods only, so a call is visibly a call and cost and effects are never hidden behind a field-like read |
 | Property observers (`willSet`, `didSet`) | Not adopted: hidden control flow |
 | Property wrappers, `@dynamicMemberLookup` | Not adopted: compile-time derives cover the useful cases, and dynamic lookup harms local reasoning |
 | Result builders (the SwiftUI DSL style) | Covered by compile-time code plus closures; relevant to the UI question in [`examples/03-web-store.md`](examples/03-web-store.md) |
-| Key paths (`\Person.name`) | *Open:* possible through static reflection |
-| **Library evolution: a stable binary ABI** for frameworks | **A real gap.** Like Rust, Moddil has no stable ABI beyond C. *Open*, linked to prebuilt registry artefacts ([`build-times.md`](build-times.md) §4.2) |
+| Key paths (`\Person.name`) | **Later (decided):** field-path values through static reflection, when UI binding and typed query builders need them; closures cover the rest |
+| **Library evolution: a stable binary ABI** for frameworks | **Decided:** the C ABI plus **WASM components (WIT)** are Moddil's stable binary boundaries, for plugins and binary SDKs ([`interop.md`](interop.md)). A Swift-style resilience mode (fields and methods reached through indirection so binaries survive upgrades) is deferred. |
 | Classes with shared mutable references (ARC) | Deliberately not: `Rc` contents are immutable; shared mutation goes through sync cells |
 | Objective-C interop; Playgrounds | Objective-C through C ([`interop.md`](interop.md)); REPL or notebook mode open ([`toolchain.md`](toolchain.md)) |
 | Actors, `async`/`await`, typed throws, `some`/`any`, enums with payloads, `defer`, `Codable`, macros | Already covered: tasks and actors, effects, error handling, `impl`/`dyn`, ADTs, RAII and `errdefer`, derives, compile-time code |
 
 ## 6. Open questions
 
-1. Higher-kinded types.
-2. Laziness (opt-in lazy values or streams).
-3. Computed properties.
-4. Key paths.
-5. Library evolution and a stable ABI.
+1. Revisit higher-kinded types once GAT-based libraries show what is missing.
+2. A Swift-style resilience mode for native binary libraries.
+3. The key-path API on top of static reflection.
 
 ## Prior art
 
