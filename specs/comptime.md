@@ -17,6 +17,9 @@
 
 ## 2. Background
 
+**Problem.** Macros are powerful but break tooling, readability, caching and LLM understanding
+(C preprocessor, C++ templates, Rust proc macros). Proc macros also run arbitrary code at build time.
+
 ### 2.1 How Zig does it
 
 Zig has no macro language. It has one idea: ordinary Zig code can be evaluated by the compiler.
@@ -63,6 +66,11 @@ Zig has no macro language. It has one idea: ordinary Zig code can be evaluated b
 | Costs | An opaque mini-language; partial hygiene | Opaque to IDEs, reviewers and LLMs; slow builds (`syn`, poor caching); **arbitrary code execution at build time**; every macro is new syntax |
 
 `sqlx::query!` is the extreme case: it connects to a live database during compilation.
+
+### 2.3 Others
+
+C++ `constexpr` and C++26 static reflection; Swift's sandboxed, typed macros; Lisp/Racket
+macros.
 
 ## 3. Evaluation model
 

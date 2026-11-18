@@ -432,13 +432,54 @@ No case required first-class references with explicit lifetimes.
 ## 10. Open questions
 
 - Exact syntax for parameter modes, views and `from`.
-- Allocators: how does the allocator capability (rationale §2.2, Zig-style) interact with `.to_rc()`
+- Allocators: how does the allocator capability (Zig-style) interact with `.to_rc()`
   and arenas? Does an `Rc` remember its allocator? (Proposed answer in
   [`freestanding.md`](freestanding.md) §4.)
 - Should `Weak` be core or a mod? (It needs header support, so probably core.)
 - Linear values on error paths: what is the least noisy explicit handling?
 - Can the borrow check give diagnostics good enough for LLM agents (rationale §2.18) — e.g.
   machine-applicable "insert `.to_rc()` here" fixes?
+- Is there still a place for an optional per-task/per-actor collector, or does this model make it
+  unnecessary?
+
+## Background
+
+The problem and the state of the art that led to this design. (Moved from the rationale.)
+
+**Problem.** Every approach trades something away:
+
+| Approach                                         | Gives you                        | Costs you                                                                      |
+| ------------------------------------------------ | -------------------------------- | ------------------------------------------------------------------------------ |
+| Manual (C)                                       | Total control                    | Use-after-free, leaks, double frees: most CVEs                                 |
+| Tracing GC (Java, Go, C#)                        | Simplicity, safety               | Pauses, memory overhead, non-deterministic destruction                         |
+| RAII (C++)                                       | Deterministic, zero-cost cleanup | Only if followed consistently. Nothing enforces it; dangling references remain |
+| Reference counting (Swift, Python, `shared_ptr`) | Deterministic, incremental       | Atomic RC is slow under contention; cycles leak; extra traffic on every copy   |
+| Ownership/borrowing (Rust)                       | Safe, zero-cost, deterministic   | Learning curve; some data structures (graphs, doubly-linked lists) are awkward |
+
+**State of the art.**
+- **Rust**: the reference point for safe, GC-free memory management.
+- **Modern GCs** (ZGC, Shenandoah, Go's concurrent GC) have made pauses sub-millisecond for many
+  workloads. "GC = random delays" is less true than it was, but throughput and memory overhead remain.
+- **Perceus** (Koka, Lean 4): compile-time reference counting with reuse analysis. Most RC operations
+  are removed, and functional code can update in place.
+- **Lobster**: compile-time RC elision with ownership inference.
+- **Vale**: generational references, so memory-safety checks happen at runtime but cheaply, without a
+  borrow checker.
+- **Zig/Odin**: explicit allocators passed around, arenas everywhere, with very simple semantics.
+- **Pony ORCA**: per-actor GC with no global pauses.
+
+**What still hurts.**
+- RAII is brilliant but *opt-in by convention*; nothing stops a raw `new` in C++.
+- Most languages only manage **memory**. File handles, sockets, locks, GPU buffers and transactions
+  are managed with `defer`, `using`, `with` or finalisers, which are easy to forget.
+- Atomic RC makes multithreaded code slower even when objects are never shared.
+- Rust lifetimes leak into APIs and make refactoring expensive.
+
+**Directions.**
+- **Allocators as a capability**: the allocator is visible (Zig-style), and per-scope arenas are cheap
+  and idiomatic.
+- Machine-applicable diagnostics for the borrow check (e.g. "insert `.to_rc()` here"), aimed at
+  agents (rationale §2.18).
 
 ## Prior art
 

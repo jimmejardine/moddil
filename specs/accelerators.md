@@ -254,6 +254,38 @@ Following [`error-handling.md`](error-handling.md):
 - Hot-plug, and device loss in the middle of a run.
 - Scheduling policy when a role's device is busy or shared between processes.
 
+## Background
+
+The problem and the state of the art that led to this design. (Moved from the rationale.)
+
+**Problem.** GPU programming is fragmented by vendor, uses a different language (or dialect) from host
+code, and makes data movement between memory spaces manual and error-prone. Most programmers never
+touch it; those who do are often tied to one vendor.
+
+**State of the art.**
+- **CUDA**: mature, fast, huge ecosystem, but NVIDIA-only, C++-dialect, with a separate compilation model.
+- **SYCL / oneAPI, OpenCL, HIP**: portability attempts with varying success.
+- **Metal / Vulkan compute / WebGPU (WGSL)**: platform-bound compute shaders.
+- **Triton**: a Python DSL for tiled GPU kernels. It shows that block-level abstractions can match
+  hand-written CUDA for many kernels.
+- **Halide**: separates the *algorithm* (what to compute) from the *schedule* (tiling, vectorisation,
+  parallelism, placement). This is a key idea.
+- **Futhark**: a functional data-parallel language that compiles to GPU and proves that high-level
+  array programs can compete.
+- **JAX / XLA, MLIR**: compiler infrastructure that lowers high-level array programs to many back ends.
+- **Mojo**: aims at Python ergonomics plus systems performance plus accelerator targeting via MLIR.
+
+**What still hurts.**
+- Host and device code live in different worlds: different types, different debuggers, different build steps.
+- Memory spaces (host, device, shared, unified) are invisible in most type systems, so you only discover
+  an accidental copy or an invalid pointer at runtime.
+- Portable performance is still mostly a myth. Schedules are tuned per device by hand.
+- Synchronisation between CPU and GPU (streams, fences, events) is manual and unchecked.
+
+**Directions.**
+- MLIR for tensor-level optimisation if needed; vendor graph compilers for NPUs.
+- Feature tiers (subgroups, f16, tensor cores) as target capabilities checked at compile time.
+
 ## Prior art
 
 CUDA; HIP/ROCm; SYCL/oneAPI; OpenCL; Metal; Vulkan compute; WebGPU/WGSL; wgpu and naga; Slang;

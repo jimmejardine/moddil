@@ -1,36 +1,54 @@
 # Moddil Rationale: Why a New Language?
 
-> **Status:** brainstorm / living document for **Moddil**. This is not a specification and makes no syntax commitments.
-> Its job is to list the problems clearly, credit what already works, and narrow down where a new
-> language could actually earn its place.
->
-> Where a decision has been made, this document gives a short summary and links to the detailed
-> companion document (see the map below). The companion documents are authoritative for detail.
+> **Status:** living index for **Moddil**. This is not a specification and makes no syntax commitments.
+> It states the thesis, lists the problem areas with a short summary of each, and points to the
+> subdocument that holds the detail. The subdocuments are authoritative.
 
-**Document map**
+## Index
 
-| Document                                             | Covers                                                                                                                              | Status                                |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| [`rationale.md`](rationale.md)                       | Problems, prior art, direction (this document)                                                                                      | Living                                |
-| [`memory-and-resources.md`](memory-and-resources.md) | Ownership, borrows and view types, `.to_rc()`, linear resources, zero-copy I/O (§2.2)                                               | Decided direction                     |
-| [`concurrency.md`](concurrency.md)                   | CPU concurrency: sharing rules, structured tasks, sync cells, runtime contract (§2.8)                                               | Decided direction                     |
-| [`accelerators.md`](accelerators.md)                 | GPUs and accelerators: three kernel levels, devices and addressing, launches as tasks (§2.9)                                        | Decided direction                     |
-| [`observability.md`](observability.md)               | Logging, spans, metrics as write-only effects; task-aware stacks; flight recorder; introspection (§2.12)                            | Decided direction                     |
-| [`distribution.md`](distribution.md)                 | Components, placement, `remote` effect, contracts and skew checks; images and adapters to existing platforms (§2.10)                | Decided direction                     |
-| [`interop.md`](interop.md)                           | C ABI and Rust only: header import, overlays, generated Rust bridge, components, C++ via shims (§2.13)                              | Decided direction                     |
-| [`docs-and-tests.md`](docs-and-tests.md)             | Checked and generated docs, examples as tests, attached tests and benchmarks, notes (§2.17, §2.18)                                  | Decided direction                     |
-| [`targets.md`](targets.md)                           | Cross-compilation from any host, static builds, libc strategy, signing and packaging (§2.15)                                        | Decided direction                     |
-| [`mods.md`](mods.md)                                 | Mods, the core/mod boundary, standard-mod catalogue (R2)                                                                            | Decided direction                     |
-| [`error-handling.md`](error-handling.md)             | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§2.3)                                                 | Partly decided; survey                |
-| [`correctness.md`](correctness.md)                   | Contracts, validated newtypes, property testing, fuzzing, verification, assurance levels (§2.7)                                     | Proposal                              |
-| [`determinism.md`](determinism.md)                   | Deterministic core, simulation testing, scoped handlers, record and replay, reproducible builds (§2.11)                             | Proposal                              |
-| [`build-times.md`](build-times.md)                   | Language rules for fast builds, query-based lazy compiler, no-link dev builds, default profiles, budgets (§2.14)                    | Proposal                              |
-| [`closures.md`](closures.md)                         | Lambdas that borrow, fail and suspend; parameter modes for closures; escaping closures (§2.8)                                       | Mostly follows from decided direction |
-| [`units.md`](units.md)                               | Units of measure: F#-style `100<cm>`, open set of dimensions, declared units with scale and offset (§2.5)                           | Proposal                              |
-| [`freestanding.md`](freestanding.md)                 | Kernels and firmware: profiles by available effects, interrupts, static tasks, MMIO capabilities, emulator-verified targets (§2.15) | Proposal                              |
-| [`comptime.md`](comptime.md)                         | Compile-time evaluation, reflection, typed derives, tagged-literal DSLs instead of macros (§2.6)                                    | Decided direction                     |
-| [`bootstrap.md`](bootstrap.md)                       | Bootstrap compiler, self-hosting, backends, WASM engine support (R1)                                                                | Proposed                              |
-| [`examples/`](examples/README.md)                    | Four reference systems used to test every decision                                                                                  | Written                               |
+Status legend:
+
+- 🟡 **started**: brainstorm or proposal; nothing is decided yet.
+- 🟠 **questions**: the direction is decided; open questions remain.
+- 🟢 **complete**: decided, with no open questions.
+
+**Problem areas** (each links to its summary below)
+
+| §                                                             | Area                                   | Status       | Detail                                                                                   |
+| ------------------------------------------------------------- | -------------------------------------- | ------------ | ---------------------------------------------------------------------------------------- |
+| [2.1](#21-effects-and-capabilities-as-a-unifying-idea)        | Effects and capabilities               | 🟡 started   | [`effects-and-capabilities.md`](effects-and-capabilities.md)                             |
+| [2.2](#22-memory-and-resource-management)                     | Memory and resource management         | 🟠 questions | [`memory-and-resources.md`](memory-and-resources.md)                                     |
+| [2.3](#23-error-handling)                                     | Error handling                         | 🟠 questions | [`error-handling.md`](error-handling.md)                                                 |
+| [2.4](#24-null-and-invalid-states)                            | Null and invalid states                | 🟠 questions | [`null-safety.md`](null-safety.md)                                                       |
+| [2.5](#25-numerics-and-data)                                  | Numerics and data                      | 🟡 started   | [`numerics.md`](numerics.md), [`units.md`](units.md)                                     |
+| [2.6](#26-metaprogramming)                                    | Metaprogramming                        | 🟠 questions | [`comptime.md`](comptime.md)                                                             |
+| [2.7](#27-correctness-tooling-contracts-and-verification)     | Contracts and verification             | 🟡 started   | [`correctness.md`](correctness.md)                                                       |
+| [2.8](#28-concurrency-across-cpus)                            | Concurrency across CPUs                | 🟠 questions | [`concurrency.md`](concurrency.md), [`closures.md`](closures.md)                         |
+| [2.9](#29-concurrency-across-gpus-and-accelerators)           | GPUs and accelerators                  | 🟠 questions | [`accelerators.md`](accelerators.md)                                                     |
+| [2.10](#210-distributed-and-multi-tier-programs)              | Distributed and multi-tier programs    | 🟠 questions | [`distribution.md`](distribution.md)                                                     |
+| [2.11](#211-determinism-and-reproducibility)                  | Determinism and reproducibility        | 🟡 started   | [`determinism.md`](determinism.md)                                                       |
+| [2.12](#212-observability-and-debuggability)                  | Observability and debuggability        | 🟠 questions | [`observability.md`](observability.md)                                                   |
+| [2.13](#213-interoperability-with-c-and-rust)                 | Interoperability with C and Rust       | 🟠 questions | [`interop.md`](interop.md)                                                               |
+| [2.14](#214-build-times)                                      | Build times                            | 🟡 started   | [`build-times.md`](build-times.md)                                                       |
+| [2.15](#215-cross-compilation-and-deployment)                 | Cross-compilation and deployment       | 🟠 questions | [`targets.md`](targets.md), [`freestanding.md`](freestanding.md)                         |
+| [2.16](#216-package-management-and-supply-chain-security)     | Packages and supply-chain security     | 🟡 started   | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)                           |
+| [2.17](#217-tooling-uniformity)                               | Tooling uniformity                     | 🟠 questions | [`docs-and-tests.md`](docs-and-tests.md)                                                 |
+| [2.18](#218-llms-as-first-class-programmers)                  | LLMs as first-class programmers        | 🟡 started   | [`agent-interface.md`](agent-interface.md)                                               |
+| [2.19](#219-diffs-code-review-and-version-control)            | Diffs, code review and version control | 🟡 started   | [`semantic-vcs.md`](semantic-vcs.md)                                                     |
+| [2.20](#220-language-evolution)                               | Language evolution                     | 🟡 started   | [`evolution.md`](evolution.md)                                                           |
+
+**Other documents**
+
+| Document                                 | Covers                                                                 | Status       | Summary here                              |
+| ---------------------------------------- | ---------------------------------------------------------------------- | ------------ | ----------------------------------------- |
+| [`requirements.md`](requirements.md)     | Firm requirements R1–R3 in full, and non-goals                         | 🟠 questions | [§5](#5-requirements-and-non-goals)       |
+| [`mods.md`](mods.md)                     | Mods, the core/mod boundary, standard-mod catalogue (R2)               | 🟡 started   | [§5.1](#51-firm-requirements-decided)     |
+| [`bootstrap.md`](bootstrap.md)           | Bootstrap compiler, self-hosting, backends, WASM engine support (R1)   | 🟡 started   | [§5.1](#51-firm-requirements-decided)     |
+| [`closures.md`](closures.md)             | Lambdas that borrow, fail and suspend; escaping closures               | 🟠 questions | [§2.8](#28-concurrency-across-cpus)       |
+| [`units.md`](units.md)                   | Units of measure: `100<cm>`, open dimensions, declared units           | 🟡 started   | [§2.5](#25-numerics-and-data)             |
+| [`freestanding.md`](freestanding.md)     | Kernels and firmware: profiles, interrupts, MMIO, emulator testing     | 🟡 started   | [§2.15](#215-cross-compilation-and-deployment) |
+| [`prior-art.md`](prior-art.md)           | Prior-art matrix across languages, and the reference list              | reference    | [§6](#6-prior-art-matrix)                 |
+| [`examples/`](examples/README.md)        | Four reference systems used to test every decision                     | 🟡 started   | [§7](#7-open-questions-and-next-steps-for-moddil) |
 
 ---
 
@@ -87,218 +105,131 @@ schedule onto heterogeneous hardware, easier to split safely across machines, an
 
 The areas are ordered from the language core outward: semantics (effects, memory, errors, types, numerics, metaprogramming, correctness), then execution (CPU, GPU, distributed, determinism, observability), then the surrounding system (interop, builds, deployment, packages, tooling), and finally the human and agent workflow (LLMs, review, evolution). The order reflects dependencies, not priority: every area matters equally. Effects come first because most other areas build on them.
 
-Each area follows the same template:
+Each area below gives only:
 
-- **Problem**: what goes wrong today.
-- **State of the art**: who does it best, and why.
-- **What still hurts**: the remaining gaps.
-- **Decision** (once made): a short summary, with a link to the companion document.
-- **Directions**: ideas still to explore (not decisions).
-- **Open questions**
+- its **status** and a link to the **subdocument**, which holds the problem statement, prior art,
+  decisions and directions in full;
+- a short **summary** of the problem and of what is decided or proposed;
+- the **open questions**, copied from the subdocument. The subdocument's list is the master copy.
 
 ---
 
 ### 2.1 Effects and capabilities as a unifying idea
 
-- **Problem.** Signatures say what a function takes and returns, but not what it *does*: I/O,
-  allocation, suspension, failure, nondeterminism, GPU work, unsafe code.
-- **State of the art.** Koka, Effekt, Eff (algebraic effects and handlers); OCaml 5 effect handlers;
-  Unison abilities; Haskell monads/effect libraries; object-capability languages (E, Austral, Monte),
-  WASI capabilities.
-- **Why it matters here.** One mechanism could solve several problems above:
-  - concurrency without colouring (suspension is an effect, §2.8)
-  - GPU-safe subsets (kernels are code with a restricted effect set, §2.9)
-  - resource safety (effects plus linear types, §2.2)
-  - supply-chain security (capabilities, §2.16)
-  - reviewability (effects in signatures, §2.18, §2.19)
-  - testability (handlers swap real I/O for fakes, §2.11)
-  - implicit context (config, database pools) provided by handlers instead of threading context
-    objects through every call ([`memory-and-resources.md`](memory-and-resources.md) §4)
-- **Directions.** Effect *inference* inside a module, explicit effects at module/package boundaries;
-  capabilities as values; handlers compiled to zero-cost code where possible (Koka's evidence passing).
-- **Open question.** Can effect systems be made ergonomic for mainstream programmers? No mainstream
-  language has done it yet; this is both the biggest risk and the biggest opportunity.
+🟡 **started** · Detail: [`effects-and-capabilities.md`](effects-and-capabilities.md)
+
+Signatures say what a function takes and returns, but not what it *does*: I/O, allocation,
+suspension, failure, nondeterminism, GPU work, unsafe code. One mechanism, effects plus capability
+values, underlies most other areas:
+
+- suspension without function colouring (§2.8) and GPU-safe kernel subsets (§2.9);
+- resource safety with linear types (§2.2) and visible failure (§2.3);
+- capability-scoped dependencies (§2.16) and reviewable signatures (§2.18, §2.19);
+- handlers that swap real I/O for fakes in tests (§2.11) and provide implicit context.
+
+Direction: effects inferred inside a module and explicit at boundaries; capabilities as values;
+handlers compiled to zero-cost code where possible.
+
+**Open questions** (same list as [`effects-and-capabilities.md`](effects-and-capabilities.md) §5)
+
+- Can effect systems be made ergonomic for mainstream programmers? No mainstream language has done
+  it yet; this is both the biggest risk and the biggest opportunity.
+- Effect system design: row-polymorphic (Koka) vs capability-passing vs hybrid.
+  [`determinism.md`](determinism.md) §4 recommends a hybrid: scoped handlers plus second-class
+  capability values.
 
 ---
 
 ### 2.2 Memory and resource management
 
-**Problem.** Every approach trades something away:
+🟠 **questions** · Detail: [`memory-and-resources.md`](memory-and-resources.md)
 
-| Approach                                         | Gives you                        | Costs you                                                                      |
-| ------------------------------------------------ | -------------------------------- | ------------------------------------------------------------------------------ |
-| Manual (C)                                       | Total control                    | Use-after-free, leaks, double frees: most CVEs                                 |
-| Tracing GC (Java, Go, C#)                        | Simplicity, safety               | Pauses, memory overhead, non-deterministic destruction                         |
-| RAII (C++)                                       | Deterministic, zero-cost cleanup | Only if followed consistently. Nothing enforces it; dangling references remain |
-| Reference counting (Swift, Python, `shared_ptr`) | Deterministic, incremental       | Atomic RC is slow under contention; cycles leak; extra traffic on every copy   |
-| Ownership/borrowing (Rust)                       | Safe, zero-cost, deterministic   | Learning curve; some data structures (graphs, doubly-linked lists) are awkward |
+Every existing approach trades something away: manual management is unsafe, tracing GC costs pauses
+and memory, RAII is unenforced, reference counting is slow when atomic, and Rust's lifetimes leak
+into APIs. Most languages also manage only memory, not files, sockets, locks or transactions.
 
-**State of the art.**
-- **Rust**: the reference point for safe, GC-free memory management.
-- **Modern GCs** (ZGC, Shenandoah, Go's concurrent GC) have made pauses sub-millisecond for many
-  workloads. "GC = random delays" is less true than it was, but throughput and memory overhead remain.
-- **Perceus** (Koka, Lean 4): compile-time reference counting with reuse analysis. Most RC operations
-  are removed, and functional code can update in place.
-- **Lobster**: compile-time RC elision with ownership inference.
-- **Vale**: generational references, so memory-safety checks happen at runtime but cheaply, without a
-  borrow checker.
-- **Zig/Odin**: explicit allocators passed around, arenas everywhere, with very simple semantics.
-- **Pony ORCA**: per-actor GC with no global pauses.
+Decided:
 
-**What still hurts.**
-- RAII is brilliant but *opt-in by convention*; nothing stops a raw `new` in C++.
-- Most languages only manage **memory**. File handles, sockets, locks, GPU buffers and transactions
-  are managed with `defer`, `using`, `with` or finalisers, which are easy to forget.
-- Atomic RC makes multithreaded code slower even when objects are never shared.
-- Rust lifetimes leak into APIs and make refactoring expensive.
+- **Unique ownership and RAII by default** for every resource, enforced by the compiler. Drop is
+  deterministic, never suspends and never fails.
+- **Second-class borrows with no lifetime annotations**: parameter modes `let`, `mut` and `sink`,
+  plus *view types* for structs and containers that hold borrows.
+- **`.to_rc()` is the only way to share a pointer.** Contents are immutable, and biased reference
+  counting keeps it nearly free on the owning thread.
+- **Affine by default, linear on request**: transactions and fallible `close` must be consumed.
+- **Zero-copy I/O** by moving owned buffers and parsing through views.
 
-**Decision** (detail: [`memory-and-resources.md`](memory-and-resources.md)).
-- **Unique ownership and RAII by default**, for every resource, enforced by the compiler. Values
-  are moved or borrowed. Drop is deterministic, never suspends and never fails.
-- **Borrows are second-class; there are no lifetime annotations anywhere.**
-  - Parameter modes `let` (shared), `mut` (exclusive) and `sink` (move), as in Hylo. A shared
-    borrow freezes its source.
-  - *View types* (structs and containers holding borrows, with one inferred region) cover context
-    objects, custom iterators and arena-backed graphs.
-  - Functions may return borrows derived from their parameters.
-  - Accepted limits: no structs with two independent lifetimes, and no borrows stored in long-lived
-    owned data.
-- **`.to_rc()` is the only way to share a pointer**, so the cost is visible where it is paid. `Weak`
-  handles break cycles.
-  - rc contents are immutable; shared mutation goes only through sync cells.
-  - **Biased reference counting**: one rc type, always thread-safe, and nearly free while it stays
-    on its owning thread. Compile-time RC elision removes more.
-- **Affine by default, linear on request.** Linear types (transactions, fallible `close`) must be
-  explicitly consumed, and cannot be rc'd.
-- **Destructors are rare and infallible.** Drop glue is generated; a hand-written
-  `drop(self: sink Self)` lives with its type, may destructure itself, and cannot fail or suspend.
-  `defer` follows the same rules; `errdefer` may fail, and its error is suppressed. Fields and locals
-  drop in reverse declaration order ([`memory-and-resources.md`](memory-and-resources.md) §2.1–§2.4).
-- **Zero-copy I/O** comes from moving owned buffers: DMA buffers are owned values, parsed through
-  validated views, *owning views* (buffer + offsets) or rc slices.
+**Open questions** (same list as [`memory-and-resources.md`](memory-and-resources.md) §10)
 
-**Directions.**
-- **Allocators as a capability**: the allocator is visible (Zig-style), and per-scope arenas are cheap
-  and idiomatic.
-- Machine-applicable diagnostics for the borrow check (e.g. "insert `.to_rc()` here"), aimed at
-  agents (§2.18).
-
-**Open questions** (more in [`memory-and-resources.md`](memory-and-resources.md) §10).
-- How do allocators interact with `.to_rc()` and arenas? Does an `Rc` remember its allocator?
-- What is the least noisy way to consume linear values on error paths (§2.3)?
-- Is there still a place for an optional per-task/per-actor collector, or does the model above make
-  it unnecessary?
+- Exact syntax for parameter modes, views and `from`.
+- Allocators: how does the allocator capability (Zig-style) interact with `.to_rc()`
+  and arenas? Does an `Rc` remember its allocator? (Proposed answer in
+  [`freestanding.md`](freestanding.md) §4.)
+- Should `Weak` be core or a mod? (It needs header support, so probably core.)
+- Linear values on error paths: what is the least noisy explicit handling?
+- Can the borrow check give diagnostics good enough for LLM agents (§2.18) — e.g.
+  machine-applicable "insert `.to_rc()` here" fixes?
+- Is there still a place for an optional per-task/per-actor collector, or does this model make it
+  unnecessary?
 
 ---
 
 ### 2.3 Error handling
 
-> Expanded in [`error-handling.md`](error-handling.md). Decided: Rust-style `?`, try blocks,
-> **R3** (§5.1): no unhandled errors, and cleanup that cannot fail silently or fatally.
+🟠 **questions** · Detail: [`error-handling.md`](error-handling.md)
 
-- **Problem.** Exceptions hide control flow; error codes get ignored; `Result` types are explicit but
-  noisy; panics/abort are coarse. Composing error types across libraries is painful (Rust's
-  `thiserror`/`anyhow` split shows this).
-- **State of the art.** Rust `Result` + `?`; Swift typed `throws`; Zig error unions with inferred error
-  sets and error return traces; Go explicit `error` values; Erlang "let it crash" plus supervisors.
-- **Directions.** Errors as an *effect* (`fail(E)`) so they are visible in signatures but cheap to
-  propagate; inferred error sets (Zig) to reduce boilerplate; mandatory handling; error return traces
-  for free; a clear split between *recoverable errors* and *bugs* (contract violations → abort the
-  task, not the process, in structured concurrency). Error propagation must also respect linear
-  values (§2.2): a path that propagates an error while holding an open transaction has to consume it.
-  Absence is *not* an error: "not found" is an `Option` (§2.4), and `or_fail` converts explicitly.
-- **Decided: cleanup cannot fail silently or fatally.**
-  - In C++, a destructor that throws during unwinding calls `std::terminate`, and destructors are
-    `noexcept` by default. So libraries swallow real cleanup errors, such as a failed flush on close.
-  - In Moddil, **drop has an empty effect set**, checked by the compiler, so it cannot fail or
-    suspend.
-  - Cleanup that can fail is a **linear type** with an explicit `close`/`commit`, which every path
-    must call.
-  - Errors don't unwind, so there is never a second error in flight while drops run.
-  - If cleanup on an error path fails too, its error is **suppressed** onto the primary error (as in
-    Java's try-with-resources): it is never lost and never fatal.
-  - Details: [`error-handling.md`](error-handling.md) §9.1 and
-    [`memory-and-resources.md`](memory-and-resources.md) §7.1.
-- **Open question.** Checked-exception fatigue (Java) vs inference: how much should be inferred?
+Exceptions hide control flow, error codes get ignored, `Result` types are noisy, and panics are
+coarse. Composing error types across libraries is painful.
+
+Decided:
+
+- Rust-style `?` and try blocks; errors do not unwind.
+- **R3** (§5.1): no unhandled errors, checked at every entry point.
+- A clear split between recoverable errors and bugs (traps).
+- **Cleanup cannot fail silently or fatally**: drop has an empty effect set; cleanup that can fail
+  is a linear type with an explicit `close`/`commit`; a second error on an error path is
+  *suppressed* onto the primary error, never lost.
+
+Still a direction: errors as an effect (`fail(E)`) with inferred error sets.
+
+**Open questions** (same list as [`error-handling.md`](error-handling.md) §12)
+
+1. Are explicit discards of errors allowed, and do they need a reason (§4.4 there)?
+2. Do failed contract assertions trap or raise an error (§2 there)? (Recommendation: trap; see
+   [`correctness.md`](correctness.md) §5.)
+3. Task scopes: first error and cancel siblings, or collect all errors (§4.5 there)?
+4. Can a trap terminate only its task rather than the process, and how are its resources freed (§8 there)?
+   If so, linear types would also need an infallible, non-suspending `abandon` for that path (e.g. a
+   transaction drops its connection so the database rolls back). Cancellation does not need it
+   ([`concurrency.md`](concurrency.md) §9).
+5. Should a resumable recovery effect ("retry"/"default") exist as a separate effect?
+6. How is context attached to structured errors (§5 there)?
+7. Is `Option` part of the same machinery (`?` on `Option`, as in Rust)?
+8. Should errors from the `remote` effect (§2.10) have a standard shape (timeout, unreachable,
+   incompatible version), and how are errors serialised across tiers?
+9. Checked-exception fatigue (Java) vs inference: how much of an error set should be inferred?
 
 ---
 
 ### 2.4 Null and invalid states
 
-**Problem.** Null references (Hoare's "billion-dollar mistake"). More generally: types that admit
-values the domain does not, such as zero values nobody chose, unchecked ranges, mixed-up IDs, and
-objects used in the wrong state.
+🟠 **questions** · Detail: [`null-safety.md`](null-safety.md)
 
-**State of the art.** Every language that has tackled null is converging on *absence in the type,
-plus compiler-checked narrowing*, in one of two styles:
+Null references are the best-known case of a wider problem: types that admit values the domain does
+not (unchosen zero values, unchecked ranges, mixed-up IDs, objects used in the wrong state).
 
-| Style | Languages | Strength | Weakness |
-|---|---|---|---|
-| Wrapper sum type `Option<T>` | Rust, Haskell (`Maybe`), OCaml, Scala, Zig (`?T`) | Ordinary type; composes; nests (`Option<Option<T>>` ≠ `Option<T>`) | Ceremony without sugar |
-| Nullable union `T \| null` + flow typing | Kotlin, TypeScript (`strictNullChecks`), Dart 3, C# 8, Java (Valhalla null-restricted types, JSpecify) | Ergonomic; can be retrofitted onto a language with null | `T??` collapses to `T?`: "absent" vs "present but null" is lost |
+Decided:
 
-- **Swift** is the synthesis most new designs copy. `T?` is sugar for a real `Optional<T>` sum type,
-  so it nests correctly, and it adds `if let`, `guard let`, optional chaining `a?.b` and `x ?? d`.
-- **Rust** has exactly one `Option`, kept separate from `Result`: absence is a normal outcome,
-  failure is an error.
-  - Raw pointers can be null only in `unsafe` code.
-  - The **niche optimisation** makes `Option<&T>` pointer-sized, with `None` as address 0.
-  - Ergonomics keep improving: `?` on `Option`, `let … else`, `if let` chains (2024 edition).
-  - The *pattern types* work (`u32 is 1..`) generalises niches.
-- **The frontier is invalid states in general:**
-  - definite initialisation (no Go-style zero values);
-  - refinement types (Liquid Haskell, F*);
-  - newtypes;
-  - typestate.
+- **No null in safe code.** Absence is `Option<T>`, an ordinary sum type in a mod, with Swift-style
+  sugar: `T?`, `if let`, `let … else`, `a?.b`, `x ?? d`. There is no implicit unwrap.
+- **Absence is data; failure is an effect**, so `Option` is the only "maybe" type in everyday code.
+- **Guaranteed niches**: `Option<&T>`, `Option<Rc<T>>` and range-typed integers cost no extra space.
+- **Definite initialisation**: no zero values and no uninitialised reads.
+- **Beyond null**: cheap newtypes, pattern/range types, refinement types, and typestate through
+  linear types.
 
-**Decision.**
-- **No null in safe code.** Absence is `Option<T>` = `None | Some(T)`. It is an ordinary sum type in a
-  core-adjacent mod (R2); the compiler adds only sugar and layout guarantees.
-- **Swift-style sugar:** `T?` means `Option<T>`, and nests (`T??` ≠ `T?`). It comes with:
-  - exhaustive `match`, `if let` and `let … else`;
-  - optional chaining `a?.b`;
-  - defaulting `x ?? d`.
+**Open questions** (same list as [`null-safety.md`](null-safety.md) §4)
 
-  There is no implicit unwrap. `unwrap()` is an explicit, visible panic point.
-- **Absence is data; failure is an effect.** `fail(E)` (§2.3) plays the role of Rust's `Result`,
-  so `Option` is the only "maybe" type in everyday code.
-  - `opt.or_fail(e)` turns absence into failure.
-  - Catching a failure can produce an `Option`.
-- **Guaranteed niches:** `Option<&T>`, `Option<Rc<T>>`, owned pointers, non-zero and range-typed
-  integers, and enums with spare values are all the same size as `T`. Nullable C pointers import as
-  `Option<…>` (§2.13).
-- **Fits the ownership model:**
-  - `Option<&T>`, or an `Option` holding a view, is itself a view
-    ([`memory-and-resources.md`](memory-and-resources.md) §4).
-  - Moving out of an `Option` is an ordinary move (`take()`).
-- **Definite initialisation:** no zero values, and no reads of uninitialised memory in safe code.
-  Values are created only by literals that supply every field; there are no special constructors
-  ([`memory-and-resources.md`](memory-and-resources.md) §2).
-- **Invalid states beyond null:**
-  - **Cheap newtypes:** zero-cost and distinct, with no implicit conversion (`UserId` ≠ `OrderId`).
-  - **Pattern/range types** (`u32 in 1..`): values that are excluded become free niches for `Option`.
-  - **Refinement types** (`Int where 0 <= self < 100`): checked statically where provable,
-    dynamically otherwise. They share machinery with contracts (§2.7).
-  - **Typestate through linear types** (§2.2): states are types, and transitions consume the old
-    state, e.g. `Conn<Unauthed>` → `Conn<Authed>`.
-
-Illustration only:
-```
-type UserId = newtype u64
-type Port   = u16 in 1..                          // 0 excluded: Port? is still 2 bytes
-
-fn email_of(users: let Map<UserId, User>, id: UserId) -> &str? {
-    users.get(id)?.profile?.email                 // optional chaining: absence flows through
-}
-
-fn connect(host: let str, port: Port?) ! {net, fail(NetError)} {
-    let addr = resolve(host) ?? return            // default/early exit on absence
-    let Some(p) = port else { fail(NetError.NoPort) }
-    …
-}
-```
-
-**Open questions.**
 - **What does postfix `?` mean?** In Rust it propagates `None`/`Err`; in Swift it is chaining.
   - If `fail` is an effect, failure may propagate implicitly. The `call()?` in the snippets of
     [`memory-and-resources.md`](memory-and-resources.md) would then disappear.
@@ -311,519 +242,377 @@ fn connect(host: let str, port: Port?) ! {net, fail(NetError)} {
 
 ### 2.5 Numerics and data
 
-> Arbitrary-width integers (`u3`, `i24`) and packed bitfields are proposed in
-> [`freestanding.md`](freestanding.md) §6.
->
-> Units of measure are expanded in [`units.md`](units.md) (proposal): F#-style `100<cm>` and
-> `f64<m/s>`, an open set of dimensions any mod can extend, and units declared with a scale (and an
-> offset for affine units) so related units convert automatically.
+🟡 **started** · Detail: [`numerics.md`](numerics.md), [`units.md`](units.md) (units of measure)
 
-- **Problem.** Silent integer overflow (C), undefined behaviour, float surprises, no units.
-- **Directions.** **Decided** ([`error-handling.md`](error-handling.md) §2): integer arithmetic
-  wraps (two's complement, no UB, no checks); floats follow IEEE 754; integer division by zero and
-  `MIN / -1` trap, as in Rust; explicit checked/saturating operators live in a mod;
-  units of measure (F#) as an optional type feature; SIMD vectors and tensors as first-class types
-  (ties into §2.9); arbitrary-precision integers in the standard library.
+Silent integer overflow, undefined behaviour, floating-point surprises and no units.
+
+- Decided ([`error-handling.md`](error-handling.md) §2): integer arithmetic wraps with no undefined
+  behaviour; floats follow IEEE 754; integer division by zero and `MIN / -1` trap; checked and
+  saturating operators live in a mod.
+- Proposed: F#-style units of measure (`100<cm>`, `f64<m/s>`) with an open set of dimensions
+  ([`units.md`](units.md)); arbitrary-width integers and packed bitfields
+  ([`freestanding.md`](freestanding.md) §6).
+- Directions: SIMD vectors and tensors as first-class types (§2.9); arbitrary-precision integers in
+  the standard library.
+
+**Open questions** (same list as [`numerics.md`](numerics.md) §4)
+
+None recorded yet. Units of measure have their own list in [`units.md`](units.md) §10.
+
+**Open questions** (same list as [`units.md`](units.md) §10)
+
+1. Confirm the lexing rule: no space between a literal and its `<unit>`.
+2. Glob imports of unit packs (§7 there).
+3. Angles: are radians and degrees units of a dimensionless-but-distinct "angle" kind?
+4. Rational exponents (`m^(1/2)`), needed for some formulas: allow, or only integers?
+5. The common-unit rule for unannotated mixed expressions: finer unit, or left operand?
+6. Integer representations with fractional scales (for example `i64<mm>` from `cm`): exact-only
+   conversion, or a fixed-point scale in the type?
 
 ---
 
 ### 2.6 Metaprogramming
 
-**Problem.** Macros are powerful but break tooling, readability, caching and LLM understanding
-(C preprocessor, C++ templates, Rust proc macros). Proc macros also run arbitrary code at build time.
+🟠 **questions** · Detail: [`comptime.md`](comptime.md)
 
-**State of the art.**
-- **Zig `comptime`**: ordinary code run at compile time, with no separate macro language. Types are
-  values and reflection is built in. But generics are duck-typed, and comptime cannot add
-  declarations (no `derive`).
-- **Rust**: hygienic `macro_rules!` and very powerful proc macros (`serde`, `sqlx`), which are opaque,
-  slow to build and unsandboxed.
-- **Others**: C++ `constexpr` and C++26 static reflection; Swift's sandboxed, typed macros;
-  Lisp/Racket macros.
+Macros are powerful but break tooling, readability, caching and LLM understanding, and proc macros
+run arbitrary code at build time.
 
-**Decision** (detail: [`comptime.md`](comptime.md)).
+Decided:
+
 - **No macro language.** Metaprogramming is ordinary Moddil code run by the compiler.
-- **Comptime is pure**: an empty effect set, deterministic, fuel-limited, sandboxed and cached by
-  input hash (§2.14). External inputs come only through declared `embed` files.
-- **Generics stay trait-bounded** and are checked at definition. Comptime is for values (sizes,
-  tables, format strings) and for code generation.
-- **Static reflection**: `reflect(T)`, read-only, respecting visibility.
-- **Typed generation at the annotation site.** `@derive(serde.Serialize)` calls a comptime function
-  that returns a typed impl built through a construction API, never token streams.
-- **Tagged string literals for DSLs**: `fmt"…"`, `re"…"`, `sql"…"`. These are checked at compile time,
-  with interpolations as typed holes, and `sql` checks against an embedded schema rather than a
-  live database.
-- **Every expansion is visible**, through `explain` (§2.18) and in semantic diffs (§2.19).
+- **Comptime is pure**: deterministic, fuel-limited, sandboxed and cached by input hash.
+- **Generics stay trait-bounded** and are checked at definition.
+- **Static reflection** (`reflect(T)`) and **typed derives** built through a construction API,
+  never token streams.
+- **Tagged string literals for DSLs** (`fmt"…"`, `re"…"`, `sql"…"`), checked at compile time.
+- Every expansion is visible through `explain` and in semantic diffs.
 
-**Open questions** (more in [`comptime.md`](comptime.md) §13).
-- Does comptime run in an interpreter inside the compiler, as WASM, or a hybrid?
-- What are the default compile-time budget and the per-mod limits?
+**Open questions** (same list as [`comptime.md`](comptime.md) §13)
+
+- **Where does comptime run?** Options:
+  - an interpreter inside the compiler (Zig; fast start, slow for heavy work);
+  - compiling comptime code to WASM and running it in Wasmtime (fast for heavy work; type values
+    must cross the boundary);
+  - a hybrid of the two.
+- **Allocation:** what allocator does comptime use, and how does comptime data become static data in
+  the binary?
+- **Budget:** what is the default fuel and the per-mod compile-time budget (§2.14)?
+- **Ordering:** can one derive depend on another's output (e.g. `Hash` relying on `Eq`), and how are
+  cycles detected?
+- **Reflection and privacy:** exactly which private details may a derive in another mod see?
+- **IDE responsiveness:** comptime must be incremental enough to run on every keystroke for agents
+  (§2.18).
+- **Construction API:** how expressive is it, and does it stay stable across editions (§2.20)?
 
 ---
 
 ### 2.7 Correctness tooling: contracts and verification
 
-> Expanded in [`correctness.md`](correctness.md) (proposal): easy v1 wins (contracts, validated
-> newtypes, property testing with contracts as oracles, fuzzing, mutation testing, a Miri-style
-> checker, interleaving tests), and state of the art to design for now (proofs in Moddil itself,
-> assurance levels per mod, refinement types, model checking).
+🟡 **started** · Detail: [`correctness.md`](correctness.md)
 
-- **Problem.** Tests show the presence of bugs, not their absence; specifications live in comments or
-  nowhere.
-- **State of the art.** Ada/SPARK, Eiffel (design by contract), Dafny, Verus (Rust), Liquid Haskell,
-  Lean 4, Prusti/Kani for Rust, property-based testing (QuickCheck, Hypothesis).
-- **Directions.** Contracts are syntax, not library calls; checked at runtime in debug, optionally
-  proven by an SMT-backed verifier for critical modules; property tests generated from contracts.
-  This becomes much more valuable with LLMs, which can write proofs and code against a fixed spec.
+Tests show the presence of bugs, not their absence, and specifications live in comments or nowhere.
+
+Proposed:
+
+- **v1**: contracts as syntax (checked at run time in debug builds), validated newtypes, property
+  testing with contracts as oracles, fuzzing, mutation testing, a Miri-style checker and
+  interleaving tests.
+- **Designed for now, built later**: proofs written in Moddil itself (SMT-backed), assurance levels
+  per mod, refinement types and model checking.
+
+**Open questions** (same list as [`correctness.md`](correctness.md) §7)
+
+1. Is the verifier part of the core toolchain or a mod (`moddil/verify`)?
+2. Which SMT solver(s), and how are solver versions pinned for reproducible proofs?
+3. How much annotation burden is acceptable before L1/L2 stop being used?
+4. Should wrapping arithmetic have a "prove no overflow" mode for mods that want it?
+5. How are contracts on effectful operations expressed (for example, "this handler is called at most
+   once")?
 
 ---
 
 ### 2.8 Concurrency across CPUs
 
-> Closures and lambdas, including ones that suspend or fail inside `visit`/`map`, are covered in
-> [`closures.md`](closures.md). How tasks map onto OS threads (one runtime, several executors) is
-> in [`concurrency.md`](concurrency.md) §6.1.
+🟠 **questions** · Detail: [`concurrency.md`](concurrency.md), [`closures.md`](closures.md) (lambdas)
 
-**Problem.** Shared-memory parallelism is still the main source of the hardest bugs: data races,
-deadlocks, priority inversion, and memory-ordering mistakes. Async programming has split many
-ecosystems into "sync" and "async" halves.
+Shared-memory parallelism is still the source of the hardest bugs, async has split ecosystems into
+sync and async halves, and cancellation is an afterthought almost everywhere.
 
-**State of the art.**
-- **Rust**: `Send`/`Sync` traits plus ownership give compile-time freedom from data races. This is a
-  real breakthrough.
-- **Erlang/BEAM**: share-nothing processes, message passing, supervisors, and preemptive scheduling of
-  millions of lightweight processes. It has the best story for fault tolerance.
-- **Go**: goroutines and channels make concurrency cheap and ergonomic, and there are no coloured
-  functions.
-- **Pony**: reference capabilities (`iso`, `val`, `ref`, `tag`, …) give actors data-race freedom by
-  construction, plus a per-actor GC (ORCA) with no stop-the-world pauses.
-- **Structured concurrency**: Trio (Python), Swift's `TaskGroup`, Kotlin coroutine scopes, and Java's
-  virtual threads plus `StructuredTaskScope`. A task's lifetime is bounded by its lexical scope, so
-  cancellation and errors propagate properly.
+Decided:
 
-**What still hurts.**
-- **Function colouring** (Bob Nystrom's "What color is your function?"). In Rust, C#, JS and Python,
-  `async` spreads through the codebase, and libraries split into sync and async variants. Rust async adds
-  `Pin`, `Send` bounds across `.await`, and executor lock-in (Tokio vs others).
-- Go has no compile-time protection against races. The race detector is dynamic and optional.
-- Erlang's isolation costs copying, and its raw compute performance is weak.
-- Rust's guarantees come with a learning curve that is still the most common complaint about the
-  language.
-- Cancellation is an afterthought almost everywhere. Blocking reads (stdin, `accept`) ignore
-  shutdown, forcing workarounds such as pressing Enter after Ctrl-C or connecting to your own socket.
-- **No async constructors** in C#, JavaScript, Python, Java or C++. The workarounds (`CreateAsync`
-  factories, two-phase `InitAsync`, `Lazy<Task<T>>`) give awkward APIs or leave invalid objects
-  reachable.
+- **Data-race freedom by construction**, built on §2.2: owned values move into tasks, shared borrows
+  are lent to many children, `mut` to exactly one, and the only shared mutable state is sync cells.
+  There are **no `Send`/`Sync` traits**.
+- **Structured concurrency is the only way to start a task**, so children can borrow from their
+  parent's frame.
+- **No function colouring**: suspension is an effect, and the backend chooses the lowering.
+- **Runtimes are mods** that handle the scheduling effect (R2).
+- **Construction may suspend; drop may not.** Async teardown is an explicit `close()` on a linear
+  type.
+- **Cancellation is implicit and cooperative**, with two-level shutdown (stop, then cancel)
+  delivered innermost scope first. All I/O is promptly cancellable and cancel-safe.
+- Closures are non-escaping by default and may borrow, fail and suspend
+  ([`closures.md`](closures.md)).
 
-**Decision** (detail: [`concurrency.md`](concurrency.md)).
-- **Data-race freedom by construction**, built on the memory model of §2.2:
-  - owned values are *moved* into tasks;
-  - shared borrows may be lent to many child tasks, a `mut` borrow to exactly one;
-  - `Rc` is always thread-safe and its contents are immutable;
-  - the only shared mutable state is thread-safe *sync cells* (`Atomic`, `AtomicRc`, `Mutex`, …).
-- Therefore **no `Send`/`Sync` traits**: every type can be sent between tasks.
-- **Structured concurrency is the only way to start a task.** Every task has a parent scope and ends
-  before it, which is what lets children borrow from their parent's frame with no `'static` bounds
-  and no `Arc` cloning (Rust's `thread::scope`, as the only mode).
-- **No function colouring.** Suspension is an *effect* (§2.1); the backend chooses the lowering
-  (stack switching, JSPI, …; see R1).
-- **Runtimes are mods** that handle the scheduling effect (R2). They also poll the biased-RC merge
-  queue (§2.2).
-- **Construction may suspend; drop may not.** There are no special constructors, so creating a value
-  is an ordinary function that may suspend or fail. Async teardown is an explicit `close()` on a
-  linear type ([`concurrency.md`](concurrency.md) §8).
-- **Cancellation is implicit and cooperative.** A task's scope is its token (no `CancellationToken`
-  parameters); cancellation is observed only at suspension points, and the cancellation path must
-  consume linear values like the error path. Shutdown has two levels, graceful *stop* then *cancel*
-  after a grace deadline, delivered **innermost scope first**, so outer services keep running while
-  inner layers drain ([`concurrency.md`](concurrency.md) §9). Every I/O operation, stdin and
-  `accept` included, is promptly cancellable and cancel-safe (§9.5 there).
+**Open questions** (same list as [`concurrency.md`](concurrency.md) §7)
 
-**Directions.**
-- Actors, channels and thread-per-core sharding as library patterns built on these primitives, not
-  as the only model.
-- Deterministic scheduling mode for tests (see §2.11).
-- Lints for holding a lock across a suspension point.
+- **Preemption:** guaranteed (BEAM-style, via compiler-inserted yield points) or cooperative?
+  Affects tail latency (HFT, game tick) and fairness. *Recommended* (§6.1 there): compiler-inserted safe
+  points in loops and function entries, which `pinned` executors can disable.
+- ~~**Cancellation and linear values.**~~ Resolved: cancellation is cooperative and observed only at
+  suspension points, and the cancellation path must consume linear values like the error path (§9 there).
+- **Deadlock:** this model prevents data races, not deadlocks. Lock ordering by type? A lint? Lock
+  levels (as in some kernels)? Or steer toward message passing?
+- **Async drop:** drop may not suspend (§8 there). Is that enough for resources whose clean shutdown needs
+  I/O (e.g. flushing a TLS stream)? Probably: they become linear with an explicit `close`.
+- **Priority inversion** under the scheduler effect: does the core effect interface carry priority?
+- **Long-lived tasks:** what is the idiomatic shape for a server's top-level scope (accept loop with
+  per-connection children) so that it reads naturally, not as a workaround for "no fire-and-forget"?
 
-**Open questions** (tracked in [`concurrency.md`](concurrency.md) §7).
-- Should preemption be guaranteed (BEAM-style) or cooperative?
-- The model prevents data races, not deadlocks. Lock ordering, lock levels, lints, or steering
-  toward message passing?
+**Open questions** (same list as [`closures.md`](closures.md) §11)
+
+1. Non-local `return` and labelled `break` from non-escaping lambdas (§7 there).
+2. Default closure parameter mode, stated or inferred (§3 there).
+3. Showing suspension points: inlay hints or an `await` marker (§9 there).
+4. Rules and syntax for methods that declare which fields of `self` they touch (§6 there).
 
 ---
 
 ### 2.9 Concurrency across GPUs and accelerators
 
-**Problem.** GPU programming is fragmented by vendor, uses a different language (or dialect) from host
-code, and makes data movement between memory spaces manual and error-prone. Most programmers never
-touch it; those who do are often tied to one vendor.
+🟠 **questions** · Detail: [`accelerators.md`](accelerators.md)
 
-**State of the art.**
-- **CUDA**: mature, fast, huge ecosystem, but NVIDIA-only, C++-dialect, with a separate compilation model.
-- **SYCL / oneAPI, OpenCL, HIP**: portability attempts with varying success.
-- **Metal / Vulkan compute / WebGPU (WGSL)**: platform-bound compute shaders.
-- **Triton**: a Python DSL for tiled GPU kernels. It shows that block-level abstractions can match
-  hand-written CUDA for many kernels.
-- **Halide**: separates the *algorithm* (what to compute) from the *schedule* (tiling, vectorisation,
-  parallelism, placement). This is a key idea.
-- **Futhark**: a functional data-parallel language that compiles to GPU and proves that high-level
-  array programs can compete.
-- **JAX / XLA, MLIR**: compiler infrastructure that lowers high-level array programs to many back ends.
-- **Mojo**: aims at Python ergonomics plus systems performance plus accelerator targeting via MLIR.
+GPU programming is fragmented by vendor, uses a different language from host code, and leaves data
+movement between memory spaces manual and unchecked.
 
-**What still hurts.**
-- Host and device code live in different worlds: different types, different debuggers, different build steps.
-- Memory spaces (host, device, shared, unified) are invisible in most type systems, so you only discover
-  an accidental copy or an invalid pointer at runtime.
-- Portable performance is still mostly a myth. Schedules are tuned per device by hand.
-- Synchronisation between CPU and GPU (streams, fences, events) is manual and unchecked.
+Decided:
 
-**Decision** (detail: [`accelerators.md`](accelerators.md)).
-- **One language, three levels**, all ordinary Moddil restricted by a compiler-checked `kernel` effect
-  set (no heap allocation except scoped shared memory, no recursion, no rc, no suspension or I/O;
-  always specialised):
-  1. **tensor expressions** in `moddil/tensor`, whose graph is built at comptime and lowered to
-     XLA/ONNX/Core ML (the only route to NPUs and TPUs) or to generated kernels;
-  2. **tile kernels** (Triton-style), the default for custom kernels;
-  3. **SIMT kernels** for experts.
-- **Devices are capability values.** `main` receives `Devices`; libraries cannot enumerate hardware.
-  - A **CPU pool** over chosen cores is a device too (a "pseudo-GPU" with host memory).
-  - Buffers are **branded by their device** (`Buffer<T, g0>`), so mixing devices is a compile error;
-    `.erase()` gives a runtime-checked form.
-  - Code asks for **roles or requirements**; a deployment manifest binds them to hardware.
-- **Launches are structured tasks** that borrow inputs (`let`) and outputs (`mut`); the end of the
-  scope is the fence. CPU–GPU races and fence bugs are ruled out by the existing borrowing rules.
-- **Race-free kernels by default**: disjoint output tiles and atomics are safe; arbitrary scatter
-  writes need `unsafe`; the CPU simulator detects races.
-- **Algorithm/schedule separation**: schedules are comptime data per target; autotuning is an
-  offline tool whose output is embedded, so comptime stays pure.
-- **Runtimes are mods** handling the `gpu` effect. WebGPU (via naga) comes first, CUDA (via LLVM)
-  second; a CPU simulator gives GPU-free tests.
+- **One language, three levels**, all ordinary Moddil restricted by a compiler-checked `kernel`
+  effect set: tensor expressions, tile kernels (the default) and SIMT kernels.
+- **Devices are capability values**; buffers are branded by their device, so mixing devices is a
+  compile error. A CPU pool is a device too.
+- **Launches are structured tasks**; the end of the scope is the fence.
+- **Race-free kernels by default**; arbitrary scatter writes need `unsafe`.
+- **Algorithm and schedule are separate**; schedules are comptime data per target.
+- **Runtimes are mods**: WebGPU first, CUDA second, plus a CPU simulator for tests.
 
-**Directions.**
-- MLIR for tensor-level optimisation if needed; vendor graph compilers for NPUs.
-- Feature tiers (subgroups, f16, tensor cores) as target capabilities checked at compile time.
+**Open questions** (same list as [`accelerators.md`](accelerators.md) §14)
 
-**Open questions** (more in [`accelerators.md`](accelerators.md) §14).
-- Autodiff: a comptime transformation or a tensor-mod feature?
-- Multi-GPU collectives as a library over placement (§2.10)?
-- Exact rules for device brands, and how they interact with views and generics.
+- **Autodiff:** a comptime transformation (as Slang and Enzyme do) or a feature of `moddil/tensor`?
+- **Multi-GPU collectives** (all-reduce etc.): a library built on placement (§2.10)?
+- Should tensor/array syntax become core, or stay in a mod?
+- How close can the CPU simulator get to bit-exact results with GPU floating point?
+- WebGPU feature gaps (subgroups, f16) and their fallbacks.
+- **Brands:** exact rules — how far they propagate, and how they interact with views and generics.
+- Hot-plug, and device loss in the middle of a run.
+- Scheduling policy when a role's device is busy or shared between processes.
 
 ---
 
 ### 2.10 Distributed and multi-tier programs
 
-**Problem.** Almost no real system is one process. A single feature, such as "user uploads a photo",
-touches a browser client, an API server, a message queue, a worker, object storage and a database.
-Today that means:
-- **N codebases in M languages** (TypeScript client, Go/Java/Python server, consumers, SQL, plus
-  Terraform/Helm/YAML), each with its own build and deploy.
-- **Hand-maintained contracts** between them (OpenAPI, protobuf, JSON shapes) that drift silently.
-- **Mixed versions in production**: during a rolling deploy, old and new code talk to each other, and
-  nothing checks that they are compatible.
-- **Partial failure** (timeouts, retries, duplicates, ordering) handled ad hoc in every service.
-- **Implicit trust boundaries**: client code runs on hostile machines, but nothing in the code says so.
+🟠 **questions** · Detail: [`distribution.md`](distribution.md)
 
-**State of the art.**
-- **Multitier ("tierless") languages**: Links, Hop.js, Ur/Web, Eliom/Ocsigen, ScalaLoci. One program
-  with client and server parts; the compiler splits it and generates the communication.
-- **Choreographic programming**: Choral, HasChor, Pirouette. A multi-party protocol is written *once*
-  from a global viewpoint and projected into the code for each participant. Deadlock freedom and
-  protocol conformance hold by construction.
-- **Erlang/OTP and Akka**: distribution as a native concept, with location-aware process identifiers
-  and supervision across nodes.
-- **Microsoft Orleans**: virtual actors that the runtime places and moves for you.
-- **Service Weaver** (Google): write a *modular monolith*, then decide at deploy time which components
-  run in which processes. The same code runs as one binary locally or as many services in production.
-- **Unison Cloud**: code is shipped to remote nodes by hash; there is no deployment step in the
-  usual sense.
-- **Winglang**: separates *preflight* code (defines infrastructure) from *inflight* code (runs on it),
-  in one language.
-- **Ballerina**: a language whose types and syntax are built around network services and data.
-- **Durable execution**: Temporal, Restate, Azure Durable Functions. Workflows survive crashes and
-  restarts.
-- **Web frameworks** moving the same way: React Server Components and server actions, Electric
-  Clojure, tRPC (types shared end to end).
-- **Research**: Berkeley's Hydro/Bloom (dataflow languages for distributed systems).
-- **Infrastructure as code**: Pulumi (real languages), Terraform (declarative).
+Almost no real system is one process. Today a feature spans several codebases and languages, held
+together by hand-maintained contracts that drift, with mixed versions in production and implicit
+trust boundaries.
 
-**What still hurts.**
-- **Transparent RPC is a trap.** Making a remote call look like a local one hides latency, partial
-  failure and concurrency. This is the central lesson of Waldo et al., *A Note on Distributed
-  Computing* (1994), and of Deutsch's "fallacies of distributed computing". Many multitier systems
-  repeated the mistake.
-- Frameworks that blur client and server make it easy to **leak secrets or trust client input** by
-  moving one line of code.
-- **Schema evolution** across independently deployed versions is still manual discipline.
-- Infrastructure definitions live apart from the code that depends on them, and drift.
-- Running and testing the *whole system* locally is slow and flaky.
-- **Adoption-killing history.** Multitier languages stayed niche, and Google's Service Weaver was put
-  into maintenance mode about two years after launch. The common causes: all-or-nothing adoption,
-  fighting the ops team's tools, hidden networks, and proprietary protocols at the edges.
+Decided: *the language owns the program's meaning across boundaries; existing tools own where and
+how it runs.*
 
-**Decision** (detail: [`distribution.md`](distribution.md)). *The language owns the program's meaning
-across boundaries; existing tools own where and how it runs.*
-- **Layer A, in the language** (v0):
-  - **components with placement** (`@client`, `@server`, `@worker`, `@edge`, `@peer` for symmetric
-    P2P), checked by the compiler; the same placement ladder as devices (§2.9);
-  - a **`remote` effect** that never looks local, with typed failures, declared retry/idempotency,
-    and deadlines and cancellation propagated through structured concurrency;
-  - **wire contracts generated from types**, with **version-skew checking** against every deployed
-    version still in service; OpenAPI/protobuf/AsyncAPI generated or consumed at the edges;
-  - **trust and secrets** (`Untrusted<T>`, `Secret<T>`) and **capabilities per component**;
-  - **whole-system runs**: every component in one process, or under deterministic simulation (§2.11).
-- **Layer B, thin adapter mods** (v1 onwards):
-  - **one static binary per deployment unit**, WASM for `@client`, WASI components for edge;
-  - **OCI images built directly** (no Dockerfile), run by Docker, Podman or containerd;
-  - a **topology file** maps components to deployment units and platforms per environment;
-  - adapters emit **Compose, Kubernetes, Nomad, systemd** and WASI-platform formats; discovery via
-    Consul or Kubernetes DNS; secrets via Vault, Kubernetes or cloud KMS; **network and secret
-    policies generated from the capability graph**.
-- **Infrastructure is bound, never provisioned**: components declare typed requirements (a Postgres
-  with schema S), and the topology binds them to what Terraform, OpenTofu or Pulumi created.
-- **Layer C, never**: orchestration, scheduling, autoscaling, service mesh, load balancing,
-  provisioning, secret storage and rollout strategy (non-goals, §5.2).
+- **Layer A, in the language** (v0): components with checked placement (`@client`, `@server`, …); a
+  `remote` effect that never looks local; wire contracts generated from types with version-skew
+  checking; `Untrusted<T>` and `Secret<T>`; whole-system runs in one process or under simulation.
+- **Layer B, thin adapter mods** (v1 onwards): static binaries and OCI images; a topology file;
+  adapters that emit Compose, Kubernetes, Nomad and systemd formats.
+- **Infrastructure is bound, never provisioned.**
+- **Layer C, never**: orchestration, autoscaling, service mesh, provisioning (non-goals, §5.2).
 
-**Directions.**
-- **Durable workflows** as an effect whose handlers target Temporal or Restate, or a built-in
-  replay-based handler.
-- **Choreographies** for multi-party protocols, projected to each participant (later).
+**Open questions** (same list as [`distribution.md`](distribution.md) §17)
 
-**Open questions** (more in [`distribution.md`](distribution.md) §17).
-- Where deployed contracts are recorded: a lock file in the repository, or a registry?
-- How database schema migrations are versioned and checked alongside the code.
-- Can one team deploy its component without rebuilding the world?
+- Where deployed contracts are recorded: in the repository (a lock file) or a registry?
+- **Choreographies**: write a multi-party protocol once and project it to each participant — when,
+  and how much?
+- Databases as requirements: how schema migrations are versioned and checked alongside code.
+- Independent team deploys: can one team ship its component without rebuilding the world?
+- How much rollout safety (e.g. canary analysis) should Moddil check, versus leave to the platform?
+- How unreliable or unordered channels (game snapshots over WebTransport) are expressed in types.
 
 ---
 
 ### 2.11 Determinism and reproducibility
 
-> Expanded in [`determinism.md`](determinism.md) (proposal): core semantics deterministic with all
-> nondeterminism entering through effects; strict IEEE floating point; scoped handlers for
-> per-node and per-subsystem injection; record and replay; reproducible builds. Lessons from
-> Hashiverse's hand-written time and transport seams.
+🟡 **started** · Detail: [`determinism.md`](determinism.md)
 
-- **Problem.** Concurrent and distributed bugs are hard to reproduce.
-- **State of the art.** FoundationDB and TigerBeetle deterministic simulation testing; `rr` record and
-  replay; Loom (Rust) model checking for concurrency.
-- **Directions.** Since time, randomness, I/O and scheduling are effects/capabilities, a test harness
-  can replace them with deterministic versions, giving **deterministic simulation testing as a built-in
-  mode** with seed-based replay.
+Concurrent and distributed bugs are hard to reproduce.
+
+Proposed:
+
+- The core language is deterministic; **all nondeterminism enters through effects** (time,
+  randomness, I/O, scheduling), with strict IEEE floating point.
+- **Deterministic simulation testing as a built-in mode**, with seed-based replay.
+- **Scoped handlers** for per-node and per-subsystem injection.
+- **Record and replay**, and **reproducible builds**.
+
+**Open questions** (same list as [`determinism.md`](determinism.md) §12)
+
+1. Should this become R4?
+2. Insertion-ordered maps by default, or seeded hash order?
+3. How much of `moddil/math` must be correctly rounded, and at what speed cost?
+4. GPU determinism: per kernel, per mod, or global?
+5. Record format and retention: per task, per request, sampled?
+6. How are non-Moddil peers brought into simulation beyond WASM components?
 
 ---
 
 ### 2.12 Observability and debuggability
 
-**Problem.** Optimised code is hard to debug; async stacks are unreadable; tracing is bolted on and
-context is propagated by hand; logging is slow, stringly typed and global; secrets leak into logs;
-production bugs can't be reproduced.
+🟠 **questions** · Detail: [`observability.md`](observability.md)
 
-**State of the art.** OpenTelemetry and W3C Trace Context; Rust `tracing`; Java Flight Recorder;
-BEAM's live introspection of production nodes; defmt and NanoLog (format strings interned at compile
-time); rr, Pernosco and WinDbg TTD (record and replay); tokio-console and Swift async backtraces; eBPF
-and continuous profilers.
+Optimised code is hard to debug, async stacks are unreadable, tracing is bolted on, logging is slow
+and stringly typed, secrets leak into logs, and production bugs cannot be reproduced.
 
-**Decision** (detail: [`observability.md`](observability.md)).
-- **`log`, `span` and `metric` are write-only ambient effects**: always available, never in
-  signatures. Handlers are mods and cannot feed values back, so observing never changes results.
-  There is no global logger.
-- **Events are interned at compile time** through `fmt"…"` literals; the hot path writes an event ID
-  plus typed arguments, and text is rendered later.
-- **Spans follow the structured-concurrency tree**, and trace context crosses `remote` calls
-  automatically.
-- **`Secret<T>` values cannot reach any event**: compile error.
-- **Task-aware stacks** and a live task tree showing what each task is blocked on.
-- **Flight recorder**: a bounded production recording of effect results, dumped on failure and
-  replayed deterministically (record and replay: [`determinism.md`](determinism.md) §5).
-- **Live introspection** (attach, inspect, enable tracing without restarting) behind an
-  `introspect` capability.
-- **Release builds stay debuggable**: full debug info, stored separately and keyed by build hash.
+Decided:
 
-**Open questions** (more in [`observability.md`](observability.md) §13).
-- Continuous profiling with time attributed by effect?
-- Retention and privacy of recordings.
+- **`log`, `span` and `metric` are write-only ambient effects**; handlers are mods and cannot change
+  results. There is no global logger.
+- **Events are interned at compile time**; text is rendered later.
+- **Spans follow the structured-concurrency tree** and cross `remote` calls automatically.
+- **`Secret<T>` values cannot reach any event.**
+- **Task-aware stacks**, a **flight recorder** with deterministic replay, and **live introspection**
+  behind a capability.
+- **Release builds stay debuggable.**
+
+**Open questions** (same list as [`observability.md`](observability.md) §13)
+
+- **Continuous profiling** as a handler, with time attributed by effect (network, locks, GPU)?
+- Sampling policy for spans and recordings.
+- Recording volume and retention; encrypting recordings, or excluding secret-typed effect results.
+- Replaying a whole fleet: combining recordings from several processes.
+- Schema evolution of structured events across versions.
+- Overhead targets per level (e.g. nanoseconds per interned event on the hot path).
 
 ---
 
 ### 2.13 Interoperability with C and Rust
 
-**Problem.** Nobody adopts a language that can't use existing code. Decades of C libraries, huge C++
-codebases, and a growing Rust ecosystem must be reachable with low friction and low overhead.
+🟠 **questions** · Detail: [`interop.md`](interop.md)
 
-**State of the art.**
-- **C ABI**: the de facto lingua franca. Every language speaks it.
-- **Zig**: `@cImport` reads C headers directly; `zig cc` is a drop-in C/C++ cross-compiler. This is the
-  best-in-class C story.
-- **Swift**: direct C++ interop (importing classes, templates in some cases) without wrappers.
-- **Carbon**: designed explicitly as a C++ successor with bidirectional interop.
-- **Rust**: `bindgen`, `cbindgen`, `cxx` (safe C++ bridge), `crubit` (Google's C++/Rust interop).
-- **D**: `extern(C++)` with substantial C++ ABI support.
-- **Mojo**: Python interop as a primary adoption strategy.
+Nobody adopts a language that cannot use existing code, yet C headers carry no ownership or
+nullability information, C++ interop is very expensive, and Rust has no stable ABI.
 
-**What still hurts.**
-- C headers carry no ownership, lifetime, nullability or thread-safety information; bindings must
-  guess or annotate by hand.
-- C++ interop is hard: templates, overloading, exceptions, ABI differences between compilers.
-- **Rust has no stable ABI**; interop goes through `extern "C"`, losing generics, traits, and ownership.
-- Each FFI boundary is a hole in safety guarantees.
+Decided:
 
-**Decision** (detail: [`interop.md`](interop.md)).
-- **Only the C ABI and Rust are supported by the language.** C++ is reached through C shims
-  (`extern "C"` wrappers), hand-written or produced by an optional tool, never by a C++ importer in
-  the compiler. Mobile platform APIs are reachable through C too (JNI, the Objective-C runtime, Swift
-  `@_cdecl`).
-- **C, both directions, zero overhead**: direct header import (Zig-style), C-layout types, C export
-  with generated headers.
-- **The toolchain compiles C**: C dependencies are built hermetically and cross-compiled by the
-  bundled clang/LLVM (`zig cc`-style).
-- **Annotation overlays** type the C surface: ownership (owned / borrowed / linear), nullability
-  (`Option`, §2.4), error conventions (`fail(E)`), effects including `blocking` (offloaded by the
-  runtime), thread affinity and capabilities. They are shared across projects, DefinitelyTyped-style.
-- **Rust through a generated bridge** over the C ABI (as UniFFI, Diplomat and `cxx` do): tooling
-  reads a crate's API and generates a Rust shim plus Moddil bindings, mapping ownership, `Option`,
-  `Result` → `fail`, panics → traps, and futures → suspension. crABI is tracked, not depended on.
-- **WASM components (WIT)** are the sandboxed path for untrusted or browser-bound C and Rust code.
-- **Foreign code is visible**: raw bindings are `unsafe`, and the `ffi` capability shows in
-  signatures, PR summaries (§2.19) and package audits (§2.16). Callbacks from C are entry points
-  (R3), and nothing unwinds across the boundary.
+- **Only the C ABI and Rust are supported by the language.** C++ is reached through C shims.
+- **C in both directions with zero overhead**: direct header import, C export with generated headers.
+- **The toolchain compiles C**, hermetically and for any target.
+- **Annotation overlays** add ownership, nullability, errors and effects to C APIs.
+- **Rust through a generated bridge** over the C ABI.
+- **WASM components** are the sandboxed path for untrusted code.
+- **Foreign code is visible**: raw bindings are `unsafe`, and `ffi` is a capability.
 
-**Open questions** (more in [`interop.md`](interop.md) §12).
-- How stable is rustdoc's JSON output as the bridge's input, and how far can generics cross?
-- Who may publish annotation overlays, and how are they audited?
+**Open questions** (same list as [`interop.md`](interop.md) §12)
+
+- How stable is rustdoc's JSON format, and how much generator maintenance follows Rust releases?
+- How far can generics cross the Rust bridge beyond explicit instantiations?
+- If crABI stabilises, can the bridge use it instead of the C ABI?
+- Overlay distribution and trust: who may publish overlays, and how are they audited?
+- Python interop (raised in the HFT example): out of scope, or through Python's C API as a mod?
+- Size of the bundled clang in the toolchain download.
 
 ---
 
 ### 2.14 Build times
 
-> Expanded in [`build-times.md`](build-times.md) (proposal): the language rules that decide build
-> speed (no cycles between mods, explicit interface artefacts, witness tables in debug and
-> specialisation in release), a lazy query-based compiler with a shared cache and no link step in
-> dev builds, live update of a running debug program, four cache layers (daemon, local store, team
-> cache, signed registry artefacts), optimised dependencies by default, and published budgets.
+🟡 **started** · Detail: [`build-times.md`](build-times.md)
 
-**Problem.** Slow builds damage the edit-compile-test loop for humans, and are worse for LLM agents
-that iterate dozens of times per task.
+Slow builds damage the edit-compile-test loop for humans, and are worse for agents that iterate
+dozens of times per task.
 
-**State of the art.**
-- **Go**: designed for fast compilation (no circular imports, simple type system, export data per
-  package). It is the benchmark.
-- **Zig**: incremental compilation and its own fast backends; it aims for sub-second rebuilds.
-- **Jai / D / Delphi**: famously fast compilers.
-- **Rust**: Cranelift backend for debug builds, incremental compilation, parallel front end (in progress).
-- **Bazel/Buck2**: content-addressed, hermetic, remote-cached builds at monorepo scale.
+Proposed:
 
-**What still hurts.**
-- **C++**: textual `#include`, template instantiation in every translation unit; modules are arriving slowly.
-- **Rust**: monomorphisation and LLVM optimisation are the dominant costs, and proc macros are opaque
-  to caching.
-- Macro and compile-time evaluation systems that can run arbitrary code break incremental caching.
-- Linking is often the slowest single step (mold and lld help).
+- **Language rules that decide build speed**: no cycles between mods, explicit interface artefacts,
+  witness tables in debug builds and specialisation in release builds.
+- **A lazy, query-based compiler** with a shared cache and no link step in dev builds.
+- **Two backends**: a fast one for the dev loop, LLVM for release.
+- **Live update** of a running debug program.
+- **Four cache layers**, optimised dependencies by default, and **published budgets**.
 
-**Directions.**
-- **Make the module boundary the unit of compilation and caching.** Interfaces are separate from
-  implementations (an interface hash change triggers a rebuild of dependents; an implementation
-  change does not).
-- **Content-addressed, query-based compiler** (rust-analyzer/Salsa style) where every artefact is
-  cached by hash and can be shared through a remote cache.
-- **Two backends**: a fast, unoptimised backend (Cranelift-like, or a custom one) for the dev loop, and
-  LLVM/MLIR for release.
-- **Avoid monomorphisation blow-up by default**: dictionary passing / dynamic dispatch for generics in
-  debug builds, specialisation in release builds (as Swift does with witness tables).
-- **Bounded compile-time execution**: compile-time code is deterministic, sandboxed, has no I/O, and
-  is cacheable ([`comptime.md`](comptime.md) §3).
-- **Hot reload** of function bodies in dev builds.
+**Open questions** (same list as [`build-times.md`](build-times.md) §10)
 
-**Open questions.**
-- Can debug-mode dictionary passing and release-mode specialisation produce *identical semantics*,
-  so the difference is purely performance? *Proposed answer:* yes, if everything layout-dependent
-  lives in the witness table, as Swift does ([`build-times.md`](build-times.md) §3).
-- Target: what is the budget? *Proposed:* < 100 ms keystroke to diagnostics, < 1 s from a
-  function-body edit to a runnable test regardless of project size ([`build-times.md`](build-times.md) §6).
+1. Are cycles allowed between modules inside one mod?
+2. How slow can generic code be in debug builds before it is unacceptable? Should hot generics be
+   specialised even in debug builds?
+3. Live update (§4.1 there) proposes: bodies, signatures and new items live; layout changes through
+   migration hooks or scope restart plus replay. Open: which layout migrations can be automatic, and
+   whether production hot upgrades are ever a goal.
+4. How much should the registry serve prebuilt binaries, and what are the trust implications?
+5. Can debug-mode dictionary passing and release-mode specialisation produce *identical
+   semantics*, so the difference is purely performance? *Proposed answer:* yes, if everything
+   layout-dependent lives in the witness table, as Swift does (§3 there).
+6. What is the budget? *Proposed:* < 100 ms keystroke to diagnostics, < 1 s from a function-body
+   edit to a runnable test regardless of project size (§6 there).
 
 ---
 
 ### 2.15 Cross-compilation and deployment
 
-> Bare-metal targets (kernels, bootloaders, microcontroller firmware) are covered by the freestanding
-> profile in [`freestanding.md`](freestanding.md) (proposal), verified in QEMU and Renode.
+🟠 **questions** · Detail: [`targets.md`](targets.md), [`freestanding.md`](freestanding.md) (bare metal; proposal)
 
-**Problem.** Shared libraries make deployment fragile: the right versions must be installed on every
-machine ("dependency hell"), and building for another OS usually needs that OS, a VM, Docker images
-or hand-assembled sysroots.
+Shared libraries make deployment fragile, and building for another OS usually needs that OS, a VM
+or a hand-assembled sysroot.
 
-**State of the art.** Zig cross-compiles anything to anything from one download (bundled musl,
-mingw-w64, glibc stubs per version, macOS stubs); Go builds static Linux binaries with no libc via
-`GOOS`/`GOARCH`; Rust needs extra tools (`cross`, `cargo-zigbuild`, `cargo-xwin`); rcodesign signs and
-notarises macOS binaries from Linux or Windows.
+Decided:
 
-**Decision** (detail: [`targets.md`](targets.md)).
-- **Every toolchain is a cross-compiler** for every tier-1 target, with zero setup: Linux, macOS and
-  Windows binaries from any of them, plus WASM (R1).
-- **Static by default**, meaning *static except the OS's own mandatory surface*: no third-party shared
-  libraries ever. Linux binaries are fully static; Windows uses only system DLLs; macOS links only
-  `libSystem` (Apple supports nothing else).
-- **No libc where the OS allows**: Moddil's standard library uses raw system calls on Linux and Win32
-  on Windows, with its own DNS resolver. libc comes in only when C code is linked (static musl on
-  Linux).
-- **Opt-in dynamic glibc targets** with a pinned minimum version (`linux-x86_64-gnu.2.28`) for programs
-  that must load system drivers (CUDA, Vulkan) or NSS modules.
-- **Byte-identical output on any host**, so build caches are shared across operating systems and
-  releases can be verified (§2.16).
-- **Signing and packaging from any host** (Authenticode; macOS ad-hoc, Developer ID and
-  notarisation; OCI images), with keys supplied as capabilities at release time.
-- Cross-built binaries run locally through WSL2, QEMU user mode and Wasmtime; macOS through remote
-  runners.
+- **Every toolchain is a cross-compiler** for every tier-1 target (Linux, macOS, Windows, WASM),
+  with zero setup.
+- **Static by default**: no third-party shared libraries, ever.
+- **No libc where the OS allows**; opt-in dynamic glibc targets with a pinned minimum version.
+- **Byte-identical output on any host.**
+- **Signing and packaging from any host.**
 
-**Open questions** (more in [`targets.md`](targets.md) §13).
-- Licensing review of bundling macOS headers and link stubs.
-- Scope of iOS and Android packaging; which tier-2 targets to support.
+Proposed: a freestanding profile for kernels, bootloaders and firmware, verified in emulators
+([`freestanding.md`](freestanding.md)).
+
+**Open questions** (same list as [`targets.md`](targets.md) §13)
+
+- **Licensing review** of bundling macOS headers and link stubs.
+- Notarising from CI without a Mac, and how Apple credentials are held.
+- Scope of iOS and Android packaging.
+- Which tier-2 targets (Windows on ARM, FreeBSD, RISC-V), and when they become tier 1.
+- The default CPU feature level per architecture.
+- Which glibc versions to ship stubs for.
+
+**Open questions** (same list as [`freestanding.md`](freestanding.md) §11)
+
+1. Add a fifth, embedded reference example (§9.4 there)?
+2. Should `moddil/rt-embedded` default to preemptive or cooperative scheduling?
+3. Does stack-depth analysis apply to all freestanding code, or only to L1 tasks?
+4. Tier assignments for bare-metal targets ([`targets.md`](targets.md) §5).
+5. Floating point in interrupt handlers (lazy FPU state saving).
 
 ---
 
 ### 2.16 Package management and supply-chain security
 
-**Problem.** Package managers made code reuse trivially easy, and in doing so made the dependency
-graph the largest attack surface in modern software.
+🟡 **started** · Detail: [`packages-and-supply-chain.md`](packages-and-supply-chain.md)
 
-**State of the art.**
-- **Cargo**: lockfiles, semver, workspaces, features, `cargo-vet`/`cargo-crev` for audit trails.
-  The ergonomics are excellent.
-- **Go modules**: minimal version selection (deterministic, no SAT solver), a public checksum database
-  (`sum.golang.org`), a module proxy, and **no install scripts**.
-- **Nix / Guix**: fully reproducible, content-addressed builds.
-- **Deno**: runtime permissions (`--allow-net`, `--allow-read`, …).
-- **Unison**: code identified by hash, so there is no "dependency hell" between versions because
-  definitions are immutable.
-- **Sigstore / SLSA / in-toto**: signing and provenance attestations.
-- **pnpm / Yarn PnP**: content-addressed stores and strictness about phantom dependencies.
+Package managers made reuse trivially easy, and made the dependency graph the largest attack surface
+in modern software: build-time code execution, ambient authority, and transitive dependencies that
+nobody reviews.
 
-**What still hurts.**
-- **Build-time code execution**: npm `postinstall`, Python `setup.py`, Rust `build.rs` and proc macros
-  all run arbitrary code on the developer's machine at install or build time.
-- **Ambient authority**: any dependency, however deep, can open sockets, read `~/.ssh`, or spawn
-  processes. A left-pad library has the same power as your web server.
-- Typosquatting, account takeover, maintainer burnout, and long-con attacks (the `xz-utils` backdoor,
-  `event-stream`, `ua-parser-js`).
-- Transitive dependency counts in the hundreds or thousands; nobody reviews them.
-- Binary artefacts in packages that don't match the source.
+Directions:
 
-**Directions.**
-- **Capability-scoped dependencies.** A package declares the capabilities it needs (`net`, `fs`,
-  `env`, `ffi`, `unsafe`, `spawn`, `time`, …), and **the compiler enforces it**: a JSON parser that
-  imports `net` fails to build. Capabilities are passed as values (object-capability style), so a
-  library only gets what its caller hands it. (Prior art: E, Austral, WASI, Deno.)
-- **Capability diffs on upgrade**: "`foo` 1.4 → 1.5 now requests `net`" is a red flag shown by the tool.
-- **No arbitrary code at install time.** Build logic is declarative or runs in a WASM sandbox
-  (R1, §5.1) with no network or file access beyond its inputs. Comptime code, which replaces proc
-  macros, is pure and sandboxed ([`comptime.md`](comptime.md) §10).
-- **Reproducible builds by default**; packages are published from source and the registry verifies
-  the build.
-- **Hash-pinned lockfiles, minimal version selection, transparency log.**
-- **Audit trail built in** (cargo-vet style): "who reviewed this version, and was it a human or an
-  agent?"
-- **Small, broad standard library** to reduce trivial dependencies.
+- **Capability-scoped dependencies**, enforced by the compiler: a JSON parser that imports `net`
+  fails to build. Upgrades show **capability diffs**.
+- **No arbitrary code at install time**; build logic is declarative or sandboxed in WASM.
+- **Reproducible builds by default**, hash-pinned lockfiles, minimal version selection and a
+  transparency log.
+- **A built-in audit trail**, and a small but broad standard library.
 
-**Open questions.**
+**Open questions** (same list as [`packages-and-supply-chain.md`](packages-and-supply-chain.md) §5)
+
 - How to handle capabilities through FFI (C code can do anything)? Probably: FFI *is* a capability
   (`ffi`/`unsafe`) and auditors treat it as high risk.
 - Content-addressed definitions (Unison) vs versioned packages, or both?
@@ -833,81 +622,53 @@ graph the largest attack surface in modern software.
 
 ### 2.17 Tooling uniformity
 
-- **Lesson from Go and Rust.** One official formatter, test runner, doc generator, package manager,
-  LSP, benchmark harness and linter, shipped with the compiler, removes endless ecosystem fragmentation.
-- **Directions.** The compiler is a library and a service; every tool (formatter, LSP, agent API,
-  semantic diff, docs) uses the same front end.
-- **Decided: docs and tests live next to the code, and do more than in Rust** (detail:
-  [`docs-and-tests.md`](docs-and-tests.md)).
-  - `///` docs are parsed into the AST and **checked** (parameter names, links, error docs); effects,
-    capabilities, error sets, contracts and traps are **generated** by the compiler.
-  - **Examples are tests** with expected results (`// => value`), run in the same build under the
-    deterministic simulation runtime.
-  - **Tests name their subject** (`test "…" for withdraw { }`), so tooling and semantic diffs know
-    what each test covers. Property tests, fuzz targets, proofs and benchmarks attach the same way,
-    and contracts become tests automatically.
-  - Only affected tests run, with results cached by content hash.
-  - `note` blocks record the *why* for maintainers, separate from user docs.
+🟠 **questions** · Detail: [`docs-and-tests.md`](docs-and-tests.md); see also [`agent-interface.md`](agent-interface.md)
+
+One official formatter, test runner, doc generator, package manager, LSP, benchmark harness and
+linter, shipped with the compiler, removes ecosystem fragmentation. The compiler is a library and a
+service, and every tool uses the same front end.
+
+Decided: docs and tests live next to the code.
+
+- `///` docs are parsed and **checked**; effects, capabilities, error sets, contracts and traps are
+  **generated**.
+- **Examples are tests** with expected results, run under the deterministic simulation runtime.
+- **Tests name their subject** (`test "…" for withdraw { }`); property tests, fuzz targets, proofs
+  and benchmarks attach the same way.
+- Only affected tests run, with results cached by content hash.
+- `note` blocks record the *why* for maintainers.
+
+**Open questions** (same list as [`docs-and-tests.md`](docs-and-tests.md) §13)
+
+- Syntax for attaching tests to methods, trait implementations and generic instantiations.
+- Shared fixtures and test-only helpers: how they are declared and kept out of release builds.
+- Default doc-coverage thresholds per assurance level.
+- Where notes and provenance live: in the source, or in a sidecar keyed by definition ID?
+- Benchmark stability on shared CI machines.
 
 ---
 
 ### 2.18 LLMs as first-class programmers
 
-**Problem.** Languages assume the person who writes the code also understands it. In an LLM-heavy
-workflow, the writer is a model and the human is the *reviewer, architect and approver*. Current
-languages optimise for the writer and against the reviewer.
+🟡 **started** · Detail: [`agent-interface.md`](agent-interface.md)
 
-**What LLMs struggle with today.**
-- **Non-local semantics**: implicit conversions, overload resolution, operator overloading, Scala
-  implicits, C++ ADL, monkey patching, global state. A model (and a human) has to see far away to
-  understand a single line.
-- **Many ways to say the same thing**: style variation makes training data noisier and diffs bigger.
-- **Opaque macros**: generated code that neither model nor reviewer can see.
-- **Weak feedback loops**: compiler diagnostics written for humans, not structured for agents; slow
-  builds limiting iterations.
-- **Hallucinated APIs**: names that look plausible but don't exist. Fast and precise feedback is the cure.
-- **Version drift**: the model learned an old API; nothing tells it the API changed.
+Languages assume the person who writes the code also understands it. In an LLM-heavy workflow the
+writer is a model and the human is the reviewer, architect and approver. Current languages optimise
+for the writer and against the reviewer.
 
-**What humans struggle with when reviewing LLM code.**
-- "What does this change *actually* do?" Side effects are invisible in signatures.
-- "Is this safe?" Nothing marks which code touches the network, filesystem, or `unsafe`.
-- "Why was it written like this?" Intent is lost; only the result remains.
-- Big diffs from mechanical changes hide the few lines that matter.
+Directions:
 
-**State of the art.**
-- **Go**: one formatter, a small language, few ways to do things. LLMs write Go well.
-- **Rust**: precise, structured compiler errors with suggested fixes; strong types catch hallucinations.
-- **TypeScript**: types + LSP give models a tight feedback loop.
-- **Dafny / Lean / Verus**: specifications that a model can try to satisfy and a checker can verify.
-- **Language servers / tree-sitter**: queryable structure for tooling.
+- **Canonical form**: exactly one formatting, ideally a printed view of a canonical AST.
+- **Local reasoning**: a line can be understood from itself plus the signatures it calls.
+- **Effects and capabilities in signatures** (§2.1), and **contracts next to code** (§2.7).
+- **A machine-first compiler API**: structured diagnostics with machine-applicable fixes and a
+  queryable semantic model.
+- **Intent and provenance**: `note` blocks for the *why* (decided); where provenance lives is open.
+- **A small, stable surface syntax**, and `explain` tooling that shows the expanded view of any
+  expression.
 
-**Directions.**
-- **Canonical form.** Exactly one formatting; ideally the source is a printed view of a canonical
-  AST. No style debates, minimal diffs.
-- **Local reasoning.** You can understand a line by reading it plus the signatures it calls. No
-  implicit conversions, limited overloading, hygienic and *visible* metaprogramming (the expansion can
-  always be shown).
-- **Effects and capabilities in signatures.** A reviewer can see at a glance that a function does
-  I/O, allocates, can fail, can suspend, or runs on a GPU (§2.1). Illustration only:
-  ```
-  fn fetch_user(id: UserId) -> User ! {net, fail(HttpError)}
-  ```
-- **Contracts and properties next to code.** Pre/post-conditions, invariants and property-based tests
-  are first-class syntax, so a model can be asked to "make these pass" and a human can review the
-  *spec* instead of the implementation.
-- **Machine-first compiler API.** Diagnostics as structured data with stable codes and machine-applicable
-  fixes; a queryable semantic model (types, effects, call graph) exposed as a service; fast incremental
-  checking.
-- **Intent and provenance.** First-class places for *why* (design notes, linked issues) and *who/what*
-  (human, model, model version, prompt reference) that survive refactors, unlike comments, which drift.
-  The *why* is decided: `note` blocks attached to declarations
-  ([`docs-and-tests.md`](docs-and-tests.md) §9); where provenance lives is still open.
-- **Stable, small surface syntax** that changes rarely, so training data stays valid. Editions handle
-  evolution (§2.20).
-- **Explainability tooling**: `explain` commands that show the expanded, desugared, effect-annotated
-  view of any expression.
+**Open questions** (same list as [`agent-interface.md`](agent-interface.md) §6)
 
-**Open questions.**
 - How verbose can a language be before humans reject it, given they will mostly *read* it? Is
   explicit-but-verbose acceptable if humans rarely type it?
 - Should provenance live in the source, in version control metadata, or in a sidecar?
@@ -918,47 +679,23 @@ languages optimise for the writer and against the reviewer.
 
 ### 2.19 Diffs, code review and version control
 
-**Problem.** Version control operates on lines of text, but programs are trees with meaning. Reviewers
-see noise (formatting, renames, moved code) and miss signal (a new side effect, a changed error path, a
-performance regression). As agents produce more code, review becomes the bottleneck.
+🟡 **started** · Detail: [`semantic-vcs.md`](semantic-vcs.md)
 
-**State of the art.**
-- **Git**: universal, fast, but line-based and snapshot-based; merges are textual.
-- **Difftastic / SemanticDiff / GumTree**: AST-aware diffs that ignore formatting and track moves.
-- **Unison**: code is stored by hash; names are metadata. Renames are free and never conflict.
-- **Pijul / Darcs**: patch theory, so patches commute and merges are more predictable.
-- **Jujutsu (jj)**: first-class conflicts, working copy as a commit, easy history rewriting.
-- **Stacked diffs** (Phabricator, Gerrit, Graphite, Sapling): small, reviewable, dependent changes.
-- **Refactoring-aware review tools** (RefactoringMiner, IDE "show refactors") detect renames and moves.
+Version control works on lines of text, but programs are trees with meaning. Reviewers see noise
+(formatting, renames, moves) and miss signal (a new side effect, a changed error path). As agents
+write more code, review becomes the bottleneck.
 
-**What still hurts.**
-- A rename across 200 files is a 200-file diff.
-- Reformatting obscures history (`git blame` breaks).
-- Diffs show *textual* change, not *behavioural* change.
-- Reviewers can't easily ask "which public APIs changed? which functions gained side effects? did
-  allocation or complexity change?"
-- Merge conflicts on code that is semantically independent.
+Directions:
 
-**Directions.**
-- **Canonical AST as the diff unit.** Since formatting is canonical (§2.18), whitespace and style
-  diffs disappear. Tooling diffs trees, not lines.
-- **Refactors as intents.** A rename, move or extract-function is recorded as a single operation
-  ("rename `foo` → `bar`") that the tool replays, rather than as hundreds of line edits. Reviewers
-  approve the intent, not every touched line.
-- **Semantic change summary per PR**, computed by the compiler:
-  - public API / signature changes
-  - **effect and capability deltas** ("`parse()` now performs `fs`")
-  - new `unsafe` / FFI
-  - new dependencies and their capabilities
-  - contract changes
-  - optional: allocation / complexity / benchmark deltas
-- **LLM-written review summaries that are checked** against the computed semantic diff, so the summary
-  cannot claim something the diff does not show.
-- **Definition-level history**: blame and history per function/type, surviving moves and renames.
-- Work *with* Git (it is not going away), but store enough structure (e.g., stable node IDs, rename
-  maps) to enable all of the above. Consider Unison-style hashing of definitions as an internal model.
+- **The canonical AST is the diff unit.**
+- **Refactors are recorded as intents** ("rename `foo` → `bar`"), and reviewers approve the intent.
+- **A semantic change summary per PR**, computed by the compiler: API changes, effect and capability
+  deltas, new `unsafe` or FFI, new dependencies.
+- **LLM-written review summaries are checked** against the computed semantic diff.
+- **Definition-level history**, working with Git, not replacing it.
 
-**Open questions.**
+**Open questions** (same list as [`semantic-vcs.md`](semantic-vcs.md) §5)
+
 - Stable identity for definitions: hash of content (Unison) vs persistent IDs vs name-based?
 - Is a custom VCS layer justified, or can everything be done as Git metadata + tooling?
 
@@ -966,11 +703,16 @@ performance regression). As agents produce more code, review becomes the bottlen
 
 ### 2.20 Language evolution
 
-- **Problem.** Languages either freeze (C) or break their ecosystems (Python 2→3).
-- **State of the art.** Rust editions (per-crate, interoperable); Go 1 compatibility promise plus
-  `go fix`; Swift's evolution process.
-- **Directions.** Editions from day one; **automated migrations** as part of the toolchain, which agents
-  can run and humans can review as intents (§2.19).
+🟡 **started** · Detail: [`evolution.md`](evolution.md)
+
+Languages either freeze (C) or break their ecosystems (Python 2→3).
+
+Direction: editions from day one, with **automated migrations** in the toolchain that agents can run
+and humans can review as intents (§2.19).
+
+**Open questions** (same list as [`evolution.md`](evolution.md) §4)
+
+None recorded yet.
 
 ---
 
@@ -1030,84 +772,60 @@ Being honest about where goals collide:
 
 ## 5. Requirements and Non-Goals
 
+Full text: [`requirements.md`](requirements.md).
+
 ### 5.1 Firm requirements (decided)
 
 These are no longer open for debate. Every other design decision must be compatible with them.
 
-**R1. WebAssembly is a first-class compilation target.**
+**R1. WebAssembly is a first-class compilation target.** WASM is a tier-one target from the first
+release, tested in CI like native targets: core WASM, WASI and the Component Model, and the browser.
+It is needed for multi-tier programs (§2.10), it fits the capability model (§2.1, §2.16), and it is
+the sandbox for untrusted code. Concurrency semantics are target-independent; the backend lowers
+suspension to stack switching (preferred), JSPI (the browser baseline) or a CPS transform. Details:
+[`requirements.md`](requirements.md) §1 and [`bootstrap.md`](bootstrap.md).
 
-WASM is not a port done later. It is a tier-one target from the first release, tested in CI like
-native targets. Reasons:
-- **Multi-tier programs (§2.10)** need it: the browser tier compiles to WASM, and edge/serverless
-  platforms increasingly run WASM components.
-- **It fits the capability model (§2.16, §2.1).** A WASM module has no ambient authority; it can only
-  call the imports it is given. WASI and the Component Model are object-capability systems.
-- **It is the sandbox for untrusted code**: build-time logic and compile-time evaluation (§2.14, §2.6),
-  package build steps (§2.16), plugins, and even imported C libraries compiled to WASM and isolated
-  (as RLBox does in Firefox, §2.13).
-- **Portability and determinism**: one artefact that runs anywhere, with deterministic execution
-  available for simulation testing (§2.11).
+**R2. Small core; functionality lives in mods.** The core language is deliberately very small.
+Collections, networking, crypto, the async runtime, GPU support and UI are provided by **mods**
+(packages; a *module* is a namespace inside a mod). A feature belongs in the core only if the
+compiler must check it, if other mods need it to be defined at all, or if it cannot be expressed
+efficiently in a mod. Runtimes are mods that provide handlers for core effects. Details:
+[`mods.md`](mods.md).
 
-What "first-class" means in practice:
-- **Targets**: core WASM (`wasm32`, later `wasm64`/memory64), **WASI preview 2+ and the Component
-  Model**, and the **browser** (with JS interop generated from Moddil types).
-- **Interfaces**: Moddil module interfaces map to and from **WIT** automatically, so Moddil
-  components compose with components written in Rust, C, Go, JS, etc.
-- **Effects map to imports**: a capability a Moddil module requires becomes a WASM import; one it does
-  not require cannot be reached.
-- **Small binaries and fast start-up** are explicit goals (they matter for browsers and edge).
-- **The standard library** works on WASM, with platform-specific parts behind capabilities.
+**R3. No crash from an unhandled error.** Every error the language knows about must be handled. An
+unhandled error at any entry point, or a silently dropped result, is a compile-time error, and there
+are no fire-and-forget tasks. Traps (out of memory, stack overflow, division by zero, out-of-bounds
+indexing) are out of scope. Details: [`error-handling.md`](error-handling.md).
 
-Design constraints this places on the rest of Moddil:
-- **Memory model**: Moddil has no global tracing GC, so linear memory is the natural fit. The WASM GC
-  proposal is an optional optimisation for interop with JS objects, not a dependency.
-- **Concurrency without function colouring (§2.8)** needs suspendable stacks. *Revised after checking
-  engine support (Nov 2026; see [`bootstrap.md`](bootstrap.md) §6 and §8):* stack switching is Phase 3
-  but ships in **no** browser or Node (Chrome has it behind a flag only); Wasmtime has it at Tier 3 on
-  x86_64 Linux. JSPI, however, is standardised and ships in all major browsers and Node ≥ 26.
-  **Decision:** the concurrency semantics are target-independent, and the backend picks a lowering:
-  1. **WASM stack switching**: the preferred lowering, built first against **Wasmtime**.
-  2. **JSPI**: the browser and Node baseline until stack switching ships there. Each Moddil task is
-     its own suspended `promising` stack, scheduled from JS.
-  3. **CPS/Asyncify-style transform**: only if WASI runtimes without stack switching must be
-     supported (open question).
+**Open questions** (same list as [`requirements.md`](requirements.md) §3)
 
-  Keep the dependency in one place in the backend (the task/continuation runtime) so proposal
-  changes stay local.
-- **Threads**: shared memory + atomics are available but restricted in browsers (cross-origin
-  isolation). Structured concurrency must degrade gracefully to a single thread; on a single thread
-  every biased-RC operation takes the cheap owner path ([`concurrency.md`](concurrency.md) §6).
-- **Exceptions, SIMD, tail calls**: use the standard proposals (exception handling, 128-bit SIMD,
-  tail calls) where available; error handling (§2.3) must not depend on unwinding.
-- **GPU (§2.9)** in the browser goes through WebGPU/WGSL, so kernel lowering needs a WGSL path.
-- **FFI (§2.13)** on WASM means C code compiled to WASM and linked as components, not native calls.
+- R1: should WASI runtimes without stack switching be supported, which would need the
+  CPS/Asyncify-style lowering? (Also in [`bootstrap.md`](bootstrap.md) §9.)
+- Non-goals: is a REPL or script mode desirable?
+- Should determinism become R4 ([`determinism.md`](determinism.md) §12)?
 
-**R2. Small core; functionality lives in mods.**
+**Open questions** (same list as [`mods.md`](mods.md) §8)
 
-The core language is deliberately very small. Almost everything else, including collections,
-networking, crypto, the async runtime, GPU support and UI, is provided by **mods** (Moddil's package
-unit, equivalent to a Rust crate). Standard mods live under the `moddil/` namespace (like C++'s
-STL/Boost); anyone can write and publish their own (for example, a tokio-style runtime).
+- **How many batteries?** Go ships a broad standard library (HTTP, crypto, JSON); Rust ships a minimal
+  one. With strong supply-chain controls (§2.16), a broad `moddil/` set reduces risky third-party
+  dependencies. Which way should Moddil lean?
+- **Distribution**: should standard mods ship with the toolchain, or be fetched and pinned like
+  any other mod?
+- **Registry**: one central registry with a `moddil/` namespace, or decentralised (Go-style URLs plus a
+  proxy and checksum database)?
+- **Naming**: is "mod" too easily confused with Rust's `mod` (a module)? The distinction between mod
+  and module needs to stay clear in docs and tooling.
+- **Coherence**: how are trait/instance overlap rules (Rust's orphan rule) handled across mods?
 
-- *Terminology*: a **mod** is a package; a **module** is a namespace/file unit inside a mod.
-- *Boundary rule*: a feature belongs in the core only if the compiler must check it (ownership,
-  effects, capabilities, placement, contracts), if other mods need it to be defined at all, or if it
-  cannot be expressed efficiently in a mod.
-- *Runtimes are mods*: scheduling, I/O and time are core **effects**; runtimes are mods that provide
-  **handlers**. Every library therefore works with every runtime, which avoids Rust's tokio/async-std
-  split.
+**Open questions** (same list as [`bootstrap.md`](bootstrap.md) §9)
 
-Details: [`mods.md`](mods.md).
-
-**R3. No crash from an unhandled error.**
-
-Every error the language knows about (the `fail` effect / `Result`) must be handled. An unhandled
-error at any entry point (`main`, task bodies, exported/FFI functions, tier endpoints, handlers) or a
-silently dropped result is a **compile-time error**. There are **no fire-and-forget tasks**: every
-task is awaited by its enclosing scope. Out of scope for R3: traps such as out of memory, stack
-overflow, integer division by zero and out-of-bounds indexing, which are crashes as in Rust.
-
-Details: [`error-handling.md`](error-handling.md).
+- Stack switching may change shape before standardisation, or arrive late in Safari.
+- Should the MIR be designed so that MLIR can consume it later (GPU/tensor work)?
+- C backend: worth it for bootstrapping and portability?
+- Should WASI runtimes without stack switching be supported (lowering 4)?
+- LLVM version pinning and upgrade cadence.
+- Is Moddil-core (the stage 0 subset) small enough to build quickly, yet large enough to write a
+  pleasant compiler in?
 
 ### 5.2 Non-goals (draft)
 
@@ -1125,26 +843,8 @@ Details: [`error-handling.md`](error-handling.md).
 
 ## 6. Prior-Art Matrix
 
-Legend: ✓ strong · ◐ partial · ✗ weak/absent. These are rough judgements, intended as a starting
-point for debate.
-
-| Language | CPU concurrency | GPU | Memory / resources | Build times | Packages / supply chain | LLM-friendliness | Semantic diffs | C/C++/Rust interop | Distributed / multi-tier |
-|---|---|---|---|---|---|---|---|---|---|
-| C | ✗ manual | ◐ via CUDA C/OpenCL | ✗ manual | ◐ fast-ish, headers | ✗ none standard | ◐ simple but unsafe | ✗ | ✓ *is* the ABI | ✗ |
-| C++ | ◐ libraries, no race safety | ✓ CUDA/SYCL/HIP | ◐ RAII unenforced | ✗ slow | ✗ fragmented (vcpkg/Conan) | ✗ huge, non-local semantics | ✗ | ✓ C / ◐ Rust | ✗ |
-| Rust | ✓ Send/Sync; ◐ async colouring | ◐ emerging | ✓ ownership; ◐ learning curve | ✗ slow | ✓ Cargo; ◐ build.rs/proc macros | ✓ great diagnostics | ✗ | ✓ C / ◐ C++ | ◐ WASM client + server, separate builds |
-| Go | ✓ goroutines; ✗ race safety | ✗ | ◐ low-pause GC | ✓ fast | ✓ MVS, checksum DB | ✓ small, one format | ✗ | ◐ cgo overhead | ◐ Service Weaver |
-| Zig | ◐ manual | ◐ SPIR-V/PTX targets emerging | ◐ explicit allocators, no safety proof | ✓ fast, incremental | ◐ young | ◐ explicit, little magic | ✗ | ✓ best C story | ✗ |
-| Swift | ✓ structured concurrency, actors | ◐ Metal (separate language) | ◐ ARC, atomic costs | ◐ | ◐ SwiftPM | ◐ | ✗ | ✓ C / ✓ C++ | ◐ distributed actors |
-| Mojo | ◐ | ✓ MLIR-based targeting | ◐ ownership | ? | ◐ young | ◐ Python-like | ✗ | ◐ Python, C | ✗ |
-| Odin / Jai | ◐ | ✗ | ◐ allocators, arenas | ✓ very fast | ◐ | ◐ | ✗ | ✓ C | ✗ |
-| Erlang / Elixir | ✓ processes, supervisors | ✗ | ✓ per-process GC | ◐ | ✓ Hex | ◐ | ✗ | ◐ NIFs are risky | ✓ native distribution; ◐ trusted clusters only |
-| Haskell / OCaml / Koka | ◐ / ✓ OCaml 5 effects | ◐ Futhark-like DSLs | ◐ GC; ✓ Perceus (Koka) | ◐ | ◐ | ◐ strong types, steep learning | ✗ | ◐ | ◐ Eliom (OCaml), HasChor (Haskell) |
-| Unison | ◐ abilities | ✗ | ◐ GC | ✓ cache by hash | ✓ content-addressed | ◐ | ✓ by design | ✗ | ✓ ships code by hash |
-| Carbon | ? | ? | ◐ planned safety | ? | ? | ? | ✗ | ✓ C++ (goal) | ✗ |
-| Vale | ◐ | ✗ | ✓ generational refs | ? | ? | ◐ | ✗ | ◐ | ✗ |
-| Pony | ✓ ref capabilities | ✗ | ✓ ORCA GC | ◐ | ◐ | ✗ niche | ✗ | ◐ C | ✗ |
-| Ballerina / Winglang | ◐ | ✗ | ◐ GC | ◐ | ◐ | ◐ | ✗ | ✗ | ✓ network/cloud-aware by design |
+The matrix comparing fifteen languages across the problem areas, and the reference list, are in
+[`prior-art.md`](prior-art.md).
 
 **Observation:** no row is strong across the board, and **no language at all** is strong in "semantic
 diffs" or treats "LLM-friendliness" as a stated design goal. Distributed programming is well served
@@ -1155,6 +855,9 @@ with effects and capabilities as a unifying mechanism, are where the opportunity
 ---
 
 ## 7. Open Questions and Next Steps for Moddil
+
+Open questions for a single area are listed under that area in §2. The questions here cut across
+areas.
 
 **Strategic questions**
 1. **Primary target domain** for v0? Candidates: systems / infrastructure services; ML and
@@ -1186,86 +889,3 @@ removal.
    capability values.
 9. Canonical AST storage: text with canonical printing, or a structured store (Unison-style) with text
    as a view?
-
-**Documents written** (see the document map at the top)
-- `specs/memory-and-resources.md`: ownership, borrows and views, rc, linear resources, zero-copy I/O (§2.2)
-- `specs/concurrency.md`: sharing rules, structured concurrency, runtime contract (§2.8)
-- `specs/accelerators.md`: GPUs and accelerators, devices and addressing, kernels (§2.9)
-- `specs/observability.md`: logging, tracing, metrics, task-aware stacks, flight recorder (§2.12)
-- `specs/interop.md`: C ABI and Rust interop, overlays, generated bridge, C++ via shims (§2.13)
-- `specs/distribution.md`: components, `remote`, contracts and skew, topology, adapters (§2.10)
-- `specs/docs-and-tests.md`: docs, examples, attached tests and benchmarks, notes (§2.17, §2.18)
-- `specs/targets.md`: cross-compilation, static builds, libc strategy, signing (§2.15)
-- `specs/mods.md`: mods, core/mod boundary, standard-mod catalogue (R2)
-- `specs/error-handling.md`: `?`, try blocks, R3, outcome classes, traces (§2.3); survey of prior art
-- `specs/correctness.md`: contracts, testing and verification (§2.7); proposal
-- `specs/determinism.md`: determinism, simulation, scoped handlers, record and replay (§2.11); proposal
-- `specs/build-times.md`: language rules, compiler architecture, profiles, budgets (§2.14); proposal
-- `specs/closures.md`: lambdas that borrow, fail and suspend; escaping closures (§2.8)
-- `specs/units.md`: units of measure, open dimensions, unit algebra (§2.5); proposal
-- `specs/freestanding.md`: freestanding profile, bare-metal concurrency, hardware access, emulator testing (§2.15); proposal
-- `specs/comptime.md`: compile-time evaluation, reflection, typed derives, tagged literals (§2.6)
-- `specs/bootstrap.md`: stage 0, self-hosting, backends, WASM support status (R1)
-- `specs/examples/`: the four reference systems
-
-**Documents still to write**
-- `specs/effects-and-capabilities.md`: the unifying mechanism (§2.1). Natural next step: both
-  written specs lean on effects (suspension, scheduling, implicit context).
-- `specs/packages-and-supply-chain.md`: §2.16
-- `specs/agent-interface.md`: compiler-as-a-service for LLMs (§2.18)
-- `specs/semantic-vcs.md`: diffs and review (§2.19)
-- `specs/requirements.md`: firm requirements (R1 WASM, R2 small core, …) and non-goals, grown from §5
-- `specs/wasm.md`: target details: WASI/Component Model mapping, browser/JS interop, stack switching
-
----
-
-## Appendix: References and Prior Art
-
-*To be expanded with links during research.*
-
-- **Concurrency:** Nystrom, "What Color is Your Function?" (2015); N. J. Smith, "Notes on structured
-  concurrency, or: Go statement considered harmful" (2018); Pony reference capabilities and the ORCA
-  GC; Java JEP 444 (virtual threads) and JEP 453/480 (structured concurrency); Rust
-  `std::thread::scope` and rayon.
-- **GPU:** Ragan-Kelley et al., *Halide* (PLDI 2013); Tillet et al., *Triton* (MAPL 2019); Henriksen
-  et al., *Futhark* (PLDI 2017); MLIR (Lattner et al., CGO 2021); SYCL specification.
-- **Memory:** Reinking et al., *Perceus: Garbage Free Reference Counting with Reuse* (PLDI 2021);
-  Vale generational references; Hylo (Val) mutable value semantics and parameter conventions; Mojo
-  argument conventions and origins; Swift non-escaping closures; Rust Polonius; Choi, Shull,
-  Torrellas, *Biased Reference Counting* (PACT 2018) and CPython PEP 703; Austral and Linear
-  Haskell (linear types); Rust `bytes::Bytes` and `yoke`; FlatBuffers, Cap'n Proto, SBE.
-- **Build systems:** Mokhov, Mitchell, Peyton Jones, *Build Systems à la Carte* (ICFP 2018); Salsa;
-  Bazel / Buck2.
-- **Supply chain:** Go modules and Cox's "Our Software Dependency Problem" (2019); SLSA; Sigstore;
-  `cargo-vet`; analysis of the `xz-utils` backdoor (CVE-2024-3094); Miller, *Robust Composition*
-  (object capabilities, 2006); Austral language.
-- **Effects:** Leijen, *Koka* papers; Effekt language; OCaml 5 effect handlers; Unison abilities.
-- **Version control:** Pijul theory of patches; Jujutsu; Difftastic; GumTree (Falleri et al., 2014);
-  Unison codebase model.
-- **Verification:** Dafny; Verus; SPARK; Liquid Haskell; Kani.
-- **Null and invalid states:** Hoare, "Null References: The Billion Dollar Mistake" (QCon 2009);
-  Swift `Optional`; Kotlin null safety; TypeScript `strictNullChecks`; Dart sound null safety; C# 8
-  nullable reference types; Java Project Valhalla null-restricted types and JSpecify; Rust niche
-  optimisation and pattern types; F* and Liquid Haskell refinement types; typestate (Strom and
-  Yemini, 1986).
-- **Metaprogramming:** Zig `comptime`; Rust proc macros, `syn`, `serde`, `sqlx`; C++26 static
-  reflection (P2996); D CTFE; Jai `#run`/`#insert`; Nim macros; Swift macros; Scala 3 inline and
-  quotes; JavaScript tagged templates.
-- **Interop:** Zig `@cImport` / `zig cc`; Swift C++ interoperability; Carbon language goals; `cxx`;
-  `crubit`; Rust `crabi` proposal; Mozilla UniFFI; ICU4X Diplomat; `wit-bindgen`; RLBox.
-- **Determinism:** FoundationDB simulation testing; TigerBeetle VOPR; `rr`.
-- **Cross-compilation:** Zig (`zig cc`, bundled libcs); Go (`GOOS`/`GOARCH`); `cargo-zigbuild`;
-  `cargo-xwin`; osxcross; musl; mingw-w64; rcodesign (apple-codesign).
-- **Observability:** OpenTelemetry; W3C Trace Context; Rust `tracing`; Java Flight Recorder; BEAM
-  observer and recon; defmt; Yang et al., *NanoLog* (USENIX ATC 2018); Pernosco; WinDbg TTD;
-  tokio-console.
-- **WebAssembly:** Haas et al., *Bringing the Web up to Speed with WebAssembly* (PLDI 2017); WASI and
-  the Component Model / WIT (Bytecode Alliance); stack-switching and JSPI proposals; WASM GC
-  proposal; RLBox (sandboxing C libraries via WASM in Firefox).
-- **Distribution:** Waldo, Wyant, Wollrath, Kendall, *A Note on Distributed Computing* (1994);
-  Deutsch, "Fallacies of distributed computing"; Weisenburger, Wirth, Salvaneschi, *A Survey of
-  Multitier Programming* (ACM Computing Surveys, 2020); Montesi, *Choreographic Programming*
-  (PhD thesis, 2013) and Choral; HasChor; Links; Ur/Web; Eliom; ScalaLoci; Service Weaver
-  ("Towards Modern Development of Cloud Applications", HotOS 2023); Orleans; Winglang; Ballerina;
-  Temporal; Restate; Hydro (Berkeley); Go `ko` and Jib (images without Dockerfiles); Kubernetes,
-  Nomad, Consul, Vault, Terraform/OpenTofu.

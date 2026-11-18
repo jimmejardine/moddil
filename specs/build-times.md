@@ -225,6 +225,33 @@ than for humans:
    migration hooks or scope restart plus replay. Open: which layout migrations can be automatic, and
    whether production hot upgrades are ever a goal.
 4. How much should the registry serve prebuilt binaries, and what are the trust implications?
+5. Can debug-mode dictionary passing and release-mode specialisation produce *identical
+   semantics*, so the difference is purely performance? *Proposed answer:* yes, if everything
+   layout-dependent lives in the witness table, as Swift does (§3).
+6. What is the budget? *Proposed:* < 100 ms keystroke to diagnostics, < 1 s from a function-body
+   edit to a runnable test regardless of project size (§6).
+
+## Background
+
+The problem and the state of the art that led to this design. (Moved from the rationale.)
+
+**Problem.** Slow builds damage the edit-compile-test loop for humans, and are worse for LLM agents
+that iterate dozens of times per task.
+
+**State of the art.**
+- **Go**: designed for fast compilation (no circular imports, simple type system, export data per
+  package). It is the benchmark.
+- **Zig**: incremental compilation and its own fast backends; it aims for sub-second rebuilds.
+- **Jai / D / Delphi**: famously fast compilers.
+- **Rust**: Cranelift backend for debug builds, incremental compilation, parallel front end (in progress).
+- **Bazel/Buck2**: content-addressed, hermetic, remote-cached builds at monorepo scale.
+
+**What still hurts.**
+- **C++**: textual `#include`, template instantiation in every translation unit; modules are arriving slowly.
+- **Rust**: monomorphisation and LLVM optimisation are the dominant costs, and proc macros are opaque
+  to caching.
+- Macro and compile-time evaluation systems that can run arbitrary code break incremental caching.
+- Linking is often the slowest single step (mold and lld help).
 
 ## Prior art
 

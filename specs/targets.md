@@ -18,6 +18,10 @@
 
 ## 2. State of the art
 
+**Problem.** Shared libraries make deployment fragile: the right versions must be installed on every
+machine ("dependency hell"), and building for another OS usually needs that OS, a VM, Docker images
+or hand-assembled sysroots.
+
 | Tool | What it does well | Limits |
 |---|---|---|
 | **Zig** (`zig cc`, `cargo-zigbuild`) | The gold standard. One download cross-compiles C, C++ and Zig to Linux, Windows, macOS and WASM. It bundles musl, mingw-w64, glibc stubs **per glibc version** (e.g. `x86_64-linux-gnu.2.28`) and macOS headers and link stubs. | Shipping Apple-derived stubs is a licensing grey area |

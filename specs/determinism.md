@@ -233,6 +233,17 @@ real-world evidence for it.
 5. Record format and retention: per task, per request, sampled?
 6. How are non-Moddil peers brought into simulation beyond WASM components?
 
+## Background
+
+The problem and the state of the art that led to this design. (Moved from the rationale.)
+
+- **Problem.** Concurrent and distributed bugs are hard to reproduce.
+- **State of the art.** FoundationDB and TigerBeetle deterministic simulation testing; `rr` record and
+  replay; Loom (Rust) model checking for concurrency.
+- **Directions.** Since time, randomness, I/O and scheduling are effects/capabilities, a test harness
+  can replace them with deterministic versions, giving **deterministic simulation testing as a built-in
+  mode** with seed-based replay.
+
 ## Prior art
 
 - FoundationDB simulation testing and `BUGGIFY`; TigerBeetle VOPR; Antithesis.

@@ -186,6 +186,15 @@ function's whole specification and evidence in one place:
 - Where notes and provenance live: in the source, or in a sidecar keyed by definition ID?
 - Benchmark stability on shared CI machines.
 
+## Background
+
+Tooling uniformity (rationale §2.17), which this document builds on.
+
+- **Lesson from Go and Rust.** One official formatter, test runner, doc generator, package manager,
+  LSP, benchmark harness and linter, shipped with the compiler, removes endless ecosystem fragmentation.
+- **Directions.** The compiler is a library and a service; every tool (formatter, LSP, agent API,
+  semantic diff, docs) uses the same front end.
+
 ## Prior art
 
 Rust rustdoc, doc tests and `#[cfg(test)]`; Zig `test` blocks; D `unittest` blocks; Pyret `where:`

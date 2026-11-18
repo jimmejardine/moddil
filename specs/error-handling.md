@@ -357,6 +357,23 @@ txn.commit()?
 7. Is `Option` part of the same machinery (`?` on `Option`, as in Rust)?
 8. Should errors from the `remote` effect (§2.10) have a standard shape (timeout, unreachable,
    incompatible version), and how are errors serialised across tiers?
+9. Checked-exception fatigue (Java) vs inference: how much of an error set should be inferred?
+
+## Background
+
+The problem and the state of the art that led to this design. (Moved from the rationale.)
+
+- **Problem.** Exceptions hide control flow; error codes get ignored; `Result` types are explicit but
+  noisy; panics/abort are coarse. Composing error types across libraries is painful (Rust's
+  `thiserror`/`anyhow` split shows this).
+- **State of the art.** Rust `Result` + `?`; Swift typed `throws`; Zig error unions with inferred error
+  sets and error return traces; Go explicit `error` values; Erlang "let it crash" plus supervisors.
+- **Directions.** Errors as an *effect* (`fail(E)`) so they are visible in signatures but cheap to
+  propagate; inferred error sets (Zig) to reduce boilerplate; mandatory handling; error return traces
+  for free; a clear split between *recoverable errors* and *bugs* (contract violations → abort the
+  task, not the process, in structured concurrency). Error propagation must also respect linear
+  values (rationale §2.2): a path that propagates an error while holding an open transaction has to consume it.
+  Absence is *not* an error: "not found" is an `Option` (rationale §2.4), and `or_fail` converts explicitly.
 
 ## References
 

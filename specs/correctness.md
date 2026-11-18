@@ -230,6 +230,18 @@ These are cheap now and expensive to change once code exists.
 5. How are contracts on effectful operations expressed (for example, "this handler is called at most
    once")?
 
+## Background
+
+The problem and the state of the art that led to this design. (Moved from the rationale.)
+
+- **Problem.** Tests show the presence of bugs, not their absence; specifications live in comments or
+  nowhere.
+- **State of the art.** Ada/SPARK, Eiffel (design by contract), Dafny, Verus (Rust), Liquid Haskell,
+  Lean 4, Prusti/Kani for Rust, property-based testing (QuickCheck, Hypothesis).
+- **Directions.** Contracts are syntax, not library calls; checked at runtime in debug, optionally
+  proven by an SMT-backed verifier for critical modules; property tests generated from contracts.
+  This becomes much more valuable with LLMs, which can write proofs and code against a fixed spec.
+
 ## Prior art
 
 - Bertrand Meyer, *Object-Oriented Software Construction* (Eiffel, design by contract); Eiffel AutoTest.

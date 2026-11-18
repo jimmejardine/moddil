@@ -160,6 +160,30 @@ let post = hashiverse.Post.decode(bytes)?      // Result<Post, DecodeError> → 
 - Python interop (raised in the HFT example): out of scope, or through Python's C API as a mod?
 - Size of the bundled clang in the toolchain download.
 
+## Background
+
+The problem and the state of the art that led to this design. (Moved from the rationale.)
+
+**Problem.** Nobody adopts a language that can't use existing code. Decades of C libraries, huge C++
+codebases, and a growing Rust ecosystem must be reachable with low friction and low overhead.
+
+**State of the art.**
+- **C ABI**: the de facto lingua franca. Every language speaks it.
+- **Zig**: `@cImport` reads C headers directly; `zig cc` is a drop-in C/C++ cross-compiler. This is the
+  best-in-class C story.
+- **Swift**: direct C++ interop (importing classes, templates in some cases) without wrappers.
+- **Carbon**: designed explicitly as a C++ successor with bidirectional interop.
+- **Rust**: `bindgen`, `cbindgen`, `cxx` (safe C++ bridge), `crubit` (Google's C++/Rust interop).
+- **D**: `extern(C++)` with substantial C++ ABI support.
+- **Mojo**: Python interop as a primary adoption strategy.
+
+**What still hurts.**
+- C headers carry no ownership, lifetime, nullability or thread-safety information; bindings must
+  guess or annotate by hand.
+- C++ interop is hard: templates, overloading, exceptions, ABI differences between compilers.
+- **Rust has no stable ABI**; interop goes through `extern "C"`, losing generics, traits, and ownership.
+- Each FFI boundary is a hole in safety guarantees.
+
 ## Prior art
 
 Zig `@cImport` and `zig cc`; Rust `bindgen`, `cbindgen`, `cxx` and `autocxx`; Mozilla UniFFI; ICU4X

@@ -215,6 +215,56 @@ guarantees, generated policies and typed requirements — and leaves the rest to
 - How much rollout safety (e.g. canary analysis) should Moddil check, versus leave to the platform?
 - How unreliable or unordered channels (game snapshots over WebTransport) are expressed in types.
 
+## Background
+
+The problem and the state of the art that led to this design. (Moved from the rationale. Why earlier
+attempts stayed niche is in §2.)
+
+**Problem.** Almost no real system is one process. A single feature, such as "user uploads a photo",
+touches a browser client, an API server, a message queue, a worker, object storage and a database.
+Today that means:
+- **N codebases in M languages** (TypeScript client, Go/Java/Python server, consumers, SQL, plus
+  Terraform/Helm/YAML), each with its own build and deploy.
+- **Hand-maintained contracts** between them (OpenAPI, protobuf, JSON shapes) that drift silently.
+- **Mixed versions in production**: during a rolling deploy, old and new code talk to each other, and
+  nothing checks that they are compatible.
+- **Partial failure** (timeouts, retries, duplicates, ordering) handled ad hoc in every service.
+- **Implicit trust boundaries**: client code runs on hostile machines, but nothing in the code says so.
+
+**State of the art.**
+- **Multitier ("tierless") languages**: Links, Hop.js, Ur/Web, Eliom/Ocsigen, ScalaLoci. One program
+  with client and server parts; the compiler splits it and generates the communication.
+- **Choreographic programming**: Choral, HasChor, Pirouette. A multi-party protocol is written *once*
+  from a global viewpoint and projected into the code for each participant. Deadlock freedom and
+  protocol conformance hold by construction.
+- **Erlang/OTP and Akka**: distribution as a native concept, with location-aware process identifiers
+  and supervision across nodes.
+- **Microsoft Orleans**: virtual actors that the runtime places and moves for you.
+- **Service Weaver** (Google): write a *modular monolith*, then decide at deploy time which components
+  run in which processes. The same code runs as one binary locally or as many services in production.
+- **Unison Cloud**: code is shipped to remote nodes by hash; there is no deployment step in the
+  usual sense.
+- **Winglang**: separates *preflight* code (defines infrastructure) from *inflight* code (runs on it),
+  in one language.
+- **Ballerina**: a language whose types and syntax are built around network services and data.
+- **Durable execution**: Temporal, Restate, Azure Durable Functions. Workflows survive crashes and
+  restarts.
+- **Web frameworks** moving the same way: React Server Components and server actions, Electric
+  Clojure, tRPC (types shared end to end).
+- **Research**: Berkeley's Hydro/Bloom (dataflow languages for distributed systems).
+- **Infrastructure as code**: Pulumi (real languages), Terraform (declarative).
+
+**What still hurts.**
+- **Transparent RPC is a trap.** Making a remote call look like a local one hides latency, partial
+  failure and concurrency. This is the central lesson of Waldo et al., *A Note on Distributed
+  Computing* (1994), and of Deutsch's "fallacies of distributed computing". Many multitier systems
+  repeated the mistake.
+- Frameworks that blur client and server make it easy to **leak secrets or trust client input** by
+  moving one line of code.
+- **Schema evolution** across independently deployed versions is still manual discipline.
+- Infrastructure definitions live apart from the code that depends on them, and drift.
+- Running and testing the *whole system* locally is slow and flaky.
+
 ## Prior art
 
 Links; Ur/Web; Hop.js; Eliom; ScalaLoci; Choral and HasChor; Erlang/OTP; Orleans; Service Weaver;

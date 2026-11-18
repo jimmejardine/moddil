@@ -18,13 +18,20 @@ illustration only and do not commit to any syntax.
 
 ## Start here
 
-Read [`specs/rationale.md`](specs/rationale.md) first. Its status note and **document map** at the
-top link to every other document. Then read the Thesis (§1) and the firm requirements (§5).
+Read [`specs/rationale.md`](specs/rationale.md) first. Its **index** at the top lists every problem
+area with a status (🟡 started, 🟠 questions, 🟢 complete), and links to a short summary and to the
+subdocument that holds the detail. Then read the Thesis (§1) and the firm requirements (§5).
 
 ## Notes for LLMs and agents
 
-- Start with `specs/rationale.md`. For detail, the companion documents linked from its document map
-  are authoritative.
+- Start with `specs/rationale.md`. It holds only an index and a short summary per area. The
+  subdocuments linked from its index are authoritative, and hold the problem statement, prior art,
+  decisions and directions in full.
+- **Keep the rationale in sync.** When you change a subdocument:
+  - an open question lives in the subdocument's *Open questions* section and is copied into the
+    matching rationale summary, so change both together;
+  - update the area's status in the rationale index if it changed;
+  - a new subdocument needs an index row.
 - Sections marked **Decision** or **Decided**, and the firm requirements **R1–R3**, are settled.
   Don't reopen them unless asked. **Directions** and **Open questions** are still open.
 - The four reference systems in [`specs/examples/`](specs/examples/README.md) are the yardstick: a
@@ -38,7 +45,9 @@ top link to every other document. Then read the Thesis (§1) and the firm requir
 
 ```
 specs/
-  rationale.md     why Moddil exists; problems, prior art, decisions; start here
-  *.md             companion specs (memory, concurrency, errors, comptime, mods, bootstrap, …)
+  rationale.md     why Moddil exists; index, status and summary of every area; start here
+  *.md             subdocuments (memory, concurrency, errors, comptime, mods, bootstrap, …)
+  requirements.md  firm requirements R1–R3 and non-goals, in full
+  prior-art.md     prior-art matrix across languages, and references
   examples/        four reference systems used to test every decision
 ```

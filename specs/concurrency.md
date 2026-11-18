@@ -485,6 +485,47 @@ fn serve(listener: let Listener) ! {net, suspend} {
 }
 ```
 
+## Background
+
+The problem and the state of the art that led to this design. (Moved from the rationale.)
+
+**Problem.** Shared-memory parallelism is still the main source of the hardest bugs: data races,
+deadlocks, priority inversion, and memory-ordering mistakes. Async programming has split many
+ecosystems into "sync" and "async" halves.
+
+**State of the art.**
+- **Rust**: `Send`/`Sync` traits plus ownership give compile-time freedom from data races. This is a
+  real breakthrough.
+- **Erlang/BEAM**: share-nothing processes, message passing, supervisors, and preemptive scheduling of
+  millions of lightweight processes. It has the best story for fault tolerance.
+- **Go**: goroutines and channels make concurrency cheap and ergonomic, and there are no coloured
+  functions.
+- **Pony**: reference capabilities (`iso`, `val`, `ref`, `tag`, …) give actors data-race freedom by
+  construction, plus a per-actor GC (ORCA) with no stop-the-world pauses.
+- **Structured concurrency**: Trio (Python), Swift's `TaskGroup`, Kotlin coroutine scopes, and Java's
+  virtual threads plus `StructuredTaskScope`. A task's lifetime is bounded by its lexical scope, so
+  cancellation and errors propagate properly.
+
+**What still hurts.**
+- **Function colouring** (Bob Nystrom's "What color is your function?"). In Rust, C#, JS and Python,
+  `async` spreads through the codebase, and libraries split into sync and async variants. Rust async adds
+  `Pin`, `Send` bounds across `.await`, and executor lock-in (Tokio vs others).
+- Go has no compile-time protection against races. The race detector is dynamic and optional.
+- Erlang's isolation costs copying, and its raw compute performance is weak.
+- Rust's guarantees come with a learning curve that is still the most common complaint about the
+  language.
+- Cancellation is an afterthought almost everywhere. Blocking reads (stdin, `accept`) ignore
+  shutdown, forcing workarounds such as pressing Enter after Ctrl-C or connecting to your own socket.
+- **No async constructors** in C#, JavaScript, Python, Java or C++. The workarounds (`CreateAsync`
+  factories, two-phase `InitAsync`, `Lazy<Task<T>>`) give awkward APIs or leave invalid objects
+  reachable.
+
+**Directions.**
+- Actors, channels and thread-per-core sharding as library patterns built on these primitives, not
+  as the only model.
+- Deterministic scheduling mode for tests (see rationale §2.11).
+- Lints for holding a lock across a suspension point.
+
 ## Prior art
 
 Rust (`Send`/`Sync`, `thread::scope`, rayon); Trio, Swift `TaskGroup`, Kotlin scopes, Java
