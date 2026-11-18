@@ -1,6 +1,6 @@
 # Determinism and Reproducibility
 
-> **Status:** proposal. Expands [`rationale.md`](rationale.md) §2.11. Nothing here is decided;
+> **Status:** proposal. Expands [`overview.md`](overview.md) §2.11. Nothing here is decided;
 > recommendations are marked **Recommended**. Syntax is illustrative.
 
 ## 1. The principle
@@ -43,7 +43,7 @@ What it enables:
 - a **simulated disk** with faults: torn writes, an `fsync` that lies, full disks;
 - **fault-injection points** (FoundationDB's `BUGGIFY`) as an effect that does nothing in production.
 
-**Whole systems in one process:** every placement or tier (rationale §2.10) becomes a simulated node.
+**Whole systems in one process:** every placement or tier (overview §2.10) becomes a simulated node.
 This covers all four [reference examples](examples/README.md).
 
 **Searching for bugs:**
@@ -141,7 +141,7 @@ Recording can be selective per scope or task to control volume.
 
 **Durable execution.** Temporal and Restate rely on deterministic replay of workflow code, and can
 only check it at runtime. In Moddil a workflow's effect row may contain only replayable effects, so
-**workflow determinism is checked by the compiler** (durable workflows, rationale §2.10).
+**workflow determinism is checked by the compiler** (durable workflows, overview §2.10).
 
 ## 6. Reproducible builds
 
@@ -151,7 +151,7 @@ The same source, lockfile and toolchain produce **bit-identical artefacts**:
 - pure, sandboxed comptime ([`comptime.md`](comptime.md));
 - hash-pinned dependencies.
 
-Anyone can rebuild a tagged version of a mod and compare the bytes (rationale §2.16). The bootstrap fixed point
+Anyone can rebuild a tagged version of a mod and compare the bytes (overview §2.16). The bootstrap fixed point
 ([`bootstrap.md`](bootstrap.md) §2–§3) uses the same machinery. Prior art: Go toolchains are fully
 reproducible from Go 1.21; Debian Reproducible Builds; Nix and Guix; Bazel's hermetic builds.
 
@@ -237,7 +237,7 @@ real-world evidence for it.
 
 ## Background
 
-The problem and the state of the art that led to this design. (Moved from the rationale.)
+The problem and the state of the art that led to this design. (Moved from the overview.)
 
 - **Problem.** Concurrent and distributed bugs are hard to reproduce.
 - **State of the art.** FoundationDB and TigerBeetle deterministic simulation testing; `rr` record and

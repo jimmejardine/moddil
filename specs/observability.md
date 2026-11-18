@@ -1,6 +1,6 @@
 # Observability and Debuggability
 
-> **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §2.12. Builds on
+> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.12. Builds on
 > effects and handlers (§2.1, R2), structured concurrency ([`concurrency.md`](concurrency.md)), error
 > traces ([`error-handling.md`](error-handling.md) §6), record and replay
 > ([`determinism.md`](determinism.md) §5) and comptime literals ([`comptime.md`](comptime.md) §8).
@@ -33,7 +33,7 @@
 
 ## 3. Observability effects
 
-`log`, `span` and `metric` are effects with **handlers provided by mods** (rationale R2):
+`log`, `span` and `metric` are effects with **handlers provided by mods** (overview R2):
 stdout/pretty-printing, OTLP export, Prometheus, a ring buffer, test capture, the simulation runtime.
 The handler is chosen in `main` or the deployment manifest. There is no global logger, and libraries
 never choose where their events go.
@@ -60,7 +60,7 @@ metric.count("orders.filled", 1, venue: order.venue)
 
 - The `fmt"…"` literal is checked at build time (argument types, field names) and **interned**: the
   build records a table of event IDs → format strings, keyed by the content-addressed build hash
-  (rationale §2.14).
+  (overview §2.14).
 - On the hot path an event writes only its ID and typed arguments into a per-task or per-core
   buffer, as NanoLog and defmt do. No string formatting happens in the program.
 - Text is rendered later by the handler or by offline tools using the string table.
@@ -72,14 +72,14 @@ metric.count("orders.filled", 1, venue: order.venue)
   so parent/child relationships need no manual context passing.
 - Users add spans for logical operations (`span("checkout") { … }`).
 - **GPU launches are spans** ([`accelerators.md`](accelerators.md) §6).
-- **Calls through the `remote` effect** (rationale §2.10) carry W3C Trace Context automatically, so a
+- **Calls through the `remote` effect** (overview §2.10) carry W3C Trace Context automatically, so a
   trace follows a request from browser to API to worker.
 - Metrics: explicit counters, gauges and histograms, plus rate/error/duration metrics derivable from
   spans.
 
 ## 6. Secrets never reach observability
 
-- `Secret<T>` is the information-flow marking from rationale §2.10 (secrets cannot flow to
+- `Secret<T>` is the information-flow marking from overview §2.10 (secrets cannot flow to
   `client`).
 - A `Secret<T>` value **cannot flow into the arguments of any observability event**. This is a compile
   error, including when the secret is nested inside a struct or an error payload being logged.
@@ -132,7 +132,7 @@ In the browser this maps onto DevTools.
 
 - Full debug info is always produced, including for optimised builds, stored separately and served
   from a **symbol store keyed by build hash**.
-- Debug and release builds share the same semantics (rationale §2.14), so behaviour cannot differ
+- Debug and release builds share the same semantics (overview §2.14), so behaviour cannot differ
   between them, only performance and the quality of variable locations.
 - Optimised code keeps best-effort variable locations and inlined-frame information.
 - WASM builds carry DWARF and source maps.
@@ -140,7 +140,7 @@ In the browser this maps onto DevTools.
 ## 11. For agents
 
 The task tree, recordings, replay and debugger are exposed as a **structured API**, part of the
-compiler-as-a-service (rationale §2.18). An agent can ask: "replay incident 4711 and show the inputs
+compiler-as-a-service (overview §2.18). An agent can ask: "replay incident 4711 and show the inputs
 of the task that failed", or "which tasks have been blocked on the database for over a second?".
 
 ## 12. Fit check against the reference examples

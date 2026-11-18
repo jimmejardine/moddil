@@ -1,6 +1,6 @@
 # Units of Measure
 
-> **Status:** proposal. Expands [`rationale.md`](rationale.md) §2.5. Recommendations are marked
+> **Status:** proposal. Expands [`overview.md`](overview.md) §2.5. Recommendations are marked
 > **Recommended**; syntax follows the recommendation but is not final.
 
 ## 1. Summary
@@ -43,7 +43,7 @@ F#'s weaknesses, which Moddil addresses (§4):
 - No affine units (°C vs K).
 
 **Recommended:** adopt the F# form as Moddil's single syntax for units in types and literals. It is
-consistent with Moddil's generic syntax and gives compound units for free. One form only (rationale
+consistent with Moddil's generic syntax and gives compound units for free. One form only (overview
 §2.18); the suffix form `100cm` is not used.
 
 **Lexing rule:** a `<` immediately after a numeric literal (no space) starts a unit. The canonical
@@ -150,11 +150,11 @@ use moddil::units::si::{m, cm, mm, s, ms};
 ```
 
 *Open:* whether a whole unit pack can be imported at once (`use moddil::units::si::*`), given that
-glob imports otherwise hurt local reasoning (rationale §2.18).
+glob imports otherwise hurt local reasoning (overview §2.18).
 
 ## 8. Across tiers
 
-Wire contracts (rationale §2.10) carry units, so a unit mismatch between services is a compile
+Wire contracts (overview §2.10) carry units, so a unit mismatch between services is a compile
 error. The 1999 Mars Climate Orbiter was lost to exactly this: one system produced pound-force
 seconds, the other expected newton-seconds.
 

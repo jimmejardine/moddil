@@ -1,6 +1,6 @@
 # Bootstrapping and Backends
 
-> **Status:** proposal. Answers rationale §7 Q6. WASM support facts verified November 2026 (§8 below).
+> **Status:** proposal. Answers overview §7 Q6. WASM support facts verified November 2026 (§8 below).
 
 ## Answers in brief
 

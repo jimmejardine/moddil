@@ -23,7 +23,7 @@ Success criteria → Mods used → Interop and non-Moddil parts → Open questio
 
 ## Coverage: examples × problem areas
 
-Section numbers refer to [`../rationale.md`](../rationale.md).
+Section numbers refer to [`../overview.md`](../overview.md).
 ● = central to the example · ○ = exercised · blank = not significant.
 
 | Problem area | Game | HFT | Store | Hashiverse |

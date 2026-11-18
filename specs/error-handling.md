@@ -1,6 +1,6 @@
 # Error Handling
 
-> **Status:** survey + partial decisions. Expands [`rationale.md`](rationale.md) §2.3 and defines
+> **Status:** survey + partial decisions. Expands [`overview.md`](overview.md) §2.3 and defines
 > requirement **R3** (§5.1). Decisions made so far are marked **Decided**; everything else is open.
 
 ## 1. Decisions so far
@@ -56,7 +56,7 @@ Notes:
 `fn parse(s) -> Config with fail(ParseError)`. Raising performs the `fail` effect; a handler further up
 the stack decides what happens. Because functions can be **generic over effects**, one higher-order
 function works for fallible and infallible callers alike (§3.2). It is the same mechanism as Moddil's
-other effects (rationale §2.1).
+other effects (overview §2.1).
 
 **Moddil has both, linked:**
 ```
@@ -179,7 +179,7 @@ inference:
 - Unlike Rust, no `From` conversions are needed to combine errors from different sources; the sets
   simply union.
 - **Explicit at mod boundaries.** Public functions of a mod declare their error set (consistent with
-  rationale §2.1 and §2.18). Inference stays local, which helps incremental builds (§2.14) and makes
+  overview §2.1 and §2.18). Inference stays local, which helps incremental builds (§2.14) and makes
   semantic diffs meaningful ("`parse()` can now fail with `Io`", §2.19).
 - Named error types are still possible for documentation and reuse.
 
@@ -361,7 +361,7 @@ txn.commit()?
 
 ## Background
 
-The problem and the state of the art that led to this design. (Moved from the rationale.)
+The problem and the state of the art that led to this design. (Moved from the overview.)
 
 - **Problem.** Exceptions hide control flow; error codes get ignored; `Result` types are explicit but
   noisy; panics/abort are coarse. Composing error types across libraries is painful (Rust's
@@ -372,8 +372,8 @@ The problem and the state of the art that led to this design. (Moved from the ra
   propagate; inferred error sets (Zig) to reduce boilerplate; mandatory handling; error return traces
   for free; a clear split between *recoverable errors* and *bugs* (contract violations → abort the
   task, not the process, in structured concurrency). Error propagation must also respect linear
-  values (rationale §2.2): a path that propagates an error while holding an open transaction has to consume it.
-  Absence is *not* an error: "not found" is an `Option` (rationale §2.4), and `or_fail` converts explicitly.
+  values (overview §2.2): a path that propagates an error while holding an open transaction has to consume it.
+  Absence is *not* an error: "not found" is an `Option` (overview §2.4), and `or_fail` converts explicitly.
 
 ## References
 

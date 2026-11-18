@@ -1,6 +1,6 @@
 # Docs, Examples and Tests Next to the Code
 
-> **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §2.17 and §2.18,
+> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.17 and §2.18,
 > and gives the tools of [`correctness.md`](correctness.md) one place to live. Snippets are
 > **illustration only**; no syntax is committed.
 
@@ -70,12 +70,12 @@ properties and benchmarks attached to it, its mutation score, and the mod's assu
 ## 4. Docs are checked and partly generated
 
 `///` stays, because it is familiar and LLM-friendly, but the compiler parses it into the canonical
-AST (rationale §2.18) instead of treating it as a comment.
+AST (overview §2.18) instead of treating it as a comment.
 
 **Checked:**
 - documented parameter names must exist, and (per mod policy) every parameter is documented;
 - links such as `[[Account::open]]` must resolve. They point at *definitions*, so a rename updates
-  them (rationale §2.19);
+  them (overview §2.19);
 - a hand-written errors section must match the function's actual error set
   ([`error-handling.md`](error-handling.md) §5).
 
@@ -206,7 +206,7 @@ this one uses and is used by. The documentation page for a module combines the t
   separate integration-test modules.
 - **Tooling knows each test's subject**:
   - "which tests cover `withdraw`?" is a query;
-  - the semantic diff (rationale §2.19) reports "**`withdraw` changed, but none of its tests did**",
+  - the semantic diff (overview §2.19) reports "**`withdraw` changed, but none of its tests did**",
     a sharp signal when reviewing agent-written changes.
 - **Tests use effect handlers, not mocks.** The simulation runtime is the default: virtual time,
   seeded randomness, simulated network and filesystem. Fakes are scoped handlers
@@ -247,14 +247,14 @@ function's whole specification and evidence in one place:
   linked issues and design records.
 - Notes are attached to declarations in the AST, so they survive moves and renames, unlike comments.
 - They are shown to maintainers, reviewers and agents, and kept out of user-facing API docs.
-- This is the "intent" half of rationale §2.18; where *provenance* (human or agent, model version)
+- This is the "intent" half of overview §2.18; where *provenance* (human or agent, model version)
   lives is still open there.
 
 ## 10. Benchmarks
 
 - `bench "…" for f { … }` attaches a benchmark to its subject (Criterion-style statistics).
 - Results are recorded per build hash, so the semantic diff can report **performance deltas** for
-  changed functions (rationale §2.19).
+  changed functions (overview §2.19).
 - Noise handling: repeated runs, confidence intervals, and dedicated or pinned machines for
   benchmarks that gate merges.
 
@@ -262,13 +262,13 @@ function's whole specification and evidence in one place:
 
 - The compiler API serves the docs, examples, contracts, effects and attached tests of the **installed
   version** of each mod. Agents read exactly the API they compile against, which addresses
-  hallucinated and outdated APIs (rationale §2.18).
+  hallucinated and outdated APIs (overview §2.18).
 - **Groups as context.** For any item, the agent API reports its groups, explicit or inherited
   (§4.1), so an agent editing a private helper knows which themes it serves.
 - **Overviews first.** Asked to explain a mod, the agent API returns the mod overview, then module
   overviews, then groups, and drills down to individual items only on request (§4.1). Agents get the
   theme before the details, and fit within their context.
-- The doc site, language server and agent API all come from the same front end (rationale §2.17).
+- The doc site, language server and agent API all come from the same front end (overview §2.17).
 - Editors can fold or show tests, notes and benchmarks around a declaration, giving a literate view
   of the code.
 
@@ -293,7 +293,7 @@ function's whole specification and evidence in one place:
 
 ## Background
 
-Tooling uniformity (rationale §2.17), which this document builds on.
+Tooling uniformity (overview §2.17), which this document builds on.
 
 - **Lesson from Go and Rust.** One official formatter, test runner, doc generator, package manager,
   LSP, benchmark harness and linter, shipped with the compiler, removes endless ecosystem fragmentation.

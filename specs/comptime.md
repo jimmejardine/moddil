@@ -1,6 +1,6 @@
 # Compile-time Evaluation (instead of Macros)
 
-> **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §2.6.
+> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.6.
 > Snippets are **illustration only**; no syntax is committed.
 
 ## 1. Summary
@@ -51,7 +51,7 @@ Zig has no macro language. It has one idea: ordinary Zig code can be evaluated b
 **Gaps that matter for Moddil:**
 - **Duck-typed generics.** `anytype` and comptime `type` parameters have no declared bounds. As with
   C++ templates, errors appear at instantiation, deep inside library code, and a signature does not
-  say what it requires. That conflicts with local reasoning (rationale §2.18) and with debug-mode
+  say what it requires. That conflicts with local reasoning (overview §2.18) and with debug-mode
   dictionary passing (§2.14).
 - **Lazy analysis.** Code that is never instantiated is never checked.
 - **No generated declarations.** `@Type` cannot create methods or attach an implementation to an
@@ -75,7 +75,7 @@ macros.
 ## 3. Evaluation model
 
 - Comptime code is **ordinary Moddil**: the same syntax, types, ownership rules and standard mods.
-- It must have an **empty effect set**, which the effect system checks (rationale §2.1).
+- It must have an **empty effect set**, which the effect system checks (overview §2.1).
   - Allocation within the evaluator is allowed.
   - `fail` becomes a compile error.
   - Every other effect is rejected.
@@ -204,7 +204,7 @@ Generated code is ordinary code once expanded:
 |---|---|
 | New syntax forms (`tokio::select!`, `html!`, `json!`) | Language features where fundamental (select is part of the structured-concurrency API); otherwise tagged literals or plain functions |
 | `vec![a, b, c]` and other variadic sugar | Array/collection literals; comptime variadic parameters |
-| Attribute macros that rewrite a function body (`#[tokio::main]`, `#[async_trait]`) | Not needed: effects remove function colouring and runtime selection happens in `main` (rationale R2) |
+| Attribute macros that rewrite a function body (`#[tokio::main]`, `#[async_trait]`) | Not needed: effects remove function colouring and runtime selection happens in `main` (overview R2) |
 | Generating items at arbitrary places, or names chosen by the macro | Not possible: generation only at the annotation site, through the typed API |
 | Token-level tricks | Not possible, by design |
 

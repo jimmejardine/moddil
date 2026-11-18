@@ -1,6 +1,6 @@
 # Mods: Small Core, Big Library
 
-> **Status:** brainstorm. Implements requirement **R2** in [`rationale.md`](rationale.md) §5.1.
+> **Status:** brainstorm. Implements requirement **R2** in [`overview.md`](overview.md) §5.1.
 
 ## 1. Idea
 

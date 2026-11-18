@@ -1,6 +1,6 @@
 # Diffs, Code Review and Version Control
 
-> **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §2.19.
+> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.19.
 
 ## 1. Problem
 

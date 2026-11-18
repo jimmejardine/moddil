@@ -1,6 +1,6 @@
 # Packages and Supply-Chain Security
 
-> **Status:** decided direction, open questions remain. Expands [`rationale.md`](rationale.md) §2.16.
+> **Status:** decided direction, open questions remain. Expands [`overview.md`](overview.md) §2.16.
 > Manifest syntax, commands and file formats are **illustration only**.
 
 ## 1. Summary
@@ -150,7 +150,7 @@ github.com/acme/json                  v2 → v3 available (major)
 
 ### 4.8 Capability-scoped dependencies
 
-Two layers, both enforced by the compiler (rationale §2.1):
+Two layers, both enforced by the compiler (overview §2.1):
 - **A ceiling per mod**: the manifest declares the capabilities the mod may use (`net`, `fs`, `env`,
   `spawn`, `time`, `ffi`, `unsafe`, …). A JSON parser that uses `net` fails to build.
 - **Authority flows as values** (object capabilities): a library only gets the capabilities its

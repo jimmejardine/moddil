@@ -1,6 +1,6 @@
 # Correctness: Contracts, Testing and Verification
 
-> **Status:** proposal. Expands [`rationale.md`](rationale.md) §2.7. Nothing here is decided yet;
+> **Status:** proposal. Expands [`overview.md`](overview.md) §2.7. Nothing here is decided yet;
 > recommendations are marked **Recommended**. Syntax is illustrative.
 
 ## 1. Summary
@@ -20,11 +20,11 @@ decisions remove the usual obstacles:
 
 | Existing decision | What it gives correctness tooling |
 |---|---|
-| **Effects** (rationale §2.1) | The compiler can *check* that contract expressions are pure; most languages can only trust them to be. Effect handlers swap real I/O, time and scheduling for test versions. |
+| **Effects** (overview §2.1) | The compiler can *check* that contract expressions are pure; most languages can only trust them to be. Effect handlers swap real I/O, time and scheduling for test versions. |
 | **Ownership; immutable rc contents; shared mutation only in sync cells** ([`memory-and-resources.md`](memory-and-resources.md)) | No unrestricted aliasing, so a verifier knows what a function can modify (the "frame problem"). This is why Verus, Prusti and Creusot work for Rust and why C/C++ verification is so hard. |
 | **Linear resources** | Typestate: protocols such as "open → write → commit or rollback" checked by the type system. |
 | **MIR interpreter** ([`bootstrap.md`](bootstrap.md), [`comptime.md`](comptime.md)) | A Miri-style undefined-behaviour checker, and a reference semantics for testing the backends against each other. |
-| **Deterministic runtime** (`moddil/runtime-sim`, rationale §2.11) | Reproducible tests and systematic exploration of task interleavings. |
+| **Deterministic runtime** (`moddil/runtime-sim`, overview §2.11) | Reproducible tests and systematic exploration of task interleavings. |
 | **Comptime and static reflection** | Test-data generators derived from types (`#[derive(Arbitrary)]`); contracts on literals checked at compile time. |
 
 ## 3. Easy wins (v1)
@@ -50,7 +50,7 @@ struct OrderBook {
   ([`syntax.md`](syntax.md)).
 - **Contract expressions must be pure**, checked by the effect system.
 - Contracts are part of the **mod interface**: shown by the language server, included in generated
-  docs, subject to semver, and visible in semantic diffs (rationale §2.19). A trait impl may weaken
+  docs, subject to semver, and visible in semantic diffs (overview §2.19). A trait impl may weaken
   preconditions and strengthen postconditions, never the reverse (Liskov).
 - Runtime checking policy: see §5.
 
@@ -103,7 +103,7 @@ checks that some test fails (cargo-mutants, PIT, Stryker). A surviving mutant po
 behaviour.
 
 This matters more than usual for Moddil: **LLM-written tests are often weak or tautological**
-(rationale §2.18). Mutation scores give reviewers an objective measure of whether a PR's tests
+(overview §2.18). Mutation scores give reviewers an objective measure of whether a PR's tests
 actually test anything, and can be shown in the PR summary.
 
 ### 3.6 A Miri-style checker
@@ -118,7 +118,7 @@ See also [`determinism.md`](determinism.md) §3.
 
 Because scheduling is an effect, `runtime-sim` can explore task interleavings: random, PCT (a
 probabilistic strategy with good bug-finding guarantees), or exhaustive for small tests (Loom,
-shuttle, Coyote, FoundationDB). Every failure replays from a seed (rationale §2.11).
+shuttle, Coyote, FoundationDB). Every failure replays from a seed (overview §2.11).
 
 ### 3.8 Differential testing of the compiler
 
@@ -150,7 +150,7 @@ verified:
 | **L1** | **No traps**, proven: no division by zero, out-of-bounds index or `unreachable` reachable. This complements R3: errors are handled, *and* nothing crashes. |
 | **L2** | Functional correctness proven against the contracts |
 
-The level is part of mod metadata and the audit trail (rationale §2.16), so a dependency's assurance
+The level is part of mod metadata and the audit trail (overview §2.16), so a dependency's assurance
 is visible before you depend on it. The HFT risk module (example 2) would target L2.
 
 ### 4.3 Refinement types with automatic proofs
@@ -166,7 +166,7 @@ tests, so engineers adopt it easily. A Moddil equivalent could run on MIR.
 
 ### 4.5 Protocol and distributed verification
 
-- **Choreographies and session types** (rationale §2.10) are deadlock-free by construction.
+- **Choreographies and session types** (overview §2.10) are deadlock-free by construction.
 - **TLA+** and **P** (used at AWS and Microsoft) model-check distributed protocols. Moddil
   choreographies could be exported to such a checker, and deterministic simulation (§2.11) gives a
   cheaper complement.
@@ -174,7 +174,7 @@ tests, so engineers adopt it easily. A Moddil equivalent could run on MIR.
 ### 4.6 Information flow
 
 Type-level taint tracking and non-interference: secrets never reach the `client` placement, and untrusted
-input reaches sensitive sinks only after validation (rationale §2.10). This is both a security and a
+input reaches sensitive sinks only after validation (overview §2.10). This is both a security and a
 correctness property.
 
 ### 4.7 A formal semantics of the core
@@ -188,7 +188,7 @@ which every other tool here depends on.
 Agents can now write code *and* its proofs, with the verifier as the arbiter ("vericoding"). The
 spec is what the human reviews; the proof certifies that the code meets it. To support this:
 - verifier output must be **structured**: failing obligations, counterexamples, and suggested
-  invariants, in a form agents can act on (rationale §2.18);
+  invariants, in a form agents can act on (overview §2.18);
 - **spec inference**: tools or LLMs propose candidate contracts and invariants (Daikon-style), and
   humans approve them.
 
@@ -235,7 +235,7 @@ These are cheap now and expensive to change once code exists.
 
 ## Background
 
-The problem and the state of the art that led to this design. (Moved from the rationale.)
+The problem and the state of the art that led to this design. (Moved from the overview.)
 
 - **Problem.** Tests show the presence of bugs, not their absence; specifications live in comments or
   nowhere.

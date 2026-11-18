@@ -54,7 +54,7 @@ fn on_trap(info: &TrapInfo) -> ! { log_to_flash(info); system_reset() }
 
 ## 4. Memory without an operating system
 
-- Allocation is a capability (rationale §2.2).
+- Allocation is a capability (overview §2.2).
 - **In freestanding profiles allocation is fallible by default:** it fails with `OutOfMemory`
   (class 1) rather than trapping, as in Zig and the Linux kernel's Rust code.
 - Strategies, chosen by the program:

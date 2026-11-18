@@ -1,6 +1,6 @@
 # Null and Invalid States
 
-> **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §2.4.
+> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.4.
 
 ## 1. Problem
 
@@ -46,13 +46,13 @@ plus compiler-checked narrowing*, in one of two styles:
   - defaulting with `x.unwrap_or(d)` and `x.unwrap_or_else(|| …)`.
 
   There is no implicit unwrap. `unwrap()` is an explicit, visible panic point.
-- **Absence is data; failure is an effect.** `fail(E)` (rationale §2.3) plays the role of Rust's `Result`,
+- **Absence is data; failure is an effect.** `fail(E)` (overview §2.3) plays the role of Rust's `Result`,
   so `Option` is the only "maybe" type in everyday code.
   - `opt.or_fail(e)` turns absence into failure.
   - Catching a failure can produce an `Option`.
 - **Guaranteed niches:** `Option<&T>`, `Option<Rc<T>>`, owned pointers, non-zero and range-typed
   integers, and enums with spare values are all the same size as `T`. Nullable C pointers import as
-  `Option<…>` (rationale §2.13).
+  `Option<…>` (overview §2.13).
 - **Fits the ownership model:**
   - `Option<&T>`, or an `Option` holding a view, is itself a view
     ([`memory-and-resources.md`](memory-and-resources.md) §4).
@@ -65,8 +65,8 @@ plus compiler-checked narrowing*, in one of two styles:
   - **Range refinements** (`u32 where self in 1..`): values that are excluded become free niches for
     `Option`. This is the same `where` form as other refinements (decided).
   - **Refinement types** (`Int where 0 <= self < 100`): checked statically where provable,
-    dynamically otherwise. They share machinery with contracts (rationale §2.7).
-  - **Typestate through linear types** (rationale §2.2): states are types, and transitions consume the old
+    dynamically otherwise. They share machinery with contracts (overview §2.7).
+  - **Typestate through linear types** (overview §2.2): states are types, and transitions consume the old
     state, e.g. `Conn<Unauthed>` → `Conn<Authed>`.
 
 Illustration only:
@@ -95,7 +95,7 @@ fn connect(host: &str, port: Option<Port>) with net, fail(NetError) {
 - ~~What does postfix `?` mean?~~ **Resolved:** it propagates, as in Rust (`None`, or a failure
   through the `fail` effect, [`error-handling.md`](error-handling.md)). Swift-style chaining within
   an expression is `try { a?.b?.c }`.
-- How much refinement checking is static vs dynamic, and what does it cost in compile time (rationale §2.14)?
+- How much refinement checking is static vs dynamic, and what does it cost in compile time (overview §2.14)?
 - Layout of nested options (`Option<Option<T>>`): how far should niche packing go?
 
 ## Prior art

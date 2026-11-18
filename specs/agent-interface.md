@@ -1,6 +1,6 @@
 # LLMs as First-Class Programmers: the Agent Interface
 
-> **Status:** decided direction, open questions remain. Expands [`rationale.md`](rationale.md) §2.18.
+> **Status:** decided direction, open questions remain. Expands [`overview.md`](overview.md) §2.18.
 > Snippets and message formats are **illustration only**.
 
 ## Summary
@@ -61,7 +61,7 @@ languages optimise for the writer and against the reviewer.
 The source is a printed view of a canonical AST, so how much is shown is a choice of view, not a
 property of the source.
 - **Explicit in the source** only where readers need it: at **mod boundaries**, public signatures
-  state effects, error sets, contracts and capabilities (rationale §2.1, §2.3, §2.7).
+  state effects, error sets, contracts and capabilities (overview §2.1, §2.3, §2.7).
 - **Inferred inside** a module: local effects, error sets and types.
 - **Two views of the same code**:
   - a **compact view** for writing;
@@ -78,7 +78,7 @@ pub fn load(path: Path) -> Config with fs, fail(LoadError)   // explicit: public
 
 ### 5.2 The agent server
 
-The compiler is a library and a service (rationale §2.17; the whole toolchain is in
+The compiler is a library and a service (overview §2.17; the whole toolchain is in
 [`toolchain.md`](toolchain.md)). It is exposed over **LSP** for editors and
 over **MCP** for agents, from the same front end.
 
@@ -139,7 +139,7 @@ may be Moddil's largest adoption risk. Measures:
 
 - Comptime is pure and sandboxed ([`comptime.md`](comptime.md)).
 - Tests run under the simulation runtime by default ([`determinism.md`](determinism.md)).
-- A program can use only the capabilities it declares (rationale §2.1, §2.16).
+- A program can use only the capabilities it declares (overview §2.1, §2.16).
 
 So an agent can build and test code without being able to reach the network or the disk.
 
@@ -164,7 +164,7 @@ Every change can be reviewed through:
   statement, not per token, which local inference makes cheap.
 - **Translation tools** from Rust and TypeScript, to seed code and port projects.
 - **A small, stable surface syntax** that changes rarely, so training data stays valid; editions
-  handle evolution (rationale §2.20).
+  handle evolution (overview §2.20).
 
 ## 7. Open questions
 

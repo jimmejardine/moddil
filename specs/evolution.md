@@ -1,6 +1,6 @@
 # Language Evolution
 
-> **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §2.20.
+> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.20.
 
 ## 1. Problem
 

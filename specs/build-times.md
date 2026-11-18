@@ -1,6 +1,6 @@
 # Build Times
 
-> **Status:** proposal. Expands [`rationale.md`](rationale.md) §2.14. Nothing here is decided;
+> **Status:** proposal. Expands [`overview.md`](overview.md) §2.14. Nothing here is decided;
 > recommendations are marked **Recommended**. Numbers in §6 are initial targets.
 
 ## 1. Summary
@@ -52,7 +52,7 @@ Both are workarounds that every serious Rust project rediscovers. Moddil should 
    - Debug: one copy of the code, receiving a hidden **witness table** of type information and
      operations (size, alignment, copy, drop, trait methods).
    - Release: a specialised copy per type (monomorphisation).
-   - This answers rationale §2.14's open question: the semantics are identical as long as everything
+   - This answers overview §2.14's open question: the semantics are identical as long as everything
      layout-dependent lives in the witness table. Swift's value witness tables show this works at
      scale.
    - Risk: generic-heavy code (iterators, collections) can be much slower in debug builds.
@@ -65,7 +65,7 @@ Both are workarounds that every serious Rust project rediscovers. Moddil should 
 8. **Trait implementations are checked locally** (an orphan-style coherence rule), with no global
    search across all mods.
 9. **Cache keys are hashes of the canonical AST**, not of text, so formatting and comment changes
-   invalidate nothing (rationale §2.18, §2.19).
+   invalidate nothing (overview §2.18, §2.19).
 
 ## 4. Compiler architecture
 
@@ -80,7 +80,7 @@ Both are workarounds that every serious Rust project rediscovers. Moddil should 
   Cranelift in process, which also enables **live update** (§4.1). Release builds link normally with
   `lld` or `mold`, with split debug info.
 - **Check-only mode:** type, effect and ownership checking without code generation, powering the
-  language server and agents (rationale §2.18).
+  language server and agents (overview §2.18).
 - **Test impact analysis:** the query graph knows which tests depend on a change, so only those run.
 
 ### 4.1 Live update (debug builds)
@@ -123,7 +123,7 @@ reports exactly where. Even layout changes then feel live in most development lo
   module instantiated against the same memory and table, then its entries are swapped in.
 
 **Scope:** debug builds only. Production hot upgrades are a **non-goal for now**; production uses
-rolling deploys with compiler-checked compatibility between versions (rationale §2.10).
+rolling deploys with compiler-checked compatibility between versions (overview §2.10).
 
 ### 4.2 Cached builds
 
@@ -149,7 +149,7 @@ rolling deploys with compiler-checked compatibility between versions (rationale 
 - A shared cache is a supply-chain risk (cache poisoning).
 - Remote and shared-artefact entries are **signed**; only trusted CI writes, developers read.
 - Builds are reproducible, so independent rebuilders and random sampling can verify hits
-  ([`determinism.md`](determinism.md) §6, rationale §2.16).
+  ([`determinism.md`](determinism.md) §6, overview §2.16).
 
 **Release builds** may be slow. Their optimised artefacts are cached per mod, and profile-guided
 optimisation profiles are just more inputs to the key. Dependencies normally arrive optimised from the
@@ -188,7 +188,7 @@ Supporting tools:
 
 ## 7. Agents
 
-Agents rebuild dozens of times per task (rationale §2.18), so the following matter even more for them
+Agents rebuild dozens of times per task (overview §2.18), so the following matter even more for them
 than for humans:
 - check-only mode for fast feedback on types, effects and ownership;
 - test impact analysis;
@@ -234,7 +234,7 @@ than for humans:
 
 ## Background
 
-The problem and the state of the art that led to this design. (Moved from the rationale.)
+The problem and the state of the art that led to this design. (Moved from the overview.)
 
 **Problem.** Slow builds damage the edit-compile-test loop for humans, and are worse for LLM agents
 that iterate dozens of times per task.

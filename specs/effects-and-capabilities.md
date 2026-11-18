@@ -1,6 +1,6 @@
 # Effects and Capabilities
 
-> **Status:** decided direction, open questions remain. Expands [`rationale.md`](rationale.md) §2.1.
+> **Status:** decided direction, open questions remain. Expands [`overview.md`](overview.md) §2.1.
 > Snippets are **illustration only**.
 
 ## 1. Summary
@@ -147,7 +147,7 @@ keeps them cheap and guarantees the handler outlives its uses.
 
 ### 4.6 Signatures and inference
 
-- **Inferred inside a module**, **explicit on `pub` signatures** (rationale §2.18). The reviewer view
+- **Inferred inside a module**, **explicit on `pub` signatures** (overview §2.18). The reviewer view
   shows inferred effects inline ([`agent-interface.md`](agent-interface.md) §5.1).
 - An effect set is a **set**: order doesn't matter, and a function with fewer effects can be used
   where more are allowed.

@@ -1,6 +1,6 @@
 # The Toolchain
 
-> **Status:** proposal. Expands [`rationale.md`](rationale.md) §2.17. Docs and tests are detailed in
+> **Status:** proposal. Expands [`overview.md`](overview.md) §2.17. Docs and tests are detailed in
 > [`docs-and-tests.md`](docs-and-tests.md); the agent-facing API in
 > [`agent-interface.md`](agent-interface.md); packages in
 > [`packages-and-supply-chain.md`](packages-and-supply-chain.md). Commands are illustrative.
@@ -47,7 +47,7 @@ human-oriented text.
 ## 3. Formatter
 
 - **Canonical.** Like `gofmt` and Black, the formatter has no style options. Source text is a print
-  of the canonical AST (rationale §2.18, §2.19), so formatting never appears in a diff.
+  of the canonical AST (overview §2.18, §2.19), so formatting never appears in a diff.
 - Comments and blank-line grouping are part of the AST and are preserved.
 - `moddil fmt --check` runs in CI; editors format on save.
 - **One setting, recommended:** a project-wide line width in the manifest (default 120). Teams
@@ -74,7 +74,7 @@ human-oriented text.
   - inlay hints at suspension points ([`closures.md`](closures.md) §9);
   - the active handler stack in tests and simulations ([`determinism.md`](determinism.md) §4);
   - `explain` expansions inline;
-  - a semantic diff view (rationale §2.19).
+  - a semantic diff view (overview §2.19).
 - An official **tree-sitter grammar** for syntax highlighting elsewhere (GitHub, other editors and
   tools).
 - Official editor integrations: VS Code, Zed, Neovim and JetBrains (via LSP). Priority order is open.

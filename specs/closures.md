@@ -31,7 +31,7 @@ fn sync_all(index: &Map<Path, Meta>, cache: &mut Cache) -> u64 {
 
 | Rust pain | Cause | Moddil |
 |---|---|---|
-| `\|x\| async move { … }` cannot borrow its argument or its captures; higher-ranked lifetimes on futures; async closures only stable since 1.85; still no way to say "the returned future is `Send`" | Async means returning a future value, so every async closure returns a state machine with lifetimes | Suspension is an **effect** (rationale §2.1, [`concurrency.md`](concurrency.md) §8). A suspending lambda is an ordinary lambda with `suspend` in its effects. There is no future type, so no extra lifetimes. |
+| `\|x\| async move { … }` cannot borrow its argument or its captures; higher-ranked lifetimes on futures; async closures only stable since 1.85; still no way to say "the returned future is `Send`" | Async means returning a future value, so every async closure returns a state machine with lifetimes | Suspension is an **effect** (overview §2.1, [`concurrency.md`](concurrency.md) §8). A suspending lambda is an ordinary lambda with `suspend` in its effects. There is no future type, so no extra lifetimes. |
 | Separate APIs: `for_each`, `try_for_each`, `StreamExt::for_each`, `for_each_concurrent` | APIs are coloured by `Result` and `async` | **One `visit`**, generic over the closure's effects ([`error-handling.md`](error-handling.md) §3.2) |
 | `?` inside a closure exits the closure, not the enclosing function | `Result` is a value | `fail` is an effect, so `?` propagates through `visit` to the caller |
 | `'static`, `move` and `Arc::clone` for spawned closures | Tasks can outlive their spawner | Structured concurrency: child closures are non-escaping and borrow freely ([`concurrency.md`](concurrency.md) §3) |
@@ -151,7 +151,7 @@ across a suspension and a lock might be held across it.
 
 *Open:* how to show them.
 - **(a) Recommended:** no marker in the source. The language server shows suspension points as inlay
-  hints, and semantic diffs report new ones (rationale §2.19).
+  hints, and semantic diffs report new ones (overview §2.19).
 - (b) A Swift-style `await` marker at call sites, optional or required.
 
 ## 10. Syntax

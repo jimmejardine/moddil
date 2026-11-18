@@ -1,6 +1,6 @@
 # Prior Art: Matrix and References
 
-> **Status:** reference material. Moved from [`rationale.md`](rationale.md) §6 and its appendix. Each spec also has its own
+> **Status:** reference material. Moved from [`overview.md`](overview.md) §6 and its appendix. Each spec also has its own
 > prior-art list.
 
 ## 1. Prior-art matrix

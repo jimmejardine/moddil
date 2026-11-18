@@ -1,4 +1,4 @@
-# Moddil Rationale: Why a New Language?
+# Moddil Overview: Why a New Language?
 
 > **Status:** living index for **Moddil**. This is not a specification and makes no syntax commitments.
 > It states the thesis, lists the problem areas with a short summary of each, and points to the

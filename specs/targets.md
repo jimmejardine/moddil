@@ -1,6 +1,6 @@
 # Targets, Cross-compilation and Static Builds
 
-> **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §2.15.
+> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.15.
 > Commands, target names and file formats are **illustration only**.
 
 ## 1. Summary
@@ -117,7 +117,7 @@ This requires:
 Two payoffs:
 - build caches are shared across developers on different operating systems
   ([`build-times.md`](build-times.md));
-- anyone can rebuild a release and check that it matches (rationale §2.16).
+- anyone can rebuild a release and check that it matches (overview §2.16).
 
 ## 9. Signing and packaging from any host
 
@@ -126,7 +126,7 @@ Two payoffs:
 | **Windows** | Authenticode signing (avoids SmartScreen warnings) |
 | **macOS** | Ad-hoc signature by default (Apple silicon refuses to run unsigned code); Developer ID signing and notarisation for distribution, from any host (rcodesign-style); universal binaries |
 | **Linux** | Archives, OCI images built directly ([`distribution.md`](distribution.md) §10); distribution packages through adapters |
-| **All** | Release archives with SBOM and provenance (rationale §2.16) |
+| **All** | Release archives with SBOM and provenance (overview §2.16) |
 
 Signing keys and Apple credentials are **capabilities supplied at release time**, never stored in the
 build or the repository.

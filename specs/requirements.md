@@ -1,6 +1,6 @@
 # Requirements and Non-Goals
 
-> **Status:** R1–R3 are decided. The non-goals are a draft. Expands [`rationale.md`](rationale.md) §5.
+> **Status:** R1–R3 are decided. The non-goals are a draft. Expands [`overview.md`](overview.md) §5.
 
 ## 1. Firm requirements (decided)
 
@@ -10,15 +10,15 @@ These are no longer open for debate. Every other design decision must be compati
 
 WASM is not a port done later. It is a tier-one target from the first release, tested in CI like
 native targets. Reasons:
-- **Multi-tier programs (rationale §2.10)** need it: the browser tier compiles to WASM, and edge/serverless
+- **Multi-tier programs (overview §2.10)** need it: the browser tier compiles to WASM, and edge/serverless
   platforms increasingly run WASM components.
-- **It fits the capability model (rationale §2.16, §2.1).** A WASM module has no ambient authority; it can only
+- **It fits the capability model (overview §2.16, §2.1).** A WASM module has no ambient authority; it can only
   call the imports it is given. WASI and the Component Model are object-capability systems.
-- **It is the sandbox for untrusted code**: build-time logic and compile-time evaluation (rationale §2.14, §2.6),
-  package build steps (rationale §2.16), plugins, and even imported C libraries compiled to WASM and isolated
-  (as RLBox does in Firefox, rationale §2.13).
+- **It is the sandbox for untrusted code**: build-time logic and compile-time evaluation (overview §2.14, §2.6),
+  package build steps (overview §2.16), plugins, and even imported C libraries compiled to WASM and isolated
+  (as RLBox does in Firefox, overview §2.13).
 - **Portability and determinism**: one artefact that runs anywhere, with deterministic execution
-  available for simulation testing (rationale §2.11).
+  available for simulation testing (overview §2.11).
 
 What "first-class" means in practice:
 - **Targets**: core WASM (`wasm32`, later `wasm64`/memory64), **WASI preview 2+ and the Component
@@ -33,7 +33,7 @@ What "first-class" means in practice:
 Design constraints this places on the rest of Moddil:
 - **Memory model**: Moddil has no global tracing GC, so linear memory is the natural fit. The WASM GC
   proposal is an optional optimisation for interop with JS objects, not a dependency.
-- **Concurrency without function colouring (rationale §2.8)** needs suspendable stacks. *Revised after checking
+- **Concurrency without function colouring (overview §2.8)** needs suspendable stacks. *Revised after checking
   engine support (Nov 2026; see [`bootstrap.md`](bootstrap.md) §6 and §8):* stack switching is Phase 3
   but ships in **no** browser or Node (Chrome has it behind a flag only); Wasmtime has it at Tier 3 on
   x86_64 Linux. JSPI, however, is standardised and ships in all major browsers and Node ≥ 26.
@@ -50,9 +50,9 @@ Design constraints this places on the rest of Moddil:
   isolation). Structured concurrency must degrade gracefully to a single thread; on a single thread
   every biased-RC operation takes the cheap owner path ([`concurrency.md`](concurrency.md) §6).
 - **Exceptions, SIMD, tail calls**: use the standard proposals (exception handling, 128-bit SIMD,
-  tail calls) where available; error handling (rationale §2.3) must not depend on unwinding.
-- **GPU (rationale §2.9)** in the browser goes through WebGPU/WGSL, so kernel lowering needs a WGSL path.
-- **FFI (rationale §2.13)** on WASM means C code compiled to WASM and linked as components, not native calls.
+  tail calls) where available; error handling (overview §2.3) must not depend on unwinding.
+- **GPU (overview §2.9)** in the browser goes through WebGPU/WGSL, so kernel lowering needs a WGSL path.
+- **FFI (overview §2.13)** on WASM means C code compiled to WASM and linked as components, not native calls.
 
 ### R2. Small core; functionality lives in mods.
 

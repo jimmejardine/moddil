@@ -1,6 +1,6 @@
 # Interoperability with C and Rust
 
-> **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §2.13.
+> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.13.
 > Snippets are **illustration only**; no syntax is committed.
 
 ## 1. Summary
@@ -39,9 +39,9 @@ exceptions and compiler-specific ABIs. Swift and Carbon have each spent years on
   simple macros become raw bindings automatically.
 - **The toolchain compiles C.** C sources of a dependency are compiled by the bundled clang, using the
   LLVM Moddil already ships ([`bootstrap.md`](bootstrap.md)):
-  - hermetic and reproducible: declared inputs only, the same compiler on every machine (rationale
+  - hermetic and reproducible: declared inputs only, the same compiler on every machine (overview
     §2.16);
-  - cross-compiled to every Moddil target, including WASM (rationale §2.15, R1);
+  - cross-compiled to every Moddil target, including WASM (overview §2.15, R1);
   - run in the build sandbox like any other build step.
 
 ```rust
@@ -57,7 +57,7 @@ and turn raw bindings into Moddil types:
 | C fact | Overlay says | Moddil result |
 |---|---|---|
 | Who frees a returned pointer | owned / borrowed / linear | Owned: a Moddil type whose drop calls the C free function. Borrowed: a view. Linear: when freeing can fail (e.g. a close that reports errors). |
-| Can a pointer be null | nullable | `Option<…>` (rationale §2.4) |
+| Can a pointer be null | nullable | `Option<…>` (overview §2.4) |
 | How errors are reported | errno, negative return, out-parameter | `fail(E)` with a typed error |
 | Can the call block | `blocking` | The runtime moves the call off its workers to a blocking pool, so one slow C call can't stall the scheduler. Such calls are the one exception to promptly cancellable I/O ([`concurrency.md`](concurrency.md) §9.5). |
 | Thread requirements | thread-affine, not thread-safe | Pinned tasks; values that can't be sent are wrapped accordingly |
@@ -71,7 +71,7 @@ and turn raw bindings into Moddil types:
 
 - **Raw bindings are `unsafe`.** Safe wrappers are ordinary mods built on them.
 - Any mod that uses foreign code declares the **`ffi` capability**. It appears in signatures, package
-  audits and semantic diffs (rationale §2.16, §2.19): "`foo` 1.5 now uses `ffi`" is flagged on
+  audits and semantic diffs (overview §2.16, §2.19): "`foo` 1.5 now uses `ffi`" is flagged on
   upgrade.
 - Faults in foreign code are traps (class 3; [`error-handling.md`](error-handling.md) D8).
 - Foreign code is **outside record and replay** unless it is wrapped by effects; the recorder flags it
@@ -91,7 +91,7 @@ and turn raw bindings into Moddil types:
 - Moddil functions and `#[repr(C)]` types can be **exported with the C ABI**, with a **generated header**.
 - Moddil mods can also be exposed to Rust as a **generated crate** (§8, reverse direction).
 - This is the adoption path: Moddil can be introduced inside existing C, C++ or Rust projects one
-  module at a time (rationale §7).
+  module at a time (overview §7).
 
 ## 8. Rust: the generated bridge
 
@@ -128,7 +128,7 @@ let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → 
 ## 9. WASM components: the sandboxed path
 
 - C and Rust code compiled to WASM can be linked as **components**, with interfaces in **WIT**, which
-  Moddil maps to and from automatically (rationale R1). Rust has strong tooling for this
+  Moddil maps to and from automatically (overview R1). Rust has strong tooling for this
   (`wit-bindgen`).
 - It costs copying at the boundary (the canonical ABI), so it isn't zero-copy.
 - In return, the foreign code is **isolated**: it can reach only the capabilities it is given, as
@@ -165,7 +165,7 @@ let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → 
 
 ## Background
 
-The problem and the state of the art that led to this design. (Moved from the rationale.)
+The problem and the state of the art that led to this design. (Moved from the overview.)
 
 **Problem.** Nobody adopts a language that can't use existing code. Decades of C libraries, huge C++
 codebases, and a growing Rust ecosystem must be reachable with low friction and low overhead.

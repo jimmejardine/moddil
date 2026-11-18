@@ -1,6 +1,6 @@
 # Distributed and Multi-tier Programs
 
-> **Status:** decided direction, details open. Expands [`rationale.md`](rationale.md) §2.10.
+> **Status:** decided direction, details open. Expands [`overview.md`](overview.md) §2.10.
 > Snippets and file formats are **illustration only**; no syntax is committed.
 
 ## 1. Summary
@@ -43,7 +43,7 @@ it falls on. Adoption must be incremental: a Moddil service is an ordinary servi
 |---|---|---|
 | **A. Language** | Components and placement; the `remote` effect; generated contracts and skew checks; trust, secrets and capabilities; structured concurrency across machines; whole-system simulation | **Do it.** Only a compiler can, and most of it reuses existing decisions. |
 | **B. Artefacts and adapters** | Static binaries, WASM and OCI images; a topology file; adapter mods emitting Compose, Kubernetes, Nomad, systemd and WASI-platform formats; discovery, secret and policy integration | **Do it thinly**, as ordinary mods (R2). |
-| **C. Infrastructure** | Orchestration, scheduling, autoscaling, service mesh, load balancing, provisioning, secret storage, rollout strategy | **Never.** Kubernetes, Nomad, Consul, Vault, Terraform and Argo own these (non-goals, rationale §5.2). |
+| **C. Infrastructure** | Orchestration, scheduling, autoscaling, service mesh, load balancing, provisioning, secret storage, rollout strategy | **Never.** Kubernetes, Nomad, Consul, Vault, Terraform and Argo own these (non-goals, overview §5.2). |
 
 ## 4. Layer A: components and placement
 
@@ -64,7 +64,7 @@ mod web    { … api::checkout(cart) … }   // here: with remote, fail(RemoteEr
 - The compiler checks what may live where: `client` code cannot use `db`; server-only types cannot be
   sent to the client; secrets cannot cross to `client` (§7).
 - Placement is one ladder at every scale: thread, core, device ([`accelerators.md`](accelerators.md)
-  §4), machine, tier (rationale theme 4).
+  §4), machine, tier (overview theme 4).
 
 ## 5. The `remote` effect
 
@@ -84,7 +84,7 @@ mod web    { … api::checkout(cart) … }   // here: with remote, fail(RemoteEr
 - Contracts are **generated from the types** at each boundary. There is no hand-written OpenAPI or
   protobuf between Moddil components.
 - **Schema evolution rules** are explicit: added fields need defaults or `Option`; removed fields go
-  through deprecation; renames are refactor intents (rationale §2.19), not breaking changes.
+  through deprecation; renames are refactor intents (overview §2.19), not breaking changes.
 - **Skew checking against what is deployed.** The contract of each deployed version is recorded (in
   the repository or a registry). The compiler compares a change with every version still in service
   (including months-old mobile clients) and rejects changes that would break a rolling deploy. The
@@ -128,7 +128,7 @@ mod web    { … api::checkout(cart) … }   // here: with remote, fail(RemoteEr
 - **OCI images are built directly** from the binaries, as Go's `ko`, Java's Jib and Nix do: no
   Dockerfile, reproducible, minimal (distroless) images that Docker, Podman or containerd run and any
   registry stores.
-- Each artefact comes with an SBOM and build provenance (rationale §2.16).
+- Each artefact comes with an SBOM and build provenance (overview §2.16).
 
 ## 11. The topology file
 
@@ -222,7 +222,7 @@ guarantees, generated policies and typed requirements — and leaves the rest to
 
 ## Background
 
-The problem and the state of the art that led to this design. (Moved from the rationale. Why earlier
+The problem and the state of the art that led to this design. (Moved from the overview. Why earlier
 attempts stayed niche is in §2.)
 
 **Problem.** Almost no real system is one process. A single feature, such as "user uploads a photo",
