@@ -226,13 +226,13 @@ Performance in the supported patterns is the same as Rust: plain pointers, no re
 ```
 let node = Node { … }          // unique, zero overhead
 let shared = node.to_rc()      // moves node into an rc allocation; returns Rc<Node>
-let other = shared.clone()     // refcount inc; both point at the same node
+let other = shared.share()     // refcount inc; both point at the same node
 let back = shared.weak()       // Weak<Node>: does not keep it alive; upgrade() -> Option<Rc<Node>>
 ```
 
 - `.to_rc()` **consumes** the owner; the value now lives as long as any `Rc` does.
 - RC cannot collect cycles. Back-edges (parent pointers, doubly-linked `prev`) use `Weak`.
-- Passing an `Rc` as a shared borrow (`&Rc<T>`) does **not** touch the count. Only storing a copy does.
+- Passing an `Rc` as a shared borrow (`&Rc<T>`) does **not** touch the count. Only `.share()` does ([`values.md`: `.share()` for reference counts](values.md#share-for-reference-counts)).
 - Compile-time RC elision (Perceus-style) removes inc/dec pairs the compiler can prove redundant.
 
 ### rc contents are immutable

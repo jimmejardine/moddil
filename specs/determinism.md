@@ -26,7 +26,7 @@ What it enables:
 | Evaluation order | Unspecified in C and C++ | Specified left to right; drop order specified |
 | Time, randomness, environment, process IDs, I/O | Ambient global functions | Effects and capabilities only |
 | Scheduling, `select` fairness | Hidden inside the runtime | Scheduling is an effect; random choices draw from `rand` |
-| Hash-map iteration order | Rust randomises the seed; Go deliberately randomises iteration | The hash seed comes from the `rand` effect: protection against hash-flooding in production, a fixed seed in simulation. **Open:** should maps iterate in insertion order by default (Python, JavaScript)? |
+| Hash-map iteration order | Rust randomises the seed; Go deliberately randomises iteration | The hash seed comes from the `rand` effect: protection against hash-flooding in production, a fixed seed in simulation. Maps iterate in seeded hash order (decided, [`values.md`](values.md#map-iteration-order-seeded-hash-order)); `OrderedMap` and `TreeMap` when order matters; tests use a fresh, printed seed. |
 | Pointer addresses | Observable (hashing or sorting by address) | Safe code cannot turn an address into an integer |
 | Floating point | FMA contraction, x87 extended precision, fast-math reordering, flush-to-zero, differing `libm`, WASM NaN bit patterns, relaxed SIMD | **Strict IEEE 754 by default**: no implicit FMA, no reordering. A deterministic `moddil/math` with correctly rounded functions (CORE-MATH style). NaN canonicalisation where observable. Fast-math and relaxed SIMD only by explicit opt-in, **marked nondeterministic** so they are excluded from replayable code. |
 | Platform integer width | `usize` is 32-bit on wasm32, 64-bit natively | `int` (lengths, indices, counts) is 64-bit on every target ([`numerics.md`: Integer types](numerics.md#integer-types)). `usize` exists only for FFI and memory-level code, and a lint flags it in cross-target code. |
@@ -202,7 +202,6 @@ real-world evidence for it.
   is an explicit, visible opt-in.
 - Recording adds overhead (hence selective recording).
 - A simulation is only as faithful as its models.
-- Insertion-ordered maps, if chosen, cost a little memory.
 
 ## Decisions to lock early (recommendations)
 
@@ -210,7 +209,7 @@ real-world evidence for it.
 2. Specified evaluation and drop order.
 3. Strict IEEE floating point by default; deterministic `moddil/math`; nondeterministic floating
    point opt-in and visible.
-4. Hash seeding via the `rand` effect; whether maps iterate in insertion order by default.
+4. Hash seeding via the `rand` effect; seeded hash order for maps (decided).
 5. A hybrid effect design: scoped handlers plus second-class capability values ([Handlers are scoped, not global](#handlers-are-scoped-not-global)).
 6. `moddil/runtime-sim` as a first-class standard mod, with CI running the standard library under it.
 7. Record and replay at effect boundaries as a runtime feature; workflow determinism checked by effect
@@ -229,11 +228,10 @@ real-world evidence for it.
 ## Open questions
 
 1. Should this become R4?
-2. Insertion-ordered maps by default, or seeded hash order?
-3. How much of `moddil/math` must be correctly rounded, and at what speed cost?
-4. GPU determinism: per kernel, per mod, or global?
-5. Record format and retention: per task, per request, sampled?
-6. How are non-Moddil peers brought into simulation beyond WASM components?
+2. How much of `moddil/math` must be correctly rounded, and at what speed cost?
+3. GPU determinism: per kernel, per mod, or global?
+4. Record format and retention: per task, per request, sampled?
+5. How are non-Moddil peers brought into simulation beyond WASM components?
 
 ## Background
 

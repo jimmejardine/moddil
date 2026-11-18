@@ -33,7 +33,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | **The language**                                                   |                    |                                                                            |
 | [Effects and capabilities](effects-and-capabilities.md)            | 🟠 major questions | [`effects-and-capabilities.md`](effects-and-capabilities.md)               |
 | [Memory and resource management](memory-and-resources.md)          | 🟡 minor questions | [`memory-and-resources.md`](memory-and-resources.md)                       |
-| [Values: copy, clone and equality](values.md)                      | ⚪ not started      | [`values.md`](values.md)                                                   |
+| [Values: copy, clone and equality](values.md)                      | 🟡 minor questions | [`values.md`](values.md)                                                   |
 | [Error handling](error-handling.md)                                | 🟠 major questions | [`error-handling.md`](error-handling.md)                                   |
 | [Null and invalid states](null-safety.md)                          | 🟡 minor questions | [`null-safety.md`](null-safety.md)                                         |
 | [Type system core](types.md)                                       | ⚪ not started      | [`types.md`](types.md)                                                     |
