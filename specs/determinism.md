@@ -32,6 +32,7 @@ What it enables:
 | Platform integer width | `usize` is 32-bit on wasm32, 64-bit natively | `int` (lengths, indices, counts) is 64-bit on every target ([`numerics.md`: Integer types](numerics.md#integer-types)). `usize` exists only for FFI and memory-level code, and a lint flags it in cross-target code. |
 | Parallel float reductions, GPU atomics | Order of additions varies | Deterministic reductions by default where cheap; GPU determinism opt-in (cf. PyTorch `use_deterministic_algorithms`) |
 | Native FFI | Anything | Behind the `ffi` capability; outside the guarantee unless modelled |
+| Locale | Process-wide settings change number formats, case mapping and sorting (C `setlocale`, Java `Locale.getDefault()`) | Formatting and case mapping are locale-independent; locale-dependent code performs the `locale` effect ([`text.md`: Localisation: the `locale` effect](text.md#localisation-the-locale-effect)) |
 
 ## Deterministic simulation testing
 

@@ -75,7 +75,7 @@ with time = sim.clock(node) {          // installs a handler for this block
 | Kind | Effects | Notes |
 |---|---|---|
 | **Core** | `fail(E)`, `suspend`, `spawn` | Defined by the language ([`error-handling.md`](error-handling.md), [`concurrency.md`](concurrency.md)) |
-| **Standard** | `time`, `rand`, `net`, `fs`, `env`, `process`, `gpu`, `remote`, `introspect` | Interfaces in standard mods; handlers in runtime and simulation mods ([`mods.md`: Pluggable runtimes without ecosystem splits](mods.md#pluggable-runtimes-without-ecosystem-splits)) |
+| **Standard** | `time`, `rand`, `net`, `fs`, `env`, `process`, `gpu`, `remote`, `introspect`, `locale` | Interfaces in standard mods; handlers in runtime and simulation mods ([`mods.md`: Pluggable runtimes without ecosystem splits](mods.md#pluggable-runtimes-without-ecosystem-splits)) |
 | **Capabilities with no handler to swap** | `ffi`, `unsafe` | Declared and visible to every consumer; treated as high risk ([`interop.md`: The safety boundary](interop.md#the-safety-boundary)) |
 | **Ambient, write-only** | `log`, `span`, `metric` | Never written in signatures; cannot feed values back ([`observability.md`](observability.md)) |
 | **User-defined** | anything | Context such as a database pool, configuration, feature flags ([Directions (not yet decided)](#directions-not-yet-decided)) |

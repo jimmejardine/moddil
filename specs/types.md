@@ -79,7 +79,7 @@ only where the expected type is known (an argument, an annotated `let`, a return
 | `&mut T` to `&T` | Lending an exclusive borrow as a shared one |
 | Unsizing | `&[T; N]` to `&[T]`; `Box<T>` to `Box<dyn Trait>` when `T: Trait` |
 
-Everything else is explicit: numeric conversions (`u8::from`, `as` with checked semantics per
+Everything else is explicit: numeric conversions (`x.to::<u8>()?`, `x.truncate::<u8>()`; there is no `as` for numbers,
 [`numerics.md`](numerics.md)), refinement checks in the other direction (`Port::try_from(n)?`), and
 unit conversions ([`units.md`](units.md)).
 

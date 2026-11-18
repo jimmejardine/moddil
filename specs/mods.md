@@ -119,7 +119,8 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 | Mod | Contents | Needed by |
 |---|---|---|
 | `moddil/collections` | Vec, Map, Set, deque, ring buffers, persistent collections | G H W X |
-| `moddil/text` | UTF-8 strings, Unicode, regex | G W X |
+| `moddil/text` | Unicode algorithms (graphemes, normalisation, case folding), regex ([`text.md`](text.md)) | G W X |
+| `moddil/i18n` | The `locale` effect: localised numbers, dates, plurals, collation, MessageFormat 2 ([`text.md`: Localisation: the `locale` effect](text.md#localisation-the-locale-effect)) | G W X |
 | `moddil/serde` | Serialisation framework; binary and JSON formats; schema evolution; zero-copy validated views ([`memory-and-resources.md`: Zero-copy I/O](memory-and-resources.md#zero-copy-io)) | G H W X |
 | `moddil/fs` / `moddil/io` | Files, streams, buffers | H W X |
 | `moddil/net` | TCP, UDP, TLS, HTTP/1-2-3, WebSocket, WebTransport | G H W X |
