@@ -46,6 +46,15 @@ document is still a proposal; 🟡 if what is left is detail, tooling or operati
 | [2.19](#219-diffs-code-review-and-version-control)        | Diffs, code review and version control | 🟡 minor questions | [`semantic-vcs.md`](semantic-vcs.md)                                                                                                                |
 | [2.20](#220-language-evolution)                           | Language evolution                     | 🟡 minor questions | [`evolution.md`](evolution.md)                                                                                                                      |
 | [2.21](#221-surface-syntax-and-paradigms)                 | Surface syntax and paradigms           | 🟡 minor questions | [`syntax.md`](syntax.md), [`paradigms.md`](paradigms.md)                                                                                            |
+| [2.22](#222-type-system-core)                             | Type system core                       | ⚪ not started     | —                                                                                                                                                   |
+| [2.23](#223-modules-visibility-and-program-structure)     | Modules, visibility and program structure | ⚪ not started     | —                                                                                                                                                   |
+| [2.24](#224-unsafe-and-the-safety-boundary)               | `unsafe` and the safety boundary       | ⚪ not started     | —                                                                                                                                                   |
+| [2.25](#225-text-and-strings)                             | Text and strings                       | ⚪ not started     | —                                                                                                                                                   |
+| [2.26](#226-values-copy-clone-and-equality)               | Values: copy, clone and equality       | ⚪ not started     | —                                                                                                                                                   |
+| [2.27](#227-standard-library-shape)                       | Standard library shape                 | ⚪ not started     | —                                                                                                                                                   |
+| [2.28](#228-data-interchange-and-persistence)             | Data interchange and persistence       | ⚪ not started     | —                                                                                                                                                   |
+| [2.29](#229-ui-mobile-and-the-browser)                    | UI, mobile and the browser             | ⚪ not started     | —                                                                                                                                                   |
+| [2.30](#230-program-lifecycle)                            | Program lifecycle                      | ⚪ not started     | —                                                                                                                                                   |
 | [3](#3-cross-cutting-themes)                              | Cross-cutting themes                   | —                  | —                                                                                                                                                   |
 | [4](#4-tensions-and-trade-offs)                           | Tensions and trade-offs                | —                  | —                                                                                                                                                   |
 | [5.1](#51-firm-requirements-decided)                      | Firm requirements (R1–R3)              | 🟠 major questions | [`requirements.md`](requirements.md), [`bootstrap.md`](bootstrap.md) (R1), [`mods.md`](mods.md) (R2), [`error-handling.md`](error-handling.md) (R3) |
@@ -109,7 +118,7 @@ schedule onto heterogeneous hardware, easier to split safely across machines, an
 
 ## 2. Problem Areas
 
-The areas are ordered from the language core outward: semantics (effects, memory, errors, types, numerics, metaprogramming, correctness), then execution (CPU, GPU, distributed, determinism, observability), then the surrounding system (interop, builds, deployment, packages, tooling), and finally the human and agent workflow (LLMs, review, evolution). The order reflects dependencies, not priority: every area matters equally. Effects come first because most other areas build on them.
+The areas are ordered from the language core outward: semantics (effects, memory, errors, types, numerics, metaprogramming, correctness), then execution (CPU, GPU, distributed, determinism, observability), then the surrounding system (interop, builds, deployment, packages, tooling), and finally the human and agent workflow (LLMs, review, evolution). The order reflects dependencies, not priority: every area matters equally. Effects come first because most other areas build on them. Areas 2.22–2.30 came out of a gap review and are not started yet; each will get a subdocument when it is worked on.
 
 Each area below gives only:
 
@@ -835,6 +844,184 @@ Decided:
 
 ---
 
+### 2.22 Type system core
+
+⚪ **not started** · Detail: none yet
+
+Moddil borrows Rust's traits, generics and sum types, but the core rules of the type system have not
+been decided in their own right, and several other areas depend on them: coherence decides whether
+two mods can implement the same trait for the same type, and the generics strategy decides both
+build times and debug-build speed.
+
+**Touched on in:** [`syntax.md`](syntax.md) §2, [`paradigms.md`](paradigms.md),
+[`comptime.md`](comptime.md) §5, [`build-times.md`](build-times.md) §3, [`mods.md`](mods.md) §8.
+
+**Questions to settle:**
+
+- Traits and **coherence across mods**: Rust's orphan rule, or something looser?
+- Associated types and GATs (higher-kinded types are deferred, §2.21).
+- Generics compiled by monomorphisation, dictionary passing, or both by build profile.
+- Variance, `dyn` safety, and exhaustiveness checking of sum types.
+
+---
+
+### 2.23 Modules, visibility and program structure
+
+⚪ **not started** · Detail: none yet
+
+The mod boundary already carries a lot of meaning (explicit effects, capability ceilings, required
+groups, semver checks), but the module system itself is still Rust's by default: visibility levels,
+how files map to modules, and how code varies by target are undecided.
+
+**Touched on in:** [`syntax.md`](syntax.md) §2, [`docs-and-tests.md`](docs-and-tests.md) §4.1,
+[`build-times.md`](build-times.md) §10, [`mods.md`](mods.md).
+
+**Questions to settle:**
+
+- Visibility levels (`pub`, `pub(mod)`, private) and what each exposes.
+- Are cycles allowed between modules inside one mod?
+- Conditional compilation per target and profile, and Cargo-style feature flags.
+- The exact meaning of the mod boundary for effects, groups, capabilities and semver.
+
+---
+
+### 2.24 `unsafe` and the safety boundary
+
+⚪ **not started** · Detail: none yet
+
+`unsafe` is mentioned throughout as a capability and an escape hatch, but its semantics are
+undefined: what undefined behaviour remains inside it, what aliasing rules raw pointers must obey,
+and what the Miri-style checker actually checks.
+
+**Touched on in:** [`memory-and-resources.md`](memory-and-resources.md),
+[`interop.md`](interop.md) §5, [`correctness.md`](correctness.md),
+[`effects-and-capabilities.md`](effects-and-capabilities.md) §4.2.
+
+**Questions to settle:**
+
+- Which undefined behaviour remains inside `unsafe`, and how it is documented.
+- The aliasing model for raw pointers (cf. Rust's Stacked and Tree Borrows).
+- What the Miri-style checker checks, and when it runs.
+- How `unsafe` code is reviewed and audited across mods.
+
+---
+
+### 2.25 Text and strings
+
+⚪ **not started** · Detail: none yet
+
+Every reference example, and almost every program an agent writes, handles text, yet string types,
+encoding guarantees and formatting have no design of their own.
+
+**Touched on in:** [`memory-and-resources.md`](memory-and-resources.md) §6 (rc slices),
+[`comptime.md`](comptime.md) §8 (`fmt"…"`), [`mods.md`](mods.md) §6 (`moddil/text`).
+
+**Questions to settle:**
+
+- String types: owned, borrowed and rc slices, and how they convert.
+- UTF-8 guarantees, byte strings, and OS strings (paths, environment).
+- Indexing: bytes, code points or grapheme clusters.
+- Formatting, and localisation (messages, numbers, dates).
+
+---
+
+### 2.26 Values: copy, clone and equality
+
+⚪ **not started** · Detail: none yet
+
+The theme "cost is visible" (§3) has not yet been applied to everyday values: which types copy
+implicitly, whether duplicating a value is always explicit, and how equality, hashing and ordering
+are defined and derived.
+
+**Touched on in:** [`memory-and-resources.md`](memory-and-resources.md),
+[`paradigms.md`](paradigms.md), [`numerics.md`](numerics.md) §4.6 (float ordering).
+
+**Questions to settle:**
+
+- Which types copy implicitly (a `Copy`-like rule), and whether `clone` is always explicit.
+- Derived `Eq`, `Hash` and `Ord`; structural vs nominal equality.
+- Hashing and determinism (seeded hashing, [`determinism.md`](determinism.md) §2).
+
+---
+
+### 2.27 Standard library shape
+
+⚪ **not started** · Detail: none yet
+
+The catalogue of standard mods exists, but not the shape of their core interfaces, which every
+library builds on.
+
+**Touched on in:** [`mods.md`](mods.md) §6, §8.
+
+**Questions to settle:**
+
+- How many batteries: a broad standard library (Go) or a minimal one (Rust)?
+- The iterator protocol, and how it relates to generators.
+- The collections surface (`Vec`, maps, sets) and its naming.
+- The I/O stream model: readers, writers and buffers over effects.
+
+---
+
+### 2.28 Data interchange and persistence
+
+⚪ **not started** · Detail: none yet
+
+Serialisation, schema evolution and databases appear in several places (standard mods, distributed
+contracts, the web store), but there is no single design for how data leaves and re-enters a
+program.
+
+**Touched on in:** [`mods.md`](mods.md) §6 (`moddil/serde`, `moddil/sql`),
+[`distribution.md`](distribution.md) (contracts), [`examples/03-web-store.md`](examples/03-web-store.md).
+
+**Questions to settle:**
+
+- Serialisation and derives; binary and text formats.
+- Schema evolution, shared with distributed contracts.
+- Zero-copy formats and validated views.
+- Typed SQL, migrations and connection pools.
+
+---
+
+### 2.29 UI, mobile and the browser
+
+⚪ **not started** · Detail: none yet
+
+Two reference examples need user interfaces, and the browser is a required target (R1), yet there is
+no decision on how Moddil builds UIs, or how it talks to JavaScript and the DOM. Interop covers C and
+Rust only.
+
+**Touched on in:** §7 Q5, [`examples/03-web-store.md`](examples/03-web-store.md),
+[`examples/01-multiplayer-game.md`](examples/01-multiplayer-game.md), [`targets.md`](targets.md) §11.
+
+**Questions to settle:**
+
+- A Moddil UI mod, or shared logic under native UI shells?
+- JS and DOM interop for `wasm32-browser`.
+- Mobile packaging for Android and iOS.
+
+---
+
+### 2.30 Program lifecycle
+
+⚪ **not started** · Detail: none yet
+
+How a program starts, is configured and stops is spread across several areas: root capabilities
+arrive in `main`, shutdown is layered, and traps terminate something. These pieces need one coherent
+design.
+
+**Touched on in:** [`concurrency.md`](concurrency.md) §9 (shutdown),
+[`effects-and-capabilities.md`](effects-and-capabilities.md) §4.4 (root capabilities),
+[`error-handling.md`](error-handling.md) §2 (traps).
+
+**Questions to settle:**
+
+- The entry point and which root capabilities it receives.
+- Configuration, command-line arguments and environment variables.
+- Signals and exit codes.
+- Does a trap terminate the task or the whole process?
+
+---
+
 ## 3. Cross-Cutting Themes
 
 When the problem areas are laid side by side, four ideas keep recurring:
@@ -1012,8 +1199,11 @@ removal.
 7. **Memory core — decided** in [`memory-and-resources.md`](memory-and-resources.md): unique
    ownership, second-class borrows and view types, `.to_rc()` with biased RC, affine + linear
    resources (summary in §2.2).
-8. Effect system design: row-polymorphic (Koka) vs capability-passing vs hybrid.
-   [`determinism.md`](determinism.md) §4 recommends a hybrid: scoped handlers plus second-class
-   capability values.
+8. Effect system design. **Decided:** a hybrid of scoped handlers and second-class capability
+   values ([`effects-and-capabilities.md`](effects-and-capabilities.md), §2.1).
 9. Canonical AST storage: text with canonical printing, or a structured store (Unison-style) with text
    as a view?
+10. **Minimum viable language**: which language features are in v0 and which come later? (Separate
+    from the compiler milestones in [`bootstrap.md`](bootstrap.md) §5.)
+11. **How is the language defined?** A prose reference, a formal semantics, or the MIR interpreter as
+    the executable reference? How are conformance tests organised?
