@@ -133,6 +133,7 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 | `moddil/simd`, `moddil/tensor` | Portable SIMD; n-d arrays and tensor expressions compiled to graphs or kernels ([`accelerators.md`](accelerators.md) §8) | G H X |
 | `moddil/gpu` | Devices, buffers, launches; WebGPU/Vulkan/Metal/CUDA/ROCm and CPU-simulator handlers ([`accelerators.md`](accelerators.md)) | G H |
 | `moddil/decimal` | Fixed-point and decimal arithmetic | H W |
+| `moddil/units` | Unit packs: `si`, `information`, `currency`, `angle` ([`units.md`](units.md)) | G H W X |
 | `moddil/sql` | Typed SQL, schemas, migrations, connection pools | H W |
 | `moddil/timeseries` | Columnar storage, compression, tick data | H |
 | `moddil/sim` | Deterministic simulation: network, time, faults (§2.11) | G H W X |

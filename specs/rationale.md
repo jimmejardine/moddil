@@ -25,6 +25,7 @@
 | [`determinism.md`](determinism.md)                   | Deterministic core, simulation testing, scoped handlers, record and replay, reproducible builds (§2.11)          | Proposal                              |
 | [`build-times.md`](build-times.md)                   | Language rules for fast builds, query-based lazy compiler, no-link dev builds, default profiles, budgets (§2.14) | Proposal                              |
 | [`closures.md`](closures.md)                         | Lambdas that borrow, fail and suspend; parameter modes for closures; escaping closures (§2.8)                    | Mostly follows from decided direction |
+| [`units.md`](units.md)                               | Units of measure: F#-style `100<cm>`, open set of dimensions, declared units with scale and offset (§2.5) | Proposal                              |
 | [`comptime.md`](comptime.md)                         | Compile-time evaluation, reflection, typed derives, tagged-literal DSLs instead of macros (§2.6)                 | Decided direction                     |
 | [`bootstrap.md`](bootstrap.md)                       | Bootstrap compiler, self-hosting, backends, WASM engine support (R1)                                             | Proposed                              |
 | [`examples/`](examples/README.md)                    | Four reference systems used to test every decision                                                               | Written                               |
@@ -303,6 +304,10 @@ fn connect(host: let str, port: Port?) ! {net, fail(NetError)} {
 ---
 
 ### 2.5 Numerics and data
+
+> Units of measure are expanded in [`units.md`](units.md) (proposal): F#-style `100<cm>` and
+> `f64<m/s>`, an open set of dimensions any mod can extend, and units declared with a scale (and an
+> offset for affine units) so related units convert automatically.
 
 - **Problem.** Silent integer overflow (C), undefined behaviour, float surprises, no units.
 - **Directions.** **Decided** ([`error-handling.md`](error-handling.md) §2): integer arithmetic
@@ -1152,6 +1157,7 @@ removal.
 - `specs/determinism.md`: determinism, simulation, scoped handlers, record and replay (§2.11); proposal
 - `specs/build-times.md`: language rules, compiler architecture, profiles, budgets (§2.14); proposal
 - `specs/closures.md`: lambdas that borrow, fail and suspend; escaping closures (§2.8)
+- `specs/units.md`: units of measure, open dimensions, unit algebra (§2.5); proposal
 - `specs/comptime.md`: compile-time evaluation, reflection, typed derives, tagged literals (§2.6)
 - `specs/bootstrap.md`: stage 0, self-hosting, backends, WASM support status (R1)
 - `specs/examples/`: the four reference systems
