@@ -58,7 +58,7 @@ and turn raw bindings into Moddil types:
 | Who frees a returned pointer | owned / borrowed / linear | Owned: a Moddil type whose drop calls the C free function. Borrowed: a view. Linear: when freeing can fail (e.g. a close that reports errors). |
 | Can a pointer be null | nullable | `Option<…>` (rationale §2.4) |
 | How errors are reported | errno, negative return, out-parameter | `fail(E)` with a typed error |
-| Can the call block | `blocking` | The runtime moves the call off its workers to a blocking pool, so one slow C call can't stall the scheduler |
+| Can the call block | `blocking` | The runtime moves the call off its workers to a blocking pool, so one slow C call can't stall the scheduler. Such calls are the one exception to promptly cancellable I/O ([`concurrency.md`](concurrency.md) §9.5). |
 | Thread requirements | thread-affine, not thread-safe | Pinned tasks; values that can't be sent are wrapped accordingly |
 | What it touches | capabilities (`fs`, `net`, …) | Checked like Moddil code ([`mods.md`](mods.md) §2) |
 

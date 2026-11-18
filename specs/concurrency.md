@@ -195,6 +195,10 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers (ration
   See [`determinism.md`](determinism.md) for the simulation runtime, virtual time and record/replay.
 - **Observability:** runtimes expose the task tree and each task's blocked-on effect operation to
   spans and to the `introspect` capability ([`observability.md`](observability.md) §7, §9).
+- **Cancellable I/O:** every pending I/O operation must be cancellable promptly at the OS level
+  (io_uring cancel, epoll/kqueue deregistration, `CancelIoEx`), using per-platform strategies for
+  terminals and pipes; results that complete in a race with cancellation are retained, so standard
+  I/O stays cancel-safe (§9.5).
 
 ### 6.1 Tasks, threads and executors
 
@@ -419,6 +423,67 @@ On Ctrl-C:
 
 If the grace deadline expires first, cancellation proceeds in the same inner-to-outer order, so each
 layer's shielded cleanup still finds the outer services alive.
+
+### 9.5 Cancelling I/O: no "press Enter", no self-connect
+
+**The problem elsewhere.** In Rust, a task reading stdin, or a thread in a blocking `accept`, sits
+inside a blocking system call. A shutdown signal cannot reach it until the call returns, so users
+press Enter after Ctrl-C, and programs connect to their own listening socket just to wake it up.
+- Even `tokio::io::stdin` reads on a background blocking thread: stdin can't portably be made
+  non-blocking (setting `O_NONBLOCK` on a shared terminal affects other processes; Windows console
+  and anonymous-pipe handles don't support overlapped I/O).
+- `select!` adds a second trap: each operation must be checked for *cancel-safety*, because some
+  (such as `read_line`) lose data already read when they lose the race.
+
+**Moddil's rules:**
+1. **Every I/O operation is a suspension point and a cancellation point.** `accept`, `read`,
+   `read_line`, `recv` and timers are effect operations handled by the runtime's reactor (§6.1),
+   never blocking system calls on a thread. A stop that wins a `select`, or a hard cancel, removes
+   the pending operation and the task continues **immediately**.
+2. **The runtime cancels at the OS level** (§6): io_uring cancel requests, removing interest from
+   epoll or kqueue, `CancelIoEx` on Windows. An operation that completes in a race with its
+   cancellation keeps its result (rule 4).
+3. **Hard sources are handled once, in the runtime, per platform:**
+
+   | Source | Strategy |
+   |---|---|
+   | Unix terminals and pipes | Wait for readiness, then read only what is available, so a read never blocks; never set `O_NONBLOCK` on a shared descriptor. Cancelling means no longer waiting. |
+   | Linux with io_uring | A read on stdin can be cancelled (io_uring interrupts its worker), or use the readiness path. |
+   | Windows console | Wait on the console input handle together with a cancel event; read only when input is signalled. |
+   | Windows anonymous pipes | A thread on the `blocking` executor, interrupted with `CancelSynchronousIo`. |
+   | Devices and FFI calls the OS cannot interrupt | The `blocking` executor; the scope waits, or detaches the thread if the function's overlay allows it ([`interop.md`](interop.md) §4). This is the **only** documented exception. |
+
+4. **Standard I/O is always cancel-safe.** Buffers belong to the reader or stream object, not to the
+   in-flight operation, so a cancelled `read_line` loses nothing: partial data stays in the reader for
+   the next call. A `select` cancels its losing branches, and with cancel-safe operations that is
+   always correct. There is no per-method "is this cancel-safe?" to look up.
+5. **Ctrl-C itself.** In normal (cooked) terminal mode, SIGINT becomes a stop event on the root scope
+   (§9.3). In raw mode (full-screen terminal apps) it arrives as a key event from the terminal API.
+6. **Testable.** Stdin, sockets and timers are effects, so the simulation runtime can feed input,
+   stop and cancel deterministically ([`determinism.md`](determinism.md)).
+
+```
+fn repl() ! {stdin, stdout, suspend} {
+    let input = stdin.lines()
+    loop {
+        select {
+            line = input.next()  => eval(line?)
+            stop_requested()     => break       // Ctrl-C: the pending read is cancelled; no Enter needed
+        }
+    }
+}
+
+fn serve(listener: let Listener) ! {net, suspend} {
+    scope { s ->
+        loop {
+            select {
+                conn = listener.accept() => s.spawn { handle(conn) }
+                stop_requested()         => break      // the pending accept is cancelled; no self-connect
+            }
+        }
+    }
+}
+```
 
 ## Prior art
 

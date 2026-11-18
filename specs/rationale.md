@@ -404,7 +404,8 @@ ecosystems into "sync" and "async" halves.
 - Erlang's isolation costs copying, and its raw compute performance is weak.
 - Rust's guarantees come with a learning curve that is still the most common complaint about the
   language.
-- Cancellation is an afterthought almost everywhere.
+- Cancellation is an afterthought almost everywhere. Blocking reads (stdin, `accept`) ignore
+  shutdown, forcing workarounds such as pressing Enter after Ctrl-C or connecting to your own socket.
 - **No async constructors** in C#, JavaScript, Python, Java or C++. The workarounds (`CreateAsync`
   factories, two-phase `InitAsync`, `Lazy<Task<T>>`) give awkward APIs or leave invalid objects
   reachable.
@@ -430,7 +431,8 @@ ecosystems into "sync" and "async" halves.
   parameters); cancellation is observed only at suspension points, and the cancellation path must
   consume linear values like the error path. Shutdown has two levels, graceful *stop* then *cancel*
   after a grace deadline, delivered **innermost scope first**, so outer services keep running while
-  inner layers drain ([`concurrency.md`](concurrency.md) §9).
+  inner layers drain ([`concurrency.md`](concurrency.md) §9). Every I/O operation, stdin and
+  `accept` included, is promptly cancellable and cancel-safe (§9.5 there).
 
 **Directions.**
 - Actors, channels and thread-per-core sharding as library patterns built on these primitives, not
