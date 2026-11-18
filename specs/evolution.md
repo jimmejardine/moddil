@@ -64,15 +64,18 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
    Dart's data-driven fixes, Go's inline fixes and OpenRewrite do). Deprecated items warn for at
    least one minor series before a major release may remove them.
 6. **No unstable features in published code.** Feature gates exist in development builds of the
-   toolchain, but **the registry rejects mods that use unstable features**. This avoids Rust's split
+   toolchain, but **`moddil publish` refuses to tag a mod that uses unstable features**, and consumers'
+   builds refuse such dependencies (there is no registry,
+   [`packages-and-supply-chain.md`](packages-and-supply-chain.md)). This avoids Rust's split
    between stable crates and crates that build only on nightly. Experiments live in development
    toolchains and forks, not in the ecosystem.
 7. **Process.** A proposal process (Moddil Evolution, in the spirit of Rust RFCs and Swift
    Evolution). Every proposal must:
    - cite a reference example that needs it ([`examples/README.md`](examples/README.md));
    - include its migration if it changes anything;
-   - pass an **ecosystem run**: build and test every registry mod with the new toolchain (Rust's
-     crater, Swift's source-compatibility suite). Reproducible builds and the shared cache
+   - pass an **ecosystem run**: build and test a **corpus of public mods** (a list kept in a public
+     git repository, which authors opt into) from their tags with the new toolchain (Rust's crater,
+     Swift's source-compatibility suite). Reproducible builds and the shared cache
      ([`build-times.md`](build-times.md) §4.2) keep this cheap.
 8. **Standard mods** follow semver, with the bump computed by `moddil diff`. They remove items only
    across editions, always with replacement rules ([`mods.md`](mods.md)).

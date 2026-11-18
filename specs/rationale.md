@@ -621,6 +621,8 @@ Decided:
   upgrades show **capability diffs**; `ffi` and `unsafe` are high-risk capabilities.
 - **No code at fetch or build time**; **the source is the release** (no tarballs); a **built-in audit
   trail** recorded in git, saying whether a human or an agent reviewed each version.
+- **Local sources**: local git repositories (still hash-pinned), user-level source overrides to
+  mirrors or clones, and `moddil.work` workspaces for live working copies during development.
 
 **Open questions** (same list as [`packages-and-supply-chain.md`](packages-and-supply-chain.md) §7)
 

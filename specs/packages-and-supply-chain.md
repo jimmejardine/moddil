@@ -17,6 +17,7 @@
 | **No code at fetch or build time** | A declarative manifest plus pure comptime; no install scripts and no `build.rs`. |
 | **The source is the release** | No tarballs or uploaded artefacts that could differ from the repository. |
 | **Audit trail in git** | Reviews of dependency versions are recorded in the consumer's repository, saying whether a human or an agent reviewed them. |
+| **Local sources** | Local git repositories, user-level source overrides, and `moddil.work` workspaces for live working copies; hashes still enforced for tagged versions (§4.13). |
 
 ## 2. Problem
 
@@ -89,8 +90,10 @@ largest attack surface in modern software:
 - **The real cost**: if A exposes v1's `Foo` and B takes v2's `Foo`, they are different types and need
   a conversion. Cargo has the same problem. The fix is the "semver trick": v1 re-exports v2's
   unchanged types, so they *are* the same type.
-- **Migration is mechanical.** Renames and moves are recorded as refactor intents
-  ([`semantic-vcs.md`](semantic-vcs.md)), so `moddil migrate` can upgrade consumers from v1 to v2.
+- **Migration is mechanical.** Renames and moves are inferred from the two versions
+  ([`semantic-vcs.md`](semantic-vcs.md)), and libraries can ship replacement rules
+  ([`evolution.md`](evolution.md) §3), so `moddil migrate` and `moddil fix` can upgrade consumers from
+  v1 to v2.
 
 ### 4.4 Semver is checked by the compiler
 
@@ -202,6 +205,61 @@ requires = []                     # pure: no net, fs, ffi
 
 A broad set of `moddil/` mods reduces trivial third-party dependencies ([`mods.md`](mods.md) §6). How
 broad is still open there (§8).
+
+### 4.13 Local repositories and working copies
+
+Git fetches from local paths and `file://` URLs as readily as from remote hosts. Moddil uses that
+for three different needs, without weakening hash pinning or the rule that names are URLs.
+
+**1. A local repository as the source of a tagged version** (reproducible):
+
+```toml
+[dependencies]
+"github.com/jimme/hashiverse-protocol" = { version = "1.4.2", git = "../hashiverse" }   # or file:///D:/Repos/hashiverse
+```
+
+- Fetching is an ordinary git fetch of the tag from the local repository. The lockfile pins the
+  commit and content hash exactly as for a remote source.
+- The mod's **identity stays its URL name**, so anyone else resolves the same lockfile from the
+  remote.
+- Uses: offline work, sibling repositories, air-gapped builds.
+- `moddil publish` refuses a mod whose manifest contains machine-specific paths: published mods name
+  their dependencies by URL only.
+
+**2. Source overrides in user or CI configuration** (never in the manifest): map URLs to other git
+locations, such as local clones or a company mirror, like git's `url.insteadOf` or Go's `GOPROXY`:
+
+```toml
+# ~/.config/moddil/sources.toml (illustration only)
+"github.com/jimme/*" = "file:///D:/Repos/*"
+"github.com/acme/*"  = "https://git.internal/mirror/acme/*"
+```
+
+The content hash must still match the lockfile, so an override changes *where* the bytes come from,
+never *what* they are.
+
+**3. Live working copies during development** (unreleased, uncommitted edits): a workspace file,
+`moddil.work`, like Go's `go.work` or Cargo's `[patch]` with a path. It is kept out of git by
+default.
+
+```toml
+# moddil.work (illustration only)
+use = ["../hashiverse/protocol", "."]
+```
+
+- The listed directories replace the corresponding mods with their working trees, uncommitted edits
+  included. They rebuild incrementally and live-update in debug builds
+  ([`build-times.md`](build-times.md) §4.1).
+- **Visible and contained:** builds report "workspace overrides active"; the lockfile is not
+  rewritten from them; `moddil publish` and `moddil vet` refuse while they are active; `moddil diff`
+  lists them ([`semantic-vcs.md`](semantic-vcs.md)).
+- Capability ceilings (§4.8) still apply to overridden mods.
+
+**Monorepos:** several mods in one repository refer to each other by relative path inside that
+repository and act as one workspace; releases use path-prefixed tags (`protocol/v1.4.2`, §4.3).
+
+**Security:** local paths and source overrides never bypass hash checking for tagged versions.
+Working-copy overrides are unpinned by nature, so they are for development only and always reported.
 
 ## 5. Fit check against the reference examples
 
