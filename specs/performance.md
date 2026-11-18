@@ -110,6 +110,76 @@ fn on_tick(book: &mut OrderBook, tick: &Tick, out: &mut SpscProducer<Order>) wit
   and running the hot path with the allocator capability withheld would only check the code reached
   in that one scope. Swift's `@_noAllocation` shows that checked attributes work.
 
+## Kernel-bypass I/O: a worked example
+
+With kernel bypass (DPDK, ef_vi/Onload, AF_XDP) the NIC writes packets by DMA straight into a ring in
+the process's memory, without the kernel. Nothing here needs a new language feature: it combines
+handlers, pinned executors, owned DMA buffers, contained `unsafe` and declared root capabilities.
+
+**Three ways to notice a packet:**
+
+| Wait mode | How | Latency | CPU |
+|---|---|---|---|
+| **Busy-poll** | A core spins on the RX ring's next descriptor | Hundreds of ns | One core at 100% |
+| **Interrupt** | The NIC raises MSI-X, delivered to user space as an **eventfd** (VFIO with DPDK's RX interrupts, AF_XDP `need_wakeup` plus `poll`, ef_vi event-queue priming) | ~5–20 µs (wake-up and context switch) | Near zero when idle |
+| **Adaptive** | Spin for N µs after the last packet, then arm the interrupt and sleep (as Linux NAPI and DPDK's power-aware examples do) | Busy-poll latency under load | Proportional to load |
+
+On a hosted OS, user space never runs a real interrupt handler: an "interrupt" is an eventfd becoming
+readable.
+
+**The NIC queue is a `net` handler.** A kernel-bypass runtime mod provides a handler bound to one
+queue; application code reads packets exactly as it would from sockets, so the same feed handler runs
+on kernel sockets, kernel bypass and the simulator ([`effects-and-capabilities.md`](effects-and-capabilities.md)).
+
+```rust
+fn main(net: NetRoot) {
+    let rx = net.bypass("eth0", queue: 3, wait: Adaptive { spin: 20<us> })   // narrows NetRoot
+    scope(|s| {
+        s.spawn(|| feed_handler(&rx))
+    }, on: pinned(3))                       // the core that also takes the queue's IRQ
+}
+
+#[no_alloc, no_lock]
+fn feed_handler(rx: &RxQueue) with net, suspend, fail(NetError) {
+    loop {
+        let batch = rx.recv_batch::<32>()?  // owned Packets from the DMA pool; zero copy
+        for pkt in batch { on_packet(pkt) }
+    }
+}
+```
+
+- **The wait mode is the handler's configuration, not the code's.**
+  - *Busy-poll*: `recv` spins on the descriptor ring on a `pinned` executor, which already offers
+    busy-polling and real-time priority ([`concurrency.md`: Tasks, threads and executors](concurrency.md#tasks-threads-and-executors)).
+    Each spin is a cancellation checkpoint, so stop and cancel still work.
+  - *Interrupt*: the handler arms the queue's interrupt, registers its eventfd with the shared I/O
+    reactor and suspends the task. The interrupt wakes the task, which drains the ring in a batch and
+    re-arms.
+  - *Adaptive*: spin, then arm and suspend.
+  - The spin budget, interrupt coalescing (`rx-usecs`) and IRQ affinity are set in code or in the
+    deployment topology. Production can busy-poll while a developer laptop uses interrupts, with no
+    code change.
+- **Packets are owned DMA buffers.** A `Packet` is a unique value over a DMA-pool slot, typed by its
+  memory space; dropping it returns the slot to the ring; validation yields zero-copy views
+  ([`memory-and-resources.md`: Zero-copy I/O](memory-and-resources.md#zero-copy-io), [`accelerators.md`](accelerators.md)).
+- **`unsafe` lives in one small mod.** Descriptor rings, the AF_XDP UMEM mapping, volatile access and
+  DPDK or ef_vi bindings use `unsafe` (and `ffi`), with safety contracts, `FromBytes` descriptors,
+  the checker and human review ([`unsafe.md`](unsafe.md)). Applications hold neither capability.
+  AF_XDP can be driven from pure Moddil through raw system calls.
+- **Capabilities.** Opening a bypass queue narrows `NetRoot`, so it appears in `main`'s declared roots;
+  the startup sandbox keeps exactly the privileges it needs (VFIO device access, or `CAP_NET_RAW` and
+  `CAP_BPF` for AF_XDP) and drops the rest ([`lifecycle.md`: `main` declares its root capabilities](lifecycle.md#main-declares-its-root-capabilities)).
+- **Replay and simulation.** A packet arrival is a `net` effect result, so the flight recorder captures
+  it and a trading day replays exactly; in tests a simulation handler delivers packets with modelled
+  latency and loss ([`determinism.md`: Record and replay](determinism.md#record-and-replay)).
+- **Bare metal.** In the freestanding profile there are real interrupt handlers, with a restricted
+  effect set; they only signal, and a task drains the ring ([`freestanding.md`](freestanding.md)):
+
+  ```rust
+  #[interrupt(NIC_RX, priority = 3)]
+  fn nic_rx() { RX_READY.signal() }        // no allocation, no suspension
+  ```
+
 ## Checks and their elision
 
 **Decision: overflow and bounds checks are never turned off for a whole build.** A program behaves the
@@ -176,7 +246,7 @@ fn bench_on_tick(b: &mut Bencher) {
 
 | Example | What it needs | Moddil's answer |
 |---|---|---|
-| [HFT platform](examples/02-hft-platform.md) | Predictable tick-to-trade latency; zero allocation on the hot path | `#[no_alloc, no_lock]` hot loop; pinned executors; PGO from a replayed trading day; counter budgets in CI |
+| [HFT platform](examples/02-hft-platform.md) | Predictable tick-to-trade latency; zero allocation on the hot path | `#[no_alloc, no_lock]` hot loop; pinned executors; kernel-bypass reads, busy-polling in production and interrupt-driven in development; PGO from a replayed trading day; counter budgets in CI |
 | [Multiplayer game](examples/01-multiplayer-game.md) | Frame budget in release and debug; cache-friendly entity data | Struct-of-arrays; optimised dependencies in debug; debug frame-rate benchmark |
 | [Web store](examples/03-web-store.md) | Throughput per request; low memory per request | Allocation counters per request handler; visible rc and clone costs |
 | [Hashiverse](examples/04-hashiverse.md) | Crypto and proof-of-work throughput | Constant-time crypto that is still vectorised; PGO from simulated network runs |
