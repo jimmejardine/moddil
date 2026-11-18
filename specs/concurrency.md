@@ -389,7 +389,7 @@ depends on it is still draining. Moddil orders shutdown by the scope tree instea
   supervisors, which terminate children in reverse start order.
 
 ```rust
-fn main(sys: System) {
+fn main(net: NetRoot) {                                    // declares only the roots it uses
     scope(|services| {                                     // layer 1 (outer)
         services.spawn(|| db_writer());
         services.spawn(|| dht.maintain());

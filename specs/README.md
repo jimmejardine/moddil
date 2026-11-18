@@ -48,7 +48,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [GPUs and accelerators](accelerators.md)                           | 🟡 minor questions | [`accelerators.md`](accelerators.md)                                       |
 | [Distributed and multi-tier programs](distribution.md)             | 🟡 minor questions | [`distribution.md`](distribution.md)                                       |
 | [Determinism and reproducibility](determinism.md)                  | 🟠 major questions | [`determinism.md`](determinism.md)                                         |
-| [Program lifecycle](lifecycle.md)                                  | ⚪ not started     | [`lifecycle.md`](lifecycle.md)                                             |
+| [Program lifecycle](lifecycle.md)                                  | 🟡 minor questions | [`lifecycle.md`](lifecycle.md)                                             |
 | [Observability and debuggability](observability.md)                | 🟡 minor questions | [`observability.md`](observability.md)                                     |
 | **Library and ecosystem**                                          |                    |                                                                            |
 | [Mods and the standard catalogue](mods.md)                         | 🟠 major questions | [`mods.md`](mods.md) (R2)                                                  |

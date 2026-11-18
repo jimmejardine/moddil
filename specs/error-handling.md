@@ -26,7 +26,7 @@
 |---|---|---|---|
 | **1. Errors** | I/O failure, parse error, not found, network timeout, validation | Must be handled (R3) | Compiler: effect/type checking |
 | **2. Defined arithmetic** | Float NaN/∞; explicit wrapping (`+%`, `Wrapping<T>`) | No handling; the result is defined | Nothing (by design: fast) |
-| **3. Traps (crashes)** | OOM, stack overflow, integer overflow, integer ÷ 0, out-of-bounds index, `unreachable`, FFI fault | Terminates the process (option: terminate only the task) with a full trace | Runtime |
+| **3. Traps (crashes)** | OOM, stack overflow, integer overflow, integer ÷ 0, out-of-bounds index, `unreachable`, FFI fault | Terminates the process with a full trace, or only an isolated scope ([`lifecycle.md`](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)) | Runtime |
 
 R3 is about class 1 only: **a Moddil program never crashes because an error the language knows about
 was not handled.**
@@ -255,10 +255,10 @@ and P0709):
   register (Swift) or CPU flag (P0709);
 - in very deep chains where errors almost never happen, table-based exceptions can benchmark faster.
 
-**Traps (class 3)** are where cleanup is hard. If a trap terminates only a task rather than the
-process, its resources must be freed without unwinding each frame. Options: resources tracked per task
-scope or region, so the whole region is released at once (Erlang, Midori), or unwinding used only on
-this rare path. *Open.*
+**Traps (class 3)** are where cleanup is hard. Decided: a trap terminates the process by default; a
+scope that opts into isolation is unwound on this rare path instead, running drops, poisoning held
+sync cells and abandoning linear values
+([`lifecycle.md`: Traps: the process by default, isolated scopes on request](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)).
 
 ## Cleanup
 
@@ -350,16 +350,12 @@ txn.commit()?
 2. Do failed contract assertions trap or raise an error ([Three outcome classes](#three-outcome-classes))? (Recommendation: trap; see
    [`correctness.md`: Decisions to lock early](correctness.md#decisions-to-lock-early).)
 3. Task scopes: first error and cancel siblings, or collect all errors ([Tasks and concurrency](#tasks-and-concurrency))?
-4. Can a trap terminate only its task rather than the process, and how are its resources freed ([Performance: why C++ exceptions are slow, and why Moddil's errors aren't](#performance-why-c-exceptions-are-slow-and-why-moddils-errors-arent))?
-   If so, linear types would also need an infallible, non-suspending `abandon` for that path (e.g. a
-   transaction drops its connection so the database rolls back). Cancellation does not need it
-   ([`concurrency.md`: Cancellation and shutdown](concurrency.md#cancellation-and-shutdown)).
-5. Should a resumable recovery effect ("retry"/"default") exist as a separate effect?
-6. How is context attached to structured errors ([Error types](#error-types))?
-7. Is `Option` part of the same machinery (`?` on `Option`, as in Rust)?
-8. Should errors from the `remote` effect ([Distributed and multi-tier programs](distribution.md)) have a standard shape (timeout, unreachable,
+4. Should a resumable recovery effect ("retry"/"default") exist as a separate effect?
+5. How is context attached to structured errors ([Error types](#error-types))?
+6. Is `Option` part of the same machinery (`?` on `Option`, as in Rust)?
+7. Should errors from the `remote` effect ([Distributed and multi-tier programs](distribution.md)) have a standard shape (timeout, unreachable,
    incompatible version), and how are errors serialised across tiers?
-9. Checked-exception fatigue (Java) vs inference: how much of an error set should be inferred?
+8. Checked-exception fatigue (Java) vs inference: how much of an error set should be inferred?
 
 ## Background
 

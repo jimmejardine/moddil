@@ -365,6 +365,9 @@ Rules:
 - **Cancellation paths are checked like error paths**: a task observes cancellation only at a
   suspension point, and must consume its linear values on that path too, typically with
   `errdefer txn.rollback()` ([`concurrency.md`: Cancellation and shutdown](concurrency.md#cancellation-and-shutdown)).
+- **Every linear type has an `abandon` operation**: infallible and non-suspending (for a
+  transaction, drop the connection so the database rolls back). It runs only when an isolated
+  scope traps ([`lifecycle.md`: Traps: the process by default, isolated scopes on request](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)).
 
 ### Cleanup that can fail (why drop cannot)
 

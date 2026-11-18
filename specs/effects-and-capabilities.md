@@ -9,7 +9,7 @@
 |---|---|
 | **Effects are interfaces; handlers are scoped implementations** | `effect time { fn now() -> Instant }`; `with time` in a signature; `with time = sim.clock(n) { … }` installs a handler for a block. |
 | **Handler tiers** | User effects get function-like (tail-resumptive) and abortive handlers. One-shot continuations are reserved for core and standard effects (`suspend`, generators). Resuming twice is never allowed. |
-| **Authority comes only from root capabilities** | `main` receives `System` and `Devices`; real OS handlers are built only from those. Libraries perform, wrap and narrow effects, but never create authority. |
+| **Authority comes only from root capabilities** | `main` declares the root capabilities it needs (`NetRoot`, `FsRoot`, `Devices`, …); real OS handlers are built only from those. Libraries perform, wrap and narrow effects, but never create authority. |
 | **Capability values for two at once** | A handler can also be passed as a second-class value (`fn bridge(a: &Net, b: &Net)`). |
 | **Inferred inside, explicit at `pub`** | Effects are inferred inside a mod and written on `pub` signatures; no aliases. |
 | **Implicit effect polymorphism** | An unannotated closure parameter means "whatever `f` does, I do too"; `with E` is written only to name or constrain. |
@@ -105,10 +105,10 @@ signatures short ([Signatures and inference](#signatures-and-inference)).
 ### Authority comes only from root capabilities
 
 ```rust
-fn main(sys: System, devs: Devices) {
-    with net = sys.net(),
-         fs  = sys.fs().read_only("/data"),
-         time = sys.clock() {
+fn main(net: NetRoot, files: FsRoot, clock: Clock, devs: Devices) {
+    with net  = net,
+         fs   = files.read_only("/data"),
+         time = clock {
         app::run()
     }
 }
@@ -121,7 +121,8 @@ fn load_plugin(p: &Plugin) with fs, fail(PluginError) {
 }
 ```
 
-- **Only `main` receives root capabilities** (`System`, `Devices`, …). Real OS handlers are built
+- **Only `main` receives root capabilities**, and it declares exactly which ones it uses
+  ([`lifecycle.md`: `main` declares its root capabilities](lifecycle.md#main-declares-its-root-capabilities)). Real OS handlers are built
   only from them, so a library can never create a network or file-system handler of its own.
 - A library may:
   - **perform** the effects its signature declares (and its mod's ceiling allows,
@@ -130,7 +131,7 @@ fn load_plugin(p: &Plugin) with fs, fail(PluginError) {
   - **narrow** a handler before passing control on.
 - So there is **no ambient authority**: what code can do is bounded by its signature, its mod's
   ceiling and the handlers its callers chose.
-- Tests and simulations build handlers from simulation values rather than `System`, so the same
+- Tests and simulations build handlers from simulation values rather than root capabilities, so the same
   code runs against fakes ([`determinism.md`](determinism.md)).
 
 ### Capability values
