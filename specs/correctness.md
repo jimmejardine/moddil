@@ -110,7 +110,8 @@ actually test anything, and can be shown in the PR summary.
 
 Run tests on the MIR interpreter with extra checks: `unsafe` code obeying aliasing and validity rules,
 FFI boundaries, use of uninitialised memory (Rust's Miri). This is nearly free, since the interpreter
-exists for comptime.
+exists for comptime. It must pass before a mod with the `unsafe` capability is published
+([`unsafe.md`: Checking](unsafe.md#checking)).
 
 ### Systematic concurrency testing
 

@@ -99,6 +99,8 @@ largest attack surface in modern software:
 
 - `moddil publish` compares the new version's public API, effects, error sets and capabilities with
   the previous tag. It **refuses a breaking change without a major bump**, then creates a signed tag.
+- For a mod with the `unsafe` capability, `publish` also requires its tests to pass under the unsafe
+  checker ([`unsafe.md`: Checking](unsafe.md#checking)).
 - Anyone can create a tag by hand, so **`moddil update` re-runs the check** on the consumer's side:
   "`1.5.0` removes `Parser.reset`, which breaks `1.4`; treat as a major?".
 - Within a major, the semver promise is therefore a guarantee rather than a hope, which is what makes
@@ -199,6 +201,8 @@ requires = []                     # pure: no net, fs, ffi
 - **Shared audits**: an organisation can import another's audit records from that organisation's git
   repository.
 - `moddil vet` fails CI when a locked version has no review that satisfies the project's policy.
+- **The default policy requires a human review** for new or changed `unsafe` or `ffi` code in a
+  delta; agent reviews are recorded but don't satisfy it ([`unsafe.md`: Review and audit](unsafe.md#review-and-audit)).
 
 ### A broad standard library
 
