@@ -37,10 +37,10 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Error handling](error-handling.md)                                | 🟠 major questions | [`error-handling.md`](error-handling.md)                                   |
 | [Null and invalid states](null-safety.md)                          | 🟡 minor questions | [`null-safety.md`](null-safety.md)                                         |
 | [Type system core](types.md)                                       | 🟠 major questions | [`types.md`](types.md)                                                     |
-| [Modules, visibility and program structure](modules.md)            | ⚪ not started     | [`modules.md`](modules.md)                                                 |
-| [`unsafe` and the safety boundary](unsafe.md)                      | ⚪ not started     | [`unsafe.md`](unsafe.md)                                                   |
+| [Modules, visibility and program structure](modules.md)            | ⚪ not started      | [`modules.md`](modules.md)                                                 |
+| [`unsafe` and the safety boundary](unsafe.md)                      | ⚪ not started      | [`unsafe.md`](unsafe.md)                                                   |
 | [Numerics and data](numerics.md)                                   | 🟠 major questions | [`numerics.md`](numerics.md), [`units.md`](units.md)                       |
-| [Text and strings](text.md)                                        | ⚪ not started     | [`text.md`](text.md)                                                       |
+| [Text and strings](text.md)                                        | ⚪ not started      | [`text.md`](text.md)                                                       |
 | [Metaprogramming](comptime.md)                                     | 🟡 minor questions | [`comptime.md`](comptime.md)                                               |
 | [Contracts and verification](correctness.md)                       | 🟠 major questions | [`correctness.md`](correctness.md)                                         |
 | **Running programs**                                               |                    |                                                                            |
@@ -48,15 +48,15 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [GPUs and accelerators](accelerators.md)                           | 🟡 minor questions | [`accelerators.md`](accelerators.md)                                       |
 | [Distributed and multi-tier programs](distribution.md)             | 🟡 minor questions | [`distribution.md`](distribution.md)                                       |
 | [Determinism and reproducibility](determinism.md)                  | 🟠 major questions | [`determinism.md`](determinism.md)                                         |
-| [Program lifecycle](lifecycle.md)                                  | ⚪ not started     | [`lifecycle.md`](lifecycle.md)                                             |
+| [Program lifecycle](lifecycle.md)                                  | ⚪ not started      | [`lifecycle.md`](lifecycle.md)                                             |
 | [Observability and debuggability](observability.md)                | 🟡 minor questions | [`observability.md`](observability.md)                                     |
 | **Library and ecosystem**                                          |                    |                                                                            |
 | [Mods and the standard catalogue](mods.md)                         | 🟠 major questions | [`mods.md`](mods.md) (R2)                                                  |
-| [Standard library shape](stdlib.md)                                | ⚪ not started     | [`stdlib.md`](stdlib.md)                                                   |
+| [Standard library shape](stdlib.md)                                | ⚪ not started      | [`stdlib.md`](stdlib.md)                                                   |
 | [Packages and supply-chain security](packages-and-supply-chain.md) | 🟡 minor questions | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)             |
 | [Interoperability with C and Rust](interop.md)                     | 🟡 minor questions | [`interop.md`](interop.md)                                                 |
-| [Data interchange and persistence](data.md)                        | ⚪ not started     | [`data.md`](data.md)                                                       |
-| [UI, mobile and the browser](ui.md)                                | ⚪ not started     | [`ui.md`](ui.md)                                                           |
+| [Data interchange and persistence](data.md)                        | ⚪ not started      | [`data.md`](data.md)                                                       |
+| [UI, mobile and the browser](ui.md)                                | ⚪ not started      | [`ui.md`](ui.md)                                                           |
 | **Tools and workflow**                                             |                    |                                                                            |
 | [Tooling uniformity](toolchain.md)                                 | 🟡 minor questions | [`toolchain.md`](toolchain.md), [`docs-and-tests.md`](docs-and-tests.md)   |
 | [Build times](build-times.md)                                      | 🟠 major questions | [`build-times.md`](build-times.md)                                         |
