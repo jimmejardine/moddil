@@ -17,6 +17,8 @@
 | D8 | **Resource exhaustion and faults are crashes**, not R3 violations: out of memory, stack overflow, `unreachable`, native FFI faults. |
 | D9 | **Drop cannot fail or suspend**: a drop implementation has an empty effect set, checked by the compiler. Cleanup that can fail is a linear type with an explicit `close`/`commit` (§9). |
 | D10 | **Cleanup failures during error handling are suppressed, not lost**: they are attached to the primary error (as in Java's try-with-resources), never replace it and never terminate (§9). |
+| D11 | **`defer` is infallible; `errdefer` may fail.** `defer` follows drop's rules (no fail, no suspend); `errdefer` runs on error and cancellation exits, and its failure is suppressed (§9). |
+| D12 | **A destructor is checked like an entry point**: its failure set must be empty, so a fallible call inside `drop` must be handled there (logged, explicitly discarded, or the type made linear) (§9.1). |
 
 ## 2. Three outcome classes
 
@@ -259,8 +261,11 @@ this rare path. *Open.*
 ## 9. Cleanup
 
 - RAII / linear types (§2.2) clean up on every path.
-- **`errdefer`** (Zig): cleanup that runs only when the scope exits with an error, for example rolling
-  back a half-built structure.
+- **`defer`** (Zig, Go, Swift): cleanup on every exit. It must be infallible and non-suspending (D11).
+- **`errdefer`** (Zig): cleanup that runs only when the scope exits with an error **or is cancelled**,
+  for example rolling back a half-built structure. It may fail; the failure is suppressed (D10).
+- Destructors, drop order, `defer` and `errdefer` are specified in
+  [`memory-and-resources.md`](memory-and-resources.md) §2.1–§2.4.
 
 ```
 let file = fs.create(tmp)?;
@@ -298,6 +303,12 @@ txn.commit()?
 ```
 
 - **Traps inside drop** (class 3) terminate with a full trace (D8).
+
+**If a destructor "errors", specifically:**
+1. A fallible call inside `drop` does not compile unless handled there (D12): logged, explicitly
+   discarded with a reason, or the type is made linear.
+2. Cleanup failing while an error or cancellation is in progress is suppressed onto it (D10).
+3. A trap inside `drop` terminates the process; remaining drops do not run; a second trap aborts.
 
 ## 10. State of the art: what to take, what to avoid
 
@@ -338,6 +349,9 @@ txn.commit()?
    [`correctness.md`](correctness.md) §5.)
 3. Task scopes: first error and cancel siblings, or collect all errors (§4.5)?
 4. Can a trap terminate only its task rather than the process, and how are its resources freed (§8)?
+   If so, linear types would also need an infallible, non-suspending `abandon` for that path (e.g. a
+   transaction drops its connection so the database rolls back). Cancellation does not need it
+   ([`concurrency.md`](concurrency.md) §9).
 5. Should a resumable recovery effect ("retry"/"default") exist as a separate effect?
 6. How is context attached to structured errors (§5)?
 7. Is `Option` part of the same machinery (`?` on `Option`, as in Rust)?

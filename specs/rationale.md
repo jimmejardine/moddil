@@ -168,6 +168,10 @@ Each area follows the same template:
     on its owning thread. Compile-time RC elision removes more.
 - **Affine by default, linear on request.** Linear types (transactions, fallible `close`) must be
   explicitly consumed, and cannot be rc'd.
+- **Destructors are rare and infallible.** Drop glue is generated; a hand-written
+  `drop(self: sink Self)` lives with its type, may destructure itself, and cannot fail or suspend.
+  `defer` follows the same rules; `errdefer` may fail, and its error is suppressed. Fields and locals
+  drop in reverse declaration order ([`memory-and-resources.md`](memory-and-resources.md) §2.1–§2.4).
 - **Zero-copy I/O** comes from moving owned buffers: DMA buffers are owned values, parsed through
   validated views, *owning views* (buffer + offsets) or rc slices.
 
@@ -422,6 +426,11 @@ ecosystems into "sync" and "async" halves.
 - **Construction may suspend; drop may not.** There are no special constructors, so creating a value
   is an ordinary function that may suspend or fail. Async teardown is an explicit `close()` on a
   linear type ([`concurrency.md`](concurrency.md) §8).
+- **Cancellation is implicit and cooperative.** A task's scope is its token (no `CancellationToken`
+  parameters); cancellation is observed only at suspension points, and the cancellation path must
+  consume linear values like the error path. Shutdown has two levels, graceful *stop* then *cancel*
+  after a grace deadline, delivered **innermost scope first**, so outer services keep running while
+  inner layers drain ([`concurrency.md`](concurrency.md) §9).
 
 **Directions.**
 - Actors, channels and thread-per-core sharding as library patterns built on these primitives, not
@@ -431,7 +440,6 @@ ecosystems into "sync" and "async" halves.
 
 **Open questions** (tracked in [`concurrency.md`](concurrency.md) §7).
 - Should preemption be guaranteed (BEAM-style) or cooperative?
-- What happens to a linear value (e.g. an open transaction) in a task that is cancelled?
 - The model prevents data races, not deadlocks. Lock ordering, lock levels, lints, or steering
   toward message passing?
 

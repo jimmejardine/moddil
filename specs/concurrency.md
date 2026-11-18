@@ -253,10 +253,8 @@ thread; executor placement is recorded and simulated ([`determinism.md`](determi
 - **Preemption:** guaranteed (BEAM-style, via compiler-inserted yield points) or cooperative?
   Affects tail latency (HFT, game tick) and fairness. *Recommended* (§6.1): compiler-inserted safe
   points in loops and function entries, which `pinned` executors can disable.
-- **Cancellation and linear values:** a cancelled task may hold a linear `Txn`. Options: cancellation
-  is only observed at suspension points and the type system requires linear values to be consumed
-  before any suspension that can be cancelled; or linear types declare a mandatory
-  `on_cancel` consumer (e.g. rollback); or cancellation is deferred while linear values are live.
+- ~~**Cancellation and linear values.**~~ Resolved: cancellation is cooperative and observed only at
+  suspension points, and the cancellation path must consume linear values like the error path (§9).
 - **Deadlock:** this model prevents data races, not deadlocks. Lock ordering by type? A lint? Lock
   levels (as in some kernels)? Or steer toward message passing?
 - **Async drop:** drop may not suspend (§8). Is that enough for resources whose clean shutdown needs
@@ -307,6 +305,120 @@ fn connect(addr: let Addr) -> Conn ! {net, suspend, fail(NetError)} {
 it must be immediate and infallible. A resource whose teardown needs I/O is a **linear type** with an
 explicit `close()` or `commit()`, which may suspend and fail like any other function
 ([`memory-and-resources.md`](memory-and-resources.md) §7).
+
+## 9. Cancellation and shutdown
+
+### 9.1 Why cancellation has to exist
+
+In servers and interactive programs, work regularly becomes unwanted before it finishes:
+
+| Cause | Example |
+|---|---|
+| Sibling failure | A request fans out to three services; one fails, so the other results are useless |
+| Deadlines | The caller's 200 ms budget has expired |
+| The requester left | The client disconnected, or the user navigated away |
+| Racing | Hedged requests: ask two replicas, take the first answer, stop the other |
+| Shutdown | Ctrl-C, or SIGTERM during a rolling deploy |
+
+Without cancellation that work keeps running and holding resources (Go's goroutine leaks before
+`context.Context`).
+
+**Two designs Moddil rejects:**
+- **Explicit tokens** (C#'s `CancellationToken`, Go's `context.Context`) must be threaded through
+  every call. People forget, libraries ignore them, and signatures get noisier.
+- **Asynchronous killing** (.NET's `Thread.Abort`, Java's `Thread.stop`) was removed from both
+  platforms: stopping code at an arbitrary instruction breaks invariants halfway through an update.
+
+### 9.2 The model: implicit and cooperative
+
+- **A task's scope is its cancellation token.** It is carried by structured concurrency (as in Trio,
+  Kotlin and Swift); nothing is passed through signatures.
+- **Cancellation is observed only at suspension points.** Suspension is an effect, so every place a
+  task can pause is known: I/O, joining children, locks, timers, channels. When a task is cancelled,
+  its next suspension point returns a **`Cancelled` outcome** instead of a value. Code between
+  suspension points is never interrupted, so invariants are never torn.
+- **The cancellation path is an ordinary, checked exit path:**
+  - drops, `defer` and `errdefer` run ([`memory-and-resources.md`](memory-and-resources.md) §2.2–§2.3);
+  - **linear values must be consumed on it**, exactly as on error paths, typically with
+    `errdefer txn.rollback()`;
+  - cleanup on this path **may suspend** (a rollback needs the network) inside a **shielded,
+    deadline-bounded scope**: it is not itself cancelled midway, and it cannot hang for ever.
+- `Cancelled` is a distinct outcome, not an error ([`error-handling.md`](error-handling.md) §4.5);
+  it is accounted for at the join.
+- **Long pure-compute loops** have no suspension points. They call a cheap `checkpoint()` (a
+  suspension point that observes cancellation); a lint flags long loops in cancellable tasks without
+  one. Preemption safe points (§6.1) only yield the thread; they never deliver cancellation, because
+  that would interrupt code between effect operations.
+- **Blocking FFI calls** cannot be interrupted. They run on the `blocking` executor (§6.1); the scope
+  waits for them, or detaches the OS thread if the function's overlay allows it
+  ([`interop.md`](interop.md) §4).
+
+### 9.3 Two levels: stop, then cancel
+
+| | **Stop** (graceful) | **Cancel** (hard, still cooperative) |
+|---|---|---|
+| Trigger | Ctrl-C / SIGTERM, deploy drain, a parent asks | Grace deadline expired, sibling failed, request deadline, racing |
+| Observed | Only where code asks, e.g. `stop_requested()` in a `select` | At every suspension point (`Cancelled`) |
+| Typical reaction | Stop taking new work, finish current work, say goodbye to peers, persist state | Abort current work, run cleanup |
+| Like | Go's `http.Server.Shutdown`; Hashiverse's shutdown token | Trio / Kotlin / Swift cancellation |
+
+- Signals are not asynchronous handlers: the runtime mod turns SIGINT and SIGTERM into a **stop**
+  event on `main`'s root scope.
+- If the scope has not finished when its **grace deadline** expires, stop escalates to cancel.
+- A **second signal** exits the process immediately; the OS reclaims everything.
+
+### 9.4 Layered shutdown: innermost first
+
+A naive shared token tells everyone to stop at once, so a service can shut down while code that
+depends on it is still draining. Moddil orders shutdown by the scope tree instead:
+
+- **Services provided as effect handlers cannot disappear early.** A handler (database pool, logger,
+  DHT client) is installed by an outer scope, and a scope cannot end until everything inside it has
+  finished, so no child outlives a handler it uses.
+- **Scopes are shutdown layers.** Stop (and later cancel) is delivered to the **innermost layer
+  first**. Outer layers keep **operating completely normally** (serving requests, accepting writes)
+  while inner layers drain. Only when an inner layer has finished does the next layer out receive
+  stop.
+- **Tasks within one layer are peers** and stop together: thousands of connection handlers drain
+  concurrently.
+- Dependencies are expressed by **nesting**: services in an outer scope, the code that uses them in
+  an inner one. This is the same rule as drop order (reverse of construction) and as Erlang/OTP
+  supervisors, which terminate children in reverse start order.
+
+```
+fn main(sys: System) {
+    scope(stop_on: [SIGINT, SIGTERM], grace: 10.s) { services ->   // layer 1 (outer)
+        services.spawn { db_writer() }
+        services.spawn { dht.maintain() }
+
+        scope { app ->                                             // layer 2 (inner)
+            app.spawn { server.serve() }
+        }
+        // layer 2 has fully finished; only now do db_writer and dht see stop_requested()
+    }
+}
+
+fn serve() ! {net, suspend} {
+    scope { s ->
+        loop {
+            select {
+                conn = listener.accept() => s.spawn { handle(conn) }
+                stop_requested()         => break      // stop accepting; in-flight handlers finish
+            }
+        }
+    }                                                   // waits for in-flight handlers
+}
+```
+
+On Ctrl-C:
+1. `serve` stops accepting; in-flight handlers finish, still using `db_writer` and `dht`, which are
+   running normally.
+2. Layer 2 ends.
+3. `db_writer` flushes and `dht` persists its routing table, then they end.
+4. `main` returns an exit status.
+
+If the grace deadline expires first, cancellation proceeds in the same inner-to-outer order, so each
+layer's shielded cleanup still finds the outer services alive.
 
 ## Prior art
 
