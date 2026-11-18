@@ -65,6 +65,14 @@ then the human and agent workflow. The order reflects dependencies, not priority
 
 For people and LLM agents editing the specs:
 
+- **Each area's document is authoritative.** It holds the problem statement, prior art, decisions,
+  directions and open questions in full; this index only points to it.
+- **Respect what is settled.** Sections marked **Decision** or **Decided**, and the firm
+  requirements **R1–R3**, are settled: don't reopen them unless asked. **Directions** and
+  **Open questions** are still open.
+- **The [reference examples](examples/README.md) are the yardstick:** a feature that none of them
+  needs is a candidate for removal.
+
 - **Link by heading name, not by number.** Sections are not numbered, so they can be reordered and
   rewritten freely. Cross-reference with a heading link: `[Live update (debug builds)](build-times.md#live-update-debug-builds)`
   in another document, or `[Index](#index)` within the same document. Anchors follow
@@ -83,4 +91,6 @@ For people and LLM agents editing the specs:
 - **Statuses live only in the index table** above. **Open questions live only in their area's
   document**, under *Open questions*; nothing is copied here.
 - **A new document needs an index row**, with a status from the legend.
-- **Code blocks are illustrative** and follow [`syntax.md`](syntax.md) (Rust-based syntax).
+- **House style:** sections run *problem → state of the art → decision → directions → open
+  questions*; code blocks are illustration only and follow [`syntax.md`](syntax.md) (Rust-based
+  syntax); spelling is British.
