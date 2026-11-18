@@ -103,7 +103,7 @@ Moddil these are effects, and the test versions are handlers.
 
 | Tier | Namespace | Bar | Examples |
 |---|---|---|---|
-| Core-adjacent | `moddil/core-*` | Ships with the compiler; tiny; changes only with editions | `core-fmt`, `core-collections` (Vec, Map), `core-text` |
+| Core-adjacent | `moddil/core-*` | Ships with the compiler; tiny; changes only with editions; usable in the `freestanding` profile ([`freestanding.md`](freestanding.md)) | `core-fmt`, `core-collections` (Vec, Map), `core-text` |
 | Standard | `moddil/*` | Curated, RFC process, capability review, audited, edition-aware | `moddil/net`, `moddil/crypto`, `moddil/gpu` |
 | Community | anyone | Registry rules only (§2.16) | `fastrt`, `hashiverse/protocol` |
 
@@ -134,6 +134,9 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 | `moddil/gpu` | Devices, buffers, launches; WebGPU/Vulkan/Metal/CUDA/ROCm and CPU-simulator handlers ([`accelerators.md`](accelerators.md)) | G H |
 | `moddil/decimal` | Fixed-point and decimal arithmetic | H W |
 | `moddil/units` | Unit packs: `si`, `information`, `currency`, `angle` ([`units.md`](units.md)) | G H W X |
+| `moddil/alloc` | Allocator-backed collections and `Rc`, without an OS (`freestanding-alloc` profile) | all |
+| `moddil/rt-embedded` | Bare-metal scheduler handler with static task slots ([`freestanding.md`](freestanding.md) §5) | embedded |
+| `moddil/hal` | Hardware effects (`gpio`, `uart`, `timer`, `mmio`), SVD-generated register views, simulation handlers | embedded |
 | `moddil/sql` | Typed SQL, schemas, migrations, connection pools | H W |
 | `moddil/timeseries` | Columnar storage, compression, tick data | H |
 | `moddil/sim` | Deterministic simulation: network, time, faults (§2.11) | G H W X |

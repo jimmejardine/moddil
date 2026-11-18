@@ -9,27 +9,28 @@
 
 **Document map**
 
-| Document                                             | Covers                                                                                                           | Status                                |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| [`rationale.md`](rationale.md)                       | Problems, prior art, direction (this document)                                                                   | Living                                |
-| [`memory-and-resources.md`](memory-and-resources.md) | Ownership, borrows and view types, `.to_rc()`, linear resources, zero-copy I/O (§2.2)                            | Decided direction                     |
-| [`concurrency.md`](concurrency.md)                   | CPU concurrency: sharing rules, structured tasks, sync cells, runtime contract (§2.8)                            | Decided direction                     |
-| [`accelerators.md`](accelerators.md)                 | GPUs and accelerators: three kernel levels, devices and addressing, launches as tasks (§2.9)                     | Decided direction                     |
-| [`observability.md`](observability.md)               | Logging, spans, metrics as write-only effects; task-aware stacks; flight recorder; introspection (§2.12)         | Decided direction                     |
-| [`distribution.md`](distribution.md)                 | Components, placement, `remote` effect, contracts and skew checks; images and adapters to existing platforms (§2.10) | Decided direction                 |
-| [`interop.md`](interop.md)                           | C ABI and Rust only: header import, overlays, generated Rust bridge, components, C++ via shims (§2.13)           | Decided direction                     |
-| [`docs-and-tests.md`](docs-and-tests.md)             | Checked and generated docs, examples as tests, attached tests and benchmarks, notes (§2.17, §2.18)               | Decided direction                     |
-| [`targets.md`](targets.md)                           | Cross-compilation from any host, static builds, libc strategy, signing and packaging (§2.15)                       | Decided direction                     |
-| [`mods.md`](mods.md)                                 | Mods, the core/mod boundary, standard-mod catalogue (R2)                                                         | Decided direction                     |
-| [`error-handling.md`](error-handling.md)             | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§2.3)                              | Partly decided; survey                |
-| [`correctness.md`](correctness.md)                   | Contracts, validated newtypes, property testing, fuzzing, verification, assurance levels (§2.7)                  | Proposal                              |
-| [`determinism.md`](determinism.md)                   | Deterministic core, simulation testing, scoped handlers, record and replay, reproducible builds (§2.11)          | Proposal                              |
-| [`build-times.md`](build-times.md)                   | Language rules for fast builds, query-based lazy compiler, no-link dev builds, default profiles, budgets (§2.14) | Proposal                              |
-| [`closures.md`](closures.md)                         | Lambdas that borrow, fail and suspend; parameter modes for closures; escaping closures (§2.8)                    | Mostly follows from decided direction |
-| [`units.md`](units.md)                               | Units of measure: F#-style `100<cm>`, open set of dimensions, declared units with scale and offset (§2.5) | Proposal                              |
-| [`comptime.md`](comptime.md)                         | Compile-time evaluation, reflection, typed derives, tagged-literal DSLs instead of macros (§2.6)                 | Decided direction                     |
-| [`bootstrap.md`](bootstrap.md)                       | Bootstrap compiler, self-hosting, backends, WASM engine support (R1)                                             | Proposed                              |
-| [`examples/`](examples/README.md)                    | Four reference systems used to test every decision                                                               | Written                               |
+| Document                                             | Covers                                                                                                                              | Status                                |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| [`rationale.md`](rationale.md)                       | Problems, prior art, direction (this document)                                                                                      | Living                                |
+| [`memory-and-resources.md`](memory-and-resources.md) | Ownership, borrows and view types, `.to_rc()`, linear resources, zero-copy I/O (§2.2)                                               | Decided direction                     |
+| [`concurrency.md`](concurrency.md)                   | CPU concurrency: sharing rules, structured tasks, sync cells, runtime contract (§2.8)                                               | Decided direction                     |
+| [`accelerators.md`](accelerators.md)                 | GPUs and accelerators: three kernel levels, devices and addressing, launches as tasks (§2.9)                                        | Decided direction                     |
+| [`observability.md`](observability.md)               | Logging, spans, metrics as write-only effects; task-aware stacks; flight recorder; introspection (§2.12)                            | Decided direction                     |
+| [`distribution.md`](distribution.md)                 | Components, placement, `remote` effect, contracts and skew checks; images and adapters to existing platforms (§2.10)                | Decided direction                     |
+| [`interop.md`](interop.md)                           | C ABI and Rust only: header import, overlays, generated Rust bridge, components, C++ via shims (§2.13)                              | Decided direction                     |
+| [`docs-and-tests.md`](docs-and-tests.md)             | Checked and generated docs, examples as tests, attached tests and benchmarks, notes (§2.17, §2.18)                                  | Decided direction                     |
+| [`targets.md`](targets.md)                           | Cross-compilation from any host, static builds, libc strategy, signing and packaging (§2.15)                                        | Decided direction                     |
+| [`mods.md`](mods.md)                                 | Mods, the core/mod boundary, standard-mod catalogue (R2)                                                                            | Decided direction                     |
+| [`error-handling.md`](error-handling.md)             | `?`, try blocks, results vs effects, R3 (no unhandled errors), traps, traces (§2.3)                                                 | Partly decided; survey                |
+| [`correctness.md`](correctness.md)                   | Contracts, validated newtypes, property testing, fuzzing, verification, assurance levels (§2.7)                                     | Proposal                              |
+| [`determinism.md`](determinism.md)                   | Deterministic core, simulation testing, scoped handlers, record and replay, reproducible builds (§2.11)                             | Proposal                              |
+| [`build-times.md`](build-times.md)                   | Language rules for fast builds, query-based lazy compiler, no-link dev builds, default profiles, budgets (§2.14)                    | Proposal                              |
+| [`closures.md`](closures.md)                         | Lambdas that borrow, fail and suspend; parameter modes for closures; escaping closures (§2.8)                                       | Mostly follows from decided direction |
+| [`units.md`](units.md)                               | Units of measure: F#-style `100<cm>`, open set of dimensions, declared units with scale and offset (§2.5)                           | Proposal                              |
+| [`freestanding.md`](freestanding.md)                 | Kernels and firmware: profiles by available effects, interrupts, static tasks, MMIO capabilities, emulator-verified targets (§2.15) | Proposal                              |
+| [`comptime.md`](comptime.md)                         | Compile-time evaluation, reflection, typed derives, tagged-literal DSLs instead of macros (§2.6)                                    | Decided direction                     |
+| [`bootstrap.md`](bootstrap.md)                       | Bootstrap compiler, self-hosting, backends, WASM engine support (R1)                                                                | Proposed                              |
+| [`examples/`](examples/README.md)                    | Four reference systems used to test every decision                                                                                  | Written                               |
 
 ---
 
@@ -310,6 +311,9 @@ fn connect(host: let str, port: Port?) ! {net, fail(NetError)} {
 
 ### 2.5 Numerics and data
 
+> Arbitrary-width integers (`u3`, `i24`) and packed bitfields are proposed in
+> [`freestanding.md`](freestanding.md) §6.
+>
 > Units of measure are expanded in [`units.md`](units.md) (proposal): F#-style `100<cm>` and
 > `f64<m/s>`, an open set of dimensions any mod can extend, and units declared with a scale (and an
 > offset for affine units) so related units convert automatically.
@@ -739,6 +743,9 @@ that iterate dozens of times per task.
 ---
 
 ### 2.15 Cross-compilation and deployment
+
+> Bare-metal targets (kernels, bootloaders, microcontroller firmware) are covered by the freestanding
+> profile in [`freestanding.md`](freestanding.md) (proposal), verified in QEMU and Renode.
 
 **Problem.** Shared libraries make deployment fragile: the right versions must be installed on every
 machine ("dependency hell"), and building for another OS usually needs that OS, a VM, Docker images
@@ -1196,6 +1203,7 @@ removal.
 - `specs/build-times.md`: language rules, compiler architecture, profiles, budgets (§2.14); proposal
 - `specs/closures.md`: lambdas that borrow, fail and suspend; escaping closures (§2.8)
 - `specs/units.md`: units of measure, open dimensions, unit algebra (§2.5); proposal
+- `specs/freestanding.md`: freestanding profile, bare-metal concurrency, hardware access, emulator testing (§2.15); proposal
 - `specs/comptime.md`: compile-time evaluation, reflection, typed derives, tagged literals (§2.6)
 - `specs/bootstrap.md`: stage 0, self-hosting, backends, WASM support status (R1)
 - `specs/examples/`: the four reference systems

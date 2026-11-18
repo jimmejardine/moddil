@@ -433,7 +433,8 @@ No case required first-class references with explicit lifetimes.
 
 - Exact syntax for parameter modes, views and `from`.
 - Allocators: how does the allocator capability (rationale §2.2, Zig-style) interact with `.to_rc()`
-  and arenas? Does an `Rc` remember its allocator?
+  and arenas? Does an `Rc` remember its allocator? (Proposed answer in
+  [`freestanding.md`](freestanding.md) §4.)
 - Should `Weak` be core or a mod? (It needs header support, so probably core.)
 - Linear values on error paths: what is the least noisy explicit handling?
 - Can the borrow check give diagnostics good enough for LLM agents (rationale §2.18) — e.g.

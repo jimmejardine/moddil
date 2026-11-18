@@ -14,6 +14,7 @@
 | **Byte-identical output on any host** | The same inputs produce the same bytes whatever OS builds them: shared caches and verifiable releases. |
 | **Sign and package from any host** | Authenticode for Windows; ad-hoc, Developer ID and notarisation for macOS; OCI images; archives. |
 | **Run what you cross-built** | WSL2, QEMU user mode and Wasmtime locally; remote runners for macOS. |
+| **Bare metal is separate** | Kernels and firmware use the freestanding profile; a bare-metal target is tier 1 only if an emulator runs its tests in CI ([`freestanding.md`](freestanding.md) §9). |
 
 ## 2. State of the art
 
