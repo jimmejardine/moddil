@@ -29,7 +29,7 @@ What it enables:
 | Hash-map iteration order | Rust randomises the seed; Go deliberately randomises iteration | The hash seed comes from the `rand` effect: protection against hash-flooding in production, a fixed seed in simulation. **Open:** should maps iterate in insertion order by default (Python, JavaScript)? |
 | Pointer addresses | Observable (hashing or sorting by address) | Safe code cannot turn an address into an integer |
 | Floating point | FMA contraction, x87 extended precision, fast-math reordering, flush-to-zero, differing `libm`, WASM NaN bit patterns, relaxed SIMD | **Strict IEEE 754 by default**: no implicit FMA, no reordering. A deterministic `moddil/math` with correctly rounded functions (CORE-MATH style). NaN canonicalisation where observable. Fast-math and relaxed SIMD only by explicit opt-in, **marked nondeterministic** so they are excluded from replayable code. |
-| Platform integer width | `usize` is 32-bit on wasm32, 64-bit natively | Wrapping `usize` arithmetic differs across targets. Fixed-width integers in cross-target code, enforced by a lint. |
+| Platform integer width | `usize` is 32-bit on wasm32, 64-bit natively | `int` (lengths, indices, counts) is 64-bit on every target ([`numerics.md`](numerics.md) §4.1). `usize` exists only for FFI and memory-level code, and a lint flags it in cross-target code. |
 | Parallel float reductions, GPU atomics | Order of additions varies | Deterministic reductions by default where cheap; GPU determinism opt-in (cf. PyTorch `use_deterministic_algorithms`) |
 | Native FFI | Anything | Behind the `ffi` capability; outside the guarantee unless modelled |
 

@@ -11,7 +11,7 @@
 | D2 | **Try blocks**: `try { … }` is an expression that scopes `?`. |
 | D3 | **R3: no crash from an unhandled, language-known error.** An unhandled error at any entry point or call site is a **compile-time error**. |
 | D4 | **No fire-and-forget tasks.** Every spawned task is awaited by its enclosing scope (structured concurrency, §2.8). |
-| D5 | **Arithmetic is unchecked.** Integers wrap (two's complement, no UB); floats follow IEEE 754 (NaN, ±∞). |
+| D5 | **Integer overflow traps, in every build** (as in Swift). Wrapping is explicit: `+%`, `-%`, `*%` or `Wrapping<T>` ([`numerics.md`](numerics.md) §4.2). Floats follow IEEE 754 (NaN, ±∞). |
 | D6 | **Integer division traps, as in Rust**: `x / 0`, `x % 0`, `MIN / -1`. Same crash class as out-of-memory. |
 | D7 | **Indexing traps on out-of-bounds**; `get(i)` returns `Option`. Bounds checks are elided where the compiler proves the index is in range. |
 | D8 | **Resource exhaustion and faults are crashes**, not R3 violations: out of memory, stack overflow, `unreachable`, native FFI faults. |
@@ -25,8 +25,8 @@
 | Class | Examples | Handling | Checked by |
 |---|---|---|---|
 | **1. Errors** | I/O failure, parse error, not found, network timeout, validation | Must be handled (R3) | Compiler: effect/type checking |
-| **2. Defined arithmetic** | Integer overflow (wraps), float NaN/∞ | No handling; the result is defined | Nothing (by design: fast) |
-| **3. Traps (crashes)** | OOM, stack overflow, integer ÷ 0, out-of-bounds index, `unreachable`, FFI fault | Terminates the process (option: terminate only the task) with a full trace | Runtime |
+| **2. Defined arithmetic** | Float NaN/∞; explicit wrapping (`+%`, `Wrapping<T>`) | No handling; the result is defined | Nothing (by design: fast) |
+| **3. Traps (crashes)** | OOM, stack overflow, integer overflow, integer ÷ 0, out-of-bounds index, `unreachable`, FFI fault | Terminates the process (option: terminate only the task) with a full trace | Runtime |
 
 R3 is about class 1 only: **a Moddil program never crashes because an error the language knows about
 was not handled.**
@@ -37,8 +37,10 @@ Notes:
   The check makes behaviour, messages and traces identical on every target. It costs a compare and
   branch next to a 20–90-cycle divide, and is elided for known non-zero divisors (constants, a
   `NonZero` type). `checked_div` returns `Option`.
-- **Wrapping arithmetic (D5)** is fast but can silently produce wrong values. `checked_*`,
-  `saturating_*` and `wrapping_*` operations live in a mod, and debug sanitisers can be optional tooling.
+- **Overflow (D5)** traps in every build, so debug and release behave the same and wrong values are
+  never silent. Checks cost typically 1–5% and are elided where range analysis or refinements prove
+  safety. Wrapping (`+%`, `Wrapping<T>`), `checked_*` and `saturating_*` are explicit
+  ([`numerics.md`](numerics.md) §4.2).
 - **Open:** do failed contract assertions (§2.7) trap (class 3), or raise an error (class 1)?
   [`correctness.md`](correctness.md) §5 recommends trapping, with untrusted input handled by
   validated newtypes that return errors.

@@ -27,7 +27,7 @@ document is still a proposal; 🟡 if what is left is detail, tooling or operati
 | [2.2](#22-memory-and-resource-management)                 | Memory and resource management         | 🟡 minor questions | [`memory-and-resources.md`](memory-and-resources.md)                     |
 | [2.3](#23-error-handling)                                 | Error handling                         | 🟠 major questions | [`error-handling.md`](error-handling.md)                                 |
 | [2.4](#24-null-and-invalid-states)                        | Null and invalid states                | 🟡 minor questions | [`null-safety.md`](null-safety.md)                                       |
-| [2.5](#25-numerics-and-data)                              | Numerics and data                      | 🔴 superficial     | [`numerics.md`](numerics.md), [`units.md`](units.md)                     |
+| [2.5](#25-numerics-and-data)                              | Numerics and data                      | 🟠 major questions | [`numerics.md`](numerics.md), [`units.md`](units.md)                     |
 | [2.6](#26-metaprogramming)                                | Metaprogramming                        | 🟡 minor questions | [`comptime.md`](comptime.md)                                             |
 | [2.7](#27-correctness-tooling-contracts-and-verification) | Contracts and verification             | 🟠 major questions | [`correctness.md`](correctness.md)                                       |
 | [2.8](#28-concurrency-across-cpus)                        | Concurrency across CPUs                | 🟡 minor questions | [`concurrency.md`](concurrency.md), [`closures.md`](closures.md)         |
@@ -268,22 +268,28 @@ Decided:
 
 ### 2.5 Numerics and data
 
-🔴 **superficial** · Detail: [`numerics.md`](numerics.md), [`units.md`](units.md) (units of measure)
+🟠 **major questions** · Detail: [`numerics.md`](numerics.md), [`units.md`](units.md) (units of measure)
 
-Silent integer overflow, undefined behaviour, floating-point surprises and no units.
+Silent integer overflow, undefined behaviour, unsigned-index underflow, lossy conversions,
+floating-point surprises, floats used for money, and no units.
 
-- Decided ([`error-handling.md`](error-handling.md) §2): integer arithmetic wraps with no undefined
-  behaviour; floats follow IEEE 754; integer division by zero and `MIN / -1` trap; checked and
-  saturating operators live in a mod.
+- Decided ([`numerics.md`](numerics.md)):
+  - **integer overflow traps in every build**; wrapping is explicit (`+%`, `Wrapping<T>`);
+  - **lengths and indices are a signed `int`** (i64 on every target);
+  - **exact literals** (Go-style), checked when they get a type;
+  - **only lossless widening is implicit**; lossy conversions are named, and there is no `as`;
+  - strict IEEE floats with `total_cmp` and a totally ordered `Finite` refinement;
+  - **`Fixed<S>`** (scale in the type) and `BigDecimal` for money;
+  - `Simd<T, N>` in the core; endian types, packed structs and a comptime `Soa<T>` for layout.
 - Proposed: F#-style units of measure (`100<cm>`, `f64<m/s>`) with an open set of dimensions
-  ([`units.md`](units.md)); arbitrary-width integers and packed bitfields
-  ([`freestanding.md`](freestanding.md) §6).
-- Directions: SIMD vectors and tensors as first-class types (§2.9); arbitrary-precision integers in
-  the standard library.
+  ([`units.md`](units.md)).
 
-**Open questions** (same list as [`numerics.md`](numerics.md) §4)
+**Open questions** (same list as [`numerics.md`](numerics.md) §8)
 
-None recorded yet. Units of measure have their own list in [`units.md`](units.md) §10.
+- How are units written on parameterised types (`Fixed<4>` in US dollars: `Fixed<4><USD>`?)?
+- Should `Fixed` and `BigDecimal` have a default rounding mode, or must it always be stated?
+- Should overflow checks ever be disabled per mod or per block (an `unchecked` region), or only
+  replaced by explicit `+%`?
 
 **Open questions** (same list as [`units.md`](units.md) §10)
 
@@ -352,7 +358,7 @@ Proposed:
 1. Is the verifier part of the core toolchain or a mod (`moddil/verify`)?
 2. Which SMT solver(s), and how are solver versions pinned for reproducible proofs?
 3. How much annotation burden is acceptable before L1/L2 stop being used?
-4. Should wrapping arithmetic have a "prove no overflow" mode for mods that want it?
+4. Should a mod be able to require proof that no overflow trap can occur?
 5. How are contracts on effectful operations expressed (for example, "this handler is called at most
    once")?
 
@@ -849,7 +855,7 @@ Being honest about where goals collide:
 | Language vs infrastructure scope                   | Every step toward describing infrastructure risks turning Moddil into a cloud platform.                                                                                                          |
 | Whole-program view vs independent deploys          | Whole-system checking is powerful, but teams must still ship components separately.                                                                                                              |
 | WASM as a required target vs native-first features | Threads and GPU access are weaker on WASM, and stack switching does not ship in browsers yet, so browsers need a JSPI-based lowering in the meantime. Every core feature needs a WASM implementation strategy, even if it is slower. |
-| Wrapping arithmetic vs correctness | Unchecked, wrapping integers are fast and predictable but can silently produce wrong values. Checked operators and debug sanitisers are opt-in. |
+| Overflow checks vs speed | Integer overflow traps in every build, which costs typically 1–5% before checks are elided by range analysis. Wrapping is always available but explicit (`+%`, `Wrapping<T>`). |
 | Small core vs compiler-checked guarantees | R2 wants a tiny core, but anything the compiler must check (ownership, effects, capabilities, placement, contracts) has to be in it. The core is "small" only relative to its guarantees. |
 | "For LLMs" vs "for humans"                         | Must not produce a language only machines can comfortably write. Humans still need to read, debug and occasionally write it.                                                                     |
 

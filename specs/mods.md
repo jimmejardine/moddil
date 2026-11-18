@@ -132,7 +132,8 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 | `moddil/crypto` | Ed25519, ML-DSA, FN-DSA, Blake2/3, SHA-2/3, ChaCha20-Poly1305, TLS primitives | W X |
 | `moddil/simd`, `moddil/tensor` | Portable SIMD; n-d arrays and tensor expressions compiled to graphs or kernels ([`accelerators.md`](accelerators.md) §8) | G H X |
 | `moddil/gpu` | Devices, buffers, launches; WebGPU/Vulkan/Metal/CUDA/ROCm and CPU-simulator handlers ([`accelerators.md`](accelerators.md)) | G H |
-| `moddil/decimal` | Fixed-point and decimal arithmetic | H W |
+| `moddil/decimal` | `Fixed<S>` fixed-point (scale in the type) and `BigDecimal` ([`numerics.md`](numerics.md) §4.7) | H W |
+| `moddil/num` | `BigInt`, `Rational` | X |
 | `moddil/units` | Unit packs: `si`, `information`, `currency`, `angle` ([`units.md`](units.md)) | G H W X |
 | `moddil/alloc` | Allocator-backed collections and `Rc`, without an OS (`freestanding-alloc` profile) | all |
 | `moddil/rt-embedded` | Bare-metal scheduler handler with static task slots ([`freestanding.md`](freestanding.md) §5) | embedded |

@@ -229,7 +229,7 @@ These are cheap now and expensive to change once code exists.
 1. Is the verifier part of the core toolchain or a mod (`moddil/verify`)?
 2. Which SMT solver(s), and how are solver versions pinned for reproducible proofs?
 3. How much annotation burden is acceptable before L1/L2 stop being used?
-4. Should wrapping arithmetic have a "prove no overflow" mode for mods that want it?
+4. Should a mod be able to require proof that no overflow trap can occur?
 5. How are contracts on effectful operations expressed (for example, "this handler is called at most
    once")?
 

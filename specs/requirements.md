@@ -77,7 +77,8 @@ Every error the language knows about (the `fail` effect / `Result`) must be hand
 error at any entry point (`main`, task bodies, exported/FFI functions, tier endpoints, handlers) or a
 silently dropped result is a **compile-time error**. There are **no fire-and-forget tasks**: every
 task is awaited by its enclosing scope. Out of scope for R3: traps such as out of memory, stack
-overflow, integer division by zero and out-of-bounds indexing, which are crashes as in Rust.
+overflow, integer overflow, integer division by zero and out-of-bounds indexing, which are crashes
+as in Rust.
 
 Details: [`error-handling.md`](error-handling.md).
 
