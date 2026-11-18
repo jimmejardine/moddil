@@ -1,23 +1,295 @@
 # Type system core
 
-> **Status:** not started. Nothing is decided yet; this page records the problem and the
-> questions to settle. Listed in the [index](README.md).
+> **Status:** major questions. The core rules below are decided; the exact specialisation rules and
+> the details of bridge mods are still open. Listed in the [index](README.md). Syntax per
+> [`syntax.md`](syntax.md); snippets are **illustration only**.
+
+## Summary
+
+| Topic | Decision |
+|---|---|
+| **Baseline** | Rust's type system: structs, enums with payloads, traits, generics with bounds, associated types, GATs. **No lifetimes**, because borrows are second-class ([`memory-and-resources.md`](memory-and-resources.md)). |
+| **Subtyping** | **None.** No variance rules. A short, fixed list of implicit coercions; every other conversion is explicit ([No subtyping](#no-subtyping)). |
+| **Coherence** | **Exactly one impl per trait and type in any program.** Rust's orphan rule, plus: the application mod and mods from the same repository may write any impl, and declared **bridge mods** may join two other mods ([Coherence: one impl per trait and type](#coherence-one-impl-per-trait-and-type)). |
+| **Specialisation** | **Restricted form in v0.** Overlapping impls only when one is strictly more specific, and only beside the impl it specialises ([Specialisation](#specialisation)). |
+| **Generics** | Checked once, at the definition. Debug builds pass **witness tables**; release builds **monomorphise**. Same semantics in both ([Generics](#generics)). |
+| **`dyn`** | **Swift-style existentials.** Any trait can be used as `dyn`; generic methods dispatch through the witness table ([`dyn`: existentials](#dyn-existentials)). |
+| **Sum types** | Exhaustive `match`; `#[non_exhaustive]` for public enums that may grow ([Sum types and exhaustiveness](#sum-types-and-exhaustiveness)). |
+| **Inference** | Local only. Private signatures may be inferred and generalised within a mod; nothing is inferred across a mod boundary ([Inference](#inference)). |
+| **Higher-kinded types** | Not now; GATs cover the known needs ([`paradigms.md`](paradigms.md)). |
 
 ## Problem
 
-Moddil borrows Rust's traits, generics and sum types, but the core rules of the type system have not
-been decided in their own right, and several other areas depend on them: coherence decides whether
-two mods can implement the same trait for the same type, and the generics strategy decides both
-build times and debug-build speed.
+Moddil takes Rust's traits, generics and sum types, but several other areas depend on rules that Rust
+either gets painfully wrong for an ecosystem or leaves unstable:
 
-## Touched on in
+- **Coherence decides how an ecosystem grows.** If two mods may both implement `Serialize` for
+  `DateTime`, programs can contain two meanings for the same call. If neither may, every pair of mods
+  must coordinate through feature flags or newtypes.
+- **The generics strategy decides build times.** Monomorphising everything makes debug builds slow;
+  dictionary passing everywhere makes release builds slow ([`build-times.md`](build-times.md)).
+- **Readers and agents need local reasoning.** Which impl runs, which conversion happens and what a
+  generic function requires should all be visible from the code at hand, not from imports elsewhere.
+- **Subtyping and variance are a large source of confusion** in Rust (lifetime variance), Java
+  (array covariance) and Scala, and Moddil has removed most of the reasons for them.
 
-[`syntax.md`: Mapping](syntax.md#mapping), [`paradigms.md`](paradigms.md),
-[`comptime.md`: Generics are bounded](comptime.md#generics-are-bounded), [`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed), [`mods.md`: Open questions](mods.md#open-questions).
+## Prior art
 
-## Questions to settle
+| Language | What it does | Lesson |
+|---|---|---|
+| **Rust** | Orphan rule; `min_specialization` (unstable for about ten years, mostly because of lifetimes); "dyn compatibility" rules | Coherence works, but the orphan workarounds are a constant tax; specialisation is hard *because of lifetimes* |
+| **Swift** | Protocols, witness tables, existentials (`any P`), retroactive conformances (warned about since Swift 6) | One generics implementation that can be unspecialised or specialised; existentials that handle generic requirements |
+| **Haskell** | Type classes; orphan instances allowed with a warning; `OverlappingInstances` | Orphans cause real conflicts; unrestricted overlap makes instance choice hard to predict |
+| **Scala** | `given`/`using` (Scala 3), implicits (Scala 2) | Scoped instances are flexible, but Scala 2's implicits are the standard example of code whose behaviour depends on imports |
+| **OCaml** | Modules and functors instead of type classes | Explicit instance passing is fully local, but verbose for everyday operations like `==` and hashing |
+| **Go** | Structural interfaces, no explicit impls | No coherence problem, but no associated types, and accidental conformance |
 
-- Traits and **coherence across mods**: Rust's orphan rule, or something looser?
-- Associated types and GATs (higher-kinded types are deferred, [Surface syntax and paradigms](syntax.md)).
-- Generics compiled by monomorphisation, dictionary passing, or both by build profile.
-- Variance, `dyn` safety, and exhaustiveness checking of sum types.
+## Kinds of type
+
+This document defines the rules; the types themselves are mostly defined elsewhere.
+
+| Kind | Notes |
+|---|---|
+| Primitives | Integers, floats, `bool`, `char` ([`numerics.md`](numerics.md)) |
+| Tuples, arrays `[T; N]`, slices `[T]` | As in Rust |
+| `struct`, `enum` | Nominal, as in Rust; enums carry payloads |
+| Anonymous records `{ min: f64, max: f64 }` | **Structural**, without width subtyping ([`syntax.md`: Inference: "generic on the fly"](syntax.md#inference-generic-on-the-fly)) |
+| Function types `fn(A) -> B with E` | Effects are part of the type ([`effects-and-capabilities.md`: Effect polymorphism](effects-and-capabilities.md#effect-polymorphism)) |
+| Closures | Unnameable types implementing `Fn`, `FnMut` or `FnOnce` ([`closures.md`](closures.md)) |
+| `!` | The never type |
+| Refinements `u16 where self >= 1024` | A validated newtype over a base type ([`correctness.md`: Validated newtypes (lightweight refinements)](correctness.md#validated-newtypes-lightweight-refinements)) |
+| Unit quantities `f64<m/s>` | Dimensions are type-level ([`units.md`: Dimensions: the SI vector and an open set](units.md#dimensions-the-si-vector-and-an-open-set)) |
+| `&T`, `&mut T`, view types | Second-class borrows ([`memory-and-resources.md`: View types](memory-and-resources.md#view-types)) |
+| `linear struct` | Must be consumed explicitly ([`memory-and-resources.md`: Resources: affine and linear](memory-and-resources.md#resources-affine-and-linear)) |
+| `dyn Trait` | An existential, always behind a pointer ([`dyn`: existentials](#dyn-existentials)) |
+
+## No subtyping
+
+**Decision: Moddil has no subtyping, so it has no variance.** Rust's variance exists almost entirely
+for lifetimes, Java's and Scala's for inheritance, and TypeScript's for width subtyping. Moddil has
+none of these.
+
+The cases where a value of one type is accepted as another are a **fixed list of coercions**, applied
+only where the expected type is known (an argument, an annotated `let`, a return):
+
+| Coercion | Example |
+|---|---|
+| `!` to any type | `let x: u32 = match r { Ok(v) => v, Err(_) => return };` |
+| Refinement to its base type | A `Port` (`u16 where …`) is passed where `u16` is expected |
+| `&mut T` to `&T` | Lending an exclusive borrow as a shared one |
+| Unsizing | `&[T; N]` to `&[T]`; `Box<T>` to `Box<dyn Trait>` when `T: Trait` |
+
+Everything else is explicit: numeric conversions (`u8::from`, `as` with checked semantics per
+[`numerics.md`](numerics.md)), refinement checks in the other direction (`Port::try_from(n)?`), and
+unit conversions ([`units.md`](units.md)).
+
+**Consequences:**
+
+- `Vec<Port>` is not a `Vec<u16>`, and never needs to be: the coercion applies to values, not to
+  containers. A whole container is converted explicitly (`ports.map(u16::from)`) or viewed as its
+  base type through a method the refinement provides.
+- Generic code never has to ask "is `F<A>` a subtype of `F<B>`?", which removes a whole class of
+  confusing errors.
+
+## Traits
+
+As in Rust, with the omissions that follow from other decisions:
+
+- **Supertraits and default methods**; associated types and associated consts.
+- **Generic associated types** (lending iterators, collection families). **Higher-kinded types are
+  deferred** ([`paradigms.md`](paradigms.md)).
+- **No inheritance.** Delegation (`#[delegate(Trait)]`) forwards a trait's methods to a field
+  ([`paradigms.md`](paradigms.md)).
+- **Derives** (`#[derive(Eq, Hash, …)]`) are comptime code ([`comptime.md`](comptime.md)); what they
+  generate for equality, hashing and copying is settled in [`values.md`](values.md).
+- **No `Send` or `Sync`**, and no other auto traits: every type is sendable
+  ([`concurrency.md`: No `Send` / `Sync`](concurrency.md#no-send--sync)).
+- Traits may carry **effects** in method signatures; implementations may perform fewer effects than
+  the trait declares, never more ([`effects-and-capabilities.md`](effects-and-capabilities.md)).
+
+## Coherence: one impl per trait and type
+
+**Decision: in any program there is at most one implementation of a trait for a type.** Which impl
+runs is therefore a property of the program, not of the imports in scope.
+
+### Who may write an impl
+
+An `impl Trait for Type` is allowed in a mod when **any** of these holds:
+
+1. **The mod owns the trait or the type** (Rust's orphan rule, including its rules for local type
+   parameters such as `impl<T> From<MyType> for Vec<T>`).
+2. **The mod is the application**: the root mod being built as an executable, test binary or
+   component. Nothing depends on it, so nothing downstream can clash with it.
+3. **The mods share an owner**: mods published from the **same repository** count as one owner for
+   this rule. This removes Rust's "split crate" problem, where a project that owns both crates still
+   cannot write the impl in a third.
+4. **The mod is a declared bridge** between the trait's mod and the type's mod (below).
+
+### Bridge mods
+
+A **bridge mod** exists to join two mods that do not know about each other, such as a serialisation
+mod and a date-time mod:
+
+```toml
+# manifest (illustration only)
+[mod]
+name = "github.com/acme/chrono-serde"
+version = "1.0.0"
+bridge = ["moddil.dev/serde", "github.com/chrono/chrono"]   # traits from the first, types from the second
+```
+
+- A bridge may implement **traits of the first mod for types of the second**, and nothing else
+  outside the orphan rule.
+- **Duplicate bridges are a build error.** When a program is built, the toolchain checks that no two
+  mods in the dependency graph implement the same trait for the same type. Each mod's **interface
+  artefact** ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)) lists
+  the impls it provides, so the check is a set union over artefacts, not a re-analysis.
+- Because mods form a DAG and versions are selected once per program
+  ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)), one program contains one version of a bridge; two
+  libraries that both use `chrono-serde` share it.
+- The owning mods can later absorb the impl. Moving an impl from a bridge into the owning mod is a
+  migration `moddil` can verify ([`evolution.md`](evolution.md)).
+
+### Why not scoped or named impls
+
+Scala's `given`s and Haskell's local-instance proposals let different parts of a program use
+different impls of the same trait for the same type. Moddil rejects this:
+
+- **Data structures can disagree.** A `HashMap` built where one `Hash` impl is in scope and queried
+  where another is in scope misses its own keys. The fixes (carrying the impl in the type, as in
+  `Set<T, by = MyOrd>`) complicate every generic type.
+- **Behaviour depends on imports.** Changing a `use` line can change which code runs without any
+  visible change at the call site: bad for reviewers and for agents.
+- **Upgrades break builds at a distance.** A dependency that adds an impl can make existing code
+  ambiguous.
+
+### What Rust's workarounds cost, and what remains
+
+| Rust workaround | Cost | In Moddil |
+|---|---|---|
+| Newtype wrapper (`struct MyDate(DateTime)`) | Wrap and unwrap at every boundary; re-implement every other trait; `Vec<DateTime>` cannot become `Vec<MyDate>` | Rarely needed; when it is, `#[delegate]` forwards the other traits |
+| Optional feature flags (chrono's `serde` feature) | The type's owner must depend on every trait mod; N × M coordination | Bridge mods |
+| Remote derive (`#[serde(with = …)]`) | A parallel, hand-maintained description of a foreign type | Bridge mods, with derives run inside the bridge |
+| Same owner, different crates | Still forbidden | Same-repository rule |
+
+## Specialisation
+
+**Decision: a restricted form of specialisation is in v0.** Rust's `specialization` has been unstable
+for about ten years mainly because impl selection could depend on lifetimes, which are erased before
+code generation. Moddil has no lifetime parameters, which removes that problem.
+
+```rust
+impl<T: Clone> Extend<T> for Vec<T> {
+    default fn extend_from_slice(&mut self, items: &[T]) {       // general: clone one at a time
+        for x in items { self.push(x.clone()); }
+    }
+}
+
+impl<T: Copy> Extend<T> for Vec<T> {
+    fn extend_from_slice(&mut self, items: &[T]) {               // specialised: one memcpy
+        self.copy_from_slice_at_end(items);
+    }
+}
+```
+
+Rules (proposal, to be settled in detail):
+
+1. **Strictly more specific.** Two impls may overlap only if one applies to a strict subset of the
+   other's types. Overlaps that neither contains are an error, as today.
+2. **`default` marks what may be overridden.** Only items marked `default` in the general impl can be
+   replaced.
+3. **No action at a distance.** A specialising impl must be in the same mod as the general impl, or in
+   the mod that owns the type. A third mod cannot change how a library behaves for a library's own
+   types.
+4. **Same choice in debug and release.** The impl is selected when the witness table for a concrete
+   type is built ([Generics](#generics)), the same point at which a release build monomorphises, so
+   both builds run the same code.
+5. **Specialisation is not observable as a semantic change.** The specialised impl must be
+   behaviourally equivalent to the general one. This is not checked by the compiler; property tests
+   can compare the two ([`correctness.md`](correctness.md)).
+
+## Generics
+
+- **Checked once, at the definition** (decided, [`comptime.md`: Generics are bounded](comptime.md#generics-are-bounded)).
+  A generic function's bounds are the whole contract; errors point at the call site, not into the
+  library.
+- **Two compilation strategies, one semantics** (decided):
+  - debug builds compile one copy of a generic function, which receives a hidden **witness table**
+    (size, alignment, copy, drop and the trait methods it uses);
+  - release builds produce a specialised copy per type (monomorphisation);
+  - anything layout-dependent lives in the witness table, which is what makes the two identical
+    ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed), rule 5).
+- **Const generics** use Rust's spelling (`<const N: usize>`). **Proposal:** a const parameter may
+  have any type that is comptime-evaluable and has structural equality (integers, `bool`, `char`,
+  strings, and enums and structs made of them), so `Matrix<f32, 3, 3>` and `Format<"utf-8">` are
+  both possible.
+- **`impl Trait`** in argument position (an anonymous generic) and in return position (an opaque
+  type), including in trait methods.
+- **Inferred generalisation for private items:** `fn add(a, b) { a + b }` is generalised to
+  `fn add<T: Add<Output = T>>(a: T, b: T) -> T` ([`syntax.md`: Inference: "generic on the fly"](syntax.md#inference-generic-on-the-fly)).
+- **Effect polymorphism** is implicit for closure parameters ([`effects-and-capabilities.md`: Effect polymorphism](effects-and-capabilities.md#effect-polymorphism)).
+
+## `dyn`: existentials
+
+**Decision: any trait can be used as `dyn Trait`**, as with Swift's `any P`, rather than only the
+"dyn-compatible" traits Rust allows.
+
+- A `dyn Trait` value is a pointer to the data plus a **witness table** for its concrete type, the
+  same table debug builds already pass to generic code.
+- **Generic methods work through `dyn`.** The call passes the witness tables for the method's type
+  parameters, just as an unspecialised generic call does:
+
+  ```rust
+  trait Sink {
+      fn write<T: Serialize>(&mut self, value: &T) with fail(IoError);
+  }
+
+  fn log_all(sinks: &mut [Box<dyn Sink>], event: &Event) with fail(IoError) {
+      for s in sinks { s.write(event)?; }         // a generic method, called through dyn
+  }
+  ```
+
+  Rust rejects `dyn Sink` here; the usual workaround is a second, object-safe trait plus a blanket
+  impl.
+- **What is unavailable on `dyn`:** methods with no receiver (`fn new() -> Self`), and methods that
+  take or return `Self` by value, because the concrete type is unknown. These methods are simply not
+  callable on a `dyn` value; the rest of the trait remains usable. There is no
+  `where Self: Sized` ritual.
+- `dyn Trait` is unsized and always lives behind a pointer: `&dyn`, `&mut dyn`, `Box<dyn>`, or an rc.
+- Associated types must be fixed to be used: `dyn Iterator<Item = u8>`.
+
+## Sum types and exhaustiveness
+
+- `match` must be **exhaustive**, as in Rust; so must `let … else` and `if let` chains used as
+  expressions ([`null-safety.md`](null-safety.md)).
+- **`#[non_exhaustive]`** on a public enum means other mods must include a wildcard arm. Adding a
+  variant to an exhaustive public enum is a breaking change, and the compiler's semver check reports
+  it ([`packages-and-supply-chain.md`: Semver is checked by the compiler](packages-and-supply-chain.md#semver-is-checked-by-the-compiler)).
+- **Refinements in patterns:** matching on a refinement's base value narrows it (`n if n >= 1024`
+  binds a `u16`; converting to `Port` remains explicit, or proven automatically where
+  [`correctness.md`: Refinement types with automatic proofs](correctness.md#refinement-types-with-automatic-proofs) applies).
+
+## Inference
+
+- **Local only** ([`build-times.md`](build-times.md) rule 7). Types flow within a function body,
+  as in Rust.
+- **Private items may omit their signatures** and are generalised within their mod
+  ([Generics](#generics)).
+- **Nothing is inferred across a mod boundary.** Public signatures, effects and error sets are written
+  out and recorded in the interface artefact (rule 2), so editing a body never re-checks dependents.
+
+## Open questions
+
+1. **Specialisation details:** strictly-more-specific only, or Rust's "always applicable" lattice
+   rule? Can a specialising impl change an associated type (Rust forbids it)?
+2. **Bridge mods:** the exact manifest syntax; whether a bridge may join more than two mods; how a
+   program chooses between two competing bridges for the same pair (today: a build error, resolved
+   by removing one).
+3. **Same-repository ownership:** is "same repository" the right unit, or should it be a declared
+   mod family?
+4. **Const generic types** beyond integers, `bool` and `char`: are strings and structs worth the
+   compile-time cost?
+5. **Default type parameters** (`HashMap<K, V, S = RandomState>`): keep Rust's form, or drop it now
+   that named arguments exist ([`syntax.md`](syntax.md))?
+6. **Trait aliases** (`trait Num = Add + Sub + Mul + Copy`).
+7. Revisit **higher-kinded types** once GAT-based libraries show what is missing ([`paradigms.md`](paradigms.md)).

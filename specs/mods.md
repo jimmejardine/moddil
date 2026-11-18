@@ -168,4 +168,6 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
   any other mod?
 - **Naming**: is "mod" too easily confused with Rust's `mod` (a module)? The distinction between mod
   and module needs to stay clear in docs and tooling.
-- **Coherence**: how are trait/instance overlap rules (Rust's orphan rule) handled across mods?
+- ~~**Coherence**: how are trait/instance overlap rules (Rust's orphan rule) handled across mods?~~
+  **Resolved:** one impl per trait and type in any program; the orphan rule plus application,
+  same-repository and bridge-mod exceptions ([`types.md`: Coherence: one impl per trait and type](types.md#coherence-one-impl-per-trait-and-type)).

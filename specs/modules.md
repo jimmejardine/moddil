@@ -19,4 +19,5 @@ how files map to modules, and how code varies by target are undecided.
 - Visibility levels (`pub`, `pub(mod)`, private) and what each exposes.
 - Are cycles allowed between modules inside one mod?
 - Conditional compilation per target and profile, and Cargo-style feature flags.
-- The exact meaning of the mod boundary for effects, groups, capabilities and semver.
+- The exact meaning of the mod boundary for effects, groups, capabilities and semver. (Its meaning
+  for trait impls, including bridge mods, is in [`types.md`: Coherence: one impl per trait and type](types.md#coherence-one-impl-per-trait-and-type).)

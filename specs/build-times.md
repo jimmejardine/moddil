@@ -48,7 +48,8 @@ Both are workarounds that every serious Rust project rediscovers. Moddil should 
    release builds.
 4. **Generics are checked once, at their definition** (decided, [`comptime.md`: Generics are bounded](comptime.md#generics-are-bounded)).
    No per-instantiation re-checking as with C++ templates.
-5. **Generics compile differently in debug and release, with identical semantics.**
+5. **Generics compile differently in debug and release, with identical semantics** (decided,
+   [`types.md`: Generics](types.md#generics)).
    - Debug: one copy of the code, receiving a hidden **witness table** of type information and
      operations (size, alignment, copy, drop, trait methods).
    - Release: a specialised copy per type (monomorphisation).
@@ -62,7 +63,8 @@ Both are workarounds that every serious Rust project rediscovers. Moddil should 
    proc macros with I/O.
 7. **Local type inference only.** Function signatures are explicit; there is no whole-program
    inference.
-8. **Trait implementations are checked locally** (an orphan-style coherence rule), with no global
+8. **Trait implementations are checked locally** (an orphan-style coherence rule,
+   [`types.md`: Coherence: one impl per trait and type](types.md#coherence-one-impl-per-trait-and-type)), with no global
    search across all mods.
 9. **Cache keys are hashes of the canonical AST**, not of text, so formatting and comment changes
    invalidate nothing ([LLMs as first-class programmers](agent-interface.md), [Diffs, code review and version control](semantic-vcs.md)).

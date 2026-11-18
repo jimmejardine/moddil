@@ -17,7 +17,7 @@ here with its reason ([Deltas from Rust (and why)](#deltas-from-rust-and-why)). 
 | Parameters | `x: &T` (shared borrow), `x: &mut T` (exclusive borrow), `x: T` (move) | Borrows are second-class ([`memory-and-resources.md`: Borrowing](memory-and-resources.md#borrowing)), so **no lifetime annotations** ever appear |
 | Methods | `&self`, `&mut self`, `self` | As in Rust |
 | Locals | `let x`, `let mut x` | As in Rust |
-| Types | `struct`, `enum`, `trait`, `impl`, `type` aliases | As in Rust |
+| Types | `struct`, `enum`, `trait`, `impl`, `type` aliases | As in Rust; the rules (coherence, no subtyping, specialisation) are in [`types.md`](types.md) |
 | Generics and bounds | `fn max<T: Ord>(a: &T, b: &T) -> &T`, `where` clauses | Bounds checked at the definition ([`comptime.md`: Generics are bounded](comptime.md#generics-are-bounded)) |
 | Attributes | `#[derive(…)]`, `#[repr(C)]`, `#[entry]`, `#[interrupt(…)]`, `#[component(server)]`, `#[group(…)]` | As in Rust; Moddil-specific features use attributes rather than new syntax |
 | Modules and imports | `use moddil::units::si::{m, cm};`, `::` paths | As in Rust |
@@ -29,7 +29,7 @@ here with its reason ([Deltas from Rust (and why)](#deltas-from-rust-and-why)). 
 | Optional values | `Option<T>` only (decided); no `T?` sugar; `x.unwrap_or(d)` rather than `x ?? d` | As in Rust; one canonical spelling, and no clash with the `?` operator |
 | Prefix literals | `sql"…"`, `re"…"`, `fmt"…"` | Rust already has `b"…"` and `r"…"`; Moddil lets mods define prefixes ([`comptime.md`: Tagged string literals (embedded DSLs)](comptime.md#tagged-string-literals-embedded-dsls)) |
 | Never type | `-> !` | As in Rust |
-| Dynamic dispatch | `dyn Trait` | As in Rust |
+| Dynamic dispatch | `dyn Trait` | As in Rust, but any trait can be `dyn`, including generic methods ([`types.md`: `dyn`: existentials](types.md#dyn-existentials)) |
 
 ## Deltas from Rust (and why)
 
