@@ -1,6 +1,6 @@
 # UI, mobile and the browser
 
-> **Status:** decided direction, details open. Listed in the [index](README.md). Snippets are
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Snippets are
 > **illustration only**.
 
 ## Summary
@@ -91,9 +91,12 @@ impl Cart {
 ```
 
 - **Actions are calls into the core**: the shell calls `add` or `check_out` from its event handlers.
-- **Observation:** the generated bindings make exported state observable in each platform's own
-  terms: an `@Observable` class in Swift, a `StateFlow` in Kotlin, a subscribable store in TypeScript.
-  When an action changes the state, the shell re-reads the affected view models and re-renders.
+- **Observation (decided: per field, diffed by the core):** after each action the core compares the
+  old and new view models (a derived structural comparison) and reports only the fields that changed.
+  The generated bindings turn that into each platform's own terms: `@Observable` properties in Swift,
+  `StateFlow`s in Kotlin, per-key subscriptions in TypeScript, so the native framework redraws only
+  what changed. Lists are diffed by an `id` field, so native list views animate insertions and moves
+  correctly.
 - **Rules live in one place.** Validation, prices, permissions and offline sync are Moddil code,
   tested once with the language's tools ([`correctness.md`](correctness.md),
   [`determinism.md`](determinism.md)), and identical on every platform.
@@ -118,7 +121,8 @@ built on the C ABI on native targets ([`interop.md`: The C ABI, both directions]
 | `Vec<T>`, slices | `[T]` | `List<T>` | `T[]` or a typed array |
 | `Rc<T>` | a class sharing the handle | a class sharing the handle | a class sharing the handle |
 | `impl Fn(…)` parameter | closure | lambda | function |
-| Unit types `f64<m>` | a value type carrying the unit | a value class | a branded `number` |
+| Unit types `f64[m]` | a value type carrying the unit | a value class | a branded `number` |
+| Exported trait (implemented by the shell) | `protocol` | `interface` | `interface` |
 
 - **Cancellation crosses both ways.** Cancelling a Swift `Task`, a Kotlin coroutine or an
   `AbortSignal` cancels the Moddil task; the Moddil task's cancellation rules apply
@@ -132,14 +136,27 @@ built on the C ABI on native targets ([`interop.md`: The C ABI, both directions]
 - **Versioned together.** A core and its bindings come from one build, so there is no version skew
   between them. Skew between client and server is handled by the contract checks
   ([`distribution.md`](distribution.md)).
+- **Traits the shell implements (decided).** An exported trait becomes a Swift `protocol`, a Kotlin
+  `interface`, a TypeScript `interface` and a Python `Protocol`. The shell's object crosses as a
+  `&dyn Trait` or is installed as a handler; `suspend` methods map to async ones and `fail(E)` to typed
+  throws or rejections. Generic trait methods are not exportable.
+- **Live update under a running shell (decided).** A debug core is updated in place while the app stays
+  open ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds)), on
+  desktop, Android, the browser and the iOS simulator; the shell re-reads its view models after each
+  update. On iOS devices, where apps cannot create executable memory, changed functions run in the
+  MIR interpreter, as Flutter's debug mode does.
+- **More languages come from the community (decided).** The project maintains Python, Swift, Kotlin
+  and TypeScript. `moddil bind` exposes its model of a core's exported API, so community generators
+  can add C#, the JVM or anything else on the same footing.
 - These are **export** bindings for shells. They do not widen what Moddil imports: libraries are still
   reached only through C, Rust and WASM components ([`interop.md`](interop.md)).
 
 ### Platform APIs as shell-provided handlers
 
-**Direction (not yet decided).** Camera, notifications, payments, the keychain and similar platform
-services become Moddil **effects** (traits used after `with`) whose handlers are written in Swift, Kotlin or TypeScript and
-installed by the shell when it starts the core:
+**Decided.** Camera, notifications, payments, the keychain and similar platform services are Moddil
+**effects** (traits used after `with`), defined in a standard mod, **`moddil/platform`**. Their
+handlers are written in Swift, Kotlin or TypeScript (from generated skeletons) and installed by the
+shell when it starts the core; community mods can add more traits the same way:
 
 ```rust
 trait Payments { fn pay(&self, amount: Money, order: OrderId) -> Receipt with suspend, fail(PayError); }
@@ -164,12 +181,14 @@ TypeScript UI.
   Moddil type.
 - **Promises suspend.** Calling a Promise-returning API suspends the Moddil task through JSPI until
   the Promise settles; rejection becomes a typed failure ([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)).
-- **Browser access is an effect.** Touching the DOM or calling JavaScript performs the **`Dom`
-  effect**:
-  - it is visible in signatures, so a reviewer can see which code touches the page;
+- **Browser access is two effects (decided).** Touching the page performs **`Dom`**; calling
+  JavaScript that never touches the page (Web Crypto, JS libraries, timers) performs **`Js`**.
+  Network APIs stay behind `Net`.
+  - Both are visible in signatures, so a reviewer can see which code touches the page;
   - a **simulated DOM** handler (in `moddil/web`) runs UI logic in ordinary tests, without a
     browser;
-  - code running in a Web Worker has no `Dom` handler, so the compiler rejects DOM access there.
+  - code running in a Web Worker has a `Js` handler but no `Dom` handler, so it can call JavaScript
+    while the compiler rejects DOM access there.
 - **Workers:** a core can run in a Web Worker (as Hashiverse's does), with the generated TypeScript
   bindings marshalling calls through `postMessage`.
 - **Packaging:** output is an ES module plus generated `.d.ts` types, usable from any bundler (Vite,
@@ -230,15 +249,5 @@ Moddil does not standardise a UI framework, but nothing stops community mods fro
 
 ## Open questions
 
-1. **Observation protocol:** how fine-grained is change notification (whole view model, per field, or
-   diffs), and who computes the diff?
-2. **Granularity of browser effects:** one `Dom` effect, or separate `Dom` and `js` effects (JS calls
-   that never touch the page)?
-3. **Generics and traits across bindings:** exported generic functions are monomorphised for listed
-   types; how are exported traits (implemented by the shell) expressed in each language?
-4. **Live update under a running shell:** can a debug build hot-swap the core while the app stays open
-   ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds))?
-5. **More binding languages:** Python is **decided** as the first binding, in v0
-   ([`adoption.md`: Python first](adoption.md#python-first)). C# and .NET later?
-6. **Platform-API handlers:** adopt the shell-provided handler direction above as the standard way to
-   reach device services?
+None at present.
+

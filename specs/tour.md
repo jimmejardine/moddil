@@ -203,7 +203,7 @@ fn main(args: Args, stdio: Stdio, net: NetRoot, entropy: Entropy) -> ExitCode {
             let listener = try { net.listen(port)? } catch {
                 e => { eprintln(fmt"cannot listen on {port}: {e}"); return ExitCode::Unavailable }
             };
-            scope(|root| root.spawn(|| serve(&listener)), stop_on: [SIGINT, SIGTERM], grace: 10<s>);
+            scope(|root| root.spawn(|| serve(&listener)), stop_on: [SIGINT, SIGTERM], grace: 10[s]);
         }
     }
     ExitCode::Ok

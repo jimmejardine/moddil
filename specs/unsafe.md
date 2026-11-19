@@ -1,6 +1,6 @@
 # `unsafe` and the Safety Boundary
 
-> **Status:** decided direction, details open. Listed in the [index](README.md). Snippets are
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Snippets are
 > **illustration only**.
 
 ## Summary
@@ -74,19 +74,25 @@ block says why those guarantees hold:
 
 ```rust
 pub unsafe fn copy_nonoverlapping<T>(src: *const T, dst: *mut T, n: int)
-    requires src.is_valid_for_read(n) and dst.is_valid_for_write(n)
-    requires !overlaps(src, dst, n)
+    requires valid: src.is_valid_for_read(n) and dst.is_valid_for_write(n)
+    requires disjoint: !overlaps(src, dst, n)
 
 fn append(buf: &mut Vec<u8>, data: &[u8]) {
     buf.reserve(data.len())
-    unsafe("reserve guarantees capacity; data is a separate borrow") {
+    unsafe("valid: reserve guarantees capacity; disjoint: data is a separate borrow") {
         copy_nonoverlapping(data.as_ptr(), buf.end_ptr(), data.len())
         buf.set_len(buf.len() + data.len())
     }
 }
 ```
 
-- The preconditions are **checked at runtime** in debug builds and checker runs.
+- The preconditions are **checked at runtime** in debug builds and checker runs. In release builds
+  they follow the contract-checking policy; preconditions written **`requires always`** are checked
+  in every build (decided, [`correctness.md`: Checking policy: the `Contracts` handler](correctness.md#checking-policy-the-contracts-handler)).
+  Null and alignment checks are debug-only.
+- **Citations (decided):** a `requires` clause may be named (`valid:` above), and a justification
+  may cite names (`unsafe("valid: …")`). Tools link each claim to the obligation it discharges, a
+  lint flags named preconditions that no block cites, and the verifier knows what each block claims.
 - They can be **proved** later by the verifier
   ([`correctness.md`: Proofs in Moddil itself](correctness.md#proofs-in-moddil-itself)).
 - The justification is required: an `unsafe` block without one is a compile error.
@@ -122,7 +128,11 @@ rules much simpler than Rust's:
   - While a `&` is in scope, **no write** to that memory may happen.
 - The optimiser may assume `noalias` for borrows during their scope, as it does for safe code.
 - Views and owning views follow the borrow they were made from
-  ([`memory.md`: View types](memory.md#view-types)).
+  ([`memory.md`: View types](memory.md#view-types)). **A view that outlives its `unsafe` block
+  (decided)** keeps the borrow alive until the view's own scope ends: no conflicting access to that
+  memory may happen meanwhile, through any pointer. Views are second-class, so that scope is lexical,
+  and the checker verifies it. This is what makes zero-copy `FromBytes` views over raw buffers safe to
+  hand to safe code.
 
 ```rust
 unsafe("p is valid and uniquely owned here") {
@@ -152,12 +162,18 @@ Derives can implement it safely when they can check the invariant from the type'
 | When | What is checked |
 |---|---|
 | **Debug builds** | Null, alignment, bounds where the size is known, and `requires` preconditions of `unsafe fn` |
+| **Release builds** | `requires always` preconditions, and others as the contract policy chooses |
 | **The checker** (a test-runner mode on the MIR interpreter, [`correctness.md`: A Miri-style checker](correctness.md#a-miri-style-checker)) | Aliasing, provenance, uninitialised reads, invalid values, FFI signatures, and data races under the simulation scheduler |
 | **GPU kernels** | The CPU-simulator handler with its race detector ([`accelerators.md`](accelerators.md)) |
 
 - **The checker must pass before `moddil publish`** tags a release of a mod with the `unsafe`
   capability. Audits show the release as checked.
 - Locally it is `moddil test --check-unsafe`; CI runs it on changed unsafe code.
+- **Incremental and cached (decided).** Only tests that reach `unsafe` code run under the checker
+  (test-impact analysis, [`testing.md`: Test impact and caching](testing.md#test-impact-and-caching)),
+  and results are cached per function hash, so a publish re-checks only unsafe paths changed since
+  the last checked release. The published budget: a typical mod's checker run takes under ten minutes
+  in CI; a mod that is slower splits its unsafe core into a mod of its own.
 
 ### Review and audit
 
@@ -187,11 +203,8 @@ applications get their performance without holding the capability.
 
 ## Open questions
 
-- Which checks, if any, stay on in release builds (for example `requires` preconditions of
-  `unsafe fn`)?
-- How does the scoped-borrow model treat borrows captured by views that outlive a block?
-- Should a justification name the precondition it discharges, so tools can link the two?
-- How fast must the checker be for "required to publish" to stay practical on large mods?
+None at present.
+
 
 ## Prior art
 

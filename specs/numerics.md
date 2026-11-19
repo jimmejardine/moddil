@@ -12,7 +12,7 @@
 | **Exact literals** | A literal is an exact number until it is used, then checked to fit: `300` into a `u8` is a compile error; `0.10` into a decimal is exact. |
 | **Lossless widening only** | `i32 → i64` and `f32 → f64` are implicit; anything that can lose information is an explicit, named conversion. No `as`. |
 | **Strict IEEE floats** | `f16`, `bf16`, `f32`, `f64`; IEEE comparisons, `total_cmp` for sorting, a `Finite` refinement that is totally ordered. |
-| **Decimals for money** | `Fixed<S>`, an i64 scaled by 10^S with the scale in the type, and `BigDecimal`, in `moddil/decimal`. Rounding is always stated; money is `Fixed<4><USD>`. |
+| **Decimals for money** | `Fixed<S>`, an i64 scaled by 10^S with the scale in the type, and `BigDecimal`, in `moddil/decimal`. Rounding is always stated; money is `Fixed<4>[USD]`. |
 | **SIMD in the core** | `Simd<T, N>` and masks are core primitives; tensors are a mod. |
 | **Layout under control** | Field reordering unless `#[repr(C)]`; packed structs and bitfields; endian types (`u32be`); a comptime struct-of-arrays container. |
 
@@ -155,13 +155,13 @@ In `moddil/decimal`:
   conversion: `HalfEven`, `HalfUp`, `HalfDown`, `HalfAwayFromZero`, `TowardZero`, `AwayFromZero`,
   `Floor`, `Ceiling`. The documentation names the IEEE 754 equivalents (`HalfEven` is
   roundTiesToEven, `TowardZero` is roundTowardZero, and so on).
-- **Units** go in a last bracket: `Fixed<4><USD>`, `BigDecimal<USD>`
+- **Units** go in square brackets after the type: `Fixed<4>[USD]`, `BigDecimal[USD]`
   ([Units of measure](#units-of-measure)).
 
 ```rust
-let price: Fixed<4><USD> = 101.2550<USD>
+let price: Fixed<4>[USD] = 101.2550[USD]
 let qty:   Fixed<0>      = 300
-let notional = (price * qty).rescale::<2>(Round::HalfEven)   // Fixed<2><USD>
+let notional = (price * qty).rescale::<2>(Round::HalfEven)   // Fixed<2>[USD]
 ```
 
 ### Big numbers
@@ -190,19 +190,19 @@ let notional = (price * qty).rescale::<2>(Round::HalfEven)   // Fixed<2><USD>
 
 ## Units of measure
 
-Units are a type-level feature (`f64<m/s>`, `i64<ns>`, `100<cm>`), proposed in
-[`units.md`](units.md) with its own open questions.
+Units are a type-level feature (`f64[m/s]`, `i64[ns]`, `100[cm]`), defined in
+[`units.md`](units.md).
 
-**Decided: the unit bracket always comes last.** A type with generic parameters writes both groups
-(`Fixed<4><USD>`, `Simd<f32, 8><m>`); a type without them writes only the unit (`f64<m>`,
-`BigDecimal<USD>`). Literals put the unit after the number: `101.2550<USD>`.
+**Decided: units are written in square brackets**, after the number or the type: `101.2550[USD]`,
+`f64[m]`, `Fixed<4>[USD]`, `Simd<f32, 8>[m]`, `BigDecimal[USD]`. Angle brackets are only for generic
+arguments ([`units.md`: Why square brackets](units.md#why-square-brackets)).
 
 ## Fit check against the reference examples
 
 | Example | Uses |
 |---|---|
 | [Multiplayer game](examples/01-multiplayer-game.md) | `f32` and `Simd<f32, 8>` for physics; strict IEEE for deterministic rollback |
-| [HFT](examples/02-hft-platform.md) | `Fixed<4><USD>` prices; overflow traps in risk limits; `Soa<Order>` for scans; `u64be` exchange formats |
+| [HFT](examples/02-hft-platform.md) | `Fixed<4>[USD]` prices; overflow traps in risk limits; `Soa<Order>` for scans; `u64be` exchange formats |
 | [Web store](examples/03-web-store.md) | `Fixed<2>` or `BigDecimal` for money; exact literals for prices |
 | [Hashiverse](examples/04-hashiverse.md) | `Wrapping<u64>` hashes; `u32be` wire formats; `BigInt` where cryptography needs it |
 

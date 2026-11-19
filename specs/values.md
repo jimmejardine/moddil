@@ -1,6 +1,6 @@
 # Values: Copy, Clone and Equality
 
-> **Status:** decided direction, details open. Listed in the [index](README.md). Builds on
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Builds on
 > [`memory.md`](memory.md). Snippets are **illustration only**.
 
 ## Summary
@@ -56,8 +56,12 @@ Assignment, argument passing and returning **move** a value: the source can't be
 - A type is `Copy` only when it **says so** (`#[derive(Copy, Clone)]`).
 - Only **plain data** may be `Copy`: no `Drop`, no owned heap data, no `Rc`, no sync cells, not
   linear.
-- **Size cap**: a `Copy` type's size must not exceed a cap (proposed: 64 bytes). For generic types
-  and arrays the cap is checked per instantiation.
+- **Size cap (decided): 64 bytes**, one cache line. For generic types and arrays it is checked per
+  instantiation. Exceeding it is a deny-by-default lint that a type can override with a reason,
+  `#[allow(large_copy, "4×4 f64 matrix, copied by design")]`, visible in review and semantic diffs.
+- **`Copy` always copies (decided).** No position, such as a consuming `sink` parameter, forces a move
+  of a `Copy` value: plain data has no `Drop`, so ending its use explicitly would add a concept for
+  no benefit.
 
 | `Copy` | Not `Copy` |
 |---|---|
@@ -119,6 +123,10 @@ struct Quote { price: Fixed<4>, qty: Fixed<0>, venue: VenueId }
 - **Derived ordering uses declaration order** for fields and variant order for enums, even when the
   compiler reorders fields in memory ([`numerics.md`: Data layout](numerics.md#data-layout)).
 - Generated code is visible through `moddil explain` and in the semantic diff.
+- **`Debug` in tests needs no derive (decided).** In test builds, assertion failures and test output
+  print any value through static reflection ([`comptime.md`](comptime.md)), redacting `Secret` and
+  `Personal` fields ([`testing.md`](testing.md)). Production code still needs `#[derive(Debug)]` to
+  format a type.
 - A derived `Debug` prints `Secret<T>` fields as redacted
   ([`observability.md`: Secrets never reach observability](observability.md#secrets-never-reach-observability)).
 
@@ -157,10 +165,8 @@ struct Quote { price: Fixed<4>, qty: Fixed<0>, venue: VenueId }
 
 ## Open questions
 
-- The exact `Copy` size cap, and whether exceeding it is a hard error or a lint that can be
-  overridden.
-- Should `Copy` values still be moved explicitly in some positions (for example `sink` parameters)?
-- Should `Debug` be available without a derive, for test and assertion output?
+None at present.
+
 
 ## Prior art
 

@@ -260,7 +260,7 @@ fn main(net: NetRoot) {                                    // declares only the 
             app.spawn(|| server.serve());
         });
         // layer 2 has fully finished; only now do db_writer and dht see stop_requested()
-    }, stop_on: [SIGINT, SIGTERM], grace: 10<s>);
+    }, stop_on: [SIGINT, SIGTERM], grace: 10[s]);
 }
 
 fn serve() with Net, suspend, spawn {

@@ -166,7 +166,7 @@ fn main(net: NetRoot, clock: Clock, entropy: Entropy) {
 let sim = Sim::new(seed: 42);
 scope(|s| {
     for node in sim.nodes(6) {
-        with Time    = sim.clock(node, skew: node.id * 5<ms>),
+        with Time    = sim.clock(node, skew: node.id * 5[ms]),
              Rand    = sim.rng(node),
              Net     = sim.net.endpoint(node),
              Storage = sim.disk(node) {

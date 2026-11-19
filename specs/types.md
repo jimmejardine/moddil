@@ -1,7 +1,6 @@
 # Type system core
 
-> **Status:** minor questions. The core rules below are decided, including specialisation, bridge
-> conflicts and operators; the bridge manifest syntax is still open. Listed in the [index](README.md). Syntax per
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Syntax per
 > [`syntax.md`](syntax.md); snippets are **illustration only**.
 
 ## Summary
@@ -68,7 +67,7 @@ This document defines the rules; the types themselves are mostly defined elsewhe
 | Closures | Unnameable types implementing `Fn`, `FnMut` or `FnOnce` ([`closures.md`](closures.md)) |
 | `!` | The never type |
 | Refinements `u16 where self >= 1024` | A validated newtype over a base type ([`correctness.md`: Validated newtypes (lightweight refinements)](correctness.md#validated-newtypes-lightweight-refinements)) |
-| Unit quantities `f64<m/s>` | Dimensions are type-level ([`units.md`: Dimensions: the SI vector and an open set](units.md#dimensions-the-si-vector-and-an-open-set)) |
+| Unit quantities `f64[m/s]` | Dimensions are type-level ([`units.md`: Dimensions: the SI vector and an open set](units.md#dimensions-the-si-vector-and-an-open-set)) |
 | `&T`, `&mut T`, view types | Second-class borrows ([`memory.md`: View types](memory.md#view-types)) |
 | `linear struct` | Must be consumed explicitly ([`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear)) |
 | `dyn Trait` | An existential, always behind a pointer ([`dyn`: existentials](#dyn-existentials)) |
@@ -160,19 +159,25 @@ mod and a date-time mod:
 [mod]
 name = "github.com/acme/chrono-serde"
 version = "1.0.0"
-bridge = ["moddil.dev/serde", "github.com/chrono/chrono"]   # traits from the first, types from the second
+
+[bridge]
+traits = "moddil.dev/serde"            # the mod whose traits are implemented
+types  = "github.com/chrono/chrono"    # the mod whose types they are implemented for
 ```
 
-- A bridge joins **exactly two mods**. It may implement **traits of the first mod for types of the
-  second**, and nothing else outside the orphan rule.
+- A bridge joins **exactly two mods**, named by key rather than position (decided). It may
+  implement **traits of the `traits` mod for types of the `types` mod**, and nothing else outside the
+  orphan rule.
 - **Duplicate bridges are a build error until the application picks one** (decided). When a program
   is built, the toolchain checks that no two mods in the dependency graph implement the same trait
   for the same type. If two bridges for the same pair of mods are present (pulled in by two
   libraries, say), the error names both, and the application's manifest chooses one:
 
   ```toml
-  [bridges]
-  "moddil.dev/serde + github.com/chrono/chrono" = "github.com/acme/chrono-serde"
+  [[bridge-choice]]
+  traits = "moddil.dev/serde"
+  types  = "github.com/chrono/chrono"
+  use    = "github.com/acme/chrono-serde"
   ```
 
   The other bridge is left out of the whole program, so there is still one impl per trait and type.
@@ -325,7 +330,7 @@ Operators are traits, as in Rust: `a + b` calls `Add::add`, `a[i]` calls `Index:
 
 - Moddil's extra operators are traits too: the wrapping operators (`+%`, `-%`, `*%`;
   [`numerics.md`](numerics.md)) and matrix multiply (`@`; [`accelerators.md`](accelerators.md)).
-- **Output types follow the operands.** `f64<m> / f64<s>` is `f64<m/s>`: the `Output` associated
+- **Output types follow the operands.** `f64[m] / f64[s]` is `f64[m/s]`: the `Output` associated
   type is computed at compile time from the unit dimensions ([`units.md`: Arithmetic, conversion and polymorphism](units.md#arithmetic-conversion-and-polymorphism)).
   The same holds for `Fixed<S>` scales ([`numerics.md`: Decimals for money](numerics.md#decimals-for-money)).
 - `==` and `<` come from `PartialEq` and `PartialOrd`; `Eq` and `Ord` are markers that add
@@ -550,5 +555,5 @@ What replaces it:
 
 ## Open questions
 
-1. **Bridge manifest syntax:** the exact spelling of `bridge = [...]` in a bridge's manifest and of
-   the application's `[bridges]` choice.
+None at present.
+

@@ -1,7 +1,7 @@
 # Units of Measure
 
-> **Status:** proposal. Expands [Numerics and data](numerics.md). Recommendations are marked
-> **Recommended**; syntax follows the recommendation but is not final.
+> **Status:** complete: decided, with no open questions. Expands [Numerics and data](numerics.md). Snippets
+> are **illustration only**.
 
 ## Summary
 
@@ -9,25 +9,27 @@
 use moddil::units::si::{m, cm, mm, s, ms, kg};
 use moddil::units::information::MiB;
 
-let length: f64<m> = 100<cm> + 50.5<mm>     // 1.0505 m
-let g              = 9.81<m/s^2>
-let timeout        = 500<ms>
-let budget         = 64<MiB>
+let length: f64[m] = 100[cm] + 50.5[mm]     // 1.0505 m
+let g              = 9.81[m/s^2]
+let timeout        = 500[ms]
+let budget         = 64[MiB]
 ```
 
-- Units are part of the **type**: `f64<m>`, `i64<ns>`, `Fixed<4><USD>`. Literals use the same syntax:
-  `100<cm>`.
-- **The unit bracket always comes last.** A type with generic parameters writes both groups
-  (`Fixed<4><USD>`, `Simd<f32, 8><m>`); a type without them writes only the unit (`f64<m>`,
-  `BigDecimal<USD>`) ([`numerics.md`: Units of measure](numerics.md#units-of-measure)).
+- Units are part of the **type**: `f64[m]`, `i64[ns]`, `Fixed<4>[USD]`. Literals use the same syntax:
+  `100[cm]`.
+- **Units are written in square brackets (decided)**, after the number or the type: `100[cm]`,
+  `f64[m]`, `Fixed<4>[USD]`, `Simd<f32, 8>[m]`, `BigDecimal[USD]`. Angle brackets stay for generic
+  arguments only ([Why square brackets](#why-square-brackets)).
 - **Zero runtime cost:** units are checked at compile time and erased; conversion factors are folded
   in at compile time.
 - The set of dimensions and units is **open**: any mod can declare new ones.
 - Related units convert automatically (`cm` + `mm`); different dimensions never do.
 
-## Why F#'s `100.0<cm>` syntax
+## Why square brackets
 
-F# (Andrew Kennedy's design) treats units as types:
+Moddil keeps F#'s model of units and changes only its brackets.
+
+**What comes from F#** (Andrew Kennedy's design), which treats units as types:
 
 - **Units are types, not values or functions.** `[<Measure>] type cm` declares a measure. `float<cm>`
   is a type and `100.0<cm>` is a literal of that type, so a literal reads exactly like its type.
@@ -37,20 +39,31 @@ F# (Andrew Kennedy's design) treats units as types:
   like generic types.
 - **Open set:** any code can declare a new measure. Units form a free abelian group over whatever base
   measures exist (multiplying adds exponents, dividing subtracts them).
-- **Unambiguous lexing:** no clash with identifiers, hex digits or numeric type suffixes (which a
-  suffix form such as `100cm` would have).
 - **Erased at runtime.**
 
 F#'s weaknesses, which Moddil addresses ([Declaring units](#declaring-units)):
 - `cm` and `m` are unrelated measures; you convert by multiplying by constants such as `100.0<cm/m>`.
 - No affine units (°C vs K).
 
-**Recommended:** adopt the F# form as Moddil's single syntax for units in types and literals. It is
-consistent with Moddil's generic syntax and gives compound units for free. One form only ([LLMs as first-class programmers](agent-interface.md)); the suffix form `100cm` is not used.
+**Decided: units are written in square brackets**, the one syntax for types and literals:
 
-**Lexing rule:** a `<` immediately after a numeric literal (no space) starts a unit. The canonical
-formatter always puts spaces around the comparison operator, so `100 < limit` is never ambiguous.
-Swift uses similar whitespace-sensitive operator lexing.
+```rust
+let length: f64[m] = 100[cm] + 50.5[mm]
+let price: Fixed<4>[USD] = 101.2550[USD]
+fn mean<U>(xs: &[f64[U]]) -> f64[U] { … }
+let t = x * 1[s]                          // a unit on a computed value
+```
+
+- **The engineering convention:** tables, plots and datasheets already write "length [m]".
+- **No whitespace-sensitive lexing.** Indexing a numeric literal means nothing, so `[…]` after a
+  literal is always a unit; F#'s `<…>` would make `100<cm>` and `100 < cm` differ only by spaces.
+- **Generics keep `<…>` to themselves.** A type's generic arguments and its unit never share a
+  bracket: `Fixed<4>[USD]` and `Vec<f64[m]>`, and `Foo<m>` is always a type argument.
+- **No clash with arrays and slices**, whose bracket comes before the type (`[f64; 3]`, `[f64]`).
+- **Safe in Markdown**, unlike a backtick form, so documentation and agents can quote unit literals
+  in inline code.
+- **One form only** ([LLMs as first-class programmers](agent-interface.md)): there is no suffix form
+  such as `100cm`, which would also clash with identifiers and hex digits.
 
 ## Dimensions: the SI vector and an open set
 
@@ -70,7 +83,7 @@ Rust's `uom` and C++ mp-units work this way.
 **Its limitation:** the basis is fixed. Currency, information (bits and bytes), pixels, "orders" or
 "items" cannot be added without changing the library.
 
-**Recommended: an open set.** A dimension is a **sparse map from declared base dimensions to
+**Decided: an open set.** A dimension is a **sparse map from declared base dimensions to
 exponents**: F#'s free abelian group, rather than a fixed seven-element vector.
 
 - Any mod can declare a base dimension:
@@ -109,25 +122,36 @@ weakness.
 ## Arithmetic, conversion and polymorphism
 
 - `+`, `-` and comparisons require the **same dimension**. Units within a dimension are converted to
-  a common unit: the expected type's unit if annotated, otherwise the finer of the two.
-- `*` and `/` combine dimensions: `f64<m> / f64<s>` is `f64<m/s>`. A dimensionless result is a plain
+  a common unit: the expected type's unit if annotated, otherwise **the finer of the two**
+  (decided): `1[m] + 5[cm]` is `105[cm]`. That is exact for integers and does not depend on the order
+  of the operands.
+- `*` and `/` combine dimensions: `f64[m] / f64[s]` is `f64[m/s]`. A dimensionless result is a plain
   number.
 - **Conversion rules:**
   - floating-point representations convert implicitly;
   - integer representations convert implicitly only when exact (`cm` to `mm`); otherwise the
-    conversion is explicit, with a rounding mode;
+    conversion is explicit, with a rounding mode: `.to_unit::<cm>(Round::HalfEven)` (decided);
+  - fractional integer quantities use fixed point, `Fixed<1>[cm]`; units never carry a scale of their
+    own ([`numerics.md`: Decimals for money](numerics.md#decimals-for-money));
   - different dimensions never convert.
+- **Rational exponents (decided):** exponents are fractions, as in F#, so `sqrt(f64[m^2])` is `f64[m]`
+  and `sqrt(f64[Hz])` is `f64[Hz^(1/2)]` (noise densities such as `V/Hz^(1/2)` can be written).
+  Exponents are normalised, so `m^(1/2) * m^(1/2)` is `m`.
+- **Angles are their own dimension (decided).** `Angle` is a base dimension with `rad`, `deg` and
+  `turn`, in `moddil/units/angle`. `sin` and `cos` accept any angle unit and convert, so passing
+  degrees where radians are meant is a type error. Where the dimensions cancel (`rad/s * s`) the
+  result is plain; where a formula needs a bare number, `.per_radian()` says so explicitly.
 - **Currencies:** each currency is its own base dimension, so `USD` and `EUR` never mix. Conversion
-  needs an explicit exchange rate of type `Fixed<6><EUR/USD>`.
+  needs an explicit exchange rate of type `Fixed<6>[EUR/USD]`.
 - **Points and differences (affine):** absolute temperatures and timestamps are distinct from
   differences. `Instant - Instant = Duration`; adding two `degC` points is an error; `degC` to `K`
   applies the offset to points but not to differences.
 - **Unit polymorphism**, as in F#:
   ```rust
-  fn sqr<U>(x: f64<U>) -> f64<U^2> { x * x }
-  fn mean<U>(xs: &[f64<U>]) -> f64<U> { … }
+  fn sqr<U>(x: f64[U]) -> f64[U^2] { x * x }
+  fn mean<U>(xs: &[f64[U]]) -> f64[U] { … }
   ```
-- **Formatting and parsing:** `fmt"{length:<mm>}"` prints in the requested unit; parsing
+- **Formatting and parsing:** `fmt"{length:[mm]}"` prints in the requested unit; parsing
   `"12.5 km"` returns a `Result`.
 
 ## Core and mods
@@ -136,12 +160,12 @@ Per R2 (small core):
 
 | Core | Mods |
 |---|---|
-| Unit expressions in types and literals (`<m/s^2>`) | `dimension` and `unit` declarations |
+| Unit expressions in types and literals (`[m/s^2]`) | `dimension` and `unit` declarations |
 | Unit algebra and inference in the type checker (free abelian group arithmetic, scale and offset constants) | `moddil/units/si`, `/information`, `/currency`, `/angle`, community packs |
 | Erasure: units have no runtime representation | Formatting, parsing, conversions with explicit rounding |
 
 Unit algebra has to be in the core because unit variables are inferred by the type checker. It is a
-small piece: normalising products of base dimensions with integer exponents.
+small piece: normalising products of base dimensions with rational exponents.
 
 ## Imports
 
@@ -166,18 +190,14 @@ seconds, the other expected newton-seconds.
 | Example | Units |
 |---|---|
 | [Game](examples/01-multiplayer-game.md) | Metres, seconds, radians, `m/s^2` in physics shared by client and server |
-| [HFT](examples/02-hft-platform.md) | `Fixed<4><USD>` prices, quantities, notional (`Price * Qty`); `i64<ns>` latencies |
+| [HFT](examples/02-hft-platform.md) | `Fixed<4>[USD]` prices, quantities, notional (`Price * Qty`); `i64[ns]` latencies |
 | [Web store](examples/03-web-store.md) | Money per currency; shipping weights and dimensions |
-| [Hashiverse](examples/04-hashiverse.md) | `500<ms>` durations and `64<MiB>` sizes, where today raw integer types (`TimeMillis`, `DurationMillis`) are used |
+| [Hashiverse](examples/04-hashiverse.md) | `500[ms]` durations and `64[MiB]` sizes, where today raw integer types (`TimeMillis`, `DurationMillis`) are used |
 
 ## Open questions
 
-1. Confirm the lexing rule: no space between a literal and its `<unit>`.
-2. Angles: are radians and degrees units of a dimensionless-but-distinct "angle" kind?
-3. Rational exponents (`m^(1/2)`), needed for some formulas: allow, or only integers?
-4. The common-unit rule for unannotated mixed expressions: finer unit, or left operand?
-5. Integer representations with fractional scales (for example `i64<mm>` from `cm`): exact-only
-   conversion, or a fixed-point scale in the type?
+None at present.
+
 
 ## Prior art
 

@@ -144,7 +144,7 @@ on kernel sockets, kernel bypass and the simulator ([`effects-and-capabilities.m
 
 ```rust
 fn main(net: NetRoot) {
-    let rx = net.bypass("eth0", queue: 3, wait: Adaptive { spin: 20<us> })   // narrows NetRoot
+    let rx = net.bypass("eth0", queue: 3, wait: Adaptive { spin: 20[us] })   // narrows NetRoot
     scope(|s| {
         s.spawn(|| feed_handler(&rx))
     }, on: pinned(3))                       // the core that also takes the queue's IRQ

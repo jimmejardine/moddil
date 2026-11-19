@@ -49,7 +49,7 @@ here with its reason ([Deltas from Rust (and why)](#deltas-from-rust-and-why)). 
 | Error context | `load(p)? fmt"loading config {p}"` | A note attached to the error, not a wrapper ([`error-handling.md`: Error types](error-handling.md#error-types)) |
 | Wrapping operators | `h *% prime`, `a +% b`; `Wrapping<u32>` | Integer overflow traps by default; wrapping is explicit ([`numerics.md`: Overflow traps](numerics.md#overflow-traps)) |
 | No `as` for numbers | `x.to::<u8>()?`, `x.truncate::<u8>()`, `f.round::<i64>(mode)` | Only lossless widening is implicit; every lossy conversion is named ([`numerics.md`: Conversions](numerics.md#conversions)) |
-| Units of measure | `100<cm>`, `f64<m/s>` | Type-level units ([`units.md`](units.md)) |
+| Units of measure | `100[cm]`, `f64[m/s]` | Type-level units ([`units.md`](units.md)) |
 | Generators | `gen { for x in xs { yield f(x) } }`, `gen fn lines(…) -> Line` | Stable in v0 (unstable in Rust); compile to state-machine iterators ([`stdlib.md`: Generators](stdlib.md#generators)) |
 | Dedented string blocks | `sql"""` … `"""`; the closing quotes' indentation is stripped | Embedded SQL, JSON and HTML keep the code's indentation without a macro ([`text.md`: Literals](text.md#literals)) |
 | No integer string indexing | `let at = s.find('@')?; &s[at..s.end()]` | Positions are `StrPos` values on character boundaries, so slicing never traps ([`text.md`: Positions and slicing](text.md#positions-and-slicing)) |
@@ -121,7 +121,7 @@ As in Rust, unless a delta says otherwise:
 ## Named and default arguments
 
 - Any parameter may be passed by name: `connect(host, port: 8443)`.
-- Parameters may declare defaults: `fn connect(host: &str, port: u16 = 443, timeout: Duration = 10<s>)`.
+- Parameters may declare defaults: `fn connect(host: &str, port: u16 = 443, timeout: Duration = 10[s])`.
 - Positional arguments come first, named arguments after, in any order.
 - Defaults are part of the public interface, under semver and in semantic diffs
   ([`semantic-vcs.md`](semantic-vcs.md)).

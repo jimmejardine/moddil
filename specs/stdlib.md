@@ -134,6 +134,7 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 | `moddil/rpc` | Compiler-generated wire contracts, version compatibility ([Distributed and multi-tier programs](distribution.md), [`distribution.md`](distribution.md)) | G H W X |
 | `moddil/deploy-*` | Adapters from the topology file to Compose, Kubernetes, Nomad, systemd; discovery and secret-provider handlers ([`distribution.md`: Adapter mods](distribution.md#adapter-mods)) | G H W X |
 | `moddil/time` | Clocks, monotonic time, time zones, high-resolution timestamps | G H W X |
+| `moddil/platform` | Device-service effects (camera, notifications, payments, keychain) with shell-provided handlers ([`ui.md`: Platform APIs as shell-provided handlers](ui.md#platform-apis-as-shell-provided-handlers)) | G W X |
 | `moddil/runtime`, `-wasm`, `-sim` | Effect handlers for scheduling and I/O ([Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)) | G H W X |
 | `moddil/sync` | Sync cells (`Atomic<T>`, `AtomicRc<T>`, `Mutex`, `RwLock`), channels, lock-free queues (SPSC/MPMC) ([`concurrency.md`: Shared mutable state](concurrency.md#shared-mutable-state)) | G H X |
 | `moddil/alloc` | Arenas, pools, bump allocators, allocator capability | G H |
@@ -423,7 +424,7 @@ http::serve(listener, app)?;
   from a generator, `Response::stream(gen { for row in rows { yield row.to_csv() } })`. Backpressure
   comes from suspension.
 - **Testing without a socket.** `app.handle(&Request::get("/x"))` runs the router in-process.
-- **Client.** `http::get(url)` and `http::post(url, body: …, retries: 3, timeout: 5<s>)` use `Net`;
+- **Client.** `http::get(url)` and `http::post(url, body: …, retries: 3, timeout: 5[s])` use `Net`;
   `http::Client` holds configuration such as pooling and default headers.
 
 ## Conversion and core traits
