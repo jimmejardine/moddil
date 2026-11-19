@@ -338,3 +338,6 @@ follow Rust's `std::io`.
 5. **Persistent collections:** standard or community?
 6. **Iterator fusion guarantees:** should the compiler promise that adaptor chains over slices
    vectorise in release builds, as a documented performance contract?
+7. **The HTTP API in `moddil/net`:** request and response types, routing (the tour matches on
+   `path_segments()` by hand), serving a connection with a handler function, and the client
+   (`http::post(…, retries: 3)`). Not sketched anywhere yet ([`tour.md`](tour.md#gaps-the-tour-exposed)).

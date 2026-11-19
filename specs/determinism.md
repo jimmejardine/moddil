@@ -234,6 +234,9 @@ real-world evidence for it.
 3. GPU determinism: per kernel, per mod, or global?
 4. Record format and retention: per task, per request, sampled?
 5. How are non-Moddil peers brought into simulation beyond WASM components?
+6. **The `Sim` API:** creating nodes, per-node handlers (`sim.net.endpoint(node)`, `sim.rng(node)`),
+   addresses, fault injection and stopping a simulation (`sim.stop_all()`), as used by the tour
+   ([`tour.md`](tour.md#gaps-the-tour-exposed)).
 
 ## Background
 

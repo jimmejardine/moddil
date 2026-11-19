@@ -61,14 +61,14 @@ struct OrderBook {
 type Port = u16 where self >= 1024
 type Price = i64 where self > 0
 
-let p = Port::new(raw)?;      // returns Result: invalid input is an error (class 1)
+let p = Port::new(raw)?;      // fail(RefinementError): invalid input is an error (class 1)
 let q: Port = 8080;           // literal checked at compile time
 ```
 
 - **Decided:** `where` is the only refinement form; ranges are written `where self in 1..`
   ([`syntax.md`](syntax.md)).
 - "Parse, don't validate": once you hold a `Port`, the invariant holds, and it is never checked again.
-- Construction from untrusted input returns a `Result`, so R3 forces callers to handle bad input.
+- Construction from untrusted input fails with a typed error, so R3 forces callers to handle bad input.
 - These are the natural boundary between *errors* (bad input) and *bugs* (a broken contract inside
   trusted code).
 
@@ -236,6 +236,8 @@ These are cheap now and expensive to change once code exists.
 4. Should a mod be able to require proof that no overflow trap can occur?
 5. How are contracts on effectful operations expressed (for example, "this handler is called at most
    once")?
+6. What error does constructing a validated newtype from a bad value raise: one standard
+   `RefinementError` naming the failed `where` clause, or an error type chosen per newtype?
 
 ## Background
 

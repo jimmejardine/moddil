@@ -106,6 +106,9 @@ function's whole specification and evidence in one place:
 1. Syntax for attaching tests to methods, trait implementations and generic instantiations.
 2. Shared fixtures and test-only helpers: how they are declared and kept out of release builds.
 3. Benchmark stability on shared CI machines.
+4. **Errors inside tests:** a test body may use `?` (the tour decodes a response that way). Does an
+   unhandled error fail the test with its error return trace, and is a test therefore an entry
+   point that may leave errors unhandled, unlike `main` (R3)? ([`tour.md`](tour.md#gaps-the-tour-exposed))
 
 ## Prior art
 

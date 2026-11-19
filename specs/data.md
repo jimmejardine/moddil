@@ -134,10 +134,10 @@ schema.sql                    -- derived: replaying the migrations; CI checks it
 
 ```rust
 fn place(order: Order) -> OrderId with db, suspend, fail(DbError) {
-    let tx = db.begin()?                                   // linear: must commit or roll back
-    let id = tx.query_one(sql"INSERT INTO orders (price, qty) VALUES ({order.price}, {order.qty}) RETURNING id")?
-    tx.execute(sql"UPDATE stock SET qty = qty - {order.qty} WHERE sku = {order.sku}")?
-    tx.commit()?
+    let tx = db.begin()?;                                  // linear: must commit or roll back
+    let id = tx.query_one(sql"INSERT INTO orders (price, qty) VALUES ({order.price}, {order.qty}) RETURNING id")?;
+    tx.execute(sql"UPDATE stock SET qty = qty - {order.qty} WHERE sku = {order.sku}")?;
+    tx.commit()?;
     id
 }
 ```

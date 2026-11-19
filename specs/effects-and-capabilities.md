@@ -239,7 +239,17 @@ No mainstream language has made a typed effect system popular. The measures:
   examples are written in Moddil.
 - Should generators (`yield`) be a standard one-shot effect, and should user effects ever get
   one-shot continuations?
-- Is `spawn` a separate effect from `suspend`, or implied by it?
+- Is `spawn` a separate effect from `suspend`, or implied by it? [`concurrency.md`](concurrency.md)
+  and the tour already write it in signatures ([`tour.md`](tour.md#gaps-the-tour-exposed)).
+- **How is a handler for a user-defined effect written?** The specs only show handlers built by
+  library calls (`sim.clock(node)`). The tour uses `impl links for MemoryLinks`, treating an effect
+  like a trait whose methods take `&self` ([`tour.md`](tour.md#gaps-the-tour-exposed)). Is that the spelling, and can a handler
+  be a closure or an anonymous block for one-off cases?
+- **Effects of effect operations and of handlers.** May an operation declare effects of its own
+  (`fn put(…) with suspend, fail(E)`)? And may a handler perform effects its operations don't
+  declare, such as a SQL handler for `links` that needs `db`, taking them from the scope where it is
+  installed rather than from the caller? This decides whether swapping a handler can change a
+  caller's signature ([`tour.md`](tour.md#gaps-the-tour-exposed)).
 - How exactly are effect requirements and handler stacks surfaced, so that dynamic handler lookup is
   never surprising (LSP, `explain`)?
 

@@ -313,6 +313,13 @@ sync cells and abandoning linear values
 3. Should errors from the `remote` effect ([Distributed and multi-tier programs](distribution.md)) have a standard shape (timeout, unreachable,
    incompatible version), and how are errors serialised across tiers?
 4. Checked-exception fatigue (Java) vs inference: how much of an error set should be inferred?
+5. **"This cannot fail here."** With `fail` as an effect, asserting that a fallible call cannot
+   fail is `try { Code::new(s)? }.unwrap()`. Should there be a shorter, visible form that traps
+   with a message (Rust's `expect`), and how is it spelled ([`tour.md`](tour.md#gaps-the-tour-exposed))?
+6. **`catch` arms for an error union.** How are the variants of `fail(LinkError | DecodeError)`
+   named in a `catch`: by type (`DecodeError(e)`, `LinkError(Taken(_))`), flattened (`Taken(_)`),
+   or by a type pattern (`e: DecodeError`)? [Matching removes what it handles](#matching-removes-what-it-handles)
+   shows one example and no rule ([`tour.md`](tour.md#gaps-the-tour-exposed)).
 
 ## Background
 

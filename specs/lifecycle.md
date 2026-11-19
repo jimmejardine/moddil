@@ -362,6 +362,10 @@ fn serve(listener: &Listener) with net, suspend {
 - Should isolated scopes offer restart policies (supervision), or leave that to a library?
 - Is configuration a snapshot, or a live value reloaded on SIGHUP (`AtomicRc<Config>`)?
 - Exit codes and trap reporting on Windows.
+- The `Args` API: typed flags with defaults (the tour's `args.value("port", default: "8080")`), or a
+  derive over a struct, as `clap` does ([`tour.md`](tour.md#gaps-the-tour-exposed))?
+- Which `sysexits.h` codes get names beyond `Usage` and `Config`? The tour uses
+  `ExitCode::Unavailable` (69) for a port that cannot be bound.
 
 ## Prior art
 
