@@ -177,7 +177,8 @@ this one uses and is used by. The documentation page for a module combines the t
 2. **Cited evidence.** An invariant stated in prose links to the contract or test that enforces it
    (`[[OrderBook::no_cross]]`). If the evidence is removed, the link breaks the build.
 3. **A runnable tour.** The overview's example is compiled and run like any other example ([Examples are tests](testing.md#examples-are-tests)), so
-   when the main flow changes, the overview fails until it is updated.
+   when the main flow changes, the overview fails until it is updated. The language's own tour is
+   written this way from M0 ([`tour.md`: From markdown to source](tour.md#from-markdown-to-source)).
 4. **No orphans.** Every public item names a group, so the overviews and groups remain a real map of
    the module.
 

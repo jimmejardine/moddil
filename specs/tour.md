@@ -1,7 +1,8 @@
 # A tour of Moddil
 
-> **Status:** reference. One small, complete program written in the agreed syntax, to show how the
-> decided features fit together. Where the program needed something no spec has decided yet, it
+> **Status:** reference, until M0, when it becomes the `tour/shorty` mod
+> ([From markdown to source](#from-markdown-to-source)). One small, complete program written in the
+> agreed syntax, to show how the decided features fit together. Where the program needed something no spec has decided yet, it
 > says so and lists it under [Gaps the tour exposed](#gaps-the-tour-exposed). Listed in the
 > [index](README.md). Terms are defined in the [glossary](glossary.md).
 
@@ -264,6 +265,30 @@ test "serves over a lossy network" for serve {
 - The last test runs a server and a client in one process on a simulated network that drops 10% of
   messages. Time is virtual and the run is seeded, so a failure replays exactly.
 - The `// => 6` line in `make_code`'s doc comment is a test too ([Examples are tests](testing.md#examples-are-tests)).
+
+## From markdown to source
+
+**Decided: at M0 the tour becomes real Moddil source, a dogfood program that checks itself.**
+
+- It moves to **`tour/shorty/`** at the repository root: a real mod with a manifest and `src/*.mdl`
+  files ([`modules.md`: Mods and modules](modules.md#mods-and-modules)).
+- **Each section becomes a module** (`types`, `links`, `routes`, `serve`, `main`). Its `//!`
+  overview carries this page's explanations and spec links, and the mod overview gives the reading
+  order ([`docs.md`: Overviews](docs.md#overviews-mod-module-and-group-docs)).
+- **Everything that can be checked is checked:** the tests in section 6 are attached `test` blocks,
+  and the `// =>` examples in doc comments run as tests
+  ([`testing.md`: Examples are tests](testing.md#examples-are-tests)).
+- **`moddil doc` renders the mod as the tour**, and this page shrinks to a pointer plus the gaps
+  table.
+- **Gates, run in CI from then on** ([`roadmap.md`: Milestones](roadmap.md#milestones)):
+  - **M0:** the tour parses and passes the type, effect and ownership checks;
+  - **M2:** its tests pass, including the simulated-network test under `moddil/runtime-sim`.
+- A failing tour blocks a release: it is the first program written in Moddil.
+- The link checker (`tools/check_spec_links.py`) will then also check links in the tour's source
+  comments.
+
+Until M0, this page is the source of truth, and its spellings stay placeholders where the gaps table
+says so.
 
 ## What the tour leaves out
 

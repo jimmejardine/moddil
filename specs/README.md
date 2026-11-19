@@ -28,7 +28,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | ---------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------- |
 | **Start here**                                                         |                    |                                                                                       |
 | [Why Moddil](vision.md)                                                | —                  | [`vision.md`](vision.md): preamble, thesis, cross-cutting themes, tensions            |
-| [A tour of Moddil](tour.md)                                            | reference          | [`tour.md`](tour.md): one small service and its simulated tests, in the agreed syntax |
+| [A tour of Moddil](tour.md)                                            | reference          | [`tour.md`](tour.md): one small service and its simulated tests; becomes the `tour/shorty` mod at M0 |
 | [Requirements and non-goals](requirements.md)                          | 🟡 minor questions | [`requirements.md`](requirements.md): R1–R4 and non-goals                             |
 | [Reference examples](examples/README.md)                               | 🟠 major questions | [`examples/`](examples/README.md): game, HFT, web store, Hashiverse                   |
 | [Surface syntax](syntax.md)                                            | 🟡 minor questions | [`syntax.md`](syntax.md)                                                              |
