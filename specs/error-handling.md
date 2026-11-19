@@ -209,6 +209,9 @@ Every **entry point** must have an *empty* failure set:
 If anything remains, compilation fails, and the error lists each unhandled variant with the chain of
 `?`s it would travel through.
 
+**Tests are the one exemption (decided):** an error that escapes a test body fails that test, with its
+error return trace ([`testing.md`: Errors inside tests](testing.md#errors-inside-tests)).
+
 **Ignored results:** dropping a `Result` silently is a compile error (not a warning, as `must_use` is
 in Rust). **Decided (D14):** an explicit discard is allowed and requires a reason string, such
 as `discard(r, "best-effort cache warm")`, so it is visible in reviews and semantic diffs ([Diffs, code review and version control](semantic-vcs.md)).

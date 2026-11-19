@@ -1,6 +1,6 @@
 # The Toolchain
 
-> **Status:** proposal. Indexed in [`README.md`](README.md). Docs and tests are detailed in
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md). Docs and tests are detailed in
 > [`docs.md`](docs.md); the agent-facing API in
 > [`agent-interface.md`](agent-interface.md); packages in
 > [`packages-and-supply-chain.md`](packages-and-supply-chain.md). Commands are illustrative.
@@ -50,7 +50,7 @@ human-oriented text.
   of the canonical AST ([LLMs as first-class programmers](agent-interface.md), [Diffs, code review and version control](semantic-vcs.md)), so formatting never appears in a diff.
 - Comments and blank-line grouping are part of the AST and are preserved.
 - `moddil fmt --check` runs in CI; editors format on save.
-- **One setting, recommended:** a project-wide line width in the manifest (default 120). Teams
+- **One setting (decided):** a project-wide line width in the manifest (default 120). Teams
   genuinely differ here (Hashiverse, for example, uses a 250-character width in rustfmt), and a width
   changes no meaning. Everything else is fixed.
 
@@ -65,6 +65,14 @@ human-oriented text.
 - **Custom lints are mods:** pure, sandboxed comptime functions over the semantic model
   ([`comptime.md`](comptime.md)). They give Clippy-style power without plugin trust problems, and run
   in the same daemon.
+- **Limits (decided):** lint mods follow comptime's fuel, memory and caching rules, and
+  `moddil build --timings` attributes their cost per lint. A lint runs only if the consuming project
+  enables it, never just because a dependency ships it. Being pure, they need no security review.
+- **Diagnostics for people (decided)**, in the rustc and Elm style: one primary message, labelled
+  source snippets, notes, and a suggested fix when one is mechanical. Every error has a code with a
+  long explanation (`moddil explain E0xxx`) whose examples are tests. Effect, borrow and coherence
+  errors show the causal chain ("`parse` uses `Net` via `fetch_schema`, line 40"). A published style
+  guide covers the wording: plain British English, and no jargon without a glossary link.
 
 ## Editor support
 
@@ -77,7 +85,8 @@ human-oriented text.
   - a semantic diff view ([Diffs, code review and version control](semantic-vcs.md)).
 - An official **tree-sitter grammar** for syntax highlighting elsewhere (GitHub, other editors and
   tools).
-- Official editor integrations: VS Code, Zed, Neovim and JetBrains (via LSP). Priority order is open.
+- Official editor integrations, in priority order (decided): VS Code (most users; the playground's
+  editor shares its grammar), Zed, Neovim, then JetBrains (via LSP).
 
 ## Debugger
 
@@ -123,6 +132,10 @@ human-oriented text.
   compiler.
 - The **compiler-as-a-service API** ([`agent-interface.md`](agent-interface.md)) is versioned, so
   third-party tools see exactly what official tools see.
+- **Tools are pinned mods, not PATH plugins (decided).** There is no `moddil-xyz` discovery on
+  `PATH`. A tool is a mod with an executable, pinned in the manifest's `[tools]` section (in the
+  lockfile, hash-checked), and run as `moddil tool <name> …` under the capabilities it declares. The
+  core command set stays closed and the same everywhere.
 
 ## Budgets
 
@@ -166,19 +179,11 @@ compiler.
 
 ## Open questions
 
-1. The formatter's line-width setting ([Formatter](#formatter)): accept the single knob, or none at all?
-2. Editor priority order ([Editor support](#editor-support)).
-3. Custom lint mods are pure and sandboxed, but they still cost build time. Do they need limits or
-   review?
-4. Should `moddil` host third-party subcommands (`cargo-xyz` style), or keep a closed command set?
-5. **Diagnostics for people:** the structured form is designed for agents
-   ([`agent-interface.md`: Diagnostics built for agents](agent-interface.md#diagnostics-built-for-agents)); what is the human rendering's style guide (one
-   primary message plus notes, source snippets, suggested fixes), and how are the hardest errors
-   (effects, borrows, coherence) explained? Should each error code have a long explanation, as
-   `rustc --explain` does?
+None at present.
 
 Decided: no REPL, script or notebook mode (a non-goal, [`requirements.md`: Non-goals (draft)](requirements.md#non-goals-draft));
 quick learning comes from the in-browser playground ([Playground: learning without a REPL](#playground-learning-without-a-repl)).
+
 
 ## Prior art
 

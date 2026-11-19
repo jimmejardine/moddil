@@ -50,6 +50,14 @@
   no `mod foo;` declarations to keep in sync.
 - A file's `//!` doc comment is the module's overview
   ([`docs.md`: Overviews: mod, module and group docs](docs.md#overviews-mod-module-and-group-docs)).
+- **Mods, modules and directories (decided).** One mod contains many modules: every file under its
+  source tree. "The file tree is the module tree" only means that no file is declared by hand; it
+  does not mean one artefact per directory. One mod produces at most one library and any number of
+  executables ([Library and executables](#library-and-executables)).
+- **A nested manifest starts a separate mod (decided).** A directory containing its own manifest is
+  the root of another mod and is left out of the enclosing mod's module tree, as Go treats a nested
+  `go.mod`. The enclosing mod may depend on it by relative path, as in a monorepo
+  ([`packages-and-supply-chain.md`: Local repositories and working copies](packages-and-supply-chain.md#local-repositories-and-working-copies)).
 
 ### Three visibility levels
 
@@ -133,7 +141,12 @@ fn open_socket() -> Socket with Net {
 ### Library and executables
 
 - The manifest names the mod's **library root** (if any) and its **executables**, each with its own
-  `main` ([`lifecycle.md`](lifecycle.md)). A mod may have both.
+  `main` ([`lifecycle.md`](lifecycle.md)). A mod has **at most one library** and any number of
+  executables (decided).
+- **Executables have their own dependencies and ceilings (decided).** An executable may list extra
+  dependencies and a wider capability ceiling (a server's `NetRoot`, a CLI's argument parser). Neither
+  leaks to mods that depend on the library, so a library's users never pull in what its binaries
+  need, and the library's ceiling stays as narrow as its own code.
 
 ```toml
 # manifest (illustration only)
@@ -144,8 +157,15 @@ name = "github.com/acme/matcher"
 root = "src/lib.mdl"
 
 [[exe]]
-name = "matcher"
-main = "src/bin/matcher.mdl"
+name = "matcher-server"
+main = "src/bin/server.mdl"
+capabilities = ["net"]                                  # the executable's own ceiling
+dependencies = { "moddil.dev/net/http" = "0.4" }        # not seen by users of the library
+
+[[exe]]
+name = "matcher-cli"
+main = "src/bin/cli.mdl"
+dependencies = { "github.com/acme/args" = "1.2" }
 ```
 
 ## Fit check against the reference examples

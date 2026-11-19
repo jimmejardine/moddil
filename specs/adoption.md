@@ -155,6 +155,7 @@ Rust and Moddil share most syntax, so translation of the common subset is mechan
 | `#[derive(…)]` | Kept; derives are comptime ([`comptime.md`](comptime.md)) |
 | `macro_rules!` | Translated to comptime functions where the pattern is simple; otherwise flagged |
 | `unsafe` blocks | Kept, with the capability declared ([`unsafe.md`](unsafe.md)) |
+| `ref` and `ref mut` patterns | Removed; binding modes follow the matched value ([`syntax.md`: Patterns and control flow](syntax.md#patterns-and-control-flow)) |
 | `x as u8` | `x.truncate::<u8>()` or `x.to::<u8>()?`, chosen by the value range the compiler can prove |
 
 - **Unsupported constructs** (complex procedural macros, self-referential structs, some trait-object

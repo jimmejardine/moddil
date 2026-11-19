@@ -1,6 +1,6 @@
 # Performance model
 
-> **Status:** decided direction, details open. Listed in the [index](README.md). Brings together
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Brings together
 > performance decisions made in other areas and adds the rules for hot paths, checks, optimisation
 > and benchmarks. Snippets are **illustration only**.
 
@@ -68,6 +68,9 @@ Decided in [`numerics.md`: Data layout](numerics.md#data-layout) and summarised 
 - **Packed structs, bitfields and endian types** (`u32be`) for wire formats.
 - A **comptime struct-of-arrays container**, so a `Vec<Particle>` can become a column per field
   without rewriting the code that uses it.
+- **No automatic layout changes (decided).** The compiler never switches a collection to
+  struct-of-arrays by itself; layout stays visible in the code. The profiler and `moddil perf`
+  suggest `Soa<T>` as a diagnostic with a fix.
 
 Added here:
 
@@ -106,6 +109,14 @@ fn on_tick(book: &mut OrderBook, tick: &Tick, out: &mut SpscProducer<Order>) wit
   ([`interop.md`](interop.md)).
 - **Traps still trap.** These attributes are about latency, not failure; a bounds or overflow trap
   inside a `no_alloc` function behaves as everywhere else.
+- **Closures and parameters (decided):** `NoAlloc` and `NoLock` are marker traits that the compiler
+  infers for every function and closure (nobody writes the impls). A parameter requires them as a
+  bound, `f: impl Fn(&Tick) + NoAlloc + NoLock`, so a `pub` signature can promise and demand the
+  property, and a violating closure is reported at the call site.
+- **Bounded execution (decided, v1):** `#[bounded]` joins `no_alloc` and `no_lock`. Inside it, loops
+  are only `for` over finite ranges or collections (no `while` or `loop`), and there is no recursion,
+  directly or through calls. It is checked transitively, recorded in the interface artefact and
+  covered by the semver check, like the other two.
 - **Why attributes:** making allocation an effect would put `alloc` in almost every public signature,
   and running the hot path with the allocator capability withheld would only check the code reached
   in that one scope. Swift's `@_noAllocation` shows that checked attributes work.
@@ -184,6 +195,19 @@ fn feed_handler(rx: &RxQueue) with Net, suspend, fail(NetError) {
   fn nic_rx() { RX_READY.signal() }        // no allocation, no suspension
   ```
 
+## Real-time guarantees
+
+**Decided: `pinned` executors guarantee isolation, not hard real time.**
+
+- No work stealing, no migration, and no preemption checks on their cores; no other executor's
+  tasks run there.
+- Optional `SCHED_FIFO` priority, memory locked against paging (`mlockall`) and busy-polling
+  ([`runtime.md`: Tasks, threads and executors](runtime.md#tasks-threads-and-executors)).
+- Combined with `#[no_alloc, no_lock, bounded]`, a hot path has no hidden waits: soft real time on
+  general-purpose operating systems.
+- Hard real time is offered only by freestanding profiles with the static scheduler
+  ([`freestanding.md`](freestanding.md)).
+
 ## Checks and their elision
 
 **Decision: overflow and bounds checks are never turned off for a whole build.** A program behaves the
@@ -241,8 +265,10 @@ bench "one tick" for on_tick {
 
 - `moddil bench` (from `moddil/bench`) runs benchmarks and compares them with the previous commit
   statistically.
-- **Counters are deterministic:** allocations and syscalls are counted by the runtime; instructions
-  through hardware counters, or an instruction-counting emulator where none are available. A budget on
+- **Counters are deterministic (decided):** allocations, bytes allocated, syscalls and effect
+  operations are counted by the runtime on every target. Instructions come from hardware counters
+  where available, and otherwise from deterministic instruction counting (Wasm fuel, or the MIR
+  interpreter). Each budget names the counter it uses. A budget on
   a counter fails CI reliably, even on shared machines.
 - **Compile-time performance assertions** sit beside budgets: `#[vectorise]` fails the release build
   if a loop was not vectorised, and `#[no_alloc]` if a function can allocate
@@ -263,13 +289,5 @@ bench "one tick" for on_tick {
 
 ## Open questions
 
-1. **Properties on closures and traits:** how does a parameter say "this closure must be `no_alloc`"
-   (`impl Fn() + NoAlloc`, an attribute on the bound, or inference only)?
-2. **Bounded execution:** is a checked `#[bounded]` (no unbounded loops or recursion) feasible and
-   useful for real-time code?
-3. **Portable counters:** which counters exist on every platform, including WASM, and what replaces
-   hardware counters where they are missing?
-4. **Automatic layout:** should the compiler ever choose a struct-of-arrays layout on its own, guided
-   by a profile?
-5. **Real-time scheduling:** what guarantees can pinned executors give
-   ([`runtime.md`: Tasks, threads and executors](runtime.md#tasks-threads-and-executors))?
+None at present.
+

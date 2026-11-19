@@ -1,6 +1,6 @@
 # Observability and Debuggability
 
-> **Status:** decided direction, details open. Indexed in [`README.md`](README.md). Builds on
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md). Builds on
 > effects and handlers ([Effects and capabilities as a unifying idea](effects-and-capabilities.md), R2), structured concurrency ([`concurrency.md`](concurrency.md)), error
 > traces ([`error-handling.md`: Traces](error-handling.md#traces)), record and replay
 > ([`determinism.md`: Record and replay](determinism.md#record-and-replay)) and comptime literals ([`comptime.md`: Tagged string literals (embedded DSLs)](comptime.md#tagged-string-literals-embedded-dsls)).
@@ -58,6 +58,10 @@ log.info(fmt"order {order.id} filled {qty} @ {price}")
 metric.count("orders.filled", 1, venue: order.venue)
 ```
 
+- **Events have stable names (decided):** the module path plus an optional `name:`, with typed
+  fields. Adding a field is free. Renaming or removing a field, or changing its type, is reported by
+  the semantic diff ([`semantic-vcs.md`](semantic-vcs.md)): a warning, or a breaking change for events
+  marked `#[stable]`, which dashboards and alerts depend on.
 - The `fmt"…"` literal is checked at build time (argument types, field names) and **interned**: the
   build records a table of event IDs → format strings, keyed by the content-addressed build hash
   ([Build times](build-times.md)).
@@ -116,7 +120,20 @@ Limits:
 - Recording I/O can be large; volume and retention are configurable.
 - Code outside the effect boundary (FFI, `unsafe`, code performing `nondet`) is not
   replayable unless wrapped by effects; the recorder flags it.
-- Recordings may contain sensitive data; how secrets are excluded or encrypted is open ([Open questions](#open-questions)).
+- **Secrets in recordings (decided):** effect results typed `Secret<T>` or `Personal<T>` are stored
+  **encrypted** with a per-deployment key, so the rest of a recording can be shared freely. Replaying
+  them needs the **`ReplayKey`** capability; without it, replay substitutes placeholders and reports
+  where the run diverged. Retention is configuration
+  ([`determinism.md`: Record and replay](determinism.md#record-and-replay)).
+- **Sampling (decided):** a deterministic head decision from a hash of the trace ID, propagated with
+  the trace context, so a trace is kept or dropped as a whole. Every task also buffers its spans in
+  its ring buffer, and a trace that errors, traps or exceeds a latency threshold is kept in full
+  anyway (tail rescue). Recordings follow the same decision.
+- **Fleet replay (decided):** each process replays on its own from its own recording; other
+  processes' replies are recorded `Net` and `Remote` results. Recordings are linked by trace, span
+  and `Remote` call IDs, so tools follow a request across processes and replay the chain in causal
+  order. Moddil peers can also be loaded together into one simulation with their recorded external
+  inputs ([`determinism.md`: Deterministic simulation testing](determinism.md#deterministic-simulation-testing)).
 
 ## Live introspection
 
@@ -128,6 +145,23 @@ Behind an **`Introspect` capability**, granted by `main` or the manifest and nev
 - use probe points (USDT-style) that cost nothing while disabled.
 
 In the browser this maps onto DevTools.
+
+**Continuous profiling (decided)** is a handler mod enabled through `Introspect`. It combines CPU
+sampling with the runtime's record of which effect operation each task is blocked on, so on-CPU and
+off-CPU time is attributed per task, per span and per effect (`Net`, `Db`, locks, GPU). It exports
+pprof and OTLP profiles, and costs nothing while disabled.
+
+## Overhead budgets
+
+**Decided**, tracked in CI like the other budgets ([`performance.md`: Benchmarks and budgets](performance.md#benchmarks-and-budgets)):
+
+| Level | Cost on the hot path |
+|---|---|
+| Compiled out (comptime level) | 0 |
+| Disabled at run time | One predictable branch |
+| Enabled interned event | ≤ 10 ns |
+| Span | ≤ 50 ns |
+| Flight recorder | ≤ 5% throughput on the benchmark suite |
 
 ## Release builds stay debuggable
 
@@ -155,12 +189,8 @@ of the task that failed", or "which tasks have been blocked on the database for 
 
 ## Open questions
 
-- **Continuous profiling** as a handler, with time attributed by effect (network, locks, GPU)?
-- Sampling policy for spans and recordings.
-- Recording volume and retention; encrypting recordings, or excluding secret-typed effect results.
-- Replaying a whole fleet: combining recordings from several processes.
-- Schema evolution of structured events across versions.
-- Overhead targets per level (e.g. nanoseconds per interned event on the hot path).
+None at present.
+
 
 ## Prior art
 

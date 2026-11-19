@@ -311,9 +311,10 @@ Resolved since the tour was written:
 - the `RefinementError` a validated newtype raises ([Validated newtypes](correctness.md#validated-newtypes-lightweight-refinements));
 - `?!` for a call that cannot fail, and how `catch` arms name an error union's members
   ([This cannot fail here](error-handling.md#this-cannot-fail-here), [Matching removes what it handles](error-handling.md#matching-removes-what-it-handles));
-- the `Sim` API and its standard faults ([The `Sim` API](determinism.md#the-sim-api)).
+- the `Sim` API and its standard faults ([The `Sim` API](determinism.md#the-sim-api));
+- an unhandled `?` inside a test fails that test with its error return trace
+  ([Errors inside tests](testing.md#errors-inside-tests)).
 
 | # | Gap | Open question in |
 |---|---|---|
 | 3 | The `Args` API and named exit codes such as `ExitCode::Unavailable` | [`lifecycle.md`](lifecycle.md#open-questions) |
-| 6 | How an unhandled `?` inside a test is reported | [`testing.md`](testing.md#open-questions), Q4 |

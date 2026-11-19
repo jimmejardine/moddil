@@ -79,7 +79,8 @@ error at any entry point (`main`, task bodies, exported/FFI functions, tier endp
 silently dropped result is a **compile-time error**. There are **no fire-and-forget tasks**: every
 task is awaited by its enclosing scope. Out of scope for R3: traps such as out of memory, stack
 overflow, integer overflow, integer division by zero and out-of-bounds indexing, which are crashes
-as in Rust.
+as in Rust. **Tests are exempt** (decided): an error that escapes a test body fails that test, with
+its error return trace ([`testing.md`: Errors inside tests](testing.md#errors-inside-tests)).
 
 Details: [`error-handling.md`](error-handling.md).
 
@@ -112,6 +113,9 @@ Details: [`determinism.md`](determinism.md).
 - **Production hot code upgrades (decided).** Live update is for debug builds; production uses
   rolling deploys with compiler-checked compatibility ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds)).
 - Runtime reflection / dynamic metaprogramming.
+- **A resilience mode for native binary libraries (decided).** The C ABI and WASM components are the
+  stable binary boundaries; Moddil-to-Moddil linking is always from source or from artefacts built
+  from it ([`syntax.md`: What Swift has that we lack](syntax.md#what-swift-has-that-we-lack)).
 
 ## Open questions
 

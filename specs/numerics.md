@@ -1,6 +1,6 @@
 # Numerics and Data
 
-> **Status:** decided direction, open questions remain. Indexed in [`README.md`](README.md).
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
 > Units of measure are a separate proposal in [`units.md`](units.md). Snippets are **illustration only**.
 
 ## Summary
@@ -115,7 +115,7 @@ for i in (0..xs.len()).rev() { … }
   | `x.truncate::<u8>()` | Keeps the low bits |
   | `x.wrap::<i32>()` | Two's-complement reinterpretation |
   | `x.saturate::<u8>()` | Clamps to the range |
-  | `f.round::<i64>(mode)` | Float to integer with an explicit rounding mode; NaN and out-of-range values fail |
+  | `f.round::<i64>(mode)` | Float to integer with an explicit `Round` mode; NaN and out-of-range values fail |
 
 - There is **no `as` for numbers**: Rust's `as` silently truncates and saturates, which is exactly
   the kind of hidden behaviour Moddil avoids.
@@ -151,6 +151,10 @@ In `moddil/decimal`:
   division (`a.div::<4>(b, Round::HalfEven)`), conversion from a float, and `BigDecimal` operations
   bounded by a precision. There is no default and no ambient context (unlike Python's `decimal`), and
   a type alias cannot carry a mode: as with [conversions](#conversions), nothing is lost silently.
+- **One `Round` enum (decided)**, in core, shared by `Fixed`, `BigDecimal` and float-to-integer
+  conversion: `HalfEven`, `HalfUp`, `HalfDown`, `HalfAwayFromZero`, `TowardZero`, `AwayFromZero`,
+  `Floor`, `Ceiling`. The documentation names the IEEE 754 equivalents (`HalfEven` is
+  roundTiesToEven, `TowardZero` is roundTowardZero, and so on).
 - **Units** go in a last bracket: `Fixed<4><USD>`, `BigDecimal<USD>`
   ([Units of measure](#units-of-measure)).
 
@@ -210,8 +214,7 @@ Units are a type-level feature (`f64<m/s>`, `i64<ns>`, `100<cm>`), proposed in
 
 ## Open questions
 
-- Should decimal rescaling and float-to-integer rounding (`f.round::<i64>(mode)`) share one `Round`
-  enum?
+None at present.
 
 ## Prior art
 

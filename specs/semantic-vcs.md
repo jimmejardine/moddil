@@ -1,6 +1,6 @@
 # Diffs, Code Review and Version Control
 
-> **Status:** decided direction, details open. Indexed in [`README.md`](README.md).
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
 
 ## Problem
 
@@ -50,8 +50,15 @@ performance regression). As agents produce more code, review becomes the bottlen
   - a **content hash per definition** (the same hash as the build-cache key,
     [`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)) for instant "unchanged" checks.
 
-  Inferred renames are labelled as inferred; ambiguous matches are shown as a removal plus an
-  addition.
+  **Confidence (decided):**
+
+  | Match | Shown as |
+  |---|---|
+  | Identical canonical AST after the rename | **verified** (behaviour-preserving) |
+  | A unique best match above about 80% AST similarity | **inferred**, with its score: `rename (inferred, 87%)` |
+  | Ambiguous, or below the threshold | A removal plus an addition |
+
+  The threshold is configurable, and the JSON output carries every score.
 
 ## The report
 
@@ -69,7 +76,8 @@ Concise by default, most important first:
 4. **Refactors, collapsed:** renames, moves, extractions and formatting. When the canonical ASTs are
    identical after applying the detected renames, the refactor is marked **verified
    behaviour-preserving**, and reviewers can skip it.
-5. **Tests:** affected tests and, optionally, their results; optional mutation-score
+5. **Tests:** affected tests, listed; `--test` runs them (decided: on request, so `diff` stays fast
+   and works on any two revisions; CI's pull-request report runs them by default, configurably); optional mutation-score
    ([`correctness.md`: Mutation testing](correctness.md#mutation-testing)) and benchmark changes.
 6. **Suggested description:** a ready-to-paste **PR or commit description** generated from the
    report: summary, breaking changes, risk notes, testing. The user or an LLM edits and enriches it.
@@ -113,9 +121,12 @@ Output formats: terminal, **Markdown** (for pasting into a PR), and **JSON** (fo
 
 - **Git integration without metadata:**
   - a `.gitattributes` diff driver or difftool, so `git diff` can show the semantic view;
-  - an optional semantic **merge driver** that merges on the AST: independent additions at the same
-    place, import lists, and a rename on one side with a body edit on the other merge
-    automatically. Lockfiles and generated files are regenerated, never merged.
+  - an optional semantic **merge driver** that merges on the AST. It is **conservative (decided)**:
+    only structurally independent changes merge automatically (different definitions, import
+    lists, additions at the same place, and a rename on one side with a body edit on the other). A
+    conflict inside one body falls back to an ordinary text conflict. Every automatic merge is
+    re-type-checked and listed in the merge report. Lockfiles and generated files are regenerated,
+    never merged.
 - **Definition-level history:** `moddil log store::payments::charge` and `moddil blame …` walk Git
   history and follow inferred renames and moves, so history survives refactors and reformatting.
 - **Split suggestions:** `moddil diff --suggest-split` proposes separating refactor-only changes from
@@ -127,9 +138,8 @@ Output formats: terminal, **Markdown** (for pasting into a PR), and **JSON** (fo
 
 ## Open questions
 
-- Rename-detection thresholds, and how confidence is shown.
-- How far the optional merge driver should go.
-- Whether `diff` runs affected tests by default or only on request.
+None at present.
+
 
 ## Prior art
 

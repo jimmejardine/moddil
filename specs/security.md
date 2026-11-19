@@ -1,6 +1,6 @@
 # Security model
 
-> **Status:** decided direction, details open. Listed in the [index](README.md). This document ties
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). This document ties
 > together security mechanisms decided in other areas and states the guarantee they add up to.
 > Snippets are **illustration only**.
 
@@ -39,7 +39,7 @@ claim, or where the gaps between the pieces are.
 | Attacker | Main defences | Defined in | Not covered |
 |---|---|---|---|
 | **A malicious or compromised dependency** | Capability ceilings per dependency; no ambient authority; no code at fetch or build time; randomised cooldown; audit trail | [`packages-and-supply-chain.md`](packages-and-supply-chain.md), [`effects-and-capabilities.md`](effects-and-capabilities.md) | A dependency granted `unsafe` or `ffi` is trusted with everything |
-| **Hostile input** (network, files, IPC) | Memory safety; `Untrusted<T>`; parse-don't-validate decoding; overflow and bounds traps; typed errors (R3) | [`data.md`](data.md), [`numerics.md`](numerics.md), [`error-handling.md`](error-handling.md) | Algorithmic denial of service, beyond keyed hashing ([Open questions](#open-questions)) |
+| **Hostile input** (network, files, IPC) | Memory safety; `Untrusted<T>`; parse-don't-validate decoding; overflow and bounds traps; typed errors (R3) | [`data.md`](data.md), [`numerics.md`](numerics.md), [`error-handling.md`](error-handling.md) | Algorithmic denial of service beyond keyed hashing, bounded by opt-in budgets ([Resource budgets](#resource-budgets)) |
 | **A hostile client** (browser or app on a machine the attacker controls) | `Untrusted<T>` from `client`; secrets cannot be placed on `client`; server-side validation | [`distribution.md`: Trust, secrets and capabilities](distribution.md#trust-secrets-and-capabilities) | Anything that runs on the client itself |
 | **Untrusted plugins or tenant code** | WASM components with explicit imports and resource limits | [Isolation beyond capabilities](#isolation-beyond-capabilities), [`interop.md`](interop.md) | |
 | **A compromised build or toolchain** | Reproducible builds; hash-pinned sources; pure, sandboxed comptime; double-compiling check of the compiler | [`determinism.md`: Reproducible builds](determinism.md#reproducible-builds), [`comptime.md`](comptime.md), [`compiler.md`](compiler.md) | A compromised machine that produces both build and check |
@@ -118,14 +118,20 @@ component, code runs at full speed.
 | Label | Meaning | Rules |
 |---|---|---|
 | **`Secret<T>`** | Credentials, keys, tokens | Cannot reach logs, traces, metrics, `Debug`, `Display` or serialisation; cannot be placed on `client`; zeroed on drop; `==` is constant time ([Secret handling](#secret-handling)) |
-| **`Personal<T>`** | Personal data: names, emails, addresses, identifiers of people | Cannot reach logs, traces or metrics; may be stored or sent only to placements and stores declared for it in the topology ([`distribution.md`](distribution.md)) |
+| **`Personal<T, C = General>`** | Personal data: names, emails, addresses, identifiers of people; the category `C` marks regulated kinds (`Health`, `Financial`, `ExportControlled`, or a user-declared category) | Cannot reach logs, traces or metrics; may be stored or sent only to placements and stores declared for its category in the topology ([`distribution.md`](distribution.md)) |
 | **`Untrusted<T>`** | Data from `client`, peers or other untrusted sources | Must be validated (into a validated newtype, or by explicit checks) before use ([`correctness.md`: Validated newtypes (lightweight refinements)](correctness.md#validated-newtypes-lightweight-refinements)) |
 
 - **Labels nest.** A struct with a `Secret` field cannot be logged as a whole; a derived `Debug`
   prints the field as redacted ([`values.md`](values.md)).
-- **Declassification is explicit and auditable.** `secret.redacted()`, `personal.hash_for_correlation()`
-  and `personal.declassify(reason: "…")` are ordinary calls that the semantic diff reports
-  ([`semantic-vcs.md`](semantic-vcs.md)) and that a lint can require to be reviewed.
+- **Categories, not more labels (decided).** Domains such as health or export-controlled data use a
+  category on `Personal`, e.g. `Personal<Diagnosis, Health>`, and the topology declares which stores
+  and placements accept each category. The compiler rules stay the same; there is no policy
+  language.
+- **Declassification is explicit and reviewed (decided).** `secret.redacted()` and
+  `personal.hash_for_correlation()` are projections; `x.declassify("reason")` removes a label and
+  takes a mandatory string literal, like `unsafe("…")`. Every declassification is listed by
+  `moddil audit` and reported by the semantic diff ([`semantic-vcs.md`](semantic-vcs.md)), and a new
+  or changed one needs a human review under the default `vet` policy, which a project can relax.
 - **The checks are type-based**, not a separate analysis: the observability effects and the
   serialisation traits are simply not implemented for labelled types.
 
@@ -146,8 +152,9 @@ log.info(fmt"checkout for {customer:?}");           // ✓ prints email and card
 - **Constant-time equality.** `==` on secrets compares in constant time.
 - **Where secrets come from:** secret-provider handlers (Vault, Kubernetes secrets, cloud KMS), never
   manifests or source ([`distribution.md`](distribution.md)).
-- **Secrets in recordings:** record and replay must exclude or encrypt secret-typed values
-  ([`observability.md`](observability.md), open there).
+- **Secrets in recordings:** secret- and personal-typed effect results are stored encrypted, and
+  replaying them needs the `ReplayKey` capability
+  ([`observability.md`: Flight recorder and replay](observability.md#flight-recorder-and-replay)).
 
 ## Constant-time code
 
@@ -167,9 +174,39 @@ fn verify_mac(expected: &Secret<[u8; 32]>, actual: &[u8; 32]) -> bool {
 - **The backends preserve it**: secret-dependent selections lower to conditional moves or masked
   arithmetic, and optimisation passes that could introduce branches or table lookups on those values
   are disabled for them, in Cranelift and in LLVM.
+- **LLVM without a fork (decided):** Moddil uses LLVM's upstream constant-time intrinsics and
+  carries no patches. CI runs binary analysis on the emitted code of every `#[constant_time]`
+  function, looking for secret-dependent branches and memory addresses. A function LLVM cannot
+  preserve on some target is compiled with Cranelift there instead.
+- **Speculation (decided):** `#[constant_time]` functions also get speculative load hardening. Other
+  functions opt in with `#[speculation_hardened]`; there is no global flag. Process and component
+  isolation stay the main defence across trust boundaries.
 - **Testing:** `moddil/test` includes statistical timing tests (dudect style) for
   `#[constant_time]` functions.
 - `moddil/crypto` is written this way, so applications rarely write constant-time code themselves.
+
+## Tests are held to the same rules
+
+**Decided.** Test code counts against its mod's capability ceiling, like any other code:
+
+- A test gets **no root capabilities** unless it declares them (`test "reads real config" with FsRoot`),
+  so the default test runs against simulation handlers only.
+- **Test-only dependencies** have their own ceilings, which never leak to users of the mod.
+- `moddil test` reports which tests used real capabilities
+  ([`testing.md`](testing.md)).
+
+Comptime is already pure and sandboxed ([`comptime.md`](comptime.md)).
+
+## Resource budgets
+
+**Decided: soft budgets per scope; hard limits per component.**
+
+- **Opt-in per-scope budgets:** an allocator handler with a byte limit, where an allocation past it
+  fails with a typed error, and deadlines that cancel the scope
+  ([`lifecycle.md`: Cancellation and shutdown](lifecycle.md#cancellation-and-shutdown)).
+- **Hard, enforced limits** (fuel, memory caps, crash containment) come from WASM components
+  ([Isolation beyond capabilities](#isolation-beyond-capabilities)).
+- Nothing is charged per task by default.
 
 ## Supply chain
 
@@ -220,12 +257,5 @@ Decided in [`packages-and-supply-chain.md`](packages-and-supply-chain.md) and su
 
 ## Open questions
 
-1. **User-defined labels:** are three labels enough, or will domains (health data, export-controlled
-   data) need their own?
-2. **Declassification:** exact syntax, and whether a reason string must be recorded and reviewed.
-3. **Spectre mitigations:** opt-in speculative load hardening for code that handles secrets?
-4. **Constant-time guarantees through LLVM:** how much can be guaranteed without maintaining LLVM
-   patches, and how is it verified (binary analysis in CI)?
-5. **Capability safety of comptime and tests:** comptime is pure; are test helpers and simulation
-   handlers held to the same rules?
-6. **Denial of service inside a process:** memory and CPU budgets per task, or only per component?
+None at present.
+

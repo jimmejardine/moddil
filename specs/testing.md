@@ -1,6 +1,6 @@
 # Testing
 
-> **Status:** decided direction, details open. Listed in the [index](README.md). Tests, examples,
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Tests, examples,
 > property tests, fuzzing, simulation and benchmarks attach to the code they test and run under one
 > command, `moddil test`. Documentation is in [`docs.md`](docs.md). Snippets are **illustration only**.
 
@@ -53,6 +53,24 @@ and flaky tests are the main brake.
   `where:` clauses) and can see private items in its module.
 - Tests without a single subject are module-level `test "name" { … }` blocks; larger scenarios live in
   separate integration-test modules.
+- **Subjects are qualified paths (decided):** `test "…" for OrderBook::add` (a method),
+  `for <Money as Display>` (a trait implementation) and `for sort::<int>` (one instantiation). A
+  generic test is written once and run for listed types:
+  `test "sorts" for sort::<T> with T in [int, f64, String] { … }`.
+- **Fixtures and helpers (decided):** `#[test_only]` items and modules compile only in test builds,
+  and the compiler checks that only tests and other test-only items use them. Helpers meant for other
+  mods (fake handlers, builders) go in a separate `-testing` mod, so release builds never contain test
+  code.
+- **Capabilities in tests:** a test gets no root capabilities unless it declares them, and test code
+  counts against the mod's ceiling ([`security.md`: Tests are held to the same rules](security.md#tests-are-held-to-the-same-rules)).
+
+### Errors inside tests
+
+**Decided: an error that escapes a test fails the test.** A test is an entry point with an explicit
+exemption from R3 ([`requirements.md`: R3](requirements.md#r3-no-crash-from-an-unhandled-error)):
+its body may use `?`, and any error that escapes, like any trap, fails that test and is reported with
+its error return trace ([`error-handling.md`: Traces](error-handling.md#traces)). `main`, task
+bodies and callbacks keep the full R3 rule.
 - **Tooling knows each test's subject**:
   - "which tests cover `withdraw`?" is a query;
   - the semantic diff ([Diffs, code review and version control](semantic-vcs.md)) reports "**`withdraw` changed, but none of its tests did**",
@@ -98,17 +116,15 @@ function's whole specification and evidence in one place:
   counters, which fail CI ([`performance.md`: Benchmarks and budgets](performance.md#benchmarks-and-budgets)).
 - Results are recorded per build hash, so the semantic diff can report **performance deltas** for
   changed functions ([Diffs, code review and version control](semantic-vcs.md)).
-- Noise handling: repeated runs, confidence intervals, and dedicated or pinned machines for
-  benchmarks that gate merges.
+- **Noise handling (decided in [`performance.md`: Benchmarks and budgets](performance.md#benchmarks-and-budgets)):**
+  budgets on deterministic counters gate CI; wall-clock results come with confidence intervals and
+  only warn. Wall-clock benchmarks that gate merges run on dedicated or pinned machines, configured
+  per project.
 
 ## Open questions
 
-1. Syntax for attaching tests to methods, trait implementations and generic instantiations.
-2. Shared fixtures and test-only helpers: how they are declared and kept out of release builds.
-3. Benchmark stability on shared CI machines.
-4. **Errors inside tests:** a test body may use `?` (the tour decodes a response that way). Does an
-   unhandled error fail the test with its error return trace, and is a test therefore an entry
-   point that may leave errors unhandled, unlike `main` (R3)? ([`tour.md`](tour.md#gaps-the-tour-exposed))
+None at present.
+
 
 ## Prior art
 

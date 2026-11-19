@@ -1,6 +1,6 @@
 # Packages and Supply-Chain Security
 
-> **Status:** decided direction, open questions remain. Indexed in [`README.md`](README.md).
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
 > Manifest syntax, commands and file formats are **illustration only**.
 
 ## Summary
@@ -63,6 +63,16 @@ A mod is the unit of:
 - **Targets**: native, WASM (R1), GPU-kernel-safe, and so on. A mod declares which targets it supports.
 - **Audit** ([Package management and supply-chain security](packages-and-supply-chain.md)): reviews and attestations attach to a mod version.
 
+**The word "mod" (decided):** it stays, as part of the name Moddil. A mod is a package; a module is a
+file inside it ([`modules.md`: Mods and modules](modules.md#mods-and-modules)). Moddil has no `mod`
+keyword, but readers coming from Rust expect one, so documentation and diagnostics say "mod
+(package)" on first use, and the [glossary](glossary.md) keeps the distinction.
+
+**What one mod produces (decided):** at most **one library** and any number of **executables**
+([`modules.md`: Library and executables](modules.md#library-and-executables)). Several libraries means
+several mods, usually in one repository, because each library needs its own version, capability
+ceiling and audit record anyway.
+
 Illustrative manifest (syntax not decided):
 
 ```toml
@@ -96,6 +106,11 @@ supported = ["native", "wasm-wasi", "wasm-browser"]
   the mod.
 - In these specs, `moddil/…` is shorthand for the standard mods under the project's own domain
   (illustration only).
+- **Look-alike names (decided).** With no naming authority, typosquatting is caught locally:
+  `moddil add` warns about Unicode confusables or mixed scripts in a URL, a small edit distance to
+  your existing dependencies or to a curated list of popular mods, and very young repositories. It
+  shows the new mod's capability ceiling and asks for confirmation. Advisories can mark known squats
+  ([`governance.md`: Security response](governance.md#security-response)).
 
 ### Versions and majors
 
@@ -103,6 +118,9 @@ supported = ["native", "wasm-wasi", "wasm-browser"]
   repository.
 - **The major is part of the path**: `github.com/x/y` is v0/v1, and `github.com/x/y/v2` is a different
   mod. A build contains **at most one version per major** of each mod.
+- **Before 1.0, the minor is the major (decided)**, as in Cargo: `0.3` → `0.4` is breaking and
+  `0.3.1` → `0.3.2` is compatible. The compiler's semver check enforces this, so pre-1.0 mods can
+  move fast and upgrades stay safe.
 - **Minimal version selection** within a major: each mod states the minimum version it needs, and the
   build uses the highest of those minimums. It is deterministic, needs no solver, and never picks a
   version nobody asked for.
@@ -175,7 +193,10 @@ github.com/acme/json                  v2 → v3 available (major)
   automatically ([`security.md`: Supply chain](security.md#supply-chain)).
 - **Transitive interaction**: if a new release of A requires B ≥ 1.5 and B 1.5 is still in its
   cooldown, `update` holds A back and says why.
-- How a release's age is established without a central service is open ([Open questions](#open-questions)).
+- **A release's age (decided)** is measured from the later of its tag date and the date this
+  project first saw the tag, which `update` and `outdated` record in the lockfile. Tag dates are set by
+  the author and can be backdated; first sight cannot. A first `add` has to trust the tag date, so it
+  shows the date and warns when the release is recent.
 
 ### Capability-scoped dependencies
 
@@ -312,16 +333,8 @@ Working-copy overrides are unpinned by nature, so they are for development only 
 
 ## Open questions
 
-- **Trustworthy release dates.** Tag and commit dates are set by the author, so they can be
-  backdated to skip the cooldown. Recommended: measure age from the later of the tag date and when
-  this project first saw the tag (recorded by `outdated` and `update`). A first `add` still has to
-  trust the tag date.
-- How are typosquatting and look-alike URLs caught without a naming authority?
-- Pre-1.0: is each `0.x` minor a major (Cargo), or does `v0` promise nothing (Go)?
-- ~~Do standard mods ship with the toolchain?~~ **Resolved:** only `moddil/core-*` does
-  ([`stdlib.md`: Distribution and versioning](stdlib.md#distribution-and-versioning)).
-- **Naming**: is "mod" too easily confused with Rust's `mod` (a module)? The distinction between mod
-  and module needs to stay clear in docs and tooling.
+None at present.
+
 
 ## Prior art
 

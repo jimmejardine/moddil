@@ -1,6 +1,6 @@
 # Runtime: scheduling, executors and I/O
 
-> **Status:** decided direction, details open. Listed in the [index](README.md). The concurrency
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). The concurrency
 > *model* (structured tasks, sharing, cancellation) is in [`concurrency.md`](concurrency.md) and
 > [`lifecycle.md`](lifecycle.md); this document covers what runs it: runtimes, executors, the I/O reactor,
 > and how they differ by target. Snippets are **illustration only**.
@@ -111,12 +111,12 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](r
 | Issue | Moddil's answer |
 |---|---|
 | A task blocks its OS thread | All I/O goes through effects, so safe code cannot block. FFI functions are declared `blocking` and run on the `blocking` executor automatically. |
-| A long CPU loop never yields | **Recommended:** preemption at compiler-inserted safe points in loops and function entries (a cheap flag check), as in Go 1.14+ and Erlang. `pinned` executors can disable it. See [Open questions](#open-questions). |
+| A long CPU loop never yields | **Decided:** preemption at compiler-inserted safe points at loop back-edges and function entries (a cheap flag check), as in Go 1.14+ and Erlang, guaranteed on `default` executors. `pinned` executors and `#[no_lock]`/`#[bounded]` hot paths can turn the checks off. The same safe points serve live update and cancellation. |
 | Thread identity, thread-local storage | Tasks migrate, so safe code has no thread-local storage. Task-local context comes from effects and handlers. Thread-affine resources require the `affine` executor (a capability). |
-| Stack memory | Native: large virtual reservations, committed lazily, with guard pages. Go-style stack copying is impossible because borrows point into frames. *Open:* very many tasks on wasm32 are limited by address space. |
+| Stack memory | Native: large virtual reservations, committed lazily, with guard pages. Go-style stack copying is impossible because borrows point into frames. **wasm32 (decided):** small initial stacks (around 16 KiB) that grow in segments, never by copying; the task limit is documented, and programs needing very many tasks target wasm64 (memory64). Revisited once growable stacks are standardised in stack switching. |
 | Biased RC after migration | See the task-biased proposal in [`memory.md`: Biased reference counting](memory.md#biased-reference-counting): migration costs nothing. `pinned` executors never migrate anyway. |
 | Switch cost | Task switch: tens of nanoseconds. OS thread switch: microseconds. |
-| Priorities, real time | OS thread priorities per executor. Task priorities within an executor are open ([Open questions](#open-questions)). |
+| Priorities, real time | **Decided:** priority lives on executors only (OS thread priority per pool); tasks within an executor are scheduled fairly, so latency-critical work gets its own executor. Moddil's `Mutex` uses priority inheritance across executors where the OS supports it. Guarantees of `pinned`: [`performance.md`: Real-time guarantees](performance.md#real-time-guarantees). |
 
 **Targets:** on browser WASM without cross-origin isolation, all executors collapse onto one thread;
 with it, Web Workers add threads. GPU devices act as executors for kernel tasks
@@ -135,12 +135,8 @@ thread; executor placement is recorded and simulated ([`determinism.md`](determi
 
 ## Open questions
 
-1. **Preemption:** guaranteed (BEAM-style, via compiler-inserted yield points) or cooperative?
-   Affects tail latency (HFT, game tick) and fairness. *Recommended* ([Tasks, threads and executors](#tasks-threads-and-executors)): compiler-inserted safe
-   points in loops and function entries, which `pinned` executors can disable.
-2. **Priority inversion** under the scheduler effect: does the core effect interface carry priority?
-3. **Many tasks on wasm32:** how far can the 4 GiB address space hold task stacks, and is segmented
-   or growable stack switching needed?
+None at present.
+
 
 ## Prior art
 

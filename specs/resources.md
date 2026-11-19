@@ -1,6 +1,6 @@
 # Resources: drop, cleanup and linear types
 
-> **Status:** decided direction, details open. Listed in the [index](README.md). Brings together the
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Brings together the
 > rules for destroying values and releasing resources, previously split between memory and error
 > handling. Ownership, borrowing and sharing are in [`memory.md`](memory.md). Snippets are
 > **illustration only**.
@@ -177,7 +177,9 @@ Rules:
   and it may be on any thread.
 - Every control-flow path, including error propagation, must consume a linear value. Error
   propagation (`?`) on a path holding a linear value requires an explicit handler for it, usually an
-  `errdefer` (exact syntax open, [Open questions](#open-questions)).
+  `errdefer` (decided). Every `?` or suspension point reached while a linear value is held needs an
+  `errdefer` that consumes it, or explicit handling; the compiler offers the `errdefer` as a quick
+  fix, so the cleanup is always visible where the value is used.
 - **Cancellation paths are checked like error paths**: a task observes cancellation only at a
   suspension point, and must consume its linear values on that path too, typically with
   `errdefer txn.rollback()` ([`lifecycle.md`: Cancellation and shutdown](lifecycle.md#cancellation-and-shutdown)).
@@ -202,7 +204,9 @@ Rules:
    - the primary error stays the one that propagates and is matched on;
    - suppressed errors appear in traces ([`error-handling.md`: Traces](error-handling.md#traces)), in the language server
      ([`error-handling.md`: Language server support](error-handling.md#language-server-support)) and in logs;
-   - they can be read from the error value (exact API open), as Java's `getSuppressed()` allows;
+   - they can be read from the error value with **`e.suppressed()`** (decided), a provided method of
+     the `Error` trait returning `impl Iterator<Item = &dyn Error>` in the order they occurred, as
+     Java's `getSuppressed()` does;
    - a failure inside an `errdefer` body is suppressed in this way automatically.
 5. **Traps inside drop are crashes** (class 3, D8: out of memory, ÷ 0, out of bounds). They terminate
    with a full trace, as in Rust. They are honest, never silently swallowed.
@@ -238,9 +242,5 @@ There are three cases, each with a precise answer:
 
 ## Open questions
 
-1. **Linear values on error paths:** what is the least noisy explicit handling (an `errdefer`
-   requirement, a handler clause, or a default consuming operation)?
-2. **Suppressed errors:** the exact API for reading them from an error value.
-3. ~~**Async drop.**~~ Resolved: there is no async drop. A resource is linear if skipping its
-   graceful close would lose data, and affine with an abrupt, non-suspending drop if it would only
-   lose politeness, as with TLS's `close_notify` ([`stdlib.md`: I/O](stdlib.md#io)).
+None at present.
+

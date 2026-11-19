@@ -1,6 +1,6 @@
 # Text and strings
 
-> **Status:** decided direction, details open. Listed in the [index](README.md). Syntax per
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Syntax per
 > [`syntax.md`](syntax.md); snippets are **illustration only**.
 
 ## Summary
@@ -107,8 +107,10 @@ Swift and C++ standard libraries store 15).
   format) go through `s.slice_bytes(a..b)`, which fails with a typed error when an offset is out of
   range or not on a boundary. There is no trapping integer slice in everyday code.
 - **Iteration** chooses its unit explicitly: `.bytes()`, `.chars()` (scalar values), or
-  `.graphemes()` (user-perceived characters, from `moddil/text`, because the Unicode tables are
-  large). Counting characters is `s.chars().count()`, visibly O(n).
+  `.graphemes()` (user-perceived characters). **Decided:** grapheme, word and sentence segmentation,
+  display width and normalisation live in `moddil/text`, part of the default batteries, because the
+  Unicode tables are large; core keeps UTF-8, scalar values and positions, so freestanding binaries
+  stay small. Counting characters is `s.chars().count()`, visibly O(n).
 - **A position belongs to its string, by type (decided).** A `StrPos` is a view
   ([`memory.md`: View types](memory.md#view-types)) derived from a borrow of
   the string it was found in, in the same way an accelerator buffer is branded with its device
@@ -166,8 +168,12 @@ Swift and C++ standard libraries store 15).
 
   - The newline after the opening `"""` is dropped; the final newline before the closing `"""` is
     kept, so a block is a sequence of complete lines.
-  - A line indented less than the closing quotes is a compile error, as is mixing tabs and spaces
-    in the stripped indentation.
+  - **Exact rules (decided, as Java's text blocks):** a whitespace-only line becomes an empty line,
+    whatever its indentation; trailing spaces and tabs are stripped from every line, and `\s` keeps
+    one deliberately; line endings are normalised to `\n`, so a CRLF source file gives the same
+    string, and `\r\n` is written explicitly when needed.
+  - A non-blank line indented less than the closing quotes is a compile error, as is mixing tabs and
+    spaces in the stripped indentation.
   - Raw blocks (`r"""…"""`) dedent but do not process escapes.
   - Any **tagged literal** may use a block ([`comptime.md`: Tagged string literals (embedded DSLs)](comptime.md#tagged-string-literals-embedded-dsls)).
 - Embedding a file's text is comptime `embed("path")` ([`comptime.md`](comptime.md)).
@@ -188,6 +194,25 @@ Swift and C++ standard libraries store 15).
   produces plain text and cannot be passed where a `Sql` or `Html` value is expected.
 - **Writing without allocating:** `fmt"…"` can write into any `Write` sink, including a fixed buffer
   on freestanding targets ([`freestanding.md`](freestanding.md)).
+
+## Regular expressions
+
+**Decision: the standard library's regular expressions are linear-time only.**
+
+- `moddil/regex` uses a linear-time engine (RE2 and Rust's `regex`), so matching can never blow up
+  on hostile input.
+- `re"…"` is a tagged literal, checked and compiled at compile time; capture groups become typed
+  fields ([`comptime.md`: Tagged string literals (embedded DSLs)](comptime.md#tagged-string-literals-embedded-dsls)).
+- Backreferences and lookaround are rejected, with a diagnostic pointing to **`moddil/regex-backtrack`**:
+  a separate standard mod with the same syntax, whose every match takes a step limit (fuel), so a
+  pathological pattern is always bounded and the bound is visible at the call site.
+
+## Interning
+
+**Decision: an instance interner, never a global one.** `moddil/collections` provides `Interner<T>`,
+which hands out typed `Symbol<T>` handles: `Eq` and `Hash` in O(1), resolved back through the
+interner that made them. There are no mutable globals, so there is no process-wide interner; a
+concurrent variant keeps its table in a sync cell.
 
 ## Comparison, normalisation and case
 
@@ -242,11 +267,5 @@ with Locale = i18n::fixed("de-CH") { assert(order_summary(&o) == "…") }
 
 ## Open questions
 
-1. **Graphemes in core or in `moddil/text`?** Core keeps freestanding binaries small; a mod means
-   `.graphemes()` needs a dependency.
-2. **Regular expressions:** linear-time only (RE2, Rust's `regex`), with `re"…"` compiled at
-   compile time? Backtracking features behind an explicit opt-in?
-3. **Exact `"""` rules:** blank lines with less indentation, trailing whitespace, and line-ending
-   normalisation (CRLF source files).
-4. **Interning:** should the standard library offer an interner (`Symbol`) for compilers and
-   protocol code, or leave it to mods?
+None at present.
+

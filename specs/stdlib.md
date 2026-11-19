@@ -1,7 +1,6 @@
 # Standard library and mods
 
-> **Status:** minor questions: the shape is decided, including cleanup, HTTP and vectorisation;
-> HTTP details remain. Listed in the [index](README.md). The catalogue of
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). The catalogue of
 > standard mods is in [Initial standard-mod catalogue](#initial-standard-mod-catalogue); this document defines the shape of the
 > core interfaces they share. Snippets are **illustration only**.
 
@@ -124,8 +123,10 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 
 | Mod | Contents | Needed by |
 |---|---|---|
-| `moddil/collections` | Vec, Map, Set, deque, ring buffers, persistent collections | G H W X |
-| `moddil/text` | Unicode algorithms (graphemes, normalisation, case folding), regex ([`text.md`](text.md)) | G W X |
+| `moddil/collections` | Vec, Map, Set, deque, ring buffers, persistent collections, `Interner<T>` | G H W X |
+| `moddil/text` | Unicode algorithms: graphemes, word and sentence breaks, display width, normalisation, case folding ([`text.md`](text.md)) | G W X |
+| `moddil/regex` | Linear-time regular expressions; `re"…"` compiled at compile time ([`text.md`: Regular expressions](text.md#regular-expressions)) | W X |
+| `moddil/regex-backtrack` | Backreferences and lookaround, with a step limit on every match | Opt-in |
 | `moddil/i18n` | The `Locale` effect: localised numbers, dates, plurals, collation, MessageFormat 2 ([`text.md`: Localisation: the `Locale` effect](text.md#localisation-the-locale-effect)) | G W X |
 | `moddil/serde` | Serialisation framework; binary and JSON formats; schema evolution; zero-copy validated views ([`memory.md`: Zero-copy I/O](memory.md#zero-copy-io)) | G H W X |
 | `moddil/fs` / `moddil/io` | Files, streams, buffers | H W X |
@@ -254,6 +255,36 @@ gen fn read_records(file: &mut File) -> Record {          // an iterator of Reco
   ([`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear)); the compiler rejects a generator that could
   abandon one.
 
+### Coroutines
+
+**Decision: generators that receive a value on each resume are in v1.**
+
+```rust
+gen fn guard_ai(start: Pos) -> Action resume first: Frame {      // a Coroutine<Action, Frame, ()>
+    let mut f = first;
+    loop {
+        while !f.sees_player() { f = yield Action::Patrol }      // one action per tick
+        f = yield Action::Shout;
+        for _ in 0..30 { f = yield Action::Chase(f.player_pos()) }
+    }
+}
+
+// each game tick:
+let action = guard.resume(frame);
+```
+
+- **Why:** logic that the caller steps from outside: game behaviour across frames, protocol state
+  machines fed by an event loop Moddil doesn't control, simulation agents. Async I/O does not need
+  coroutines; `suspend` covers it.
+- **Type:** `Coroutine<Yield, Resume, Return>`. Only coroutines with `Resume = ()` implement
+  `Iterator`, so every generator is a coroutine.
+- **The first resume value** is bound by the `resume` parameter (`first` above); each later one is
+  the value of the `yield` expression.
+- **Same lowering as generators:** a state machine, with no stack of its own; the same linearity and
+  effect rules.
+- **Snapshots:** a coroutine is `Clone` when all the state it holds is, so rollback netcode can
+  snapshot and restore it ([multiplayer game](examples/01-multiplayer-game.md)).
+
 ## Collections
 
 Rust's names and shapes, in `core-*` (with an allocator) and `moddil/collections`:
@@ -367,6 +398,30 @@ http::serve(listener, app)?;
 - **Serving.** `http::serve(listener, app)` is the accept loop: one isolated scope per connection, and
   it returns when `stop_requested()` fires ([`lifecycle.md`: Two levels: stop, then cancel](lifecycle.md#two-levels-stop-then-cancel)).
   `http::serve_connection(conn, &app)` serves one connection for a hand-written loop.
+- **Typed extractors (decided).** Besides path parameters, a handler's parameters can be
+  extractors: `Query<T>`, `Header<"name", T>` and `Json<T>`. The router decodes and validates each
+  one, answering `400` (or `404` for a path parameter) before the handler runs.
+- **Middleware is a plain function (decided):** `fn(req: &Request, next: Next) -> Response`, attached
+  with `router.wrap(…)`. Middleware can **install handlers** for everything inside it, so a handler
+  asks for the current user as an effect instead of digging through request extensions:
+
+  ```rust
+  fn auth(req: &Request, next: Next) -> Response with Sessions, suspend {
+      match sessions.user_for(req.header("authorization")) {
+          Some(user) => with CurrentUser = user { next(req) },
+          None       => Response::status(Status::Unauthorized),
+      }
+  }
+
+  fn orders(q: Query<Page>) -> Response with user: CurrentUser, Db, suspend { … }
+
+  let app = Router::new().get("/orders", orders).wrap(auth);
+  ```
+
+- **Streaming bodies (decided).** `req.body()` buffers up to a configured limit and fails with a typed
+  `TooLarge` beyond it; `req.body_stream()` is a byte stream whose reads suspend. A response streams
+  from a generator, `Response::stream(gen { for row in rows { yield row.to_csv() } })`. Backpressure
+  comes from suspension.
 - **Testing without a socket.** `app.handle(&Request::get("/x"))` runs the router in-process.
 - **Client.** `http::get(url)` and `http::post(url, body: …, retries: 3, timeout: 5<s>)` use `Net`;
   `http::Client` holds configuration such as pooling and default headers.
@@ -395,7 +450,5 @@ http::serve(listener, app)?;
 
 ## Open questions
 
-1. **HTTP details:** streaming request and response bodies, the shape of middleware (functions that
-   wrap a handler), and query-string and header extraction into typed parameters.
-2. **Coroutines:** generators that receive a value on each resume (`let x = yield y`). Not in v0;
-   adding them later is backwards compatible.
+None at present.
+

@@ -1,6 +1,6 @@
 # Targets, Cross-compilation and Static Builds
 
-> **Status:** decided direction, details open. Indexed in [`README.md`](README.md).
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
 > Commands, target names and file formats are **illustration only**.
 
 ## Summary
@@ -76,12 +76,16 @@ Targets are named `os-arch[-abi][.version]`:
 | `macos-aarch64`, `macos-x86_64`, `macos-universal` | macOS; universal = both architectures in one file |
 | `wasm32-wasi`, `wasm32-browser` | WASM (R1) |
 
-- **CPU feature levels** are part of the target (e.g. `linux-x86_64+v3` for AVX2). The default is
-  conservative; hot functions can carry several versions selected at start-up.
+- **CPU feature levels** are part of the target (e.g. `linux-x86_64+v3` for AVX2). **Defaults
+  (decided):** x86-64-v2 (SSE4.2, POPCNT); armv8.0 for Linux and Windows on aarch64; apple-m1 for
+  macOS on aarch64; SIMD128 for WASM. Hot functions can carry several versions selected at start-up
+  (`#[multiversion(v3, v4)]`), and a `+v3` target is an explicit choice.
 - **Tier 1** targets are built and tested in CI on every change: Linux (x86-64, ARM64), Windows
   (x86-64), macOS (ARM64, x86-64), WASM (WASI and browser, R1).
-- **Tier 2** targets build but are tested less often (e.g. Windows on ARM, FreeBSD, RISC-V); the list
-  is open ([Open questions](#open-questions)).
+- **Tier 2** targets build but are tested less often (e.g. Windows on ARM, FreeBSD, RISC-V).
+- **A published target-tier policy (decided)** sets the bar, and the tier-2 list grows from
+  contributions: tier 1 needs CI hardware, two maintainers and the full test suite passing on every
+  change. Promotion is a Moddil Evolution proposal ([`governance.md`: Moddil Evolution](governance.md#moddil-evolution)).
 
 ## The libc strategy
 
@@ -96,6 +100,10 @@ Targets are named `os-arch[-abi][.version]`:
   mingw-w64 on Windows, `libSystem` on macOS.
 
 ## Dynamic glibc targets
+
+**Versions (decided):** stubs are generated from one ABI list for every glibc from 2.17, so any
+version can be chosen; `-gnu` without a version means 2.28 (RHEL 8, Debian 10), and the default moves
+with editions.
 
 Some programs must load libraries that only exist on the machine they run on:
 - GPU drivers: CUDA's `libcuda`, the Vulkan loader, OpenGL ([`accelerators.md`](accelerators.md));
@@ -130,6 +138,14 @@ Two payoffs:
 
 Signing keys and Apple credentials are **capabilities supplied at release time**, never stored in the
 build or the repository.
+
+- **macOS headers (decided):** the toolchain bundles only headers derived from Apple's open-source
+  releases (APSL) and generated `.tbd` link stubs, as Zig does, with a legal review before v1.
+  Frameworks beyond `libSystem` (AppKit, Metal) need the user's SDK, found automatically on a Mac or
+  given by path elsewhere.
+- **Notarisation without a Mac (decided):** `moddil release` signs and notarises through the App
+  Store Connect API on any host. The Developer ID certificate and the API key come from a
+  secret-provider handler at release time.
 
 ## Running and testing cross builds
 
@@ -166,12 +182,8 @@ build or the repository.
 
 ## Open questions
 
-- **Licensing review** of bundling macOS headers and link stubs.
-- Notarising from CI without a Mac, and how Apple credentials are held.
-- ~~Scope of iOS and Android packaging.~~ **Resolved** ([`ui.md`: Mobile packaging](ui.md#mobile-packaging)).
-- Which tier-2 targets (Windows on ARM, FreeBSD, RISC-V), and when they become tier 1.
-- The default CPU feature level per architecture.
-- Which glibc versions to ship stubs for.
+None at present.
+
 
 ## Prior art
 
