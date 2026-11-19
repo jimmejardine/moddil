@@ -136,8 +136,8 @@ struct ServerConfig {
   other processes can see), and never print
   ([`observability.md`: Secrets never reach observability](observability.md#secrets-never-reach-observability)).
 - Bad arguments exit with `Usage`; bad configuration with `Config`.
-- The configuration is passed down as a value, or provided as a context effect
-  ([`effects-and-capabilities.md`](effects-and-capabilities.md)).
+- The configuration is passed down as a value, or provided as context data
+  (`with ServerConfig = cfg { … }`, [`effects-and-capabilities.md`: Context data](effects-and-capabilities.md#context-data)).
 
 ### Traps: the process by default, isolated scopes on request
 

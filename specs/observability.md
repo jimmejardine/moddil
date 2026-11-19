@@ -75,6 +75,9 @@ metric.count("orders.filled", 1, venue: order.venue)
 - **Every scope and task is a span** automatically. The structured-concurrency tree is the span tree,
   so parent/child relationships need no manual context passing.
 - Users add spans for logical operations (`span("checkout") { … }`).
+- **Span fields carry request-scoped data** such as a request ID: `span("request", id: rid) { … }`.
+  Every log line and trace inside carries it, and it never appears in a signature
+  ([`effects-and-capabilities.md`: Context data](effects-and-capabilities.md#context-data)).
 - **GPU launches are spans** ([`accelerators.md`: Launches are structured tasks](accelerators.md#launches-are-structured-tasks)).
 - **Calls through the `Remote` effect** ([Distributed and multi-tier programs](distribution.md)) carry W3C Trace Context automatically, so a
   trace follows a request from browser to API to worker.

@@ -28,6 +28,7 @@
 | **Coherence** | At most one impl of a trait for a type in a program, enforced by the orphan rule and its exceptions ([Coherence: one impl per trait and type](types.md#coherence-one-impl-per-trait-and-type)). |
 | **Component** | A module marked `#[component(…)]` and placed on a tier (client, server, worker) of a multi-tier program ([Layer A: components and placement](distribution.md#layer-a-components-and-placement)). |
 | **Comptime** | Code evaluated by the compiler's interpreter at build time: generics, reflection and code generation ([Evaluation model](comptime.md#evaluation-model)). |
+| **Context data** | A user-defined nominal type listed after `with` (`with config: &AppConfig`): passed implicitly by exact type, read-only; replaces `Context` objects ([Context data](effects-and-capabilities.md#context-data)). |
 | **Context note** | A note attached after `?` (`load(p)? fmt"loading {p}"`), shown in traces without changing the error's type (D16) ([Error types](error-handling.md#error-types)). |
 | **Contract** | `requires`, `ensures` and `invariant` clauses after a signature; a failed contract traps (D13) ([Contracts as syntax](correctness.md#contracts-as-syntax)). |
 | **`Contracts`** | The ambient handler that sets which contracts are checked at run time (`all`, `pub_preconditions`, `none`), installed per scope ([Checking policy: the `Contracts` handler](correctness.md#checking-policy-the-contracts-handler)). |

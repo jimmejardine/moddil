@@ -35,7 +35,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Language definition and conformance](definition.md)                   | 🟢 complete        | [`definition.md`](definition.md)                                                                     |
 | [Glossary](glossary.md)                                                | reference          | [`glossary.md`](glossary.md): one line per Moddil term, linked to its definition                     |
 | **The language**                                                       |                    |                                                                                                      |
-| [Effects and capabilities](effects-and-capabilities.md)                | 🟡 minor questions | [`effects-and-capabilities.md`](effects-and-capabilities.md)                                         |
+| [Effects and capabilities](effects-and-capabilities.md)                | 🟢 complete        | [`effects-and-capabilities.md`](effects-and-capabilities.md)                                         |
 | [Memory: ownership, borrowing and sharing](memory.md)                  | 🟢 complete        | [`memory.md`](memory.md)                                                                             |
 | [Resources: drop, cleanup and linear types](resources.md)              | 🟢 complete        | [`resources.md`](resources.md)                                                                       |
 | [Values: copy, clone and equality](values.md)                          | 🟢 complete        | [`values.md`](values.md)                                                                             |

@@ -1,6 +1,6 @@
 # Effects and Capabilities
 
-> **Status:** decided direction, open questions remain. Indexed in [`README.md`](README.md).
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
 > Snippets are **illustration only**.
 
 ## Summary
@@ -20,6 +20,7 @@
 | **Inferred inside, explicit at `pub`** | Effects are inferred inside a mod and written on `pub` signatures; no aliases. Long lists are shortened by domain traits whose handlers capture the infrastructure. |
 | **Implicit effect polymorphism** | An unannotated closure parameter means "whatever `f` does, I do too"; `with E` is written only to name or constrain. |
 | **One mechanism for restricted code** | Drop, kernels, comptime, workflows and freestanding profiles are all effect-set constraints. |
+| **Context data** | A user-defined nominal type can be listed after `with` like a trait: found by exact type, read-only (`with config: &AppConfig`). It replaces `Context` objects ([Context data](#context-data)). |
 | **Zero cost when handlers are known** | Effect calls compile to direct calls; abortive handlers to ordinary returns. |
 
 ## Problem
@@ -243,7 +244,7 @@ fn main(…) -> ExitCode {
 | **Standard traits** | `Time`, `Rand`, `Net`, `Fs`, `Stdin`, `Stdout`, `Stderr`, `Env`, `Process`, `Gpu`, `Remote`, `Introspect`, `Locale`, `Dom`, `Js` | Traits in standard mods; handlers in runtime and simulation mods ([`runtime.md`: Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)) |
 | **Capabilities with no handler to swap** | `ffi`, `unsafe`, `nondet` | Declared and visible to every consumer; `ffi` and `unsafe` are treated as high risk ([`interop.md`: The safety boundary](interop.md#the-safety-boundary)); `nondet` marks opt-in nondeterminism such as fast-math and float atomics, and is forbidden in replayable code ([`determinism.md`: The `nondet` effect](determinism.md#the-nondet-effect)) |
 | **Ambient, write-only** | `log`, `span`, `metric`, `Contracts` | Never written in signatures; cannot feed values back ([`observability.md`](observability.md)). `Contracts` sets which contracts are checked at run time ([`correctness.md`: Checking policy](correctness.md#checking-policy-the-contracts-handler)) |
-| **User-defined** | any trait | Context such as a database pool (`Db`), configuration, feature flags ([Directions (not yet decided)](#directions-not-yet-decided)) |
+| **User-defined** | any trait, or a nominal data type as read-only context | A database pool (`Db`), configuration, the tenant, feature flags ([Context data](#context-data)) |
 
 **`spawn` is its own effect (decided).** Starting tasks is separate from suspending: `drop`,
 GPU kernels and freestanding profiles without a scheduler must be able to forbid `spawn` while still
@@ -490,11 +491,41 @@ No mainstream language has made a typed effect system popular. The measures:
 | [Web store](examples/03-web-store.md) | A user-defined `Db` trait instead of threading a pool; narrowed `Fs` for uploads |
 | [Hashiverse](examples/04-hashiverse.md) | `TimeProvider`, `TransportFactory` and `ClientStorage` stay traits but are used after `with`, so the `RuntimeServices` plumbing disappears; the in-memory transport becomes a handler |
 
-## Directions (not yet decided)
+## Context data
 
-- **Context traits** in place of `Context` objects: a database pool, configuration or a request ID
-  provided by a handler, in the same way as the domain traits in
-  [Signatures and inference](#signatures-and-inference).
+**Decided: context is traits for behaviour, and nominal data types for data.** This replaces
+`Context` objects threaded through every call.
+
+- **Behaviour** (a database pool, a clock, payments) is a trait used as an effect, as everywhere in
+  this document. A handler captures its own resources when it is built
+  ([Effects inside handlers](#effects-inside-handlers)).
+- **Data** (configuration, a tenant, feature flags) needs no wrapper trait. **Any user-defined
+  nominal type** can be listed after `with`, and is found by its exact type, like a trait:
+
+  ```rust
+  struct AppConfig { max_items: int, region: Region }
+
+  fn list(cat: &Catalog) -> Vec<Item> with config: &AppConfig, Db {
+      cat.items().take(config.max_items)
+  }
+
+  with AppConfig = cfg, Db = pool { serve() }
+  ```
+
+  - **Read-only:** the name is always a shared borrow (`config: &AppConfig`), so one value is safe
+    to share across the block's tasks. Anything that must change lives in sync cells inside the type.
+  - **Nominal types only:** built-in and generic types (`String`, `int`, `Vec<T>`, `Option<T>`) are
+    not allowed, so two libraries can never collide on `String`; wrap the value in a newtype.
+  - It **propagates and is inferred like an effect**: inferred inside a mod, written on `pub`
+    signatures, shown by the editor and `moddil explain`.
+- **Request-scoped values are split by purpose:**
+  - *Observability data* (a request ID, a trace ID) goes on the ambient `span` as fields,
+    `span("request", id: rid) { … }`, so it reaches every log line and trace without appearing in
+    any signature ([`observability.md`](observability.md)).
+  - *Deadlines and cancellation* already belong to the task scope
+    ([`lifecycle.md`: Cancellation and shutdown](lifecycle.md#cancellation-and-shutdown)).
+  - *Data that changes behaviour* (the authenticated user, the tenant) is context data installed
+    per request: `with User = authed { handle(req) }`.
 
 ## Resolved questions
 
