@@ -101,7 +101,7 @@ impl Links for MemoryLinks {
 /// with Rand = rand::seeded(7) { make_code().len() }   // => 6
 fn make_code() -> Code with rand: Rand {
     let s: String = (0..6).map(|_| rand.pick(ALPHABET)).collect();
-    try { Code::new(s)? }.unwrap()      // gap 1: built from ALPHABET, so this cannot fail
+    Code::new(s) ?! "built from ALPHABET"
 }
 
 /// `POST /links`
@@ -276,18 +276,19 @@ own document in the [index](README.md).
 Writing a complete program needed these, and no spec decides them yet. The spellings above are
 placeholders. Each gap is recorded as an open question in its area.
 
-Resolved since the tour was written: effects are traits used after `with`, how handlers are
-defined, how a handler gets its own dependencies, `spawn` being an effect, the HTTP router, server
-and client ([HTTP](stdlib.md#http)), and the `RefinementError` a validated newtype raises
-([Validated newtypes](correctness.md#validated-newtypes-lightweight-refinements))
-([Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly), [Defining handlers](effects-and-capabilities.md#defining-handlers),
-[Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers),
-[The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)).
+Resolved since the tour was written:
+
+- effects are traits used after `with`, how handlers are defined, how a handler gets its own
+  dependencies, and `spawn` being an effect ([Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly),
+  [Defining handlers](effects-and-capabilities.md#defining-handlers), [Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers),
+  [The effect catalogue](effects-and-capabilities.md#the-effect-catalogue));
+- the HTTP router, server and client ([HTTP](stdlib.md#http));
+- the `RefinementError` a validated newtype raises ([Validated newtypes](correctness.md#validated-newtypes-lightweight-refinements));
+- `?!` for a call that cannot fail, and how `catch` arms name an error union's members
+  ([This cannot fail here](error-handling.md#this-cannot-fail-here), [Matching removes what it handles](error-handling.md#matching-removes-what-it-handles)).
 
 | # | Gap | Open question in |
 |---|---|---|
-| 1 | A short, visible "this cannot fail" form instead of `try { Code::new(s)? }.unwrap()` | [`error-handling.md`](error-handling.md#open-questions), Q5 |
-| 2 | How `catch` arms name the variants of an error union (`DecodeError(e)`, `LinkError(Taken(_))`); no longer in the code, since the router maps errors | [`error-handling.md`](error-handling.md#open-questions), Q6 |
 | 3 | The `Args` API and named exit codes such as `ExitCode::Unavailable` | [`lifecycle.md`](lifecycle.md#open-questions) |
 | 5 | The `Sim` API: nodes, per-node handlers, addresses, stopping | [`determinism.md`](determinism.md#open-questions), Q6 |
 | 6 | How an unhandled `?` inside a test is reported | [`testing.md`](testing.md#open-questions), Q4 |

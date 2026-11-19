@@ -1,6 +1,6 @@
 # Error Handling
 
-> **Status:** survey + partial decisions. Indexed in [`README.md`](README.md) and defines
+> **Status:** decided, minor questions remain. Indexed in [`README.md`](README.md) and defines
 > requirement **R3** ([Firm requirements (decided)](requirements.md#firm-requirements-decided)). Decisions made so far are marked **Decided**; everything else is open.
 
 ## Decisions so far
@@ -22,6 +22,11 @@
 | D13 | **A failed contract traps** (class 3). A broken contract is a bug, not an error; untrusted input goes through validated newtypes or checks that return errors ([`correctness.md`: Decisions to lock early](correctness.md#decisions-to-lock-early)). |
 | D14 | **Discarding an error is explicit and needs a reason**: `discard(r, "best-effort cache warm")`, visible in reviews and semantic diffs ([Entry points must handle everything (R3)](#entry-points-must-handle-everything-r3)). |
 | D15 | **In a task scope, the first error wins**: it cancels the sibling tasks and propagates with the scope's ordinary error type; errors that siblings raise before they finish are attached to it as suppressed (as D10). Cancelled siblings report `Cancelled`, which is not an error. Running every task to completion is a library choice (`parallel_map_all`), not a scope policy ([Tasks and concurrency](#tasks-and-concurrency)). |
+| D16 | **Context is a note after `?`**: `load(p)? fmt"loading config {p}"` attaches a note to the error without changing its type or variant; the note is built only on the error path ([Error types](#error-types)). |
+| D17 | **`?!` asserts that a call cannot fail**: `Code::new(s) ?! "built from ALPHABET"` traps (class 3) with the reason if it does; the reason is required ([This cannot fail here](#this-cannot-fail-here)). |
+| D18 | **`catch` arms name error types, then patterns**: `DecodeError(e)`, `LinkError::Taken(c)`, and inferred tags such as `Io(NotFound)`; no flattening ([Matching removes what it handles](#matching-removes-what-it-handles)). |
+| D19 | **No built-in resumable recovery**: "retry" or "use a default" decided by a caller is an ordinary effect trait, whose function-like handler resumes ([Results and effects](#results-and-effects)). |
+| D20 | **The model:** `fail(E)` is a non-resumable effect compiled to the return channel, with `Result` as its value form; error sets are inferred open unions with payloads, explicit on `pub` signatures; error return traces are on in debug builds ([Summary of the model](#summary-of-the-model)). |
 
 ## Three outcome classes
 
@@ -69,9 +74,22 @@ let c: Config = r?                                       // value → effect (re
 ```
 
 **Performance is identical.** A `fail` handler that cannot resume compiles to an ordinary return
-through the return channel (as with Koka's evidence passing and Swift's typed throws). Resumable
-recovery ("retry", "use a default") would be a *separate* effect, so ordinary errors never pay for
-it.
+through the return channel (as with Koka's evidence passing and Swift's typed throws).
+
+**Resumable recovery is an ordinary effect trait (D19).** When the caller should decide how to
+recover ("retry", "use a default", Common Lisp's restarts), the code asks through a trait, and
+the handler's answer lets it continue:
+
+```rust
+trait OnMissing { fn default_for(&self, key: &Key) -> Value; }
+
+fn lookup(key: &Key) -> Value with on_missing: OnMissing {
+    cache.get(key).unwrap_or_else(|| on_missing.default_for(key))
+}
+```
+
+There is no built-in recovery effect, so ordinary errors never pay for one
+([`effects-and-capabilities.md`: Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly)).
 
 ### Why `Result`-only languages duplicate higher-order APIs
 
@@ -138,6 +156,18 @@ let config = try { load(p)? } catch {
 ```
 
 - A `catch` handles only the variants it lists. **The remaining variants propagate automatically.**
+- **How arms are named (D18).** A named error type is matched by its name: `DecodeError(e)` binds the
+  whole value, and `LinkError::Taken(c)` matches one variant through its enum path. Inferred tags
+  are matched by tag (`Io(NotFound)`, `Toml{line}`). Nothing is flattened, so two error enums that
+  share a variant name never clash:
+
+  ```rust
+  try { create(req)? } catch {
+      DecodeError(e)      => bad_request(e),
+      LinkError::Taken(c) => conflict(c),
+      Io(NotFound)        => not_found(),
+  }
+  ```
 - The inferred error set after the catch is the original set **minus** the handled cases.
 - `match` on a reified `Result` works too, with exhaustiveness checking.
 
@@ -149,6 +179,23 @@ let config = try { load(p)? } catch {
 - Open details: how `return`/`break` inside a try block interact with it, and whether the error type
   of a try block can always be inferred (a known problem for Rust's unstable `try_blocks`; open
   unions avoid most of it).
+
+### This cannot fail here
+
+Sometimes a fallible call cannot fail in context: the input was built from known-good parts, or a
+check just before ruled the error out. **`?!` says so (D17):**
+
+```rust
+let code = Code::new(s) ?! "built from ALPHABET";
+```
+
+- It sits where `?` would, and the call's errors leave the error set.
+- If the error happens anyway, it is a bug: the program **traps** (class 3) with the reason and the
+  error's variant, like a failed contract (D13).
+- **The reason is required**, as for `discard` (D14), so the assumption is visible in review and in
+  semantic diffs.
+- Under assurance level L1 the verifier must prove the error unreachable
+  ([`correctness.md`: Assurance levels per mod](correctness.md#assurance-levels-per-mod)).
 
 ### Entry points must handle everything (R3)
 
@@ -199,8 +246,25 @@ inference:
   semantic diffs meaningful ("`parse()` can now fail with `Io`", [Diffs, code review and version control](semantic-vcs.md)).
 - Named error types are still possible for documentation and reuse.
 
-*Open:* how to attach context (`.context("loading config")`, as in `anyhow`) without losing the
-structured variant?
+**Context is a note after `?` (D16).** A string after `?` attaches a note to the error as it
+propagates:
+
+```rust
+fn start(p: Path) -> App {
+    let cfg = load(p)? fmt"loading config {p}";
+    let db  = connect(&cfg.db)? fmt"connecting to {cfg.db}";
+    …
+}
+// Io(NotFound) at /etc/app.toml
+//   while loading config /etc/app.toml
+//   while starting app
+```
+
+- The note is **metadata**, like the error return trace and suppressed errors: the error's type
+  and variant do not change, so `catch Io(NotFound)` still matches. This is what `anyhow`'s
+  `.context()` loses by wrapping.
+- The note is **built only on the error path**; the happy path pays one branch, as for any `?`.
+- Notes stack up the chain and appear in traces and in `Display`.
 
 ## Traces
 
@@ -295,9 +359,12 @@ sync cells and abandoning linear values
 | **Kotlin "rich errors"** (announced 2025, in design) | Evidence that mainstream languages are converging on union error types | Status uncertain |
 | **SPARK Ada, Pony, Elm, Koka** | Compile-time "every error handled" (prior art for R3) | Pony's `x / 0 = 0` (Moddil traps instead, D6) |
 
-## Strawman (not yet decided)
+## Summary of the model
 
-- `?` and `try {}` (decided), with `catch` that handles listed variants and propagates the rest.
+All decided:
+
+- `?` and `try {}`, with `catch` that handles listed variants and propagates the rest; context
+  notes after `?`; `?!` for calls that cannot fail.
 - `fail(E)` as an effect underneath; `Result` as its value form.
 - Inferred open error unions with payloads; explicit sets at mod boundaries.
 - Non-resumable `fail`, compiled to the return channel; no unwinding for errors.
@@ -308,18 +375,15 @@ sync cells and abandoning linear values
 
 ## Open questions
 
-1. Should a resumable recovery effect ("retry"/"default") exist as a separate effect?
-2. How is context attached to structured errors ([Error types](#error-types))?
-3. Should errors from the `Remote` effect ([Distributed and multi-tier programs](distribution.md)) have a standard shape (timeout, unreachable,
-   incompatible version), and how are errors serialised across tiers?
-4. Checked-exception fatigue (Java) vs inference: how much of an error set should be inferred?
-5. **"This cannot fail here."** With `fail` as an effect, asserting that a fallible call cannot
-   fail is `try { Code::new(s)? }.unwrap()`. Should there be a shorter, visible form that traps
-   with a message (Rust's `expect`), and how is it spelled ([`tour.md`](tour.md#gaps-the-tour-exposed))?
-6. **`catch` arms for an error union.** How are the variants of `fail(LinkError | DecodeError)`
-   named in a `catch`: by type (`DecodeError(e)`, `LinkError(Taken(_))`), flattened (`Taken(_)`),
-   or by a type pattern (`e: DecodeError`)? [Matching removes what it handles](#matching-removes-what-it-handles)
-   shows one example and no rule ([`tour.md`](tour.md#gaps-the-tour-exposed)).
+Resolved: resumable recovery (D19), context (D16), "cannot fail" (D17), `catch` arms (D18);
+`Remote` errors have the standard shape in [`distribution.md`: The `Remote` effect](distribution.md#the-remote-effect);
+how much is inferred follows the effect rule: inferred inside a mod, explicit on `pub`
+([`effects-and-capabilities.md`: Signatures and inference](effects-and-capabilities.md#signatures-and-inference)).
+
+1. **`return` and `break` inside a `try` block:** do they leave the block or the function, and can
+   a try block's error type always be inferred ([Try blocks](#try-blocks))?
+2. **Reading suppressed errors:** the API on an error value
+   ([`resources.md`: Open questions](resources.md#open-questions)).
 
 ## Background
 

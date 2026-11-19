@@ -39,7 +39,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Memory: ownership, borrowing and sharing](memory.md)                  | 🟡 minor questions | [`memory.md`](memory.md)                                                              |
 | [Resources: drop, cleanup and linear types](resources.md)              | 🟡 minor questions | [`resources.md`](resources.md)                                                        |
 | [Values: copy, clone and equality](values.md)                          | 🟡 minor questions | [`values.md`](values.md)                                                              |
-| [Error handling](error-handling.md)                                    | 🟠 major questions | [`error-handling.md`](error-handling.md)                                              |
+| [Error handling](error-handling.md)                                    | 🟡 minor questions | [`error-handling.md`](error-handling.md)                                              |
 | [Type system core](types.md)                                           | 🟡 minor questions | [`types.md`](types.md): traits, generics, optional values, paradigms                  |
 | [Functions and closures](closures.md)                                  | 🟡 minor questions | [`closures.md`](closures.md)                                                          |
 | [Modules, visibility and program structure](modules.md)                | 🟡 minor questions | [`modules.md`](modules.md)                                                            |

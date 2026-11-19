@@ -70,6 +70,8 @@ mod web    { … api::checkout(cart) … }   // here: with Remote, suspend, fail
 - Calling another component is a **`Remote` effect**. It never looks like a local call.
 - It has **typed failures** under R3: `Timeout`, `Unavailable`, `Incompatible` (version), `Cancelled`,
   plus the callee's own errors.
+- **Errors that cross a tier must be `Serialize`**, checked by the compiler, so the callee's own
+  errors arrive as typed values ([`error-handling.md`](error-handling.md)).
 - **Deadlines and cancellation propagate** across calls, because a remote call is part of the caller's
   structured-concurrency scope ([`concurrency.md`](concurrency.md)). A request that fans out to
   workers is one scope spanning machines.
