@@ -126,8 +126,13 @@ CI with only a CPU pool.
 "brand" trick in Rust's GhostCell). Mixing buffers from different devices is a compile error, with no
 device indices in the types. When devices are only known dynamically (a `Vec` of devices),
 `.erase()` turns a buffer into `Buffer<T, dyn Gpu>`, and the device is checked at launch. A mismatch is a
-bug and traps. The brand mechanism is a general type-system feature to define. It could also tie
-indices to their arena and DMA buffers to their NIC ring.
+bug and traps. The brand mechanism is a general type-system feature. It could also tie indices to
+their arena and DMA buffers to their NIC ring.
+
+- **Brands are scoped and second-class (decided)**, as in GhostCell. Generic code takes the brand
+  as a parameter (`fn f<dev>(b: &Buffer<T, dev>)`), and a branded value is a view that cannot
+  outlive its device handle ([`memory.md`: View types](memory.md#view-types)). To store or send a
+  buffer, `.erase()` it.
 
 ## Memory spaces and buffers
 
@@ -163,6 +168,14 @@ Streams, queues and events are runtime-handler details ([Runtimes and backends](
 removes the classic bugs: using a buffer before its kernel finished, freeing it while it is in use,
 and forgetting a fence.
 
+**Sharing a device (decided).** Within a program, launches on a device queue in scope order, with
+optional priorities per scope. Sharing a device between processes is left to the driver and
+operating system (MPS, MIG, time-slicing), configured in the deployment manifest.
+
+**Multi-GPU collectives** (all-reduce, broadcast) are a library on device handles and scopes,
+`moddil/collective` (decided). It uses NCCL or RCCL through FFI where available, and a portable
+fallback otherwise.
+
 ## Race freedom inside kernels
 
 - **Tile kernels:** each program instance receives its own **disjoint output tile**: the GPU
@@ -190,7 +203,12 @@ and forgetting a fence.
   - handed to a graph compiler for TPUs and NPUs (StableHLO/XLA, ONNX Runtime, Core ML, OpenVINO);
     this is the **only** way to reach NPUs, since nobody writes NPU kernels; or
   - lowered to generated tile kernels for GPUs and CPU pools.
-- Tensor types live in a mod, not the core language (R2).
+- Tensor types live in a mod, not the core language (R2). **Multi-dimensional slicing is core
+  syntax** (decided), spelled with ranges because `:` is taken by named arguments: `a[.., 1..3]`,
+  `a[i, ..]`.
+- **Autodiff** is a comptime transformation in a mod, `moddil/autodiff`, in the style of Enzyme
+  (decided): it derives `grad(f)` for any differentiable function, kernels and loops included, with
+  no compiler change.
 
 ## Algorithm and schedule
 
@@ -212,20 +230,31 @@ and forgetting a fence.
   1. **WebGPU first.** It serves the browser (R1) and the game example, runs on every vendor, and
      through wgpu gives portable CI on Vulkan, Metal and DX12.
   2. **CUDA second.** Peak performance and tensor cores, for the HFT research workloads.
-- **Feature tiers** (subgroups, f16, tensor cores, shared-memory size) are target capabilities checked
-  at compile time. A kernel that needs tensor cores cannot be built for a target without them; a
-  schedule can provide a fallback.
+- **Feature tiers** (subgroups, f16, tensor cores, shared-memory size) are declared by the kernel
+  (`#[requires(f16, subgroups)]`). On a device that lacks a feature (decided):
+  - the compiler substitutes an **automatic emulation** (subgroups through workgroup memory, f16
+    through f32 with f16 rounding on store) and **warns**: at build time for known targets, and at
+    `devs.pick` as a logged warning;
+  - an author-written `#[fallback]` variant, or a schedule, replaces the emulation where wanted;
+  - only a feature with no emulation is a typed error at pick time.
 - **Linking:** GPU drivers (CUDA's `libcuda`, the Vulkan loader) are installed per machine and loaded
   dynamically, so GPU programs on Linux use a dynamic glibc target with a pinned minimum version;
   everything else in them stays static ([`targets.md`: Dynamic glibc targets](targets.md#dynamic-glibc-targets)).
 - The **CPU simulator** runs kernels deterministically on the CPU. It gives GPU-free tests and CI,
   race detection ([Race freedom inside kernels](#race-freedom-inside-kernels)), and lets the same kernels run on servers without GPUs.
+  It is **bit-exact where rounding is specified** (decided): strict IEEE add, multiply and FMA,
+  and correctly rounded `moddil/math`. Where vendor approximations are allowed (`math::fast`,
+  tensor-core accumulation order), it documents a tolerance; those paths perform `nondet`
+  ([`determinism.md`: The `nondet` effect](determinism.md#the-nondet-effect)).
 
 ## Errors
 
 Following [`error-handling.md`](error-handling.md):
 - **Device out of memory, device lost, unsupported feature:** ordinary `fail` errors at allocation,
   launch or join. They must be handled (R3).
+- **Device loss** (a driver reset, an unplugged eGPU) is `fail(DeviceLost)` at the next launch,
+  join or transfer, and that device's buffers become invalid. **Hot-plugged** devices arrive as
+  events from `devs.watch()`; roles are not rebound automatically (decided).
 - **Faults inside a kernel** (out-of-bounds, unreachable, ÷ 0): class-3 traps, reported at the join
   with the kernel and the program instance that faulted.
 
@@ -245,39 +274,6 @@ Following [`error-handling.md`](error-handling.md):
 | [HFT](examples/02-hft-platform.md) | Research Monte Carlo, option pricing and ML on CUDA; tensor expressions for models; FPGA feed handlers through FFI |
 | [Web store](examples/03-web-store.md) | None needed |
 | [Hashiverse](examples/04-hashiverse.md) | Possibly proof-of-work on a GPU or CPU pool (to evaluate) |
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **Autodiff** is a comptime transformation in a mod, `moddil/autodiff`, in the style of Enzyme: it
-   derives `grad(f)` for any differentiable function, kernels and loops included, with no compiler
-   change.
-2. **Multi-GPU collectives** (all-reduce, broadcast) are a library on device handles and scopes,
-   `moddil/collective`, using NCCL or RCCL through FFI where available and a portable fallback
-   otherwise.
-3. **Multi-dimensional slicing is core syntax**, spelled with ranges because `:` is taken by named
-   arguments: `a[.., 1..3]`, `a[i, ..]`. Tensor types themselves stay in `moddil/tensor`.
-4. **The CPU simulator is bit-exact where rounding is specified** (strict IEEE add, multiply and FMA,
-   correctly rounded `moddil/math`). Where vendor approximations are allowed (`math::fast`,
-   tensor-core accumulation order) it documents a tolerance; those paths perform `nondet`
-   ([`determinism.md`: The `nondet` effect](determinism.md#the-nondet-effect)).
-5. **Device features are declared, emulated when missing, and warned about.** A kernel declares
-   what it needs (`#[requires(f16, subgroups)]`). On a device that lacks a feature, the compiler
-   substitutes an automatic emulation (subgroups through workgroup memory, f16 through f32 with f16
-   rounding on store) and warns: at build time for known targets, and at `devs.pick` as a logged
-   warning. An author-written `#[fallback]` variant replaces the emulation where wanted. Only a
-   feature with no emulation is a typed error at pick time.
-6. **Brands are scoped and second-class**, as in GhostCell. Generic code takes the brand as a
-   parameter (`fn f<dev>(b: &Buffer<T, dev>)`); a branded value is a view that cannot outlive its
-   device handle ([`memory.md`: View types](memory.md#view-types)), and `.erase()` gives the
-   runtime-checked form for storing or sending.
-7. **Device loss is an error, hot-plug is an event.** Losing a device is `fail(DeviceLost)` at the
-   next launch, join or transfer, and its buffers become invalid. New devices arrive as events from
-   `devs.watch()`; roles are not rebound automatically.
-8. **Sharing:** within a program, launches on a device queue in scope order, with optional
-   priorities per scope. Sharing between processes is left to the driver and operating system
-   (MPS, MIG, time-slicing), configured in the deployment manifest.
 
 ## Open questions
 

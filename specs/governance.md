@@ -6,7 +6,7 @@
 
 | Rule | One line |
 |---|---|
-| **Staged decision making** | Founder-led now; written triggers hand decisions to a core team, then an elected steering council; a foundation holds the name and the money. |
+| **Staged decision making** | Founder-led now; the founder decides when to hand decisions to a core team, then an elected steering council, with written triggers as guidance; a foundation holds the name and the money. |
 | **Moddil Evolution** | Proposals move from draft to stabilised in an edition, each with an example, a migration, an ecosystem run, reference paragraphs and conformance tests. |
 | **Agents as equals** | Agent reviews and approvals count as humans' do; contributions are marked as agent- or human-authored; humans break ties. |
 | **Low-friction contributions** | MIT/Apache-2.0, DCO sign-off, no CLA. |
@@ -81,6 +81,9 @@ The proposal process sketched in [`evolution.md`](evolution.md), formalised:
 - **Humans break ties**: when reviews split, or agents and humans disagree, the human reviewers
   decide.
 - An agent cannot certify that it has the right to contribute, so **its operator signs the DCO**.
+- **Agents do not vote or hold seats** (decided). Elections and council seats are for people,
+  because accountability, conduct enforcement and legal duties need a person. An agent's operator
+  votes as themselves.
 
 ### Contributions
 
@@ -98,6 +101,9 @@ The `moddil/*` mods ([`stdlib.md`](stdlib.md)) follow these rules on top of the 
   review record says whether the reviewer was a human or an agent.
 - **Wrappers are allowed**: a mod may wrap a C or Rust library ([`interop.md`](interop.md)),
   but it carries the `ffi` capability, which is visible to every consumer.
+- **Human review for `unsafe` and `ffi`** (decided): new or changed `unsafe` or `ffi` code in a
+  standard mod needs at least one human approval as well as the checker, the same default the
+  project asks of its users ([`unsafe.md`: Review and audit](unsafe.md#review-and-audit)).
 - **Editions**: standard mods follow language editions, with automated migrations ([Language evolution](evolution.md)).
 
 ### Code of conduct
@@ -108,8 +114,9 @@ The `moddil/*` mods ([`stdlib.md`](stdlib.md)) follow these rules on top of the 
 
 ### Name, logo and trademark
 
-- **"Moddil" and the armadillo logo are registered**, held by the founder until the foundation
-  exists ([`adoption.md`](adoption.md)).
+- **"Moddil" and the armadillo logo will be registered later, once there is adoption** (decided,
+  [`adoption.md`: Positioning: armour, not baggage](adoption.md#positioning-armour-not-baggage)).
+  Until the foundation exists, the founder holds them, with a written intent to transfer them.
 - **The policy is permissive**: community mods, books, talks, courses and "for Moddil" products may
   use the name freely.
 - **Implementations** may call themselves "Moddil <edition>" only if they pass that edition's
@@ -142,22 +149,6 @@ The `moddil/*` mods ([`stdlib.md`](stdlib.md)) follow these rules on top of the 
 Governance doesn't change what the examples can express; it decides how features they need get into
 the language (each proposal cites one), and how fast a security fix reaches them (advisories and the
 cooldown override).
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **Stage transitions** are the founder's decision, made in public with reasons; the table's
-   triggers are guidance ([Staged decision making](#staged-decision-making)).
-2. **Agents review and approve, but do not vote or hold seats.** Elections and council seats are
-   for people, because accountability, conduct enforcement and legal duties need a person. An
-   agent's operator votes as themselves.
-3. **Standard mods follow the same rule as everyone:** new or changed `unsafe` or `ffi` code in a
-   standard mod needs at least one human approval as well as the checker
-   ([`unsafe.md`: Review and audit](unsafe.md#review-and-audit)).
-4. **The trademark** is registered later, once there is adoption
-   ([`adoption.md`: Resolved questions](adoption.md#resolved-questions)). Until the foundation exists,
-   the founder holds it, with a written intent to transfer it.
 
 ## Open questions
 

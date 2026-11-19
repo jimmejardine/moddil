@@ -76,13 +76,16 @@ interoperate with a running network built in another language.
 - **WASM (R1).** Browser client in a Web Worker; Moddil's runtime-wasm (JSPI in the browser) should remove
   the need for a separate worker-proxy layer written in TypeScript.
 - **Interop with Rust ([Interoperability with C and Rust](../interop.md)).** Calling `hashiverse-lib` from Moddil during migration; wire
-  compatibility with Rust servers permanently.
+  compatibility with Rust servers permanently. **The Rust code is the spec:** the Moddil client
+  consumes the existing Rust wire types as consumed contracts and follows them, with no neutral
+  schema ([`data.md`: One contract system, in space and time](../data.md#one-contract-system-in-space-and-time)).
+  A written prose spec is welcome, but it is not the source of truth.
 - **Crypto and PoW performance ([Numerics and data](../numerics.md), [Concurrency across CPUs](../concurrency.md)).** Hash chains and signature checks must match Rust
   performance, natively and in WASM (SIMD).
 - **Capabilities and untrusted input ([Package management and supply-chain security](../packages-and-supply-chain.md), [Distributed and multi-tier programs](../distribution.md)).** Every byte from a peer is untrusted. The crypto mods
   must not have `Net` or `Fs`.
-- **Distributed without a centre ([Distributed and multi-tier programs](../distribution.md)).** A P2P system has no `hub`; every node runs the same code.
-  This tests whether Moddil's placement model fits symmetric topologies, not just client/server ones.
+- **Distributed without a centre ([Distributed and multi-tier programs](../distribution.md)).** A P2P system has no `hub`; every node runs the same code,
+  in the `peer` placement ([`distribution.md`: Layer A: components and placement](../distribution.md#layer-a-components-and-placement)).
 
 ## Success criteria
 
@@ -113,10 +116,4 @@ interoperate with a running network built in another language.
 
 ## Open questions
 
-- ~~Spec or Rust code?~~ **Resolved:** the Rust code is the spec. The Moddil client consumes the
-  existing Rust wire types as consumed contracts and follows them
-  ([`data.md`: One contract system, in space and time](../data.md#one-contract-system-in-space-and-time)).
-  A written prose spec is still welcome, but it is not the source of truth.
-- ~~One schema for both languages?~~ **Resolved:** no neutral schema; the Rust types are the schema.
-- ~~Symmetric P2P nodes?~~ **Resolved:** the `peer` placement
-  ([`distribution.md`: Layer A: components and placement](../distribution.md#layer-a-components-and-placement)).
+None at present.

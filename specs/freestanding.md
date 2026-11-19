@@ -64,7 +64,7 @@ fn on_trap(info: &TrapInfo) -> ! { log_to_flash(info); system_reset() }
 - `Rc` exists only when an allocator is available. On a single core, biased reference counting
   reduces to plain owner counts.
 - **Decided:** an `Rc` records its allocator only when it is not the default one; arenas stay
-  borrow-based ([`memory.md`: Resolved questions](memory.md#resolved-questions)).
+  borrow-based ([`memory.md`: Sharing: `.to_rc()`](memory.md#sharing-to_rc)).
 
 ## Concurrency without a runtime
 
@@ -81,6 +81,9 @@ Three levels, from nothing to a full scheduler:
 - Data shared between interrupts and the main loop goes through sync cells guarded by critical
   sections. A compile-time **priority-ceiling analysis** (as in Rust's RTIC) makes this deadlock-free
   and lock-free where priorities allow.
+- **Floats in interrupt handlers** are allowed when the handler declares them,
+  `#[interrupt(TIMER0, fpu)]` (decided). Using floats without `fpu` is a compile error; the runtime
+  enables lazy FPU state saving, and the stack analysis counts the extra frame.
 
 **L1: static tasks.**
 - A small runtime mod, `moddil/rt-embedded`, provides the scheduler handler with a fixed number of task
@@ -89,6 +92,10 @@ Three levels, from nothing to a full scheduler:
 - Stackful tasks on bare metal need only a register-saving context switch, as in an RTOS.
 - **Each task's stack size is computed at compile time** by stack-depth analysis: no unbounded
   recursion, and no indirect calls without a declared bound (see [`correctness.md`: Assurance levels per mod](correctness.md#assurance-levels-per-mod), level L1).
+  **The analysis covers all freestanding code** (decided): interrupt handlers, tasks and the main
+  loop, so a stack overflow is impossible rather than a crash. Recursion and indirect calls declare
+  a bound (`#[max_depth(8)]`); L2 tasks with an allocator may opt out per task and use a guard
+  region instead.
 - Structured concurrency still holds: the root scope lasts as long as the program.
 
 **L2: freestanding with an allocator and a full scheduler.** Executors behave as in hosted mode
@@ -192,6 +199,11 @@ in CI**.
 | ESP32-C3 / C6 | RISC-V microcontroller | Freestanding: `riscv32imc` | Architecture: yes. Wi-Fi and Bluetooth: no |
 | ESP32 / ESP32-S3 (e.g. Arduino Nano ESP32) | **Xtensa** | Not supported: no mainline LLVM backend (only Espressif's fork) | No |
 
+**Bare-metal tiers (decided):** tier 1 is `thumbv7em` (Cortex-M4F, on Renode) and `riscv64` QEMU
+`virt`, matching the [fifth reference example](examples/05-sensor-firmware.md); tier 2 is Cortex-M0+
+and M33, x86_64 bare metal and AArch64 `virt`; others are tier 3
+([`targets.md`: Target names and tiers](targets.md#target-names-and-tiers)).
+
 In short: Raspberry Pi computers are ordinary hosted targets and fully testable. Pico-class and modern
 Arduino boards are covered at the architecture level, with peripherals depending on HAL mods and
 emulator models. Classic 8-bit Arduinos are a stretch. Xtensa-based ESP32s are out of scope.
@@ -210,25 +222,6 @@ this CI. The options considered were:
 - live update; record and replay (by default);
 - unbounded recursion where stack analysis is required;
 - `Rc` without an allocator.
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **A fifth reference example:** [sensor firmware](examples/05-sensor-firmware.md) on Cortex-M4F
-   (Renode) and RISC-V (QEMU).
-2. **Scheduling:** `moddil/rt-embedded` is preemptive by priority by default; cooperative is an
-   option.
-3. **Stack-depth analysis applies to all freestanding code**: interrupt handlers, tasks and the main
-   loop, so a stack overflow is impossible rather than a crash. Recursion and indirect calls need a
-   declared bound (`#[max_depth(8)]`); L2 tasks with an allocator may opt out per task and use a
-   guard region instead.
-4. **Bare-metal tiers:** tier 1 is `thumbv7em` (Cortex-M4F, on Renode) and `riscv64` QEMU `virt`,
-   matching the fifth example; tier 2 is Cortex-M0+ and M33, x86_64 bare metal and AArch64 `virt`;
-   others are tier 3 ([`targets.md`: Target names and tiers](targets.md#target-names-and-tiers)).
-5. **Floats in interrupt handlers** are allowed when declared: `#[interrupt(TIMER0, fpu)]`. Using
-   floats without `fpu` is a compile error; the runtime enables lazy FPU state saving, and the stack
-   analysis counts the extra frame.
 
 ## Open questions
 

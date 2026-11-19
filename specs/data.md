@@ -57,8 +57,9 @@ struct Order {
 - `#[derive(Serialize, Deserialize)]` are comptime functions over static reflection
   ([`comptime.md`](comptime.md)) that produce typed impls of a **format-agnostic data model** (as
   serde does).
-- **Formats are mods.** `moddil/serde` ships JSON and the Moddil binary format; CBOR, MessagePack,
-  TOML and others are community mods on the same data model.
+- **Formats are mods.** `moddil/serde` ships JSON, TOML (for configuration, matching the
+  manifests) and the Moddil binary format (decided); YAML, CSV, CBOR, MessagePack and others are
+  community mods on the same data model.
 
 ### A binary format with locked tags
 
@@ -84,8 +85,10 @@ struct Order {
   **`contracts.lock` in the repository** (there is no registry,
   [`packages-and-supply-chain.md`](packages-and-supply-chain.md)). The compiler rejects a change
   that could not read data written by, or be read by, any recorded version still in use.
-- **Pruning is explicit**: `moddil contracts prune` removes versions that are no longer deployed or
-  stored, and the removal shows in review.
+- **Pruning is explicit and the owners' decision**: `moddil contracts prune` removes versions that
+  are no longer deployed or stored, and the removal shows in review. The tool advises from optional
+  deployment metadata ("no deployed instance or stored data uses v3") and warns when pruning a
+  version the metadata still lists.
 
 ### Unknown fields depend on the boundary
 
@@ -129,6 +132,8 @@ schema.sql                    -- derived: replaying the migrations; CI checks it
   service starts.
 - **No ORM.** Queries are SQL, typed by the compiler; rows come back as generated types or anonymous
   records.
+- **PostgreSQL and SQLite first** (decided): `moddil/sql` supports both from the start; other
+  databases come from the community through the same driver trait.
 
 ### The `Db` effect
 
@@ -146,6 +151,10 @@ fn place(order: Order) -> OrderId with db: Db, suspend, fail(DbError) {
   ([`effects-and-capabilities.md`](effects-and-capabilities.md)).
 - **Transactions are linear values**: they must be committed or rolled back
   ([`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear)).
+- **Tests choose their own `Db` handler** (decided); nothing is defaulted. The standard library
+  offers handlers (an in-memory SQLite or PGlite, a throwaway real PostgreSQL, a recorder), and a
+  test can read where it is running (on a developer machine, in CI, or locally pretending to be CI)
+  from its test environment and choose accordingly ([`testing.md`](testing.md)).
 
 ### Local storage
 
@@ -160,23 +169,6 @@ values are contracts, so a newer app version can always read what an older one s
 | [HFT](examples/02-hft-platform.md) | SBE-style zero-copy views for exchange feeds; typed SQL for reference data |
 | [Web store](examples/03-web-store.md) | Migrations-first PostgreSQL; `Db` effect with linear transactions; generated API contracts with old mobile clients still checked |
 | [Hashiverse](examples/04-hashiverse.md) | Wire compatibility with the Rust implementation through consumed contracts; local storage as contracts |
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **Simulation handlers for `Db` are the programmer's choice.** Nothing is defaulted: each test
-   installs the handler it wants. The standard library offers handlers (an in-memory SQLite or
-   PGlite, a throwaway real PostgreSQL, a recorder), and a test can read where it is running (on a
-   developer machine, in CI, or locally pretending to be CI) from its test environment and choose
-   accordingly ([`testing.md`](testing.md)).
-2. **`moddil/sql` supports PostgreSQL and SQLite first.** Other databases come from the community
-   through the same driver trait.
-3. **Pruning `contracts.lock`** is the owners' decision, made with `moddil contracts prune` and
-   visible in review. The tool advises from optional deployment metadata ("no deployed instance or
-   stored data uses v3") and warns when pruning a version the metadata still lists.
-4. **Standard text formats:** JSON and TOML (TOML for configuration, matching the manifests), plus
-   the binary format. YAML, CSV and others are community mods using the same derives.
 
 ## Open questions
 

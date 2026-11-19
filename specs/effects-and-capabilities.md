@@ -184,6 +184,9 @@ assert(calls == 3);
   rule as for closures ([`closures.md`](closures.md)).
 - **Methods declare their control effects.** A trait method may carry `with suspend` and `fail(E)`;
   those are what callers see ([Effects inside handlers](#effects-inside-handlers)).
+- **A single-method trait can be installed from a closure.** When a trait has exactly one required
+  method, a closure with a matching signature coerces to an anonymous impl of it, at a `with`
+  install or an explicit `dyn Trait` site only: `with Time = || t0 { … }`.
 
 ### Effects inside handlers
 
@@ -405,6 +408,11 @@ role. So handing a role to plain-`Db` code takes one explicit `with Db = input {
   one that only reaches it through callees needs nothing inside a mod and `with Net` at `pub`.
 - An effect set is a **set**: order doesn't matter, and a function with fewer effects can be used
   where more are allowed.
+- **Handler lookup is never hidden.** The language server shows which installs reach each use
+  ("`Time` here comes from `main.mdl:12` or `test_x:4`") with go-to-handler; `moddil explain f`
+  lists what `f` needs and the handlers in scope at a call; traces and the task tree show each
+  task's handler stack ([`observability.md`](observability.md)). A missing handler is a compile
+  error at the outermost entry point.
 - **No effect aliases.** Every effect is listed in a public signature, so a reader never has to look
   up what `Io` means. Coarse effects ([The effect catalogue](#the-effect-catalogue)) keep the lists
   short.
@@ -526,19 +534,6 @@ No mainstream language has made a typed effect system popular. The measures:
     ([`lifecycle.md`: Cancellation and shutdown](lifecycle.md#cancellation-and-shutdown)).
   - *Data that changes behaviour* (the authenticated user, the tenant) is context data installed
     per request: `with User = authed { handle(req) }`.
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **A single-method trait can be installed from a closure.** When a trait has exactly one required
-   method, a closure with a matching signature coerces to an anonymous impl of it, at a `with`
-   install or an explicit `dyn Trait` site only: `with Time = || t0 { … }`.
-2. **Handler lookup is surfaced everywhere.** The language server shows which installs reach each
-   use ("`Time` here comes from `main.mdl:12` or `test_x:4`") with go-to-handler; `moddil explain f`
-   lists what `f` needs and the handlers in scope at a call; traces and the task tree show each
-   task's handler stack ([`observability.md`](observability.md)). A missing handler is a compile
-   error at the outermost entry point.
 
 ## Open questions
 

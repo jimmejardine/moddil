@@ -39,7 +39,9 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
      **interface artefact is edition-neutral** ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)).
    - An edition may change syntax, defaults, lints and name resolution. It may change semantics only
      **inside a mod, and only when that mod moves to the new edition** (Go 1.22's loop variable is
-     the model).
+     the model), and **only if `moddil migrate` can rewrite old code to keep its old meaning**,
+     checked by comparing MIR (decided). A change that no tool can migrate, such as Python 3's
+     `str`/`bytes` split, is forbidden.
    - Nothing changes meaning across a mod boundary.
 2. **A compatibility promise between editions.** Within an edition, every new toolchain release is
    backwards compatible (as with Go 1 and Rust's stability guarantee). The only exceptions are
@@ -80,15 +82,17 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
      git repository, which authors opt into) from their tags with the new toolchain (Rust's crater,
      Swift's source-compatibility suite). Reproducible builds and the shared cache
      ([`build-times.md`: Cached builds](build-times.md#cached-builds)) keep this cheap.
-8. **Standard mods** follow semver, with the bump computed by `moddil diff`. They remove items only
+8. **Long-term support (decided).** One toolchain release a year is designated LTS and receives
+   security and soundness fixes for two years. Standard mods state the oldest LTS they support.
+9. **Standard mods** follow semver, with the bump computed by `moddil diff`. They remove items only
    across editions, always with replacement rules ([`stdlib.md`](stdlib.md)).
-9. **Agents and training data.**
+10. **Agents and training data.**
    - The surface syntax stays small and stable ([`syntax.md`](syntax.md)).
    - Editions, deprecations and migration rules are machine-readable through the agent API
      ([`agent-interface.md`](agent-interface.md)).
    - The compiler recognises constructs from older editions and offers the machine-applicable fix,
      so models trained on older code still converge quickly.
-10. **Binary and wire compatibility.** There is no stable native ABI; artefacts are rebuilt from
+11. **Binary and wire compatibility.** There is no stable native ABI; artefacts are rebuilt from
     source through the caches ([`types.md`](types.md)). WIT components and wire contracts are
     versioned and checked for compatibility ([`distribution.md`](distribution.md)).
 
@@ -100,19 +104,6 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
 | [HFT](examples/02-hft-platform.md) | Pinned toolchains; migrations verified as behaviour-preserving, which supports audit |
 | [Web store](examples/03-web-store.md) | A large codebase moves edition with `moddil migrate`; library upgrades applied with `moddil fix` |
 | [Hashiverse](examples/04-hashiverse.md) | Long-lived volunteer nodes run mixed versions, so wire compatibility matters more than source compatibility |
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **Edition cadence:** on demand, with minimum gaps of one, then two, then three years
-   ([cadence](#decisions)).
-2. **Semantic changes:** an edition may change run-time meaning only inside a mod that opts into
-   it, and only if `moddil migrate` can rewrite old code to keep its old meaning, checked by
-   comparing MIR. A change that no tool can migrate (Python 3's `str`/`bytes`) is forbidden.
-3. **Deprecation window:** at least one released minor version and six months.
-4. **Long-term support:** one toolchain release a year is designated LTS and receives security and
-   soundness fixes for two years. Standard mods state the oldest LTS they support.
 
 ## Open questions
 

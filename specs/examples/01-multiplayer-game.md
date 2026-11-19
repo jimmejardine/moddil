@@ -47,16 +47,21 @@ point is a real-time, authoritative-server architecture of the kind used by most
 - **GPU ([Concurrency across GPUs and accelerators](../accelerators.md))**: rendering and possibly particle/physics kernels through the WebGPU/WGSL path. The same
   kernel code could run server-side for authoritative physics.
 - **Placement and the `Remote` effect ([Distributed and multi-tier programs](../distribution.md))**: the client/hub/chat split in one program. Unreliable vs
-  reliable channels must be distinguishable in types (an unreliable send can be lost; the type system
-  should say so).
-- **Choreographies ([Distributed and multi-tier programs](../distribution.md))**: the join → match → play protocol written once from a global view and
-  projected to `client`, `hub` and `chat`.
+  reliable channels are distinguished in types: snapshots go over
+  `Channel<Snapshot, Datagram, Unordered>` ([`distribution.md`: The `Remote` effect](../distribution.md#the-remote-effect)).
+- **WebTransport only**: the game channel uses WebTransport, with no WebRTC fallback, so a browser
+  or network without it cannot play; chat stays on WebSocket.
+- **Choreographies ([Distributed and multi-tier programs](../distribution.md))**: the match lifecycle (join, ready, start, end) is written
+  once and projected to `client`, `hub` and `chat` with `moddil/choreo`, once it exists after v1
+  ([`distribution.md`: Choreographies (after v1)](../distribution.md#choreographies-after-v1)).
+  Per-frame snapshot streaming is ordinary code.
 - **Untrusted client ([Distributed and multi-tier programs](../distribution.md))**: all data from `client` is untrusted; the hub is authoritative. Anti-cheat
   starts with the type system refusing to let client-claimed state flow into authoritative state
   without validation.
 - **Shared code across tiers**: game rules and the simulation step run in *both* `client` (prediction)
-  and `hub` (authority). They must compile to WASM and native and give **bit-identical results**
-  (deterministic floating point or fixed point, [Numerics and data](../numerics.md)).
+  and `hub` (authority). They must compile to WASM and native and give **bit-identical results**.
+  Floating point is enough: strict IEEE 754 and a correctly rounded `moddil/math` give identical
+  results on both ([`determinism.md`: Deterministic maths](../determinism.md#deterministic-maths)).
 - **Structured concurrency ([Concurrency across CPUs](../concurrency.md))**: one task scope per match and per room. When a match ends, all its
   tasks end with it.
 - **Deterministic simulation ([Determinism and reproducibility](../determinism.md))**: run hub + chat + N simulated clients in one process, with
@@ -91,14 +96,4 @@ Initial targets, to be refined:
 
 ## Open questions
 
-- ~~Deterministic floating point across WASM and native, or fixed point?~~ **Resolved:** floating
-  point. Strict IEEE 754 and a correctly rounded `moddil/math` give identical results on WASM and
-  native ([`determinism.md`: Deterministic maths](../determinism.md#deterministic-maths)).
-- ~~Is WebTransport sufficient, or is a WebRTC fallback required?~~ **Resolved:** WebTransport only
-  for the game channel. There is no fallback, so a browser or network without WebTransport cannot
-  play; chat stays on WebSocket.
-- ~~How much of the hub is a choreography?~~ **Resolved:** the match lifecycle (join, ready, start,
-  end) uses `moddil/choreo` once it exists after v1; per-frame snapshot streaming is ordinary code
-  ([`distribution.md`: Resolved questions](../distribution.md#resolved-questions)).
-- ~~Is a game UI/HUD a use case for `moddil/ui`?~~ **Resolved:** there is no standard UI mod; the HUD is
-  GPU-rendered or DOM ([`ui.md`: Games and graphics](../ui.md#games-and-graphics)).
+None at present.

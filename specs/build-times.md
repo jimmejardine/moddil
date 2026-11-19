@@ -106,7 +106,7 @@ not.
 | Function body, same signature | Yes | Swap the table entry |
 | Signature (parameters, effects, error set) | Yes | Recompile the callers incrementally and swap them together in one batch |
 | New functions, types, modules | Yes | Added to the table |
-| Layout of a type with live values | Partly | **Automatic:** added fields with defaults, removed fields, reordered fields, new enum variants. **Renames and type changes** need an explicit `migrate(old) -> new` hook (like Erlang's `code_change`); otherwise the affected task scope restarts and replays. |
+| Layout of a type with live values | Partly | **Automatic:** added fields with defaults, removed fields, reordered fields, new enum variants. **Renames and type changes** need an explicit `migrate(old) -> new` hook (like Erlang's `code_change`); otherwise the affected task scope restarts and replays. Migration reaches **nested values**: it walks containers through the witness table, so every live `Old` in a `Vec<Old>` or a map is rewritten; values it cannot walk (raw pointers in `unsafe` code) fall back to a restart. |
 | Effect handlers, scope structure | Restart | The affected scope restarts |
 
 **Restart plus replay.** A restarted scope can rebuild its state by **replaying its recorded effects
@@ -156,9 +156,11 @@ deploys with compiler-checked compatibility between versions
 - They come **only from sources the user configures**: the team's CI, or a foundation-run cache.
   With nothing configured, only the local store and the team cache are used.
 - Every artefact is **signed by its builder**.
-- A **configurable fraction of hits is rebuilt locally** and compared byte for byte; reproducible
-  builds make that possible. A mismatch is a security alert, reported like an advisory by
-  `moddil audit`.
+- **A fraction of hits is rebuilt and compared** byte for byte; reproducible builds make that
+  possible. The defaults (decided): developer builds rebuild 1% of hits in the background, and CI
+  rebuilds every artefact not yet verified for that cache, so each artefact is checked once per
+  cache. A mismatch is a hard error naming the artefact and its signer, and a security alert
+  reported like an advisory by `moddil audit`.
 - A project can require mods holding `unsafe` or `ffi` to be **built from source**.
 
 **Release builds** may be slow. Their optimised artefacts are cached per mod, and profile-guided
@@ -215,21 +217,6 @@ than for humans:
 | [HFT](examples/02-hft-platform.md) | A fast dev loop; long release builds are acceptable if cached |
 | [Web store](examples/03-web-store.md) | Large-team iteration; sub-second rebuilds; patching an API handler without dropping sessions; a shared team cache |
 | [Hashiverse](examples/04-hashiverse.md) | Fast hash and crypto code in dev builds without manual overrides; tests in the default profile; live-patching one node of a running simulation |
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **The clean-build figure** is at least 100,000 lines per second per core, for a clean debug build
-   of first-party code with dependencies cached, measured on the reference examples. The dashboard
-   also tracks each example's time.
-2. **Verifying prebuilt artefacts:** developer builds rebuild 1% of cache hits in the background and
-   compare hashes; CI rebuilds every artefact not yet verified for that cache, so each artefact is
-   checked once per cache. A mismatch is a hard error naming the artefact and its signer.
-3. **Layout migrations reach nested values.** Migration walks containers through the witness table,
-   so every live `Old` reachable from a migrated root is rewritten, in `Vec<Old>` and map values
-   too. Values the migrator cannot walk, such as raw pointers in `unsafe` code, fall back to
-   restarting the affected scope.
 
 ## Open questions
 

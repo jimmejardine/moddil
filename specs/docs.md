@@ -183,6 +183,9 @@ this one uses and is used by. The documentation page for a module combines the t
    written this way from M0 ([`tour.md`: From markdown to source](tour.md#from-markdown-to-source)).
 4. **No orphans.** Every public item names a group, so the overviews and groups remain a real map of
    the module.
+5. **Stale overviews are flagged.** When a module's public interface changes and its overview does
+   not, the semantic diff shows a review warning (not a build error), and the reviewer or agent
+   confirms the overview still holds ([`semantic-vcs.md`](semantic-vcs.md)).
 
 ## Maintainer notes
 
@@ -216,16 +219,6 @@ this one uses and is used by. The documentation page for a module combines the t
 | [HFT](examples/02-hft-platform.md) | Order-book properties and interleaving tests attached to the book and queues; latency benchmarks on the hot path with deltas in review |
 | [Web store](examples/03-web-store.md) | Contracts on checkout tested automatically; examples documenting the API contract; notes explaining pricing rules |
 | [Hashiverse](examples/04-hashiverse.md) | Fuzz targets attached to wire-protocol decoders; examples of the client API under simulated peers |
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **Coverage thresholds** rise with the assurance level ([Docs are checked and partly generated](#docs-are-checked-and-partly-generated)).
-2. **Notes live in the source**, attached to declarations ([Maintainer notes](#maintainer-notes)).
-3. **Stale overviews:** the semantic diff flags a module whose public interface changed while its
-   overview did not, as a review warning rather than a build error
-   ([`semantic-vcs.md`](semantic-vcs.md)).
 
 ## Open questions
 

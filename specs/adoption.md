@@ -63,6 +63,9 @@ Three secondary reasons, each a pitch to a particular reader:
 - **Testable by construction:** time, network and randomness are effects, so deterministic simulation
   testing comes free ([`determinism.md`: Deterministic simulation testing](determinism.md#deterministic-simulation-testing)).
 
+**The name and the armadillo** will be registered as trademarks later, once there is adoption
+(decided); until then the name is used consistently ([`governance.md`](governance.md)).
+
 ## First audiences
 
 **Decision: two first audiences.**
@@ -130,8 +133,11 @@ smooth = rolling_mean(prices, window=50)  # numpy array in, no copy; list or arr
   interpreter silently.
 - **Async:** functions that `suspend` become awaitables usable from `asyncio`; cancellation crosses both
   ways, as with the other bindings ([`ui.md`: Generated bindings](ui.md#generated-bindings)).
-- **The GIL:** Moddil code releases the GIL while it runs, and runs its own tasks on its own executor;
-  free-threaded CPython builds are supported where available.
+- **The GIL:** Moddil code releases the GIL while it runs, and runs its own tasks on its own executor.
+- **Free-threaded CPython** (decided): separate pools, with a handoff. A Python thread that calls
+  into Moddil blocks while the call runs on Moddil's executor; Moddil calls back into Python through
+  typed callbacks that run on a Python thread. Neither runtime schedules the other's threads, so
+  this works with and without the GIL.
 - **Placement in the roadmap:** Python bindings ship at M3, with the first optimised native release
   ([`roadmap.md`: Milestones](roadmap.md#milestones)), before the Swift, Kotlin and TypeScript
   bindings.
@@ -164,11 +170,15 @@ Rust and Moddil share most syntax, so translation of the common subset is mechan
   translated mechanically, what was flagged, and the test results.
 - The **generated Rust bridge** lets translated and untranslated crates work together during a
   migration ([`interop.md`](interop.md)).
+- **The v0 target** (decided): 80% of the top 100 crates without `unsafe` or procedural macros
+  translate with their tests passing; everything else is flagged, never dropped.
 
 ### TypeScript and other languages: agent-assisted
 
 TypeScript, Python and Go are too far from Moddil (a GC, dynamic shapes, exceptions) for a purely
-mechanical translation. The workflow:
+mechanical translation, and **TypeScript migration stays agent-assisted** (decided): structural types,
+`any` and shared mutation do not map mechanically to ownership, even in functional-style code. The
+workflow:
 
 1. The tool translates **structure and types**: modules, functions, interfaces into traits, unions
    into enums, exceptions into `fail` types.
@@ -264,24 +274,6 @@ GDScript and C# offer neither.
 - Published mods, and how many are depended on by others.
 - Newcomer compile-error rates and time to a first service ([Simpler than Rust](#simpler-than-rust)).
 - Agent success rate on a standard task suite, compared with Rust and Go.
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **The Rust migration subset** in v0 is the [translation table](#moddil-migrate-rust). The target:
-   80% of the top 100 crates without `unsafe` or procedural macros translate with their tests
-   passing; everything else is flagged, never dropped.
-2. **Simplicity metrics** are measured by agents only ([Simpler than Rust](#simpler-than-rust)).
-3. **Free-threaded Python:** separate pools, with a handoff. A Python thread that calls into Moddil
-   blocks while the call runs on Moddil's executor; Moddil calls back into Python through typed
-   callbacks that run on a Python thread. Neither runtime schedules the other's threads, so this
-   works with and without the GIL.
-4. **Name and trademark:** registered later, once there is adoption. Until then the name is used
-   consistently ([`governance.md`](governance.md)).
-5. **TypeScript migration stays agent-assisted**, never mechanical: structural types, `any` and
-   shared mutation do not map mechanically to ownership.
-6. **Godot bindings are official and early** ([Games through Godot](#games-through-godot)).
 
 ## Open questions
 

@@ -58,7 +58,7 @@ mod worker { pub fn send_receipt(order: OrderId) with Email { … } }
 mod web    { … api::checkout(cart) … }   // here: with Remote, suspend, fail(RemoteError | CheckoutError)
 ```
 
-- The three modules above are separate files, shown together ([`modules.md`: Resolved questions](modules.md#resolved-questions)).
+- The three modules above are separate files, shown together ([`modules.md`: Mods and modules](modules.md#mods-and-modules)).
 - A **component** is a unit of code with a **placement**: `client`, `server`, `worker`, `edge`,
   or `peer`.
 - `peer` covers **symmetric** topologies, where every node is both client and server (Hashiverse).
@@ -80,6 +80,11 @@ mod web    { … api::checkout(cart) … }   // here: with Remote, suspend, fail
   an idempotency key), and the retry policy is part of the call site or the topology.
 - There is **no fire-and-forget** (error-handling D4): a message either belongs to a scope, or is a
   durable workflow step ([Durable workflows](#durable-workflows)).
+- **Unreliable channels are type parameters** (decided): `Channel<T, Reliable>` or
+  `Channel<T, Datagram>`, with `Ordered` or `Unordered` as a second parameter. On a datagram
+  channel, `send` may lose a message and `recv` may see messages out of order, so messages must be
+  idempotent or carry sequence numbers, which a derive checks. Game snapshots over WebTransport
+  datagrams use `Channel<Snapshot, Datagram, Unordered>`. The simulator's faults apply per kind.
 
 ## Wire contracts and version skew
 
@@ -91,6 +96,12 @@ mod web    { … api::checkout(cart) … }   // here: with Remote, suspend, fail
   `contracts.lock` in the repository ([`data.md`: One contract system, in space and time](data.md#one-contract-system-in-space-and-time)). The compiler compares a change with every version still in service
   (including months-old mobile clients) and rejects changes that would break a rolling deploy. The
   semantic diff shows contract changes.
+- **Components deploy independently** (decided). A component is built and deployed on its own,
+  checked against the recorded contracts rather than other components' source; a whole-system
+  build is needed only for whole-system simulation.
+- **Rollout safety stops at compatibility** (decided): Moddil proves that a new version can coexist
+  with every recorded version and emits that proof as rollout metadata. Canary analysis, traffic
+  shifting and rollback stay with the platform ([Layer C: what Moddil never does](#layer-c-what-moddil-never-does)).
 - **At the edges**, for non-Moddil peers, the compiler generates standard descriptions
   (OpenAPI, protobuf/gRPC, AsyncAPI), and can consume them to produce typed clients. Other teams see
   an ordinary service.
@@ -115,6 +126,13 @@ mod web    { … api::checkout(cart) … }   // here: with Remote, suspend, fail
 - The **simulation runtime** ([`determinism.md`](determinism.md)) runs every tier in one process with
   simulated latency, partitions, crashes and clock skew, replayable from a seed.
 - `--topology compose` runs the same components as real containers when that matters.
+
+## Choreographies (after v1)
+
+**Decided: a library after v1.** `moddil/choreo` projects a multi-party protocol written once (the
+game's match lifecycle, two-phase commit) into per-component functions and typed channels at compile
+time ([`comptime.md`](comptime.md)), in the style of Choral and HasChor. Ordinary request and response
+stays a `Remote` call.
 
 ## Durable workflows
 
@@ -209,26 +227,6 @@ What ships in v0, v1 and later is in [`roadmap.md`: Staging: distributed program
 | [HFT](examples/02-hft-platform.md) | Collector, store, research and execution as separate deployment units and binaries; latency-critical paths with no mesh in the way; one strategy mod placed in both research and execution |
 | [Web store](examples/03-web-store.md) | Client, API and database; skew checks against months-old mobile clients; Postgres provisioned by Terraform and bound as a requirement; payment keys as `Secret<T>` |
 | [Hashiverse](examples/04-hashiverse.md) | `peer` placement; wire compatibility with existing Rust servers via consumed contracts; a single static binary for volunteers |
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **Choreographies** come after v1, as a library: `moddil/choreo` projects a multi-party protocol
-   written once (the game's match lifecycle, two-phase commit) into per-component functions and
-   typed channels at compile time ([`comptime.md`](comptime.md)). Ordinary request and response
-   stays a `Remote` call.
-2. **Independent deploys:** a component builds and deploys on its own. Its compatibility is checked
-   against the wire contracts recorded in `contracts.lock` (every version still deployed), not
-   against other components' source ([`data.md`: One contract system, in space and time](data.md#one-contract-system-in-space-and-time)).
-   Whole-system builds are needed only for whole-system simulation.
-3. **Rollout safety:** Moddil proves that a new version can coexist with every recorded version and
-   emits that as rollout metadata. Canary analysis, traffic shifting and rollback stay with the
-   platform ([Layer C: what Moddil never does](#layer-c-what-moddil-never-does)).
-4. **Unreliable channels are type parameters:** `Channel<T, Reliable>` or `Channel<T, Datagram>`,
-   with `Ordered` or `Unordered` as a second parameter. On a datagram channel, `send` may lose a
-   message and `recv` may see messages out of order, so messages must be idempotent or carry
-   sequence numbers, which a derive checks. The simulator's faults apply per kind.
 
 ## Open questions
 

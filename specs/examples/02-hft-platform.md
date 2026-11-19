@@ -47,9 +47,11 @@ data, time and order routing are effects, and only their handlers differ.
 ## Moddil features this stresses
 
 - **Effects and handlers as the core architecture ([Effects and capabilities as a unifying idea](../effects-and-capabilities.md), [Determinism and reproducibility](../determinism.md)).** A strategy is written against
-  effects such as `market_data`, `clock` and `orders`:
+  effect traits such as `MarketData`, `Time` and `Exchange`:
   - live handlers: kernel-bypass feed, hardware clock, exchange gateway;
-  - research handlers: historical replay, simulated clock, simulated exchange.
+  - research handlers: historical replay, simulated clock, simulated exchange. The simulator
+    implements the same `Exchange` trait as the gateway; queue position, partial fills and latency
+    models are its state, driven by simulated time.
 
   The strategy code is identical in both. This is the clearest demonstration of why effects belong in
   the core language.
@@ -57,6 +59,11 @@ data, time and order routing are effects, and only their handlers differ.
   deployment to `execution` grants it. A third-party analytics mod cannot touch the network.
 - **Predictable latency ([Memory: ownership, borrowing and sharing](../memory.md)).** No GC; arenas and pools; **`#[no_alloc]` and `#[no_lock]`** that the
   compiler checks on the hot path ([`performance.md`: Hot-path guarantees](../performance.md#hot-path-guarantees)); no hidden locks; core pinning and NUMA-aware placement.
+  **Code places, deployment provisions:** code says where work runs and which memory it uses
+  (`on: pinned(3)`, NUMA-local allocators, huge-page arenas); the deployment manifest provisions the
+  machine (isolated cores, IRQ affinity, reserved huge pages); at startup the program checks that
+  what it asked for was provisioned, and fails with a typed error if not
+  ([`performance.md`: Kernel-bypass I/O: a worked example](../performance.md#kernel-bypass-io-a-worked-example)).
 - **Lock-free concurrency ([Concurrency across CPUs](../concurrency.md)).** SPSC/MPMC rings between feed, strategy and gateway threads;
   thread-per-core designs; busy-polling.
 - **C/C++ interop ([Interoperability with C and Rust](../interop.md)).** Kernel-bypass NIC libraries (e.g. DPDK, ef_vi/Onload-style APIs), exchange
@@ -96,23 +103,12 @@ Initial targets, to be refined:
 - Kernel-bypass networking and NIC timestamping (C libraries).
 - Exchange-provided SDKs (often C++).
 - Possibly FPGA-accelerated feed handlers (out of scope for Moddil itself, but Moddil must talk to them).
-- Research workflows may still use Python notebooks; a Python binding for research mods would help
-  adoption.
+- Research workflows still use Python notebooks: research mods are exported to Python as wheels
+  ([`adoption.md`: Python first](../adoption.md#python-first)), and Moddil can call Python libraries
+  through `moddil/python` ([`interop.md`](../interop.md)).
 
 ## Open questions
 
-- ~~Can a "no allocation" or "bounded latency" property be an effect the compiler checks?~~
-  **Resolved:** checked attributes, `#[no_alloc]` and `#[no_lock]`, not effects; bounded latency is still
-  open ([`performance.md`: Hot-path guarantees](../performance.md#hot-path-guarantees)).
-- ~~Simulated exchange alongside the real gateway?~~ **Resolved:** one `Exchange` effect trait with
-  two handlers. The real gateway and the simulator implement the same trait; queue position,
-  partial fills and latency models are the simulator's state, driven by simulated time
-  ([`effects-and-capabilities.md`: Effects are traits passed implicitly](../effects-and-capabilities.md#effects-are-traits-passed-implicitly)).
-- ~~Hardware control: runtime mod or deployment manifest?~~ **Resolved:** both, split. Code places
-  work and memory through the runtime mod (`on: pinned(3)`, NUMA-local allocators, huge-page
-  arenas); the deployment manifest provisions the machine (isolated cores, IRQ affinity, reserved
-  huge pages). At startup the program checks that what it asks for was provisioned, and fails with
-  a typed error if not ([`performance.md`: Kernel-bypass I/O: a worked example](../performance.md#kernel-bypass-io-a-worked-example)).
-- ~~Python interop for research users?~~ **Resolved:** consuming Moddil from Python (extension
-  modules and wheels) is in v0 ([`adoption.md`: Python first](../adoption.md#python-first)); calling
-  Python from Moddil remains open in [`interop.md`](../interop.md#open-questions).
+- **Bounded latency:** `#[no_alloc]` and `#[no_lock]` are checked attributes
+  ([`performance.md`: Hot-path guarantees](../performance.md#hot-path-guarantees)). Can a latency
+  bound on the hot path be checked too, or only measured?

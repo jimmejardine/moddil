@@ -85,6 +85,11 @@ fn main(args: Args, env: Env, stdio: Stdio, files: FsRoot, net: NetRoot, clock: 
   **drops every OS privilege that wasn't requested** before `main` runs: Landlock and seccomp on
   Linux, `pledge`/`unveil` on OpenBSD, pre-opens on WASI, and the best available mechanism elsewhere.
   What could and couldn't be enforced is reported.
+- **The sandbox follows narrowing** (decided). Paths often come from configuration read at run time,
+  so narrowing a root capability after start (`files.read_only(cfg.data_dir)`) also tightens the OS
+  sandbox (adding Landlock rules, calling `unveil`) once the wider root is no longer held anywhere.
+  This happens wherever the OS allows tightening after start, and the final enforced state is
+  reported.
 - `moddil audit` shows each executable's root set, and a change to it appears in the semantic diff.
 - Tests and simulations call the same code with **simulated** roots
   ([`determinism.md`](determinism.md)).
@@ -102,6 +107,9 @@ fn main(args: Args, env: Env, stdio: Stdio, files: FsRoot, net: NetRoot, clock: 
   ([`requirements.md`](requirements.md)), so `main` decides how each one becomes an exit code.
 - There is **no ambient `exit()`**. `exit_now(code)` exists only on `ProcessRoot`; it skips cleanup,
   so it shows up in the root set and in review.
+- **Windows uses the same codes** (decided); Ctrl-C gives 0xC000013A, as Windows expects. A trap
+  prints the same trace to stderr and exits 70; Windows Error Reporting dialogs are suppressed so a
+  service never hangs on one, and crash dumps are opt-in.
 
 ### Signals are values
 
@@ -136,6 +144,15 @@ struct ServerConfig {
   other processes can see), and never print
   ([`observability.md`: Secrets never reach observability](observability.md#secrets-never-reach-observability)).
 - Bad arguments exit with `Usage`; bad configuration with `Config`.
+- **Arguments** (decided): the main path is a derive, `#[derive(Args)] struct Cli { port: Port = 8080,
+  verbose: bool }`, parsed with `Cli::parse(&args)?`. It shares its machinery with
+  `#[derive(Config)]` (it is the command-line layer), giving `--help`, subcommands from enums and
+  refined-type validation. Small tools can read one typed flag:
+  `args.value::<Port>("port", default: 8080)?`.
+- **A snapshot by default; live on request** (decided). The configuration is an immutable value. A
+  program that wants reloading holds `Live<Config>`, refreshed by a task that `select`s on SIGHUP
+  from `Signals` and re-validates; readers take a consistent snapshot per request, and a failed
+  reload keeps the old value and logs.
 - The configuration is passed down as a value, or provided as context data
   (`with ServerConfig = cfg { … }`, [`effects-and-capabilities.md`: Context data](effects-and-capabilities.md#context-data)).
 
@@ -162,6 +179,9 @@ scope(|s| {
   - the parent receives **`fail(Trapped)`** with the trace.
 - A trap inside `drop` or `abandon` still terminates the process. Shared rc data is immutable, so a
   trap cannot leave it half-updated.
+- **Restart policies are a library** (decided): `supervise(|s| …, restart: Backoff { … }, max: 5
+  per 1[min])` in `moddil/sync`, built on isolated scopes
+  ([`concurrency.md`: Open questions](concurrency.md#open-questions)).
 
 ### No mutable globals
 
@@ -354,28 +374,6 @@ fn serve(listener: &Listener) with Net, suspend, spawn {
 | [HFT](examples/02-hft-platform.md) | Typed configuration with risk limits as refined types; traps kill the process (no partial trading state) |
 | [Web store](examples/03-web-store.md) | Isolated scopes per request; secrets from the environment; layered configuration per environment |
 | [Hashiverse](examples/04-hashiverse.md) | Volunteer binaries sandboxed to the roots they declare; layered shutdown on Ctrl-C |
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **Sandboxing follows narrowing.** Narrowing a root capability after start
-   (`files.read_only(cfg.data_dir)`) also tightens the OS sandbox (adding Landlock rules, calling
-   `unveil`) once the wider root is no longer held anywhere. This happens wherever the OS allows
-   tightening after start, and the final enforced state is reported.
-2. **Supervision is a library:** `supervise(|s| …, restart: Backoff { … }, max: 5 per 1[min])` in
-   `moddil/sync`, built on isolated scopes ([`concurrency.md`](concurrency.md#open-questions)).
-3. **Configuration is a snapshot by default.** A program that wants reloading holds `Live<Config>`,
-   refreshed by a task that `select`s on SIGHUP from `Signals` and re-validates; readers take a
-   consistent snapshot per request, and a failed reload keeps the old value and logs.
-4. **Windows** uses the same exit codes as other platforms (Ctrl-C gives 0xC000013A, as Windows
-   expects). A trap prints the same trace to stderr and exits 70; Windows Error Reporting dialogs are
-   suppressed so services never hang on one, and crash dumps are opt-in.
-5. **Arguments:** the main path is `#[derive(Args)] struct Cli { port: Port = 8080, verbose: bool }`,
-   parsed with `Cli::parse(&args)?`. It shares its machinery with `#[derive(Config)]`, giving
-   `--help`, subcommands from enums and refined-type validation. Small tools can read one typed
-   flag: `args.value::<Port>("port", default: 8080)?`.
-6. **Exit codes:** the whole `sysexits.h` set is named ([Conventional exits](#conventional-exits)).
 
 ## Open questions
 

@@ -73,6 +73,10 @@ by pointer**, whichever is cheaper (as Swift and Hylo do). Small types travel in
   ([Build times](build-times.md)).
 - **Non-escaping closures** may capture borrows (Swift's model). Escaping closures capture by move
   or rc. Details in [`closures.md`](closures.md).
+- **Diagnostics built for agents** (decided): every borrow error has one root cause and a ranked
+  menu of machine-applicable fixes (clone, `.to_rc()`, a view, splitting the borrow by field, a
+  move), each with a confidence level and a short cost note. The fix success rate is measured with
+  the agent simplicity benchmarks ([`adoption.md`: Simpler than Rust](adoption.md#simpler-than-rust)).
 
 ### Returning borrows
 
@@ -80,7 +84,8 @@ A function may return a borrow or a view ([View types](#view-types)) derived fro
 
 - **Methods**: the result derives from `self`.
 - **Free functions**: the result derives from *all* borrowed parameters (conservative default).
-- **Optional** precision: `-> T from a` names a *parameter*, never an abstract region.
+- **Optional** precision: `-> T from a` (or `from a, b`) names a *parameter*, never an abstract
+  region. This spelling is decided.
 
 ```rust
 fn get(&self, key: &K) -> Option<&V>                        // derives from self
@@ -90,8 +95,9 @@ fn first_word(text: &str, sep: &str) -> &str from text
 
 ## View types
 
-A **view type** is a struct or container whose fields hold borrows. Each view has **exactly one
-implicit region**, always inferred. It is second-class, like a borrow:
+A **view type** is a struct or container whose fields hold borrows, declared with
+`view Name<T> { … }` (decided). Each view has **exactly one implicit region**, always inferred. It
+is second-class, like a borrow:
 
 - It can be created, kept in locals, passed *down* the call stack, nested in other views, returned
   under the [Returning borrows](#returning-borrows) rules, and lent to structured child tasks ([`concurrency.md`: Tasks and borrowing](concurrency.md#tasks-and-borrowing)).
@@ -142,8 +148,17 @@ let other = shared.share()     // refcount inc; both point at the same node
 let back = shared.weak()       // Weak<Node>: does not keep it alive; upgrade() -> Option<Rc<Node>>
 ```
 
-- `.to_rc()` **consumes** the owner; the value now lives as long as any `Rc` does.
-- RC cannot collect cycles. Back-edges (parent pointers, doubly-linked `prev`) use `Weak`.
+- `.to_rc()` **consumes** the owner; the value now lives as long as any `Rc` does. It uses the
+  allocator in scope; an `Rc` records its allocator only when it is not the default one, so default
+  rcs pay nothing (decided). Arenas stay borrow-based: arena allocations are views tied to the
+  arena's scope and cannot become `Rc`s
+  ([`freestanding.md`: Memory without an operating system](freestanding.md#memory-without-an-operating-system)).
+- RC cannot collect cycles. Back-edges (parent pointers, doubly-linked `prev`) use `Weak`, which is
+  **core**, beside `Rc`, because the header layout and biased counting must know about weak counts.
+- **There is no garbage collector** (decided). Cycles are avoided by design: `Weak` for back-edges,
+  arenas and indices for graphs. Debug builds and the simulator run a cycle detector that reports
+  leaked rc cycles with their allocation sites. A collected `Gc<T>` arena could be a library if a
+  real need appears.
 - Passing an `Rc` as a shared borrow (`&Rc<T>`) does **not** touch the count. Only `.share()` does ([`values.md`: `.share()` for reference counts](values.md#share-for-reference-counts)).
 - Compile-time RC elision (Perceus-style) removes inc/dec pairs the compiler can prove redundant.
 
@@ -272,29 +287,6 @@ The full cost model, including calls, effects and checks, is in
 | [Hashiverse](examples/04-hashiverse.md) | Shared routing table snapshots (`AtomicRc` swap); key material handles | Key-locker unlock sessions? (to evaluate) | RPC packets validated once (PoW-stamped) and passed as owning views | Kademlia routing tables: indices or `AtomicRc` snapshots, not mutable rc graphs |
 
 No case required first-class references with explicit lifetimes.
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **Syntax:** parameter modes are `&T`, `&mut T` and `T`; views are declared with
-   `view Name<T> { … }`; a returned borrow names its source with `-> &T from param` (or
-   `from a, b`), defaulting to `self` for methods and to every borrowed parameter for free
-   functions ([Returning borrows](#returning-borrows)).
-2. **Allocators:** an `Rc` records its allocator only when it is not the default one, so default
-   rcs pay nothing; `.to_rc()` uses the allocator in scope. Arenas stay borrow-based: arena
-   allocations are views tied to the arena's scope and cannot become `Rc`s
-   ([`freestanding.md`: Memory without an operating system](freestanding.md#memory-without-an-operating-system)).
-3. **`Weak` is core**, beside `Rc`, because the header layout and biased counting must know about
-   weak counts.
-4. **Borrow diagnostics for agents:** every borrow error has one root cause and a ranked menu of
-   machine-applicable fixes (clone, `.to_rc()`, a view, splitting the borrow by field, a move), each
-   with a confidence level and a short cost note. The fix success rate is measured with the agent
-   simplicity benchmarks ([`adoption.md`: Simpler than Rust](adoption.md#simpler-than-rust)).
-5. **No garbage collector.** Cycles are avoided by design (`Weak` for back-edges, arenas and
-   indices for graphs). Debug builds and the simulator run a cycle detector that reports leaked rc
-   cycles with their allocation sites. A collected `Gc<T>` arena could be a library if a real need
-   appears.
 
 ## Open questions
 

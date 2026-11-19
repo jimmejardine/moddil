@@ -47,11 +47,15 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
 |---|---|
 | **The reference** | **Normative.** Prose, with formal rules for the core (types, effects, borrows and evaluation). |
 | **The reference interpreter** | The executable form of the reference: a **separate, small interpreter over the canonical AST**, independent of the compiler's MIR interpreter (which runs comptime and the unsafe checker), so that each can check the other ([`compiler.md`: Two interpreters](compiler.md#two-interpreters)). Tested against the reference. |
-| **The core model** | A mechanised model of the core (for example in Lean) that proves the core rules sound and validates the interpreter ([`correctness.md`: A formal semantics of the core](correctness.md#a-formal-semantics-of-the-core)). |
+| **The core model** | A mechanised model of the core **in Lean** that proves the core rules sound and validates the interpreter ([`correctness.md`: A formal semantics of the core](correctness.md#a-formal-semantics-of-the-core)). |
 
 - **Any disagreement between them is a bug.** The reference decides the intended meaning (changing it
   if it was wrong), and the fix lands in all three.
 - This is WebAssembly's arrangement, which has kept several engines in close agreement.
+- **Lean is the source of truth for the core** (decided). The reference shows the core rules as
+  inference rules generated from the Lean definitions, so the two cannot drift.
+- **The formal core covers everything from the start** (decided): dynamic semantics, type and
+  effect soundness, and borrows, in the style of RustBelt.
 
 ### The reference
 
@@ -61,6 +65,9 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
   meaning; a rule that changes gets a new ID, and the old one is marked with the edition that
   retired it.
 - Conformance tests cite the IDs they cover, so coverage of the reference is measurable.
+- **The language is defined by its canonical text form** (decided): the grammar and lexical rules
+  below. However code is stored ([`roadmap.md`](roadmap.md), question 9), a structured store would
+  be a lossless encoding of that text, so the reference does not change.
 
 ### Lexical structure
 
@@ -110,6 +117,10 @@ fn leak() -> int { counter.tick() }   //~ E0601
   word errors their own way.
 - Determinism ([`determinism.md`](determinism.md)) makes expected outputs exact, including for
   concurrent tests run under the simulation scheduler.
+- **The spec team owns the suite**, and any implementation may contribute tests. A disputed test
+  (implementations disagree, or one thinks the test is wrong) is resolved by clarifying the
+  reference through the RFC and governance process ([`governance.md`](governance.md)); until then
+  it is marked *disputed* and does not count towards conformance.
 
 ### Written with the compiler
 
@@ -146,22 +157,6 @@ fn leak() -> int { counter.tick() }   //~ E0601
 The examples need a definition only indirectly: every feature they use is covered by reference
 paragraphs and conformance tests, and determinism lets the HFT and game examples rely on identical
 behaviour across the interpreter, native backends and WASM.
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **Notation:** Lean is the source of truth for the core model; the reference shows the rules as
-   inference rules generated from the Lean definitions, so the two cannot drift.
-2. **Reach of the formal core:** everything, from the start: dynamic semantics, type and effect
-   soundness, and borrows (in the style of RustBelt).
-3. **Source text:** the reference defines the language by its canonical text form, whatever
-   [`roadmap.md`](roadmap.md) question 9 decides about storage; a structured store would be a
-   lossless encoding of that text.
-4. **The conformance suite** is owned by the spec team; any implementation may contribute tests. A
-   disputed test is resolved by clarifying the reference through the RFC and governance process
-   ([`governance.md`](governance.md)), and is marked *disputed* (not counted towards conformance)
-   until then.
 
 ## Open questions
 

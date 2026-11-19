@@ -314,7 +314,7 @@ Resolved since the tour was written:
 - the `Sim` API and its standard faults ([The `Sim` API](determinism.md#the-sim-api));
 - an unhandled `?` inside a test fails that test with its error return trace
   ([Errors inside tests](testing.md#errors-inside-tests));
-- typed argument access and the named `sysexits.h` exit codes ([`lifecycle.md`: Resolved questions](lifecycle.md#resolved-questions)).
+- typed argument access and the named `sysexits.h` exit codes ([`lifecycle.md`: Typed, layered configuration](lifecycle.md#typed-layered-configuration), [Conventional exits](lifecycle.md#conventional-exits)).
 
 No gaps remain open.
 

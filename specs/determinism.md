@@ -73,6 +73,10 @@ kernel fn splat(points: &[Point], grid: &mut [f32]) with nondet {   // float ato
 - **Forbidden where replay or lockstep matters:** durable workflows, lockstep game simulation and
   any scope that requires replay reject it, through the same effect-set check as other restricted
   code ([`effects-and-capabilities.md`: Restricted code is one mechanism](effects-and-capabilities.md#restricted-code-is-one-mechanism)).
+- **Requiring replay** (decided): durable workflows and lockstep code require it automatically. Any
+  other scope opts in, with `scope(…, replayable: true)` or `#[replayable]` on a function, and the
+  compiler then rejects `nondet` inside it. Typical users are consensus code, ledgers and trading
+  strategies.
 - The recorder flags code that performs `nondet` as not replayable
   ([Record and replay](#record-and-replay)).
 
@@ -257,6 +261,11 @@ Bit-identical results across x86, ARM, WASM and GPU (for code without `nondet`),
 systems. It follows from [Sources of nondeterminism](#sources-of-nondeterminism): strict floating
 point, correctly rounded maths, and fixed-width integers.
 
+**GPUs are included, across vendors** (decided): for code without `nondet`, strict IEEE, correctly
+rounded maths and fixed-order reductions give the same bits on any GPU and on the CPU simulator.
+Tensor-core paths whose accumulation order a vendor leaves open, and fast intrinsics, perform
+`nondet` ([`accelerators.md`: Runtimes and backends](accelerators.md#runtimes-and-backends)).
+
 ## Prior art: Hashiverse
 
 [Hashiverse](examples/04-hashiverse.md) already applies the core idea by hand, and is the strongest
@@ -304,20 +313,6 @@ real-world evidence for it.
 | [HFT](examples/02-hft-platform.md) | Bit-identical backtest and replay of a trading day; replay of production traffic through new strategy versions |
 | [Web store](examples/03-web-store.md) | Simulated rolling deploys with mixed versions; reproducible order-flow tests |
 | [Hashiverse](examples/04-hashiverse.md) | The existing harness, plus deterministic randomness and interleavings, record and replay, and the self-check |
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **The `Sim` API** is decided as [above](#the-sim-api), with its standard faults.
-2. **Requiring replay:** durable workflows and lockstep code require it automatically. Any other
-   scope opts in, with `scope(…, replayable: true)` or `#[replayable]` on a function, and the
-   compiler then rejects [`nondet`](#the-nondet-effect) inside it. Typical users: consensus code,
-   ledgers, trading strategies.
-3. **GPU determinism holds across vendors** for code without `nondet`: strict IEEE, correctly
-   rounded maths and fixed-order reductions give the same bits on any GPU and on the CPU simulator.
-   Tensor-core paths whose accumulation order a vendor leaves open, and fast intrinsics, perform
-   `nondet` ([`accelerators.md`](accelerators.md)).
 
 ## Open questions
 

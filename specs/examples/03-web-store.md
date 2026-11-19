@@ -45,16 +45,21 @@ not be adopted, whatever its other strengths.
 
 - **Compiler-generated client↔API contracts ([Distributed and multi-tier programs](../distribution.md))**: no hand-written OpenAPI. The API is typed once
   and used from all three clients.
-- **Version compatibility ([Diffs, code review and version control](../semantic-vcs.md), [Distributed and multi-tier programs](../distribution.md))**: mobile clients can be months old. The compiler must check
-  that a new `api` still serves every client version still in support, and flag breaking changes in
-  the PR's semantic diff.
+- **Version compatibility ([Diffs, code review and version control](../semantic-vcs.md), [Distributed and multi-tier programs](../distribution.md))**: mobile clients can be months old. The compiler checks
+  that a new `api` still serves every version recorded in `contracts.lock`, and flags breaking
+  changes in the PR's semantic diff. Old versions leave only through an explicit
+  `moddil contracts prune` ([`data.md`: One contract system, in space and time](../data.md#one-contract-system-in-space-and-time)).
 - **Trust boundaries ([Distributed and multi-tier programs](../distribution.md))**: prices, totals and stock levels from `client` are untrusted; secrets
   (payment keys, DB credentials) cannot flow to `client`, and the type system enforces it.
 - **Capabilities ([Package management and supply-chain security](../packages-and-supply-chain.md))**: only the checkout module holds the `Payments` capability; only `api` holds
   `Db`. A dependency that suddenly asks for `Net` is flagged.
-- **Typed SQL and migrations**: queries checked against the schema at compile time (as in sqlx or
-  jOOQ); migrations are versioned and reviewable; transactions are linear resources that must commit
-  or roll back ([Memory: ownership, borrowing and sharing](../memory.md)).
+- **Typed SQL and migrations**: `sql"…"` is a tagged literal from a mod, checked against
+  `schema.sql` at compile time (as sqlx and jOOQ check queries); migrations are versioned and
+  reviewable; transactions are linear resources that must commit or roll back
+  ([`data.md`: Databases: migrations-first](../data.md#databases-migrations-first)).
+- **The database is not a placement**: it is an external service, provisioned outside Moddil and
+  bound as a requirement, with its typed schema in Moddil
+  ([`distribution.md`: Infrastructure: bind, never provision](../distribution.md#infrastructure-bind-never-provision)).
 - **Error handling ([Error handling](../error-handling.md))**: clear, typed errors from DB to HTTP response to UI.
 - **LLM-friendliness ([LLMs as first-class programmers](../agent-interface.md))**: most store code is CRUD that agents will write. It should be easy to
   generate, review and test, with contracts and property tests next to the code.
@@ -107,12 +112,4 @@ Initial targets, to be refined:
 
 ## Open questions
 
-- ~~Which mobile UI option?~~ **Resolved:** shared core under native UI shells ([`ui.md`](../ui.md)).
-- ~~How far back must API compatibility checking go?~~ **Resolved:** to every version recorded in
-  `contracts.lock`; old versions are removed explicitly with `moddil contracts prune`, visible in
-  review ([`data.md`: One contract system, in space and time](../data.md#one-contract-system-in-space-and-time)).
-- ~~Typed SQL: language feature or mod?~~ **Resolved:** a mod. `sql"…"` is a tagged literal checked
-  against `schema.sql` at compile time ([`data.md`: Databases: migrations-first](../data.md#databases-migrations-first)).
-- ~~Should `db` be a placement?~~ **Resolved:** no. It is an external service, provisioned outside
-  Moddil and bound as a requirement, with its typed schema in Moddil
-  ([`distribution.md`: Infrastructure: bind, never provision](../distribution.md#infrastructure-bind-never-provision)).
+None at present.

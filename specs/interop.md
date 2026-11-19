@@ -29,6 +29,7 @@ exceptions and compiler-specific ABIs. Swift and Carbon have each spent years on
 | CUDA libraries, LLVM, SQLite, OpenSSL, DPDK, libpq | C APIs | Direct ([The C ABI, both directions](#the-c-abi-both-directions)) |
 | Mobile platform APIs (web store) | iOS: Objective-C/Swift; Android: Java/Kotlin | Still C underneath: JNI is a C ABI, the Objective-C runtime has a C API, and Swift can export C functions (`@_cdecl`). Platform mods wrap them. |
 | The Rust ecosystem, existing Rust code (Hashiverse) | Rust crates | The generated bridge ([Rust: the generated bridge](#rust-the-generated-bridge)) or components ([WASM components: the sandboxed path](#wasm-components-the-sandboxed-path)) |
+| Python libraries for research glue (NumPy, pandas in an HFT backtest) | CPython | A mod, `moddil/python`, on CPython's C API (decided): Python objects are opaque handles, calls go through the free-threading handoff ([`adoption.md`: Python first](adoption.md#python-first)), and the mod needs `ffi`. Calling Moddil *from* Python is the first binding target |
 
 ## The C ABI, both directions
 
@@ -38,8 +39,11 @@ exceptions and compiler-specific ABIs. Swift and Carbon have each spent years on
   (`#[repr(C)]`); variadic C functions can be called.
 - **Direct header import** through libclang (as Zig's `@cImport`): types, functions, constants and
   simple macros become raw bindings automatically.
-- **The toolchain compiles C.** C sources of a dependency are compiled by the toolchain's clang component, using the
-  LLVM Moddil already ships ([`compiler.md`](compiler.md)):
+- **The toolchain compiles C.** C sources of a dependency are compiled by the toolchain's clang
+  component, using the LLVM Moddil already ships ([`compiler.md`](compiler.md)):
+  - fetched on first use (decided): clang is a separate, pinned and hash-verified component of about
+    50–80 MB, downloaded by the first build that needs C, so pure-Moddil users never pay for it;
+    offline installers may include it;
   - hermetic and reproducible: declared inputs only, the same compiler on every machine ([Package management and supply-chain security](packages-and-supply-chain.md));
   - cross-compiled to every Moddil target, including WASM ([Cross-compilation and deployment](targets.md), R1);
   - run in the build sandbox like any other build step.
@@ -64,7 +68,12 @@ and turn raw bindings into Moddil types:
 | What it touches | capabilities (`Fs`, `Net`, …) | Checked like Moddil code ([`packages-and-supply-chain.md`: What a mod is](packages-and-supply-chain.md#what-a-mod-is)) |
 
 - Overlays live in a **shared repository**, versioned against library versions, like TypeScript's
-  DefinitelyTyped, so each C library is annotated once for everyone.
+  DefinitelyTyped, so each C library is annotated once for everyone. It accepts overlays by reviewed
+  pull request (decided).
+- **Consumers pin overlay versions** in the lockfile and record reviews in their own audit trail,
+  like any dependency ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)). A project's
+  local overlay takes precedence, and an overlay change that alters ownership or capabilities is
+  flagged in semantic diffs.
 - An overlay is reviewable code: a wrong overlay is a bug in a specific, auditable place.
 
 ## The safety boundary
@@ -125,6 +134,15 @@ mod hashiverse;
 let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → fail(DecodeError)
 ```
 
+- **rustdoc JSON is unstable**, so the generator supports a window of its format versions, with a
+  small adapter per version (decided). CI runs it against Rust stable and beta, so breakage shows
+  six weeks early, and a project can pin its Rust toolchain in the bridge description.
+- **Generics beyond explicit instantiations:** the bridge also instantiates every concrete use the
+  Moddil side makes of a generic Rust item, found at build time. A Moddil type used as `T` inside
+  Rust goes through generated vtables, for traits marked bridgeable.
+- **crABI, if it stabilises,** becomes a second backend under the same bridge description, removing
+  shim copies for `Option`, slices and strings; the C ABI remains the fallback.
+
 ## WASM components: the sandboxed path
 
 - C and Rust code compiled to WASM can be linked as **components**, with interfaces in **WIT**, which
@@ -153,30 +171,6 @@ let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → 
 | [HFT](examples/02-hft-platform.md) | DPDK / ef_vi-style kernel-bypass through C with zero overhead; C++ exchange SDKs and FIX engines through shims; `blocking` overlays for SDK calls that block |
 | [Web store](examples/03-web-store.md) | PostgreSQL through libpq or a native mod; mobile platform APIs through JNI and the Objective-C/Swift C surface |
 | [Hashiverse](examples/04-hashiverse.md) | The generated Rust bridge to `hashiverse-lib` during migration, replaced module by module by native Moddil |
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **rustdoc JSON:** the bridge generator supports a window of rustdoc JSON format versions, with
-   a small adapter per version. CI runs it against Rust stable and beta, so breakage shows six weeks
-   early, and a project can pin its Rust toolchain in the bridge description.
-2. **Generics across the bridge:** explicit instantiations, plus every concrete use the Moddil side
-   makes of a generic Rust item, found at build time. A Moddil type used as `T` inside Rust goes
-   through generated vtables, for traits marked bridgeable.
-3. **crABI:** if it stabilises, it becomes a second backend under the same bridge description,
-   removing shim copies for `Option`, slices and strings. The C ABI remains the fallback.
-4. **Overlays:** the shared repository accepts overlays by reviewed pull request, versioned against
-   library versions. Consumers pin overlay versions in the lockfile and record reviews in their own
-   audit trail ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)); a project's local
-   overlay takes precedence; an overlay change that alters ownership or capabilities is flagged in
-   semantic diffs.
-5. **Calling Python from Moddil** is a mod, `moddil/python`, using CPython's C API: Python objects
-   are opaque handles, calls go through the free-threading handoff
-   ([`adoption.md`: Resolved questions](adoption.md#resolved-questions)), and the mod needs `ffi`.
-6. **clang is a separate toolchain component**, fetched on demand by the first build that needs C
-   (pinned and hash-verified, about 50–80 MB compressed). Offline installers may include it, so
-   pure-Moddil users never download it.
 
 ## Open questions
 

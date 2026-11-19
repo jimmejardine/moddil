@@ -67,7 +67,16 @@ Rules:
   `Rc` somewhere that outlives the borrow (e.g. in a value it sends on a channel).
 - Long-lived tasks (e.g. a server's per-connection tasks, children of an accept-loop scope near the
   top of `main`) still borrow from that top-level frame, or receive owned values and `Rc`s.
-- Cancellation and errors propagate through scopes as defined by the language (Concurrency across CPUs).
+  **Libraries package the shape** (decided): `http::serve(listener, app)` is an accept loop with an
+  isolated scope per connection ([`stdlib.md`: HTTP](stdlib.md#http)), and
+  `supervise(|s| …, restart: …)` in `moddil/sync` covers pollers and workers with restart policies.
+  The hand-written loop in the [tour](tour.md) is the documented pattern underneath.
+- Cancellation and errors propagate through scopes
+  ([`error-handling.md`: Tasks and concurrency](error-handling.md#tasks-and-concurrency)).
+  Cancellation is cooperative and observed only at suspension points, and the cancellation path
+  must consume linear values like the error path
+  ([`lifecycle.md`: Cancellation and shutdown](lifecycle.md#cancellation-and-shutdown)). There is no
+  async drop ([`stdlib.md`: I/O](stdlib.md#io)).
 
 ## Shared mutable state
 
@@ -85,6 +94,14 @@ config.with(|c| c.max_conns = 100);         // lock held for the closure only
 A guard is a view (second-class), so it cannot leak out of the scope or be held across task
 boundaries by accident. Holding a lock across a suspension point is allowed but visible
 (the closure has the `suspend` effect); a lint can flag it.
+
+**Deadlocks** (decided). The model prevents data races, not deadlocks, so:
+- a mutex may carry a **lock level** (`Mutex<T, level: 3>`). Taking a lock whose level is equal to
+  or lower than one already held is a compile error where it can be seen statically, and a trap
+  otherwise, as in kernel lock-ordering schemes; unlevelled mutexes are allowed;
+- `runtime-sim` detects actual deadlocks (every task blocked) and reports the cycle with the seed
+  that replays it;
+- documentation steers towards channels and actors.
 
 ## Patterns the model makes easy
 
@@ -179,22 +196,8 @@ use `?`. None of that applies here.
 
 ## Open questions
 
-Runtime questions (preemption, priorities) are in [`runtime.md`: Open questions](runtime.md#open-questions).
-
-Resolved:
-
-- **Cancellation and linear values:** cancellation is cooperative and observed only at suspension
-  points, and the cancellation path must consume linear values like the error path ([Cancellation and shutdown](lifecycle.md#cancellation-and-shutdown)).
-- **Async drop:** there is none ([`stdlib.md`: I/O](stdlib.md#io)).
-- **Deadlock:** mutexes may carry a **lock level** (`Mutex<T, level: 3>`). Taking a lock whose level
-  is equal to or lower than one already held is a compile error where it can be seen statically,
-  and a trap otherwise, as in kernel lock-ordering schemes; unlevelled mutexes are allowed.
-  `runtime-sim` detects actual deadlocks (every task blocked) and reports the cycle with the seed to
-  replay it. Documentation steers towards channels and actors.
-- **Long-lived tasks:** libraries package the shape. `http::serve(listener, app)` is an accept loop
-  with an isolated scope per connection ([`stdlib.md`: HTTP](stdlib.md#http)), and
-  `supervise(|s| …, restart: …)` in `moddil/sync` covers pollers and workers with restart policies.
-  The hand-written loop in the [tour](tour.md) is the documented pattern underneath.
+None at present. Runtime questions (preemption, priorities) are in
+[`runtime.md`: Open questions](runtime.md#open-questions).
 
 ## Background
 

@@ -225,7 +225,9 @@ as `discard(r, "best-effort cache warm")`, so it is visible in reviews and seman
   propagates from the scope. The scope's error type is the union of its children's errors, so `?`
   and `catch` work unchanged; there is no error-group type to take apart (Python's `except*`).
   Errors that siblings raise before they observe the cancellation are attached to the first error
-  as **suppressed**, as cleanup failures are (D10), so nothing is lost.
+  as **suppressed**, as cleanup failures are (D10), so nothing is lost. Every error value has
+  `e.suppressed()`, an iterator of `&dyn Error`, and `e.notes()` for its context notes (D16); both
+  appear in `Display` and in traces.
 - **"First" is by completion time**, so on a real runtime it can vary between runs; under
   `runtime-sim` it is seed-controlled and replayable ([Determinism and reproducibility](determinism.md)).
 - **`escape` is not an error.** A task that performs `escape v` wins the scope the same way, and
@@ -382,18 +384,6 @@ All decided:
 ## Open questions
 
 None at present.
-
-Resolved: resumable recovery (D19), context (D16), "cannot fail" (D17), `catch` arms (D18);
-`Remote` errors have the standard shape in [`distribution.md`: The `Remote` effect](distribution.md#the-remote-effect);
-how much is inferred follows the effect rule: inferred inside a mod, explicit on `pub`
-([`effects-and-capabilities.md`: Signatures and inference](effects-and-capabilities.md#signatures-and-inference)).
-Also decided in the open-question review:
-
-- **`return` and `break` inside a `try` block** keep their normal meaning: they leave the function
-  or loop, running drops and `errdefer`. `try` scopes only `?`. A try block's error type is always
-  inferred, as the union of its `?`s ([Try blocks](#try-blocks)).
-- **Reading suppressed errors:** every error value has `e.suppressed()`, an iterator of
-  `&dyn Error`, and `e.notes()` for its context notes; both appear in `Display` and in traces.
 
 ## Background
 

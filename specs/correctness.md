@@ -93,6 +93,9 @@ with Contracts = contracts::none() { book.match_orders() }   // a measured hot p
   is one branch on the policy.
 - **Proven contracts are never checked.** A contract discharged by the verifier
   ([Proofs in Moddil itself](#proofs-in-moddil-itself)) is erased whatever the policy.
+- **`requires always` cannot be switched off.** `requires always len <= MAX` is checked under every
+  policy, including `none`, unless the verifier has proven it. It is for safety and security
+  boundaries such as an `unsafe fn`'s preconditions or a buffer-size limit.
 
 ### Validated newtypes (lightweight refinements)
 
@@ -212,6 +215,10 @@ verified (decided):
 A single function can ask for a higher level than its mod with `#[assure(L1)]`, for example the
 arithmetic core of a risk check in an L0 mod.
 
+**The annotation budget:** typical code should reach L1 with contracts on `pub` functions only, the
+verifier inferring loop invariants where it can. This is measured on the reference examples as
+annotation lines per 100 lines of code (at most 5 for L1) and published with each release.
+
 The level is part of mod metadata and the audit trail ([Package management and supply-chain security](packages-and-supply-chain.md)), so a dependency's assurance
 is visible before you depend on it. The HFT risk module (example 2) would target L2.
 
@@ -285,18 +292,6 @@ These are cheap now and expensive to change once code exists. All are **decided*
 | [HFT](examples/02-hft-platform.md) | Risk limits as contracts, with the risk module at L1 or L2; property tests on the order book; interleaving tests for lock-free queues |
 | [Web store](examples/03-web-store.md) | Validated newtypes for money, IDs and quantities; contracts on checkout; property tests on pricing |
 | [Hashiverse](examples/04-hashiverse.md) | Fuzzing the wire protocol against the Rust implementation; contracts and L1 on crypto and PoW code |
-
-## Resolved questions
-
-Decided in the open-question review:
-
-1. **Annotation budget:** typical code reaches L1 with contracts on `pub` functions only. It is
-   measured on the reference examples as annotation lines per 100 lines of code (at most 5 for L1)
-   and published with each release.
-2. **Contracts that are always checked:** `requires always …` is checked under every policy,
-   including `none`, unless the verifier has proven it. It is for safety and security boundaries
-   such as an `unsafe fn`'s preconditions or a buffer-size limit
-   ([Checking policy: the `Contracts` handler](#checking-policy-the-contracts-handler)).
 
 ## Open questions
 
