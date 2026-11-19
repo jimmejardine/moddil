@@ -1,6 +1,6 @@
 # Requirements and Non-Goals
 
-> **Status:** R1–R3 are decided. The non-goals are a draft. Indexed in [`README.md`](README.md).
+> **Status:** R1–R4 are decided. The non-goals are a draft. Indexed in [`README.md`](README.md).
 
 ## Firm requirements (decided)
 
@@ -83,6 +83,18 @@ as in Rust.
 
 Details: [`error-handling.md`](error-handling.md).
 
+### R4. Deterministic by construction.
+
+Pure Moddil code run under deterministic handlers produces **bit-identical results** on every
+tier-one target. Every source of nondeterminism (time, randomness, I/O, scheduling, the environment)
+enters through an effect or a root capability, and evaluation and drop order are specified. The
+exceptions are a closed, visible list: the `ffi` capability, `unsafe` code that breaks the rules, and
+the `nondet` effect (fast-math, relaxed SIMD, float atomics, unordered reductions). This is what makes
+deterministic simulation testing, exact record and replay, compiler-checked durable workflows and
+cross-platform lockstep possible.
+
+Details: [`determinism.md`](determinism.md).
+
 ## Non-goals (draft)
 
 - Maximum syntactic novelty. Familiar syntax wins unless there is a strong reason.
@@ -103,4 +115,3 @@ Details: [`error-handling.md`](error-handling.md).
 
 - R1: should WASI runtimes without stack switching be supported, which would need the
   CPS/Asyncify-style lowering? (Also in [`compiler.md`: Risks and open questions](compiler.md#risks-and-open-questions).)
-- Should determinism become R4 ([`determinism.md`: Open questions](determinism.md#open-questions))?

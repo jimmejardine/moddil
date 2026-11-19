@@ -241,7 +241,7 @@ fn main(…) -> ExitCode {
 |---|---|---|
 | **Control (built in)** | `fail(E)`, `suspend`, `spawn` | Keywords, not traits: they act on the caller's stack and task ([`error-handling.md`](error-handling.md), [`concurrency.md`](concurrency.md)) |
 | **Standard traits** | `Time`, `Rand`, `Net`, `Fs`, `Stdin`, `Stdout`, `Stderr`, `Env`, `Process`, `Gpu`, `Remote`, `Introspect`, `Locale`, `Dom` | Traits in standard mods; handlers in runtime and simulation mods ([`runtime.md`: Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)) |
-| **Capabilities with no handler to swap** | `ffi`, `unsafe` | Declared and visible to every consumer; treated as high risk ([`interop.md`: The safety boundary](interop.md#the-safety-boundary)) |
+| **Capabilities with no handler to swap** | `ffi`, `unsafe`, `nondet` | Declared and visible to every consumer; `ffi` and `unsafe` are treated as high risk ([`interop.md`: The safety boundary](interop.md#the-safety-boundary)); `nondet` marks opt-in nondeterminism such as fast-math and float atomics, and is forbidden in replayable code ([`determinism.md`: The `nondet` effect](determinism.md#the-nondet-effect)) |
 | **Ambient, write-only** | `log`, `span`, `metric`, `Contracts` | Never written in signatures; cannot feed values back ([`observability.md`](observability.md)). `Contracts` sets which contracts are checked at run time ([`correctness.md`: Checking policy](correctness.md#checking-policy-the-contracts-handler)) |
 | **User-defined** | any trait | Context such as a database pool (`Db`), configuration, feature flags ([Directions (not yet decided)](#directions-not-yet-decided)) |
 

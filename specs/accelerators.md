@@ -177,6 +177,9 @@ and forgetting a fence.
   `unsafe` block, which is visible in capabilities and review ([Package management and supply-chain security](packages-and-supply-chain.md), [Diffs, code review and version control](semantic-vcs.md)).
 - **The CPU-simulator handler includes a race detector**, so unsafe kernels can be checked in tests
   and CI.
+- **Deterministic by default:** reductions run in a fixed order and integer atomics are
+  order-independent. Float atomics and unordered reductions perform `nondet`, which keeps them out
+  of lockstep and replayable code ([`determinism.md`: The `nondet` effect](determinism.md#the-nondet-effect)).
 
 ## Level 1: tensor expressions
 

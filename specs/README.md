@@ -29,7 +29,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | **Start here**                                                         |                    |                                                                                       |
 | [Why Moddil](vision.md)                                                | —                  | [`vision.md`](vision.md): preamble, thesis, cross-cutting themes, tensions            |
 | [A tour of Moddil](tour.md)                                            | reference          | [`tour.md`](tour.md): one small service and its simulated tests, in the agreed syntax |
-| [Requirements and non-goals](requirements.md)                          | 🟡 minor questions | [`requirements.md`](requirements.md): R1–R3 and non-goals                             |
+| [Requirements and non-goals](requirements.md)                          | 🟡 minor questions | [`requirements.md`](requirements.md): R1–R4 and non-goals                             |
 | [Reference examples](examples/README.md)                               | 🟠 major questions | [`examples/`](examples/README.md): game, HFT, web store, Hashiverse                   |
 | [Surface syntax](syntax.md)                                            | 🟡 minor questions | [`syntax.md`](syntax.md)                                                              |
 | [Language definition and conformance](definition.md)                   | 🟡 minor questions | [`definition.md`](definition.md)                                                      |
@@ -55,7 +55,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Performance model](performance.md)                                    | 🟡 minor questions | [`performance.md`](performance.md)                                                    |
 | [GPUs and accelerators](accelerators.md)                               | 🟡 minor questions | [`accelerators.md`](accelerators.md)                                                  |
 | [Distributed and multi-tier programs](distribution.md)                 | 🟡 minor questions | [`distribution.md`](distribution.md)                                                  |
-| [Determinism and reproducibility](determinism.md)                      | 🟠 major questions | [`determinism.md`](determinism.md)                                                    |
+| [Determinism and reproducibility](determinism.md)                      | 🟡 minor questions | [`determinism.md`](determinism.md)                                                    |
 | [Program lifecycle](lifecycle.md)                                      | 🟡 minor questions | [`lifecycle.md`](lifecycle.md)                                                        |
 | [Observability and debuggability](observability.md)                    | 🟡 minor questions | [`observability.md`](observability.md)                                                |
 | **Library and ecosystem**                                              |                    |                                                                                       |
@@ -86,7 +86,7 @@ For people and LLM agents editing the specs:
 - **Each area's document is authoritative.** It holds the problem statement, prior art, decisions,
   directions and open questions in full; this index only points to it.
 - **Respect what is settled.** Sections marked **Decision** or **Decided**, and the firm
-  requirements **R1–R3**, are settled: don't reopen them unless asked. **Directions** and
+  requirements **R1–R4**, are settled: don't reopen them unless asked. **Directions** and
   **Open questions** are still open.
 - **The [reference examples](examples/README.md) are the yardstick:** a feature that none of them
   needs is a candidate for removal.
@@ -95,7 +95,7 @@ For people and LLM agents editing the specs:
   rewritten freely. Cross-reference with a heading link: `[Live update (debug builds)](build-times.md#live-update-debug-builds)`
   in another document, or `[Index](#index)` within the same document. Anchors follow
   GitHub's slug rules (lower-case, punctuation removed, spaces become hyphens). Stable identifiers
-  that are not positions (R1–R3, D1–D10, example file numbers) stay as they are.
+  that are not positions (R1–R4, D1–D10, example file numbers) stay as they are.
 - **Run the link checker after every edit:**
 
   ```text

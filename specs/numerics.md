@@ -124,7 +124,9 @@ for i in (0..xs.len()).rev() { … }
 
 - `f16`, `bf16`, `f32`, `f64`.
 - **Strict IEEE 754** ([`determinism.md`: Sources of nondeterminism](determinism.md#sources-of-nondeterminism)): no implicit FMA, no fast-math
-  reordering unless opted into, and a correctly rounded `moddil/math`.
+  reordering except under the `nondet` effect
+  ([`determinism.md`: The `nondet` effect](determinism.md#the-nondet-effect)), and a correctly rounded
+  `moddil/math` ([`determinism.md`: Deterministic maths](determinism.md#deterministic-maths)).
 - `==` and `<` follow IEEE (NaN is unequal to everything), so floats are `PartialOrd`, not `Ord`.
 - **Sorting** uses `total_cmp` (IEEE `totalOrder`).
 - **A finite float** is a refinement: `type Finite = f64 where self.is_finite()`. It implements `Ord`

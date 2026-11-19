@@ -114,7 +114,7 @@ section covers how observability uses it.
 
 Limits:
 - Recording I/O can be large; volume and retention are configurable.
-- Code outside the effect boundary (FFI, `unsafe`, explicitly nondeterministic maths) is not
+- Code outside the effect boundary (FFI, `unsafe`, code performing `nondet`) is not
   replayable unless wrapped by effects; the recorder flags it.
 - Recordings may contain sensitive data; how secrets are excluded or encrypted is open ([Open questions](#open-questions)).
 
