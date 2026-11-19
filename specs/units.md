@@ -15,8 +15,11 @@ let timeout        = 500<ms>
 let budget         = 64<MiB>
 ```
 
-- Units are part of the **type**: `f64<m>`, `i64<ns>`, `Decimal<USD>`. Literals use the same syntax:
+- Units are part of the **type**: `f64<m>`, `i64<ns>`, `Fixed<4><USD>`. Literals use the same syntax:
   `100<cm>`.
+- **The unit bracket always comes last.** A type with generic parameters writes both groups
+  (`Fixed<4><USD>`, `Simd<f32, 8><m>`); a type without them writes only the unit (`f64<m>`,
+  `BigDecimal<USD>`) ([`numerics.md`: Units of measure](numerics.md#units-of-measure)).
 - **Zero runtime cost:** units are checked at compile time and erased; conversion factors are folded
   in at compile time.
 - The set of dimensions and units is **open**: any mod can declare new ones.
@@ -115,7 +118,7 @@ weakness.
     conversion is explicit, with a rounding mode;
   - different dimensions never convert.
 - **Currencies:** each currency is its own base dimension, so `USD` and `EUR` never mix. Conversion
-  needs an explicit exchange rate of type `Decimal<EUR/USD>`.
+  needs an explicit exchange rate of type `Fixed<6><EUR/USD>`.
 - **Points and differences (affine):** absolute temperatures and timestamps are distinct from
   differences. `Instant - Instant = Duration`; adding two `degC` points is an error; `degC` to `K`
   applies the offset to points but not to differences.
@@ -163,7 +166,7 @@ seconds, the other expected newton-seconds.
 | Example | Units |
 |---|---|
 | [Game](examples/01-multiplayer-game.md) | Metres, seconds, radians, `m/s^2` in physics shared by client and server |
-| [HFT](examples/02-hft-platform.md) | `Decimal<USD>` prices, quantities, notional (`Price * Qty`); `i64<ns>` latencies |
+| [HFT](examples/02-hft-platform.md) | `Fixed<4><USD>` prices, quantities, notional (`Price * Qty`); `i64<ns>` latencies |
 | [Web store](examples/03-web-store.md) | Money per currency; shipping weights and dimensions |
 | [Hashiverse](examples/04-hashiverse.md) | `500<ms>` durations and `64<MiB>` sizes, where today raw integer types (`TimeMillis`, `DurationMillis`) are used |
 

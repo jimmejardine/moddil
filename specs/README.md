@@ -45,7 +45,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Modules, visibility and program structure](modules.md)                | 🟡 minor questions | [`modules.md`](modules.md)                                                            |
 | [`unsafe` and the safety boundary](unsafe.md)                          | 🟡 minor questions | [`unsafe.md`](unsafe.md)                                                              |
 | [Security model](security.md)                                          | 🟡 minor questions | [`security.md`](security.md)                                                          |
-| [Numerics and data](numerics.md)                                       | 🟠 major questions | [`numerics.md`](numerics.md), [`units.md`](units.md)                                  |
+| [Numerics and data](numerics.md)                                       | 🟡 minor questions | [`numerics.md`](numerics.md), [`units.md`](units.md)                                  |
 | [Text and strings](text.md)                                            | 🟡 minor questions | [`text.md`](text.md)                                                                  |
 | [Metaprogramming](comptime.md)                                         | 🟡 minor questions | [`comptime.md`](comptime.md)                                                          |
 | [Contracts and verification](correctness.md)                           | 🟠 major questions | [`correctness.md`](correctness.md)                                                    |

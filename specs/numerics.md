@@ -7,12 +7,12 @@
 
 | Rule | One line |
 |---|---|
-| **Overflow traps** | In every build, as in Swift. Wrapping is explicit: `+%`, `-%`, `*%` or `Wrapping<T>`. |
+| **Overflow traps** | In every build, as in Swift, with no opt-out per build, mod or block. Wrapping is explicit: `+%`, `-%`, `*%` or `Wrapping<T>`. |
 | **`int` for lengths and indices** | A signed 64-bit `int` on every target; `len - 1` on an empty list is `-1`, not 2^64−1. |
 | **Exact literals** | A literal is an exact number until it is used, then checked to fit: `300` into a `u8` is a compile error; `0.10` into a decimal is exact. |
 | **Lossless widening only** | `i32 → i64` and `f32 → f64` are implicit; anything that can lose information is an explicit, named conversion. No `as`. |
 | **Strict IEEE floats** | `f16`, `bf16`, `f32`, `f64`; IEEE comparisons, `total_cmp` for sorting, a `Finite` refinement that is totally ordered. |
-| **Decimals for money** | `Fixed<S>`, an i64 scaled by 10^S with the scale in the type, and `BigDecimal`, in `moddil/decimal`. |
+| **Decimals for money** | `Fixed<S>`, an i64 scaled by 10^S with the scale in the type, and `BigDecimal`, in `moddil/decimal`. Rounding is always stated; money is `Fixed<4><USD>`. |
 | **SIMD in the core** | `Simd<T, N>` and masks are core primitives; tensors are a mod. |
 | **Layout under control** | Field reordering unless `#[repr(C)]`; packed structs and bitfields; endian types (`u32be`); a comptime struct-of-arrays container. |
 
@@ -67,8 +67,16 @@
 - **Cost**: typically 1–5% in integer-heavy code before optimisation. Checks are removed where
   range analysis or refinements prove that overflow can't happen (loop counters bounded by a
   length, values of `type Percent = u8 where self <= 100`).
-- **No global opt-out:** no build profile turns overflow checks off; `moddil perf checks` reports the
-  ones that remain ([`performance.md`: Checks and their elision](performance.md#checks-and-their-elision)).
+- **No opt-out (decided):** overflow checks are never turned off, not per build, per mod or per
+  block; there is no `unchecked` region. The only exits are:
+  - explicit wrapping (`+%`, `Wrapping<T>`), where wrapping is the intended meaning;
+  - checks the compiler removes because it can prove they never fire: range analysis, refinements,
+    or a `requires` or `assert` stating the range before a loop.
+
+  So `+` means the same thing in every file. Overflow is not undefined behaviour even inside
+  `unsafe` ([`unsafe.md`: The closed list of undefined behaviour](unsafe.md#the-closed-list-of-undefined-behaviour)).
+  `moddil perf checks` reports the checks that remain
+  ([`performance.md`: Checks and their elision](performance.md#checks-and-their-elision)).
 
 ### Indices and lengths are signed
 
@@ -136,11 +144,18 @@ In `moddil/decimal`:
   - Overflow traps, like integers.
 - **`BigDecimal`**: arbitrary precision with explicit rounding contexts, for accounting.
 - Exact literals ([Exact literals](#exact-literals)) make `let price: Fixed<4> = 101.2550` safe.
+- **Rounding is always stated (decided).** `+`, `-` and widening `*` are exact and take no mode.
+  Anything that can lose digits takes an explicit `Round` mode: rescaling to a smaller scale,
+  division (`a.div::<4>(b, Round::HalfEven)`), conversion from a float, and `BigDecimal` operations
+  bounded by a precision. There is no default and no ambient context (unlike Python's `decimal`), and
+  a type alias cannot carry a mode: as with [conversions](#conversions), nothing is lost silently.
+- **Units** go in a last bracket: `Fixed<4><USD>`, `BigDecimal<USD>`
+  ([Units of measure](#units-of-measure)).
 
 ```rust
-let price: Fixed<4> = 101.2550
-let qty:   Fixed<0> = 300
-let notional = (price * qty).rescale::<2>(Round::HalfEven)   // Fixed<2>
+let price: Fixed<4><USD> = 101.2550<USD>
+let qty:   Fixed<0>      = 300
+let notional = (price * qty).rescale::<2>(Round::HalfEven)   // Fixed<2><USD>
 ```
 
 ### Big numbers
@@ -172,12 +187,16 @@ let notional = (price * qty).rescale::<2>(Round::HalfEven)   // Fixed<2>
 Units are a type-level feature (`f64<m/s>`, `i64<ns>`, `100<cm>`), proposed in
 [`units.md`](units.md) with its own open questions.
 
+**Decided: the unit bracket always comes last.** A type with generic parameters writes both groups
+(`Fixed<4><USD>`, `Simd<f32, 8><m>`); a type without them writes only the unit (`f64<m>`,
+`BigDecimal<USD>`). Literals put the unit after the number: `101.2550<USD>`.
+
 ## Fit check against the reference examples
 
 | Example | Uses |
 |---|---|
 | [Multiplayer game](examples/01-multiplayer-game.md) | `f32` and `Simd<f32, 8>` for physics; strict IEEE for deterministic rollback |
-| [HFT](examples/02-hft-platform.md) | `Fixed<4>` prices; overflow traps in risk limits; `Soa<Order>` for scans; `u64be` exchange formats |
+| [HFT](examples/02-hft-platform.md) | `Fixed<4><USD>` prices; overflow traps in risk limits; `Soa<Order>` for scans; `u64be` exchange formats |
 | [Web store](examples/03-web-store.md) | `Fixed<2>` or `BigDecimal` for money; exact literals for prices |
 | [Hashiverse](examples/04-hashiverse.md) | `Wrapping<u64>` hashes; `u32be` wire formats; `BigInt` where cryptography needs it |
 
@@ -189,10 +208,8 @@ Units are a type-level feature (`f64<m/s>`, `i64<ns>`, `100<cm>`), proposed in
 
 ## Open questions
 
-- How are units written on parameterised types (`Fixed<4>` in US dollars: `Fixed<4><USD>`?)?
-- Should `Fixed` and `BigDecimal` have a default rounding mode, or must it always be stated?
-- Should overflow checks ever be disabled per mod or per block (an `unchecked` region), or only
-  replaced by explicit `+%`?
+- Should decimal rescaling and float-to-integer rounding (`f.round::<i64>(mode)`) share one `Round`
+  enum?
 
 ## Prior art
 

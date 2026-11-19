@@ -194,8 +194,9 @@ same in debug and release, on every target ([`numerics.md`: Overflow traps](nume
   server can show remaining checks inline.
 - **Local opt-outs** are visible in the code:
   - wrapping operators and `Wrapping<T>` where wrapping is the intended meaning;
-  - `get_unchecked` and unchecked arithmetic inside `unsafe`, with a stated safety contract
-    ([`unsafe.md`](unsafe.md)).
+  - `get_unchecked` inside `unsafe`, with a stated safety contract ([`unsafe.md`](unsafe.md));
+  - overflow checks removed by stating the range (`requires`, `assert`, refinements). Arithmetic
+    itself is never unchecked ([`numerics.md`: Overflow traps](numerics.md#overflow-traps)).
 
 ## Optimisation control
 
