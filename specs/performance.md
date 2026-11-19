@@ -238,6 +238,9 @@ bench "one tick" for on_tick {
 - **Counters are deterministic:** allocations and syscalls are counted by the runtime; instructions
   through hardware counters, or an instruction-counting emulator where none are available. A budget on
   a counter fails CI reliably, even on shared machines.
+- **Compile-time performance assertions** sit beside budgets: `#[vectorise]` fails the release build
+  if a loop was not vectorised, and `#[no_alloc]` if a function can allocate
+  ([`stdlib.md`: Iteration](stdlib.md#iteration)).
 - **Wall-clock time** is reported with confidence intervals and warns on regression, but does not fail
   the build: timing on CI machines is too noisy.
 - Results are recorded per commit, so a regression can be traced to the change that caused it

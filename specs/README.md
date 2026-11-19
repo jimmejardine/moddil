@@ -59,7 +59,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Program lifecycle](lifecycle.md)                                      | 🟡 minor questions | [`lifecycle.md`](lifecycle.md)                                                        |
 | [Observability and debuggability](observability.md)                    | 🟡 minor questions | [`observability.md`](observability.md)                                                |
 | **Library and ecosystem**                                              |                    |                                                                                       |
-| [Standard library and mods (R2)](stdlib.md)                            | 🟠 major questions | [`stdlib.md`](stdlib.md): small core, tiers, catalogue, core interfaces               |
+| [Standard library and mods (R2)](stdlib.md)                            | 🟡 minor questions | [`stdlib.md`](stdlib.md): small core, tiers, catalogue, core interfaces               |
 | [Packages and supply-chain security](packages-and-supply-chain.md)     | 🟡 minor questions | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)                        |
 | [Interoperability with C and Rust](interop.md)                         | 🟡 minor questions | [`interop.md`](interop.md)                                                            |
 | [Data interchange and persistence](data.md)                            | 🟡 minor questions | [`data.md`](data.md)                                                                  |

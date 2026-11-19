@@ -147,7 +147,9 @@ fn connect(addr: &Addr) -> Conn with net: Net, suspend, fail(NetError) {
 
 **Drop never suspends.** Destruction runs on every exit path, including cancellation and traps, so
 it must be immediate and infallible. A resource whose teardown needs I/O is a **linear type** with an
-explicit `close()` or `commit()`, which may suspend and fail like any other function.
+explicit `close()` or `commit()`, which may suspend and fail like any other function. A resource
+whose graceful close only matters for politeness may instead stay affine: `close()` is graceful,
+and a drop closes abruptly ([`stdlib.md`: I/O](stdlib.md#io)).
 
 ## Resources: affine and linear
 
@@ -239,5 +241,6 @@ There are three cases, each with a precise answer:
 1. **Linear values on error paths:** what is the least noisy explicit handling (an `errdefer`
    requirement, a handler clause, or a default consuming operation)?
 2. **Suppressed errors:** the exact API for reading them from an error value.
-3. **Async drop:** drop may not suspend. Is a linear `close` enough for every resource whose clean
-   shutdown needs I/O (for example flushing a TLS stream)?
+3. ~~**Async drop.**~~ Resolved: there is no async drop. A resource is linear if skipping its
+   graceful close would lose data, and affine with an abrupt, non-suspending drop if it would only
+   lose politeness, as with TLS's `close_notify` ([`stdlib.md`: I/O](stdlib.md#io)).

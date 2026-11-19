@@ -64,7 +64,8 @@
 | **`Remote`** | The effect performed by a call that crosses tiers, with its own failures ([The `Remote` effect](distribution.md#the-remote-effect)). |
 | **Role trait** | An empty subtrait with a blanket impl (`trait DbInput: Db {}`), giving a second handler of a trait its own effect ([Role traits](effects-and-capabilities.md#role-traits)). |
 | **Root capability** | A capability `main` receives as a parameter (`NetRoot`, `FsRoot`, `Stdio`, …); the only source of authority ([`main` declares its root capabilities](lifecycle.md#main-declares-its-root-capabilities)). |
-| **Runtime** | A mod providing handlers for scheduling, I/O and time (`moddil/runtime`, `-wasm`, `-sim`) ([Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)). |
+| **Router** | `http::Router`: maps compile-time-checked paths to handler functions, converting path parameters with `TryFrom`; handler errors must implement `IntoResponse` ([HTTP](stdlib.md#http)). |
+| **Root capability** | A mod providing handlers for scheduling, I/O and time (`moddil/runtime`, `-wasm`, `-sim`) ([Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)). |
 | **Safety contract** | The documented conditions a caller of an `unsafe fn` must uphold ([Safety contracts](unsafe.md#safety-contracts)). |
 | **Scope** | `scope(\|s\| …)`: the only way to start tasks; it waits for all of them and is their cancellation token ([Tasks and borrowing](concurrency.md#tasks-and-borrowing)). |
 | **Security labels** | `Secret<T>`, `Personal<T>` and `Untrusted<T>`, checked by the compiler ([Information-flow labels](security.md#information-flow-labels)). |

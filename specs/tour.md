@@ -21,7 +21,7 @@ isolation, graceful shutdown, and tests that run against a simulated network.
 ```rust
 use moddil::collections::Map
 use moddil::net::{Listener, Conn, Url}
-use moddil::net::http::{self, Method, Request, Response, Status}
+use moddil::net::http::{self, Handler, IntoResponse, Request, Response, Router, Status}
 use moddil::serde::{json, Deserialize, Serialize}
 use moddil::sync::Mutex
 
@@ -82,7 +82,7 @@ impl Links for MemoryLinks {
 - `Links` is an ordinary **trait**. Listed after `with` it becomes an **effect**: its implementation
   is chosen by whoever installs a handler, not by this code, and reaches every function below without
   being passed as an argument ([Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly)).
-- `create` and `follow` call `links` directly, so they bind the name (`with links: Links`); `route`
+- `create` and `follow` call `links` directly, so they bind the name (`with links: Links`); `app`
   and `serve` only pass the need on, so they write the bare `Links`.
 - A production build would install a SQL-backed handler instead. That handler captures `Db` when it is
   built in `main`, so nothing that uses `Links` changes
@@ -113,41 +113,43 @@ fn create(req: &Request) -> Response with links: Links, Rand, suspend, fail(Link
     Response::json(Status::Created, &Created { code })
 }
 
-/// `GET /{code}`
-fn follow(raw: &str) -> Response with links: Links, suspend {
-    let target = try { links.get(&Code::new(raw)?) } catch { _ => None };   // a bad code is just unknown
-    match target {
+/// `GET /{code}`: a malformed code never gets here; the router answers 404.
+fn follow(code: Code) -> Response with links: Links, suspend {
+    match links.get(&code) {
         Some(t) => Response::redirect(Status::PermanentRedirect, &t),
         None    => Response::status(Status::NotFound),
     }
 }
 
-/// Every error becomes a response, so nothing is left for the caller (R3).
-fn route(req: &Request) -> Response with Links, Rand, suspend {
-    try {
-        match (req.method(), req.path_segments()) {
-            (Method::Post, ["links"]) => create(req)?,
-            (Method::Get, [code])     => follow(code),
-            _                         => Response::status(Status::NotFound),
-        }
-    } catch {                                           // gap 2: arms for an error union
-        DecodeError(e)          => Response::text(Status::BadRequest, fmt"bad request: {e}"),
-        LinkError(Taken(_))     => Response::status(Status::Conflict),
+/// How each error becomes a response.
+impl IntoResponse for DecodeError {
+    fn into_response(self) -> Response { Response::text(Status::BadRequest, fmt"bad request: {self}") }
+}
+impl IntoResponse for LinkError {
+    fn into_response(self) -> Response {
+        match self { LinkError::Taken(_) => Response::status(Status::Conflict) }
     }
+}
+
+/// The routes.
+fn app() -> impl Handler with Links, Rand, suspend {
+    Router::new()
+        .post("/links", create)
+        .get("/{code}", follow)
 }
 ```
 
-- **Errors are an effect.** `fail(LinkError | DecodeError)` is part of `create`'s signature, `?`
-  propagates, and the compiler rejects `route` if any variant is left unhandled
-  ([Entry points must handle everything (R3)](error-handling.md#entry-points-must-handle-everything-r3)).
+- **Errors are an effect.** `fail(LinkError | DecodeError)` is part of `create`'s signature and `?`
+  propagates. The router accepts `create` only because both errors implement `IntoResponse`, so
+  every error becomes a response and nothing is left for the caller
+  ([HTTP](stdlib.md#http), [Entry points must handle everything (R3)](error-handling.md#entry-points-must-handle-everything-r3)).
+- **Paths are checked at compile time** and `{code}` is converted to a `Code` before `follow` runs,
+  so `follow` never sees a malformed code.
 - **Every effect is listed on its own** (`links, rand, suspend`); there is no umbrella I/O effect
   ([The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)). Private functions could
   leave their effects to inference; they are written out here for the reader
   ([Signatures and inference](effects-and-capabilities.md#signatures-and-inference)).
-- A `try` block turns errors into a value; `catch` handles the listed variants
-  ([Try blocks](error-handling.md#try-blocks)).
 - `fmt"…"` is checked at compile time ([Formatting](text.md#formatting)).
-- `match` on a slice pattern needs no string indexing ([Positions and slicing](text.md#positions-and-slicing)).
 
 ## 4. Serving, isolated per connection
 
@@ -167,7 +169,7 @@ pub fn serve(listener: &Listener) with Links, Rand, Net, suspend, spawn {
 /// Serves one connection; a bug here cannot take down the server.
 fn handle(conn: Conn) with Links, Rand, Net, suspend, spawn {
     try {
-        scope(|c| c.spawn(|| http::serve_connection(conn, route)), isolate: true)?
+        scope(|c| c.spawn(|| http::serve_connection(conn, &app())), isolate: true)?
     } catch {
         Trapped(t) => log.error(fmt"request trapped: {t}"),
         e          => log.warn(fmt"connection ended: {e}"),
@@ -175,6 +177,8 @@ fn handle(conn: Conn) with Links, Rand, Net, suspend, spawn {
 }
 ```
 
+- `http::serve(listener, app())` packages this loop; it is written out here to show `scope` and
+  isolation ([HTTP](stdlib.md#http)).
 - `scope` is the only way to start tasks, and it waits for all of them, so a connection cannot
   outlive the server ([Tasks and borrowing](concurrency.md#tasks-and-borrowing)).
 - Spawned tasks **inherit their scope's handlers**, so every connection sees the same `Links`.
@@ -217,19 +221,19 @@ fn main(args: Args, stdio: Stdio, net: NetRoot, entropy: Entropy) -> ExitCode {
 ## 6. Tests on a simulated network
 
 ```rust
-test "a created link redirects" for route {
+test "a created link redirects" for app {
     with Links = MemoryLinks::new(), Rand = rand::seeded(1) {
-        let created = route(&Request::post("/links", body: r#"{"url": "https://moddil.org"}"#));
+        let created = app().handle(&Request::post("/links", body: r#"{"url": "https://moddil.org"}"#));
         assert(created.status() == Status::Created);
         let code: Created = json::decode(created.body())?;
-        let followed = route(&Request::get(fmt"/{code.code}"));
+        let followed = app().handle(&Request::get(fmt"/{code.code}"));
         assert(followed.status() == Status::PermanentRedirect);
     }
 }
 
-test "plain http is rejected" for route {
+test "plain http is rejected" for app {
     with Links = MemoryLinks::new(), Rand = rand::seeded(1) {
-        let r = route(&Request::post("/links", body: r#"{"url": "http://moddil.org"}"#));
+        let r = app().handle(&Request::post("/links", body: r#"{"url": "http://moddil.org"}"#));
         assert(r.status() == Status::BadRequest);
     }
 }
@@ -253,7 +257,7 @@ test "serves over a lossy network" for serve {
 }
 ```
 
-- **Tests name their subject** (`for route`), so tooling knows which tests cover what changed
+- **Tests name their subject** (`for app`), so tooling knows which tests cover what changed
   ([Attached tests](testing.md#attached-tests)).
 - **No mocks:** the tests install different handlers for the same effects. The production code is
   unchanged ([Deterministic simulation testing](determinism.md#deterministic-simulation-testing)).
@@ -273,7 +277,9 @@ Writing a complete program needed these, and no spec decides them yet. The spell
 placeholders. Each gap is recorded as an open question in its area.
 
 Resolved since the tour was written: effects are traits used after `with`, how handlers are
-defined, how a handler gets its own dependencies, and `spawn` being an effect
+defined, how a handler gets its own dependencies, `spawn` being an effect, the HTTP router, server
+and client ([HTTP](stdlib.md#http)), and the `RefinementError` a validated newtype raises
+([Validated newtypes](correctness.md#validated-newtypes-lightweight-refinements))
 ([Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly), [Defining handlers](effects-and-capabilities.md#defining-handlers),
 [Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers),
 [The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)).
@@ -281,9 +287,7 @@ defined, how a handler gets its own dependencies, and `spawn` being an effect
 | # | Gap | Open question in |
 |---|---|---|
 | 1 | A short, visible "this cannot fail" form instead of `try { Code::new(s)? }.unwrap()` | [`error-handling.md`](error-handling.md#open-questions), Q5 |
-| 2 | How `catch` arms name the variants of an error union (`DecodeError(e)`, `LinkError(Taken(_))`) | [`error-handling.md`](error-handling.md#open-questions), Q6 |
+| 2 | How `catch` arms name the variants of an error union (`DecodeError(e)`, `LinkError(Taken(_))`); no longer in the code, since the router maps errors | [`error-handling.md`](error-handling.md#open-questions), Q6 |
 | 3 | The `Args` API and named exit codes such as `ExitCode::Unavailable` | [`lifecycle.md`](lifecycle.md#open-questions) |
-| 4 | The HTTP server, router and client in `moddil/net` | [`stdlib.md`](stdlib.md#open-questions), Q7 |
 | 5 | The `Sim` API: nodes, per-node handlers, addresses, stopping | [`determinism.md`](determinism.md#open-questions), Q6 |
 | 6 | How an unhandled `?` inside a test is reported | [`testing.md`](testing.md#open-questions), Q4 |
-| 7 | The error raised when a validated newtype rejects a value | [`correctness.md`](correctness.md#open-questions), Q6 |

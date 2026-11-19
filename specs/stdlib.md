@@ -1,6 +1,7 @@
 # Standard library and mods
 
-> **Status:** decided direction, details open. Listed in the [index](README.md). The catalogue of
+> **Status:** minor questions: the shape is decided, including cleanup, HTTP and vectorisation;
+> HTTP details remain. Listed in the [index](README.md). The catalogue of
 > standard mods is in [Initial standard-mod catalogue](#initial-standard-mod-catalogue); this document defines the shape of the
 > core interfaces they share. Snippets are **illustration only**.
 
@@ -14,7 +15,9 @@
 | **Iteration** | **One external `Iterator` protocol.** `next` may carry effects, so an iterator that suspends is also an async stream: there is no separate `Stream` trait ([Iteration](#iteration)). |
 | **Generators** | **`gen` blocks and `gen fn` in v0**, compiled to state-machine iterators ([Generators](#generators)). |
 | **Collections** | Rust's names and shapes; `Map` and `Set` traits for generic code; seeded hash order ([Collections](#collections)). |
-| **I/O** | One set of `Read`/`Write` traits for every kind of I/O, with **borrowed buffers**, safe on completion-based kernels because cancellation is structured ([I/O](#io)). |
+| **I/O** | One set of `Read`/`Write` traits for every kind of I/O, with **borrowed buffers**, safe on completion-based kernels because cancellation is structured. No async drop: a resource is linear if skipping its graceful close loses data, affine with an abrupt drop otherwise ([I/O](#io)). |
+| **HTTP** | A `Router` with paths checked at compile time and typed path parameters; handlers are plain functions whose errors must implement `IntoResponse` (R3) ([HTTP](#http)). |
+| **Vectorisation** | Not promised; `#[vectorise]` asserts it where it matters and fails the build otherwise ([Iteration](#iteration)). |
 
 ## Problem
 
@@ -171,7 +174,7 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 
 ## The prelude
 
-The prelude is small, and contains no effects:
+**Decision:** the prelude is small, and contains no effects:
 
 - types: `Option`, `Result`, `Vec`, `String`, `Box`, `Rc`;
 - traits: `Iterator`, `IntoIterator`, `Clone`, `Copy`, `Eq`, `Ord`, `Hash`, `Display`, `Debug`,
@@ -211,6 +214,11 @@ trait Iterator {
   ([`closures.md`](closures.md)). It is simpler to implement for trees and concurrent maps, and lets
   the collection keep its own locks or traversal stack. `for` and adaptors use `Iterator`; `visit` is
   an alternative, not a replacement.
+- **Vectorisation is asserted, not promised** (decided). Release builds vectorise adaptor chains
+  over slices when they can, but the language does not guarantee it. Where it matters,
+  `#[vectorise]` on a loop or function fails the release build if the backend did not vectorise it,
+  and says why (possible aliasing, a call it could not inline, a trap edge). It is a performance
+  contract you ask for, like a benchmark's `#[budget]` ([`performance.md`: Benchmarks and budgets](performance.md#benchmarks-and-budgets)).
 - **Parallel iteration** is `parallel_map` and friends over structured tasks
   ([`concurrency.md`: Data parallelism: `parallel_map`](concurrency.md#data-parallelism-parallel_map)).
 
@@ -257,7 +265,7 @@ Rust's names and shapes, in `core-*` (with an allocator) and `moddil/collections
 | `TreeMap<K, V>`, `TreeSet<T>` | Sorted; Rust's `BTreeMap` |
 | `OrderedMap<K, V>`, `OrderedSet<T>` | Insertion order |
 | `BinaryHeap<T>`, `RingBuffer<T>` | |
-| Persistent collections | Structural sharing for immutable updates, in `moddil/collections` |
+| Persistent collections | Structural sharing for immutable updates; standard, in `moddil/collections` (decided) |
 
 - **`Map` and `Set` traits** let generic code accept any map (the specs' snippets write
   `&Map<K, V>`).
@@ -300,6 +308,25 @@ follow Rust's `std::io`.
 - **Closing can fail, so it is explicit.** Files open for writing and buffered writers are linear:
   they must be `close`d or `abort`ed, and a flush error cannot be lost in a destructor
   ([`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear)).
+- **Graceful or abrupt close, chosen per type (decided).** Drop never suspends, and there is no
+  async drop ([`resources.md`: Construction may suspend; drop may not](resources.md#construction-may-suspend-drop-may-not)):
+  - if skipping the graceful close would **lose data** (a buffered file writer, a transaction), the
+    type is **linear** and must be `close`d, `commit`ted or `abort`ed;
+  - if it would only **lose politeness** (TLS's `close_notify`, a WebSocket close frame), the type
+    is **affine**: `close()` is graceful and may suspend, and a drop closes abruptly (a TCP reset)
+    without suspending.
+
+  ```rust
+  let w = fs.create(path)?;            // linear: must be closed or aborted
+  w.write_all(data)?;
+  w.close()?;
+
+  let tls = tls::connect(conn)?;       // affine
+  tls.write_all(request)?;
+  tls.close()?;                        // graceful; dropping it instead closes abruptly
+  ```
+
+  Each type's documentation says which it is.
 - **Zero-copy reads** hand out `Bytes` and `RcStr` slices of the runtime's buffers
   ([`memory.md`: Zero-copy I/O](memory.md#zero-copy-io), [`text.md`](text.md)).
 - **Where I/O comes from:** `Fs` and `Net` are effects. Handlers live in the runtime mods (`moddil/runtime`
@@ -307,11 +334,50 @@ follow Rust's `std::io`.
   the same code runs in production, in the browser and in deterministic tests
   ([`determinism.md`](determinism.md)).
 
+## HTTP
+
+**Decision: a router with compile-time-checked paths and typed parameters**, in `moddil/net::http`.
+
+```rust
+fn create(req: &Request) -> Response with links: Links, Rand, suspend, fail(LinkError | DecodeError) { … }
+fn follow(code: Code) -> Response with links: Links, suspend { … }
+
+impl IntoResponse for LinkError { … }      // Taken => 409
+impl IntoResponse for DecodeError { … }    // 400
+
+let app = Router::new()
+    .post("/links", create)
+    .get("/{code}", follow);
+
+http::serve(listener, app)?;
+```
+
+- **Paths are checked at compile time.** Route strings are tagged literals
+  ([`comptime.md`: Tagged string literals (embedded DSLs)](comptime.md#tagged-string-literals-embedded-dsls)):
+  a malformed path, a duplicate route, or a `{param}` with no matching handler parameter is a build
+  error.
+- **Path parameters are typed.** `{code}` is converted with `TryFrom<&str>` to the handler's
+  parameter type, so `follow` receives a validated `Code`; a value that does not convert answers
+  `404` without reaching the handler.
+- **Handlers are plain functions** taking the request and the path parameters and returning a
+  `Response`. Their effects are inferred and become the router's effects; tests call them directly.
+- **Every error has a response (R3).** A handler may `fail(E)` only if every variant of `E`
+  implements `IntoResponse`. The bound is checked when the route is added, so nothing escapes the
+  router unhandled ([`error-handling.md`: Entry points must handle everything (R3)](error-handling.md#entry-points-must-handle-everything-r3)).
+- **Serving.** `http::serve(listener, app)` is the accept loop: one isolated scope per connection, and
+  it returns when `stop_requested()` fires ([`lifecycle.md`: Two levels: stop, then cancel](lifecycle.md#two-levels-stop-then-cancel)).
+  `http::serve_connection(conn, &app)` serves one connection for a hand-written loop.
+- **Testing without a socket.** `app.handle(&Request::get("/x"))` runs the router in-process.
+- **Client.** `http::get(url)` and `http::post(url, body: …, retries: 3, timeout: 5<s>)` use `Net`;
+  `http::Client` holds configuration such as pooling and default headers.
+
 ## Conversion and core traits
 
 | Trait | Notes |
 |---|---|
 | `From`, `Into`, `TryFrom`, `TryInto` | As in Rust; `TryFrom` fails through `fail(E)` ([`error-handling.md`](error-handling.md)) |
+| `Borrow` | Kept for keyed lookups: `map.get("k")` on a `Map<String, V>` |
+| ~~`AsRef`~~ | Not in Moddil (decided): functions take `&str` or `&[T]`, and callers convert with unsizing or `.as_str()` |
 | `Default` | As in Rust |
 | `Display`, `Debug` | [`text.md`: Formatting](text.md#formatting) |
 | `Clone`, `Copy`, `Eq`, `Ord`, `Hash` | [`values.md`](values.md) |
@@ -329,15 +395,7 @@ follow Rust's `std::io`.
 
 ## Open questions
 
-1. **The exact prelude:** should `Box`, `Rc` and the conversion traits be in it, or imported?
-2. **`AsRef` and `Borrow`:** are they still needed once unsizing coercions and the `Map` trait exist
-   ([`types.md`: No subtyping](types.md#no-subtyping))?
-3. **I/O handles and async drop:** is linear `close` enough for every resource whose shutdown must
-   suspend ([`concurrency.md`: Open questions](concurrency.md#open-questions))?
-4. **Coroutines:** generators that receive a value on each resume (`let x = yield y`), later?
-5. **Persistent collections:** standard or community?
-6. **Iterator fusion guarantees:** should the compiler promise that adaptor chains over slices
-   vectorise in release builds, as a documented performance contract?
-7. **The HTTP API in `moddil/net`:** request and response types, routing (the tour matches on
-   `path_segments()` by hand), serving a connection with a handler function, and the client
-   (`http::post(…, retries: 3)`). Not sketched anywhere yet ([`tour.md`](tour.md#gaps-the-tour-exposed)).
+1. **HTTP details:** streaming request and response bodies, the shape of middleware (functions that
+   wrap a handler), and query-string and header extraction into typed parameters.
+2. **Coroutines:** generators that receive a value on each resume (`let x = yield y`). Not in v0;
+   adding them later is backwards compatible.
