@@ -12,6 +12,7 @@
 | **Python** | `moddil bind --lang python` is the **first binding target, in v0**: native extension modules, `.pyi` stubs and wheels ([Python first](#python-first)). |
 | **Migration** | `moddil migrate rust` is an official, mechanical, test-verified translator for the common subset. TypeScript and other languages get an **agent-assisted** workflow ([Migrating existing code](#migrating-existing-code)). |
 | **Simplicity** | "Simpler than Rust" is a measured claim, with metrics published per release ([Simpler than Rust](#simpler-than-rust)). |
+| **Games** | Godot bindings through GDExtension as a second-wave path; no engine port ([Games through Godot](#games-through-godot)). |
 
 ## Problem
 
@@ -213,6 +214,45 @@ Models write well only in languages they have seen. Moddil's plan is in
 - **A widely used Python package** accelerated with Moddil would do more for adoption than any feature;
   finding one is a goal for the first year.
 
+## Games through Godot
+
+**Proposal: Godot bindings are a second-wave adoption path**, after the two
+[first audiences](#first-audiences). Moddil game code runs inside the unmodified Godot engine; a port
+of the engine itself (about 1.5 million lines of C++) is out of scope.
+
+Precedent: **godot-rust (gdext)** brought many game developers to Rust; **SwiftGodot** and
+**godot-cpp** do the same for Swift and C++.
+
+Why it fits:
+
+- **A pure C ABI.** Godot 4's GDExtension interface is a C header, `gdextension_interface.h`, so it is
+  imported directly, with no C++ shim
+  ([`interop.md`: The C ABI, both directions](interop.md#the-c-abi-both-directions)).
+- **The whole API is generated.** `extension_api.json` describes every class, method, signal and enum;
+  bindings are generated from it at comptime ([`comptime.md`](comptime.md)).
+- **Overlays add what the JSON lacks**: nullable object returns, reference-counted vs manually freed
+  objects, and main-thread affinity
+  ([`interop.md`: Annotation overlays](interop.md#annotation-overlays)).
+- **Engine callbacks are entry points.** `_ready`, `_process` and other virtual methods must handle
+  every error; for game code that means logging and carrying on
+  ([`interop.md`: Callbacks into Moddil](interop.md#callbacks-into-moddil)).
+- **Hot reload** uses Godot's own GDExtension reloading.
+
+**The pitch:** game logic written in Moddil is deterministic, with the engine (rendering, input,
+audio) behind an effect boundary, so simulation testing and replay work for gameplay and netcode
+([`determinism.md`: Deterministic simulation testing](determinism.md#deterministic-simulation-testing)).
+GDScript and C# offer neither.
+
+| Hard part | Direction |
+|---|---|
+| Godot's object model is built on inheritance (`Node3D` → `Node` → `Object`) | A derive such as `#[godot_class(base = Node3D)]` generates the registration and virtual-method overrides; Moddil itself keeps traits |
+| The engine frees objects whenever it likes (`queue_free`) | Handles check the object's instance ID on each use and trap on a dead object, as gdext's `Gd<T>` does |
+| `Variant` and signals are dynamically typed | `Variant` is an enum; signals get generated, typed wrappers |
+| Capabilities stop at the boundary: the engine can reach files and the network | The binding mod holds `ffi`; game code is only as restricted as the binding's API makes it |
+| No in-editor editing like GDScript's | An external editor with the language server |
+
+**When:** once C export and comptime ship; a natural community flagship.
+
 ## Measuring adoption
 
 - Weekly active projects building with `moddil`, and wheels built with `moddil build --wheel`.
@@ -231,3 +271,5 @@ Models write well only in languages they have seen. Moddil's plan is in
    ([`governance.md`](governance.md)).
 5. **Can TypeScript migration ever be mechanical**, for example for TypeScript written in a functional,
    immutable style?
+6. **Godot bindings:** official or community, and at which milestone
+   ([Games through Godot](#games-through-godot))?
