@@ -13,10 +13,11 @@
 | **Handlers are impls or anonymous impls** | `impl Links for MemoryLinks` for a reusable handler; `impl Time { … }` as an expression for a one-off that captures locals. One instance is shared by the block's tasks ([Defining handlers](#defining-handlers)). |
 | **Control from the caller; dependencies captured at construction** | Trait methods declare `suspend` and `fail`; anything else a handler needs (`Db`, the outer `Net`) is captured when the handler is built, so swapping a handler never changes callers' signatures ([Effects inside handlers](#effects-inside-handlers)). |
 | **Three control effects are built in** | `suspend`, `spawn` and `fail(E)` are keywords, not traits; `spawn` is separate from `suspend` ([The effect catalogue](#the-effect-catalogue)). |
-| **Handler tiers** | User traits get function-like (tail-resumptive) handlers, and abortive ones once their spelling is settled. One-shot continuations are reserved for `suspend` and generators. Resuming twice is never allowed. |
+| **Any dyn-compatible trait** | No opt-in: any trait usable as `&dyn Trait` can follow `with`; each instantiation of a generic trait is a separate effect ([Which traits are effects](#which-traits-are-effects)). |
+| **Handler tiers** | User traits get function-like (tail-resumptive) handlers only; a handler ends a block early by failing through its method's declared `fail(E)`. One-shot continuations are reserved for `suspend` and generators, and are never available to user traits. Resuming twice is never allowed. |
 | **Authority comes only from root capabilities** | `main` declares the root capabilities it needs (`NetRoot`, `FsRoot`, `Devices`, …); real OS handlers are built only from those. Libraries perform, wrap and narrow effects, but never create authority. |
 | **Two handlers of one trait** | Re-install per phase (`with Db = inputs { … }`), pass second-class values (`fn copy(src: &dyn Db, dst: &dyn Db)`), or give each role its own subtrait (`trait DbInput: Db {}`). Lookup is by exact trait, never through a supertrait ([Two handlers of one trait](#two-handlers-of-one-trait)). |
-| **Inferred inside, explicit at `pub`** | Effects are inferred inside a mod and written on `pub` signatures; no aliases. |
+| **Inferred inside, explicit at `pub`** | Effects are inferred inside a mod and written on `pub` signatures; no aliases. Long lists are shortened by domain traits whose handlers capture the infrastructure. |
 | **Implicit effect polymorphism** | An unannotated closure parameter means "whatever `f` does, I do too"; `with E` is written only to name or constrain. |
 | **One mechanism for restricted code** | Drop, kernels, comptime, workflows and freestanding profiles are all effect-set constraints. |
 | **Zero cost when handlers are known** | Effect calls compile to direct calls; abortive handlers to ordinary returns. |
@@ -112,6 +113,34 @@ effect avoids is the plumbing a trait passed as a value needs:
 
 This is compiler-checked dependency injection: it replaces mocking frameworks, `Context` objects and
 hand-written provider traits, at the cost of one name per effect in public signatures.
+
+### Which traits are effects
+
+**Decided: any dyn-compatible trait, with no opt-in.**
+
+- A trait may follow `with` if it can be used as `&dyn Trait` and its methods take `&self`, because
+  the name a signature binds is a second-class `&dyn Trait` ([Capability values](#capability-values)).
+  There is no `#[effect]` marker, so there is still only one kind of trait.
+- **Marker and derive-only traits** (`Copy`, `Eq`, `Hash`, traits with no methods, even inherited)
+  are rejected. Empty role subtraits such as `trait DbInput: Db {}` are allowed: they inherit `Db`'s
+  methods ([Role traits](#role-traits)).
+- A **lint** flags traits that are legal but meaningless as effects, such as `with Display`.
+
+**Decided: each instantiation of a generic trait is a separate effect.**
+
+```rust
+trait Store<T> {
+    fn get(&self, id: Id<T>) -> Option<T> with suspend;
+}
+
+with Store<User> = users, Store<Order> = orders {   // two handlers, found by full type
+    checkout(cart)                                  // with Store<User>, Store<Order>, suspend
+}
+```
+
+- A handler is found by the **full type**: `Store<User>` and `Store<Order>` are different entries in
+  an effect set, installed and looked up independently.
+- In a generic function, `with Store<T>` is resolved per instantiation, at monomorphisation.
 
 ### Defining handlers
 
@@ -239,8 +268,39 @@ not from more traits. This keeps signatures short ([Signatures and inference](#s
 | Tier | What the handler can do | Who can define it | Compiles to |
 |---|---|---|---|
 | **Tail-resumptive** | Return a value to the caller, like a function | Anyone: an ordinary trait method | A direct (or indirect) call |
-| **Abortive** | Never resume; unwind to the handler, like an exception | Built in for `fail`; for user traits, open ([Open questions](#open-questions)) | An ordinary return (`fail`, [`error-handling.md`: Results and effects](error-handling.md#results-and-effects)) |
-| **One-shot continuation** | Capture the rest of the computation and resume it **once**, later | Built in only: `suspend`, generators | Stack switching ([`runtime.md`: Runtime contract](runtime.md#runtime-contract), [`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)) |
+| **Abortive** | Never resume; unwind to the handler, like an exception | Built in for `fail`. A user handler aborts by failing through its method's declared `fail(E)` | An ordinary return (`fail`, [`error-handling.md`: Results and effects](error-handling.md#results-and-effects)) |
+| **One-shot continuation** | Capture the rest of the computation and resume it **once**, later | Built in only: `suspend` and generators (`gen`, [`stdlib.md`: Generators](stdlib.md#generators)). Never available to user traits; schedulers plug in through the runtime contract | Stack switching ([`runtime.md`: Runtime contract](runtime.md#runtime-contract), [`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)); generators compile to state machines |
+
+**Decided: ending a block early reuses `fail`.** There is no separate abortive form for user traits.
+The method declares the failure, the handler fails, and the code around the `with` block catches it:
+
+```rust
+trait Visitor {
+    fn visit(&self, n: &Node) with fail(Found);
+}
+
+let found = try {
+    with Visitor = impl Visitor {
+        fn visit(&self, n: &Node) with fail(Found) {
+            if n.matches() { fail(Found(n.id)) }
+        }
+    } {
+        walk(tree);                   // stops at the first match
+        None
+    }
+} catch {
+    Found(id) => Some(id),
+};
+```
+
+- **No new control-flow path:** an early exit is an ordinary failure, with the usual `try`/`catch`.
+- **It stays visible:** every caller of `visit` sees `fail(Found)` in its effect set.
+- **It costs nothing extra:** it compiles to ordinary returns, like any `fail`.
+
+**Decided: user traits never get one-shot continuations.** A user handler is always an ordinary
+call, which keeps user effects simple to compile (including to WASM) and to reason about, for people
+and agents. Alternative schedulers plug in through the runtime contract
+([`runtime.md`: Runtime contract](runtime.md#runtime-contract)), not through continuations.
 
 - **No multi-shot resumption**, ever. Resuming twice would run the rest of the computation twice,
   duplicating linear values and running drops twice ([`memory.md`](memory.md)).
@@ -345,8 +405,21 @@ role. So handing a role to plain-`Db` code takes one explicit `with Db = input {
 - An effect set is a **set**: order doesn't matter, and a function with fewer effects can be used
   where more are allowed.
 - **No effect aliases.** Every effect is listed in a public signature, so a reader never has to look
-  up what `Io` means. Coarse effects ([The effect catalogue](#the-effect-catalogue)) keep the lists short; whether they stay short enough is
-  open ([Open questions](#open-questions)).
+  up what `Io` means. Coarse effects ([The effect catalogue](#the-effect-catalogue)) keep the lists
+  short.
+- **Domain traits, not aliases, shorten long lists.** A trait such as `Store` or `Payments` has a
+  handler that captures `Net`, `Db` and `Time` when it is built
+  ([Effects inside handlers](#effects-inside-handlers)), so callers list only the domain trait:
+
+```rust
+// infrastructure leaking into every handler
+pub fn place_order(req: Request) -> Response with Net, Db, Time, Rand, suspend, fail(OrderError)
+
+// a domain trait whose handler captured Net, Db, Time and Rand where it was built
+pub fn place_order(req: Request) -> Response with Orders, suspend, fail(OrderError)
+```
+
+- This is re-checked once the reference examples are written in Moddil.
 
 ### Effect polymorphism
 
@@ -419,25 +492,14 @@ No mainstream language has made a typed effect system popular. The measures:
 
 ## Directions (not yet decided)
 
-- **Generators** as a built-in one-shot `yield` effect, so iterators can be written as loops.
 - **Context traits** in place of `Context` objects: a database pool, configuration or a request ID
-  provided by a handler.
+  provided by a handler, in the same way as the domain traits in
+  [Signatures and inference](#signatures-and-inference).
 
 ## Open questions
 
-- Without aliases, do public signatures of high-level functions (a request handler with `Net`,
-  `Fs`, `Time`, `Rand`, `suspend` and `fail(…)`) become too long? Revisit once the reference
-  examples are written in Moddil.
-- Should generators (`yield`) be a built-in one-shot effect, and should user traits ever get
-  one-shot continuations?
-- **User-defined abortive handlers:** how are they written? Perhaps a trait method returning `!`,
-  whose handler supplies the value of the whole `with` block ([Handler tiers](#handler-tiers)).
 - May a trait with a single method be installed from a plain closure (`with Time = || t0`), or is
   an anonymous impl short enough ([Defining handlers](#defining-handlers))?
-- **Is every trait usable after `with`?** `with Display` is harmless but meaningless. Should a trait
-  opt in, or is any trait whose methods take `&self` allowed?
-- **Generic traits as effects:** `with store: Store<User>` and `with Store<Order>` in one scope are
-  two different needs. Is each instantiation installed separately?
 - How exactly are effect requirements and handler stacks surfaced, so that dynamic handler lookup is
   never surprising (LSP, `explain`)?
 
