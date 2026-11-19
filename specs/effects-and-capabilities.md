@@ -8,7 +8,10 @@
 | Rule | One line |
 |---|---|
 | **Effects are interfaces; handlers are scoped implementations** | `effect time { fn now() -> Instant }`; `with time` in a signature; `with time = sim.clock(n) { … }` installs a handler for a block. |
+| **Handlers are impls or `handler` blocks** | `impl links for MemoryLinks` for a reusable handler; `handler time { … }` for a one-off that captures locals. One instance is shared by the block's tasks ([Defining handlers](#defining-handlers)). |
+| **Control from the caller, context from the installer** | Operations declare `suspend` and `fail`; any other effect a handler uses comes from where it is installed, so swapping a handler never changes callers' signatures ([Effects inside handlers](#effects-inside-handlers)). |
 | **Handler tiers** | User effects get function-like (tail-resumptive) and abortive handlers. One-shot continuations are reserved for core and standard effects (`suspend`, generators). Resuming twice is never allowed. |
+| **`spawn` is its own effect** | Starting tasks is separate from suspending, so restricted code can forbid one and allow the other ([The effect catalogue](#the-effect-catalogue)). |
 | **Authority comes only from root capabilities** | `main` declares the root capabilities it needs (`NetRoot`, `FsRoot`, `Devices`, …); real OS handlers are built only from those. Libraries perform, wrap and narrow effects, but never create authority. |
 | **Capability values for two at once** | A handler can also be passed as a second-class value (`fn bridge(a: &Net, b: &Net)`). |
 | **Inferred inside, explicit at `pub`** | Effects are inferred inside a mod and written on `pub` signatures; no aliases. |
@@ -70,6 +73,93 @@ with time = sim.clock(node) {          // installs a handler for this block
 - This is compiler-checked dependency injection. It replaces mocking frameworks, `Context` objects
   and hand-written provider traits.
 
+### Defining handlers
+
+**Decided: a named handler is an `impl`; a one-off handler is a `handler` block.**
+
+```rust
+effect links {
+    fn get(code: &Code) -> Option<Target> with suspend;
+    fn put(code: Code, target: Target) with suspend, fail(LinkError);
+}
+
+// named and reusable: an effect is implemented like a trait
+struct MemoryLinks { map: Mutex<Map<Code, Target>> }
+
+impl links for MemoryLinks {
+    fn get(&self, code: &Code) -> Option<Target> with suspend { … }
+    fn put(&self, code: Code, target: Target) with suspend, fail(LinkError) { … }
+}
+
+with links = MemoryLinks::new() { serve(&listener) }
+
+// one-off: an anonymous handler captures locals like a closure
+let mut calls = 0;
+with time = handler time {
+    fn now() -> Instant { calls += 1; t0 }
+} {
+    run_once()
+}
+assert(calls == 3);
+```
+
+- **`impl e for T`** makes any value of `T` a handler for `e`, installed with `with e = value { … }`.
+  This is Rust's trait syntax, because the semantics match: an interface and an implementation.
+- **`handler e { … }`** is an expression for tests and one-off interposition. It captures its
+  environment like a closure and may **borrow** locals, because a handler never outlives its `with`
+  block (handlers are second-class, [Capability values](#capability-values)).
+- **One instance is shared.** Operations take `&self`, and every task spawned inside the `with` block
+  uses the same handler, so a handler's mutable state lives in sync cells
+  ([`concurrency.md`: Shared mutable state](concurrency.md#shared-mutable-state)). A `handler` block
+  that captures a local by `&mut` (like `calls` above) is rejected if the block spawns tasks, the same
+  rule as for closures ([`closures.md`](closures.md)).
+- **Operations declare their control effects.** An operation's signature in the `effect` declaration
+  may carry `with suspend` and `fail(E)`; those are what callers see
+  ([Effects inside handlers](#effects-inside-handlers)).
+
+### Effects inside handlers
+
+**Decided: control effects follow the caller; context effects come from the installer.**
+
+```rust
+// a production handler for `links`, backed by SQL
+impl links for SqlLinks {
+    fn put(&self, code: Code, target: Target) with suspend, fail(LinkError) {
+        try { db.execute(sql"INSERT INTO links (code, target) VALUES ({code}, {target})")? } catch {
+            Unique(_) => fail(LinkError::Taken(code)),
+            e         => fail(LinkError::Storage(e)),    // DbError mapped into the declared error
+        }
+    }
+    …
+}
+
+fn main(…) -> ExitCode {
+    with db = pool, links = SqlLinks {     // `db` is needed here, where the handler is installed…
+        serve(&listener)                   // …not by `serve` or anything that performs `links`
+    }
+}
+```
+
+- **Control effects follow the caller.** `suspend` pauses the caller's task and `fail` returns
+  through the caller's stack, so they belong to the operation: an operation that may suspend or fail
+  declares it, and every caller sees it. A handler cannot raise an error its operation doesn't
+  declare; it maps it into a declared one (`LinkError::Storage`) or handles it.
+- **Context effects come from the installer.** Any other effect in a handler body (`db`, `net`,
+  `time`, `fs`, a user effect) is handled by the handlers in scope **where the handler is installed**,
+  not where the operation is performed. The `with` site therefore needs `db`; callers of `links` don't.
+  **Swapping a handler never changes a caller's signature**, which is what makes handlers usable for
+  dependency injection. Handlers in one `with` list are installed left to right, so `links = SqlLinks`
+  sees the `db` installed just before it.
+- **Interposition falls out.** Inside a handler for `net`, performing `net` reaches the *enclosing*
+  handler, so a recorder, a fault injector or a rate limiter is an ordinary handler that forwards
+  ([`determinism.md`: Handlers are scoped, not global](determinism.md#handlers-are-scoped-not-global)).
+- **No authority is created.** The installer must itself be allowed to perform `db`, by its
+  signature, its mod's ceiling and its own callers' handlers
+  ([Authority comes only from root capabilities](#authority-comes-only-from-root-capabilities)).
+  A handler only moves where an effect is paid for, never whether it is allowed.
+- **Restricted contexts still apply.** A `drop` has an empty effect set (D9), so it cannot perform
+  `links` at all, whatever the handler would do ([Restricted code is one mechanism](#restricted-code-is-one-mechanism)).
+
 ### The effect catalogue
 
 | Kind | Effects | Notes |
@@ -79,6 +169,12 @@ with time = sim.clock(node) {          // installs a handler for this block
 | **Capabilities with no handler to swap** | `ffi`, `unsafe` | Declared and visible to every consumer; treated as high risk ([`interop.md`: The safety boundary](interop.md#the-safety-boundary)) |
 | **Ambient, write-only** | `log`, `span`, `metric` | Never written in signatures; cannot feed values back ([`observability.md`](observability.md)) |
 | **User-defined** | anything | Context such as a database pool, configuration, feature flags ([Directions (not yet decided)](#directions-not-yet-decided)) |
+
+**`spawn` is its own effect (decided).** Starting tasks is separate from suspending: `drop`,
+GPU kernels and freestanding profiles without a scheduler must be able to forbid `spawn` while still
+allowing `suspend` (or forbid both). A function that opens a `scope` and spawns into it lists
+`spawn`; one that only waits on I/O lists `suspend`
+([`concurrency.md`: Tasks and borrowing](concurrency.md#tasks-and-borrowing)).
 
 **Not effects:**
 - **allocation**: a capability chosen per profile ([`freestanding.md`](freestanding.md));
@@ -187,11 +283,11 @@ visit(&orders, |o| total += o.qty)              // this one is pure
 
 | Context | Allowed effects |
 |---|---|
-| `drop` | None ([`error-handling.md`](error-handling.md) D9) |
+| `drop` | None, so neither `suspend` nor `spawn` ([`error-handling.md`](error-handling.md) D9) |
 | Comptime | None: pure and sandboxed ([`comptime.md`](comptime.md)) |
-| GPU kernels | A restricted set: no suspension, no allocation, no I/O ([`accelerators.md`](accelerators.md)) |
+| GPU kernels | A restricted set: no `suspend`, no `spawn`, no allocation, no I/O ([`accelerators.md`](accelerators.md)) |
 | Durable workflows | Replayable effects only ([`determinism.md`: Record and replay](determinism.md#record-and-replay)) |
-| Freestanding profiles | No OS effects ([`freestanding.md`](freestanding.md)) |
+| Freestanding profiles | No OS effects; no `spawn` without a scheduler ([`freestanding.md`](freestanding.md)) |
 
 Each is an effect-set constraint, checked by the same compiler pass and reported with the same
 diagnostics.
@@ -200,6 +296,9 @@ diagnostics.
 
 - **Handlers known statically** (production `main`): effect operations become direct calls, by
   monomorphisation or Koka-style evidence passing. Production pays nothing for testability.
+- **Handlers that use installer-context effects** carry those handlers' evidence with them, like a
+  closure's environment ([Effects inside handlers](#effects-inside-handlers)). When handlers are known
+  statically this is still direct calls.
 - **Abortive handlers** compile to ordinary returns ([`error-handling.md`: Results and effects](error-handling.md#results-and-effects)).
 - **One-shot continuations** use stack switching natively and WASM stack switching or JSPI in the
   browser ([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)).
@@ -239,17 +338,10 @@ No mainstream language has made a typed effect system popular. The measures:
   examples are written in Moddil.
 - Should generators (`yield`) be a standard one-shot effect, and should user effects ever get
   one-shot continuations?
-- Is `spawn` a separate effect from `suspend`, or implied by it? [`concurrency.md`](concurrency.md)
-  and the tour already write it in signatures ([`tour.md`](tour.md#gaps-the-tour-exposed)).
-- **How is a handler for a user-defined effect written?** The specs only show handlers built by
-  library calls (`sim.clock(node)`). The tour uses `impl links for MemoryLinks`, treating an effect
-  like a trait whose methods take `&self` ([`tour.md`](tour.md#gaps-the-tour-exposed)). Is that the spelling, and can a handler
-  be a closure or an anonymous block for one-off cases?
-- **Effects of effect operations and of handlers.** May an operation declare effects of its own
-  (`fn put(…) with suspend, fail(E)`)? And may a handler perform effects its operations don't
-  declare, such as a SQL handler for `links` that needs `db`, taking them from the scope where it is
-  installed rather than from the caller? This decides whether swapping a handler can change a
-  caller's signature ([`tour.md`](tour.md#gaps-the-tour-exposed)).
+- **User-defined abortive handlers:** how are they written? Perhaps an operation returning `!`,
+  whose handler supplies the value of the whole `with` block ([Handler tiers](#handler-tiers)).
+- May an effect with a single operation be handled by a plain closure (`with clock = || t0`), or
+  is `handler clock { … }` short enough ([Defining handlers](#defining-handlers))?
 - How exactly are effect requirements and handler stacks surfaced, so that dynamic handler lookup is
   never surprising (LSP, `explain`)?
 

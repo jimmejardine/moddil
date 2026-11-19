@@ -10,6 +10,7 @@
 | **Affine type** | A type whose values may be used at most once and are dropped automatically: the default for owned values ([Resources: affine and linear](resources.md#resources-affine-and-linear)). |
 | **Agent server** | The long-running compiler service that agents and editors query for types, effects and fixes ([The agent server](agent-interface.md#the-agent-server)). |
 | **Annotation overlay** | A file that adds ownership, effects and error facts to a C or Rust API without editing its headers ([Annotation overlays](interop.md#annotation-overlays)). |
+| **Anonymous handler** | `handler e { … }`: a one-off handler expression that captures locals like a closure ([Defining handlers](effects-and-capabilities.md#defining-handlers)). |
 | **Assurance level** | Mod metadata stating how much is proven or checked, from tested to fully verified ([Assurance levels per mod](correctness.md#assurance-levels-per-mod)). |
 | **Attached test** | `test "…" for f { … }`: a test that names its subject and sits beside it ([Attached tests](testing.md#attached-tests)). |
 | **Biased reference counting** | Rc counting that is non-atomic for the owning task and atomic only for others ([Biased reference counting](memory.md#biased-reference-counting)). |
@@ -39,9 +40,11 @@
 | **Flight recorder** | An in-memory ring of recent events dumped on an error or trap ([Flight recorder and replay](observability.md#flight-recorder-and-replay)). |
 | **Freestanding profile** | A build without an operating system (kernels, firmware), with `#[entry]` instead of `main` ([Profiles](freestanding.md#profiles)). |
 | **Generator** | A `gen` block or function that yields values, giving an `Iterator` written as a loop ([Generators](stdlib.md#generators)). |
-| **Handler** | A scoped implementation of an effect, installed with `with e = h { … }`; the innermost one wins ([Handlers are scoped, not global](determinism.md#handlers-are-scoped-not-global)). |
+| **Handler** | A scoped implementation of an effect: a value of a type with `impl e for T`, or a `handler e { … }` block, installed with `with e = h { … }`; the innermost one wins ([Defining handlers](effects-and-capabilities.md#defining-handlers)). |
 | **Hot-path attributes** | `#[no_alloc]`, `#[no_lock]` and similar compiler-checked latency guarantees ([Hot-path guarantees](performance.md#hot-path-guarantees)). |
 | **`int`** | The signed 64-bit integer used for lengths, indices and counts on every target ([Integer types](numerics.md#integer-types)). |
+| **Installer context** | The effects a handler body uses beyond `suspend` and `fail` are handled where the handler is installed, not by the caller ([Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)). |
+| **Interposition** | A handler that forwards to the enclosing handler for the same effect, to record, delay or inject faults ([Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)). |
 | **Isolated scope** | `scope(…, isolate: true)`: a trap inside unwinds only that scope, which fails with `Trapped` ([Traps: the process by default, isolated scopes on request](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)). |
 | **JSPI** | JavaScript Promise Integration: the first WASM lowering for suspension, in browsers and Node ([WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)). |
 | **Linear type** | A type whose values must be explicitly consumed (`commit`, `close`), used when cleanup can fail ([Resources: affine and linear](resources.md#resources-affine-and-linear)). |
@@ -66,6 +69,7 @@
 | **Semantic diff** | A report of what a change does to interfaces, effects, errors and tests, rather than to lines ([The report](semantic-vcs.md#the-report)). |
 | **`.share()`** | An O(1) count increment returning another handle to the same rc object ([`.share()` for reference counts](values.md#share-for-reference-counts)). |
 | **Simulation runtime** | `moddil/runtime-sim`: one deterministic thread with virtual time, seeded randomness and a simulated network ([Deterministic simulation testing](determinism.md#deterministic-simulation-testing)). |
+| **`spawn`** | The core effect of starting tasks in a scope, separate from `suspend` ([The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)). |
 | **Specialisation** | A restricted form of overlapping impls ([Specialisation](types.md#specialisation)). |
 | **Stop** | The graceful first stage of shutdown, observed where code asks with `stop_requested()` ([Two levels: stop, then cancel](lifecycle.md#two-levels-stop-then-cancel)). |
 | **`StrPos`** | A byte position on a character boundary, tied by type to its string ([Positions and slicing](text.md#positions-and-slicing)). |

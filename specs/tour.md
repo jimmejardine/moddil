@@ -67,7 +67,7 @@ impl MemoryLinks {
     pub fn new() -> MemoryLinks { MemoryLinks { map: Mutex::new(Map::new()) } }
 }
 
-impl links for MemoryLinks {                                   // gap 1: handler syntax
+impl links for MemoryLinks {
     fn get(&self, code: &Code) -> Option<Target> with suspend {
         self.map.lock().get(code).map(|t| t.clone())
     }
@@ -81,7 +81,9 @@ impl links for MemoryLinks {                                   // gap 1: handler
 
 - `links` is an **effect**: an interface whose implementation is chosen by the caller, not by this
   code ([Effects are interfaces](effects-and-capabilities.md#effects-are-interfaces-handlers-are-scoped-implementations)).
-  A production build would install a handler from `moddil/sql` instead; nothing else changes.
+  A production build would install a SQL-backed handler instead. That handler needs `db`, which
+  comes from where it is installed (`main`), so nothing that performs `links` changes
+  ([Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)).
 - Tasks share the handler, so its state is in a **sync cell**, the only shared mutable state
   ([Shared mutable state](concurrency.md#shared-mutable-state)). There is no `Send` or `Sync` to
   write ([No `Send` / `Sync`](concurrency.md#no-send--sync)).
@@ -96,7 +98,7 @@ impl links for MemoryLinks {                                   // gap 1: handler
 /// with rand = rand::seeded(7) { make_code().len() }   // => 6
 fn make_code() -> Code with rand {
     let s: String = (0..6).map(|_| rand.pick(ALPHABET)).collect();
-    try { Code::new(s)? }.unwrap()      // gap 4: built from ALPHABET, so this cannot fail
+    try { Code::new(s)? }.unwrap()      // gap 1: built from ALPHABET, so this cannot fail
 }
 
 /// `POST /links`
@@ -125,7 +127,7 @@ fn route(req: &Request) -> Response with links, rand, suspend {
             (Method::Get, [code])     => follow(code),
             _                         => Response::status(Status::NotFound),
         }
-    } catch {                                           // gap 5: arms for an error union
+    } catch {                                           // gap 2: arms for an error union
         DecodeError(e)          => Response::text(Status::BadRequest, fmt"bad request: {e}"),
         LinkError(Taken(_))     => Response::status(Status::Conflict),
     }
@@ -148,7 +150,7 @@ fn route(req: &Request) -> Response with links, rand, suspend {
 
 ```rust
 /// Accepts connections until asked to stop.
-pub fn serve(listener: &Listener) with links, rand, net, suspend, spawn {   // gap 3: spawn
+pub fn serve(listener: &Listener) with links, rand, net, suspend, spawn {
     scope(|s| {
         loop {
             select {
@@ -266,15 +268,17 @@ own document in the [index](README.md).
 Writing a complete program needed these, and no spec decides them yet. The spellings above are
 placeholders. Each gap is recorded as an open question in its area.
 
+Resolved since the tour was written: how handlers are defined, which effects a handler body may
+use, and `spawn` being an effect ([Defining handlers](effects-and-capabilities.md#defining-handlers),
+[Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers),
+[The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)).
+
 | # | Gap | Open question in |
 |---|---|---|
-| 1 | How a handler for a user-defined effect is written (`impl links for MemoryLinks`) | [`effects-and-capabilities.md`](effects-and-capabilities.md#open-questions) |
-| 2 | Whether effect operations declare effects (`with suspend`, `fail(E)`), and whether a handler may perform effects its operations don't declare (a SQL handler needs `db`) | [`effects-and-capabilities.md`](effects-and-capabilities.md#open-questions) |
-| 3 | Whether `spawn` is an effect; `serve` lists it | [`effects-and-capabilities.md`](effects-and-capabilities.md#open-questions) |
-| 4 | A short, visible "this cannot fail" form instead of `try { Code::new(s)? }.unwrap()` | [`error-handling.md`](error-handling.md#open-questions), Q5 |
-| 5 | How `catch` arms name the variants of an error union (`DecodeError(e)`, `LinkError(Taken(_))`) | [`error-handling.md`](error-handling.md#open-questions), Q6 |
-| 6 | The `Args` API and named exit codes such as `ExitCode::Unavailable` | [`lifecycle.md`](lifecycle.md#open-questions) |
-| 7 | The HTTP server, router and client in `moddil/net` | [`stdlib.md`](stdlib.md#open-questions), Q7 |
-| 8 | The `Sim` API: nodes, per-node handlers, addresses, stopping | [`determinism.md`](determinism.md#open-questions), Q6 |
-| 9 | How an unhandled `?` inside a test is reported | [`testing.md`](testing.md#open-questions), Q4 |
-| 10 | The error raised when a validated newtype rejects a value | [`correctness.md`](correctness.md#open-questions), Q6 |
+| 1 | A short, visible "this cannot fail" form instead of `try { Code::new(s)? }.unwrap()` | [`error-handling.md`](error-handling.md#open-questions), Q5 |
+| 2 | How `catch` arms name the variants of an error union (`DecodeError(e)`, `LinkError(Taken(_))`) | [`error-handling.md`](error-handling.md#open-questions), Q6 |
+| 3 | The `Args` API and named exit codes such as `ExitCode::Unavailable` | [`lifecycle.md`](lifecycle.md#open-questions) |
+| 4 | The HTTP server, router and client in `moddil/net` | [`stdlib.md`](stdlib.md#open-questions), Q7 |
+| 5 | The `Sim` API: nodes, per-node handlers, addresses, stopping | [`determinism.md`](determinism.md#open-questions), Q6 |
+| 6 | How an unhandled `?` inside a test is reported | [`testing.md`](testing.md#open-questions), Q4 |
+| 7 | The error raised when a validated newtype rejects a value | [`correctness.md`](correctness.md#open-questions), Q6 |
