@@ -114,7 +114,9 @@ As in Rust, with the omissions that follow from other decisions:
 - **No `Send` or `Sync`**, and no other auto traits: every type is sendable
   ([`concurrency.md`: No `Send` / `Sync`](concurrency.md#no-send--sync)).
 - **Any trait can be used as an effect** by listing it after `with` (`with time: Time`). The
-  implementation is then passed implicitly, found by trait type in the dynamic scope; coherence is
+  implementation is then passed implicitly, found by its exact trait in the dynamic scope (never
+  through a supertrait, so an empty subtrait such as `trait DbInput: Db {}` gives a second `Db` its
+  own role, see [Role traits](effects-and-capabilities.md#role-traits)); coherence is
   unaffected, because each handler is an ordinary impl on its own type
   ([`effects-and-capabilities.md`: Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly)).
 - **Anonymous impls**: `impl Trait { … }` is an expression that implements a trait for an unnamed

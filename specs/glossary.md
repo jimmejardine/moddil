@@ -20,7 +20,7 @@
 | **Cancel** | The hard second stage of shutdown: the next suspension point returns `Cancelled` ([Two levels: stop, then cancel](lifecycle.md#two-levels-stop-then-cancel)). |
 | **Capability** | Authority to perform an effect, held as a handler; it originates only in `main`'s root capabilities ([Authority comes only from root capabilities](effects-and-capabilities.md#authority-comes-only-from-root-capabilities)). |
 | **Capability ceiling** | The capabilities a mod may use at all, declared in its manifest and checked by the compiler; a JSON parser that uses `Net` fails to build ([Capability-scoped dependencies](packages-and-supply-chain.md#capability-scoped-dependencies)). |
-| **Capability value** | A handler passed explicitly as a second-class `&dyn Trait`, when two of the same effect are needed at once ([Capability values](effects-and-capabilities.md#capability-values)). |
+| **Capability value** | A handler passed explicitly as a second-class `&dyn Trait`, e.g. when one function uses two handlers of one trait at once ([Capability values](effects-and-capabilities.md#capability-values)). |
 | **Captured handler** | A handler that keeps another handler it was built with (a SQL handler keeping `Db`, a recorder keeping the outer `Net`); it is second-class and cannot outlive that scope ([Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)). |
 | **Class 1 / 2 / 3** | The three outcome classes: errors (must be handled), defined arithmetic (no handling), traps (crash or isolated scope) ([Three outcome classes](error-handling.md#three-outcome-classes)). |
 | **`.clone()`** | An explicit deep copy whose cost grows with the value; `Rc` has no `.clone()` ([`.clone()` is explicit and means a copy](values.md#clone-is-explicit-and-means-a-copy)). |
@@ -61,6 +61,7 @@
 | **Reference interpreter** | An interpreter over the canonical AST, kept separate from the compiler for differential testing ([Two interpreters](compiler.md#two-interpreters)). |
 | **Refinement** | A validated newtype such as `type Port = u16 where self >= 1024` ([Validated newtypes (lightweight refinements)](correctness.md#validated-newtypes-lightweight-refinements)). |
 | **`Remote`** | The effect performed by a call that crosses tiers, with its own failures ([The `Remote` effect](distribution.md#the-remote-effect)). |
+| **Role trait** | An empty subtrait with a blanket impl (`trait DbInput: Db {}`), giving a second handler of a trait its own effect ([Role traits](effects-and-capabilities.md#role-traits)). |
 | **Root capability** | A capability `main` receives as a parameter (`NetRoot`, `FsRoot`, `Stdio`, …); the only source of authority ([`main` declares its root capabilities](lifecycle.md#main-declares-its-root-capabilities)). |
 | **Runtime** | A mod providing handlers for scheduling, I/O and time (`moddil/runtime`, `-wasm`, `-sim`) ([Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)). |
 | **Safety contract** | The documented conditions a caller of an `unsafe fn` must uphold ([Safety contracts](unsafe.md#safety-contracts)). |

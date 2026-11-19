@@ -15,7 +15,7 @@
 | **Three control effects are built in** | `suspend`, `spawn` and `fail(E)` are keywords, not traits; `spawn` is separate from `suspend` ([The effect catalogue](#the-effect-catalogue)). |
 | **Handler tiers** | User traits get function-like (tail-resumptive) handlers, and abortive ones once their spelling is settled. One-shot continuations are reserved for `suspend` and generators. Resuming twice is never allowed. |
 | **Authority comes only from root capabilities** | `main` declares the root capabilities it needs (`NetRoot`, `FsRoot`, `Devices`, …); real OS handlers are built only from those. Libraries perform, wrap and narrow effects, but never create authority. |
-| **Capability values for two at once** | A handler can also be passed as a second-class value (`fn bridge(a: &dyn Net, b: &dyn Net)`). |
+| **Two handlers of one trait** | Re-install per phase (`with Db = inputs { … }`), pass second-class values (`fn copy(src: &dyn Db, dst: &dyn Db)`), or give each role its own subtrait (`trait DbInput: Db {}`). Lookup is by exact trait, never through a supertrait ([Two handlers of one trait](#two-handlers-of-one-trait)). |
 | **Inferred inside, explicit at `pub`** | Effects are inferred inside a mod and written on `pub` signatures; no aliases. |
 | **Implicit effect polymorphism** | An unannotated closure parameter means "whatever `f` does, I do too"; `with E` is written only to name or constrain. |
 | **One mechanism for restricted code** | Drop, kernels, comptime, workflows and freestanding profiles are all effect-set constraints. |
@@ -74,7 +74,9 @@ with Time = sim.clock(node) {          // installs a handler for this block
 ```
 
 - **Found by trait type.** `with Time = value { … }` installs `value` (whose type implements `Time`)
-  for the block, and the innermost one wins
+  for the block, and the innermost one wins. Lookup is by the **exact trait**: a `DbInput` handler
+  does not satisfy `with Db`, even though `DbInput: Db`
+  ([Two handlers of one trait](#two-handlers-of-one-trait)).
   ([`determinism.md`: Handlers are scoped, not global](determinism.md#handlers-are-scoped-not-global)).
   This is Scala's `using`/`given`, resolved by dynamic scope rather than by imports.
 - **Named when used, bare when passed through.** `with time: Time` binds `time` (a second-class
@@ -280,10 +282,26 @@ pub fn load_plugin(p: &Plugin) with fs: Fs, fail(PluginError) {
 Capabilities are a **security boundary**, not only an audit aid: code in a mod without `unsafe` or
 `ffi` can use only the authority it is passed ([`security.md`: The guarantee: capabilities as a boundary](security.md#the-guarantee-capabilities-as-a-boundary)).
 
-### Capability values
+### Two handlers of one trait
 
-When code needs **two instances of the same trait at once** (a bridge between two networks, a test
-asserting on two nodes), handlers are passed as values (Effekt's capability-passing style):
+Sometimes code needs two handlers of one trait: an input `Db` and an output `Db` backed by
+different mocks, or a bridge between two networks. There are three patterns, in order of
+preference.
+
+#### Re-install per phase
+
+When each phase uses only one of them, install a different handler around each phase. The library
+code underneath asks for one `Db` and never knows there are two:
+
+```rust
+let rows = with Db = inputs { orders::load_all()? };
+with Db = outputs { report::save(rows)? }
+```
+
+#### Capability values
+
+When one function uses both at once, handlers are passed as values (Effekt's capability-passing
+style):
 
 ```rust
 fn bridge(a: &dyn Net, b: &dyn Net) with suspend { … }
@@ -292,6 +310,31 @@ fn bridge(a: &dyn Net, b: &dyn Net) with suspend { … }
 These values, and the names bound by `with net: Net`, are **second-class**: like Moddil's borrows,
 they cannot escape their scope, which keeps them cheap and guarantees the handler outlives its uses.
 A struct that holds one is a [view type](memory.md#view-types).
+
+#### Role traits
+
+When two roles must reach code several calls down without being passed by hand, give each role its
+own trait: an empty subtrait with a blanket impl. No new syntax is involved:
+
+```rust
+trait DbInput: Db {}
+impl<T: Db> DbInput for T {}
+trait DbOutput: Db {}
+impl<T: Db> DbOutput for T {}
+
+fn migrate() with input: DbInput, output: DbOutput, suspend, fail(DbError) {
+    for row in input.query(ALL)? { output.insert(row)? }
+    with Db = input { audit::check_schema()? }   // hand the input to code that asks for `Db`
+}
+
+with DbInput = mock_a, DbOutput = mock_b { migrate()? }
+```
+
+Lookup is by **exact trait**, so `DbInput` and `DbOutput` are separate effects, and a child that
+asks for `Db` does not find either of them. If lookup went through supertraits, a child asking for
+`Db` would be ambiguous with both roles installed; picking the innermost would silently choose a
+role. So handing a role to plain-`Db` code takes one explicit `with Db = input { … }`. As a value,
+`&input` coerces to `&dyn Db`.
 
 ### Signatures and inference
 
