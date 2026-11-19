@@ -1,8 +1,9 @@
 # Correctness: Contracts, Testing and Verification
 
-> **Status:** proposal. Indexed in [`README.md`](README.md). Nothing here is decided yet apart from
-> contract failures trapping ([Decisions to lock early](#decisions-to-lock-early), item 4);
-> recommendations are marked **Recommended**. Syntax is illustrative.
+> **Status:** minor questions. The plan below is adopted: the v1 tools, the reserved proof syntax,
+> the [decisions locked early](#decisions-to-lock-early), the runtime checking policy (an ambient
+> `Contracts` handler), the verifier and the assurance levels. Indexed in [`README.md`](README.md).
+> Syntax is illustrative.
 
 ## Summary
 
@@ -12,7 +13,9 @@ Moddil should make correctness tooling **cheap by default and deep on demand**:
   the compiler's backends ([Easy wins (v1)](#easy-wins-v1)).
 - **Designed in now, built later:** proofs written in Moddil itself (SMT-backed), refinement types,
   bounded model checking, protocol verification, and assurance levels per mod ([State of the art not to miss (design now, build later)](#state-of-the-art-not-to-miss-design-now-build-later)).
-- A handful of **decisions must be locked early**, because they are expensive to retrofit ([Decisions to lock early](#decisions-to-lock-early)).
+- A handful of **decisions are locked early**, because they are expensive to retrofit ([Decisions to lock early](#decisions-to-lock-early)).
+- **Which contracts are checked at run time** is chosen by an ambient `Contracts` handler, installed
+  per scope like any other handler ([Checking policy: the `Contracts` handler](#checking-policy-the-contracts-handler)).
 
 ## Why Moddil is unusually well placed
 
@@ -50,10 +53,46 @@ struct OrderBook {
   Dafny). **Decided:** contracts are clauses after the signature, not attributes
   ([`syntax.md`](syntax.md)).
 - **Contract expressions must be pure**, checked by the effect system.
+- **Contracts on effect traits bind every handler.** A `requires` or `ensures` on a trait method
+  (`Db::put`) applies to every handler, under the same Liskov rule. Properties about *how* effects
+  are used ("called at most once", "commit or roll back") are not contracts: they are types
+  (`FnOnce`, linear values, typestate, [`resources.md`](resources.md)), and temporal properties are
+  checked by simulation and property tests ([`determinism.md`](determinism.md)) (decided).
 - Contracts are part of the **mod interface**: shown by the language server, included in generated
   docs, subject to semver, and visible in semantic diffs ([Diffs, code review and version control](semantic-vcs.md)). A trait impl may weaken
   preconditions and strengthen postconditions, never the reverse (Liskov).
-- Runtime checking policy: see [Decisions to lock early](#decisions-to-lock-early).
+- Runtime checking policy: see [Checking policy: the `Contracts` handler](#checking-policy-the-contracts-handler).
+
+### Checking policy: the `Contracts` handler
+
+**Decision: which contracts are checked at run time is set by an ambient `Contracts` handler.** Like
+`log`, it is always present and never written in signatures ([`effects-and-capabilities.md`: The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)).
+Installing a handler changes the policy for a scope, including the tasks spawned in it:
+
+```rust
+fn main(…) {
+    with Contracts = contracts::pub_preconditions() { app::run() }
+}
+
+test "pricing" for price {
+    with Contracts = contracts::all() { … }
+}
+
+with Contracts = contracts::none() { book.match_orders() }   // a measured hot path opts out locally
+```
+
+- **Policies:** `all`, `pub_preconditions` (preconditions of `pub` functions, the Ada and Eiffel
+  default), and `none`.
+- **Defaults come from the build profile:** debug builds and tests start with `all`; release
+  builds start with `pub_preconditions`. Code that installs nothing gets the default.
+- **The policy never changes results, only whether a broken contract is caught.** A check that runs
+  and fails traps (D13); a check that is skipped does nothing. So, like `log`, the handler cannot
+  feed values back into the program.
+- **Zero cost when known.** When the handler is known at compile time (the usual case, from the
+  profile or a `with` around a call tree), unchecked contracts compile away; otherwise each check
+  is one branch on the policy.
+- **Proven contracts are never checked.** A contract discharged by the verifier
+  ([Proofs in Moddil itself](#proofs-in-moddil-itself)) is erased whatever the policy.
 
 ### Validated newtypes (lightweight refinements)
 
@@ -67,6 +106,10 @@ let q: Port = 8080;           // literal checked at compile time
 
 - **Decided:** `where` is the only refinement form; ranges are written `where self in 1..`
   ([`syntax.md`](syntax.md)).
+- **Decided: a failed check raises the standard `RefinementError { ty, clause, value }`**, naming
+  the newtype and the `where` clause that failed. A newtype that wants its own error writes an
+  ordinary constructor (`fn parse(s: &str) -> Port with fail(PortError)`) that checks first, so the
+  `where` form stays one line.
 - "Parse, don't validate": once you hold a `Port`, the invariant holds, and it is never checked again.
 - Construction from untrusted input fails with a typed error, so R3 forces callers to handle bad input.
 - These are the natural boundary between *errors* (bad input) and *bugs* (a broken contract inside
@@ -140,18 +183,34 @@ Creusot do:
 - an SMT solver (Z3 or cvc5) discharges proof obligations.
 
 Verus's linear ghost permissions are a particularly good fit for Moddil's ownership model.
-**Recommended:** reserve the syntax and erasure semantics now, even if the verifier ships much later.
+**Decided:** the syntax and erasure semantics are reserved now, even if the verifier ships much later.
+
+**The verifier is part of the toolchain (decided).** `moddil verify` is a subcommand like the
+others ([`toolchain.md`](toolchain.md)): the compiler parses ghost code, erases it, and generates
+the proof obligations; the verifier sends them to a solver.
+
+- **Z3 is the default solver**, with cvc5 as an optional cross-check.
+- **The solver is pinned** in the lockfile like a dependency, so a proof that passes once passes
+  everywhere ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)).
+- **Limits count solver steps, not seconds** (Z3's resource limit), so a proof does not pass on a
+  fast machine and fail on a slow one.
+- **Results are cached** by a hash of the obligation and the solver version, so unchanged code is
+  not re-proven ([`build-times.md`](build-times.md)).
+- **Output is structured** for people and agents ([LLMs plus verification](#llms-plus-verification)).
 
 ### Assurance levels per mod
 
 Following SPARK's graded levels (Stone, Bronze, Silver, Gold, Platinum), a mod declares how far it is
-verified:
+verified (decided):
 
 | Level | Meaning |
 |---|---|
 | **L0** | Contracts checked at runtime; tests and property tests pass |
-| **L1** | **No traps**, proven: no division by zero, out-of-bounds index or `unreachable` reachable. This complements R3: errors are handled, *and* nothing crashes. |
+| **L1** | **No traps**, proven: no integer overflow, division by zero, out-of-bounds index or `unreachable` reachable. This complements R3: errors are handled, *and* nothing crashes. |
 | **L2** | Functional correctness proven against the contracts |
+
+A single function can ask for a higher level than its mod with `#[assure(L1)]`, for example the
+arithmetic core of a risk check in an L0 mod.
 
 The level is part of mod metadata and the audit trail ([Package management and supply-chain security](packages-and-supply-chain.md)), so a dependency's assurance
 is visible before you depend on it. The HFT risk module (example 2) would target L2.
@@ -203,7 +262,7 @@ require language design decisions beyond a well-specified MIR.
 
 ## Decisions to lock early
 
-These are cheap now and expensive to change once code exists.
+These are cheap now and expensive to change once code exists. All are **decided**.
 
 1. **Contract syntax**: `requires`, `ensures`, `invariant`, `old`; contract expressions pure,
    enforced by effects.
@@ -214,10 +273,9 @@ These are cheap now and expensive to change once code exists.
 4. **A runtime contract failure traps (class 3).** **Decided** ([`error-handling.md`](error-handling.md) D13). A broken contract is a bug, not an
    error. Untrusted input goes through validated newtypes or explicit checks that return errors
    (class 1).
-5. **Release-build checking policy, per mod**: `all`, `preconditions` (the Ada and Eiffel default),
-   or `none`. **Recommended default:** preconditions on public mod functions stay on in release
-   builds; internal contracts are checked in debug builds only, unless the mod opts in.
-6. **Assurance levels** as mod metadata ([Assurance levels per mod](#assurance-levels-per-mod)).
+5. **Runtime checking policy**: an ambient `Contracts` handler, `all` in debug builds and
+   `pub_preconditions` in release, replaceable per scope ([Checking policy: the `Contracts` handler](#checking-policy-the-contracts-handler)).
+6. **Assurance levels** as mod metadata, L1 including overflow ([Assurance levels per mod](#assurance-levels-per-mod)).
 
 ## Fit with the reference examples
 
@@ -230,14 +288,11 @@ These are cheap now and expensive to change once code exists.
 
 ## Open questions
 
-1. Is the verifier part of the core toolchain or a mod (`moddil/verify`)?
-2. Which SMT solver(s), and how are solver versions pinned for reproducible proofs?
-3. How much annotation burden is acceptable before L1/L2 stop being used?
-4. Should a mod be able to require proof that no overflow trap can occur?
-5. How are contracts on effectful operations expressed (for example, "this handler is called at most
-   once")?
-6. What error does constructing a validated newtype from a bad value raise: one standard
-   `RefinementError` naming the failed `where` clause, or an error type chosen per newtype?
+1. **Annotation budget:** how much annotation is acceptable before L1 and L2 stop being used? The
+   target is that typical code reaches L1 with contracts on `pub` functions only, the verifier
+   inferring loop invariants where it can; the reference examples will measure it.
+2. **Contracts that must always be checked:** can a function insist that a contract is checked under
+   every policy, including `none` (a safety check that no caller may switch off)?
 
 ## Background
 

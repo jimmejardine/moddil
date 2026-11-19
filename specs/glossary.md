@@ -28,6 +28,7 @@
 | **Component** | A module marked `#[component(…)]` and placed on a tier (client, server, worker) of a multi-tier program ([Layer A: components and placement](distribution.md#layer-a-components-and-placement)). |
 | **Comptime** | Code evaluated by the compiler's interpreter at build time: generics, reflection and code generation ([Evaluation model](comptime.md#evaluation-model)). |
 | **Contract** | `requires`, `ensures` and `invariant` clauses after a signature; a failed contract traps (D13) ([Contracts as syntax](correctness.md#contracts-as-syntax)). |
+| **`Contracts`** | The ambient handler that sets which contracts are checked at run time (`all`, `pub_preconditions`, `none`), installed per scope ([Checking policy: the `Contracts` handler](correctness.md#checking-policy-the-contracts-handler)). |
 | **Cooldown** | A randomised delay before a newly published dependency version is adopted, overridable for security fixes ([Randomised cooldown](packages-and-supply-chain.md#randomised-cooldown)). |
 | **Core** | What the language itself defines (syntax, core effects, core traits); everything else lives in mods (R2) ([The core / mod boundary](stdlib.md#the-core--mod-boundary)). |
 | **`defer` / `errdefer`** | Block-scoped cleanup: `defer` is infallible and always runs; `errdefer` runs only on error and cancellation exits and may fail ([`defer` and `errdefer`](resources.md#defer-and-errdefer)). |

@@ -48,7 +48,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Numerics and data](numerics.md)                                       | 🟡 minor questions | [`numerics.md`](numerics.md), [`units.md`](units.md)                                  |
 | [Text and strings](text.md)                                            | 🟡 minor questions | [`text.md`](text.md)                                                                  |
 | [Metaprogramming](comptime.md)                                         | 🟡 minor questions | [`comptime.md`](comptime.md)                                                          |
-| [Contracts and verification](correctness.md)                           | 🟠 major questions | [`correctness.md`](correctness.md)                                                    |
+| [Contracts and verification](correctness.md)                           | 🟡 minor questions | [`correctness.md`](correctness.md)                                                    |
 | **Running programs**                                                   |                    |                                                                                       |
 | [Concurrency across CPUs](concurrency.md)                              | 🟡 minor questions | [`concurrency.md`](concurrency.md)                                                    |
 | [Runtime: scheduling, executors and I/O](runtime.md)                   | 🟡 minor questions | [`runtime.md`](runtime.md)                                                            |
