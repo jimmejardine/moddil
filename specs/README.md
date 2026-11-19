@@ -67,7 +67,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | **Tools and workflow**                                                 |                    |                                                                                       |
 | [Tooling uniformity](toolchain.md)                                     | 🟡 minor questions | [`toolchain.md`](toolchain.md), [`docs.md`](docs.md)                                  |
 | [Testing](testing.md)                                                  | 🟡 minor questions | [`testing.md`](testing.md)                                                            |
-| [Build times](build-times.md)                                          | 🟠 major questions | [`build-times.md`](build-times.md)                                                    |
+| [Build times](build-times.md)                                          | 🟡 minor questions | [`build-times.md`](build-times.md)                                                    |
 | [Cross-compilation and deployment](targets.md)                         | 🟡 minor questions | [`targets.md`](targets.md), [`freestanding.md`](freestanding.md)                      |
 | [LLMs as first-class programmers](agent-interface.md)                  | 🟡 minor questions | [`agent-interface.md`](agent-interface.md)                                            |
 | [Diffs, code review and version control](semantic-vcs.md)              | 🟡 minor questions | [`semantic-vcs.md`](semantic-vcs.md)                                                  |

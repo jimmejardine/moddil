@@ -217,6 +217,8 @@ Games and simulations must stay usable in debug builds:
 
 - **dependencies are optimised by default**, and only the workspace is built unoptimised
   ([`build-times.md`: Profiles](build-times.md#profiles));
+- generics from optimised dependencies are specialised even when your code instantiates them
+  ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed), rule 5);
 - a mod (or one hot function) can be optimised in debug builds with an `opt-level` override;
 - **target:** the reference game holds its frame budget in a default debug build. This is tracked in
   CI as a benchmark.

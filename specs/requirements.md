@@ -109,6 +109,8 @@ Details: [`determinism.md`](determinism.md).
 - A cloud platform, orchestrator or service mesh. Moddil emits artefacts and manifests for existing
   ones.
 - Transparent remote calls.
+- **Production hot code upgrades (decided).** Live update is for debug builds; production uses
+  rolling deploys with compiler-checked compatibility ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds)).
 - Runtime reflection / dynamic metaprogramming.
 
 ## Open questions

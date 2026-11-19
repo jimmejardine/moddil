@@ -273,7 +273,8 @@ Rules (decided):
     (size, alignment, copy, drop and the trait methods it uses);
   - release builds produce a specialised copy per type (monomorphisation);
   - anything layout-dependent lives in the witness table, which is what makes the two identical
-    ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed), rule 5).
+    ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed), rule 5);
+  - generics from optimised dependencies are specialised even in debug builds, and cached (same rule).
 - **Const generics** use Rust's spelling, with `int` for sizes (`<const N: int>`,
   [`numerics.md`: Integer types](numerics.md#integer-types)). **Decided:** a const parameter may
   have any type that is comptime-evaluable and has structural equality (integers, `bool`, `char`,

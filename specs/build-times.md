@@ -1,18 +1,24 @@
 # Build Times
 
-> **Status:** proposal. Indexed in [`README.md`](README.md). Nothing here is decided;
-> recommendations are marked **Recommended**. Numbers in [Budgets](#budgets) are initial targets.
+> **Status:** decided direction, details open. Indexed in [`README.md`](README.md).
 
 ## Summary
 
 Build speed is decided mostly by **language rules**, not by compiler cleverness. Go is fast because of
-what it forbids; Rust and C++ are slow largely because of what they allow. Moddil should:
-- lock in the language rules that make fast builds possible ([Language rules that decide build speed](#language-rules-that-decide-build-speed)), because they cannot be retrofitted;
-- build a query-based, lazy compiler that skips linking in dev builds ([Compiler architecture](compiler.md#compiler-architecture)), supports **live update
-  of a running debug program** ([Live update (debug builds)](#live-update-debug-builds)), and caches results in four layers from a warm daemon to signed
-  shared dependency artefacts ([Cached builds](#cached-builds));
-- optimise dependencies by default and keep your own code fast to compile ([Profiles](#profiles));
-- publish build-time budgets and treat regressions as bugs ([Budgets](#budgets)).
+what it forbids; Rust and C++ are slow largely because of what they allow.
+
+| Rule | One line |
+|---|---|
+| **Language rules for speed** | No cycles between mods, explicit interfaces at mod boundaries, generics checked once, pure comptime, local inference, canonical-AST cache keys ([Language rules that decide build speed](#language-rules-that-decide-build-speed)). |
+| **Debug generics** | Witness tables for your own generics, with the same semantics as release; generics from optimised dependencies are specialised and cached even in debug builds. |
+| **Live update** | Debug programs are updated while running; additive layout changes migrate automatically; production hot upgrades are a non-goal ([Live update (debug builds)](#live-update-debug-builds)). |
+| **Four cache layers** | A warm daemon, a local content-addressed store, a team cache and trusted shared artefacts; a hit can never be stale ([Cached builds](#cached-builds)). |
+| **Prebuilt dependencies, verified** | Only from sources you configure, signed, with a sample of hits rebuilt and compared ([Prebuilt dependencies](#prebuilt-dependencies)). |
+| **Optimised dependencies in dev** | The default dev profile optimises dependencies and builds your workspace fast ([Profiles](#profiles)). |
+| **Budgets** | < 100 ms keystroke to diagnostics; < 1 s from a body edit to a runnable test; regressions are bugs ([Budgets](#budgets)). |
+
+The compiler itself is query-based and lazy, and skips linking in dev builds
+([`compiler.md`: Compiler architecture](compiler.md#compiler-architecture)).
 
 ## Where build time goes today
 
@@ -35,7 +41,7 @@ Both are workarounds that every serious Rust project rediscovers. Moddil should 
 
 ## Language rules that decide build speed
 
-**Recommended** to lock early; each is very hard to add later.
+**Decided.** Each is very hard to add later.
 
 1. **No cycles between mods** (as in Go). Mods form a DAG and compile in parallel. Cycles between
    modules inside a mod are allowed ([`modules.md`: Cycles](modules.md#cycles)).
@@ -53,12 +59,16 @@ Both are workarounds that every serious Rust project rediscovers. Moddil should 
    - Debug: one copy of the code, receiving a hidden **witness table** of type information and
      operations (size, alignment, copy, drop, trait methods).
    - Release: a specialised copy per type (monomorphisation).
-   - This answers Build times's open question: the semantics are identical as long as everything
-     layout-dependent lives in the witness table. Swift's value witness tables show this works at
-     scale.
-   - Risk: generic-heavy code (iterators, collections) can be much slower in debug builds.
-     Mitigations: dependencies are optimised by default ([Profiles](#profiles)), and trivial functions are inlined at the
-     MIR level even in debug builds.
+   - The semantics are identical because everything layout-dependent lives in the witness table.
+     Swift's value witness tables show this works at scale.
+   - **Generics from optimised dependencies are specialised even in debug builds.** When workspace
+     code instantiates a generic from an optimised dependency (collections, iterators, hashing,
+     crypto), that instantiation is specialised and optimised, and cached under the key (generic,
+     type arguments, dependency version), so it is compiled once. The workspace's own generics keep
+     witness tables, so editing them stays fast.
+   - Trivial functions are inlined at the MIR level even in debug builds.
+   - **Target:** debug code runs at most about 3× slower than release on the benchmark suite
+     ([Budgets](#budgets)).
 6. **Pure, sandboxed, cached comptime** (decided, [`comptime.md`](comptime.md)). No build scripts, no
    proc macros with I/O.
 7. **Local type inference only.** Function signatures are explicit; there is no whole-program
@@ -96,7 +106,7 @@ not.
 | Function body, same signature | Yes | Swap the table entry |
 | Signature (parameters, effects, error set) | Yes | Recompile the callers incrementally and swap them together in one batch |
 | New functions, types, modules | Yes | Added to the table |
-| Layout of a type with live values | Partly | State held by a service or actor migrates through an explicit `migrate(old) -> new` hook (like Erlang's `code_change`); new fields with defaults migrate automatically. Otherwise the affected task scope restarts. |
+| Layout of a type with live values | Partly | **Automatic:** added fields with defaults, removed fields, reordered fields, new enum variants. **Renames and type changes** need an explicit `migrate(old) -> new` hook (like Erlang's `code_change`); otherwise the affected task scope restarts and replays. |
 | Effect handlers, scope structure | Restart | The affected scope restarts |
 
 **Restart plus replay.** A restarted scope can rebuild its state by **replaying its recorded effects
@@ -108,8 +118,10 @@ reports exactly where. Even layout changes then feel live in most development lo
 - WASM (browser and Wasmtime): calls go through a function table (`call_indirect`). New code is a new
   module instantiated against the same memory and table, then its entries are swapped in.
 
-**Scope:** debug builds only. Production hot upgrades are a **non-goal for now**; production uses
-rolling deploys with compiler-checked compatibility between versions ([Distributed and multi-tier programs](distribution.md)).
+**Scope:** debug builds only. **Production hot upgrades are a non-goal**
+([`requirements.md`: Non-goals (draft)](requirements.md#non-goals-draft)): production uses rolling
+deploys with compiler-checked compatibility between versions
+([Distributed and multi-tier programs](distribution.md)).
 
 ## Cached builds
 
@@ -120,7 +132,7 @@ rolling deploys with compiler-checked compatibility between versions ([Distribut
 | 1. Compiler daemon | The warm query graph, shared by builds, the language server, tests and live update | rust-analyzer, Bazel server, Gradle daemon |
 | 2. Local content-addressed store | Results on disk; survives restarts; shared across branches and worktrees, so switching branches does not rebuild; garbage-collected by size and age | ccache, sccache, Nix store |
 | 3. Team / CI remote cache | Results uploaded by CI, downloaded by developers | Bazel remote cache, Turborepo, Nx |
-| 4. Trusted shared artefacts | Signed, prebuilt dependency artefacts per mod version, target and profile, from a source the user configures (there is no central registry, [`packages-and-supply-chain.md`: The source is the release](packages-and-supply-chain.md#the-source-is-the-release)) | Nix binary cache |
+| 4. Trusted shared artefacts | Signed, prebuilt dependency artefacts per mod version, target and profile, only from sources the user configures (there is no central registry, [`packages-and-supply-chain.md`: The source is the release](packages-and-supply-chain.md#the-source-is-the-release)); off by default ([Prebuilt dependencies](#prebuilt-dependencies)) | Nix binary cache |
 
 **Keys and granularity**
 - Key = hash of (the item's canonical AST, the interface artefacts it depends on, toolchain version,
@@ -137,6 +149,18 @@ rolling deploys with compiler-checked compatibility between versions ([Distribut
 - Builds are reproducible, so independent rebuilders and random sampling can verify hits
   ([`determinism.md`: Reproducible builds](determinism.md#reproducible-builds), [Package management and supply-chain security](packages-and-supply-chain.md)).
 
+### Prebuilt dependencies
+
+**Decided: prebuilt artefacts are opt-in and verified.**
+
+- They come **only from sources the user configures**: the team's CI, or a foundation-run cache.
+  With nothing configured, only the local store and the team cache are used.
+- Every artefact is **signed by its builder**.
+- A **configurable fraction of hits is rebuilt locally** and compared byte for byte; reproducible
+  builds make that possible. A mismatch is a security alert, reported like an advisory by
+  `moddil audit`.
+- A project can require mods holding `unsafe` or `ffi` to be **built from source**.
+
 **Release builds** may be slow. Their optimised artefacts are cached per mod, and profile-guided
 optimisation profiles are just more inputs to the key. Dependencies normally arrive optimised from the
 cache and are never rebuilt locally ([Profiles](#profiles)).
@@ -146,7 +170,7 @@ input changed.
 
 ## Profiles
 
-**Recommended default dev profile:**
+**Decided default dev profile:**
 - **dependencies optimised** and fetched from the cache;
 - **your workspace** built with fast, unoptimised code generation and full debug info.
 
@@ -158,7 +182,7 @@ PGO from recorded runs and the debug-build speed target are in [`performance.md`
 
 ## Budgets
 
-Initial targets, tracked in CI as benchmarks. A regression is a bug.
+**Decided**, tracked in CI as benchmarks. A regression is a bug.
 
 | Operation | Target |
 |---|---|
@@ -167,6 +191,7 @@ Initial targets, tracked in CI as benchmarks. A regression is a bug.
 | Interface change | Proportional to direct dependents, not project size |
 | Clean debug build, warm dependency cache | Comparable to Go (exact figure to be set) |
 | Release build | Slower is acceptable; always cacheable |
+| Debug-build run time | At most about 3× slower than release on the benchmark suite |
 
 Supporting tools:
 - a public performance dashboard, as perf.rust-lang.org does for Rust;
@@ -191,32 +216,11 @@ than for humans:
 | [Web store](examples/03-web-store.md) | Large-team iteration; sub-second rebuilds; patching an API handler without dropping sessions; a shared team cache |
 | [Hashiverse](examples/04-hashiverse.md) | Fast hash and crypto code in dev builds without manual overrides; tests in the default profile; live-patching one node of a running simulation |
 
-## Decisions to lock early (recommendations)
-
-1. No cycles between mods ([Language rules that decide build speed](#language-rules-that-decide-build-speed)).
-2. Explicit interfaces and interface artefacts at mod boundaries ([Language rules that decide build speed](#language-rules-that-decide-build-speed)).
-3. No cross-mod inlining in debug builds ([Language rules that decide build speed](#language-rules-that-decide-build-speed)).
-4. Witness tables in debug, specialisation in release, with identical semantics ([Language rules that decide build speed](#language-rules-that-decide-build-speed)).
-5. Canonical-AST hashing for cache keys ([Language rules that decide build speed](#language-rules-that-decide-build-speed)).
-6. Optimised dependencies as the default dev profile ([Profiles](#profiles)).
-7. Published budgets, enforced in CI ([Budgets](#budgets)).
-8. Debug builds call through an indirection table; live updates apply in batches at safe points ([Live update (debug builds)](#live-update-debug-builds)).
-9. Hermetic, signed, layered caches ([Cached builds](#cached-builds)).
-
 ## Open questions
 
-1. How slow can generic code be in debug builds before it is unacceptable? Should hot generics be
-   specialised even in debug builds?
-2. Live update ([Live update (debug builds)](#live-update-debug-builds)) proposes: bodies, signatures and new items live; layout changes through
-   migration hooks or scope restart plus replay. Open: which layout migrations can be automatic, and
-   whether production hot upgrades are ever a goal.
-3. How much should trusted shared caches serve prebuilt dependency binaries, and what are the trust
-   implications? (There is no registry: [`packages-and-supply-chain.md`](packages-and-supply-chain.md).)
-4. Can debug-mode dictionary passing and release-mode specialisation produce *identical
-   semantics*, so the difference is purely performance? *Proposed answer:* yes, if everything
-   layout-dependent lives in the witness table, as Swift does ([Language rules that decide build speed](#language-rules-that-decide-build-speed)).
-5. What is the budget? *Proposed:* < 100 ms keystroke to diagnostics, < 1 s from a function-body
-   edit to a runnable test regardless of project size ([Budgets](#budgets)).
+1. The exact clean-build figure behind "comparable to Go".
+2. The default sampling rate for rebuilding prebuilt-artefact hits.
+3. Do automatic layout migrations reach values nested in containers (`Vec<Old>`, `Map<K, Old>`)?
 
 ## Background
 
