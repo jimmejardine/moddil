@@ -310,7 +310,7 @@ sync cells and abandoning linear values
 
 1. Should a resumable recovery effect ("retry"/"default") exist as a separate effect?
 2. How is context attached to structured errors ([Error types](#error-types))?
-3. Should errors from the `remote` effect ([Distributed and multi-tier programs](distribution.md)) have a standard shape (timeout, unreachable,
+3. Should errors from the `Remote` effect ([Distributed and multi-tier programs](distribution.md)) have a standard shape (timeout, unreachable,
    incompatible version), and how are errors serialised across tiers?
 4. Checked-exception fatigue (Java) vs inference: how much of an error set should be inferred?
 5. **"This cannot fail here."** With `fail` as an effect, asserting that a fallible call cannot

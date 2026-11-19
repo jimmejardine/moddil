@@ -123,7 +123,7 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 |---|---|---|
 | `moddil/collections` | Vec, Map, Set, deque, ring buffers, persistent collections | G H W X |
 | `moddil/text` | Unicode algorithms (graphemes, normalisation, case folding), regex ([`text.md`](text.md)) | G W X |
-| `moddil/i18n` | The `locale` effect: localised numbers, dates, plurals, collation, MessageFormat 2 ([`text.md`: Localisation: the `locale` effect](text.md#localisation-the-locale-effect)) | G W X |
+| `moddil/i18n` | The `Locale` effect: localised numbers, dates, plurals, collation, MessageFormat 2 ([`text.md`: Localisation: the `Locale` effect](text.md#localisation-the-locale-effect)) | G W X |
 | `moddil/serde` | Serialisation framework; binary and JSON formats; schema evolution; zero-copy validated views ([`memory.md`: Zero-copy I/O](memory.md#zero-copy-io)) | G H W X |
 | `moddil/fs` / `moddil/io` | Files, streams, buffers | H W X |
 | `moddil/net` | TCP, UDP, TLS, HTTP/1-2-3, WebSocket, WebTransport | G H W X |
@@ -148,7 +148,7 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 | `moddil/test`, `moddil/prop`, `moddil/bench` | Test runner, property-based testing, fuzzing, mutation testing, benchmarks ([`correctness.md`](correctness.md), [`docs.md`](docs.md)) | G H W X |
 | `moddil/verify` | Verifier front end: proof obligations, SMT back ends, assurance levels (open: core tool or mod) | H X |
 | `moddil/log`, `moddil/trace` | Handlers for the write-only `log`/`span`/`metric` effects: pretty output, OTLP, Prometheus, flight recorder ([`observability.md`](observability.md)) | G H W X |
-| `moddil/web` | Bindings generated from WebIDL; the `dom` effect and a simulated DOM; JS interop for `wasm32-browser` ([`ui.md`: The browser](ui.md#the-browser)) | G W X |
+| `moddil/web` | Bindings generated from WebIDL; the `Dom` effect and a simulated DOM; JS interop for `wasm32-browser` ([`ui.md`: The browser](ui.md#the-browser)) | G W X |
 | `moddil/storage` | Key-value storage: SQLite, IndexedDB, files | W X |
 | `moddil/dht`, `moddil/pow` | Kademlia DHT, proof-of-work | X (probably community mods, not standard) |
 
@@ -177,7 +177,7 @@ The prelude is small, and contains no effects:
 - traits: `Iterator`, `IntoIterator`, `Clone`, `Copy`, `Eq`, `Ord`, `Hash`, `Display`, `Debug`,
   `Default`, `From`, `Into`, `TryFrom`, `Fn`, `FnMut`, `FnOnce`, `Drop`.
 
-Everything else is imported with `use`. Effects such as `fs` and `net` are never ambient: they arrive
+Everything else is imported with `use`. Effects such as `Fs` and `Net` are never ambient: they arrive
 from root capabilities ([`effects-and-capabilities.md`: Authority comes only from root capabilities](effects-and-capabilities.md#authority-comes-only-from-root-capabilities)).
 
 ## Iteration
@@ -302,7 +302,7 @@ follow Rust's `std::io`.
   ([`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear)).
 - **Zero-copy reads** hand out `Bytes` and `RcStr` slices of the runtime's buffers
   ([`memory.md`: Zero-copy I/O](memory.md#zero-copy-io), [`text.md`](text.md)).
-- **Where I/O comes from:** `fs` and `net` are effects. Handlers live in the runtime mods (`moddil/runtime`
+- **Where I/O comes from:** `Fs` and `Net` are effects. Handlers live in the runtime mods (`moddil/runtime`
   for epoll, kqueue, io_uring and IOCP; `-wasm` for WASI and the browser; `-sim` for simulation), so
   the same code runs in production, in the browser and in deterministic tests
   ([`determinism.md`](determinism.md)).

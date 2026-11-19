@@ -12,11 +12,11 @@
 |---|---|
 | **Write-only ambient effects** | `log`, `span` and `metric` are always available and never appear in signatures. Handlers are pluggable mods and cannot feed values back, so observing never changes results. |
 | **Compile-time interned events** | Format strings are checked and interned at build time; the hot path writes an event ID plus typed arguments. Text is rendered later. |
-| **Spans follow the task tree** | Every scope and task is a span. Trace context crosses `remote` calls automatically. |
+| **Spans follow the task tree** | Every scope and task is a span. Trace context crosses `Remote` calls automatically. |
 | **Secrets never reach observability** | A `Secret<T>` value cannot flow into any event: compile error. |
 | **Task-aware stacks** | Traces show the logical chain of frames and spawn sites; a live view shows what each task is blocked on. |
 | **Flight recorder + replay** | A bounded production recording of effect results is dumped on failure and replayed deterministically, including stepping backwards ([`determinism.md`: Record and replay](determinism.md#record-and-replay)). |
-| **Live introspection** | Attach to a running process, inspect tasks and enable tracing dynamically, behind an `introspect` capability. |
+| **Live introspection** | Attach to a running process, inspect tasks and enable tracing dynamically, behind an `Introspect` capability. |
 | **Release builds stay debuggable** | Full debug info is always produced, stored separately and keyed by build hash. |
 
 ## Problems
@@ -72,7 +72,7 @@ metric.count("orders.filled", 1, venue: order.venue)
   so parent/child relationships need no manual context passing.
 - Users add spans for logical operations (`span("checkout") { … }`).
 - **GPU launches are spans** ([`accelerators.md`: Launches are structured tasks](accelerators.md#launches-are-structured-tasks)).
-- **Calls through the `remote` effect** ([Distributed and multi-tier programs](distribution.md)) carry W3C Trace Context automatically, so a
+- **Calls through the `Remote` effect** ([Distributed and multi-tier programs](distribution.md)) carry W3C Trace Context automatically, so a
   trace follows a request from browser to API to worker.
 - Metrics: explicit counters, gauges and histograms, plus rate/error/duration metrics derivable from
   spans.
@@ -120,7 +120,7 @@ Limits:
 
 ## Live introspection
 
-Behind an **`introspect` capability**, granted by `main` or the manifest and never ambient:
+Behind an **`Introspect` capability**, granted by `main` or the manifest and never ambient:
 - attach to a running process, locally or remotely;
 - view the task tree ([Task-aware stacks and the task tree](#task-aware-stacks-and-the-task-tree)) and per-task flight-recorder buffers;
 - enable or disable spans and log levels for a module **without restarting**, as BEAM allows;

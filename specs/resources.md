@@ -131,8 +131,8 @@ Two decisions remove the async-constructor problem rather than working around it
 So async construction is simply a function that suspends:
 
 ```rust
-fn connect(addr: &Addr) -> Conn with net, suspend, fail(NetError) {
-    let socket  = tcp.connect(addr);    // may suspend
+fn connect(addr: &Addr) -> Conn with net: Net, suspend, fail(NetError) {
+    let socket  = net.connect(addr);    // may suspend
     let session = handshake(socket)?;   // may suspend or fail; on failure, socket is dropped
     Conn { socket, session }            // the Conn exists only from here, fully formed
 }
@@ -163,7 +163,7 @@ impl Txn {
     fn rollback(self);
 }
 
-fn checkout(db: &Db) with db, suspend, fail(DbError) {
+fn checkout() with db: Db, suspend, fail(DbError) {
     let txn = db.begin();
     txn.insert(order)?;       // ✗ unless the error path also consumes txn
     txn.commit()?;

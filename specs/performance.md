@@ -58,7 +58,7 @@ copy whose size grows with the data.**
 | `suspend` and resume | A stack switch | Roughly a function call plus register save and restore ([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)) |
 | Bounds and overflow checks | A compare and a branch to a trap | Usually 1–5% in integer-heavy code, less after elision ([Checks and their elision](#checks-and-their-elision)) |
 | `fmt"…"` into a `String` | Formatting plus an allocation if longer than the inline capacity | Writing into an existing buffer avoids the allocation ([`text.md`](text.md)) |
-| `remote` call | Serialisation and a network round trip | Always an explicit effect ([`distribution.md`](distribution.md)) |
+| `Remote` call | Serialisation and a network round trip | Always an explicit effect ([`distribution.md`](distribution.md)) |
 
 ## Data layout
 
@@ -127,7 +127,7 @@ handlers, pinned executors, owned DMA buffers, contained `unsafe` and declared r
 On a hosted OS, user space never runs a real interrupt handler: an "interrupt" is an eventfd becoming
 readable.
 
-**The NIC queue is a `net` handler.** A kernel-bypass runtime mod provides a handler bound to one
+**The NIC queue is a `Net` handler.** A kernel-bypass runtime mod provides a handler bound to one
 queue; application code reads packets exactly as it would from sockets, so the same feed handler runs
 on kernel sockets, kernel bypass and the simulator ([`effects-and-capabilities.md`](effects-and-capabilities.md)).
 
@@ -140,7 +140,7 @@ fn main(net: NetRoot) {
 }
 
 #[no_alloc, no_lock]
-fn feed_handler(rx: &RxQueue) with net, suspend, fail(NetError) {
+fn feed_handler(rx: &RxQueue) with Net, suspend, fail(NetError) {
     loop {
         let batch = rx.recv_batch::<32>()?  // owned Packets from the DMA pool; zero copy
         for pkt in batch { on_packet(pkt) }
@@ -169,7 +169,7 @@ fn feed_handler(rx: &RxQueue) with net, suspend, fail(NetError) {
 - **Capabilities.** Opening a bypass queue narrows `NetRoot`, so it appears in `main`'s declared roots;
   the startup sandbox keeps exactly the privileges it needs (VFIO device access, or `CAP_NET_RAW` and
   `CAP_BPF` for AF_XDP) and drops the rest ([`lifecycle.md`: `main` declares its root capabilities](lifecycle.md#main-declares-its-root-capabilities)).
-- **Replay and simulation.** A packet arrival is a `net` effect result, so the flight recorder captures
+- **Replay and simulation.** A packet arrival is a `Net` effect result, so the flight recorder captures
   it and a trading day replays exactly; in tests a simulation handler delivers packets with modelled
   latency and loss ([`determinism.md`: Record and replay](determinism.md#record-and-replay)).
 - **Bare metal.** In the freestanding profile there are real interrupt handlers, with a restricted

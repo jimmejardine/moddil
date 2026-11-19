@@ -61,7 +61,7 @@ and turn raw bindings into Moddil types:
 | How errors are reported | errno, negative return, out-parameter | `fail(E)` with a typed error |
 | Can the call block | `blocking` | The runtime moves the call off its workers to a blocking pool, so one slow C call can't stall the scheduler. Such calls are the one exception to promptly cancellable I/O ([`lifecycle.md`: Cancelling I/O: no "press Enter", no self-connect](lifecycle.md#cancelling-io-no-press-enter-no-self-connect)). |
 | Thread requirements | thread-affine, not thread-safe | Pinned tasks; values that can't be sent are wrapped accordingly |
-| What it touches | capabilities (`fs`, `net`, …) | Checked like Moddil code ([`packages-and-supply-chain.md`: What a mod is](packages-and-supply-chain.md#what-a-mod-is)) |
+| What it touches | capabilities (`Fs`, `Net`, …) | Checked like Moddil code ([`packages-and-supply-chain.md`: What a mod is](packages-and-supply-chain.md#what-a-mod-is)) |
 
 - Overlays live in a **shared repository**, versioned against library versions, like TypeScript's
   DefinitelyTyped, so each C library is annotated once for everyone.

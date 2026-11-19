@@ -9,7 +9,7 @@
 |---|---|
 | **Who owns UI** | **The platform, always.** Moddil compiles the **shared core** (models, state, validation, networking, storage); the UI is the platform's own toolkit: SwiftUI or UIKit, Jetpack Compose, or TypeScript with any web framework. There is no standard `moddil/ui` ([Native UI over a shared core](#native-ui-over-a-shared-core)). |
 | **Bindings** | `moddil bind` generates **Swift, Kotlin and TypeScript** bindings to a core (and Python bindings, the first target, [`adoption.md`: Python first](adoption.md#python-first)): types, async calls, errors, cancellation and state observation ([Generated bindings](#generated-bindings)). |
-| **Browser APIs** | Generated from **WebIDL and TypeScript `.d.ts`**; JS values are opaque handles; Promises suspend through JSPI. Browser access is the **`dom` effect**, so it is visible and can be simulated in tests ([The browser](#the-browser)). |
+| **Browser APIs** | Generated from **WebIDL and TypeScript `.d.ts`**; JS values are opaque handles; Promises suspend through JSPI. Browser access is the **`Dom` effect**, so it is visible and can be simulated in tests ([The browser](#the-browser)). |
 | **Mobile** | The toolchain produces **libraries plus bindings** (an XCFramework for iOS, an AAR for Android). Xcode and Gradle still build and sign the app ([Mobile packaging](#mobile-packaging)). |
 | **UI programming model** | **Not chosen by Moddil.** Community UI mods are welcome; notes on what fits Moddil's ownership model are below ([Community UI mods](#community-ui-mods)). |
 
@@ -86,7 +86,7 @@ pub struct Cart { … }                            // the state; private fields 
 impl Cart {
     pub fn view(&self) -> CartView;                                  // what to render
     pub fn add(&mut self, item: ItemId, qty: u32) with fail(CartError);
-    pub fn check_out(&mut self) -> OrderId with suspend, remote, fail(CheckoutError);
+    pub fn check_out(&mut self) -> OrderId with suspend, Remote, fail(CheckoutError);
 }
 ```
 
@@ -138,14 +138,14 @@ built on the C ABI on native targets ([`interop.md`: The C ABI, both directions]
 ### Platform APIs as shell-provided handlers
 
 **Direction (not yet decided).** Camera, notifications, payments, the keychain and similar platform
-services become Moddil **effects** whose handlers are written in Swift, Kotlin or TypeScript and
+services become Moddil **effects** (traits used after `with`) whose handlers are written in Swift, Kotlin or TypeScript and
 installed by the shell when it starts the core:
 
 ```rust
-effect payments { fn pay(amount: Money, order: OrderId) -> Receipt with suspend, fail(PayError) }
+trait Payments { fn pay(&self, amount: Money, order: OrderId) -> Receipt with suspend, fail(PayError); }
 ```
 
-- The core calls `payments.pay(…)`; on iOS the handler is Swift calling Apple Pay, on Android Kotlin
+- The core calls `payments.pay(…)` (with `payments: Payments` in its signature); on iOS the handler is Swift calling Apple Pay, on Android Kotlin
   calling Google Pay, on the web TypeScript calling a payment provider.
 - Tests and simulations install a fake handler, so checkout logic is tested without a device
   ([`effects-and-capabilities.md`](effects-and-capabilities.md), [`determinism.md`](determinism.md)).
@@ -164,12 +164,12 @@ TypeScript UI.
   Moddil type.
 - **Promises suspend.** Calling a Promise-returning API suspends the Moddil task through JSPI until
   the Promise settles; rejection becomes a typed failure ([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)).
-- **Browser access is an effect.** Touching the DOM or calling JavaScript performs the **`dom`
+- **Browser access is an effect.** Touching the DOM or calling JavaScript performs the **`Dom`
   effect**:
   - it is visible in signatures, so a reviewer can see which code touches the page;
   - a **simulated DOM** handler (in `moddil/web`) runs UI logic in ordinary tests, without a
     browser;
-  - code running in a Web Worker has no `dom` handler, so the compiler rejects DOM access there.
+  - code running in a Web Worker has no `Dom` handler, so the compiler rejects DOM access there.
 - **Workers:** a core can run in a Web Worker (as Hashiverse's does), with the generated TypeScript
   bindings marshalling calls through `postMessage`.
 - **Packaging:** output is an ES module plus generated `.d.ts` types, usable from any bundler (Vite,
@@ -232,7 +232,7 @@ Moddil does not standardise a UI framework, but nothing stops community mods fro
 
 1. **Observation protocol:** how fine-grained is change notification (whole view model, per field, or
    diffs), and who computes the diff?
-2. **Granularity of browser effects:** one `dom` effect, or separate `dom` and `js` effects (JS calls
+2. **Granularity of browser effects:** one `Dom` effect, or separate `Dom` and `js` effects (JS calls
    that never touch the page)?
 3. **Generics and traits across bindings:** exported generic functions are monomorphised for listed
    types; how are exported traits (implemented by the shell) expressed in each language?

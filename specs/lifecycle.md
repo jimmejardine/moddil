@@ -53,11 +53,11 @@ them.
 
 ```rust
 fn main(args: Args, env: Env, stdio: Stdio, files: FsRoot, net: NetRoot, clock: Clock) -> ExitCode {
-    with stderr = stdio.err {
+    with Stderr = stdio.err {
         let cfg = try { ServerConfig::load(&args, &env, &files)? } catch {
             e => { eprintln(fmt"{e}"); return ExitCode::Config }
         };
-        with net = net, fs = files.read_only(cfg.data_dir), time = clock {
+        with Net = net, Fs = files.read_only(cfg.data_dir), Time = clock {
             server::run(cfg)
         }
     }
@@ -68,17 +68,17 @@ fn main(args: Args, env: Env, stdio: Stdio, files: FsRoot, net: NetRoot, clock: 
 | Root capability | Grants |
 |---|---|
 | `Args`, `Env` | Command-line arguments; environment variables |
-| `Stdio` | Standard input, output and error (handlers for `stdin`, `stdout` and `stderr`) |
+| `Stdio` | Standard input, output and error (handlers for `Stdin`, `Stdout` and `Stderr`) |
 | `FsRoot` | The file system, narrowed with `read_only`, `only(path)` |
 | `NetRoot` | Network access, narrowed by address or port |
-| `Clock`, `Entropy` | Real time; OS randomness (handlers for `time` and `rand`) |
+| `Clock`, `Entropy` | Real time; OS randomness (handlers for `Time` and `Rand`) |
 | `ProcessRoot` | Spawning processes; `exit_now` |
 | `Signals` | Signals beyond the stop signals |
 | `Devices` | GPUs and accelerators ([`accelerators.md`](accelerators.md)) |
 | `Introspect` | Live introspection ([`observability.md`](observability.md)) |
 
-- Nothing writes to the terminal ambiently: `print` and `println` perform `stdout`, `eprintln`
-  performs `stderr`, and both are handled from `Stdio`. (The write-only `log` effect is separate.)
+- Nothing writes to the terminal ambiently: `print` and `println` perform `Stdout`, `eprintln`
+  performs `Stderr`, and both are handled from `Stdio`. (The write-only `log` effect is separate.)
 - Root capabilities are handlers, or build them
   ([`effects-and-capabilities.md`: Authority comes only from root capabilities](effects-and-capabilities.md#authority-comes-only-from-root-capabilities)).
 - **Startup sandboxing.** The executable's root set is known at compile time, so the runtime
@@ -263,7 +263,7 @@ fn main(net: NetRoot) {                                    // declares only the 
     }, stop_on: [SIGINT, SIGTERM], grace: 10<s>);
 }
 
-fn serve() with net, suspend {
+fn serve() with Net, suspend, spawn {
     scope(|s| {
         loop {
             select {
@@ -324,7 +324,7 @@ press Enter after Ctrl-C, and programs connect to their own listening socket jus
    stop and cancel deterministically ([`determinism.md`](determinism.md)).
 
 ```rust
-fn repl() with stdin, stdout, suspend {
+fn repl() with stdin: Stdin, Stdout, suspend {
     let input = stdin.lines();
     loop {
         select {
@@ -334,7 +334,7 @@ fn repl() with stdin, stdout, suspend {
     }
 }
 
-fn serve(listener: &Listener) with net, suspend {
+fn serve(listener: &Listener) with Net, suspend, spawn {
     scope(|s| {
         loop {
             select {

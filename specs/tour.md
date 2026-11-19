@@ -55,19 +55,19 @@ pub enum LinkError { Taken(Code) }
 
 ```rust
 /// Where links are kept.
-pub effect links {
-    fn get(code: &Code) -> Option<Target> with suspend;
-    fn put(code: Code, target: Target) with suspend, fail(LinkError);
+pub trait Links {
+    fn get(&self, code: &Code) -> Option<Target> with suspend;
+    fn put(&self, code: Code, target: Target) with suspend, fail(LinkError);
 }
 
-/// An in-memory handler for `links`: used by `main` here, and by the tests.
+/// An in-memory handler for `Links`: used by `main` here, and by the tests.
 pub struct MemoryLinks { map: Mutex<Map<Code, Target>> }
 
 impl MemoryLinks {
     pub fn new() -> MemoryLinks { MemoryLinks { map: Mutex::new(Map::new()) } }
 }
 
-impl links for MemoryLinks {
+impl Links for MemoryLinks {
     fn get(&self, code: &Code) -> Option<Target> with suspend {
         self.map.lock().get(code).map(|t| t.clone())
     }
@@ -79,10 +79,13 @@ impl links for MemoryLinks {
 }
 ```
 
-- `links` is an **effect**: an interface whose implementation is chosen by the caller, not by this
-  code ([Effects are interfaces](effects-and-capabilities.md#effects-are-interfaces-handlers-are-scoped-implementations)).
-  A production build would install a SQL-backed handler instead. That handler needs `db`, which
-  comes from where it is installed (`main`), so nothing that performs `links` changes
+- `Links` is an ordinary **trait**. Listed after `with` it becomes an **effect**: its implementation
+  is chosen by whoever installs a handler, not by this code, and reaches every function below without
+  being passed as an argument ([Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly)).
+- `create` and `follow` call `links` directly, so they bind the name (`with links: Links`); `route`
+  and `serve` only pass the need on, so they write the bare `Links`.
+- A production build would install a SQL-backed handler instead. That handler captures `Db` when it is
+  built in `main`, so nothing that uses `Links` changes
   ([Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)).
 - Tasks share the handler, so its state is in a **sync cell**, the only shared mutable state
   ([Shared mutable state](concurrency.md#shared-mutable-state)). There is no `Send` or `Sync` to
@@ -95,14 +98,14 @@ impl links for MemoryLinks {
 /// Makes a random code.
 ///
 /// # Example
-/// with rand = rand::seeded(7) { make_code().len() }   // => 6
-fn make_code() -> Code with rand {
+/// with Rand = rand::seeded(7) { make_code().len() }   // => 6
+fn make_code() -> Code with rand: Rand {
     let s: String = (0..6).map(|_| rand.pick(ALPHABET)).collect();
     try { Code::new(s)? }.unwrap()      // gap 1: built from ALPHABET, so this cannot fail
 }
 
 /// `POST /links`
-fn create(req: &Request) -> Response with links, rand, suspend, fail(LinkError | DecodeError) {
+fn create(req: &Request) -> Response with links: Links, Rand, suspend, fail(LinkError | DecodeError) {
     let new: NewLink = json::decode(req.body())?;      // untrusted bytes in, validated value out
     let code = make_code();
     links.put(code.clone(), new.url)?;
@@ -111,7 +114,7 @@ fn create(req: &Request) -> Response with links, rand, suspend, fail(LinkError |
 }
 
 /// `GET /{code}`
-fn follow(raw: &str) -> Response with links, suspend {
+fn follow(raw: &str) -> Response with links: Links, suspend {
     let target = try { links.get(&Code::new(raw)?) } catch { _ => None };   // a bad code is just unknown
     match target {
         Some(t) => Response::redirect(Status::PermanentRedirect, &t),
@@ -120,7 +123,7 @@ fn follow(raw: &str) -> Response with links, suspend {
 }
 
 /// Every error becomes a response, so nothing is left for the caller (R3).
-fn route(req: &Request) -> Response with links, rand, suspend {
+fn route(req: &Request) -> Response with Links, Rand, suspend {
     try {
         match (req.method(), req.path_segments()) {
             (Method::Post, ["links"]) => create(req)?,
@@ -150,7 +153,7 @@ fn route(req: &Request) -> Response with links, rand, suspend {
 
 ```rust
 /// Accepts connections until asked to stop.
-pub fn serve(listener: &Listener) with links, rand, net, suspend, spawn {
+pub fn serve(listener: &Listener) with Links, Rand, Net, suspend, spawn {
     scope(|s| {
         loop {
             select {
@@ -162,7 +165,7 @@ pub fn serve(listener: &Listener) with links, rand, net, suspend, spawn {
 }
 
 /// Serves one connection; a bug here cannot take down the server.
-fn handle(conn: Conn) with links, rand, net, suspend, spawn {
+fn handle(conn: Conn) with Links, Rand, Net, suspend, spawn {
     try {
         scope(|c| c.spawn(|| http::serve_connection(conn, route)), isolate: true)?
     } catch {
@@ -174,7 +177,7 @@ fn handle(conn: Conn) with links, rand, net, suspend, spawn {
 
 - `scope` is the only way to start tasks, and it waits for all of them, so a connection cannot
   outlive the server ([Tasks and borrowing](concurrency.md#tasks-and-borrowing)).
-- Spawned tasks **inherit their scope's handlers**, so every connection sees the same `links`.
+- Spawned tasks **inherit their scope's handlers**, so every connection sees the same `Links`.
 - **Isolation:** a trap in one connection (an overflow, a failed contract) unwinds only that
   connection's scope, which then fails with `Trapped`
   ([Traps](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)).
@@ -187,11 +190,11 @@ fn handle(conn: Conn) with links, rand, net, suspend, spawn {
 
 ```rust
 fn main(args: Args, stdio: Stdio, net: NetRoot, entropy: Entropy) -> ExitCode {
-    with stderr = stdio.err {
+    with Stderr = stdio.err {
         let port = try { args.value("port", default: "8080").parse::<Port>()? } catch {
             e => { eprintln(fmt"bad --port: {e}"); return ExitCode::Usage }
         };
-        with net = net, rand = entropy, links = MemoryLinks::new() {
+        with Net = net, Rand = entropy, Links = MemoryLinks::new() {
             let listener = try { net.listen(port)? } catch {
                 e => { eprintln(fmt"cannot listen on {port}: {e}"); return ExitCode::Unavailable }
             };
@@ -215,7 +218,7 @@ fn main(args: Args, stdio: Stdio, net: NetRoot, entropy: Entropy) -> ExitCode {
 
 ```rust
 test "a created link redirects" for route {
-    with links = MemoryLinks::new(), rand = rand::seeded(1) {
+    with Links = MemoryLinks::new(), Rand = rand::seeded(1) {
         let created = route(&Request::post("/links", body: r#"{"url": "https://moddil.org"}"#));
         assert(created.status() == Status::Created);
         let code: Created = json::decode(created.body())?;
@@ -225,7 +228,7 @@ test "a created link redirects" for route {
 }
 
 test "plain http is rejected" for route {
-    with links = MemoryLinks::new(), rand = rand::seeded(1) {
+    with Links = MemoryLinks::new(), Rand = rand::seeded(1) {
         let r = route(&Request::post("/links", body: r#"{"url": "http://moddil.org"}"#));
         assert(r.status() == Status::BadRequest);
     }
@@ -235,11 +238,12 @@ test "serves over a lossy network" for serve {
     let sim = Sim::new(seed: 42);
     let (server, client) = (sim.node(), sim.node());
     scope(|s| {
-        with net = sim.net.endpoint(server), rand = sim.rng(server), links = MemoryLinks::new() {
+        let net = sim.net.endpoint(server);
+        with Net = net, Rand = sim.rng(server), Links = MemoryLinks::new() {
             let listener = net.listen(80)?;
             s.spawn(|| serve(&listener));
         }
-        with net = drop_messages(10.percent, outer: sim.net.endpoint(client)) {
+        with Net = drop_messages(10.percent, outer: sim.net.endpoint(client)) {
             let r = http::post(fmt"http://{server.addr()}/links",
                                body: r#"{"url": "https://moddil.org"}"#, retries: 3)?;
             assert(r.status() == Status::Created);
@@ -268,8 +272,9 @@ own document in the [index](README.md).
 Writing a complete program needed these, and no spec decides them yet. The spellings above are
 placeholders. Each gap is recorded as an open question in its area.
 
-Resolved since the tour was written: how handlers are defined, which effects a handler body may
-use, and `spawn` being an effect ([Defining handlers](effects-and-capabilities.md#defining-handlers),
+Resolved since the tour was written: effects are traits used after `with`, how handlers are
+defined, how a handler gets its own dependencies, and `spawn` being an effect
+([Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly), [Defining handlers](effects-and-capabilities.md#defining-handlers),
 [Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers),
 [The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)).
 

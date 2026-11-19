@@ -13,7 +13,7 @@ A lambda passed to `visit`, `map`, `for_each`, `sort_by`, `with` and similar API
 - needs **no** lifetimes, `move`, `Box`, `Pin`, `Send` bounds, or separate async versions of APIs.
 
 ```rust
-fn sync_all(index: &Map<Path, Meta>, cache: &mut Cache) -> u64 {
+fn sync_all(index: &Map<Path, Meta>, cache: &mut Cache) -> u64 with fs: Fs, store: Store {
     let mut uploaded = 0;
     index.visit(|path, meta| {
         if meta.dirty {
@@ -24,7 +24,7 @@ fn sync_all(index: &Map<Path, Meta>, cache: &mut Cache) -> u64 {
         }
     });
     uploaded
-}   // inferred: with suspend, fail(Io | Store), fs, net
+}   // inferred in full: with Fs, Store, suspend, fail(Io | Store)
 ```
 
 ## Rust pain points and Moddil's answers

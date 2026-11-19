@@ -113,8 +113,15 @@ As in Rust, with the omissions that follow from other decisions:
   generate for equality, hashing and copying is settled in [`values.md`](values.md).
 - **No `Send` or `Sync`**, and no other auto traits: every type is sendable
   ([`concurrency.md`: No `Send` / `Sync`](concurrency.md#no-send--sync)).
-- Traits may carry **effects** in method signatures; implementations may perform fewer effects than
-  the trait declares, never more ([`effects-and-capabilities.md`](effects-and-capabilities.md)).
+- **Any trait can be used as an effect** by listing it after `with` (`with time: Time`). The
+  implementation is then passed implicitly, found by trait type in the dynamic scope; coherence is
+  unaffected, because each handler is an ordinary impl on its own type
+  ([`effects-and-capabilities.md`: Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly)).
+- **Anonymous impls**: `impl Trait { … }` is an expression that implements a trait for an unnamed
+  type and captures its environment like a closure ([`effects-and-capabilities.md`: Defining handlers](effects-and-capabilities.md#defining-handlers)).
+- Trait methods may carry the **control effects** `suspend` and `fail(E)`; implementations may
+  perform fewer than the trait declares, never more. Other dependencies of an implementation are
+  captured when the value is built ([`effects-and-capabilities.md`: Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)).
 
 ## Coherence: one impl per trait and type
 
@@ -378,7 +385,7 @@ fn greeting(users: &Map<UserId, User>, id: UserId) -> String {
     fmt"Hello {email.unwrap_or("guest")}"
 }
 
-fn connect(host: &str, port: Option<Port>) with net, suspend, fail(NetError) {
+fn connect(host: &str, port: Option<Port>) with Net, suspend, fail(NetError) {
     let Some(addr) = resolve(host) else { return };   // early exit on absence
     let Some(p) = port else { fail(NetError::NoPort) };
     …

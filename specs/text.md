@@ -12,7 +12,7 @@
 | **Indexing** | **No `s[i]`.** Searches return a `StrPos`, a byte position on a character boundary **tied by type to its string**, so slicing with positions never traps and a position cannot be used on the wrong string. Raw byte offsets go through a visibly fallible call ([Positions and slicing](#positions-and-slicing)). |
 | **Literals** | Rust's literals, plus **dedented `"""` blocks**, which also work with tagged literals (`sql"""…"""`) ([Literals](#literals)). |
 | **Formatting** | `fmt"…"` is checked at compile time; `Display` and `Debug` as in Rust. Output **never depends on the locale** ([Formatting](#formatting)). |
-| **Localisation** | Locale-dependent formatting performs a **`locale` effect**, so it is visible, handled per request, and deterministic in tests ([Localisation: the `locale` effect](#localisation-the-locale-effect)). |
+| **Localisation** | Locale-dependent formatting performs a **`Locale` effect**, so it is visible, handled per request, and deterministic in tests ([Localisation: the `Locale` effect](#localisation-the-locale-effect)). |
 | **Comparison** | Byte-wise equality and ordering; normalisation and case folding are explicit ([Comparison, normalisation and case](#comparison-normalisation-and-case)). |
 
 ## Problem
@@ -144,7 +144,7 @@ Swift and C++ standard libraries store 15).
   `os.to_str()?` fail with a typed error that keeps the original bytes. Lossy conversion is spelled
   out: `os.to_string_lossy()`.
 - **Environment variables and command-line arguments** are `OsString`s and are reached through
-  effects (`env`, `process`; [`effects-and-capabilities.md`: The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)), never through
+  effects (`Env`, `Process`; [`effects-and-capabilities.md`: The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)), never through
   ambient globals. How `main` receives them is part of [`lifecycle.md`](lifecycle.md).
 - **Freestanding targets** have `str`, `[u8]` and `char`, but no `OsStr` or `Path`
   ([`freestanding.md`](freestanding.md)).
@@ -197,16 +197,16 @@ Swift and C++ standard libraries store 15).
   different strings until normalised: `s.nfc()`, `s.nfd()` in `moddil/text`.
 - **Case-insensitive comparison is explicit:** `a.eq_ignore_case(b)` uses Unicode default case
   folding, independent of locale.
-- **Linguistic sorting** (collation) depends on the language and therefore needs the `locale` effect
+- **Linguistic sorting** (collation) depends on the language and therefore needs the `Locale` effect
   ([below](#localisation-the-locale-effect)).
 - Hashing follows [`values.md`: Hashing](values.md#hashing).
 
-## Localisation: the `locale` effect
+## Localisation: the `Locale` effect
 
-**Decision: anything that depends on the user's language or region performs a `locale` effect.**
+**Decision: anything that depends on the user's language or region uses the `Locale` effect.**
 
 ```rust
-fn order_summary(o: &Order) -> String with locale {
+fn order_summary(o: &Order) -> String with Locale {
     i18n::message("order-summary",                      // MessageFormat 2, plural-aware
         count: o.items.len(),
         total: i18n::money(o.total),                    // "1.234,50 €" or "€1,234.50"
@@ -214,16 +214,16 @@ fn order_summary(o: &Order) -> String with locale {
 }
 
 // per request, from the Accept-Language header
-with locale = i18n::locale(req.header("Accept-Language")) {
+with Locale = i18n::locale(req.header("Accept-Language")) {
     page.render(order_summary(&order))
 }
 
 // in tests: one fixed locale, so output is reproducible
-with locale = i18n::fixed("de-CH") { assert(order_summary(&o) == "…") }
+with Locale = i18n::fixed("de-CH") { assert(order_summary(&o) == "…") }
 ```
 
 - **Visible:** a function that formats for humans says so in its signature; a CSV writer without
-  `locale` cannot accidentally write `1,5`.
+  `Locale` cannot accidentally write `1,5`.
 - **Scoped, not global:** each request, task or test installs its own handler
   ([`effects-and-capabilities.md`](effects-and-capabilities.md)); there is no process-wide locale to race on.
 - **Deterministic:** simulation and replay install a fixed handler ([`determinism.md`](determinism.md)).

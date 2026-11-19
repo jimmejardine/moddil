@@ -121,7 +121,7 @@ Output formats: terminal, **Markdown** (for pasting into a PR), and **JSON** (fo
 - **Split suggestions:** `moddil diff --suggest-split` proposes separating refactor-only changes from
   behavioural ones into stacked commits, which suits large agent-written changes. Advisory only.
 - **CI and review policy:** CI posts the Markdown report on each pull request. Optional rules in the
-  manifest act on the report, for example "a new `net` or `ffi` capability in this mod needs security
+  manifest act on the report, for example "a new `Net` or `ffi` capability in this mod needs security
   review" or "a semver-major change needs an API owner": CODEOWNERS keyed on *semantic* change rather
   than file paths.
 

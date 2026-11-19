@@ -102,7 +102,7 @@ use moddil::units::si::prelude::*                     // allowed: a declared pre
 ### Conditional code is comptime `if`
 
 ```rust
-fn open_socket() -> Socket with net {
+fn open_socket() -> Socket with Net {
     if comptime target.os == Os::Linux {
         linux::open_with_io_uring()
     } else {
@@ -128,7 +128,7 @@ fn open_socket() -> Socket with net {
   - **no feature unification**: nothing is switched on behind a mod's back;
   - **no 2^n test matrix**: each mod is built and tested one way;
   - **capability ceilings stay per mod**: an optional networking extension is its own mod with its
-    own `net` ceiling.
+    own `Net` ceiling.
 
 ### Library and executables
 

@@ -66,7 +66,7 @@ When the problem areas are laid side by side, four ideas keep recurring:
 3. **Safe by default, with explicit escape hatches.** Unsafe, FFI, manual memory and wrapping
    arithmetic are always possible, but always *visible*: in signatures, in package metadata and in PR
    summaries. The same goes for **cost**: the default is zero-cost (owned values and borrows), and
-   anything more expensive is spelled out where it happens (`.to_rc()`, a sync cell, a `remote`
+   anything more expensive is spelled out where it happens (`.to_rc()`, a sync cell, a `Remote`
    call).
 
 4. **Placement is one concept at every scale.** Thread → core → GPU → machine → tier: work is placed

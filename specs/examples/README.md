@@ -39,7 +39,7 @@ Rows link to each area's document; all areas are listed in the [index](../README
 | [Deterministic simulation](../determinism.md) | ● | ● | ○ | ● |
 | [C/C++/Rust interop](../interop.md) | ○ | ● (kernel bypass, exchange SDKs) | ○ (mobile platform APIs) | ● (existing Rust code) |
 | [Build times](../build-times.md) | ○ | ○ | ● (large app team) | ○ |
-| [Supply chain / capabilities](../packages-and-supply-chain.md) | ○ | ● (`order` capability) | ● (`payments`) | ● (untrusted peers) |
+| [Supply chain / capabilities](../packages-and-supply-chain.md) | ○ | ● (`order` capability) | ● (`Payments`) | ● (untrusted peers) |
 | [LLM-friendliness](../agent-interface.md) | ○ | ○ | ● (CRUD volume) | ○ |
 | [Semantic diffs / review](../semantic-vcs.md) | ○ | ● (audited algos) | ● | ○ |
 | R1 WASM | ● (browser client) | | ● (web client) | ● (browser client) |

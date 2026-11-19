@@ -11,7 +11,7 @@
 provides.**
 
 Allocation, scheduling, time, I/O and hardware access are already effects or capabilities in Moddil.
-On bare metal the entry point simply does not provide `fs`, `net` or `spawn`, and may not provide
+On bare metal the entry point simply does not provide `Fs`, `Net` or `spawn`, and may not provide
 `alloc`. Code that needs them **does not compile**; code that does not need them (parsers, crypto,
 maths, collections over caller-provided buffers) works unchanged.
 
@@ -202,7 +202,7 @@ emulator models. Classic 8-bit Arduinos are a stretch. Xtensa-based ESP32s are o
 
 ## Not available in freestanding profiles
 
-- OS effects (`fs`, `net`, `env`, processes);
+- OS effects (`Fs`, `Net`, `Env`, processes);
 - the default runtime and executors (unless a freestanding runtime mod supplies them);
 - live update; record and replay (by default);
 - unbounded recursion where stack analysis is required;

@@ -50,8 +50,8 @@ not be adopted, whatever its other strengths.
   the PR's semantic diff.
 - **Trust boundaries ([Distributed and multi-tier programs](../distribution.md))**: prices, totals and stock levels from `client` are untrusted; secrets
   (payment keys, DB credentials) cannot flow to `client`, and the type system enforces it.
-- **Capabilities ([Package management and supply-chain security](../packages-and-supply-chain.md))**: only the checkout module holds the `payments` capability; only `api` holds
-  `db`. A dependency that suddenly asks for `net` is flagged.
+- **Capabilities ([Package management and supply-chain security](../packages-and-supply-chain.md))**: only the checkout module holds the `Payments` capability; only `api` holds
+  `Db`. A dependency that suddenly asks for `Net` is flagged.
 - **Typed SQL and migrations**: queries checked against the schema at compile time (as in sqlx or
   jOOQ); migrations are versioned and reviewable; transactions are linear resources that must commit
   or roll back ([Memory: ownership, borrowing and sharing](../memory.md)).

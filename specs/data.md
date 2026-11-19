@@ -13,7 +13,7 @@
 | **Unknown fields depend on the boundary** | Ignored inside contracts, rejected by default at untyped edges. |
 | **Parse, don't validate** | Decoding untrusted bytes produces validated types or a typed `fail(DecodeError)`. |
 | **Migrations-first databases** | Versioned SQL migrations are the source of truth; `schema.sql` is derived; `sql"…"` is checked against it; no ORM. |
-| **A `db` effect** | Pools are handlers; transactions are linear values. |
+| **A `Db` effect** | Pools are handlers; transactions are linear values. |
 
 ## Problem
 
@@ -74,7 +74,7 @@ struct Order {
 
 - Anything that crosses a boundary **in space** (the network) or **in time** (storage) is a
   **contract**:
-  - messages at a `remote` boundary, which are contracts implicitly
+  - messages at a `Remote` boundary, which are contracts implicitly
     ([`distribution.md`](distribution.md));
   - files, stored blobs, cache entries and queue messages, marked `#[contract]`.
 - All contracts follow the **same evolution rules**: added fields need a default or `Option`;
@@ -130,10 +130,10 @@ schema.sql                    -- derived: replaying the migrations; CI checks it
 - **No ORM.** Queries are SQL, typed by the compiler; rows come back as generated types or anonymous
   records.
 
-### The `db` effect
+### The `Db` effect
 
 ```rust
-fn place(order: Order) -> OrderId with db, suspend, fail(DbError) {
+fn place(order: Order) -> OrderId with db: Db, suspend, fail(DbError) {
     let tx = db.begin()?;                                  // linear: must commit or roll back
     let id = tx.query_one(sql"INSERT INTO orders (price, qty) VALUES ({order.price}, {order.qty}) RETURNING id")?;
     tx.execute(sql"UPDATE stock SET qty = qty - {order.qty} WHERE sku = {order.sku}")?;
@@ -142,7 +142,7 @@ fn place(order: Order) -> OrderId with db, suspend, fail(DbError) {
 }
 ```
 
-- `db` is a **context effect** provided by `moddil/sql`; a connection pool is its handler
+- `Db` is a **context effect** provided by `moddil/sql`; a connection pool is its handler
   ([`effects-and-capabilities.md`](effects-and-capabilities.md)).
 - **Transactions are linear values**: they must be committed or rolled back
   ([`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear)).
@@ -158,12 +158,12 @@ values are contracts, so a newer app version can always read what an older one s
 |---|---|
 | [Multiplayer game](examples/01-multiplayer-game.md) | Compact binary snapshots with locked tags; saved games as contracts |
 | [HFT](examples/02-hft-platform.md) | SBE-style zero-copy views for exchange feeds; typed SQL for reference data |
-| [Web store](examples/03-web-store.md) | Migrations-first PostgreSQL; `db` effect with linear transactions; generated API contracts with old mobile clients still checked |
+| [Web store](examples/03-web-store.md) | Migrations-first PostgreSQL; `Db` effect with linear transactions; generated API contracts with old mobile clients still checked |
 | [Hashiverse](examples/04-hashiverse.md) | Wire compatibility with the Rust implementation through consumed contracts; local storage as contracts |
 
 ## Open questions
 
-- How does the `db` effect get a simulation handler: an ephemeral real database per test, or an
+- How does the `Db` effect get a simulation handler: an ephemeral real database per test, or an
   in-memory SQL engine?
 - Which databases does `moddil/sql` support first (PostgreSQL, SQLite)?
 - When can recorded contract versions be pruned from `contracts.lock`, and who decides?

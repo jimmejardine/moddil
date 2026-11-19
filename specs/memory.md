@@ -235,7 +235,7 @@ Goal: data arrives from a NIC (or disk, or GPU) and is consumed without ever bei
 | Fan-out to several consumers | `.to_rc()` the packet; each consumer gets an **rc slice** (rc + range). Immutable, so race-free. | One biased-RC inc/dec per consumer |
 
 ```rust
-fn on_rx(pkt: Packet) with net, fail(DecodeError) {
+fn on_rx(pkt: Packet) with Net, fail(DecodeError) {
     let order = wire::Order::validate(pkt)?; // Parsed<Order>: owns pkt, zero copy
     if order.symbol() == "ESZ6" {            // projection: borrow derived from order
         strategy_queue.push(order);          // move: the buffer travels, the payload is not copied

@@ -14,7 +14,7 @@
 | **Explicit derives** | `#[derive(Clone, PartialEq, Eq, Hash, Ord, Debug)]`, structural and visible in diffs. |
 | **Rust's equality traits** | `PartialEq`/`Eq` and `PartialOrd`/`Ord`; floats are partial, `Finite` is total. |
 | **Equality is never identity** | Addresses are unobservable; `Rc::ptr_eq` is the only identity test. |
-| **Seeded hashing and map order** | Keyed hashing seeded from the `rand` effect; maps iterate in seeded hash order; ordered maps are explicit. |
+| **Seeded hashing and map order** | Keyed hashing seeded from the `Rand` effect; maps iterate in seeded hash order; ordered maps are explicit. |
 
 ## Problem
 
@@ -132,7 +132,7 @@ struct Quote { price: Fixed<4>, qty: Fixed<0>, venue: VenueId }
 ### Hashing
 
 - **`Hash` + `Hasher`**, as in Rust: a type says *what* it hashes; the hasher decides *how*.
-- The default hasher is **keyed and flood-resistant**, keyed from the `rand` effect: random in
+- The default hasher is **keyed and flood-resistant**, keyed from the `Rand` effect: random in
   production, fixed in simulation and replay ([`determinism.md`](determinism.md)).
 - A faster, unkeyed hasher is an explicit opt-in for trusted keys.
 

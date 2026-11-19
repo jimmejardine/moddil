@@ -88,12 +88,12 @@ compile error, and reflection cannot reach private state.
 ```rust
 // A third-party template engine, declared with no capabilities in its manifest.
 // It can only use what this call hands it: here, a read-only view of one directory.
-with fs = fs.read_only(theme_dir) {
+with Fs = fs.read_only(theme_dir) {
     let html = templates::render(&page, &ctx)?;
 }
 ```
 
-- **Capability diffs in review:** an upgrade that adds `net` to a logging library shows up in the
+- **Capability diffs in review:** an upgrade that adds `Net` to a logging library shows up in the
   semantic diff and needs explicit acceptance ([`semantic-vcs.md`](semantic-vcs.md),
   [`packages-and-supply-chain.md`: Capability-scoped dependencies](packages-and-supply-chain.md#capability-scoped-dependencies)).
 - **Narrow before delegating:** handlers are narrowed (`fs.read_only`, `net.only("api.example.com")`)

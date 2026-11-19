@@ -10,7 +10,7 @@
 | **Affine type** | A type whose values may be used at most once and are dropped automatically: the default for owned values ([Resources: affine and linear](resources.md#resources-affine-and-linear)). |
 | **Agent server** | The long-running compiler service that agents and editors query for types, effects and fixes ([The agent server](agent-interface.md#the-agent-server)). |
 | **Annotation overlay** | A file that adds ownership, effects and error facts to a C or Rust API without editing its headers ([Annotation overlays](interop.md#annotation-overlays)). |
-| **Anonymous handler** | `handler e { … }`: a one-off handler expression that captures locals like a closure ([Defining handlers](effects-and-capabilities.md#defining-handlers)). |
+| **Anonymous impl** | `impl Trait { … }` as an expression: implements a trait for an unnamed type and captures locals like a closure; the usual one-off handler ([Defining handlers](effects-and-capabilities.md#defining-handlers)). |
 | **Assurance level** | Mod metadata stating how much is proven or checked, from tested to fully verified ([Assurance levels per mod](correctness.md#assurance-levels-per-mod)). |
 | **Attached test** | `test "…" for f { … }`: a test that names its subject and sits beside it ([Attached tests](testing.md#attached-tests)). |
 | **Biased reference counting** | Rc counting that is non-atomic for the owning task and atomic only for others ([Biased reference counting](memory.md#biased-reference-counting)). |
@@ -19,8 +19,9 @@
 | **Budget** | `#[budget(…)]` on a `bench` block: a limit on deterministic counters (allocations, instructions) that fails CI ([Benchmarks and budgets](performance.md#benchmarks-and-budgets)). |
 | **Cancel** | The hard second stage of shutdown: the next suspension point returns `Cancelled` ([Two levels: stop, then cancel](lifecycle.md#two-levels-stop-then-cancel)). |
 | **Capability** | Authority to perform an effect, held as a handler; it originates only in `main`'s root capabilities ([Authority comes only from root capabilities](effects-and-capabilities.md#authority-comes-only-from-root-capabilities)). |
-| **Capability ceiling** | The capabilities a mod may use at all, declared in its manifest and checked by the compiler; a JSON parser that uses `net` fails to build ([Capability-scoped dependencies](packages-and-supply-chain.md#capability-scoped-dependencies)). |
-| **Capability value** | A handler passed as a second-class value when two instances of one effect are needed at once ([Capability values](effects-and-capabilities.md#capability-values)). |
+| **Capability ceiling** | The capabilities a mod may use at all, declared in its manifest and checked by the compiler; a JSON parser that uses `Net` fails to build ([Capability-scoped dependencies](packages-and-supply-chain.md#capability-scoped-dependencies)). |
+| **Capability value** | A handler passed explicitly as a second-class `&dyn Trait`, when two of the same effect are needed at once ([Capability values](effects-and-capabilities.md#capability-values)). |
+| **Captured handler** | A handler that keeps another handler it was built with (a SQL handler keeping `Db`, a recorder keeping the outer `Net`); it is second-class and cannot outlive that scope ([Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)). |
 | **Class 1 / 2 / 3** | The three outcome classes: errors (must be handled), defined arithmetic (no handling), traps (crash or isolated scope) ([Three outcome classes](error-handling.md#three-outcome-classes)). |
 | **`.clone()`** | An explicit deep copy whose cost grows with the value; `Rc` has no `.clone()` ([`.clone()` is explicit and means a copy](values.md#clone-is-explicit-and-means-a-copy)). |
 | **Coherence** | At most one impl of a trait for a type in a program, enforced by the orphan rule and its exceptions ([Coherence: one impl per trait and type](types.md#coherence-one-impl-per-trait-and-type)). |
@@ -33,25 +34,24 @@
 | **Delegation** | `#[delegate(Trait)]` forwards a trait's methods to a field, replacing implementation inheritance ([Multiple inheritance](types.md#multiple-inheritance)). |
 | **`discard`** | `discard(r, "reason")`: the only way to ignore an error, visible in review (D14) ([Entry points must handle everything (R3)](error-handling.md#entry-points-must-handle-everything-r3)). |
 | **`dyn`** | An existential: any trait used as a type, behind a pointer with a witness table ([`dyn`: existentials](types.md#dyn-existentials)). |
-| **Effect** | An interface of operations (`net`, `fs`, `fail(E)`, `suspend`, user-defined) listed after `with` in a signature; each effect is listed on its own ([Effects are interfaces; handlers are scoped implementations](effects-and-capabilities.md#effects-are-interfaces-handlers-are-scoped-implementations)). |
+| **Effect** | A trait listed after `with` in a signature (`with net: Net`), whose implementation is passed implicitly by scope; plus the built-in control effects `suspend`, `spawn` and `fail(E)` ([Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly)). |
 | **Effect polymorphism** | A function such as `visit` takes on the effects of the closure it is given ([Effect polymorphism](effects-and-capabilities.md#effect-polymorphism)). |
 | **Executor** | A pool of OS threads with a scheduling policy (`default`, `blocking`, `pinned`, `affine`) inside the one runtime ([Tasks, threads and executors](runtime.md#tasks-threads-and-executors)). |
 | **First error wins** | In a task scope, the first failure cancels the siblings; their later errors are suppressed onto it (D15) ([Tasks and concurrency](error-handling.md#tasks-and-concurrency)). |
 | **Flight recorder** | An in-memory ring of recent events dumped on an error or trap ([Flight recorder and replay](observability.md#flight-recorder-and-replay)). |
 | **Freestanding profile** | A build without an operating system (kernels, firmware), with `#[entry]` instead of `main` ([Profiles](freestanding.md#profiles)). |
 | **Generator** | A `gen` block or function that yields values, giving an `Iterator` written as a loop ([Generators](stdlib.md#generators)). |
-| **Handler** | A scoped implementation of an effect: a value of a type with `impl e for T`, or a `handler e { … }` block, installed with `with e = h { … }`; the innermost one wins ([Defining handlers](effects-and-capabilities.md#defining-handlers)). |
+| **Handler** | The value installed for an effect with `with Trait = value { … }`: an ordinary impl or an anonymous impl; the innermost one wins ([Defining handlers](effects-and-capabilities.md#defining-handlers)). |
 | **Hot-path attributes** | `#[no_alloc]`, `#[no_lock]` and similar compiler-checked latency guarantees ([Hot-path guarantees](performance.md#hot-path-guarantees)). |
 | **`int`** | The signed 64-bit integer used for lengths, indices and counts on every target ([Integer types](numerics.md#integer-types)). |
-| **Installer context** | The effects a handler body uses beyond `suspend` and `fail` are handled where the handler is installed, not by the caller ([Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)). |
-| **Interposition** | A handler that forwards to the enclosing handler for the same effect, to record, delay or inject faults ([Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)). |
+| **Interposition** | A handler that captures the enclosing handler for the same trait and forwards to it, to record, delay or inject faults ([Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)). |
 | **Isolated scope** | `scope(…, isolate: true)`: a trap inside unwinds only that scope, which fails with `Trapped` ([Traps: the process by default, isolated scopes on request](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)). |
 | **JSPI** | JavaScript Promise Integration: the first WASM lowering for suspension, in browsers and Node ([WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)). |
 | **Linear type** | A type whose values must be explicitly consumed (`commit`, `close`), used when cleanup can fail ([Resources: affine and linear](resources.md#resources-affine-and-linear)). |
 | **Live update** | Patching a running debug build while keeping its state ([Live update (debug builds)](build-times.md#live-update-debug-builds)). |
 | **Mod** | The unit of distribution, versioning and capability ceilings: a git repository (or a folder in one) with a manifest ([What a mod is](packages-and-supply-chain.md#what-a-mod-is)). |
-| **Moddil Evolution** | The proposal process for language and standard-mod changes ([Moddil Evolution](governance.md#moddil-evolution)). |
 | **`moddil bind`** | Generates Python, Swift, Kotlin and TypeScript bindings to a Moddil core ([Generated bindings](ui.md#generated-bindings)). |
+| **Moddil Evolution** | The proposal process for language and standard-mod changes ([Moddil Evolution](governance.md#moddil-evolution)). |
 | **Module** | A namespace inside a mod; visibility is module, mod or public ([Mods and modules](modules.md#mods-and-modules)). |
 | **Note** | `note "…"`: a maintainer note attached to an item, kept out of the public docs ([Maintainer notes](docs.md#maintainer-notes)). |
 | **Orphan rule** | An impl must live with its trait or its type, with three exceptions: the application, the same repository and bridge mods ([Who may write an impl](types.md#who-may-write-an-impl)). |
@@ -60,7 +60,7 @@
 | **Rc** | `Rc<T>`: a shared, reference-counted handle to immutable data, made with `.to_rc()` ([Sharing: `.to_rc()`](memory.md#sharing-to_rc)). |
 | **Reference interpreter** | An interpreter over the canonical AST, kept separate from the compiler for differential testing ([Two interpreters](compiler.md#two-interpreters)). |
 | **Refinement** | A validated newtype such as `type Port = u16 where self >= 1024` ([Validated newtypes (lightweight refinements)](correctness.md#validated-newtypes-lightweight-refinements)). |
-| **`remote`** | The effect performed by a call that crosses tiers, with its own failures ([The `remote` effect](distribution.md#the-remote-effect)). |
+| **`Remote`** | The effect performed by a call that crosses tiers, with its own failures ([The `Remote` effect](distribution.md#the-remote-effect)). |
 | **Root capability** | A capability `main` receives as a parameter (`NetRoot`, `FsRoot`, `Stdio`, …); the only source of authority ([`main` declares its root capabilities](lifecycle.md#main-declares-its-root-capabilities)). |
 | **Runtime** | A mod providing handlers for scheduling, I/O and time (`moddil/runtime`, `-wasm`, `-sim`) ([Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)). |
 | **Safety contract** | The documented conditions a caller of an `unsafe fn` must uphold ([Safety contracts](unsafe.md#safety-contracts)). |

@@ -17,7 +17,7 @@ areas.
    and the generated Rust bridge ([Interoperability with C and Rust](interop.md))? **Decided**, with
    Python extension modules and `moddil migrate rust` added ([`adoption.md`: Adopting inside existing codebases](adoption.md#adopting-inside-existing-codebases)).
 4. **Is multi-tier deployment ([Distributed and multi-tier programs](distribution.md)) a v0 goal?** **Decided:** the language layer (components,
-   placement, `remote`, contracts, single-process and simulated runs) is v0; images, Compose,
+   placement, `Remote`, contracts, single-process and simulated runs) is v0; images, Compose,
    Kubernetes and skew checks are v1; other adapters later ([Staging](#staging-distributed-programs)).
 5. **Mobile and UI**: shared logic under native UI shells, or a Moddil UI mod? **Decided:** native UI
    over a shared Moddil core, always; no standard UI mod ([`ui.md`](ui.md)).
@@ -63,7 +63,7 @@ The order puts the two first audiences, Python teams and backend teams, before t
 
 | Stage | Delivers |
 |---|---|
-| **v0** | Layer A: components, placement, the `remote` effect, generated contracts, single-process mode and simulation |
+| **v0** | Layer A: components, placement, the `Remote` effect, generated contracts, single-process mode and simulation |
 | **v1** | OCI images, Compose and Kubernetes adapters, skew checking against deployed contracts |
 | **Later** | Nomad and WASI-platform adapters, generated policies, Temporal/Restate workflow handlers, choreographies |
 

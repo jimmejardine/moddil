@@ -145,7 +145,7 @@ program on every edit**, in an **in-browser playground**:
   programs) and Moddil's own WASM emitter (for speed). LLVM and Cranelift are not needed.
 - **Standard mods** arrive as precompiled interface artefacts and code from the cache
   ([`build-times.md`: Cached builds](build-times.md#cached-builds)), loaded lazily.
-- **Effects in the playground:** `fs`, `net`, `time` and `rand` use simulation handlers
+- **Effects in the playground:** `Fs`, `Net`, `Time` and `Rand` use simulation handlers
   ([`determinism.md`](determinism.md)): a virtual file system, a simulated network, virtual time
   and a seeded RNG. Real `fetch` is optional, with the user's consent. Suspension uses JSPI; threads
   use cross-origin isolation (the playground sets COOP/COEP); kernels use WebGPU.

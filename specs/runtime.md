@@ -29,8 +29,8 @@ and a static scheduler on a microcontroller.
 interface for spawning, timers or I/O. The result: libraries tied to tokio, async-std or smol, and an
 ecosystem that partly fragmented.
 
-**Moddil's approach.** The *interfaces* are core effects: `suspend`, `spawn` (scoped), `time`, `net`,
-`fs`, `rand`, `log`. *Implementations* are mods that provide **handlers** for those effects:
+**Moddil's approach.** The *interfaces* are core effects: `suspend`, `spawn` (scoped), `Time`, `Net`,
+`Fs`, `Rand`, `log`. *Implementations* are mods that provide **handlers** for those effects:
 
 - `moddil/runtime`: the standard multi-threaded work-stealing runtime.
 - `moddil/runtime-wasm`: browser and WASI runtime; JSPI in browsers and Node first, WASM stack
@@ -64,7 +64,7 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](r
   interleavings are seed-controlled and replayable.
   See [`determinism.md`](determinism.md) for the simulation runtime, virtual time and record/replay.
 - **Observability:** runtimes expose the task tree and each task's blocked-on effect operation to
-  spans and to the `introspect` capability ([`observability.md`: Task-aware stacks and the task tree](observability.md#task-aware-stacks-and-the-task-tree), [`observability.md`: Live introspection](observability.md#live-introspection)).
+  spans and to the `Introspect` capability ([`observability.md`: Task-aware stacks and the task tree](observability.md#task-aware-stacks-and-the-task-tree), [`observability.md`: Live introspection](observability.md#live-introspection)).
 - **Cancellable I/O:** every pending I/O operation must be cancellable promptly at the OS level
   (io_uring cancel, epoll/kqueue deregistration, `CancelIoEx`), using per-platform strategies for
   terminals and pipes; results that complete in a race with cancellation are retained, so standard

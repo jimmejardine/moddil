@@ -8,7 +8,7 @@
 | Rule | One line |
 |---|---|
 | **No macro language** | There are no token-level macros (`macro_rules!`, proc macros, a preprocessor). Metaprogramming is ordinary Moddil code that the compiler runs. |
-| **Comptime is pure** | Code run at compile time has an empty effect set: no `net`, `fs`, `time` or `rand`. It is deterministic, fuel-limited, sandboxed and cached. |
+| **Comptime is pure** | Code run at compile time has an empty effect set: no `Net`, `Fs`, `Time` or `Rand`. It is deterministic, fuel-limited, sandboxed and cached. |
 | **Generics stay bounded** | Generic code is checked against trait bounds where it is defined. Comptime handles values and code generation, not untyped generics. |
 | **Static reflection** | `reflect(T)` describes a type's fields, variants, annotations and generic parameters, read-only. |
 | **Typed generation at the annotation site** | `#[derive(serde::Serialize)]` calls a comptime function that returns a *typed* trait impl. It is never a token stream and never appears anywhere the annotation isn't. |
@@ -186,8 +186,8 @@ let open_orders = sql"""
 
 Generated code is ordinary code once expanded:
 - it is checked for borrows, linearity, effects and capabilities like anything hand-written;
-- a derive **cannot grant capabilities**: if it generates code that performs `net`, the mod using it
-  must declare `net`;
+- a derive **cannot grant capabilities**: if it generates code that performs `Net`, the mod using it
+  must declare `Net`;
 - generated effects and capabilities appear in signatures and PR summaries like any others.
 
 ## Security and supply chain

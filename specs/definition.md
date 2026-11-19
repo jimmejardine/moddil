@@ -92,11 +92,11 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
 // conformance/2027/effects/handler-scope.mdl
 // covers: effect.handler.scope.1, effect.handler.scope.2
 
-effect counter { fn tick() -> int }
+trait Counter { fn tick(&self) -> int; }
 
-fn twice() -> int with counter { counter.tick() + counter.tick() }
+fn twice() -> int with counter: Counter { counter.tick() + counter.tick() }
 
-with counter = Counting::new() {
+with Counter = Counting::new() {
     twice()                       // => 3
 }
 

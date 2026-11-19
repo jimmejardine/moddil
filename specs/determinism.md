@@ -25,14 +25,14 @@ What it enables:
 |---|---|---|
 | Evaluation order | Unspecified in C and C++ | Specified left to right; drop order specified |
 | Time, randomness, environment, process IDs, I/O | Ambient global functions | Effects and capabilities only |
-| Scheduling, `select` fairness | Hidden inside the runtime | Scheduling is an effect; random choices draw from `rand` |
-| Hash-map iteration order | Rust randomises the seed; Go deliberately randomises iteration | The hash seed comes from the `rand` effect: protection against hash-flooding in production, a fixed seed in simulation. Maps iterate in seeded hash order (decided, [`values.md`](values.md#map-iteration-order-seeded-hash-order)); `OrderedMap` and `TreeMap` when order matters; tests use a fresh, printed seed. |
+| Scheduling, `select` fairness | Hidden inside the runtime | Scheduling is an effect; random choices draw from `Rand` |
+| Hash-map iteration order | Rust randomises the seed; Go deliberately randomises iteration | The hash seed comes from the `Rand` effect: protection against hash-flooding in production, a fixed seed in simulation. Maps iterate in seeded hash order (decided, [`values.md`](values.md#map-iteration-order-seeded-hash-order)); `OrderedMap` and `TreeMap` when order matters; tests use a fresh, printed seed. |
 | Pointer addresses | Observable (hashing or sorting by address) | Safe code cannot turn an address into an integer |
 | Floating point | FMA contraction, x87 extended precision, fast-math reordering, flush-to-zero, differing `libm`, WASM NaN bit patterns, relaxed SIMD | **Strict IEEE 754 by default**: no implicit FMA, no reordering. A deterministic `moddil/math` with correctly rounded functions (CORE-MATH style). NaN canonicalisation where observable. Fast-math and relaxed SIMD only by explicit opt-in, **marked nondeterministic** so they are excluded from replayable code. |
 | Platform integer width | `usize` is 32-bit on wasm32, 64-bit natively | `int` (lengths, indices, counts) is 64-bit on every target ([`numerics.md`: Integer types](numerics.md#integer-types)). `usize` exists only for FFI and memory-level code, and a lint flags it in cross-target code. |
 | Parallel float reductions, GPU atomics | Order of additions varies | Deterministic reductions by default where cheap; GPU determinism opt-in (cf. PyTorch `use_deterministic_algorithms`) |
 | Native FFI | Anything | Behind the `ffi` capability; outside the guarantee unless modelled |
-| Locale | Process-wide settings change number formats, case mapping and sorting (C `setlocale`, Java `Locale.getDefault()`) | Formatting and case mapping are locale-independent; locale-dependent code performs the `locale` effect ([`text.md`: Localisation: the `locale` effect](text.md#localisation-the-locale-effect)) |
+| Locale | Process-wide settings change number formats, case mapping and sorting (C `setlocale`, Java `Locale.getDefault()`) | Formatting and case mapping are locale-independent; locale-dependent code performs the `Locale` effect ([`text.md`: Localisation: the `Locale` effect](text.md#localisation-the-locale-effect)) |
 
 ## Deterministic simulation testing
 
@@ -72,7 +72,7 @@ through constructors.
 
 ```rust
 // production main: handlers installed once
-with time = os::clock, rand = os::rng, net = os::net {
+with Time = os::clock, Rand = os::rng, Net = os::net {
     server.run()
 }
 
@@ -80,10 +80,10 @@ with time = os::clock, rand = os::rng, net = os::net {
 let sim = Sim::new(seed: 42);
 scope(|s| {
     for node in sim.nodes(6) {
-        with time    = sim.clock(node, skew: node.id * 5<ms>),
-             rand    = sim.rng(node),
-             net     = sim.net.endpoint(node),
-             storage = sim.disk(node) {
+        with Time    = sim.clock(node, skew: node.id * 5<ms>),
+             Rand    = sim.rng(node),
+             Net     = sim.net.endpoint(node),
+             Storage = sim.disk(node) {
             s.spawn(|| server.run());    // unchanged production code
         }
     }
@@ -95,7 +95,7 @@ What this allows:
   disks and RNG streams).
 - **Per subsystem:** wrap one call, so that only that part sees the fault.
   ```
-  with net = drop_messages(30.percent, outer: net) { replicate(batch)? }
+  with Net = drop_messages(30.percent) { replicate(batch)? }   // captures the outer Net
   ```
 - **Interposition:** a handler can forward to the enclosing one while recording, delaying, failing or
   asserting. Typed mocks, spies, fault injection and recording all compose by nesting.
@@ -184,7 +184,7 @@ real-world evidence for it.
 2. **Hand-written seams are incomplete by construction.** Randomness is not behind a trait: free
    functions call the OS RNG directly, at about 38 call sites (RPC, Kademlia, keys, PoW, posting).
    Tokio's multi-threaded scheduling is not under test control either. So tests are deterministic in
-   time but not in randomness or interleaving. With effects, using `rand` without a handler does not
+   time but not in randomness or interleaving. With effects, using `Rand` without a handler does not
    compile.
 3. **Plumbing cost:** `Arc<dyn …>` through constructors, a boxed future per `sleep`, and a services
    bundle that grows with each new service. Effects remove it.
@@ -192,7 +192,7 @@ real-world evidence for it.
    first, which is racy on a multi-threaded runtime. In Moddil the scheduler and the clock are one
    handler, advancing time only at quiescence.
 5. **Cryptographic randomness:** keys need real entropy in production and reproducible entropy in
-   simulation. **Recommended:** one `rand` effect with a `secure` sub-capability. Production handlers
+   simulation. **Recommended:** one `Rand` effect with a `secure` sub-capability. Production handlers
    use the OS CSPRNG; the simulation handler uses a seeded CSPRNG (e.g. ChaCha20). Simulated keys must
    never leave simulation.
 6. **Next steps Hashiverse doesn't have yet,** and a Moddil port gets for free: seeded scheduling,
@@ -211,7 +211,7 @@ real-world evidence for it.
 2. Specified evaluation and drop order.
 3. Strict IEEE floating point by default; deterministic `moddil/math`; nondeterministic floating
    point opt-in and visible.
-4. Hash seeding via the `rand` effect; seeded hash order for maps (decided).
+4. Hash seeding via the `Rand` effect; seeded hash order for maps (decided).
 5. A hybrid effect design: scoped handlers plus second-class capability values ([Handlers are scoped, not global](#handlers-are-scoped-not-global)).
 6. `moddil/runtime-sim` as a first-class standard mod, with CI running the standard library under it.
 7. Record and replay at effect boundaries as a runtime feature; workflow determinism checked by effect

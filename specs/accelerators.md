@@ -16,7 +16,7 @@
 | **Launches are structured tasks** | A launch borrows its inputs (`let`) and outputs (`mut`). The end of the scope is the fence. CPU–GPU races are ruled out by the existing borrowing rules. |
 | **Race-free kernels by default** | Disjoint writes and atomics are safe; arbitrary scatter writes need `unsafe`. |
 | **Schedules are comptime data** | Algorithm and schedule are separate. Autotuning is an offline tool whose output is embedded. |
-| **Runtimes are mods** | The `gpu` effect is handled by WebGPU, Vulkan, Metal, CUDA, ROCm and CPU-simulator mods. WebGPU comes first, then CUDA. |
+| **Runtimes are mods** | The `Gpu` effect is handled by WebGPU, Vulkan, Metal, CUDA, ROCm and CPU-simulator mods. WebGPU comes first, then CUDA. |
 
 ## The accelerator spectrum
 
@@ -86,14 +86,14 @@ code.
 - **Device-to-device copies** are always an explicit `.to(device)`. The runtime chooses the path:
   NVLink, PCIe peer-to-peer, or staging through host memory (consumer cards often have no NVLink and
   may not support peer-to-peer).
-- **Remote devices** (a GPU on another machine) are reached only through the `remote` effect
+- **Remote devices** (a GPU on another machine) are reached only through the `Remote` effect
   ([Distributed and multi-tier programs](distribution.md)). Device placement is the bottom rung of the placement ladder: thread, core,
   device, machine, tier.
 
 Example: a workstation with two GPUs and a 128-core CPU.
 
 ```rust
-fn main(devs: Devices, …) with gpu, … {
+fn main(devs: Devices, …) with Gpu, … {
     let g0  = devs.role("physics")?;                   // manifest: physics = "cuda:0"
     let g1  = devs.role("render")?;                    //           render  = "cuda:1"
     let cpu = devs.cpu_pool(cores: 32..128)?;          // pseudo-GPU on 96 cores; 32 left for the runtime
@@ -200,7 +200,7 @@ and forgetting a fence.
 
 ## Runtimes and backends
 
-- `gpu` is an effect. **Handler mods** implement it: WebGPU (via wgpu), Vulkan, Metal, CUDA, ROCm
+- `Gpu` is an effect. **Handler mods** implement it: WebGPU (via wgpu), Vulkan, Metal, CUDA, ROCm
   and a **CPU simulator**. Libraries work with every handler ([R2](requirements.md#firm-requirements-decided)).
 - **Lowering** reuses existing tools, as in [`compiler.md`](compiler.md): naga for
   WGSL/SPIR-V/MSL/HLSL; LLVM NVPTX and AMDGPU for CUDA- and ROCm-class targets; MLIR later if

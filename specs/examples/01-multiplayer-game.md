@@ -46,7 +46,7 @@ point is a real-time, authoritative-server architecture of the kind used by most
   (WASM stack switching once browsers ship it).
 - **GPU ([Concurrency across GPUs and accelerators](../accelerators.md))**: rendering and possibly particle/physics kernels through the WebGPU/WGSL path. The same
   kernel code could run server-side for authoritative physics.
-- **Placement and the `remote` effect ([Distributed and multi-tier programs](../distribution.md))**: the client/hub/chat split in one program. Unreliable vs
+- **Placement and the `Remote` effect ([Distributed and multi-tier programs](../distribution.md))**: the client/hub/chat split in one program. Unreliable vs
   reliable channels must be distinguishable in types (an unreliable send can be lost; the type system
   should say so).
 - **Choreographies ([Distributed and multi-tier programs](../distribution.md))**: the join → match → play protocol written once from a global view and

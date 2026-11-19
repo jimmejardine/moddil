@@ -58,8 +58,8 @@ A mod is the unit of:
 - **Versioning**: semver, with editions for the language ([Language evolution](evolution.md)).
 - **Compilation and caching** ([Build times](build-times.md)): interface hash vs implementation hash (see
   [`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)).
-- **Capabilities** ([Package management and supply-chain security](packages-and-supply-chain.md)): the manifest declares which capabilities the mod may require (`net`, `fs`,
-  `ffi`, `gpu`, `unsafe`, …). The compiler rejects any use beyond them.
+- **Capabilities** ([Package management and supply-chain security](packages-and-supply-chain.md)): the manifest declares which capabilities the mod may require (`Net`, `Fs`,
+  `ffi`, `Gpu`, `unsafe`, …). The compiler rejects any use beyond them.
 - **Targets**: native, WASM (R1), GPU-kernel-safe, and so on. A mod declares which targets it supports.
 - **Audit** ([Package management and supply-chain security](packages-and-supply-chain.md)): reviews and attestations attach to a mod version.
 
@@ -180,12 +180,12 @@ github.com/acme/json                  v2 → v3 available (major)
 ### Capability-scoped dependencies
 
 Two layers, both enforced by the compiler ([Effects and capabilities as a unifying idea](effects-and-capabilities.md)):
-- **A ceiling per mod**: the manifest declares the capabilities the mod may use (`net`, `fs`, `env`,
-  `spawn`, `time`, `ffi`, `unsafe`, …). A JSON parser that uses `net` fails to build.
+- **A ceiling per mod**: the manifest declares the capabilities the mod may use (`Net`, `Fs`, `Env`,
+  `spawn`, `Time`, `ffi`, `unsafe`, …). A JSON parser that uses `Net` fails to build.
 - **Authority flows as values** (object capabilities): a library only gets the capabilities its
   caller passes in. The ceiling bounds what a mod *could* ask for; values decide what it actually
   gets.
-- **Capability diffs on upgrade**: "`acme/json` 2.1 → 2.2 now requests `net`" is shown by `outdated`
+- **Capability diffs on upgrade**: "`acme/json` 2.1 → 2.2 now requests `Net`" is shown by `outdated`
   and `update`, and needs an explicit acceptance.
 - **FFI is a capability.** C code can do anything, so `ffi` and `unsafe` are declared, visible to
   every consumer, and treated as high risk by audits ([`interop.md`: The safety boundary](interop.md#the-safety-boundary)).
@@ -299,7 +299,7 @@ Working-copy overrides are unpinned by nature, so they are for development only 
 | Example | Uses |
 |---|---|
 | [Multiplayer game](examples/01-multiplayer-game.md) | Capability ceilings keep asset and maths libraries pure; vendoring for reproducible console builds |
-| [HFT](examples/02-hft-platform.md) | Private mods over internal git; cooldown plus a strict `vet` policy; no `net` in strategy libraries |
+| [HFT](examples/02-hft-platform.md) | Private mods over internal git; cooldown plus a strict `vet` policy; no `Net` in strategy libraries |
 | [Web store](examples/03-web-store.md) | Capability diffs on upgrades of payment and auth mods; shared audits across teams |
 | [Hashiverse](examples/04-hashiverse.md) | `hashiverse/protocol` published from its own repository; no central service, in keeping with a decentralised project |
 

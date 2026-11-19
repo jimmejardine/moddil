@@ -67,7 +67,7 @@ interoperate with a running network built in another language.
 - **Effects as built-in pluggable traits ([Effects and capabilities as a unifying idea](../effects-and-capabilities.md)).** Hashiverse already does by hand what Moddil wants
   to make standard: transport, time, storage and key management are swappable traits with production
   and test implementations. In Moddil these become effects, and the implementations become handlers:
-  `net` → HTTPS or in-memory; `time` → real or simulated; `storage` → IndexedDB, SQLite or memory;
+  `Net` → HTTPS or in-memory; `Time` → real or simulated; `Storage` → IndexedDB, SQLite or memory;
   `keys` → browser locker or disk. This is concrete evidence for the effects design, drawn from a real
   codebase.
 - **Deterministic simulation ([Determinism and reproducibility](../determinism.md)).** Hashiverse's test harness (one primary, several secondary servers
@@ -80,7 +80,7 @@ interoperate with a running network built in another language.
 - **Crypto and PoW performance ([Numerics and data](../numerics.md), [Concurrency across CPUs](../concurrency.md)).** Hash chains and signature checks must match Rust
   performance, natively and in WASM (SIMD).
 - **Capabilities and untrusted input ([Package management and supply-chain security](../packages-and-supply-chain.md), [Distributed and multi-tier programs](../distribution.md)).** Every byte from a peer is untrusted. The crypto mods
-  must not have `net` or `fs`.
+  must not have `Net` or `Fs`.
 - **Distributed without a centre ([Distributed and multi-tier programs](../distribution.md)).** A P2P system has no `hub`; every node runs the same code.
   This tests whether Moddil's placement model fits symmetric topologies, not just client/server ones.
 
