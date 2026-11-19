@@ -1,6 +1,6 @@
 # Distributed and Multi-tier Programs
 
-> **Status:** decided direction, details open. Indexed in [`README.md`](README.md).
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
 > Snippets and file formats are **illustration only**; no syntax is committed.
 
 ## Summary
@@ -209,13 +209,29 @@ What ships in v0, v1 and later is in [`roadmap.md`: Staging: distributed program
 | [Web store](examples/03-web-store.md) | Client, API and database; skew checks against months-old mobile clients; Postgres provisioned by Terraform and bound as a requirement; payment keys as `Secret<T>` |
 | [Hashiverse](examples/04-hashiverse.md) | `peer` placement; wire compatibility with existing Rust servers via consumed contracts; a single static binary for volunteers |
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **Choreographies** come after v1, as a library: `moddil/choreo` projects a multi-party protocol
+   written once (the game's match lifecycle, two-phase commit) into per-component functions and
+   typed channels at compile time ([`comptime.md`](comptime.md)). Ordinary request and response
+   stays a `Remote` call.
+2. **Independent deploys:** a component builds and deploys on its own. Its compatibility is checked
+   against the wire contracts recorded in `contracts.lock` (every version still deployed), not
+   against other components' source ([`data.md`: One contract system, in space and time](data.md#one-contract-system-in-space-and-time)).
+   Whole-system builds are needed only for whole-system simulation.
+3. **Rollout safety:** Moddil proves that a new version can coexist with every recorded version and
+   emits that as rollout metadata. Canary analysis, traffic shifting and rollback stay with the
+   platform ([Layer C: what Moddil never does](#layer-c-what-moddil-never-does)).
+4. **Unreliable channels are type parameters:** `Channel<T, Reliable>` or `Channel<T, Datagram>`,
+   with `Ordered` or `Unordered` as a second parameter. On a datagram channel, `send` may lose a
+   message and `recv` may see messages out of order, so messages must be idempotent or carry
+   sequence numbers, which a derive checks. The simulator's faults apply per kind.
+
 ## Open questions
 
-- **Choreographies**: write a multi-party protocol once and project it to each participant — when,
-  and how much?
-- Independent team deploys: can one team ship its component without rebuilding the world?
-- How much rollout safety (e.g. canary analysis) should Moddil check, versus leave to the platform?
-- How unreliable or unordered channels (game snapshots over WebTransport) are expressed in types.
+None at present.
 
 ## Background
 

@@ -1,6 +1,6 @@
 # Correctness: Contracts, Testing and Verification
 
-> **Status:** minor questions. The plan below is adopted: the v1 tools, the reserved proof syntax,
+> **Status:** complete: decided, with no open questions. The plan below is adopted: the v1 tools, the reserved proof syntax,
 > the [decisions locked early](#decisions-to-lock-early), the runtime checking policy (an ambient
 > `Contracts` handler), the verifier and the assurance levels. Indexed in [`README.md`](README.md).
 > Syntax is illustrative.
@@ -286,13 +286,21 @@ These are cheap now and expensive to change once code exists. All are **decided*
 | [Web store](examples/03-web-store.md) | Validated newtypes for money, IDs and quantities; contracts on checkout; property tests on pricing |
 | [Hashiverse](examples/04-hashiverse.md) | Fuzzing the wire protocol against the Rust implementation; contracts and L1 on crypto and PoW code |
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **Annotation budget:** typical code reaches L1 with contracts on `pub` functions only. It is
+   measured on the reference examples as annotation lines per 100 lines of code (at most 5 for L1)
+   and published with each release.
+2. **Contracts that are always checked:** `requires always …` is checked under every policy,
+   including `none`, unless the verifier has proven it. It is for safety and security boundaries
+   such as an `unsafe fn`'s preconditions or a buffer-size limit
+   ([Checking policy: the `Contracts` handler](#checking-policy-the-contracts-handler)).
+
 ## Open questions
 
-1. **Annotation budget:** how much annotation is acceptable before L1 and L2 stop being used? The
-   target is that typical code reaches L1 with contracts on `pub` functions only, the verifier
-   inferring loop invariants where it can; the reference examples will measure it.
-2. **Contracts that must always be checked:** can a function insist that a contract is checked under
-   every policy, including `none` (a safety check that no caller may switch off)?
+None at present.
 
 ## Background
 

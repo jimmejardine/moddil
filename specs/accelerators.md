@@ -1,6 +1,6 @@
 # GPUs and Accelerators
 
-> **Status:** decided direction, details open. Indexed in [`README.md`](README.md) and extends
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md) and extends
 > [`concurrency.md`](concurrency.md) from CPUs to devices. Snippets are **illustration only**; no
 > syntax is committed.
 
@@ -246,16 +246,42 @@ Following [`error-handling.md`](error-handling.md):
 | [Web store](examples/03-web-store.md) | None needed |
 | [Hashiverse](examples/04-hashiverse.md) | Possibly proof-of-work on a GPU or CPU pool (to evaluate) |
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **Autodiff** is a comptime transformation in a mod, `moddil/autodiff`, in the style of Enzyme: it
+   derives `grad(f)` for any differentiable function, kernels and loops included, with no compiler
+   change.
+2. **Multi-GPU collectives** (all-reduce, broadcast) are a library on device handles and scopes,
+   `moddil/collective`, using NCCL or RCCL through FFI where available and a portable fallback
+   otherwise.
+3. **Multi-dimensional slicing is core syntax**, spelled with ranges because `:` is taken by named
+   arguments: `a[.., 1..3]`, `a[i, ..]`. Tensor types themselves stay in `moddil/tensor`.
+4. **The CPU simulator is bit-exact where rounding is specified** (strict IEEE add, multiply and FMA,
+   correctly rounded `moddil/math`). Where vendor approximations are allowed (`math::fast`,
+   tensor-core accumulation order) it documents a tolerance; those paths perform `nondet`
+   ([`determinism.md`: The `nondet` effect](determinism.md#the-nondet-effect)).
+5. **Device features are declared, emulated when missing, and warned about.** A kernel declares
+   what it needs (`#[requires(f16, subgroups)]`). On a device that lacks a feature, the compiler
+   substitutes an automatic emulation (subgroups through workgroup memory, f16 through f32 with f16
+   rounding on store) and warns: at build time for known targets, and at `devs.pick` as a logged
+   warning. An author-written `#[fallback]` variant replaces the emulation where wanted. Only a
+   feature with no emulation is a typed error at pick time.
+6. **Brands are scoped and second-class**, as in GhostCell. Generic code takes the brand as a
+   parameter (`fn f<dev>(b: &Buffer<T, dev>)`); a branded value is a view that cannot outlive its
+   device handle ([`memory.md`: View types](memory.md#view-types)), and `.erase()` gives the
+   runtime-checked form for storing or sending.
+7. **Device loss is an error, hot-plug is an event.** Losing a device is `fail(DeviceLost)` at the
+   next launch, join or transfer, and its buffers become invalid. New devices arrive as events from
+   `devs.watch()`; roles are not rebound automatically.
+8. **Sharing:** within a program, launches on a device queue in scope order, with optional
+   priorities per scope. Sharing between processes is left to the driver and operating system
+   (MPS, MIG, time-slicing), configured in the deployment manifest.
+
 ## Open questions
 
-- **Autodiff:** a comptime transformation (as Slang and Enzyme do) or a feature of `moddil/tensor`?
-- **Multi-GPU collectives** (all-reduce etc.): a library built on placement ([Distributed and multi-tier programs](distribution.md))?
-- Should tensor/array syntax become core, or stay in a mod?
-- How close can the CPU simulator get to bit-exact results with GPU floating point?
-- WebGPU feature gaps (subgroups, f16) and their fallbacks.
-- **Brands:** exact rules — how far they propagate, and how they interact with views and generics.
-- Hot-plug, and device loss in the middle of a run.
-- Scheduling policy when a role's device is busy or shared between processes.
+None at present.
 
 ## Background
 

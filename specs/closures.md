@@ -1,8 +1,8 @@
 # Closures and Lambdas
 
 > **Status:** mostly follows from decided direction in [`memory.md`](memory.md),
-> [`concurrency.md`](concurrency.md) and [`error-handling.md`](error-handling.md). Open points are
-> marked. Syntax follows [`syntax.md`](syntax.md) (Rust-based).
+> [`concurrency.md`](concurrency.md) and [`error-handling.md`](error-handling.md). Complete: no open
+> questions. Syntax follows [`syntax.md`](syntax.md) (Rust-based).
 
 ## Summary
 
@@ -52,7 +52,9 @@ that made them painful: lifetimes, `Send`, `'static` and `move`.
 | `impl FnMut(…)` | call it any number of times, one call at a time | read and mutate its captures |
 | `impl FnOnce(…)` | call it at most once | consume (move out of) its captures |
 
-**Recommended default** for callbacks such as `visit`, `map` and `for_each`: `impl FnMut`. Closures
+**Decided:** `pub` signatures state the trait, and `impl FnMut` is the documented default for
+callbacks such as `visit`, `map` and `for_each`; private functions may leave it to inference, which
+picks the most permissive trait the body allows. Closures
 passed as `impl Fn…` parameters are **non-escaping** ([Non-escaping by default](#non-escaping-by-default)). Captures are inferred, so `move` is never
 needed.
 
@@ -105,28 +107,33 @@ fn refresh(&mut self) {
 - A method called from inside the closure normally borrows the whole of `self`. Methods can declare
   the fields they touch, so that `self.add_to_total(x)` can also be called while `self.items` is
   being visited (view types, [`memory.md`: View types](memory.md#view-types)).
-- *Open:* the exact syntax and rules for methods that declare their fields.
+- **Decided:** a private method's field footprint is inferred from its body within the mod. A `pub`
+  method may declare one, `fn add_to_total(&mut self.{total}, x: Money)`; the declaration is part
+  of its API and checked against its body.
 
 ## Control flow out of a lambda
 
 - `?` propagates (decided, via effects).
-- *Open:* should a labelled `break` inside a non-escaping lambda leave the **enclosing** block, as
-  Kotlin's inline lambdas allow with non-local `return`? In Rust syntax this is a labelled block:
+- `return` inside a lambda returns from the lambda, and `break` never crosses a lambda.
+- **`escape v` returns `v` from the enclosing function** (decided), crossing any number of
+  non-escaping lambdas. There are no labels: its destination is always the enclosing `fn`, and
+  closures are not `fn`s. To stop only part of a function early, put that part in its own function.
 
   ```rust
   fn find_owner(index: &Map<Path, Meta>, user: &User) -> Option<Path> {
-      'found: {
-          index.visit(|path, meta| {
-              if meta.owner == *user { break 'found Some(path.clone()) }
-          });
-          None
-      }
+      index.parallel_visit(|path, meta| if meta.owner == *user { escape Some(path.clone()) });
+      None
   }
   ```
 
-  It is safe because the lambda cannot escape, and it can be implemented as an escape effect that
-  `visit` passes through. **Recommended:** allow it, always with an explicit label so it is never
-  ambiguous.
+- It is an inferred **escape effect** that `visit` and other higher-order functions pass through,
+  like any other effect of their callback. Drops and `errdefer` run on the way out.
+- **Inside task scopes, the first `escape` wins.** Its value becomes the result; the other tasks
+  are cancelled, as a failing task cancels its siblings
+  ([`error-handling.md`: Tasks and concurrency](error-handling.md#tasks-and-concurrency)). It is not
+  an error, so nothing is reported or suppressed. This makes a parallel search an ordinary
+  function.
+- `escape` is not allowed in escaping (stored) closures, which may run after the function returns.
 
 ## Stored (escaping) closures
 
@@ -149,10 +156,9 @@ There is no `await` keyword; suspension is implicit ([`resources.md`: Constructi
 Reviewers may still want to see where a lambda can suspend, because state in sync cells can change
 across a suspension and a lock might be held across it.
 
-*Open:* how to show them.
-- **(a) Recommended:** no marker in the source. The language server shows suspension points as inlay
-  hints, and semantic diffs report new ones ([Diffs, code review and version control](semantic-vcs.md)).
-- (b) A Swift-style `await` marker at call sites, optional or required.
+**Decided: no marker in the source.** The language server shows suspension points as inlay hints,
+semantic diffs report new ones ([Diffs, code review and version control](semantic-vcs.md)), and a
+lint flags a lock held across a suspension.
 
 ## Syntax
 
@@ -163,10 +169,7 @@ across a suspension and a lock might be held across it.
 
 ## Open questions
 
-1. Labelled `break` out of non-escaping lambdas ([Control flow out of a lambda](#control-flow-out-of-a-lambda)).
-2. Default closure trait for callbacks: stated or inferred ([Closure parameters: `Fn`, `FnMut`, `FnOnce`](#closure-parameters-fn-fnmut-fnonce)).
-3. Showing suspension points: inlay hints or an `await` marker ([Seeing suspension points](#seeing-suspension-points)).
-4. Rules and syntax for methods that declare which fields of `self` they touch ([Capturing parts of `self`](#capturing-parts-of-self)).
+None at present.
 
 ## Prior art
 

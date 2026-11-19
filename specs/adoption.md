@@ -1,6 +1,6 @@
 # Adoption
 
-> **Status:** decided direction, details open. Listed in the [index](README.md). Snippets are
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Snippets are
 > **illustration only**.
 
 ## Summary
@@ -12,7 +12,7 @@
 | **Python** | `moddil bind --lang python` is the **first binding target, in v0**: native extension modules, `.pyi` stubs and wheels ([Python first](#python-first)). |
 | **Migration** | `moddil migrate rust` is an official, mechanical, test-verified translator for the common subset. TypeScript and other languages get an **agent-assisted** workflow ([Migrating existing code](#migrating-existing-code)). |
 | **Simplicity** | "Simpler than Rust" is a measured claim, with metrics published per release ([Simpler than Rust](#simpler-than-rust)). |
-| **Games** | Godot bindings through GDExtension as a second-wave path; no engine port ([Games through Godot](#games-through-godot)). |
+| **Games** | Official Godot bindings through GDExtension, at an early milestone; no engine port ([Games through Godot](#games-through-godot)). |
 
 ## Problem
 
@@ -92,13 +92,17 @@ What a newcomer to Moddil never has to learn, compared with Rust:
 - orphan-rule workarounds and object-safety rules ([`types.md`](types.md));
 - numeric `as` casts with silent truncation ([`numerics.md`](numerics.md)).
 
-**Proposal: simplicity is measured, not asserted.** Each release publishes:
+**Decided: simplicity is measured, not asserted, by agents.** Each release runs a fixed set of
+newcomer tasks with LLM agents (a CLI tool, an HTTP service with a database, a concurrent crawler,
+a parser with tests, a Python extension) and publishes, compared with Rust and Go:
 
 - the **number of concepts** needed to write, test and ship a small HTTP service, compared with Rust
   and Go;
-- the **compile-error rate** on a standard set of newcomer tasks, for people and for agents
+- the **compile-error rate** on those tasks
   ([`agent-interface.md`](agent-interface.md));
-- the **time to a first working service** from `moddil new`.
+- the **turns to a first working service** from `moddil new`.
+
+There is no human user study; the measurement is automatic and repeatable.
 
 ## Python first
 
@@ -216,8 +220,8 @@ Models write well only in languages they have seen. Moddil's plan is in
 
 ## Games through Godot
 
-**Proposal: Godot bindings are a second-wave adoption path**, after the two
-[first audiences](#first-audiences). Moddil game code runs inside the unmodified Godot engine; a port
+**Decided: Godot bindings are official and come early**, built and maintained by the core team as a
+showcase alongside the two [first audiences](#first-audiences). Moddil game code runs inside the unmodified Godot engine; a port
 of the engine itself (about 1.5 million lines of C++) is out of scope.
 
 Precedent: **godot-rust (gdext)** brought many game developers to Rust; **SwiftGodot** and
@@ -251,7 +255,7 @@ GDScript and C# offer neither.
 | Capabilities stop at the boundary: the engine can reach files and the network | The binding mod holds `ffi`; game code is only as restricted as the binding's API makes it |
 | No in-editor editing like GDScript's | An external editor with the language server |
 
-**When:** once C export and comptime ship; a natural community flagship.
+**When:** as soon as C export and comptime ship, maintained by the core team.
 
 ## Measuring adoption
 
@@ -260,16 +264,24 @@ GDScript and C# offer neither.
 - Newcomer compile-error rates and time to a first service ([Simpler than Rust](#simpler-than-rust)).
 - Agent success rate on a standard task suite, compared with Rust and Go.
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **The Rust migration subset** in v0 is the [translation table](#moddil-migrate-rust). The target:
+   80% of the top 100 crates without `unsafe` or procedural macros translate with their tests
+   passing; everything else is flagged, never dropped.
+2. **Simplicity metrics** are measured by agents only ([Simpler than Rust](#simpler-than-rust)).
+3. **Free-threaded Python:** separate pools, with a handoff. A Python thread that calls into Moddil
+   blocks while the call runs on Moddil's executor; Moddil calls back into Python through typed
+   callbacks that run on a Python thread. Neither runtime schedules the other's threads, so this
+   works with and without the GIL.
+4. **Name and trademark:** registered later, once there is adoption. Until then the name is used
+   consistently ([`governance.md`](governance.md)).
+5. **TypeScript migration stays agent-assisted**, never mechanical: structural types, `any` and
+   shared mutation do not map mechanically to ownership.
+6. **Godot bindings are official and early** ([Games through Godot](#games-through-godot)).
+
 ## Open questions
 
-1. **The Rust migration subset:** which constructs are translated mechanically in v0, and what success
-   rate on popular crates is the target?
-2. **Simplicity metrics:** which newcomer tasks, and what targets relative to Rust and Go?
-3. **Free-threaded Python:** how do Moddil's executors and Python's threads interact once the GIL is
-   gone?
-4. **Name, logo and trademark:** registering "Moddil" and protecting the armadillo
-   ([`governance.md`](governance.md)).
-5. **Can TypeScript migration ever be mechanical**, for example for TypeScript written in a functional,
-   immutable style?
-6. **Godot bindings:** official or community, and at which milestone
-   ([Games through Godot](#games-through-godot))?
+None at present.

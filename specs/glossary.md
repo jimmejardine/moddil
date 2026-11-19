@@ -39,6 +39,7 @@
 | **`dyn`** | An existential: any trait used as a type, behind a pointer with a witness table ([`dyn`: existentials](types.md#dyn-existentials)). |
 | **Effect** | A trait listed after `with` in a signature (`with net: Net`), whose implementation is passed implicitly by scope; plus the built-in control effects `suspend`, `spawn` and `fail(E)` ([Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly)). |
 | **Effect polymorphism** | A function such as `visit` takes on the effects of the closure it is given ([Effect polymorphism](effects-and-capabilities.md#effect-polymorphism)). |
+| **`escape`** | `escape v`: returns `v` from the enclosing function across non-escaping lambdas; in a task scope the first one wins and cancels the rest ([Control flow out of a lambda](closures.md#control-flow-out-of-a-lambda)). |
 | **Executor** | A pool of OS threads with a scheduling policy (`default`, `blocking`, `pinned`, `affine`) inside the one runtime ([Tasks, threads and executors](runtime.md#tasks-threads-and-executors)). |
 | **First error wins** | In a task scope, the first failure cancels the siblings; their later errors are suppressed onto it (D15) ([Tasks and concurrency](error-handling.md#tasks-and-concurrency)). |
 | **Flight recorder** | An in-memory ring of recent events dumped on an error or trap ([Flight recorder and replay](observability.md#flight-recorder-and-replay)). |

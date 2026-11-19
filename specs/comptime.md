@@ -1,6 +1,6 @@
 # Compile-time Evaluation (instead of Macros)
 
-> **Status:** decided direction, details open. Indexed in [`README.md`](README.md).
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
 > Snippets are **illustration only**; no syntax is committed.
 
 ## Summary
@@ -83,7 +83,8 @@ macros.
 - **Fuel-limited**: a default step budget, raisable per call site with a visible annotation.
 - **Errors**: `compile_error(msg, span)` reports a diagnostic at a source location chosen by the
   comptime code, such as a position inside a literal. Diagnostics are structured, for agents ([LLMs as first-class programmers](agent-interface.md)).
-- **Sandboxed**: the evaluator has no ambient authority (R1 makes WASM the natural sandbox; see [Open questions](#open-questions)).
+- **Sandboxed**: the evaluator has no ambient authority. It is the compiler's MIR interpreter
+  ([`compiler.md`: Two interpreters](compiler.md#two-interpreters)); see [Resolved questions](#resolved-questions).
 - **Cached** by a hash of the function, its arguments and the reflected inputs it read. This makes it
   fit the query-based, content-addressed compiler of [Build times](build-times.md).
 - **External inputs** (schemas, IDL files, protocol definitions) come only through `embed("path")`.
@@ -219,22 +220,36 @@ Generated code is ordinary code once expanded:
 
 None of them needed token-level macros.
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **Where comptime runs:** the compiler's MIR interpreter. Later, a second tier may compile hot
+   comptime functions (large derives, parser generators) to WASM and run them in Wasmtime, with
+   identical results checked in CI.
+2. **Allocation:** each evaluation has its own arena, freed afterwards. A value that ends up in a
+   `const` is deep-copied into read-only static data (a `Vec` becomes a static slice, an `Rc` is
+   frozen); a type that cannot be made static (raw pointers, a `Mutex`) is a compile error there.
+3. **Budget:** 10 million interpreter steps per evaluation by default, raisable at the call site
+   with a visible `#[fuel(…)]`. Steps are counted identically on every machine. Each mod's comptime
+   time appears in `moddil build --timings` with a warning above 2 s; a hard limit applies only if
+   a project sets one in CI.
+4. **Derive ordering:** derives are compiler queries. A derive may ask whether `T: Eq` holds, which
+   runs that derive first; a cycle is a compile error that shows it. Derives see which traits are
+   implemented, never another derive's generated body.
+5. **Reflection and privacy:** writing `#[derive(X)]` on a type grants X's comptime code read access
+   to that type's private fields, attributes and variants, for that derive only. Other comptime code
+   sees only public items. The grant shows in semantic diffs.
+6. **IDE responsiveness:** results are cached by a hash of their inputs, so editing a body does not
+   rerun derives on unrelated types. An evaluation that takes longer than 50 ms runs in the
+   background and its diagnostics stream in; the keystroke path never blocks.
+7. **The construction API** is a full typed syntax tree: it can build any item a person could write.
+   It is versioned per edition; older derives keep working through adapters, and migrations update
+   them ([`evolution.md`](evolution.md)).
+
 ## Open questions
 
-- **Where does comptime run?** Options:
-  - an interpreter inside the compiler (Zig; fast start, slow for heavy work);
-  - compiling comptime code to WASM and running it in Wasmtime (fast for heavy work; type values
-    must cross the boundary);
-  - a hybrid of the two.
-- **Allocation:** what allocator does comptime use, and how does comptime data become static data in
-  the binary?
-- **Budget:** what is the default fuel and the per-mod compile-time budget ([Build times](build-times.md))?
-- **Ordering:** can one derive depend on another's output (e.g. `Hash` relying on `Eq`), and how are
-  cycles detected?
-- **Reflection and privacy:** exactly which private details may a derive in another mod see?
-- **IDE responsiveness:** comptime must be incremental enough to run on every keystroke for agents
-  ([LLMs as first-class programmers](agent-interface.md)).
-- **Construction API:** how expressive is it, and does it stay stable across editions ([Language evolution](evolution.md))?
+None at present.
 
 ## Prior art
 

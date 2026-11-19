@@ -1,6 +1,6 @@
 # Build Times
 
-> **Status:** decided direction, details open. Indexed in [`README.md`](README.md).
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
 
 ## Summary
 
@@ -189,7 +189,7 @@ PGO from recorded runs and the debug-build speed target are in [`performance.md`
 | Keystroke to diagnostics (language server) | < 100 ms |
 | Edit one function body → runnable test | < 1 s, independent of project size |
 | Interface change | Proportional to direct dependents, not project size |
-| Clean debug build, warm dependency cache | Comparable to Go (exact figure to be set) |
+| Clean debug build, warm dependency cache | At least 100k lines per second per core on the reference examples, comparable to Go |
 | Release build | Slower is acceptable; always cacheable |
 | Debug-build run time | At most about 3× slower than release on the benchmark suite |
 
@@ -216,11 +216,24 @@ than for humans:
 | [Web store](examples/03-web-store.md) | Large-team iteration; sub-second rebuilds; patching an API handler without dropping sessions; a shared team cache |
 | [Hashiverse](examples/04-hashiverse.md) | Fast hash and crypto code in dev builds without manual overrides; tests in the default profile; live-patching one node of a running simulation |
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **The clean-build figure** is at least 100,000 lines per second per core, for a clean debug build
+   of first-party code with dependencies cached, measured on the reference examples. The dashboard
+   also tracks each example's time.
+2. **Verifying prebuilt artefacts:** developer builds rebuild 1% of cache hits in the background and
+   compare hashes; CI rebuilds every artefact not yet verified for that cache, so each artefact is
+   checked once per cache. A mismatch is a hard error naming the artefact and its signer.
+3. **Layout migrations reach nested values.** Migration walks containers through the witness table,
+   so every live `Old` reachable from a migrated root is rewritten, in `Vec<Old>` and map values
+   too. Values the migrator cannot walk, such as raw pointers in `unsafe` code, fall back to
+   restarting the affected scope.
+
 ## Open questions
 
-1. The exact clean-build figure behind "comparable to Go".
-2. The default sampling rate for rebuilding prebuilt-artefact hits.
-3. Do automatic layout migrations reach values nested in containers (`Vec<Old>`, `Map<K, Old>`)?
+None at present.
 
 ## Background
 

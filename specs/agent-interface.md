@@ -1,6 +1,6 @@
 # LLMs as First-Class Programmers: the Agent Interface
 
-> **Status:** decided direction, open questions remain. Indexed in [`README.md`](README.md).
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
 > Snippets and message formats are **illustration only**.
 
 ## Summary
@@ -152,27 +152,35 @@ Every change can be reviewed through:
 - an LLM-written summary that is **checked against the semantic diff**;
 - `note` blocks recording *why* ([`docs.md`: Maintainer notes](docs.md#maintainer-notes)).
 
-## Directions (not yet decided)
+## Provenance, decoding and protocol
 
-- **Provenance in version control.** *Recommended:* commit trailers record who or what wrote a change
+All decided:
+
+
+- **Provenance in version control.** Commit trailers record who or what wrote a change
   (model, version, session or prompt reference, approving human), and a per-definition index is
   derived from them, so blame survives moves and renames. Never in the source; prompts by reference
   only, since they may contain secrets.
-- **A prefix-checkable grammar.** *Recommended:* an unambiguous grammar suited to grammar-constrained
+- **A prefix-checkable grammar.** An unambiguous grammar suited to grammar-constrained
   decoding, plus a compiler service answering "what may legally come next here?" (names in scope,
   fields and methods of the type at the cursor, valid effect operations). Full checks run per
   statement, not per token, which local inference makes cheap.
+- **One protocol of our own, many adapters.** The agent server's interface is a versioned JSON-RPC
+  API defined by Moddil (the queries and actions above). MCP and LSP are adapters over it, and
+  others can be added as agent protocols change.
+- **A tiered reference.** The context-sized reference is a core of at most 30k tokens (syntax,
+  effects, errors, ownership, the prelude) plus one file per mod of at most 10k tokens, generated
+  from the specs and the API at each release, versioned with the toolchain, and example-checked.
+- **Hand-curated synonyms.** The cross-language synonym tables and foreign-syntax recognisers of
+  ["Did you mean?"](#did-you-mean) are curated by the toolchain team and shipped as versioned data
+  with the compiler.
 - **Translation tools** from Rust and TypeScript, to seed code and port projects.
 - **A small, stable surface syntax** that changes rarely, so training data stays valid; editions
   handle evolution ([Language evolution](evolution.md)).
 
 ## Open questions
 
-- Should provenance live in version control (recommended, [Directions (not yet decided)](#directions-not-yet-decided)), in the source, or in a sidecar?
-- How far should constrained decoding go: grammar only, or names and types per statement?
-- What size budget should the context-sized reference have, and how is it kept current?
-- Who curates the cross-language synonym tables and foreign-syntax recognisers?
-- Is MCP the right agent protocol long term, or one adapter among several?
+None at present.
 
 ## Prior art
 

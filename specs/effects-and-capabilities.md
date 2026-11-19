@@ -496,12 +496,22 @@ No mainstream language has made a typed effect system popular. The measures:
   provided by a handler, in the same way as the domain traits in
   [Signatures and inference](#signatures-and-inference).
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **A single-method trait can be installed from a closure.** When a trait has exactly one required
+   method, a closure with a matching signature coerces to an anonymous impl of it, at a `with`
+   install or an explicit `dyn Trait` site only: `with Time = || t0 { … }`.
+2. **Handler lookup is surfaced everywhere.** The language server shows which installs reach each
+   use ("`Time` here comes from `main.mdl:12` or `test_x:4`") with go-to-handler; `moddil explain f`
+   lists what `f` needs and the handlers in scope at a call; traces and the task tree show each
+   task's handler stack ([`observability.md`](observability.md)). A missing handler is a compile
+   error at the outermost entry point.
+
 ## Open questions
 
-- May a trait with a single method be installed from a plain closure (`with Time = || t0`), or is
-  an anonymous impl short enough ([Defining handlers](#defining-handlers))?
-- How exactly are effect requirements and handler stacks surfaced, so that dynamic handler lookup is
-  never surprising (LSP, `explain`)?
+None at present.
 
 ## Prior art
 

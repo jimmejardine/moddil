@@ -83,8 +83,10 @@ AST ([LLMs as first-class programmers](agent-interface.md)) instead of treating 
   (assurance level L1, [`correctness.md`: Assurance levels per mod](correctness.md#assurance-levels-per-mod));
 - attached tests, properties and benchmarks, with mutation scores ([Correctness tools in the same place](testing.md#correctness-tools-in-the-same-place)).
 
-**Coverage policy** is per mod and can follow its assurance level: for example, every public item
-documented with at least one example at L1 and above.
+**Coverage policy** follows the mod's assurance level (decided): at L0 every public item has a
+`///` doc; at L1 each also has at least one runnable example; at L2 every public function also
+documents its contracts in prose. A missing one is a compile error, and a mod may only raise its
+level.
 
 ### Overviews: mod, module and group docs
 
@@ -188,8 +190,9 @@ this one uses and is used by. The documentation page for a module combines the t
   linked issues and design records.
 - Notes are attached to declarations in the AST, so they survive moves and renames, unlike comments.
 - They are shown to maintainers, reviewers and agents, and kept out of user-facing API docs.
-- This is the "intent" half of [LLMs as first-class programmers](agent-interface.md); where *provenance* (human or agent, model version)
-  lives is still open there.
+- This is the "intent" half of [LLMs as first-class programmers](agent-interface.md). Notes live in
+  the source (decided); *provenance* (human or agent, model version) lives in commit trailers
+  ([`agent-interface.md`: Provenance, decoding and protocol](agent-interface.md#provenance-decoding-and-protocol)).
 
 ## For agents and tools
 
@@ -214,12 +217,19 @@ this one uses and is used by. The documentation page for a module combines the t
 | [Web store](examples/03-web-store.md) | Contracts on checkout tested automatically; examples documenting the API contract; notes explaining pricing rules |
 | [Hashiverse](examples/04-hashiverse.md) | Fuzz targets attached to wire-protocol decoders; examples of the client API under simulated peers |
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **Coverage thresholds** rise with the assurance level ([Docs are checked and partly generated](#docs-are-checked-and-partly-generated)).
+2. **Notes live in the source**, attached to declarations ([Maintainer notes](#maintainer-notes)).
+3. **Stale overviews:** the semantic diff flags a module whose public interface changed while its
+   overview did not, as a review warning rather than a build error
+   ([`semantic-vcs.md`](semantic-vcs.md)).
+
 ## Open questions
 
-- Default doc-coverage thresholds per assurance level.
-- Where notes and provenance live: in the source, or in a sidecar keyed by definition ID?
-- Should the semantic diff flag a module whose public interface changed but whose overview wasn't
-  edited?
+None at present.
 
 ## Background
 

@@ -1,6 +1,6 @@
 # Data Interchange and Persistence
 
-> **Status:** decided direction, details open. Listed in the [index](README.md). Snippets, file
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Snippets, file
 > names and formats are **illustration only**.
 
 ## Summary
@@ -161,14 +161,26 @@ values are contracts, so a newer app version can always read what an older one s
 | [Web store](examples/03-web-store.md) | Migrations-first PostgreSQL; `Db` effect with linear transactions; generated API contracts with old mobile clients still checked |
 | [Hashiverse](examples/04-hashiverse.md) | Wire compatibility with the Rust implementation through consumed contracts; local storage as contracts |
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **Simulation handlers for `Db` are the programmer's choice.** Nothing is defaulted: each test
+   installs the handler it wants. The standard library offers handlers (an in-memory SQLite or
+   PGlite, a throwaway real PostgreSQL, a recorder), and a test can read where it is running (on a
+   developer machine, in CI, or locally pretending to be CI) from its test environment and choose
+   accordingly ([`testing.md`](testing.md)).
+2. **`moddil/sql` supports PostgreSQL and SQLite first.** Other databases come from the community
+   through the same driver trait.
+3. **Pruning `contracts.lock`** is the owners' decision, made with `moddil contracts prune` and
+   visible in review. The tool advises from optional deployment metadata ("no deployed instance or
+   stored data uses v3") and warns when pruning a version the metadata still lists.
+4. **Standard text formats:** JSON and TOML (TOML for configuration, matching the manifests), plus
+   the binary format. YAML, CSV and others are community mods using the same derives.
+
 ## Open questions
 
-- How does the `Db` effect get a simulation handler: an ephemeral real database per test, or an
-  in-memory SQL engine?
-- Which databases does `moddil/sql` support first (PostgreSQL, SQLite)?
-- When can recorded contract versions be pruned from `contracts.lock`, and who decides?
-- Which text formats beyond JSON are standard, for example TOML or YAML for configuration
-  ([`lifecycle.md`](lifecycle.md))?
+None at present.
 
 ## Prior art
 

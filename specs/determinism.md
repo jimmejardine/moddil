@@ -1,6 +1,6 @@
 # Determinism and Reproducibility
 
-> **Status:** decided direction, details open. Indexed in [`README.md`](README.md). Snippets are
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md). Snippets are
 > **illustration only**.
 
 ## Summary
@@ -121,15 +121,16 @@ This covers all four [reference examples](examples/README.md).
 **Self-check:** every seed is run twice and the state hashes compared. Any difference is accidental
 nondeterminism, caught immediately (TigerBeetle does this).
 
-### The `Sim` API (direction)
+### The `Sim` API
 
-The shape used by the [tour](tour.md#gaps-the-tour-exposed):
+**Decided**, in the shape used by the [tour](tour.md):
 
 | Operation | Shape |
 |---|---|
 | Create a simulation and its nodes | `Sim::new(seed: 42)`, `sim.node()` |
 | Per-node handlers | `sim.clock(node)`, `sim.rng(node)`, `sim.net.endpoint(node)`, `sim.disk(node)` |
 | Faults | Interposing handlers (`drop_messages(10.percent)`), `sim.net.partition(a, b)`, `sim.net.heal()` |
+| Standard faults | Network: drop, delay, duplicate, reorder, partition, heal. Disk: write errors, torn writes, lost `fsync`. Clocks: skew, jumps. Nodes: crash and restart. All seed-driven; more are added as interposing handlers |
 | Running and stopping | `sim.run_until(condition)`; `sim.stop_all()` requests every node to stop |
 
 ### Peers not written in Moddil
@@ -304,13 +305,23 @@ real-world evidence for it.
 | [Web store](examples/03-web-store.md) | Simulated rolling deploys with mixed versions; reproducible order-flow tests |
 | [Hashiverse](examples/04-hashiverse.md) | The existing harness, plus deterministic randomness and interleavings, record and replay, and the self-check |
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **The `Sim` API** is decided as [above](#the-sim-api), with its standard faults.
+2. **Requiring replay:** durable workflows and lockstep code require it automatically. Any other
+   scope opts in, with `scope(…, replayable: true)` or `#[replayable]` on a function, and the
+   compiler then rejects [`nondet`](#the-nondet-effect) inside it. Typical users: consensus code,
+   ledgers, trading strategies.
+3. **GPU determinism holds across vendors** for code without `nondet`: strict IEEE, correctly
+   rounded maths and fixed-order reductions give the same bits on any GPU and on the CPU simulator.
+   Tensor-core paths whose accumulation order a vendor leaves open, and fast intrinsics, perform
+   `nondet` ([`accelerators.md`](accelerators.md)).
+
 ## Open questions
 
-1. **The `Sim` API:** exact names and the full set of fault controls
-   ([The `Sim` API (direction)](#the-sim-api-direction), [`tour.md`](tour.md#gaps-the-tour-exposed)).
-2. Which scopes require replay beyond durable workflows and lockstep code, and how is that
-   requirement written?
-3. Is GPU determinism promised across vendors, or only across runs on the same device?
+None at present.
 
 ## Background
 

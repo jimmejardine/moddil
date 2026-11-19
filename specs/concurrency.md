@@ -1,6 +1,6 @@
 # Concurrency across CPUs
 
-> **Status:** decided direction, details open. Indexed in [`README.md`](README.md) and builds on
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md) and builds on
 > [`memory.md`](memory.md). GPUs and other accelerators, which reuse these
 > rules for kernel launches, are in [`accelerators.md`](accelerators.md). Snippets are
 > **illustration only**.
@@ -179,15 +179,22 @@ use `?`. None of that applies here.
 
 ## Open questions
 
-Runtime questions (preemption, priorities) are in [`runtime.md`: Open questions](runtime.md#open-questions); async drop
-in [`resources.md`: Open questions](resources.md#open-questions).
+Runtime questions (preemption, priorities) are in [`runtime.md`: Open questions](runtime.md#open-questions).
 
-- ~~**Cancellation and linear values.**~~ Resolved: cancellation is cooperative and observed only at
-  suspension points, and the cancellation path must consume linear values like the error path ([Cancellation and shutdown](lifecycle.md#cancellation-and-shutdown)).
-- **Deadlock:** this model prevents data races, not deadlocks. Lock ordering by type? A lint? Lock
-  levels (as in some kernels)? Or steer toward message passing?
-- **Long-lived tasks:** what is the idiomatic shape for a server's top-level scope (accept loop with
-  per-connection children) so that it reads naturally, not as a workaround for "no fire-and-forget"?
+Resolved:
+
+- **Cancellation and linear values:** cancellation is cooperative and observed only at suspension
+  points, and the cancellation path must consume linear values like the error path ([Cancellation and shutdown](lifecycle.md#cancellation-and-shutdown)).
+- **Async drop:** there is none ([`stdlib.md`: I/O](stdlib.md#io)).
+- **Deadlock:** mutexes may carry a **lock level** (`Mutex<T, level: 3>`). Taking a lock whose level
+  is equal to or lower than one already held is a compile error where it can be seen statically,
+  and a trap otherwise, as in kernel lock-ordering schemes; unlevelled mutexes are allowed.
+  `runtime-sim` detects actual deadlocks (every task blocked) and reports the cycle with the seed to
+  replay it. Documentation steers towards channels and actors.
+- **Long-lived tasks:** libraries package the shape. `http::serve(listener, app)` is an accept loop
+  with an isolated scope per connection ([`stdlib.md`: HTTP](stdlib.md#http)), and
+  `supervise(|s| …, restart: …)` in `moddil/sync` covers pollers and workers with restart policies.
+  The hand-written loop in the [tour](tour.md) is the documented pattern underneath.
 
 ## Background
 

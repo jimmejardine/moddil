@@ -310,10 +310,10 @@ Resolved since the tour was written:
 - the HTTP router, server and client ([HTTP](stdlib.md#http));
 - the `RefinementError` a validated newtype raises ([Validated newtypes](correctness.md#validated-newtypes-lightweight-refinements));
 - `?!` for a call that cannot fail, and how `catch` arms name an error union's members
-  ([This cannot fail here](error-handling.md#this-cannot-fail-here), [Matching removes what it handles](error-handling.md#matching-removes-what-it-handles)).
+  ([This cannot fail here](error-handling.md#this-cannot-fail-here), [Matching removes what it handles](error-handling.md#matching-removes-what-it-handles));
+- the `Sim` API and its standard faults ([The `Sim` API](determinism.md#the-sim-api)).
 
 | # | Gap | Open question in |
 |---|---|---|
 | 3 | The `Args` API and named exit codes such as `ExitCode::Unavailable` | [`lifecycle.md`](lifecycle.md#open-questions) |
-| 5 | The `Sim` API: nodes, per-node handlers, addresses, stopping | [`determinism.md`](determinism.md#open-questions), Q6 |
 | 6 | How an unhandled `?` inside a test is reported | [`testing.md`](testing.md#open-questions), Q4 |

@@ -1,6 +1,6 @@
 # Error Handling
 
-> **Status:** decided, minor questions remain. Indexed in [`README.md`](README.md) and defines
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md) and defines
 > requirement **R3** ([Firm requirements (decided)](requirements.md#firm-requirements-decided)). Decisions made so far are marked **Decided**; everything else is open.
 
 ## Decisions so far
@@ -176,9 +176,9 @@ let config = try { load(p)? } catch {
 - `try { … }` evaluates to `Result<T, E>`, where `E` is inferred from the `?`s inside it, or to
   `Option<T>` when its `?`s are on `Option` ([`types.md`: Optional values and invalid states](types.md#optional-values-and-invalid-states)).
 - `try { … } catch { … }` is shorthand for matching that result.
-- Open details: how `return`/`break` inside a try block interact with it, and whether the error type
-  of a try block can always be inferred (a known problem for Rust's unstable `try_blocks`; open
-  unions avoid most of it).
+- `return` and `break` inside a try block leave the function or loop as usual; only `?` is scoped.
+  The block's error type is always inferred, because unions are open (Rust's unstable
+  `try_blocks` struggles here).
 
 ### This cannot fail here
 
@@ -225,6 +225,9 @@ as `discard(r, "best-effort cache warm")`, so it is visible in reviews and seman
   as **suppressed**, as cleanup failures are (D10), so nothing is lost.
 - **"First" is by completion time**, so on a real runtime it can vary between runs; under
   `runtime-sim` it is seed-controlled and replayable ([Determinism and reproducibility](determinism.md)).
+- **`escape` is not an error.** A task that performs `escape v` wins the scope the same way, and
+  the siblings are cancelled, but nothing is reported or suppressed
+  ([`closures.md`: Control flow out of a lambda](closures.md#control-flow-out-of-a-lambda)).
 - **Running everything to completion** is a library choice, not a second scope policy.
   `parallel_map_all` returns `Vec<Result<U, E>>`: each child reifies its own outcome
   (`try { f(x)? }`), so a failed item is data rather than a scope failure, no sibling is
@@ -375,15 +378,19 @@ All decided:
 
 ## Open questions
 
+None at present.
+
 Resolved: resumable recovery (D19), context (D16), "cannot fail" (D17), `catch` arms (D18);
 `Remote` errors have the standard shape in [`distribution.md`: The `Remote` effect](distribution.md#the-remote-effect);
 how much is inferred follows the effect rule: inferred inside a mod, explicit on `pub`
 ([`effects-and-capabilities.md`: Signatures and inference](effects-and-capabilities.md#signatures-and-inference)).
+Also decided in the open-question review:
 
-1. **`return` and `break` inside a `try` block:** do they leave the block or the function, and can
-   a try block's error type always be inferred ([Try blocks](#try-blocks))?
-2. **Reading suppressed errors:** the API on an error value
-   ([`resources.md`: Open questions](resources.md#open-questions)).
+- **`return` and `break` inside a `try` block** keep their normal meaning: they leave the function
+  or loop, running drops and `errdefer`. `try` scopes only `?`. A try block's error type is always
+  inferred, as the union of its `?`s ([Try blocks](#try-blocks)).
+- **Reading suppressed errors:** every error value has `e.suppressed()`, an iterator of
+  `&dyn Error`, and `e.notes()` for its context notes; both appear in `Display` and in traces.
 
 ## Background
 

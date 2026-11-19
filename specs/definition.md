@@ -1,6 +1,6 @@
 # Language Definition and Conformance
 
-> **Status:** decided direction, details open. Listed in the [index](README.md). Snippets and IDs
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Snippets and IDs
 > are **illustration only**.
 
 ## Summary
@@ -147,14 +147,25 @@ The examples need a definition only indirectly: every feature they use is covere
 paragraphs and conformance tests, and determinism lets the HFT and game examples rely on identical
 behaviour across the interpreter, native backends and WASM.
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **Notation:** Lean is the source of truth for the core model; the reference shows the rules as
+   inference rules generated from the Lean definitions, so the two cannot drift.
+2. **Reach of the formal core:** everything, from the start: dynamic semantics, type and effect
+   soundness, and borrows (in the style of RustBelt).
+3. **Source text:** the reference defines the language by its canonical text form, whatever
+   [`roadmap.md`](roadmap.md) question 9 decides about storage; a structured store would be a
+   lossless encoding of that text.
+4. **The conformance suite** is owned by the spec team; any implementation may contribute tests. A
+   disputed test is resolved by clarifying the reference through the RFC and governance process
+   ([`governance.md`](governance.md)), and is marked *disputed* (not counted towards conformance)
+   until then.
+
 ## Open questions
 
-- Which notation do the formal rules use: inference rules in the prose, or Lean as the source of
-  truth for the core?
-- How far does the formal core reach: types, effects and borrows, or dynamic semantics only?
-- Does the canonical-AST question ([`roadmap.md`](roadmap.md), question 9) change how the reference
-  describes source text?
-- Who maintains the conformance suite, and how are disputed tests resolved?
+None at present.
 
 ## Prior art
 
