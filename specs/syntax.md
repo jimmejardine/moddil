@@ -53,6 +53,7 @@ here with its reason ([Deltas from Rust (and why)](#deltas-from-rust-and-why)). 
 | Contracts (decided: clauses) | `requires …`, `ensures …`, `invariant …` after the signature, positioned like `where` | First-class syntax for docs, tooling and verification ([`correctness.md`: Contracts as syntax](correctness.md#contracts-as-syntax)) |
 | Anonymous records (decided) | `fn bounds(xs: &[f64]) -> { min: f64, max: f64 }` | [Inference: "generic on the fly"](#inference-generic-on-the-fly) |
 | Linear and view types | `linear struct Txn { … }`, `view RingIter<T> { … }` | [`memory.md`: View types](memory.md#view-types), [`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear) |
+| Comparison chaining | `0 <= i < len`, `lo < x <= hi` | One direction only; `==` does not chain ([`types.md`: Operators](types.md#operators)) |
 | Matrix multiply | `a @ b` | Tensor code ([`accelerators.md`](accelerators.md)) |
 | Structured `select` | `select { conn = listener.accept() => …, _ = stop_requested() => break, }` | A language construct, not a macro ([`concurrency.md`](concurrency.md)) |
 | Inferred signatures for private items | `fn add(a, b) { a + b }` | [Inference: "generic on the fly"](#inference-generic-on-the-fly) |

@@ -71,7 +71,7 @@
 | **`.share()`** | An O(1) count increment returning another handle to the same rc object ([`.share()` for reference counts](values.md#share-for-reference-counts)). |
 | **Simulation runtime** | `moddil/runtime-sim`: one deterministic thread with virtual time, seeded randomness and a simulated network ([Deterministic simulation testing](determinism.md#deterministic-simulation-testing)). |
 | **`spawn`** | The core effect of starting tasks in a scope, separate from `suspend` ([The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)). |
-| **Specialisation** | A restricted form of overlapping impls ([Specialisation](types.md#specialisation)). |
+| **Specialisation** | A restricted form of overlapping impls: strictly more specific, beside the general impl, and able to change a `default type` ([Specialisation](types.md#specialisation)). |
 | **Stop** | The graceful first stage of shutdown, observed where code asks with `stop_requested()` ([Two levels: stop, then cancel](lifecycle.md#two-levels-stop-then-cancel)). |
 | **`StrPos`** | A byte position on a character boundary, tied by type to its string ([Positions and slicing](text.md#positions-and-slicing)). |
 | **Suppressed error** | An error attached to a primary error rather than replacing it, from cleanup (D10) or from sibling tasks (D15) ([Cleanup that can fail](resources.md#cleanup-that-can-fail)). |
@@ -81,6 +81,7 @@
 | **Task** | A stackful coroutine; the only unit of concurrency, with no user-facing threads ([Tasks, threads and executors](runtime.md#tasks-threads-and-executors)). |
 | **Tier (of mods)** | `moddil/core-*` (ships with the compiler), the standard `moddil/*` mods, and community mods ([Batteries and tiers](stdlib.md#batteries-and-tiers)). |
 | **Topology file** | The deployment description mapping components to artefacts and machines ([The topology file](distribution.md#the-topology-file)). |
+| **Trait alias** | `trait Num = Add + Sub + Mul + Copy;`: a transparent name for a set of bounds, satisfied by every type that meets them ([Traits](types.md#traits)). |
 | **Trap** | A class-3 outcome (overflow, bounds, a failed contract, out of memory): terminates the process or an isolated scope ([Three outcome classes](error-handling.md#three-outcome-classes)). |
 | **Try block** | `try { … }` turns propagating errors into a `Result` (or `None` into an `Option`) value; `catch` handles listed variants ([Try blocks](error-handling.md#try-blocks)). |
 | **Verbosity is a view** | Inferred types and effects are shown or hidden by the editor, not by what is written ([Verbosity is a view](agent-interface.md#verbosity-is-a-view)). |

@@ -40,7 +40,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Resources: drop, cleanup and linear types](resources.md)              | 🟡 minor questions | [`resources.md`](resources.md)                                                        |
 | [Values: copy, clone and equality](values.md)                          | 🟡 minor questions | [`values.md`](values.md)                                                              |
 | [Error handling](error-handling.md)                                    | 🟠 major questions | [`error-handling.md`](error-handling.md)                                              |
-| [Type system core](types.md)                                           | 🟠 major questions | [`types.md`](types.md): traits, generics, optional values, paradigms                  |
+| [Type system core](types.md)                                           | 🟡 minor questions | [`types.md`](types.md): traits, generics, optional values, paradigms                  |
 | [Functions and closures](closures.md)                                  | 🟡 minor questions | [`closures.md`](closures.md)                                                          |
 | [Modules, visibility and program structure](modules.md)                | 🟡 minor questions | [`modules.md`](modules.md)                                                            |
 | [`unsafe` and the safety boundary](unsafe.md)                          | 🟡 minor questions | [`unsafe.md`](unsafe.md)                                                              |

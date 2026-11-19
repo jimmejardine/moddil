@@ -1,7 +1,7 @@
 # Type system core
 
-> **Status:** major questions. The core rules below are decided; the exact specialisation rules and
-> the details of bridge mods are still open. Listed in the [index](README.md). Syntax per
+> **Status:** minor questions. The core rules below are decided, including specialisation, bridge
+> conflicts and operators; the bridge manifest syntax is still open. Listed in the [index](README.md). Syntax per
 > [`syntax.md`](syntax.md); snippets are **illustration only**.
 
 ## Summary
@@ -11,9 +11,10 @@
 | **Baseline** | Rust's type system: structs, enums with payloads, traits, generics with bounds, associated types, GATs. **No lifetimes**, because borrows are second-class ([`memory.md`](memory.md)). |
 | **Subtyping** | **None.** No variance rules. A short, fixed list of implicit coercions; every other conversion is explicit ([No subtyping](#no-subtyping)). |
 | **Coherence** | **Exactly one impl per trait and type in any program.** Rust's orphan rule, plus: the application mod and mods from the same repository may write any impl, and declared **bridge mods** may join two other mods ([Coherence: one impl per trait and type](#coherence-one-impl-per-trait-and-type)). |
-| **Specialisation** | **Restricted form in v0.** Overlapping impls only when one is strictly more specific, and only beside the impl it specialises ([Specialisation](#specialisation)). |
+| **Specialisation** | **Restricted form in v0.** Overlapping impls only when one is strictly more specific, and only beside the impl it specialises; `default type` lets a specialisation change an associated type ([Specialisation](#specialisation)). |
 | **Generics** | Checked once, at the definition. Debug builds pass **witness tables**; release builds **monomorphise**. Same semantics in both ([Generics](#generics)). |
 | **`dyn`** | **Swift-style existentials.** Any trait can be used as `dyn`; generic methods dispatch through the witness table ([`dyn`: existentials](#dyn-existentials)). |
+| **Operators** | Traits, as in Rust; pure apart from traps and allocation. Comparisons chain in one direction (`lo <= x < hi`) ([Operators](#operators)). |
 | **Sum types** | Exhaustive `match`; `#[non_exhaustive]` for public enums that may grow ([Sum types and exhaustiveness](#sum-types-and-exhaustiveness)). |
 | **Inference** | Local only. Private signatures may be inferred and generalised within a mod; nothing is inferred across a mod boundary ([Inference](#inference)). |
 | **Optional values** | No null in safe code: `Option<T>` only, no `T?` sugar; definite initialisation; guaranteed niches ([Optional values and invalid states](#optional-values-and-invalid-states)). |
@@ -119,6 +120,10 @@ As in Rust, with the omissions that follow from other decisions:
   own role, see [Role traits](effects-and-capabilities.md#role-traits)); coherence is
   unaffected, because each handler is an ordinary impl on its own type
   ([`effects-and-capabilities.md`: Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly)).
+- **Trait aliases** (decided): `trait Num = Add + Sub + Mul + Copy;` is a transparent name for a
+  set of bounds. Every type that meets the bounds satisfies it, and nothing implements it
+  directly. This is the opposite of a [role trait](effects-and-capabilities.md#role-traits), which
+  is a distinct trait.
 - **Anonymous impls**: `impl Trait { … }` is an expression that implements a trait for an unnamed
   type and captures its environment like a closure ([`effects-and-capabilities.md`: Defining handlers](effects-and-capabilities.md#defining-handlers)).
 - Trait methods may carry the **control effects** `suspend` and `fail(E)`; implementations may
@@ -140,7 +145,9 @@ An `impl Trait for Type` is allowed in a mod when **any** of these holds:
    component. Nothing depends on it, so nothing downstream can clash with it.
 3. **The mods share an owner**: mods published from the **same repository** count as one owner for
    this rule. This removes Rust's "split crate" problem, where a project that owns both crates still
-   cannot write the impl in a third.
+   cannot write the impl in a third. The repository is the unit (decided), not a declared family:
+   a mod's identity is already its repository path ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)),
+   so the boundary cannot be claimed by a stranger and needs no extra declaration.
 4. **The mod is a declared bridge** between the trait's mod and the type's mod (below).
 
 ### Bridge mods
@@ -156,10 +163,21 @@ version = "1.0.0"
 bridge = ["moddil.dev/serde", "github.com/chrono/chrono"]   # traits from the first, types from the second
 ```
 
-- A bridge may implement **traits of the first mod for types of the second**, and nothing else
-  outside the orphan rule.
-- **Duplicate bridges are a build error.** When a program is built, the toolchain checks that no two
-  mods in the dependency graph implement the same trait for the same type. Each mod's **interface
+- A bridge joins **exactly two mods**. It may implement **traits of the first mod for types of the
+  second**, and nothing else outside the orphan rule.
+- **Duplicate bridges are a build error until the application picks one** (decided). When a program
+  is built, the toolchain checks that no two mods in the dependency graph implement the same trait
+  for the same type. If two bridges for the same pair of mods are present (pulled in by two
+  libraries, say), the error names both, and the application's manifest chooses one:
+
+  ```toml
+  [bridges]
+  "moddil.dev/serde + github.com/chrono/chrono" = "github.com/acme/chrono-serde"
+  ```
+
+  The other bridge is left out of the whole program, so there is still one impl per trait and type.
+  Only the application can choose, because only it sees the whole graph. If a library needs an impl
+  that only the dropped bridge provides, the build reports it. Each mod's **interface
   artefact** ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)) lists
   the impls it provides, so the check is a set union over artefacts, not a re-analysis.
 - Because mods form a DAG and versions are selected once per program
@@ -210,20 +228,39 @@ impl<T: Copy> Extend<T> for Vec<T> {
 }
 ```
 
-Rules (proposal, to be settled in detail):
+Rules (decided):
 
 1. **Strictly more specific.** Two impls may overlap only if one applies to a strict subset of the
-   other's types. Overlaps that neither contains are an error, as today.
+   other's types. Overlaps that neither contains are an error, as today. Rust's "always applicable"
+   lattice rule exists to keep lifetimes out of impl selection, and Moddil has none.
 2. **`default` marks what may be overridden.** Only items marked `default` in the general impl can be
-   replaced.
-3. **No action at a distance.** A specialising impl must be in the same mod as the general impl, or in
+   replaced: methods, and associated types marked `default type`.
+3. **A `default type` is opaque to generic code.** A specialisation may change it, so generic code
+   sees only its bounds, never the general impl's choice; code that names a concrete type sees the
+   real one. Method signatures cannot change. This allows changes of representation:
+
+   ```rust
+   impl<T> Store for Column<T> {
+       default type Repr = Vec<T>;
+       default fn get(&self, i: int) -> T { … }
+   }
+   impl Store for Column<bool> {
+       type Repr = BitVec;                       // 8x smaller
+       fn get(&self, i: int) -> bool { … }
+   }
+   ```
+
+   It costs nothing at run time: release builds monomorphise, and debug builds carry the associated
+   type in the witness table, as they already do.
+4. **No action at a distance.** A specialising impl must be in the same mod as the general impl, or in
    the mod that owns the type. A third mod cannot change how a library behaves for a library's own
    types.
-4. **Same choice in debug and release.** The impl is selected when the witness table for a concrete
+5. **Same choice in debug and release.** The impl is selected when the witness table for a concrete
    type is built ([Generics](#generics)), the same point at which a release build monomorphises, so
    both builds run the same code.
-5. **Specialisation is not observable as a semantic change.** The specialised impl must be
-   behaviourally equivalent to the general one. This is not checked by the compiler; property tests
+6. **Specialisation is not observable as a semantic change.** The specialised impl must be
+   behaviourally equivalent to the general one (C++'s `vector<bool>`, whose elements cannot be
+   borrowed, is the failure this rules out). This is not checked by the compiler; property tests
    can compare the two ([`correctness.md`](correctness.md)).
 
 ## Generics
@@ -238,10 +275,13 @@ Rules (proposal, to be settled in detail):
   - anything layout-dependent lives in the witness table, which is what makes the two identical
     ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed), rule 5).
 - **Const generics** use Rust's spelling, with `int` for sizes (`<const N: int>`,
-  [`numerics.md`: Integer types](numerics.md#integer-types)). **Proposal:** a const parameter may
+  [`numerics.md`: Integer types](numerics.md#integer-types)). **Decided:** a const parameter may
   have any type that is comptime-evaluable and has structural equality (integers, `bool`, `char`,
   strings, and enums and structs made of them), so `Matrix<f32, 3, 3>` and `Format<"utf-8">` are
   both possible.
+- **Default type parameters**, as in Rust (`HashMap<K, V, S = RandomState>`; decided). Named
+  arguments are for values; a type default lets a type gain a parameter without breaking its users
+  ([`evolution.md`](evolution.md)).
 - **`impl Trait`** in argument position (an anonymous generic) and in return position (an opaque
   type), including in trait methods.
 - **Inferred generalisation for private items:** `fn add(a, b) { a + b }` is generalised to
@@ -287,9 +327,26 @@ Operators are traits, as in Rust: `a + b` calls `Add::add`, `a[i]` calls `Index:
 - **Output types follow the operands.** `f64<m> / f64<s>` is `f64<m/s>`: the `Output` associated
   type is computed at compile time from the unit dimensions ([`units.md`: Arithmetic, conversion and polymorphism](units.md#arithmetic-conversion-and-polymorphism)).
   The same holds for `Fixed<S>` scales ([`numerics.md`: Decimals for money](numerics.md#decimals-for-money)).
-- `==` and `<` come from `Eq` and `Ord` ([`values.md`: Equality and ordering traits](values.md#equality-and-ordering-traits)).
-- Operators may perform effects only if the trait allows it; the standard operator traits are
-  pure apart from traps (open question 8).
+- `==` and `<` come from `PartialEq` and `PartialOrd`; `Eq` and `Ord` are markers that add
+  guarantees ([`values.md`: Equality and ordering traits](values.md#equality-and-ordering-traits)).
+  There is no separate overloadable `==`.
+- **Operator traits are pure** (decided): no `fail`, no `suspend`, and no other effects. They may
+  trap and may allocate (allocation is a capability of the profile, not an effect), so `+` on big
+  numbers works. Anything that can fail is a named method: `a.checked_add(b)?`.
+- **Comparisons chain in one direction** (decided): `lo <= x < hi` means `lo <= x && x < hi`, with
+  `x` evaluated once. Every operator in a chain is `<`/`<=`, or every one is `>`/`>=`; `==` and `!=`
+  do not chain, and `a < b > c` is an error (which also keeps generics' angle brackets
+  unambiguous). Rust rejects `a < b < c`, and `(a < b) < c` cannot compile, since `bool` does not
+  compare with numbers, so no existing reading changes:
+
+  ```rust
+  assert!(0 <= i < len);
+  if lo < x <= hi { … }                        // an exclusive lower bound, which ranges cannot express
+  type Ephemeral = u16 where 49152 <= self <= 65535
+  ```
+- **Operators keep their meaning** (decided): an operator impl must be the operation its symbol
+  names. This is a review rule for people and agents, and the standard library sets the example
+  (no `+` on strings, [`text.md`](text.md)); no lint can decide what an operation "means".
 
 ## Sum types and exhaustiveness
 
@@ -356,7 +413,11 @@ plus compiler-checked narrowing*, in one of two styles:
   - Catching a failure can produce an `Option`.
 - **Guaranteed niches:** `Option<&T>`, `Option<Rc<T>>`, owned pointers, non-zero and range-typed
   integers, and enums with spare values are all the same size as `T`. Nullable C pointers import as
-  `Option<…>` ([Interoperability with C and Rust](interop.md)).
+  `Option<…>` ([Interoperability with C and Rust](interop.md)). Beyond this list (decided), the
+  layout of nested options such as `Option<Option<T>>` and of other enums is the compiler's choice:
+  it packs into spare values where it can, but programs cannot rely on it, and a size change from
+  better packing is not a breaking change. `#[repr(C)]` and the guaranteed niches are the only stable
+  layouts.
 - **Fits the ownership model:**
   - `Option<&T>`, or an `Option` holding a view, is itself a view
     ([`memory.md`: View types](memory.md#view-types)).
@@ -370,6 +431,12 @@ plus compiler-checked narrowing*, in one of two styles:
     `Option`. This is the same `where` form as other refinements (decided).
   - **Refinement types** (`Int where 0 <= self < 100`): checked statically where provable,
     dynamically otherwise. They share machinery with contracts ([Correctness tooling: contracts and verification](correctness.md)).
+    **How much is static** (decided): literals and constants are checked at compile time; a cheap
+    analysis within one function (linear integer facts from dominating `if`s, `match` guards and loop
+    bounds, no solver) removes runtime checks it can prove; everything else is checked at
+    construction. SMT-backed proofs across functions are opt-in per mod, at the verification levels
+    of [`correctness.md`](correctness.md), so default builds pay no solver time
+    ([`build-times.md`](build-times.md)).
   - **Typestate through linear types** ([Memory: ownership, borrowing and sharing](memory.md)): states are types, and transitions consume the old
     state, e.g. `Conn<Unauthed>` → `Conn<Authed>`.
 
@@ -482,25 +549,5 @@ What replaces it:
 
 ## Open questions
 
-1. **Specialisation details:** strictly-more-specific only, or Rust's "always applicable" lattice
-   rule? Can a specialising impl change an associated type (Rust forbids it)?
-2. **Bridge mods:** the exact manifest syntax; whether a bridge may join more than two mods; how a
-   program chooses between two competing bridges for the same pair (today: a build error, resolved
-   by removing one).
-3. **Same-repository ownership:** is "same repository" the right unit, or should it be a declared
-   mod family?
-4. **Const generic types** beyond integers, `bool` and `char`: are strings and structs worth the
-   compile-time cost?
-5. **Default type parameters** (`HashMap<K, V, S = RandomState>`): keep Rust's form, or drop it now
-   that named arguments exist ([`syntax.md`](syntax.md))?
-6. **Trait aliases** (`trait Num = Add + Sub + Mul + Copy`).
-7. Revisit **higher-kinded types** once GAT-based libraries show what is missing ([Paradigms: functional and object-oriented](#paradigms-functional-and-object-oriented)).
-8. **How far operator overloading goes:** may operator traits fail or suspend (`a + b` on big numbers
-   that allocate)? Should comparison chaining (`a < b < c`) exist?
-9. **Can `==` differ from `Eq`?** Rust's `PartialEq` allows it (floats); Moddil's equality rules are
-   in [`values.md`](values.md). Is a separate overloadable `==` ever needed?
-10. **Guidance against surprising overloads:** a lint or review rule (for people and agents) that
-    operators keep their arithmetic meaning, as the `+` on strings is absent ([`text.md`](text.md)).
-11. **Refinements: static or dynamic?** How much refinement checking is done at compile time, and what
-    does it cost in build time ([`build-times.md`](build-times.md))?
-12. **Niche packing:** how far should layout optimisation of nested options (`Option<Option<T>>`) go?
+1. **Bridge manifest syntax:** the exact spelling of `bridge = [...]` in a bridge's manifest and of
+   the application's `[bridges]` choice.
