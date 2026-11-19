@@ -68,8 +68,9 @@ NIC ring slot. In practice that is mostly low-level mods.
 impl Drop for Socket {
     fn drop(self) {
         let Socket { fd, buf } = self;            // move fields out; no recursive drop of Socket
-        let r = c::close(fd);                     // C close can report an error…
-        if let Err(e) = r { log.warn(fmt"close failed: {e}") }   // …handled here: logged
+        try { c::close(fd)? } catch {             // C close can report an error…
+            e => log.warn(fmt"close failed: {e}"),  // …handled here: logged
+        }
     }                                             // buf is dropped by glue here
 }
 ```
@@ -162,7 +163,7 @@ impl Txn {
     fn rollback(self);
 }
 
-fn checkout(db: &Db) with db, fail(DbError) {
+fn checkout(db: &Db) with db, suspend, fail(DbError) {
     let txn = db.begin();
     txn.insert(order)?;       // ✗ unless the error path also consumes txn
     txn.commit()?;

@@ -71,8 +71,8 @@ property of the source.
 - Humans mostly *read* the reviewer view and *type* the compact one.
 
 ```rust
-pub fn load(path: Path) -> Config with fs, fail(LoadError)   // explicit: public signature
-    let text = fs.read(path)?;         // reviewer view shows:  : String with fs, fail(IoError)
+pub fn load(path: Path) -> Config with fs, suspend, fail(LoadError)   // explicit: public signature
+    let text = fs.read(path)?;         // reviewer view shows:  : String with fs, suspend, fail(IoError)
     parse(text)?                       // reviewer view shows:  : Config with fail(ParseError)
 ```
 

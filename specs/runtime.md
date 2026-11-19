@@ -33,7 +33,8 @@ ecosystem that partly fragmented.
 `fs`, `rand`, `log`. *Implementations* are mods that provide **handlers** for those effects:
 
 - `moddil/runtime`: the standard multi-threaded work-stealing runtime.
-- `moddil/runtime-wasm`: browser/WASI runtime using stack switching and JSPI (R1).
+- `moddil/runtime-wasm`: browser and WASI runtime; JSPI in browsers and Node first, WASM stack
+  switching on WASI hosts later (R1).
 - `moddil/runtime-sim`: deterministic simulation runtime ([Determinism and reproducibility](determinism.md)).
 - A community `fastrt` (the tokio-equivalent): a different scheduler, io_uring, thread-per-core, etc.
 
@@ -73,7 +74,8 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](r
 
 **Tasks are the only programming model; threads are an execution resource.**
 
-- Everything concurrent is a **task**: a stackful coroutine, implemented with stack switching
+- Everything concurrent is a **task**: a stackful coroutine, implemented with native stack switching,
+  JSPI in browsers and Node, and WASM stack switching on WASI hosts later
   ([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)). There is **no thread API in user code**, as with Go
   goroutines, Java virtual threads and Erlang processes.
 - Scheduling is M:N: any task may run on any worker thread of its executor.

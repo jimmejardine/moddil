@@ -73,7 +73,7 @@ interoperate with a running network built in another language.
 - **Deterministic simulation ([Determinism and reproducibility](../determinism.md)).** Hashiverse's test harness (one primary, several secondary servers
   and many clients in one process) is exactly what `moddil/runtime-sim` should provide out of the box,
   with seeded replay and fault injection added.
-- **WASM (R1).** Browser client in a Web Worker; Moddil's runtime-wasm with stack switching should remove
+- **WASM (R1).** Browser client in a Web Worker; Moddil's runtime-wasm (JSPI in the browser) should remove
   the need for a separate worker-proxy layer written in TypeScript.
 - **Interop with Rust ([Interoperability with C and Rust](../interop.md)).** Calling `hashiverse-lib` from Moddil during migration; wire
   compatibility with Rust servers permanently.

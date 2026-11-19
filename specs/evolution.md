@@ -57,7 +57,7 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
 
    ```rust
    #[deprecated(since = "2.0", replace_with = "connect_with(host, Options { port, ..Default::default() })")]
-   pub fn connect(host: &str, port: u16) -> Conn with net, fail(NetError) { … }
+   pub fn connect(host: &str, port: u16) -> Conn with net, suspend, fail(NetError) { … }
    ```
 
    Rename rules cover types and modules. `moddil fix` applies the rules across downstream code (as

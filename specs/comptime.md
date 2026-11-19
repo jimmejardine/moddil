@@ -94,7 +94,7 @@ macros.
 ## Comptime parameters and values
 
 ```rust
-fn ring<const N: usize, T>() -> RingBuffer<T, N>          // size known at compile time
+fn ring<const N: int, T>() -> RingBuffer<T, N>          // size known at compile time
 const CRC_TABLE: [u32; 256] = const { crc_table(0xEDB88320) };
 fn pow<const N: u32>(x: f64) -> f64 { … }                  // specialised per N
 ```

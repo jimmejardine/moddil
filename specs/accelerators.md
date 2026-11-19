@@ -54,7 +54,7 @@ code alike.
 
 ```rust
 #[kernel]
-fn matmul<const BM: usize, const BN: usize, const BK: usize>(
+fn matmul<const BM: int, const BN: int, const BK: int>(
     a: &Matrix<f16>, b: &Matrix<f16>, c: &mut Tile<f32, BM, BN>,         // c: this instance's own tile
 ) {
     let mut acc = Tile::<f32, BM, BN>::zeros();

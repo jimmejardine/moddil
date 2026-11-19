@@ -75,7 +75,7 @@ with time = sim.clock(node) {          // installs a handler for this block
 | Kind | Effects | Notes |
 |---|---|---|
 | **Core** | `fail(E)`, `suspend`, `spawn` | Defined by the language ([`error-handling.md`](error-handling.md), [`concurrency.md`](concurrency.md)) |
-| **Standard** | `time`, `rand`, `net`, `fs`, `env`, `process`, `gpu`, `remote`, `introspect`, `locale`, `dom` | Interfaces in standard mods; handlers in runtime and simulation mods ([`runtime.md`: Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)) |
+| **Standard** | `time`, `rand`, `net`, `fs`, `stdin`, `stdout`, `stderr`, `env`, `process`, `gpu`, `remote`, `introspect`, `locale`, `dom` | Interfaces in standard mods; handlers in runtime and simulation mods ([`runtime.md`: Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)) |
 | **Capabilities with no handler to swap** | `ffi`, `unsafe` | Declared and visible to every consumer; treated as high risk ([`interop.md`: The safety boundary](interop.md#the-safety-boundary)) |
 | **Ambient, write-only** | `log`, `span`, `metric` | Never written in signatures; cannot feed values back ([`observability.md`](observability.md)) |
 | **User-defined** | anything | Context such as a database pool, configuration, feature flags ([Directions (not yet decided)](#directions-not-yet-decided)) |
@@ -88,6 +88,9 @@ with time = sim.clock(node) {          // installs a handler for this block
 **Effects are coarse.** There is one `fs`, not `fs.read` and `fs.write`. Finer limits come from
 **narrowing a handler** (`fs.read_only("/data")`), not from more effect names. This keeps
 signatures short ([Signatures and inference](#signatures-and-inference)).
+
+**No umbrella effects.** Each effect is listed on its own, and none implies another: there is no
+`io` effect. A function that uses the network and may suspend writes `with net, suspend`.
 
 ### Handler tiers
 
@@ -169,7 +172,7 @@ fn visit<T>(xs: &[T], f: impl Fn(&T)) {        // no `with`: whatever f does, vi
     for x in xs { f(x) }
 }
 
-visit(&orders, |o| send(o)?)                    // this call is `with net, fail(SendError)`
+visit(&orders, |o| send(o)?)                    // this call is `with net, suspend, fail(SendError)`
 visit(&orders, |o| total += o.qty)              // this one is pure
 ```
 

@@ -228,7 +228,8 @@ Rules (proposal, to be settled in detail):
   - release builds produce a specialised copy per type (monomorphisation);
   - anything layout-dependent lives in the witness table, which is what makes the two identical
     ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed), rule 5).
-- **Const generics** use Rust's spelling (`<const N: usize>`). **Proposal:** a const parameter may
+- **Const generics** use Rust's spelling, with `int` for sizes (`<const N: int>`,
+  [`numerics.md`: Integer types](numerics.md#integer-types)). **Proposal:** a const parameter may
   have any type that is comptime-evaluable and has structural equality (integers, `bool`, `char`,
   strings, and enums and structs made of them), so `Matrix<f32, 3, 3>` and `Format<"utf-8">` are
   both possible.
@@ -377,7 +378,7 @@ fn greeting(users: &Map<UserId, User>, id: UserId) -> String {
     fmt"Hello {email.unwrap_or("guest")}"
 }
 
-fn connect(host: &str, port: Option<Port>) with net, fail(NetError) {
+fn connect(host: &str, port: Option<Port>) with net, suspend, fail(NetError) {
     let Some(addr) = resolve(host) else { return };   // early exit on absence
     let Some(p) = port else { fail(NetError::NoPort) };
     …
@@ -461,7 +462,7 @@ What replaces it:
        log: AuditLog,
    }
    impl Write for AuditedFile {
-       fn write(&mut self, buf: &[u8]) -> usize with fs, fail(IoError) {
+       fn write(&mut self, buf: &[u8]) -> int with suspend, fail(IoError) {
            self.log.record(buf.len());
            self.inner.write(buf)      // override one method; the rest are delegated
        }

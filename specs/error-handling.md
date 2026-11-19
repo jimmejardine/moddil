@@ -19,6 +19,9 @@
 | D10 | **Cleanup failures during error handling are suppressed, not lost**: they are attached to the primary error (as in Java's try-with-resources), never replace it and never terminate ([`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)). |
 | D11 | **`defer` is infallible; `errdefer` may fail.** `defer` follows drop's rules (no fail, no suspend); `errdefer` runs on error and cancellation exits, and its failure is suppressed ([`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)). |
 | D12 | **A destructor is checked like an entry point**: its failure set must be empty, so a fallible call inside `drop` must be handled there (logged, explicitly discarded, or the type made linear) ([`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)). |
+| D13 | **A failed contract traps** (class 3). A broken contract is a bug, not an error; untrusted input goes through validated newtypes or checks that return errors ([`correctness.md`: Decisions to lock early](correctness.md#decisions-to-lock-early)). |
+| D14 | **Discarding an error is explicit and needs a reason**: `discard(r, "best-effort cache warm")`, visible in reviews and semantic diffs ([Entry points must handle everything (R3)](#entry-points-must-handle-everything-r3)). |
+| D15 | **In a task scope, the first error wins**: it cancels the sibling tasks and propagates with the scope's ordinary error type; errors that siblings raise before they finish are attached to it as suppressed (as D10). Cancelled siblings report `Cancelled`, which is not an error. Running every task to completion is a library choice (`parallel_map_all`), not a scope policy ([Tasks and concurrency](#tasks-and-concurrency)). |
 
 ## Three outcome classes
 
@@ -26,7 +29,7 @@
 |---|---|---|---|
 | **1. Errors** | I/O failure, parse error, not found, network timeout, validation | Must be handled (R3) | Compiler: effect/type checking |
 | **2. Defined arithmetic** | Float NaN/∞; explicit wrapping (`+%`, `Wrapping<T>`) | No handling; the result is defined | Nothing (by design: fast) |
-| **3. Traps (crashes)** | OOM, stack overflow, integer overflow, integer ÷ 0, out-of-bounds index, `unreachable`, FFI fault | Terminates the process with a full trace, or only an isolated scope ([`lifecycle.md`](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)) | Runtime |
+| **3. Traps (crashes)** | OOM, stack overflow, integer overflow, integer ÷ 0, out-of-bounds index, `unreachable`, failed contract (D13), FFI fault | Terminates the process with a full trace, or only an isolated scope ([`lifecycle.md`](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)) | Runtime |
 
 R3 is about class 1 only: **a Moddil program never crashes because an error the language knows about
 was not handled.**
@@ -41,9 +44,8 @@ Notes:
   never silent. Checks cost typically 1–5% and are elided where range analysis or refinements prove
   safety. Wrapping (`+%`, `Wrapping<T>`), `checked_*` and `saturating_*` are explicit
   ([`numerics.md`: Overflow traps](numerics.md#overflow-traps)).
-- **Open:** do failed contract assertions ([Correctness tooling: contracts and verification](correctness.md)) trap (class 3), or raise an error (class 1)?
-  [`correctness.md`: Decisions to lock early](correctness.md#decisions-to-lock-early) recommends trapping, with untrusted input handled by
-  validated newtypes that return errors.
+- **Contracts (D13)**: a failed contract assertion ([Contracts and verification](correctness.md)) traps
+  (class 3); untrusted input is handled by validated newtypes that return errors.
 
 ## Results and effects
 
@@ -141,7 +143,8 @@ let config = try { load(p)? } catch {
 
 ### Try blocks
 
-- `try { … }` evaluates to `Result<T, E>`, where `E` is inferred from the `?`s inside it.
+- `try { … }` evaluates to `Result<T, E>`, where `E` is inferred from the `?`s inside it, or to
+  `Option<T>` when its `?`s are on `Option` ([`types.md`: Optional values and invalid states](types.md#optional-values-and-invalid-states)).
 - `try { … } catch { … }` is shorthand for matching that result.
 - Open details: how `return`/`break` inside a try block interact with it, and whether the error type
   of a try block can always be inferred (a known problem for Rust's unstable `try_blocks`; open
@@ -160,16 +163,27 @@ If anything remains, compilation fails, and the error lists each unhandled varia
 `?`s it would travel through.
 
 **Ignored results:** dropping a `Result` silently is a compile error (not a warning, as `must_use` is
-in Rust). *Open:* is an explicit discard allowed at all, and should it require a reason string, such
-as `discard(r, "best-effort cache warm")`, so it is visible in reviews and semantic diffs ([Diffs, code review and version control](semantic-vcs.md))?
+in Rust). **Decided (D14):** an explicit discard is allowed and requires a reason string, such
+as `discard(r, "best-effort cache warm")`, so it is visible in reviews and semantic diffs ([Diffs, code review and version control](semantic-vcs.md)).
 
 ### Tasks and concurrency
 
 - No fire-and-forget (D4). Long-running background work (servers, pollers) is a child of a long-lived
   scope, typically the service's root scope, whose handler supervises and restarts it.
 - A task's errors are delivered at its **join point** and must be handled there.
-- **Several tasks can fail at once.** The scope aggregates their errors (Python's `ExceptionGroup` /
-  `except*`, Trio, Swift `ThrowingTaskGroup`). *Open:* first error plus cancel siblings, or collect all?
+- **Several tasks can fail at once. The first error wins (D15).** It cancels the sibling tasks and
+  propagates from the scope. The scope's error type is the union of its children's errors, so `?`
+  and `catch` work unchanged; there is no error-group type to take apart (Python's `except*`).
+  Errors that siblings raise before they observe the cancellation are attached to the first error
+  as **suppressed**, as cleanup failures are (D10), so nothing is lost.
+- **"First" is by completion time**, so on a real runtime it can vary between runs; under
+  `runtime-sim` it is seed-controlled and replayable ([Determinism and reproducibility](determinism.md)).
+- **Running everything to completion** is a library choice, not a second scope policy.
+  `parallel_map_all` returns `Vec<Result<U, E>>`: each child reifies its own outcome
+  (`try { f(x)? }`), so a failed item is data rather than a scope failure, no sibling is
+  cancelled, and every item runs to the end. Only cancellation of the enclosing scope, or a trap
+  ([`lifecycle.md`: Traps: the process by default, isolated scopes on request](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)),
+  stops it early.
 - **Cancellation** is a distinct outcome, not an error, but it must still be accounted for at the join.
 
 ## Error types
@@ -289,21 +303,16 @@ sync cells and abandoning linear values
 - Non-resumable `fail`, compiled to the return channel; no unwinding for errors.
 - Error return traces (debug on, release configurable).
 - `errdefer`.
-- Aggregated errors in task scopes; cancellation as a separate outcome.
+- First error wins in task scopes, with sibling errors suppressed onto it; cancellation as a separate outcome.
 - Traps (class 3) terminate the process by default.
 
 ## Open questions
 
-1. Are explicit discards of errors allowed, and do they need a reason ([Entry points must handle everything (R3)](#entry-points-must-handle-everything-r3))?
-2. Do failed contract assertions trap or raise an error ([Three outcome classes](#three-outcome-classes))? (Recommendation: trap; see
-   [`correctness.md`: Decisions to lock early](correctness.md#decisions-to-lock-early).)
-3. Task scopes: first error and cancel siblings, or collect all errors ([Tasks and concurrency](#tasks-and-concurrency))?
-4. Should a resumable recovery effect ("retry"/"default") exist as a separate effect?
-5. How is context attached to structured errors ([Error types](#error-types))?
-6. Is `Option` part of the same machinery (`?` on `Option`, as in Rust)?
-7. Should errors from the `remote` effect ([Distributed and multi-tier programs](distribution.md)) have a standard shape (timeout, unreachable,
+1. Should a resumable recovery effect ("retry"/"default") exist as a separate effect?
+2. How is context attached to structured errors ([Error types](#error-types))?
+3. Should errors from the `remote` effect ([Distributed and multi-tier programs](distribution.md)) have a standard shape (timeout, unreachable,
    incompatible version), and how are errors serialised across tiers?
-8. Checked-exception fatigue (Java) vs inference: how much of an error set should be inferred?
+4. Checked-exception fatigue (Java) vs inference: how much of an error set should be inferred?
 
 ## Background
 

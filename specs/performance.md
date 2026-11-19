@@ -12,7 +12,7 @@
 | **Hot paths** | **`#[no_alloc]` and `#[no_lock]`** on functions or blocks, checked transitively through callees. "Never suspends" already follows from effect sets ([Hot-path guarantees](#hot-path-guarantees)). |
 | **Checks** | Overflow and bounds checks are **never disabled globally**. The compiler elides what it can prove, `moddil perf` reports what remains, and opt-outs are local ([Checks and their elision](#checks-and-their-elision)). |
 | **PGO** | **First-class, from replays:** profiles come from recorded or simulated runs and are versioned in git, so optimised builds stay reproducible ([Optimisation control](#optimisation-control)). |
-| **Benchmarks** | `#[bench(budget = …)]` on **deterministic counters** fails CI; wall-clock comparisons are statistical and only warn ([Benchmarks and budgets](#benchmarks-and-budgets)). |
+| **Benchmarks** | A `#[budget(…)]` on **deterministic counters** on an attached `bench` block fails CI; wall-clock comparisons are statistical and only warn ([Benchmarks and budgets](#benchmarks-and-budgets)). |
 
 ## Problem
 
@@ -225,10 +225,10 @@ Games and simulations must stay usable in debug builds:
 **Decision: budgets on deterministic counters fail CI; wall-clock results only warn.**
 
 ```rust
-#[bench(budget = { allocations: 0, instructions: 2_000 })]
-fn bench_on_tick(b: &mut Bencher) {
-    let (mut book, tick, mut out) = fixtures::market();
-    b.iter(|| on_tick(&mut book, &tick, &mut out));
+#[budget(allocations: 0, instructions: 2_000)]
+bench "one tick" for on_tick {
+    let (mut book, tick, mut out) = fixtures::market();     // setup: not measured
+    measure(|| on_tick(&mut book, &tick, &mut out));
 }
 ```
 

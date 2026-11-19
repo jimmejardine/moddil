@@ -137,9 +137,10 @@ fn parallel_map<T, U, E>(items: &[T], f: impl Fn(&T) -> U with E) -> Vec<U> with
 
 **Errors, cancellation and limits**
 
-- If `f` fails, the first error cancels the sibling tasks and propagates ([Tasks and borrowing](#tasks-and-borrowing)).
-- Collecting *all* errors instead is open ([`error-handling.md`: Tasks and concurrency](error-handling.md#tasks-and-concurrency)); a
-  `parallel_map_all` returning `Vec<Result<U, E>>` would cover it.
+- If `f` fails, the first error cancels the sibling tasks and propagates; errors from siblings that
+  fail before stopping are attached to it as suppressed ([`error-handling.md`: Tasks and concurrency](error-handling.md#tasks-and-concurrency), D15).
+- `parallel_map_all` returns `Vec<Result<U, E>>` instead: each item's failure is captured as a value,
+  so nothing is cancelled and every item runs to completion, even when some fail.
 - `limit:` caps concurrency for I/O-bound work; CPU-bound work defaults to the runtime's worker count.
 
 **What the compiler rejects**

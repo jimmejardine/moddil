@@ -92,7 +92,10 @@ function's whole specification and evidence in one place:
 
 ## Benchmarks
 
-- `bench "…" for f { … }` attaches a benchmark to its subject (Criterion-style statistics).
+- `bench "…" for f { … }` attaches a benchmark to its subject (Criterion-style statistics), the
+  same way `test "…" for f` attaches a test.
+- `#[budget(allocations: 0, instructions: 2_000)]` on a `bench` block sets limits on deterministic
+  counters, which fail CI ([`performance.md`: Benchmarks and budgets](performance.md#benchmarks-and-budgets)).
 - Results are recorded per build hash, so the semantic diff can report **performance deltas** for
   changed functions ([Diffs, code review and version control](semantic-vcs.md)).
 - Noise handling: repeated runs, confidence intervals, and dedicated or pinned machines for
@@ -103,8 +106,6 @@ function's whole specification and evidence in one place:
 1. Syntax for attaching tests to methods, trait implementations and generic instantiations.
 2. Shared fixtures and test-only helpers: how they are declared and kept out of release builds.
 3. Benchmark stability on shared CI machines.
-4. Benchmark syntax: `bench "…" for f { }` here and `#[bench(budget = …)]` in
-   [`performance.md`](performance.md) need to be reconciled.
 
 ## Prior art
 

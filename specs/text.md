@@ -219,7 +219,7 @@ with locale = i18n::locale(req.header("Accept-Language")) {
 }
 
 // in tests: one fixed locale, so output is reproducible
-with locale = i18n::fixed("de-CH") { assert_eq!(order_summary(&o), "…") }
+with locale = i18n::fixed("de-CH") { assert(order_summary(&o) == "…") }
 ```
 
 - **Visible:** a function that formats for humans says so in its signature; a CSV writer without

@@ -8,7 +8,7 @@
 | Topic | Decision |
 |---|---|
 | **Who owns UI** | **The platform, always.** Moddil compiles the **shared core** (models, state, validation, networking, storage); the UI is the platform's own toolkit: SwiftUI or UIKit, Jetpack Compose, or TypeScript with any web framework. There is no standard `moddil/ui` ([Native UI over a shared core](#native-ui-over-a-shared-core)). |
-| **Bindings** | `moddil bind` generates **Swift, Kotlin and TypeScript** bindings to a core: types, async calls, errors, cancellation and state observation ([Generated bindings](#generated-bindings)). |
+| **Bindings** | `moddil bind` generates **Swift, Kotlin and TypeScript** bindings to a core (and Python bindings, the first target, [`adoption.md`: Python first](adoption.md#python-first)): types, async calls, errors, cancellation and state observation ([Generated bindings](#generated-bindings)). |
 | **Browser APIs** | Generated from **WebIDL and TypeScript `.d.ts`**; JS values are opaque handles; Promises suspend through JSPI. Browser access is the **`dom` effect**, so it is visible and can be simulated in tests ([The browser](#the-browser)). |
 | **Mobile** | The toolchain produces **libraries plus bindings** (an XCFramework for iOS, an AAR for Android). Xcode and Gradle still build and sign the app ([Mobile packaging](#mobile-packaging)). |
 | **UI programming model** | **Not chosen by Moddil.** Community UI mods are welcome; notes on what fits Moddil's ownership model are below ([Community UI mods](#community-ui-mods)). |
@@ -72,7 +72,7 @@ renders with the GPU, as games do ([Games and graphics](#games-and-graphics)).
 The core exposes **state**, **actions** and **view models**, and the shell renders them:
 
 ```rust
-#[export]                                        // bound into Swift, Kotlin and TypeScript
+#[export]                                        // bound into Swift, Kotlin, TypeScript and Python
 pub struct CartView {
     pub lines: Vec<CartLine>,
     pub total: Money,

@@ -42,8 +42,8 @@ point is a real-time, authoritative-server architecture of the kind used by most
 
 ## Moddil features this stresses
 
-- **WASM in the browser (R1)**: binary size, start-up time, stack switching + JSPI for suspending on
-  browser APIs.
+- **WASM in the browser (R1)**: binary size, start-up time, JSPI for suspending on browser APIs
+  (WASM stack switching once browsers ship it).
 - **GPU ([Concurrency across GPUs and accelerators](../accelerators.md))**: rendering and possibly particle/physics kernels through the WebGPU/WGSL path. The same
   kernel code could run server-side for authoritative physics.
 - **Placement and the `remote` effect ([Distributed and multi-tier programs](../distribution.md))**: the client/hub/chat split in one program. Unreliable vs

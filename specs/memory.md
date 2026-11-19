@@ -106,7 +106,7 @@ The three common patterns:
 view AppContext { config: &Config, db: &DbPool, session: &UserSession }
 
 // Custom iterators: the collection is frozen while the iterator is live.
-view RingIter<T> { buf: &[T], idx: usize }
+view RingIter<T> { buf: &[T], idx: int }
 fn iter(&self) -> RingIter<T>
 for x in ring.iter().filter(f).map(g) { … }     // adaptors: view in, view out
 ring.push(1);                                   // ✗ while the iterator is live
@@ -235,7 +235,7 @@ Goal: data arrives from a NIC (or disk, or GPU) and is consumed without ever bei
 | Fan-out to several consumers | `.to_rc()` the packet; each consumer gets an **rc slice** (rc + range). Immutable, so race-free. | One biased-RC inc/dec per consumer |
 
 ```rust
-fn on_rx(pkt: Packet) with net {
+fn on_rx(pkt: Packet) with net, fail(DecodeError) {
     let order = wire::Order::validate(pkt)?; // Parsed<Order>: owns pkt, zero copy
     if order.symbol() == "ESZ6" {            // projection: borrow derived from order
         strategy_queue.push(order);          // move: the buffer travels, the payload is not copied
@@ -258,7 +258,7 @@ The full cost model, including calls, effects and checks, is in
 | `&` / `&mut` borrow | None | None (may be passed by value) | Lent to child tasks |
 | View type | None | None | Lent to child tasks |
 | Owning view `Parsed<T>` | The underlying buffer | One add per field access | Move only |
-| `Rc<T>` | Header + value | Biased inc/dec on clone/drop; free when borrowed | Yes |
+| `Rc<T>` | Header + value | Biased inc/dec on share/drop; free when borrowed | Yes |
 | `Weak<T>` | (shares rc allocation) | Upgrade check | Yes |
 | Sync cell | Inline | Atomic op or lock | Yes |
 

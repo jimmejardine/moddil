@@ -1,6 +1,7 @@
 # Correctness: Contracts, Testing and Verification
 
-> **Status:** proposal. Indexed in [`README.md`](README.md). Nothing here is decided yet;
+> **Status:** proposal. Indexed in [`README.md`](README.md). Nothing here is decided yet apart from
+> contract failures trapping ([Decisions to lock early](#decisions-to-lock-early), item 4);
 > recommendations are marked **Recommended**. Syntax is illustrative.
 
 ## Summary
@@ -210,9 +211,9 @@ These are cheap now and expensive to change once code exists.
    erased.
 3. **Contracts in interfaces**: part of the mod's public surface, under semver, in semantic diffs,
    with Liskov rules for trait impls.
-4. **A runtime contract failure traps (class 3).** **Recommended.** A broken contract is a bug, not an
+4. **A runtime contract failure traps (class 3).** **Decided** ([`error-handling.md`](error-handling.md) D13). A broken contract is a bug, not an
    error. Untrusted input goes through validated newtypes or explicit checks that return errors
-   (class 1). This would close [`error-handling.md`](error-handling.md) open question 2.
+   (class 1).
 5. **Release-build checking policy, per mod**: `all`, `preconditions` (the Ada and Eiffel default),
    or `none`. **Recommended default:** preconditions on public mod functions stay on in release
    builds; internal contracts are checked in debug builds only, unless the mod opts in.

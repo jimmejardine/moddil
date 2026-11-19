@@ -49,13 +49,13 @@ it falls on. Adoption must be incremental: a Moddil service is an ordinary servi
 
 ```rust
 #[component(server)]
-mod api    { pub fn checkout(cart: Untrusted<Cart>) -> Order with db, payments, fail(CheckoutError) { … } }
+mod api    { pub fn checkout(cart: Untrusted<Cart>) -> Order with db, payments, suspend, fail(CheckoutError) { … } }
 
 #[component(worker)]
 mod worker { pub fn send_receipt(order: OrderId) with email { … } }
 
 #[component(client)]
-mod web    { … api::checkout(cart) … }   // here: with remote, fail(RemoteError | CheckoutError)
+mod web    { … api::checkout(cart) … }   // here: with remote, suspend, fail(RemoteError | CheckoutError)
 ```
 
 - A **component** is a unit of code with a **placement**: `client`, `server`, `worker`, `edge`,

@@ -25,7 +25,7 @@ here with its reason ([Deltas from Rust (and why)](#deltas-from-rust-and-why)). 
 | Closures | `\|x\| expr`, `\|x\| { … }`; `impl Fn`, `impl FnMut`, `impl FnOnce`; `Box<dyn Fn…>` | **No `move`**: captures are inferred ([`closures.md`](closures.md)) |
 | Concurrency | `scope(\|s\| { s.spawn(\|\| …); })` | Like `std::thread::scope`; the only way to start a task ([`concurrency.md`](concurrency.md)) |
 | Labelled exits | `'label: { … break 'label value … }` | As in Rust |
-| Compile-time evaluation | `const fn`, `const { … }` blocks, `<const N: usize>` | Rust's spelling for the comptime concept ([`comptime.md`](comptime.md)) |
+| Compile-time evaluation | `const fn`, `const { … }` blocks, `<const N: int>` | Rust's spelling for the comptime concept ([`comptime.md`](comptime.md)) |
 | Errors | `?`, `try { … }`, `Result`, `Option` | As in Rust, with `try … catch` sugar ([`error-handling.md`: Propagation, matching and try blocks](error-handling.md#propagation-matching-and-try-blocks)) |
 | Optional values | `Option<T>` only (decided); no `T?` sugar; `x.unwrap_or(d)` rather than `x ?? d` | As in Rust; one canonical spelling, and no clash with the `?` operator |
 | Prefix literals | `sql"…"`, `re"…"`, `fmt"…"` | Rust already has `b"…"` and `r"…"`; Moddil lets mods define prefixes ([`comptime.md`: Tagged string literals (embedded DSLs)](comptime.md#tagged-string-literals-embedded-dsls)) |

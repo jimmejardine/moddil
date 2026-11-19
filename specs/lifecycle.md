@@ -52,13 +52,14 @@
 them.
 
 ```rust
-fn main(args: Args, env: Env, files: FsRoot, net: NetRoot, clock: Clock) -> ExitCode {
-    let cfg = match ServerConfig::load(&args, &env, &files) {
-        Ok(cfg) => cfg,
-        Err(e)  => { eprintln(e); return ExitCode::Config }
-    }
-    with net = net, fs = files.read_only(cfg.data_dir), time = clock {
-        server::run(cfg)
+fn main(args: Args, env: Env, stdio: Stdio, files: FsRoot, net: NetRoot, clock: Clock) -> ExitCode {
+    with stderr = stdio.err {
+        let cfg = try { ServerConfig::load(&args, &env, &files)? } catch {
+            e => { eprintln(fmt"{e}"); return ExitCode::Config }
+        };
+        with net = net, fs = files.read_only(cfg.data_dir), time = clock {
+            server::run(cfg)
+        }
     }
     ExitCode::Ok
 }
@@ -67,7 +68,7 @@ fn main(args: Args, env: Env, files: FsRoot, net: NetRoot, clock: Clock) -> Exit
 | Root capability | Grants |
 |---|---|
 | `Args`, `Env` | Command-line arguments; environment variables |
-| `Stdio` | Standard input, output and error |
+| `Stdio` | Standard input, output and error (handlers for `stdin`, `stdout` and `stderr`) |
 | `FsRoot` | The file system, narrowed with `read_only`, `only(path)` |
 | `NetRoot` | Network access, narrowed by address or port |
 | `Clock`, `Entropy` | Real time; OS randomness (handlers for `time` and `rand`) |
@@ -76,6 +77,8 @@ fn main(args: Args, env: Env, files: FsRoot, net: NetRoot, clock: Clock) -> Exit
 | `Devices` | GPUs and accelerators ([`accelerators.md`](accelerators.md)) |
 | `Introspect` | Live introspection ([`observability.md`](observability.md)) |
 
+- Nothing writes to the terminal ambiently: `print` and `println` perform `stdout`, `eprintln`
+  performs `stderr`, and both are handled from `Stdio`. (The write-only `log` effect is separate.)
 - Root capabilities are handlers, or build them
   ([`effects-and-capabilities.md`: Authority comes only from root capabilities](effects-and-capabilities.md#authority-comes-only-from-root-capabilities)).
 - **Startup sandboxing.** The executable's root set is known at compile time, so the runtime
@@ -143,11 +146,11 @@ struct ServerConfig {
 - A scope can opt into **isolation**, typically for servers handling independent requests:
 
 ```rust
-scope(isolate: true, |s| {
+scope(|s| {
     for conn in listener.incoming() {
         s.spawn(|| handle(conn))            // a bug in one request doesn't kill the server
     }
-})?                                         // fail(Trapped) if a task inside trapped
+}, isolate: true)?                                         // fail(Trapped) if a task inside trapped
 ```
 
 - When a task in an isolated scope traps:
