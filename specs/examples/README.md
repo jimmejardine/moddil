@@ -1,6 +1,7 @@
 # Reference Examples
 
-> **Status:** brainstorm. These are design drivers, not code (yet).
+> **Status:** design drivers, not code (yet). Their open questions are details; the larger ones
+> have been answered in the area documents.
 
 Moddil is designed against four real, multi-tier systems. Every proposed language feature or
 standard mod should be able to point at **at least one example that needs it**. A feature that no

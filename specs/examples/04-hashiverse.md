@@ -113,8 +113,10 @@ interoperate with a running network built in another language.
 
 ## Open questions
 
-- Does the Moddil client reimplement the protocol from a spec, or is the Rust code the spec? A
-  written protocol spec would benefit Hashiverse independently.
-- Should the protocol's wire format be described once in a schema that both Rust and Moddil generate
-  from?
-- How does Moddil's placement model express symmetric P2P nodes (each node is both client and server)?
+- ~~Spec or Rust code?~~ **Resolved:** the Rust code is the spec. The Moddil client consumes the
+  existing Rust wire types as consumed contracts and follows them
+  ([`data.md`: One contract system, in space and time](../data.md#one-contract-system-in-space-and-time)).
+  A written prose spec is still welcome, but it is not the source of truth.
+- ~~One schema for both languages?~~ **Resolved:** no neutral schema; the Rust types are the schema.
+- ~~Symmetric P2P nodes?~~ **Resolved:** the `peer` placement
+  ([`distribution.md`: Layer A: components and placement](../distribution.md#layer-a-components-and-placement)).

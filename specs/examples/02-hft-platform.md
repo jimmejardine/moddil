@@ -104,8 +104,15 @@ Initial targets, to be refined:
 - ~~Can a "no allocation" or "bounded latency" property be an effect the compiler checks?~~
   **Resolved:** checked attributes, `#[no_alloc]` and `#[no_lock]`, not effects; bounded latency is still
   open ([`performance.md`: Hot-path guarantees](../performance.md#hot-path-guarantees)).
-- How exactly do simulated-exchange semantics (queue position, partial fills, latency models) live
-  alongside the real gateway behind one effect interface?
-- How far should Moddil go in controlling hardware (core pinning, NUMA, huge pages): runtime mod or
-  deployment manifest?
-- Is Python interop needed for research users, and if so, at what priority?
+- ~~Simulated exchange alongside the real gateway?~~ **Resolved:** one `Exchange` effect trait with
+  two handlers. The real gateway and the simulator implement the same trait; queue position,
+  partial fills and latency models are the simulator's state, driven by simulated time
+  ([`effects-and-capabilities.md`: Effects are traits passed implicitly](../effects-and-capabilities.md#effects-are-traits-passed-implicitly)).
+- ~~Hardware control: runtime mod or deployment manifest?~~ **Resolved:** both, split. Code places
+  work and memory through the runtime mod (`on: pinned(3)`, NUMA-local allocators, huge-page
+  arenas); the deployment manifest provisions the machine (isolated cores, IRQ affinity, reserved
+  huge pages). At startup the program checks that what it asks for was provisioned, and fails with
+  a typed error if not ([`performance.md`: Kernel-bypass I/O: a worked example](../performance.md#kernel-bypass-io-a-worked-example)).
+- ~~Python interop for research users?~~ **Resolved:** consuming Moddil from Python (extension
+  modules and wheels) is in v0 ([`adoption.md`: Python first](../adoption.md#python-first)); calling
+  Python from Moddil remains open in [`interop.md`](../interop.md#open-questions).

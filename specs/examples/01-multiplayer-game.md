@@ -13,7 +13,7 @@ point is a real-time, authoritative-server architecture of the kind used by most
           │  client   (WASM + WebGPU)                                            │
           │  input → prediction → render        chat UI                          │
           └───────┬──────────────────────────────────────────┬──────────────────┘
-                  │ WebTransport / WebRTC (unreliable+reliable) │ WebSocket
+                  │ WebTransport (unreliable+reliable)          │ WebSocket
                   ▼                                             ▼
           ┌───────────────┐   room events   ┌────────────────────────────┐
           │    hub        │◄───────────────►│   chat   (N instances)      │
@@ -77,7 +77,7 @@ Initial targets, to be refined:
 
 ## Mods used
 
-- Standard: `moddil/net` (WebTransport, WebRTC data channels, WebSocket), `moddil/rpc`,
+- Standard: `moddil/net` (WebTransport, WebSocket), `moddil/rpc`,
   `moddil/runtime` / `-wasm` / `-sim`, `moddil/serde` (compact binary), `moddil/gpu` (WebGPU),
   `moddil/simd`, `moddil/web`, `moddil/sync`, `moddil/collections`, `moddil/text`. The HUD and menus are
   GPU-rendered or DOM ([`ui.md`: Games and graphics](../ui.md#games-and-graphics)).
@@ -85,16 +85,20 @@ Initial targets, to be refined:
 
 ## Interop and non-Moddil parts
 
-- Browser APIs (WebGPU, WebTransport, WebRTC, input, audio) through `moddil/web`.
+- Browser APIs (WebGPU, WebTransport, input, audio) through `moddil/web`.
 - Possibly an existing physics engine (C/C++/Rust) compiled to WASM and linked as a component ([Interoperability with C and Rust](../interop.md), R1).
 - Authentication through a standard identity provider (OAuth/OIDC).
 
 ## Open questions
 
-- Is deterministic floating point across WASM and native achievable, or should shared simulation code
-  use fixed point? ([`../determinism.md`: Sources of nondeterminism](../determinism.md#sources-of-nondeterminism) proposes strict IEEE floating point
-  plus a deterministic `moddil/math`, which would make it achievable.)
-- Is WebTransport sufficient everywhere, or is a WebRTC data-channel fallback required?
-- How much of the hub is a choreography, and how much is ordinary server code?
+- ~~Deterministic floating point across WASM and native, or fixed point?~~ **Resolved:** floating
+  point. Strict IEEE 754 and a correctly rounded `moddil/math` give identical results on WASM and
+  native ([`determinism.md`: Deterministic maths](../determinism.md#deterministic-maths)).
+- ~~Is WebTransport sufficient, or is a WebRTC fallback required?~~ **Resolved:** WebTransport only
+  for the game channel. There is no fallback, so a browser or network without WebTransport cannot
+  play; chat stays on WebSocket.
+- How much of the hub is a choreography? The direction: the match lifecycle (join, ready, start,
+  end) is a multi-party protocol and a candidate for one; per-frame snapshot streaming is ordinary
+  code. It waits on [`distribution.md`: Open questions](../distribution.md#open-questions).
 - ~~Is a game UI/HUD a use case for `moddil/ui`?~~ **Resolved:** there is no standard UI mod; the HUD is
   GPU-rendered or DOM ([`ui.md`: Games and graphics](../ui.md#games-and-graphics)).

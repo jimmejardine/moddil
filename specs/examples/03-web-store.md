@@ -108,8 +108,11 @@ Initial targets, to be refined:
 ## Open questions
 
 - ~~Which mobile UI option?~~ **Resolved:** shared core under native UI shells ([`ui.md`](../ui.md)).
-- How far back must API compatibility checking go, and how does the compiler know which client
-  versions are still in use (deployment metadata)?
-- Is typed SQL a language feature (compile-time evaluation against a schema), or purely a mod using
-  [Metaprogramming](../comptime.md) reflection?
-- Should `db` be a placement at all, or just an external service with a typed schema?
+- ~~How far back must API compatibility checking go?~~ **Resolved:** to every version recorded in
+  `contracts.lock`; old versions are removed explicitly with `moddil contracts prune`, visible in
+  review ([`data.md`: One contract system, in space and time](../data.md#one-contract-system-in-space-and-time)).
+- ~~Typed SQL: language feature or mod?~~ **Resolved:** a mod. `sql"…"` is a tagged literal checked
+  against `schema.sql` at compile time ([`data.md`: Databases: migrations-first](../data.md#databases-migrations-first)).
+- ~~Should `db` be a placement?~~ **Resolved:** no. It is an external service, provisioned outside
+  Moddil and bound as a requirement, with its typed schema in Moddil
+  ([`distribution.md`: Infrastructure: bind, never provision](../distribution.md#infrastructure-bind-never-provision)).

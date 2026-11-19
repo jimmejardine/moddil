@@ -159,6 +159,10 @@ fn feed_handler(rx: &RxQueue) with Net, suspend, fail(NetError) {
   - The spin budget, interrupt coalescing (`rx-usecs`) and IRQ affinity are set in code or in the
     deployment topology. Production can busy-poll while a developer laptop uses interrupts, with no
     code change.
+- **Code places; deployment provisions.** Code says where work runs and which memory it uses
+  (`on: pinned(3)`, NUMA-local allocators, huge-page arenas). The deployment manifest provisions
+  the machine: isolated cores, IRQ affinity, reserved huge pages. At startup the program checks that
+  what it asks for was provisioned, and fails with a typed error if not.
 - **Packets are owned DMA buffers.** A `Packet` is a unique value over a DMA-pool slot, typed by its
   memory space; dropping it returns the slot to the ring; validation yields zero-copy views
   ([`memory.md`: Zero-copy I/O](memory.md#zero-copy-io), [`accelerators.md`](accelerators.md)).
