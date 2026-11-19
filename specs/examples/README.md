@@ -3,7 +3,7 @@
 > **Status:** design drivers, not code (yet). Their open questions are details; the larger ones
 > have been answered in the area documents.
 
-Moddil is designed against four real, multi-tier systems. Every proposed language feature or
+Moddil is designed against five systems: four real, multi-tier ones and one bare-metal firmware. Every proposed language feature or
 standard mod should be able to point at **at least one example that needs it**. A feature that no
 example needs is a candidate for removal.
 
@@ -18,8 +18,9 @@ Each example will eventually become:
 | 2 | HFT platform | Finance, ultra-low latency | [`02-hft-platform.md`](02-hft-platform.md) |
 | 3 | Web store | Commerce, web + mobile | [`03-web-store.md`](03-web-store.md) |
 | 4 | Hashiverse | Decentralised P2P social network | [`04-hashiverse.md`](04-hashiverse.md) |
+| 5 | Sensor firmware | Embedded, bare metal | [`05-sensor-firmware.md`](05-sensor-firmware.md) |
 
-All four use the same template: *Overview → Topology → Key flows → Moddil features this stresses →
+All five use the same template: *Overview → Topology → Key flows → Moddil features this stresses →
 Success criteria → Mods used → Interop and non-Moddil parts → Open questions.*
 
 ## Coverage: examples × problem areas
@@ -27,24 +28,24 @@ Success criteria → Mods used → Interop and non-Moddil parts → Open questio
 Rows link to each area's document; all areas are listed in the [index](../README.md).
 ● = central to the example · ○ = exercised · blank = not significant.
 
-| Problem area | Game | HFT | Store | Hashiverse |
-|---|---|---|---|---|
-| [Effects and handlers](../effects-and-capabilities.md) | ○ | ● (sim ↔ live) | ○ | ● (pluggable transport/time/storage) |
-| [Memory / resources](../memory.md) | ○ | ● (zero-alloc hot path) | ○ | ○ |
-| [Error handling](../error-handling.md) | ○ | ● | ○ | ○ |
-| [Numerics](../numerics.md) | ○ | ● (decimal, SIMD) | ○ (money) | ○ (crypto) |
-| [Contracts / verification](../correctness.md) | | ● (risk checks) | ○ | ○ |
-| [CPU concurrency](../concurrency.md) | ● | ● | ○ | ● (parallel PoW) |
-| [GPU](../accelerators.md) | ● (WebGPU) | ● (research) | | |
-| [Distributed / multi-tier](../distribution.md) | ● | ● | ● | ● (P2P) |
-| [Deterministic simulation](../determinism.md) | ● | ● | ○ | ● |
-| [C/C++/Rust interop](../interop.md) | ○ | ● (kernel bypass, exchange SDKs) | ○ (mobile platform APIs) | ● (existing Rust code) |
-| [Build times](../build-times.md) | ○ | ○ | ● (large app team) | ○ |
-| [Supply chain / capabilities](../packages-and-supply-chain.md) | ○ | ● (`order` capability) | ● (`Payments`) | ● (untrusted peers) |
-| [LLM-friendliness](../agent-interface.md) | ○ | ○ | ● (CRUD volume) | ○ |
-| [Semantic diffs / review](../semantic-vcs.md) | ○ | ● (audited algos) | ● | ○ |
-| R1 WASM | ● (browser client) | | ● (web client) | ● (browser client) |
-| Mobile (iOS/Android) | | | ● | |
+| Problem area | Game | HFT | Store | Hashiverse | Firmware |
+|---|---|---|---|---|---|
+| [Effects and handlers](../effects-and-capabilities.md) | ○ | ● (sim ↔ live) | ○ | ● (pluggable transport/time/storage) | ○ |
+| [Memory / resources](../memory.md) | ○ | ● (zero-alloc hot path) | ○ | ○ | ● (no heap, static buffers) |
+| [Error handling](../error-handling.md) | ○ | ● | ○ | ○ | ○ |
+| [Numerics](../numerics.md) | ○ | ● (decimal, SIMD) | ○ (money) | ○ (crypto) | ○ (fixed point, filters) |
+| [Contracts / verification](../correctness.md) | | ● (risk checks) | ○ | ○ | ○ (stack bounds) |
+| [CPU concurrency](../concurrency.md) | ● | ● | ○ | ● (parallel PoW) | ● (interrupts, static tasks) |
+| [GPU](../accelerators.md) | ● (WebGPU) | ● (research) | | | |
+| [Distributed / multi-tier](../distribution.md) | ● | ● | ● | ● (P2P) | |
+| [Deterministic simulation](../determinism.md) | ● | ● | ○ | ● | ● (host simulation) |
+| [C/C++/Rust interop](../interop.md) | ○ | ● (kernel bypass, exchange SDKs) | ○ (mobile platform APIs) | ● (existing Rust code) | ○ (vendor C, SVD) |
+| [Build times](../build-times.md) | ○ | ○ | ● (large app team) | ○ | |
+| [Supply chain / capabilities](../packages-and-supply-chain.md) | ○ | ● (`order` capability) | ● (`Payments`) | ● (untrusted peers) | ○ (no `Net`, no `Fs`) |
+| [LLM-friendliness](../agent-interface.md) | ○ | ○ | ● (CRUD volume) | ○ | |
+| [Semantic diffs / review](../semantic-vcs.md) | ○ | ● (audited algos) | ● | ○ | |
+| R1 WASM | ● (browser client) | | ● (web client) | ● (browser client) | |
+| Mobile (iOS/Android) | | | ● | | |
 
 No problem area is left unexercised. [GPU](../accelerators.md) is the thinnest; if research workloads in the HFT
 example are not enough, a fifth GPU-heavy example (e.g. ML inference) may be added.
@@ -54,21 +55,21 @@ example are not enough, a fifth GPU-heavy example (e.g. ML inference) may be add
 See [`../stdlib.md`: Initial standard-mod catalogue](../stdlib.md#initial-standard-mod-catalogue) for the full catalogue. Mods marked **new** are example-specific
 mods the example would create.
 
-| Mod | Game | HFT | Store | Hashiverse |
-|---|---|---|---|---|
-| `moddil/net`, `moddil/rpc` | ● | ● | ● | ● |
-| `moddil/runtime`, `-wasm`, `-sim` | ● | ● | ● | ● |
-| `moddil/serde` | ● | ● | ● | ● |
-| `moddil/sync` | ● | ● | | ● |
-| `moddil/alloc` | ○ | ● | | |
-| `moddil/crypto` | | | ○ | ● |
-| `moddil/simd`, `moddil/tensor` | ○ | ● | | ○ |
-| `moddil/gpu` | ● | ● | | |
-| `moddil/decimal` | | ● | ● | |
-| `moddil/sql` | | ○ | ● | |
-| `moddil/timeseries` | | ● | | |
-| `moddil/web` | ● | | ● | ● |
-| `moddil/storage` | | | ○ | ● |
-| **new** | `game/netcode`, `game/chat` | `hft/marketdata`, `hft/risk`, `hft/fix` | `store/catalog`, `store/payments` | `hashiverse/protocol`, `moddil/dht`?, `moddil/pow`? |
+| Mod | Game | HFT | Store | Hashiverse | Firmware |
+|---|---|---|---|---|---|
+| `moddil/net`, `moddil/rpc` | ● | ● | ● | ● | |
+| `moddil/runtime`, `-wasm`, `-sim` | ● | ● | ● | ● | ● (`rt-embedded`, `-sim`) |
+| `moddil/serde` | ● | ● | ● | ● | ● |
+| `moddil/sync` | ● | ● | | ● | ● |
+| `moddil/alloc` | ○ | ● | | | |
+| `moddil/crypto` | | | ○ | ● | |
+| `moddil/simd`, `moddil/tensor` | ○ | ● | | ○ | |
+| `moddil/gpu` | ● | ● | | | |
+| `moddil/decimal` | | ● | ● | | |
+| `moddil/sql` | | ○ | ● | | |
+| `moddil/timeseries` | | ● | | | |
+| `moddil/web` | ● | | ● | ● | |
+| `moddil/storage` | | | ○ | ● | |
+| **new** | `game/netcode`, `game/chat` | `hft/marketdata`, `hft/risk`, `hft/fix` | `store/catalog`, `store/payments` | `hashiverse/protocol`, `moddil/dht`?, `moddil/pow`? | `sensor/hal`, `sensor/frames` |
 
 The order in which the examples are built is in [`roadmap.md`: Order of the reference examples](../roadmap.md#order-of-the-reference-examples).

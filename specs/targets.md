@@ -50,7 +50,7 @@ One toolchain download contains everything needed for every tier-1 target:
 - `lld`, which writes all four binary formats (ELF, Mach-O, COFF, WASM);
 - musl and mingw-w64 sources, glibc stubs per supported version, and minimal macOS headers and link
   stubs;
-- the bundled clang that compiles C dependencies ([`interop.md`: The C ABI, both directions](interop.md#the-c-abi-both-directions)).
+- the clang component that compiles C dependencies, fetched on first use ([`interop.md`: The C ABI, both directions](interop.md#the-c-abi-both-directions)).
 
 This matches the backend plan in [`compiler.md`: Backends](compiler.md#backends).
 
@@ -83,6 +83,9 @@ Targets are named `os-arch[-abi][.version]`:
 - **Tier 1** targets are built and tested in CI on every change: Linux (x86-64, ARM64), Windows
   (x86-64), macOS (ARM64, x86-64), WASM (WASI and browser, R1).
 - **Tier 2** targets build but are tested less often (e.g. Windows on ARM, FreeBSD, RISC-V).
+- **Bare-metal tiers (decided):** tier 1 is `thumbv7em` (Cortex-M4F, on Renode) and `riscv64` QEMU
+  `virt`; tier 2 is Cortex-M0+ and M33, x86_64 bare metal and AArch64 `virt`; others are tier 3
+  ([`freestanding.md`](freestanding.md)).
 - **A published target-tier policy (decided)** sets the bar, and the tier-2 list grows from
   contributions: tier 1 needs CI hardware, two maintainers and the full test suite passing on every
   change. Promotion is a Moddil Evolution proposal ([`governance.md`: Moddil Evolution](governance.md#moddil-evolution)).

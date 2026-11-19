@@ -1,6 +1,6 @@
 # Governance
 
-> **Status:** decided direction, details open. Listed in the [index](README.md).
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md).
 
 ## Summary
 
@@ -11,7 +11,7 @@
 | **Agents as equals** | Agent reviews and approvals count as humans' do; contributions are marked as agent- or human-authored; humans break ties. |
 | **Low-friction contributions** | MIT/Apache-2.0, DCO sign-off, no CLA. |
 | **A code of conduct** | Contributor Covenant 2.1, moderated separately from technical decisions. |
-| **A protected, permissive name** | "Moddil" and the armadillo are registered; community use is free; implementations need the conformance suite. |
+| **A protected, permissive name** | "Moddil" and the armadillo will be registered once there is adoption; community use is free; implementations need the conformance suite. |
 | **An independent non-profit** | Funded by donations and sponsors, without corporate control. |
 | **Security response in git** | OSV advisories in a project repository; community mods publish their own; `moddil audit` reads both. |
 
@@ -45,14 +45,17 @@
 
 ### Staged decision making
 
-| Stage | Who decides | Moves on when (proposed) |
+| Stage | Who decides | Moves on when (guidance; the founder decides) |
 |---|---|---|
 | **1. Founder** | The founder, in the open, with public reasoning | v1 ships, or ten people contribute regularly |
 | **2. Core team** | A small named team under a written charter | A set number of years at stage 2, or enough contributors to hold an election |
 | **3. Steering council** | An elected council, with teams for the compiler, standard mods, tooling and the reference | — |
 | **Foundation** (alongside 2 or 3) | Holds the trademark, money and infrastructure; does not make technical decisions | Created when there is money or a trademark to hold |
 
-- The triggers are written down now, so each transition is planned rather than forced by a crisis.
+- **The founder decides when each transition happens** (decided), announcing it publicly with
+  reasons. The triggers above are written down now as guidance, so each transition is planned
+  rather than forced by a crisis. Council members are elected by contributors; the details are set
+  at the transition.
 
 ### Moddil Evolution
 
@@ -140,14 +143,25 @@ Governance doesn't change what the examples can express; it decides how features
 the language (each proposal cites one), and how fast a security fix reaches them (advisories and the
 cooldown override).
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **Stage transitions** are the founder's decision, made in public with reasons; the table's
+   triggers are guidance ([Staged decision making](#staged-decision-making)).
+2. **Agents review and approve, but do not vote or hold seats.** Elections and council seats are
+   for people, because accountability, conduct enforcement and legal duties need a person. An
+   agent's operator votes as themselves.
+3. **Standard mods follow the same rule as everyone:** new or changed `unsafe` or `ffi` code in a
+   standard mod needs at least one human approval as well as the checker
+   ([`unsafe.md`: Review and audit](unsafe.md#review-and-audit)).
+4. **The trademark** is registered later, once there is adoption
+   ([`adoption.md`: Resolved questions](adoption.md#resolved-questions)). Until the foundation exists,
+   the founder holds it, with a written intent to transfer it.
+
 ## Open questions
 
-- The exact triggers for each stage, and how council members are chosen.
-- Do agents take part in elections or hold council seats, or only review?
-- Does the human-review default for `unsafe` and `ffi` changes
-  ([`unsafe.md`: Review and audit](unsafe.md#review-and-audit)) also apply to the project's own
-  standard mods, given that agents are equals here?
-- Who holds the trademark, and in which jurisdictions, before the foundation exists?
+None at present.
 
 ## Prior art
 

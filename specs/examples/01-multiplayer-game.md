@@ -97,8 +97,8 @@ Initial targets, to be refined:
 - ~~Is WebTransport sufficient, or is a WebRTC fallback required?~~ **Resolved:** WebTransport only
   for the game channel. There is no fallback, so a browser or network without WebTransport cannot
   play; chat stays on WebSocket.
-- How much of the hub is a choreography? The direction: the match lifecycle (join, ready, start,
-  end) is a multi-party protocol and a candidate for one; per-frame snapshot streaming is ordinary
-  code. It waits on [`distribution.md`: Open questions](../distribution.md#open-questions).
+- ~~How much of the hub is a choreography?~~ **Resolved:** the match lifecycle (join, ready, start,
+  end) uses `moddil/choreo` once it exists after v1; per-frame snapshot streaming is ordinary code
+  ([`distribution.md`: Resolved questions](../distribution.md#resolved-questions)).
 - ~~Is a game UI/HUD a use case for `moddil/ui`?~~ **Resolved:** there is no standard UI mod; the HUD is
   GPU-rendered or DOM ([`ui.md`: Games and graphics](../ui.md#games-and-graphics)).

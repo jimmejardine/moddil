@@ -1,6 +1,6 @@
 # The Freestanding Profile
 
-> **Status:** proposal. Covers kernels, bootloaders, hypervisors and microcontroller firmware: code
+> **Status:** complete: decided, with no open questions. Covers kernels, bootloaders, hypervisors and microcontroller firmware: code
 > with no operating system underneath. Related: [`targets.md`](targets.md) (hosted targets),
 > [`concurrency.md`](concurrency.md), [`memory.md`](memory.md).
 > Syntax is illustrative.
@@ -63,7 +63,8 @@ fn on_trap(info: &TrapInfo) -> ! { log_to_flash(info); system_reset() }
   - a program-supplied heap allocator (TLSF, linked list).
 - `Rc` exists only when an allocator is available. On a single core, biased reference counting
   reduces to plain owner counts.
-- **Proposed answer** to the allocator question in [`memory.md`: Open questions](memory.md#open-questions): an `Rc` records its allocator only when it is not the default one; arenas stay borrow-based.
+- **Decided:** an `Rc` records its allocator only when it is not the default one; arenas stay
+  borrow-based ([`memory.md`: Resolved questions](memory.md#resolved-questions)).
 
 ## Concurrency without a runtime
 
@@ -83,7 +84,8 @@ Three levels, from nothing to a full scheduler:
 
 **L1: static tasks.**
 - A small runtime mod, `moddil/rt-embedded`, provides the scheduler handler with a fixed number of task
-  slots: preemptive by priority (driven by a timer interrupt) or cooperative.
+  slots: **preemptive by priority by default** (driven by a timer interrupt), or cooperative as a
+  configuration option.
 - Stackful tasks on bare metal need only a register-saving context switch, as in an RTOS.
 - **Each task's stack size is computed at compile time** by stack-depth analysis: no unbounded
   recursion, and no indirect calls without a declared bound (see [`correctness.md`: Assurance levels per mod](correctness.md#assurance-levels-per-mod), level L1).
@@ -196,7 +198,8 @@ emulator models. Classic 8-bit Arduinos are a stretch. Xtensa-based ESP32s are o
 
 ### Proving the profile end to end
 
-**Recommended:** a fifth reference example that runs in this CI, for example:
+**Decided:** the fifth reference example, [sensor firmware](examples/05-sensor-firmware.md), runs in
+this CI. The options considered were:
 - sensor firmware on Renode (Cortex-M4F) and QEMU (Cortex-M33, RISC-V); and/or
 - a tiny kernel that boots on QEMU `x86_64` and RISC-V `virt` and runs its own test suite.
 
@@ -208,13 +211,28 @@ emulator models. Classic 8-bit Arduinos are a stretch. Xtensa-based ESP32s are o
 - unbounded recursion where stack analysis is required;
 - `Rc` without an allocator.
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **A fifth reference example:** [sensor firmware](examples/05-sensor-firmware.md) on Cortex-M4F
+   (Renode) and RISC-V (QEMU).
+2. **Scheduling:** `moddil/rt-embedded` is preemptive by priority by default; cooperative is an
+   option.
+3. **Stack-depth analysis applies to all freestanding code**: interrupt handlers, tasks and the main
+   loop, so a stack overflow is impossible rather than a crash. Recursion and indirect calls need a
+   declared bound (`#[max_depth(8)]`); L2 tasks with an allocator may opt out per task and use a
+   guard region instead.
+4. **Bare-metal tiers:** tier 1 is `thumbv7em` (Cortex-M4F, on Renode) and `riscv64` QEMU `virt`,
+   matching the fifth example; tier 2 is Cortex-M0+ and M33, x86_64 bare metal and AArch64 `virt`;
+   others are tier 3 ([`targets.md`: Target names and tiers](targets.md#target-names-and-tiers)).
+5. **Floats in interrupt handlers** are allowed when declared: `#[interrupt(TIMER0, fpu)]`. Using
+   floats without `fpu` is a compile error; the runtime enables lazy FPU state saving, and the stack
+   analysis counts the extra frame.
+
 ## Open questions
 
-1. Add a fifth, embedded reference example ([Proving the profile end to end](#proving-the-profile-end-to-end))?
-2. Should `moddil/rt-embedded` default to preemptive or cooperative scheduling?
-3. Does stack-depth analysis apply to all freestanding code, or only to L1 tasks?
-4. Tier assignments for bare-metal targets ([`targets.md`: Target names and tiers](targets.md#target-names-and-tiers)).
-5. Floating point in interrupt handlers (lazy FPU state saving).
+None at present.
 
 ## Prior art
 

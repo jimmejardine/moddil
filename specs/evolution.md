@@ -1,6 +1,6 @@
 # Language Evolution
 
-> **Status:** decided direction, details open. Indexed in [`README.md`](README.md).
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
 
 ## Problem
 
@@ -44,8 +44,10 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
 2. **A compatibility promise between editions.** Within an edition, every new toolchain release is
    backwards compatible (as with Go 1 and Rust's stability guarantee). The only exceptions are
    soundness and security fixes, each preceded by a lint period.
-3. **Cadence:** at most one edition every three years, kept small, and only when there is something
-   worth changing.
+3. **Cadence (decided): on demand, with rising minimum gaps.** An edition comes only when there is
+   something worth changing, and is kept small. The second edition may follow the first after at
+   least one year, the third after at least two more, and every later one after at least three,
+   while the language is young enough to need faster fixes.
 4. **Automated, verified migrations.** `moddil migrate --edition 2030` rewrites a mod through
    compiler-driven AST transformations.
    - The result is **checked equivalent**: the old program under the old edition elaborates to the
@@ -62,7 +64,8 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
 
    Rename rules cover types and modules. `moddil fix` applies the rules across downstream code (as
    Dart's data-driven fixes, Go's inline fixes and OpenRewrite do). Deprecated items warn for at
-   least one minor series before a major release may remove them.
+   least one released minor version **and** six months before a major release may remove them
+   (decided); standard mods must ship `replace_with` rules, so `moddil fix` migrates users.
 6. **No unstable features in published code.** Feature gates exist in development builds of the
    toolchain, but **`moddil publish` refuses to tag a mod that uses unstable features**, and consumers'
    builds refuse such dependencies (there is no registry,
@@ -98,12 +101,22 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
 | [Web store](examples/03-web-store.md) | A large codebase moves edition with `moddil migrate`; library upgrades applied with `moddil fix` |
 | [Hashiverse](examples/04-hashiverse.md) | Long-lived volunteer nodes run mixed versions, so wire compatibility matters more than source compatibility |
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **Edition cadence:** on demand, with minimum gaps of one, then two, then three years
+   ([cadence](#decisions)).
+2. **Semantic changes:** an edition may change run-time meaning only inside a mod that opts into
+   it, and only if `moddil migrate` can rewrite old code to keep its old meaning, checked by
+   comparing MIR. A change that no tool can migrate (Python 3's `str`/`bytes`) is forbidden.
+3. **Deprecation window:** at least one released minor version and six months.
+4. **Long-term support:** one toolchain release a year is designated LTS and receives security and
+   soundness fixes for two years. Standard mods state the oldest LTS they support.
+
 ## Open questions
 
-1. The exact edition cadence.
-2. May an edition change runtime semantics at all, or only syntax and defaults?
-3. The minimum deprecation window.
-4. Long-term-support toolchains.
+None at present.
 
 ## Prior art
 

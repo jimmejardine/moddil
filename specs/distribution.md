@@ -58,6 +58,7 @@ mod worker { pub fn send_receipt(order: OrderId) with Email { … } }
 mod web    { … api::checkout(cart) … }   // here: with Remote, suspend, fail(RemoteError | CheckoutError)
 ```
 
+- The three modules above are separate files, shown together ([`modules.md`: Resolved questions](modules.md#resolved-questions)).
 - A **component** is a unit of code with a **placement**: `client`, `server`, `worker`, `edge`,
   or `peer`.
 - `peer` covers **symmetric** topologies, where every node is both client and server (Hashiverse).

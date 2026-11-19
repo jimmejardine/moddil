@@ -1,6 +1,6 @@
 # Memory: ownership, borrowing and sharing
 
-> **Status:** decided direction, details open. Indexed in [`README.md`](README.md) and is the
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md) and is the
 > foundation for CPU concurrency in [`concurrency.md`](concurrency.md). Destruction, cleanup and linear
 > types are in [`resources.md`](resources.md). Snippets are **illustration
 > only**; no syntax is committed.
@@ -52,8 +52,8 @@ traits and without lifetime annotations ([`concurrency.md`: No `Send` / `Sync`](
 
 ### Parameter modes
 
-Parameter modes use Rust's spelling ([`syntax.md`](syntax.md)); borrows are second-class, so no
-lifetimes appear.
+Parameter modes use Rust's spelling (decided, [`syntax.md`](syntax.md)); borrows are second-class,
+so no lifetimes appear.
 
 | Parameter | Meaning | Caller's value during the call |
 |---|---|---|
@@ -273,17 +273,32 @@ The full cost model, including calls, effects and checks, is in
 
 No case required first-class references with explicit lifetimes.
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **Syntax:** parameter modes are `&T`, `&mut T` and `T`; views are declared with
+   `view Name<T> { … }`; a returned borrow names its source with `-> &T from param` (or
+   `from a, b`), defaulting to `self` for methods and to every borrowed parameter for free
+   functions ([Returning borrows](#returning-borrows)).
+2. **Allocators:** an `Rc` records its allocator only when it is not the default one, so default
+   rcs pay nothing; `.to_rc()` uses the allocator in scope. Arenas stay borrow-based: arena
+   allocations are views tied to the arena's scope and cannot become `Rc`s
+   ([`freestanding.md`: Memory without an operating system](freestanding.md#memory-without-an-operating-system)).
+3. **`Weak` is core**, beside `Rc`, because the header layout and biased counting must know about
+   weak counts.
+4. **Borrow diagnostics for agents:** every borrow error has one root cause and a ranked menu of
+   machine-applicable fixes (clone, `.to_rc()`, a view, splitting the borrow by field, a move), each
+   with a confidence level and a short cost note. The fix success rate is measured with the agent
+   simplicity benchmarks ([`adoption.md`: Simpler than Rust](adoption.md#simpler-than-rust)).
+5. **No garbage collector.** Cycles are avoided by design (`Weak` for back-edges, arenas and
+   indices for graphs). Debug builds and the simulator run a cycle detector that reports leaked rc
+   cycles with their allocation sites. A collected `Gc<T>` arena could be a library if a real need
+   appears.
+
 ## Open questions
 
-- Exact syntax for parameter modes, views and `from`.
-- Allocators: how does the allocator capability (Zig-style) interact with `.to_rc()`
-  and arenas? Does an `Rc` remember its allocator? (Proposed answer in
-  [`freestanding.md`: Memory without an operating system](freestanding.md#memory-without-an-operating-system).)
-- Should `Weak` be core or a mod? (It needs header support, so probably core.)
-- Can the borrow check give diagnostics good enough for LLM agents ([LLMs as first-class programmers](agent-interface.md)) — e.g.
-  machine-applicable "insert `.to_rc()` here" fixes?
-- Is there still a place for an optional per-task/per-actor collector, or does this model make it
-  unnecessary?
+None at present.
 
 ## Background
 

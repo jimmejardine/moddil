@@ -196,7 +196,7 @@ fn handle(conn: Conn) with Links, Rand, Net, suspend, spawn {
 ```rust
 fn main(args: Args, stdio: Stdio, net: NetRoot, entropy: Entropy) -> ExitCode {
     with Stderr = stdio.err {
-        let port = try { args.value("port", default: "8080").parse::<Port>()? } catch {
+        let port = try { args.value::<Port>("port", default: 8080)? } catch {
             e => { eprintln(fmt"bad --port: {e}"); return ExitCode::Usage }
         };
         with Net = net, Rand = entropy, Links = MemoryLinks::new() {
@@ -313,8 +313,10 @@ Resolved since the tour was written:
   ([This cannot fail here](error-handling.md#this-cannot-fail-here), [Matching removes what it handles](error-handling.md#matching-removes-what-it-handles));
 - the `Sim` API and its standard faults ([The `Sim` API](determinism.md#the-sim-api));
 - an unhandled `?` inside a test fails that test with its error return trace
-  ([Errors inside tests](testing.md#errors-inside-tests)).
+  ([Errors inside tests](testing.md#errors-inside-tests));
+- typed argument access and the named `sysexits.h` exit codes ([`lifecycle.md`: Resolved questions](lifecycle.md#resolved-questions)).
+
+No gaps remain open.
 
 | # | Gap | Open question in |
 |---|---|---|
-| 3 | The `Args` API and named exit codes such as `ExitCode::Unavailable` | [`lifecycle.md`](lifecycle.md#open-questions) |

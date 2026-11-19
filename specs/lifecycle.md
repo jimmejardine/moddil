@@ -1,6 +1,6 @@
 # Program Lifecycle
 
-> **Status:** decided direction, details open. Listed in the [index](README.md). Snippets are
+> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Snippets are
 > **illustration only**.
 
 ## Summary
@@ -94,7 +94,7 @@ fn main(args: Args, env: Env, stdio: Stdio, files: FsRoot, net: NetRoot, clock: 
 | Exit | Code |
 |---|---|
 | `main` returns `()` or `ExitCode::Ok` | 0 |
-| `main` returns another `ExitCode` | That code; named `Usage` (64) and `Config` (78) follow `sysexits.h` |
+| `main` returns another `ExitCode` | That code. Every `sysexits.h` code is named: `Usage` 64, `DataErr` 65, `NoInput` 66, `NoUser` 67, `NoHost` 68, `Unavailable` 69, `Software` 70, `OsErr` 71, `OsFile` 72, `CantCreate` 73, `IoErr` 74, `TempFail` 75, `Protocol` 76, `NoPerm` 77, `Config` 78; `ExitCode::new(n)` for anything else |
 | A trap | 70 (`EX_SOFTWARE`), after printing the trace |
 | A second stop signal | 128 + n |
 
@@ -355,17 +355,31 @@ fn serve(listener: &Listener) with Net, suspend, spawn {
 | [Web store](examples/03-web-store.md) | Isolated scopes per request; secrets from the environment; layered configuration per environment |
 | [Hashiverse](examples/04-hashiverse.md) | Volunteer binaries sandboxed to the roots they declare; layered shutdown on Ctrl-C |
 
+## Resolved questions
+
+Decided in the open-question review:
+
+1. **Sandboxing follows narrowing.** Narrowing a root capability after start
+   (`files.read_only(cfg.data_dir)`) also tightens the OS sandbox (adding Landlock rules, calling
+   `unveil`) once the wider root is no longer held anywhere. This happens wherever the OS allows
+   tightening after start, and the final enforced state is reported.
+2. **Supervision is a library:** `supervise(|s| …, restart: Backoff { … }, max: 5 per 1[min])` in
+   `moddil/sync`, built on isolated scopes ([`concurrency.md`](concurrency.md#open-questions)).
+3. **Configuration is a snapshot by default.** A program that wants reloading holds `Live<Config>`,
+   refreshed by a task that `select`s on SIGHUP from `Signals` and re-validates; readers take a
+   consistent snapshot per request, and a failed reload keeps the old value and logs.
+4. **Windows** uses the same exit codes as other platforms (Ctrl-C gives 0xC000013A, as Windows
+   expects). A trap prints the same trace to stderr and exits 70; Windows Error Reporting dialogs are
+   suppressed so services never hang on one, and crash dumps are opt-in.
+5. **Arguments:** the main path is `#[derive(Args)] struct Cli { port: Port = 8080, verbose: bool }`,
+   parsed with `Cli::parse(&args)?`. It shares its machinery with `#[derive(Config)]`, giving
+   `--help`, subcommands from enums and refined-type validation. Small tools can read one typed
+   flag: `args.value::<Port>("port", default: 8080)?`.
+6. **Exit codes:** the whole `sysexits.h` set is named ([Conventional exits](#conventional-exits)).
+
 ## Open questions
 
-- How fine-grained can startup sandboxing be when paths come from configuration at runtime (sandbox
-  again after loading configuration)?
-- Should isolated scopes offer restart policies (supervision), or leave that to a library?
-- Is configuration a snapshot, or a live value reloaded on SIGHUP (`AtomicRc<Config>`)?
-- Exit codes and trap reporting on Windows.
-- The `Args` API: typed flags with defaults (the tour's `args.value("port", default: "8080")`), or a
-  derive over a struct, as `clap` does ([`tour.md`](tour.md#gaps-the-tour-exposed))?
-- Which `sysexits.h` codes get names beyond `Usage` and `Config`? The tour uses
-  `ExitCode::Unavailable` (69) for a port that cannot be bound.
+None at present.
 
 ## Prior art
 
