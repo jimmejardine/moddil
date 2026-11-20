@@ -1,0 +1,54 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "fn f() { let k = \\Order.customer.email; if const target.os == Os::Linux { } }"
+---
+SOURCE_FILE
+  FN_ITEM
+    FN_KW "fn"
+    NAME
+      IDENT "f"
+    PARAM_LIST
+      L_PAREN "("
+      R_PAREN ")"
+    BLOCK
+      L_CURLY "{"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "k"
+        EQ "="
+        KEY_PATH
+          BACKSLASH "\\"
+          PATH
+            PATH_SEGMENT
+              IDENT "Order"
+          DOT "."
+          IDENT "customer"
+          DOT "."
+          IDENT "email"
+        SEMI ";"
+      IF_EXPR
+        IF_KW "if"
+        CONST_KW "const"
+        BIN_EXPR
+          FIELD_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "target"
+            DOT "."
+            IDENT "os"
+          EQ_EQ "=="
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "Os"
+              COLON_COLON "::"
+              PATH_SEGMENT
+                IDENT "Linux"
+        BLOCK
+          L_CURLY "{"
+          R_CURLY "}"
+      R_CURLY "}"

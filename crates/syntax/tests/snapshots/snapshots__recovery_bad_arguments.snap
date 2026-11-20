@@ -1,0 +1,39 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "fn f() { foo(1, ; bar(); }"
+---
+SOURCE_FILE
+  FN_ITEM
+    FN_KW "fn"
+    NAME
+      IDENT "f"
+    PARAM_LIST
+      L_PAREN "("
+      R_PAREN ")"
+    BLOCK
+      L_CURLY "{"
+      EXPR_STMT
+        CALL_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "foo"
+          ARG_LIST
+            L_PAREN "("
+            ARG
+              LITERAL
+                INTEGER "1"
+            COMMA ","
+        SEMI ";"
+      EXPR_STMT
+        CALL_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "bar"
+          ARG_LIST
+            L_PAREN "("
+            R_PAREN ")"
+        SEMI ";"
+      R_CURLY "}"
+error 16..17: expected an argument, found `;`

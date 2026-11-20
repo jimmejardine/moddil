@@ -1,0 +1,2833 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "tree(cases[0])"
+---
+SOURCE_FILE
+  USE_ITEM
+    USE_KW "use"
+    USE_TREE
+      PATH
+        PATH_SEGMENT
+          IDENT "moddil"
+        COLON_COLON "::"
+        PATH_SEGMENT
+          IDENT "collections"
+        COLON_COLON "::"
+        PATH_SEGMENT
+          IDENT "Map"
+    SEMI ";"
+  USE_ITEM
+    USE_KW "use"
+    USE_TREE
+      PATH
+        PATH_SEGMENT
+          IDENT "moddil"
+        COLON_COLON "::"
+        PATH_SEGMENT
+          IDENT "net"
+      COLON_COLON "::"
+      USE_LIST
+        L_CURLY "{"
+        USE_TREE
+          PATH
+            PATH_SEGMENT
+              IDENT "Listener"
+        COMMA ","
+        USE_TREE
+          PATH
+            PATH_SEGMENT
+              IDENT "Conn"
+        COMMA ","
+        USE_TREE
+          PATH
+            PATH_SEGMENT
+              IDENT "Url"
+        R_CURLY "}"
+    SEMI ";"
+  USE_ITEM
+    USE_KW "use"
+    USE_TREE
+      PATH
+        PATH_SEGMENT
+          IDENT "moddil"
+        COLON_COLON "::"
+        PATH_SEGMENT
+          IDENT "net"
+        COLON_COLON "::"
+        PATH_SEGMENT
+          IDENT "http"
+      COLON_COLON "::"
+      USE_LIST
+        L_CURLY "{"
+        USE_TREE
+          PATH
+            PATH_SEGMENT
+              SELF_KW "self"
+        COMMA ","
+        USE_TREE
+          PATH
+            PATH_SEGMENT
+              IDENT "Handler"
+        COMMA ","
+        USE_TREE
+          PATH
+            PATH_SEGMENT
+              IDENT "IntoResponse"
+        COMMA ","
+        USE_TREE
+          PATH
+            PATH_SEGMENT
+              IDENT "Request"
+        COMMA ","
+        USE_TREE
+          PATH
+            PATH_SEGMENT
+              IDENT "Response"
+        COMMA ","
+        USE_TREE
+          PATH
+            PATH_SEGMENT
+              IDENT "Router"
+        COMMA ","
+        USE_TREE
+          PATH
+            PATH_SEGMENT
+              IDENT "Status"
+        R_CURLY "}"
+    SEMI ";"
+  USE_ITEM
+    USE_KW "use"
+    USE_TREE
+      PATH
+        PATH_SEGMENT
+          IDENT "moddil"
+        COLON_COLON "::"
+        PATH_SEGMENT
+          IDENT "serde"
+      COLON_COLON "::"
+      USE_LIST
+        L_CURLY "{"
+        USE_TREE
+          PATH
+            PATH_SEGMENT
+              IDENT "json"
+        COMMA ","
+        USE_TREE
+          PATH
+            PATH_SEGMENT
+              IDENT "Deserialize"
+        COMMA ","
+        USE_TREE
+          PATH
+            PATH_SEGMENT
+              IDENT "Serialize"
+        R_CURLY "}"
+    SEMI ";"
+  USE_ITEM
+    USE_KW "use"
+    USE_TREE
+      PATH
+        PATH_SEGMENT
+          IDENT "moddil"
+        COLON_COLON "::"
+        PATH_SEGMENT
+          IDENT "sync"
+        COLON_COLON "::"
+        PATH_SEGMENT
+          IDENT "Mutex"
+    SEMI ";"
+  CONST_ITEM
+    CONST_KW "const"
+    NAME
+      IDENT "ALPHABET"
+    COLON ":"
+    REF_TYPE
+      AMP "&"
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "str"
+    EQ "="
+    LITERAL
+      STRING "\"abcdefghjkmnpqrstuvwxyz23456789\""
+    SEMI ";"
+  TYPE_ITEM
+    OUTER_ATTR
+      DOC_OUTER "/// A short code: six characters from `ALPHABET`."
+    VIS
+      PUB_KW "pub"
+    TYPE_KW "type"
+    NAME
+      IDENT "Code"
+    EQ "="
+    PATH_TYPE
+      PATH
+        PATH_SEGMENT
+          IDENT "String"
+    WHERE_KW "where"
+    BIN_EXPR
+      BIN_EXPR
+        METHOD_CALL_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                SELF_KW "self"
+          DOT "."
+          IDENT "len"
+          ARG_LIST
+            L_PAREN "("
+            R_PAREN ")"
+        EQ_EQ "=="
+        LITERAL
+          INTEGER "6"
+      AMP_AMP "&&"
+      METHOD_CALL_EXPR
+        METHOD_CALL_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                SELF_KW "self"
+          DOT "."
+          IDENT "chars"
+          ARG_LIST
+            L_PAREN "("
+            R_PAREN ")"
+        DOT "."
+        IDENT "all"
+        ARG_LIST
+          L_PAREN "("
+          ARG
+            CLOSURE_EXPR
+              CLOSURE_PARAMS
+                PIPE "|"
+                CLOSURE_PARAM
+                  PATH_PAT
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "c"
+                PIPE "|"
+              METHOD_CALL_EXPR
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "ALPHABET"
+                DOT "."
+                IDENT "contains"
+                ARG_LIST
+                  L_PAREN "("
+                  ARG
+                    PATH_EXPR
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "c"
+                  R_PAREN ")"
+          R_PAREN ")"
+    SEMI ";"
+  TYPE_ITEM
+    OUTER_ATTR
+      DOC_OUTER "/// A link target: only HTTPS URLs are accepted."
+    VIS
+      PUB_KW "pub"
+    TYPE_KW "type"
+    NAME
+      IDENT "Target"
+    EQ "="
+    PATH_TYPE
+      PATH
+        PATH_SEGMENT
+          IDENT "Url"
+    WHERE_KW "where"
+    BIN_EXPR
+      METHOD_CALL_EXPR
+        PATH_EXPR
+          PATH
+            PATH_SEGMENT
+              SELF_KW "self"
+        DOT "."
+        IDENT "scheme"
+        ARG_LIST
+          L_PAREN "("
+          R_PAREN ")"
+      EQ_EQ "=="
+      LITERAL
+        STRING "\"https\""
+    SEMI ";"
+  STRUCT_ITEM
+    OUTER_ATTR
+      POUND_L_BRACK "#["
+      ATTR
+        PATH
+          PATH_SEGMENT
+            IDENT "derive"
+        ATTR_INPUT
+          L_PAREN "("
+          IDENT "Deserialize"
+          R_PAREN ")"
+      R_BRACK "]"
+    STRUCT_KW "struct"
+    NAME
+      IDENT "NewLink"
+    STRUCT_BODY
+      L_CURLY "{"
+      FIELD
+        NAME
+          IDENT "url"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "Target"
+      R_CURLY "}"
+  STRUCT_ITEM
+    OUTER_ATTR
+      POUND_L_BRACK "#["
+      ATTR
+        PATH
+          PATH_SEGMENT
+            IDENT "derive"
+        ATTR_INPUT
+          L_PAREN "("
+          IDENT "Serialize"
+          R_PAREN ")"
+      R_BRACK "]"
+    STRUCT_KW "struct"
+    NAME
+      IDENT "Created"
+    STRUCT_BODY
+      L_CURLY "{"
+      FIELD
+        NAME
+          IDENT "code"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "Code"
+      R_CURLY "}"
+  ENUM_ITEM
+    OUTER_ATTR
+      POUND_L_BRACK "#["
+      ATTR
+        PATH
+          PATH_SEGMENT
+            IDENT "derive"
+        ATTR_INPUT
+          L_PAREN "("
+          IDENT "Debug"
+          R_PAREN ")"
+      R_BRACK "]"
+    VIS
+      PUB_KW "pub"
+    ENUM_KW "enum"
+    NAME
+      IDENT "LinkError"
+    VARIANT_LIST
+      L_CURLY "{"
+      VARIANT
+        NAME
+          IDENT "Taken"
+        TUPLE_FIELDS
+          L_PAREN "("
+          TUPLE_FIELD
+            PATH_TYPE
+              PATH
+                PATH_SEGMENT
+                  IDENT "Code"
+          R_PAREN ")"
+      R_CURLY "}"
+  TRAIT_ITEM
+    OUTER_ATTR
+      DOC_OUTER "/// Where links are kept."
+    VIS
+      PUB_KW "pub"
+    TRAIT_KW "trait"
+    NAME
+      IDENT "Links"
+    TRAIT_BODY
+      L_CURLY "{"
+      FN_ITEM
+        FN_KW "fn"
+        NAME
+          IDENT "get"
+        PARAM_LIST
+          L_PAREN "("
+          SELF_PARAM
+            AMP "&"
+            SELF_KW "self"
+          COMMA ","
+          PARAM
+            PATH_PAT
+              PATH
+                PATH_SEGMENT
+                  IDENT "code"
+            COLON ":"
+            REF_TYPE
+              AMP "&"
+              PATH_TYPE
+                PATH
+                  PATH_SEGMENT
+                    IDENT "Code"
+          R_PAREN ")"
+        RET_TYPE
+          MINUS_GT "->"
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Option"
+                GENERIC_ARGS
+                  LT "<"
+                  TYPE_ARG
+                    PATH_TYPE
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "Target"
+                  GT ">"
+        EFFECT_CLAUSE
+          WITH_KW "with"
+          SIG_EFFECT
+            EFFECT
+              SUSPEND_KW "suspend"
+        SEMI ";"
+      FN_ITEM
+        FN_KW "fn"
+        NAME
+          IDENT "put"
+        PARAM_LIST
+          L_PAREN "("
+          SELF_PARAM
+            AMP "&"
+            SELF_KW "self"
+          COMMA ","
+          PARAM
+            PATH_PAT
+              PATH
+                PATH_SEGMENT
+                  IDENT "code"
+            COLON ":"
+            PATH_TYPE
+              PATH
+                PATH_SEGMENT
+                  IDENT "Code"
+          COMMA ","
+          PARAM
+            PATH_PAT
+              PATH
+                PATH_SEGMENT
+                  IDENT "target"
+            COLON ":"
+            PATH_TYPE
+              PATH
+                PATH_SEGMENT
+                  IDENT "Target"
+          R_PAREN ")"
+        EFFECT_CLAUSE
+          WITH_KW "with"
+          SIG_EFFECT
+            EFFECT
+              SUSPEND_KW "suspend"
+          COMMA ","
+          SIG_EFFECT
+            EFFECT
+              FAIL_KW "fail"
+              L_PAREN "("
+              ERROR_TYPES
+                PATH_TYPE
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "LinkError"
+              R_PAREN ")"
+        SEMI ";"
+      R_CURLY "}"
+  STRUCT_ITEM
+    OUTER_ATTR
+      DOC_OUTER "/// An in-memory handler for `Links`: used by `main` here, and by the tests."
+    VIS
+      PUB_KW "pub"
+    STRUCT_KW "struct"
+    NAME
+      IDENT "MemoryLinks"
+    STRUCT_BODY
+      L_CURLY "{"
+      FIELD
+        NAME
+          IDENT "map"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "Mutex"
+              GENERIC_ARGS
+                LT "<"
+                TYPE_ARG
+                  PATH_TYPE
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "Map"
+                        GENERIC_ARGS
+                          LT "<"
+                          TYPE_ARG
+                            PATH_TYPE
+                              PATH
+                                PATH_SEGMENT
+                                  IDENT "Code"
+                          COMMA ","
+                          TYPE_ARG
+                            PATH_TYPE
+                              PATH
+                                PATH_SEGMENT
+                                  IDENT "Target"
+                          GT ">"
+                GT ">"
+      R_CURLY "}"
+  IMPL_ITEM
+    IMPL_KW "impl"
+    PATH_TYPE
+      PATH
+        PATH_SEGMENT
+          IDENT "MemoryLinks"
+    IMPL_BODY
+      L_CURLY "{"
+      FN_ITEM
+        VIS
+          PUB_KW "pub"
+        FN_KW "fn"
+        NAME
+          IDENT "new"
+        PARAM_LIST
+          L_PAREN "("
+          R_PAREN ")"
+        RET_TYPE
+          MINUS_GT "->"
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "MemoryLinks"
+        BLOCK
+          L_CURLY "{"
+          STRUCT_LIT
+            PATH
+              PATH_SEGMENT
+                IDENT "MemoryLinks"
+            L_CURLY "{"
+            FIELD_INIT
+              IDENT "map"
+              COLON ":"
+              CALL_EXPR
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "Mutex"
+                    COLON_COLON "::"
+                    PATH_SEGMENT
+                      IDENT "new"
+                ARG_LIST
+                  L_PAREN "("
+                  ARG
+                    CALL_EXPR
+                      PATH_EXPR
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "Map"
+                          COLON_COLON "::"
+                          PATH_SEGMENT
+                            IDENT "new"
+                      ARG_LIST
+                        L_PAREN "("
+                        R_PAREN ")"
+                  R_PAREN ")"
+            R_CURLY "}"
+          R_CURLY "}"
+      R_CURLY "}"
+  IMPL_ITEM
+    IMPL_KW "impl"
+    PATH_TYPE
+      PATH
+        PATH_SEGMENT
+          IDENT "Links"
+    FOR_KW "for"
+    PATH_TYPE
+      PATH
+        PATH_SEGMENT
+          IDENT "MemoryLinks"
+    IMPL_BODY
+      L_CURLY "{"
+      FN_ITEM
+        FN_KW "fn"
+        NAME
+          IDENT "get"
+        PARAM_LIST
+          L_PAREN "("
+          SELF_PARAM
+            AMP "&"
+            SELF_KW "self"
+          COMMA ","
+          PARAM
+            PATH_PAT
+              PATH
+                PATH_SEGMENT
+                  IDENT "code"
+            COLON ":"
+            REF_TYPE
+              AMP "&"
+              PATH_TYPE
+                PATH
+                  PATH_SEGMENT
+                    IDENT "Code"
+          R_PAREN ")"
+        RET_TYPE
+          MINUS_GT "->"
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Option"
+                GENERIC_ARGS
+                  LT "<"
+                  TYPE_ARG
+                    PATH_TYPE
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "Target"
+                  GT ">"
+        EFFECT_CLAUSE
+          WITH_KW "with"
+          SIG_EFFECT
+            EFFECT
+              SUSPEND_KW "suspend"
+        BLOCK
+          L_CURLY "{"
+          METHOD_CALL_EXPR
+            METHOD_CALL_EXPR
+              METHOD_CALL_EXPR
+                FIELD_EXPR
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        SELF_KW "self"
+                  DOT "."
+                  IDENT "map"
+                DOT "."
+                IDENT "lock"
+                ARG_LIST
+                  L_PAREN "("
+                  R_PAREN ")"
+              DOT "."
+              IDENT "get"
+              ARG_LIST
+                L_PAREN "("
+                ARG
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "code"
+                R_PAREN ")"
+            DOT "."
+            IDENT "map"
+            ARG_LIST
+              L_PAREN "("
+              ARG
+                CLOSURE_EXPR
+                  CLOSURE_PARAMS
+                    PIPE "|"
+                    CLOSURE_PARAM
+                      PATH_PAT
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "t"
+                    PIPE "|"
+                  METHOD_CALL_EXPR
+                    PATH_EXPR
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "t"
+                    DOT "."
+                    IDENT "clone"
+                    ARG_LIST
+                      L_PAREN "("
+                      R_PAREN ")"
+              R_PAREN ")"
+          R_CURLY "}"
+      FN_ITEM
+        FN_KW "fn"
+        NAME
+          IDENT "put"
+        PARAM_LIST
+          L_PAREN "("
+          SELF_PARAM
+            AMP "&"
+            SELF_KW "self"
+          COMMA ","
+          PARAM
+            PATH_PAT
+              PATH
+                PATH_SEGMENT
+                  IDENT "code"
+            COLON ":"
+            PATH_TYPE
+              PATH
+                PATH_SEGMENT
+                  IDENT "Code"
+          COMMA ","
+          PARAM
+            PATH_PAT
+              PATH
+                PATH_SEGMENT
+                  IDENT "target"
+            COLON ":"
+            PATH_TYPE
+              PATH
+                PATH_SEGMENT
+                  IDENT "Target"
+          R_PAREN ")"
+        EFFECT_CLAUSE
+          WITH_KW "with"
+          SIG_EFFECT
+            EFFECT
+              SUSPEND_KW "suspend"
+          COMMA ","
+          SIG_EFFECT
+            EFFECT
+              FAIL_KW "fail"
+              L_PAREN "("
+              ERROR_TYPES
+                PATH_TYPE
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "LinkError"
+              R_PAREN ")"
+        BLOCK
+          L_CURLY "{"
+          LET_STMT
+            LET_KW "let"
+            IDENT_PAT
+              MUT_KW "mut"
+              NAME
+                IDENT "map"
+            EQ "="
+            METHOD_CALL_EXPR
+              FIELD_EXPR
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      SELF_KW "self"
+                DOT "."
+                IDENT "map"
+              DOT "."
+              IDENT "lock"
+              ARG_LIST
+                L_PAREN "("
+                R_PAREN ")"
+            SEMI ";"
+          IF_EXPR
+            IF_KW "if"
+            METHOD_CALL_EXPR
+              PATH_EXPR
+                PATH
+                  PATH_SEGMENT
+                    IDENT "map"
+              DOT "."
+              IDENT "contains_key"
+              ARG_LIST
+                L_PAREN "("
+                ARG
+                  REF_EXPR
+                    AMP "&"
+                    PATH_EXPR
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "code"
+                R_PAREN ")"
+            BLOCK
+              L_CURLY "{"
+              FAIL_EXPR
+                FAIL_KW "fail"
+                L_PAREN "("
+                CALL_EXPR
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "LinkError"
+                      COLON_COLON "::"
+                      PATH_SEGMENT
+                        IDENT "Taken"
+                  ARG_LIST
+                    L_PAREN "("
+                    ARG
+                      PATH_EXPR
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "code"
+                    R_PAREN ")"
+                R_PAREN ")"
+              R_CURLY "}"
+          EXPR_STMT
+            METHOD_CALL_EXPR
+              PATH_EXPR
+                PATH
+                  PATH_SEGMENT
+                    IDENT "map"
+              DOT "."
+              IDENT "insert"
+              ARG_LIST
+                L_PAREN "("
+                ARG
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "code"
+                COMMA ","
+                ARG
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "target"
+                R_PAREN ")"
+            SEMI ";"
+          R_CURLY "}"
+      R_CURLY "}"
+  FN_ITEM
+    OUTER_ATTR
+      DOC_OUTER "/// Makes a random code."
+    OUTER_ATTR
+      DOC_OUTER "///"
+    OUTER_ATTR
+      DOC_OUTER "/// # Example"
+    OUTER_ATTR
+      DOC_OUTER "/// with Rand = rand::seeded(7) { make_code().len() }   // => 6"
+    FN_KW "fn"
+    NAME
+      IDENT "make_code"
+    PARAM_LIST
+      L_PAREN "("
+      R_PAREN ")"
+    RET_TYPE
+      MINUS_GT "->"
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "Code"
+    EFFECT_CLAUSE
+      WITH_KW "with"
+      SIG_EFFECT
+        IDENT "rand"
+        COLON ":"
+        EFFECT
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Rand"
+    BLOCK
+      L_CURLY "{"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "s"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "String"
+        EQ "="
+        METHOD_CALL_EXPR
+          METHOD_CALL_EXPR
+            PAREN_EXPR
+              L_PAREN "("
+              RANGE_EXPR
+                LITERAL
+                  INTEGER "0"
+                DOT_DOT ".."
+                LITERAL
+                  INTEGER "6"
+              R_PAREN ")"
+            DOT "."
+            IDENT "map"
+            ARG_LIST
+              L_PAREN "("
+              ARG
+                CLOSURE_EXPR
+                  CLOSURE_PARAMS
+                    PIPE "|"
+                    CLOSURE_PARAM
+                      WILDCARD_PAT
+                        UNDERSCORE "_"
+                    PIPE "|"
+                  METHOD_CALL_EXPR
+                    PATH_EXPR
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "rand"
+                    DOT "."
+                    IDENT "pick"
+                    ARG_LIST
+                      L_PAREN "("
+                      ARG
+                        PATH_EXPR
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "ALPHABET"
+                      R_PAREN ")"
+              R_PAREN ")"
+          DOT "."
+          IDENT "collect"
+          ARG_LIST
+            L_PAREN "("
+            R_PAREN ")"
+        SEMI ";"
+      UNWRAP_EXPR
+        CALL_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "Code"
+              COLON_COLON "::"
+              PATH_SEGMENT
+                IDENT "new"
+          ARG_LIST
+            L_PAREN "("
+            ARG
+              PATH_EXPR
+                PATH
+                  PATH_SEGMENT
+                    IDENT "s"
+            R_PAREN ")"
+        QUESTION_BANG "?!"
+        STRING "\"built from ALPHABET\""
+      R_CURLY "}"
+  FN_ITEM
+    OUTER_ATTR
+      DOC_OUTER "/// `POST /links`"
+    FN_KW "fn"
+    NAME
+      IDENT "create"
+    PARAM_LIST
+      L_PAREN "("
+      PARAM
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "req"
+        COLON ":"
+        REF_TYPE
+          AMP "&"
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Request"
+      R_PAREN ")"
+    RET_TYPE
+      MINUS_GT "->"
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "Response"
+    EFFECT_CLAUSE
+      WITH_KW "with"
+      SIG_EFFECT
+        IDENT "links"
+        COLON ":"
+        EFFECT
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Links"
+      COMMA ","
+      SIG_EFFECT
+        EFFECT
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Rand"
+      COMMA ","
+      SIG_EFFECT
+        EFFECT
+          SUSPEND_KW "suspend"
+      COMMA ","
+      SIG_EFFECT
+        EFFECT
+          FAIL_KW "fail"
+          L_PAREN "("
+          ERROR_TYPES
+            PATH_TYPE
+              PATH
+                PATH_SEGMENT
+                  IDENT "LinkError"
+            PIPE "|"
+            PATH_TYPE
+              PATH
+                PATH_SEGMENT
+                  IDENT "DecodeError"
+          R_PAREN ")"
+    BLOCK
+      L_CURLY "{"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "new"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "NewLink"
+        EQ "="
+        PROPAGATE_EXPR
+          CALL_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "json"
+                COLON_COLON "::"
+                PATH_SEGMENT
+                  IDENT "decode"
+            ARG_LIST
+              L_PAREN "("
+              ARG
+                METHOD_CALL_EXPR
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "req"
+                  DOT "."
+                  IDENT "body"
+                  ARG_LIST
+                    L_PAREN "("
+                    R_PAREN ")"
+              R_PAREN ")"
+          QUESTION "?"
+        SEMI ";"
+      LET_STMT
+        LINE_COMMENT "// untrusted bytes in, validated value out"
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "code"
+        EQ "="
+        CALL_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "make_code"
+          ARG_LIST
+            L_PAREN "("
+            R_PAREN ")"
+        SEMI ";"
+      EXPR_STMT
+        PROPAGATE_EXPR
+          METHOD_CALL_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "links"
+            DOT "."
+            IDENT "put"
+            ARG_LIST
+              L_PAREN "("
+              ARG
+                METHOD_CALL_EXPR
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "code"
+                  DOT "."
+                  IDENT "clone"
+                  ARG_LIST
+                    L_PAREN "("
+                    R_PAREN ")"
+              COMMA ","
+              ARG
+                FIELD_EXPR
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "new"
+                  DOT "."
+                  IDENT "url"
+              R_PAREN ")"
+          QUESTION "?"
+        SEMI ";"
+      EXPR_STMT
+        METHOD_CALL_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "log"
+          DOT "."
+          IDENT "info"
+          ARG_LIST
+            L_PAREN "("
+            ARG
+              LITERAL
+                TAGGED_STRING "fmt\"created {code}\""
+            R_PAREN ")"
+        SEMI ";"
+      LINE_COMMENT "// log is ambient and write-only"
+      CALL_EXPR
+        PATH_EXPR
+          PATH
+            PATH_SEGMENT
+              IDENT "Response"
+            COLON_COLON "::"
+            PATH_SEGMENT
+              IDENT "json"
+        ARG_LIST
+          L_PAREN "("
+          ARG
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "Status"
+                COLON_COLON "::"
+                PATH_SEGMENT
+                  IDENT "Created"
+          COMMA ","
+          ARG
+            REF_EXPR
+              AMP "&"
+              STRUCT_LIT
+                PATH
+                  PATH_SEGMENT
+                    IDENT "Created"
+                L_CURLY "{"
+                FIELD_INIT
+                  IDENT "code"
+                R_CURLY "}"
+          R_PAREN ")"
+      R_CURLY "}"
+  FN_ITEM
+    OUTER_ATTR
+      DOC_OUTER "/// `GET /{code}`: a malformed code never gets here; the router answers 404."
+    FN_KW "fn"
+    NAME
+      IDENT "follow"
+    PARAM_LIST
+      L_PAREN "("
+      PARAM
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "code"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "Code"
+      R_PAREN ")"
+    RET_TYPE
+      MINUS_GT "->"
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "Response"
+    EFFECT_CLAUSE
+      WITH_KW "with"
+      SIG_EFFECT
+        IDENT "links"
+        COLON ":"
+        EFFECT
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Links"
+      COMMA ","
+      SIG_EFFECT
+        EFFECT
+          SUSPEND_KW "suspend"
+    BLOCK
+      L_CURLY "{"
+      MATCH_EXPR
+        MATCH_KW "match"
+        METHOD_CALL_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "links"
+          DOT "."
+          IDENT "get"
+          ARG_LIST
+            L_PAREN "("
+            ARG
+              REF_EXPR
+                AMP "&"
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "code"
+            R_PAREN ")"
+        MATCH_ARM_LIST
+          L_CURLY "{"
+          MATCH_ARM
+            TUPLE_STRUCT_PAT
+              PATH
+                PATH_SEGMENT
+                  IDENT "Some"
+              L_PAREN "("
+              PATH_PAT
+                PATH
+                  PATH_SEGMENT
+                    IDENT "t"
+              R_PAREN ")"
+            EQ_GT "=>"
+            CALL_EXPR
+              PATH_EXPR
+                PATH
+                  PATH_SEGMENT
+                    IDENT "Response"
+                  COLON_COLON "::"
+                  PATH_SEGMENT
+                    IDENT "redirect"
+              ARG_LIST
+                L_PAREN "("
+                ARG
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "Status"
+                      COLON_COLON "::"
+                      PATH_SEGMENT
+                        IDENT "PermanentRedirect"
+                COMMA ","
+                ARG
+                  REF_EXPR
+                    AMP "&"
+                    PATH_EXPR
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "t"
+                R_PAREN ")"
+            COMMA ","
+          MATCH_ARM
+            PATH_PAT
+              PATH
+                PATH_SEGMENT
+                  IDENT "None"
+            EQ_GT "=>"
+            CALL_EXPR
+              PATH_EXPR
+                PATH
+                  PATH_SEGMENT
+                    IDENT "Response"
+                  COLON_COLON "::"
+                  PATH_SEGMENT
+                    IDENT "status"
+              ARG_LIST
+                L_PAREN "("
+                ARG
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "Status"
+                      COLON_COLON "::"
+                      PATH_SEGMENT
+                        IDENT "NotFound"
+                R_PAREN ")"
+            COMMA ","
+          R_CURLY "}"
+      R_CURLY "}"
+  IMPL_ITEM
+    OUTER_ATTR
+      DOC_OUTER "/// How each error becomes a response."
+    IMPL_KW "impl"
+    PATH_TYPE
+      PATH
+        PATH_SEGMENT
+          IDENT "IntoResponse"
+    FOR_KW "for"
+    PATH_TYPE
+      PATH
+        PATH_SEGMENT
+          IDENT "DecodeError"
+    IMPL_BODY
+      L_CURLY "{"
+      FN_ITEM
+        FN_KW "fn"
+        NAME
+          IDENT "into_response"
+        PARAM_LIST
+          L_PAREN "("
+          SELF_PARAM
+            SELF_KW "self"
+          R_PAREN ")"
+        RET_TYPE
+          MINUS_GT "->"
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Response"
+        BLOCK
+          L_CURLY "{"
+          CALL_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "Response"
+                COLON_COLON "::"
+                PATH_SEGMENT
+                  IDENT "text"
+            ARG_LIST
+              L_PAREN "("
+              ARG
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "Status"
+                    COLON_COLON "::"
+                    PATH_SEGMENT
+                      IDENT "BadRequest"
+              COMMA ","
+              ARG
+                LITERAL
+                  TAGGED_STRING "fmt\"bad request: {self}\""
+              R_PAREN ")"
+          R_CURLY "}"
+      R_CURLY "}"
+  IMPL_ITEM
+    IMPL_KW "impl"
+    PATH_TYPE
+      PATH
+        PATH_SEGMENT
+          IDENT "IntoResponse"
+    FOR_KW "for"
+    PATH_TYPE
+      PATH
+        PATH_SEGMENT
+          IDENT "LinkError"
+    IMPL_BODY
+      L_CURLY "{"
+      FN_ITEM
+        FN_KW "fn"
+        NAME
+          IDENT "into_response"
+        PARAM_LIST
+          L_PAREN "("
+          SELF_PARAM
+            SELF_KW "self"
+          R_PAREN ")"
+        RET_TYPE
+          MINUS_GT "->"
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Response"
+        BLOCK
+          L_CURLY "{"
+          MATCH_EXPR
+            MATCH_KW "match"
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  SELF_KW "self"
+            MATCH_ARM_LIST
+              L_CURLY "{"
+              MATCH_ARM
+                TUPLE_STRUCT_PAT
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "LinkError"
+                    COLON_COLON "::"
+                    PATH_SEGMENT
+                      IDENT "Taken"
+                  L_PAREN "("
+                  WILDCARD_PAT
+                    UNDERSCORE "_"
+                  R_PAREN ")"
+                EQ_GT "=>"
+                CALL_EXPR
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "Response"
+                      COLON_COLON "::"
+                      PATH_SEGMENT
+                        IDENT "status"
+                  ARG_LIST
+                    L_PAREN "("
+                    ARG
+                      PATH_EXPR
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "Status"
+                          COLON_COLON "::"
+                          PATH_SEGMENT
+                            IDENT "Conflict"
+                    R_PAREN ")"
+              R_CURLY "}"
+          R_CURLY "}"
+      R_CURLY "}"
+  FN_ITEM
+    OUTER_ATTR
+      DOC_OUTER "/// The routes."
+    FN_KW "fn"
+    NAME
+      IDENT "app"
+    PARAM_LIST
+      L_PAREN "("
+      R_PAREN ")"
+    RET_TYPE
+      MINUS_GT "->"
+      IMPL_TYPE
+        IMPL_KW "impl"
+        BOUND
+          PATH
+            PATH_SEGMENT
+              IDENT "Handler"
+    EFFECT_CLAUSE
+      WITH_KW "with"
+      SIG_EFFECT
+        EFFECT
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Links"
+      COMMA ","
+      SIG_EFFECT
+        EFFECT
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Rand"
+      COMMA ","
+      SIG_EFFECT
+        EFFECT
+          SUSPEND_KW "suspend"
+    BLOCK
+      L_CURLY "{"
+      METHOD_CALL_EXPR
+        METHOD_CALL_EXPR
+          CALL_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "Router"
+                COLON_COLON "::"
+                PATH_SEGMENT
+                  IDENT "new"
+            ARG_LIST
+              L_PAREN "("
+              R_PAREN ")"
+          DOT "."
+          IDENT "post"
+          ARG_LIST
+            L_PAREN "("
+            ARG
+              LITERAL
+                STRING "\"/links\""
+            COMMA ","
+            ARG
+              PATH_EXPR
+                PATH
+                  PATH_SEGMENT
+                    IDENT "create"
+            R_PAREN ")"
+        DOT "."
+        IDENT "get"
+        ARG_LIST
+          L_PAREN "("
+          ARG
+            LITERAL
+              STRING "\"/{code}\""
+          COMMA ","
+          ARG
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "follow"
+          R_PAREN ")"
+      R_CURLY "}"
+  FN_ITEM
+    OUTER_ATTR
+      DOC_OUTER "/// Accepts connections until asked to stop."
+    VIS
+      PUB_KW "pub"
+    FN_KW "fn"
+    NAME
+      IDENT "serve"
+    PARAM_LIST
+      L_PAREN "("
+      PARAM
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "listener"
+        COLON ":"
+        REF_TYPE
+          AMP "&"
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Listener"
+      R_PAREN ")"
+    EFFECT_CLAUSE
+      WITH_KW "with"
+      SIG_EFFECT
+        EFFECT
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Links"
+      COMMA ","
+      SIG_EFFECT
+        EFFECT
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Rand"
+      COMMA ","
+      SIG_EFFECT
+        EFFECT
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Net"
+      COMMA ","
+      SIG_EFFECT
+        EFFECT
+          SUSPEND_KW "suspend"
+      COMMA ","
+      SIG_EFFECT
+        EFFECT
+          SPAWN_KW "spawn"
+    BLOCK
+      L_CURLY "{"
+      CALL_EXPR
+        PATH_EXPR
+          PATH
+            PATH_SEGMENT
+              IDENT "scope"
+        ARG_LIST
+          L_PAREN "("
+          ARG
+            CLOSURE_EXPR
+              CLOSURE_PARAMS
+                PIPE "|"
+                CLOSURE_PARAM
+                  PATH_PAT
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "s"
+                PIPE "|"
+              BLOCK
+                L_CURLY "{"
+                LOOP_EXPR
+                  LOOP_KW "loop"
+                  BLOCK
+                    L_CURLY "{"
+                    SELECT_EXPR
+                      SELECT_KW "select"
+                      MATCH_ARM_LIST
+                        L_CURLY "{"
+                        SELECT_ARM
+                          PATH_PAT
+                            PATH
+                              PATH_SEGMENT
+                                IDENT "conn"
+                          EQ "="
+                          METHOD_CALL_EXPR
+                            PATH_EXPR
+                              PATH
+                                PATH_SEGMENT
+                                  IDENT "listener"
+                            DOT "."
+                            IDENT "accept"
+                            ARG_LIST
+                              L_PAREN "("
+                              R_PAREN ")"
+                          EQ_GT "=>"
+                          METHOD_CALL_EXPR
+                            PATH_EXPR
+                              PATH
+                                PATH_SEGMENT
+                                  IDENT "s"
+                            DOT "."
+                            SPAWN_KW "spawn"
+                            ARG_LIST
+                              L_PAREN "("
+                              ARG
+                                CLOSURE_EXPR
+                                  CLOSURE_PARAMS
+                                    PIPE_PIPE "||"
+                                  CALL_EXPR
+                                    PATH_EXPR
+                                      PATH
+                                        PATH_SEGMENT
+                                          IDENT "handle"
+                                    ARG_LIST
+                                      L_PAREN "("
+                                      ARG
+                                        PATH_EXPR
+                                          PATH
+                                            PATH_SEGMENT
+                                              IDENT "conn"
+                                      R_PAREN ")"
+                              R_PAREN ")"
+                          COMMA ","
+                        SELECT_ARM
+                          WILDCARD_PAT
+                            UNDERSCORE "_"
+                          EQ "="
+                          CALL_EXPR
+                            PATH_EXPR
+                              PATH
+                                PATH_SEGMENT
+                                  IDENT "stop_requested"
+                            ARG_LIST
+                              L_PAREN "("
+                              R_PAREN ")"
+                          EQ_GT "=>"
+                          BREAK_EXPR
+                            BREAK_KW "break"
+                          COMMA ","
+                        LINE_COMMENT "// stop accepting; open connections finish"
+                        R_CURLY "}"
+                    R_CURLY "}"
+                R_CURLY "}"
+          R_PAREN ")"
+      R_CURLY "}"
+  FN_ITEM
+    OUTER_ATTR
+      DOC_OUTER "/// Serves one connection; a bug here cannot take down the server."
+    FN_KW "fn"
+    NAME
+      IDENT "handle"
+    PARAM_LIST
+      L_PAREN "("
+      PARAM
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "conn"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "Conn"
+      R_PAREN ")"
+    EFFECT_CLAUSE
+      WITH_KW "with"
+      SIG_EFFECT
+        EFFECT
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Links"
+      COMMA ","
+      SIG_EFFECT
+        EFFECT
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Rand"
+      COMMA ","
+      SIG_EFFECT
+        EFFECT
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Net"
+      COMMA ","
+      SIG_EFFECT
+        EFFECT
+          SUSPEND_KW "suspend"
+      COMMA ","
+      SIG_EFFECT
+        EFFECT
+          SPAWN_KW "spawn"
+    BLOCK
+      L_CURLY "{"
+      TRY_EXPR
+        TRY_KW "try"
+        BLOCK
+          L_CURLY "{"
+          PROPAGATE_EXPR
+            CALL_EXPR
+              PATH_EXPR
+                PATH
+                  PATH_SEGMENT
+                    IDENT "scope"
+              ARG_LIST
+                L_PAREN "("
+                ARG
+                  CLOSURE_EXPR
+                    CLOSURE_PARAMS
+                      PIPE "|"
+                      CLOSURE_PARAM
+                        PATH_PAT
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "c"
+                      PIPE "|"
+                    METHOD_CALL_EXPR
+                      PATH_EXPR
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "c"
+                      DOT "."
+                      SPAWN_KW "spawn"
+                      ARG_LIST
+                        L_PAREN "("
+                        ARG
+                          CLOSURE_EXPR
+                            CLOSURE_PARAMS
+                              PIPE_PIPE "||"
+                            CALL_EXPR
+                              PATH_EXPR
+                                PATH
+                                  PATH_SEGMENT
+                                    IDENT "http"
+                                  COLON_COLON "::"
+                                  PATH_SEGMENT
+                                    IDENT "serve_connection"
+                              ARG_LIST
+                                L_PAREN "("
+                                ARG
+                                  PATH_EXPR
+                                    PATH
+                                      PATH_SEGMENT
+                                        IDENT "conn"
+                                COMMA ","
+                                ARG
+                                  REF_EXPR
+                                    AMP "&"
+                                    CALL_EXPR
+                                      PATH_EXPR
+                                        PATH
+                                          PATH_SEGMENT
+                                            IDENT "app"
+                                      ARG_LIST
+                                        L_PAREN "("
+                                        R_PAREN ")"
+                                R_PAREN ")"
+                        R_PAREN ")"
+                COMMA ","
+                ARG
+                  IDENT "isolate"
+                  COLON ":"
+                  LITERAL
+                    TRUE_KW "true"
+                R_PAREN ")"
+            QUESTION "?"
+          R_CURLY "}"
+        CATCH
+          CATCH_KW "catch"
+          MATCH_ARM_LIST
+            L_CURLY "{"
+            MATCH_ARM
+              TUPLE_STRUCT_PAT
+                PATH
+                  PATH_SEGMENT
+                    IDENT "Trapped"
+                L_PAREN "("
+                PATH_PAT
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "t"
+                R_PAREN ")"
+              EQ_GT "=>"
+              METHOD_CALL_EXPR
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "log"
+                DOT "."
+                IDENT "error"
+                ARG_LIST
+                  L_PAREN "("
+                  ARG
+                    LITERAL
+                      TAGGED_STRING "fmt\"request trapped: {t}\""
+                  R_PAREN ")"
+              COMMA ","
+            MATCH_ARM
+              PATH_PAT
+                PATH
+                  PATH_SEGMENT
+                    IDENT "e"
+              EQ_GT "=>"
+              METHOD_CALL_EXPR
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "log"
+                DOT "."
+                IDENT "warn"
+                ARG_LIST
+                  L_PAREN "("
+                  ARG
+                    LITERAL
+                      TAGGED_STRING "fmt\"connection ended: {e}\""
+                  R_PAREN ")"
+              COMMA ","
+            R_CURLY "}"
+      R_CURLY "}"
+  FN_ITEM
+    FN_KW "fn"
+    NAME
+      IDENT "main"
+    PARAM_LIST
+      L_PAREN "("
+      PARAM
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "args"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "Args"
+      COMMA ","
+      PARAM
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "stdio"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "Stdio"
+      COMMA ","
+      PARAM
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "net"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "NetRoot"
+      COMMA ","
+      PARAM
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "entropy"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "Entropy"
+      R_PAREN ")"
+    RET_TYPE
+      MINUS_GT "->"
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "ExitCode"
+    BLOCK
+      L_CURLY "{"
+      WITH_EXPR
+        WITH_KW "with"
+        HANDLER
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Stderr"
+          EQ "="
+          FIELD_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "stdio"
+            DOT "."
+            IDENT "err"
+        BLOCK
+          L_CURLY "{"
+          LET_STMT
+            LET_KW "let"
+            PATH_PAT
+              PATH
+                PATH_SEGMENT
+                  IDENT "port"
+            EQ "="
+            TRY_EXPR
+              TRY_KW "try"
+              BLOCK
+                L_CURLY "{"
+                PROPAGATE_EXPR
+                  METHOD_CALL_EXPR
+                    PATH_EXPR
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "args"
+                    DOT "."
+                    IDENT "value"
+                    COLON_COLON "::"
+                    GENERIC_ARGS
+                      LT "<"
+                      TYPE_ARG
+                        PATH_TYPE
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "Port"
+                      GT ">"
+                    ARG_LIST
+                      L_PAREN "("
+                      ARG
+                        LITERAL
+                          STRING "\"port\""
+                      COMMA ","
+                      ARG
+                        DEFAULT_KW "default"
+                        COLON ":"
+                        LITERAL
+                          INTEGER "8080"
+                      R_PAREN ")"
+                  QUESTION "?"
+                R_CURLY "}"
+              CATCH
+                CATCH_KW "catch"
+                MATCH_ARM_LIST
+                  L_CURLY "{"
+                  MATCH_ARM
+                    PATH_PAT
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "e"
+                    EQ_GT "=>"
+                    BLOCK
+                      L_CURLY "{"
+                      EXPR_STMT
+                        CALL_EXPR
+                          PATH_EXPR
+                            PATH
+                              PATH_SEGMENT
+                                IDENT "eprintln"
+                          ARG_LIST
+                            L_PAREN "("
+                            ARG
+                              LITERAL
+                                TAGGED_STRING "fmt\"bad --port: {e}\""
+                            R_PAREN ")"
+                        SEMI ";"
+                      RETURN_EXPR
+                        RETURN_KW "return"
+                        PATH_EXPR
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "ExitCode"
+                            COLON_COLON "::"
+                            PATH_SEGMENT
+                              IDENT "Usage"
+                      R_CURLY "}"
+                  R_CURLY "}"
+            SEMI ";"
+          WITH_EXPR
+            WITH_KW "with"
+            HANDLER
+              PATH_TYPE
+                PATH
+                  PATH_SEGMENT
+                    IDENT "Net"
+              EQ "="
+              PATH_EXPR
+                PATH
+                  PATH_SEGMENT
+                    IDENT "net"
+            COMMA ","
+            HANDLER
+              PATH_TYPE
+                PATH
+                  PATH_SEGMENT
+                    IDENT "Rand"
+              EQ "="
+              PATH_EXPR
+                PATH
+                  PATH_SEGMENT
+                    IDENT "entropy"
+            COMMA ","
+            HANDLER
+              PATH_TYPE
+                PATH
+                  PATH_SEGMENT
+                    IDENT "Links"
+              EQ "="
+              CALL_EXPR
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "MemoryLinks"
+                    COLON_COLON "::"
+                    PATH_SEGMENT
+                      IDENT "new"
+                ARG_LIST
+                  L_PAREN "("
+                  R_PAREN ")"
+            BLOCK
+              L_CURLY "{"
+              LET_STMT
+                LET_KW "let"
+                PATH_PAT
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "listener"
+                EQ "="
+                TRY_EXPR
+                  TRY_KW "try"
+                  BLOCK
+                    L_CURLY "{"
+                    PROPAGATE_EXPR
+                      METHOD_CALL_EXPR
+                        PATH_EXPR
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "net"
+                        DOT "."
+                        IDENT "listen"
+                        ARG_LIST
+                          L_PAREN "("
+                          ARG
+                            PATH_EXPR
+                              PATH
+                                PATH_SEGMENT
+                                  IDENT "port"
+                          R_PAREN ")"
+                      QUESTION "?"
+                    R_CURLY "}"
+                  CATCH
+                    CATCH_KW "catch"
+                    MATCH_ARM_LIST
+                      L_CURLY "{"
+                      MATCH_ARM
+                        PATH_PAT
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "e"
+                        EQ_GT "=>"
+                        BLOCK
+                          L_CURLY "{"
+                          EXPR_STMT
+                            CALL_EXPR
+                              PATH_EXPR
+                                PATH
+                                  PATH_SEGMENT
+                                    IDENT "eprintln"
+                              ARG_LIST
+                                L_PAREN "("
+                                ARG
+                                  LITERAL
+                                    TAGGED_STRING "fmt\"cannot listen on {port}: {e}\""
+                                R_PAREN ")"
+                            SEMI ";"
+                          RETURN_EXPR
+                            RETURN_KW "return"
+                            PATH_EXPR
+                              PATH
+                                PATH_SEGMENT
+                                  IDENT "ExitCode"
+                                COLON_COLON "::"
+                                PATH_SEGMENT
+                                  IDENT "Unavailable"
+                          R_CURLY "}"
+                      R_CURLY "}"
+                SEMI ";"
+              EXPR_STMT
+                CALL_EXPR
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "scope"
+                  ARG_LIST
+                    L_PAREN "("
+                    ARG
+                      CLOSURE_EXPR
+                        CLOSURE_PARAMS
+                          PIPE "|"
+                          CLOSURE_PARAM
+                            PATH_PAT
+                              PATH
+                                PATH_SEGMENT
+                                  IDENT "root"
+                          PIPE "|"
+                        METHOD_CALL_EXPR
+                          PATH_EXPR
+                            PATH
+                              PATH_SEGMENT
+                                IDENT "root"
+                          DOT "."
+                          SPAWN_KW "spawn"
+                          ARG_LIST
+                            L_PAREN "("
+                            ARG
+                              CLOSURE_EXPR
+                                CLOSURE_PARAMS
+                                  PIPE_PIPE "||"
+                                CALL_EXPR
+                                  PATH_EXPR
+                                    PATH
+                                      PATH_SEGMENT
+                                        IDENT "serve"
+                                  ARG_LIST
+                                    L_PAREN "("
+                                    ARG
+                                      REF_EXPR
+                                        AMP "&"
+                                        PATH_EXPR
+                                          PATH
+                                            PATH_SEGMENT
+                                              IDENT "listener"
+                                    R_PAREN ")"
+                            R_PAREN ")"
+                    COMMA ","
+                    ARG
+                      IDENT "stop_on"
+                      COLON ":"
+                      ARRAY_EXPR
+                        L_BRACK "["
+                        PATH_EXPR
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "SIGINT"
+                        COMMA ","
+                        PATH_EXPR
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "SIGTERM"
+                        R_BRACK "]"
+                    COMMA ","
+                    ARG
+                      IDENT "grace"
+                      COLON ":"
+                      LITERAL
+                        INTEGER "10"
+                        UNIT_SUFFIX
+                          L_BRACK "["
+                          PATH_TYPE
+                            PATH
+                              PATH_SEGMENT
+                                IDENT "s"
+                          R_BRACK "]"
+                    R_PAREN ")"
+                SEMI ";"
+              R_CURLY "}"
+          R_CURLY "}"
+      PATH_EXPR
+        PATH
+          PATH_SEGMENT
+            IDENT "ExitCode"
+          COLON_COLON "::"
+          PATH_SEGMENT
+            IDENT "Ok"
+      R_CURLY "}"
+  TEST_ITEM
+    TEST_KW "test"
+    STRING "\"a created link redirects\""
+    FOR_KW "for"
+    PATH
+      PATH_SEGMENT
+        IDENT "app"
+    BLOCK
+      L_CURLY "{"
+      WITH_EXPR
+        WITH_KW "with"
+        HANDLER
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Links"
+          EQ "="
+          CALL_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "MemoryLinks"
+                COLON_COLON "::"
+                PATH_SEGMENT
+                  IDENT "new"
+            ARG_LIST
+              L_PAREN "("
+              R_PAREN ")"
+        COMMA ","
+        HANDLER
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Rand"
+          EQ "="
+          CALL_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "rand"
+                COLON_COLON "::"
+                PATH_SEGMENT
+                  IDENT "seeded"
+            ARG_LIST
+              L_PAREN "("
+              ARG
+                LITERAL
+                  INTEGER "1"
+              R_PAREN ")"
+        BLOCK
+          L_CURLY "{"
+          LET_STMT
+            LET_KW "let"
+            PATH_PAT
+              PATH
+                PATH_SEGMENT
+                  IDENT "created"
+            EQ "="
+            METHOD_CALL_EXPR
+              CALL_EXPR
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "app"
+                ARG_LIST
+                  L_PAREN "("
+                  R_PAREN ")"
+              DOT "."
+              IDENT "handle"
+              ARG_LIST
+                L_PAREN "("
+                ARG
+                  REF_EXPR
+                    AMP "&"
+                    CALL_EXPR
+                      PATH_EXPR
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "Request"
+                          COLON_COLON "::"
+                          PATH_SEGMENT
+                            IDENT "post"
+                      ARG_LIST
+                        L_PAREN "("
+                        ARG
+                          LITERAL
+                            STRING "\"/links\""
+                        COMMA ","
+                        ARG
+                          IDENT "body"
+                          COLON ":"
+                          LITERAL
+                            RAW_STRING "r#\"{\"url\": \"https://moddil.org\"}\"#"
+                        R_PAREN ")"
+                R_PAREN ")"
+            SEMI ";"
+          EXPR_STMT
+            CALL_EXPR
+              PATH_EXPR
+                PATH
+                  PATH_SEGMENT
+                    IDENT "assert"
+              ARG_LIST
+                L_PAREN "("
+                ARG
+                  BIN_EXPR
+                    METHOD_CALL_EXPR
+                      PATH_EXPR
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "created"
+                      DOT "."
+                      IDENT "status"
+                      ARG_LIST
+                        L_PAREN "("
+                        R_PAREN ")"
+                    EQ_EQ "=="
+                    PATH_EXPR
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "Status"
+                        COLON_COLON "::"
+                        PATH_SEGMENT
+                          IDENT "Created"
+                R_PAREN ")"
+            SEMI ";"
+          LET_STMT
+            LET_KW "let"
+            PATH_PAT
+              PATH
+                PATH_SEGMENT
+                  IDENT "code"
+            COLON ":"
+            PATH_TYPE
+              PATH
+                PATH_SEGMENT
+                  IDENT "Created"
+            EQ "="
+            PROPAGATE_EXPR
+              CALL_EXPR
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "json"
+                    COLON_COLON "::"
+                    PATH_SEGMENT
+                      IDENT "decode"
+                ARG_LIST
+                  L_PAREN "("
+                  ARG
+                    METHOD_CALL_EXPR
+                      PATH_EXPR
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "created"
+                      DOT "."
+                      IDENT "body"
+                      ARG_LIST
+                        L_PAREN "("
+                        R_PAREN ")"
+                  R_PAREN ")"
+              QUESTION "?"
+            SEMI ";"
+          LET_STMT
+            LET_KW "let"
+            PATH_PAT
+              PATH
+                PATH_SEGMENT
+                  IDENT "followed"
+            EQ "="
+            METHOD_CALL_EXPR
+              CALL_EXPR
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "app"
+                ARG_LIST
+                  L_PAREN "("
+                  R_PAREN ")"
+              DOT "."
+              IDENT "handle"
+              ARG_LIST
+                L_PAREN "("
+                ARG
+                  REF_EXPR
+                    AMP "&"
+                    CALL_EXPR
+                      PATH_EXPR
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "Request"
+                          COLON_COLON "::"
+                          PATH_SEGMENT
+                            IDENT "get"
+                      ARG_LIST
+                        L_PAREN "("
+                        ARG
+                          LITERAL
+                            TAGGED_STRING "fmt\"/{code.code}\""
+                        R_PAREN ")"
+                R_PAREN ")"
+            SEMI ";"
+          EXPR_STMT
+            CALL_EXPR
+              PATH_EXPR
+                PATH
+                  PATH_SEGMENT
+                    IDENT "assert"
+              ARG_LIST
+                L_PAREN "("
+                ARG
+                  BIN_EXPR
+                    METHOD_CALL_EXPR
+                      PATH_EXPR
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "followed"
+                      DOT "."
+                      IDENT "status"
+                      ARG_LIST
+                        L_PAREN "("
+                        R_PAREN ")"
+                    EQ_EQ "=="
+                    PATH_EXPR
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "Status"
+                        COLON_COLON "::"
+                        PATH_SEGMENT
+                          IDENT "PermanentRedirect"
+                R_PAREN ")"
+            SEMI ";"
+          R_CURLY "}"
+      R_CURLY "}"
+  TEST_ITEM
+    TEST_KW "test"
+    STRING "\"plain http is rejected\""
+    FOR_KW "for"
+    PATH
+      PATH_SEGMENT
+        IDENT "app"
+    BLOCK
+      L_CURLY "{"
+      WITH_EXPR
+        WITH_KW "with"
+        HANDLER
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Links"
+          EQ "="
+          CALL_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "MemoryLinks"
+                COLON_COLON "::"
+                PATH_SEGMENT
+                  IDENT "new"
+            ARG_LIST
+              L_PAREN "("
+              R_PAREN ")"
+        COMMA ","
+        HANDLER
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Rand"
+          EQ "="
+          CALL_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "rand"
+                COLON_COLON "::"
+                PATH_SEGMENT
+                  IDENT "seeded"
+            ARG_LIST
+              L_PAREN "("
+              ARG
+                LITERAL
+                  INTEGER "1"
+              R_PAREN ")"
+        BLOCK
+          L_CURLY "{"
+          LET_STMT
+            LET_KW "let"
+            PATH_PAT
+              PATH
+                PATH_SEGMENT
+                  IDENT "r"
+            EQ "="
+            METHOD_CALL_EXPR
+              CALL_EXPR
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "app"
+                ARG_LIST
+                  L_PAREN "("
+                  R_PAREN ")"
+              DOT "."
+              IDENT "handle"
+              ARG_LIST
+                L_PAREN "("
+                ARG
+                  REF_EXPR
+                    AMP "&"
+                    CALL_EXPR
+                      PATH_EXPR
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "Request"
+                          COLON_COLON "::"
+                          PATH_SEGMENT
+                            IDENT "post"
+                      ARG_LIST
+                        L_PAREN "("
+                        ARG
+                          LITERAL
+                            STRING "\"/links\""
+                        COMMA ","
+                        ARG
+                          IDENT "body"
+                          COLON ":"
+                          LITERAL
+                            RAW_STRING "r#\"{\"url\": \"http://moddil.org\"}\"#"
+                        R_PAREN ")"
+                R_PAREN ")"
+            SEMI ";"
+          EXPR_STMT
+            CALL_EXPR
+              PATH_EXPR
+                PATH
+                  PATH_SEGMENT
+                    IDENT "assert"
+              ARG_LIST
+                L_PAREN "("
+                ARG
+                  BIN_EXPR
+                    METHOD_CALL_EXPR
+                      PATH_EXPR
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "r"
+                      DOT "."
+                      IDENT "status"
+                      ARG_LIST
+                        L_PAREN "("
+                        R_PAREN ")"
+                    EQ_EQ "=="
+                    PATH_EXPR
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "Status"
+                        COLON_COLON "::"
+                        PATH_SEGMENT
+                          IDENT "BadRequest"
+                R_PAREN ")"
+            SEMI ";"
+          R_CURLY "}"
+      R_CURLY "}"
+  TEST_ITEM
+    TEST_KW "test"
+    STRING "\"serves over a lossy network\""
+    FOR_KW "for"
+    PATH
+      PATH_SEGMENT
+        IDENT "serve"
+    BLOCK
+      L_CURLY "{"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "sim"
+        EQ "="
+        CALL_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "Sim"
+              COLON_COLON "::"
+              PATH_SEGMENT
+                IDENT "new"
+          ARG_LIST
+            L_PAREN "("
+            ARG
+              IDENT "seed"
+              COLON ":"
+              LITERAL
+                INTEGER "42"
+            R_PAREN ")"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        TUPLE_PAT
+          L_PAREN "("
+          PATH_PAT
+            PATH
+              PATH_SEGMENT
+                IDENT "server"
+          COMMA ","
+          PATH_PAT
+            PATH
+              PATH_SEGMENT
+                IDENT "client"
+          R_PAREN ")"
+        EQ "="
+        TUPLE_EXPR
+          L_PAREN "("
+          METHOD_CALL_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "sim"
+            DOT "."
+            IDENT "node"
+            ARG_LIST
+              L_PAREN "("
+              R_PAREN ")"
+          COMMA ","
+          METHOD_CALL_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "sim"
+            DOT "."
+            IDENT "node"
+            ARG_LIST
+              L_PAREN "("
+              R_PAREN ")"
+          R_PAREN ")"
+        SEMI ";"
+      EXPR_STMT
+        CALL_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "scope"
+          ARG_LIST
+            L_PAREN "("
+            ARG
+              CLOSURE_EXPR
+                CLOSURE_PARAMS
+                  PIPE "|"
+                  CLOSURE_PARAM
+                    PATH_PAT
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "s"
+                  PIPE "|"
+                BLOCK
+                  L_CURLY "{"
+                  LET_STMT
+                    LET_KW "let"
+                    PATH_PAT
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "net"
+                    EQ "="
+                    METHOD_CALL_EXPR
+                      FIELD_EXPR
+                        PATH_EXPR
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "sim"
+                        DOT "."
+                        IDENT "net"
+                      DOT "."
+                      IDENT "endpoint"
+                      ARG_LIST
+                        L_PAREN "("
+                        ARG
+                          PATH_EXPR
+                            PATH
+                              PATH_SEGMENT
+                                IDENT "server"
+                        R_PAREN ")"
+                    SEMI ";"
+                  WITH_EXPR
+                    WITH_KW "with"
+                    HANDLER
+                      PATH_TYPE
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "Net"
+                      EQ "="
+                      PATH_EXPR
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "net"
+                    COMMA ","
+                    HANDLER
+                      PATH_TYPE
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "Rand"
+                      EQ "="
+                      METHOD_CALL_EXPR
+                        PATH_EXPR
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "sim"
+                        DOT "."
+                        IDENT "rng"
+                        ARG_LIST
+                          L_PAREN "("
+                          ARG
+                            PATH_EXPR
+                              PATH
+                                PATH_SEGMENT
+                                  IDENT "server"
+                          R_PAREN ")"
+                    COMMA ","
+                    HANDLER
+                      PATH_TYPE
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "Links"
+                      EQ "="
+                      CALL_EXPR
+                        PATH_EXPR
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "MemoryLinks"
+                            COLON_COLON "::"
+                            PATH_SEGMENT
+                              IDENT "new"
+                        ARG_LIST
+                          L_PAREN "("
+                          R_PAREN ")"
+                    BLOCK
+                      L_CURLY "{"
+                      LET_STMT
+                        LET_KW "let"
+                        PATH_PAT
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "listener"
+                        EQ "="
+                        PROPAGATE_EXPR
+                          METHOD_CALL_EXPR
+                            PATH_EXPR
+                              PATH
+                                PATH_SEGMENT
+                                  IDENT "net"
+                            DOT "."
+                            IDENT "listen"
+                            ARG_LIST
+                              L_PAREN "("
+                              ARG
+                                LITERAL
+                                  INTEGER "80"
+                              R_PAREN ")"
+                          QUESTION "?"
+                        SEMI ";"
+                      EXPR_STMT
+                        METHOD_CALL_EXPR
+                          PATH_EXPR
+                            PATH
+                              PATH_SEGMENT
+                                IDENT "s"
+                          DOT "."
+                          SPAWN_KW "spawn"
+                          ARG_LIST
+                            L_PAREN "("
+                            ARG
+                              CLOSURE_EXPR
+                                CLOSURE_PARAMS
+                                  PIPE_PIPE "||"
+                                CALL_EXPR
+                                  PATH_EXPR
+                                    PATH
+                                      PATH_SEGMENT
+                                        IDENT "serve"
+                                  ARG_LIST
+                                    L_PAREN "("
+                                    ARG
+                                      REF_EXPR
+                                        AMP "&"
+                                        PATH_EXPR
+                                          PATH
+                                            PATH_SEGMENT
+                                              IDENT "listener"
+                                    R_PAREN ")"
+                            R_PAREN ")"
+                        SEMI ";"
+                      R_CURLY "}"
+                  WITH_EXPR
+                    WITH_KW "with"
+                    HANDLER
+                      PATH_TYPE
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "Net"
+                      EQ "="
+                      CALL_EXPR
+                        PATH_EXPR
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "drop_messages"
+                        ARG_LIST
+                          L_PAREN "("
+                          ARG
+                            IDENT "rate"
+                            COLON ":"
+                            LITERAL
+                              FLOAT "0.1"
+                          COMMA ","
+                          ARG
+                            IDENT "outer"
+                            COLON ":"
+                            METHOD_CALL_EXPR
+                              FIELD_EXPR
+                                PATH_EXPR
+                                  PATH
+                                    PATH_SEGMENT
+                                      IDENT "sim"
+                                DOT "."
+                                IDENT "net"
+                              DOT "."
+                              IDENT "endpoint"
+                              ARG_LIST
+                                L_PAREN "("
+                                ARG
+                                  PATH_EXPR
+                                    PATH
+                                      PATH_SEGMENT
+                                        IDENT "client"
+                                R_PAREN ")"
+                          R_PAREN ")"
+                    BLOCK
+                      L_CURLY "{"
+                      LET_STMT
+                        LET_KW "let"
+                        PATH_PAT
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "r"
+                        EQ "="
+                        PROPAGATE_EXPR
+                          CALL_EXPR
+                            PATH_EXPR
+                              PATH
+                                PATH_SEGMENT
+                                  IDENT "http"
+                                COLON_COLON "::"
+                                PATH_SEGMENT
+                                  IDENT "post"
+                            ARG_LIST
+                              L_PAREN "("
+                              ARG
+                                LITERAL
+                                  TAGGED_STRING "fmt\"http://{server.addr()}/links\""
+                              COMMA ","
+                              ARG
+                                IDENT "body"
+                                COLON ":"
+                                LITERAL
+                                  RAW_STRING "r#\"{\"url\": \"https://moddil.org\"}\"#"
+                              COMMA ","
+                              ARG
+                                IDENT "retries"
+                                COLON ":"
+                                LITERAL
+                                  INTEGER "3"
+                              R_PAREN ")"
+                          QUESTION "?"
+                        SEMI ";"
+                      EXPR_STMT
+                        CALL_EXPR
+                          PATH_EXPR
+                            PATH
+                              PATH_SEGMENT
+                                IDENT "assert"
+                          ARG_LIST
+                            L_PAREN "("
+                            ARG
+                              BIN_EXPR
+                                METHOD_CALL_EXPR
+                                  PATH_EXPR
+                                    PATH
+                                      PATH_SEGMENT
+                                        IDENT "r"
+                                  DOT "."
+                                  IDENT "status"
+                                  ARG_LIST
+                                    L_PAREN "("
+                                    R_PAREN ")"
+                                EQ_EQ "=="
+                                PATH_EXPR
+                                  PATH
+                                    PATH_SEGMENT
+                                      IDENT "Status"
+                                    COLON_COLON "::"
+                                    PATH_SEGMENT
+                                      IDENT "Created"
+                            R_PAREN ")"
+                        SEMI ";"
+                      R_CURLY "}"
+                  EXPR_STMT
+                    METHOD_CALL_EXPR
+                      PATH_EXPR
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "sim"
+                      DOT "."
+                      IDENT "stop_all"
+                      ARG_LIST
+                        L_PAREN "("
+                        R_PAREN ")"
+                    SEMI ";"
+                  LINE_COMMENT "// serve sees stop_requested() and returns"
+                  R_CURLY "}"
+            R_PAREN ")"
+        SEMI ";"
+      R_CURLY "}"

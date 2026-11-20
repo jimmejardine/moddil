@@ -9,6 +9,7 @@ mod expand;
 mod gbnf;
 #[cfg(test)]
 mod gbnf_check;
+mod kinds;
 mod lark;
 mod ll;
 mod parse;
@@ -146,6 +147,29 @@ pub struct Generated {
     pub uncovered: Vec<String>,
 }
 
+/// `count` random token edits of the valid corpus, rendered as source text, each with whether
+/// the grammar accepts it (by the LL(3) recogniser). Deterministic for a given `seed`. Used to test
+/// that the hand-written parser accepts exactly what the grammar accepts.
+///
+/// # Errors
+///
+/// Returns every problem that stops the grammar from being analysed.
+pub fn edited_cases(
+    source: &str,
+    count: usize,
+    seed: u64,
+) -> Result<Vec<(String, bool)>, Vec<GrammarError>> {
+    let grammar = parse::parse(source)?;
+    let bnf = expand::expand(&grammar)?;
+    let mut rec = recognise::Recogniser::new(&bnf, DEFAULT_K);
+    let corpus = corpus::generate(&mut rec);
+    let edits = corpus::edits(&mut rec, &corpus.valid, count, seed);
+    Ok(edits
+        .into_iter()
+        .map(|(tokens, ok)| (corpus::render(&bnf, &tokens), ok))
+        .collect())
+}
+
 /// Generates the parser corpus and the derived grammars from `source`.
 ///
 /// # Errors
@@ -184,6 +208,10 @@ pub fn generate(source: &str) -> Result<Generated, Vec<GrammarError>> {
         GeneratedFile {
             path: "editors/tree-sitter-moddil/grammar.js".to_string(),
             contents: treesitter::emit(&grammar),
+        },
+        GeneratedFile {
+            path: "crates/syntax/src/generated/kinds.rs".to_string(),
+            contents: kinds::emit(&grammar),
         },
     ];
     Ok(Generated {

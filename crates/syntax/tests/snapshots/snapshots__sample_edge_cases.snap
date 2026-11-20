@@ -1,0 +1,917 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "tree(cases[1])"
+---
+SOURCE_FILE
+  INNER_ATTR
+    DOC_INNER "//! Lexing and syntax edge cases, written as a real programmer would."
+  TYPE_ITEM
+    BLOCK_COMMENT "/* a block comment /* that nests */ and ends here */"
+    TYPE_KW "type"
+    NAME
+      IDENT "Grid"
+    EQ "="
+    PATH_TYPE
+      PATH
+        PATH_SEGMENT
+          IDENT "Vec"
+          GENERIC_ARGS
+            LT "<"
+            TYPE_ARG
+              PATH_TYPE
+                PATH
+                  PATH_SEGMENT
+                    IDENT "Vec"
+                    GENERIC_ARGS
+                      LT "<"
+                      TYPE_ARG
+                        PATH_TYPE
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "f64"
+                          UNIT_SUFFIX
+                            L_BRACK "["
+                            PATH_TYPE
+                              PATH
+                                PATH_SEGMENT
+                                  IDENT "m"
+                            R_BRACK "]"
+                      GT ">"
+            GT ">"
+    SEMI ";"
+  TYPE_ITEM
+    TYPE_KW "type"
+    NAME
+      IDENT "Money"
+    EQ "="
+    PATH_TYPE
+      PATH
+        PATH_SEGMENT
+          IDENT "Fixed"
+          GENERIC_ARGS
+            LT "<"
+            CONST_ARG
+              INTEGER "4"
+            GT ">"
+      UNIT_SUFFIX
+        L_BRACK "["
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "USD"
+        R_BRACK "]"
+    SEMI ";"
+  TYPE_ITEM
+    TYPE_KW "type"
+    NAME
+      IDENT "Rate"
+    EQ "="
+    REFINED_TYPE
+      L_PAREN "("
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "u32"
+      WHERE_KW "where"
+      BIN_EXPR
+        PATH_EXPR
+          PATH
+            PATH_SEGMENT
+              SELF_KW "self"
+        GT_EQ ">="
+        LITERAL
+          INTEGER "1"
+      R_PAREN ")"
+    SEMI ";"
+  TYPE_ITEM
+    TYPE_KW "type"
+    NAME
+      IDENT "Handler"
+    EQ "="
+    PATH_TYPE
+      PATH
+        PATH_SEGMENT
+          IDENT "Box"
+          GENERIC_ARGS
+            LT "<"
+            TYPE_ARG
+              EFFECT_TYPE
+                DYN_TYPE
+                  DYN_KW "dyn"
+                  BOUND
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "Fn"
+                    FN_SUGAR
+                      TYPE_LIST
+                        L_PAREN "("
+                        PATH_TYPE
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "Event"
+                        R_PAREN ")"
+                TYPE_EFFECTS
+                  WITH_KW "with"
+                  L_PAREN "("
+                  EFFECT
+                    SUSPEND_KW "suspend"
+                  COMMA ","
+                  EFFECT
+                    FAIL_KW "fail"
+                    L_PAREN "("
+                    ERROR_TYPES
+                      PATH_TYPE
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "HandlerError"
+                    R_PAREN ")"
+                  R_PAREN ")"
+            GT ">"
+    SEMI ";"
+  UNIT_ITEM
+    UNIT_KW "unit"
+    NAME
+      IDENT "km"
+    EQ "="
+    UNIT_DEF
+      UNIT_BIN
+        LITERAL
+          INTEGER "1000"
+        STAR "*"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "m"
+    SEMI ";"
+  UNIT_ITEM
+    UNIT_KW "unit"
+    NAME
+      IDENT "degC"
+    EQ "="
+    UNIT_DEF
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "K"
+      PLUS "+"
+      FLOAT "273.15"
+    SEMI ";"
+  DIMENSION_ITEM
+    DIMENSION_KW "dimension"
+    NAME
+      IDENT "Velocity"
+    EQ "="
+    UNIT_BIN
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "Length"
+      SLASH "/"
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "Time"
+    SEMI ";"
+  STRUCT_ITEM
+    OUTER_ATTR
+      POUND_L_BRACK "#["
+      ATTR
+        PATH
+          PATH_SEGMENT
+            IDENT "derive"
+        ATTR_INPUT
+          L_PAREN "("
+          IDENT "Copy"
+          COMMA ","
+          IDENT "Clone"
+          R_PAREN ")"
+      R_BRACK "]"
+    STRUCT_KW "struct"
+    NAME
+      IDENT "Pair"
+    TUPLE_FIELDS
+      L_PAREN "("
+      TUPLE_FIELD
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "u8"
+      COMMA ","
+      TUPLE_FIELD
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "u8"
+      R_PAREN ")"
+    SEMI ";"
+  STRUCT_ITEM
+    LINEAR_KW "linear"
+    STRUCT_KW "struct"
+    NAME
+      IDENT "Txn"
+    STRUCT_BODY
+      L_CURLY "{"
+      FIELD
+        NAME
+          IDENT "id"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "u64"
+      R_CURLY "}"
+  VIEW_ITEM
+    VIEW_KW "view"
+    NAME
+      IDENT "Rows"
+    GENERIC_PARAMS
+      LT "<"
+      TYPE_PARAM
+        NAME
+          IDENT "T"
+      GT ">"
+    STRUCT_BODY
+      L_CURLY "{"
+      FIELD
+        NAME
+          IDENT "buf"
+        COLON ":"
+        REF_TYPE
+          AMP "&"
+          SLICE_TYPE
+            L_BRACK "["
+            PATH_TYPE
+              PATH
+                PATH_SEGMENT
+                  IDENT "T"
+            R_BRACK "]"
+      COMMA ","
+      FIELD
+        NAME
+          IDENT "at"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "int"
+      R_CURLY "}"
+  FN_ITEM
+    GEN_KW "gen"
+    FN_KW "fn"
+    NAME
+      IDENT "guard"
+    PARAM_LIST
+      L_PAREN "("
+      PARAM
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "start"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "Pos"
+      R_PAREN ")"
+    RET_TYPE
+      MINUS_GT "->"
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "Action"
+    RESUME_CLAUSE
+      RESUME_KW "resume"
+      NAME
+        IDENT "first"
+      COLON ":"
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "Frame"
+    BLOCK
+      L_CURLY "{"
+      LET_STMT
+        LET_KW "let"
+        IDENT_PAT
+          MUT_KW "mut"
+          NAME
+            IDENT "f"
+        EQ "="
+        PATH_EXPR
+          PATH
+            PATH_SEGMENT
+              IDENT "first"
+        SEMI ";"
+      LOOP_EXPR
+        LOOP_KW "loop"
+        BLOCK
+          L_CURLY "{"
+          WHILE_EXPR
+            WHILE_KW "while"
+            PREFIX_EXPR
+              BANG "!"
+              METHOD_CALL_EXPR
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "f"
+                DOT "."
+                IDENT "sees"
+                ARG_LIST
+                  L_PAREN "("
+                  R_PAREN ")"
+            BLOCK
+              L_CURLY "{"
+              ASSIGN_EXPR
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "f"
+                EQ "="
+                YIELD_EXPR
+                  YIELD_KW "yield"
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "Action"
+                      COLON_COLON "::"
+                      PATH_SEGMENT
+                        IDENT "Patrol"
+              R_CURLY "}"
+          EXPR_STMT
+            ASSIGN_EXPR
+              PATH_EXPR
+                PATH
+                  PATH_SEGMENT
+                    IDENT "f"
+              EQ "="
+              YIELD_EXPR
+                YIELD_KW "yield"
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "Action"
+                    COLON_COLON "::"
+                    PATH_SEGMENT
+                      IDENT "Shout"
+            SEMI ";"
+          R_CURLY "}"
+      R_CURLY "}"
+  FN_ITEM
+    FN_KW "fn"
+    NAME
+      IDENT "first_word"
+    PARAM_LIST
+      L_PAREN "("
+      PARAM
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "text"
+        COLON ":"
+        REF_TYPE
+          AMP "&"
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "str"
+      COMMA ","
+      PARAM
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "sep"
+        COLON ":"
+        REF_TYPE
+          AMP "&"
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "str"
+      R_PAREN ")"
+    RET_TYPE
+      MINUS_GT "->"
+      REF_TYPE
+        AMP "&"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "str"
+    FROM_CLAUSE
+      FROM_KW "from"
+      IDENT "text"
+    EFFECT_CLAUSE
+      WITH_KW "with"
+      SIG_EFFECT
+        EFFECT
+          FAIL_KW "fail"
+          L_PAREN "("
+          ERROR_TYPES
+            PATH_TYPE
+              PATH
+                PATH_SEGMENT
+                  IDENT "E"
+          R_PAREN ")"
+    WHERE_CLAUSE
+      WHERE_KW "where"
+      WHERE_PRED
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "E"
+        COLON ":"
+        BOUND
+          PATH
+            PATH_SEGMENT
+              IDENT "Error"
+    CONTRACT
+      REQUIRES_KW "requires"
+      ALWAYS_KW "always"
+      NAME
+        IDENT "valid"
+      COLON ":"
+      BIN_EXPR
+        METHOD_CALL_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "text"
+          DOT "."
+          IDENT "len"
+          ARG_LIST
+            L_PAREN "("
+            R_PAREN ")"
+        GT ">"
+        LITERAL
+          INTEGER "0"
+    CONTRACT
+      ENSURES_KW "ensures"
+      LITERAL
+        TRUE_KW "true"
+    BLOCK
+      L_CURLY "{"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "p"
+        EQ "="
+        TUPLE_EXPR
+          L_PAREN "("
+          LITERAL
+            INTEGER "1"
+          COMMA ","
+          LITERAL
+            INTEGER "2"
+          R_PAREN ")"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "q"
+        EQ "="
+        BIN_EXPR
+          FIELD_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "p"
+            DOT "."
+            INTEGER "0"
+          PLUS "+"
+          FIELD_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "p"
+            DOT "."
+            INTEGER "1"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "r"
+        EQ "="
+        RANGE_EXPR
+          LITERAL
+            INTEGER "0"
+          DOT_DOT ".."
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "q"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "len"
+        EQ "="
+        BIN_EXPR
+          LITERAL
+            FLOAT "1.5"
+            UNIT_SUFFIX
+              L_BRACK "["
+              PATH_TYPE
+                PATH
+                  PATH_SEGMENT
+                    IDENT "km"
+              R_BRACK "]"
+          STAR "*"
+          LITERAL
+            INTEGER "2"
+            UNIT_SUFFIX
+              L_BRACK "["
+              UNIT_POWER
+                PATH_TYPE
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "h"
+                CARET "^"
+                EXPONENT
+                  MINUS "-"
+                  INTEGER "1"
+              R_BRACK "]"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "s"
+        EQ "="
+        LITERAL
+          RAW_STRING "r#\"a \"quoted\" raw\"#"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "b"
+        EQ "="
+        LITERAL
+          BYTE_STRING "b\"bytes\""
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "c"
+        EQ "="
+        LITERAL
+          CHAR "'\\n'"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "tagged"
+        EQ "="
+        LITERAL
+          TAGGED_STRING "fmt\"Hi {name.or(\"guest\")} {{braces}}\""
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "block"
+        EQ "="
+        LITERAL
+          TAGGED_STRING "sql\"\"\"\n        SELECT id FROM t WHERE x = {x}\n        \"\"\""
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "ok"
+        EQ "="
+        BIN_EXPR
+          COMPARE_CHAIN
+            LITERAL
+              INTEGER "0"
+            LT_EQ "<="
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "q"
+            LT "<"
+            LITERAL
+              INTEGER "10"
+          AMP_AMP "&&"
+          IN_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "q"
+            IN_KW "in"
+            RANGE_EXPR
+              LITERAL
+                INTEGER "1"
+              DOT_DOT ".."
+              LITERAL
+                INTEGER "10"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "paths"
+        EQ "="
+        KEY_PATH
+          BACKSLASH "\\"
+          PATH
+            PATH_SEGMENT
+              IDENT "Order"
+          DOT "."
+          IDENT "customer"
+          DOT "."
+          IDENT "email"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "f"
+        EQ "="
+        CLOSURE_EXPR
+          CLOSURE_PARAMS
+            PIPE "|"
+            CLOSURE_PARAM
+              PATH_PAT
+                PATH
+                  PATH_SEGMENT
+                    IDENT "x"
+              COLON ":"
+              PATH_TYPE
+                PATH
+                  PATH_SEGMENT
+                    IDENT "int"
+            PIPE "|"
+          BIN_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "x"
+            STAR "*"
+            LITERAL
+              INTEGER "2"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "g"
+        EQ "="
+        CLOSURE_EXPR
+          CLOSURE_PARAMS
+            PIPE_PIPE "||"
+          LITERAL
+            INTEGER "0"
+        SEMI ";"
+      LABELLED_EXPR
+        LABEL "'outer"
+        COLON ":"
+        FOR_EXPR
+          FOR_KW "for"
+          PATH_PAT
+            PATH
+              PATH_SEGMENT
+                IDENT "i"
+          IN_KW "in"
+          RANGE_EXPR
+            LITERAL
+              INTEGER "0"
+            DOT_DOT ".."
+            LITERAL
+              INTEGER "3"
+          BLOCK
+            L_CURLY "{"
+            IF_EXPR
+              IF_KW "if"
+              CONST_KW "const"
+              BIN_EXPR
+                FIELD_EXPR
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "target"
+                  DOT "."
+                  IDENT "os"
+                EQ_EQ "=="
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "Os"
+                    COLON_COLON "::"
+                    PATH_SEGMENT
+                      IDENT "Linux"
+              BLOCK
+                L_CURLY "{"
+                BREAK_EXPR
+                  BREAK_KW "break"
+                  LABEL "'outer"
+                R_CURLY "}"
+            IF_EXPR
+              IF_KW "if"
+              BIN_EXPR
+                LET_COND
+                  LET_KW "let"
+                  TUPLE_STRUCT_PAT
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "Some"
+                    L_PAREN "("
+                    PATH_PAT
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "v"
+                    R_PAREN ")"
+                  EQ "="
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "maybe"
+                AMP_AMP "&&"
+                BIN_EXPR
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "v"
+                  GT ">"
+                  LITERAL
+                    INTEGER "0"
+              BLOCK
+                L_CURLY "{"
+                CONTINUE_EXPR
+                  CONTINUE_KW "continue"
+                R_CURLY "}"
+            R_CURLY "}"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "wrapped"
+        EQ "="
+        BIN_EXPR
+          BIN_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "h"
+            STAR_PERCENT "*%"
+            LITERAL
+              INTEGER "31"
+          PLUS_PERCENT "+%"
+          LITERAL
+            INTEGER "7"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "first"
+        EQ "="
+        INDEX_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "xs"
+          L_BRACK "["
+          RANGE_EXPR
+            DOT_DOT ".."
+          COMMA ","
+          RANGE_EXPR
+            LITERAL
+              INTEGER "1"
+            DOT_DOT ".."
+            LITERAL
+              INTEGER "3"
+          R_BRACK "]"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "found"
+        EQ "="
+        TRY_EXPR
+          TRY_KW "try"
+          BLOCK
+            L_CURLY "{"
+            PROPAGATE_EXPR
+              CALL_EXPR
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "lookup"
+                ARG_LIST
+                  L_PAREN "("
+                  ARG
+                    PATH_EXPR
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "k"
+                  R_PAREN ")"
+              QUESTION "?"
+              ERROR_CONTEXT
+                TAGGED_STRING "fmt\"looking up {k}\""
+            R_CURLY "}"
+          CATCH
+            CATCH_KW "catch"
+            MATCH_ARM_LIST
+              L_CURLY "{"
+              MATCH_ARM
+                PATH_PAT
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "NotFound"
+                EQ_GT "=>"
+                CALL_EXPR
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "none"
+                  ARG_LIST
+                    L_PAREN "("
+                    R_PAREN ")"
+              R_CURLY "}"
+        SEMI ";"
+      DEFER_STMT
+        DEFER_KW "defer"
+        BLOCK
+          L_CURLY "{"
+          CALL_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "done"
+            ARG_LIST
+              L_PAREN "("
+              R_PAREN ")"
+          R_CURLY "}"
+      DEFER_STMT
+        ERRDEFER_KW "errdefer"
+        CALL_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "cleanup"
+          ARG_LIST
+            L_PAREN "("
+            R_PAREN ")"
+        SEMI ";"
+      UNSAFE_BLOCK
+        UNSAFE_KW "unsafe"
+        L_PAREN "("
+        STRING "\"valid: checked above\""
+        R_PAREN ")"
+        BLOCK
+          L_CURLY "{"
+          CALL_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "raw"
+            ARG_LIST
+              L_PAREN "("
+              R_PAREN ")"
+          R_CURLY "}"
+      METHOD_CALL_EXPR
+        METHOD_CALL_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "x"
+          DOT "."
+          VIEW_KW "view"
+          ARG_LIST
+            L_PAREN "("
+            R_PAREN ")"
+        DOT "."
+        DEFAULT_KW "default"
+        ARG_LIST
+          L_PAREN "("
+          ARG
+            FROM_KW "from"
+            COLON ":"
+            LITERAL
+              INTEGER "1"
+          R_PAREN ")"
+      R_CURLY "}"

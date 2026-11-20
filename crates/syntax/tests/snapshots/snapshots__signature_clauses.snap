@@ -1,0 +1,141 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "gen fn g<T: Ord, const N: int = 4>(x: &T, *, y: int = 2) -> T resume r: R from x with t: Time, fail(E | F) where T: Copy requires always n: x > 0 ensures true;"
+---
+SOURCE_FILE
+  FN_ITEM
+    GEN_KW "gen"
+    FN_KW "fn"
+    NAME
+      IDENT "g"
+    GENERIC_PARAMS
+      LT "<"
+      TYPE_PARAM
+        NAME
+          IDENT "T"
+        COLON ":"
+        BOUND
+          PATH
+            PATH_SEGMENT
+              IDENT "Ord"
+      COMMA ","
+      CONST_PARAM
+        CONST_KW "const"
+        NAME
+          IDENT "N"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "int"
+        EQ "="
+        CONST_ARG
+          INTEGER "4"
+      GT ">"
+    PARAM_LIST
+      L_PAREN "("
+      PARAM
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "x"
+        COLON ":"
+        REF_TYPE
+          AMP "&"
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "T"
+      COMMA ","
+      NAMED_ONLY_MARKER
+        STAR "*"
+      COMMA ","
+      PARAM
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "y"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "int"
+        EQ "="
+        LITERAL
+          INTEGER "2"
+      R_PAREN ")"
+    RET_TYPE
+      MINUS_GT "->"
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "T"
+    RESUME_CLAUSE
+      RESUME_KW "resume"
+      NAME
+        IDENT "r"
+      COLON ":"
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "R"
+    FROM_CLAUSE
+      FROM_KW "from"
+      IDENT "x"
+    EFFECT_CLAUSE
+      WITH_KW "with"
+      SIG_EFFECT
+        IDENT "t"
+        COLON ":"
+        EFFECT
+          PATH_TYPE
+            PATH
+              PATH_SEGMENT
+                IDENT "Time"
+      COMMA ","
+      SIG_EFFECT
+        EFFECT
+          FAIL_KW "fail"
+          L_PAREN "("
+          ERROR_TYPES
+            PATH_TYPE
+              PATH
+                PATH_SEGMENT
+                  IDENT "E"
+            PIPE "|"
+            PATH_TYPE
+              PATH
+                PATH_SEGMENT
+                  IDENT "F"
+          R_PAREN ")"
+    WHERE_CLAUSE
+      WHERE_KW "where"
+      WHERE_PRED
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "T"
+        COLON ":"
+        BOUND
+          PATH
+            PATH_SEGMENT
+              IDENT "Copy"
+    CONTRACT
+      REQUIRES_KW "requires"
+      ALWAYS_KW "always"
+      NAME
+        IDENT "n"
+      COLON ":"
+      BIN_EXPR
+        PATH_EXPR
+          PATH
+            PATH_SEGMENT
+              IDENT "x"
+        GT ">"
+        LITERAL
+          INTEGER "0"
+    CONTRACT
+      ENSURES_KW "ensures"
+      LITERAL
+        TRUE_KW "true"
+    SEMI ";"

@@ -1,0 +1,74 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "fn f() { 0 <= i < n && i in 1..10; ..; a..=b; x = ..y; }"
+---
+SOURCE_FILE
+  FN_ITEM
+    FN_KW "fn"
+    NAME
+      IDENT "f"
+    PARAM_LIST
+      L_PAREN "("
+      R_PAREN ")"
+    BLOCK
+      L_CURLY "{"
+      EXPR_STMT
+        BIN_EXPR
+          COMPARE_CHAIN
+            LITERAL
+              INTEGER "0"
+            LT_EQ "<="
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "i"
+            LT "<"
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "n"
+          AMP_AMP "&&"
+          IN_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "i"
+            IN_KW "in"
+            RANGE_EXPR
+              LITERAL
+                INTEGER "1"
+              DOT_DOT ".."
+              LITERAL
+                INTEGER "10"
+        SEMI ";"
+      EXPR_STMT
+        RANGE_EXPR
+          DOT_DOT ".."
+        SEMI ";"
+      EXPR_STMT
+        RANGE_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "a"
+          DOT_DOT_EQ "..="
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "b"
+        SEMI ";"
+      EXPR_STMT
+        ASSIGN_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "x"
+          EQ "="
+          RANGE_EXPR
+            DOT_DOT ".."
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "y"
+        SEMI ";"
+      R_CURLY "}"

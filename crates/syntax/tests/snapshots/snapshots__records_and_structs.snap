@@ -1,0 +1,70 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "fn f() { let r = { min: lo, max: hi }; let s = S { a, b: 1, ..base }; }"
+---
+SOURCE_FILE
+  FN_ITEM
+    FN_KW "fn"
+    NAME
+      IDENT "f"
+    PARAM_LIST
+      L_PAREN "("
+      R_PAREN ")"
+    BLOCK
+      L_CURLY "{"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "r"
+        EQ "="
+        RECORD_EXPR
+          L_CURLY "{"
+          RECORD_FIELD_INIT
+            IDENT "min"
+            COLON ":"
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "lo"
+          COMMA ","
+          RECORD_FIELD_INIT
+            IDENT "max"
+            COLON ":"
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "hi"
+          R_CURLY "}"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "s"
+        EQ "="
+        STRUCT_LIT
+          PATH
+            PATH_SEGMENT
+              IDENT "S"
+          L_CURLY "{"
+          FIELD_INIT
+            IDENT "a"
+          COMMA ","
+          FIELD_INIT
+            IDENT "b"
+            COLON ":"
+            LITERAL
+              INTEGER "1"
+          COMMA ","
+          SPREAD
+            DOT_DOT ".."
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "base"
+          R_CURLY "}"
+        SEMI ";"
+      R_CURLY "}"

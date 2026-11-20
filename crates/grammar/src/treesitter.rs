@@ -6,7 +6,7 @@
 //! every use made optional, and any other rule that can match nothing is inlined where it is used.
 //! The four scanner tokens are external, implemented in `src/scanner.c`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::Write as _;
 
 use crate::parse::{Alt, Atom, Body, Grammar, Item, Quant, Rule};
@@ -120,27 +120,29 @@ pub(crate) fn emit(grammar: &Grammar) -> String {
 /// Token rules named by syntax rules (fragments are inlined into the tokens that use them), plus
 /// the skipped line comment.
 fn used_tokens(grammar: &Grammar) -> HashSet<&str> {
-    let mut used = HashSet::new();
-    fn walk<'a>(alt: &'a Alt, used: &mut HashSet<&'a str>) {
-        for seq in &alt.0 {
-            for item in &seq.items {
-                match &item.atom {
-                    Atom::Ref { name, .. } => {
-                        used.insert(name.as_str());
-                    }
-                    Atom::Group(inner) => walk(inner, used),
-                    Atom::Term(_) => {}
-                }
-            }
-        }
-    }
+    let mut used = BTreeSet::new();
     for rule in &grammar.rules {
         if let Body::Syntax(alt) = &rule.body {
-            walk(alt, &mut used);
+            refs(alt, &mut used);
         }
     }
     used.insert("LINE_COMMENT");
-    used
+    used.into_iter().collect()
+}
+
+/// Every rule an alternative refers to.
+pub(crate) fn refs<'a>(alt: &'a Alt, used: &mut BTreeSet<&'a str>) {
+    for seq in &alt.0 {
+        for item in &seq.items {
+            match &item.atom {
+                Atom::Ref { name, .. } => {
+                    used.insert(name.as_str());
+                }
+                Atom::Group(inner) => refs(inner, used),
+                Atom::Term(_) => {}
+            }
+        }
+    }
 }
 
 fn js_name(name: &str) -> String {

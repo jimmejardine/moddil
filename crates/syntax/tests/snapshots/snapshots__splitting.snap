@@ -1,0 +1,107 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "type V = Vec<Vec<T>>; fn f() { a >>= 1; let r = &&x; let g = |a| a || b; let h = || 0; }"
+---
+SOURCE_FILE
+  TYPE_ITEM
+    TYPE_KW "type"
+    NAME
+      IDENT "V"
+    EQ "="
+    PATH_TYPE
+      PATH
+        PATH_SEGMENT
+          IDENT "Vec"
+          GENERIC_ARGS
+            LT "<"
+            TYPE_ARG
+              PATH_TYPE
+                PATH
+                  PATH_SEGMENT
+                    IDENT "Vec"
+                    GENERIC_ARGS
+                      LT "<"
+                      TYPE_ARG
+                        PATH_TYPE
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "T"
+                      GT ">"
+            GT ">"
+    SEMI ";"
+  FN_ITEM
+    FN_KW "fn"
+    NAME
+      IDENT "f"
+    PARAM_LIST
+      L_PAREN "("
+      R_PAREN ")"
+    BLOCK
+      L_CURLY "{"
+      EXPR_STMT
+        ASSIGN_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "a"
+          GT_GT_EQ ">>="
+          LITERAL
+            INTEGER "1"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "r"
+        EQ "="
+        REF_EXPR
+          AMP "&"
+          REF_EXPR
+            AMP "&"
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "x"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "g"
+        EQ "="
+        CLOSURE_EXPR
+          CLOSURE_PARAMS
+            PIPE "|"
+            CLOSURE_PARAM
+              PATH_PAT
+                PATH
+                  PATH_SEGMENT
+                    IDENT "a"
+            PIPE "|"
+          BIN_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "a"
+            PIPE_PIPE "||"
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "b"
+        SEMI ";"
+      LET_STMT
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "h"
+        EQ "="
+        CLOSURE_EXPR
+          CLOSURE_PARAMS
+            PIPE_PIPE "||"
+          LITERAL
+            INTEGER "0"
+        SEMI ";"
+      R_CURLY "}"

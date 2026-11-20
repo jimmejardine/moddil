@@ -116,6 +116,11 @@ problem, which is exactly the supply-chain concern of [Package management and su
 - **Grammar first.** The machine-readable grammar is written before the parser, and the parser is
   **hand-written** against it (for good error recovery and diagnostics), with the grammar's
   generated tests keeping them in step ([`definition.md`: One grammar source](definition.md#one-grammar-source)).
+- **Syntax tree (decided):** a lossless tree (every token, whitespace and comment, with error
+  nodes) with a typed AST over it, in our own small implementation rather than a library; the
+  parser recovers from errors from the start, so a tree always exists. The formatter, the language
+  server and agents edit the same tree the compiler reads
+  ([`crates/syntax`](../crates/syntax/README.md)).
 - **Vertical slices.** The language grows slice by slice, each running end to end
   ([`roadmap.md`: M0: the v0 language in slices](roadmap.md#m0-the-v0-language-in-slices)).
 - **Interpreter first.** Every slice runs on the MIR interpreter; no code-generation backend exists

@@ -222,6 +222,98 @@ fn near_misses(rec: &mut Recogniser<'_>, valid: &[Vec<u32>]) -> Vec<Vec<u32>> {
     out
 }
 
+/// `count` random edits of the valid sentences (one to three token edits each: delete,
+/// duplicate, swap, insert or replace), each with the recogniser's verdict: as many valid as
+/// invalid, where the attempts allow (most random edits are invalid). An oracle for testing
+/// the hand-written parser against the grammar on far more cases than the checked-in corpus.
+pub(crate) fn edits(
+    rec: &mut Recogniser<'_>,
+    valid: &[Vec<u32>],
+    count: usize,
+    seed: u64,
+) -> Vec<(Vec<u32>, bool)> {
+    let terms = rec.bnf().terms.len();
+    let mut rng = Rng(seed | 1);
+    let mut out = Vec::new();
+    let mut seen: HashSet<Vec<u32>> = HashSet::new();
+    let pool: Vec<&Vec<u32>> = valid.iter().filter(|s| !s.is_empty()).collect();
+    let (mut valid_left, mut invalid_left) = (count - count / 2, count / 2);
+    let mut attempts = 0;
+    while valid_left + invalid_left > 0 && attempts < count * 50 {
+        attempts += 1;
+        let mut edited = pool[rng.next(pool.len())].clone();
+        // Mostly single edits: they are valid far more often than multiple ones.
+        let edits = if rng.next(4) == 0 { 2 + rng.next(2) } else { 1 };
+        for _ in 0..edits {
+            if edited.is_empty() {
+                break;
+            }
+            let at = rng.next(edited.len());
+            let random = crate::ll::index(rng.next(terms));
+            match rng.next(5) {
+                0 => {
+                    edited.remove(at);
+                }
+                1 => edited.insert(at, edited[at]),
+                2 if at + 1 < edited.len() => edited.swap(at, at + 1),
+                3 => edited[at] = random,
+                _ => edited.insert(at, random),
+            }
+        }
+        if seen.insert(edited.clone()) {
+            let ok = accepts_with_splitting(rec, &edited);
+            let left = if ok {
+                &mut valid_left
+            } else {
+                &mut invalid_left
+            };
+            if *left > 0 {
+                *left -= 1;
+                out.push((edited, ok));
+            }
+        }
+    }
+    out
+}
+
+/// Whether the grammar accepts `tokens`, applying the Tokens section's splitting rules: where
+/// the recogniser rejects at `&&` (two `&`) or at `>>`, `>=` or `>>=` (a `>` closing generic
+/// arguments), it retries with the token split after its first character.
+fn accepts_with_splitting(rec: &mut Recogniser<'_>, tokens: &[u32]) -> bool {
+    let bnf = rec.bnf();
+    let term = |name: &str| {
+        bnf.terms
+            .iter()
+            .position(|t| t == name)
+            .map(crate::ll::index)
+    };
+    let splits: Vec<(u32, [u32; 2])> = [
+        ("'&&'", "'&'", "'&'"),
+        ("'>>'", "'>'", "'>'"),
+        ("'>='", "'>'", "'='"),
+        ("'>>='", "'>'", "'>='"),
+    ]
+    .iter()
+    .filter_map(|(whole, a, b)| Some((term(whole)?, [term(a)?, term(b)?])))
+    .collect();
+    let mut tokens = tokens.to_vec();
+    for _ in 0..8 {
+        match rec.recognise(&tokens) {
+            Ok(_) => return true,
+            Err(at) => match tokens
+                .get(at)
+                .and_then(|t| splits.iter().find(|s| s.0 == *t))
+            {
+                Some(&(_, parts)) => {
+                    tokens.splice(at..=at, parts);
+                }
+                None => return false,
+            },
+        }
+    }
+    false
+}
+
 /// The sample spelling of each token kind in rendered sentences.
 fn sample(name: &str) -> &'static str {
     match name {

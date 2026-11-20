@@ -1,0 +1,30 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "fn f() {} ) ] 42 fn g() {}"
+---
+SOURCE_FILE
+  FN_ITEM
+    FN_KW "fn"
+    NAME
+      IDENT "f"
+    PARAM_LIST
+      L_PAREN "("
+      R_PAREN ")"
+    BLOCK
+      L_CURLY "{"
+      R_CURLY "}"
+  ERROR
+    R_PAREN ")"
+    R_BRACK "]"
+    INTEGER "42"
+  FN_ITEM
+    FN_KW "fn"
+    NAME
+      IDENT "g"
+    PARAM_LIST
+      L_PAREN "("
+      R_PAREN ")"
+    BLOCK
+      L_CURLY "{"
+      R_CURLY "}"
+error 10..11: expected an item, found `)`

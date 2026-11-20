@@ -52,6 +52,8 @@ ariadne = "0.6.0"           # diagnostics rendering
 la-arena = "0.3.1"          # index-based arenas for AST, HIR and MIR nodes
 clap = { version = "4.6.9", features = ["derive"] }
 insta = "1.49.0"            # snapshot tests
+unicode-ident = "1.0.27"     # UAX #31 identifier classes (the lexer)
+unicode-normalization = "0.1.26"  # NFC checks on identifiers (the lexer)
 cargo_metadata = "0.23.1"   # the refinterp independence check
 
 [profile.dev]
@@ -60,6 +62,10 @@ debug = "line-tables-only"
 # Dependencies are optimised a little even in debug builds; our own crates stay fast to rebuild.
 [profile.dev.package."*"]
 opt-level = 1
+
+# The grammar tool runs the recogniser over thousands of cases in moddil-syntax's tests.
+[profile.dev.package.moddil-grammar]
+opt-level = 2
 
 [profile.release]
 lto = "thin"

@@ -1,0 +1,29 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "// about f\nfn f() {}\n\n// loose\n\n/// doc\nfn g() {}"
+---
+SOURCE_FILE
+  FN_ITEM
+    LINE_COMMENT "// about f"
+    FN_KW "fn"
+    NAME
+      IDENT "f"
+    PARAM_LIST
+      L_PAREN "("
+      R_PAREN ")"
+    BLOCK
+      L_CURLY "{"
+      R_CURLY "}"
+  LINE_COMMENT "// loose"
+  FN_ITEM
+    OUTER_ATTR
+      DOC_OUTER "/// doc"
+    FN_KW "fn"
+    NAME
+      IDENT "g"
+    PARAM_LIST
+      L_PAREN "("
+      R_PAREN ")"
+    BLOCK
+      L_CURLY "{"
+      R_CURLY "}"

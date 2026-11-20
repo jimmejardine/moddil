@@ -29,9 +29,10 @@ class Skip(Exception):
     """A step that cannot run here; fatal on CI, a warning locally."""
 
 
-def run(*args):
+def run(*args, env=None):
     print("$ " + " ".join(args), flush=True)
-    return subprocess.call(list(args), cwd=str(ROOT)) == 0
+    full_env = dict(os.environ, **env) if env else None
+    return subprocess.call(list(args), cwd=str(ROOT), env=full_env) == 0
 
 
 def has_cargo_tool(name):
@@ -67,10 +68,14 @@ def step_links():
 
 
 def step_grammars():
-    # The files generated from reference/grammar/moddil.ebnf are current, and Lark and tree-sitter
-    # accept every corpus case and sample (tools/check_grammars.py).
+    # The files generated from reference/grammar/moddil.ebnf are current; Lark and tree-sitter
+    # accept every corpus case and sample (tools/check_grammars.py); and the hand-written parser
+    # agrees with the grammar's recogniser on 10000 random edits of the corpus.
     current = run("cargo", "run", "--release", "-q", "-p", "moddil-grammar", "--", "generate", "--check")
-    return run(sys.executable, "-X", "utf8", "tools/check_grammars.py") and current
+    tools = run(sys.executable, "-X", "utf8", "tools/check_grammars.py")
+    parser = run("cargo", "test", "--release", "-q", "-p", "moddil-syntax", "--test", "corpus",
+                 "the_parser_agrees", env={"MODDIL_EDITS": "10000"})
+    return current and tools and parser
 
 
 STEPS = {

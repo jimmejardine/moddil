@@ -1,0 +1,117 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "#[derive(Copy)] pub struct P(pub u8, u8); linear struct T { id: u64 } enum E { A, B(int) = 2 } unit km = 1000 * m; dimension V = L / T; group g \"title\";"
+---
+SOURCE_FILE
+  STRUCT_ITEM
+    OUTER_ATTR
+      POUND_L_BRACK "#["
+      ATTR
+        PATH
+          PATH_SEGMENT
+            IDENT "derive"
+        ATTR_INPUT
+          L_PAREN "("
+          IDENT "Copy"
+          R_PAREN ")"
+      R_BRACK "]"
+    VIS
+      PUB_KW "pub"
+    STRUCT_KW "struct"
+    NAME
+      IDENT "P"
+    TUPLE_FIELDS
+      L_PAREN "("
+      TUPLE_FIELD
+        VIS
+          PUB_KW "pub"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "u8"
+      COMMA ","
+      TUPLE_FIELD
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "u8"
+      R_PAREN ")"
+    SEMI ";"
+  STRUCT_ITEM
+    LINEAR_KW "linear"
+    STRUCT_KW "struct"
+    NAME
+      IDENT "T"
+    STRUCT_BODY
+      L_CURLY "{"
+      FIELD
+        NAME
+          IDENT "id"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "u64"
+      R_CURLY "}"
+  ENUM_ITEM
+    ENUM_KW "enum"
+    NAME
+      IDENT "E"
+    VARIANT_LIST
+      L_CURLY "{"
+      VARIANT
+        NAME
+          IDENT "A"
+      COMMA ","
+      VARIANT
+        NAME
+          IDENT "B"
+        TUPLE_FIELDS
+          L_PAREN "("
+          TUPLE_FIELD
+            PATH_TYPE
+              PATH
+                PATH_SEGMENT
+                  IDENT "int"
+          R_PAREN ")"
+        EQ "="
+        LITERAL
+          INTEGER "2"
+      R_CURLY "}"
+  UNIT_ITEM
+    UNIT_KW "unit"
+    NAME
+      IDENT "km"
+    EQ "="
+    UNIT_DEF
+      UNIT_BIN
+        LITERAL
+          INTEGER "1000"
+        STAR "*"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "m"
+    SEMI ";"
+  DIMENSION_ITEM
+    DIMENSION_KW "dimension"
+    NAME
+      IDENT "V"
+    EQ "="
+    UNIT_BIN
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "L"
+      SLASH "/"
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "T"
+    SEMI ";"
+  GROUP_ITEM
+    GROUP_KW "group"
+    NAME
+      IDENT "g"
+    STRING "\"title\""
+    SEMI ";"

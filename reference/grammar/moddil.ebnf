@@ -115,8 +115,9 @@ PUNCT         ::= '+' | '-' | '*' | '/' | '%' | '^' | '!' | '&' | '|' | '&&' | '
                 | '==' | '!=' | '<' | '>' | '<=' | '>=' | '.' | '..' | '..=' | ',' | ';' | ':'
                 | '::' | '->' | '=>' | '#[' | '#![' | '(' | ')' | '[' | ']' | '{' | '}'
 PUNCT_NOT_DELIMITER ::= PUNCT - ( '(' | ')' | '[' | ']' | '{' | '}' )
-# Splitting: in generic arguments '>>', '>=' and '>>=' close with their first '>'; in prefix
-# position '&&' is two borrows; '||' in operand position is an empty closure parameter list.
+# Splitting: in generic arguments '>>', '>=' and '>>=' close with their first '>'; where a '&'
+# begins an expression, type, pattern or effect, '&&' is two '&' (`&&x`, `&&T`); '||' in operand
+# position is an empty closure parameter list.
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Files, attributes, items

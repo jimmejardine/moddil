@@ -1,0 +1,36 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "struct S { a: , b: int } fn g() {}"
+---
+SOURCE_FILE
+  STRUCT_ITEM
+    STRUCT_KW "struct"
+    NAME
+      IDENT "S"
+    STRUCT_BODY
+      L_CURLY "{"
+      FIELD
+        NAME
+          IDENT "a"
+        COLON ":"
+      COMMA ","
+      FIELD
+        NAME
+          IDENT "b"
+        COLON ":"
+        PATH_TYPE
+          PATH
+            PATH_SEGMENT
+              IDENT "int"
+      R_CURLY "}"
+  FN_ITEM
+    FN_KW "fn"
+    NAME
+      IDENT "g"
+    PARAM_LIST
+      L_PAREN "("
+      R_PAREN ")"
+    BLOCK
+      L_CURLY "{"
+      R_CURLY "}"
+error 14..15: expected a type, found `,`

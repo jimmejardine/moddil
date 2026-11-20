@@ -1,0 +1,113 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "fn f() { t.0.1; x.to::<u8>()?; load(p)? \"context\"; v ?! \"reason\"; xs[1, 2]; 1[m/s^2]; }"
+---
+SOURCE_FILE
+  FN_ITEM
+    FN_KW "fn"
+    NAME
+      IDENT "f"
+    PARAM_LIST
+      L_PAREN "("
+      R_PAREN ")"
+    BLOCK
+      L_CURLY "{"
+      EXPR_STMT
+        FIELD_EXPR
+          FIELD_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "t"
+            DOT "."
+            INTEGER "0"
+          DOT "."
+          INTEGER "1"
+        SEMI ";"
+      EXPR_STMT
+        PROPAGATE_EXPR
+          METHOD_CALL_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "x"
+            DOT "."
+            IDENT "to"
+            COLON_COLON "::"
+            GENERIC_ARGS
+              LT "<"
+              TYPE_ARG
+                PATH_TYPE
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "u8"
+              GT ">"
+            ARG_LIST
+              L_PAREN "("
+              R_PAREN ")"
+          QUESTION "?"
+        SEMI ";"
+      EXPR_STMT
+        PROPAGATE_EXPR
+          CALL_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "load"
+            ARG_LIST
+              L_PAREN "("
+              ARG
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "p"
+              R_PAREN ")"
+          QUESTION "?"
+          ERROR_CONTEXT
+            STRING "\"context\""
+        SEMI ";"
+      EXPR_STMT
+        UNWRAP_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "v"
+          QUESTION_BANG "?!"
+          STRING "\"reason\""
+        SEMI ";"
+      EXPR_STMT
+        INDEX_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "xs"
+          L_BRACK "["
+          LITERAL
+            INTEGER "1"
+          COMMA ","
+          LITERAL
+            INTEGER "2"
+          R_BRACK "]"
+        SEMI ";"
+      EXPR_STMT
+        LITERAL
+          INTEGER "1"
+          UNIT_SUFFIX
+            L_BRACK "["
+            UNIT_BIN
+              PATH_TYPE
+                PATH
+                  PATH_SEGMENT
+                    IDENT "m"
+              SLASH "/"
+              UNIT_POWER
+                PATH_TYPE
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "s"
+                CARET "^"
+                EXPONENT
+                  INTEGER "2"
+            R_BRACK "]"
+        SEMI ";"
+      R_CURLY "}"

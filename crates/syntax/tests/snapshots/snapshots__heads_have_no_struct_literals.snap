@@ -1,0 +1,63 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "fn f() { if a == b { c } else if d { S { e: 1 } } else { f } }"
+---
+SOURCE_FILE
+  FN_ITEM
+    FN_KW "fn"
+    NAME
+      IDENT "f"
+    PARAM_LIST
+      L_PAREN "("
+      R_PAREN ")"
+    BLOCK
+      L_CURLY "{"
+      IF_EXPR
+        IF_KW "if"
+        BIN_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "a"
+          EQ_EQ "=="
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "b"
+        BLOCK
+          L_CURLY "{"
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "c"
+          R_CURLY "}"
+        ELSE_KW "else"
+        IF_EXPR
+          IF_KW "if"
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "d"
+          BLOCK
+            L_CURLY "{"
+            STRUCT_LIT
+              PATH
+                PATH_SEGMENT
+                  IDENT "S"
+              L_CURLY "{"
+              FIELD_INIT
+                IDENT "e"
+                COLON ":"
+                LITERAL
+                  INTEGER "1"
+              R_CURLY "}"
+            R_CURLY "}"
+          ELSE_KW "else"
+          BLOCK
+            L_CURLY "{"
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "f"
+            R_CURLY "}"
+      R_CURLY "}"

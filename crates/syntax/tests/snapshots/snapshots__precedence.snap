@@ -1,0 +1,99 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "fn f() { x = a || b && c == d | e ^ f & g << h + i * -j?.k(1)[2]; }"
+---
+SOURCE_FILE
+  FN_ITEM
+    FN_KW "fn"
+    NAME
+      IDENT "f"
+    PARAM_LIST
+      L_PAREN "("
+      R_PAREN ")"
+    BLOCK
+      L_CURLY "{"
+      EXPR_STMT
+        ASSIGN_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "x"
+          EQ "="
+          BIN_EXPR
+            PATH_EXPR
+              PATH
+                PATH_SEGMENT
+                  IDENT "a"
+            PIPE_PIPE "||"
+            BIN_EXPR
+              PATH_EXPR
+                PATH
+                  PATH_SEGMENT
+                    IDENT "b"
+              AMP_AMP "&&"
+              BIN_EXPR
+                PATH_EXPR
+                  PATH
+                    PATH_SEGMENT
+                      IDENT "c"
+                EQ_EQ "=="
+                BIN_EXPR
+                  PATH_EXPR
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "d"
+                  PIPE "|"
+                  BIN_EXPR
+                    PATH_EXPR
+                      PATH
+                        PATH_SEGMENT
+                          IDENT "e"
+                    CARET "^"
+                    BIN_EXPR
+                      PATH_EXPR
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "f"
+                      AMP "&"
+                      BIN_EXPR
+                        PATH_EXPR
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "g"
+                        LT_LT "<<"
+                        BIN_EXPR
+                          PATH_EXPR
+                            PATH
+                              PATH_SEGMENT
+                                IDENT "h"
+                          PLUS "+"
+                          BIN_EXPR
+                            PATH_EXPR
+                              PATH
+                                PATH_SEGMENT
+                                  IDENT "i"
+                            STAR "*"
+                            PREFIX_EXPR
+                              MINUS "-"
+                              INDEX_EXPR
+                                METHOD_CALL_EXPR
+                                  PROPAGATE_EXPR
+                                    PATH_EXPR
+                                      PATH
+                                        PATH_SEGMENT
+                                          IDENT "j"
+                                    QUESTION "?"
+                                  DOT "."
+                                  IDENT "k"
+                                  ARG_LIST
+                                    L_PAREN "("
+                                    ARG
+                                      LITERAL
+                                        INTEGER "1"
+                                    R_PAREN ")"
+                                L_BRACK "["
+                                LITERAL
+                                  INTEGER "2"
+                                R_BRACK "]"
+        SEMI ";"
+      R_CURLY "}"

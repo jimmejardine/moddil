@@ -1,0 +1,72 @@
+---
+source: crates/syntax/tests/snapshots.rs
+expression: "type H = Box<dyn Fn(Event) with (suspend, fail(E))>; type R = (u32 where self >= 1);"
+---
+SOURCE_FILE
+  TYPE_ITEM
+    TYPE_KW "type"
+    NAME
+      IDENT "H"
+    EQ "="
+    PATH_TYPE
+      PATH
+        PATH_SEGMENT
+          IDENT "Box"
+          GENERIC_ARGS
+            LT "<"
+            TYPE_ARG
+              EFFECT_TYPE
+                DYN_TYPE
+                  DYN_KW "dyn"
+                  BOUND
+                    PATH
+                      PATH_SEGMENT
+                        IDENT "Fn"
+                    FN_SUGAR
+                      TYPE_LIST
+                        L_PAREN "("
+                        PATH_TYPE
+                          PATH
+                            PATH_SEGMENT
+                              IDENT "Event"
+                        R_PAREN ")"
+                TYPE_EFFECTS
+                  WITH_KW "with"
+                  L_PAREN "("
+                  EFFECT
+                    SUSPEND_KW "suspend"
+                  COMMA ","
+                  EFFECT
+                    FAIL_KW "fail"
+                    L_PAREN "("
+                    ERROR_TYPES
+                      PATH_TYPE
+                        PATH
+                          PATH_SEGMENT
+                            IDENT "E"
+                    R_PAREN ")"
+                  R_PAREN ")"
+            GT ">"
+    SEMI ";"
+  TYPE_ITEM
+    TYPE_KW "type"
+    NAME
+      IDENT "R"
+    EQ "="
+    REFINED_TYPE
+      L_PAREN "("
+      PATH_TYPE
+        PATH
+          PATH_SEGMENT
+            IDENT "u32"
+      WHERE_KW "where"
+      BIN_EXPR
+        PATH_EXPR
+          PATH
+            PATH_SEGMENT
+              SELF_KW "self"
+        GT_EQ ">="
+        LITERAL
+          INTEGER "1"
+      R_PAREN ")"
+    SEMI ";"
