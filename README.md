@@ -3,6 +3,7 @@
 # Moddil
 
 [![checks](https://github.com/jimmejardine/moddil/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/jimmejardine/moddil/actions/workflows/checks.yml)
+[![grammars](https://github.com/jimmejardine/moddil/actions/workflows/grammars.yml/badge.svg?branch=main)](https://github.com/jimmejardine/moddil/actions/workflows/grammars.yml)
 [![Linux](https://github.com/jimmejardine/moddil/actions/workflows/test-linux.yml/badge.svg?branch=main)](https://github.com/jimmejardine/moddil/actions/workflows/test-linux.yml)
 [![Windows](https://github.com/jimmejardine/moddil/actions/workflows/test-windows.yml/badge.svg?branch=main)](https://github.com/jimmejardine/moddil/actions/workflows/test-windows.yml)
 [![macOS](https://github.com/jimmejardine/moddil/actions/workflows/test-macos.yml/badge.svg?branch=main)](https://github.com/jimmejardine/moddil/actions/workflows/test-macos.yml)
@@ -23,10 +24,20 @@ the compiler. That makes code easier for agents to write correctly and for human
 
 ## Status
 
-Moddil is at the **design stage**. The Rust workspace for the compiler is set up, but there is no
-language code yet. The documents in `specs/` range
-from brainstorm to decided direction; none of them is a formal specification. Code snippets are
-illustration only and do not commit to any syntax.
+Moddil is **early in M0**, the first milestone. The design in `specs/` ranges from brainstorm to
+decided direction; none of it is a formal specification yet. Implemented so far:
+
+- **The grammar** for all decided syntax, in
+  [`reference/grammar/moddil.ebnf`](reference/grammar/moddil.ebnf), checked LL(3). GBNF, Lark and
+  tree-sitter grammars are generated from it.
+- **A lexer and parser** for the whole grammar.
+- **Slice S0, end to end**: functions, `let`, `int` and `bool`, arithmetic with overflow traps,
+  `if`, blocks and calls, through names and types, the MIR and the MIR interpreter. It is checked
+  by the [conformance suite](conformance/README.md), whose tests cite the
+  [2027 reference](reference/README.md).
+
+Code in the specs follows [`syntax.md`](specs/syntax.md) and the grammar, but beyond S0 none of it
+runs yet; the [M0 slices](specs/roadmap.md#m0-the-v0-language-in-slices) add the rest.
 
 ## Start here
 
@@ -39,9 +50,12 @@ the specs should follow [Working on these specs](specs/README.md#working-on-thes
 ## Layout
 
 ```
-specs/   the design: one document per area, indexed by specs/README.md
-crates/  the Rust implementation: the stage-0 compiler and its tools
-tools/   helper scripts: the spec link checker and the CI script
+specs/        the design: one document per area, indexed by specs/README.md
+reference/    the normative reference, and the grammar (reference/grammar/moddil.ebnf)
+conformance/  the shared test suite every implementation must pass
+crates/       the Rust implementation: the stage-0 compiler and its tools
+editors/      editor support: the tree-sitter grammar
+tools/        helper scripts: the spec link checker, the grammar check and the CI script
 ```
 
 The full layout, including the directories that fill up during M0, is in
@@ -54,7 +68,24 @@ itself on first use.
 
 ```
 cargo build --workspace
-python tools/ci.py        # fmt, clippy, deny, test, links: the same checks GitHub runs
+python tools/ci.py        # fmt, clippy, deny, test, links, grammars: the same checks GitHub runs
+```
+
+A program in slice S0, saved as `hello.mdl`:
+
+```rust
+fn add(a: int, b: int) -> int { a + b }
+
+fn main() -> int { add(2, 3) }
+
+test "add" {
+    add(2, 3)                 // => 5
+}
+```
+
+```
+cargo run -p moddil -- run hello.mdl     # prints 5
+cargo run -p moddil -- test hello.mdl    # test "add" ... ok
 ```
 
 See [`crates/README.md`](crates/README.md) for more.
