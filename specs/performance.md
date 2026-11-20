@@ -229,6 +229,11 @@ same in debug and release, on every target ([`numerics.md`: Overflow traps](nume
 ## Optimisation control
 
 - **Inlining hints:** `#[inline]`, `#[inline(never)]` and `#[cold]`, as in Rust.
+- **Call-site inlining (decided):** `#[inline]` or `#[inline(never)]` on a *statement* applies to the
+  calls written in that statement, not to calls inside the callees, as Jai's `inline` and
+  `no_inline` at a call. It goes on statements because the grammar has statement attributes but
+  no expression attributes. A call that cannot be inlined (recursive, through `dyn`, foreign) gets
+  a warning, and the hint never changes semantics.
 - **LTO** in release builds; no cross-mod inlining in debug builds ([`build-times.md`: Profiles](build-times.md#profiles)).
 - **PGO from replays (decided):**
   - `moddil build --pgo` uses profiles gathered from **recorded production runs or simulated runs**

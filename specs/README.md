@@ -36,10 +36,10 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Glossary](glossary.md)                                                | reference          | [`glossary.md`](glossary.md): one line per Moddil term, linked to its definition                     |
 | **The language**                                                       |                    |                                                                                                      |
 | [Effects and capabilities](effects-and-capabilities.md)                | 🟢 complete        | [`effects-and-capabilities.md`](effects-and-capabilities.md)                                         |
-| [Memory: ownership, borrowing and sharing](memory.md)                  | 🟢 complete        | [`memory.md`](memory.md)                                                                             |
+| [Memory: ownership, borrowing and sharing](memory.md)                  | 🟠 major questions | [`memory.md`](memory.md)                                                                             |
 | [Resources: drop, cleanup and linear types](resources.md)              | 🟢 complete        | [`resources.md`](resources.md)                                                                       |
 | [Values: copy, clone and equality](values.md)                          | 🟢 complete        | [`values.md`](values.md)                                                                             |
-| [Error handling](error-handling.md)                                    | 🟢 complete        | [`error-handling.md`](error-handling.md)                                                             |
+| [Error handling](error-handling.md)                                    | 🟡 minor questions | [`error-handling.md`](error-handling.md)                                                             |
 | [Type system core](types.md)                                           | 🟢 complete        | [`types.md`](types.md): traits, generics, optional values, paradigms                                 |
 | [Functions and closures](closures.md)                                  | 🟢 complete        | [`closures.md`](closures.md)                                                                         |
 | [Modules, visibility and program structure](modules.md)                | 🟢 complete        | [`modules.md`](modules.md)                                                                           |
@@ -59,7 +59,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Program lifecycle](lifecycle.md)                                      | 🟢 complete        | [`lifecycle.md`](lifecycle.md)                                                                       |
 | [Observability and debuggability](observability.md)                    | 🟢 complete        | [`observability.md`](observability.md)                                                               |
 | **Library and ecosystem**                                              |                    |                                                                                                      |
-| [Standard library and mods (R2)](stdlib.md)                            | 🟢 complete        | [`stdlib.md`](stdlib.md): small core, tiers, catalogue, core interfaces                              |
+| [Standard library and mods (R2)](stdlib.md)                            | 🟡 minor questions | [`stdlib.md`](stdlib.md): small core, tiers, catalogue, core interfaces                              |
 | [Packages and supply-chain security](packages-and-supply-chain.md)     | 🟢 complete        | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)                                       |
 | [Interoperability with C and Rust](interop.md)                         | 🟢 complete        | [`interop.md`](interop.md)                                                                           |
 | [Data interchange and persistence](data.md)                            | 🟢 complete        | [`data.md`](data.md)                                                                                 |

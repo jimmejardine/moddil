@@ -67,6 +67,11 @@ point is a real-time, authoritative-server architecture of the kind used by most
 - **Deterministic simulation ([Determinism and reproducibility](../determinism.md))**: run hub + chat + N simulated clients in one process, with
   simulated latency, packet loss and disconnects, replayable from a seed.
 - **Hot reload ([Build times](../build-times.md))**: change game rules or rendering without restarting the client.
+- **Per-frame scratch memory ([`stdlib.md`: Scratch arenas](../stdlib.md#scratch-arenas))**: each client frame and hub tick
+  allocates its temporary data in a `Scratch` arena that is reset at the end of the frame, with no
+  per-object frees.
+- **In-game inspector**: a debug overlay that lists and edits entity fields needs runtime type
+  information (open: [`stdlib.md`: Open questions](../stdlib.md#open-questions)).
 
 ## Success criteria
 

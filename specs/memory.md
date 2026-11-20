@@ -293,7 +293,19 @@ No case required first-class references with explicit lifetimes.
 
 ## Open questions
 
-None at present.
+- **What "the allocator in scope" is.** `.to_rc()` and growing collections use the allocator in
+  scope ([Conversion](#conversion)), but the effect catalogue says allocation is not an effect, only a
+  capability chosen per profile ([`effects-and-capabilities.md`: The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)),
+  and no spec says how code puts an arena in scope. The options:
+  - **explicit only**: `_in(alloc)` constructors such as `Vec::new_in(tmp)`, and everything else
+    uses the profile's default allocator;
+  - **a scoped handler**: `with Alloc = tmp { … }`, as Jai's `push_allocator` and context
+    allocator, with arena lifetimes checked by the borrow rules.
+
+  Game and HFT code expects the second. Either way, allocation must not become an effect that
+  spreads into every signature, and the answer must say what `#[no_alloc]` means under it
+  ([`performance.md`: Hot-path guarantees](performance.md#hot-path-guarantees)). Scratch arenas are
+  decided either way ([`stdlib.md`: Scratch arenas](stdlib.md#scratch-arenas)).
 
 ## Background
 
@@ -341,4 +353,5 @@ second-class references, parameter conventions, subscripts); Mojo (argument conv
 Swift (ARC, non-escaping closures, borrow/consume parameters); Koka/Lean 4 Perceus (RC elision and
 reuse); Choi, Shull, Torrellas, *Biased Reference Counting* (PACT 2018) and CPython PEP 703; Austral
 and Linear Haskell (linear types); Rust `bytes::Bytes` (rc slices) and `yoke` (owning views);
-FlatBuffers, Cap'n Proto, SBE (zero-copy formats); io_uring, AF_XDP, DPDK (zero-copy I/O).
+FlatBuffers, Cap'n Proto, SBE (zero-copy formats); io_uring, AF_XDP, DPDK (zero-copy I/O); Zig
+explicit allocators; Odin and Jai context allocators and Jai temporary storage.

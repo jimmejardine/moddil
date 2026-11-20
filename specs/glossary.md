@@ -82,6 +82,7 @@
 | **Router** | `http::Router`: maps compile-time-checked paths to handler functions, converting path parameters with `TryFrom`; handler errors must implement `IntoResponse` ([HTTP](stdlib.md#http)). |
 | **Runtime** | A mod providing handlers for scheduling, I/O and time (`moddil/runtime`, `-wasm`, `-sim`) ([Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)). |
 | **Safety contract** | The documented conditions a caller of an `unsafe fn` must uphold ([Safety contracts](unsafe.md#safety-contracts)). |
+| **Scratch arena** | `Scratch` in `moddil/alloc`: a bump arena reset whole at the end of a scope, for per-frame or per-request data ([Scratch arenas](stdlib.md#scratch-arenas)). |
 | **Scope** | `scope(\|s\| …)`: the only way to start tasks; it waits for all of them and is their cancellation token ([Tasks and borrowing](concurrency.md#tasks-and-borrowing)). |
 | **Security labels** | `Secret<T>`, `Personal<T>` and `Untrusted<T>`, checked by the compiler ([Information-flow labels](security.md#information-flow-labels)). |
 | **Semantic diff** | A report of what a change does to interfaces, effects, errors and tests, rather than to lines ([The report](semantic-vcs.md#the-report)). |

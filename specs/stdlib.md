@@ -137,7 +137,7 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 | `moddil/platform` | Device-service effects (camera, notifications, payments, keychain) with shell-provided handlers ([`ui.md`: Platform APIs as shell-provided handlers](ui.md#platform-apis-as-shell-provided-handlers)) | G W X |
 | `moddil/runtime`, `-wasm`, `-sim` | Effect handlers for scheduling and I/O ([Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)) | G H W X |
 | `moddil/sync` | Sync cells (`Atomic<T>`, `AtomicRc<T>`, `Mutex`, `RwLock`), channels, lock-free queues (SPSC/MPMC) ([`concurrency.md`: Shared mutable state](concurrency.md#shared-mutable-state)) | G H X |
-| `moddil/alloc` | Arenas, pools, bump allocators, allocator capability | G H |
+| `moddil/alloc` | Arenas, pools, bump allocators, scratch arenas ([Scratch arenas](#scratch-arenas)), allocator capability | G H |
 | `moddil/crypto` | Ed25519, ML-DSA, FN-DSA, Blake2/3, SHA-2/3, ChaCha20-Poly1305, TLS primitives | W X |
 | `moddil/simd`, `moddil/tensor` | Portable SIMD; n-d arrays and tensor expressions compiled to graphs or kernels ([`accelerators.md`: Level 1: tensor expressions](accelerators.md#level-1-tensor-expressions)) | G H X |
 | `moddil/gpu` | Devices, buffers, launches; WebGPU/Vulkan/Metal/CUDA/ROCm and CPU-simulator handlers ([`accelerators.md`](accelerators.md)) | G H |
@@ -297,6 +297,7 @@ Rust's names and shapes, in `core-*` (with an allocator) and `moddil/collections
 | `TreeMap<K, V>`, `TreeSet<T>` | Sorted; Rust's `BTreeMap` |
 | `OrderedMap<K, V>`, `OrderedSet<T>` | Insertion order |
 | `BinaryHeap<T>`, `RingBuffer<T>` | |
+| `EnumSet<E>` | A bit set over a fieldless enum, Jai's `enum_flags`: bit *i* is the variant with index *i*, stored in the smallest unsigned integer that fits; `#[repr(u8)]`-style layout is guaranteed, so it fits packed structs, register maps and wire formats (decided) |
 | Persistent collections | Structural sharing for immutable updates; standard, in `moddil/collections` (decided) |
 
 - **`Map` and `Set` traits** let generic code accept any map (the specs' snippets write
@@ -307,6 +308,40 @@ Rust's names and shapes, in `core-*` (with an allocator) and `moddil/collections
   the profile ([`freestanding.md`: Memory without an operating system](freestanding.md#memory-without-an-operating-system)).
 - Shared, mutable collections are sync cells or lock-free structures in `moddil/sync`
   ([`concurrency.md`: Shared mutable state](concurrency.md#shared-mutable-state)).
+- **Spare capacity is written, never read (decided).** `vec.spare()` gives a view of the
+  uninitialised capacity that tracks how much of it has been written, like Rust's `BorrowedBuf`.
+  It can be split, filled element by element, or filled by an I/O read; `commit` extends `len` by
+  the written prefix only. Large I/O and frame buffers skip zeroing without `unsafe`, unlike Jai's
+  `---`, and safe code never reads uninitialised memory ([`types.md`](types.md)).
+
+## Scratch arenas
+
+**Decided: `moddil/alloc` provides `Scratch`, a bump arena that is reset whole at the end of a
+scope**, as Jai's temporary storage and `reset_temporary_storage()`.
+
+```rust
+let mut scratch = Scratch::with_capacity(4[MiB]);
+loop {
+    scratch.scope(|tmp| {                              // tmp: &Arena, valid for this frame only
+        let mut visible = Vec::new_in(tmp);            // grows inside the arena
+        tick(&mut world, &mut visible);
+        render(&visible);
+    });                                                // O(1) reset; nothing is freed one by one
+}
+```
+
+- Allocations are **views tied to the scope** ([`memory.md`: Sharing: `.to_rc()`](memory.md#sharing-to_rc)), so the
+  borrow checker rejects anything that would outlive the frame. There is no use-after-reset, and
+  nothing in it can become an `Rc`.
+- **Running out of room** grows the arena by chaining another block in hosted profiles. In
+  freestanding profiles it fails with `OutOfMemory`
+  ([`freestanding.md`: Memory without an operating system](freestanding.md#memory-without-an-operating-system)).
+- `scope` takes `&mut self`, so scopes cannot overlap on one `Scratch`. Each task that needs one
+  has its own.
+- Debug builds poison reset memory and report the high-water mark per scope, so the capacity
+  can be tuned.
+- `Vec::new_in(tmp)` is explicit until [`memory.md`: Open questions](memory.md#open-questions)
+  decides whether an arena can also be put in scope.
 
 ## I/O
 
@@ -451,5 +486,12 @@ http::serve(listener, app)?;
 
 ## Open questions
 
-None at present.
+- **Opt-in runtime type information.** `reflect(T)` exists only at compile time
+  ([`comptime.md`: Static reflection](comptime.md#static-reflection)). In-game editors, inspectors and
+  generic debug UIs need a runtime description of a value's fields; Jai gives every type a
+  `Type_Info`. A `#[derive(Reflect)]` could emit a static `TypeInfo` and typed field accessors, paid
+  for only by the types that opt in. Still open:
+  - whether it is a standard mod or a community one;
+  - how it respects field visibility;
+  - whether an editor may mutate fields through it, or only read them.
 

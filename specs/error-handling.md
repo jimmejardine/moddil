@@ -383,7 +383,14 @@ All decided:
 
 ## Open questions
 
-None at present.
+- **Caller locations for helpers.** Error return traces record each `?` ([Traces](#traces)), but a
+  helper such as `expect`, an `assert`-like check or a logging wrapper cannot report *its caller's*
+  source location. There are two options:
+  - an attribute on the function, like Rust's `#[track_caller]`;
+  - a default argument, `loc: Location = caller_location()`, like Jai's `#caller_location` and
+    Swift's `#fileID` and `#line` defaults.
+
+  Either way it must show in the signature and cost nothing when it is unused.
 
 ## Background
 
@@ -408,6 +415,7 @@ The problem and the state of the art that led to this design.
 - Swift Evolution SE-0413, *Typed throws*.
 - Rust `try_blocks` tracking issue; the Rust keyword-generics initiative.
 - Zig language reference: errors, `errdefer`, error return traces.
+- Rust `#[track_caller]` (RFC 2091); Jai `#caller_location`.
 - Roc: tag unions and error handling.
 - Koka and Effekt: effect handlers.
 - PEP 654, *Exception Groups and except\**.

@@ -17,7 +17,8 @@ point for debate.
 | Zig | ◐ manual | ◐ SPIR-V/PTX targets emerging | ◐ explicit allocators, no safety proof | ✓ fast, incremental | ◐ young | ◐ explicit, little magic | ✗ | ✓ best C story | ✗ |
 | Swift | ✓ structured concurrency, actors | ◐ Metal (separate language) | ◐ ARC, atomic costs | ◐ | ◐ SwiftPM | ◐ | ✗ | ✓ C / ✓ C++ | ◐ distributed actors |
 | Mojo | ◐ | ✓ MLIR-based targeting | ◐ ownership | ? | ◐ young | ◐ Python-like | ✗ | ◐ Python, C | ✗ |
-| Odin / Jai | ◐ | ✗ | ◐ allocators, arenas | ✓ very fast | ◐ | ◐ | ✗ | ✓ C | ✗ |
+| Odin | ◐ | ✗ | ◐ allocators, arenas, implicit context | ✓ very fast | ◐ vendored collection, no package manager | ◐ | ✗ | ✓ C | ✗ |
+| Jai | ◐ | ✗ | ◐ context allocator, temporary storage | ✓ very fast; the build is a metaprogram | ✗ closed beta | ◐ | ✗ | ✓ C | ✗ |
 | Erlang / Elixir | ✓ processes, supervisors | ✗ | ✓ per-process GC | ◐ | ✓ Hex | ◐ | ✗ | ◐ NIFs are risky | ✓ native distribution; ◐ trusted clusters only |
 | Haskell / OCaml / Koka | ◐ / ✓ OCaml 5 effects | ◐ Futhark-like DSLs | ◐ GC; ✓ Perceus (Koka) | ◐ | ◐ | ◐ strong types, steep learning | ✗ | ◐ | ◐ Eliom (OCaml), HasChor (Haskell) |
 | Unison | ◐ abilities | ✗ | ◐ GC | ✓ cache by hash | ✓ content-addressed | ◐ | ✓ by design | ✗ | ✓ ships code by hash |
