@@ -129,7 +129,7 @@ struct ServerConfig {
     data_dir: Path,
     /// Database password; from the environment or a file only.
     db_password: Secret<String>,
-    max_conns: u32 where self >= 1 = 1000,
+    max_conns: (u32 where self >= 1) = 1000,
 }
 ```
 

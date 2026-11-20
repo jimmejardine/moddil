@@ -78,9 +78,9 @@ pub unsafe fn copy_nonoverlapping<T>(src: *const T, dst: *mut T, n: int)
     requires disjoint: !overlaps(src, dst, n)
 
 fn append(buf: &mut Vec<u8>, data: &[u8]) {
-    buf.reserve(data.len())
+    buf.reserve(data.len());
     unsafe("valid: reserve guarantees capacity; disjoint: data is a separate borrow") {
-        copy_nonoverlapping(data.as_ptr(), buf.end_ptr(), data.len())
+        copy_nonoverlapping(data.as_ptr(), buf.end_ptr(), data.len());
         buf.set_len(buf.len() + data.len())
     }
 }
@@ -136,7 +136,7 @@ rules much simpler than Rust's:
 
 ```rust
 unsafe("p is valid and uniquely owned here") {
-    let r: &mut Node = &mut *p      // r's scope starts
+    let r: &mut Node = &mut *p;     // r's scope starts
     r.count += 1
     // (*q).count += 1              // UB if q points at the same Node while r is in scope
 }                                   // r's scope ends: raw access through p or q is fine again

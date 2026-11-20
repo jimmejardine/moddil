@@ -163,6 +163,7 @@ Rust and Moddil share most syntax, so translation of the common subset is mechan
 | `unsafe` blocks | Kept, with the capability declared ([`unsafe.md`](unsafe.md)) |
 | `ref` and `ref mut` patterns | Removed; binding modes follow the matched value ([`syntax.md`: Patterns and control flow](syntax.md#patterns-and-control-flow)) |
 | `x as u8` | `x.truncate::<u8>()` or `x.to::<u8>()?`, chosen by the value range the compiler can prove |
+| Suffixed literals (`0u8`, `1.5f32`) | Plain literals typed by an annotation or their context |
 
 - **Unsupported constructs** (complex procedural macros, self-referential structs, some trait-object
   patterns) produce TODO diagnostics with a pointer to the original code; nothing is silently dropped.

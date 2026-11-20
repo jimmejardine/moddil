@@ -79,7 +79,11 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
   name are the same identifier.
 - **Confusable and mixed-script identifiers are linted** (Unicode UTS #39): `раssword` with a
   Cyrillic `р` next to `password` is flagged.
-- **Keywords are ASCII**, and the reserved-word list is short.
+- **Keywords are ASCII and all reserved** (decided): there are no contextual keywords
+  ([`syntax.md`: Grammar rules](syntax.md#grammar-rules)). A keyword may still name a **member** (a
+  field or method, where declared and after `.` or `::`) or be a named-argument label
+  (`pub fn view(&self)`, `Type::from(x)`, `default: 8080`), as in Swift and Kotlin, because those
+  positions are unambiguous.
 - **Bidirectional control characters are rejected** in source, except as escapes in string literals,
   which closes the "Trojan Source" attack.
 - Text handling inside programs is covered in [`text.md`](text.md).
@@ -87,8 +91,8 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
 ### One grammar source
 
 - The grammar is **LL(k) with a small k** and **unambiguous**: for example, there is no Rust-style
-  ambiguity between a struct literal and the block of an `if` condition. Contextual keywords are
-  kept to a minimum.
+  ambiguity between a struct literal and the block of an `if` condition, because a struct literal
+  in a condition head must be parenthesised, as in Rust. There are no contextual keywords.
 - One machine-readable source generates:
   - the parser's grammar tests;
   - the official **tree-sitter** grammar ([`toolchain.md`](toolchain.md));

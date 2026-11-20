@@ -9,10 +9,10 @@
 use moddil::units::si::{m, cm, mm, s, ms, kg};
 use moddil::units::information::MiB;
 
-let length: f64[m] = 100[cm] + 50.5[mm]     // 1.0505 m
-let g              = 9.81[m/s^2]
-let timeout        = 500[ms]
-let budget         = 64[MiB]
+let length: f64[m] = 100[cm] + 50.5[mm];    // 1.0505 m
+let g              = 9.81[m/s^2];
+let timeout        = 500[ms];
+let budget         = 64[MiB];
 ```
 
 - Units are part of the **type**: `f64[m]`, `i64[ns]`, `Fixed<4>[USD]`. Literals use the same syntax:
@@ -48,10 +48,10 @@ F#'s weaknesses, which Moddil addresses ([Declaring units](#declaring-units)):
 **Decided: units are written in square brackets**, the one syntax for types and literals:
 
 ```rust
-let length: f64[m] = 100[cm] + 50.5[mm]
-let price: Fixed<4>[USD] = 101.2550[USD]
+let length: f64[m] = 100[cm] + 50.5[mm];
+let price: Fixed<4>[USD] = 101.2550[USD];
 fn mean<U>(xs: &[f64[U]]) -> f64[U] { … }
-let t = x * 1[s]                          // a unit on a computed value
+let t = x * 1[s];                         // a unit on a computed value
 ```
 
 - **The engineering convention:** tables, plots and datasheets already write "length [m]".
@@ -106,15 +106,19 @@ units:
 unit m:  Length               // base unit for Length
 unit cm = m / 100
 unit mm = m / 1000
-unit km = 1000 m
+unit km = 1000 * m
 unit s:  Time
 unit ms = s / 1000
 unit K:  Temperature
 unit degC = K + 273.15        // affine
 unit B:  Information
-unit MiB = 1048576 B
+unit MiB = 1048576 * B
 unit USD: Currency::USD       // each currency is its own base dimension (see below)
 ```
+
+**Unit expressions (decided)** in declarations use explicit operators over unit names: `*` and `/`
+for scale (`1000 * m`, `m / 100`), `^` for powers, and `+` for an affine offset (`K + 273.15`).
+There is no juxtaposition, so `1000 m` is not a unit expression.
 
 Because `cm` and `m` are declared as related, they **convert automatically**, fixing F#'s main
 weakness.

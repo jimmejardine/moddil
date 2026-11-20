@@ -85,9 +85,9 @@ Assignment, argument passing and returning **move** a value: the source can't be
 ### `.share()` for reference counts
 
 ```rust
-let shared = node.to_rc()        // Rc<Node>
-let other  = shared.share()      // O(1): count + 1; the same node
-let deep   = node2.clone()       // independent copy; cost grows with node2
+let shared = node.to_rc();       // Rc<Node>
+let other  = shared.share();     // O(1): count + 1; the same node
+let deep   = node2.clone();      // independent copy; cost grows with node2
 fn render(n: &Rc<Node>) { … }    // borrowing an Rc touches no count
 ```
 

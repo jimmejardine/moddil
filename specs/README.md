@@ -31,7 +31,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [A tour of Moddil](tour.md)                                            | reference          | [`tour.md`](tour.md): one small service and its simulated tests; becomes the `tour/shorty` mod at M0 |
 | [Requirements and non-goals](requirements.md)                          | 🟡 minor questions | [`requirements.md`](requirements.md): R1–R4 and non-goals                                            |
 | [Reference examples](examples/README.md)                               | 🟡 minor questions | [`examples/`](examples/README.md): game, HFT, web store, Hashiverse, firmware                        |
-| [Surface syntax](syntax.md)                                            | 🟡 minor questions | [`syntax.md`](syntax.md)                                                                             |
+| [Surface syntax](syntax.md)                                            | 🟢 complete        | [`syntax.md`](syntax.md)                                                                             |
 | [Language definition and conformance](definition.md)                   | 🟢 complete        | [`definition.md`](definition.md)                                                                     |
 | [Glossary](glossary.md)                                                | reference          | [`glossary.md`](glossary.md): one line per Moddil term, linked to its definition                     |
 | **The language**                                                       |                    |                                                                                                      |

@@ -440,8 +440,8 @@ fn visit<T>(xs: &[T], f: impl Fn(&T)) {        // no `with`: whatever f does, vi
     for x in xs { f(x) }
 }
 
-visit(&orders, |o| send(o)?)                    // this call is `with Net, suspend, fail(SendError)`
-visit(&orders, |o| total += o.qty)              // this one is pure
+visit(&orders, |o| send(o)?);                   // this call is `with Net, suspend, fail(SendError)`
+visit(&orders, |o| total += o.qty);             // this one is pure
 ```
 
 - `with E` is written only to **name or constrain** the effects, e.g. to say that two closures share

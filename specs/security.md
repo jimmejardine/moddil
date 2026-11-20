@@ -163,7 +163,7 @@ log.info(fmt"checkout for {customer:?}");           // ✓ prints email and card
 ```rust
 #[constant_time]
 fn verify_mac(expected: &Secret<[u8; 32]>, actual: &[u8; 32]) -> bool {
-    let mut diff = 0u8;
+    let mut diff: u8 = 0;
     for i in 0..32 { diff |= expected.expose()[i] ^ actual[i]; }   // fixed bounds: OK
     diff == 0
 }

@@ -144,7 +144,7 @@ on kernel sockets, kernel bypass and the simulator ([`effects-and-capabilities.m
 
 ```rust
 fn main(net: NetRoot) {
-    let rx = net.bypass("eth0", queue: 3, wait: Adaptive { spin: 20[us] })   // narrows NetRoot
+    let rx = net.bypass("eth0", queue: 3, wait: Adaptive { spin: 20[us] });  // narrows NetRoot
     scope(|s| {
         s.spawn(|| feed_handler(&rx))
     }, on: pinned(3))                       // the core that also takes the queue's IRQ
@@ -153,7 +153,7 @@ fn main(net: NetRoot) {
 #[no_alloc, no_lock]
 fn feed_handler(rx: &RxQueue) with Net, suspend, fail(NetError) {
     loop {
-        let batch = rx.recv_batch::<32>()?  // owned Packets from the DMA pool; zero copy
+        let batch = rx.recv_batch::<32>()?; // owned Packets from the DMA pool; zero copy
         for pkt in batch { on_packet(pkt) }
     }
 }

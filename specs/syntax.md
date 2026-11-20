@@ -1,6 +1,6 @@
 # Syntax
 
-> **Status:** minor questions: the grammar inventory found spellings to settle. Indexed in [`README.md`](README.md).
+> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
 > Moddil's surface syntax is **based on Rust**. Every
 > snippet in these specs follows this document; snippets remain illustrative where a feature's own
 > design is still open.
@@ -136,6 +136,28 @@ As in Rust, unless a delta says otherwise:
   generic bound or the concrete type therefore uses the same defaults. Changing a trait's default is
   a semver-visible change.
 
+## Grammar rules
+
+Decided while building the grammar inventory
+([`reference/grammar/inventory.md`](../reference/grammar/inventory.md)), so the grammar can be written:
+
+| Rule | Decision |
+|---|---|
+| **Statements** | Rust's rule: a statement ends with `;`; a block's final expression without `;` is its value; items and block-ended expressions (`if`, `match`, `loop`, `with … { }`) need none |
+| **Comptime conditionals** | `if const target.os == Os::Linux { … }` ([`modules.md`](modules.md#conditional-code-is-comptime-if)) |
+| **Generated modules** | `#[c_import(…)] mod sqlite3;`: `mod name;` only with a generating attribute ([`modules.md`](modules.md#mods-and-modules)) |
+| **Unit declarations** | Explicit operators: `unit km = 1000 * m`, `unit cm = m / 100`, `unit degC = K + 273.15` ([`units.md`](units.md#declaring-units)) |
+| **Refinements** | A bare `where` refinement only in a `type` alias (`type Port = u16 where self >= 1024`); elsewhere it is parenthesised, `max_conns: (u32 where self >= 1) = 1000`. In a signature, `where` always means bounds |
+| **Literal suffixes** | None: `0u8` is written `let d: u8 = 0` ([`numerics.md`](numerics.md#exact-literals)) |
+| **Struct literals in heads** | As in Rust, a struct literal in the head of `if`, `while` or `match` must be parenthesised: `if x == (Foo { a: 1 }) { … }` |
+| **Signature clause order** | `fn f<T>(a: &T, b: &T) -> &T from a with fail(E) where T: Ord requires … ensures … { … }`: provenance, effects, bounds, contracts; the formatter enforces it |
+| **Keywords** | All reserved, none contextual. A keyword may still name a **member**: a field or method, where it is declared (`pub fn view(&self)`, `default: Port`) and where it is used after `.` or `::` (`Type::from(x)`, `cart.view()`), and a named-argument label (`default: 8080`) |
+
+**Reserved keywords:** Rust's strict keywords except `async`, `await`, `move` and `macro_rules`, plus
+`with`, `fail`, `suspend`, `spawn`, `nondet`, `try`, `catch`, `escape`, `gen`, `yield`, `resume`,
+`defer`, `errdefer`, `select`, `linear`, `view`, `requires`, `ensures`, `always`, `invariant`, `from`,
+`default`, `test`, `bench`, `property`, `note`, `group`, `unit` and `dimension`.
+
 ## What Swift has that we lack
 
 | Swift feature | Moddil |
@@ -154,36 +176,7 @@ As in Rust, unless a delta says otherwise:
 
 ## Open questions
 
-Found while building the grammar inventory
-([`reference/grammar/inventory.md`](../reference/grammar/inventory.md)); each must be decided before
-the construct enters the grammar.
-
-1. **C1: comptime conditionals.** `if comptime target.os == Os::Linux` (modules.md) against Rust's
-   `const` spelling (comptime.md). Options: `if const …`; keep `if comptime …` as the one place the
-   word appears; or an ordinary `if` on a `const` value that the compiler folds.
-2. **C2: generated modules.** How is a comptime-generated module declared, such as a C or Rust
-   import? `#[c_import(…)] mod sqlite3;` (interop.md) contradicts "no `mod` declarations"
-   (modules.md). Options: allow `mod name;` only with a generating attribute; or a `const`
-   expression, `const sqlite3 = c_import("sqlite3.h", …);`.
-3. **C3: statement terminators.** Rust's `;` rule (statements end with `;`, a block's last
-   expression is its value), or newline-terminated statements. Error context (`load(p)? fmt"…"`)
-   needs a clear end of statement either way.
-4. **C4: unit declarations.** `unit km = 1000 m` uses juxtaposition; with bracketed units it could be
-   `unit km = 1000[m]`, or unit expressions in declarations could keep their own algebra
-   (`unit km = 1000 * m`).
-5. **C5: inline refinements.** `max_conns: u32 where self >= 1 = 1000` puts a refinement inside a
-   field type, which can collide with a signature's `where` bounds. Options: refinements only through
-   named `type` aliases; or inline ones in parentheses, `(u32 where self >= 1)`.
-6. **C6: integer type suffixes.** Keep Rust's `0u8`, or drop suffixes in favour of annotations
-   (`let d: u8 = 0`), since literals are exact until typed?
-7. **C7: struct literals in conditions.** Rust forbids a struct literal in the head of `if`, `while`
-   and `match` unless parenthesised; the grammar can encode that with a second expression rule.
-   Adopt Rust's rule, or require parentheses around every struct literal there?
-8. **C8: signature clause order.** The canonical order of `from`, `with`, `where`, `requires` and
-   `ensures` after the return type.
-9. **C9: keywords.** Which words are reserved and which contextual: `test`, `bench`, `property`,
-   `note`, `group`, `select`, `escape`, `resume`, `invariant`, `requires`, `ensures`, `linear`,
-   `view`, `unit`, `dimension`, `default`, `gen`, `yield`, `defer`, `errdefer`.
+None at present.
 
 
 ## Prior art

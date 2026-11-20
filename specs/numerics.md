@@ -58,10 +58,10 @@
 - **Wrapping is explicit**, for hashes, checksums, crypto and sequence numbers:
 
   ```rust
-  let h = h *% 0x100000001b3 ^ byte          // wrapping operators
-  let seq: Wrapping<u32> = last + 1           // or a wrapping type: every operation wraps
-  let n = a.checked_add(b)?                   // Option, for "might not fit" logic
-  let v = level.saturating_sub(drain)
+  let h = h *% 0x100000001b3 ^ byte;         // wrapping operators
+  let seq: Wrapping<u32> = last + 1;          // or a wrapping type: every operation wraps
+  let n = a.checked_add(b)?;                  // Option, for "might not fit" logic
+  let v = level.saturating_sub(drain);
   ```
 
 - **Cost**: typically 1–5% in integer-heavy code before optimisation. Checks are removed where
@@ -81,8 +81,8 @@
 ### Indices and lengths are signed
 
 ```rust
-let last = xs.len() - 1        // -1 when xs is empty: an ordinary number
-xs[last]                       // traps: index -1 out of bounds (not 18446744073709551615)
+let last = xs.len() - 1;       // -1 when xs is empty: an ordinary number
+xs[last];                      // traps: index -1 out of bounds (not 18446744073709551615)
 for i in (0..xs.len()).rev() { … }
 ```
 
@@ -99,6 +99,8 @@ for i in (0..xs.len()).rev() { … }
   - `let p: Fixed<2> = 0.10` is exactly ten cents;
   - `let x: f64 = 0.1` rounds to the nearest double, as always.
 - Without other constraints, integer literals are `int` and fractional literals are `f64`.
+- **No type suffixes (decided):** Rust's `0u8` and `1.5f32` are not used; a literal gets its type
+  from an annotation or its context (`let d: u8 = 0`), so there is one spelling.
 - This is comptime evaluation applied to numbers ([`comptime.md`](comptime.md)).
 
 ### Conversions
@@ -159,9 +161,9 @@ In `moddil/decimal`:
   ([Units of measure](#units-of-measure)).
 
 ```rust
-let price: Fixed<4>[USD] = 101.2550[USD]
-let qty:   Fixed<0>      = 300
-let notional = (price * qty).rescale::<2>(Round::HalfEven)   // Fixed<2>[USD]
+let price: Fixed<4>[USD] = 101.2550[USD];
+let qty:   Fixed<0>      = 300;
+let notional = (price * qty).rescale::<2>(Round::HalfEven);  // Fixed<2>[USD]
 ```
 
 ### Big numbers

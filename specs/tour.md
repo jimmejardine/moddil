@@ -20,11 +20,11 @@ isolation, graceful shutdown, and tests that run against a simulated network.
 ## 1. Types that validate themselves
 
 ```rust
-use moddil::collections::Map
-use moddil::net::{Listener, Conn, Url}
-use moddil::net::http::{self, Handler, IntoResponse, Request, Response, Router, Status}
-use moddil::serde::{json, Deserialize, Serialize}
-use moddil::sync::Mutex
+use moddil::collections::Map;
+use moddil::net::{Listener, Conn, Url};
+use moddil::net::http::{self, Handler, IntoResponse, Request, Response, Router, Status};
+use moddil::serde::{json, Deserialize, Serialize};
+use moddil::sync::Mutex;
 
 const ALPHABET: &str = "abcdefghjkmnpqrstuvwxyz23456789";
 
