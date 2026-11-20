@@ -137,7 +137,8 @@ fn leak() -> int { counter.tick() }   //~ E0601
 
 - Organised **by feature and edition**, like Test262.
 - Tests are ordinary Moddil files with **inline expectations**: `// =>` for values (as in
-  [`docs.md`](docs.md)), `//~ E0601` for diagnostics, `//~ trap` for traps.
+  [`docs.md`](docs.md)), `//~ E0601` for diagnostics, `//~ trap` for traps. From S1, tests may
+  also use [`assert`](testing.md#assertions), whose failure is a trap like any other.
 - **How expectations bind (decided):** `// =>` follows an expression statement or a block's final
   expression inside a `test` item, and every such line must run and produce exactly that value;
   `//~ E…` names a diagnostic starting on its line; `//~ trap` marks the line where a trap

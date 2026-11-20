@@ -34,7 +34,7 @@
 |---|---|---|---|
 | **1. Errors** | I/O failure, parse error, not found, network timeout, validation | Must be handled (R3) | Compiler: effect/type checking |
 | **2. Defined arithmetic** | Float NaN/∞; explicit wrapping (`+%`, `Wrapping<T>`) | No handling; the result is defined | Nothing (by design: fast) |
-| **3. Traps (crashes)** | OOM, stack overflow, integer overflow, integer ÷ 0, out-of-bounds index, `unreachable`, failed contract (D13), FFI fault | Terminates the process with a full trace, or only an isolated scope ([`lifecycle.md`](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)) | Runtime |
+| **3. Traps (crashes)** | OOM, stack overflow, integer overflow, integer ÷ 0, out-of-bounds index, `unreachable`, failed contract (D13), failed `assert` ([`testing.md`: Assertions](testing.md#assertions)), FFI fault | Terminates the process with a full trace, or only an isolated scope ([`lifecycle.md`](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)) | Runtime |
 
 R3 is about class 1 only: **a Moddil program never crashes because an error the language knows about
 was not handled.**

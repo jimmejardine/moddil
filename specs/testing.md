@@ -9,6 +9,7 @@
 | Rule | One line |
 |---|---|
 | **Examples are tests** | Examples carry expected results (`// => value`), compile in the same build, and run under the deterministic simulation runtime ([Examples are tests](#examples-are-tests)). |
+| **`assert` is a power assert** | `assert(cond)` checks a condition anywhere, in every build; when it fails, the trap shows the value of every part of `cond` ([Assertions](#assertions)). |
 | **Tests name what they test** | `test "…" for withdraw { }` sits next to its subject, with private access. Tooling knows every test's subject ([Attached tests](#attached-tests)). |
 | **Handlers, not mocks** | Tests run under the simulation runtime by default: virtual time, seeded randomness, simulated network and filesystem. |
 | **Correctness tools attach the same way** | Property tests, fuzz targets, snapshots, interleaving tests, model checking and proofs all attach to a subject; contracts become tests automatically ([Correctness tools in the same place](#correctness-tools-in-the-same-place)). |
@@ -81,6 +82,47 @@ its body may use `?`, and any error that escapes, like any trap, fails that test
 its error return trace ([`error-handling.md`: Traces](error-handling.md#traces)). `main`, task
 bodies and callbacks keep the full R3 rule.
 
+## Assertions
+
+**Decided: `assert(cond)` is a power assert.** When it fails, the compiler, which sees the whole
+condition, reports the value of every part of it, as Groovy, Spock and pytest do. There is no
+`assert_eq` or `assert_ne` family: `assert(a == b)` already shows both sides.
+
+```rust
+test "fees" {
+    let amount = 250;
+    assert(fee(amount) + amount == 260);
+}
+```
+
+```
+trap: assertion failed: fee(amount) + amount == 260
+    amount               = 250
+    fee(amount)          = 25
+    fee(amount) + amount = 275
+    … == 260             = false
+```
+
+- **The form:** `assert(cond)` with `cond: bool`, of type `()`. It is spelled as a call and parses
+  as one, so the grammar has no `assert` keyword. `assert` is a **built-in in the prelude**: a name
+  resolves to a local, then to an item of the mod, then to the prelude, so a local or item named
+  `assert` shadows it. `assert` must be called with exactly one argument; it is not a value.
+- **A reason comes with strings:** `assert(cond, "reason")` adds a message; until strings arrive
+  ([M0 slices](roadmap.md#m0-the-v0-language-in-slices)), only the one-argument form exists.
+- **It always runs, in every build**, like overflow checks (D5 in
+  [`error-handling.md`](error-handling.md#decisions-so-far)), and is never compiled out as C's
+  `NDEBUG` does. Optimisation may remove one only when it is proven redundant
+  ([`mir.md`: Explicit checks](mir.md#explicit-checks)). Contracts differ: the `Contracts` policy
+  can strip them per scope ([`correctness.md`](correctness.md#checking-policy-the-contracts-handler)).
+- **A failed `assert` traps** (class 3, trap class *assertion*): a broken assertion is a bug, not an
+  error, like a failed contract. In a test, the trap fails the test.
+- **What it shows:** the value of each part of `cond` that is not a literal (locals, calls and
+  operators), each evaluated exactly once, in the usual order. A part skipped by `&&`, `||` or a
+  comparison chain is shown as *not evaluated*.
+- **`// =>` or `assert`:** `// =>` shows a value, doctest style, in tests and doc comments
+  ([Examples are tests](#examples-are-tests)). `assert` checks a condition anywhere, including
+  non-test code and loops.
+
 ## Correctness tools in the same place
 
 The tools of [`correctness.md`](correctness.md) attach to subjects in the same way, so a reader sees a
@@ -128,6 +170,6 @@ None at present.
 
 ## Prior art
 
-Rust (`cargo test`, doc tests, nextest); Zig `test` blocks; Pyret `where:` clauses; Python and Elixir
+Rust (`cargo test`, doc tests, nextest); power asserts in Groovy, Spock and pytest; Zig `test` blocks; Pyret `where:` clauses; Python and Elixir
 doctests; Go `// Output:` examples; QuickCheck and Hypothesis; Criterion; iai; FoundationDB and
 TigerBeetle deterministic simulation; Bazel test caching.

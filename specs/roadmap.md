@@ -71,7 +71,7 @@ something runs from the first slice.
 | Slice | Adds | Why here |
 |---|---|---|
 | **S0** | `fn`, `let`, `int` and `bool`, arithmetic with overflow traps, `if`, blocks, calls; the conformance runner (`// =>`, `//~ E…`, `//~ trap`) | The smallest program that runs, and the harness for everything after it |
-| **S1** | Structs, enums, tuples, exhaustive `match`, `Option` | Data modelling, which every later slice needs |
+| **S1** | Structs, enums, tuples, exhaustive `match`, `Option`; `assert` ([`testing.md`: Assertions](testing.md#assertions)) | Data modelling, which every later slice needs |
 | **S2** | Ownership: moves, `Copy`, second-class `&` and `&mut`, drop and RAII, `defer` | The core of the language, tested before generics complicate it |
 | **S3** | Traits, generics (checked once; witness tables in the interpreter), coherence | Needed for collections and effects |
 | **S4** | `fail(E)`, `?`, `try`/`catch`, R3 entry points, `?!` | Errors, the simplest effect |

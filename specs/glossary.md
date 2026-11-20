@@ -12,6 +12,7 @@
 | **Agent server** | The long-running compiler service that agents and editors query for types, effects and fixes ([The agent server](agent-interface.md#the-agent-server)). |
 | **Annotation overlay** | A file that adds ownership, effects and error facts to a C or Rust API without editing its headers ([Annotation overlays](interop.md#annotation-overlays)). |
 | **Anonymous impl** | `impl Trait { … }` as an expression: implements a trait for an unnamed type and captures locals like a closure; the usual one-off handler ([Defining handlers](effects-and-capabilities.md#defining-handlers)). |
+| **`assert`** | `assert(cond)`: a power assert, a prelude built-in that runs in every build and traps (class 3), showing the value of every part of `cond` ([Assertions](testing.md#assertions)). |
 | **Assurance level** | Mod metadata stating how much is proven or checked, from tested to fully verified ([Assurance levels per mod](correctness.md#assurance-levels-per-mod)). |
 | **Attached test** | `test "…" for f { … }`: a test that names its subject and sits beside it ([Attached tests](testing.md#attached-tests)). |
 | **Biased reference counting** | Rc counting that is non-atomic for the owning task and atomic only for others ([Biased reference counting](memory.md#biased-reference-counting)). |
