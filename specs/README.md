@@ -76,6 +76,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Governance](governance.md)                                            | 🟢 complete        | [`governance.md`](governance.md)                                                                     |
 | **The project**                                                        |                    |                                                                                                      |
 | [Compiler and bootstrap](compiler.md)                                  | 🟡 minor questions | [`compiler.md`](compiler.md) (R1)                                                                    |
+| [MIR: the mid-level IR](mir.md)                                        | 🟠 major questions | [`mir.md`](mir.md): pipeline, form, and how each feature lowers                                      |
 | [Roadmap: milestones, staging and cross-cutting questions](roadmap.md) | 🟡 minor questions | [`roadmap.md`](roadmap.md)                                                                           |
 | [Prior art](prior-art.md)                                              | reference          | [`prior-art.md`](prior-art.md)                                                                       |
 

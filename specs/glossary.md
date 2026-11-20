@@ -49,6 +49,7 @@
 | **Generator** | A `gen` block or function that yields values, giving an `Iterator` written as a loop ([Generators](stdlib.md#generators)). |
 | **Group** | `#[group(…)]`: a named set of related `pub` items with its own overview; every `pub` item belongs to one ([Overviews: mod, module and group docs](docs.md#overviews-mod-module-and-group-docs)). |
 | **Handler** | The value installed for an effect with `with Trait = value { … }`: an ordinary impl or an anonymous impl; the innermost one wins ([Defining handlers](effects-and-capabilities.md#defining-handlers)). |
+| **HIR** | The typed, desugared tree between the canonical AST and MIR, carrying inferred types, effects and error sets ([Pipeline](mir.md#pipeline)). |
 | **Hot-path attributes** | `#[no_alloc]`, `#[no_lock]` and similar compiler-checked latency guarantees ([Hot-path guarantees](performance.md#hot-path-guarantees)). |
 | **`int`** | The signed 64-bit integer used for lengths, indices and counts on every target ([Integer types](numerics.md#integer-types)). |
 | **Interface artefact** | A mod's `pub` items with their full signatures: what dependents compile against and what the semver check compares ([Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)). |
@@ -57,6 +58,7 @@
 | **JSPI** | JavaScript Promise Integration: the first WASM lowering for suspension, in browsers and Node ([WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)). |
 | **Linear type** | A type whose values must be explicitly consumed (`commit`, `close`), used when cleanup can fail ([Resources: affine and linear](resources.md#resources-affine-and-linear)). |
 | **Live update** | Patching a running debug build while keeping its state ([Live update (debug builds)](build-times.md#live-update-debug-builds)). |
+| **MIR** | The compiler's mid-level IR: places and a control-flow graph per item, where ownership is checked, drops and checks are made explicit, and the interpreter and backends start ([MIR: the mid-level IR](mir.md)). |
 | **Mod** | The unit of distribution, versioning and capability ceilings: a git repository (or a folder in one) with a manifest ([What a mod is](packages-and-supply-chain.md#what-a-mod-is)). |
 | **`moddil bind`** | Generates Python, Swift, Kotlin and TypeScript bindings to a Moddil core ([Generated bindings](ui.md#generated-bindings)). |
 | **Moddil Evolution** | The proposal process for language and standard-mod changes ([Moddil Evolution](governance.md#moddil-evolution)). |
