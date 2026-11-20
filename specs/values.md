@@ -111,7 +111,7 @@ fn render(n: &Rc<Node>) { … }    // borrowing an Rc touches no count
 
 ```rust
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-struct OrderId(u64)
+struct OrderId(u64);
 
 #[derive(Clone, PartialEq, Debug)]
 struct Quote { price: Fixed<4>, qty: Fixed<0>, venue: VenueId }

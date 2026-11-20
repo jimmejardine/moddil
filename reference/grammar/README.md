@@ -1,10 +1,11 @@
 # Grammar
 
-The **one grammar source** for Moddil: `moddil.ebnf`, written in a small EBNF dialect of our own
-([`specs/definition.md`: One grammar source](../../specs/definition.md#one-grammar-source)).
+The **one grammar source** for Moddil: [`moddil.ebnf`](moddil.ebnf), written in a small EBNF dialect
+of our own ([`specs/definition.md`: One grammar source](../../specs/definition.md#one-grammar-source)).
 
-**Status:** next to be written. It is the first artefact of M0, and it covers **all decided syntax**,
-not only what M0 implements, so ambiguities surface before any parser code exists.
+**Status:** written for **all decided syntax**, not only what M0 implements; the LL(k) checker in
+`crates/grammar` is still to be built. Every rule is defined and used, and the alternatives that
+share a first token are all resolved by two or three tokens of lookahead (k = 3) or by flags.
 
 ## Notation
 
@@ -23,6 +24,27 @@ IDENT       ::= XID_START XID_CONTINUE*        # UPPERCASE names are token rules
 | `a?` `a*` `a+` | optional, zero or more, one or more |
 | `( … )` | grouping |
 | `'…'` | a terminal |
+| `[a-z]`, `A - B` | character class, exclusion (Tokens section only) |
+
+### Flags
+
+One extension expresses Rust's restrictions without writing the expression rules several times:
+
+| Flag | Meaning |
+|---|---|
+| `ns` | No struct or record literal and no bare block: set in heads that a block follows (`if`, `while`, `match`, `for`, handler values, contracts) |
+| `stmt` | The expression starts a statement, so it may not begin with a block-like expression |
+| `cond` | A `let` condition may appear (`if` and `while` heads) |
+
+| Form | Meaning |
+|---|---|
+| `name` | No flags; delimiters `( )`, `[ ]`, `{ }` always reset flags |
+| `name@` | Inherit every current flag (the leftmost operand) |
+| `name@ns` | Inherit only `ns` and `cond` (the other operands) |
+| `name+ns` | Start with a flag set (several: `name+ns+cond`) |
+| `!ns alt` / `?cond alt` | An alternative removed while a flag is set / present only while it is set |
+
+Flags expand to finite copies of the rules, so the grammar stays checkable as LL(k).
 
 ## How it is written
 

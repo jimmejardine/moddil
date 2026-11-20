@@ -349,7 +349,7 @@ Operators are traits, as in Rust: `a + b` calls `Add::add`, `a[i]` calls `Index:
   ```rust
   assert(0 <= i < len);
   if lo < x <= hi { … }                        // an exclusive lower bound, which ranges cannot express
-  type Ephemeral = u16 where 49152 <= self <= 65535
+  type Ephemeral = u16 where 49152 <= self <= 65535;
   ```
 - **Operators keep their meaning** (decided): an operator impl must be the operation its symbol
   names. This is a review rule for people and agents, and the standard library sets the example

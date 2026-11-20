@@ -139,7 +139,8 @@ As in Rust, unless a delta says otherwise:
 ## Grammar rules
 
 Decided while building the grammar inventory
-([`reference/grammar/inventory.md`](../reference/grammar/inventory.md)), so the grammar can be written:
+([`reference/grammar/inventory.md`](../reference/grammar/inventory.md)) and writing the grammar
+([`reference/grammar/moddil.ebnf`](../reference/grammar/README.md)):
 
 | Rule | Decision |
 |---|---|
@@ -151,6 +152,14 @@ Decided while building the grammar inventory
 | **Literal suffixes** | None: `0u8` is written `let d: u8 = 0` ([`numerics.md`](numerics.md#exact-literals)) |
 | **Struct literals in heads** | As in Rust, a struct literal in the head of `if`, `while` or `match` must be parenthesised: `if x == (Foo { a: 1 }) { … }` |
 | **Signature clause order** | `fn f<T>(a: &T, b: &T) -> &T from a with fail(E) where T: Ord requires … ensures … { … }`: provenance, effects, bounds, contracts; the formatter enforces it |
+| **Effects inside types** | In type position one effect may be bare (`fn() -> T with E`, `impl Fn() with suspend`); several are parenthesised: `Box<dyn Fn(Event) with (suspend, fail(E))>`. Named effects (`time: Time`) appear only in signatures, whose `with` lists stay bare. Effects written after a type belong to it |
+| **Anonymous records** | No shorthand fields: `{ min: lo, max: hi }`. `{` followed by a name and `:` starts a record; anything else starts a block. Named struct literals keep shorthand (`Conn { socket, session }`) |
+| **Heads before a block** | The struct-literal rule covers every head that a block follows: `if`, `while`, `match`, `for … in`, handler values in `with … = value { }`, and contract expressions before a body. A bare block or `const { }` block is not allowed there either; parenthesise it |
+| **`if const`** | After `if`, the keyword `const` always starts a comptime conditional |
+| **Refinement patterns** | `p: Port` is only allowed at the top of a `match` arm; in `let` and parameters, `:` is the type annotation |
+| **Membership** | `x in a..b` takes its range at comparison precedence, so `self in 1..10 && self != 5` groups as written |
+| **Items** | Items that do not end in a block end with `;`: `use`, `type`, `const`, tuple and unit structs, `mod`, `group`, `unit`, `dimension` |
+| **Tagged-literal holes** | Inside a tagged literal, `{` opens a hole that runs to its matching `}`, so holes may contain strings (`fmt"Hi {name.or("guest")}"`); `{{` and `}}` are literal braces |
 | **Keywords** | All reserved, none contextual. A keyword may still name a **member**: a field or method, where it is declared (`pub fn view(&self)`, `default: Port`) and where it is used after `.` or `::` (`Type::from(x)`, `cart.view()`), and a named-argument label (`default: 8080`) |
 
 **Reserved keywords:** Rust's strict keywords except `async`, `await`, `move` and `macro_rules`, plus

@@ -448,7 +448,7 @@ visit(&orders, |o| total += o.qty);             // this one is pure
   effects, or that `f` must not suspend:
   `fn map<T, U, E>(xs: &[T], f: impl FnMut(&T) -> U with E) -> Vec<U> with E`.
 - **Stored closures state their effects** ([`closures.md`: Stored (escaping) closures](closures.md#stored-escaping-closures)):
-  `Box<dyn Fn(Event) with suspend, fail(HandlerError)>`.
+  `Box<dyn Fn(Event) with (suspend, fail(HandlerError))>`.
 - This generalises Swift's `rethrows` to every effect, and avoids Java's checked-exception trap.
 
 ### Restricted code is one mechanism

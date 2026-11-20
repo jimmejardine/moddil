@@ -115,10 +115,10 @@ the rule.
 //! match_order(&mut book, ask(99, 3))      // => [Fill(99, 3)]     (the tour, run as a test)
 
 /// Each side is a sorted list of levels; orders queue FIFO within a level.
-group levels "Price levels"
+group levels "Price levels";
 
 /// How fills are computed and reported to the client.
-group fills "Fills and reporting"
+group fills "Fills and reporting";
 
 #[group(levels)]
 pub struct Level { … }

@@ -1,0 +1,374 @@
+# Moddil grammar: the one grammar source (edition 2027 draft).
+#
+# Normative for syntax. Meaning lives in the reference; design rationale in specs/.
+# Checklist: inventory.md. Decisions: specs/syntax.md, "Grammar rules".
+#
+# ─── Notation (W3C-style EBNF) ───────────────────────────────────────────────
+#   rule ::= a b        sequence            a | b      choice
+#   a?  a*  a+          optional, zero or more, one or more
+#   ( … )               grouping            'x'        a terminal
+#   [a-z]  [^"]         character classes (Tokens section only)
+#   A - B               A, except what B matches (Tokens section only)
+#   UPPERCASE           token rules; lower_snake: syntax rules
+#   # …                 comment
+#
+# ─── Flags (the one extension) ───────────────────────────────────────────────
+# Two Rust restrictions are expressed as flags on rules, so expressions are written once:
+#   ns    no struct or record literal and no bare block: set in heads that a block follows
+#         (if, while, match, for, with-handlers, contracts), as Rust's "no struct literal" rule
+#   stmt  the expression starts a statement, so it may not *begin* with a block-like expression
+#         (a statement that begins with one is a block-like statement instead)
+#   cond  a `let` condition may appear: set in `if` and `while` heads (let chains)
+#
+#   name          reference with no flags (used inside delimiters: ( ) [ ] { } reset flags)
+#   name@         inherit every current flag (the leftmost operand)
+#   name@ns       inherit only ns and cond (the other operands)
+#   name+f        start with flag f set (several: name+ns+cond)
+#   !f alt        an alternative removed while f is set
+#   ?f alt        an alternative present only while f is set
+#
+# Flags expand to finite copies of the rules, so the grammar stays checkable as LL(k).
+# Lookahead needed: k = 3 (`{ IDENT ':'` starts a record; `& mut self`).
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Tokens
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Source is UTF-8 (NFC-normalised identifiers). Bidirectional control characters are rejected
+# outside string-literal escapes.
+
+WHITESPACE    ::= [ \t\r\n]+
+LINE_COMMENT  ::= '//' [^/!\n] [^\n]* | '//'                 # includes `// =>` and `//~` test expectations
+BLOCK_COMMENT ::= '/*' ( BLOCK_COMMENT | [^*] | '*' [^/] )* '*/'  # nests
+DOC_OUTER     ::= '///' [^\n]*                                # documents the following item
+DOC_INNER     ::= '//!' [^\n]*                                # documents the enclosing module
+
+IDENT         ::= IDENT_TEXT - KEYWORD
+IDENT_TEXT    ::= XID_START XID_CONTINUE* | '_' XID_CONTINUE+    # Unicode UAX #31
+KEYWORD       ::= 'always' | 'as' | 'bench' | 'break' | 'catch' | 'const' | 'continue' | 'crate'
+                | 'default' | 'defer' | 'dimension' | 'dyn' | 'else' | 'ensures' | 'enum'
+                | 'errdefer' | 'escape' | 'extern' | 'fail' | 'false' | 'fn' | 'for' | 'from'
+                | 'gen' | 'group' | 'if' | 'impl' | 'in' | 'invariant' | 'let' | 'linear' | 'loop'
+                | 'match' | 'mod' | 'mut' | 'nondet' | 'note' | 'property' | 'pub' | 'ref'
+                | 'requires' | 'resume' | 'return' | 'select' | 'self' | 'Self' | 'spawn' | 'static'
+                | 'struct' | 'super' | 'suspend' | 'test' | 'trait' | 'true' | 'try' | 'type'
+                | 'unit' | 'unsafe' | 'use' | 'view' | 'where' | 'while' | 'with' | 'yield'
+# All keywords are reserved (no contextual keywords). `extern`, `ref` and `static` are reserved but
+# unused. A keyword may still name a member: see member_name.
+
+INTEGER       ::= DEC_DIGITS | '0x' [0-9a-fA-F_]+ | '0o' [0-7_]+ | '0b' [01_]+
+DEC_DIGITS    ::= [0-9] [0-9_]*
+FLOAT         ::= DEC_DIGITS '.' [0-9] [0-9_]* EXPONENT? | DEC_DIGITS EXPONENT
+EXPONENT      ::= [eE] [+-]? [0-9_]+
+# No type suffixes: `0u8` is written `let d: u8 = 0`.
+# `1..2` lexes as INTEGER '..' INTEGER: a '.' followed by '.' never continues a number.
+# A FLOAT after '.' (tuple access `t.0.1`) is split by the parser into two indices.
+
+STRING        ::= '"' ( [^"\\] | ESCAPE )* '"'
+RAW_STRING    ::= 'r' '#'* '"' … '"' '#'*                     # as Rust: closing hashes match opening
+BYTE_STRING   ::= 'b' STRING | 'br' '#'* '"' … '"' '#'*
+BLOCK_STRING  ::= 'r'? '"""' NEWLINE … NEWLINE [ \t]* '"""'   # dedent rules: specs/text.md
+CHAR          ::= "'" ( [^'\\] | ESCAPE ) "'"
+BYTE          ::= "b'" ( [^'\\] | ESCAPE ) "'"
+ESCAPE        ::= '\\' ( [nrt0\\"'s] | 'x' HEX HEX | 'u{' HEX+ '}' )   # \s keeps a space in blocks
+TAGGED_STRING ::= TAG ( STRING | RAW_STRING | BLOCK_STRING )      # no space: fmt"…", sql"""…"""
+TAG           ::= IDENT_TEXT - ( 'r' | 'b' | 'br' )
+# Holes: inside a tagged literal, '{' opens a hole that runs to its matching '}'. The lexer counts
+# nested braces and skips string and char literals inside a hole, so fmt"Hi {name.or("guest")}"
+# is one token; '{{' and '}}' are literal braces. The tag's comptime parser reads the holes
+# ({expr}, {expr:spec}); to the grammar the whole literal is one token. Plain strings have no holes.
+LABEL         ::= "'" IDENT_TEXT                                # not followed by "'"
+
+PUNCT_NOT_DELIMITER ::= PUNCT - ( '(' | ')' | '[' | ']' | '{' | '}' )
+# PUNCT, longest match first:
+#   +  -  *  /  %  ^  !  &  |  &&  ||  <<  >>  +%  -%  *%  @  \  ?  ?!
+#   =  +=  -=  *=  /=  %=  ^=  &=  |=  <<=  >>=  +%=  -%=  *%=
+#   ==  !=  <  >  <=  >=  .  ..  ..=  ,  ;  :  ::  ->  =>  #[  #![  (  )  [  ]  {  }
+# Splitting: in generic arguments '>>', '>=' and '>>=' close with their first '>'; in prefix
+# position '&&' is two borrows; '||' in operand position is an empty closure parameter list.
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Files, attributes, items
+# ═══════════════════════════════════════════════════════════════════════════
+
+file           ::= inner_attr* item*
+inner_attr     ::= '#![' attr_list ']' | DOC_INNER
+outer_attr     ::= '#[' attr_list ']' | DOC_OUTER                    # doc comments attach like attributes
+attr_list      ::= attr ( ',' attr )* ','?
+attr           ::= simple_path attr_input?
+attr_input     ::= '(' token_tree* ')' | '=' literal
+token_tree     ::= '(' token_tree* ')' | '[' token_tree* ']' | '{' token_tree* '}' | any_token
+any_token      ::= IDENT | KEYWORD | LABEL | literal_token | PUNCT_NOT_DELIMITER   # any token but ( ) [ ] { }
+literal_token  ::= INTEGER | FLOAT | STRING | RAW_STRING | BYTE_STRING | BLOCK_STRING | TAGGED_STRING
+                 | CHAR | BYTE
+
+item           ::= outer_attr* note* vis? item_kind
+note           ::= 'note' ( STRING | BLOCK_STRING )                  # a maintainer note on the item
+vis            ::= 'pub' ( '(' 'mod' ')' )?
+item_kind      ::= fn_item | struct_item | view_item | enum_item | trait_item | impl_item
+                 | type_item | const_item | use_item | mod_item
+                 | test_item | property_item | bench_item | group_item | unit_item | dimension_item
+
+# ─── Functions ────────────────────────────────────────────────────────────────
+fn_item        ::= fn_qualifier* 'fn' member_name generic_params? '(' params? ')' signature_tail
+                   ( block | ';' )
+fn_qualifier   ::= 'const' | 'unsafe' | 'gen'
+signature_tail ::= ( '->' type )? resume_clause? from_clause? effect_clause? where_clause? contract*
+# The clause order is fixed; the formatter enforces it.
+resume_clause  ::= 'resume' IDENT ':' type                       # coroutines: gen fn … -> Y resume r: R
+from_clause    ::= 'from' IDENT ( ',' IDENT )*                   # which borrowed parameter a result derives from
+effect_clause  ::= 'with' sig_effect ( ',' sig_effect )*
+sig_effect     ::= ( IDENT ':' )? effect_atom                     # `time: Time` names the handle
+effect_atom    ::= 'suspend' | 'spawn' | 'nondet' | 'fail' '(' error_types ')' | '&' type | path_type
+error_types    ::= type ( '|' type )*
+where_clause   ::= 'where' where_pred ( ',' where_pred )* ','?      # bounds; never a refinement here
+where_pred     ::= type ':' bounds
+contract       ::= 'requires' 'always'? contract_body | 'ensures' contract_body
+contract_body  ::= ( IDENT ':' )? expr+ns                         # an optional name, cited by unsafe("name: …")
+
+params         ::= param_entry ( ',' param_entry )* ','?
+param_entry    ::= outer_attr* ( self_param | '*' | param )        # '*': later parameters are name-only
+self_param     ::= '&' 'mut'? 'self' | 'mut'? 'self' ( ':' type )?
+param          ::= pattern_no_alt ( ':' type )? ( '=' expr )?      # private functions may omit types
+
+generic_params ::= '<' generic_param ( ',' generic_param )* ','? '>'
+generic_param  ::= outer_attr* ( 'const' IDENT ':' type ( '=' const_arg )?
+                               | IDENT ( ':' bounds )? ( '=' type )? )
+
+# ─── Data types ───────────────────────────────────────────────────────────────
+struct_item    ::= 'linear'? 'struct' IDENT generic_params? where_clause?
+                   ( struct_body | tuple_fields ';' | ';' )
+view_item      ::= 'view' IDENT generic_params? where_clause? struct_body
+struct_body    ::= '{' ( struct_member ( ',' struct_member )* ','? )? '}'
+struct_member  ::= outer_attr* ( field | 'invariant' expr )
+field          ::= vis? member_name ':' type ( '=' expr )?           # a default value
+tuple_fields   ::= '(' ( tuple_field ( ',' tuple_field )* ','? )? ')'
+tuple_field    ::= outer_attr* vis? type
+
+enum_item      ::= 'enum' IDENT generic_params? where_clause? '{' ( variant ( ',' variant )* ','? )? '}'
+variant        ::= outer_attr* IDENT ( struct_body | tuple_fields )? ( '=' expr )?
+
+trait_item     ::= 'unsafe'? 'trait' IDENT generic_params? ( ':' bounds )? where_clause?
+                   '{' trait_member* '}'
+trait_member   ::= outer_attr* note* ( fn_item | assoc_type | const_item )
+assoc_type     ::= 'type' IDENT ( ':' bounds )? ( '=' type )? ';'
+
+impl_item      ::= 'unsafe'? 'impl' generic_params? type ( 'for' type )? where_clause? impl_body
+impl_body      ::= '{' impl_member* '}'
+impl_member    ::= outer_attr* note* vis? 'default'? ( fn_item | assoc_type | const_item )
+
+type_item      ::= 'type' IDENT generic_params? '=' type ( 'where' expr )? ';'   # `where` here: a refinement
+const_item     ::= 'const' IDENT ':' type '=' expr ';'
+
+# ─── Modules ──────────────────────────────────────────────────────────────────
+use_item       ::= 'use' use_tree ';'
+use_tree       ::= use_path ( '::' ( '*' | '{' use_list '}' ) )? ( 'as' IDENT )?
+                 | '{' use_list '}'
+use_list       ::= ( use_tree ( ',' use_tree )* ','? )?
+use_path       ::= use_segment ( '::' use_segment )*                  # LL(2): '::' then a name, '*' or '{'
+use_segment    ::= IDENT | 'self' | 'super' | 'crate'
+mod_item       ::= 'mod' IDENT ';'          # only with a generating attribute: #[c_import(…)] mod sqlite3;
+
+# ─── Tests, documentation groups ─────────────────────────────────────────────
+test_item      ::= 'test' STRING ( 'for' test_subject ( 'with' IDENT 'in' '[' type ( ',' type )* ','? ']' )? )?
+                   ( 'with' path_type ( ',' path_type )* )? block      # `with FsRoot`: real capabilities
+property_item  ::= 'property' STRING 'for' test_subject '(' params? ')' block
+bench_item     ::= 'bench' STRING ( 'for' test_subject )? block
+test_subject   ::= expr_path                                          # sort::<int>, <Money as Display>
+group_item     ::= 'group' IDENT STRING ';'
+
+# ─── Units and dimensions ────────────────────────────────────────────────────
+unit_item      ::= 'unit' IDENT ( ':' path_type | '=' unit_def ) ';'
+unit_def       ::= scale_expr ( ( '+' | '-' ) number )?            # an affine offset: K + 273.15
+scale_expr     ::= scale_power ( ( '*' | '/' ) scale_power )*
+scale_power    ::= scale_atom ( '^' exponent )?
+scale_atom     ::= simple_path | number | '(' scale_expr ')'
+dimension_item ::= 'dimension' IDENT ( '=' unit_expr )? ';'
+
+unit_suffix    ::= '[' unit_expr ']'                                  # 100[cm], f64[m/s^2]
+unit_expr      ::= unit_power ( ( '*' | '/' ) unit_power )*
+unit_power     ::= unit_atom ( '^' exponent )?
+unit_atom      ::= simple_path | '(' unit_expr ')'
+exponent       ::= '-'? INTEGER | '(' '-'? INTEGER ( '/' INTEGER )? ')'   # rational: m^(1/2)
+number         ::= INTEGER | FLOAT
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Types
+# ═══════════════════════════════════════════════════════════════════════════
+
+type           ::= path_type
+                 | '&' 'mut'? type
+                 | '*' ( 'const' | 'mut' ) type
+                 | '[' type ( ';' expr )? ']'                         # array [T; N] or slice [T]
+                 | '(' paren_type_rest
+                 | '{' member_name ':' type ( ',' member_name ':' type )* ','? '}'   # anonymous record
+                 | 'fn' '(' type_list? ')' ( '->' type )? type_effects?
+                 | 'impl' bounds
+                 | 'dyn' bounds
+                 | '!'
+                 | '_'
+paren_type_rest ::= ')'                                               # unit type
+                 | type ( ')'                                          # parenthesised
+                        | ',' type_list? ')'                           # tuple
+                        | 'where' expr ')' )                           # refinement: (u32 where self >= 1)
+type_list      ::= type ( ',' type )* ','?
+path_type      ::= qualified_path | type_path
+type_path      ::= type_segment ( '::' type_segment )* unit_suffix?   # f64[m], Fixed<4>[USD]
+type_segment   ::= IDENT generic_args? | 'Self' | 'self' | 'super' | 'crate'
+qualified_path ::= '<' type 'as' type_path '>' ( '::' member_name )*
+generic_args   ::= '<' ( generic_arg ( ',' generic_arg )* ','? )? '>'
+generic_arg    ::= type | const_arg | IDENT '=' type                  # LL(2): Item = int
+const_arg      ::= '-'? INTEGER | STRING | 'true' | 'false' | block
+bounds         ::= bound ( '+' bound )*
+bound          ::= type_path fn_sugar?                                # Fn(&T) -> U with E
+fn_sugar       ::= '(' type_list? ')' ( '->' type )? type_effects?
+type_effects   ::= 'with' ( effect_atom | '(' effect_atom ( ',' effect_atom )* ','? ')' )
+# In type position one effect may be bare; several are parenthesised. Effects written after a type
+# belong to it: `-> impl Fn() with E` gives E to the closure, not to the function.
+
+simple_path    ::= IDENT ( '::' IDENT )*
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Patterns
+# ═══════════════════════════════════════════════════════════════════════════
+
+pattern        ::= pattern_no_alt ( '|' pattern_no_alt )*
+pattern_no_alt ::= '_'
+                 | '..'                                               # rest, in slices and tuples
+                 | literal_pat ( range_op literal_pat? )?             # 1..=9, 'a'..='z'
+                 | 'mut' IDENT ( '@' pattern_no_alt )?
+                 | pattern_path path_pat_tail?                        # a binding, a constant or a variant
+                 | '&' 'mut'? pattern_no_alt                          # matching through a borrow; no `ref`
+                 | '(' ( pattern ( ',' pattern )* ','? )? ')'
+                 | '[' ( pattern ( ',' pattern )* ','? )? ']'
+                 | '{' field_pats '}'                                 # anonymous record: { host, port, .. }
+pattern_path   ::= ( qualified_path | IDENT | 'Self' | 'super' | 'crate' ) ( '::' ( member_name | generic_args ) )*
+# Not `self`, so a parameter beginning `self` is always self_param.
+path_pat_tail  ::= '(' ( pattern ( ',' pattern )* ','? )? ')'
+                 | '{' field_pats '}'
+                 | '@' pattern_no_alt
+field_pats     ::= ( field_pat ( ',' field_pat )* ','? )?
+field_pat      ::= member_name ( ':' pattern )? | '..'
+literal_pat    ::= '-'? number | STRING | CHAR | BYTE | BYTE_STRING | 'true' | 'false'
+arm_pattern    ::= pattern ( ':' type )?          # p: Port: a refinement test, only at the top of an arm
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Statements and blocks
+# ═══════════════════════════════════════════════════════════════════════════
+
+block          ::= '{' inner_attr* statements '}'
+statements     ::= ( statement statements                            # right-recursive so the grammar
+                   | expr+stmt ( ';' statements )? )?                 # stays LL: the last expression
+                                                                      # without ';' is the block's value
+statement      ::= outer_attr* ( let_stmt | local_item | defer_stmt | block_like ';'? )
+let_stmt       ::= 'let' pattern ( ':' type )? ( '=' expr ( 'else' block )? )? ';'
+local_item     ::= fn_item | struct_item | enum_item | trait_item | impl_item | type_item
+                 | const_item | use_item
+defer_stmt     ::= ( 'defer' | 'errdefer' ) ( block | expr+stmt ';' )
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Expressions, lowest precedence first
+# ═══════════════════════════════════════════════════════════════════════════
+
+expr           ::= assign@
+assign         ::= range@ ( assign_op assign@ns )?                    # right-associative
+assign_op      ::= '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=' | '<<=' | '>>='
+                 | '+%=' | '-%=' | '*%='
+range          ::= or@ ( range_op or@ns? )?
+                 | range_op or@ns?                                    # ..b, .., ..=b
+range_op       ::= '..' | '..='
+or             ::= and@ ( '||' and@ns )*
+and            ::= compare@ ( '&&' compare@ns )*
+compare        ::= bit_or@ ( ( compare_op bit_or@ns )+                  # chains: 0 <= i < len
+                            | 'in' in_operand@ns )?                    # self in 1..
+compare_op     ::= '==' | '!=' | '<' | '>' | '<=' | '>='
+# A chain runs in one direction only (all < and <=, or all > and >=); == and != do not chain.
+in_operand     ::= bit_or@ ( range_op bit_or@ns? )? | range_op bit_or@ns?
+# `in` takes its range here, so `self in 1..10 && self != 5` groups as expected.
+bit_or         ::= bit_xor@ ( '|' bit_xor@ns )*
+bit_xor        ::= bit_and@ ( '^' bit_and@ns )*
+bit_and        ::= shift@ ( '&' shift@ns )*
+shift          ::= additive@ ( ( '<<' | '>>' ) additive@ns )*
+additive       ::= multiplicative@ ( ( '+' | '-' | '+%' | '-%' ) multiplicative@ns )*
+multiplicative ::= unary@ ( ( '*' | '/' | '%' | '*%' | '@' ) unary@ns )*   # @: matrix multiply
+unary          ::= ( '-' | '!' | '*' | '&' 'mut'? ) unary@ns
+                 | postfix@
+postfix        ::= primary@ postfix_op*
+postfix_op     ::= '?' error_context?                                 # propagate, with optional context
+                 | '?!' STRING                                        # cannot fail here: trap with the reason
+                 | call_args
+                 | '.' member_name ( '::' generic_args )? call_args?  # field, or method with turbofish
+                 | '.' INTEGER                                        # tuple field
+                 | '[' index_arg ( ',' index_arg )* ','? ']'          # a[i], a[.., 1..3]
+error_context  ::= STRING | TAGGED_STRING                             # load(p)? fmt"loading {p}"
+call_args      ::= '(' ( argument ( ',' argument )* ','? )? ')'
+argument       ::= ( member_name ':' )? expr                          # named argument: limit: 32
+index_arg      ::= expr
+
+# ─── Primaries ───────────────────────────────────────────────────────────────
+primary        ::= literal
+                 | expr_path struct_tail@?
+                 | '(' ( expr ( ',' ( expr ( ',' expr )* ','? )? )? )? ')'   # (), (e), tuples
+                 | '[' ( expr ( ( ',' expr )* ','? | ';' expr ) )? ']'       # arrays, [x; n]
+                 | !ns '{' member_name ':' expr ( ',' member_name ':' expr )* ','? '}'   # record
+                 | !ns !stmt block
+                 | !ns !stmt 'const' block                            # comptime block; parenthesise it in heads
+                 | !stmt block_like_keyword
+                 | !stmt 'impl' type impl_body                        # anonymous impl: a one-off handler
+                 | closure
+                 | '\' type_path ( '.' member_name )+                 # key path: \Order.customer.email
+                 | ?cond 'let' pattern '=' compare@ns                  # in if/while heads: let chains
+                 | 'fail' '(' expr ')'
+                 | 'escape' expr?                                     # leave the enclosing fn from a lambda
+                 | 'yield' expr?
+                 | 'return' expr?
+                 | 'break' LABEL? expr?
+                 | 'continue' LABEL?
+struct_tail    ::= !ns '{' struct_fields '}'                        # gone under ns: then just the path
+struct_fields  ::= ( field_init ( ',' field_init )* ','? )?
+field_init     ::= member_name ( ':' expr )? | '..' expr              # shorthand only for named structs
+
+literal        ::= number unit_suffix?                                # 100[cm], 9.81[m/s^2]
+                 | STRING | RAW_STRING | BYTE_STRING | BLOCK_STRING | TAGGED_STRING
+                 | CHAR | BYTE | 'true' | 'false'
+
+expr_path      ::= ( qualified_path | path_start ) ( '::' ( member_name | generic_args ) )*
+path_start     ::= IDENT | 'self' | 'Self' | 'super' | 'crate'
+# In expressions generic arguments need the turbofish: Vec::<T>::new(), x.to::<u8>().
+
+member_name    ::= IDENT | KEYWORD
+# After '.' or '::', as a field or method name where it is declared, and as an argument label,
+# a keyword is an ordinary name: Type::from(x), cart.view(), default: 8080.
+
+closure        ::= ( '||' | '|' ( closure_param ( ',' closure_param )* ','? )? '|' )
+                   ( '->' type block | expr@ns )
+closure_param  ::= pattern_no_alt ( ':' type )?                       # no top-level '|' inside '| … |'
+
+# ─── Block-like expressions ──────────────────────────────────────────────────
+# At the start of a statement these form a statement of their own (block_like); elsewhere they
+# are ordinary operands (block_like_keyword in primary).
+block_like     ::= block | 'const' block | block_like_keyword
+block_like_keyword
+               ::= if_expr | match_expr | loop_expr | while_expr | for_expr | labelled
+                 | try_expr | with_expr | select_expr | unsafe_block
+                 | 'gen' block                                        # generator block
+if_expr        ::= 'if' ( 'const' expr+ns | expr+ns+cond ) block ( 'else' ( if_expr | block ) )?
+# `if const`: a comptime conditional; every branch is checked, only the taken one compiled. Under ns a
+# const block cannot start an operand, so after `if` the keyword `const` is always this form.
+match_expr     ::= 'match' expr+ns '{' inner_attr* arms '}'
+arms           ::= ( outer_attr* arm_pattern ( 'if' expr )? '=>' arm_rest )?
+arm_rest       ::= block_like ','? arms
+                 | expr+stmt ( ',' arms )?
+loop_expr      ::= 'loop' block
+while_expr     ::= 'while' expr+ns+cond block
+for_expr       ::= 'for' pattern 'in' expr+ns block
+labelled       ::= LABEL ':' ( loop_expr | while_expr | for_expr | block )
+try_expr       ::= 'try' block ( 'catch' '{' arms '}' )?
+with_expr      ::= 'with' handler ( ',' handler )* block              # install effect handlers
+handler        ::= path_type '=' expr+ns
+select_expr    ::= 'select' '{' select_arms '}'
+select_arms    ::= ( pattern '=' expr '=>' arm_select_rest )?
+arm_select_rest
+               ::= block_like ','? select_arms
+                 | expr+stmt ( ',' select_arms )?
+unsafe_block   ::= 'unsafe' '(' STRING ')' block                      # the justification is required

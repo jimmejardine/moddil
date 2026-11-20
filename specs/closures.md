@@ -140,7 +140,7 @@ fn refresh(&mut self) {
 Stored callbacks and event handlers are boxed, owned closures:
 
 ```rust
-type Handler = Box<dyn Fn(Event) with suspend, fail(HandlerError)>;
+type Handler = Box<dyn Fn(Event) with (suspend, fail(HandlerError))>;
 
 fn on_message(&mut self, h: Handler) { self.handlers.push(h) }
 ```

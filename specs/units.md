@@ -88,10 +88,10 @@ exponents**: F#'s free abelian group, rather than a fixed seven-element vector.
 
 - Any mod can declare a base dimension:
   ```
-  dimension Length
-  dimension Currency
-  dimension Information
-  dimension Pixel
+  dimension Length;
+  dimension Currency;
+  dimension Information;
+  dimension Pixel;
   ```
 - A dimension's identity is its fully qualified name, so two mods' `Pixel` never collide.
 - The SI dimensions are simply the first such declarations, in `moddil/units/si`.
@@ -103,17 +103,17 @@ A unit has a dimension and a scale relative to that dimension's base unit, plus 
 units:
 
 ```
-unit m:  Length               // base unit for Length
-unit cm = m / 100
-unit mm = m / 1000
-unit km = 1000 * m
-unit s:  Time
-unit ms = s / 1000
-unit K:  Temperature
-unit degC = K + 273.15        // affine
-unit B:  Information
-unit MiB = 1048576 * B
-unit USD: Currency::USD       // each currency is its own base dimension (see below)
+unit m:  Length;              // base unit for Length
+unit cm = m / 100;
+unit mm = m / 1000;
+unit km = 1000 * m;
+unit s:  Time;
+unit ms = s / 1000;
+unit K:  Temperature;
+unit degC = K + 273.15;       // affine
+unit B:  Information;
+unit MiB = 1048576 * B;
+unit USD: Currency::USD;      // each currency is its own base dimension (see below)
 ```
 
 **Unit expressions (decided)** in declarations use explicit operators over unit names: `*` and `/`

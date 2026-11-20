@@ -100,8 +100,8 @@ with Contracts = contracts::none() { book.match_orders() }   // a measured hot p
 ### Validated newtypes (lightweight refinements)
 
 ```
-type Port = u16 where self >= 1024
-type Price = i64 where self > 0
+type Port = u16 where self >= 1024;
+type Price = i64 where self > 0;
 
 let p = Port::new(raw)?;      // fail(RefinementError): invalid input is an error (class 1)
 let q: Port = 8080;           // literal checked at compile time

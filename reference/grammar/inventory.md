@@ -4,7 +4,7 @@ Every syntactic construct the specs decide, with an example and the spec that de
 checklist for `moddil.ebnf` ([`README.md`](README.md)). Built by sweeping every code block and syntax
 table in [`specs/`](../../specs/README.md).
 
-**Status values:** ✅ decided · ⚠️ conflict or undecided spelling. All nine conflicts found are now
+**Status values:** ✅ decided · ⚠️ conflict or undecided spelling. All eleven conflicts found are now
 decided ([Conflicts, resolved](#conflicts-resolved)).
 
 The base rule: **Rust's syntax unless a delta says otherwise**
@@ -121,7 +121,7 @@ The base rule: **Rust's syntax unless a delta says otherwise**
 | Paths and generics | `Map<Code, Target>`, `Option<&V>`, `Self::Item` | as Rust | ✅ |
 | Borrows, arrays, slices, tuples | `&T`, `&mut T`, `[u8; 32]`, `[f64]`, `(A, B)` | as Rust | ✅ |
 | Units on types | `f64[m]`, `i64[ns]`, `Fixed<4>[USD]`, `f64[U^2]`, `Vec<f64[m]>` | [units](../../specs/units.md#why-square-brackets) | ✅ |
-| `impl` and `dyn` | `impl Fn(&T) + NoAlloc`, `Box<dyn Fn(Event) with suspend, fail(E)>`, `&dyn Net` | [types](../../specs/types.md), [closures](../../specs/closures.md) | ✅ |
+| `impl` and `dyn` | `impl Fn(&T) + NoAlloc`, `Box<dyn Fn(Event) with (suspend, fail(E))>`, `&dyn Net` | [types](../../specs/types.md), [closures](../../specs/closures.md) | ✅ |
 | Function types | `fn(A) -> B with E` | [types](../../specs/types.md) | ✅ |
 | Anonymous records | `-> { min: f64, max: f64 }` | [syntax](../../specs/syntax.md#inference-generic-on-the-fly) | ✅ |
 | Never | `!` | as Rust | ✅ |
@@ -141,6 +141,8 @@ Found by the inventory and decided in [`specs/syntax.md`: Grammar rules](../../s
 | C7 | Struct literals in condition heads | Parenthesised, as in Rust |
 | C8 | Signature clause order | `from`, `with`, `where`, then `requires`/`ensures` |
 | C9 | Reserved or contextual keywords | All reserved; keywords may name members and label arguments |
+| C10 | Effect lists inside types, where commas already separate things | One bare effect, or several in parentheses: `with (suspend, fail(E))` |
+| C11 | Anonymous record shorthand `{ min, max }` vs a block | No shorthand: `{ min: lo, max: hi }` |
 
 Fixed directly, as slips against decided rules: `assert!(…)` in types.md (there are no macros) and
 `and` in an unsafe.md contract (Rust's `&&`).
