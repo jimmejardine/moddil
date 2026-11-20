@@ -3,8 +3,8 @@
     python tools/check_grammars.py            every check
     python tools/check_grammars.py lark       one check (lark, tree-sitter)
 
-Each parses every valid corpus case (reference/grammar/tests/valid.mdl) and the hand-written
-samples (samples.mdl), which must all be accepted. The GBNF is checked by moddil-grammar's own
+Each parses every valid corpus case (reference/grammar/tests/valid.moddil) and the hand-written
+samples (samples.moddil), which must all be accepted. The GBNF is checked by moddil-grammar's own
 Rust tests. A missing tool is a skip locally and a failure on CI (CI=true).
 
 Tools: lark (pip install lark==1.2.2); tree-sitter (npx tree-sitter-cli@0.26.13, plus a C compiler).
@@ -33,7 +33,7 @@ class Skip(Exception):
 def cases():
     """(name, text) for every case that must parse."""
     out = []
-    for file in ("valid.mdl", "samples.mdl"):
+    for file in ("valid.moddil", "samples.moddil"):
         text = (TESTS / file).read_text(encoding="utf-8").replace("\r\n", "\n")
         for i, case in enumerate(text.split("// ---\n")[1:], 1):
             out.append(("{}#{}".format(file, i), case))
@@ -67,7 +67,7 @@ def check_tree_sitter():
     with tempfile.TemporaryDirectory() as tmp:
         names = {}
         for i, (name, text) in enumerate(cases()):
-            path = Path(tmp) / "case{:04}.mdl".format(i)
+            path = Path(tmp) / "case{:04}.moddil".format(i)
             path.write_text(text, encoding="utf-8")
             names[path.name] = name
         listing = Path(tmp) / "paths.txt"

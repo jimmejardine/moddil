@@ -73,7 +73,7 @@ cargo build --workspace
 python tools/ci.py        # fmt, clippy, deny, test, links, grammars: the same checks GitHub runs
 ```
 
-A small program, saved as `hello.mdl`:
+A small program, saved as `hello.moddil`:
 
 ```rust
 fn add(a: int, b: int) -> int { a + b }
@@ -87,8 +87,8 @@ test "add" {
 ```
 
 ```
-cargo run -p moddil -- run hello.mdl     # prints 5
-cargo run -p moddil -- test hello.mdl    # test "add" ... ok
+cargo run -p moddil -- run hello.moddil     # prints 5
+cargo run -p moddil -- test hello.moddil    # test "add" ... ok
 ```
 
 A test checks values in two ways: `// =>` states the value of the expression before it, and

@@ -12,7 +12,7 @@ the reference interpreter. The runner is [`crates/conformance`](../crates/confor
 
 ## Layout
 
-`conformance/<edition>/<feature>/*.mdl`, organised by feature and edition, like Test262.
+`conformance/<edition>/<feature>/*.moddil`, organised by feature and edition, like Test262.
 
 ## Writing a test
 
@@ -20,7 +20,7 @@ Tests are ordinary Moddil files with inline expectations, and cite the reference
 cover:
 
 ```rust
-// conformance/2027/arithmetic/overflow.mdl
+// conformance/2027/arithmetic/overflow.moddil
 // covers: expr.arith.overflow.1, trap.1
 
 fn max() -> int { 9223372036854775807 }
@@ -35,7 +35,7 @@ test "addition" {
 ```
 
 ```rust
-// conformance/2027/calls/errors.mdl
+// conformance/2027/calls/errors.moddil
 // covers: expr.call.1
 
 fn one(a: int) -> int { a }

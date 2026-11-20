@@ -409,7 +409,7 @@ role. So handing a role to plain-`Db` code takes one explicit `with Db = input {
 - An effect set is a **set**: order doesn't matter, and a function with fewer effects can be used
   where more are allowed.
 - **Handler lookup is never hidden.** The language server shows which installs reach each use
-  ("`Time` here comes from `main.mdl:12` or `test_x:4`") with go-to-handler; `moddil explain f`
+  ("`Time` here comes from `main.moddil:12` or `test_x:4`") with go-to-handler; `moddil explain f`
   lists what `f` needs and the handlers in scope at a call; traces and the task tree show each
   task's handler stack ([`observability.md`](observability.md)). A missing handler is a compile
   error at the outermost entry point.

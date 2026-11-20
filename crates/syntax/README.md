@@ -13,7 +13,7 @@ parse.syntax();     // the lossless tree: its text is exactly `text`
 parse.tree();       // the typed AST (`ast::SourceFile`)
 ```
 
-`cargo run -p moddil-syntax --example dump -- file.mdl` prints a file's tree and errors.
+`cargo run -p moddil-syntax --example dump -- file.moddil` prints a file's tree and errors.
 
 ## Design
 
@@ -48,9 +48,9 @@ parse.tree();       // the typed AST (`ast::SourceFile`)
 
 `tests/corpus.rs`:
 
-- every case in [`valid.mdl`](../../reference/grammar/tests/valid.mdl) (which together use every
-  production) and both [samples](../../reference/grammar/tests/samples.mdl) parse without errors;
-- every near-miss in [`invalid.mdl`](../../reference/grammar/tests/invalid.mdl) is rejected;
+- every case in [`valid.moddil`](../../reference/grammar/tests/valid.moddil) (which together use every
+  production) and both [samples](../../reference/grammar/tests/samples.moddil) parse without errors;
+- every near-miss in [`invalid.moddil`](../../reference/grammar/tests/invalid.moddil) is rejected;
 - **differential:** random token edits of the valid corpus, half valid and half invalid, each judged
   by the grammar's own LL(3) recogniser (`moddil_grammar::edited_cases`); the parser must give the
   same verdict on every one. 1,000 in `cargo test`; 10,000 in release in CI's `grammars` step

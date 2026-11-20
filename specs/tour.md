@@ -270,7 +270,7 @@ test "serves over a lossy network" for serve {
 
 **Decided: at M0 the tour becomes real Moddil source, a dogfood program that checks itself.**
 
-- It moves to **`tour/shorty/`** at the repository root: a real mod with a manifest and `src/*.mdl`
+- It moves to **`tour/shorty/`** at the repository root: a real mod with a manifest and `src/*.moddil`
   files ([`modules.md`: Mods and modules](modules.md#mods-and-modules)).
 - **Each section becomes a module** (`types`, `links`, `routes`, `serve`, `main`). Its `//!`
   overview carries this page's explanations and spec links, and the mod overview gives the reading

@@ -31,7 +31,7 @@ cargo run --release -p moddil-grammar -- generate  # write the generated files (
 
   | Module | Writes |
   |---|---|
-  | `src/corpus.rs` | `reference/grammar/tests/valid.mdl` (cases that together use every reachable production, judged by the recogniser) and `invalid.mdl` (single-token edits it rejects) |
+  | `src/corpus.rs` | `reference/grammar/tests/valid.moddil` (cases that together use every reachable production, judged by the recogniser) and `invalid.moddil` (single-token edits it rejects) |
   | `src/gbnf.rs` | `reference/grammar/generated/moddil.gbnf`, for constrained decoding |
   | `src/lark.rs` | `reference/grammar/generated/moddil.lark`, for Python tooling |
   | `src/treesitter.rs` | `editors/tree-sitter-moddil/grammar.js` (the C scanner beside it is hand-written) |

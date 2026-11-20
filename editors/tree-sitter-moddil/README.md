@@ -12,7 +12,7 @@ The tree-sitter grammar for Moddil, for highlighting, folding and structural edi
 ```
 cd editors/tree-sitter-moddil
 npx tree-sitter-cli@0.26.13 generate
-npx tree-sitter-cli@0.26.13 parse path/to/file.mdl
+npx tree-sitter-cli@0.26.13 parse path/to/file.moddil
 ```
 
 ## How it differs from the reference grammar

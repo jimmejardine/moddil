@@ -105,7 +105,7 @@ snap!(recovery_garbage_between_items, "fn f() {} ) ] 42 fn g() {}");
 #[test]
 fn samples() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../reference/grammar/tests/samples.mdl");
+        .join("../../reference/grammar/tests/samples.moddil");
     let text = std::fs::read_to_string(path)
         .expect("samples")
         .replace("\r\n", "\n");

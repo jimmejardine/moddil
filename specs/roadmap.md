@@ -35,8 +35,9 @@ removal.
    resources (summary in [Memory: ownership, borrowing and sharing](memory.md)).
 8. Effect system design. **Decided:** a hybrid of scoped handlers and second-class capability
    values ([`effects-and-capabilities.md`](effects-and-capabilities.md), [Effects and capabilities as a unifying idea](effects-and-capabilities.md)).
-9. **Canonical AST storage — decided:** plain `.mdl` text files in git, always in canonical format
-   (the formatter prints the AST). There is no structured store: the language is its canonical text
+9. **Canonical AST storage — decided:** plain `.moddil` text files in git (not `.mdl`, which other
+   tools already use, so editors would misdetect it), always in canonical format (the formatter
+   prints the AST). There is no structured store: the language is its canonical text
    ([`definition.md`: The reference](definition.md#the-reference)), and the semantic diff and
    per-definition content hashes give the structured benefits ([`semantic-vcs.md`](semantic-vcs.md)).
 10. **Minimum viable language — decided:** M0 implements the v0 language in ten vertical slices, with

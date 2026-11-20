@@ -54,9 +54,9 @@ fn show(failures: &[String], total: usize, what: &str) -> String {
 
 #[test]
 fn valid_cases_parse_without_errors() {
-    let cases: Vec<String> = cases("valid.mdl")
+    let cases: Vec<String> = cases("valid.moddil")
         .into_iter()
-        .chain(cases("samples.mdl"))
+        .chain(cases("samples.moddil"))
         .collect();
     assert_eq!(cases.len(), 764);
     let mut failures = Vec::new();
@@ -74,7 +74,7 @@ fn valid_cases_parse_without_errors() {
 
 #[test]
 fn invalid_cases_report_errors() {
-    let cases = cases("invalid.mdl");
+    let cases = cases("invalid.moddil");
     assert_eq!(cases.len(), 300);
     let accepted: Vec<String> = cases
         .iter()
@@ -131,7 +131,7 @@ fn the_parser_agrees_with_the_grammar_on_random_edits() {
 
 #[test]
 fn every_prefix_of_the_samples_parses_losslessly() {
-    for case in cases("samples.mdl") {
+    for case in cases("samples.moddil") {
         let mut cut = 0;
         while cut < case.len() {
             lossless(&case[..cut]);

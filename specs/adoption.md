@@ -112,7 +112,7 @@ There is no human user study; the measurement is automatic and repeatable.
 **Decision: Python bindings are in v0, and Python is the first `moddil bind` target.**
 
 ```rust
-// fast_stats.mdl
+// fast_stats.moddil
 #[export(python)]
 pub fn rolling_mean(xs: &[f64], window: int) -> Vec<f64> { … }
 ```

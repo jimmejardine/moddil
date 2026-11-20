@@ -182,7 +182,7 @@ pub fn generate(source: &str) -> Result<Generated, Vec<GrammarError>> {
     let corpus = corpus::generate(&mut rec);
     let files = vec![
         GeneratedFile {
-            path: "reference/grammar/tests/valid.mdl".to_string(),
+            path: "reference/grammar/tests/valid.moddil".to_string(),
             contents: corpus::file(
                 &bnf,
                 &corpus.valid,
@@ -190,7 +190,7 @@ pub fn generate(source: &str) -> Result<Generated, Vec<GrammarError>> {
             ),
         },
         GeneratedFile {
-            path: "reference/grammar/tests/invalid.mdl".to_string(),
+            path: "reference/grammar/tests/invalid.moddil".to_string(),
             contents: corpus::file(
                 &bnf,
                 &corpus.invalid,
@@ -246,8 +246,8 @@ mod tests {
     #[test]
     fn gbnf_accepts_the_valid_corpus() {
         let cfg = gbnf_check::read(&repo_file("reference/grammar/generated/moddil.gbnf"));
-        let corpus = repo_file("reference/grammar/tests/valid.mdl")
-            + &repo_file("reference/grammar/tests/samples.mdl");
+        let corpus = repo_file("reference/grammar/tests/valid.moddil")
+            + &repo_file("reference/grammar/tests/samples.moddil");
         let mut failures = Vec::new();
         for case in corpus.split("// ---\n").skip(1) {
             if !gbnf_check::accepts(&cfg, case) {

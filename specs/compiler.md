@@ -159,7 +159,7 @@ moddil/
 ├─ specs/                 design documents (an Obsidian vault)
 ├─ reference/             the normative reference, versioned by edition
 │  └─ grammar/moddil.ebnf the one grammar source (definition.md)
-├─ conformance/           the shared test suite: <edition>/<feature>/*.mdl
+├─ conformance/           the shared test suite: <edition>/<feature>/*.moddil
 ├─ Cargo.toml             the Rust workspace root
 ├─ crates/                the Rust implementation
 │  ├─ grammar/            EBNF tool: LL(k) and ambiguity checks, generated tests and grammars

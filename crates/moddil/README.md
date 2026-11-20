@@ -8,9 +8,9 @@ interpreter, and a failed `assert` shows the value of each part of its condition
 the full command set (`build`, `fmt`, `diff`, `audit`, `bind`, …) arrives over the milestones.
 
 ```
-moddil check file.mdl    # report errors (exit 1 if any)
-moddil run file.mdl      # run `fn main()` and print its result (exit 101 on a trap)
-moddil test file.mdl     # run the file's `test` items
+moddil check file.moddil    # report errors (exit 1 if any)
+moddil run file.moddil      # run `fn main()` and print its result (exit 101 on a trap)
+moddil test file.moddil     # run the file's `test` items
 ```
 
 Diagnostics are rendered in the rustc style with `ariadne`; `--format json` comes later.

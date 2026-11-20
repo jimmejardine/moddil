@@ -111,7 +111,7 @@ because of earlier decisions:
 
 ```
 error[E0425]: no function `length` on `String`
-  --> src/report.mdl:12:18
+  --> src/report.moddil:12:18
    |
 12 |     if title.length() > 80 {
    |              ^^^^^^ did you mean `len`?  (confidence: high; `length` is common in JS/Java)

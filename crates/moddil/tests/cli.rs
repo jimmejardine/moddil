@@ -28,14 +28,14 @@ test \"fib\" { fib(10) }
 
 #[test]
 fn runs_main_and_prints_its_result() {
-    let out = moddil(&["run"], &file("fib.mdl", PROGRAM));
+    let out = moddil(&["run"], &file("fib.moddil", PROGRAM));
     assert!(out.status.success());
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "6765");
 }
 
 #[test]
 fn runs_tests() {
-    let out = moddil(&["test"], &file("fib-test.mdl", PROGRAM));
+    let out = moddil(&["test"], &file("fib-test.moddil", PROGRAM));
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("test \"fib\" ... ok"), "{stdout}");
@@ -43,7 +43,10 @@ fn runs_tests() {
 
 #[test]
 fn reports_errors_with_codes() {
-    let out = moddil(&["check"], &file("bad.mdl", "fn main() -> int { true }\n"));
+    let out = moddil(
+        &["check"],
+        &file("bad.moddil", "fn main() -> int { true }\n"),
+    );
     assert_eq!(out.status.code(), Some(1));
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("E0201"), "{stderr}");
@@ -51,7 +54,10 @@ fn reports_errors_with_codes() {
 
 #[test]
 fn a_trap_exits_with_101() {
-    let path = file("trap.mdl", "fn main() -> int { 9223372036854775807 + 1 }\n");
+    let path = file(
+        "trap.moddil",
+        "fn main() -> int { 9223372036854775807 + 1 }\n",
+    );
     let out = moddil(&["run"], &path);
     assert_eq!(out.status.code(), Some(101));
     let stderr = String::from_utf8_lossy(&out.stderr);
@@ -62,7 +68,7 @@ fn a_trap_exits_with_101() {
 fn a_failed_assert_shows_its_parts() {
     let text = "fn fee(a: int) -> int { a / 10 }\n\
                 test \"fees\" { let amount = 250; assert(fee(amount) + amount == 260); }\n";
-    let out = moddil(&["test"], &file("assert.mdl", text));
+    let out = moddil(&["test"], &file("assert.moddil", text));
     assert_eq!(out.status.code(), Some(1));
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("trap: assertion failed"), "{stderr}");

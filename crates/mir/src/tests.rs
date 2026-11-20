@@ -5,7 +5,7 @@ use super::*;
 /// The MIR of every function and test in `text`, one after another.
 fn dump(text: &str) -> String {
     let db = Database::default();
-    let file = SourceFile::new(&db, "t.mdl".to_string(), text.to_string());
+    let file = SourceFile::new(&db, "t.moddil".to_string(), text.to_string());
     let diagnostics = moddil_sema::diagnostics(&db, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     moddil_sema::owners(&db, file)
@@ -25,7 +25,7 @@ fn no_mir_for_files_with_errors() {
     let db = Database::default();
     let file = SourceFile::new(
         &db,
-        "t.mdl".to_string(),
+        "t.moddil".to_string(),
         "fn f() -> int { true }".to_string(),
     );
     assert!(mir(&db, Owner::new(&db, file, Item::Fn(0))).is_none());

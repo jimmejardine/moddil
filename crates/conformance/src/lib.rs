@@ -259,8 +259,8 @@ impl Report {
     }
 }
 
-/// Every `.mdl` file under `dir`, sorted.
-fn mdl_files(dir: &Path, ext: &str, out: &mut Vec<PathBuf>) {
+/// Every file with extension `ext` under `dir`, sorted.
+fn files_with_extension(dir: &Path, ext: &str, out: &mut Vec<PathBuf>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
@@ -268,7 +268,7 @@ fn mdl_files(dir: &Path, ext: &str, out: &mut Vec<PathBuf>) {
     entries.sort();
     for p in entries {
         if p.is_dir() {
-            mdl_files(&p, ext, out);
+            files_with_extension(&p, ext, out);
         } else if p.extension().is_some_and(|e| e == ext) {
             out.push(p);
         }
@@ -279,7 +279,7 @@ fn mdl_files(dir: &Path, ext: &str, out: &mut Vec<PathBuf>) {
 /// as `**expr.arith.overflow.1**`.
 pub fn paragraph_ids(repo: &Path, edition: &str) -> BTreeSet<String> {
     let mut files = Vec::new();
-    mdl_files(&repo.join("reference").join(edition), "md", &mut files);
+    files_with_extension(&repo.join("reference").join(edition), "md", &mut files);
     let mut ids = BTreeSet::new();
     for f in files {
         let Ok(text) = fs::read_to_string(&f) else {
@@ -315,7 +315,11 @@ fn paragraph_id(line: &str) -> Option<&str> {
 /// paragraph IDs the tests cite against `repo/reference/`.
 pub fn run_suite(repo: &Path, edition: &str, implementations: &[&dyn Implementation]) -> Report {
     let mut files = Vec::new();
-    mdl_files(&repo.join("conformance").join(edition), "mdl", &mut files);
+    files_with_extension(
+        &repo.join("conformance").join(edition),
+        "moddil",
+        &mut files,
+    );
     let ids = paragraph_ids(repo, edition);
     let mut report = Report {
         paragraphs: ids.len(),
@@ -410,7 +414,7 @@ mod tests {
     fn outcome(text: &str) -> Vec<String> {
         compare(
             &expectations(text).expect("valid"),
-            &MirInterpreter.run("t.mdl", text),
+            &MirInterpreter.run("t.moddil", text),
         )
     }
 

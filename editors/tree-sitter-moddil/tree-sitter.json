@@ -5,7 +5,7 @@
       "camelcase": "Moddil",
       "scope": "source.moddil",
       "path": ".",
-      "file-types": ["mdl"]
+      "file-types": ["moddil"]
     }
   ],
   "metadata": {

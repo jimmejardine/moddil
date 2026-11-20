@@ -85,13 +85,13 @@ literals (`KEYWORD`, `PUNCT`) is a choice of terminals.
 
 | File | What | Checked by |
 |---|---|---|
-| [`tests/valid.mdl`](tests/valid.mdl) | Valid cases that together use **every production** the parser can reach | The LL(3) recogniser in `moddil-grammar`; later `moddil-syntax` |
-| [`tests/invalid.mdl`](tests/invalid.mdl) | Near-misses: single-token edits of valid cases that the parser must reject | The recogniser |
+| [`tests/valid.moddil`](tests/valid.moddil) | Valid cases that together use **every production** the parser can reach | The LL(3) recogniser in `moddil-grammar`; later `moddil-syntax` |
+| [`tests/invalid.moddil`](tests/invalid.moddil) | Near-misses: single-token edits of valid cases that the parser must reject | The recogniser |
 | [`generated/moddil.gbnf`](generated/moddil.gbnf) | GBNF (llama.cpp) for constrained decoding, flags exact | An Earley recogniser in `moddil-grammar`'s tests |
 | [`generated/moddil.lark`](generated/moddil.lark) | Lark, for Python tooling and constrained decoding, flags exact | Lark 1.2.2 (`tools/check_grammars.py`) |
 | [`../../editors/tree-sitter-moddil/grammar.js`](../../editors/tree-sitter-moddil/grammar.js) | tree-sitter, from the rules as written (a superset, as editors want), with a hand-written C scanner | tree-sitter CLI 0.26.13 |
 
-[`tests/samples.mdl`](tests/samples.mdl) is written by hand: the tour's program and lexing edge cases
+[`tests/samples.moddil`](tests/samples.moddil) is written by hand: the tour's program and lexing edge cases
 in real spelling (the generated cases are spaced token by token). Every generated grammar must
 accept it too.
 

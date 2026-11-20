@@ -3,7 +3,7 @@ use super::*;
 /// The codes reported for `text`, with the 1-based line each starts on.
 fn codes(text: &str) -> Vec<(String, u32)> {
     let db = Database::default();
-    let file = SourceFile::new(&db, "test.mdl".to_string(), text.to_string());
+    let file = SourceFile::new(&db, "test.moddil".to_string(), text.to_string());
     diagnostics(&db, file)
         .iter()
         .map(|d| {
@@ -126,7 +126,7 @@ fn beyond_s0_is_not_supported_yet() {
 fn tests_observe_annotated_lines() {
     let text = "test \"t\" {\n  1 + 2; // => 3\n  if true { 4 } else { 5 } // => 4\n  6 // => 6\n}";
     let db = Database::default();
-    let file = SourceFile::new(&db, "t.mdl".to_string(), text.to_string());
+    let file = SourceFile::new(&db, "t.moddil".to_string(), text.to_string());
     assert!(diagnostics(&db, file).is_empty());
     let owner = Owner::new(&db, file, Item::Test(0));
     let lowered = body(&db, owner);
@@ -151,7 +151,11 @@ fn tests_observe_annotated_lines() {
 fn queries_are_reused_after_an_edit() {
     use salsa::Setter;
     let mut db = Database::default();
-    let file = SourceFile::new(&db, "t.mdl".to_string(), "fn f() -> int { 1 }".to_string());
+    let file = SourceFile::new(
+        &db,
+        "t.moddil".to_string(),
+        "fn f() -> int { 1 }".to_string(),
+    );
     assert!(diagnostics(&db, file).is_empty());
     file.set_text(&mut db)
         .to("fn f() -> int { true }".to_string());

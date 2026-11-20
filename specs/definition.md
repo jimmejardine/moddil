@@ -114,7 +114,7 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
 ### A shared conformance suite
 
 ```rust
-// conformance/2027/effects/handler-scope.mdl
+// conformance/2027/effects/handler-scope.moddil
 // covers: effect.handler.scope.1
 
 trait Counter { fn tick(&self) -> int; }
@@ -129,7 +129,7 @@ test "a handler is in scope inside its `with` block" {
 ```
 
 ```rust
-// conformance/2027/effects/handler-leak.mdl
+// conformance/2027/effects/handler-leak.moddil
 // covers: effect.handler.scope.2
 
 fn leak() -> int { counter.tick() }   //~ E0601

@@ -9,7 +9,7 @@ The markers and how they bind are in the [suite's README](../../conformance/READ
 
 ## Does
 
-- Finds `conformance/<edition>/<feature>/*.mdl` files and their inline expectations:
+- Finds `conformance/<edition>/<feature>/*.moddil` files and their inline expectations:
   `// =>` values, `//~ E…` diagnostic codes, `//~ trap`.
 - Runs each test on every available implementation (the reference interpreter, the MIR interpreter,
   later compiled code) and reports any disagreement.
