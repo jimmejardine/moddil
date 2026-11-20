@@ -1,0 +1,15 @@
+[package]
+name = "moddil-grammar"
+description = "Checks Moddil's EBNF grammar and generates tests and grammars from it"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

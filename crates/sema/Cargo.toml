@@ -1,0 +1,16 @@
+[package]
+name = "moddil-sema"
+description = "Names, types and effects for Moddil; produces the typed HIR"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+moddil-syntax.workspace = true
+
+[lints]
+workspace = true

@@ -155,8 +155,8 @@ moddil/
 ├─ crates/                the Rust implementation
 │  ├─ grammar/            EBNF tool: LL(k) and ambiguity checks, generated tests and grammars
 │  ├─ syntax/             lexer, parser, AST; later the formatter
-│  ├─ sema/               names, types, effects, ownership (split as it grows)
-│  ├─ mir/                the MIR and lowering to it
+│  ├─ sema/               names, types, effects; the typed HIR (split as it grows)
+│  ├─ mir/                the MIR, its phases and ownership checking (mir.md)
 │  ├─ interp/             the MIR interpreter
 │  ├─ refinterp/          the reference interpreter (depends only on syntax)
 │  ├─ conformance/        the conformance runner (// =>, //~ E…, //~ trap)
@@ -178,8 +178,12 @@ moddil/
   ([`packages-and-supply-chain.md`: Versions and majors](packages-and-supply-chain.md#versions-and-majors));
   only `mods/core-*` ships inside the toolchain ([`stdlib.md`: Distribution and versioning](stdlib.md#distribution-and-versioning)).
 - **Crates** are published as `moddil-<name>`. They start coarse and split as they grow (`sema` into
-  names, types, effects and ownership), following the many-small-crates rule in
+  names, types and effects), following the many-small-crates rule in
   [Stage 0 language: Rust](#stage-0-language-rust).
+- **The Rust toolchain is pinned** in `rust-toolchain.toml` (1.95.0, also the workspace's
+  `rust-version`), and every dependency is declared once in the root `Cargo.toml`. CI is defined
+  once, in `tools/ci.py`: GitHub Actions runs it on Linux, Windows and macOS, and it runs locally
+  on Windows and in WSL. `cargo-deny` checks licences, advisories and sources.
 - **The reference interpreter's independence is checked:** CI fails if `crates/refinterp` depends on
   anything but `crates/syntax` and general-purpose crates ([Two interpreters](#two-interpreters)).
 - **The reference examples become code in `examples/<name>/`**, built and tested in CI on every

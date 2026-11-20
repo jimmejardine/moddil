@@ -1,0 +1,19 @@
+[package]
+name = "moddil-refinterp"
+description = "The reference interpreter for Moddil, independent of the compiler"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+moddil-syntax.workspace = true
+
+[dev-dependencies]
+cargo_metadata.workspace = true
+
+[lints]
+workspace = true

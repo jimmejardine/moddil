@@ -4,8 +4,28 @@ The **Rust implementation** of Moddil: the stage-0 compiler and its tools, in on
 whose `Cargo.toml` sits at the repository root
 ([`specs/compiler.md`](../specs/compiler.md), [Repository layout](../specs/compiler.md#repository-layout)).
 
-**Status:** no code yet. The grammar comes first; the crates follow slice by slice
+**Status:** a workspace skeleton: every crate builds and is tested, but there is no language code
+yet. The grammar comes first; the crates follow slice by slice
 ([M0 slices](../specs/roadmap.md#m0-the-v0-language-in-slices)).
+
+## Building and checking
+
+```
+cargo build --workspace
+cargo run -p moddil -- --version
+python tools/ci.py             # every CI step on this machine: fmt, clippy, deny, test, links
+python tools/ci.py --wsl       # the same steps in WSL (Linux); --all runs both
+```
+
+- **Toolchain:** pinned to Rust 1.95.0 in [`rust-toolchain.toml`](../rust-toolchain.toml); rustup
+  installs it on first use.
+- **Dependencies** are declared once, in the root [`Cargo.toml`](../Cargo.toml) under
+  `[workspace.dependencies]`; a crate takes one with `name.workspace = true` when a slice needs it.
+- **Lints** are workspace-wide (`[workspace.lints]`); CI denies warnings.
+- **Supply chain:** [`deny.toml`](../deny.toml) checks licences, advisories and sources with
+  `cargo-deny`.
+- **CI** is [`tools/ci.py`](../tools/ci.py), called step by step by
+  [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) on Linux, Windows and macOS.
 
 | Crate | Package | Role |
 |---|---|---|
@@ -22,7 +42,8 @@ whose `Cargo.toml` sits at the repository root
 
 - **Query-based and incremental** (Salsa), demand-driven, down to individual declarations.
 - **Many small crates:** start coarse and split as they grow, so the compiler itself builds fast.
-- **`refinterp` depends only on `syntax`** (and general-purpose crates). CI enforces this, so the
-  reference interpreter stays independent of the compiler's semantics.
+- **`refinterp` depends only on `syntax`** (and general-purpose crates). The test
+  `crates/refinterp/tests/independence.rs` enforces this, so the reference interpreter stays
+  independent of the compiler's semantics.
 - **Interpreter first:** no code-generation backend exists until M1 (Cranelift, then LLVM and the own
   WASM emitter).

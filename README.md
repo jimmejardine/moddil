@@ -16,7 +16,8 @@ the compiler. That makes code easier for agents to write correctly and for human
 
 ## Status
 
-Moddil is at the **design stage**, and there is no compiler yet. The documents in `specs/` range
+Moddil is at the **design stage**. The Rust workspace for the compiler is set up, but there is no
+language code yet. The documents in `specs/` range
 from brainstorm to decided direction; none of them is a formal specification. Code snippets are
 illustration only and do not commit to any syntax.
 
@@ -32,8 +33,24 @@ the specs should follow [Working on these specs](specs/README.md#working-on-thes
 
 ```
 specs/   the design: one document per area, indexed by specs/README.md
-tools/   helper scripts, such as the spec link checker
+crates/  the Rust implementation: the stage-0 compiler and its tools
+tools/   helper scripts: the spec link checker and the CI script
 ```
+
+The full layout, including the directories that fill up during M0, is in
+[`specs/compiler.md`: Repository layout](specs/compiler.md#repository-layout).
+
+## Building
+
+Needs [rustup](https://rustup.rs) and Python 3.8 or later. The pinned Rust toolchain installs
+itself on first use.
+
+```
+cargo build --workspace
+python tools/ci.py        # fmt, clippy, deny, test, links: the same checks GitHub runs
+```
+
+See [`crates/README.md`](crates/README.md) for more.
 
 ## Licence
 

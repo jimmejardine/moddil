@@ -1,2 +1,5 @@
 # Obsidian vault settings
 .obsidian/
+
+# Rust build output
+/target

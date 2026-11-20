@@ -1,0 +1,66 @@
+# The Rust workspace for the stage-0 Moddil compiler and its tools.
+# Layout: specs/compiler.md, "Repository layout". Crate roles: crates/README.md.
+
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/jimmejardine/moddil"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+# A short list of pedantic lints worth having from the start.
+cloned_instead_of_copied = "warn"
+explicit_iter_loop = "warn"
+manual_let_else = "warn"
+match_same_arms = "warn"
+needless_pass_by_value = "warn"
+semicolon_if_nothing_returned = "warn"
+uninlined_format_args = "warn"
+unnested_or_patterns = "warn"
+dbg_macro = "warn"
+todo = "warn"
+
+# Every dependency is declared once, here. A crate takes one with `name.workspace = true`
+# when a slice first needs it; entries no crate uses are never resolved or built.
+[workspace.dependencies]
+# Internal crates.
+moddil-grammar = { path = "crates/grammar", version = "0.0.0" }
+moddil-syntax = { path = "crates/syntax", version = "0.0.0" }
+moddil-sema = { path = "crates/sema", version = "0.0.0" }
+moddil-mir = { path = "crates/mir", version = "0.0.0" }
+moddil-interp = { path = "crates/interp", version = "0.0.0" }
+moddil-refinterp = { path = "crates/refinterp", version = "0.0.0" }
+moddil-conformance = { path = "crates/conformance", version = "0.0.0" }
+
+# External crates (versions checked on crates.io, November 2026).
+salsa = "0.28.5"            # query-based incremental compilation
+logos = "0.16.1"            # lexer generator
+ariadne = "0.6.0"           # diagnostics rendering
+la-arena = "0.3.1"          # index-based arenas for AST, HIR and MIR nodes
+clap = { version = "4.6.9", features = ["derive"] }
+insta = "1.49.0"            # snapshot tests
+cargo_metadata = "0.23.1"   # the refinterp independence check
+
+[profile.dev]
+debug = "line-tables-only"
+
+# Dependencies are optimised a little even in debug builds; our own crates stay fast to rebuild.
+[profile.dev.package."*"]
+opt-level = 1
+
+[profile.release]
+lto = "thin"
+codegen-units = 16
