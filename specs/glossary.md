@@ -7,6 +7,7 @@
 | Term | Meaning |
 |---|---|
 | **`?!`** | `call ?! "reason"`: asserts that a call cannot fail; traps with the reason if it does (D17) ([This cannot fail here](error-handling.md#this-cannot-fail-here)). |
+| **`#[around]`** | `#[around(w)]`: wraps a function in the ordinary generic function `w`, which sees its signature but not its body; for logging, permission checks, timing and retries ([Function wrappers](comptime.md#function-wrappers)). |
 | **Abortive handler** | A handler that never resumes the code that performed the effect; `fail` works this way and compiles to an ordinary return ([Handler tiers](effects-and-capabilities.md#handler-tiers)). |
 | **Affine type** | A type whose values may be used at most once and are dropped automatically: the default for owned values ([Resources: affine and linear](resources.md#resources-affine-and-linear)). |
 | **Agent server** | The long-running compiler service that agents and editors query for types, effects and fixes ([The agent server](agent-interface.md#the-agent-server)). |
@@ -47,6 +48,7 @@
 | **First error wins** | In a task scope, the first failure cancels the siblings; their later errors are suppressed onto it (D15) ([Tasks and concurrency](error-handling.md#tasks-and-concurrency)). |
 | **Flight recorder** | An in-memory ring of recent events dumped on an error or trap ([Flight recorder and replay](observability.md#flight-recorder-and-replay)). |
 | **Freestanding profile** | A build without an operating system (kernels, firmware), with `#[entry]` instead of `main` ([Profiles](freestanding.md#profiles)). |
+| **`FromArrayLiteral`** | The prelude trait that lets `[a, b, c]` and `[x; n]` build a `Vec`, a set, a map or a user type when the context expects one ([Collections](stdlib.md#collections)). |
 | **Generator** | A `gen` block or function that yields values, giving an `Iterator` written as a loop ([Generators](stdlib.md#generators)). |
 | **Group** | `#[group(…)]`: a named set of related `pub` items with its own overview; every `pub` item belongs to one ([Overviews: mod, module and group docs](docs.md#overviews-mod-module-and-group-docs)). |
 | **Handler** | The value installed for an effect with `with Trait = value { … }`: an ordinary impl or an anonymous impl; the innermost one wins ([Defining handlers](effects-and-capabilities.md#defining-handlers)). |

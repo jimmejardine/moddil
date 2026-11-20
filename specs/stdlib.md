@@ -180,7 +180,8 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 
 - types: `Option`, `Result`, `Vec`, `String`, `Box`, `Rc`;
 - traits: `Iterator`, `IntoIterator`, `Clone`, `Copy`, `Eq`, `Ord`, `Hash`, `Display`, `Debug`,
-  `Default`, `From`, `Into`, `TryFrom`, `Fn`, `FnMut`, `FnOnce`, `Drop`.
+  `Default`, `From`, `Into`, `TryFrom`, `Fn`, `FnMut`, `FnOnce`, `Drop`, and `FromArrayLiteral`
+  ([Collections](#collections)).
 
 Everything else is imported with `use`. Effects such as `Fs` and `Net` are never ambient: they arrive
 from root capabilities ([`effects-and-capabilities.md`: Authority comes only from root capabilities](effects-and-capabilities.md#authority-comes-only-from-root-capabilities)).
@@ -300,6 +301,19 @@ Rust's names and shapes, in `core-*` (with an allocator) and `moddil/collections
 | `EnumSet<E>` | A bit set over a fieldless enum, Jai's `enum_flags`: bit *i* is the variant with index *i*, stored in the smallest unsigned integer that fits; `#[repr(u8)]`-style layout is guaranteed, so it fits packed structs, register maps and wire formats (decided) |
 | Persistent collections | Structural sharing for immutable updates; standard, in `moddil/collections` (decided) |
 
+- **Collection literals are typed by context (decided).** There is no `vec!`. `[a, b, c]` and
+  `[x; n]` build whatever type the context expects, if it implements the prelude trait
+  `FromArrayLiteral<T>` (`from_array<const N: int>(items: [T; N]) -> Self` and
+  `from_repeat(x: T, n: int) -> Self where T: Clone`); with no expected type, the literal is a
+  fixed array `[T; N]`. `Vec`, `Deque`, the sets and the maps implement it, a map from
+  `[(k, v), …]` with later pairs winning as with `insert`, and user types can too:
+
+  ```rust
+  let v: Vec<int> = [1, 2, 3];
+  let zeros: Vec<f64> = [0.0; n];                   // n need not be constant for a Vec
+  let ages: HashMap<&str, int> = [("ada", 36), ("alan", 41)];
+  total(&[a, b, c])                                 // the parameter's type decides
+  ```
 - **`Map` and `Set` traits** let generic code accept any map (the specs' snippets write
   `&Map<K, V>`).
 - **Indexing:** `xs[i]` traps when out of bounds (decided, [`numerics.md`](numerics.md)); `xs.get(i)`

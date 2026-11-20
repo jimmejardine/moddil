@@ -74,12 +74,12 @@ something runs from the first slice.
 | **S0** | `fn`, `let`, `int` and `bool`, arithmetic with overflow traps, `if`, blocks, calls; the conformance runner (`// =>`, `//~ E…`, `//~ trap`) | The smallest program that runs, and the harness for everything after it |
 | **S1** | Structs, enums, tuples, exhaustive `match`; loops (`loop`, `while`, `break`, `continue`); `assert` ([`testing.md`: Assertions](testing.md#assertions)) | Data modelling, which every later slice needs; loops, which no other slice brings |
 | **S2** | Ownership: moves, `Copy`, second-class `&` and `&mut`, drop and RAII, `defer` | The core of the language, tested before generics complicate it |
-| **S3** | Traits, generics (checked once; witness tables in the interpreter), coherence; `Option` | Needed for collections and effects; `Option` is the first generic type |
+| **S3** | Traits, generics (checked once; witness tables in the interpreter), coherence; `Option`; arrays `[T; N]` and slices `[T]` | Needed for collections and effects; `Option` is the first generic type |
 | **S4** | `fail(E)`, `?`, `try`/`catch`, R3 entry points, `?!` | Errors, the simplest effect |
 | **S5** | User effects: traits after `with`, handlers, inference inside a mod, explicit at `pub` | The distinctive feature, built on traits and `fail` |
 | **S6** | Several files and mods: the module tree, visibility, the manifest | The tour has several modules |
-| **S7** | Closures, strings, `Vec` and `Map` written in Moddil as the first core mods | Dogfooding starts |
-| **S8** | Refinements (`where`), runtime `requires`, derives (a minimal comptime) | The tour's `Code` and `Target` types and its derives |
+| **S7** | Closures, strings, `Vec` and `Map` written in Moddil as the first core mods; collection literals through `FromArrayLiteral` ([`stdlib.md`: Collections](stdlib.md#collections)) | Dogfooding starts |
+| **S8** | Refinements (`where`), runtime `requires`, derives (a minimal comptime); `#[around]` wrappers ([`comptime.md`: Function wrappers](comptime.md#function-wrappers)) | The tour's `Code` and `Target` types and its derives |
 | **S9** | `scope`, `spawn` and `suspend` under a deterministic interpreter scheduler | The tour's `serve`; **the tour parses and checks**, M0's exit gate |
 
 - **S1 is monomorphic (decided):** structs and enums take no type parameters until generics arrive
@@ -89,6 +89,14 @@ something runs from the first slice.
   S2, checked as [`values.md`](values.md#opt-in-copy-with-a-size-cap) says, although derives in
   general arrive with S8; `Clone` gains its method with traits in S3. S2's drops have no
   hand-written `drop` yet (that needs `impl`, S3), so RAII is observable through `defer`.
+- **Two open questions must be settled before S7**, because S7 writes the first library code in
+  Moddil:
+  - **caller locations** ([`error-handling.md`: Open questions](error-handling.md#open-questions)),
+    so that a trap in `unwrap`, `expect` or `xs[i]` reports the user's line, not one inside the
+    prelude or `Vec`. Settle it before the prelude gains a method that traps;
+  - **the allocator in scope** ([`memory.md`: Open questions](memory.md#open-questions)), which
+    fixes the constructors of `Vec` and `Map`. Settle it by S5 if the answer is a scoped
+    handler, since S5 builds handlers.
 - **Deferred past M0:** units; `Fixed` and `Simd`; views and linear types; generators and coroutines;
   full comptime and reflection; `unsafe` and FFI; GPU; distribution; data contracts.
 - **The tour only has to check at M0**, so its library dependencies (HTTP, serde, `Url`) are

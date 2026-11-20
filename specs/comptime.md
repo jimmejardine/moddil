@@ -12,6 +12,7 @@
 | **Generics stay bounded** | Generic code is checked against trait bounds where it is defined. Comptime handles values and code generation, not untyped generics. |
 | **Static reflection** | `reflect(T)` describes a type's fields, variants, annotations and generic parameters, read-only. |
 | **Typed generation at the annotation site** | `#[derive(serde::Serialize)]` calls a comptime function that returns a *typed* trait impl. It is never a token stream and never appears anywhere the annotation isn't. |
+| **Typed function wrappers** | `#[around(trace::instrument)]` wraps a function in an ordinary generic function that sees its signature, never its body ([Function wrappers](#function-wrappers)). |
 | **Tagged string literals for DSLs** | `sql"…"`, `re"…"` and `fmt"…"` are parsed and checked at compile time and produce typed code. There is no new syntax. |
 | **Everything is visible** | Every expansion can be printed as canonical source and appears in semantic diffs. |
 
@@ -170,13 +171,171 @@ struct Order {
   `T: Eq` holds, which runs that derive first, and a cycle is a compile error that shows it. A derive
   sees which traits are implemented, never another derive's generated body.
 - **Generation happens only where the annotation is.** A derive can add the impl it promises and
-  nothing else: no new names in the caller's scope, no edits elsewhere.
+  nothing else: no new names in the caller's scope, no edits elsewhere. A wrapper likewise changes
+  only the function it annotates ([Function wrappers](#function-wrappers)).
 - Comptime functions can also return **types** (Zig-style, e.g. a struct-of-arrays layout computed
   from a struct), constants and specialised functions.
 - **Visible expansion:**
   - `moddil explain Order` prints the generated impls as canonical source ([LLMs as first-class programmers](agent-interface.md)).
   - Expansions are part of the semantic diff ([Diffs, code review and version control](semantic-vcs.md)), so a derive version bump that changes generated
     code shows up in review.
+
+## Function wrappers
+
+**Decided: `#[around(w)]` wraps a function in an ordinary generic function `w`.** This covers
+what Rust's attribute macros are best at (entry and exit logging, permission checks, timing,
+retries, memoisation) without rewriting tokens.
+
+```rust
+#[around(trace::instrument)]
+fn transfer(from: AccountId, to: AccountId, amount: Money) -> Receipt with Db, fail(TransferError) {
+    …
+}
+```
+
+- **The expansion is fixed by the language.** The body becomes a call to the wrapper, which is
+  given the function's description, its arguments as one value, and the original body as a closure
+  that takes the arguments back:
+
+  ```rust
+  fn transfer(from: AccountId, to: AccountId, amount: Money) -> Receipt with Db, fail(TransferError) {
+      trace::instrument(&INFO, transfer::Args { from, to, amount },
+                        |transfer::Args { from, to, amount }| { … })
+  }
+  ```
+
+  - `INFO: FnInfo` is the function's [static reflection](#static-reflection), as static data: its
+    path, its parameters' names and types, its attributes and its effects.
+  - `transfer::Args` is generated with one field per parameter, named like it. It is a **view
+    type** whenever a parameter is a borrow (`&T`, `&mut T`), because borrows cannot be stored in
+    owned data such as a tuple ([`memory.md`: View types](memory.md#view-types)). A view can be
+    passed down the call stack and to a non-escaping closure, which is all a wrapper does, so
+    borrowed parameters work.
+  - The arguments pass through the wrapper and back, so moves and borrows are checked as in the
+    original body.
+- **A wrapper is ordinary Moddil:** a generic, effect-polymorphic function, checked once where it
+  is defined ([Generics are bounded](#generics-are-bounded)):
+
+  ```rust
+  pub fn instrument<A: Debug, R: Debug, E>(f: &FnInfo, args: A,
+                                           inner: impl FnOnce(A) -> R with E) -> R with E {
+      span(f.path, args: &args) {
+          log::debug("enter");
+          let r = inner(args);
+          log::debug("exit", result: &r);
+          r
+      }
+  }
+  ```
+
+  `A: Debug` holds when every parameter is `Debug`; a parameter that is not is an error at the
+  `#[around]`, not inside the library.
+- **Arguments and order:** `#[around(auth::require(Role::Admin))]` passes comptime arguments.
+  Several wrappers apply in written order, the first outermost.
+- **What a wrapper can do:** run code before and after `inner`; call `inner` never (refusing),
+  once, or several times (retrying, which needs `A: Clone`); read context data; and use the ambient
+  `log`, `span` and `metric` ([`observability.md`](observability.md)).
+- **What it cannot do:** see or change the body, add names to any scope, change the signature, or
+  add effects and errors the function does not have. A wrapper that fails with `Forbidden` needs
+  `fail(Forbidden)` in the function's error set: inferred inside a mod, written on a `pub`
+  signature, where the compiler suggests it
+  ([`effects-and-capabilities.md`: Signatures and inference](effects-and-capabilities.md#signatures-and-inference)).
+- **Visible:** `moddil explain transfer` prints the expansion; the wrapper appears in the function's
+  docs; and a wrapper's version bump that changes behaviour shows in semantic diffs
+  ([`semantic-vcs.md`](semantic-vcs.md)).
+- **Cost:** the wrapper and its closure inline like any generic code; in a debug build a wrapper
+  is one extra call.
+
+## Rust's macros, the Moddil way
+
+Rust's macros are at their best on cross-cutting concerns that would otherwise repeat in every
+function. Each pair below shows the Rust idiom, then Moddil's. Sometimes the answer is a wrapper;
+often a type or an effect does the job better.
+
+### Logging entry and exit
+
+```rust
+// Rust (tracing)
+#[tracing::instrument(skip(password), err)]
+fn login(user: &str, password: &str) -> Result<Session, AuthError> { … }
+```
+
+```rust
+// Moddil
+#[around(trace::instrument)]
+fn login(user: &str, password: Secret<&str>) -> Session with fail(AuthError) { … }
+```
+
+- **No `skip` list to forget:** `Secret<T>` prints as redacted, so a secret never reaches a log
+  ([`observability.md`: Secrets never reach observability](observability.md#secrets-never-reach-observability)).
+- **Errors are already traced:** an error that leaves the function carries an error return trace
+  ([`error-handling.md`: Traces](error-handling.md#traces)), so the wrapper need not log it.
+- **Every task and scope is already a span**
+  ([`observability.md`: Spans and context propagation](observability.md#spans-and-context-propagation)),
+  so `#[around(trace::instrument)]` is for logical operations worth naming, not for every function.
+
+### Security preambles
+
+```rust
+// Rust (actix-web-grants): a runtime check inserted at the top of the body
+#[has_permissions("ADMIN")]
+async fn delete_user(id: web::Path<UserId>) -> HttpResponse { … }
+```
+
+**Preferred in Moddil: make the check a type.** The function takes context data that only the
+check can produce, so every caller is proven to have checked, and no preamble can be forgotten or
+reordered:
+
+```rust
+pub struct Admin { by: UserId }                    // no public constructor
+
+pub fn admin(user: &User) -> Admin with fail(Forbidden) {
+    if !user.roles.contains(Role::Admin) { fail(Forbidden) }
+    Admin { by: user.id }
+}
+
+fn delete_user(id: UserId) with admin: &Admin, Db { … }
+
+// at the edge, once per request
+with Admin = auth::admin(&user)? { delete_user(id) }
+```
+
+([`effects-and-capabilities.md`: Context data](effects-and-capabilities.md#context-data)). **When
+policy must run at entry**, such as writing an audit record for every call, a wrapper does it:
+
+```rust
+#[around(auth::require(Role::Admin))]
+pub fn delete_user(id: UserId) with user: &User, Db, fail(Forbidden) { … }
+```
+
+The wrapper reads `user`, writes the audit log, and either calls `inner` or fails with
+`Forbidden`, which is visible in the signature.
+
+### Timing, retries and memoisation
+
+| Rust | Moddil | Notes |
+|---|---|---|
+| `#[timed]` (metrics crates) | `#[around(metric::timed)]` | Records a duration histogram; `metric` is ambient, so the signature does not change |
+| `#[retry(3)]` (retry crates) | `#[around(retry::times(3, backoff: exp(10ms)))]` | Re-calls `inner`, so the arguments must be `Clone`; sleeping uses `Time`, which the function must already have. At a single call site, the plain function `retry::times(3, \|\| fetch(url))` does the same |
+| `#[cached]` (cached) | `#[around(cache::memo)]` | Rust's version hides a global map; Moddil's store is context data, `with memo: &Memo<K, V>`, installed by the caller and replaced in tests |
+
+### Other common macros
+
+| Rust | Moddil |
+|---|---|
+| `#[derive(…)]` | `#[derive(…)]`, through the typed construction API ([Generation](#generation-typed-impls-at-the-annotation-site)) |
+| `format!`, `println!`, `write!` | `fmt"…"`, checked against the argument types ([Tagged string literals](#tagged-string-literals-embedded-dsls)) |
+| `vec![a, b, c]`, `vec![x; n]` | `[a, b, c]` and `[x; n]`, typed by context: `let v: Vec<int> = [1, 2, 3];` ([`stdlib.md`: Collections](stdlib.md#collections)) |
+| `include_str!`, `include_bytes!` | `embed("path")`, declared in the manifest ([Evaluation model](#evaluation-model)) |
+| `sqlx::query!` | `sql"…"`, checked against an embedded schema, never a live database |
+| `assert!`, `assert_eq!`, `assert_ne!` | The power `assert(cond)`, which shows every part's value ([`testing.md`: Assertions](testing.md#assertions)) |
+| `#[cfg(…)]` | `if const`, whose excluded branch is still checked ([`modules.md`](modules.md#conditional-code-is-comptime-if)) |
+| `#[test]` | `test "…" { }` items ([`testing.md`: Attached tests](testing.md#attached-tests)) |
+| `#[tokio::main]`, `#[async_trait]` | Not needed: effects remove function colouring, and `main` chooses the runtime |
+| `lazy_static!`, `once_cell` for tables | `const { … }`, evaluated at compile time ([Comptime parameters and values](#comptime-parameters-and-values)) |
+| `bitflags!` | `EnumSet<E>` over a fieldless enum ([`stdlib.md`: Collections](stdlib.md#collections)) |
+| `thiserror` | Error sets with payloads, and `#[derive(Display)]` ([`error-handling.md`](error-handling.md)) |
+| `matches!` | `if let` and `let … else` |
 
 ## Tagged string literals (embedded DSLs)
 
@@ -219,13 +378,13 @@ Generated code is ordinary code once expanded:
 
 ## What we give up
 
-| Rust feature | Moddil answer |
-|---|---|
-| New syntax forms (`tokio::select!`, `html!`, `json!`) | Language features where fundamental (select is part of the structured-concurrency API); otherwise tagged literals or plain functions |
-| `vec![a, b, c]` and other variadic sugar | Array/collection literals; comptime variadic parameters |
-| Attribute macros that rewrite a function body (`#[tokio::main]`, `#[async_trait]`) | Not needed: effects remove function colouring and runtime selection happens in `main` ([R2](requirements.md#firm-requirements-decided)) |
-| Generating items at arbitrary places, or names chosen by the macro | Not possible: generation only at the annotation site, through the typed API |
-| Token-level tricks | Not possible, by design |
+| Rust feature                                                                       | Moddil answer                                                                                                                           |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| New syntax forms (`tokio::select!`, `html!`, `json!`)                              | Language features where fundamental (select is part of the structured-concurrency API); otherwise tagged literals or plain functions    |
+| `vec![a, b, c]` and other variadic sugar                                           | Array literals typed by context (`let v: Vec<int> = [1, 2, 3];`); comptime variadic parameters |
+| Attribute macros that rewrite a function body (`#[tokio::main]`, `#[async_trait]`) | Rewriting is not possible. `#[tokio::main]` and `#[async_trait]` are not needed (effects remove function colouring, and runtime selection happens in `main`, [R2](requirements.md#firm-requirements-decided)); logging, permission checks, timing, retries and memoisation use [typed wrappers](#function-wrappers) |
+| Generating items at arbitrary places, or names chosen by the macro                 | Not possible: generation only at the annotation site, through the typed API                                                             |
+| Token-level tricks                                                                 | Not possible, by design                                                                                                                 |
 
 ## Fit check against the reference examples
 

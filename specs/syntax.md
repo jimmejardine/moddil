@@ -46,6 +46,8 @@ here with its reason ([Deltas from Rust (and why)](#deltas-from-rust-and-why)). 
 | Early exit from lambdas | `escape Some(p)` | Returns from the enclosing `fn` across non-escaping lambdas; in task scopes the first `escape` wins ([`closures.md`: Control flow out of a lambda](closures.md#control-flow-out-of-a-lambda)) |
 | Multi-dimensional slicing | `a[.., 1..3]`, `a[i, ..]` | Ranges, not `:`, which named arguments use ([`accelerators.md`: Level 1: tensor expressions](accelerators.md#level-1-tensor-expressions)) |
 | Power assert | `assert(fee(amount) + amount == 260)` | A built-in in the prelude, not a macro; when it fails, the trap shows every part's value, so there is no `assert_eq!` ([`testing.md`: Assertions](testing.md#assertions)) |
+| Collection literals | `let v: Vec<int> = [1, 2, 3]` | No `vec!`: an array literal takes the type the context expects ([`stdlib.md`: Collections](stdlib.md#collections)) |
+| Function wrappers | `#[around(trace::instrument)] fn transfer(…)` | Logging, permission checks and retries without body-rewriting macros ([`comptime.md`: Function wrappers](comptime.md#function-wrappers)) |
 | Cannot-fail assertion | `Code::new(s) ?! "built from ALPHABET"` | Traps with the reason if the call fails anyway ([`error-handling.md`: This cannot fail here](error-handling.md#this-cannot-fail-here)) |
 | Error context | `load(p)? fmt"loading config {p}"` | A note attached to the error, not a wrapper ([`error-handling.md`: Error types](error-handling.md#error-types)) |
 | Wrapping operators | `h *% prime`, `a +% b`; `Wrapping<u32>` | Integer overflow traps by default; wrapping is explicit ([`numerics.md`: Overflow traps](numerics.md#overflow-traps)) |
