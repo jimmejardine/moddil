@@ -55,6 +55,7 @@
 | **`int`** | The signed 64-bit integer used for lengths, indices and counts on every target ([Integer types](numerics.md#integer-types)). |
 | **Interface artefact** | A mod's `pub` items with their full signatures: what dependents compile against and what the semver check compares ([Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)). |
 | **Interposition** | A handler that captures the enclosing handler for the same trait and forwards to it, to record, delay or inject faults ([Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)). |
+| **IR** | Intermediate representation: a form of the program between source and machine code that the compiler checks and transforms. Moddil's own are the HIR and the MIR; the backends then build theirs (Cranelift's CLIF, LLVM IR) ([Pipeline](mir.md#pipeline)). |
 | **Isolated scope** | `scope(…, isolate: true)`: a trap inside unwinds only that scope, which fails with `Trapped` ([Traps: the process by default, isolated scopes on request](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)). |
 | **JSPI** | JavaScript Promise Integration: the first WASM lowering for suspension, in browsers and Node ([WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)). |
 | **Linear type** | A type whose values must be explicitly consumed (`commit`, `close`), used when cleanup can fail ([Resources: affine and linear](resources.md#resources-affine-and-linear)). |
