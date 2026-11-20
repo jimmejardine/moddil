@@ -1,0 +1,9 @@
+// covers: syntax.comment.1, syntax.text.1
+
+/* A block comment /* with a nested one */ still open */
+test "comments and whitespace only separate tokens" {
+    1/* between */+/**/2      // => 3
+    ;
+    let café = 4;             // a UAX #31 identifier, in NFC
+    café                      // => 4
+}

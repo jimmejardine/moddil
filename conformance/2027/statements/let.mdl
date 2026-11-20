@@ -1,0 +1,17 @@
+// covers: stmt.let.1, stmt.expr.1
+
+test "let" {
+    let a = 1;
+    let b: int = a + 1;
+    let _ = b * 100;
+    let mut c = b;
+    c += a;
+    c                         // => 3
+}
+
+test "statements" {
+    let mut x = 0;
+    if true { x = 1 }         // a block-like statement of type () needs no `;`
+    x;
+    x                         // => 1
+}

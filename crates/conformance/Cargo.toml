@@ -12,6 +12,10 @@ publish.workspace = true
 [dependencies]
 moddil-refinterp.workspace = true
 moddil-interp.workspace = true
+moddil-mir.workspace = true
+moddil-sema.workspace = true
+moddil-syntax.workspace = true
+
 
 [lints]
 workspace = true

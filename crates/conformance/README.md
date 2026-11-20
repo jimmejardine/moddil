@@ -2,7 +2,9 @@
 
 The runner for the [conformance suite](../../conformance/README.md).
 
-**Status:** part of slice S0, so every later slice lands with tests.
+**Status:** slice S0: runs the suite on the MIR interpreter and checks reference coverage;
+`cargo test -p moddil-conformance` runs it (`tests/suite.rs`). The reference interpreter joins at
+slice S1. The markers and how they bind are in the [suite's README](../../conformance/README.md).
 
 ## Does
 

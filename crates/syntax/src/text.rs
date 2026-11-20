@@ -64,3 +64,11 @@ impl fmt::Display for SyntaxError {
         write!(f, "{:?}: {}", self.range, self.message)
     }
 }
+
+/// The 1-based line and column (in characters) of byte `offset` in `text`.
+pub fn line_col(text: &str, offset: u32) -> (u32, u32) {
+    let before = &text[..(offset as usize).min(text.len())];
+    let line = before.matches('\n').count() + 1;
+    let col = before.rsplit('\n').next().map_or(0, |l| l.chars().count()) + 1;
+    (line as u32, col as u32)
+}

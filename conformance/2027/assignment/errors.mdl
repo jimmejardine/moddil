@@ -1,0 +1,11 @@
+// covers: expr.assign.1
+
+fn f(p: int) {
+    let x = 1;
+    x = 2;                    //~ E0301
+    p += 1;                   //~ E0301
+    let mut y = 1;
+    y = true;                 //~ E0201
+    1 = 2;                    //~ E0206
+    f = 3;                    //~ E0206
+}

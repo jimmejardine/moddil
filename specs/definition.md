@@ -115,15 +115,22 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
 
 ```rust
 // conformance/2027/effects/handler-scope.mdl
-// covers: effect.handler.scope.1, effect.handler.scope.2
+// covers: effect.handler.scope.1
 
 trait Counter { fn tick(&self) -> int; }
 
 fn twice() -> int with counter: Counter { counter.tick() + counter.tick() }
 
-with Counter = Counting::new() {
-    twice()                       // => 3
+test "a handler is in scope inside its `with` block" {
+    with Counter = Counting::new() {
+        twice()                   // => 3
+    }
 }
+```
+
+```rust
+// conformance/2027/effects/handler-leak.mdl
+// covers: effect.handler.scope.2
 
 fn leak() -> int { counter.tick() }   //~ E0601
 ```
@@ -131,8 +138,17 @@ fn leak() -> int { counter.tick() }   //~ E0601
 - Organised **by feature and edition**, like Test262.
 - Tests are ordinary Moddil files with **inline expectations**: `// =>` for values (as in
   [`docs.md`](docs.md)), `//~ E0601` for diagnostics, `//~ trap` for traps.
+- **How expectations bind (decided):** `// =>` follows an expression statement or a block's final
+  expression inside a `test` item, and every such line must run and produce exactly that value;
+  `//~ E…` names a diagnostic starting on its line; `//~ trap` marks the line where a trap
+  happens. A file with expected diagnostics is only checked, not run, so error tests live in their
+  own files. A file has only items at the top level, so values are always observed in tests.
 - **Diagnostic codes are part of conformance; message wording is not**, so implementations may
   word errors their own way.
+- **Codes come in blocks by area (decided):** E00xx syntax, E01xx names, E02xx types, E03xx
+  ownership and mutability, E04xx traits and generics, E05xx errors and `fail`, E06xx effects, and
+  further blocks as areas arrive. A code never changes meaning. The table is in the reference
+  ([`reference/2027/diagnostics.md`](../reference/2027/diagnostics.md)).
 - Determinism ([`determinism.md`](determinism.md)) makes expected outputs exact, including for
   concurrent tests run under the simulation scheduler.
 - **The spec team owns the suite**, and any implementation may contribute tests. A disputed test

@@ -1,0 +1,55 @@
+---
+source: crates/mir/src/tests.rs
+expression: "dump(\"fn f(a: int, b: int) -> int { -(a + b) * 2 / b % 3 << 1 >> a & 1 | 2 ^ 3 }\")"
+---
+fn f(_1: int, _2: int) -> int {
+    // _1: a
+    // _2: b
+    let _3: int;
+    let _4: int;
+    let _5: int;
+    let _6: int;
+    let _7: int;
+    let _8: int;
+    let _9: int;
+    let _10: int;
+    let _11: bool;
+    let _12: bool;
+    let _13: bool;
+    let _14: bool;
+    let _15: bool;
+    let _16: bool;
+    let _17: bool;
+    let _18: bool;
+    let _19: int;
+
+    bb0: {
+        _11 = AddOverflows(_1, _2);
+        assert(!_11, overflow) @ 32..37;
+        _10 = Add(_1, _2);
+        _12 = NegOverflows(_10);
+        assert(!_12, overflow) @ 30..38;
+        _9 = Neg(_10);
+        _13 = MulOverflows(_9, const 2);
+        assert(!_13, overflow) @ 30..42;
+        _8 = Mul(_9, const 2);
+        _14 = Eq(_2, const 0);
+        assert(!_14, division by zero) @ 30..46;
+        _15 = DivOverflows(_8, _2);
+        assert(!_15, overflow) @ 30..46;
+        _7 = Div(_8, _2);
+        _16 = Eq(const 3, const 0);
+        assert(!_16, division by zero) @ 30..50;
+        _6 = Rem(_7, const 3);
+        _17 = ShlOverflows(_6, const 1);
+        assert(!_17, overflow) @ 30..55;
+        _5 = Shl(_6, const 1);
+        _18 = ShrOverflows(_5, _1);
+        assert(!_18, overflow) @ 30..60;
+        _4 = Shr(_5, _1);
+        _3 = BitAnd(_4, const 1);
+        _19 = BitXor(const 2, const 3);
+        _0 = BitOr(_3, _19);
+        return;
+    }
+}

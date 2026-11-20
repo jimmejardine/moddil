@@ -5,8 +5,26 @@ desugared and name-resolved, carrying inferred types, effects and error sets. Th
 `moddil explain` and MIR building all read it
 ([`specs/mir.md`: Pipeline](../../specs/mir.md#pipeline)). Ownership is checked later, on MIR.
 
-**Status:** not started. It starts as one crate and splits as it grows (names, types,
-effects).
+**Status:** slice S0: functions and tests, `let`, `int`, `bool` and `()`, operators, `if`, blocks,
+calls and `return`, with the diagnostics of [`reference/2027/diagnostics.md`](../../reference/2027/diagnostics.md).
+Valid Moddil beyond S0 is reported as "not supported yet" (`I0001`). It starts as one crate and
+splits as it grows (names, types, effects).
+
+## Queries (Salsa)
+
+Every analysis is a query over `SourceFile` inputs, memoised and recomputed only when what it read
+changes:
+
+| Query | Result |
+|---|---|
+| `parse(file)` | The lossless syntax tree |
+| `item_tree(file)` | The functions and tests, with their signatures |
+| `body(owner)` | A function's or test's body in HIR, with names resolved and sugar removed |
+| `infer(owner)` | The types of the body's expressions and locals, and type errors |
+| `diagnostics(file)` | Everything wrong with the file, in source order (only syntax errors if there are any) |
+
+An `Owner` is a function or a test. In a `test`, an expression statement or final expression
+followed by `// =>` on its line is marked as **observed**, so the test harness sees its value.
 
 ## Does
 

@@ -1,0 +1,18 @@
+// covers: names.resolve.1, stmt.let.scope.1, expr.block.scope.1
+
+fn value() -> int { 1 }
+
+test "a local shadows a function" {
+    value()                   // => 1
+    ;
+    let x = 2;
+    let x = x + 1;            // the initialiser sees the outer `x`
+    x                         // => 3
+    ;
+    { let x = 10; x }         // => 10
+    ;
+    x                         // => 3
+    ;
+    let value = 5;
+    value                     // => 5
+}

@@ -1,0 +1,6 @@
+// covers: stmt.expr.1
+
+fn f() -> int {
+    if true { 1 } else { 2 }  //~ E0201
+    3
+}

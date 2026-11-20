@@ -3,7 +3,11 @@
 The **shared test suite** every Moddil implementation must pass to use the name "Moddil <edition>"
 ([`specs/definition.md`: A shared conformance suite](../specs/definition.md#a-shared-conformance-suite)).
 
-**Status:** empty until slice S0, which brings the runner (`crates/conformance`).
+**Status:** slice S0: [`2027/`](2027) tests functions, tests, `let`, `int`, `bool` and `()`,
+arithmetic and its traps, comparisons, logic, `if`, blocks and calls, and cites every paragraph of
+the [2027 reference](../reference/2027/README.md). The runner is
+[`crates/conformance`](../crates/conformance/README.md); `cargo test -p moddil-conformance` runs the
+suite.
 
 ## Layout
 
@@ -15,25 +19,49 @@ Tests are ordinary Moddil files with inline expectations, and cite the reference
 cover:
 
 ```rust
-// conformance/2027/effects/handler-scope.mdl
-// covers: effect.handler.scope.1, effect.handler.scope.2
+// conformance/2027/arithmetic/overflow.mdl
+// covers: expr.arith.overflow.1, trap.1
 
-with Counter = Counting::new() {
-    twice()                       // => 3
+fn max() -> int { 9223372036854775807 }
+
+test "in range" {
+    max() - 1 + 1             // => 9223372036854775807
 }
 
-fn leak() -> int { counter.tick() }   //~ E0601
+test "addition" {
+    max() + 1;                //~ trap
+}
+```
+
+```rust
+// conformance/2027/calls/errors.mdl
+// covers: expr.call.1
+
+fn one(a: int) -> int { a }
+
+fn f() -> int {
+    one(1, 2)                 //~ E0202
+}
 ```
 
 | Marker | Expects |
 |---|---|
-| `// => value` | The expression evaluates to `value` |
-| `//~ E0601` | A diagnostic with that code (wording is not part of conformance) |
-| `//~ trap` | A trap |
+| `// covers: id, …` | The reference paragraphs the file tests; every file has one |
+| `// => value` | The expression statement or block's final expression it follows evaluates to `value`, written as Moddil source (`3`, `-1`, `true`, `()`) |
+| `//~ E0202` | A diagnostic with that code starting on this line; several codes may follow (wording is not part of conformance) |
+| `//~ trap` | A trap on this line: the line of the operation that fails, which may be inside a function the test calls |
+| `// disputed` | The test does not count until the reference is clarified |
 
+- **Values are observed in `test` items.** A file has only items at the top level, so the runner
+  runs every `test` in the file, and every `// =>` line must run and produce exactly its value.
+  Traps must happen exactly on the `//~ trap` lines; a test stops at its trap.
+- **A file with expected diagnostics is only checked, not run**, and must report exactly the
+  diagnostics marked. Error tests therefore live in their own files.
+- **Coverage:** the runner fails if a reference paragraph is cited by no test, or a test cites a
+  paragraph that does not exist.
 - Determinism makes expected outputs exact, including for concurrent tests under the simulation
   scheduler.
 - The spec team owns the suite; any implementation may contribute. A disputed test is marked
   *disputed* and does not count until the reference is clarified.
-- Every test runs on the reference interpreter, the MIR interpreter and compiled code; a difference
-  is a bug in one of them.
+- Every test runs on the reference interpreter (from slice S1), the MIR interpreter and, from M1,
+  compiled code; a difference is a bug in one of them.

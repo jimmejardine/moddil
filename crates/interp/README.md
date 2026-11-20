@@ -3,7 +3,14 @@
 The **MIR interpreter**, part of the compiler. It runs *analysed* or *runtime* MIR and never needs
 target lowering ([`specs/mir.md`: Pipeline](../../specs/mir.md#pipeline)).
 
-**Status:** not started; it runs every M0 slice, since no code-generation backend exists until M1.
+**Status:** slice S0: `int`, `bool` and `()` values, calls on its own frame stack (so deep recursion
+is a `stack overflow` trap at 10,000 frames, never a host crash), and every trap class. It runs
+every M0 slice, since no code-generation backend exists until M1.
+
+```rust
+moddil_interp::call_fn(&db, file, index, &args, &mut |_, _| {})   // -> Result<Value, Trap>
+moddil_interp::run_test(&db, file, index, &mut |range, value| …) // observed values
+```
 
 ## Used for
 

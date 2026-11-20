@@ -1,0 +1,16 @@
+// covers: item.test.decl.1, item.test.value.1, trap.1
+
+test "values of any type" {
+    let n = 3;
+    n * n                     // => 9
+    ;
+    n > 2                     // => true
+    ;
+    if n > 2 { n } else { 0 } // => 3
+}
+
+test "a test passes unless it traps" {}
+
+test "this one fails" {
+    9223372036854775807 + 1;  //~ trap
+}

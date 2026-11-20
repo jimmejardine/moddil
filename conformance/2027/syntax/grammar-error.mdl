@@ -1,0 +1,6 @@
+// covers: syntax.grammar.1
+// A file the grammar does not accept is rejected with E0001.
+
+fn f() -> int {
+    1 +
+}                             //~ E0001

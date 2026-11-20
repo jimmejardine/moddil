@@ -19,13 +19,13 @@ mod tree;
 
 pub use kinds::SyntaxKind;
 pub use lexer::{Token, lex};
-pub use text::{SyntaxError, TextRange};
+pub use text::{SyntaxError, TextRange, line_col};
 pub use tree::{
     GreenBuilder, GreenElement, GreenNode, GreenToken, SyntaxElement, SyntaxNode, SyntaxToken,
 };
 
 /// The result of parsing: the tree, and the errors found on the way.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Parse {
     green: GreenNode,
     errors: Vec<SyntaxError>,

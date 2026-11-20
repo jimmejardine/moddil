@@ -1,0 +1,13 @@
+// covers: expr.if.cond.1, expr.if.value.1, expr.if.no-else.1
+
+fn f() -> int {
+    if 1 { 2 } else { 3 }     //~ E0201
+}
+
+fn g() -> int {
+    if true { 1 } else { false }  //~ E0201
+}
+
+fn h() {
+    if true { 1 }             //~ E0201
+}

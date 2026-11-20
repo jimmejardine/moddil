@@ -3,8 +3,16 @@
 The **`moddil` command**: one tool for building, testing, formatting and everything else
 ([`specs/toolchain.md`](../../specs/toolchain.md)).
 
-**Status:** not started. At M0 it runs files and tests on the MIR interpreter; the full command set
-(`build`, `test`, `fmt`, `diff`, `audit`, `bind`, …) arrives over the milestones.
+**Status:** slice S0. At M0 it checks files and runs them and their tests on the MIR interpreter;
+the full command set (`build`, `fmt`, `diff`, `audit`, `bind`, …) arrives over the milestones.
+
+```
+moddil check file.mdl    # report errors (exit 1 if any)
+moddil run file.mdl      # run `fn main()` and print its result (exit 101 on a trap)
+moddil test file.mdl     # run the file's `test` items
+```
+
+Diagnostics are rendered in the rustc style with `ariadne`; `--format json` comes later.
 
 ## Rules
 

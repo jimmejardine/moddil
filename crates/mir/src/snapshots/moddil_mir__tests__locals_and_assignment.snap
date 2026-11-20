@@ -1,0 +1,61 @@
+---
+source: crates/mir/src/tests.rs
+expression: "dump(\"fn f(x: int) -> int { let mut y = x; y += 1; let mut y = y * 2; y = y - 1; y }\\n\\\n         fn g() -> int { let mut x = 1; x + { x = 5; x } }\")"
+---
+fn f(_1: int) -> int {
+    // _1: x
+    let _2: int;
+    let _3: int; // y
+    let _4: ();
+    let _5: bool;
+    let _6: int;
+    let _7: bool;
+    let _8: int; // y
+    let _9: ();
+    let _10: int;
+    let _11: bool;
+
+    bb0: {
+        _2 = _1;
+        _3 = _2;
+        _5 = AddOverflows(_3, const 1);
+        assert(!_5, overflow) @ 37..43;
+        _3 = Add(_3, const 1);
+        _4 = const ();
+        _7 = MulOverflows(_3, const 2);
+        assert(!_7, overflow) @ 57..62;
+        _6 = Mul(_3, const 2);
+        _8 = _6;
+        _11 = SubOverflows(_8, const 1);
+        assert(!_11, overflow) @ 68..73;
+        _10 = Sub(_8, const 1);
+        _8 = _10;
+        _9 = const ();
+        _0 = _8;
+        return;
+    }
+}
+
+fn g() -> int {
+    let _1: int;
+    let _2: int; // x
+    let _3: int;
+    let _4: int;
+    let _5: ();
+    let _6: int;
+    let _7: bool;
+
+    bb0: {
+        _1 = const 1;
+        _2 = _1;
+        _3 = _2;
+        _6 = const 5;
+        _2 = _6;
+        _5 = const ();
+        _4 = _2;
+        _7 = AddOverflows(_3, _4);
+        assert(!_7, overflow) @ 110..126;
+        _0 = Add(_3, _4);
+        return;
+    }
+}

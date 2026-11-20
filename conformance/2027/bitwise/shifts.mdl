@@ -1,0 +1,23 @@
+// covers: expr.bit.shift.1
+
+test "shifts" {
+    1 << 62                   // => 4611686018427387904
+    ;
+    -1 << 63                  // => -9223372036854775808
+    ;
+    -16 >> 2                  // => -4
+    ;
+    5 >> 63                   // => 0
+}
+
+test "too far" {
+    1 << 64;                  //~ trap
+}
+
+test "negative amount" {
+    1 >> -1;                  //~ trap
+}
+
+test "bits lost" {
+    3 << 62;                  //~ trap
+}

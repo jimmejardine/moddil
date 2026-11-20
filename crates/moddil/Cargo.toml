@@ -15,6 +15,12 @@ path = "src/main.rs"
 
 [dependencies]
 moddil-interp.workspace = true
+moddil-mir.workspace = true
+moddil-sema.workspace = true
+moddil-syntax.workspace = true
+ariadne.workspace = true
+clap.workspace = true
+
 
 [lints]
 workspace = true

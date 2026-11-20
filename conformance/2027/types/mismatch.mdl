@@ -1,0 +1,6 @@
+// covers: type.match.1, stmt.let.1
+
+fn f() {
+    let b: bool = 1;          //~ E0201
+    let i: int = ();          //~ E0201
+}

@@ -1,0 +1,3 @@
+// covers: names.type.1
+
+fn f(x: Integer) {}           //~ E0102

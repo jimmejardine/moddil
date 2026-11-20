@@ -3,7 +3,14 @@
 Moddil's **mid-level IR**, built from the typed HIR, and the passes over it
 ([`specs/mir.md`](../../specs/mir.md)).
 
-**Status:** the shape is outlined in the spec; code starts with slice S0.
+**Status:** slice S0: the `mir(owner)` query builds a body from the typed HIR, for files without
+errors. Locals have no projections yet; ownership checking and drops come with slice S2.
+
+- **Checks:** `+`, `-`, `*`, `/`, negation and shifts are preceded by an `Overflows` test and an
+  `Assert` with the `overflow` trap class; `/` and `%` by a zero test with `division by zero`.
+- **Tests:** `Observe` statements carry the values a test's `// =>` lines expect.
+- Blocks control never reaches are removed. The text form (`format!("{body:?}")`) is snapshot
+  tested in `src/snapshots/`.
 
 ## Shape
 

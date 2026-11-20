@@ -1,0 +1,28 @@
+// covers: expr.assign.1, expr.assign.compound.1
+
+test "assignment" {
+    let mut x = 1;
+    x = 5;
+    x                         // => 5
+    ;
+    x = 1                     // => ()
+    ;
+    x += 2;
+    x *= 10;
+    x -= 1;
+    x /= 2;
+    x %= 5;
+    x                         // => 4
+    ;
+    x <<= 4;
+    x >>= 1;
+    x |= 1;
+    x &= 0b1101;
+    x ^= 2;
+    x                         // => 3
+}
+
+test "compound assignment traps like its operator" {
+    let mut x = 9223372036854775807;
+    x += 1;                   //~ trap
+}

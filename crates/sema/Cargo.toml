@@ -11,6 +11,8 @@ publish.workspace = true
 
 [dependencies]
 moddil-syntax.workspace = true
+salsa.workspace = true
+la-arena.workspace = true
 
 [lints]
 workspace = true

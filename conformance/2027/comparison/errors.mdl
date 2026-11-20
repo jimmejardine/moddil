@@ -1,0 +1,6 @@
+// covers: expr.cmp.eq.1, expr.cmp.order.1
+
+fn f() {
+    let a = 1 == true;        //~ E0201
+    let b = true < false;     //~ E0205 E0205
+}

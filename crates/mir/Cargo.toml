@@ -11,6 +11,13 @@ publish.workspace = true
 
 [dependencies]
 moddil-sema.workspace = true
+moddil-syntax.workspace = true
+salsa.workspace = true
+la-arena.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+
 
 [lints]
 workspace = true

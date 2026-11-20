@@ -1,0 +1,20 @@
+// covers: type.int.1, type.bool.1, type.unit.1, type.never.1
+
+fn early(x: int) -> int {
+    let y: int = if x < 0 { return 0 } else { x };
+    y
+}
+
+test "the built-in types" {
+    9223372036854775807       // => 9223372036854775807
+    ;
+    -9223372036854775807 - 1  // => -9223372036854775808
+    ;
+    true                      // => true
+    ;
+    {}                        // => ()
+    ;
+    early(-5)                 // => 0
+    ;
+    early(5)                  // => 5
+}

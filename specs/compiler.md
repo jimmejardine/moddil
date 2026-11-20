@@ -121,6 +121,10 @@ problem, which is exactly the supply-chain concern of [Package management and su
   parser recovers from errors from the start, so a tree always exists. The formatter, the language
   server and agents edit the same tree the compiler reads
   ([`crates/syntax`](../crates/syntax/README.md)).
+- **Queries from the first slice (decided):** the compiler is built on Salsa from slice S0, with
+  coarse queries (parse a file, its items, each body's HIR, types and MIR) that later slices
+  refine, so the query structure is never retrofitted
+  ([`crates/sema`](../crates/sema/README.md)).
 - **Vertical slices.** The language grows slice by slice, each running end to end
   ([`roadmap.md`: M0: the v0 language in slices](roadmap.md#m0-the-v0-language-in-slices)).
 - **Interpreter first.** Every slice runs on the MIR interpreter; no code-generation backend exists

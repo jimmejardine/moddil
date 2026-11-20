@@ -1,0 +1,22 @@
+---
+source: crates/mir/src/tests.rs
+expression: "dump(\"test \\\"t\\\" {\\n    let x = 2;\\n    x + 1; // => 3\\n    x // => 2\\n}\")"
+---
+fn "t"() -> () {
+    let _1: int;
+    let _2: int; // x
+    let _3: int;
+    let _4: bool;
+
+    bb0: {
+        _1 = const 2;
+        _2 = _1;
+        _4 = AddOverflows(_2, const 1);
+        assert(!_4, overflow) @ 30..35;
+        _3 = Add(_2, const 1);
+        observe(_3) @ 30..35;
+        observe(_2) @ 49..50;
+        _0 = _2;
+        return;
+    }
+}

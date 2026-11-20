@@ -71,6 +71,12 @@ node!(/// An expression followed by `;` (or a block-like expression with attribu
     ExprStmt = EXPR_STMT);
 node!(/// A path: `a::b::c`.
     Path = PATH);
+node!(/// `test "name" { … }`.
+    TestItem = TEST_ITEM);
+node!(/// `( … )` after a callee.
+    ArgList = ARG_LIST);
+node!(/// One argument of a call, maybe labelled: `limit: 32`.
+    Arg = ARG);
 
 impl SourceFile {
     /// The functions at the top level.
@@ -94,6 +100,37 @@ impl FnItem {
     }
     /// The body, if the function has one.
     pub fn body(&self) -> Option<Block> {
+        child(&self.0)
+    }
+}
+
+impl TestItem {
+    /// The string literal naming the test, quotes included.
+    pub fn name_token(&self) -> Option<SyntaxToken> {
+        self.0.token(SyntaxKind::STRING)
+    }
+    /// The body.
+    pub fn body(&self) -> Option<Block> {
+        child(&self.0)
+    }
+}
+
+impl ArgList {
+    /// The arguments, in order.
+    pub fn args(&self) -> impl Iterator<Item = Arg> + '_ {
+        children(&self.0)
+    }
+}
+
+impl Arg {
+    /// The label of a named argument (`limit` in `limit: 32`).
+    pub fn label(&self) -> Option<SyntaxToken> {
+        self.0
+            .child_tokens()
+            .find(|t| !t.kind().is_trivia() && t.kind() != SyntaxKind::COLON)
+    }
+    /// The argument's value.
+    pub fn expr(&self) -> Option<Expr> {
         child(&self.0)
     }
 }

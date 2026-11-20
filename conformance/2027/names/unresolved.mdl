@@ -1,0 +1,15 @@
+// covers: names.resolve.1, stmt.let.scope.1, expr.block.scope.1
+
+fn missing() -> int {
+    nothing                   //~ E0101
+}
+
+fn own_initialiser() -> int {
+    let y = y + 1;            //~ E0101
+    y
+}
+
+fn out_of_scope() -> int {
+    { let z = 1; }
+    z                         //~ E0101
+}

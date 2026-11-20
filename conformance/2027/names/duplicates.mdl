@@ -1,0 +1,12 @@
+// covers: names.item.1, item.fn.params.1
+
+fn twice() {}
+fn twice() {}                 //~ E0103
+
+fn params(a: int, a: int) {}  //~ E0104
+
+test "same" {}
+test "same" {}                //~ E0103
+
+// A function and a test may share a name.
+fn same() {}

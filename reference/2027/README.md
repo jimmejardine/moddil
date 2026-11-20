@@ -1,0 +1,34 @@
+# Moddil 2027: the reference
+
+The normative rules of the 2027 edition. It grows with the compiler, slice by slice: a feature is
+done only when it has paragraphs here, conformance tests in
+[`conformance/2027/`](../../conformance/README.md) and an implementation
+([`specs/definition.md`: Written with the compiler](../../specs/definition.md#written-with-the-compiler)).
+
+**Status:** slice S0: functions, tests, `let`, `int`, `bool` and `()`, arithmetic with traps,
+comparisons, logic, `if`, blocks and calls.
+
+## Paragraphs
+
+Every rule is a paragraph that starts with its **stable ID** in bold, such as
+**expr.arith.overflow.1**. An ID never changes meaning; a rule that changes gets a new ID, and the
+old one is marked with the edition that retired it. Conformance tests cite the IDs they cover
+(`// covers: expr.arith.overflow.1`), and the conformance runner checks that every ID here is cited
+and that every cited ID exists.
+
+Each page lists its diagnostics by code; the codes are in [Diagnostics](diagnostics.md).
+
+## Pages
+
+- [Syntax](syntax.md)
+- [Names](names.md)
+- Items: [Functions](items/functions.md), [Tests](items/tests.md)
+- [Types](types.md)
+- [Statements](statements.md)
+- Expressions: [Evaluation](expressions/evaluation.md), [Literals](expressions/literals.md),
+  [Arithmetic](expressions/arithmetic.md), [Bitwise operators](expressions/bitwise.md),
+  [Comparisons](expressions/comparison.md), [Logic](expressions/logic.md),
+  [Blocks](expressions/blocks.md), [`if`](expressions/if.md), [Calls and `return`](expressions/calls.md),
+  [Assignment](expressions/assignment.md)
+- [Traps](traps.md)
+- [Diagnostics](diagnostics.md)
