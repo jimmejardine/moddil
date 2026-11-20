@@ -214,6 +214,7 @@ fn first_word(text: &str, sep: &str) -> &str from text with fail(E) where E: Err
         if let Some(v) = maybe && v > 0 { continue }
     }
     let wrapped = h *% 31 +% 7;
+    #[inline] let doubled = f(q);
     let first = xs[.., 1..3];
     let found = try { lookup(k)? fmt"looking up {k}" } catch { NotFound => none() };
     defer { done() }

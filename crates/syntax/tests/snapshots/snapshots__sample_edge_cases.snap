@@ -781,6 +781,34 @@ SOURCE_FILE
             INTEGER "7"
         SEMI ";"
       LET_STMT
+        OUTER_ATTR
+          POUND_L_BRACK "#["
+          ATTR
+            PATH
+              PATH_SEGMENT
+                IDENT "inline"
+          R_BRACK "]"
+        LET_KW "let"
+        PATH_PAT
+          PATH
+            PATH_SEGMENT
+              IDENT "doubled"
+        EQ "="
+        CALL_EXPR
+          PATH_EXPR
+            PATH
+              PATH_SEGMENT
+                IDENT "f"
+          ARG_LIST
+            L_PAREN "("
+            ARG
+              PATH_EXPR
+                PATH
+                  PATH_SEGMENT
+                    IDENT "q"
+            R_PAREN ")"
+        SEMI ";"
+      LET_STMT
         LET_KW "let"
         PATH_PAT
           PATH
