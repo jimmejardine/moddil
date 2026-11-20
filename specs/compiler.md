@@ -136,6 +136,60 @@ problem, which is exactly the supply-chain concern of [Package management and su
   ([`unsafe.md`](unsafe.md)); it does not need to be fast enough for real programs.
 - **Timing (decided):** the reference interpreter starts at slice S1 of M0 and follows every slice
   after it ([`roadmap.md`: M0: the v0 language in slices](roadmap.md#m0-the-v0-language-in-slices)).
+- **Independence (decided):** it shares only the parser and AST (`crates/syntax`, pinned down by the
+  grammar's generated tests) with the compiler, and never depends on semantic analysis, MIR or the
+  MIR interpreter ([Repository layout](#repository-layout)).
+
+## Repository layout
+
+**Decided: one main repository** for the language, its toolchain, the reference, the conformance
+suite, the standard mods and the tour.
+
+```
+moddil/
+├─ specs/                 design documents (an Obsidian vault)
+├─ reference/             the normative reference, versioned by edition
+│  └─ grammar/moddil.ebnf the one grammar source (definition.md)
+├─ conformance/           the shared test suite: <edition>/<feature>/*.mdl
+├─ Cargo.toml             the Rust workspace root
+├─ crates/                the Rust implementation
+│  ├─ grammar/            EBNF tool: LL(k) and ambiguity checks, generated tests and grammars
+│  ├─ syntax/             lexer, parser, AST; later the formatter
+│  ├─ sema/               names, types, effects, ownership (split as it grows)
+│  ├─ mir/                the MIR and lowering to it
+│  ├─ interp/             the MIR interpreter
+│  ├─ refinterp/          the reference interpreter (depends only on syntax)
+│  ├─ conformance/        the conformance runner (// =>, //~ E…, //~ trap)
+│  └─ moddil/             the `moddil` command
+├─ mods/                  standard mods written in Moddil: core-*, collections, text, …
+├─ tour/shorty/           the dogfood tour, from M0 (tour.md)
+├─ examples/              the reference examples as programs, from M3
+├─ model/                 the Lean core model, from slice S5
+├─ editors/               the generated tree-sitter grammar, editor extensions
+├─ tools/                 repository scripts, such as the link checker
+└─ bootstrap/             the WASM bootstrap blob, only after self-hosting
+```
+
+- **Why one repository:** during M0 the language changes weekly, and a change to the grammar, the
+  parser, the conformance tests and a standard mod should land as one commit that CI checks as a
+  whole. Rust, Go and Zig keep their standard libraries in their main repositories.
+- **Standard mods release independently anyway.** Each is released with a path-prefixed tag
+  (`mods/net/v0.3.1`) and reached through a vanity name (`moddil.dev/net`)
+  ([`packages-and-supply-chain.md`: Versions and majors](packages-and-supply-chain.md#versions-and-majors));
+  only `mods/core-*` ships inside the toolchain ([`stdlib.md`: Distribution and versioning](stdlib.md#distribution-and-versioning)).
+- **Crates** are published as `moddil-<name>`. They start coarse and split as they grow (`sema` into
+  names, types, effects and ownership), following the many-small-crates rule in
+  [Stage 0 language: Rust](#stage-0-language-rust).
+- **The reference interpreter's independence is checked:** CI fails if `crates/refinterp` depends on
+  anything but `crates/syntax` and general-purpose crates ([Two interpreters](#two-interpreters)).
+- **The reference examples become code in `examples/<name>/`**, built and tested in CI on every
+  change, so a language change that breaks one is caught at once. `specs/examples/*.md` stay their
+  design documents; Hashiverse may move to its own repository once it ships.
+- **Separate repositories:** Moddil Evolution proposals
+  ([`governance.md`: Moddil Evolution](governance.md#moddil-evolution)) and security advisories
+  ([`governance.md`: Security response](governance.md#security-response)), created when governance
+  needs them.
+- **Directories are created when their first content lands**, starting with the grammar.
 
 ## Backends
 

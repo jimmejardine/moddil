@@ -46,7 +46,7 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
 | Artefact | Role |
 |---|---|
 | **The reference** | **Normative.** Prose, with formal rules for the core (types, effects, borrows and evaluation). |
-| **The reference interpreter** | The executable form of the reference: a **separate, small interpreter over the canonical AST**, independent of the compiler's MIR interpreter (which runs comptime and the unsafe checker), so that each can check the other ([`compiler.md`: Two interpreters](compiler.md#two-interpreters)). Tested against the reference. |
+| **The reference interpreter** | The executable form of the reference: a **separate, small interpreter over the canonical AST**, independent of the compiler's MIR interpreter (which runs comptime and the unsafe checker), so that each can check the other; it shares only the parser and AST with the compiler ([`compiler.md`: Two interpreters](compiler.md#two-interpreters)). Tested against the reference. |
 | **The core model** | A mechanised model of the core **in Lean** that proves the core rules sound and validates the interpreter ([`correctness.md`: A formal semantics of the core](correctness.md#a-formal-semantics-of-the-core)). |
 
 - **Any disagreement between them is a bug.** The reference decides the intended meaning (changing it
