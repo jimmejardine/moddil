@@ -11,8 +11,8 @@ whose `Cargo.toml` sits at the repository root
 |---|---|---|
 | [`grammar/`](grammar/README.md) | `moddil-grammar` | Checks the EBNF grammar and generates tests and grammars |
 | [`syntax/`](syntax/README.md) | `moddil-syntax` | Lexer, parser and AST; later the formatter |
-| [`sema/`](sema/README.md) | `moddil-sema` | Names, types, effects and ownership |
-| [`mir/`](mir/README.md) | `moddil-mir` | The mid-level IR and lowering to it |
+| [`sema/`](sema/README.md) | `moddil-sema` | Names, types and effects; produces the typed HIR |
+| [`mir/`](mir/README.md) | `moddil-mir` | The MIR, its phases, and ownership checking ([`specs/mir.md`](../specs/mir.md)) |
 | [`interp/`](interp/README.md) | `moddil-interp` | The MIR interpreter |
 | [`refinterp/`](refinterp/README.md) | `moddil-refinterp` | The reference interpreter |
 | [`conformance/`](conformance/README.md) | `moddil-conformance` | The conformance runner |

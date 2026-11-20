@@ -347,7 +347,7 @@ Operators are traits, as in Rust: `a + b` calls `Add::add`, `a[i]` calls `Index:
   compare with numbers, so no existing reading changes:
 
   ```rust
-  assert!(0 <= i < len);
+  assert(0 <= i < len);
   if lo < x <= hi { … }                        // an exclusive lower bound, which ranges cannot express
   type Ephemeral = u16 where 49152 <= self <= 65535
   ```

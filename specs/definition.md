@@ -96,7 +96,14 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
     ([`agent-interface.md`](agent-interface.md)).
 - The formatter's canonical output must parse back to the same AST, and the grammar tests check it.
 - **The source (decided):** `reference/grammar/moddil.ebnf`, in a small EBNF dialect of our own. A
-  Rust tool checks that it is LL(k) and unambiguous and generates the outputs above. It covers **all
+  Rust tool checks that it is LL(k) and unambiguous and generates the outputs above.
+- **Notation (decided):** W3C-style EBNF (`rule ::= a b? c* (d | e)+`), with quoted terminals and
+  UPPERCASE token rules, in one file with a Tokens section and a Syntax section. GBNF and Lark use
+  the same operators, so generating them is nearly direct.
+- **Writing it (decided):** an inventory of every decided construct comes first
+  (`reference/grammar/inventory.md`). Ambiguities and conflicts found along the way become open
+  questions in [`syntax.md`](syntax.md#open-questions), so the grammar only ever holds decided
+  syntax. It covers **all
   decided syntax from the start**, not only what M0 implements, so ambiguities surface before any
   parser code exists; the compiler's hand-written parser implements it slice by slice.
 

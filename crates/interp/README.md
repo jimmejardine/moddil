@@ -1,6 +1,7 @@
 # moddil-interp
 
-The **MIR interpreter**, part of the compiler.
+The **MIR interpreter**, part of the compiler. It runs *analysed* or *runtime* MIR and never needs
+target lowering ([`specs/mir.md`: Pipeline](../../specs/mir.md#pipeline)).
 
 **Status:** not started; it runs every M0 slice, since no code-generation backend exists until M1.
 

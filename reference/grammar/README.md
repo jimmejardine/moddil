@@ -6,6 +6,32 @@ The **one grammar source** for Moddil: `moddil.ebnf`, written in a small EBNF di
 **Status:** next to be written. It is the first artefact of M0, and it covers **all decided syntax**,
 not only what M0 implements, so ambiguities surface before any parser code exists.
 
+## Notation
+
+W3C-style EBNF, in one file with a **Tokens** section and a **Syntax** section:
+
+```
+expr_stmt   ::= expr ';'?
+call        ::= primary '(' (arg (',' arg)* ','?)? ')'
+IDENT       ::= XID_START XID_CONTINUE*        # UPPERCASE names are token rules
+```
+
+| Operator | Meaning |
+|---|---|
+| `a b` | sequence |
+| `a \| b` | choice |
+| `a?` `a*` `a+` | optional, zero or more, one or more |
+| `( … )` | grouping |
+| `'…'` | a terminal |
+
+## How it is written
+
+1. **[`inventory.md`](inventory.md)** lists every decided construct, the spec that decides it and an
+   example. It is the grammar's checklist.
+2. Conflicts and undecided spellings it finds become open questions in
+   [`specs/syntax.md`](../../specs/syntax.md#open-questions) and are decided there.
+3. Only then does a construct go into `moddil.ebnf`, so the grammar holds decided syntax only.
+
 ## Rules
 
 - **LL(k) with a small k, and unambiguous.** Contextual keywords are kept to a minimum.

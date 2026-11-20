@@ -74,7 +74,7 @@ block says why those guarantees hold:
 
 ```rust
 pub unsafe fn copy_nonoverlapping<T>(src: *const T, dst: *mut T, n: int)
-    requires valid: src.is_valid_for_read(n) and dst.is_valid_for_write(n)
+    requires valid: src.is_valid_for_read(n) && dst.is_valid_for_write(n)
     requires disjoint: !overlaps(src, dst, n)
 
 fn append(buf: &mut Vec<u8>, data: &[u8]) {
