@@ -114,8 +114,32 @@ codes! {
     E0213 = "wrong number of fields",
     /// A range pattern that matches nothing, such as `5..=1`.
     E0214 = "empty range pattern",
-    /// An assignment to a local not declared `mut`.
-    E0301 = "assignment to an immutable local",
+    /// An assignment to, or a `&mut` borrow of, a local not declared `mut`.
+    E0301 = "mutation of an immutable local",
+    /// An assignment through, or a `&mut` borrow through, a shared borrow.
+    E0302 = "mutation through a shared borrow",
+    /// A use of a value after it was moved.
+    E0303 = "use of a moved value",
+    /// A move of a value out of a borrow, which does not own it.
+    E0304 = "move out of a borrow",
+    /// A borrow that conflicts with another borrow still in use.
+    E0305 = "conflicting borrows",
+    /// An assignment to, or a move of, a value while it is borrowed.
+    E0306 = "assignment to or move of a borrowed value",
+    /// A use of a value while it is borrowed with `&mut`.
+    E0307 = "use of a value borrowed with `&mut`",
+    /// A borrow used after the local it borrows has gone, or returned from where it was made.
+    E0308 = "borrow outlives its value",
+    /// A borrow stored in a struct, enum or tuple, or a borrow of a borrow.
+    E0309 = "borrow stored in data",
+    /// A returned borrow that does not come from a borrowed parameter.
+    E0310 = "returned borrow without a source",
+    /// `Copy` on a type that is not plain `Copy` data, or without `Clone`.
+    E0311 = "type cannot be `Copy`",
+    /// A `Copy` type larger than 64 bytes.
+    E0312 = "`Copy` type over the size cap",
+    /// `return`, `break` or `continue` out of a `defer` block.
+    E0313 = "leaving a `defer` block",
     /// A `match` arm no value can reach.
     W0201 = "unreachable pattern",
     /// Valid Moddil that this implementation does not support yet.

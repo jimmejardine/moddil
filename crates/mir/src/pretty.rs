@@ -14,6 +14,7 @@ impl fmt::Debug for Place {
             s = match p {
                 Projection::Field(n) => format!("{s}.{n}"),
                 Projection::Downcast(v) => format!("({s} as #{v})"),
+                Projection::Deref => format!("(*{s})"),
             };
         }
         f.write_str(&s)
@@ -24,6 +25,7 @@ impl fmt::Debug for Operand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Operand::Copy(l) => write!(f, "{l:?}"),
+            Operand::Move(l) => write!(f, "move {l:?}"),
             Operand::Const(c) => write!(f, "{c:?}"),
         }
     }
@@ -57,6 +59,8 @@ impl fmt::Display for Rvalue {
                 }
             }
             Rvalue::Discriminant(p) => write!(f, "discriminant({p:?})"),
+            Rvalue::Ref(true, p) => write!(f, "&mut {p:?}"),
+            Rvalue::Ref(false, p) => write!(f, "&{p:?}"),
         }
     }
 }
@@ -149,6 +153,8 @@ impl fmt::Debug for Body {
                             "        assert({not}{cond:?}, {trap}) @ {range:?}{shown};"
                         )?;
                     }
+                    Statement::Read(p) => writeln!(f, "        read({p:?});")?,
+                    Statement::StorageDead(l) => writeln!(f, "        StorageDead({l:?});")?,
                     Statement::Observe { range, value } => {
                         writeln!(f, "        observe({value:?}) @ {range:?};")?;
                     }

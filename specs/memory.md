@@ -71,6 +71,9 @@ by pointer**, whichever is cheaper (as Swift and Hylo do). Small types travel in
 - Checking is **intraprocedural** and flow-sensitive (NLL-style): a borrow ends at its last use.
   Function signatures carry everything a caller needs, so checking stays local and incremental
   ([Build times](build-times.md)).
+- **Dereferencing follows Rust (decided):** field access looks through a borrow (`r.x`);
+  operators, comparisons and writes through a borrow need `*` (`*r + 1`, `*a == *b`, `*r = v`).
+  Using a `&mut` borrow lends it again (an implicit reborrow) instead of using it up.
 - **Non-escaping closures** may capture borrows (Swift's model). Escaping closures capture by move
   or rc. Details in [`closures.md`](closures.md).
 - **Diagnostics built for agents** (decided): every borrow error has one root cause and a ranked

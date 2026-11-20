@@ -2,8 +2,10 @@
 //! any backend, the Miri-style checker and the playground.
 //!
 //! It runs calls on its own stack of frames, not the host's, so deep recursion in a Moddil
-//! program is a [`TrapClass::StackOverflow`] trap and never crashes the interpreter. See this
-//! crate's `README.md`.
+//! program is a [`TrapClass::StackOverflow`] trap and never crashes the interpreter. A borrow is
+//! a pointer to a frame's local and a path of fields in it; borrows cannot outlive what they
+//! point to (the borrow checker sees to that), so the frame is always there. See this crate's
+//! `README.md`.
 
 use moddil_mir::{
     AggregateKind, BinOp, Body, Const, Local, Operand, Place, Projection, Rvalue, Statement,
@@ -32,11 +34,24 @@ pub enum Value {
         /// The fields' values.
         fields: Vec<Value>,
     },
+    /// A borrow, while the program runs: where it points, and whether it is `&mut`.
+    Ref(Pointer, bool),
+    /// A borrow as reported outside the program (an observed value, a result): what it pointed
+    /// to, and whether it was `&mut`.
+    Borrowed(Box<Value>, bool),
+}
+
+/// Where a borrow points: a local of a frame, and a path of field indices into it.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Pointer {
+    frame: usize,
+    local: u32,
+    path: Vec<u32>,
 }
 
 impl Value {
     /// The value as written in Moddil source and in `// =>` expectations: `3`, `-1`, `true`,
-    /// `()`, `(1, true)`, `Point { x: 1, y: 2 }`, `Shape::Circle(3)`.
+    /// `()`, `(1, true)`, `Point { x: 1, y: 2 }`, `Shape::Circle(3)`, `&3`.
     pub fn render(&self, items: &ItemTree) -> String {
         match self {
             Value::Int(v) => v.to_string(),
@@ -71,6 +86,9 @@ impl Value {
                     }
                 }
             }
+            Value::Borrowed(v, true) => format!("&mut {}", v.render(items)),
+            Value::Borrowed(v, false) => format!("&{}", v.render(items)),
+            Value::Ref(..) => "&…".to_string(),
         }
     }
 }
@@ -98,7 +116,7 @@ pub type Observer<'a> = &'a mut dyn FnMut(TextRange, Value);
 ///
 /// # Panics
 ///
-/// If the file has errors (check `moddil_sema::has_errors` first), or `args` does not match the
+/// If the file has errors (check `moddil_mir::has_errors` first), or `args` does not match the
 /// function's parameters.
 ///
 /// # Errors
@@ -138,11 +156,11 @@ struct Frame<'a> {
     block: usize,
     stmt: usize,
     /// Where the caller wants the result, and where it continues.
-    ret: Option<(Place, usize)>,
+    ret: Option<(Pointer, usize)>,
 }
 
 impl<'a> Frame<'a> {
-    fn new(body: &'a Body, args: Vec<Value>, ret: Option<(Place, usize)>) -> Self {
+    fn new(body: &'a Body, args: Vec<Value>, ret: Option<(Pointer, usize)>) -> Self {
         assert_eq!(args.len(), body.arg_count, "argument count");
         let mut locals = vec![Value::Unit; body.locals.len()];
         for (slot, a) in locals[1..].iter_mut().zip(args) {
@@ -156,39 +174,130 @@ impl<'a> Frame<'a> {
             ret,
         }
     }
+}
 
-    fn read(&self, place: &Place) -> Value {
-        let mut v = &self.locals[place.local.index()];
+/// The interpreter's state: the stack of frames.
+struct Machine<'a> {
+    stack: Vec<Frame<'a>>,
+}
+
+impl Machine<'_> {
+    fn top(&self) -> usize {
+        self.stack.len() - 1
+    }
+
+    /// Where `place` of the top frame is, following borrows.
+    fn resolve(&self, place: &Place) -> Pointer {
+        let mut ptr = Pointer {
+            frame: self.top(),
+            local: place.local.0,
+            path: Vec::new(),
+        };
         for p in &place.projection {
-            if let Projection::Field(i) = p {
-                v = match v {
-                    Value::Tuple(xs) | Value::Adt { fields: xs, .. } => &xs[*i as usize],
-                    other => unreachable!("a field of {other:?}"),
-                };
+            match p {
+                Projection::Field(i) => ptr.path.push(*i),
+                Projection::Downcast(_) => {}
+                Projection::Deref => match self.load(&ptr) {
+                    Value::Ref(target, _) => ptr = target,
+                    other => unreachable!("dereferencing {other:?}"),
+                },
             }
+        }
+        ptr
+    }
+
+    fn load(&self, ptr: &Pointer) -> Value {
+        let mut v = &self.stack[ptr.frame].locals[ptr.local as usize];
+        for &i in &ptr.path {
+            v = match v {
+                Value::Tuple(xs) | Value::Adt { fields: xs, .. } => &xs[i as usize],
+                other => unreachable!("a field of {other:?}"),
+            };
         }
         v.clone()
     }
 
-    fn write(&mut self, place: &Place, value: Value) {
-        let mut v = &mut self.locals[place.local.index()];
-        for p in &place.projection {
-            if let Projection::Field(i) = p {
-                v = match v {
-                    Value::Tuple(xs) | Value::Adt { fields: xs, .. } => &mut xs[*i as usize],
-                    other => unreachable!("a field of {other:?}"),
-                };
-            }
+    fn store(&mut self, ptr: &Pointer, value: Value) {
+        let mut v = &mut self.stack[ptr.frame].locals[ptr.local as usize];
+        for &i in &ptr.path {
+            v = match v {
+                Value::Tuple(xs) | Value::Adt { fields: xs, .. } => &mut xs[i as usize],
+                other => unreachable!("a field of {other:?}"),
+            };
         }
         *v = value;
     }
 
+    fn read(&self, place: &Place) -> Value {
+        self.load(&self.resolve(place))
+    }
+
     fn operand(&self, o: &Operand) -> Value {
         match o {
-            Operand::Copy(p) => self.read(p),
+            Operand::Copy(p) | Operand::Move(p) => self.read(p),
             Operand::Const(Const::Int(v)) => Value::Int(*v),
             Operand::Const(Const::Bool(v)) => Value::Bool(*v),
             Operand::Const(Const::Unit) => Value::Unit,
+        }
+    }
+
+    /// `v` with every borrow replaced by what it points to, for reporting outside the program.
+    fn shown(&self, v: Value) -> Value {
+        match v {
+            Value::Ref(ptr, m) => Value::Borrowed(Box::new(self.shown(self.load(&ptr))), m),
+            Value::Tuple(xs) => Value::Tuple(xs.into_iter().map(|x| self.shown(x)).collect()),
+            Value::Adt {
+                adt,
+                variant,
+                fields,
+            } => Value::Adt {
+                adt,
+                variant,
+                fields: fields.into_iter().map(|x| self.shown(x)).collect(),
+            },
+            v => v,
+        }
+    }
+
+    fn rvalue(&self, r: &Rvalue) -> Value {
+        match r {
+            Rvalue::Use(a) => self.operand(a),
+            Rvalue::Unary(op, a) => match (op, self.operand(a)) {
+                (UnOp::Neg, Value::Int(v)) => Value::Int(v.wrapping_neg()),
+                (UnOp::Not, Value::Int(v)) => Value::Int(!v),
+                (UnOp::Not, Value::Bool(v)) => Value::Bool(!v),
+                (op, v) => unreachable!("{op:?} on {v:?}"),
+            },
+            Rvalue::NegOverflows(a) => Value::Bool(int(&self.operand(a)) == i64::MIN),
+            Rvalue::Overflows(op, a, b) => {
+                let (a, b) = (int(&self.operand(a)), int(&self.operand(b)));
+                Value::Bool(match op {
+                    BinOp::Add => a.checked_add(b).is_none(),
+                    BinOp::Sub => a.checked_sub(b).is_none(),
+                    BinOp::Mul => a.checked_mul(b).is_none(),
+                    BinOp::Div => a.checked_div(b).is_none(),
+                    BinOp::Shl => !(0..64).contains(&b) || (a << b) >> b != a,
+                    BinOp::Shr => !(0..64).contains(&b),
+                    _ => false,
+                })
+            }
+            Rvalue::Binary(op, a, b) => binary(*op, self.operand(a), self.operand(b)),
+            Rvalue::Aggregate(kind, ops) => {
+                let fields: Vec<Value> = ops.iter().map(|o| self.operand(o)).collect();
+                match kind {
+                    AggregateKind::Tuple => Value::Tuple(fields),
+                    AggregateKind::Adt { adt, variant, .. } => Value::Adt {
+                        adt: *adt,
+                        variant: *variant,
+                        fields,
+                    },
+                }
+            }
+            Rvalue::Discriminant(p) => match self.read(p) {
+                Value::Adt { variant, .. } => Value::Int(i64::from(variant)),
+                other => unreachable!("the discriminant of {other:?}"),
+            },
+            Rvalue::Ref(m, p) => Value::Ref(self.resolve(p), *m),
         }
     }
 }
@@ -206,17 +315,22 @@ fn run<'db>(
     observer: Observer<'_>,
 ) -> Result<Value, Trap> {
     let file = owner.file(db);
-    let mut stack = vec![Frame::new(body(db, owner), args.to_vec(), None)];
+    let mut m = Machine {
+        stack: vec![Frame::new(body(db, owner), args.to_vec(), None)],
+    };
     loop {
-        let depth = stack.len();
-        let frame = stack.last_mut().expect("a frame");
-        let block = &frame.body.blocks[frame.block];
+        let depth = m.stack.len();
+        let top = m.top();
+        let frame = &m.stack[top];
+        let code = frame.body;
+        let block = &code.blocks[frame.block];
         if let Some(s) = block.statements.get(frame.stmt) {
-            frame.stmt += 1;
+            m.stack[top].stmt += 1;
             match s {
                 Statement::Assign(place, r) => {
-                    let v = rvalue(frame, r);
-                    frame.write(place, v);
+                    let v = m.rvalue(r);
+                    let ptr = m.resolve(place);
+                    m.store(&ptr, v);
                 }
                 Statement::Assert {
                     cond,
@@ -225,14 +339,14 @@ fn run<'db>(
                     range,
                     parts,
                 } => {
-                    if frame.operand(cond) != Value::Bool(*expected) {
+                    if m.operand(cond) != Value::Bool(*expected) {
+                        let locals = &m.stack[top].locals;
                         let parts = parts
                             .iter()
                             .map(|p| {
-                                let evaluated =
-                                    frame.locals[p.evaluated.index()] == Value::Bool(true);
+                                let evaluated = locals[p.evaluated.index()] == Value::Bool(true);
                                 let value =
-                                    evaluated.then(|| frame.locals[p.value.index()].clone());
+                                    evaluated.then(|| m.shown(locals[p.value.index()].clone()));
                                 (p.range, value)
                             })
                             .collect();
@@ -243,23 +357,27 @@ fn run<'db>(
                         });
                     }
                 }
-                Statement::Observe { range, value } => observer(*range, frame.operand(value)),
+                Statement::Observe { range, value } => {
+                    let v = m.shown(m.operand(value));
+                    observer(*range, v);
+                }
+                Statement::Read(_) | Statement::StorageDead(_) => {}
             }
             continue;
         }
         match &block.terminator {
             Terminator::Goto(t) => {
-                frame.block = t.index();
-                frame.stmt = 0;
+                m.stack[top].block = t.index();
+                m.stack[top].stmt = 0;
             }
             Terminator::SwitchBool { cond, then, else_ } => {
-                let to = if frame.operand(cond) == Value::Bool(true) {
+                let to = if m.operand(cond) == Value::Bool(true) {
                     then
                 } else {
                     else_
                 };
-                frame.block = to.index();
-                frame.stmt = 0;
+                m.stack[top].block = to.index();
+                m.stack[top].stmt = 0;
             }
             Terminator::Call {
                 func,
@@ -275,19 +393,22 @@ fn run<'db>(
                         parts: Vec::new(),
                     });
                 }
-                let values: Vec<Value> = args.iter().map(|a| frame.operand(a)).collect();
+                let values: Vec<Value> = args.iter().map(|a| m.operand(a)).collect();
+                let dest = m.resolve(dest);
                 let callee = body(db, Owner::new(db, file, Item::Fn(*func)));
-                let next = Frame::new(callee, values, Some((dest.clone(), target.index())));
-                stack.push(next);
+                m.stack
+                    .push(Frame::new(callee, values, Some((dest, target.index()))));
             }
             Terminator::Return => {
-                let mut done = stack.pop().expect("a frame");
-                let value = std::mem::replace(&mut done.locals[Local::RETURN.index()], Value::Unit);
-                let Some((dest, target)) = done.ret else {
-                    return Ok(value);
-                };
-                let caller = stack.last_mut().expect("a caller");
-                caller.write(&dest, value);
+                let value = m.stack[top].locals[Local::RETURN.index()].clone();
+                if m.stack[top].ret.is_none() {
+                    // Show borrows while what they point to still exists.
+                    return Ok(m.shown(value));
+                }
+                let done = m.stack.pop().expect("a frame");
+                let (dest, target) = done.ret.expect("a caller");
+                m.store(&dest, value);
+                let caller = m.stack.last_mut().expect("a caller");
                 caller.block = target;
                 caller.stmt = 0;
             }
@@ -300,47 +421,6 @@ fn int(v: &Value) -> i64 {
     match v {
         Value::Int(i) => *i,
         other => unreachable!("expected an int, found {other:?}"),
-    }
-}
-
-fn rvalue(frame: &Frame<'_>, r: &Rvalue) -> Value {
-    match r {
-        Rvalue::Use(a) => frame.operand(a),
-        Rvalue::Unary(op, a) => match (op, frame.operand(a)) {
-            (UnOp::Neg, Value::Int(v)) => Value::Int(v.wrapping_neg()),
-            (UnOp::Not, Value::Int(v)) => Value::Int(!v),
-            (UnOp::Not, Value::Bool(v)) => Value::Bool(!v),
-            (op, v) => unreachable!("{op:?} on {v:?}"),
-        },
-        Rvalue::NegOverflows(a) => Value::Bool(int(&frame.operand(a)) == i64::MIN),
-        Rvalue::Overflows(op, a, b) => {
-            let (a, b) = (int(&frame.operand(a)), int(&frame.operand(b)));
-            Value::Bool(match op {
-                BinOp::Add => a.checked_add(b).is_none(),
-                BinOp::Sub => a.checked_sub(b).is_none(),
-                BinOp::Mul => a.checked_mul(b).is_none(),
-                BinOp::Div => a.checked_div(b).is_none(),
-                BinOp::Shl => !(0..64).contains(&b) || (a << b) >> b != a,
-                BinOp::Shr => !(0..64).contains(&b),
-                _ => false,
-            })
-        }
-        Rvalue::Binary(op, a, b) => binary(*op, frame.operand(a), frame.operand(b)),
-        Rvalue::Aggregate(kind, ops) => {
-            let fields: Vec<Value> = ops.iter().map(|o| frame.operand(o)).collect();
-            match kind {
-                AggregateKind::Tuple => Value::Tuple(fields),
-                AggregateKind::Adt { adt, variant, .. } => Value::Adt {
-                    adt: *adt,
-                    variant: *variant,
-                    fields,
-                },
-            }
-        }
-        Rvalue::Discriminant(p) => match frame.read(p) {
-            Value::Adt { variant, .. } => Value::Int(i64::from(variant)),
-            other => unreachable!("the discriminant of {other:?}"),
-        },
     }
 }
 

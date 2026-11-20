@@ -1,12 +1,12 @@
 //! Building MIR from the typed HIR: the `mir` query.
 
+use std::collections::HashMap;
+
 use moddil_sema::hir::{
     self, BinaryOp, CompareOp, ExprId, ExprKind, LogicOp, PatId, PatKind, Stmt, UnaryOp,
 };
 use moddil_sema::{Db, Inference, Item, ItemTree, Owner, Ty, tuple_positions};
 use moddil_syntax::TextRange;
-
-use std::collections::HashMap;
 
 use crate::{
     AggregateKind, AssertPart, BasicBlock, BinOp, BlockId, Body, Const, Local, LocalDecl, Operand,
@@ -47,6 +47,8 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
         locals: vec![None; hir.locals.len()],
         loops: Vec::new(),
         recording: HashMap::new(),
+        scopes: vec![Vec::new()],
+        span: TextRange::default(),
     };
     b.current = b.new_block();
     for &p in &hir.params {
@@ -58,8 +60,16 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
         b.test_pat(pat, &place, fail);
     }
     if let Some(root) = hir.root {
-        b.eval_into(Local::RETURN, root);
+        if let Item::Test(_) = owner.item(db) {
+            // A test's value is observed, not returned.
+            let t = b.temp(types.expr(root));
+            b.eval_into(t, root);
+            b.assign(Local::RETURN, Rvalue::Use(Operand::Const(Const::Unit)));
+        } else {
+            b.eval_into(Local::RETURN, root);
+        }
     }
+    b.leave_scopes(0);
     b.terminate(Terminator::Return);
     remove_unreachable(&mut b.body);
     Some(b.body)
@@ -79,6 +89,17 @@ struct LoopCx {
     header: BlockId,
     /// Where a `break` value goes.
     dest: Local,
+    /// How many scopes were open outside the loop.
+    depth: usize,
+}
+
+/// What a scope holds, in the order it was declared: leaving the scope undoes them in reverse.
+#[derive(Clone, Copy)]
+enum ScopeItem {
+    /// A local, whose storage ends.
+    Local(Local),
+    /// A `defer` block, which runs.
+    Defer(ExprId),
 }
 
 struct Builder<'a> {
@@ -93,19 +114,27 @@ struct Builder<'a> {
     /// While an `assert`'s condition is built: for each of its parts, the locals holding its
     /// value and whether it was evaluated.
     recording: HashMap<ExprId, (Local, Local)>,
+    /// The open scopes, outermost (the body, holding the parameters) first.
+    scopes: Vec<Vec<ScopeItem>>,
+    /// The source of what is being built, recorded with each statement.
+    span: TextRange,
 }
 
 impl Builder<'_> {
     fn new_block(&mut self) -> BlockId {
         self.body.blocks.push(BasicBlock {
             statements: Vec::new(),
+            spans: Vec::new(),
             terminator: Terminator::Unreachable,
+            terminator_span: self.span,
         });
         BlockId(self.body.blocks.len() as u32 - 1)
     }
 
     fn push(&mut self, s: Statement) {
-        self.body.blocks[self.current.index()].statements.push(s);
+        let block = &mut self.body.blocks[self.current.index()];
+        block.statements.push(s);
+        block.spans.push(self.span);
     }
 
     fn assign(&mut self, dest: impl Into<Place>, r: Rvalue) {
@@ -115,13 +144,15 @@ impl Builder<'_> {
     /// Ends the current block with `t` and continues in a new block (unreachable unless
     /// something jumps to it).
     fn terminate(&mut self, t: Terminator) {
-        self.body.blocks[self.current.index()].terminator = t;
-        self.current = self.new_block();
+        let next = self.new_block();
+        self.terminate_into(t, next);
     }
 
     /// Ends the current block with `t` and continues in `next`.
     fn terminate_into(&mut self, t: Terminator, next: BlockId) {
-        self.body.blocks[self.current.index()].terminator = t;
+        let block = &mut self.body.blocks[self.current.index()];
+        block.terminator = t;
+        block.terminator_span = self.span;
         self.current = next;
     }
 
@@ -143,7 +174,7 @@ impl Builder<'_> {
         Local(self.body.locals.len() as u32 - 1)
     }
 
-    /// The MIR local of HIR local `l`, declared on first use.
+    /// The MIR local of HIR local `l`, declared on first use in the innermost scope.
     fn local(&mut self, l: hir::LocalId) -> Local {
         if let Some(local) = self.locals[idx(l)] {
             return local;
@@ -155,7 +186,31 @@ impl Builder<'_> {
         });
         let local = Local(self.body.locals.len() as u32 - 1);
         self.locals[idx(l)] = Some(local);
+        self.scopes
+            .last_mut()
+            .expect("a scope")
+            .push(ScopeItem::Local(local));
         local
+    }
+
+    /// Leaves every scope deeper than `depth`, innermost first: runs their `defer` blocks and
+    /// ends their locals' storage, in reverse order of declaration. The scopes stay open in the
+    /// builder; only the code for leaving them is emitted.
+    fn leave_scopes(&mut self, depth: usize) {
+        let items: Vec<ScopeItem> = self.scopes[depth..]
+            .iter()
+            .rev()
+            .flat_map(|s| s.iter().rev().copied())
+            .collect();
+        for item in items {
+            match item {
+                ScopeItem::Local(l) => self.push(Statement::StorageDead(l)),
+                ScopeItem::Defer(body) => {
+                    let t = self.temp(Ty::Unit);
+                    self.eval_into(t, body);
+                }
+            }
+        }
     }
 
     fn ty(&self, e: ExprId) -> Ty {
@@ -164,6 +219,10 @@ impl Builder<'_> {
 
     fn range(&self, e: ExprId) -> TextRange {
         self.hir.exprs[e].range
+    }
+
+    fn is_copy(&self, ty: &Ty) -> bool {
+        self.items.is_copy(ty)
     }
 
     /// Whether evaluating `e` may assign to a local.
@@ -178,7 +237,9 @@ impl Builder<'_> {
             | ExprKind::Local(_)
             | ExprKind::Fn(_)
             | ExprKind::Continue { .. } => false,
-            ExprKind::Assert(c) => self.assigns(*c),
+            ExprKind::Assert(c) | ExprKind::Deref(c) | ExprKind::Ref { expr: c, .. } => {
+                self.assigns(*c)
+            }
             ExprKind::Tuple(xs) => any(xs),
             ExprKind::Adt { fields, .. } => fields.iter().any(|&(_, x)| self.assigns(x)),
             ExprKind::Field { base, .. } => self.assigns(*base),
@@ -188,7 +249,7 @@ impl Builder<'_> {
                     Stmt::Let { init, else_, .. } => {
                         self.assigns(init) || else_.is_some_and(|x| self.assigns(x))
                     }
-                    Stmt::Expr { expr, .. } => self.assigns(expr),
+                    Stmt::Expr { expr, .. } | Stmt::Defer(expr) => self.assigns(expr),
                 }) || tail.is_some_and(|t| self.assigns(t))
             }
             ExprKind::If { cond, then, else_ } => {
@@ -217,20 +278,68 @@ impl Builder<'_> {
         }
     }
 
-    /// The place `e` denotes, if it is a local or fields of one.
+    /// The place `e` denotes without evaluating anything, if it is a local, or fields and
+    /// dereferences of one.
     fn place_of(&mut self, e: ExprId) -> Option<Place> {
         match self.hir.exprs[e].kind {
             ExprKind::Local(l) => Some(Place::local(self.local(l))),
             ExprKind::Field { base, .. } => {
                 let i = self.types.field_index(e)?;
-                Some(self.place_of(base)?.field(i))
+                let p = self.place_of(base)?;
+                let p = if self.types.field_through_borrow(e) {
+                    p.deref()
+                } else {
+                    p
+                };
+                Some(p.field(i))
             }
+            ExprKind::Deref(x) => Some(self.place_of(x)?.deref()),
             _ => None,
         }
     }
 
+    /// The place `e` denotes, evaluating what is not a place (a call returning a borrow, a
+    /// temporary to borrow) into a temporary first.
+    fn place(&mut self, e: ExprId) -> Place {
+        if let Some(p) = self.place_of(e) {
+            return p;
+        }
+        match self.hir.exprs[e].kind {
+            ExprKind::Field { base, .. } => {
+                let i = self.types.field_index(e).expect("a checked field");
+                let p = self.place(base);
+                let p = if self.types.field_through_borrow(e) {
+                    p.deref()
+                } else {
+                    p
+                };
+                p.field(i)
+            }
+            ExprKind::Deref(x) => self.place(x).deref(),
+            _ => {
+                let t = self.temp(self.ty(e));
+                self.eval_into(t, e);
+                Place::local(t)
+            }
+        }
+    }
+
+    /// The operand that uses the value at `place` of type `ty`: a copy for `Copy` types, a fresh
+    /// reborrow for `&mut` borrows (so using one does not use it up), and otherwise a move.
+    fn use_place(&mut self, place: Place, ty: &Ty) -> Operand {
+        match ty {
+            Ty::Ref(true, inner) => {
+                let t = self.temp(Ty::Ref(true, inner.clone()));
+                self.assign(t, Rvalue::Ref(true, place.deref()));
+                Operand::Move(Place::local(t))
+            }
+            t if self.is_copy(t) => Operand::Copy(place),
+            _ => Operand::Move(place),
+        }
+    }
+
     /// `e` as an operand. If an expression evaluated later (`later`) may assign to a local, a
-    /// place's value is copied first, so the operand keeps the value it had here.
+    /// place's value is taken into a temporary first, so the operand keeps the value it had here.
     fn operand(&mut self, e: ExprId, later: &[ExprId]) -> Operand {
         if let Some(&(v, _)) = self.recording.get(&e) {
             self.eval_into(v, e);
@@ -245,11 +354,17 @@ impl Builder<'_> {
         if !later.iter().any(|&x| self.assigns(x))
             && let Some(place) = self.place_of(e)
         {
-            return Operand::Copy(place);
+            let ty = self.ty(e);
+            return self.use_place(place, &ty);
         }
-        let t = self.temp(self.ty(e));
+        let ty = self.ty(e);
+        let t = self.temp(ty.clone());
         self.eval_into(t, e);
-        Operand::Copy(Place::local(t))
+        if self.is_copy(&ty) {
+            Operand::Copy(Place::local(t))
+        } else {
+            Operand::Move(Place::local(t))
+        }
     }
 
     /// The operands of `xs`, evaluated left to right.
@@ -267,7 +382,9 @@ impl Builder<'_> {
             self.eval_plain(v, e);
             self.assign(flag, Rvalue::Use(Operand::Const(Const::Bool(true))));
             if dest != v {
-                self.assign(dest, Rvalue::Use(Operand::Copy(Place::local(v))));
+                let ty = self.ty(e);
+                let op = self.use_place(Place::local(v), &ty);
+                self.assign(dest, Rvalue::Use(op));
             }
             return;
         }
@@ -282,7 +399,9 @@ impl Builder<'_> {
             out.push(e);
         }
         let children: Vec<ExprId> = match kind {
-            ExprKind::Unary(_, x) | ExprKind::Field { base: x, .. } => vec![*x],
+            ExprKind::Unary(_, x) | ExprKind::Field { base: x, .. } | ExprKind::Deref(x) => {
+                vec![*x]
+            }
             ExprKind::Binary(_, l, r) | ExprKind::Logic(_, l, r) => vec![*l, *r],
             ExprKind::Compare { first, rest } => std::iter::once(*first)
                 .chain(rest.iter().map(|&(_, x)| x))
@@ -297,27 +416,40 @@ impl Builder<'_> {
     }
 
     fn eval_plain(&mut self, dest: Local, e: ExprId) {
+        let span = self.range(e);
+        let outer = std::mem::replace(&mut self.span, span);
+        self.eval_kind(dest, e);
+        self.span = outer;
+    }
+
+    fn eval_kind(&mut self, dest: Local, e: ExprId) {
         let range = self.range(e);
         match self.hir.exprs[e].kind.clone() {
             ExprKind::Missing | ExprKind::Fn(_) => {
                 unreachable!("MIR is only built for bodies without errors")
             }
-            ExprKind::Int(_) | ExprKind::Bool(_) | ExprKind::Unit | ExprKind::Local(_) => {
-                let op = self.operand(e, &[]);
+            ExprKind::Int(_)
+            | ExprKind::Bool(_)
+            | ExprKind::Unit
+            | ExprKind::Local(_)
+            | ExprKind::Field { .. }
+            | ExprKind::Deref(_) => {
+                let place = match self.hir.exprs[e].kind {
+                    ExprKind::Field { .. } | ExprKind::Deref(_) => Some(self.place(e)),
+                    _ => None,
+                };
+                let op = match place {
+                    Some(p) => {
+                        let ty = self.ty(e);
+                        self.use_place(p, &ty)
+                    }
+                    None => self.operand(e, &[]),
+                };
                 self.assign(dest, Rvalue::Use(op));
             }
-            ExprKind::Field { base, .. } => {
-                let place = match self.place_of(e) {
-                    Some(p) => p,
-                    None => {
-                        // A field of a value that is not in a local: put it in one first.
-                        let i = self.types.field_index(e).expect("a checked field");
-                        let t = self.temp(self.ty(base));
-                        self.eval_into(t, base);
-                        Place::local(t).field(i)
-                    }
-                };
-                self.assign(dest, Rvalue::Use(Operand::Copy(place)));
+            ExprKind::Ref { mutable, expr } => {
+                let place = self.place(expr);
+                self.assign(dest, Rvalue::Ref(mutable, place));
             }
             ExprKind::Tuple(xs) => {
                 let ops = self.operands(&xs);
@@ -346,21 +478,27 @@ impl Builder<'_> {
                 tail,
                 observe_tail,
             } => {
+                self.scopes.push(Vec::new());
                 for s in &stmts {
                     self.stmt(s);
                 }
                 match tail {
                     Some(t) if observe_tail => {
-                        let value = self.operand(t, &[]);
+                        let place = self.place(t);
                         self.push(Statement::Observe {
                             range: self.range(t),
-                            value: value.clone(),
+                            value: Operand::Copy(place.clone()),
                         });
-                        self.assign(dest, Rvalue::Use(value));
+                        let ty = self.ty(t);
+                        let op = self.use_place(place, &ty);
+                        self.assign(dest, Rvalue::Use(op));
                     }
                     Some(t) => self.eval_into(dest, t),
                     None => self.assign(dest, Rvalue::Use(Operand::Const(Const::Unit))),
                 }
+                let depth = self.scopes.len() - 1;
+                self.leave_scopes(depth);
+                self.scopes.pop();
             }
             ExprKind::If { cond, then, else_ } => {
                 let c = self.operand(cond, &[]);
@@ -401,12 +539,22 @@ impl Builder<'_> {
             }
             ExprKind::Match { scrutinee, arms } => {
                 let place = self.scrutinee(scrutinee);
+                // While guards run, the matched value is borrowed, so a guard cannot change it.
+                let guarded = arms.iter().any(|a| a.guard.is_some());
+                let fake = guarded.then(|| {
+                    let t = self.temp(Ty::reference(false, self.ty(scrutinee)));
+                    self.assign(t, Rvalue::Ref(false, place.clone()));
+                    t
+                });
                 let join = self.new_block();
                 for arm in &arms {
                     let next = self.new_block();
                     self.test_pat(arm.pat, &place, next);
                     if let Some(g) = arm.guard {
                         let c = self.operand(g, &[]);
+                        if let Some(f) = fake {
+                            self.push(Statement::Read(Place::local(f)));
+                        }
                         self.branch(c, next);
                     }
                     self.eval_into(dest, arm.body);
@@ -424,6 +572,7 @@ impl Builder<'_> {
                     exit,
                     header,
                     dest,
+                    depth: self.scopes.len(),
                 });
                 let t = self.temp(Ty::Unit);
                 self.eval_into(t, body);
@@ -434,18 +583,35 @@ impl Builder<'_> {
                 let header = self.new_block();
                 let exit = self.new_block();
                 self.terminate_into(Terminator::Goto(header), header);
+                // The condition's `let` bindings live for one iteration.
+                self.scopes.push(Vec::new());
                 let c = self.operand(cond, &[]);
-                self.branch(c, exit);
+                let body_bb = self.new_block();
+                let leave = self.new_block();
+                self.terminate_into(
+                    Terminator::SwitchBool {
+                        cond: c,
+                        then: body_bb,
+                        else_: leave,
+                    },
+                    body_bb,
+                );
                 self.loops.push(LoopCx {
                     id: e,
                     exit,
                     header,
                     dest,
+                    depth: self.scopes.len() - 1,
                 });
                 let t = self.temp(Ty::Unit);
                 self.eval_into(t, body);
                 self.loops.pop();
-                self.terminate_into(Terminator::Goto(header), exit);
+                let depth = self.scopes.len() - 1;
+                self.leave_scopes(depth);
+                self.terminate_into(Terminator::Goto(header), leave);
+                self.leave_scopes(depth);
+                self.scopes.pop();
+                self.terminate_into(Terminator::Goto(exit), exit);
                 self.assign(dest, Rvalue::Use(Operand::Const(Const::Unit)));
             }
             ExprKind::Break { target, value } => {
@@ -455,7 +621,7 @@ impl Builder<'_> {
                     .rev()
                     .find(|l| l.id == target)
                     .expect("a resolved loop");
-                let (exit, loop_dest) = (cx.exit, cx.dest);
+                let (exit, loop_dest, depth) = (cx.exit, cx.dest, cx.depth);
                 let is_while = matches!(self.hir.exprs[target].kind, ExprKind::While { .. });
                 match value {
                     Some(v) => self.eval_into(loop_dest, v),
@@ -464,17 +630,27 @@ impl Builder<'_> {
                     }
                     None => {}
                 }
+                self.leave_scopes(depth);
                 self.terminate(Terminator::Goto(exit));
             }
             ExprKind::Continue { target } => {
-                let header = self
+                let cx = self
                     .loops
                     .iter()
                     .rev()
                     .find(|l| l.id == target)
-                    .expect("a resolved loop")
-                    .header;
+                    .expect("a resolved loop");
+                let (header, depth) = (cx.header, cx.depth);
+                self.leave_scopes(depth);
                 self.terminate(Terminator::Goto(header));
+            }
+            ExprKind::Return(v) => {
+                match v {
+                    Some(v) => self.eval_into(Local::RETURN, v),
+                    None => self.assign(Local::RETURN, Rvalue::Use(Operand::Const(Const::Unit))),
+                }
+                self.leave_scopes(0);
+                self.terminate(Terminator::Return);
             }
             ExprKind::Assert(cond) => {
                 let mut exprs = Vec::new();
@@ -503,13 +679,6 @@ impl Builder<'_> {
                     parts,
                 });
                 self.assign(dest, Rvalue::Use(Operand::Const(Const::Unit)));
-            }
-            ExprKind::Return(v) => {
-                match v {
-                    Some(v) => self.eval_into(Local::RETURN, v),
-                    None => self.assign(Local::RETURN, Rvalue::Use(Operand::Const(Const::Unit))),
-                }
-                self.terminate(Terminator::Return);
             }
             ExprKind::Unary(op, x) => {
                 let a = self.operand(x, &[]);
@@ -553,15 +722,17 @@ impl Builder<'_> {
             }
             ExprKind::Compare { first, rest } => self.compare(dest, first, &rest),
             ExprKind::Assign { target, op, value } => {
-                let place = self.place_of(target).expect("a checked place");
                 let ty = self.ty(target);
                 match op {
                     None => {
                         let t = self.temp(self.ty(value));
                         self.eval_into(t, value);
-                        self.assign(place, Rvalue::Use(Operand::Copy(Place::local(t))));
+                        let place = self.place(target);
+                        let op = self.use_place(Place::local(t), &ty);
+                        self.assign(place, Rvalue::Use(op));
                     }
                     Some(op) => {
+                        let place = self.place(target);
                         let a = if self.assigns(value) {
                             let t = self.temp(ty.clone());
                             self.assign(t, Rvalue::Use(Operand::Copy(place.clone())));
@@ -595,18 +766,33 @@ impl Builder<'_> {
         }
     }
 
-    /// A temporary holding the value of `e` for matching, so that a guard or arm assigning to
-    /// the scrutinee's local cannot change what later arms test.
+    /// The place holding the value `e` matched: `e`'s own place if it is one (matching does not
+    /// move it; bindings move or borrow its parts), otherwise a temporary.
     fn scrutinee(&mut self, e: ExprId) -> Place {
+        if let Some(p) = self.place_of(e) {
+            return p;
+        }
         let t = self.temp(self.ty(e));
-        let op = self.operand(e, &[]);
-        self.assign(t, Rvalue::Use(op));
+        self.eval_into(t, e);
         Place::local(t)
     }
 
     /// Tests whether the value at `place` matches `pat`, binding its names as it goes; continues
     /// in the current block if it does and goes to `fail` if not.
     fn test_pat(&mut self, pat: PatId, place: &Place, fail: BlockId) {
+        let span = self.hir.pats[pat].range;
+        let outer = std::mem::replace(&mut self.span, span);
+        self.test_pat_kind(pat, place, fail);
+        self.span = outer;
+    }
+
+    fn test_pat_kind(&mut self, pat: PatId, place: &Place, fail: BlockId) {
+        // Matching through a borrow tests what it points to.
+        let place = &if self.types.pat_through_borrow(pat) {
+            place.deref()
+        } else {
+            place.clone()
+        };
         match self.hir.pats[pat].kind.clone() {
             PatKind::Missing | PatKind::Wild | PatKind::Unit => {}
             PatKind::Bind { local, sub } => {
@@ -614,8 +800,16 @@ impl Builder<'_> {
                     self.test_pat(s, place, fail);
                 }
                 let l = self.local(local);
-                self.assign(l, Rvalue::Use(Operand::Copy(place.clone())));
+                let value = match self.types.binds_borrow(pat) {
+                    Some(m) => Rvalue::Ref(m, place.clone()),
+                    None => {
+                        let ty = self.types.pat(pat);
+                        Rvalue::Use(self.use_place(place.clone(), &ty))
+                    }
+                };
+                self.assign(l, value);
             }
+            PatKind::Ref { pat: inner, .. } => self.test_pat(inner, &place.deref(), fail),
             PatKind::Int(v) => self.test_cmp(BinOp::Eq, place, Const::Int(v as i64), fail),
             PatKind::Bool(v) => self.test_cmp(BinOp::Eq, place, Const::Bool(v), fail),
             PatKind::Range { lo, hi, inclusive } => {
@@ -626,7 +820,7 @@ impl Builder<'_> {
                 }
             }
             PatKind::Tuple { pats, rest } => {
-                let arity = match self.types.pat(pat) {
+                let arity = match self.types.pat(pat).strip_ref() {
                     Ty::Tuple(ts) => ts.len(),
                     _ => pats.len(),
                 };
@@ -693,13 +887,14 @@ impl Builder<'_> {
                     let t = self.temp(self.types.local(local));
                     self.eval_into(t, init);
                     let named = self.local(local);
-                    self.assign(named, Rvalue::Use(Operand::Copy(Place::local(t))));
+                    let ty = self.types.local(local);
+                    let op = self.use_place(Place::local(t), &ty);
+                    self.assign(named, Rvalue::Use(op));
                     return;
                 }
-                let t = self.temp(self.ty(init));
-                self.eval_into(t, init);
+                let place = self.scrutinee(init);
                 let fail = self.new_block();
-                self.test_pat(pat, &Place::local(t), fail);
+                self.test_pat(pat, &place, fail);
                 if let Some(x) = else_ {
                     let matched = self.current;
                     self.current = fail;
@@ -709,20 +904,32 @@ impl Builder<'_> {
                     self.terminate_into(Terminator::Unreachable, matched);
                 }
             }
+            Stmt::Defer(body) => {
+                self.scopes
+                    .last_mut()
+                    .expect("a scope")
+                    .push(ScopeItem::Defer(body));
+            }
             Stmt::Expr {
                 expr,
                 observe: true,
                 ..
             } => {
-                let value = self.operand(expr, &[]);
+                // Observing reads the value; a place keeps it.
+                let place = self.place(expr);
                 self.push(Statement::Observe {
                     range: self.range(expr),
-                    value,
+                    value: Operand::Copy(place),
                 });
             }
             Stmt::Expr { expr, .. } => {
-                let t = self.temp(self.ty(expr));
-                self.eval_into(t, expr);
+                // A place whose value is discarded is read, not moved, as `let _ = p` would.
+                if let Some(place) = self.place_of(expr) {
+                    self.push(Statement::Read(place));
+                } else {
+                    let t = self.temp(self.ty(expr));
+                    self.eval_into(t, expr);
+                }
             }
         }
     }

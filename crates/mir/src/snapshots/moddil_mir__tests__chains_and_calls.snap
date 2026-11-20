@@ -13,6 +13,9 @@ fn within(_1: int, _2: int, _3: int) -> bool {
     }
 
     bb1: {
+        StorageDead(_3);
+        StorageDead(_2);
+        StorageDead(_1);
         return;
     }
 
@@ -30,6 +33,7 @@ fn twice(_1: int) -> int {
     }
 
     bb1: {
+        StorageDead(_1);
         return;
     }
 }
@@ -43,6 +47,8 @@ fn add(_1: int, _2: int) -> int {
         _3 = AddOverflows(_1, _2);
         assert(!_3, overflow) @ 131..136;
         _0 = Add(_1, _2);
+        StorageDead(_2);
+        StorageDead(_1);
         return;
     }
 }

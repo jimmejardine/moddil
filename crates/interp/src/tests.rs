@@ -6,7 +6,7 @@ use super::*;
 fn eval(text: &str, args: &[Value]) -> Result<Value, Trap> {
     let db = Database::default();
     let file = SourceFile::new(&db, "t.moddil".to_string(), text.to_string());
-    let diagnostics = moddil_sema::diagnostics(&db, file);
+    let diagnostics = moddil_mir::diagnostics(&db, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let main = moddil_sema::item_tree(&db, file)
         .fn_named("main")
@@ -152,7 +152,7 @@ fn tests_report_observed_values() {
 fn shown(text: &str) -> String {
     let db = Database::default();
     let file = SourceFile::new(&db, "t.moddil".to_string(), text.to_string());
-    let diagnostics = moddil_sema::diagnostics(&db, file);
+    let diagnostics = moddil_mir::diagnostics(&db, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let items = moddil_sema::item_tree(&db, file);
     let main = items.fn_named("main").expect("a main");

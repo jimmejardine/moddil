@@ -32,6 +32,9 @@ fn f(_1: int) -> int {
         _8 = _10;
         _9 = const ();
         _0 = _8;
+        StorageDead(_8);
+        StorageDead(_3);
+        StorageDead(_1);
         return;
     }
 }
@@ -56,6 +59,7 @@ fn g() -> int {
         _7 = AddOverflows(_3, _4);
         assert(!_7, overflow) @ 110..126;
         _0 = Add(_3, _4);
+        StorageDead(_2);
         return;
     }
 }

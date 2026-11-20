@@ -19,11 +19,13 @@ fn abs(_1: int) -> int {
         _5 = NegOverflows(_1);
         assert(!_5, overflow) @ 42..44;
         _0 = Neg(_1);
+        StorageDead(_1);
         return;
     }
 
     bb2: {
         _0 = _1;
+        StorageDead(_1);
         return;
     }
 }
@@ -44,6 +46,7 @@ fn sign(_1: int) -> int {
     }
 
     bb2: {
+        StorageDead(_1);
         return;
     }
 
@@ -101,6 +104,8 @@ fn both(_1: bool, _2: bool) -> bool {
     }
 
     bb6: {
+        StorageDead(_2);
+        StorageDead(_1);
         return;
     }
 }

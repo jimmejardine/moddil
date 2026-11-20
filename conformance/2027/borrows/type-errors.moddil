@@ -1,0 +1,11 @@
+// covers: borrow.type.1, borrow.deref.1, borrow.mut.1
+
+struct Holder { r: &int }                                   //~ E0309
+fn in_a_tuple(a: &int) -> int { let t = (a, 1); 0 }         //~ E0309
+fn of_a_borrow(a: &&int) {}                                 //~ E0309
+fn compare(a: &int, b: &int) -> bool { a == b }             //~ E0205
+fn add(a: &int) -> int { a + 1 }                            //~ E0205
+fn not_a_borrow(n: int) -> int { *n }                       //~ E0205
+fn through_shared(a: &int) { *a = 1; }                      //~ E0302
+fn field_through_shared(p: &(int, int)) { p.0 = 1; }        //~ E0302
+fn immutable() { let x = 1; let r = &mut x; }               //~ E0301

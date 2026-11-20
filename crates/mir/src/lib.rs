@@ -6,8 +6,9 @@
 //! Every check that can trap is an explicit [`Statement::Assert`] with a [`TrapClass`] and a source
 //! range, so backends cannot forget one. The [`mir`] query builds a body from the typed HIR.
 //!
-//! Places are a local and a path of projections into it (a field, or a variant's view of an
-//! enum). There are no drops or ownership checks yet; see this crate's `README.md`.
+//! Places are a local and a path of projections into it (a field, a variant's view of an enum,
+//! or what a borrow points to). Operands copy or move; borrows are `Rvalue::Ref`. The
+//! [`borrowck`] query checks ownership and borrows on the MIR; see this crate's `README.md`.
 
 use std::fmt;
 
@@ -15,9 +16,11 @@ use moddil_sema::Ty;
 use moddil_syntax::TextRange;
 
 mod build;
+mod ownership;
 mod pretty;
 
 pub use build::mir;
+pub use ownership::{borrowck, diagnostics, has_errors};
 
 /// A local: `_0` is the return value, `_1` to `_n` the arguments, then named locals and
 /// temporaries.
@@ -84,8 +87,12 @@ pub struct LocalDecl {
 pub struct BasicBlock {
     /// The statements.
     pub statements: Vec<Statement>,
+    /// The source each statement comes from, for diagnostics.
+    pub spans: Vec<TextRange>,
     /// Where control goes next.
     pub terminator: Terminator,
+    /// The source the terminator comes from.
+    pub terminator_span: TextRange,
 }
 
 /// A place: a local, or a part of one reached through projections (`_1.0`, `(_2 as Circle).0`).
@@ -104,6 +111,8 @@ pub enum Projection {
     Field(u32),
     /// The enum viewed as variant `n`; only valid when it holds that variant.
     Downcast(u32),
+    /// What the borrow at this place points to.
+    Deref,
 }
 
 impl Place {
@@ -121,6 +130,19 @@ impl Place {
         let mut p = self.clone();
         p.projection.push(Projection::Field(n));
         p
+    }
+
+    /// What the borrow at this place points to.
+    #[must_use]
+    pub fn deref(&self) -> Place {
+        let mut p = self.clone();
+        p.projection.push(Projection::Deref);
+        p
+    }
+
+    /// Whether the place is reached through a borrow.
+    pub fn is_indirect(&self) -> bool {
+        self.projection.contains(&Projection::Deref)
     }
 
     /// This place viewed as variant `n`.
@@ -156,6 +178,11 @@ pub enum Statement {
         /// For an `assert`: the parts of its condition, whose values the trap shows.
         parts: Vec<AssertPart>,
     },
+    /// Reads a place without using its value: a discarded place expression, or keeping a borrow
+    /// in use (the borrow that stops `match` guards changing what is matched).
+    Read(Place),
+    /// The local's storage ends: it leaves scope, so nothing may borrow it any more.
+    StorageDead(Local),
     /// Reports a value to the test harness: an expression followed by a `// =>` expectation.
     Observe {
         /// The expression observed.
@@ -196,6 +223,8 @@ pub enum Rvalue {
     Aggregate(AggregateKind, Vec<Operand>),
     /// Which variant an enum holds, as an `int` (the variant's index).
     Discriminant(Place),
+    /// A borrow of a place: `&mut` if the flag is set.
+    Ref(bool, Place),
 }
 
 /// What an [`Rvalue::Aggregate`] builds.
@@ -217,8 +246,10 @@ pub enum AggregateKind {
 /// A place's value or a constant.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Operand {
-    /// The value of a place.
+    /// A copy of the value of a place, which stays usable.
     Copy(Place),
+    /// The value of a place, moved out: the place cannot be used again until it is assigned.
+    Move(Place),
     /// A constant.
     Const(Const),
 }

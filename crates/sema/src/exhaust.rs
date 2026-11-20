@@ -61,7 +61,8 @@ struct Cx<'a> {
 impl Cx<'_> {
     /// The types of the fields of constructor `c` of type `ty`.
     fn field_types(&self, c: &Ctor, ty: &Ty) -> Vec<Ty> {
-        match (c, ty) {
+        // A borrow has the constructors of what it points to.
+        match (c, ty.strip_ref()) {
             (Ctor::Single, Ty::Tuple(ts)) => ts.to_vec(),
             (Ctor::Single, Ty::Adt(a, _)) => self.variant_fields(*a, 0),
             (Ctor::Variant(v), Ty::Adt(a, _)) => self.variant_fields(*a, *v),
@@ -82,7 +83,7 @@ impl Cx<'_> {
         let ty = self.types.pat(p);
         match &self.body.pats[p].kind {
             PatKind::Missing | PatKind::Wild | PatKind::Bind { sub: None, .. } => DPat::wild(ty),
-            &PatKind::Bind { sub: Some(s), .. } => self.lower(s),
+            &PatKind::Bind { sub: Some(s), .. } | &PatKind::Ref { pat: s, .. } => self.lower(s),
             &PatKind::Int(v) => DPat {
                 ctor: Ctor::Int(v, v),
                 ty,
@@ -155,7 +156,7 @@ impl Cx<'_> {
     /// Every constructor of `ty`, with integers split at the boundaries of the ranges in `heads`.
     /// `None` for a type whose values are not analysed (an error).
     fn all_ctors(&self, ty: &Ty, heads: &[&DPat]) -> Option<Vec<Ctor>> {
-        Some(match ty {
+        Some(match ty.strip_ref() {
             Ty::Bool => vec![Ctor::Bool(false), Ctor::Bool(true)],
             Ty::Int => split_ints(heads, INT_MIN, INT_MAX),
             Ty::Unit | Ty::Tuple(_) => vec![Ctor::Single],
@@ -168,7 +169,7 @@ impl Cx<'_> {
                 }
             }
             Ty::Never => Vec::new(),
-            Ty::Error => return None,
+            Ty::Error | Ty::Ref(..) => return None,
         })
     }
 
@@ -284,7 +285,7 @@ impl Witness {
     fn render(&self, items: &ItemTree) -> String {
         let Witness::Ctor(c, ty, fields) = self;
         let fields: Vec<String> = fields.iter().map(|f| f.render(items)).collect();
-        match (c, ty) {
+        match (c, ty.strip_ref()) {
             (Ctor::Bool(b), _) => b.to_string(),
             (Ctor::Int(INT_MIN, INT_MAX), _) => "_".to_string(),
             (Ctor::Int(lo, hi), _) if lo == hi => lo.to_string(),

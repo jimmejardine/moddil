@@ -3,9 +3,10 @@
 The **shared test suite** every Moddil implementation must pass to use the name "Moddil <edition>"
 ([`specs/definition.md`: A shared conformance suite](../specs/definition.md#a-shared-conformance-suite)).
 
-**Status:** slices S0 and S1: [`2027/`](2027) tests functions, tests, `let`, `int`, `bool` and `()`,
+**Status:** slices S0 to S2: [`2027/`](2027) tests functions, tests, `let`, `int`, `bool` and `()`,
 arithmetic and its traps, comparisons, logic, `if`, blocks and calls (S0); tuples, structs, enums,
-patterns, `match`, `if let`, `let … else`, loops and `assert` (S1). It cites every paragraph of the
+patterns, `match`, `if let`, `let … else`, loops and `assert` (S1); moves, `Copy`, borrows and
+`defer` (S2). It cites every paragraph of the
 [2027 reference](../reference/2027/README.md), and every test runs on both the MIR interpreter and
 the reference interpreter. The runner is [`crates/conformance`](../crates/conformance/README.md);
 `cargo test -p moddil-conformance` runs the suite.

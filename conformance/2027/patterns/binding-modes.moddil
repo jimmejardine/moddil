@@ -1,0 +1,21 @@
+// covers: pat.mode.1, pat.ref.1
+
+enum Shape { Dot, Circle(int) }
+
+fn grow(s: &mut Shape) { match s { Shape::Circle(r) => *r += 1, Shape::Dot => {} } }
+fn radius(s: &Shape) -> int { match s { Shape::Circle(r) => *r, Shape::Dot => 0 } }
+
+test "matching through a borrow binds borrows" {
+    let mut s = Shape::Circle(1);
+    grow(&mut s);
+    radius(&s)                  // => 2
+    ;
+    let t = (1, true);
+    match &t { (m, true) => *m, _ => 0 } // => 1
+}
+
+test "& patterns copy" {
+    let t = (4, false);
+    let &(n, b) = &t;
+    n                           // => 4
+}

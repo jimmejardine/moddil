@@ -1,0 +1,33 @@
+// covers: own.move.1, own.move.partial.1, own.move.borrow.1
+
+struct Label { id: int }
+struct Pair { a: Label, b: Label }
+
+fn reuse(l: Label) -> Label {
+    let m = l;
+    l                           //~ E0303
+}
+
+fn whole_after_part(p: Pair) -> Pair {
+    let a = p.a;
+    p                           //~ E0303
+}
+
+fn on_some_path(b: bool, l: Label) -> Label {
+    if b { let m = l; }
+    l                           //~ E0303
+}
+
+fn in_a_loop(l: Label) {
+    loop {
+        let m = l;              //~ E0303
+    }
+}
+
+fn out_of_a_borrow(r: &Label) -> Label {
+    *r                          //~ E0304
+}
+
+fn field_out_of_a_borrow(r: &Pair) -> Label {
+    r.a                         //~ E0304
+}

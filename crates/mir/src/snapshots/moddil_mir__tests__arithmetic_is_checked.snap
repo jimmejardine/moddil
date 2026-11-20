@@ -50,6 +50,8 @@ fn f(_1: int, _2: int) -> int {
         _3 = BitAnd(_4, const 1);
         _19 = BitXor(const 2, const 3);
         _0 = BitOr(_3, _19);
+        StorageDead(_2);
+        StorageDead(_1);
         return;
     }
 }

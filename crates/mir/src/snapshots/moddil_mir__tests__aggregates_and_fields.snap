@@ -11,12 +11,14 @@ fn f(_1: Point) -> (int, Point) {
 
     bb0: {
         _2 = Point(const 1, _1.0);
-        _3 = _2;
+        _3 = move _2;
         _5 = AddOverflows(_3.1, const 1);
         assert(!_5, overflow) @ 101..109;
         _3.1 = Add(_3.1, const 1);
         _4 = const ();
-        _0 = (_3.0, _3);
+        _0 = (_3.0, move _3);
+        StorageDead(_3);
+        StorageDead(_1);
         return;
     }
 }

@@ -85,6 +85,10 @@ something runs from the first slice.
 - **S1 is monomorphic (decided):** structs and enums take no type parameters until generics arrive
   in S3, so `Option` comes with them. S1 has no ownership checking yet and copies aggregates; its
   conformance tests never use a value after moving it, so they stay valid when S2 arrives.
+- **S2 accepts `#[derive(Copy, Clone)]` early (decided):** structs and enums can be `Copy` from
+  S2, checked as [`values.md`](values.md#opt-in-copy-with-a-size-cap) says, although derives in
+  general arrive with S8; `Clone` gains its method with traits in S3. S2's drops have no
+  hand-written `drop` yet (that needs `impl`, S3), so RAII is observable through `defer`.
 - **Deferred past M0:** units; `Fixed` and `Simd`; views and linear types; generators and coroutines;
   full comptime and reflection; `unsafe` and FFI; GPU; distribution; data contracts.
 - **The tour only has to check at M0**, so its library dependencies (HTTP, serde, `Url`) are

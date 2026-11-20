@@ -1,0 +1,43 @@
+// covers: own.move.1, own.move.partial.1, own.move.discard.1, own.copy.1
+
+struct Label { id: int }
+struct Pair { a: Label, b: Label }
+
+fn pass(l: Label) -> Label { l }
+
+test "moving and assigning again" {
+    let a = Label { id: 1 };
+    let b = pass(a);
+    b.id                        // => 1
+    ;
+    let mut c = Label { id: 4 };
+    let d = c;
+    c = Label { id: 5 };
+    c.id + d.id                 // => 9
+}
+
+test "moving one field leaves the others" {
+    let p = Pair { a: Label { id: 2 }, b: Label { id: 3 } };
+    let x = p.a;
+    p.b.id + x.id               // => 5
+}
+
+test "a discarded place is not moved" {
+    let e = Label { id: 6 };
+    e;
+    e.id                        // => 6
+}
+
+test "Copy values are copied" {
+    let n = 7;
+    let m = n;
+    n + m                       // => 14
+    ;
+    let t = (1, true);
+    let u = t;
+    t.0 + u.0                   // => 2
+    ;
+    let r = &n;
+    let s = r;
+    *r + *s                     // => 14
+}

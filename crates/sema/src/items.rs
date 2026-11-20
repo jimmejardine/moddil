@@ -39,6 +39,9 @@ pub struct FnSig {
     pub ret: Ty,
     /// Where the return type is written, if it is.
     pub ret_range: Option<TextRange>,
+    /// The parameters a returned borrow comes from: those named by `from`, or else every
+    /// borrowed parameter.
+    pub ret_from: Vec<u32>,
 }
 
 /// A parameter.
@@ -65,6 +68,8 @@ pub struct AdtDef {
     pub name_range: TextRange,
     /// Whether it is an enum.
     pub is_enum: bool,
+    /// Whether it is declared `#[derive(Copy, Clone)]`.
+    pub copy: bool,
     /// The variants, in order (one for a struct).
     pub variants: Vec<VariantDef>,
 }
@@ -212,12 +217,14 @@ pub fn item_tree(db: &dyn Db, file: SourceFile) -> ItemTree {
             name,
             name_range,
             is_enum: node.kind() == K::ENUM_ITEM,
+            copy: false,
             variants: Vec::new(),
         });
     }
     let skeleton = tree.adts.clone();
     for (i, node) in adt_nodes.iter().enumerate() {
         tree.adts[i].variants = adt_variants(node, &skeleton, &mut tree.diagnostics);
+        tree.adts[i].copy = derives_copy(node, &mut tree.diagnostics);
     }
     for node in root.children() {
         match node.kind() {
@@ -259,7 +266,157 @@ pub fn item_tree(db: &dyn Db, file: SourceFile) -> ItemTree {
         }
     }
     recursive_types(&mut tree);
+    copy_types(&mut tree);
     tree
+}
+
+/// Whether a struct or enum is declared `#[derive(Copy, Clone)]`. Other attributes are not
+/// supported yet.
+fn derives_copy(node: &SyntaxNode, diagnostics: &mut Vec<Diagnostic>) -> bool {
+    let mut copy = false;
+    for attr in node.children().filter(|c| c.kind() == K::OUTER_ATTR) {
+        let Some(a) = attr.child(K::ATTR) else {
+            continue;
+        };
+        let path = a
+            .child(K::PATH)
+            .and_then(ast::Path::cast)
+            .map(|p| p.segments())
+            .unwrap_or_default();
+        if path != ["derive"] {
+            diagnostics.push(Diagnostic::unsupported(attr.text_range(), "this attribute"));
+            continue;
+        }
+        let names: Vec<String> = a
+            .child(K::ATTR_INPUT)
+            .map(|i| {
+                i.child_tokens()
+                    .filter(|t| t.kind() == K::IDENT)
+                    .map(|t| t.text().to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+        for n in &names {
+            if n != "Copy" && n != "Clone" {
+                diagnostics.push(Diagnostic::unsupported(
+                    attr.text_range(),
+                    &format!("deriving `{n}`"),
+                ));
+            }
+        }
+        if names.iter().any(|n| n == "Copy") {
+            if names.iter().any(|n| n == "Clone") {
+                copy = true;
+            } else {
+                diagnostics.push(Diagnostic::error(
+                    Code::E0311,
+                    attr.text_range(),
+                    "a `Copy` type is also `Clone`: write `#[derive(Copy, Clone)]`",
+                ));
+            }
+        }
+    }
+    copy
+}
+
+/// Checks the structs and enums declared `Copy`: every field must be `Copy`, and the type at
+/// most 64 bytes. A type that fails keeps its `Copy` so that one error is reported once.
+fn copy_types(tree: &mut ItemTree) {
+    for a in 0..tree.adts.len() {
+        if !tree.adts[a].copy {
+            continue;
+        }
+        let def = &tree.adts[a];
+        let bad: Vec<String> = def
+            .variants
+            .iter()
+            .flat_map(|v| &v.fields)
+            .filter(|f| !tree.is_copy(&f.ty))
+            .map(|f| format!("`{}: {}`", f.name, f.ty))
+            .collect();
+        if !bad.is_empty() {
+            let d = Diagnostic::error(
+                Code::E0311,
+                def.name_range,
+                format!(
+                    "`{}` cannot be `Copy`: the field {} is not `Copy`",
+                    def.name,
+                    bad.join(", ")
+                ),
+            );
+            tree.diagnostics.push(d);
+            continue;
+        }
+        let size = tree.size_of(&def.ty(a as u32)).0;
+        if size > COPY_CAP {
+            let d = Diagnostic::error(
+                Code::E0312,
+                def.name_range,
+                format!(
+                    "`{}` is {size} bytes, over the {COPY_CAP}-byte cap for `Copy` types; copy it \
+                     with `.clone()` instead",
+                    def.name
+                ),
+            );
+            tree.diagnostics.push(d);
+        }
+    }
+}
+
+/// The largest a `Copy` type may be, in bytes: one cache line.
+pub(crate) const COPY_CAP: u64 = 64;
+
+impl ItemTree {
+    /// Whether values of `ty` are copied rather than moved: scalars, `()`, shared borrows, tuples
+    /// of `Copy` types, and structs and enums declared `Copy`.
+    pub fn is_copy(&self, ty: &Ty) -> bool {
+        match ty {
+            Ty::Int | Ty::Bool | Ty::Unit | Ty::Never | Ty::Error | Ty::Ref(false, _) => true,
+            Ty::Ref(true, _) => false,
+            Ty::Tuple(ts) => ts.iter().all(|t| self.is_copy(t)),
+            Ty::Adt(a, _) => self.adts[*a as usize].copy,
+        }
+    }
+
+    /// The size and alignment of `ty` in bytes, as the `Copy` cap counts them: `int` and borrows
+    /// are 8, `bool` 1, `()` 0; tuples and structs lay their fields out in order, each at a
+    /// multiple of its alignment, rounded up to the largest alignment; an enum is an 8-byte tag
+    /// followed by its largest variant.
+    pub fn size_of(&self, ty: &Ty) -> (u64, u64) {
+        fn layout(tree: &ItemTree, fields: &[Ty]) -> (u64, u64) {
+            let mut size: u64 = 0;
+            let mut align: u64 = 1;
+            for f in fields {
+                let (s, a) = tree.size_of(f);
+                size = size.div_ceil(a) * a + s;
+                align = align.max(a);
+            }
+            (size.div_ceil(align) * align, align)
+        }
+        match ty {
+            Ty::Int | Ty::Ref(..) => (8, 8),
+            Ty::Bool => (1, 1),
+            Ty::Unit | Ty::Never | Ty::Error => (0, 1),
+            Ty::Tuple(ts) => layout(self, ts),
+            Ty::Adt(a, _) => {
+                let def = &self.adts[*a as usize];
+                let shapes: Vec<(u64, u64)> = def
+                    .variants
+                    .iter()
+                    .map(|v| {
+                        let fields: Vec<Ty> = v.fields.iter().map(|f| f.ty.clone()).collect();
+                        layout(self, &fields)
+                    })
+                    .collect();
+                if def.is_enum {
+                    let payload = shapes.iter().map(|s| s.0).max().unwrap_or(0);
+                    (8 + payload.div_ceil(8) * 8, 8)
+                } else {
+                    shapes.first().copied().unwrap_or((0, 1))
+                }
+            }
+        }
+    }
 }
 
 /// An item's name and its range (the whole item's if the name is missing).
@@ -276,7 +433,7 @@ fn adt_variants(
     adts: &[AdtDef],
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Vec<VariantDef> {
-    unsupported_parts(node, diagnostics);
+    unsupported_parts(node, diagnostics, true);
     if let Some(t) = node.token(K::LINEAR_KW) {
         diagnostics.push(Diagnostic::unsupported(t.text_range(), "a `linear` struct"));
     }
@@ -289,7 +446,7 @@ fn adt_variants(
         return variants;
     };
     for v in list.children().filter(|c| c.kind() == K::VARIANT) {
-        unsupported_parts(&v, diagnostics);
+        unsupported_parts(&v, diagnostics, false);
         if v.token(K::EQ).is_some() {
             diagnostics.push(Diagnostic::unsupported(
                 v.text_range(),
@@ -329,7 +486,7 @@ fn variant_def(
                 }
                 continue;
             }
-            unsupported_parts(&m, diagnostics);
+            unsupported_parts(&m, diagnostics, false);
             if m.token(K::EQ).is_some() {
                 diagnostics.push(Diagnostic::unsupported(
                     m.text_range(),
@@ -338,7 +495,7 @@ fn variant_def(
             }
             let (fname, range) = item_name(&m);
             let ty = match m.children().find_map(ast::Type::cast) {
-                Some(t) => resolve_type(&t, adts, diagnostics),
+                Some(t) => field_type(&t, adts, diagnostics),
                 None => Ty::Error,
             };
             if let Some(first) = fields.iter().find(|f| f.name == fname) {
@@ -364,9 +521,9 @@ fn variant_def(
             .filter(|c| c.kind() == K::TUPLE_FIELD)
             .enumerate()
         {
-            unsupported_parts(&f, diagnostics);
+            unsupported_parts(&f, diagnostics, false);
             let ty = match f.children().find_map(ast::Type::cast) {
-                Some(t) => resolve_type(&t, adts, diagnostics),
+                Some(t) => field_type(&t, adts, diagnostics),
                 None => Ty::Error,
             };
             fields.push(FieldDef {
@@ -445,16 +602,18 @@ fn keyword_range(node: &SyntaxNode) -> TextRange {
         .map_or_else(|| node.text_range(), |t| t.text_range())
 }
 
-fn unsupported_parts(node: &SyntaxNode, diagnostics: &mut Vec<Diagnostic>) {
+/// Reports the parts of an item this slice does not support. `attrs_handled` says the caller
+/// reads the item's attributes itself.
+fn unsupported_parts(node: &SyntaxNode, diagnostics: &mut Vec<Diagnostic>, attrs_handled: bool) {
     for c in node.children() {
         let what = match c.kind() {
+            K::OUTER_ATTR if attrs_handled => continue,
             K::OUTER_ATTR => "an attribute",
             K::GENERIC_PARAMS => "a generic item",
             K::EFFECT_CLAUSE => "an effect clause",
             K::WHERE_CLAUSE => "a `where` clause",
             K::CONTRACT => "a contract",
             K::RESUME_CLAUSE => "a `resume` clause",
-            K::FROM_CLAUSE => "a `from` clause",
             _ => continue,
         };
         diagnostics.push(Diagnostic::unsupported(c.text_range(), what));
@@ -463,7 +622,7 @@ fn unsupported_parts(node: &SyntaxNode, diagnostics: &mut Vec<Diagnostic>) {
 
 fn fn_sig(f: &ast::FnItem, adts: &[AdtDef], diagnostics: &mut Vec<Diagnostic>) -> FnSig {
     let node = f.syntax();
-    unsupported_parts(node, diagnostics);
+    unsupported_parts(node, diagnostics, false);
     for t in node.child_tokens() {
         if t.kind() == K::FN_KW {
             break;
@@ -527,18 +686,93 @@ fn fn_sig(f: &ast::FnItem, adts: &[AdtDef], diagnostics: &mut Vec<Diagnostic>) -
         ),
         None => (Ty::Unit, None),
     };
+    let ret_from = ret_sources(node, &params, &ret, ret_range, diagnostics);
     FnSig {
         name,
         name_range,
         params,
         ret,
         ret_range,
+        ret_from,
     }
+}
+
+/// The parameters a returned borrow may come from (`memory.md`: Returning borrows): those a `from`
+/// clause names, which must be borrowed parameters, or else every borrowed parameter. A function
+/// that returns a borrow needs at least one (E0310).
+fn ret_sources(
+    node: &SyntaxNode,
+    params: &[ParamSig],
+    ret: &Ty,
+    ret_range: Option<TextRange>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Vec<u32> {
+    let borrowed: Vec<u32> = params
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| matches!(p.ty, Ty::Ref(..)))
+        .map(|(i, _)| i as u32)
+        .collect();
+    let Some(clause) = node.child(K::FROM_CLAUSE) else {
+        if ret.has_ref() && borrowed.is_empty() {
+            diagnostics.push(Diagnostic::error(
+                Code::E0310,
+                ret_range.unwrap_or_else(|| node.text_range()),
+                "a function returning a borrow needs a borrowed parameter for it to come from",
+            ));
+        }
+        return borrowed;
+    };
+    if !ret.has_ref() {
+        diagnostics.push(Diagnostic::error(
+            Code::E0310,
+            clause.text_range(),
+            "`from` names where a returned borrow comes from, but this function does not return \
+             one",
+        ));
+    }
+    let mut from = Vec::new();
+    for t in clause.child_tokens().filter(|t| t.kind() == K::IDENT) {
+        match params
+            .iter()
+            .position(|p| p.name.as_deref() == Some(t.text()))
+        {
+            Some(i) if borrowed.contains(&(i as u32)) => from.push(i as u32),
+            Some(_) => diagnostics.push(Diagnostic::error(
+                Code::E0310,
+                t.text_range(),
+                format!(
+                    "`{}` is not a borrowed parameter, so a returned borrow cannot come from it",
+                    t.text()
+                ),
+            )),
+            None => diagnostics.push(Diagnostic::error(
+                Code::E0101,
+                t.text_range(),
+                format!("there is no parameter called `{}`", t.text()),
+            )),
+        }
+    }
+    from
+}
+
+/// A field's type: borrows are second-class, so a field cannot hold one (E0309).
+fn field_type(t: &ast::Type, adts: &[AdtDef], diagnostics: &mut Vec<Diagnostic>) -> Ty {
+    let ty = resolve_type(t, adts, diagnostics);
+    if ty.has_ref() {
+        diagnostics.push(Diagnostic::error(
+            Code::E0309,
+            t.syntax().text_range(),
+            "a field cannot hold a borrow: borrows live only in parameters and locals",
+        ));
+        return Ty::Error;
+    }
+    ty
 }
 
 fn param_sig(p: &ast::Param, adts: &[AdtDef], diagnostics: &mut Vec<Diagnostic>) -> ParamSig {
     let node = p.syntax();
-    unsupported_parts(node, diagnostics);
+    unsupported_parts(node, diagnostics, false);
     if node.children().any(|c| ast::Expr::can_cast(c.kind())) {
         diagnostics.push(Diagnostic::unsupported(
             node.text_range(),
@@ -634,12 +868,38 @@ pub(crate) fn resolve_type(
                 }
             }
         }
-        ast::Type::Tuple(_) => Ty::tuple(
-            node.children()
+        ast::Type::Tuple(_) => {
+            let elements: Vec<Ty> = node
+                .children()
                 .filter_map(ast::Type::cast)
                 .map(|t| resolve_type(&t, adts, diagnostics))
-                .collect(),
-        ),
+                .collect();
+            if elements.iter().any(Ty::has_ref) {
+                diagnostics.push(Diagnostic::error(
+                    Code::E0309,
+                    range,
+                    "a tuple cannot hold a borrow: borrows live only in parameters and locals",
+                ));
+                return Ty::Error;
+            }
+            Ty::tuple(elements)
+        }
+        ast::Type::Ref(_) => {
+            let mutable = node.token(K::MUT_KW).is_some();
+            let inner = match node.children().find_map(ast::Type::cast) {
+                Some(t) => resolve_type(&t, adts, diagnostics),
+                None => Ty::Error,
+            };
+            if inner.has_ref() {
+                diagnostics.push(Diagnostic::error(
+                    Code::E0309,
+                    range,
+                    "a borrow cannot point to a borrow",
+                ));
+                return Ty::Error;
+            }
+            Ty::reference(mutable, inner)
+        }
         ast::Type::Paren(_) => match node.children().find_map(ast::Type::cast) {
             Some(inner) => resolve_type(&inner, adts, diagnostics),
             None => Ty::Error,
@@ -654,7 +914,7 @@ pub(crate) fn resolve_type(
 
 fn test_sig(t: &ast::TestItem, diagnostics: &mut Vec<Diagnostic>) -> TestSig {
     let node = t.syntax();
-    unsupported_parts(node, diagnostics);
+    unsupported_parts(node, diagnostics, false);
     if node
         .child_tokens()
         .any(|t| matches!(t.kind(), K::FOR_KW | K::WITH_KW))

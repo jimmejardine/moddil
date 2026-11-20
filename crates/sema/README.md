@@ -5,11 +5,12 @@ desugared and name-resolved, carrying inferred types, effects and error sets. Th
 `moddil explain` and MIR building all read it
 ([`specs/mir.md`: Pipeline](../../specs/mir.md#pipeline)). Ownership is checked later, on MIR.
 
-**Status:** slices S0 and S1: functions and tests, `let`, `int`, `bool` and `()`, operators, `if`,
+**Status:** slices S0 to S2: functions and tests, `let`, `int`, `bool` and `()`, operators, `if`,
 blocks, calls and `return` (S0); tuples, structs, enums, patterns, `match` with exhaustiveness
-checking, `if let`, `let … else`, loops and `assert` (S1), with the diagnostics of
-[`reference/2027/diagnostics.md`](../../reference/2027/diagnostics.md). Valid Moddil beyond S1 is
-reported as "not supported yet" (`I0001`). It starts as one crate and
+checking, `if let`, `let … else`, loops and `assert` (S1); borrow types and their mutability
+rules, `*`, binding modes, `Copy` and `defer` (S2; moves and borrows are checked on MIR), with the
+diagnostics of [`reference/2027/diagnostics.md`](../../reference/2027/diagnostics.md). Valid
+Moddil beyond S2 is reported as "not supported yet" (`I0001`). It starts as one crate and
 splits as it grows (names, types, effects).
 
 ## Queries (Salsa)

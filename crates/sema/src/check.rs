@@ -1,7 +1,7 @@
 //! Type checking a body: the `infer` query. It also checks that patterns are exhaustive where
 //! they must be ([`crate::exhaust`]).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use la_arena::RawIdx;
 use moddil_syntax::TextRange;
@@ -19,6 +19,9 @@ pub struct Inference {
     pat_types: Vec<Ty>,
     local_types: Vec<Ty>,
     field_indices: HashMap<ExprId, u32>,
+    field_derefs: HashSet<ExprId>,
+    pat_derefs: HashSet<PatId>,
+    by_ref: HashMap<PatId, bool>,
     /// Type errors, and exhaustiveness errors and warnings.
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -42,6 +45,23 @@ impl Inference {
     /// For a field expression `base.name`: the field's index in its struct or tuple.
     pub fn field_index(&self, e: ExprId) -> Option<u32> {
         self.field_indices.get(&e).copied()
+    }
+
+    /// Whether field expression `e` reads its field through a borrow (`r.x` for `r: &Point`).
+    pub fn field_through_borrow(&self, e: ExprId) -> bool {
+        self.field_derefs.contains(&e)
+    }
+
+    /// Whether pattern `p` matches through a borrow: the value is a borrow, and `p` tests what
+    /// it points to.
+    pub fn pat_through_borrow(&self, p: PatId) -> bool {
+        self.pat_derefs.contains(&p)
+    }
+
+    /// For a binding pattern that binds a borrow of the matched place (matching through a
+    /// borrow): whether the borrow is `&mut`.
+    pub fn binds_borrow(&self, p: PatId) -> Option<bool> {
+        self.by_ref.get(&p).copied()
     }
 }
 
@@ -74,6 +94,9 @@ pub fn infer<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Inference {
             pat_types: vec![Ty::Error; body.pats.len()],
             local_types: vec![Ty::Error; body.locals.len()],
             field_indices: HashMap::new(),
+            field_derefs: HashSet::new(),
+            pat_derefs: HashSet::new(),
+            by_ref: HashMap::new(),
             diagnostics: Vec::new(),
         },
     };
@@ -83,7 +106,7 @@ pub fn infer<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Inference {
         }
         for &(local, pat) in &body.param_pats {
             let t = cx.out.local_types[index(local)].clone();
-            cx.check_pat(pat, &t);
+            cx.check_pat(pat, &t, None);
             cx.irrefutable(pat, "a parameter");
         }
     }
@@ -197,8 +220,48 @@ impl Checker<'_> {
                 Ty::Error
             }
             ExprKind::Tuple(elements) => {
-                Ty::tuple(elements.iter().map(|&x| self.infer(x)).collect())
+                let ts: Vec<Ty> = elements.iter().map(|&x| self.infer(x)).collect();
+                if ts.iter().any(Ty::has_ref) {
+                    self.report(
+                        Code::E0309,
+                        range,
+                        "a tuple cannot hold a borrow: borrows live only in parameters and locals",
+                    );
+                    return Ty::Error;
+                }
+                Ty::tuple(ts)
             }
+            &ExprKind::Ref { mutable, expr } => {
+                let t = self.infer(expr);
+                if mutable {
+                    self.check_mutable(expr, "borrowed as `&mut`");
+                }
+                match t {
+                    Ty::Ref(..) => {
+                        self.report(
+                            Code::E0309,
+                            range,
+                            "a borrow cannot point to a borrow: to borrow what it points to, \
+                             write `&*r`",
+                        );
+                        Ty::Error
+                    }
+                    Ty::Error => Ty::Error,
+                    t => Ty::reference(mutable, t),
+                }
+            }
+            &ExprKind::Deref(x) => match self.infer(x) {
+                Ty::Ref(_, t) => (*t).clone(),
+                Ty::Error => Ty::Error,
+                t => {
+                    self.report(
+                        Code::E0205,
+                        range,
+                        format!("`*` is not defined for `{t}`: only a borrow can be dereferenced"),
+                    );
+                    Ty::Error
+                }
+            },
             ExprKind::Adt {
                 adt,
                 variant,
@@ -221,7 +284,7 @@ impl Checker<'_> {
             &ExprKind::If { cond, then, else_ } => self.if_expr(cond, then, else_),
             &ExprKind::Let { pat, init } => {
                 let t = self.infer(init);
-                self.check_pat(pat, &t);
+                self.check_pat(pat, &t, None);
                 Ty::Bool
             }
             ExprKind::Match { scrutinee, arms } => self.match_expr(e, *scrutinee, arms),
@@ -351,6 +414,15 @@ impl Checker<'_> {
                     } else {
                         match join(&pt, &t) {
                             None => self.mismatch(x, &pt, &t),
+                            Some(Ty::Ref(..)) => self.report(
+                                Code::E0205,
+                                range,
+                                format!(
+                                    "`{}` compares values, not borrows: dereference both sides \
+                                     with `*`",
+                                    op.symbol()
+                                ),
+                            ),
                             Some(Ty::Tuple(_) | Ty::Adt(..)) => self.report(
                                 Code::E0205,
                                 range,
@@ -373,6 +445,7 @@ impl Checker<'_> {
                     ExprKind::Fn(_) => Ty::Error,
                     _ => self.infer(target),
                 };
+                self.check_mutable(target, "assigned to");
                 match op {
                     None => {
                         self.check(value, &lt);
@@ -386,8 +459,50 @@ impl Checker<'_> {
         }
     }
 
+    /// Reports why the place `e` cannot be changed, if it cannot: a local not declared `mut`
+    /// (E0301), or a place reached through a shared borrow (E0302). `what` is how it would be
+    /// changed: "assigned to", "borrowed as `&mut`".
+    fn check_mutable(&mut self, e: ExprId, what: &str) {
+        let range = self.range(e);
+        match self.body.exprs[e].kind {
+            ExprKind::Local(l) => {
+                let data = &self.body.locals[l];
+                if !data.mutable {
+                    let d = Diagnostic::error(
+                        Code::E0301,
+                        range,
+                        format!(
+                            "`{}` is not declared `mut`, so it cannot be {what}",
+                            data.name
+                        ),
+                    )
+                    .with_label(data.range, "declared here");
+                    self.out.diagnostics.push(d);
+                }
+            }
+            ExprKind::Field { base, .. } if !self.out.field_derefs.contains(&e) => {
+                self.check_mutable(base, what);
+            }
+            ExprKind::Field { base: x, .. } | ExprKind::Deref(x) => {
+                if let Ty::Ref(false, _) = self.out.expr(x) {
+                    self.report(
+                        Code::E0302,
+                        range,
+                        format!("this is behind a shared borrow (`&`), so it cannot be {what}"),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn field(&mut self, e: ExprId, base: ExprId, name: &str, name_range: TextRange) -> Ty {
-        let bt = self.infer(base);
+        let mut bt = self.infer(base);
+        // Field access looks through a borrow.
+        if let Ty::Ref(_, inner) = &bt {
+            self.out.field_derefs.insert(e);
+            bt = (**inner).clone();
+        }
         let found = match &bt {
             Ty::Error => return Ty::Error,
             Ty::Tuple(ts) => name
@@ -460,7 +575,7 @@ impl Checker<'_> {
         let mut broken = false;
         for arm in arms {
             broken |= self.has_missing(arm.pat);
-            self.check_pat(arm.pat, &st);
+            self.check_pat(arm.pat, &st, None);
             broken |= self.out.diagnostics.len() > errors_before;
             if let Some(g) = arm.guard {
                 self.check(g, &Ty::Bool);
@@ -504,6 +619,7 @@ impl Checker<'_> {
                 pats.iter().any(|&s| self.has_missing(s))
             }
             PatKind::Adt { fields, .. } => fields.iter().any(|&(_, s)| self.has_missing(s)),
+            PatKind::Ref { pat, .. } => self.has_missing(*pat),
             _ => false,
         }
     }
@@ -527,8 +643,31 @@ impl Checker<'_> {
     }
 
     /// Checks that `p` can match a value of type `expected`, and gives its bindings their types.
-    fn check_pat(&mut self, p: PatId, expected: &Ty) {
+    /// `mode` is `Some(mutable)` while matching through a borrow: names then bind borrows of the
+    /// parts they match (`syntax.md`: binding modes).
+    fn check_pat(&mut self, p: PatId, expected: &Ty, mode: Option<bool>) {
         self.out.pat_types[index(p)] = expected.clone();
+        let tests_value = matches!(
+            self.body.pats[p].kind,
+            PatKind::Int(_)
+                | PatKind::Bool(_)
+                | PatKind::Range { .. }
+                | PatKind::Unit
+                | PatKind::Tuple { .. }
+                | PatKind::Adt { .. }
+        );
+        if tests_value && let Ty::Ref(m, inner) = expected {
+            // Matching through a borrow: test what it points to, and bind borrows.
+            self.out.pat_derefs.insert(p);
+            let mode = Some(mode.map_or(*m, |outer| outer && *m));
+            let inner = (**inner).clone();
+            self.check_pat_kind(p, &inner, mode);
+        } else {
+            self.check_pat_kind(p, expected, mode);
+        }
+    }
+
+    fn check_pat_kind(&mut self, p: PatId, expected: &Ty, mode: Option<bool>) {
         let range = self.body.pats[p].range;
         let wrong = |found: &str| -> String {
             format!("expected `{expected}`, but this pattern matches {found}")
@@ -536,9 +675,47 @@ impl Checker<'_> {
         match &self.body.pats[p].kind {
             PatKind::Missing | PatKind::Wild => {}
             &PatKind::Bind { local, sub } => {
-                self.out.local_types[index(local)] = expected.clone();
+                self.out.local_types[index(local)] = match mode {
+                    Some(m) => {
+                        self.out.by_ref.insert(p, m);
+                        Ty::reference(m, expected.clone())
+                    }
+                    None => expected.clone(),
+                };
                 if let Some(s) = sub {
-                    self.check_pat(s, expected);
+                    self.check_pat(s, expected, mode);
+                }
+            }
+            &PatKind::Ref { mutable, pat } => {
+                let inner = match expected {
+                    Ty::Ref(m, inner) if *m == mutable && mode.is_none() => (**inner).clone(),
+                    Ty::Error => Ty::Error,
+                    _ => {
+                        let form = if mutable {
+                            "`&mut` pattern"
+                        } else {
+                            "`&` pattern"
+                        };
+                        self.report(Code::E0201, range, wrong(&format!("a borrow (a {form})")));
+                        Ty::Error
+                    }
+                };
+                self.check_pat(pat, &inner, None);
+                // `&x` copies what the borrow points to, so only `Copy` values can be bound.
+                let mut binds = Vec::new();
+                self.value_bindings(pat, &mut binds);
+                for (local, at) in binds {
+                    let t = self.out.local_types[index(local)].clone();
+                    if !self.items.is_copy(&t) {
+                        self.report(
+                            Code::E0304,
+                            at,
+                            format!(
+                                "`{t}` is not `Copy`, so it cannot be bound out of a borrow: \
+                                 match the borrow without `&` to bind a borrow instead"
+                            ),
+                        );
+                    }
                 }
             }
             &PatKind::Int(v) => {
@@ -613,13 +790,13 @@ impl Checker<'_> {
                         ),
                     );
                     for &s in &pats {
-                        self.check_pat(s, &Ty::Error);
+                        self.check_pat(s, &Ty::Error, None);
                     }
                     return;
                 }
                 let positions = tuple_positions(pats.len(), rest, elements.len());
                 for (&s, i) in pats.iter().zip(positions) {
-                    self.check_pat(s, &elements[i]);
+                    self.check_pat(s, &elements[i], mode);
                 }
             }
             PatKind::Adt {
@@ -633,7 +810,7 @@ impl Checker<'_> {
                     let path = def.path(variant);
                     self.report(Code::E0201, range, wrong(&format!("`{path}`")));
                     for &(_, s) in &fields {
-                        self.check_pat(s, &Ty::Error);
+                        self.check_pat(s, &Ty::Error, None);
                     }
                     return;
                 }
@@ -641,14 +818,39 @@ impl Checker<'_> {
                     let t = self.items.variant(adt, variant).fields[i as usize]
                         .ty
                         .clone();
-                    self.check_pat(s, &t);
+                    self.check_pat(s, &t, mode);
                 }
             }
             PatKind::Or(alts) => {
                 for &a in &alts.clone() {
-                    self.check_pat(a, expected);
+                    self.check_pat(a, expected, mode);
                 }
             }
+        }
+    }
+
+    /// The names `p` binds by value (not through a borrow), with where each is bound.
+    fn value_bindings(&self, p: PatId, out: &mut Vec<(LocalId, TextRange)>) {
+        match &self.body.pats[p].kind {
+            &PatKind::Bind { local, sub } => {
+                if !self.out.by_ref.contains_key(&p) {
+                    out.push((local, self.body.pats[p].range));
+                }
+                if let Some(s) = sub {
+                    self.value_bindings(s, out);
+                }
+            }
+            PatKind::Tuple { pats, .. } | PatKind::Or(pats) => {
+                for &s in pats {
+                    self.value_bindings(s, out);
+                }
+            }
+            PatKind::Adt { fields, .. } => {
+                for &(_, s) in fields {
+                    self.value_bindings(s, out);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -746,7 +948,7 @@ impl Checker<'_> {
                         None => self.infer(init),
                     };
                     diverges |= t == Ty::Never;
-                    self.check_pat(pat, &t);
+                    self.check_pat(pat, &t, None);
                     match else_ {
                         None => self.irrefutable(pat, "`let` without `else`"),
                         Some(x) => {
@@ -764,6 +966,9 @@ impl Checker<'_> {
                             }
                         }
                     }
+                }
+                Stmt::Defer(body) => {
+                    self.check(body, &Ty::Unit);
                 }
                 Stmt::Expr {
                     expr,

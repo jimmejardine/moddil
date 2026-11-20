@@ -31,6 +31,7 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
         out: Lowered::default(),
         scopes: Vec::new(),
         loops: Vec::new(),
+        defer_floor: None,
     };
     let block = match owner.item(db) {
         Item::Fn(i) => {
@@ -99,6 +100,8 @@ struct Lowerer<'a> {
     scopes: Vec<(String, LocalId)>,
     /// Enclosing loops, innermost last: the label and the loop expression.
     loops: Vec<(Option<String>, ExprId)>,
+    /// Inside a `defer` block: how many loops enclose the block, so jumps out of it are errors.
+    defer_floor: Option<usize>,
 }
 
 impl Lowerer<'_> {
@@ -181,9 +184,20 @@ impl Lowerer<'_> {
                         observe,
                     });
                 }
+                ast::Stmt::Item(n)
+                    if n.kind() == K::DEFER_STMT && n.token(K::ERRDEFER_KW).is_none() =>
+                {
+                    let Some(b) = n.child(K::BLOCK).and_then(ast::Block::cast) else {
+                        continue;
+                    };
+                    let outer = self.defer_floor.replace(self.loops.len());
+                    let body = self.block(&b);
+                    self.defer_floor = outer;
+                    stmts.push(Stmt::Defer(body));
+                }
                 ast::Stmt::Item(n) => {
                     let what = if n.kind() == K::DEFER_STMT {
-                        "`defer`"
+                        "`errdefer`"
                     } else {
                         "a local item"
                     };
@@ -404,7 +418,21 @@ impl Lowerer<'_> {
             ast::Expr::Break(_) | ast::Expr::Continue(_) => self.jump(&node, e),
             ast::Expr::Return(_) => {
                 let value = e.sub_exprs().first().map(|v| self.expr(v));
+                if self.defer_floor.is_some() {
+                    self.report(
+                        Code::E0313,
+                        range,
+                        "a `defer` block cannot `return`: it runs while its scope is being left",
+                    );
+                    return self.missing(range);
+                }
                 self.alloc(ExprKind::Return(value), range)
+            }
+            ast::Expr::Ref(_) => {
+                let mutable = node.token(K::MUT_KW).is_some();
+                let inner = e.sub_exprs().into_iter().next();
+                let expr = self.expr_or_missing(inner, range);
+                self.alloc(ExprKind::Ref { mutable, expr }, range)
             }
             ast::Expr::Prefix(_) => self.prefix(&node, e),
             ast::Expr::Bin(_) => self.binary(&node, e),
@@ -712,6 +740,17 @@ impl Lowerer<'_> {
         let Some(target) = target else {
             return self.missing(range);
         };
+        if let Some(floor) = self.defer_floor
+            && self.loops.iter().position(|&(_, id)| id == target) < Some(floor)
+        {
+            let what = if is_break { "break" } else { "continue" };
+            self.report(
+                Code::E0313,
+                range,
+                format!("a `defer` block cannot `{what}` out of itself"),
+            );
+            return self.missing(range);
+        }
         let kind = if is_break {
             ExprKind::Break { target, value }
         } else {
@@ -726,6 +765,10 @@ impl Lowerer<'_> {
             return self.missing(range);
         };
         let operand = e.sub_exprs().into_iter().next();
+        if op.kind() == K::STAR {
+            let x = self.expr_or_missing(operand, range);
+            return self.alloc(ExprKind::Deref(x), range);
+        }
         let op = match op.kind() {
             K::MINUS => UnaryOp::Neg,
             K::BANG => UnaryOp::Not,
@@ -834,32 +877,18 @@ impl Lowerer<'_> {
             return self.missing(range);
         };
         let target_range = target.syntax().text_range();
-        if matches!(target, ast::Expr::Index(_) | ast::Expr::Prefix(_)) {
+        if matches!(target, ast::Expr::Index(_)) {
             return self.unsupported(target_range, "assigning to this place");
         }
         let target = self.expr(&target);
-        // The place must be a local, or fields of one.
+        // The place must be a local or a dereferenced borrow, or fields of one. Whether it may
+        // be changed needs types, so the checker decides that.
         let mut root = target;
         while let ExprKind::Field { base, .. } = self.out.body.exprs[root].kind {
             root = base;
         }
         match self.out.body.exprs[root].kind {
-            ExprKind::Local(l) => {
-                let data = &self.out.body.locals[l];
-                if !data.mutable {
-                    let d = Diagnostic::error(
-                        Code::E0301,
-                        target_range,
-                        format!(
-                            "`{}` is not declared `mut`, so it cannot be assigned to",
-                            data.name
-                        ),
-                    )
-                    .with_label(data.range, "declared here");
-                    self.error(d);
-                }
-            }
-            ExprKind::Missing => {}
+            ExprKind::Local(_) | ExprKind::Deref(_) | ExprKind::Missing => {}
             ExprKind::Fn(_) => {
                 self.report(
                     Code::E0206,
@@ -1042,8 +1071,14 @@ impl Lowerer<'_> {
                 PatKind::Missing
             }
             ast::Pat::Ref(_) => {
-                self.error(Diagnostic::unsupported(range, "a `&` pattern"));
-                PatKind::Missing
+                let mutable = node.token(K::MUT_KW).is_some();
+                match node.children().find_map(ast::Pat::cast) {
+                    Some(inner) => PatKind::Ref {
+                        mutable,
+                        pat: self.pat(&inner, b),
+                    },
+                    None => PatKind::Missing,
+                }
             }
             ast::Pat::Typed(_) => {
                 self.error(Diagnostic::unsupported(range, "a refinement test"));

@@ -9,10 +9,11 @@
 //! - [`infer`]: the types of a body's expressions, patterns and locals;
 //! - [`diagnostics`]: everything wrong with a file.
 //!
-//! Slices S0 and S1 cover `fn`, `test`, `let`, `int`, `bool`, `()`, arithmetic, comparisons,
+//! Slices S0 to S2 cover `fn`, `test`, `let`, `int`, `bool`, `()`, arithmetic, comparisons,
 //! logic, `if`, blocks, calls and `return`; tuples, structs, enums, patterns, `match` (with
-//! exhaustiveness checking), `if let`, `let … else`, loops and `assert`. Valid Moddil beyond that
-//! is reported as "not supported yet" (`I0001`). See this crate's `README.md`.
+//! exhaustiveness checking), `if let`, `let … else`, loops and `assert`; borrow types, `*`,
+//! binding modes, `Copy` and `defer`. Moves and borrows are checked on MIR (`moddil-mir`). Valid
+//! Moddil beyond that is reported as "not supported yet" (`I0001`). See this crate's `README.md`.
 
 mod check;
 mod db;

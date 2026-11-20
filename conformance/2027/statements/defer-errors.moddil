@@ -1,0 +1,6 @@
+// covers: stmt.defer.1
+
+fn returns() { defer { return; } }                  //~ E0313
+fn breaks() { loop { defer { break; } } }           //~ E0313
+fn value() { defer { 1 } }                          //~ E0201
+fn inner_loop() { defer { loop { break; } } }

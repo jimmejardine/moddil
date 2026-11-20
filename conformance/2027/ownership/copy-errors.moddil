@@ -1,0 +1,15 @@
+// covers: own.copy.derive.1
+
+struct Label { id: int }
+
+#[derive(Copy, Clone)]
+struct Holder { l: Label }                                              //~ E0311
+
+#[derive(Copy)]                                                         //~ E0311
+struct Bare;
+
+#[derive(Copy, Clone)]
+struct Big { a: (int, int, int, int), b: (int, int, int, int, int) }   //~ E0312
+
+#[derive(Copy, Clone)]
+enum Wide { A((int, int, int, int, int, int, int, int)) }              //~ E0312

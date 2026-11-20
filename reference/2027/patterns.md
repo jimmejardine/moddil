@@ -43,5 +43,14 @@ first that matches binds. Every alternative binds the same names (E0105).
 tuple, struct or variant pattern for another type is an error (E0201). Each name a pattern binds
 gets the type of the part it binds.
 
+**pat.mode.1** Matching a borrow with a pattern that tests a value (a literal, range, tuple,
+struct or variant pattern) tests the value it points to, and the names inside bind borrows of the
+parts they match: `&` from a `&` borrow and `&mut` from a `&mut` one. Matching an owned value
+moves or copies the parts into the names ([Ownership](ownership.md)).
+
+**pat.ref.1** `&p` matches a `&T` borrow and `&mut p` a `&mut T` one (E0201), by matching `p`
+against the value the borrow points to. The names in `p` bind copies of its parts, so they must
+be `Copy` (E0304).
+
 **pat.irrefutable.1** The pattern of a `let` without `else`, and of a parameter, must match every
 value of its type (E0209): `let (a, b) = pair;` is allowed, `let Shape::Circle(r) = s;` is not.

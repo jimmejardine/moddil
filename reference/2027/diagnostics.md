@@ -44,7 +44,19 @@ and a code never changes meaning.
 | E0212 | `break` with a value out of `while` | [expr.break.value.1](expressions/loops.md) |
 | E0213 | Wrong number of fields in a pattern | [pat.tuple.1](patterns.md), [pat.struct.tuple.1](patterns.md) |
 | E0214 | An empty range pattern | [pat.range.1](patterns.md) |
-| E0301 | Assignment to an immutable local | [expr.assign.1](expressions/assignment.md) |
+| E0301 | Mutation of an immutable local (assigning, or borrowing with `&mut`) | [expr.assign.1](expressions/assignment.md), [borrow.mut.1](borrows.md) |
+| E0302 | Mutation through a shared borrow | [borrow.mut.1](borrows.md) |
+| E0303 | Use of a moved value | [own.move.1](ownership.md), [own.move.partial.1](ownership.md) |
+| E0304 | Move out of a borrow | [own.move.borrow.1](ownership.md), [pat.ref.1](patterns.md) |
+| E0305 | Conflicting borrows | [borrow.rules.1](borrows.md) |
+| E0306 | Assignment to or move of a borrowed value | [borrow.rules.1](borrows.md), [borrow.guard.1](borrows.md) |
+| E0307 | Use of a value borrowed with `&mut` | [borrow.rules.1](borrows.md) |
+| E0308 | A borrow that outlives its value | [borrow.scope.1](borrows.md), [item.fn.ret-borrow.1](items/functions.md) |
+| E0309 | A borrow stored in a struct, enum or tuple, or a borrow of a borrow | [borrow.type.1](borrows.md) |
+| E0310 | A returned borrow without a borrowed parameter to come from | [item.fn.ret-borrow.1](items/functions.md) |
+| E0311 | A type that cannot be `Copy` | [own.copy.derive.1](ownership.md) |
+| E0312 | A `Copy` type over 64 bytes | [own.copy.derive.1](ownership.md) |
+| E0313 | `return`, `break` or `continue` out of a `defer` block | [stmt.defer.1](statements.md) |
 
 **Warnings** have codes of the same form starting with `W`, in the same blocks. They do not stop a
 program from running, and conformance tests expect them like errors.

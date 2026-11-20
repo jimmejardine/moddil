@@ -4,7 +4,7 @@ expression: "dump(\"enum Shape { Dot, Circle(int) }\\n\\\n         fn f(s: Shape
 ---
 fn f(_1: Shape) -> int {
     // _1: s
-    let _2: Shape;
+    let _2: &Shape;
     let _3: int;
     let _4: bool;
     let _5: bool;
@@ -17,35 +17,38 @@ fn f(_1: Shape) -> int {
     let _12: bool;
 
     bb0: {
-        _2 = _1;
-        _3 = discriminant(_2);
+        _2 = &_1;
+        _3 = discriminant(_1);
         _4 = Eq(_3, const 1);
         switch(_4) -> [true: bb3, false: bb2];
     }
 
     bb1: {
+        StorageDead(_7);
+        StorageDead(_1);
         return;
     }
 
     bb2: {
-        _9 = discriminant(_2);
+        _9 = discriminant(_1);
         _10 = Eq(_9, const 1);
         switch(_10) -> [true: bb10, false: bb9];
     }
 
     bb3: {
-        _5 = Ge((_2 as #1).0, const 1);
+        _5 = Ge((_1 as #1).0, const 1);
         switch(_5) -> [true: bb4, false: bb2];
     }
 
     bb4: {
-        _6 = Le((_2 as #1).0, const 9);
+        _6 = Le((_1 as #1).0, const 9);
         switch(_6) -> [true: bb5, false: bb2];
     }
 
     bb5: {
-        _7 = (_2 as #1).0;
+        _7 = (_1 as #1).0;
         _8 = Gt(_7, const 2);
+        read(_2);
         switch(_8) -> [true: bb6, false: bb2];
     }
 
@@ -64,7 +67,7 @@ fn f(_1: Shape) -> int {
     }
 
     bb9: {
-        _11 = discriminant(_2);
+        _11 = discriminant(_1);
         _12 = Eq(_11, const 0);
         switch(_12) -> [true: bb11, false: bb7];
     }

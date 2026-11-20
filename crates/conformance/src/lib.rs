@@ -77,13 +77,13 @@ impl Implementation for MirInterpreter {
         let db = Database::default();
         let file = SourceFile::new(&db, path.to_string(), text.to_string());
         let mut outcome = Outcome {
-            diagnostics: moddil_sema::diagnostics(&db, file)
+            diagnostics: moddil_mir::diagnostics(&db, file)
                 .iter()
                 .map(|d| (line(d.range.start), d.code.as_str().to_string()))
                 .collect(),
             ..Outcome::default()
         };
-        if moddil_sema::has_errors(&db, file) {
+        if moddil_mir::has_errors(&db, file) {
             return outcome;
         }
         let items = moddil_sema::item_tree(&db, file);

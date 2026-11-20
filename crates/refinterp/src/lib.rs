@@ -6,9 +6,11 @@
 //! leaves loops and functions through Rust's `?`. It runs **checked programs only**: a file the
 //! compiler rejects has no meaning to run, so it does not repeat the checks and may panic on one.
 //!
-//! Slices S0 and S1: functions, tests, `let`, `int`, `bool`, `()`, tuples, structs, enums,
+//! Slices S0 to S2: functions, tests, `let`, `int`, `bool`, `()`, tuples, structs, enums,
 //! patterns, `match`, `if let`, `let … else`, loops, arithmetic with its traps, comparisons,
-//! logic and calls. See this crate's `README.md`.
+//! logic and calls; borrows, `*`, binding modes and `defer`. A borrow is a pointer to a variable
+//! of some call and a path of fields in it. Moves need nothing at run time: a checked program
+//! never uses a value after moving it. See this crate's `README.md`.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -99,6 +101,23 @@ enum Value {
         variant: String,
         fields: Vec<Value>,
     },
+    /// A borrow, and whether it is `&mut`.
+    Ref(Pointer, bool),
+}
+
+/// Where a borrow points: a call's frame, a variable in it, and a path of field positions.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Pointer {
+    frame: usize,
+    slot: usize,
+    path: Vec<usize>,
+}
+
+/// What a pattern is matched against: a value, or (through a borrow) a place, whose parts the
+/// pattern's names then borrow (`pat.mode.1`).
+enum Src {
+    Val(Value),
+    At(Pointer, bool),
 }
 
 /// How a struct or variant is written.
@@ -211,8 +230,8 @@ impl Program {
         let (name, body) = &self.tests[index];
         let mut m = Machine {
             program: self,
-            scopes: Vec::new(),
-            depth: 1,
+            frames: vec![Vec::new()],
+            defers: Vec::new(),
             observed: Vec::new(),
         };
         let trap = match m.block(body) {
@@ -263,6 +282,7 @@ impl Program {
                 let xs: Vec<String> = xs.iter().map(|x| self.render(x)).collect();
                 format!("({})", xs.join(", "))
             }
+            Value::Ref(..) => unreachable!("a borrow is shown by the machine"),
             Value::Adt {
                 ty,
                 variant,
@@ -336,29 +356,137 @@ fn variant_info(node: &SyntaxNode, name: String) -> VariantInfo {
 /// The state of a running test.
 struct Machine<'p> {
     program: &'p Program,
-    /// The current call's variables, innermost last.
-    scopes: Vec<(String, Value)>,
-    /// How many calls are active, counting the test.
-    depth: usize,
+    /// One frame per active call (the test first), each holding its variables, innermost last.
+    /// Temporaries that are borrowed get a nameless variable.
+    frames: Vec<Vec<(String, Value)>>,
+    /// The `defer` blocks of each open block, innermost last.
+    defers: Vec<Vec<ast::Block>>,
     observed: Vec<(TextRange, String)>,
 }
 
 impl Machine<'_> {
-    fn lookup(&self, name: &str) -> Option<&Value> {
-        self.scopes
-            .iter()
-            .rev()
-            .find(|(n, _)| n == name)
-            .map(|(_, v)| v)
+    fn vars(&self) -> &Vec<(String, Value)> {
+        self.frames.last().expect("a frame")
     }
 
-    fn lookup_mut(&mut self, name: &str) -> &mut Value {
-        self.scopes
-            .iter_mut()
-            .rev()
-            .find(|(n, _)| n == name)
-            .map(|(_, v)| v)
-            .expect("a checked program assigns only to variables in scope")
+    fn mark(&self) -> usize {
+        self.vars().len()
+    }
+
+    fn truncate(&mut self, mark: usize) {
+        self.frames.last_mut().expect("a frame").truncate(mark);
+    }
+
+    fn bind(&mut self, binds: Vec<(String, Value)>) {
+        self.frames.last_mut().expect("a frame").extend(binds);
+    }
+
+    fn slot(&self, name: &str) -> Option<usize> {
+        self.vars().iter().rposition(|(n, _)| n == name)
+    }
+
+    fn lookup(&self, name: &str) -> Option<&Value> {
+        self.slot(name).map(|i| &self.vars()[i].1)
+    }
+
+    fn load(&self, ptr: &Pointer) -> Value {
+        let mut v = &self.frames[ptr.frame][ptr.slot].1;
+        for &i in &ptr.path {
+            v = match v {
+                Value::Tuple(xs) | Value::Adt { fields: xs, .. } => &xs[i],
+                _ => unreachable!("a checked field"),
+            };
+        }
+        v.clone()
+    }
+
+    fn store(&mut self, ptr: &Pointer, value: Value) {
+        let mut v = &mut self.frames[ptr.frame][ptr.slot].1;
+        for &i in &ptr.path {
+            v = match v {
+                Value::Tuple(xs) | Value::Adt { fields: xs, .. } => &mut xs[i],
+                _ => unreachable!("a checked field"),
+            };
+        }
+        *v = value;
+    }
+
+    /// `v`, or what it points to if it is a borrow.
+    fn target(&self, v: Value) -> Value {
+        match v {
+            Value::Ref(ptr, _) => self.load(&ptr),
+            v => v,
+        }
+    }
+
+    /// The position of field `name` in `v` (a tuple index, or a struct's or variant's field).
+    fn field_index(&self, v: &Value, name: &str) -> usize {
+        match v {
+            Value::Tuple(_) => name.parse().expect("a tuple index"),
+            Value::Adt { ty, variant, .. } => self
+                .program
+                .variant(ty, variant)
+                .fields
+                .iter()
+                .position(|f| f == name)
+                .expect("a checked field"),
+            _ => unreachable!("a checked field access"),
+        }
+    }
+
+    /// Where the place `e` is: a variable, a dereferenced borrow, or fields of one; field
+    /// access looks through a borrow. Any other expression is evaluated into a nameless
+    /// variable, so that it can be borrowed (`expr.borrow.1`).
+    fn place(&mut self, e: &ast::Expr) -> Eval<Pointer> {
+        match e {
+            ast::Expr::Path(_)
+                if let Some(slot) = segments(e.syntax()).first().and_then(|n| self.slot(n)) =>
+            {
+                Ok(Pointer {
+                    frame: self.frames.len() - 1,
+                    slot,
+                    path: Vec::new(),
+                })
+            }
+            ast::Expr::Paren(_) => self.place(&e.sub_exprs()[0]),
+            ast::Expr::Field(_) => {
+                let mut p = self.place(&e.sub_exprs()[0])?;
+                if let Value::Ref(target, _) = self.load(&p) {
+                    p = target;
+                }
+                let i = self.field_index(&self.load(&p), &member_name(e.syntax()));
+                p.path.push(i);
+                Ok(p)
+            }
+            ast::Expr::Prefix(_) if e.syntax().token(K::STAR).is_some() => {
+                let p = self.place(&e.sub_exprs()[0])?;
+                match self.load(&p) {
+                    Value::Ref(target, _) => Ok(target),
+                    _ => unreachable!("a checked dereference"),
+                }
+            }
+            _ => {
+                let v = self.eval(e)?;
+                self.frames
+                    .last_mut()
+                    .expect("a frame")
+                    .push((String::new(), v));
+                Ok(Pointer {
+                    frame: self.frames.len() - 1,
+                    slot: self.mark() - 1,
+                    path: Vec::new(),
+                })
+            }
+        }
+    }
+
+    /// `v` as Moddil source; a borrow shows what it points to (`items.test.observe.1`).
+    fn show(&self, v: &Value) -> String {
+        match v {
+            Value::Ref(ptr, true) => format!("&mut {}", self.show(&self.load(ptr))),
+            Value::Ref(ptr, false) => format!("&{}", self.show(&self.load(ptr))),
+            v => self.program.render(v),
+        }
     }
 
     /// Whether a `// =>` expectation follows `end` on the same line, after an optional `;`
@@ -374,17 +502,29 @@ impl Machine<'_> {
 
     fn observe(&mut self, range: TextRange, v: &Value) {
         if self.observed(range.end) {
-            let shown = self.program.render(v);
+            let shown = self.show(v);
             self.observed.push((range, shown));
         }
     }
 
     // Blocks and statements.
 
+    /// A block. Leaving it in any way but a trap runs its `defer` blocks, last first
+    /// (`stmt.defer.1`).
     fn block(&mut self, b: &ast::Block) -> Eval {
-        let mark = self.scopes.len();
-        let result = self.block_inner(b);
-        self.scopes.truncate(mark);
+        let mark = self.mark();
+        self.defers.push(Vec::new());
+        let mut result = self.block_inner(b);
+        let defers = self.defers.pop().expect("this block's defers");
+        if !matches!(result, Err(Flow::Trap(_))) {
+            for d in defers.iter().rev() {
+                if let Err(f) = self.block(d) {
+                    result = Err(f);
+                    break;
+                }
+            }
+        }
+        self.truncate(mark);
         result
     }
 
@@ -401,7 +541,13 @@ impl Machine<'_> {
                     let v = self.eval(&x)?;
                     self.observe(x.syntax().text_range(), &v);
                 }
-                ast::Stmt::Item(_) => {}
+                ast::Stmt::Item(n) => {
+                    if n.kind() == K::DEFER_STMT
+                        && let Some(d) = n.child(K::BLOCK).and_then(ast::Block::cast)
+                    {
+                        self.defers.last_mut().expect("a block").push(d);
+                    }
+                }
             }
         }
         match b.tail_expr() {
@@ -419,8 +565,8 @@ impl Machine<'_> {
         let v = self.eval(&l.init().expect("a checked `let` has a value"))?;
         let pat = l.pat().expect("a checked `let` has a pattern");
         let mut binds = Vec::new();
-        if self.matches(&pat, &v, &mut binds) {
-            self.scopes.extend(binds);
+        if self.matches(&pat, &Src::Val(v), &mut binds) {
+            self.bind(binds);
             return Ok(());
         }
         let else_ = l
@@ -466,8 +612,21 @@ impl Machine<'_> {
             }
             ast::Expr::StructLit(_) => self.struct_lit(node),
             ast::Expr::Field(_) => {
+                // Field access looks through a borrow (`expr.field.1`).
                 let base = self.eval(&e.sub_exprs()[0])?;
-                Ok(field(self.program, &base, &member_name(node)).clone())
+                let base = self.target(base);
+                let i = self.field_index(&base, &member_name(node));
+                match base {
+                    Value::Tuple(mut xs) | Value::Adt { fields: mut xs, .. } => {
+                        Ok(xs.swap_remove(i))
+                    }
+                    _ => unreachable!("a checked field access"),
+                }
+            }
+            ast::Expr::Ref(_) => {
+                let mutable = node.token(K::MUT_KW).is_some();
+                let p = self.place(&e.sub_exprs()[0])?;
+                Ok(Value::Ref(p, mutable))
             }
             ast::Expr::Block(_) => self.block(&ast::Block::cast(node.clone()).expect("a block")),
             ast::Expr::If(_) => self.if_expr(e),
@@ -476,10 +635,10 @@ impl Machine<'_> {
                 let v = self.eval(&init)?;
                 let pat = node.children().find_map(ast::Pat::cast).expect("a pattern");
                 let mut binds = Vec::new();
-                let matched = self.matches(&pat, &v, &mut binds);
+                let matched = self.matches(&pat, &Src::Val(v), &mut binds);
                 if matched {
                     // In scope for the rest of the condition and the block it guards.
-                    self.scopes.extend(binds);
+                    self.bind(binds);
                 }
                 Ok(Value::Bool(matched))
             }
@@ -514,7 +673,7 @@ impl Machine<'_> {
             ast::Expr::CompareChain(_) => self.chain(node, e),
             ast::Expr::Assign(_) => self.assign(node, e),
             ast::Expr::Call(_) => self.call(node, e, range),
-            _ => unreachable!("a checked program of slices S0 and S1"),
+            _ => unreachable!("a checked program of slices S0 to S2"),
         }
     }
 
@@ -550,26 +709,26 @@ impl Machine<'_> {
 
     fn if_expr(&mut self, e: &ast::Expr) -> Eval {
         let subs = e.sub_exprs();
-        let mark = self.scopes.len();
+        let mark = self.mark();
         let cond = self.eval(&subs[0]);
         let taken = match cond {
             Ok(Value::Bool(b)) => b,
             Ok(_) => unreachable!("a checked condition"),
             Err(f) => {
-                self.scopes.truncate(mark);
+                self.truncate(mark);
                 return Err(f);
             }
         };
         let result = if taken {
             self.eval(&subs[1])
         } else {
-            self.scopes.truncate(mark);
+            self.truncate(mark);
             match subs.get(2) {
                 Some(x) => self.eval(x),
                 None => Ok(Value::Unit),
             }
         };
-        self.scopes.truncate(mark);
+        self.truncate(mark);
         result
     }
 
@@ -582,11 +741,11 @@ impl Machine<'_> {
         for arm in list.children().filter(|c| c.kind() == K::MATCH_ARM) {
             let pat = arm.children().find_map(ast::Pat::cast).expect("a pattern");
             let mut binds = Vec::new();
-            if !self.matches(&pat, &v, &mut binds) {
+            if !self.matches(&pat, &Src::Val(v.clone()), &mut binds) {
                 continue;
             }
-            let mark = self.scopes.len();
-            self.scopes.extend(binds);
+            let mark = self.mark();
+            self.bind(binds);
             let guard = arm
                 .child(K::MATCH_GUARD)
                 .and_then(|g| g.children().find_map(ast::Expr::cast));
@@ -595,7 +754,7 @@ impl Machine<'_> {
                     Ok(Value::Bool(b)) => b,
                     Ok(_) => unreachable!("a checked guard"),
                     Err(f) => {
-                        self.scopes.truncate(mark);
+                        self.truncate(mark);
                         return Err(f);
                     }
                 },
@@ -604,10 +763,10 @@ impl Machine<'_> {
             if go {
                 let body = arm.children().filter_map(ast::Expr::cast).last();
                 let result = self.eval(&body.expect("an arm's value"));
-                self.scopes.truncate(mark);
+                self.truncate(mark);
                 return result;
             }
-            self.scopes.truncate(mark);
+            self.truncate(mark);
         }
         unreachable!("a checked `match` is exhaustive")
     }
@@ -620,22 +779,22 @@ impl Machine<'_> {
             ast::Block::cast(exprs.last().expect("a body").syntax().clone()).expect("a block");
         let ours = |l: &Option<String>| l.is_none() || l.as_deref() == label;
         loop {
-            let mark = self.scopes.len();
+            let mark = self.mark();
             if is_while {
                 match self.eval(&exprs[0]) {
                     Ok(Value::Bool(true)) => {}
                     Ok(_) => {
-                        self.scopes.truncate(mark);
+                        self.truncate(mark);
                         return Ok(Value::Unit);
                     }
                     Err(f) => {
-                        self.scopes.truncate(mark);
+                        self.truncate(mark);
                         return Err(f);
                     }
                 }
             }
             let result = self.block(&body);
-            self.scopes.truncate(mark);
+            self.truncate(mark);
             match result {
                 Ok(_) => {}
                 Err(Flow::Break(l, v)) if ours(&l) => {
@@ -660,6 +819,11 @@ impl Machine<'_> {
         {
             // `-9223372036854775808` is one literal (`expr.lit.int.1`).
             return Ok(literal(lit, true));
+        }
+        if op.kind() == K::STAR {
+            // What a borrow points to (`expr.deref.1`).
+            let v = self.eval(operand)?;
+            return Ok(self.target(v));
         }
         match (op.kind(), self.eval(operand)?) {
             (K::MINUS, Value::Int(v)) => v
@@ -731,29 +895,19 @@ impl Machine<'_> {
             .expect("an operator");
         let (target, value) = e.operands();
         let (target, value) = (target.expect("a place"), value.expect("a value"));
-        let (root, path) = place(&target);
-        let new = if op.kind() == K::EQ {
-            self.eval(&value)?
-        } else {
-            let old = self.read_place(&root, &path);
+        // `x = e` evaluates `e` first; `x op= e` reads `x` first (`expr.assign.1`).
+        if op.kind() == K::EQ {
             let v = self.eval(&value)?;
-            arith(compound(op.kind()), old, v, range)?
-        };
-        let program = self.program;
-        let mut slot = self.lookup_mut(&root);
-        for name in &path {
-            slot = field_mut(program, slot, name);
+            let p = self.place(&target)?;
+            self.store(&p, v);
+        } else {
+            let p = self.place(&target)?;
+            let old = self.load(&p);
+            let v = self.eval(&value)?;
+            let new = arith(compound(op.kind()), old, v, range)?;
+            self.store(&p, new);
         }
-        *slot = new;
         Ok(Value::Unit)
-    }
-
-    fn read_place(&self, root: &str, path: &[String]) -> Value {
-        let mut v = self.lookup(root).expect("a variable in scope");
-        for name in path {
-            v = field(self.program, v, name);
-        }
-        v.clone()
     }
 
     /// A call of a function, or of a tuple struct or variant (`expr.call.1`, `expr.struct.1`).
@@ -790,22 +944,21 @@ impl Machine<'_> {
         }
         let f = self.program.fns[&segments[0]].clone();
         let values = self.eval_all(&args)?;
-        if self.depth >= MAX_DEPTH {
+        if self.frames.len() >= MAX_DEPTH {
             return Err(trap(TrapClass::StackOverflow, range));
         }
-        // The callee sees only its parameters.
-        let saved = std::mem::take(&mut self.scopes);
-        self.depth += 1;
+        // The callee sees only its parameters, in a frame of its own.
+        self.frames.push(Vec::new());
         let params: Vec<ast::Param> = f.params().map(|l| l.params().collect()).unwrap_or_default();
         for (p, v) in params.iter().zip(values) {
             let mut binds = Vec::new();
-            let matched = self.matches(&p.pat().expect("a parameter pattern"), &v, &mut binds);
+            let pat = p.pat().expect("a parameter pattern");
+            let matched = self.matches(&pat, &Src::Val(v), &mut binds);
             debug_assert!(matched, "parameter patterns are irrefutable");
-            self.scopes.extend(binds);
+            self.bind(binds);
         }
         let result = self.block(&f.body().expect("a body"));
-        self.depth -= 1;
-        self.scopes = saved;
+        self.frames.pop();
         match result {
             Ok(v) | Err(Flow::Return(v)) => Ok(v),
             Err(f) => Err(f),
@@ -814,52 +967,96 @@ impl Machine<'_> {
 
     // Patterns.
 
-    /// Whether `v` matches `p`; if it does, `binds` gets the names it binds (`pat.1`).
-    fn matches(&self, p: &ast::Pat, v: &Value, binds: &mut Vec<(String, Value)>) -> bool {
+    /// The value a source holds (looking through a borrow, for patterns that test it).
+    fn value_of(&self, src: &Src) -> Value {
+        match src {
+            Src::Val(v) => self.target(v.clone()),
+            Src::At(ptr, _) => self.load(ptr),
+        }
+    }
+
+    /// What a name bound to `src` holds: the value, or a borrow of the place.
+    fn bound(src: &Src) -> Value {
+        match src {
+            Src::Val(v) => v.clone(),
+            Src::At(ptr, m) => Value::Ref(ptr.clone(), *m),
+        }
+    }
+
+    /// The source a pattern that tests a value sees: matching a borrow tests the place it
+    /// points to, and names inside bind borrows of its parts (`pat.mode.1`).
+    fn enter(src: &Src) -> Src {
+        match src {
+            Src::Val(Value::Ref(ptr, m)) | Src::At(ptr, m) => Src::At(ptr.clone(), *m),
+            Src::Val(v) => Src::Val(v.clone()),
+        }
+    }
+
+    /// Part `i` of the value a source holds.
+    fn part(&self, src: &Src, i: usize) -> Src {
+        match src {
+            Src::Val(Value::Tuple(xs) | Value::Adt { fields: xs, .. }) => Src::Val(xs[i].clone()),
+            Src::Val(_) => unreachable!("a checked pattern"),
+            Src::At(ptr, m) => {
+                let mut p = ptr.clone();
+                p.path.push(i);
+                Src::At(p, *m)
+            }
+        }
+    }
+
+    /// Whether `src` matches `p`; if it does, `binds` gets the names it binds (`pat.1`).
+    fn matches(&self, p: &ast::Pat, src: &Src, binds: &mut Vec<(String, Value)>) -> bool {
         let node = p.syntax();
         match p {
             ast::Pat::Wildcard(_) => true,
-            ast::Pat::Literal(_) => literal_pat(node) == *v,
+            ast::Pat::Literal(_) => literal_pat(node) == self.value_of(src),
             ast::Pat::Range(_) => {
                 let bounds: Vec<Value> = node
                     .children()
                     .filter(|c| c.kind() == K::LITERAL_PAT)
                     .map(|b| literal_pat(&b))
                     .collect();
-                let (Value::Int(x), Some(Value::Int(lo))) = (v, bounds.first()) else {
+                let (Value::Int(x), Some(Value::Int(lo))) = (self.value_of(src), bounds.first())
+                else {
                     unreachable!("a checked range pattern");
                 };
                 let below = match bounds.get(1) {
                     None => true,
-                    Some(Value::Int(hi)) if node.token(K::DOT_DOT_EQ).is_some() => x <= hi,
-                    Some(Value::Int(hi)) => x < hi,
+                    Some(Value::Int(hi)) if node.token(K::DOT_DOT_EQ).is_some() => x <= *hi,
+                    Some(Value::Int(hi)) => x < *hi,
                     Some(_) => unreachable!("an integer bound"),
                 };
-                lo <= x && below
+                *lo <= x && below
             }
             ast::Pat::Ident(_) => {
                 if let Some(sub) = node.children().find_map(ast::Pat::cast)
-                    && !self.matches(&sub, v, binds)
+                    && !self.matches(&sub, src, binds)
                 {
                     return false;
                 }
-                binds.push((name_of(node), v.clone()));
+                binds.push((name_of(node), Self::bound(src)));
                 true
             }
             ast::Pat::At(_) => {
                 let sub = node.children().find_map(ast::Pat::cast).expect("a pattern");
-                if !self.matches(&sub, v, binds) {
+                if !self.matches(&sub, src, binds) {
                     return false;
                 }
-                binds.push((segments(node)[0].clone(), v.clone()));
+                binds.push((segments(node)[0].clone(), Self::bound(src)));
                 true
+            }
+            ast::Pat::Ref(_) => {
+                // `&p` copies what the borrow points to.
+                let sub = node.children().find_map(ast::Pat::cast).expect("a pattern");
+                self.matches(&sub, &Src::Val(self.value_of(src)), binds)
             }
             ast::Pat::Path(_) => {
                 let segments = segments(node);
                 match self.program.ctor(&segments) {
-                    Some((ty, info)) => is_ctor(v, &ty, &info.name),
+                    Some((ty, info)) => is_ctor(&self.value_of(src), &ty, &info.name),
                     None => {
-                        binds.push((segments[0].clone(), v.clone()));
+                        binds.push((segments[0].clone(), Self::bound(src)));
                         true
                     }
                 }
@@ -869,25 +1066,20 @@ impl Machine<'_> {
                     .program
                     .ctor(&segments(node))
                     .expect("a checked pattern");
-                if !is_ctor(v, &ty, &info.name) {
+                if !is_ctor(&self.value_of(src), &ty, &info.name) {
                     return false;
                 }
-                let Value::Adt { fields, .. } = v else {
-                    unreachable!()
-                };
-                self.positional(node, fields, binds)
+                self.positional(node, &Self::enter(src), info.fields.len(), binds)
             }
             ast::Pat::Struct(_) => {
                 let (ty, info) = self
                     .program
                     .ctor(&segments(node))
                     .expect("a checked pattern");
-                if !is_ctor(v, &ty, &info.name) {
+                if !is_ctor(&self.value_of(src), &ty, &info.name) {
                     return false;
                 }
-                let Value::Adt { fields, .. } = v else {
-                    unreachable!()
-                };
+                let src = Self::enter(src);
                 for f in node.children().filter(|c| c.kind() == K::FIELD_PAT) {
                     if f.token(K::DOT_DOT).is_some() {
                         continue;
@@ -898,13 +1090,14 @@ impl Machine<'_> {
                         .iter()
                         .position(|n| *n == name)
                         .expect("a checked field");
+                    let part = self.part(&src, i);
                     match f.children().find_map(ast::Pat::cast) {
                         Some(sub) => {
-                            if !self.matches(&sub, &fields[i], binds) {
+                            if !self.matches(&sub, &part, binds) {
                                 return false;
                             }
                         }
-                        None => binds.push((name, fields[i].clone())),
+                        None => binds.push((name, Self::bound(&part))),
                     }
                 }
                 true
@@ -912,36 +1105,38 @@ impl Machine<'_> {
             ast::Pat::Tuple(_) => {
                 let subs: Vec<ast::Pat> = node.children().filter_map(ast::Pat::cast).collect();
                 if subs.is_empty() {
-                    return *v == Value::Unit;
+                    return self.value_of(src) == Value::Unit;
                 }
                 if subs.len() == 1
                     && node.token(K::COMMA).is_none()
                     && !matches!(subs[0], ast::Pat::Rest(_))
                 {
-                    return self.matches(&subs[0], v, binds);
+                    return self.matches(&subs[0], src, binds);
                 }
-                let Value::Tuple(xs) = v else {
+                let Value::Tuple(xs) = self.value_of(src) else {
                     unreachable!("a checked tuple pattern")
                 };
-                self.positional(node, xs, binds)
+                self.positional(node, &Self::enter(src), xs.len(), binds)
             }
             ast::Pat::Or(_) => node.children().filter_map(ast::Pat::cast).any(|alt| {
                 let mut tried = Vec::new();
-                let ok = self.matches(&alt, v, &mut tried);
+                let ok = self.matches(&alt, src, &mut tried);
                 if ok {
                     binds.extend(tried);
                 }
                 ok
             }),
-            _ => unreachable!("a checked pattern of slices S0 and S1"),
+            _ => unreachable!("a checked pattern of slices S0 to S2"),
         }
     }
 
-    /// The positional sub-patterns of `node` (with an optional `..`) against `values`.
+    /// The positional sub-patterns of `node` (with an optional `..`) against the `len` parts of
+    /// `src`.
     fn positional(
         &self,
         node: &SyntaxNode,
-        values: &[Value],
+        src: &Src,
+        len: usize,
         binds: &mut Vec<(String, Value)>,
     ) -> bool {
         let subs: Vec<ast::Pat> = node.children().filter_map(ast::Pat::cast).collect();
@@ -954,70 +1149,16 @@ impl Machine<'_> {
         pats.iter().enumerate().all(|(i, p)| {
             // After `..`, patterns match the last elements.
             let at = match rest {
-                Some(r) if i >= r => values.len() - (n - i),
+                Some(r) if i >= r => len - (n - i),
                 _ => i,
             };
-            self.matches(p, &values[at], binds)
+            self.matches(p, &self.part(src, at), binds)
         })
     }
 }
 
 fn is_ctor(v: &Value, ty: &str, variant: &str) -> bool {
     matches!(v, Value::Adt { ty: t, variant: n, .. } if t == ty && n == variant)
-}
-
-/// Field `name` (a name, or a position in a tuple or tuple struct) of `v`.
-fn field<'v>(program: &Program, v: &'v Value, name: &str) -> &'v Value {
-    match v {
-        Value::Tuple(xs) => &xs[name.parse::<usize>().expect("a tuple index")],
-        Value::Adt {
-            ty,
-            variant,
-            fields,
-        } => {
-            let i = program
-                .variant(ty, variant)
-                .fields
-                .iter()
-                .position(|f| f == name)
-                .expect("a checked field");
-            &fields[i]
-        }
-        _ => unreachable!("a checked field access"),
-    }
-}
-
-fn field_mut<'v>(program: &Program, v: &'v mut Value, name: &str) -> &'v mut Value {
-    match v {
-        Value::Tuple(xs) => &mut xs[name.parse::<usize>().expect("a tuple index")],
-        Value::Adt {
-            ty,
-            variant,
-            fields,
-        } => {
-            let i = program
-                .variant(ty, variant)
-                .fields
-                .iter()
-                .position(|f| f == name)
-                .expect("a checked field");
-            &mut fields[i]
-        }
-        _ => unreachable!("a checked field access"),
-    }
-}
-
-/// The variable and field path of an assignment's target: `p.x.0` is `("p", ["x", "0"])`.
-fn place(target: &ast::Expr) -> (String, Vec<String>) {
-    match target {
-        ast::Expr::Field(_) => {
-            let (root, mut path) = place(&target.sub_exprs()[0]);
-            path.push(member_name(target.syntax()));
-            (root, path)
-        }
-        ast::Expr::Paren(_) => place(&target.sub_exprs()[0]),
-        _ => (segments(target.syntax())[0].clone(), Vec::new()),
-    }
 }
 
 fn segments(node: &SyntaxNode) -> Vec<String> {

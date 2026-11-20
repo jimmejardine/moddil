@@ -1,0 +1,48 @@
+---
+source: crates/mir/src/tests.rs
+expression: "dump(\"fn f(b: bool) -> int { let mut n = 0; { defer { n += 1; } if b { return n; } } n }\")"
+---
+fn f(_1: bool) -> int {
+    // _1: b
+    let _2: int;
+    let _3: int; // n
+    let _4: ();
+    let _5: !;
+    let _6: ();
+    let _7: ();
+    let _8: bool;
+    let _9: ();
+    let _10: ();
+    let _11: bool;
+
+    bb0: {
+        _2 = const 0;
+        _3 = _2;
+        _4 = const ();
+        switch(_1) -> [true: bb1, false: bb2];
+    }
+
+    bb1: {
+        _0 = _3;
+        _8 = AddOverflows(_3, const 1);
+        assert(!_8, overflow) @ 48..54;
+        _3 = Add(_3, const 1);
+        _7 = const ();
+        _6 = const ();
+        StorageDead(_3);
+        StorageDead(_1);
+        return;
+    }
+
+    bb2: {
+        _11 = AddOverflows(_3, const 1);
+        assert(!_11, overflow) @ 48..54;
+        _3 = Add(_3, const 1);
+        _10 = const ();
+        _9 = const ();
+        _0 = _3;
+        StorageDead(_3);
+        StorageDead(_1);
+        return;
+    }
+}

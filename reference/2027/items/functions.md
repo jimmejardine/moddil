@@ -16,6 +16,13 @@ holding the argument's value.
 **item.fn.params.2** A parameter may also be any pattern that matches every value of its type
 ([Patterns](../patterns.md)), such as `(a, b): (int, int)`; its names are locals of the body.
 
+**item.fn.ret-borrow.1** A function may return a borrow (`-> &T`, `-> &mut T`). The borrow must
+come from a borrowed parameter: with `from a, b` after the result type, from one of those
+parameters, which must be borrowed (E0310); without it, from any borrowed parameter, and a
+function returning a borrow needs one (E0310). Returning a borrow of the function's own variables
+or temporaries is an error (E0308). A caller treats the result as borrowing what it passed for
+those parameters, for as long as the result is used ([Borrows](../borrows.md)).
+
 **item.fn.body.1** Calling the function runs its body ([Calls](../expressions/calls.md)). The
 body's value is the result unless `return` ends it sooner; its type must fit the result type
 (E0201).

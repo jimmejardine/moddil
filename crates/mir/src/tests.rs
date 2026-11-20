@@ -93,3 +93,126 @@ fn loops() {
         "fn f() -> int { let mut i = 0; while i < 3 { i += 1; } loop { if i > 5 { break i; } i += 1; } }"
     ));
 }
+
+/// The ownership and borrow codes reported for `text`, with the 1-based line each starts on.
+fn ownership(text: &str) -> Vec<(String, u32)> {
+    let db = Database::default();
+    let file = SourceFile::new(&db, "t.moddil".to_string(), text.to_string());
+    diagnostics(&db, file)
+        .iter()
+        .map(|d| {
+            (
+                d.code.as_str().to_string(),
+                moddil_syntax::line_col(text, d.range.start).0,
+            )
+        })
+        .collect()
+}
+
+fn accepted(text: &str) {
+    assert_eq!(ownership(text), vec![], "for:\n{text}");
+}
+
+fn rejected(text: &str, expected: &[(&str, u32)]) {
+    let expected: Vec<(String, u32)> = expected.iter().map(|&(c, l)| (c.to_string(), l)).collect();
+    assert_eq!(ownership(text), expected, "for:\n{text}");
+}
+
+const S: &str =
+    "struct S { a: P, b: P }\nstruct P { x: int }\n#[derive(Copy, Clone)]\nstruct C { x: int }\n";
+
+#[test]
+fn moves() {
+    accepted(&format!("{S}fn f(p: P) -> P {{ let q = p; q }}"));
+    accepted(&format!("{S}fn f(c: C) -> (C, C) {{ let d = c; (c, d) }}"));
+    accepted(&format!(
+        "{S}fn f(s: S) -> P {{ let a = s.a; let b = s.b; a }}"
+    ));
+    accepted(&format!(
+        "{S}fn f(p: P) -> P {{ let mut q = p; let r = q; q = P {{ x: 1 }}; q }}"
+    ));
+    accepted(&format!("{S}fn f(p: P) -> int {{ p; p.x }}"));
+    rejected(
+        &format!("{S}fn f(p: P) -> P {{\nlet q = p;\np\n}}"),
+        &[("E0303", 7)],
+    );
+    rejected(
+        &format!("{S}fn f(s: S) -> S {{\nlet a = s.a;\ns\n}}"),
+        &[("E0303", 7)],
+    );
+    rejected(
+        &format!("{S}fn f(b: bool, p: P) -> P {{\nif b {{ let q = p; }}\np\n}}"),
+        &[("E0303", 7)],
+    );
+    rejected(
+        &format!("{S}fn f(p: P) {{\nloop {{ let q = p; }}\n}}"),
+        &[("E0303", 6)],
+    );
+    rejected(&format!("{S}fn f(r: &P) -> P {{\n*r\n}}"), &[("E0304", 6)]);
+    rejected(&format!("{S}fn f(r: &S) -> P {{\nr.a\n}}"), &[("E0304", 6)]);
+}
+
+#[test]
+fn borrows() {
+    accepted("fn f() -> int { let mut x = 1; let r = &mut x; *r += 1; x }");
+    accepted("fn f() -> int { let x = 1; let a = &x; let b = &x; *a + *b }");
+    accepted(
+        "fn g(r: &mut int) { *r += 1; }\nfn f() -> int { let mut x = 1; g(&mut x); g(&mut x); x }",
+    );
+    accepted("fn g(r: &mut int) { *r += 1; }\nfn f(r: &mut int) { g(r); g(r); *r += 1; }");
+    accepted(
+        "fn first(a: &int, b: &int) -> &int from a { a }\nfn f() -> int { let x = 1; let y = 2; *first(&x, &y) }",
+    );
+    rejected(
+        "fn f() -> int {\nlet mut x = 1;\nlet r = &mut x;\nlet y = x;\n*r += 1;\ny\n}",
+        &[("E0307", 4)],
+    );
+    rejected(
+        "fn f() {\nlet mut x = 1;\nlet r = &x;\nx = 2;\nlet y = *r;\n}",
+        &[("E0306", 4)],
+    );
+    rejected(
+        "fn f() {\nlet mut x = 1;\nlet a = &mut x;\nlet b = &mut x;\n*a += 1;\n}",
+        &[("E0305", 4)],
+    );
+    rejected(
+        "fn f() {\nlet mut x = 1;\nlet a = &x;\nlet b = &mut x;\nlet y = *a;\n}",
+        &[("E0305", 4)],
+    );
+    rejected(
+        "fn f() -> int {\nlet mut r = &0;\n{ let x = 1; r = &x; }\n*r\n}",
+        &[("E0308", 3)],
+    );
+    rejected("fn f() -> &int {\nlet x = 1;\n&x\n}", &[("E0310", 1)]);
+    rejected("fn f(a: int) -> &int from a {\n&a\n}", &[("E0310", 1)]);
+    rejected(
+        "fn f(a: &int) -> &int {\nlet x = 1;\n&x\n}",
+        &[("E0308", 3)],
+    );
+    rejected(
+        "fn f(a: &int, b: &int) -> &int from a {\nb\n}",
+        &[("E0310", 2)],
+    );
+    rejected(
+        "fn first(a: &int, b: &int) -> &int from a { a }\nfn f() -> int {\nlet mut x = 1;\nlet r = first(&x, &x);\nx = 2;\n*r\n}",
+        &[("E0306", 5)],
+    );
+}
+
+#[test]
+fn matching_borrows() {
+    accepted(
+        "enum E { A(int), B }\nfn f(e: &mut E) { match e { E::A(n) => *n += 1, E::B => {} } }",
+    );
+    rejected(
+        "fn f(n: int) -> int {\nlet mut x = n;\nmatch x { y if { x = 0; y > 0 } => y, _ => 0 }\n}",
+        &[("E0306", 3)],
+    );
+}
+
+#[test]
+fn defer_runs_on_every_exit() {
+    insta::assert_snapshot!(dump(
+        "fn f(b: bool) -> int { let mut n = 0; { defer { n += 1; } if b { return n; } } n }"
+    ));
+}

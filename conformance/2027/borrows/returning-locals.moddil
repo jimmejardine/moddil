@@ -1,0 +1,14 @@
+// covers: item.fn.ret-borrow.1
+
+fn local(a: &int) -> &int {
+    let x = 1;
+    &x                          //~ E0308
+}
+
+fn by_value(a: int, b: &int) -> &int {
+    &a                          //~ E0308
+}
+
+fn wrong_source(a: &int, b: &int) -> &int from a {
+    b                           //~ E0310
+}

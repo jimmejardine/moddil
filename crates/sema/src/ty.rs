@@ -18,6 +18,8 @@ pub enum Ty {
     Tuple(Arc<[Ty]>),
     /// A struct or enum of this file, by its index in the item tree, with its name.
     Adt(u32, Arc<str>),
+    /// A borrow: `&T` (shared) or `&mut T` (exclusive).
+    Ref(bool, Arc<Ty>),
     /// The type of an expression that already has an error; it matches everything, so one error
     /// is reported once.
     Error,
@@ -26,7 +28,13 @@ pub enum Ty {
 impl Ty {
     /// Whether a value of type `self` can be used where `expected` is wanted.
     pub fn fits(&self, expected: &Ty) -> bool {
-        self == expected || matches!(self, Ty::Never | Ty::Error) || *expected == Ty::Error
+        match (self, expected) {
+            // `&mut T` can be used where `&T` is wanted.
+            (Ty::Ref(true, a), Ty::Ref(false, b)) => a.fits(b) && b.fits(a),
+            _ => {
+                self == expected || matches!(self, Ty::Never | Ty::Error) || *expected == Ty::Error
+            }
+        }
     }
 
     /// Whether the type is or contains an error, so that errors about it would be noise.
@@ -34,6 +42,7 @@ impl Ty {
         match self {
             Ty::Error => true,
             Ty::Tuple(ts) => ts.iter().any(Ty::has_error),
+            Ty::Ref(_, t) => t.has_error(),
             _ => false,
         }
     }
@@ -44,6 +53,28 @@ impl Ty {
             Ty::Unit
         } else {
             Ty::Tuple(elements.into())
+        }
+    }
+
+    /// A borrow of `t`.
+    pub fn reference(mutable: bool, t: Ty) -> Ty {
+        Ty::Ref(mutable, Arc::new(t))
+    }
+
+    /// The type a borrow points to, or the type itself.
+    pub fn strip_ref(&self) -> &Ty {
+        match self {
+            Ty::Ref(_, t) => t,
+            t => t,
+        }
+    }
+
+    /// Whether the type is or contains a borrow.
+    pub fn has_ref(&self) -> bool {
+        match self {
+            Ty::Ref(..) => true,
+            Ty::Tuple(ts) => ts.iter().any(Ty::has_ref),
+            _ => false,
         }
     }
 
@@ -65,6 +96,8 @@ impl fmt::Debug for Ty {
             Ty::Never => f.write_str("!"),
             Ty::Error => f.write_str("{error}"),
             Ty::Adt(_, name) => f.write_str(name),
+            Ty::Ref(true, t) => write!(f, "&mut {t:?}"),
+            Ty::Ref(false, t) => write!(f, "&{t:?}"),
             Ty::Tuple(ts) => {
                 f.write_str("(")?;
                 for (i, t) in ts.iter().enumerate() {

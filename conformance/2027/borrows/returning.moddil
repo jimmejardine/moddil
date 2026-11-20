@@ -1,0 +1,23 @@
+// covers: item.fn.ret-borrow.1
+
+struct Pair { a: int, b: int }
+
+fn first(p: &Pair) -> &int { &p.a }
+fn pick(a: &int, b: &int) -> &int from a { a }
+fn larger(a: &int, b: &int) -> &int { if *a > *b { a } else { b } }
+fn biggest(p: &mut Pair) -> &mut int { if p.a > p.b { &mut p.a } else { &mut p.b } }
+
+test "returning borrows" {
+    let p = Pair { a: 1, b: 2 };
+    *first(&p)                  // => 1
+    ;
+    let x = 3;
+    let y = 4;
+    *pick(&x, &y)               // => 3
+    ;
+    *larger(&x, &y)             // => 4
+    ;
+    let mut q = Pair { a: 5, b: 9 };
+    *biggest(&mut q) += 1;
+    q                           // => Pair { a: 5, b: 10 }
+}

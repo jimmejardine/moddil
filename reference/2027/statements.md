@@ -21,5 +21,10 @@ pattern's names.
 **stmt.let.scope.1** A binding is in scope from the statement after its `let` to the end of the
 enclosing block, not in its own initialiser. A later `let` of the same name shadows it.
 
+**stmt.defer.1** `defer block` runs `block` when the enclosing block is left in any way but a
+trap: at its end, or by `break`, `continue` or `return`. The `defer` blocks of a block run last
+first. A `return` value is evaluated before them. The block has type `()` (E0201), and cannot
+leave itself with `return`, or with `break` or `continue` out of it (E0313).
+
 **stmt.expr.1** An expression followed by `;` is evaluated and its value discarded. A block-like
 expression (such as `if`) may stand as a statement without `;`; then its type must be `()` (E0201).

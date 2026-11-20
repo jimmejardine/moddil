@@ -119,7 +119,7 @@ fn beyond_s0_is_not_supported_yet() {
     err("fn f<T>() {}", &[("I0001", 1)]);
     err("fn f() { let s = \"x\"; }", &[("I0001", 1)]);
     err("fn f() { for x in y {} }", &[("I0001", 1)]);
-    err("fn f() { let &x = 1; }", &[("I0001", 1)]);
+    err("fn f() { let x = [1]; }", &[("I0001", 1)]);
 }
 
 #[test]
@@ -311,4 +311,48 @@ fn assert_is_a_prelude_built_in() {
     err("fn f() { assert(1); }", &[("E0201", 1)]);
     err("fn f() { assert(true, false); }", &[("E0202", 1)]);
     err("fn f() { let a = assert; }", &[("E0112", 1)]);
+}
+
+#[test]
+fn borrows_and_copy() {
+    ok("fn f(a: &int, b: &mut int) { *b = *a + 1; }");
+    ok("struct P { x: int }\nfn f(p: &mut P) -> int { p.x += 1; p.x }");
+    ok("fn f() -> int { let mut x = 1; let r = &mut x; *r += 1; x }");
+    ok("fn first(a: &int, b: &int) -> &int from a { a }");
+    ok("fn f(a: &mut int) -> &int { a }");
+    ok("#[derive(Copy, Clone)]\nstruct P { x: int, y: bool }");
+    ok("enum S { A(int), B }\nfn f(s: &S) -> int { match s { S::A(n) => *n, S::B => 0 } }");
+    ok("fn f(t: &(int, bool)) -> int { let &(n, _) = t; n }");
+    ok("fn f() { let mut n = 0; defer { n += 1; } }");
+    err("fn f(a: &int) { *a = 1; }", &[("E0302", 1)]);
+    err(
+        "struct P { x: int }\nfn f(p: &P) { p.x = 1; }",
+        &[("E0302", 2)],
+    );
+    err("fn f() { let x = 1; let r = &mut x; }", &[("E0301", 1)]);
+    err("fn f(a: int) -> int { *a }", &[("E0205", 1)]);
+    err("fn f(a: &int, b: &int) -> bool { a == b }", &[("E0205", 1)]);
+    err("struct P { r: &int }", &[("E0309", 1)]);
+    err("fn f(a: &int) { let t = (a, 1); }", &[("E0309", 1)]);
+    err("fn f(a: &&int) {}", &[("E0309", 1)]);
+    err("fn f() -> &int { 1 }", &[("E0310", 1), ("E0201", 1)]);
+    err(
+        "fn f(a: int, b: &int) -> &int from a { b }",
+        &[("E0310", 1)],
+    );
+    err(
+        "struct S { v: P }\nstruct P { x: int }\n#[derive(Copy, Clone)]\nenum E { A(S) }",
+        &[("E0311", 4)],
+    );
+    err("#[derive(Copy)]\nstruct P;", &[("E0311", 1)]);
+    err(
+        "#[derive(Copy, Clone)]\nstruct Big { a: (int, int, int, int), b: (int, int, int, int, int) }",
+        &[("E0312", 2)],
+    );
+    err(
+        "struct S { x: P }\nstruct P { y: int }\nfn f(s: &S) { let &S { x } = s; }",
+        &[("E0304", 3)],
+    );
+    err("fn f() { loop { defer { break; } } }", &[("E0313", 1)]);
+    err("fn f() { defer { return; } }", &[("E0313", 1)]);
 }

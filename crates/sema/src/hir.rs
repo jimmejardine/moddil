@@ -153,6 +153,15 @@ pub enum ExprKind {
     Return(Option<ExprId>),
     /// `assert(cond)`: traps unless `cond` holds.
     Assert(ExprId),
+    /// `&e` or `&mut e`: a borrow of the place `e` (or of a temporary holding its value).
+    Ref {
+        /// Whether it is `&mut`.
+        mutable: bool,
+        /// What is borrowed.
+        expr: ExprId,
+    },
+    /// `*e`: the place a borrow points to.
+    Deref(ExprId),
     /// `-e` or `!e`.
     Unary(UnaryOp, ExprId),
     /// `a op b`, other than `&&` and `||`.
@@ -166,9 +175,10 @@ pub enum ExprKind {
         /// Each operator and the operand after it.
         rest: Vec<(CompareOp, ExprId)>,
     },
-    /// `place = e` or `place op= e`, where the place is a local or a field of one (`p.x.0`).
+    /// `place = e` or `place op= e`, where the place is a local, a dereferenced borrow, or fields
+    /// of one (`p.x.0`, `*r`, `r.x`).
     Assign {
-        /// The place assigned: a `Local` expression, or `Field` expressions over one.
+        /// The place assigned: `Local`, `Deref` and `Field` expressions.
         target: ExprId,
         /// The operator of a compound assignment.
         op: Option<BinaryOp>,
@@ -202,6 +212,9 @@ pub enum Stmt {
         /// The `else` block, which must not finish normally.
         else_: Option<ExprId>,
     },
+    /// `defer block`: the block runs when the enclosing block is left, in last-in, first-out
+    /// order with the other deferred blocks.
+    Defer(ExprId),
     /// An expression statement.
     Expr {
         /// The expression.
@@ -270,6 +283,13 @@ pub enum PatKind {
     },
     /// `a | b`.
     Or(Vec<PatId>),
+    /// `&p` or `&mut p`: matches through a borrow, binding by copying.
+    Ref {
+        /// Whether it is `&mut p`.
+        mutable: bool,
+        /// The pattern for the value the borrow points to.
+        pat: PatId,
+    },
 }
 
 /// Prefix operators.

@@ -55,11 +55,11 @@ fn main() -> ExitCode {
     let name = path.display().to_string();
     let db = Database::default();
     let file = SourceFile::new(&db, name.clone(), text.clone());
-    let diagnostics = moddil_sema::diagnostics(&db, file);
+    let diagnostics = moddil_mir::diagnostics(&db, file);
     for d in diagnostics {
         report(&name, &text, d);
     }
-    if moddil_sema::has_errors(&db, file) {
+    if moddil_mir::has_errors(&db, file) {
         let n = diagnostics.len();
         eprintln!("moddil: {n} error{}", if n == 1 { "" } else { "s" });
         return ExitCode::FAILURE;
