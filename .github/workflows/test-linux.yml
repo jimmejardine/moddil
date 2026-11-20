@@ -1,0 +1,21 @@
+# Tests on Linux; the steps live in _test.yml. Every step calls tools/ci.py,
+# which is also how CI runs locally (Windows and WSL).
+name: test (Linux)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    uses: ./.github/workflows/_test.yml
+    with:
+      os: ubuntu-latest

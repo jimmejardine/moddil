@@ -1,7 +1,7 @@
 """The single definition of CI for this repository.
 
-GitHub Actions (.github/workflows/ci.yml) calls this script step by step, and the same script runs
-locally, so the two cannot drift.
+The GitHub workflows in .github/workflows/ (checks.yml and test-*.yml) call this script step by
+step, and the same script runs locally, so the two cannot drift.
 
     python tools/ci.py                 every step, here
     python tools/ci.py clippy test     chosen steps, here

@@ -24,8 +24,10 @@ python tools/ci.py --wsl       # the same steps in WSL (Linux); --all runs both
 - **Lints** are workspace-wide (`[workspace.lints]`); CI denies warnings.
 - **Supply chain:** [`deny.toml`](../deny.toml) checks licences, advisories and sources with
   `cargo-deny`.
-- **CI** is [`tools/ci.py`](../tools/ci.py), called step by step by
-  [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) on Linux, Windows and macOS.
+- **CI** is [`tools/ci.py`](../tools/ci.py), called step by step by four GitHub workflows in
+  [`.github/workflows/`](../.github/workflows): `checks.yml`, and `test-linux.yml`,
+  `test-windows.yml` and `test-macos.yml`, which share `_test.yml`. Each has a badge in the root
+  README.
 
 | Crate | Package | Role |
 |---|---|---|
