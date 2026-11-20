@@ -56,6 +56,9 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
   inference rules generated from the Lean definitions, so the two cannot drift.
 - **The formal core covers everything from the start** (decided): dynamic semantics, type and
   effect soundness, and borrows, in the style of RustBelt.
+- **When each starts (decided):** the reference and the conformance suite grow from the first M0
+  slice; the reference interpreter from slice S1; work on the Lean model after slice S5, once the core
+  has settled ([`roadmap.md`: M0: the v0 language in slices](roadmap.md#m0-the-v0-language-in-slices)).
 
 ### The reference
 
@@ -92,6 +95,10 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
   - **GBNF and Lark grammars** for constrained decoding by models
     ([`agent-interface.md`](agent-interface.md)).
 - The formatter's canonical output must parse back to the same AST, and the grammar tests check it.
+- **The source (decided):** `reference/grammar/moddil.ebnf`, in a small EBNF dialect of our own. A
+  Rust tool checks that it is LL(k) and unambiguous and generates the outputs above. It covers **all
+  decided syntax from the start**, not only what M0 implements, so ambiguities surface before any
+  parser code exists; the compiler's hand-written parser implements it slice by slice.
 
 ### A shared conformance suite
 

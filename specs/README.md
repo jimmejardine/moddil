@@ -76,7 +76,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Governance](governance.md)                                            | 🟢 complete        | [`governance.md`](governance.md)                                                                     |
 | **The project**                                                        |                    |                                                                                                      |
 | [Compiler and bootstrap](compiler.md)                                  | 🟡 minor questions | [`compiler.md`](compiler.md) (R1)                                                                    |
-| [Roadmap: milestones, staging and cross-cutting questions](roadmap.md) | 🟠 major questions | [`roadmap.md`](roadmap.md)                                                                           |
+| [Roadmap: milestones, staging and cross-cutting questions](roadmap.md) | 🟡 minor questions | [`roadmap.md`](roadmap.md)                                                                           |
 | [Prior art](prior-art.md)                                              | reference          | [`prior-art.md`](prior-art.md)                                                                       |
 
 ## Working on these specs

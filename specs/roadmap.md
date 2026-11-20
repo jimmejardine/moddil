@@ -1,6 +1,6 @@
 # Roadmap and cross-cutting questions
 
-> **Status:** major questions. The single place for planning: strategic and technical questions that
+> **Status:** minor questions. The single place for planning: strategic and technical questions that
 > span several areas, compiler milestones, staging, and the order of the reference examples.
 
 ## Cross-cutting questions
@@ -35,10 +35,12 @@ removal.
    resources (summary in [Memory: ownership, borrowing and sharing](memory.md)).
 8. Effect system design. **Decided:** a hybrid of scoped handlers and second-class capability
    values ([`effects-and-capabilities.md`](effects-and-capabilities.md), [Effects and capabilities as a unifying idea](effects-and-capabilities.md)).
-9. Canonical AST storage: text with canonical printing, or a structured store (Unison-style) with text
-   as a view?
-10. **Minimum viable language**: which language features are in v0 and which come later? (Separate
-    from the compiler milestones in [Milestones](#milestones).)
+9. **Canonical AST storage — decided:** plain `.mdl` text files in git, always in canonical format
+   (the formatter prints the AST). There is no structured store: the language is its canonical text
+   ([`definition.md`: The reference](definition.md#the-reference)), and the semantic diff and
+   per-definition content hashes give the structured benefits ([`semantic-vcs.md`](semantic-vcs.md)).
+10. **Minimum viable language — decided:** M0 implements the v0 language in ten vertical slices, with
+    a list of what waits until later ([M0: the v0 language in slices](#m0-the-v0-language-in-slices)).
 11. **How is the language defined?** A prose reference, a formal semantics, or the MIR interpreter as
     the executable reference? How are conformance tests organised? **Decided:** a normative
     reference with formal core rules, the interpreter as its executable form and a mechanised core
@@ -48,7 +50,7 @@ removal.
 
 | Milestone | Contents |
 |---|---|
-| **M0** | The compiler front end in Rust: parser, type, effect and ownership checker, MIR, MIR interpreter. Small programs run. The separate **reference interpreter** starts alongside ([`compiler.md`: Two interpreters](compiler.md#two-interpreters)). **The tour** becomes the `tour/shorty` mod and must parse and check in CI ([`tour.md`: From markdown to source](tour.md#from-markdown-to-source)). |
+| **M0** | The grammar source first ([`definition.md`: One grammar source](definition.md#one-grammar-source)), then the compiler front end in Rust, grown in vertical slices ([M0: the v0 language in slices](#m0-the-v0-language-in-slices)): parser, type, effect and ownership checker, MIR, MIR interpreter. Small programs run. The separate **reference interpreter** starts alongside ([`compiler.md`: Two interpreters](compiler.md#two-interpreters)). **The tour** becomes the `tour/shorty` mod and must parse and check in CI ([`tour.md`: From markdown to source](tour.md#from-markdown-to-source)). |
 | **M1** | Cranelift native backend (Linux, macOS, Windows). Own WASM emitter producing core modules with the **JSPI lowering**, run in Node and browsers. |
 | **M2** | First standard mods written in Moddil; `moddil/runtime` and `moddil/runtime-sim`; LSP prototype. The tour's tests pass under `moddil/runtime-sim`. |
 | **M3** | **Hashiverse CLI/native client** (example 4, phase A). LLVM release backend. **Python bindings** (`moddil bind --lang python`, wheels), the first binding target ([`adoption.md`: Python first](adoption.md#python-first)). |
@@ -58,6 +60,34 @@ removal.
 
 The order puts the two first audiences, Python teams and backend teams, before the browser
 (decided November 2026).
+
+## M0: the v0 language in slices
+
+**Decided: M0 grows by vertical slices.** Each slice runs end to end (grammar, parser, checker, MIR,
+MIR interpreter) before the next begins, and lands with its reference paragraphs and conformance
+tests ([`definition.md`: Written with the compiler](definition.md#written-with-the-compiler)), so
+something runs from the first slice.
+
+| Slice | Adds | Why here |
+|---|---|---|
+| **S0** | `fn`, `let`, `int` and `bool`, arithmetic with overflow traps, `if`, blocks, calls; the conformance runner (`// =>`, `//~ E…`, `//~ trap`) | The smallest program that runs, and the harness for everything after it |
+| **S1** | Structs, enums, tuples, exhaustive `match`, `Option` | Data modelling, which every later slice needs |
+| **S2** | Ownership: moves, `Copy`, second-class `&` and `&mut`, drop and RAII, `defer` | The core of the language, tested before generics complicate it |
+| **S3** | Traits, generics (checked once; witness tables in the interpreter), coherence | Needed for collections and effects |
+| **S4** | `fail(E)`, `?`, `try`/`catch`, R3 entry points, `?!` | Errors, the simplest effect |
+| **S5** | User effects: traits after `with`, handlers, inference inside a mod, explicit at `pub` | The distinctive feature, built on traits and `fail` |
+| **S6** | Several files and mods: the module tree, visibility, the manifest | The tour has several modules |
+| **S7** | Closures, strings, `Vec` and `Map` written in Moddil as the first core mods | Dogfooding starts |
+| **S8** | Refinements (`where`), runtime `requires`, derives (a minimal comptime) | The tour's `Code` and `Target` types and its derives |
+| **S9** | `scope`, `spawn` and `suspend` under a deterministic interpreter scheduler | The tour's `serve`; **the tour parses and checks**, M0's exit gate |
+
+- **Deferred past M0:** units; `Fixed` and `Simd`; views and linear types; generators and coroutines;
+  full comptime and reflection; `unsafe` and FFI; GPU; distribution; data contracts.
+- **The tour only has to check at M0**, so its library dependencies (HTTP, serde, `Url`) are
+  signature-only stubs until M2, when its tests must pass.
+- **The reference interpreter** starts at S1 and follows each slice, so differential testing starts
+  early; **work on the Lean core model** starts after S5, once ownership, traits, errors and effects
+  have settled ([`definition.md`: Three artefacts, one meaning](definition.md#three-artefacts-one-meaning)).
 
 ## Staging: distributed programs
 
