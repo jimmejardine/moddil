@@ -103,6 +103,14 @@ boundaries by accident. Holding a lock across a suspension point is allowed but 
   that replays it;
 - documentation steers towards channels and actors.
 
+**Software transactional memory is a library pattern, not a language feature** (decided). Nothing in
+the core is needed: `atomically(|tx| …)` can take a closure whose effects are restricted to an
+`Stm` trait ([`effects-and-capabilities.md`: Restricted code is one mechanism](effects-and-capabilities.md#restricted-code-is-one-mechanism)),
+so a retried body can do no I/O, `spawn` or `suspend`, and immutable `Rc` contents make snapshots
+cheap. It stays out of the standard mods: logging every read and write allocates (so it is
+unusable under `#[no_alloc]`), contention causes retry storms, and it is unavailable in
+freestanding builds and on GPUs. Community mods may provide it.
+
 ## Patterns the model makes easy
 
 | Pattern | Shape |

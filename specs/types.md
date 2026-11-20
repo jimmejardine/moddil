@@ -15,6 +15,7 @@
 | **`dyn`** | **Swift-style existentials.** Any trait can be used as `dyn`; generic methods dispatch through the witness table ([`dyn`: existentials](#dyn-existentials)). |
 | **Operators** | Traits, as in Rust; pure apart from traps and allocation. Comparisons chain in one direction (`lo <= x < hi`) ([Operators](#operators)). |
 | **Sum types** | Exhaustive `match`; `#[non_exhaustive]` for public enums that may grow ([Sum types and exhaustiveness](#sum-types-and-exhaustiveness)). |
+| **Union types** | **No general unions** (`int \| String`): sums of values are named enums. Error sets are the only open unions ([No general union types](#no-general-union-types)). |
 | **Inference** | Local only. Private signatures may be inferred and generalised within a mod; nothing is inferred across a mod boundary ([Inference](#inference)). |
 | **Optional values** | No null in safe code: `Option<T>` only, no `T?` sugar; definite initialisation; guaranteed niches ([Optional values and invalid states](#optional-values-and-invalid-states)). |
 | **Paradigms** | Functional and object-oriented styles both supported; no inheritance, traits plus delegation instead ([Paradigms: functional and object-oriented](#paradigms-functional-and-object-oriented)). |
@@ -364,6 +365,25 @@ Operators are traits, as in Rust: `a + b` calls `Add::add`, `a[i]` calls `Index:
 - **Refinements in patterns:** matching on a refinement's base value narrows it (`n if n >= 1024`
   binds a `u16`; converting to `Port` remains explicit, or proven automatically where
   [`correctness.md`: Refinement types with automatic proofs](correctness.md#refinement-types-with-automatic-proofs) applies).
+
+### No general union types
+
+**Decided: there are no anonymous union types for values**, as TypeScript's `int | String`. A sum of
+values is a named enum. Error sets remain the only open unions
+([`error-handling.md`: Error types](error-handling.md#error-types)).
+
+- **Unions reopen subtyping.** If `A` flows into `A | B`, the next question is whether `Vec<A>` is a
+  `Vec<A | B>`: the variance Moddil removed ([No subtyping](#no-subtyping)).
+- **Inference would hide mistakes.** `if c { 1 } else { "x" }` stays a type error instead of quietly
+  becoming `int | String`.
+- **Unions over type parameters are ambiguous:** in `T | U`, if `T == U`, which arm matches? Error
+  sets avoid this because their members are nominal error types and tags, never bare parameters.
+- **One way to write a sum type** keeps code uniform for readers and agents
+  ([LLMs as first-class programmers](agent-interface.md)).
+- **Foreign unions become enums:** generated bindings turn WebIDL and TypeScript unions into named
+  enums ([`ui.md`: The browser](ui.md#the-browser)).
+- Adding unions later, for example restricted to named nominal types and matched only by `match`,
+  stays backwards compatible.
 
 ## Optional values and invalid states
 

@@ -176,7 +176,9 @@ TypeScript UI.
 
 - **Generated bindings to the web platform.** `moddil/web` is generated from the WebIDL specifications
   (DOM, Fetch, WebGPU, IndexedDB, WebSocket, WebTransport, …), as Rust's `web-sys` is. Bindings to a
-  JS library are generated from its TypeScript `.d.ts` file.
+  JS library are generated from its TypeScript `.d.ts` file. Unions in either (`string | Blob`)
+  become named enums, since Moddil has no general union types
+  ([`types.md`: No general union types](types.md#no-general-union-types)).
 - **JS values are opaque handles** (`externref`), with no copying until a value is converted to a
   Moddil type.
 - **Promises suspend.** Calling a Promise-returning API suspends the Moddil task through JSPI until
