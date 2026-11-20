@@ -70,3 +70,26 @@ fn tests_observe_values() {
         "test \"t\" {\n    let x = 2;\n    x + 1; // => 3\n    x // => 2\n}"
     ));
 }
+
+#[test]
+fn aggregates_and_fields() {
+    insta::assert_snapshot!(dump(
+        "struct Point { x: int, y: int }\n\
+         fn f(p: Point) -> (int, Point) { let mut q = Point { y: p.x, x: 1 }; q.y += 1; (q.x, q) }"
+    ));
+}
+
+#[test]
+fn matching() {
+    insta::assert_snapshot!(dump(
+        "enum Shape { Dot, Circle(int) }\n\
+         fn f(s: Shape) -> int { match s { Shape::Circle(r @ 1..=9) if r > 2 => r, Shape::Circle(_) | Shape::Dot => 0 } }"
+    ));
+}
+
+#[test]
+fn loops() {
+    insta::assert_snapshot!(dump(
+        "fn f() -> int { let mut i = 0; while i < 3 { i += 1; } loop { if i > 5 { break i; } i += 1; } }"
+    ));
+}

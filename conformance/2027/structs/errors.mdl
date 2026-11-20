@@ -1,0 +1,16 @@
+// covers: expr.struct.1, expr.struct.tuple.1, expr.struct.form.1
+
+struct Point { x: int, y: int }
+struct Pair(int, bool);
+struct Marker;
+enum Shape { Dot, Circle(int) }
+
+fn missing() -> Point { Point { x: 1 } }               //~ E0207
+fn unknown() -> Point { Point { x: 1, y: 2, z: 3 } }   //~ E0107
+fn twice() -> Point { Point { x: 1, x: 2, y: 3 } }     //~ E0108
+fn wrong_type() -> Point { Point { x: true, y: 2 } }   //~ E0201
+fn arity() -> Pair { Pair(1) }                         //~ E0202
+fn no_braces() -> Point { Point }                      //~ E0111
+fn braces() -> Pair { Pair { x: 1 } }                  //~ E0111
+fn called() -> Marker { Marker() }                     //~ E0111
+fn enum_value() -> Shape { Shape }                     //~ E0111

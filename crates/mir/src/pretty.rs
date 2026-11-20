@@ -2,7 +2,23 @@
 
 use std::fmt;
 
-use crate::{BinOp, Body, Const, Operand, Rvalue, Statement, Terminator, UnOp};
+use crate::{
+    AggregateKind, BinOp, Body, Const, Operand, Place, Projection, Rvalue, Statement, Terminator,
+    UnOp,
+};
+
+impl fmt::Debug for Place {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut s = format!("{:?}", self.local);
+        for p in &self.projection {
+            s = match p {
+                Projection::Field(n) => format!("{s}.{n}"),
+                Projection::Downcast(v) => format!("({s} as #{v})"),
+            };
+        }
+        f.write_str(&s)
+    }
+}
 
 impl fmt::Debug for Operand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -32,6 +48,15 @@ impl fmt::Display for Rvalue {
             Rvalue::Binary(op, a, b) => write!(f, "{op:?}({a:?}, {b:?})"),
             Rvalue::Overflows(op, a, b) => write!(f, "{op:?}Overflows({a:?}, {b:?})"),
             Rvalue::NegOverflows(a) => write!(f, "NegOverflows({a:?})"),
+            Rvalue::Aggregate(kind, ops) => {
+                let ops: Vec<String> = ops.iter().map(|o| format!("{o:?}")).collect();
+                match kind {
+                    AggregateKind::Tuple if ops.len() == 1 => write!(f, "({},)", ops[0]),
+                    AggregateKind::Tuple => write!(f, "({})", ops.join(", ")),
+                    AggregateKind::Adt { path, .. } => write!(f, "{path}({})", ops.join(", ")),
+                }
+            }
+            Rvalue::Discriminant(p) => write!(f, "discriminant({p:?})"),
         }
     }
 }
@@ -107,9 +132,22 @@ impl fmt::Debug for Body {
                         expected,
                         trap,
                         range,
+                        parts,
                     } => {
                         let not = if *expected { "" } else { "!" };
-                        writeln!(f, "        assert({not}{cond:?}, {trap}) @ {range:?};")?;
+                        let shown: Vec<String> = parts
+                            .iter()
+                            .map(|p| format!("{:?} if {:?}", p.value, p.evaluated))
+                            .collect();
+                        let shown = if shown.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" showing [{}]", shown.join(", "))
+                        };
+                        writeln!(
+                            f,
+                            "        assert({not}{cond:?}, {trap}) @ {range:?}{shown};"
+                        )?;
                     }
                     Statement::Observe { range, value } => {
                         writeln!(f, "        observe({value:?}) @ {range:?};")?;

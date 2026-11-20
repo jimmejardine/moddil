@@ -5,9 +5,11 @@ desugared and name-resolved, carrying inferred types, effects and error sets. Th
 `moddil explain` and MIR building all read it
 ([`specs/mir.md`: Pipeline](../../specs/mir.md#pipeline)). Ownership is checked later, on MIR.
 
-**Status:** slice S0: functions and tests, `let`, `int`, `bool` and `()`, operators, `if`, blocks,
-calls and `return`, with the diagnostics of [`reference/2027/diagnostics.md`](../../reference/2027/diagnostics.md).
-Valid Moddil beyond S0 is reported as "not supported yet" (`I0001`). It starts as one crate and
+**Status:** slices S0 and S1: functions and tests, `let`, `int`, `bool` and `()`, operators, `if`,
+blocks, calls and `return` (S0); tuples, structs, enums, patterns, `match` with exhaustiveness
+checking, `if let`, `let … else`, loops and `assert` (S1), with the diagnostics of
+[`reference/2027/diagnostics.md`](../../reference/2027/diagnostics.md). Valid Moddil beyond S1 is
+reported as "not supported yet" (`I0001`). It starts as one crate and
 splits as it grows (names, types, effects).
 
 ## Queries (Salsa)
@@ -18,9 +20,9 @@ changes:
 | Query | Result |
 |---|---|
 | `parse(file)` | The lossless syntax tree |
-| `item_tree(file)` | The functions and tests, with their signatures |
+| `item_tree(file)` | The functions, tests, structs and enums, with their signatures |
 | `body(owner)` | A function's or test's body in HIR, with names resolved and sugar removed |
-| `infer(owner)` | The types of the body's expressions and locals, and type errors |
+| `infer(owner)` | The types of the body's expressions, patterns and locals; type errors; exhaustiveness (Maranget's usefulness algorithm, with integer ranges split at their bounds) |
 | `diagnostics(file)` | Everything wrong with the file, in source order (only syntax errors if there are any) |
 
 An `Owner` is a function or a test. In a `test`, an expression statement or final expression

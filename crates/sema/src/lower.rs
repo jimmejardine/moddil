@@ -4,9 +4,10 @@ use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode, SyntaxToken, TextRange};
 
 use crate::hir::{
-    BinaryOp, Body, CompareOp, Expr, ExprId, ExprKind, Local, LocalId, LogicOp, Stmt, UnaryOp,
+    Arm, BinaryOp, Body, CompareOp, Expr, ExprId, ExprKind, Local, LocalId, LogicOp, Pat, PatId,
+    PatKind, Stmt, UnaryOp,
 };
-use crate::items::{binding, item_node, item_tree, parse, resolve_type};
+use crate::items::{Shape, item_node, item_tree, parse, resolve_type};
 use crate::{Code, Db, Diagnostic, Item, ItemTree, Owner};
 
 /// A body in HIR, with the problems found while lowering it.
@@ -29,22 +30,36 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
         items,
         out: Lowered::default(),
         scopes: Vec::new(),
+        loops: Vec::new(),
     };
     let block = match owner.item(db) {
         Item::Fn(i) => {
             let node = item_node(&root, K::FN_ITEM, i).and_then(ast::FnItem::cast);
             let sig = &items.fns[i as usize];
-            for p in &sig.params {
+            let param_nodes: Vec<ast::Param> = node
+                .as_ref()
+                .and_then(ast::FnItem::params)
+                .map(|l| l.params().collect())
+                .unwrap_or_default();
+            let mut binds = Binds::default();
+            for (k, p) in sig.params.iter().enumerate() {
                 let local = cx.out.body.locals.alloc(Local {
                     name: p.name.clone().unwrap_or_else(|| "_".to_string()),
                     mutable: p.mutable,
                     range: p.range,
                 });
+                cx.out.body.params.push(local);
                 if let Some(name) = &p.name {
                     cx.scopes.push((name.clone(), local));
+                } else if p.destructures
+                    && let Some(pat) = param_nodes.get(k).and_then(ast::Param::pat)
+                {
+                    let id = cx.pat(&pat, &mut binds);
+                    cx.out.body.param_pats.push((local, id));
                 }
-                cx.out.body.params.push(local);
             }
+            cx.scopes
+                .extend(binds.names.into_iter().map(|(n, l, _)| (n, l)));
             node.and_then(|f| f.body())
         }
         Item::Test(i) => item_node(&root, K::TEST_ITEM, i)
@@ -58,12 +73,32 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
     cx.out
 }
 
+/// The names a pattern binds as it is lowered.
+#[derive(Default)]
+struct Binds {
+    /// Each name bound so far, with its local and where it is bound.
+    names: Vec<(String, LocalId, TextRange)>,
+    /// In the second and later alternatives of an or-pattern: the locals the first alternative
+    /// bound, so every alternative binds the same ones.
+    reuse: Vec<(String, LocalId)>,
+}
+
+/// What a value path names.
+enum Resolved {
+    Local(LocalId),
+    Fn(u32),
+    /// A struct (variant 0) or an enum's variant.
+    Ctor(u32, u32),
+}
+
 struct Lowerer<'a> {
     text: &'a str,
     items: &'a ItemTree,
     out: Lowered,
     /// Locals in scope, innermost last.
     scopes: Vec<(String, LocalId)>,
+    /// Enclosing loops, innermost last: the label and the loop expression.
+    loops: Vec<(Option<String>, ExprId)>,
 }
 
 impl Lowerer<'_> {
@@ -71,13 +106,32 @@ impl Lowerer<'_> {
         self.out.body.exprs.alloc(Expr { kind, range })
     }
 
+    fn alloc_pat(&mut self, kind: PatKind, range: TextRange) -> PatId {
+        self.out.body.pats.alloc(Pat { kind, range })
+    }
+
     fn error(&mut self, d: Diagnostic) {
         self.out.diagnostics.push(d);
+    }
+
+    fn report(&mut self, code: Code, range: TextRange, message: impl Into<String>) {
+        self.error(Diagnostic::error(code, range, message));
     }
 
     fn unsupported(&mut self, range: TextRange, what: &str) -> ExprId {
         self.error(Diagnostic::unsupported(range, what));
         self.alloc(ExprKind::Missing, range)
+    }
+
+    fn missing(&mut self, range: TextRange) -> ExprId {
+        self.alloc(ExprKind::Missing, range)
+    }
+
+    fn expr_or_missing(&mut self, e: Option<ast::Expr>, range: TextRange) -> ExprId {
+        match e {
+            Some(e) => self.expr(&e),
+            None => self.missing(range),
+        }
     }
 
     /// Whether a `// =>` expectation follows `end` on the same line (after an optional `;`).
@@ -157,29 +211,37 @@ impl Lowerer<'_> {
 
     fn let_stmt(&mut self, l: &ast::LetStmt) -> Option<Stmt> {
         let node = l.syntax();
-        if let Some(e) = node.child(K::LET_ELSE) {
-            self.error(Diagnostic::unsupported(e.text_range(), "`let … else`"));
-        }
         if let Some(attr) = node.child(K::OUTER_ATTR) {
             self.error(Diagnostic::unsupported(attr.text_range(), "an attribute"));
         }
-        let ty = l.ty().map(|t| resolve_type(&t, &mut self.out.diagnostics));
+        let ty = l
+            .ty()
+            .map(|t| resolve_type(&t, &self.items.adts, &mut self.out.diagnostics));
         let init = match l.init() {
             Some(e) => self.expr(&e),
             None => self.unsupported(node.text_range(), "`let` without an initialiser"),
         };
-        let pat = l.pat()?;
-        let (name, mutable, range) = binding(&pat, &mut self.out.diagnostics);
-        let local = name.map(|name| {
-            let id = self.out.body.locals.alloc(Local {
-                name: name.clone(),
-                mutable,
-                range,
-            });
-            self.scopes.push((name, id));
-            id
-        });
-        Some(Stmt::Let { local, ty, init })
+        // The `else` block does not see the pattern's names.
+        let else_ = node
+            .child(K::LET_ELSE)
+            .and_then(|e| e.child(K::BLOCK))
+            .and_then(ast::Block::cast)
+            .map(|b| self.block(&b));
+        let p = l.pat()?;
+        let mut binds = Binds::default();
+        let pat = self.pat(&p, &mut binds);
+        self.bring_into_scope(binds);
+        Some(Stmt::Let {
+            pat,
+            ty,
+            init,
+            else_,
+        })
+    }
+
+    fn bring_into_scope(&mut self, binds: Binds) {
+        self.scopes
+            .extend(binds.names.into_iter().map(|(n, l, _)| (n, l)));
     }
 
     fn lookup(&self, name: &str) -> Option<LocalId> {
@@ -190,17 +252,85 @@ impl Lowerer<'_> {
             .map(|&(_, id)| id)
     }
 
-    /// The single-segment name of a path expression, or `None` after reporting why not.
-    fn path_name(&mut self, node: &SyntaxNode) -> Option<String> {
+    /// The segments of the `PATH` in `node`, or `None` after reporting a path this slice does not
+    /// support (generic arguments, qualified paths).
+    fn segments(&mut self, node: &SyntaxNode) -> Option<Vec<String>> {
         let path = node.child(K::PATH).and_then(ast::Path::cast);
         let generic = node
             .descendants()
             .iter()
             .any(|d| matches!(d.kind(), K::GENERIC_ARGS | K::QUALIFIED_PATH));
         match path.map(|p| p.segments()) {
-            Some(segments) if segments.len() == 1 && !generic => segments.into_iter().next(),
+            Some(segments) if !segments.is_empty() && !generic => Some(segments),
             _ => {
                 self.error(Diagnostic::unsupported(node.text_range(), "this path"));
+                None
+            }
+        }
+    }
+
+    /// What the value path in `node` names, or `None` after reporting why it names nothing.
+    fn resolve(&mut self, node: &SyntaxNode) -> Option<Resolved> {
+        let range = node.text_range();
+        let segments = self.segments(node)?;
+        match segments.as_slice() {
+            [name] => {
+                if let Some(local) = self.lookup(name) {
+                    return Some(Resolved::Local(local));
+                }
+                if let Some(f) = self.items.fn_named(name) {
+                    return Some(Resolved::Fn(f));
+                }
+                if let Some(a) = self.items.adt_named(name) {
+                    if !self.items.adts[a as usize].is_enum {
+                        return Some(Resolved::Ctor(a, 0));
+                    }
+                    self.report(
+                        Code::E0111,
+                        range,
+                        format!("`{name}` is an enum; name one of its variants: `{name}::…`"),
+                    );
+                    return None;
+                }
+                if name == "assert" {
+                    self.report(
+                        Code::E0112,
+                        range,
+                        "`assert` is a built-in, not a value: call it as `assert(condition)`",
+                    );
+                    return None;
+                }
+                self.report(
+                    Code::E0101,
+                    range,
+                    format!("there is nothing called `{name}` here"),
+                );
+                None
+            }
+            [ty, variant] => {
+                let Some(a) = self.items.adt_named(ty) else {
+                    self.report(
+                        Code::E0101,
+                        range,
+                        format!("there is no enum called `{ty}`"),
+                    );
+                    return None;
+                };
+                let adt = &self.items.adts[a as usize];
+                match adt.variant(variant).filter(|_| adt.is_enum) {
+                    Some(v) => Some(Resolved::Ctor(a, v)),
+                    None => {
+                        self.report(
+                            Code::E0101,
+                            range,
+                            format!("`{ty}` has no variant called `{variant}`"),
+                        );
+                        None
+                    }
+                }
+            }
+            _ => {
+                self.error(Diagnostic::unsupported(range, "this path"));
                 None
             }
         }
@@ -211,33 +341,67 @@ impl Lowerer<'_> {
         let range = node.text_range();
         match e {
             ast::Expr::Literal(_) => self.literal(&node, false),
-            ast::Expr::Path(_) => {
-                let Some(name) = self.path_name(&node) else {
-                    return self.alloc(ExprKind::Missing, range);
-                };
-                if let Some(local) = self.lookup(&name) {
-                    self.alloc(ExprKind::Local(local), range)
-                } else if let Some(f) = self.items.fn_named(&name) {
-                    self.alloc(ExprKind::Fn(f), range)
+            ast::Expr::Path(_) => match self.resolve(&node) {
+                Some(Resolved::Local(l)) => self.alloc(ExprKind::Local(l), range),
+                Some(Resolved::Fn(f)) => self.alloc(ExprKind::Fn(f), range),
+                Some(Resolved::Ctor(adt, variant)) => {
+                    let def = self.items.variant(adt, variant);
+                    match def.shape {
+                        Shape::Unit => self.alloc(
+                            ExprKind::Adt {
+                                adt,
+                                variant,
+                                fields: Vec::new(),
+                            },
+                            range,
+                        ),
+                        Shape::Tuple => self.unsupported(range, "a constructor used as a value"),
+                        Shape::Named => {
+                            let path = self.items.adts[adt as usize].path(variant);
+                            self.report(
+                                Code::E0111,
+                                range,
+                                format!("`{path}` has named fields: write `{path} {{ … }}`"),
+                            );
+                            self.missing(range)
+                        }
+                    }
+                }
+                None => self.missing(range),
+            },
+            ast::Expr::Paren(_) => {
+                let inner = e.sub_exprs().into_iter().next();
+                self.expr_or_missing(inner, range)
+            }
+            ast::Expr::Tuple(_) => {
+                let elements: Vec<ExprId> = e.sub_exprs().iter().map(|x| self.expr(x)).collect();
+                if elements.is_empty() {
+                    self.alloc(ExprKind::Unit, range)
                 } else {
-                    self.error(Diagnostic::error(
-                        Code::E0101,
-                        range,
-                        format!("there is nothing called `{name}` here"),
-                    ));
-                    self.alloc(ExprKind::Missing, range)
+                    self.alloc(ExprKind::Tuple(elements), range)
                 }
             }
-            ast::Expr::Paren(_) => match e.sub_exprs().first() {
-                Some(inner) => self.expr(inner),
-                None => self.alloc(ExprKind::Missing, range),
-            },
-            ast::Expr::Tuple(_) if e.sub_exprs().is_empty() => self.alloc(ExprKind::Unit, range),
+            ast::Expr::StructLit(_) => self.struct_lit(&node),
+            ast::Expr::Field(_) => self.field(&node, e),
             ast::Expr::Block(_) => match ast::Block::cast(node) {
                 Some(b) => self.block(&b),
-                None => self.alloc(ExprKind::Missing, range),
+                None => self.missing(range),
             },
             ast::Expr::If(_) => self.if_expr(&node, e),
+            ast::Expr::LetCond(_) => self.let_cond(&node),
+            ast::Expr::Match(_) => self.match_expr(&node),
+            ast::Expr::Loop(_) | ast::Expr::While(_) => self.loop_expr(&node, None),
+            ast::Expr::Labelled(_) => {
+                let label = node.token(K::LABEL).map(|t| t.text().to_string());
+                match node.children().find_map(ast::Expr::cast) {
+                    Some(inner @ (ast::Expr::Loop(_) | ast::Expr::While(_))) => {
+                        self.loop_expr(inner.syntax(), label)
+                    }
+                    Some(ast::Expr::For(_)) => self.unsupported(range, "`for`"),
+                    _ => self.unsupported(range, "a labelled block"),
+                }
+            }
+            ast::Expr::Break(_) | ast::Expr::Continue(_) => self.jump(&node, e),
             ast::Expr::Return(_) => {
                 let value = e.sub_exprs().first().map(|v| self.expr(v));
                 self.alloc(ExprKind::Return(value), range)
@@ -247,6 +411,8 @@ impl Lowerer<'_> {
             ast::Expr::CompareChain(_) => self.compare(&node, e),
             ast::Expr::Assign(_) => self.assign(&node, e),
             ast::Expr::Call(_) => self.call(&node, e),
+            ast::Expr::For(_) => self.unsupported(range, "`for`"),
+            ast::Expr::MethodCall(_) => self.unsupported(range, "a method call"),
             _ => self.unsupported(range, "this expression"),
         }
     }
@@ -257,7 +423,7 @@ impl Lowerer<'_> {
             return self.unsupported(range, "a unit of measure");
         }
         let Some(tok) = node.child_tokens().find(|t| !t.kind().is_trivia()) else {
-            return self.alloc(ExprKind::Missing, range);
+            return self.missing(range);
         };
         match tok.kind() {
             K::TRUE_KW => self.alloc(ExprKind::Bool(true), range),
@@ -265,15 +431,140 @@ impl Lowerer<'_> {
             K::INTEGER => match integer_value(tok.text()) {
                 Some(v) => self.alloc(ExprKind::Int(if negate { -v } else { v }), range),
                 None => {
-                    self.error(Diagnostic::error(
+                    self.report(
                         Code::E0204,
                         range,
                         format!("`{}` is too large for any integer type", tok.text()),
-                    ));
-                    self.alloc(ExprKind::Missing, range)
+                    );
+                    self.missing(range)
                 }
             },
             _ => self.unsupported(range, "this kind of literal"),
+        }
+    }
+
+    /// `Path { field: value, … }`.
+    fn struct_lit(&mut self, node: &SyntaxNode) -> ExprId {
+        let range = node.text_range();
+        let target = match self.resolve(node) {
+            Some(Resolved::Ctor(adt, variant)) => {
+                let def = self.items.variant(adt, variant);
+                if def.shape == Shape::Named {
+                    Some((adt, variant))
+                } else {
+                    let path = self.items.adts[adt as usize].path(variant);
+                    self.report(
+                        Code::E0111,
+                        range,
+                        format!(
+                            "`{path}` has no named fields, so it is not written with `{{ … }}`"
+                        ),
+                    );
+                    None
+                }
+            }
+            Some(Resolved::Local(_) | Resolved::Fn(_)) => {
+                self.report(Code::E0111, range, "this is not a struct or variant");
+                None
+            }
+            None => None,
+        };
+        let mut fields: Vec<(u32, ExprId)> = Vec::new();
+        let mut given: Vec<(u32, TextRange)> = Vec::new();
+        for init in node.children().filter(|c| c.kind() == K::FIELD_INIT) {
+            let init_range = init.text_range();
+            if init.token(K::DOT_DOT).is_some() {
+                self.error(Diagnostic::unsupported(init_range, "struct update syntax"));
+                continue;
+            }
+            let Some(name_tok) = member_name(&init) else {
+                continue;
+            };
+            let name = name_tok.text().to_string();
+            let value = match init.children().find_map(ast::Expr::cast) {
+                Some(v) => self.expr(&v),
+                None => match self.lookup(&name) {
+                    Some(l) => self.alloc(ExprKind::Local(l), name_tok.text_range()),
+                    None => {
+                        self.report(
+                            Code::E0101,
+                            name_tok.text_range(),
+                            format!("there is nothing called `{name}` here"),
+                        );
+                        self.missing(init_range)
+                    }
+                },
+            };
+            let Some((adt, variant)) = target else {
+                continue;
+            };
+            let def = self.items.variant(adt, variant);
+            match def.field(&name) {
+                Some(i) => {
+                    if let Some(&(_, first)) = given.iter().find(|(g, _)| *g == i) {
+                        let d = Diagnostic::error(
+                            Code::E0108,
+                            name_tok.text_range(),
+                            format!("the field `{name}` is given twice"),
+                        )
+                        .with_label(first, "first given here");
+                        self.error(d);
+                    } else {
+                        given.push((i, name_tok.text_range()));
+                        fields.push((i, value));
+                    }
+                }
+                None => {
+                    let path = self.items.adts[adt as usize].path(variant);
+                    self.report(
+                        Code::E0107,
+                        name_tok.text_range(),
+                        format!("`{path}` has no field called `{name}`"),
+                    );
+                }
+            }
+        }
+        let Some((adt, variant)) = target else {
+            return self.missing(range);
+        };
+        let def = self.items.variant(adt, variant);
+        let missing: Vec<String> = (0..def.fields.len() as u32)
+            .filter(|i| !given.iter().any(|(g, _)| g == i))
+            .map(|i| format!("`{}`", def.fields[i as usize].name))
+            .collect();
+        if !missing.is_empty() {
+            let path = self.items.adts[adt as usize].path(variant);
+            self.report(
+                Code::E0207,
+                range,
+                format!("`{path}` needs the fields {}", missing.join(", ")),
+            );
+        }
+        self.alloc(
+            ExprKind::Adt {
+                adt,
+                variant,
+                fields,
+            },
+            range,
+        )
+    }
+
+    /// `base.name` or `base.0`.
+    fn field(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {
+        let range = node.text_range();
+        let base = e.sub_exprs().into_iter().next();
+        let base = self.expr_or_missing(base, range);
+        match member_name(node) {
+            Some(tok) => self.alloc(
+                ExprKind::Field {
+                    base,
+                    name: tok.text().to_string(),
+                    name_range: tok.text_range(),
+                },
+                range,
+            ),
+            None => self.missing(range),
         }
     }
 
@@ -282,23 +573,157 @@ impl Lowerer<'_> {
         if node.token(K::CONST_KW).is_some() {
             return self.unsupported(range, "`if const`");
         }
-        let subs = e.sub_exprs();
-        let cond = match subs.first() {
-            Some(c) => self.expr(c),
-            None => self.alloc(ExprKind::Missing, range),
-        };
-        let then = match subs.get(1) {
-            Some(t) => self.expr(t),
-            None => self.alloc(ExprKind::Missing, range),
-        };
-        let else_ = subs.get(2).map(|x| self.expr(x));
+        let mut subs = e.sub_exprs().into_iter();
+        // Names bound by `let` conditions are in scope in the condition after them and in the
+        // first block, not in the `else` branch.
+        let mark = self.scopes.len();
+        let cond = self.expr_or_missing(subs.next(), range);
+        let then = self.expr_or_missing(subs.next(), range);
+        self.scopes.truncate(mark);
+        let else_ = subs.next().map(|x| self.expr(&x));
         self.alloc(ExprKind::If { cond, then, else_ }, range)
+    }
+
+    /// `let p = e` in an `if` or `while` head. Its names stay in scope until the head's
+    /// expression truncates the scopes.
+    fn let_cond(&mut self, node: &SyntaxNode) -> ExprId {
+        let range = node.text_range();
+        let init = node.children().find_map(ast::Expr::cast);
+        let init = self.expr_or_missing(init, range);
+        let Some(p) = node.children().find_map(ast::Pat::cast) else {
+            return self.missing(range);
+        };
+        let mut binds = Binds::default();
+        let pat = self.pat(&p, &mut binds);
+        self.bring_into_scope(binds);
+        self.alloc(ExprKind::Let { pat, init }, range)
+    }
+
+    fn match_expr(&mut self, node: &SyntaxNode) -> ExprId {
+        let range = node.text_range();
+        let scrutinee = node.children().find_map(ast::Expr::cast);
+        let scrutinee = self.expr_or_missing(scrutinee, range);
+        let mut arms = Vec::new();
+        let Some(list) = node.child(K::MATCH_ARM_LIST) else {
+            return self.missing(range);
+        };
+        if let Some(attr) = list.child(K::INNER_ATTR) {
+            self.error(Diagnostic::unsupported(attr.text_range(), "an attribute"));
+        }
+        for arm in list.children().filter(|c| c.kind() == K::MATCH_ARM) {
+            if let Some(attr) = arm.child(K::OUTER_ATTR) {
+                self.error(Diagnostic::unsupported(attr.text_range(), "an attribute"));
+            }
+            let mark = self.scopes.len();
+            let mut binds = Binds::default();
+            let pat = match arm.children().find_map(ast::Pat::cast) {
+                Some(p) => self.pat(&p, &mut binds),
+                None => self.alloc_pat(PatKind::Missing, arm.text_range()),
+            };
+            self.bring_into_scope(binds);
+            let guard = arm.child(K::MATCH_GUARD).map(|g| {
+                let cond = g.children().find_map(ast::Expr::cast);
+                self.expr_or_missing(cond, g.text_range())
+            });
+            let body = arm.children().filter_map(ast::Expr::cast).last();
+            let body = self.expr_or_missing(body, arm.text_range());
+            self.scopes.truncate(mark);
+            arms.push(Arm { pat, guard, body });
+        }
+        self.alloc(ExprKind::Match { scrutinee, arms }, range)
+    }
+
+    /// `loop { … }` or `while cond { … }`, maybe labelled.
+    fn loop_expr(&mut self, node: &SyntaxNode, label: Option<String>) -> ExprId {
+        let range = node.text_range();
+        let id = self.missing(range);
+        self.loops.push((label, id));
+        let mark = self.scopes.len();
+        let cond = if node.kind() == K::WHILE_EXPR {
+            // The condition, then the body block.
+            let exprs: Vec<ast::Expr> = node.children().filter_map(ast::Expr::cast).collect();
+            let c = if exprs.len() > 1 {
+                exprs.first().cloned()
+            } else {
+                None
+            };
+            Some(self.expr_or_missing(c, range))
+        } else {
+            None
+        };
+        let body = node
+            .children()
+            .filter(|n| n.kind() == K::BLOCK)
+            .last()
+            .and_then(ast::Block::cast);
+        let body = match body {
+            Some(b) => self.block(&b),
+            None => self.missing(range),
+        };
+        self.scopes.truncate(mark);
+        self.loops.pop();
+        self.out.body.exprs[id].kind = match cond {
+            Some(cond) => ExprKind::While { cond, body },
+            None => ExprKind::Loop { body },
+        };
+        id
+    }
+
+    /// `break` or `continue`, with an optional label (and a value for `break`).
+    fn jump(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {
+        let range = node.text_range();
+        let is_break = node.kind() == K::BREAK_EXPR;
+        let value = if is_break {
+            e.sub_exprs().first().map(|v| self.expr(v))
+        } else {
+            None
+        };
+        let label = node.token(K::LABEL);
+        let target = match &label {
+            Some(l) => {
+                let found = self
+                    .loops
+                    .iter()
+                    .rev()
+                    .find(|(name, _)| name.as_deref() == Some(l.text()))
+                    .map(|&(_, id)| id);
+                if found.is_none() {
+                    self.report(
+                        Code::E0110,
+                        l.text_range(),
+                        format!("no enclosing loop is labelled `{}`", l.text()),
+                    );
+                }
+                found
+            }
+            None => {
+                let found = self.loops.last().map(|&(_, id)| id);
+                if found.is_none() {
+                    let what = if is_break { "break" } else { "continue" };
+                    self.report(
+                        Code::E0109,
+                        range,
+                        format!("`{what}` is only allowed inside a loop"),
+                    );
+                }
+                found
+            }
+        };
+        let Some(target) = target else {
+            return self.missing(range);
+        };
+        let kind = if is_break {
+            ExprKind::Break { target, value }
+        } else {
+            ExprKind::Continue { target }
+        };
+        self.alloc(kind, range)
     }
 
     fn prefix(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {
         let range = node.text_range();
         let Some(op) = ast::operator(node) else {
-            return self.alloc(ExprKind::Missing, range);
+            return self.missing(range);
         };
         let operand = e.sub_exprs().into_iter().next();
         let op = match op.kind() {
@@ -319,27 +744,21 @@ impl Lowerer<'_> {
                 let x = self.expr(&x);
                 self.alloc(ExprKind::Unary(op, x), range)
             }
-            None => self.alloc(ExprKind::Missing, range),
+            None => self.missing(range),
         }
     }
 
     fn operands(&mut self, e: &ast::Expr, range: TextRange) -> (ExprId, ExprId) {
         let (l, r) = e.operands();
-        let l = match l {
-            Some(l) => self.expr(&l),
-            None => self.alloc(ExprKind::Missing, range),
-        };
-        let r = match r {
-            Some(r) => self.expr(&r),
-            None => self.alloc(ExprKind::Missing, range),
-        };
+        let l = self.expr_or_missing(l, range);
+        let r = self.expr_or_missing(r, range);
         (l, r)
     }
 
     fn binary(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {
         let range = node.text_range();
         let Some(op) = ast::operator(node) else {
-            return self.alloc(ExprKind::Missing, range);
+            return self.missing(range);
         };
         if let Some(logic) = match op.kind() {
             K::AMP_AMP => Some(LogicOp::And),
@@ -371,24 +790,18 @@ impl Lowerer<'_> {
             .iter()
             .all(|o| matches!(o, CompareOp::Gt | CompareOp::Ge));
         if ops.len() > 1 && !ascending && !descending {
-            self.error(Diagnostic::error(
+            self.report(
                 Code::E0002,
                 range,
                 "a comparison chain must run in one direction (all `<` and `<=`, or all `>` and \
                  `>=`), and `==` and `!=` do not chain",
-            ));
+            );
         }
         let mut operands = e.sub_exprs().into_iter();
-        let first = match operands.next() {
-            Some(x) => self.expr(&x),
-            None => self.alloc(ExprKind::Missing, range),
-        };
+        let first = self.expr_or_missing(operands.next(), range);
         let mut rest = Vec::new();
         for op in ops {
-            let x = match operands.next() {
-                Some(x) => self.expr(&x),
-                None => self.alloc(ExprKind::Missing, range),
-            };
+            let x = self.expr_or_missing(operands.next(), range);
             rest.push((op, x));
         }
         self.alloc(ExprKind::Compare { first, rest }, range)
@@ -397,7 +810,7 @@ impl Lowerer<'_> {
     fn assign(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {
         let range = node.text_range();
         let Some(op_tok) = ast::operator(node) else {
-            return self.alloc(ExprKind::Missing, range);
+            return self.missing(range);
         };
         let op = match op_tok.kind() {
             K::EQ => None,
@@ -416,73 +829,58 @@ impl Lowerer<'_> {
             }
         };
         let (target, value) = e.operands();
-        let value = match value {
-            Some(v) => self.expr(&v),
-            None => self.alloc(ExprKind::Missing, range),
-        };
+        let value = self.expr_or_missing(value, range);
         let Some(target) = target else {
-            return self.alloc(ExprKind::Missing, range);
+            return self.missing(range);
         };
         let target_range = target.syntax().text_range();
-        let local = match &target {
-            ast::Expr::Path(_) => {
-                let Some(name) = self.path_name(target.syntax()) else {
-                    return self.alloc(ExprKind::Missing, range);
-                };
-                match self.lookup(&name) {
-                    Some(l) => l,
-                    None if self.items.fn_named(&name).is_some() => {
-                        self.error(Diagnostic::error(
-                            Code::E0206,
-                            target_range,
-                            format!("cannot assign to the function `{name}`"),
-                        ));
-                        return self.alloc(ExprKind::Missing, range);
-                    }
-                    None => {
-                        self.error(Diagnostic::error(
-                            Code::E0101,
-                            target_range,
-                            format!("there is nothing called `{name}` here"),
-                        ));
-                        return self.alloc(ExprKind::Missing, range);
-                    }
+        if matches!(target, ast::Expr::Index(_) | ast::Expr::Prefix(_)) {
+            return self.unsupported(target_range, "assigning to this place");
+        }
+        let target = self.expr(&target);
+        // The place must be a local, or fields of one.
+        let mut root = target;
+        while let ExprKind::Field { base, .. } = self.out.body.exprs[root].kind {
+            root = base;
+        }
+        match self.out.body.exprs[root].kind {
+            ExprKind::Local(l) => {
+                let data = &self.out.body.locals[l];
+                if !data.mutable {
+                    let d = Diagnostic::error(
+                        Code::E0301,
+                        target_range,
+                        format!(
+                            "`{}` is not declared `mut`, so it cannot be assigned to",
+                            data.name
+                        ),
+                    )
+                    .with_label(data.range, "declared here");
+                    self.error(d);
                 }
             }
-            ast::Expr::Field(_) | ast::Expr::Index(_) | ast::Expr::Prefix(_) => {
-                return self.unsupported(target_range, "assigning to this place");
-            }
-            _ => {
-                self.error(Diagnostic::error(
+            ExprKind::Missing => {}
+            ExprKind::Fn(_) => {
+                self.report(
                     Code::E0206,
                     target_range,
-                    "only a variable can be assigned to",
-                ));
-                return self.alloc(ExprKind::Missing, range);
+                    "a function cannot be assigned to",
+                );
             }
-        };
-        let data = &self.out.body.locals[local];
-        if !data.mutable {
-            let d = Diagnostic::error(
-                Code::E0301,
-                target_range,
-                format!(
-                    "`{}` is not declared `mut`, so it cannot be assigned to",
-                    data.name
-                ),
-            )
-            .with_label(data.range, "declared here");
-            self.error(d);
+            _ => {
+                self.report(
+                    Code::E0206,
+                    target_range,
+                    "only a variable or a field of one can be assigned to",
+                );
+            }
         }
-        self.alloc(ExprKind::Assign { local, op, value }, range)
+        self.alloc(ExprKind::Assign { target, op, value }, range)
     }
 
     fn call(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {
         let range = node.text_range();
-        let callee = match e.sub_exprs().first() {
-            Some(c) => self.expr(c),
-            None => self.alloc(ExprKind::Missing, range),
-        };
+        let callee_node = e.sub_exprs().into_iter().next();
         let mut args = Vec::new();
         if let Some(list) = node.child(K::ARG_LIST).and_then(ast::ArgList::cast) {
             for a in list.args() {
@@ -492,14 +890,587 @@ impl Lowerer<'_> {
                         "a named argument",
                     ));
                 }
-                match a.expr() {
-                    Some(x) => args.push(self.expr(&x)),
-                    None => args.push(self.alloc(ExprKind::Missing, a.syntax().text_range())),
+                let x = a.expr();
+                args.push(self.expr_or_missing(x, a.syntax().text_range()));
+            }
+        }
+        // A tuple struct or variant applied to its fields.
+        if let Some(c @ ast::Expr::Path(_)) = &callee_node {
+            let segments = c
+                .syntax()
+                .child(K::PATH)
+                .and_then(ast::Path::cast)
+                .map(|p| p.segments())
+                .unwrap_or_default();
+            let item = |one: &str| self.lookup(one).is_none() && self.items.fn_named(one).is_none();
+            // `assert` is in the prelude: a local or item of the same name shadows it.
+            if let [one] = segments.as_slice()
+                && one == "assert"
+                && item(one)
+                && self.items.adt_named(one).is_none()
+            {
+                if args.len() != 1 {
+                    self.report(
+                        Code::E0202,
+                        range,
+                        format!(
+                            "`assert` takes one argument, the condition, but {} were given",
+                            args.len()
+                        ),
+                    );
+                    return self.missing(range);
+                }
+                return self.alloc(ExprKind::Assert(args[0]), range);
+            }
+            let is_ctor = match segments.as_slice() {
+                [one] => item(one) && self.items.adt_named(one).is_some(),
+                [_, _] => true,
+                _ => false,
+            };
+            if is_ctor {
+                return match self.resolve(c.syntax()) {
+                    Some(Resolved::Ctor(adt, variant)) => self.ctor_call(range, adt, variant, args),
+                    _ => self.missing(range),
+                };
+            }
+        }
+        let callee = self.expr_or_missing(callee_node, range);
+        self.alloc(ExprKind::Call { callee, args }, range)
+    }
+
+    fn ctor_call(&mut self, range: TextRange, adt: u32, variant: u32, args: Vec<ExprId>) -> ExprId {
+        let def = self.items.variant(adt, variant);
+        let path = self.items.adts[adt as usize].path(variant);
+        if def.shape != Shape::Tuple {
+            self.report(
+                Code::E0111,
+                range,
+                format!("`{path}` has no positional fields, so it is not called"),
+            );
+            return self.missing(range);
+        }
+        if args.len() != def.fields.len() {
+            let n = def.fields.len();
+            let d = Diagnostic::error(
+                Code::E0202,
+                range,
+                format!(
+                    "`{path}` has {n} field{}, but {} {} given",
+                    if n == 1 { "" } else { "s" },
+                    args.len(),
+                    if args.len() == 1 { "was" } else { "were" },
+                ),
+            )
+            .with_label(def.name_range, "defined here");
+            self.error(d);
+        }
+        let fields = args
+            .into_iter()
+            .take(def.fields.len())
+            .enumerate()
+            .map(|(i, a)| (i as u32, a))
+            .collect();
+        self.alloc(
+            ExprKind::Adt {
+                adt,
+                variant,
+                fields,
+            },
+            range,
+        )
+    }
+
+    // Patterns.
+
+    fn pat(&mut self, p: &ast::Pat, b: &mut Binds) -> PatId {
+        let node = p.syntax().clone();
+        let range = node.text_range();
+        let kind = match p {
+            ast::Pat::Wildcard(_) => PatKind::Wild,
+            ast::Pat::Literal(_) => self.literal_pat(&node),
+            ast::Pat::Range(_) => self.range_pat(&node),
+            ast::Pat::Ident(_) => {
+                let mutable = node.token(K::MUT_KW).is_some();
+                let name = node.child(K::NAME).and_then(ast::Name::cast);
+                let sub = node.children().find_map(ast::Pat::cast);
+                let sub = sub.map(|s| self.pat(&s, b));
+                match name {
+                    Some(n) => {
+                        let local = self.bind(&n.text(), mutable, n.syntax().text_range(), b);
+                        PatKind::Bind { local, sub }
+                    }
+                    None => PatKind::Missing,
+                }
+            }
+            ast::Pat::At(_) => {
+                let sub = node.children().find_map(ast::Pat::cast);
+                let sub = sub.map(|s| self.pat(&s, b));
+                match self.segments(&node).as_deref() {
+                    Some([name]) => {
+                        let at = node.child(K::PATH).map_or(range, |n| n.text_range());
+                        let local = self.bind(name, false, at, b);
+                        PatKind::Bind { local, sub }
+                    }
+                    _ => PatKind::Missing,
+                }
+            }
+            ast::Pat::Path(_) => self.path_pat(&node, b),
+            ast::Pat::TupleStruct(_) => self.tuple_struct_pat(&node, b),
+            ast::Pat::Struct(_) => self.struct_pat(&node, b),
+            ast::Pat::Tuple(_) => {
+                let subs: Vec<ast::Pat> = node.children().filter_map(ast::Pat::cast).collect();
+                if subs.is_empty() {
+                    PatKind::Unit
+                } else if subs.len() == 1
+                    && node.token(K::COMMA).is_none()
+                    && !matches!(subs[0], ast::Pat::Rest(_))
+                {
+                    // `(p)` is `p` in parentheses.
+                    return self.pat(&subs[0], b);
+                } else {
+                    let (pats, rest) = self.with_rest(&subs, b);
+                    PatKind::Tuple { pats, rest }
+                }
+            }
+            ast::Pat::Or(_) => self.or_pat(&node, b),
+            ast::Pat::Rest(_) => {
+                self.report(
+                    Code::E0001,
+                    range,
+                    "`..` is only allowed among the fields of a tuple or struct pattern",
+                );
+                PatKind::Missing
+            }
+            ast::Pat::Ref(_) => {
+                self.error(Diagnostic::unsupported(range, "a `&` pattern"));
+                PatKind::Missing
+            }
+            ast::Pat::Typed(_) => {
+                self.error(Diagnostic::unsupported(range, "a refinement test"));
+                PatKind::Missing
+            }
+            _ => {
+                self.error(Diagnostic::unsupported(range, "this pattern"));
+                PatKind::Missing
+            }
+        };
+        self.alloc_pat(kind, range)
+    }
+
+    /// A new local for `name`, or the one the first alternative of an or-pattern bound.
+    fn bind(&mut self, name: &str, mutable: bool, range: TextRange, b: &mut Binds) -> LocalId {
+        if let Some(&(_, _, first)) = b.names.iter().find(|(n, _, _)| n == name) {
+            let d = Diagnostic::error(
+                Code::E0106,
+                range,
+                format!("`{name}` is bound more than once in this pattern"),
+            )
+            .with_label(first, "first bound here");
+            self.error(d);
+        }
+        let local = match b.reuse.iter().find(|(n, _)| n == name) {
+            Some(&(_, l)) => l,
+            None => self.out.body.locals.alloc(Local {
+                name: name.to_string(),
+                mutable,
+                range,
+            }),
+        };
+        b.names.push((name.to_string(), local, range));
+        local
+    }
+
+    /// The patterns among `subs`, and where `..` is among them.
+    fn with_rest(&mut self, subs: &[ast::Pat], b: &mut Binds) -> (Vec<PatId>, Option<usize>) {
+        let mut pats = Vec::new();
+        let mut rest = None;
+        for s in subs {
+            if let ast::Pat::Rest(r) = s {
+                if rest.is_some() {
+                    self.report(
+                        Code::E0001,
+                        r.text_range(),
+                        "`..` may appear only once in a pattern",
+                    );
+                }
+                rest = Some(pats.len());
+            } else {
+                pats.push(self.pat(s, b));
+            }
+        }
+        (pats, rest)
+    }
+
+    fn literal_pat(&mut self, node: &SyntaxNode) -> PatKind {
+        let range = node.text_range();
+        let negate = node.token(K::MINUS).is_some();
+        let Some(tok) = node
+            .child_tokens()
+            .find(|t| !t.kind().is_trivia() && t.kind() != K::MINUS)
+        else {
+            return PatKind::Missing;
+        };
+        match tok.kind() {
+            K::TRUE_KW => PatKind::Bool(true),
+            K::FALSE_KW => PatKind::Bool(false),
+            K::INTEGER => match integer_value(tok.text()) {
+                Some(v) => PatKind::Int(if negate { -v } else { v }),
+                None => {
+                    self.report(
+                        Code::E0204,
+                        range,
+                        format!("`{}` is too large for any integer type", tok.text()),
+                    );
+                    PatKind::Missing
+                }
+            },
+            _ => {
+                self.error(Diagnostic::unsupported(range, "this kind of literal"));
+                PatKind::Missing
+            }
+        }
+    }
+
+    fn range_pat(&mut self, node: &SyntaxNode) -> PatKind {
+        let range = node.text_range();
+        let bounds: Vec<SyntaxNode> = node
+            .children()
+            .filter(|c| c.kind() == K::LITERAL_PAT)
+            .collect();
+        let inclusive = node.token(K::DOT_DOT_EQ).is_some();
+        let mut values = Vec::new();
+        for b in &bounds {
+            match self.literal_pat(b) {
+                PatKind::Int(v) => values.push(v),
+                PatKind::Missing => return PatKind::Missing,
+                _ => {
+                    self.report(
+                        Code::E0201,
+                        b.text_range(),
+                        "the bounds of a range pattern are integers",
+                    );
+                    return PatKind::Missing;
                 }
             }
         }
-        self.alloc(ExprKind::Call { callee, args }, range)
+        match values.as_slice() {
+            [lo] => PatKind::Range {
+                lo: *lo,
+                hi: None,
+                inclusive,
+            },
+            [lo, hi] => PatKind::Range {
+                lo: *lo,
+                hi: Some(*hi),
+                inclusive,
+            },
+            _ => {
+                self.error(Diagnostic::unsupported(range, "this range pattern"));
+                PatKind::Missing
+            }
+        }
     }
+
+    /// `x` (a binding), a unit struct, or a unit variant `E::A`.
+    fn path_pat(&mut self, node: &SyntaxNode, b: &mut Binds) -> PatKind {
+        let range = node.text_range();
+        let Some(segments) = self.segments(node) else {
+            return PatKind::Missing;
+        };
+        if let [name] = segments.as_slice()
+            && self.items.adt_named(name).is_none()
+        {
+            let local = self.bind(name, false, range, b);
+            return PatKind::Bind { local, sub: None };
+        }
+        let Some((adt, variant)) = self.ctor_pat_target(node) else {
+            return PatKind::Missing;
+        };
+        let def = self.items.variant(adt, variant);
+        if def.shape != Shape::Unit {
+            let path = self.items.adts[adt as usize].path(variant);
+            let form = if def.shape == Shape::Tuple {
+                format!("{path}(…)")
+            } else {
+                format!("{path} {{ … }}")
+            };
+            self.report(
+                Code::E0111,
+                range,
+                format!("`{path}` has fields: match it as `{form}`"),
+            );
+            return PatKind::Missing;
+        }
+        PatKind::Adt {
+            adt,
+            variant,
+            fields: Vec::new(),
+        }
+    }
+
+    /// The struct or variant a pattern's path names.
+    fn ctor_pat_target(&mut self, node: &SyntaxNode) -> Option<(u32, u32)> {
+        let range = node.text_range();
+        let segments = self.segments(node)?;
+        match segments.as_slice() {
+            [name] => match self.items.adt_named(name) {
+                Some(a) if !self.items.adts[a as usize].is_enum => Some((a, 0)),
+                Some(_) => {
+                    self.report(
+                        Code::E0111,
+                        range,
+                        format!("`{name}` is an enum; match one of its variants: `{name}::…`"),
+                    );
+                    None
+                }
+                None => {
+                    self.report(
+                        Code::E0101,
+                        range,
+                        format!("there is no struct called `{name}`"),
+                    );
+                    None
+                }
+            },
+            [ty, variant] => {
+                let Some(a) = self.items.adt_named(ty) else {
+                    self.report(
+                        Code::E0101,
+                        range,
+                        format!("there is no enum called `{ty}`"),
+                    );
+                    return None;
+                };
+                let adt = &self.items.adts[a as usize];
+                match adt.variant(variant).filter(|_| adt.is_enum) {
+                    Some(v) => Some((a, v)),
+                    None => {
+                        self.report(
+                            Code::E0101,
+                            range,
+                            format!("`{ty}` has no variant called `{variant}`"),
+                        );
+                        None
+                    }
+                }
+            }
+            _ => {
+                self.error(Diagnostic::unsupported(range, "this path"));
+                None
+            }
+        }
+    }
+
+    /// `Pair(a, b)` or `Shape::Circle(r)`, maybe with `..`.
+    fn tuple_struct_pat(&mut self, node: &SyntaxNode, b: &mut Binds) -> PatKind {
+        let range = node.text_range();
+        let target = self.ctor_pat_target(node);
+        let subs: Vec<ast::Pat> = node.children().filter_map(ast::Pat::cast).collect();
+        let (pats, rest) = self.with_rest(&subs, b);
+        let Some((adt, variant)) = target else {
+            return PatKind::Missing;
+        };
+        let def = self.items.variant(adt, variant);
+        let path = self.items.adts[adt as usize].path(variant);
+        if def.shape != Shape::Tuple {
+            self.report(
+                Code::E0111,
+                range,
+                format!("`{path}` has no positional fields"),
+            );
+            return PatKind::Missing;
+        }
+        let n = def.fields.len();
+        let fits = match rest {
+            Some(_) => pats.len() <= n,
+            None => pats.len() == n,
+        };
+        if !fits {
+            self.report(
+                Code::E0213,
+                range,
+                format!(
+                    "`{path}` has {n} field{}, but this pattern has {}",
+                    if n == 1 { "" } else { "s" },
+                    pats.len()
+                ),
+            );
+            return PatKind::Missing;
+        }
+        let fields = match rest {
+            None => pats
+                .into_iter()
+                .enumerate()
+                .map(|(i, p)| (i as u32, p))
+                .collect(),
+            Some(at) => {
+                let after = pats.len() - at;
+                pats.into_iter()
+                    .enumerate()
+                    .map(|(i, p)| {
+                        let index = if i < at { i } else { n - after + (i - at) };
+                        (index as u32, p)
+                    })
+                    .collect()
+            }
+        };
+        PatKind::Adt {
+            adt,
+            variant,
+            fields,
+        }
+    }
+
+    /// `Point { x, y: 0, .. }`.
+    fn struct_pat(&mut self, node: &SyntaxNode, b: &mut Binds) -> PatKind {
+        let range = node.text_range();
+        let target = self.ctor_pat_target(node);
+        let target = target.filter(|&(adt, variant)| {
+            let def = self.items.variant(adt, variant);
+            if def.shape == Shape::Named {
+                return true;
+            }
+            let path = self.items.adts[adt as usize].path(variant);
+            self.report(Code::E0111, range, format!("`{path}` has no named fields"));
+            false
+        });
+        let mut fields: Vec<(u32, PatId)> = Vec::new();
+        let mut given: Vec<(u32, TextRange)> = Vec::new();
+        let mut rest = false;
+        for f in node.children().filter(|c| c.kind() == K::FIELD_PAT) {
+            if f.token(K::DOT_DOT).is_some() {
+                rest = true;
+                continue;
+            }
+            let Some(name_tok) = member_name(&f) else {
+                continue;
+            };
+            let name = name_tok.text().to_string();
+            let pat = match f.children().find_map(ast::Pat::cast) {
+                Some(p) => self.pat(&p, b),
+                None => {
+                    let local = self.bind(&name, false, name_tok.text_range(), b);
+                    self.alloc_pat(PatKind::Bind { local, sub: None }, f.text_range())
+                }
+            };
+            let Some((adt, variant)) = target else {
+                continue;
+            };
+            let def = self.items.variant(adt, variant);
+            match def.field(&name) {
+                Some(i) => {
+                    if let Some(&(_, first)) = given.iter().find(|(g, _)| *g == i) {
+                        let d = Diagnostic::error(
+                            Code::E0108,
+                            name_tok.text_range(),
+                            format!("the field `{name}` is matched twice"),
+                        )
+                        .with_label(first, "first matched here");
+                        self.error(d);
+                    } else {
+                        given.push((i, name_tok.text_range()));
+                        fields.push((i, pat));
+                    }
+                }
+                None => {
+                    let path = self.items.adts[adt as usize].path(variant);
+                    self.report(
+                        Code::E0107,
+                        name_tok.text_range(),
+                        format!("`{path}` has no field called `{name}`"),
+                    );
+                }
+            }
+        }
+        let Some((adt, variant)) = target else {
+            return PatKind::Missing;
+        };
+        let def = self.items.variant(adt, variant);
+        let missing: Vec<String> = (0..def.fields.len() as u32)
+            .filter(|i| !given.iter().any(|(g, _)| g == i))
+            .map(|i| format!("`{}`", def.fields[i as usize].name))
+            .collect();
+        if !rest && !missing.is_empty() {
+            let path = self.items.adts[adt as usize].path(variant);
+            self.report(
+                Code::E0207,
+                range,
+                format!(
+                    "this pattern leaves out {} of `{path}`; match them or write `..`",
+                    missing.join(", ")
+                ),
+            );
+        }
+        PatKind::Adt {
+            adt,
+            variant,
+            fields,
+        }
+    }
+
+    /// `a | b`: every alternative binds the same names, to the same locals.
+    fn or_pat(&mut self, node: &SyntaxNode, b: &mut Binds) -> PatKind {
+        let before = b.names.len();
+        let saved = b.reuse.clone();
+        let mut first: Option<Vec<(String, LocalId, TextRange)>> = None;
+        let mut alts = Vec::new();
+        for alt in node.children().filter_map(ast::Pat::cast) {
+            b.names.truncate(before);
+            if let Some(f) = &first {
+                b.reuse = saved.clone();
+                b.reuse.extend(f.iter().map(|(n, l, _)| (n.clone(), *l)));
+            }
+            let id = self.pat(&alt, b);
+            let bound: Vec<(String, LocalId, TextRange)> = b.names[before..].to_vec();
+            match &first {
+                None => first = Some(bound),
+                Some(f) => {
+                    let alt_range = alt.syntax().text_range();
+                    for (n, _, _) in f {
+                        if !bound.iter().any(|(m, _, _)| m == n) {
+                            self.report(
+                                Code::E0105,
+                                alt_range,
+                                format!("`{n}` is bound in the first alternative but not this one"),
+                            );
+                        }
+                    }
+                    for (n, _, r) in &bound {
+                        if !f.iter().any(|(m, _, _)| m == n) {
+                            self.report(
+                                Code::E0105,
+                                *r,
+                                format!("`{n}` is not bound in the first alternative"),
+                            );
+                        }
+                    }
+                }
+            }
+            alts.push(id);
+        }
+        b.names.truncate(before);
+        b.names.extend(first.unwrap_or_default());
+        b.reuse = saved;
+        PatKind::Or(alts)
+    }
+}
+
+/// The field name after `.` in a field expression, or the name in a field initialiser or field
+/// pattern: an identifier, a keyword used as a member name, or a tuple index.
+fn member_name(node: &SyntaxNode) -> Option<SyntaxToken> {
+    let tokens: Vec<SyntaxToken> = node
+        .child_tokens()
+        .filter(|t| !t.kind().is_trivia())
+        .collect();
+    let after_dot = tokens.iter().position(|t| t.kind() == K::DOT);
+    let candidates = match after_dot {
+        Some(i) => &tokens[i + 1..],
+        None => &tokens[..],
+    };
+    candidates
+        .iter()
+        .find(|t| matches!(t.kind(), K::IDENT | K::INTEGER) || t.kind().is_keyword())
+        .cloned()
 }
 
 fn compare_op(tok: &SyntaxToken) -> Option<CompareOp> {

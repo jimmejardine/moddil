@@ -2,9 +2,10 @@
 
 The runner for the [conformance suite](../../conformance/README.md).
 
-**Status:** slice S0: runs the suite on the MIR interpreter and checks reference coverage;
-`cargo test -p moddil-conformance` runs it (`tests/suite.rs`). The reference interpreter joins at
-slice S1. The markers and how they bind are in the [suite's README](../../conformance/README.md).
+**Status:** slices S0 and S1: runs the suite on the MIR interpreter and the reference interpreter,
+and checks reference coverage; `cargo test -p moddil-conformance` runs it (`tests/suite.rs`). The
+reference interpreter does not check programs, so it runs only files that expect no diagnostics.
+The markers and how they bind are in the [suite's README](../../conformance/README.md).
 
 ## Does
 

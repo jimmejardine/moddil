@@ -1,0 +1,388 @@
+//! Exhaustiveness and reachability of patterns, by Maranget's usefulness algorithm ("Warnings for
+//! pattern matching", 2007).
+//!
+//! A pattern vector `v` is *useful* with respect to a matrix of rows if some value matches `v` but
+//! no row. A `match` is exhaustive if `_` is not useful after all its unguarded arms, and an arm
+//! is unreachable if its pattern is not useful after the unguarded arms before it. Integer ranges
+//! are split at every boundary that appears in the column, so each piece is either inside or
+//! outside every range.
+
+use moddil_syntax::TextRange;
+
+use crate::check::{Inference, tuple_positions};
+use crate::hir::{Arm, Body, PatId, PatKind};
+use crate::items::Shape;
+use crate::{Code, Diagnostic, ItemTree, Ty};
+
+/// A constructor: what a pattern's head matches.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Ctor {
+    /// `true` or `false`.
+    Bool(bool),
+    /// The integers from `lo` to `hi`, both included (`lo > hi` matches nothing).
+    Int(i128, i128),
+    /// The only constructor of a tuple, struct or `()`.
+    Single,
+    /// An enum's variant.
+    Variant(u32),
+    /// Anything.
+    Wild,
+    /// Any of the alternatives (held in the pattern's fields).
+    Or,
+}
+
+/// A pattern taken apart: its constructor, its type and its fields' patterns.
+#[derive(Clone, Debug)]
+struct DPat {
+    ctor: Ctor,
+    ty: Ty,
+    fields: Vec<DPat>,
+}
+
+impl DPat {
+    fn wild(ty: Ty) -> DPat {
+        DPat {
+            ctor: Ctor::Wild,
+            ty,
+            fields: Vec::new(),
+        }
+    }
+}
+
+const INT_MIN: i128 = i64::MIN as i128;
+const INT_MAX: i128 = i64::MAX as i128;
+
+struct Cx<'a> {
+    items: &'a ItemTree,
+    body: &'a Body,
+    types: &'a Inference,
+}
+
+impl Cx<'_> {
+    /// The types of the fields of constructor `c` of type `ty`.
+    fn field_types(&self, c: &Ctor, ty: &Ty) -> Vec<Ty> {
+        match (c, ty) {
+            (Ctor::Single, Ty::Tuple(ts)) => ts.to_vec(),
+            (Ctor::Single, Ty::Adt(a, _)) => self.variant_fields(*a, 0),
+            (Ctor::Variant(v), Ty::Adt(a, _)) => self.variant_fields(*a, *v),
+            _ => Vec::new(),
+        }
+    }
+
+    fn variant_fields(&self, adt: u32, variant: u32) -> Vec<Ty> {
+        self.items
+            .variant(adt, variant)
+            .fields
+            .iter()
+            .map(|f| f.ty.clone())
+            .collect()
+    }
+
+    fn lower(&self, p: PatId) -> DPat {
+        let ty = self.types.pat(p);
+        match &self.body.pats[p].kind {
+            PatKind::Missing | PatKind::Wild | PatKind::Bind { sub: None, .. } => DPat::wild(ty),
+            &PatKind::Bind { sub: Some(s), .. } => self.lower(s),
+            &PatKind::Int(v) => DPat {
+                ctor: Ctor::Int(v, v),
+                ty,
+                fields: Vec::new(),
+            },
+            &PatKind::Bool(b) => DPat {
+                ctor: Ctor::Bool(b),
+                ty,
+                fields: Vec::new(),
+            },
+            &PatKind::Range { lo, hi, inclusive } => {
+                let hi = match hi {
+                    None => INT_MAX,
+                    Some(h) if inclusive => h,
+                    Some(h) => h - 1,
+                };
+                DPat {
+                    ctor: Ctor::Int(lo, hi),
+                    ty,
+                    fields: Vec::new(),
+                }
+            }
+            PatKind::Unit => DPat {
+                ctor: Ctor::Single,
+                ty,
+                fields: Vec::new(),
+            },
+            PatKind::Tuple { pats, rest } => {
+                let types = self.field_types(&Ctor::Single, &ty);
+                let mut fields: Vec<DPat> = types.iter().cloned().map(DPat::wild).collect();
+                for (&s, i) in pats
+                    .iter()
+                    .zip(tuple_positions(pats.len(), *rest, types.len()))
+                {
+                    if i < fields.len() {
+                        fields[i] = self.lower(s);
+                    }
+                }
+                DPat {
+                    ctor: Ctor::Single,
+                    ty,
+                    fields,
+                }
+            }
+            PatKind::Adt {
+                adt,
+                variant,
+                fields: given,
+            } => {
+                let ctor = if self.items.adts[*adt as usize].is_enum {
+                    Ctor::Variant(*variant)
+                } else {
+                    Ctor::Single
+                };
+                let types = self.variant_fields(*adt, *variant);
+                let mut fields: Vec<DPat> = types.into_iter().map(DPat::wild).collect();
+                for &(i, s) in given {
+                    fields[i as usize] = self.lower(s);
+                }
+                DPat { ctor, ty, fields }
+            }
+            PatKind::Or(alts) => DPat {
+                ctor: Ctor::Or,
+                ty,
+                fields: alts.iter().map(|&a| self.lower(a)).collect(),
+            },
+        }
+    }
+
+    /// Every constructor of `ty`, with integers split at the boundaries of the ranges in `heads`.
+    /// `None` for a type whose values are not analysed (an error).
+    fn all_ctors(&self, ty: &Ty, heads: &[&DPat]) -> Option<Vec<Ctor>> {
+        Some(match ty {
+            Ty::Bool => vec![Ctor::Bool(false), Ctor::Bool(true)],
+            Ty::Int => split_ints(heads, INT_MIN, INT_MAX),
+            Ty::Unit | Ty::Tuple(_) => vec![Ctor::Single],
+            Ty::Adt(a, _) => {
+                let def = &self.items.adts[*a as usize];
+                if def.is_enum {
+                    (0..def.variants.len() as u32).map(Ctor::Variant).collect()
+                } else {
+                    vec![Ctor::Single]
+                }
+            }
+            Ty::Never => Vec::new(),
+            Ty::Error => return None,
+        })
+    }
+
+    /// A value matched by `v` and by no row of `rows`, if there is one: the witness, one pattern
+    /// per column.
+    fn useful(&self, rows: &[Vec<DPat>], v: &[DPat]) -> Option<Vec<Witness>> {
+        let Some(head) = v.first() else {
+            return rows.is_empty().then(Vec::new);
+        };
+        // Expand or-patterns at the head of the rows.
+        if rows.iter().any(|r| r[0].ctor == Ctor::Or) {
+            let mut expanded = Vec::new();
+            for r in rows {
+                expand(r, &mut expanded);
+            }
+            return self.useful(&expanded, v);
+        }
+        if head.ctor == Ctor::Or {
+            for alt in &head.fields {
+                let mut w = vec![alt.clone()];
+                w.extend_from_slice(&v[1..]);
+                if let Some(found) = self.useful(rows, &w) {
+                    return Some(found);
+                }
+            }
+            return None;
+        }
+        let ty = &head.ty;
+        let ctors = match &head.ctor {
+            Ctor::Wild => {
+                let heads: Vec<&DPat> = rows.iter().map(|r| &r[0]).collect();
+                self.all_ctors(ty, &heads)?
+            }
+            Ctor::Int(lo, hi) => {
+                let mut heads: Vec<&DPat> = rows.iter().map(|r| &r[0]).collect();
+                heads.push(head);
+                split_ints(&heads, *lo, *hi)
+            }
+            c => vec![c.clone()],
+        };
+        for c in ctors {
+            let types = self.field_types(&c, ty);
+            let specialised: Vec<Vec<DPat>> = rows
+                .iter()
+                .filter_map(|r| specialise(r, &c, &types))
+                .collect();
+            let Some(sv) = specialise(v, &c, &types) else {
+                continue;
+            };
+            if let Some(mut w) = self.useful(&specialised, &sv) {
+                let fields: Vec<Witness> = w.drain(..types.len()).collect();
+                let mut out = vec![Witness::Ctor(c, ty.clone(), fields)];
+                out.extend(w);
+                return Some(out);
+            }
+        }
+        None
+    }
+}
+
+fn expand(row: &[DPat], out: &mut Vec<Vec<DPat>>) {
+    if row[0].ctor == Ctor::Or {
+        for alt in &row[0].fields {
+            let mut r = vec![alt.clone()];
+            r.extend_from_slice(&row[1..]);
+            expand(&r, out);
+        }
+    } else {
+        out.push(row.to_vec());
+    }
+}
+
+/// The ranges from `lo` to `hi` split at every boundary of the integer patterns in `heads`.
+fn split_ints(heads: &[&DPat], lo: i128, hi: i128) -> Vec<Ctor> {
+    if lo > hi {
+        return Vec::new();
+    }
+    let mut cuts: Vec<i128> = vec![lo, hi + 1];
+    for h in heads {
+        if let Ctor::Int(a, b) = h.ctor
+            && a <= b
+        {
+            cuts.push(a.clamp(lo, hi + 1));
+            cuts.push((b + 1).clamp(lo, hi + 1));
+        }
+    }
+    cuts.sort_unstable();
+    cuts.dedup();
+    cuts.windows(2).map(|w| Ctor::Int(w[0], w[1] - 1)).collect()
+}
+
+/// `row` with its head replaced by the fields of constructor `c`, if the head can match `c`.
+fn specialise(row: &[DPat], c: &Ctor, types: &[Ty]) -> Option<Vec<DPat>> {
+    let head = &row[0];
+    let mut out: Vec<DPat> = match (&head.ctor, c) {
+        (Ctor::Wild, _) => types.iter().cloned().map(DPat::wild).collect(),
+        // `c` is a piece that lies wholly inside or outside the head's range.
+        (Ctor::Int(a, b), Ctor::Int(lo, hi)) if a <= lo && hi <= b => Vec::new(),
+        (h, c) if h == c => head.fields.clone(),
+        _ => return None,
+    };
+    out.extend_from_slice(&row[1..]);
+    Some(out)
+}
+
+/// A value no pattern matches, for messages.
+#[derive(Clone, Debug)]
+enum Witness {
+    Ctor(Ctor, Ty, Vec<Witness>),
+}
+
+impl Witness {
+    fn render(&self, items: &ItemTree) -> String {
+        let Witness::Ctor(c, ty, fields) = self;
+        let fields: Vec<String> = fields.iter().map(|f| f.render(items)).collect();
+        match (c, ty) {
+            (Ctor::Bool(b), _) => b.to_string(),
+            (Ctor::Int(INT_MIN, INT_MAX), _) => "_".to_string(),
+            (Ctor::Int(lo, hi), _) if lo == hi => lo.to_string(),
+            (Ctor::Int(lo, hi), _) if *hi == INT_MAX => format!("{lo}.."),
+            (Ctor::Int(lo, hi), _) => format!("{lo}..={hi}"),
+            (Ctor::Single, Ty::Unit) => "()".to_string(),
+            (Ctor::Single, Ty::Tuple(_)) if fields.len() == 1 => format!("({},)", fields[0]),
+            (Ctor::Single, Ty::Tuple(_)) => format!("({})", fields.join(", ")),
+            (Ctor::Single, Ty::Adt(a, _)) => adt_witness(items, *a, 0, &fields),
+            (Ctor::Variant(v), Ty::Adt(a, _)) => adt_witness(items, *a, *v, &fields),
+            _ => "_".to_string(),
+        }
+    }
+}
+
+fn adt_witness(items: &ItemTree, adt: u32, variant: u32, fields: &[String]) -> String {
+    let path = items.adts[adt as usize].path(variant);
+    let def = items.variant(adt, variant);
+    match def.shape {
+        Shape::Unit => path,
+        Shape::Tuple => format!("{path}({})", fields.join(", ")),
+        Shape::Named => {
+            let all_wild = fields.iter().all(|f| f == "_");
+            if all_wild {
+                format!("{path} {{ .. }}")
+            } else {
+                let named: Vec<String> = def
+                    .fields
+                    .iter()
+                    .zip(fields)
+                    .filter(|(_, w)| *w != "_")
+                    .map(|(f, w)| format!("{}: {w}", f.name))
+                    .collect();
+                format!("{path} {{ {}, .. }}", named.join(", "))
+            }
+        }
+    }
+}
+
+/// The diagnostics for a `match` on a value of type `ty`: E0208 if its arms do not cover every
+/// value, W0201 for each arm no value reaches.
+pub(crate) fn check_match(
+    items: &ItemTree,
+    body: &Body,
+    types: &Inference,
+    range: TextRange,
+    ty: &Ty,
+    arms: &[Arm],
+) -> Vec<Diagnostic> {
+    let cx = Cx { items, body, types };
+    let mut out = Vec::new();
+    let mut rows: Vec<Vec<DPat>> = Vec::new();
+    for arm in arms {
+        let p = cx.lower(arm.pat);
+        // An empty range is already an error (E0214); it would also be unreachable.
+        if !has_empty_range(&p) && cx.useful(&rows, std::slice::from_ref(&p)).is_none() {
+            out.push(Diagnostic::warning(
+                Code::W0201,
+                body.pats[arm.pat].range,
+                "no value reaches this arm: the arms before it match everything it does",
+            ));
+        }
+        if arm.guard.is_none() {
+            rows.push(vec![p]);
+        }
+    }
+    if let Some(w) = cx.useful(&rows, &[DPat::wild(ty.clone())]) {
+        let missing = w
+            .first()
+            .map_or_else(|| "_".to_string(), |w| w.render(items));
+        out.push(Diagnostic::error(
+            Code::E0208,
+            range,
+            format!(
+                "this `match` does not cover every `{ty}`: `{missing}` is not matched (an arm \
+                 with a guard covers nothing for this check)"
+            ),
+        ));
+    }
+    out
+}
+
+fn has_empty_range(p: &DPat) -> bool {
+    matches!(p.ctor, Ctor::Int(a, b) if a > b) || p.fields.iter().any(has_empty_range)
+}
+
+/// A value of `pat`'s type that `pat` does not match, if there is one, rendered as a pattern.
+pub(crate) fn refutable(
+    items: &ItemTree,
+    body: &Body,
+    types: &Inference,
+    pat: PatId,
+) -> Option<String> {
+    let cx = Cx { items, body, types };
+    let rows = vec![vec![cx.lower(pat)]];
+    let w = cx.useful(&rows, &[DPat::wild(types.pat(pat))])?;
+    Some(
+        w.first()
+            .map_or_else(|| "_".to_string(), |w| w.render(items)),
+    )
+}

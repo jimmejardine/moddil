@@ -1,0 +1,7 @@
+// covers: item.struct.fields.1, item.enum.variants.1, names.item.2
+
+struct Point { x: int, x: int }     //~ E0103
+enum Shape { Dot, Dot }             //~ E0103
+struct Dup;
+fn Dup() {}                         //~ E0103
+enum Fields { A { x: int, x: int } } //~ E0103

@@ -4,27 +4,31 @@
 //! recomputed only when what they read changes:
 //!
 //! - [`parse`]: the syntax tree;
-//! - [`item_tree`]: the file's functions and tests, with their signatures;
+//! - [`item_tree`]: the file's functions, tests, structs and enums, with their signatures;
 //! - [`body`]: one function's or test's body in HIR;
-//! - [`infer`]: the types of a body's expressions and locals;
+//! - [`infer`]: the types of a body's expressions, patterns and locals;
 //! - [`diagnostics`]: everything wrong with a file.
 //!
-//! Slice S0 covers `fn`, `test`, `let`, `int`, `bool`, `()`, arithmetic, comparisons, logic, `if`,
-//! blocks, calls and `return`. Valid Moddil beyond that is reported as "not supported yet"
-//! (`I0001`). See this crate's `README.md`.
+//! Slices S0 and S1 cover `fn`, `test`, `let`, `int`, `bool`, `()`, arithmetic, comparisons,
+//! logic, `if`, blocks, calls and `return`; tuples, structs, enums, patterns, `match` (with
+//! exhaustiveness checking), `if let`, `let … else`, loops and `assert`. Valid Moddil beyond that
+//! is reported as "not supported yet" (`I0001`). See this crate's `README.md`.
 
 mod check;
 mod db;
 mod diag;
+mod exhaust;
 pub mod hir;
 mod items;
 mod lower;
 mod ty;
 
-pub use check::{Inference, infer};
+pub use check::{Inference, infer, tuple_positions};
 pub use db::{Database, Db, Item, Owner, SourceFile};
 pub use diag::{CODES, Code, Diagnostic, Severity};
-pub use items::{FnSig, ItemTree, ParamSig, TestSig, item_tree, parse};
+pub use items::{
+    AdtDef, FieldDef, FnSig, ItemTree, ParamSig, Shape, TestSig, VariantDef, item_tree, parse,
+};
 pub use lower::{Lowered, body};
 pub use ty::Ty;
 

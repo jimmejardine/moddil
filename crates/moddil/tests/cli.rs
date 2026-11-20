@@ -57,3 +57,15 @@ fn a_trap_exits_with_101() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("trap: overflow"), "{stderr}");
 }
+
+#[test]
+fn a_failed_assert_shows_its_parts() {
+    let text = "fn fee(a: int) -> int { a / 10 }\n\
+                test \"fees\" { let amount = 250; assert(fee(amount) + amount == 260); }\n";
+    let out = moddil(&["test"], &file("assert.mdl", text));
+    assert_eq!(out.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("trap: assertion failed"), "{stderr}");
+    assert!(stderr.contains("fee(amount) + amount"), "{stderr}");
+    assert!(stderr.contains("= 275"), "{stderr}");
+}

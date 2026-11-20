@@ -1,0 +1,13 @@
+// covers: stmt.let.else.1
+
+enum Shape { Dot, Circle(int) }
+
+fn falls_through(s: Shape) -> int {
+    let Shape::Circle(r) = s else { 0 };        //~ E0210
+    r
+}
+
+fn unit_else(s: Shape) -> int {
+    let Shape::Circle(r) = s else { };          //~ E0210
+    r
+}

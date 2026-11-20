@@ -7,7 +7,7 @@
 //! |---|---|
 //! | `// covers: expr.arith.overflow.1, …` | The reference paragraphs the file tests |
 //! | `// => 3` | The expression statement or final expression it follows evaluates to `3` (in a `test` item) |
-//! | `//~ E0201` | A diagnostic with this code starting on this line (several codes may follow) |
+//! | `//~ E0201` | A diagnostic with this code starting on this line (several codes may follow); warnings have `W` codes |
 //! | `//~ trap` | A trap on this line |
 //! | `// disputed` | The test does not count until the reference is clarified |
 //!
@@ -57,6 +57,11 @@ pub trait Implementation {
     fn name(&self) -> &str;
     /// Checks the file and, if it has no errors, runs all its tests.
     fn run(&self, path: &str, text: &str) -> Outcome;
+    /// Whether it checks programs. One that does not (the reference interpreter) only runs files
+    /// that expect no diagnostics.
+    fn checks(&self) -> bool {
+        true
+    }
 }
 
 /// The compiler's front end with the MIR interpreter.
@@ -81,11 +86,11 @@ impl Implementation for MirInterpreter {
         if moddil_sema::has_errors(&db, file) {
             return outcome;
         }
-        let tests = moddil_sema::item_tree(&db, file).tests.len() as u32;
-        for i in 0..tests {
+        let items = moddil_sema::item_tree(&db, file);
+        for i in 0..items.tests.len() as u32 {
             let mut observed = Vec::new();
             let result = moddil_interp::run_test(&db, file, i, &mut |range, value| {
-                observed.push((line(range.end), value.to_string()));
+                observed.push((line(range.end), value.render(items)));
             });
             outcome.observed.extend(observed);
             if let Err(trap) = result {
@@ -93,6 +98,41 @@ impl Implementation for MirInterpreter {
             }
         }
         outcome
+    }
+}
+
+/// The reference interpreter. It runs checked programs and does not check them itself.
+pub struct ReferenceInterpreter;
+
+impl Implementation for ReferenceInterpreter {
+    fn name(&self) -> &str {
+        "reference interpreter"
+    }
+
+    fn run(&self, _path: &str, text: &str) -> Outcome {
+        let line = |offset: u32| line_col(text, offset).0;
+        let mut outcome = Outcome::default();
+        let Some(runs) = moddil_refinterp::run_tests(text) else {
+            outcome
+                .diagnostics
+                .insert((0, "(the interpreter panicked)".to_string()));
+            return outcome;
+        };
+        for run in runs {
+            outcome.observed.extend(
+                run.observed
+                    .into_iter()
+                    .map(|(range, value)| (line(range.end), value)),
+            );
+            if let Some(trap) = run.trap {
+                outcome.traps.insert(line(trap.range.start));
+            }
+        }
+        outcome
+    }
+
+    fn checks(&self) -> bool {
+        false
     }
 }
 
@@ -124,7 +164,7 @@ pub fn expectations(text: &str) -> Result<Expectations, String> {
                     e.diagnostics.insert((line, w.to_string()));
                 } else {
                     return Err(format!(
-                        "line {line}: `{w}` is not `trap` or a code like E0201"
+                        "line {line}: `{w}` is not `trap` or a code like E0201 or W0201"
                     ));
                 }
             }
@@ -149,7 +189,9 @@ pub fn expectations(text: &str) -> Result<Expectations, String> {
 }
 
 fn is_code(w: &str) -> bool {
-    w.len() == 5 && w.starts_with('E') && w[1..].chars().all(|c| c.is_ascii_digit())
+    w.len() == 5
+        && (w.starts_with('E') || w.starts_with('W'))
+        && w[1..].chars().all(|c| c.is_ascii_digit())
 }
 
 /// Why an outcome does not meet its expectations; empty if it does.
@@ -310,6 +352,9 @@ pub fn run_suite(repo: &Path, edition: &str, implementations: &[&dyn Implementat
         }
         report.files += 1;
         for imp in implementations {
+            if !imp.checks() && !expected.diagnostics.is_empty() {
+                continue;
+            }
             let outcome = imp.run(&rel, &text);
             for p in compare(&expected, &outcome) {
                 report.failures.push(format!("{rel} ({}): {p}", imp.name()));

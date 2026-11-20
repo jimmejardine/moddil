@@ -1,15 +1,17 @@
-//! Runs the conformance suite (`conformance/2027/`) on the MIR interpreter, and checks that every
-//! paragraph of the reference (`reference/2027/`) is cited by a test and every cited paragraph
-//! exists.
+//! Runs the conformance suite (`conformance/2027/`) on the MIR interpreter and the reference
+//! interpreter, and checks that every paragraph of the reference (`reference/2027/`) is cited by
+//! a test and every cited paragraph exists.
 
 use std::path::Path;
 
-use moddil_conformance::{EDITION, Implementation, MirInterpreter, run_suite};
+use moddil_conformance::{
+    EDITION, Implementation, MirInterpreter, ReferenceInterpreter, run_suite,
+};
 
 #[test]
 fn the_suite_passes_and_covers_the_reference() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let implementations: [&dyn Implementation; 1] = [&MirInterpreter];
+    let implementations: [&dyn Implementation; 2] = [&MirInterpreter, &ReferenceInterpreter];
     let report = run_suite(&repo, EDITION, &implementations);
     println!(
         "{} files, {} reference paragraphs, {} disputed",

@@ -3,9 +3,11 @@
 The **MIR interpreter**, part of the compiler. It runs *analysed* or *runtime* MIR and never needs
 target lowering ([`specs/mir.md`: Pipeline](../../specs/mir.md#pipeline)).
 
-**Status:** slice S0: `int`, `bool` and `()` values, calls on its own frame stack (so deep recursion
-is a `stack overflow` trap at 10,000 frames, never a host crash), and every trap class. It runs
-every M0 slice, since no code-generation backend exists until M1.
+**Status:** slices S0 and S1: `int`, `bool`, `()`, tuple, struct and enum values, places with
+projections, calls on its own frame stack (so deep recursion is a `stack overflow` trap at 10,000
+frames, never a host crash), and every trap class. A failed `assert` returns the value of each part
+of its condition with the trap. It runs every M0 slice, since no code-generation backend exists
+until M1.
 
 ```rust
 moddil_interp::call_fn(&db, file, index, &args, &mut |_, _| {})   // -> Result<Value, Trap>

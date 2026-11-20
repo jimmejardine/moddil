@@ -1,0 +1,32 @@
+// covers: expr.match.exhaustive.1
+
+enum Shape { Dot, Circle(int), Rect { w: int, h: int } }
+
+fn missing_variant(s: Shape) -> int {
+    match s {                   //~ E0208
+        Shape::Dot => 0,
+        Shape::Circle(_) => 1,
+    }
+}
+
+fn missing_range(n: int) -> int {
+    match n {                   //~ E0208
+        -9223372036854775808..0 => 0,
+        1.. => 1,
+    }
+}
+
+fn guards_cover_nothing(b: bool) -> int {
+    match b {                   //~ E0208
+        true => 1,
+        false if true => 0,
+    }
+}
+
+fn nested(p: (bool, Shape)) -> int {
+    match p {                   //~ E0208
+        (true, _) => 1,
+        (false, Shape::Dot) => 2,
+        (false, Shape::Circle(_)) => 3,
+    }
+}

@@ -1,0 +1,68 @@
+// covers: pat.1, pat.bind.1, pat.range.1, pat.tuple.1, pat.struct.1, pat.struct.tuple.1, pat.or.1
+
+struct Point { x: int, y: int }
+struct Pair(int, bool);
+struct Marker;
+enum Shape { Dot, Circle(int), Rect { w: int, h: int } }
+
+fn classify(n: int) -> int {
+    match n {
+        0 => 0,
+        -1 => -1,
+        1..=9 => 1,
+        10..100 => 2,
+        100.. => 3,
+        _ => -2,
+    }
+}
+
+fn describe(s: Shape) -> int {
+    match s {
+        Shape::Dot | Shape::Circle(0) => 0,
+        Shape::Circle(r @ 1..=9) => r,
+        Shape::Circle(_) => 10,
+        Shape::Rect { w, h: 1 } => w,
+        Shape::Rect { w: 0, .. } => -1,
+        Shape::Rect { w, h } => w * h,
+    }
+}
+
+test "literals, wildcards and ranges" {
+    let small = (classify(0), classify(-1), classify(9));
+    small                       // => (0, -1, 1)
+    ;
+    (classify(10), classify(99), classify(100), classify(-5)) // => (2, 2, 3, -2)
+}
+
+test "structs, variants and alternatives" {
+    let circles = (describe(Shape::Circle(0)), describe(Shape::Circle(4)), describe(Shape::Circle(12)));
+    circles                     // => (0, 4, 10)
+    ;
+    describe(Shape::Dot)        // => 0
+    ;
+    describe(Shape::Rect { w: 5, h: 1 }) // => 5
+    ;
+    describe(Shape::Rect { w: 0, h: 3 }) // => -1
+    ;
+    describe(Shape::Rect { w: 2, h: 3 }) // => 6
+}
+
+test "tuples and rest patterns" {
+    match (1, true, 3) { (a, false, _) => a, (.., c) => c }     // => 3
+    ;
+    match (1, 2, 3, 4) { (first, .., last) => first * 10 + last } // => 14
+    ;
+    match Pair(5, true) { Pair(n, true) => n, Pair(..) => 0 }    // => 5
+    ;
+    match (Point { x: 1, y: 2 }) { Point { y, .. } => y }        // => 2
+}
+
+test "bindings" {
+    match Marker { Marker => 1 }                                  // => 1
+    ;
+    match 7 { mut n => { n += 1; n } }                            // => 8
+    ;
+    match (3, ()) { (n @ 1..=5, ()) => n, _ => 0 }               // => 3
+    ;
+    match Shape::Circle(2) { Shape::Circle(r) | Shape::Rect { w: r, .. } => r, Shape::Dot => 0 } // => 2
+}

@@ -1,0 +1,19 @@
+// covers: expr.tuple.1, type.tuple.1
+
+fn pair(a: int, b: bool) -> (int, bool) { (a, b) }
+fn one(a: int) -> (int,) { (a,) }
+
+test "tuples" {
+    pair(1, true)               // => (1, true)
+    ;
+    one(4)                      // => (4,)
+    ;
+    (1)                         // => 1
+    ;
+    let t = (1, (true, 3), ());
+    t.1                         // => (true, 3)
+    ;
+    t.1.1 + t.0                 // => 4
+    ;
+    t.2                         // => ()
+}

@@ -1,0 +1,63 @@
+// covers: expr.loop.1, expr.while.1, expr.break.1, expr.break.label.1, expr.break.value.1
+
+enum List { Nil, One(int) }
+
+fn first_square_over(n: int) -> int {
+    let mut i = 0;
+    loop {
+        i += 1;
+        if i * i > n { break i * i; }
+    }
+}
+
+test "loop and break with a value" {
+    first_square_over(50)       // => 64
+}
+
+test "while and continue" {
+    let mut i = 0;
+    let mut odd = 0;
+    while i < 10 {
+        i += 1;
+        if i % 2 == 0 { continue; }
+        odd += i;
+    }
+    odd                         // => 25
+}
+
+test "while let" {
+    let mut l = List::One(4);
+    let mut total = 0;
+    while let List::One(k) = l {
+        total += k;
+        l = List::Nil;
+    }
+    total                       // => 4
+}
+
+test "labels" {
+    let mut n = 0;
+    let found = 'outer: loop {
+        loop {
+            n += 1;
+            if n == 3 { break 'outer n * 10; }
+            if n < 3 { continue 'outer; }
+        }
+    };
+    found                       // => 30
+    ;
+    'rows: while n < 100 {
+        while true {
+            n += 100;
+            continue 'rows;
+        }
+    }
+    n                           // => 103
+}
+
+test "a loop that never stops still checks overflow" {
+    let mut i = 1;
+    loop {
+        i *= 2;                 //~ trap
+    }
+}

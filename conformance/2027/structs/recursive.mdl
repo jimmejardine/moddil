@@ -1,0 +1,5 @@
+// covers: item.struct.recursive.1
+
+struct Node { value: int, next: Node }      //~ E0211
+struct A { b: (int, B) }                    //~ E0211
+enum B { Leaf, Branch(A) }                  //~ E0211

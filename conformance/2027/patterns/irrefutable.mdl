@@ -1,0 +1,10 @@
+// covers: pat.irrefutable.1
+
+enum Shape { Dot, Circle(int) }
+
+fn let_refutable(s: Shape) -> int {
+    let Shape::Circle(r) = s;           //~ E0209
+    r
+}
+
+fn param_refutable(1..=5: int) -> int { 0 }  //~ E0209

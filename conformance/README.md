@@ -3,11 +3,12 @@
 The **shared test suite** every Moddil implementation must pass to use the name "Moddil <edition>"
 ([`specs/definition.md`: A shared conformance suite](../specs/definition.md#a-shared-conformance-suite)).
 
-**Status:** slice S0: [`2027/`](2027) tests functions, tests, `let`, `int`, `bool` and `()`,
-arithmetic and its traps, comparisons, logic, `if`, blocks and calls, and cites every paragraph of
-the [2027 reference](../reference/2027/README.md). The runner is
-[`crates/conformance`](../crates/conformance/README.md); `cargo test -p moddil-conformance` runs the
-suite.
+**Status:** slices S0 and S1: [`2027/`](2027) tests functions, tests, `let`, `int`, `bool` and `()`,
+arithmetic and its traps, comparisons, logic, `if`, blocks and calls (S0); tuples, structs, enums,
+patterns, `match`, `if let`, `let … else`, loops and `assert` (S1). It cites every paragraph of the
+[2027 reference](../reference/2027/README.md), and every test runs on both the MIR interpreter and
+the reference interpreter. The runner is [`crates/conformance`](../crates/conformance/README.md);
+`cargo test -p moddil-conformance` runs the suite.
 
 ## Layout
 
@@ -48,7 +49,7 @@ fn f() -> int {
 |---|---|
 | `// covers: id, …` | The reference paragraphs the file tests; every file has one |
 | `// => value` | The expression statement or block's final expression it follows evaluates to `value`, written as Moddil source (`3`, `-1`, `true`, `()`) |
-| `//~ E0202` | A diagnostic with that code starting on this line; several codes may follow (wording is not part of conformance) |
+| `//~ E0202` | A diagnostic with that code starting on this line; several codes may follow (wording is not part of conformance). Warnings have `W` codes, such as `//~ W0201` |
 | `//~ trap` | A trap on this line: the line of the operation that fails, which may be inside a function the test calls |
 | `// disputed` | The test does not count until the reference is clarified |
 
@@ -63,5 +64,6 @@ fn f() -> int {
   scheduler.
 - The spec team owns the suite; any implementation may contribute. A disputed test is marked
   *disputed* and does not count until the reference is clarified.
-- Every test runs on the reference interpreter (from slice S1), the MIR interpreter and, from M1,
-  compiled code; a difference is a bug in one of them.
+- Every test runs on the reference interpreter, the MIR interpreter and, from M1, compiled code; a
+  difference is a bug in one of them. The reference interpreter does not check programs, so it
+  runs only files that expect no diagnostics.

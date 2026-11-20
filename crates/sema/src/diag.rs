@@ -68,6 +68,23 @@ codes! {
     E0103 = "duplicate definition",
     /// Two parameters with the same name.
     E0104 = "duplicate parameter",
+    /// A name bound in some alternatives of an or-pattern but not all.
+    E0105 = "binding missing from an alternative",
+    /// A name bound twice in one pattern.
+    E0106 = "name bound twice in a pattern",
+    /// A field that the type does not have.
+    E0107 = "no such field",
+    /// A field given twice in a struct expression or pattern.
+    E0108 = "field given twice",
+    /// `break` or `continue` outside a loop.
+    E0109 = "`break` or `continue` outside a loop",
+    /// A label that names no enclosing loop.
+    E0110 = "unresolved label",
+    /// A struct or variant written in a form it does not have (`Point` for a struct with named
+    /// fields, `Shape::Circle { … }` for a variant with positional ones).
+    E0111 = "struct or variant in the wrong form",
+    /// A built-in such as `assert` used other than by calling it.
+    E0112 = "built-in used as a value",
     /// A type other than the one expected.
     E0201 = "mismatched types",
     /// A call with the wrong number of arguments.
@@ -80,8 +97,27 @@ codes! {
     E0205 = "operator not defined for these types",
     /// An assignment to something that is not a place.
     E0206 = "invalid assignment target",
+    /// A struct expression that leaves out fields, or a pattern that leaves them out without `..`.
+    E0207 = "missing fields",
+    /// A `match` whose arms do not cover every value.
+    E0208 = "non-exhaustive patterns",
+    /// A pattern that can fail where one that cannot is needed (`let` without `else`, a
+    /// parameter).
+    E0209 = "refutable pattern",
+    /// The `else` block of `let … else` can finish normally.
+    E0210 = "`let … else` that does not diverge",
+    /// A struct or enum that contains itself without indirection.
+    E0211 = "recursive type of infinite size",
+    /// `break` with a value out of a loop other than `loop`.
+    E0212 = "`break` with a value out of `while`",
+    /// A tuple-struct pattern or constructor with the wrong number of fields.
+    E0213 = "wrong number of fields",
+    /// A range pattern that matches nothing, such as `5..=1`.
+    E0214 = "empty range pattern",
     /// An assignment to a local not declared `mut`.
     E0301 = "assignment to an immutable local",
+    /// A `match` arm no value can reach.
+    W0201 = "unreachable pattern",
     /// Valid Moddil that this implementation does not support yet.
     I0001 = "not supported yet",
 }
@@ -119,6 +155,14 @@ impl Diagnostic {
             range,
             message: message.into(),
             labels: Vec::new(),
+        }
+    }
+
+    /// A warning.
+    pub fn warning(code: Code, range: TextRange, message: impl Into<String>) -> Self {
+        Diagnostic {
+            severity: Severity::Warning,
+            ..Diagnostic::error(code, range, message)
         }
     }
 

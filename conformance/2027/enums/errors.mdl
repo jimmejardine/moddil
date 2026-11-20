@@ -1,0 +1,8 @@
+// covers: names.resolve.2, item.enum.decl.1
+
+enum Shape { Dot, Circle(int) }
+enum Never {}
+
+fn unknown_variant() -> Shape { Shape::Square }     //~ E0101
+fn unknown_enum() -> Shape { Shapes::Dot }          //~ E0101
+fn no_values(n: Never) -> int { match n {} }

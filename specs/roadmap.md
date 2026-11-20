@@ -71,9 +71,9 @@ something runs from the first slice.
 | Slice | Adds | Why here |
 |---|---|---|
 | **S0** | `fn`, `let`, `int` and `bool`, arithmetic with overflow traps, `if`, blocks, calls; the conformance runner (`// =>`, `//~ E…`, `//~ trap`) | The smallest program that runs, and the harness for everything after it |
-| **S1** | Structs, enums, tuples, exhaustive `match`, `Option`; `assert` ([`testing.md`: Assertions](testing.md#assertions)) | Data modelling, which every later slice needs |
+| **S1** | Structs, enums, tuples, exhaustive `match`; loops (`loop`, `while`, `break`, `continue`); `assert` ([`testing.md`: Assertions](testing.md#assertions)) | Data modelling, which every later slice needs; loops, which no other slice brings |
 | **S2** | Ownership: moves, `Copy`, second-class `&` and `&mut`, drop and RAII, `defer` | The core of the language, tested before generics complicate it |
-| **S3** | Traits, generics (checked once; witness tables in the interpreter), coherence | Needed for collections and effects |
+| **S3** | Traits, generics (checked once; witness tables in the interpreter), coherence; `Option` | Needed for collections and effects; `Option` is the first generic type |
 | **S4** | `fail(E)`, `?`, `try`/`catch`, R3 entry points, `?!` | Errors, the simplest effect |
 | **S5** | User effects: traits after `with`, handlers, inference inside a mod, explicit at `pub` | The distinctive feature, built on traits and `fail` |
 | **S6** | Several files and mods: the module tree, visibility, the manifest | The tour has several modules |
@@ -81,6 +81,9 @@ something runs from the first slice.
 | **S8** | Refinements (`where`), runtime `requires`, derives (a minimal comptime) | The tour's `Code` and `Target` types and its derives |
 | **S9** | `scope`, `spawn` and `suspend` under a deterministic interpreter scheduler | The tour's `serve`; **the tour parses and checks**, M0's exit gate |
 
+- **S1 is monomorphic (decided):** structs and enums take no type parameters until generics arrive
+  in S3, so `Option` comes with them. S1 has no ownership checking yet and copies aggregates; its
+  conformance tests never use a value after moving it, so they stay valid when S2 arrives.
 - **Deferred past M0:** units; `Fixed` and `Simd`; views and linear types; generators and coroutines;
   full comptime and reflection; `unsafe` and FFI; GPU; distribution; data contracts.
 - **The tour only has to check at M0**, so its library dependencies (HTTP, serde, `Url`) are

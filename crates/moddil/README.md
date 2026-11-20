@@ -3,7 +3,8 @@
 The **`moddil` command**: one tool for building, testing, formatting and everything else
 ([`specs/toolchain.md`](../../specs/toolchain.md)).
 
-**Status:** slice S0. At M0 it checks files and runs them and their tests on the MIR interpreter;
+**Status:** slices S0 and S1. At M0 it checks files and runs them and their tests on the MIR
+interpreter, and a failed `assert` shows the value of each part of its condition;
 the full command set (`build`, `fmt`, `diff`, `audit`, `bind`, …) arrives over the milestones.
 
 ```

@@ -115,11 +115,11 @@ fn syntax_errors_hide_the_rest() {
 
 #[test]
 fn beyond_s0_is_not_supported_yet() {
-    err("struct S {}", &[("I0001", 1)]);
+    err("trait T {}", &[("I0001", 1)]);
     err("fn f<T>() {}", &[("I0001", 1)]);
     err("fn f() { let s = \"x\"; }", &[("I0001", 1)]);
-    err("fn f() -> int { loop {} }", &[("I0001", 1)]);
-    err("fn f() { let (a, b) = (); }", &[("I0001", 1)]);
+    err("fn f() { for x in y {} }", &[("I0001", 1)]);
+    err("fn f() { let &x = 1; }", &[("I0001", 1)]);
 }
 
 #[test]
@@ -156,4 +156,155 @@ fn queries_are_reused_after_an_edit() {
     file.set_text(&mut db)
         .to("fn f() -> int { true }".to_string());
     assert_eq!(diagnostics(&db, file).len(), 1);
+}
+
+const SHAPES: &str = "struct Point { x: int, y: int }\n\
+                      struct Pair(int, bool);\n\
+                      struct Unit;\n\
+                      enum Shape { Dot, Circle(int), Rect { w: int, h: int } }\n";
+
+fn ok1(text: &str) {
+    ok(&format!("{SHAPES}{text}"));
+}
+
+fn err1(text: &str, expected: &[(&str, u32)]) {
+    let shifted: Vec<(&str, u32)> = expected.iter().map(|&(c, l)| (c, l + 4)).collect();
+    err(&format!("{SHAPES}{text}"), &shifted);
+}
+
+#[test]
+fn structs_enums_and_tuples() {
+    ok1("fn f() -> int { let p = Point { y: 2, x: 1 }; p.x + p.y }");
+    ok1("fn f(x: int) -> Point { Point { x, y: x } }");
+    ok1("fn f() -> bool { let p = Pair(1, true); p.1 }");
+    ok1("fn f() -> Unit { Unit }");
+    ok1("fn f() -> Shape { if true { Shape::Circle(1) } else { Shape::Rect { w: 1, h: 2 } } }");
+    ok1("fn f() -> int { let t = (1, (true, 2)); t.1.1 }");
+    ok1("fn f() -> int { let mut p = Point { x: 1, y: 2 }; p.x = 5; p.y += 1; p.x }");
+    ok1("fn f() -> (int,) { (1,) }");
+    err1("fn f() -> int { Point { x: 1 }.x }", &[("E0207", 1)]);
+    err1(
+        "fn f() -> int { Point { x: 1, y: 2, z: 3 }.x }",
+        &[("E0107", 1)],
+    );
+    err1(
+        "fn f() -> int { Point { x: 1, x: 2, y: 3 }.x }",
+        &[("E0108", 1)],
+    );
+    err1("fn f() -> int { Pair(1).0 }", &[("E0202", 1)]);
+    err1("fn f() -> int { (1, 2).2 }", &[("E0107", 1)]);
+    err1("fn f() -> int { Shape::Dot.x }", &[("E0107", 1)]);
+    err1("fn f() -> Shape { Shape::Square }", &[("E0101", 1)]);
+    err1("fn f() -> Point { Point }", &[("E0111", 1)]);
+    err1(
+        "fn f() { let p = Point { x: 1, y: 2 }; p.x = 3; }",
+        &[("E0301", 1)],
+    );
+    err1("fn f() -> bool { Unit == Unit }", &[("E0205", 1)]);
+    err(
+        "struct A { b: B }\nstruct B { a: A }",
+        &[("E0211", 1), ("E0211", 2)],
+    );
+    err("enum E { A, A }", &[("E0103", 1)]);
+    err("struct S;\nfn S() {}", &[("E0103", 2)]);
+}
+
+#[test]
+fn matching() {
+    ok1(
+        "fn area(s: Shape) -> int { match s { Shape::Dot => 0, Shape::Circle(r) => 3 * r * r, Shape::Rect { w, h } => w * h } }",
+    );
+    ok1(
+        "fn f(b: bool, c: bool) -> int { match (b, c) { (true, _) => 1, (false, true) => 2, (false, false) => 3 } }",
+    );
+    ok1("fn f(n: int) -> int { match n { 0 => 0, 1..=9 => 1, 10.. => 2, _ => -1 } }");
+    ok1("fn f(n: int) -> int { match n { ..0 => 0, _ => 1 } }"
+        .replace("..0", "-9223372036854775808..0")
+        .as_str());
+    ok1(
+        "fn f(s: Shape) -> int { match s { Shape::Dot | Shape::Circle(_) => 0, Shape::Rect { w: x @ 1..=5, .. } if x > 2 => x, Shape::Rect { .. } => 1 } }",
+    );
+    ok1(
+        "fn f(s: Shape) -> int { match s { Shape::Circle(r) | Shape::Rect { w: r, .. } => r, Shape::Dot => 0 } }",
+    );
+    ok1("fn f(p: Pair) -> int { let Pair(n, _) = p; n }");
+    ok1("fn f((a, b): (int, int)) -> int { a + b }");
+    ok1("fn f(s: Shape) -> int { let Shape::Circle(r) = s else { return 0; }; r }");
+    ok1("fn f(s: Shape) -> int { if let Shape::Circle(r) = s && r > 1 { r } else { 0 } }");
+    err1(
+        "fn f(s: Shape) -> int { match s { Shape::Dot => 0, Shape::Circle(_) => 1 } }",
+        &[("E0208", 1)],
+    );
+    err1(
+        "fn f(n: int) -> int { match n { 0..=5 => 0, 7.. => 1 } }",
+        &[("E0208", 1)],
+    );
+    err1(
+        "fn f(n: int) -> int { match n { _ => 0, 1 => 1 } }",
+        &[("W0201", 1)],
+    );
+    err1(
+        "fn f(n: int) -> int { match n { x if x > 0 => 0 } }",
+        &[("E0208", 1)],
+    );
+    err1(
+        "fn f(s: Shape) -> int { let Shape::Circle(r) = s; r }",
+        &[("E0209", 1)],
+    );
+    err1(
+        "fn f(s: Shape) -> int { let Shape::Circle(r) = s else { 0 }; r }",
+        &[("E0210", 1)],
+    );
+    err1(
+        "fn f(s: Shape) -> int { match s { Shape::Circle(r) | Shape::Dot => 0, _ => 1 } }",
+        &[("E0105", 1)],
+    );
+    err1(
+        "fn f(p: (int, int)) -> int { let (a, a) = p; a }",
+        &[("E0106", 1)],
+    );
+    err1(
+        "fn f(p: Pair) -> int { let Pair(a) = p; a }",
+        &[("E0213", 1)],
+    );
+    err1(
+        "fn f(p: Point) -> int { let Point { x } = p; x }",
+        &[("E0207", 1)],
+    );
+    err1(
+        "fn f(n: int) -> int { match n { 5..=1 => 0, _ => 1 } }",
+        &[("E0214", 1)],
+    );
+    err1(
+        "fn f(n: int) -> int { match n { true => 0, _ => 1 } }",
+        &[("E0201", 1)],
+    );
+    ok("enum Never {}\nfn f(n: Never) -> int { match n {} }");
+}
+
+#[test]
+fn loops() {
+    ok("fn f() -> int { let mut i = 0; while i < 10 { i += 1; } i }");
+    ok("fn f() -> int { let mut i = 0; loop { i += 1; if i == 5 { break i * 2; } } }");
+    ok("fn f() -> int { 'outer: loop { loop { break 'outer 1; } } }");
+    ok("fn f() -> int { let mut n = 0; while n < 3 { n += 1; continue; } n }");
+    ok("fn f() -> ! { loop {} }");
+    err("fn f() { break; }", &[("E0109", 1)]);
+    err("fn f() { loop { break 'a; } }", &[("E0110", 1)]);
+    err("fn f() { while true { break 1; } }", &[("E0212", 1)]);
+    err(
+        "fn f() -> int { loop { if true { break 1; } break true; } }",
+        &[("E0201", 1)],
+    );
+}
+
+#[test]
+fn assert_is_a_prelude_built_in() {
+    ok("test \"t\" { assert(1 + 1 == 2); }");
+    ok("fn f(x: int) { assert(x > 0 && x < 10) }");
+    ok("fn assert(x: int) -> int { x }\nfn f() -> int { assert(1) }");
+    ok("fn f() -> int { let assert = 3; assert }");
+    err("fn f() { assert(1); }", &[("E0201", 1)]);
+    err("fn f() { assert(true, false); }", &[("E0202", 1)]);
+    err("fn f() { let a = assert; }", &[("E0112", 1)]);
 }

@@ -1,0 +1,10 @@
+// covers: expr.assert.name.1
+
+fn check(n: int) -> int {
+    let assert = n * 2;
+    assert
+}
+
+test "a local named assert comes first" {
+    check(4)                    // => 8
+}

@@ -5,8 +5,9 @@ done only when it has paragraphs here, conformance tests in
 [`conformance/2027/`](../../conformance/README.md) and an implementation
 ([`specs/definition.md`: Written with the compiler](../../specs/definition.md#written-with-the-compiler)).
 
-**Status:** slice S0: functions, tests, `let`, `int`, `bool` and `()`, arithmetic with traps,
-comparisons, logic, `if`, blocks and calls.
+**Status:** slices S0 and S1: functions, tests, `let`, `int`, `bool` and `()`, arithmetic with
+traps, comparisons, logic, `if`, blocks and calls (S0); tuples, structs, enums, patterns, `match`,
+`if let`, `let … else`, loops and `assert` (S1).
 
 ## Paragraphs
 
@@ -22,13 +23,17 @@ Each page lists its diagnostics by code; the codes are in [Diagnostics](diagnost
 
 - [Syntax](syntax.md)
 - [Names](names.md)
-- Items: [Functions](items/functions.md), [Tests](items/tests.md)
+- Items: [Functions](items/functions.md), [Tests](items/tests.md), [Structs](items/structs.md),
+  [Enums](items/enums.md)
 - [Types](types.md)
 - [Statements](statements.md)
+- [Patterns](patterns.md)
 - Expressions: [Evaluation](expressions/evaluation.md), [Literals](expressions/literals.md),
   [Arithmetic](expressions/arithmetic.md), [Bitwise operators](expressions/bitwise.md),
   [Comparisons](expressions/comparison.md), [Logic](expressions/logic.md),
   [Blocks](expressions/blocks.md), [`if`](expressions/if.md), [Calls and `return`](expressions/calls.md),
-  [Assignment](expressions/assignment.md)
+  [Assignment](expressions/assignment.md), [Tuples, structs and variants](expressions/structs.md),
+  [Fields](expressions/fields.md), [`match`](expressions/match.md), [Loops](expressions/loops.md),
+  [`assert`](expressions/assert.md)
 - [Traps](traps.md)
 - [Diagnostics](diagnostics.md)

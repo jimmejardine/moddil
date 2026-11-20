@@ -147,3 +147,159 @@ fn tests_report_observed_values() {
     .expect("no trap");
     assert_eq!(seen, vec![(3, Value::Int(3)), (4, Value::Int(2))]);
 }
+
+/// Runs `main` in `text` and renders its value.
+fn shown(text: &str) -> String {
+    let db = Database::default();
+    let file = SourceFile::new(&db, "t.mdl".to_string(), text.to_string());
+    let diagnostics = moddil_sema::diagnostics(&db, file);
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    let items = moddil_sema::item_tree(&db, file);
+    let main = items.fn_named("main").expect("a main");
+    call_fn(&db, file, main, &[], &mut |_, _| {})
+        .expect("no trap")
+        .render(items)
+}
+
+const SHAPES: &str = "struct Point { x: int, y: int }\n\
+                      enum Shape { Dot, Circle(int), Rect { w: int, h: int } }\n\
+                      fn area(s: Shape) -> int {\n\
+                          match s { Shape::Dot => 0, Shape::Circle(r) => 3 * r * r, Shape::Rect { w, h } => w * h }\n\
+                      }\n";
+
+#[test]
+fn aggregates() {
+    let p = |body: &str| shown(&format!("{SHAPES}{body}"));
+    assert_eq!(
+        p("fn main() -> Point { Point { y: 2, x: 1 } }"),
+        "Point { x: 1, y: 2 }"
+    );
+    assert_eq!(
+        p("fn main() -> (int, (bool,)) { (1, (true,)) }"),
+        "(1, (true,))"
+    );
+    assert_eq!(
+        p("fn main() -> Shape { Shape::Circle(4) }"),
+        "Shape::Circle(4)"
+    );
+    assert_eq!(p("fn main() -> Shape { Shape::Dot }"), "Shape::Dot");
+    assert_eq!(
+        p(
+            "fn main() -> int { area(Shape::Circle(2)) + area(Shape::Rect { w: 2, h: 5 }) + area(Shape::Dot) }"
+        ),
+        "22"
+    );
+    assert_eq!(
+        p("fn main() -> Point { let mut q = Point { x: 1, y: 2 }; q.x = 10; q.y += q.x; q }"),
+        "Point { x: 10, y: 12 }"
+    );
+    assert_eq!(
+        p("fn main() -> int { let t = (1, (2, 3)); t.1.0 + t.1.1 }"),
+        "5"
+    );
+}
+
+#[test]
+fn patterns() {
+    let p = |body: &str| shown(&format!("{SHAPES}{body}"));
+    assert_eq!(
+        p(
+            "fn f(n: int) -> int { match n { 0 => 0, 1..=9 => 1, 10..100 => 2, _ => 3 } }\n\
+           fn main() -> (int, int, int, int, int) { (f(0), f(9), f(10), f(100), f(-5)) }"
+        ),
+        "(0, 1, 2, 3, 3)"
+    );
+    assert_eq!(
+        p(
+            "fn f(s: Shape) -> int { match s { Shape::Rect { w: n @ 1..=3, .. } if n > 1 => n, Shape::Rect { .. } | Shape::Dot => -1, Shape::Circle(r) => r } }\n\
+           fn main() -> (int, int, int, int) { (f(Shape::Rect { w: 2, h: 0 }), f(Shape::Rect { w: 1, h: 0 }), f(Shape::Dot), f(Shape::Circle(7))) }"
+        ),
+        "(2, -1, -1, 7)"
+    );
+    assert_eq!(
+        p(
+            "fn main() -> int { let (a, .., z) = (1, 2, 3, 4); let Point { x, .. } = Point { x: 5, y: 6 }; a + z + x }"
+        ),
+        "10"
+    );
+    assert_eq!(
+        p(
+            "fn f(s: Shape) -> int { let Shape::Circle(r) = s else { return -1; }; r }\n\
+           fn main() -> (int, int) { (f(Shape::Circle(3)), f(Shape::Dot)) }"
+        ),
+        "(3, -1)"
+    );
+    assert_eq!(
+        p(
+            "fn f(s: Shape) -> int { if let Shape::Circle(r) = s && r > 2 { r } else { 0 } }\n\
+           fn main() -> (int, int, int) { (f(Shape::Circle(3)), f(Shape::Circle(1)), f(Shape::Dot)) }"
+        ),
+        "(3, 0, 0)"
+    );
+    assert_eq!(
+        p(
+            "fn main() -> int { let x = 5; match (x, true) { (y, false) => y, (y, true) => y * 2 } }"
+        ),
+        "10"
+    );
+}
+
+#[test]
+fn loops() {
+    assert_eq!(
+        shown(
+            "fn main() -> int { let mut i = 0; let mut sum = 0; while i < 10 { i += 1; if i % 2 == 0 { continue; } sum += i; } sum }"
+        ),
+        "25"
+    );
+    assert_eq!(
+        shown("fn main() -> int { let mut i = 1; loop { i *= 2; if i > 100 { break i; } } }"),
+        "128"
+    );
+    assert_eq!(
+        shown(
+            "fn main() -> int { let mut n = 0; 'outer: loop { loop { n += 1; if n == 3 { break 'outer; } } } n }"
+        ),
+        "3"
+    );
+    assert_eq!(
+        shown(
+            "enum L { Nil, One(int) }\nfn main() -> int { let mut l = L::One(4); let mut n = 0; while let L::One(k) = l { n += k; l = L::Nil; } n }"
+        ),
+        "4"
+    );
+}
+
+#[test]
+fn a_failed_assert_shows_its_parts() {
+    let db = Database::default();
+    let text = "fn fee(a: int) -> int { a / 10 }\n\
+                fn main() { let amount = 250; assert(fee(amount) + amount == 260 || amount < 0 && fee(1) > 0); }";
+    let file = SourceFile::new(&db, "t.mdl".to_string(), text.to_string());
+    let items = moddil_sema::item_tree(&db, file);
+    let main = items.fn_named("main").expect("a main");
+    let t = call_fn(&db, file, main, &[], &mut |_, _| {}).expect_err("a trap");
+    assert_eq!(t.class, TrapClass::Assertion);
+    let parts: Vec<(String, String)> = t
+        .parts
+        .iter()
+        .map(|(r, v)| {
+            (
+                text[r.to_range()].to_string(),
+                v.as_ref()
+                    .map_or("not evaluated".to_string(), |v| v.render(items)),
+            )
+        })
+        .collect();
+    let find = |s: &str| {
+        parts
+            .iter()
+            .find(|(p, _)| p == s)
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default()
+    };
+    assert_eq!(find("fee(amount) + amount"), "275");
+    assert_eq!(find("amount < 0"), "false");
+    assert_eq!(find("fee(1) > 0"), "not evaluated");
+    assert!(value("fn main() { assert(true); }") == Value::Unit);
+}

@@ -1,0 +1,79 @@
+---
+source: crates/mir/src/tests.rs
+expression: "dump(\"enum Shape { Dot, Circle(int) }\\n\\\n         fn f(s: Shape) -> int { match s { Shape::Circle(r @ 1..=9) if r > 2 => r, Shape::Circle(_) | Shape::Dot => 0 } }\")"
+---
+fn f(_1: Shape) -> int {
+    // _1: s
+    let _2: Shape;
+    let _3: int;
+    let _4: bool;
+    let _5: bool;
+    let _6: bool;
+    let _7: int; // r
+    let _8: bool;
+    let _9: int;
+    let _10: bool;
+    let _11: int;
+    let _12: bool;
+
+    bb0: {
+        _2 = _1;
+        _3 = discriminant(_2);
+        _4 = Eq(_3, const 1);
+        switch(_4) -> [true: bb3, false: bb2];
+    }
+
+    bb1: {
+        return;
+    }
+
+    bb2: {
+        _9 = discriminant(_2);
+        _10 = Eq(_9, const 1);
+        switch(_10) -> [true: bb10, false: bb9];
+    }
+
+    bb3: {
+        _5 = Ge((_2 as #1).0, const 1);
+        switch(_5) -> [true: bb4, false: bb2];
+    }
+
+    bb4: {
+        _6 = Le((_2 as #1).0, const 9);
+        switch(_6) -> [true: bb5, false: bb2];
+    }
+
+    bb5: {
+        _7 = (_2 as #1).0;
+        _8 = Gt(_7, const 2);
+        switch(_8) -> [true: bb6, false: bb2];
+    }
+
+    bb6: {
+        _0 = _7;
+        goto -> bb1;
+    }
+
+    bb7: {
+        unreachable;
+    }
+
+    bb8: {
+        _0 = const 0;
+        goto -> bb1;
+    }
+
+    bb9: {
+        _11 = discriminant(_2);
+        _12 = Eq(_11, const 0);
+        switch(_12) -> [true: bb11, false: bb7];
+    }
+
+    bb10: {
+        goto -> bb8;
+    }
+
+    bb11: {
+        goto -> bb8;
+    }
+}

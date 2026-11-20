@@ -3,8 +3,10 @@
 Moddil's **mid-level IR**, built from the typed HIR, and the passes over it
 ([`specs/mir.md`](../../specs/mir.md)).
 
-**Status:** slice S0: the `mir(owner)` query builds a body from the typed HIR, for files without
-errors. Locals have no projections yet; ownership checking and drops come with slice S2.
+**Status:** slices S0 and S1: the `mir(owner)` query builds a body from the typed HIR, for files
+without errors. Places are a local with field and downcast projections; aggregates build tuples,
+structs and variants; patterns become tests on places and discriminants, tried arm by arm; loops
+are back edges. Ownership checking and drops come with slice S2.
 
 - **Checks:** `+`, `-`, `*`, `/`, negation and shifts are preceded by an `Overflows` test and an
   `Assert` with the `overflow` trap class; `/` and `%` by a zero test with `division by zero`.

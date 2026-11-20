@@ -1,0 +1,17 @@
+// covers: pat.bind.unique.1, pat.or.1, pat.tuple.1, pat.struct.1, pat.struct.tuple.1, pat.range.1, pat.type.1
+
+struct Point { x: int, y: int }
+struct Pair(int, bool);
+enum Shape { Dot, Circle(int) }
+
+fn twice(p: (int, int)) -> int { match p { (a, a) => a } }                       //~ E0106
+fn alternatives(s: Shape) -> int { match s { Shape::Circle(r) | Shape::Dot => 0 } } //~ E0105
+fn tuple_size(p: (int, int)) -> int { match p { (a, b, c) => a } }               //~ E0213
+fn struct_size(p: Pair) -> int { match p { Pair(n) => n } }                       //~ E0213
+fn missing(p: Point) -> int { match p { Point { x } => x } }                      //~ E0207
+fn unknown(p: Point) -> int { match p { Point { z, .. } => 0 } }                  //~ E0107
+fn repeated(p: Point) -> int { match p { Point { x, x: y, .. } => x } }           //~ E0108
+fn form(s: Shape) -> int { match s { Shape::Circle => 0, _ => 1 } }               //~ E0111
+fn empty(n: int) -> int { match n { 5..=1 => 0, _ => 1 } }                        //~ E0214
+fn literal_type(n: int) -> int { match n { true => 0, _ => 1 } }                  //~ E0201
+fn struct_type(n: int) -> int { match n { Point { .. } => 0, _ => 1 } }           //~ E0201

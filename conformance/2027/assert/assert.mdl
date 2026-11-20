@@ -1,0 +1,21 @@
+// covers: expr.assert.1, names.prelude.1
+
+fn fee(amount: int) -> int { amount / 10 }
+
+test "an assert that holds" {
+    assert(fee(250) + 250 == 275);
+    assert(true)                // => ()
+}
+
+test "an assert that fails traps" {
+    let amount = 250;
+    assert(fee(amount) + amount == 260); //~ trap
+}
+
+test "asserts run in loops" {
+    let mut i = 0;
+    while i < 10 {
+        assert(i < 5);          //~ trap
+        i += 1;
+    }
+}

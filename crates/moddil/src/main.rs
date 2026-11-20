@@ -8,7 +8,7 @@ use std::process::ExitCode;
 use ariadne::{Config, IndexType, Label, Report, ReportKind, Source};
 use clap::{Parser, Subcommand};
 use moddil_interp::{Trap, Value};
-use moddil_sema::{Database, Diagnostic, Severity, SourceFile};
+use moddil_sema::{Database, Diagnostic, ItemTree, Severity, SourceFile};
 
 /// Moddil: check and run programs.
 #[derive(Parser)]
@@ -84,11 +84,11 @@ fn run(db: &Database, file: SourceFile, name: &str, text: &str) -> ExitCode {
     match moddil_interp::call_fn(db, file, main, &[], &mut |_, _| {}) {
         Ok(Value::Unit) => ExitCode::SUCCESS,
         Ok(v) => {
-            println!("{v}");
+            println!("{}", v.render(items));
             ExitCode::SUCCESS
         }
         Err(trap) => {
-            report_trap(name, text, trap);
+            report_trap(name, text, items, &trap);
             ExitCode::from(TRAPPED)
         }
     }
@@ -103,7 +103,7 @@ fn test(db: &Database, file: SourceFile, name: &str, text: &str) -> ExitCode {
             Err(trap) => {
                 failed += 1;
                 println!("test \"{}\" ... trapped", t.name);
-                report_trap(name, text, trap);
+                report_trap(name, text, items, &trap);
             }
         }
     }
@@ -140,12 +140,34 @@ fn report(name: &str, text: &str, d: &Diagnostic) {
     let _ = r.finish().eprint((name, Source::from(text)));
 }
 
-fn report_trap(name: &str, text: &str, trap: Trap) {
+fn report_trap(name: &str, text: &str, items: &ItemTree, trap: &Trap) {
     let span = (name, trap.range.to_range());
-    let _ = Report::build(ReportKind::Error, span.clone())
+    let mut report = Report::build(ReportKind::Error, span.clone())
         .with_config(config())
         .with_message(format!("trap: {}", trap.class))
-        .with_label(Label::new(span).with_message("here"))
-        .finish()
-        .eprint((name, Source::from(text)));
+        .with_label(Label::new(span).with_message("here"));
+    // A failed `assert` shows the value of each part of its condition.
+    if !trap.parts.is_empty() {
+        let width = trap
+            .parts
+            .iter()
+            .map(|(r, _)| text[r.to_range()].len())
+            .max()
+            .unwrap_or(0);
+        let lines: Vec<String> = trap
+            .parts
+            .iter()
+            .map(|(r, v)| {
+                let shown = v
+                    .as_ref()
+                    .map_or_else(|| "not evaluated".to_string(), |v| v.render(items));
+                format!("{:width$} = {shown}", &text[r.to_range()])
+            })
+            .collect();
+        report = report.with_note(lines.join(
+            "
+",
+        ));
+    }
+    let _ = report.finish().eprint((name, Source::from(text)));
 }

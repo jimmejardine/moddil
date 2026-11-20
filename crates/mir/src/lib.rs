@@ -6,8 +6,8 @@
 //! Every check that can trap is an explicit [`Statement::Assert`] with a [`TrapClass`] and a source
 //! range, so backends cannot forget one. The [`mir`] query builds a body from the typed HIR.
 //!
-//! In slice S0 there are no projections, drops or ownership checks yet; see this crate's
-//! `README.md`.
+//! Places are a local and a path of projections into it (a field, or a variant's view of an
+//! enum). There are no drops or ownership checks yet; see this crate's `README.md`.
 
 use std::fmt;
 
@@ -88,11 +88,61 @@ pub struct BasicBlock {
     pub terminator: Terminator,
 }
 
+/// A place: a local, or a part of one reached through projections (`_1.0`, `(_2 as Circle).0`).
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Place {
+    /// The local.
+    pub local: Local,
+    /// The projections, outermost first.
+    pub projection: Vec<Projection>,
+}
+
+/// One step into a value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Projection {
+    /// Field `n` of a tuple, struct or (after a downcast) variant.
+    Field(u32),
+    /// The enum viewed as variant `n`; only valid when it holds that variant.
+    Downcast(u32),
+}
+
+impl Place {
+    /// The place `local` itself.
+    pub fn local(local: Local) -> Place {
+        Place {
+            local,
+            projection: Vec::new(),
+        }
+    }
+
+    /// Field `n` of this place.
+    #[must_use]
+    pub fn field(&self, n: u32) -> Place {
+        let mut p = self.clone();
+        p.projection.push(Projection::Field(n));
+        p
+    }
+
+    /// This place viewed as variant `n`.
+    #[must_use]
+    pub fn downcast(&self, n: u32) -> Place {
+        let mut p = self.clone();
+        p.projection.push(Projection::Downcast(n));
+        p
+    }
+}
+
+impl From<Local> for Place {
+    fn from(l: Local) -> Place {
+        Place::local(l)
+    }
+}
+
 /// A statement.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Statement {
-    /// `local = rvalue`.
-    Assign(Local, Rvalue),
+    /// `place = rvalue`.
+    Assign(Place, Rvalue),
     /// Traps with `trap` unless `cond` is `expected`.
     Assert {
         /// The condition checked.
@@ -103,6 +153,8 @@ pub enum Statement {
         trap: TrapClass,
         /// The source of the check.
         range: TextRange,
+        /// For an `assert`: the parts of its condition, whose values the trap shows.
+        parts: Vec<AssertPart>,
     },
     /// Reports a value to the test harness: an expression followed by a `// =>` expectation.
     Observe {
@@ -111,6 +163,19 @@ pub enum Statement {
         /// Its value.
         value: Operand,
     },
+}
+
+/// A part of an `assert`'s condition (a local, a call, an operator): where it is, the local its
+/// value is stored in, and a `bool` local that says whether it was evaluated (`&&`, `||` and
+/// comparison chains may skip parts).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct AssertPart {
+    /// The part's source.
+    pub range: TextRange,
+    /// Its value, if it was evaluated.
+    pub value: Local,
+    /// Whether it was evaluated.
+    pub evaluated: Local,
 }
 
 /// A value computed from operands.
@@ -127,13 +192,33 @@ pub enum Rvalue {
     Overflows(BinOp, Operand, Operand),
     /// Whether `-a` overflows.
     NegOverflows(Operand),
+    /// A tuple, struct or variant built from its fields' values, in field order.
+    Aggregate(AggregateKind, Vec<Operand>),
+    /// Which variant an enum holds, as an `int` (the variant's index).
+    Discriminant(Place),
 }
 
-/// A local's value or a constant.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+/// What an [`Rvalue::Aggregate`] builds.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum AggregateKind {
+    /// A tuple.
+    Tuple,
+    /// A struct (variant 0) or an enum's variant.
+    Adt {
+        /// The struct or enum, by its index in the file's item tree.
+        adt: u32,
+        /// The variant.
+        variant: u32,
+        /// How it is written (`Point`, `Shape::Circle`), for printing.
+        path: String,
+    },
+}
+
+/// A place's value or a constant.
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Operand {
-    /// The value of a local.
-    Copy(Local),
+    /// The value of a place.
+    Copy(Place),
     /// A constant.
     Const(Const),
 }
@@ -217,7 +302,7 @@ pub enum Terminator {
         /// The arguments.
         args: Vec<Operand>,
         /// Where the result goes.
-        dest: Local,
+        dest: Place,
         /// Where control goes after the call returns.
         target: BlockId,
         /// The call's source.
@@ -238,6 +323,8 @@ pub enum TrapClass {
     DivisionByZero,
     /// Calls nested too deeply.
     StackOverflow,
+    /// A failed `assert`.
+    Assertion,
 }
 
 impl TrapClass {
@@ -247,6 +334,7 @@ impl TrapClass {
             TrapClass::Overflow => "overflow",
             TrapClass::DivisionByZero => "division by zero",
             TrapClass::StackOverflow => "stack overflow",
+            TrapClass::Assertion => "assertion failed",
         }
     }
 }

@@ -1,0 +1,109 @@
+use super::*;
+
+/// The values observed by each test in `text`, and where each trapped.
+fn runs(text: &str) -> Vec<(Vec<String>, Option<TrapClass>)> {
+    run_tests(text)
+        .expect("a checked program")
+        .into_iter()
+        .map(|r| {
+            (
+                r.observed.into_iter().map(|(_, v)| v).collect(),
+                r.trap.map(|t| t.class),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn version_has_three_parts() {
+    assert_eq!(VERSION.split('.').count(), 3);
+}
+
+#[test]
+fn dependencies_are_wired() {
+    assert_eq!(moddil_syntax::VERSION, VERSION);
+}
+
+#[test]
+fn scalars_and_calls() {
+    let text = "fn fib(n: int) -> int { if n < 2 { n } else { fib(n - 1) + fib(n - 2) } }\n\
+                test \"t\" {\n\
+                    fib(15); // => 610\n\
+                    -9223372036854775808 // => -9223372036854775808\n\
+                    ;\n\
+                    1 < 2 <= 2 // => true\n\
+                }\n";
+    assert_eq!(
+        runs(text),
+        vec![(
+            vec![
+                "610".to_string(),
+                "-9223372036854775808".to_string(),
+                "true".to_string()
+            ],
+            None
+        )]
+    );
+}
+
+#[test]
+fn traps() {
+    let text = "fn down(n: int) -> int { down(n + 1) }\n\
+                test \"a\" { 9223372036854775807 + 1; }\n\
+                test \"b\" { 1 / 0; }\n\
+                test \"c\" { 1 << 64; }\n\
+                test \"d\" { down(0); }\n\
+                test \"e\" { -9223372036854775807 - 1 % -1; }\n";
+    let classes: Vec<Option<TrapClass>> = runs(text).into_iter().map(|(_, t)| t).collect();
+    assert_eq!(
+        classes,
+        vec![
+            Some(TrapClass::Overflow),
+            Some(TrapClass::DivisionByZero),
+            Some(TrapClass::Overflow),
+            Some(TrapClass::StackOverflow),
+            None,
+        ]
+    );
+}
+
+#[test]
+fn data_and_patterns() {
+    let text = "struct Point { x: int, y: int }\n\
+                enum Shape { Dot, Circle(int), Rect { w: int, h: int } }\n\
+                fn area(s: Shape) -> int {\n\
+                    match s { Shape::Dot => 0, Shape::Circle(r) => 3 * r * r, Shape::Rect { w, h } => w * h }\n\
+                }\n\
+                test \"t\" {\n\
+                    Point { y: 2, x: 1 } // => Point { x: 1, y: 2 }\n\
+                    ;\n\
+                    area(Shape::Circle(2)) + area(Shape::Rect { w: 2, h: 5 }) // => 22\n\
+                    ;\n\
+                    let mut p = Point { x: 1, y: 2 };\n\
+                    p.x += 10;\n\
+                    p // => Point { x: 11, y: 2 }\n\
+                    ;\n\
+                    let (a, .., z) = (1, 2, 3);\n\
+                    (z, a, (true,)) // => (3, 1, (true,))\n\
+                    ;\n\
+                    match 7 { 0 => 0, n @ 1..=9 if n > 5 => n, _ => -1 } // => 7\n\
+                    ;\n\
+                    let mut i = 0;\n\
+                    'out: loop { while true { i += 1; if i == 3 { break 'out; } } }\n\
+                    i // => 3\n\
+                }\n";
+    assert_eq!(
+        runs(text),
+        vec![(
+            vec![
+                "Point { x: 1, y: 2 }".to_string(),
+                "22".to_string(),
+                "Point { x: 11, y: 2 }".to_string(),
+                "(3, 1, (true,))".to_string(),
+                "7".to_string(),
+                "3".to_string(),
+            ],
+            None
+        )]
+    );
+}

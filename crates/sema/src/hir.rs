@@ -1,6 +1,6 @@
-//! The HIR of a body: expressions and statements in arenas, with names resolved and the surface
-//! sugar removed (`else if` is an `if` in an `else` block, `x += e` an assignment with an operator,
-//! parentheses are gone).
+//! The HIR of a body: expressions, patterns and statements in arenas, with names resolved and the
+//! surface sugar removed (`else if` is an `if` in an `else` block, `x += e` an assignment with an
+//! operator, a tuple-struct constructor call a struct expression, parentheses are gone).
 
 use la_arena::{Arena, Idx};
 use moddil_syntax::TextRange;
@@ -9,16 +9,23 @@ use moddil_syntax::TextRange;
 pub type ExprId = Idx<Expr>;
 /// A local's ID within its body.
 pub type LocalId = Idx<Local>;
+/// A pattern's ID within its body.
+pub type PatId = Idx<Pat>;
 
 /// A function's or a test's body.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct Body {
     /// The parameters' locals, in order (none for a test).
     pub params: Vec<LocalId>,
-    /// Every local: parameters and `let` bindings.
+    /// Every local: parameters and bindings.
     pub locals: Arena<Local>,
     /// Every expression.
     pub exprs: Arena<Expr>,
+    /// Every pattern.
+    pub pats: Arena<Pat>,
+    /// Parameters written as patterns (`(a, b): (int, int)`): the parameter's local and the
+    /// pattern its value is destructured with on entry.
+    pub param_pats: Vec<(LocalId, PatId)>,
     /// The body's block; `None` if the body is missing.
     pub root: Option<ExprId>,
 }
@@ -58,6 +65,26 @@ pub enum ExprKind {
     Local(LocalId),
     /// A function of this file, by its index in the item tree.
     Fn(u32),
+    /// `(a, b)`: a tuple of one or more elements.
+    Tuple(Vec<ExprId>),
+    /// A struct or variant value: `Point { x: 1, y: 2 }`, `Pair(1, 2)`, `Colour::Red`.
+    Adt {
+        /// The struct or enum, by its index in the item tree.
+        adt: u32,
+        /// The variant (0 for a struct).
+        variant: u32,
+        /// Each field's index and value, in source order (the order they are evaluated in).
+        fields: Vec<(u32, ExprId)>,
+    },
+    /// `base.name` or `base.0`.
+    Field {
+        /// The value whose field is read.
+        base: ExprId,
+        /// The field's name, or its position for a tuple or tuple struct.
+        name: String,
+        /// Where the name is.
+        name_range: TextRange,
+    },
     /// `callee(args)`.
     Call {
         /// The function called.
@@ -76,15 +103,56 @@ pub enum ExprKind {
     },
     /// `if cond { … } else …`.
     If {
-        /// The condition.
+        /// The condition, which may contain `let` conditions joined by `&&`.
         cond: ExprId,
         /// The block taken when it holds.
         then: ExprId,
         /// The `else` block (an `else if` is a block holding an `if`).
         else_: Option<ExprId>,
     },
+    /// `let p = e` in the head of an `if` or `while`: whether `e` matches `p`, binding its names
+    /// if it does.
+    Let {
+        /// The pattern.
+        pat: PatId,
+        /// The value matched.
+        init: ExprId,
+    },
+    /// `match scrutinee { arms }`.
+    Match {
+        /// The value matched.
+        scrutinee: ExprId,
+        /// The arms, tried in order.
+        arms: Vec<Arm>,
+    },
+    /// `loop { … }`: its value is that of the `break` that leaves it.
+    Loop {
+        /// The body.
+        body: ExprId,
+    },
+    /// `while cond { … }`.
+    While {
+        /// The condition, which may contain `let` conditions joined by `&&`.
+        cond: ExprId,
+        /// The body.
+        body: ExprId,
+    },
+    /// `break` out of loop `target`, with a value for a `loop`.
+    Break {
+        /// The `loop` or `while` expression left.
+        target: ExprId,
+        /// The value.
+        value: Option<ExprId>,
+    },
+    /// `continue` with the next iteration of loop `target`.
+    Continue {
+        /// The `loop` or `while` expression continued.
+        target: ExprId,
+    },
     /// `return e`.
     Return(Option<ExprId>),
+    /// `assert(cond)`: traps unless `cond` holds.
+    Assert(ExprId),
     /// `-e` or `!e`.
     Unary(UnaryOp, ExprId),
     /// `a op b`, other than `&&` and `||`.
@@ -98,10 +166,10 @@ pub enum ExprKind {
         /// Each operator and the operand after it.
         rest: Vec<(CompareOp, ExprId)>,
     },
-    /// `local = e` or `local op= e`.
+    /// `place = e` or `place op= e`, where the place is a local or a field of one (`p.x.0`).
     Assign {
-        /// The local assigned.
-        local: LocalId,
+        /// The place assigned: a `Local` expression, or `Field` expressions over one.
+        target: ExprId,
         /// The operator of a compound assignment.
         op: Option<BinaryOp>,
         /// The value.
@@ -109,17 +177,30 @@ pub enum ExprKind {
     },
 }
 
+/// One arm of a `match`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Arm {
+    /// The pattern.
+    pub pat: PatId,
+    /// The guard: `if cond`.
+    pub guard: Option<ExprId>,
+    /// The arm's value.
+    pub body: ExprId,
+}
+
 /// A statement.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Stmt {
-    /// `let p = init;`.
+    /// `let p = init;` or `let p = init else { … };`.
     Let {
-        /// The local bound (`None` for `_`).
-        local: Option<LocalId>,
+        /// The pattern bound.
+        pat: PatId,
         /// The declared type, if written.
         ty: Option<crate::Ty>,
         /// The initialiser.
         init: ExprId,
+        /// The `else` block, which must not finish normally.
+        else_: Option<ExprId>,
     },
     /// An expression statement.
     Expr {
@@ -130,6 +211,65 @@ pub enum Stmt {
         /// Whether it is followed by a `// =>` expectation on its line.
         observe: bool,
     },
+}
+
+/// A pattern and where it is.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Pat {
+    /// What it is.
+    pub kind: PatKind,
+    /// Where it is.
+    pub range: TextRange,
+}
+
+/// The kinds of pattern.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PatKind {
+    /// Something already reported as an error; matches anything.
+    Missing,
+    /// `_`.
+    Wild,
+    /// `x`, `mut x` or `x @ p`.
+    Bind {
+        /// The local bound.
+        local: LocalId,
+        /// The pattern after `@`.
+        sub: Option<PatId>,
+    },
+    /// An integer literal (a leading `-` folded in).
+    Int(i128),
+    /// `true` or `false`.
+    Bool(bool),
+    /// `lo..hi`, `lo..=hi` or `lo..`: the integers from `lo` to `hi`, with `hi` included as
+    /// written (`None` for no upper bound).
+    Range {
+        /// The lower bound, included.
+        lo: i128,
+        /// The upper bound, if any.
+        hi: Option<i128>,
+        /// Whether the upper bound is included (`..=`).
+        inclusive: bool,
+    },
+    /// `()`.
+    Unit,
+    /// `(a, b)` or `(a, .., z)`.
+    Tuple {
+        /// The element patterns, without the `..`.
+        pats: Vec<PatId>,
+        /// Where the `..` is among them, if anywhere.
+        rest: Option<usize>,
+    },
+    /// A struct or variant: `Point { x, .. }`, `Pair(a, b)`, `Colour::Red`.
+    Adt {
+        /// The struct or enum.
+        adt: u32,
+        /// The variant (0 for a struct).
+        variant: u32,
+        /// The fields matched, by index; the others match anything.
+        fields: Vec<(u32, PatId)>,
+    },
+    /// `a | b`.
+    Or(Vec<PatId>),
 }
 
 /// Prefix operators.

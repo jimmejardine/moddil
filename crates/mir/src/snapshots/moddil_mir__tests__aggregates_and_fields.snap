@@ -1,0 +1,22 @@
+---
+source: crates/mir/src/tests.rs
+expression: "dump(\"struct Point { x: int, y: int }\\n\\\n         fn f(p: Point) -> (int, Point) { let mut q = Point { y: p.x, x: 1 }; q.y += 1; (q.x, q) }\")"
+---
+fn f(_1: Point) -> (int, Point) {
+    // _1: p
+    let _2: Point;
+    let _3: Point; // q
+    let _4: ();
+    let _5: bool;
+
+    bb0: {
+        _2 = Point(const 1, _1.0);
+        _3 = _2;
+        _5 = AddOverflows(_3.1, const 1);
+        assert(!_5, overflow) @ 101..109;
+        _3.1 = Add(_3.1, const 1);
+        _4 = const ();
+        _0 = (_3.0, _3);
+        return;
+    }
+}

@@ -1,0 +1,22 @@
+// covers: stmt.let.else.1
+
+enum Shape { Dot, Circle(int) }
+
+fn radius(s: Shape) -> int {
+    let Shape::Circle(r) = s else { return -1; };
+    r
+}
+
+test "let else" {
+    radius(Shape::Circle(3))    // => 3
+    ;
+    radius(Shape::Dot)          // => -1
+    ;
+    let mut found = 0;
+    loop {
+        let Shape::Circle(r) = Shape::Circle(4) else { break; };
+        found = r;
+        break;
+    }
+    found                       // => 4
+}
