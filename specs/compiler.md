@@ -189,7 +189,8 @@ moddil/
   ([`governance.md`: Moddil Evolution](governance.md#moddil-evolution)) and security advisories
   ([`governance.md`: Security response](governance.md#security-response)), created when governance
   needs them.
-- **Directories are created when their first content lands**, starting with the grammar.
+- **Every directory has a `README.md`** describing its role, status and rules; contents land slice by
+  slice, starting with the grammar.
 
 ## Backends
 
