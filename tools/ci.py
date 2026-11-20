@@ -8,7 +8,7 @@ step, and the same script runs locally, so the two cannot drift.
     python tools/ci.py --wsl           every step inside WSL (Linux), on this same checkout
     python tools/ci.py --all           here, then inside WSL
 
-Steps: fmt, clippy, deny, test, links. Compatible with Python 3.8 (WSL's Ubuntu 20.04).
+Steps: fmt, clippy, deny, test, links, grammars. Compatible with Python 3.8 (WSL's Ubuntu 20.04).
 This script never installs anything; when a tool is missing it says how to install it.
 """
 
@@ -66,12 +66,20 @@ def step_links():
     return run(sys.executable, "-X", "utf8", "tools/check_spec_links.py")
 
 
+def step_grammars():
+    # The files generated from reference/grammar/moddil.ebnf are current, and Lark and tree-sitter
+    # accept every corpus case and sample (tools/check_grammars.py).
+    current = run("cargo", "run", "--release", "-q", "-p", "moddil-grammar", "--", "generate", "--check")
+    return run(sys.executable, "-X", "utf8", "tools/check_grammars.py") and current
+
+
 STEPS = {
     "fmt": step_fmt,
     "clippy": step_clippy,
     "deny": step_deny,
     "test": step_test,
     "links": step_links,
+    "grammars": step_grammars,
 }
 
 

@@ -40,15 +40,30 @@
 
 # Source is UTF-8 (NFC-normalised identifiers). Bidirectional control characters are rejected
 # outside string-literal escapes.
+#
+# Token rules use a character-level subset: quoted literals, classes [a-z] [^"\\] (escapes \n \r
+# \t \\ \] \- inside a class), the built-in classes XID_START and XID_CONTINUE (Unicode UAX #31),
+# references to other token rules, and A - B (A, except the literals B lists). Two markers:
+#   %skip      the token is dropped between syntax tokens
+#   %scanner   not a regular language; the exact rule is stated in the comment above it, and each
+#              generator implements it natively (a hand-written scanner)
+# Rules that syntax rules name are tokens; the others are fragments, used only inside tokens.
+# The lexer takes the longest match; on a tie, a quoted literal beats a class-built token, so
+# keywords are never identifiers.
 
-WHITESPACE    ::= [ \t\r\n]+
-LINE_COMMENT  ::= '//' [^/!\n] [^\n]* | '//'                 # includes `// =>` and `//~` test expectations
-BLOCK_COMMENT ::= '/*' ( BLOCK_COMMENT | [^*] | '*' [^/] )* '*/'  # nests
-DOC_OUTER     ::= '///' [^\n]*                                # documents the following item
+# ─── Skipped ─────────────────────────────────────────────────────────────────
+WHITESPACE    ::= %skip [ \t\r\n]+
+LINE_COMMENT  ::= %skip ( '//' ( [^/!\n] [^\n]* )? | '////' [^\n]* )   # includes `// =>` and `//~` test expectations
+# BLOCK_COMMENT: '/*' up to the matching '*/'; block comments nest, as in Rust.
+BLOCK_COMMENT ::= %skip %scanner
+
+# ─── Doc comments (not skipped: they attach like attributes) ──────────────────
+DOC_OUTER     ::= '///' ( [^/\n] [^\n]* )?                     # documents the following item
 DOC_INNER     ::= '//!' [^\n]*                                # documents the enclosing module
 
+# ─── Names ───────────────────────────────────────────────────────────────────
 IDENT         ::= IDENT_TEXT - KEYWORD
-IDENT_TEXT    ::= XID_START XID_CONTINUE* | '_' XID_CONTINUE+    # Unicode UAX #31
+IDENT_TEXT    ::= XID_START XID_CONTINUE* | '_' XID_CONTINUE+
 KEYWORD       ::= 'always' | 'as' | 'bench' | 'break' | 'catch' | 'const' | 'continue' | 'crate'
                 | 'default' | 'defer' | 'dimension' | 'dyn' | 'else' | 'ensures' | 'enum'
                 | 'errdefer' | 'escape' | 'extern' | 'fail' | 'false' | 'fn' | 'for' | 'from'
@@ -59,35 +74,47 @@ KEYWORD       ::= 'always' | 'as' | 'bench' | 'break' | 'catch' | 'const' | 'con
                 | 'unit' | 'unsafe' | 'use' | 'view' | 'where' | 'while' | 'with' | 'yield'
 # All keywords are reserved (no contextual keywords). `extern`, `ref` and `static` are reserved but
 # unused. A keyword may still name a member: see member_name.
+LABEL         ::= "'" IDENT_TEXT                                # 'outer; CHAR wins on 'a' (longer)
 
+# ─── Numbers ─────────────────────────────────────────────────────────────────
 INTEGER       ::= DEC_DIGITS | '0x' [0-9a-fA-F_]+ | '0o' [0-7_]+ | '0b' [01_]+
-DEC_DIGITS    ::= [0-9] [0-9_]*
 FLOAT         ::= DEC_DIGITS '.' [0-9] [0-9_]* EXPONENT? | DEC_DIGITS EXPONENT
-EXPONENT      ::= [eE] [+-]? [0-9_]+
+DEC_DIGITS    ::= [0-9] [0-9_]*
+EXPONENT      ::= [eE] [+\-]? [0-9_]+
 # No type suffixes: `0u8` is written `let d: u8 = 0`.
 # `1..2` lexes as INTEGER '..' INTEGER: a '.' followed by '.' never continues a number.
 # A FLOAT after '.' (tuple access `t.0.1`) is split by the parser into two indices.
 
+# ─── Strings and characters ──────────────────────────────────────────────────
 STRING        ::= '"' ( [^"\\] | ESCAPE )* '"'
-RAW_STRING    ::= 'r' '#'* '"' … '"' '#'*                     # as Rust: closing hashes match opening
-BYTE_STRING   ::= 'b' STRING | 'br' '#'* '"' … '"' '#'*
-BLOCK_STRING  ::= 'r'? '"""' NEWLINE … NEWLINE [ \t]* '"""'   # dedent rules: specs/text.md
-CHAR          ::= "'" ( [^'\\] | ESCAPE ) "'"
-BYTE          ::= "b'" ( [^'\\] | ESCAPE ) "'"
-ESCAPE        ::= '\\' ( [nrt0\\"'s] | 'x' HEX HEX | 'u{' HEX+ '}' )   # \s keeps a space in blocks
-TAGGED_STRING ::= TAG ( STRING | RAW_STRING | BLOCK_STRING )      # no space: fmt"…", sql"""…"""
+BYTE_STRING   ::= 'b"' ( [^"\\] | ESCAPE )* '"'
+CHAR          ::= "'" ( [^'\\\n] | ESCAPE ) "'"
+BYTE          ::= "b'" ( [^'\\\n] | ESCAPE ) "'"
+ESCAPE        ::= '\' ( [nrt0\\"'s] | 'x' HEX HEX | 'u{' HEX+ '}' )   # \s keeps a space in blocks
+HEX           ::= [0-9a-fA-F]
+# RAW_STRING: 'r' or 'br', then n '#' (n >= 0), then '"', then any characters, up to the first
+# '"' followed by n '#'. No escapes.
+RAW_STRING    ::= %scanner
+# BLOCK_STRING: an optional 'r', then '"""' and a newline; then lines, up to a line holding only
+# spaces or tabs and '"""'. Escapes as in STRING unless raw. Dedent rules: specs/text.md.
+BLOCK_STRING  ::= %scanner
+# TAGGED_STRING: a TAG immediately followed (no space) by a string, a raw string or a block
+# string, as in fmt"…" or sql"""…""". Inside it, '{{' and '}}' are literal braces, and a single
+# '{' opens a hole that runs to its matching '}': the scanner counts nested braces and skips
+# string, raw string and char literals inside the hole, so fmt"Hi {name.or("guest")}" is one
+# token. The tag's comptime parser reads the holes ({expr}, {expr:spec}). Plain strings have no
+# holes.
+TAGGED_STRING ::= %scanner
 TAG           ::= IDENT_TEXT - ( 'r' | 'b' | 'br' )
-# Holes: inside a tagged literal, '{' opens a hole that runs to its matching '}'. The lexer counts
-# nested braces and skips string and char literals inside a hole, so fmt"Hi {name.or("guest")}"
-# is one token; '{{' and '}}' are literal braces. The tag's comptime parser reads the holes
-# ({expr}, {expr:spec}); to the grammar the whole literal is one token. Plain strings have no holes.
-LABEL         ::= "'" IDENT_TEXT                                # not followed by "'"
 
+# ─── Punctuation ─────────────────────────────────────────────────────────────
+PUNCT         ::= '+' | '-' | '*' | '/' | '%' | '^' | '!' | '&' | '|' | '&&' | '||' | '<<' | '>>'
+                | '+%' | '-%' | '*%' | '@' | '\' | '?' | '?!'
+                | '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=' | '<<=' | '>>='
+                | '+%=' | '-%=' | '*%='
+                | '==' | '!=' | '<' | '>' | '<=' | '>=' | '.' | '..' | '..=' | ',' | ';' | ':'
+                | '::' | '->' | '=>' | '#[' | '#![' | '(' | ')' | '[' | ']' | '{' | '}'
 PUNCT_NOT_DELIMITER ::= PUNCT - ( '(' | ')' | '[' | ']' | '{' | '}' )
-# PUNCT, longest match first:
-#   +  -  *  /  %  ^  !  &  |  &&  ||  <<  >>  +%  -%  *%  @  \  ?  ?!
-#   =  +=  -=  *=  /=  %=  ^=  &=  |=  <<=  >>=  +%=  -%=  *%=
-#   ==  !=  <  >  <=  >=  .  ..  ..=  ,  ;  :  ::  ->  =>  #[  #![  (  )  [  ]  {  }
 # Splitting: in generic arguments '>>', '>=' and '>>=' close with their first '>'; in prefix
 # position '&&' is two borrows; '||' in operand position is an empty closure parameter list.
 

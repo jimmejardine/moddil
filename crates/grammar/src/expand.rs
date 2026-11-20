@@ -132,7 +132,7 @@ impl<'g> Builder<'g> {
                 let prods = words.iter().map(|w| vec![self.term(&quoted(w))]).collect();
                 self.nts[id as usize].prods = prods;
             }
-            Body::Token => unreachable!("token rules are terminals"),
+            Body::Token(_) => unreachable!("token rules are terminals"),
         }
         id
     }
@@ -193,7 +193,7 @@ impl<'g> Builder<'g> {
             return self.term(name);
         };
         match rule.body {
-            Body::Token => self.term(name),
+            Body::Token(_) => self.term(name),
             Body::Keywords(_) => Sym::N(self.instance(rule, 0)),
             Body::Syntax(_) => {
                 let next = match mode {

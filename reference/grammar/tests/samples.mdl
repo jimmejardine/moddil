@@ -1,0 +1,223 @@
+// Hand-written samples in real spelling (the generated corpus is spaced token by token).
+// Each case is a whole file, after a `// ---` line. Case 1 is the tour's program.
+// ---
+use moddil::collections::Map;
+use moddil::net::{Listener, Conn, Url};
+use moddil::net::http::{self, Handler, IntoResponse, Request, Response, Router, Status};
+use moddil::serde::{json, Deserialize, Serialize};
+use moddil::sync::Mutex;
+
+const ALPHABET: &str = "abcdefghjkmnpqrstuvwxyz23456789";
+
+/// A short code: six characters from `ALPHABET`.
+pub type Code = String where self.len() == 6 && self.chars().all(|c| ALPHABET.contains(c));
+
+/// A link target: only HTTPS URLs are accepted.
+pub type Target = Url where self.scheme() == "https";
+
+#[derive(Deserialize)]
+struct NewLink { url: Target }
+
+#[derive(Serialize)]
+struct Created { code: Code }
+
+#[derive(Debug)]
+pub enum LinkError { Taken(Code) }
+
+/// Where links are kept.
+pub trait Links {
+    fn get(&self, code: &Code) -> Option<Target> with suspend;
+    fn put(&self, code: Code, target: Target) with suspend, fail(LinkError);
+}
+
+/// An in-memory handler for `Links`: used by `main` here, and by the tests.
+pub struct MemoryLinks { map: Mutex<Map<Code, Target>> }
+
+impl MemoryLinks {
+    pub fn new() -> MemoryLinks { MemoryLinks { map: Mutex::new(Map::new()) } }
+}
+
+impl Links for MemoryLinks {
+    fn get(&self, code: &Code) -> Option<Target> with suspend {
+        self.map.lock().get(code).map(|t| t.clone())
+    }
+    fn put(&self, code: Code, target: Target) with suspend, fail(LinkError) {
+        let mut map = self.map.lock();
+        if map.contains_key(&code) { fail(LinkError::Taken(code)) }
+        map.insert(code, target);
+    }
+}
+
+/// Makes a random code.
+///
+/// # Example
+/// with Rand = rand::seeded(7) { make_code().len() }   // => 6
+fn make_code() -> Code with rand: Rand {
+    let s: String = (0..6).map(|_| rand.pick(ALPHABET)).collect();
+    Code::new(s) ?! "built from ALPHABET"
+}
+
+/// `POST /links`
+fn create(req: &Request) -> Response with links: Links, Rand, suspend, fail(LinkError | DecodeError) {
+    let new: NewLink = json::decode(req.body())?;      // untrusted bytes in, validated value out
+    let code = make_code();
+    links.put(code.clone(), new.url)?;
+    log.info(fmt"created {code}");                     // log is ambient and write-only
+    Response::json(Status::Created, &Created { code })
+}
+
+/// `GET /{code}`: a malformed code never gets here; the router answers 404.
+fn follow(code: Code) -> Response with links: Links, suspend {
+    match links.get(&code) {
+        Some(t) => Response::redirect(Status::PermanentRedirect, &t),
+        None    => Response::status(Status::NotFound),
+    }
+}
+
+/// How each error becomes a response.
+impl IntoResponse for DecodeError {
+    fn into_response(self) -> Response { Response::text(Status::BadRequest, fmt"bad request: {self}") }
+}
+impl IntoResponse for LinkError {
+    fn into_response(self) -> Response {
+        match self { LinkError::Taken(_) => Response::status(Status::Conflict) }
+    }
+}
+
+/// The routes.
+fn app() -> impl Handler with Links, Rand, suspend {
+    Router::new()
+        .post("/links", create)
+        .get("/{code}", follow)
+}
+
+/// Accepts connections until asked to stop.
+pub fn serve(listener: &Listener) with Links, Rand, Net, suspend, spawn {
+    scope(|s| {
+        loop {
+            select {
+                conn = listener.accept() => s.spawn(|| handle(conn)),
+                _ = stop_requested()     => break,      // stop accepting; open connections finish
+            }
+        }
+    })
+}
+
+/// Serves one connection; a bug here cannot take down the server.
+fn handle(conn: Conn) with Links, Rand, Net, suspend, spawn {
+    try {
+        scope(|c| c.spawn(|| http::serve_connection(conn, &app())), isolate: true)?
+    } catch {
+        Trapped(t) => log.error(fmt"request trapped: {t}"),
+        e          => log.warn(fmt"connection ended: {e}"),
+    }
+}
+
+fn main(args: Args, stdio: Stdio, net: NetRoot, entropy: Entropy) -> ExitCode {
+    with Stderr = stdio.err {
+        let port = try { args.value::<Port>("port", default: 8080)? } catch {
+            e => { eprintln(fmt"bad --port: {e}"); return ExitCode::Usage }
+        };
+        with Net = net, Rand = entropy, Links = MemoryLinks::new() {
+            let listener = try { net.listen(port)? } catch {
+                e => { eprintln(fmt"cannot listen on {port}: {e}"); return ExitCode::Unavailable }
+            };
+            scope(|root| root.spawn(|| serve(&listener)), stop_on: [SIGINT, SIGTERM], grace: 10[s]);
+        }
+    }
+    ExitCode::Ok
+}
+
+test "a created link redirects" for app {
+    with Links = MemoryLinks::new(), Rand = rand::seeded(1) {
+        let created = app().handle(&Request::post("/links", body: r#"{"url": "https://moddil.org"}"#));
+        assert(created.status() == Status::Created);
+        let code: Created = json::decode(created.body())?;
+        let followed = app().handle(&Request::get(fmt"/{code.code}"));
+        assert(followed.status() == Status::PermanentRedirect);
+    }
+}
+
+test "plain http is rejected" for app {
+    with Links = MemoryLinks::new(), Rand = rand::seeded(1) {
+        let r = app().handle(&Request::post("/links", body: r#"{"url": "http://moddil.org"}"#));
+        assert(r.status() == Status::BadRequest);
+    }
+}
+
+test "serves over a lossy network" for serve {
+    let sim = Sim::new(seed: 42);
+    let (server, client) = (sim.node(), sim.node());
+    scope(|s| {
+        let net = sim.net.endpoint(server);
+        with Net = net, Rand = sim.rng(server), Links = MemoryLinks::new() {
+            let listener = net.listen(80)?;
+            s.spawn(|| serve(&listener));
+        }
+        with Net = drop_messages(rate: 0.1, outer: sim.net.endpoint(client)) {
+            let r = http::post(fmt"http://{server.addr()}/links",
+                               body: r#"{"url": "https://moddil.org"}"#, retries: 3)?;
+            assert(r.status() == Status::Created);
+        }
+        sim.stop_all();                                 // serve sees stop_requested() and returns
+    });
+}
+// ---
+//! Lexing and syntax edge cases, written as a real programmer would.
+
+/* a block comment /* that nests */ and ends here */
+type Grid = Vec<Vec<f64[m]>>;
+type Money = Fixed<4>[USD];
+type Rate = (u32 where self >= 1);
+type Handler = Box<dyn Fn(Event) with (suspend, fail(HandlerError))>;
+
+unit km = 1000 * m;
+unit degC = K + 273.15;
+dimension Velocity = Length / Time;
+
+#[derive(Copy, Clone)]
+struct Pair(u8, u8);
+
+linear struct Txn { id: u64 }
+
+view Rows<T> { buf: &[T], at: int }
+
+gen fn guard(start: Pos) -> Action resume first: Frame {
+    let mut f = first;
+    loop {
+        while !f.sees() { f = yield Action::Patrol }
+        f = yield Action::Shout;
+    }
+}
+
+fn first_word(text: &str, sep: &str) -> &str from text with fail(E) where E: Error
+    requires always valid: text.len() > 0
+    ensures true
+{
+    let p = (1, 2);
+    let q = p.0 + p.1;
+    let r = 0..q;
+    let len = 1.5[km] * 2[h^-1];
+    let s = r#"a "quoted" raw"#;
+    let b = b"bytes";
+    let c = '\n';
+    let tagged = fmt"Hi {name.or("guest")} {{braces}}";
+    let block = sql"""
+        SELECT id FROM t WHERE x = {x}
+        """;
+    let ok = 0 <= q < 10 && q in 1..10;
+    let paths = \Order.customer.email;
+    let f = |x: int| x * 2;
+    let g = || 0;
+    'outer: for i in 0..3 {
+        if const target.os == Os::Linux { break 'outer }
+        if let Some(v) = maybe && v > 0 { continue }
+    }
+    let wrapped = h *% 31 +% 7;
+    let first = xs[.., 1..3];
+    let found = try { lookup(k)? fmt"looking up {k}" } catch { NotFound => none() };
+    defer { done() }
+    errdefer cleanup();
+    unsafe("valid: checked above") { raw() }
+    x.view().default(from: 1)
+}

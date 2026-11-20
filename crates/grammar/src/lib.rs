@@ -4,9 +4,17 @@
 //! See this crate's `README.md`, and `reference/grammar/README.md` for the dialect. The generated
 //! parser tests, tree-sitter grammar and constrained-decoding grammars come next.
 
+mod corpus;
 mod expand;
+mod gbnf;
+#[cfg(test)]
+mod gbnf_check;
+mod lark;
 mod ll;
 mod parse;
+mod recognise;
+mod tokens;
+mod treesitter;
 
 use std::fmt;
 
@@ -118,6 +126,73 @@ pub fn check(source: &str, k: usize) -> Result<Report, Vec<GrammarError>> {
     })
 }
 
+/// A generated file: its path from the repository root, and its contents.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GeneratedFile {
+    /// The path, relative to the repository root, with `/` separators.
+    pub path: String,
+    /// The contents.
+    pub contents: String,
+}
+
+/// Everything generated from the grammar.
+#[derive(Debug, Clone)]
+pub struct Generated {
+    /// The files, in a fixed order.
+    pub files: Vec<GeneratedFile>,
+    /// Productions the valid corpus uses, and all productions reachable from `file`.
+    pub coverage: (usize, usize),
+    /// Productions no corpus sentence reaches, as the parser parses it.
+    pub uncovered: Vec<String>,
+}
+
+/// Generates the parser corpus and the derived grammars from `source`.
+///
+/// # Errors
+///
+/// Returns every problem that stops the grammar from being analysed.
+pub fn generate(source: &str) -> Result<Generated, Vec<GrammarError>> {
+    let grammar = parse::parse(source)?;
+    let bnf = expand::expand(&grammar)?;
+    let mut rec = recognise::Recogniser::new(&bnf, DEFAULT_K);
+    let corpus = corpus::generate(&mut rec);
+    let files = vec![
+        GeneratedFile {
+            path: "reference/grammar/tests/valid.mdl".to_string(),
+            contents: corpus::file(
+                &bnf,
+                &corpus.valid,
+                "Valid: together these use every production the parser reaches.",
+            ),
+        },
+        GeneratedFile {
+            path: "reference/grammar/tests/invalid.mdl".to_string(),
+            contents: corpus::file(
+                &bnf,
+                &corpus.invalid,
+                "Invalid: single-token edits of valid cases that the parser must reject.",
+            ),
+        },
+        GeneratedFile {
+            path: "reference/grammar/generated/moddil.gbnf".to_string(),
+            contents: gbnf::emit(&grammar, &bnf),
+        },
+        GeneratedFile {
+            path: "reference/grammar/generated/moddil.lark".to_string(),
+            contents: lark::emit(&grammar, &bnf),
+        },
+        GeneratedFile {
+            path: "editors/tree-sitter-moddil/grammar.js".to_string(),
+            contents: treesitter::emit(&grammar),
+        },
+    ];
+    Ok(Generated {
+        files,
+        coverage: (corpus.covered, corpus.productions),
+        uncovered: corpus.uncovered,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,6 +204,34 @@ mod tests {
             .iter()
             .map(|c| c.decision.clone())
             .collect()
+    }
+
+    fn repo_file(path: &str) -> String {
+        let full = format!("{}/../../{path}", env!("CARGO_MANIFEST_DIR"));
+        std::fs::read_to_string(&full)
+            .unwrap_or_else(|e| panic!("{full}: {e}"))
+            .replace("\r\n", "\n")
+    }
+
+    /// Every valid corpus case is accepted by the generated GBNF (read back and run by an Earley
+    /// recogniser), so the GBNF and the corpus agree.
+    #[test]
+    fn gbnf_accepts_the_valid_corpus() {
+        let cfg = gbnf_check::read(&repo_file("reference/grammar/generated/moddil.gbnf"));
+        let corpus = repo_file("reference/grammar/tests/valid.mdl")
+            + &repo_file("reference/grammar/tests/samples.mdl");
+        let mut failures = Vec::new();
+        for case in corpus.split("// ---\n").skip(1) {
+            if !gbnf_check::accepts(&cfg, case) {
+                failures.push(case.to_string());
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "GBNF rejects {} cases, first:\n{}",
+            failures.len(),
+            failures[0]
+        );
     }
 
     #[test]

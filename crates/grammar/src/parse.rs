@@ -2,6 +2,7 @@
 //! references with flag modes, alternative guards and quantifiers.
 
 use crate::GrammarError;
+use crate::tokens::{self, TokenDef, Tx};
 
 /// The `ns` flag: no struct or record literal and no bare block.
 pub(crate) const NS: u8 = 1;
@@ -95,8 +96,8 @@ pub(crate) struct Alt(pub(crate) Vec<Seq>);
 pub(crate) enum Body {
     /// A syntax rule (lower_snake name).
     Syntax(Alt),
-    /// A token rule: one terminal, defined by the lexer.
-    Token,
+    /// A token rule: one terminal (or a fragment of one), defined at the character level.
+    Token(TokenDef),
     /// A token rule that only lists quoted keywords, such as `KEYWORD`: each is its own terminal.
     Keywords(Vec<String>),
 }
@@ -224,7 +225,17 @@ pub(crate) fn parse(source: &str) -> Result<Grammar, Vec<GrammarError>> {
             i += 1;
         }
         let body = if token_rule {
-            keyword_list(&body).map_or(Body::Token, Body::Keywords)
+            // A rule that only lists literals (KEYWORD, PUNCT) is a choice of terminals.
+            match tokens::parse_token(&body, start_line) {
+                Ok(def) => match def.expr.as_ref().and_then(tokens::literals) {
+                    Some(words) if !def.skip && words.len() > 1 => Body::Keywords(words),
+                    _ => Body::Token(def),
+                },
+                Err(e) => {
+                    errors.push(e);
+                    continue;
+                }
+            }
         } else {
             match parse_body(&body, start_line) {
                 Ok(alt) => Body::Syntax(alt),
@@ -246,6 +257,7 @@ pub(crate) fn parse(source: &str) -> Result<Grammar, Vec<GrammarError>> {
             body,
         });
     }
+    subtract_keyword_lists(&mut rules);
     if errors.is_empty() {
         Ok(Grammar { rules })
     } else {
@@ -253,15 +265,39 @@ pub(crate) fn parse(source: &str) -> Result<Grammar, Vec<GrammarError>> {
     }
 }
 
-/// `'a' | 'b' | …` and nothing else.
-fn keyword_list(body: &str) -> Option<Vec<String>> {
-    body.split('|')
-        .map(|part| {
-            let part = part.trim();
-            let inner = part.strip_prefix('\'')?.strip_suffix('\'')?;
-            (!inner.is_empty() && !inner.contains('\'')).then(|| inner.to_string())
+/// `PUNCT - ( '(' | … )` over a keyword list is itself a keyword list.
+fn subtract_keyword_lists(rules: &mut [Rule]) {
+    let lists: Vec<(String, Vec<String>)> = rules
+        .iter()
+        .filter_map(|r| match &r.body {
+            Body::Keywords(words) => Some((r.name.clone(), words.clone())),
+            _ => None,
         })
-        .collect()
+        .collect();
+    for rule in rules.iter_mut() {
+        let Body::Token(TokenDef {
+            expr: Some(Tx::Minus(from, except)),
+            ..
+        }) = &rule.body
+        else {
+            continue;
+        };
+        let Tx::Ref(base) = from.as_ref() else {
+            continue;
+        };
+        let (Some((_, words)), Some(drop)) = (
+            lists.iter().find(|(n, _)| n == base),
+            tokens::literals(except),
+        ) else {
+            continue;
+        };
+        let kept = words
+            .iter()
+            .filter(|w| !drop.contains(w))
+            .cloned()
+            .collect();
+        rule.body = Body::Keywords(kept);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

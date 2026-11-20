@@ -48,6 +48,21 @@ One extension expresses Rust's restrictions without writing the expression rules
 
 Flags expand to finite copies of the rules, so the grammar stays checkable as LL(k).
 
+### Tokens
+
+Token rules use a character-level subset, so every generator can derive exact tokens from them:
+quoted literals, classes such as `[a-z]` and `[^"\\]`, the built-in classes `XID_START` and
+`XID_CONTINUE` (Unicode UAX #31), references to other token rules (fragments), and `A - B` (A,
+except the literals B lists). Two markers:
+
+| Marker | Meaning |
+|---|---|
+| `%skip` | Dropped between syntax tokens: whitespace and comments |
+| `%scanner` | Not a regular language: nested block comments, raw strings, `"""` blocks and tagged literals. The exact rule is the comment above it, and each generator implements it natively |
+
+Token rules that syntax rules name are tokens; the others are fragments. A rule that only lists
+literals (`KEYWORD`, `PUNCT`) is a choice of terminals.
+
 ## How it is written
 
 1. **[`inventory.md`](inventory.md)** lists every decided construct, the spec that decides it and an
@@ -65,9 +80,21 @@ Flags expand to finite copies of the rules, so the grammar stays checkable as LL
 
 ## What is generated from it
 
-The `crates/grammar` tool checks the grammar and generates:
+`cargo run -p moddil-grammar -- generate` writes every file below; CI fails if any is out of date
+(`generate --check`) and runs each through its own tool (`python tools/ci.py grammars`).
 
-- the parser's grammar tests (the parser in `crates/syntax` is hand-written against this file);
-- the tree-sitter grammar in `editors/`;
-- GBNF and Lark grammars for constrained decoding by models
-  ([`specs/agent-interface.md`](../../specs/agent-interface.md)).
+| File | What | Checked by |
+|---|---|---|
+| [`tests/valid.mdl`](tests/valid.mdl) | Valid cases that together use **every production** the parser can reach | The LL(3) recogniser in `moddil-grammar`; later `moddil-syntax` |
+| [`tests/invalid.mdl`](tests/invalid.mdl) | Near-misses: single-token edits of valid cases that the parser must reject | The recogniser |
+| [`generated/moddil.gbnf`](generated/moddil.gbnf) | GBNF (llama.cpp) for constrained decoding, flags exact | An Earley recogniser in `moddil-grammar`'s tests |
+| [`generated/moddil.lark`](generated/moddil.lark) | Lark, for Python tooling and constrained decoding, flags exact | Lark 1.2.2 (`tools/check_grammars.py`) |
+| [`../../editors/tree-sitter-moddil/grammar.js`](../../editors/tree-sitter-moddil/grammar.js) | tree-sitter, from the rules as written (a superset, as editors want), with a hand-written C scanner | tree-sitter CLI 0.26.13 |
+
+[`tests/samples.mdl`](tests/samples.mdl) is written by hand: the tour's program and lexing edge cases
+in real spelling (the generated cases are spaced token by token). Every generated grammar must
+accept it too.
+
+Each corpus file is a list of cases, each a whole file after a `// ---` line. The recogniser is the
+executable definition of what the grammar accepts: it chooses productions as the hand-written parser
+must (three tokens of lookahead, flags, greedy optionals taken).

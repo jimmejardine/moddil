@@ -14,34 +14,43 @@ use crate::expand::{Bnf, Sym};
 use crate::{Conflict, GrammarError};
 
 /// The end of the file, as a lookahead token.
-const EOF: u32 = u32::MAX;
+pub(crate) const EOF: u32 = u32::MAX;
 /// Deeper stacks than this mean left recursion.
 const MAX_STACK: usize = 400;
 /// Token sequences reported per conflicting decision.
 const MAX_EXAMPLES: usize = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct Pos {
-    nt: u32,
-    prod: u32,
-    dot: u32,
+pub(crate) struct Pos {
+    pub(crate) nt: u32,
+    pub(crate) prod: u32,
+    pub(crate) dot: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct Config {
-    pos: Pos,
-    stack: Vec<Pos>,
+pub(crate) struct Config {
+    pub(crate) pos: Pos,
+    pub(crate) stack: Vec<Pos>,
 }
 
-struct Analyzer<'b> {
-    bnf: &'b Bnf,
+pub(crate) struct Analyzer<'b> {
+    pub(crate) bnf: &'b Bnf,
     /// For each nonterminal, the positions just after each place it is used.
     callers: Vec<Vec<Pos>>,
     left_recursion: Option<u32>,
 }
 
-/// Returns the conflicts at lookahead `k`.
-pub(crate) fn conflicts(bnf: &Bnf, k: usize) -> Result<(usize, Vec<Conflict>), GrammarError> {
+impl<'b> Analyzer<'b> {
+    pub(crate) fn new(bnf: &'b Bnf) -> Self {
+        Analyzer {
+            bnf,
+            callers: callers(bnf),
+            left_recursion: None,
+        }
+    }
+}
+
+fn callers(bnf: &Bnf) -> Vec<Vec<Pos>> {
     let mut callers = vec![Vec::new(); bnf.nts.len()];
     for (nt, def) in bnf.nts.iter().enumerate() {
         for (prod, syms) in def.prods.iter().enumerate() {
@@ -56,11 +65,12 @@ pub(crate) fn conflicts(bnf: &Bnf, k: usize) -> Result<(usize, Vec<Conflict>), G
             }
         }
     }
-    let mut a = Analyzer {
-        bnf,
-        callers,
-        left_recursion: None,
-    };
+    callers
+}
+
+/// Returns the conflicts at lookahead `k`.
+pub(crate) fn conflicts(bnf: &Bnf, k: usize) -> Result<(usize, Vec<Conflict>), GrammarError> {
+    let mut a = Analyzer::new(bnf);
     let mut found = Vec::new();
     let mut decisions = 0;
     for nt in 0..bnf.nts.len() {
@@ -109,7 +119,7 @@ pub(crate) fn conflicts(bnf: &Bnf, k: usize) -> Result<(usize, Vec<Conflict>), G
     Ok((decisions, found))
 }
 
-fn index(i: usize) -> u32 {
+pub(crate) fn index(i: usize) -> u32 {
     u32::try_from(i).expect("grammar fits in u32 indices")
 }
 
@@ -137,7 +147,7 @@ impl Analyzer<'_> {
 
     /// All configurations reachable from `seeds` without consuming a token, at a terminal (or at
     /// the end of the file).
-    fn closure(&mut self, seeds: Vec<Config>) -> Vec<(u32, Config)> {
+    pub(crate) fn closure(&mut self, seeds: Vec<Config>) -> Vec<(u32, Config)> {
         let mut out = Vec::new();
         let mut seen = HashSet::new();
         let mut work = seeds;

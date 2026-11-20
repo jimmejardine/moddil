@@ -1,0 +1,19 @@
+{
+  "grammars": [
+    {
+      "name": "moddil",
+      "camelcase": "Moddil",
+      "scope": "source.moddil",
+      "path": ".",
+      "file-types": ["mdl"]
+    }
+  ],
+  "metadata": {
+    "version": "0.0.0",
+    "license": "MIT OR Apache-2.0",
+    "description": "Moddil grammar for tree-sitter, generated from reference/grammar/moddil.ebnf",
+    "links": {
+      "repository": "https://github.com/jimmejardine/moddil"
+    }
+  }
+}

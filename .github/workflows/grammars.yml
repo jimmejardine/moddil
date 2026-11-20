@@ -1,0 +1,37 @@
+# The grammars generated from reference/grammar/moddil.ebnf: up to date, and accepted by their own
+# tools (Lark, and tree-sitter with its C scanner). Calls tools/ci.py, as the other workflows do.
+name: grammars
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  grammars:
+    name: generated grammars
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install the pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Lark
+        run: pip install lark==1.2.2
+      - run: python tools/ci.py grammars
