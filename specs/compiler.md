@@ -183,7 +183,7 @@ moddil/
   parser, the conformance tests and a standard mod should land as one commit that CI checks as a
   whole. Rust, Go and Zig keep their standard libraries in their main repositories.
 - **Standard mods release independently anyway.** Each is released with a path-prefixed tag
-  (`mods/net/v0.3.1`) and reached through a vanity name (`moddil.dev/net`)
+  (`mods/net/v0.3.1`) and reached through a vanity name (`moddil.com/net`)
   ([`packages-and-supply-chain.md`: Versions and majors](packages-and-supply-chain.md#versions-and-majors));
   only `mods/core-*` ships inside the toolchain ([`stdlib.md`: Distribution and versioning](stdlib.md#distribution-and-versioning)).
 - **Crates** are published as `moddil-<name>`. They start coarse and split as they grow (`sema` into

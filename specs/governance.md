@@ -139,6 +139,8 @@ The `moddil/*` mods ([`stdlib.md`](stdlib.md)) follow these rules on top of the 
   ([`security.md`](security.md)).
 - Advisories are published in the **OSV format** in a **project git repository**, consistent with
   plain-git hosting ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)).
+- The project's advisories are also rendered at `moddil.com/advisories`
+  ([`web.md`](web.md)); the repository, not the page, is what tools read.
 - **Community mods** publish OSV advisories in their own repositories.
 - `moddil audit` and `moddil outdated` read every advisory repository the user lists; the project's
   is listed by default. An advisory never bypasses the cooldown automatically; taking a fix early

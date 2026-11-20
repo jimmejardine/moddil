@@ -162,7 +162,7 @@ name = "github.com/acme/chrono-serde"
 version = "1.0.0"
 
 [bridge]
-traits = "moddil.dev/serde"            # the mod whose traits are implemented
+traits = "moddil.com/serde"            # the mod whose traits are implemented
 types  = "github.com/chrono/chrono"    # the mod whose types they are implemented for
 ```
 
@@ -176,7 +176,7 @@ types  = "github.com/chrono/chrono"    # the mod whose types they are implemente
 
   ```toml
   [[bridge-choice]]
-  traits = "moddil.dev/serde"
+  traits = "moddil.com/serde"
   types  = "github.com/chrono/chrono"
   use    = "github.com/acme/chrono-serde"
   ```

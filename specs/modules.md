@@ -184,7 +184,7 @@ root = "src/lib.moddil"
 name = "matcher-server"
 main = "src/bin/server.moddil"
 capabilities = ["net"]                                  # the executable's own ceiling
-dependencies = { "moddil.dev/net/http" = "0.4" }        # not seen by users of the library
+dependencies = { "moddil.com/net/http" = "0.4" }        # not seen by users of the library
 
 [[exe]]
 name = "matcher-cli"

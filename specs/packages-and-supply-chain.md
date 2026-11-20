@@ -101,9 +101,10 @@ supported = ["native", "wasm-wasi", "wasm-browser"]
 
 - A mod's name is where it lives: `github.com/jimme/hashiverse-protocol`, `git.example.com/team/ledger`.
   Names are unambiguous, and no naming authority is needed.
-- **Vanity domains** separate the name from the host: `moddil.dev/net` serves an HTTPS `<meta>`
+- **Vanity domains** separate the name from the host: `moddil.com/net` serves an HTTPS `<meta>`
   redirect to the real repository (as Go's `go-import`), so the owner can move hosts without renaming
-  the mod.
+  the mod. The project's own domain, and what else it serves, is in
+  [`web.md`](web.md).
 - In these specs, `moddil/…` is shorthand for the standard mods under the project's own domain
   (illustration only).
 - **Look-alike names (decided).** With no naming authority, typosquatting is caught locally:
@@ -163,7 +164,7 @@ supported = ["native", "wasm-wasi", "wasm-browser"]
 ```
 # moddil.lock (illustration only)
 github.com/jimme/hashiverse-protocol  v1.4.2  commit 3f9c1e…  tree sha256:9b1d…  key ssh-ed25519:AAAC…
-moddil.dev/net                        v0.3.0  commit a71b02…  tree sha256:44e0…  key ssh-ed25519:AAAD…
+moddil.com/net                        v0.3.0  commit a71b02…  tree sha256:44e0…  key ssh-ed25519:AAAD…
 ```
 
 ### Discovering new versions
@@ -173,7 +174,7 @@ with no clone) and reports:
 
 ```
 github.com/jimme/hashiverse-protocol  v1.4.2 → v1.5.0   eligible
-moddil.dev/net                        v0.3.0 → v0.3.1   cooldown: 9 days left
+moddil.com/net                        v0.3.0 → v0.3.1   cooldown: 9 days left
 github.com/acme/json                  v2.1.0 → v2.2.0   eligible   capability diff: + net   ⚠
 github.com/acme/json                  v2 → v3 available (major)
 ```
@@ -221,7 +222,7 @@ version = "2.2.0"
 requires = []                     # pure: no net, fs, ffi
 
 [dependencies]
-"moddil.dev/text" = "0.4.1"
+"moddil.com/text" = "0.4.1"
 ```
 
 ### No code at fetch or build time

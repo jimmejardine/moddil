@@ -130,7 +130,7 @@ fn main(args: Args, stdio: Stdio, net: NetRoot, entropy: Entropy) -> ExitCode {
 
 test "a created link redirects" for app {
     with Links = MemoryLinks::new(), Rand = rand::seeded(1) {
-        let created = app().handle(&Request::post("/links", body: r#"{"url": "https://moddil.org"}"#));
+        let created = app().handle(&Request::post("/links", body: r#"{"url": "https://moddil.com"}"#));
         assert(created.status() == Status::Created);
         let code: Created = json::decode(created.body())?;
         let followed = app().handle(&Request::get(fmt"/{code.code}"));
@@ -140,7 +140,7 @@ test "a created link redirects" for app {
 
 test "plain http is rejected" for app {
     with Links = MemoryLinks::new(), Rand = rand::seeded(1) {
-        let r = app().handle(&Request::post("/links", body: r#"{"url": "http://moddil.org"}"#));
+        let r = app().handle(&Request::post("/links", body: r#"{"url": "http://moddil.com"}"#));
         assert(r.status() == Status::BadRequest);
     }
 }
@@ -156,7 +156,7 @@ test "serves over a lossy network" for serve {
         }
         with Net = drop_messages(rate: 0.1, outer: sim.net.endpoint(client)) {
             let r = http::post(fmt"http://{server.addr()}/links",
-                               body: r#"{"url": "https://moddil.org"}"#, retries: 3)?;
+                               body: r#"{"url": "https://moddil.com"}"#, retries: 3)?;
             assert(r.status() == Status::Created);
         }
         sim.stop_all();                                 // serve sees stop_requested() and returns

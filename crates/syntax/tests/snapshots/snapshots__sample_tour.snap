@@ -2204,7 +2204,7 @@ SOURCE_FILE
                           IDENT "body"
                           COLON ":"
                           LITERAL
-                            RAW_STRING "r#\"{\"url\": \"https://moddil.org\"}\"#"
+                            RAW_STRING "r#\"{\"url\": \"https://moddil.com\"}\"#"
                         R_PAREN ")"
                 R_PAREN ")"
             SEMI ";"
@@ -2438,7 +2438,7 @@ SOURCE_FILE
                           IDENT "body"
                           COLON ":"
                           LITERAL
-                            RAW_STRING "r#\"{\"url\": \"http://moddil.org\"}\"#"
+                            RAW_STRING "r#\"{\"url\": \"http://moddil.com\"}\"#"
                         R_PAREN ")"
                 R_PAREN ")"
             SEMI ";"
@@ -2773,7 +2773,7 @@ SOURCE_FILE
                                 IDENT "body"
                                 COLON ":"
                                 LITERAL
-                                  RAW_STRING "r#\"{\"url\": \"https://moddil.org\"}\"#"
+                                  RAW_STRING "r#\"{\"url\": \"https://moddil.com\"}\"#"
                               COMMA ","
                               ARG
                                 IDENT "retries"
