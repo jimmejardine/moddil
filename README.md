@@ -73,7 +73,7 @@ cargo build --workspace
 python tools/ci.py        # fmt, clippy, deny, test, links, grammars: the same checks GitHub runs
 ```
 
-A program in slice S0, saved as `hello.mdl`:
+A small program, saved as `hello.mdl`:
 
 ```rust
 fn add(a: int, b: int) -> int { a + b }
@@ -81,6 +81,7 @@ fn add(a: int, b: int) -> int { a + b }
 fn main() -> int { add(2, 3) }
 
 test "add" {
+    assert(add(2, 2) == 4);
     add(2, 3)                 // => 5
 }
 ```
@@ -89,6 +90,10 @@ test "add" {
 cargo run -p moddil -- run hello.mdl     # prints 5
 cargo run -p moddil -- test hello.mdl    # test "add" ... ok
 ```
+
+A test checks values in two ways: `// =>` states the value of the expression before it, and
+`assert` checks a condition. When an `assert` fails, the trap shows the value of every part of
+the condition ([`specs/testing.md`: Assertions](specs/testing.md#assertions)).
 
 See [`crates/README.md`](crates/README.md) for more.
 
