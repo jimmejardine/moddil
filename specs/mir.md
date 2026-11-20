@@ -68,8 +68,8 @@ canonical AST ──► typed HIR ──► MIR (built) ──► MIR (analysed)
   through the same query system.
 - **Phases** (proposed, after Rust's): *built*, as lowered from HIR; *analysed*, after ownership
   checking and drop elaboration; *runtime*, after checks, handlers, reference counting and generics
-  are made explicit. The interpreter runs analysed or runtime MIR; it never needs target lowering.
-  ([`compiler.md`: Two interpreters](compiler.md#two-interpreters) calls this "lowered MIR".)
+  are made explicit. The interpreter runs analysed or runtime MIR; it never needs target lowering
+  ([`compiler.md`: Two interpreters](compiler.md#two-interpreters)).
 - **Lowered MIR** is per target: suspension, layouts and calling conventions are made concrete for
   native, JSPI, WASM stack switching or GPU.
 

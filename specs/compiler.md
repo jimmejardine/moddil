@@ -125,7 +125,7 @@ problem, which is exactly the supply-chain concern of [Package management and su
 
 | Interpreter | Runs | Used for |
 |---|---|---|
-| **MIR interpreter** (part of the compiler) | Lowered MIR | Compile-time evaluation, fast tests before any backend, the Miri-style `unsafe` checker ([`correctness.md`: A Miri-style checker](correctness.md#a-miri-style-checker)), the playground |
+| **MIR interpreter** (part of the compiler) | Target-independent MIR, before per-target lowering ([`mir.md`: Pipeline](mir.md#pipeline)) | Compile-time evaluation, fast tests before any backend, the Miri-style `unsafe` checker ([`correctness.md`: A Miri-style checker](correctness.md#a-miri-style-checker)), the playground |
 | **Reference interpreter** (separate) | The canonical AST, directly | The executable form of the language reference ([`definition.md`](definition.md)); written for clarity, not speed |
 
 - **Why two:** if the reference were the compiler's own MIR interpreter, a front-end or lowering bug
@@ -198,11 +198,11 @@ moddil/
  source ─► parse ─► canonical AST (agent-interface.md, semantic-vcs.md)
                        │
                        ▼
-        names · types · effects · ownership · placement · capabilities
+     typed HIR: names · types · effects · placement · capabilities
                        │
                        ▼
-                    ┌──────┐
-                    │ MIR  │  Moddil mid-level IR: handlers, task scopes and
+                    ┌──────┐  Moddil mid-level IR (mir.md): ownership, linearity
+                    │ MIR  │  and drops checked here; handlers, task scopes and
                     └──┬───┘  suspension points lowered here, per target
      ┌─────────┬──────┼──────────┬───────────────┬──────────────┐
      ▼         ▼      ▼          ▼               ▼              ▼
