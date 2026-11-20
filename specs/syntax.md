@@ -152,12 +152,16 @@ Decided while building the grammar inventory
 | **Literal suffixes** | None: `0u8` is written `let d: u8 = 0` ([`numerics.md`](numerics.md#exact-literals)) |
 | **Struct literals in heads** | As in Rust, a struct literal in the head of `if`, `while` or `match` must be parenthesised: `if x == (Foo { a: 1 }) { … }` |
 | **Signature clause order** | `fn f<T>(a: &T, b: &T) -> &T from a with fail(E) where T: Ord requires … ensures … { … }`: provenance, effects, bounds, contracts; the formatter enforces it |
-| **Effects inside types** | In type position one effect may be bare (`fn() -> T with E`, `impl Fn() with suspend`); several are parenthesised: `Box<dyn Fn(Event) with (suspend, fail(E))>`. Named effects (`time: Time`) appear only in signatures, whose `with` lists stay bare. Effects written after a type belong to it |
+| **Effects inside types** | In type position one effect may be bare (`fn() -> T with E`, `impl Fn() with suspend`); several are parenthesised: `Box<dyn Fn(Event) with (suspend, fail(E))>`. Named effects (`time: Time`) appear only in signatures, whose `with` lists stay bare. A signature's return type takes no effects (`-> impl Handler with Links` gives `Links` to the function); a returned closure type with effects is parenthesised, `-> (impl Fn() with E)` |
 | **Anonymous records** | No shorthand fields: `{ min: lo, max: hi }`. `{` followed by a name and `:` starts a record; anything else starts a block. Named struct literals keep shorthand (`Conn { socket, session }`) |
 | **Heads before a block** | The struct-literal rule covers every head that a block follows: `if`, `while`, `match`, `for … in`, handler values in `with … = value { }`, and contract expressions before a body. A bare block or `const { }` block is not allowed there either; parenthesise it |
 | **`if const`** | After `if`, the keyword `const` always starts a comptime conditional |
 | **Refinement patterns** | `p: Port` is only allowed at the top of a `match` arm; in `let` and parameters, `:` is the type annotation |
 | **Membership** | `x in a..b` takes its range at comparison precedence, so `self in 1..10 && self != 5` groups as written |
+| **Lowest precedence** | `return`, `break`, `continue`, `escape`, `yield` and closures take the rest of the expression, so nothing continues after them: `return (a, b)` returns the tuple. `let` conditions are operands of `&&` chains in `if` and `while` heads |
+| **Key paths** | `\T.a.b` takes every `.name` after it; to call a method on a key path, parenthesise it: `(\T.f).then(g)` |
+| **Where clauses** | No trailing comma; a tuple struct's `where` clause comes after its fields, as in Rust |
+| **Longest readings** | Four places take the longer reading, as Rust does: `else` belongs to the nearest `if`; `x.f(…)` is a method call (a field then a call is `(x.f)(…)`); `[…]` right after a number is a unit; `&mut p` in a pattern matches through a mutable borrow |
 | **Items** | Items that do not end in a block end with `;`: `use`, `type`, `const`, tuple and unit structs, `mod`, `group`, `unit`, `dimension` |
 | **Tagged-literal holes** | Inside a tagged literal, `{` opens a hole that runs to its matching `}`, so holes may contain strings (`fmt"Hi {name.or("guest")}"`); `{{` and `}}` are literal braces |
 | **Keywords** | All reserved, none contextual. A keyword may still name a **member**: a field or method, where it is declared (`pub fn view(&self)`, `default: Port`) and where it is used after `.` or `::` (`Type::from(x)`, `cart.view()`), and a named-argument label (`default: 8080`) |

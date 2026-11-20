@@ -6,6 +6,7 @@
 # ─── Notation (W3C-style EBNF) ───────────────────────────────────────────────
 #   rule ::= a b        sequence            a | b      choice
 #   a?  a*  a+          optional, zero or more, one or more
+#   a??                 greedy optional: taken whenever it can start (Rust's longest reading)
 #   ( … )               grouping            'x'        a terminal
 #   [a-z]  [^"]         character classes (Tokens section only)
 #   A - B               A, except what B matches (Tokens section only)
@@ -28,6 +29,9 @@
 #   ?f alt        an alternative present only while f is set
 #
 # Flags expand to finite copies of the rules, so the grammar stays checkable as LL(k).
+# A greedy optional `a??` is the only other resolution: four places where Rust also takes the
+# longer reading (else after if, a method call's arguments, a unit after a number, `&mut` in a
+# pattern). The checker accepts a choice there only between taking `a` and skipping it.
 # Lookahead needed: k = 3 (`{ IDENT ':'` starts a record; `& mut self`).
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -113,15 +117,15 @@ item_kind      ::= fn_item | struct_item | view_item | enum_item | trait_item | 
 fn_item        ::= fn_qualifier* 'fn' member_name generic_params? '(' params? ')' signature_tail
                    ( block | ';' )
 fn_qualifier   ::= 'const' | 'unsafe' | 'gen'
-signature_tail ::= ( '->' type )? resume_clause? from_clause? effect_clause? where_clause? contract*
+signature_tail ::= ( '->' type_ne )? resume_clause? from_clause? effect_clause? where_clause? contract*
 # The clause order is fixed; the formatter enforces it.
-resume_clause  ::= 'resume' IDENT ':' type                       # coroutines: gen fn … -> Y resume r: R
+resume_clause  ::= 'resume' IDENT ':' type_ne                    # coroutines: gen fn … -> Y resume r: R
 from_clause    ::= 'from' IDENT ( ',' IDENT )*                   # which borrowed parameter a result derives from
 effect_clause  ::= 'with' sig_effect ( ',' sig_effect )*
 sig_effect     ::= ( IDENT ':' )? effect_atom                     # `time: Time` names the handle
 effect_atom    ::= 'suspend' | 'spawn' | 'nondet' | 'fail' '(' error_types ')' | '&' type | path_type
 error_types    ::= type ( '|' type )*
-where_clause   ::= 'where' where_pred ( ',' where_pred )* ','?      # bounds; never a refinement here
+where_clause   ::= 'where' where_pred ( ',' where_pred )*            # bounds; never a refinement here
 where_pred     ::= type ':' bounds
 contract       ::= 'requires' 'always'? contract_body | 'ensures' contract_body
 contract_body  ::= ( IDENT ':' )? expr+ns                         # an optional name, cited by unsafe("name: …")
@@ -136,8 +140,8 @@ generic_param  ::= outer_attr* ( 'const' IDENT ':' type ( '=' const_arg )?
                                | IDENT ( ':' bounds )? ( '=' type )? )
 
 # ─── Data types ───────────────────────────────────────────────────────────────
-struct_item    ::= 'linear'? 'struct' IDENT generic_params? where_clause?
-                   ( struct_body | tuple_fields ';' | ';' )
+struct_item    ::= 'linear'? 'struct' IDENT generic_params?
+                   ( where_clause? ( struct_body | ';' ) | tuple_fields where_clause? ';' )
 view_item      ::= 'view' IDENT generic_params? where_clause? struct_body
 struct_body    ::= '{' ( struct_member ( ',' struct_member )* ','? )? '}'
 struct_member  ::= outer_attr* ( field | 'invariant' expr )
@@ -196,15 +200,16 @@ number         ::= INTEGER | FLOAT
 # Types
 # ═══════════════════════════════════════════════════════════════════════════
 
-type           ::= path_type
-                 | '&' 'mut'? type
-                 | '*' ( 'const' | 'mut' ) type
+type           ::= type_ne type_effects?                             # Box<dyn Fn(Event) with (suspend, fail(E))>
+type_ne        ::= 'impl' bounds | 'dyn' bounds | type_core          # no trailing effects: a signature's return
+type_nb        ::= 'impl' bound | 'dyn' bound | type_core            # no bounds list, no effects: -> inside fn types
+type_core      ::= path_type
+                 | '&' 'mut'? type_nb
+                 | '*' ( 'const' | 'mut' ) type_nb
                  | '[' type ( ';' expr )? ']'                         # array [T; N] or slice [T]
                  | '(' paren_type_rest
                  | '{' member_name ':' type ( ',' member_name ':' type )* ','? '}'   # anonymous record
-                 | 'fn' '(' type_list? ')' ( '->' type )? type_effects?
-                 | 'impl' bounds
-                 | 'dyn' bounds
+                 | 'fn' '(' type_list? ')' ( '->' type_nb )?
                  | '!'
                  | '_'
 paren_type_rest ::= ')'                                               # unit type
@@ -212,19 +217,21 @@ paren_type_rest ::= ')'                                               # unit typ
                         | ',' type_list? ')'                           # tuple
                         | 'where' expr ')' )                           # refinement: (u32 where self >= 1)
 type_list      ::= type ( ',' type )* ','?
-path_type      ::= qualified_path | type_path
+path_type      ::= qualified_path ( '::' member_name )* | type_path
 type_path      ::= type_segment ( '::' type_segment )* unit_suffix?   # f64[m], Fixed<4>[USD]
 type_segment   ::= IDENT generic_args? | 'Self' | 'self' | 'super' | 'crate'
-qualified_path ::= '<' type 'as' type_path '>' ( '::' member_name )*
+qualified_path ::= '<' type 'as' type_path '>'                       # <Money as Display>
 generic_args   ::= '<' ( generic_arg ( ',' generic_arg )* ','? )? '>'
 generic_arg    ::= type | const_arg | IDENT '=' type                  # LL(2): Item = int
 const_arg      ::= '-'? INTEGER | STRING | 'true' | 'false' | block
 bounds         ::= bound ( '+' bound )*
 bound          ::= type_path fn_sugar?                                # Fn(&T) -> U with E
-fn_sugar       ::= '(' type_list? ')' ( '->' type )? type_effects?
+fn_sugar       ::= '(' type_list? ')' ( '->' type_nb )?
 type_effects   ::= 'with' ( effect_atom | '(' effect_atom ( ',' effect_atom )* ','? ')' )
-# In type position one effect may be bare; several are parenthesised. Effects written after a type
-# belong to it: `-> impl Fn() with E` gives E to the closure, not to the function.
+# In type position one effect may be bare; several are parenthesised. A signature's return type
+# takes no effects (`-> impl Handler with Links` gives Links to the function); a returned closure
+# type with effects is parenthesised: `-> (impl Fn() with E)`. Inside `fn(…) -> T` and `Fn(…) -> T`
+# the return type has no bounds list or effects, as Rust's TypeNoBounds.
 
 simple_path    ::= IDENT ( '::' IDENT )*
 
@@ -238,7 +245,7 @@ pattern_no_alt ::= '_'
                  | literal_pat ( range_op literal_pat? )?             # 1..=9, 'a'..='z'
                  | 'mut' IDENT ( '@' pattern_no_alt )?
                  | pattern_path path_pat_tail?                        # a binding, a constant or a variant
-                 | '&' 'mut'? pattern_no_alt                          # matching through a borrow; no `ref`
+                 | '&' 'mut'?? pattern_no_alt                         # matching through a borrow; no `ref`
                  | '(' ( pattern ( ',' pattern )* ','? )? ')'
                  | '[' ( pattern ( ',' pattern )* ','? )? ']'
                  | '{' field_pats '}'                                 # anonymous record: { host, port, .. }
@@ -270,20 +277,29 @@ defer_stmt     ::= ( 'defer' | 'errdefer' ) ( block | expr+stmt ';' )
 # Expressions, lowest precedence first
 # ═══════════════════════════════════════════════════════════════════════════
 
-expr           ::= assign@
-assign         ::= range@ ( assign_op assign@ns )?                    # right-associative
+expr           ::= jump@ns | closure@ns | assign@
+# Jumps and closures take the rest of the expression (Rust's lowest precedence), so nothing can
+# continue after them: `return (a, b)` returns the tuple, `|x| x + 1` is one closure.
+jump           ::= 'escape' expr@ns?                                  # leave the enclosing fn from a lambda
+                 | 'yield' expr@ns?
+                 | 'return' expr@ns?
+                 | 'break' LABEL? expr@ns?
+                 | 'continue' LABEL?
+assign         ::= range@ ( assign_op expr@ns )?                      # right-associative
 assign_op      ::= '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '&=' | '|=' | '<<=' | '>>='
                  | '+%=' | '-%=' | '*%='
 range          ::= or@ ( range_op or@ns? )?
                  | range_op or@ns?                                    # ..b, .., ..=b
 range_op       ::= '..' | '..='
 or             ::= and@ ( '||' and@ns )*
-and            ::= compare@ ( '&&' compare@ns )*
+and            ::= and_operand@ ( '&&' and_operand@ns )*
+and_operand    ::= ?cond 'let' pattern '=' compare@ns                  # in if/while heads: let chains
+                 | compare@
 compare        ::= bit_or@ ( ( compare_op bit_or@ns )+                  # chains: 0 <= i < len
                             | 'in' in_operand@ns )?                    # self in 1..
 compare_op     ::= '==' | '!=' | '<' | '>' | '<=' | '>='
 # A chain runs in one direction only (all < and <=, or all > and >=); == and != do not chain.
-in_operand     ::= bit_or@ ( range_op bit_or@ns? )? | range_op bit_or@ns?
+in_operand     ::= bit_or@ ( range_op bit_or@ns? )?? | range_op bit_or@ns?
 # `in` takes its range here, so `self in 1..10 && self != 5` groups as expected.
 bit_or         ::= bit_xor@ ( '|' bit_xor@ns )*
 bit_xor        ::= bit_and@ ( '^' bit_and@ns )*
@@ -292,12 +308,14 @@ shift          ::= additive@ ( ( '<<' | '>>' ) additive@ns )*
 additive       ::= multiplicative@ ( ( '+' | '-' | '+%' | '-%' ) multiplicative@ns )*
 multiplicative ::= unary@ ( ( '*' | '/' | '%' | '*%' | '@' ) unary@ns )*   # @: matrix multiply
 unary          ::= ( '-' | '!' | '*' | '&' 'mut'? ) unary@ns
+                 | '\' type_path ( '.' member_name )+                 # key path: \Order.customer.email
                  | postfix@
+# A key path takes every `.name` after it; call a method on one in parentheses: (\T.f).then(g).
 postfix        ::= primary@ postfix_op*
 postfix_op     ::= '?' error_context?                                 # propagate, with optional context
                  | '?!' STRING                                        # cannot fail here: trap with the reason
                  | call_args
-                 | '.' member_name ( '::' generic_args )? call_args?  # field, or method with turbofish
+                 | '.' member_name ( '::' generic_args )? call_args?? # field, or method with turbofish
                  | '.' INTEGER                                        # tuple field
                  | '[' index_arg ( ',' index_arg )* ','? ']'          # a[i], a[.., 1..3]
 error_context  ::= STRING | TAGGED_STRING                             # load(p)? fmt"loading {p}"
@@ -315,20 +333,12 @@ primary        ::= literal
                  | !ns !stmt 'const' block                            # comptime block; parenthesise it in heads
                  | !stmt block_like_keyword
                  | !stmt 'impl' type impl_body                        # anonymous impl: a one-off handler
-                 | closure
-                 | '\' type_path ( '.' member_name )+                 # key path: \Order.customer.email
-                 | ?cond 'let' pattern '=' compare@ns                  # in if/while heads: let chains
                  | 'fail' '(' expr ')'
-                 | 'escape' expr?                                     # leave the enclosing fn from a lambda
-                 | 'yield' expr?
-                 | 'return' expr?
-                 | 'break' LABEL? expr?
-                 | 'continue' LABEL?
 struct_tail    ::= !ns '{' struct_fields '}'                        # gone under ns: then just the path
 struct_fields  ::= ( field_init ( ',' field_init )* ','? )?
 field_init     ::= member_name ( ':' expr )? | '..' expr              # shorthand only for named structs
 
-literal        ::= number unit_suffix?                                # 100[cm], 9.81[m/s^2]
+literal        ::= number unit_suffix??                               # 100[cm], 9.81[m/s^2]
                  | STRING | RAW_STRING | BYTE_STRING | BLOCK_STRING | TAGGED_STRING
                  | CHAR | BYTE | 'true' | 'false'
 
@@ -352,7 +362,7 @@ block_like_keyword
                ::= if_expr | match_expr | loop_expr | while_expr | for_expr | labelled
                  | try_expr | with_expr | select_expr | unsafe_block
                  | 'gen' block                                        # generator block
-if_expr        ::= 'if' ( 'const' expr+ns | expr+ns+cond ) block ( 'else' ( if_expr | block ) )?
+if_expr        ::= 'if' ( 'const' expr+ns | expr+ns+cond ) block ( 'else' ( if_expr | block ) )??
 # `if const`: a comptime conditional; every branch is checked, only the taken one compiled. Under ns a
 # const block cannot start an operand, so after `if` the keyword `const` is always this form.
 match_expr     ::= 'match' expr+ns '{' inner_attr* arms '}'

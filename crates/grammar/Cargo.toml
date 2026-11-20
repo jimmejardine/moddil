@@ -9,6 +9,10 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[[bin]]
+name = "moddil-grammar"
+path = "src/main.rs"
+
 [dependencies]
 
 [lints]

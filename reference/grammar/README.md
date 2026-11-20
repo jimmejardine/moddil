@@ -3,9 +3,10 @@
 The **one grammar source** for Moddil: [`moddil.ebnf`](moddil.ebnf), written in a small EBNF dialect
 of our own ([`specs/definition.md`: One grammar source](../../specs/definition.md#one-grammar-source)).
 
-**Status:** written for **all decided syntax**, not only what M0 implements; the LL(k) checker in
-`crates/grammar` is still to be built. Every rule is defined and used, and the alternatives that
-share a first token are all resolved by two or three tokens of lookahead (k = 3) or by flags.
+**Status:** written for **all decided syntax**, not only what M0 implements, and **checked LL(3)**
+by [`moddil-grammar`](../../crates/grammar/README.md) on every CI run: every rule is reachable, and
+every decision is settled by at most three tokens of lookahead, by flags, or by a marked greedy
+optional. Check it locally with `cargo run -p moddil-grammar`.
 
 ## Notation
 
@@ -22,6 +23,7 @@ IDENT       ::= XID_START XID_CONTINUE*        # UPPERCASE names are token rules
 | `a b` | sequence |
 | `a \| b` | choice |
 | `a?` `a*` `a+` | optional, zero or more, one or more |
+| `a??` | greedy optional: taken whenever it can start (Rust's longest reading; used in four places) |
 | `( … )` | grouping |
 | `'…'` | a terminal |
 | `[a-z]`, `A - B` | character class, exclusion (Tokens section only) |
