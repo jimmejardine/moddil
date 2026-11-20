@@ -1,8 +1,8 @@
 # Closures and Lambdas
 
-> **Status:** mostly follows from decided direction in [`memory.md`](memory.md),
-> [`concurrency.md`](concurrency.md) and [`error-handling.md`](error-handling.md). Complete: no open
-> questions. Syntax follows [`syntax.md`](syntax.md) (Rust-based).
+> **Status:** complete: decided, with no open questions. Follows from [`memory.md`](memory.md),
+> [`concurrency.md`](concurrency.md) and [`error-handling.md`](error-handling.md); syntax follows
+> [`syntax.md`](syntax.md) (Rust-based).
 
 ## Summary
 

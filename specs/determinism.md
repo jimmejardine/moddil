@@ -63,7 +63,8 @@ What it enables:
 | Unordered parallel or GPU reductions | Fixed-order (tree) reductions |
 
 ```rust
-kernel fn splat(points: &[Point], grid: &mut [f32]) with nondet {   // float atomics: order varies
+#[kernel]
+fn splat(points: &[Point], grid: &mut [f32]) with nondet {   // float atomics: order varies
     for p in points { atomic_add(&mut grid[p.cell], p.mass) }
 }
 ```
@@ -133,7 +134,7 @@ nondeterminism, caught immediately (TigerBeetle does this).
 |---|---|
 | Create a simulation and its nodes | `Sim::new(seed: 42)`, `sim.node()` |
 | Per-node handlers | `sim.clock(node)`, `sim.rng(node)`, `sim.net.endpoint(node)`, `sim.disk(node)` |
-| Faults | Interposing handlers (`drop_messages(10.percent)`), `sim.net.partition(a, b)`, `sim.net.heal()` |
+| Faults | Interposing handlers (`drop_messages(rate: 0.1)`), `sim.net.partition(a, b)`, `sim.net.heal()` |
 | Standard faults | Network: drop, delay, duplicate, reorder, partition, heal. Disk: write errors, torn writes, lost `fsync`. Clocks: skew, jumps. Nodes: crash and restart. All seed-driven; more are added as interposing handlers |
 | Running and stopping | `sim.run_until(condition)`; `sim.stop_all()` requests every node to stop |
 
@@ -185,7 +186,7 @@ What this allows:
   disks and RNG streams).
 - **Per subsystem:** wrap one call, so that only that part sees the fault.
   ```
-  with Net = drop_messages(30.percent) { replicate(batch)? }   // captures the outer Net
+  with Net = drop_messages(rate: 0.3) { replicate(batch)? }   // captures the outer Net
   ```
 - **Interposition:** a handler can forward to the enclosing one while recording, delaying, failing or
   asserting. Typed mocks, spies, fault injection and recording all compose by nesting.

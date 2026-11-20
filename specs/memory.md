@@ -202,7 +202,7 @@ Notes:
 - The merge-queue poll is part of the runtime-handler contract ([R2](requirements.md#firm-requirements-decided),
   [`runtime.md`: Runtime contract](runtime.md#runtime-contract)). On single-threaded WASM every count is the owner count.
 
-**Proposed: bias to the owner task, not the owner thread.** Tasks migrate between worker threads
+**Decided: bias to the owner task, not the owner thread.** Tasks migrate between worker threads
 ([`runtime.md`: Tasks, threads and executors](runtime.md#tasks-threads-and-executors)), and with a thread id in the header a migrated task would
 lose the fast path. Instead:
 

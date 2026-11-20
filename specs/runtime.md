@@ -53,9 +53,9 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](r
 [`stdlib.md`: The core / mod boundary](stdlib.md#the-core--mod-boundary)). The memory model adds obligations for runtime handlers:
 
 - **Biased-RC merge queue:** objects whose last shared reference was dropped elsewhere are queued
-  to their owner. *Proposed* ([`memory.md`: Biased reference counting](memory.md#biased-reference-counting)): the owner
+  to their owner. Decided ([`memory.md`: Biased reference counting](memory.md#biased-reference-counting)): the owner
   is a **task**, and the runtime drains a task's queue when it resumes the task and at task exit.
-- **Task migration:** with task-biased RC (proposed), a task moved by work stealing keeps its fast
+- **Task migration:** with task-biased RC, a task moved by work stealing keeps its fast
   path; migration costs nothing. With thread-biased RC it would become a non-owner on its new thread
   (correct, but slower).
 - **Single-threaded targets** (browser WASM without cross-origin isolation, [R1](requirements.md#firm-requirements-decided)): every rc

@@ -121,9 +121,9 @@ let q: Port = 8080;           // literal checked at compile time
 ### Property-based testing, with contracts as free oracles
 
 ```rust
-#[property_test]
-fn withdraw_never_overdraws(mut account: Account, amount: Money) {
+property "never overdraws" for withdraw (account: Account, amount: Money) {
     try { withdraw(&mut account, amount) } catch { _ => {} }
+    assert(account.balance >= 0);
 }
 ```
 

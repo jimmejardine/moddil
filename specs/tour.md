@@ -248,7 +248,7 @@ test "serves over a lossy network" for serve {
             let listener = net.listen(80)?;
             s.spawn(|| serve(&listener));
         }
-        with Net = drop_messages(10.percent, outer: sim.net.endpoint(client)) {
+        with Net = drop_messages(rate: 0.1, outer: sim.net.endpoint(client)) {
             let r = http::post(fmt"http://{server.addr()}/links",
                                body: r#"{"url": "https://moddil.org"}"#, retries: 3)?;
             assert(r.status() == Status::Created);

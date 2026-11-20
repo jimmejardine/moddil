@@ -38,6 +38,7 @@
 | **Delegation** | `#[delegate(Trait)]` forwards a trait's methods to a field, replacing implementation inheritance ([Multiple inheritance](types.md#multiple-inheritance)). |
 | **`discard`** | `discard(r, "reason")`: the only way to ignore an error, visible in review (D14) ([Entry points must handle everything (R3)](error-handling.md#entry-points-must-handle-everything-r3)). |
 | **`dyn`** | An existential: any trait used as a type, behind a pointer with a witness table ([`dyn`: existentials](types.md#dyn-existentials)). |
+| **Edition** | A version of the language chosen per mod in its manifest (`edition = "2027"`); mods of different editions work together in one program, and migrations are automated ([Decisions](evolution.md#decisions)). |
 | **Effect** | A trait listed after `with` in a signature (`with net: Net`), whose implementation is passed implicitly by scope; plus the built-in control effects `suspend`, `spawn` and `fail(E)` ([Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly)). |
 | **Effect polymorphism** | A function such as `visit` takes on the effects of the closure it is given ([Effect polymorphism](effects-and-capabilities.md#effect-polymorphism)). |
 | **`escape`** | `escape v`: returns `v` from the enclosing function across non-escaping lambdas; in a task scope the first one wins and cancels the rest ([Control flow out of a lambda](closures.md#control-flow-out-of-a-lambda)). |
@@ -46,9 +47,11 @@
 | **Flight recorder** | An in-memory ring of recent events dumped on an error or trap ([Flight recorder and replay](observability.md#flight-recorder-and-replay)). |
 | **Freestanding profile** | A build without an operating system (kernels, firmware), with `#[entry]` instead of `main` ([Profiles](freestanding.md#profiles)). |
 | **Generator** | A `gen` block or function that yields values, giving an `Iterator` written as a loop ([Generators](stdlib.md#generators)). |
+| **Group** | `#[group(…)]`: a named set of related `pub` items with its own overview; every `pub` item belongs to one ([Overviews: mod, module and group docs](docs.md#overviews-mod-module-and-group-docs)). |
 | **Handler** | The value installed for an effect with `with Trait = value { … }`: an ordinary impl or an anonymous impl; the innermost one wins ([Defining handlers](effects-and-capabilities.md#defining-handlers)). |
 | **Hot-path attributes** | `#[no_alloc]`, `#[no_lock]` and similar compiler-checked latency guarantees ([Hot-path guarantees](performance.md#hot-path-guarantees)). |
 | **`int`** | The signed 64-bit integer used for lengths, indices and counts on every target ([Integer types](numerics.md#integer-types)). |
+| **Interface artefact** | A mod's `pub` items with their full signatures: what dependents compile against and what the semver check compares ([Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)). |
 | **Interposition** | A handler that captures the enclosing handler for the same trait and forwards to it, to record, delay or inject faults ([Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)). |
 | **Isolated scope** | `scope(…, isolate: true)`: a trap inside unwinds only that scope, which fails with `Trapped` ([Traps: the process by default, isolated scopes on request](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)). |
 | **JSPI** | JavaScript Promise Integration: the first WASM lowering for suspension, in browsers and Node ([WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)). |
@@ -57,19 +60,23 @@
 | **Mod** | The unit of distribution, versioning and capability ceilings: a git repository (or a folder in one) with a manifest ([What a mod is](packages-and-supply-chain.md#what-a-mod-is)). |
 | **`moddil bind`** | Generates Python, Swift, Kotlin and TypeScript bindings to a Moddil core ([Generated bindings](ui.md#generated-bindings)). |
 | **Moddil Evolution** | The proposal process for language and standard-mod changes ([Moddil Evolution](governance.md#moddil-evolution)). |
+| **`moddil verify`** | The toolchain subcommand that proves contracts with an SMT solver (Z3, pinned in the lockfile) ([Proofs in Moddil itself](correctness.md#proofs-in-moddil-itself)). |
 | **Module** | A namespace inside a mod; visibility is module, mod or public ([Mods and modules](modules.md#mods-and-modules)). |
+| **`nondet`** | A capability marking opt-in nondeterminism (fast-math, float atomics); forbidden in replayable code ([The `nondet` effect](determinism.md#the-nondet-effect)). |
 | **Note** | `note "…"`: a maintainer note attached to an item, kept out of the public docs ([Maintainer notes](docs.md#maintainer-notes)). |
 | **Orphan rule** | An impl must live with its trait or its type, with three exceptions: the application, the same repository and bridge mods ([Who may write an impl](types.md#who-may-write-an-impl)). |
 | **Placement** | Choosing where code runs: executor, core, GPU device or tier, by the same mechanism at each level ([Tasks, threads and executors](runtime.md#tasks-threads-and-executors)). |
 | **Prelude** | The names every module sees without `use`, and the one glob-importable module a mod may declare ([The prelude](stdlib.md#the-prelude)). |
+| **`pub(mod)`** | Visibility to every module in the same mod, between private and exported `pub` ([Three visibility levels](modules.md#three-visibility-levels)). |
 | **Rc** | `Rc<T>`: a shared, reference-counted handle to immutable data, made with `.to_rc()` ([Sharing: `.to_rc()`](memory.md#sharing-to_rc)). |
 | **Reference interpreter** | An interpreter over the canonical AST, kept separate from the compiler for differential testing ([Two interpreters](compiler.md#two-interpreters)). |
 | **Refinement** | A validated newtype such as `type Port = u16 where self >= 1024` ([Validated newtypes (lightweight refinements)](correctness.md#validated-newtypes-lightweight-refinements)). |
 | **`Remote`** | The effect performed by a call that crosses tiers, with its own failures ([The `Remote` effect](distribution.md#the-remote-effect)). |
+| **`requires always`** | A precondition checked under every `Contracts` policy, even `none` ([Checking policy: the `Contracts` handler](correctness.md#checking-policy-the-contracts-handler)). |
 | **Role trait** | An empty subtrait with a blanket impl (`trait DbInput: Db {}`), giving a second handler of a trait its own effect ([Role traits](effects-and-capabilities.md#role-traits)). |
 | **Root capability** | A capability `main` receives as a parameter (`NetRoot`, `FsRoot`, `Stdio`, …); the only source of authority ([`main` declares its root capabilities](lifecycle.md#main-declares-its-root-capabilities)). |
 | **Router** | `http::Router`: maps compile-time-checked paths to handler functions, converting path parameters with `TryFrom`; handler errors must implement `IntoResponse` ([HTTP](stdlib.md#http)). |
-| **Root capability** | A mod providing handlers for scheduling, I/O and time (`moddil/runtime`, `-wasm`, `-sim`) ([Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)). |
+| **Runtime** | A mod providing handlers for scheduling, I/O and time (`moddil/runtime`, `-wasm`, `-sim`) ([Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)). |
 | **Safety contract** | The documented conditions a caller of an `unsafe fn` must uphold ([Safety contracts](unsafe.md#safety-contracts)). |
 | **Scope** | `scope(\|s\| …)`: the only way to start tasks; it waits for all of them and is their cancellation token ([Tasks and borrowing](concurrency.md#tasks-and-borrowing)). |
 | **Security labels** | `Secret<T>`, `Personal<T>` and `Untrusted<T>`, checked by the compiler ([Information-flow labels](security.md#information-flow-labels)). |
@@ -81,7 +88,7 @@
 | **Stop** | The graceful first stage of shutdown, observed where code asks with `stop_requested()` ([Two levels: stop, then cancel](lifecycle.md#two-levels-stop-then-cancel)). |
 | **`StrPos`** | A byte position on a character boundary, tied by type to its string ([Positions and slicing](text.md#positions-and-slicing)). |
 | **Suppressed error** | An error attached to a primary error rather than replacing it, from cleanup (D10) or from sibling tasks (D15) ([Cleanup that can fail](resources.md#cleanup-that-can-fail)). |
-| **Suspend** | The core effect of pausing a task; any function that may pause lists it ([The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)). |
+| **`suspend`** | The core effect of pausing a task; any function that may pause lists it ([The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)). |
 | **Sync cell** | `Atomic<T>`, `AtomicRc<T>`, `Mutex<T>` or `RwLock<T>`: the only shared mutable state ([Shared mutable state](concurrency.md#shared-mutable-state)). |
 | **Tagged literal** | A string literal with a prefix (`fmt"…"`, `sql"…"`, `re"…"`) parsed and checked at compile time ([Tagged string literals (embedded DSLs)](comptime.md#tagged-string-literals-embedded-dsls)). |
 | **Task** | A stackful coroutine; the only unit of concurrency, with no user-facing threads ([Tasks, threads and executors](runtime.md#tasks-threads-and-executors)). |

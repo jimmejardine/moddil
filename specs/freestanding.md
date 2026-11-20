@@ -179,7 +179,7 @@ behaviour via QEMU's multi-threaded emulation.
 | Peripheral model fidelity, silicon errata | Models are written from datasheets | Renode models where available; errata handled in HAL mods; user bug reports |
 | Low-power modes, analog, radio | Partly or not modelled | Out of scope for the toolchain; the responsibility of HAL mods |
 
-**Proposed rule:** a bare-metal target is **tier 1 only if a free emulator runs its full test suite
+**Decided:** a bare-metal target is **tier 1 only if a free emulator runs its full test suite
 in CI**.
 
 ### Architectures and boards

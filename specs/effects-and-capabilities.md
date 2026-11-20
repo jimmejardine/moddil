@@ -204,8 +204,8 @@ impl SqlLinks {
 impl Links for SqlLinks {
     fn put(&self, code: Code, target: Target) with suspend, fail(LinkError) {
         try { self.db.execute(sql"INSERT INTO links (code, target) VALUES ({code}, {target})")? } catch {
-            Unique(_) => fail(LinkError::Taken(code)),
-            e         => fail(LinkError::Storage(e)),          // DbError mapped into the declared error
+            DbError::Unique(_) => fail(LinkError::Taken(code)),
+            e                  => fail(LinkError::Storage(e)),          // DbError mapped into the declared error
         }
     }
     …
@@ -490,16 +490,7 @@ No mainstream language has made a typed effect system popular. The measures:
 - **Agent-grade diagnostics**, e.g. "`parse` uses `Net` (via `fetch_schema`, line 40), which
   `acme/json`'s ceiling does not allow".
 
-## Fit check against the reference examples
-
-| Example | Uses |
-|---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | Simulation handlers for `Net` and `Time` in rollback tests; the restricted kernel set for GPU work |
-| [HFT](examples/02-hft-platform.md) | Statically known handlers in production (zero cost); recorded `Net` and `Time` for whole-day replay |
-| [Web store](examples/03-web-store.md) | A user-defined `Db` trait instead of threading a pool; narrowed `Fs` for uploads |
-| [Hashiverse](examples/04-hashiverse.md) | `TimeProvider`, `TransportFactory` and `ClientStorage` stay traits but are used after `with`, so the `RuntimeServices` plumbing disappears; the in-memory transport becomes a handler |
-
-## Context data
+### Context data
 
 **Decided: context is traits for behaviour, and nominal data types for data.** This replaces
 `Context` objects threaded through every call.
@@ -534,6 +525,15 @@ No mainstream language has made a typed effect system popular. The measures:
     ([`lifecycle.md`: Cancellation and shutdown](lifecycle.md#cancellation-and-shutdown)).
   - *Data that changes behaviour* (the authenticated user, the tenant) is context data installed
     per request: `with User = authed { handle(req) }`.
+
+## Fit check against the reference examples
+
+| Example | Uses |
+|---|---|
+| [Multiplayer game](examples/01-multiplayer-game.md) | Simulation handlers for `Net` and `Time` in rollback tests; the restricted kernel set for GPU work |
+| [HFT](examples/02-hft-platform.md) | Statically known handlers in production (zero cost); recorded `Net` and `Time` for whole-day replay |
+| [Web store](examples/03-web-store.md) | A user-defined `Db` trait instead of threading a pool; narrowed `Fs` for uploads |
+| [Hashiverse](examples/04-hashiverse.md) | `TimeProvider`, `TransportFactory` and `ClientStorage` stay traits but are used after `with`, so the `RuntimeServices` plumbing disappears; the in-memory transport becomes a handler |
 
 ## Open questions
 

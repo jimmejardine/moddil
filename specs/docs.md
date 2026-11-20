@@ -1,8 +1,8 @@
 # Docs next to the code
 
-> **Status:** decided direction, details open. Expands [Tooling uniformity](toolchain.md) and [LLMs as first-class programmers](agent-interface.md),
+> **Status:** complete: decided, with no open questions. Expands [Tooling uniformity](toolchain.md) and [LLMs as first-class programmers](agent-interface.md),
 > Examples, tests and benchmarks are in [`testing.md`](testing.md). Snippets are
-> **illustration only**; no syntax is committed.
+> **illustration only**.
 
 ## Summary
 

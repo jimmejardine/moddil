@@ -196,8 +196,7 @@ use `?`. None of that applies here.
 
 ## Open questions
 
-None at present. Runtime questions (preemption, priorities) are in
-[`runtime.md`: Open questions](runtime.md#open-questions).
+None at present.
 
 ## Background
 

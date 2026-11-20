@@ -63,14 +63,6 @@ and flaky tests are the main brake.
   code.
 - **Capabilities in tests:** a test gets no root capabilities unless it declares them, and test code
   counts against the mod's ceiling ([`security.md`: Tests are held to the same rules](security.md#tests-are-held-to-the-same-rules)).
-
-### Errors inside tests
-
-**Decided: an error that escapes a test fails the test.** A test is an entry point with an explicit
-exemption from R3 ([`requirements.md`: R3](requirements.md#r3-no-crash-from-an-unhandled-error)):
-its body may use `?`, and any error that escapes, like any trap, fails that test and is reported with
-its error return trace ([`error-handling.md`: Traces](error-handling.md#traces)). `main`, task
-bodies and callbacks keep the full R3 rule.
 - **Tooling knows each test's subject**:
   - "which tests cover `withdraw`?" is a query;
   - the semantic diff ([Diffs, code review and version control](semantic-vcs.md)) reports "**`withdraw` changed, but none of its tests did**",
@@ -80,6 +72,14 @@ bodies and callbacks keep the full R3 rule.
   ([`determinism.md`: Handlers are scoped, not global](determinism.md#handlers-are-scoped-not-global)), not global monkey-patching.
 - Tests, examples, notes and benchmarks are **excluded from the mod's interface hash and from release
   artefacts**, so editing a test never rebuilds dependents ([`build-times.md`](build-times.md)).
+
+### Errors inside tests
+
+**Decided: an error that escapes a test fails the test.** A test is an entry point with an explicit
+exemption from R3 ([`requirements.md`: R3](requirements.md#r3-no-crash-from-an-unhandled-error)):
+its body may use `?`, and any error that escapes, like any trap, fails that test and is reported with
+its error return trace ([`error-handling.md`: Traces](error-handling.md#traces)). `main`, task
+bodies and callbacks keep the full R3 rule.
 
 ## Correctness tools in the same place
 
