@@ -63,10 +63,7 @@ pub(crate) fn derive_attrs(node: &SyntaxNode) -> Vec<(TextRange, Vec<String>)> {
 }
 
 fn name_of(node: &SyntaxNode) -> String {
-    node.child(K::NAME)
-        .and_then(ast::Name::cast)
-        .map(|n| n.text())
-        .unwrap_or_default()
+    ast::name(node).map(|n| n.text()).unwrap_or_default()
 }
 
 fn variant(node: &SyntaxNode, path: String) -> Variant {

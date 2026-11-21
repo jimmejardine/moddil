@@ -146,6 +146,44 @@ impl Name {
     }
 }
 
+/// The defining name of an item, variant, field or parameter: its `NAME` child.
+pub fn name(node: &SyntaxNode) -> Option<Name> {
+    node.child(SyntaxKind::NAME).and_then(Name::cast)
+}
+
+/// The member a field expression, method call, struct-literal field or struct-pattern field
+/// names: the first name-like token after its `.`, or its first one if it has no `.`. A member
+/// is an identifier, a tuple index (`t.0`) or a keyword used as a name.
+pub fn member_name(node: &SyntaxNode) -> Option<SyntaxToken> {
+    let tokens: Vec<SyntaxToken> = node
+        .child_tokens()
+        .filter(|t| !t.kind().is_trivia())
+        .collect();
+    let start = tokens
+        .iter()
+        .position(|t| t.kind() == SyntaxKind::DOT)
+        .map_or(0, |i| i + 1);
+    tokens[start..]
+        .iter()
+        .find(|t| {
+            matches!(t.kind(), SyntaxKind::IDENT | SyntaxKind::INTEGER) || t.kind().is_keyword()
+        })
+        .cloned()
+}
+
+/// The value of an integer literal's text: decimal, `0x`, `0o` or `0b`, with `_` separators
+/// ignored. `None` if it has no digits or does not fit in an `i128`.
+pub fn int_value(text: &str) -> Option<i128> {
+    let digits: String = text.chars().filter(|&c| c != '_').collect();
+    let (radix, digits) = match digits.get(..2) {
+        Some("0x") => (16, &digits[2..]),
+        Some("0o") => (8, &digits[2..]),
+        Some("0b") => (2, &digits[2..]),
+        _ => (10, digits.as_str()),
+    };
+    i128::from_str_radix(digits, radix).ok()
+}
+
 impl ParamList {
     /// The parameters, in order.
     pub fn params(&self) -> impl Iterator<Item = Param> + '_ {
@@ -383,5 +421,20 @@ impl Expr {
     /// The sub-expressions, in order.
     pub fn sub_exprs(&self) -> Vec<Expr> {
         children(self.syntax()).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::int_value;
+
+    #[test]
+    fn integer_literals() {
+        assert_eq!(int_value("1_000"), Some(1000));
+        assert_eq!(int_value("0xff"), Some(255));
+        assert_eq!(int_value("0o17"), Some(15));
+        assert_eq!(int_value("0b1010"), Some(10));
+        assert_eq!(int_value("0x_"), None);
+        assert_eq!(int_value(&"9".repeat(50)), None);
     }
 }

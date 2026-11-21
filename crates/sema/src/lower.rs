@@ -667,7 +667,7 @@ impl Lowerer<'_> {
         match tok.kind() {
             K::TRUE_KW => self.alloc(ExprKind::Bool(true), range),
             K::FALSE_KW => self.alloc(ExprKind::Bool(false), range),
-            K::INTEGER => match integer_value(tok.text()) {
+            K::INTEGER => match ast::int_value(tok.text()) {
                 Some(v) => self.alloc(ExprKind::Int(if negate { -v } else { v }), range),
                 None => {
                     self.report(
@@ -718,7 +718,7 @@ impl Lowerer<'_> {
                 self.error(Diagnostic::unsupported(init_range, "struct update syntax"));
                 continue;
             }
-            let Some(name_tok) = member_name(&init) else {
+            let Some(name_tok) = ast::member_name(&init) else {
                 continue;
             };
             let name = name_tok.text().to_string();
@@ -842,7 +842,7 @@ impl Lowerer<'_> {
         let range = node.text_range();
         let base = e.sub_exprs().into_iter().next();
         let base = self.expr_or_missing(base, range);
-        match member_name(node) {
+        match ast::member_name(node) {
             Some(tok) => self.alloc(
                 ExprKind::Field {
                     base,
@@ -1402,7 +1402,7 @@ impl Lowerer<'_> {
         match tok.kind() {
             K::TRUE_KW => PatKind::Bool(true),
             K::FALSE_KW => PatKind::Bool(false),
-            K::INTEGER => match integer_value(tok.text()) {
+            K::INTEGER => match ast::int_value(tok.text()) {
                 Some(v) => PatKind::Int(if negate { -v } else { v }),
                 None => {
                     self.report(
@@ -1649,7 +1649,7 @@ impl Lowerer<'_> {
                 rest = true;
                 continue;
             }
-            let Some(name_tok) = member_name(&f) else {
+            let Some(name_tok) = ast::member_name(&f) else {
                 continue;
             };
             let name = name_tok.text().to_string();
@@ -1762,24 +1762,6 @@ impl Lowerer<'_> {
     }
 }
 
-/// The field name after `.` in a field expression, or the name in a field initialiser or field
-/// pattern: an identifier, a keyword used as a member name, or a tuple index.
-fn member_name(node: &SyntaxNode) -> Option<SyntaxToken> {
-    let tokens: Vec<SyntaxToken> = node
-        .child_tokens()
-        .filter(|t| !t.kind().is_trivia())
-        .collect();
-    let after_dot = tokens.iter().position(|t| t.kind() == K::DOT);
-    let candidates = match after_dot {
-        Some(i) => &tokens[i + 1..],
-        None => &tokens[..],
-    };
-    candidates
-        .iter()
-        .find(|t| matches!(t.kind(), K::IDENT | K::INTEGER) || t.kind().is_keyword())
-        .cloned()
-}
-
 fn compare_op(tok: &SyntaxToken) -> Option<CompareOp> {
     Some(match tok.kind() {
         K::EQ_EQ => CompareOp::Eq,
@@ -1806,31 +1788,4 @@ fn binary_op(tok: &SyntaxToken) -> Option<BinaryOp> {
         K::GT_GT => BinaryOp::Shr,
         _ => return None,
     })
-}
-
-/// The value of an `INTEGER` token, if it fits in an `i128`.
-fn integer_value(text: &str) -> Option<i128> {
-    let digits: String = text.chars().filter(|&c| c != '_').collect();
-    let (radix, digits) = match digits.get(..2) {
-        Some("0x") => (16, &digits[2..]),
-        Some("0o") => (8, &digits[2..]),
-        Some("0b") => (2, &digits[2..]),
-        _ => (10, digits.as_str()),
-    };
-    i128::from_str_radix(digits, radix).ok()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::integer_value;
-
-    #[test]
-    fn integer_literals() {
-        assert_eq!(integer_value("1_000"), Some(1000));
-        assert_eq!(integer_value("0xff"), Some(255));
-        assert_eq!(integer_value("0o17"), Some(15));
-        assert_eq!(integer_value("0b1010"), Some(10));
-        assert_eq!(integer_value("0x_"), None);
-        assert_eq!(integer_value(&"9".repeat(50)), None);
-    }
 }

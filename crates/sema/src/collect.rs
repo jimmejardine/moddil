@@ -592,7 +592,7 @@ fn bounds(node: &SyntaxNode, ty: &Ty, scope: &Scope, diags: &mut Vec<Diagnostic>
 }
 
 fn name_of(node: &SyntaxNode) -> (String, TextRange) {
-    match node.child(K::NAME).and_then(ast::Name::cast) {
+    match ast::name(node) {
         Some(n) => (n.text(), n.syntax().text_range()),
         None => (String::new(), node.text_range()),
     }

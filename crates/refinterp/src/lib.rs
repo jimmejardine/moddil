@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 use moddil_syntax::ast::{self, AstNode};
-use moddil_syntax::{SyntaxKind as K, SyntaxNode, SyntaxToken, TextRange};
+use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
 
 /// The prelude's source.
 const PRELUDE: &str = include_str!("../../../reference/2027/prelude.moddil");
@@ -634,10 +634,7 @@ impl Program {
 }
 
 fn name_of(node: &SyntaxNode) -> String {
-    node.child(K::NAME)
-        .and_then(ast::Name::cast)
-        .map(|n| n.text())
-        .unwrap_or_default()
+    ast::name(node).map(|n| n.text()).unwrap_or_default()
 }
 
 /// The traits `#[derive(…)]` on an item names.
@@ -2207,17 +2204,7 @@ fn segments(node: &SyntaxNode) -> Vec<String> {
 
 /// The name after `.` in a field expression, or of a field initialiser or field pattern.
 fn member_name(node: &SyntaxNode) -> String {
-    let tokens: Vec<SyntaxToken> = node
-        .child_tokens()
-        .filter(|t| !t.kind().is_trivia())
-        .collect();
-    let start = tokens
-        .iter()
-        .position(|t| t.kind() == K::DOT)
-        .map_or(0, |i| i + 1);
-    tokens[start..]
-        .iter()
-        .find(|t| matches!(t.kind(), K::IDENT | K::INTEGER) || t.kind().is_keyword())
+    ast::member_name(node)
         .map(|t| t.text().to_string())
         .expect("a member name")
 }
@@ -2246,14 +2233,7 @@ fn literal_pat(node: &SyntaxNode) -> Value {
 /// The value of an integer literal: decimal, or `0x`, `0o`, `0b`, with `_` separators
 /// (`expr.lit.int.1`).
 fn integer(text: &str) -> i128 {
-    let digits: String = text.chars().filter(|&c| c != '_').collect();
-    let (radix, digits) = match digits.get(..2) {
-        Some("0x") => (16, &digits[2..]),
-        Some("0o") => (8, &digits[2..]),
-        Some("0b") => (2, &digits[2..]),
-        _ => (10, digits.as_str()),
-    };
-    i128::from_str_radix(digits, radix).expect("a checked literal")
+    ast::int_value(text).expect("a checked literal")
 }
 
 type Comparison = fn(&Value, &Value) -> bool;
