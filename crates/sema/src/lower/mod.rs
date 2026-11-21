@@ -8,7 +8,9 @@ use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
 
 use crate::collect::{item_tree, node_at, source};
-use crate::hir::{Body, Expr, ExprId, ExprKind, Local, LocalId, Pat, PatId, PatKind, Stmt};
+use crate::hir::{
+    Body, Expr, ExprId, ExprKind, FmtPiece, Local, LocalId, Pat, PatId, PatKind, Stmt,
+};
 use crate::items::{Container, Def, Src};
 use crate::resolve::{Scope, generic_args, resolve_type};
 use crate::{Code, Db, Diagnostic, Item, ItemTree, Owner, Ty};
@@ -50,6 +52,7 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
         out: Lowered::default(),
         names: Names::default(),
         closure: None,
+        olds: None,
         types: Scope {
             holes: true,
             module,
@@ -116,6 +119,118 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
                     cx.names.bind(name.clone(), local);
                 }
             }
+            // A refinement's functions (`refine.new.1`): `holds` is `(p, self)`, and `new` is
+            // `{ let (ok, v) = holds(self); if ok { v as X } else { fail RefinementError { … } } }`.
+            if let Some((t, is_new)) = sig.refine {
+                let range = sig.name_range;
+                let this = cx.out.body.params[0];
+                let id = if is_new {
+                    let def = &items.types[t as usize];
+                    let r = def.refinement.as_ref().expect("a refinement");
+                    let holds = cx.alloc(
+                        ExprKind::Fn {
+                            func: r.holds,
+                            args: Vec::new(),
+                        },
+                        range,
+                    );
+                    let arg = cx.alloc(ExprKind::Local(this), range);
+                    let call = cx.alloc(
+                        ExprKind::Call {
+                            callee: holds,
+                            args: vec![arg],
+                        },
+                        range,
+                    );
+                    let hidden = |cx: &mut Lowerer<'_>, name: &str| {
+                        cx.out.body.locals.alloc(Local {
+                            name: name.to_string(),
+                            mutable: false,
+                            range,
+                            closure: None,
+                        })
+                    };
+                    let ok = hidden(&mut cx, "{ok}");
+                    let value = hidden(&mut cx, "{value}");
+                    let ok_pat = cx.alloc_pat(
+                        PatKind::Bind {
+                            local: ok,
+                            sub: None,
+                        },
+                        range,
+                    );
+                    let value_pat = cx.alloc_pat(
+                        PatKind::Bind {
+                            local: value,
+                            sub: None,
+                        },
+                        range,
+                    );
+                    let pair = cx.alloc_pat(
+                        PatKind::Tuple {
+                            pats: vec![ok_pat, value_pat],
+                            rest: None,
+                        },
+                        range,
+                    );
+                    let cond = cx.alloc(ExprKind::Local(ok), range);
+                    let v = cx.alloc(ExprKind::Local(value), range);
+                    let then = cx.alloc(ExprKind::Refine(v, t), range);
+                    let name =
+                        cx.alloc(ExprKind::Fmt(vec![FmtPiece::Lit(def.name.clone())]), range);
+                    let clause =
+                        cx.alloc(ExprKind::Fmt(vec![FmtPiece::Lit(r.clause.clone())]), range);
+                    let shown_v = cx.alloc(ExprKind::Local(value), range);
+                    let shown = cx.alloc(ExprKind::Fmt(vec![FmtPiece::Debug(shown_v)]), range);
+                    let else_ = match items.lang("RefinementError") {
+                        Some(adt) => {
+                            let err = cx.alloc(
+                                ExprKind::Adt {
+                                    adt,
+                                    variant: 0,
+                                    fields: vec![(0, name), (1, clause), (2, shown)],
+                                    args: Vec::new(),
+                                },
+                                range,
+                            );
+                            cx.alloc(ExprKind::Fail(err), range)
+                        }
+                        None => cx.missing(range),
+                    };
+                    let test = cx.alloc(
+                        ExprKind::If {
+                            cond,
+                            then,
+                            else_: Some(else_),
+                        },
+                        range,
+                    );
+                    cx.alloc(
+                        ExprKind::Block {
+                            stmts: vec![Stmt::Let {
+                                pat: pair,
+                                ty: None,
+                                init: call,
+                                else_: None,
+                            }],
+                            tail: Some(test),
+                            observe_tail: false,
+                        },
+                        range,
+                    )
+                } else {
+                    let pred = node_at(&root, K::TYPE_ITEM, sig.node)
+                        .and_then(|n| n.children().find_map(ast::Expr::cast));
+                    let pred = match pred {
+                        Some(e) => cx.expr(&e),
+                        None => cx.missing(range),
+                    };
+                    let back = cx.alloc(ExprKind::Local(this), range);
+                    cx.alloc(ExprKind::Tuple(vec![pred, back]), range)
+                };
+                cx.out.body.root = Some(id);
+                return cx.out;
+            }
             // A const item's body is its initialiser.
             if sig.const_item {
                 let init = node_at(&root, K::CONST_ITEM, sig.node)
@@ -125,6 +240,12 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
                     cx.out.body.root = Some(id);
                 }
                 return cx.out;
+            }
+            // Contracts (`contract.1`), on a function that is not a trait's.
+            if let Some(f) = &node
+                && !matches!(sig.container, Container::Trait(_))
+            {
+                cx.contracts(f.syntax(), &sig.ret);
             }
             node.and_then(|f| f.body())
         }
@@ -178,6 +299,8 @@ struct Lowerer<'a> {
     names: Names,
     /// The innermost closure being lowered, if any.
     closure: Option<ExprId>,
+    /// While a postcondition is lowered: the `old(e)` values it names so far.
+    olds: Option<Vec<(LocalId, ExprId)>>,
     /// What the names in types refer to; types left out are inferred.
     types: Scope<'a>,
 }
@@ -366,4 +489,43 @@ impl Lowerer<'_> {
     }
 
     // Patterns.
+}
+
+impl Lowerer<'_> {
+    /// The contracts of the function `node`: its `requires` conditions, and its `ensures`
+    /// conditions, in which `result` is the value returned and `old(e)` is `e` on entry.
+    fn contracts(&mut self, node: &SyntaxNode, ret: &Ty) {
+        let _ = ret;
+        for c in node.children().filter(|c| c.kind() == K::CONTRACT) {
+            let Some(e) = c.children().find_map(ast::Expr::cast) else {
+                continue;
+            };
+            if c.token(K::REQUIRES_KW).is_some() {
+                let id = self.expr(&e);
+                self.out.body.requires.push(id);
+                continue;
+            }
+            let result = match self.out.body.result {
+                Some(r) => r,
+                None => {
+                    let r = self.out.body.locals.alloc(Local {
+                        name: "result".to_string(),
+                        mutable: false,
+                        range: c.text_range(),
+                        closure: None,
+                    });
+                    self.out.body.result = Some(r);
+                    r
+                }
+            };
+            let mark = self.names.mark();
+            self.names.bind("result".to_string(), result);
+            self.olds = Some(Vec::new());
+            let id = self.expr(&e);
+            let olds = self.olds.take().unwrap_or_default();
+            self.out.body.olds.extend(olds);
+            self.names.restore(mark);
+            self.out.body.ensures.push(id);
+        }
+    }
 }

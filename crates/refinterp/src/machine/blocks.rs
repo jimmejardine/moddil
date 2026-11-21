@@ -110,7 +110,9 @@ impl Machine<'_> {
         let src = self.scrutinee(&init)?;
         let pat = l.pat().expect("a checked `let` has a pattern");
         let mut binds = Vec::new();
-        if self.matches(&pat, &src, &mut binds) {
+        let matched = self.matches(&pat, &src, &mut binds);
+        self.matched(l.syntax().text_range())?;
+        if matched {
             self.bind(binds);
             return Ok(());
         }

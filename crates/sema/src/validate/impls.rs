@@ -16,6 +16,20 @@ pub(crate) fn check_impls(tree: &ItemTree) -> Vec<Found> {
     let drop = tree.lang("Drop");
     for imp in &tree.impls {
         let push = |found: &mut Vec<_>, d: Diagnostic| found.push((imp.src, imp.origin, d));
+        // A refined type has its base's methods and traits, and none of its own yet.
+        if let Ty::Refined(_, name) = &imp.self_ty {
+            push(
+                &mut found,
+                Diagnostic::error(
+                    Code::E0414,
+                    imp.range,
+                    format!(
+                        "`{name}` has the methods and traits of its base, and none of its own, for now"
+                    ),
+                ),
+            );
+            continue;
+        }
         let Some(tr) = &imp.trait_ref else {
             // Inherent impls: only for the file's own structs and enums.
             match imp.self_ty.adt() {

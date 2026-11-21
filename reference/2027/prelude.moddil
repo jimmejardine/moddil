@@ -617,6 +617,28 @@ trait Iterator {
     type Item;
     fn next(&mut self) -> Option<Self::Item>;
 
+    // Whether `f` holds for every item left, stopping at the first it does not hold for.
+    fn all(self, f: impl FnMut(Self::Item) -> bool) -> bool {
+        let mut it = self;
+        while let Some(x) = it.next() {
+            if !f(x) {
+                return false;
+            }
+        }
+        true
+    }
+
+    // Whether `f` holds for some item left, stopping at the first it holds for.
+    fn any(self, f: impl FnMut(Self::Item) -> bool) -> bool {
+        let mut it = self;
+        while let Some(x) = it.next() {
+            if f(x) {
+                return true;
+            }
+        }
+        false
+    }
+
     // How many items are left, using them up.
     fn count(self) -> int {
         let mut it = self;
@@ -1319,3 +1341,11 @@ impl<T> Default for Option<T> {
     }
 }
 
+// The error `X::new(v)` fails with when `v` is not an `X` (`refine.new.1`): the refined type's
+// name, its `where` clause as written, and the value as `Debug` shows it.
+#[derive(Debug, Clone, PartialEq)]
+struct RefinementError {
+    ty: String,
+    clause: String,
+    value: String,
+}

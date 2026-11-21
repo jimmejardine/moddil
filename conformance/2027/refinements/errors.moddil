@@ -1,0 +1,25 @@
+// covers: refine.base.1, refine.new.2, refine.pat.1
+
+struct Opaque { x: int }
+
+type Port = int where self >= 1024;
+type Bad = Opaque where self.x > 0;         //~ E0402 E0402
+
+impl Port {                                 //~ E0414
+    fn f(self) {}
+}
+
+fn plain(x: int) -> bool { x > 0 }
+type Calls = int where plain(self);         //~ E1001
+
+fn take(p: Port) {}
+
+fn from_int(n: int) {
+    take(n);                                //~ E0201
+}
+
+fn not_refined(n: int) -> int {
+    match n {
+        p: int => p,                        //~ E0201
+    }
+}

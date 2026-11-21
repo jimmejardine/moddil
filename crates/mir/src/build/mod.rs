@@ -13,7 +13,9 @@ use moddil_sema::hir::{self, ExprId};
 use moddil_sema::{Container, Db, Inference, Item, ItemTree, Owner, Solver, Src, Ty};
 use moddil_syntax::TextRange;
 
-use crate::{Body, Const, Local, LocalDecl, Operand, Place, Rvalue, Statement, Terminator};
+use crate::{
+    Body, Const, Local, LocalDecl, Operand, Place, Rvalue, Statement, Terminator, TrapClass,
+};
 
 mod arith;
 mod cfg;
@@ -135,6 +137,14 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
         let fail = b.cfg.new_block();
         b.test_pat(pat, &place, fail);
     }
+    // Contracts (`contract.1`): the preconditions, then the values `old(e)` keeps.
+    for &e in &hir.requires {
+        b.contract(e, TrapClass::Precondition);
+    }
+    for &(local, e) in &hir.olds {
+        let l = b.local(local);
+        b.eval_into(l, e);
+    }
     if let Some(root) = hir.root {
         if let Item::Test(_) = owner.item(db) {
             // A test's value is observed, not returned.
@@ -146,6 +156,7 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
             b.eval_into(Local::RETURN, root);
         }
     }
+    b.ensures();
     b.leave_scopes(0);
     b.cfg.terminate(Terminator::Return);
     Some(b.cfg.finish())
@@ -414,6 +425,41 @@ fn fn_name(items: &ItemTree, func: u32) -> String {
                 Some(t) => format!("<{:?} as {}>::{}", imp.self_ty, t.name, sig.name),
                 None => format!("{:?}::{}", imp.self_ty, sig.name),
             }
+        }
+    }
+}
+
+impl Builder<'_> {
+    /// Traps with `trap` unless condition `e` holds.
+    fn contract(&mut self, e: ExprId, trap: TrapClass) {
+        let ok = self.temp(Ty::Bool);
+        self.eval_into(ok, e);
+        let range = self.range(e);
+        self.cfg.push(Statement::Assert {
+            cond: Operand::Copy(Place::local(ok)),
+            expected: true,
+            trap,
+            range,
+            parts: Vec::new(),
+        });
+    }
+
+    /// Before returning: the postconditions, with `result` holding the value returned.
+    pub(super) fn ensures(&mut self) {
+        if self.hir.ensures.is_empty() {
+            return;
+        }
+        let result = self.hir.result.map(|r| self.local(r));
+        if let Some(r) = result {
+            self.cfg
+                .assign(r, Rvalue::Use(Operand::Move(Place::local(Local::RETURN))));
+        }
+        for e in self.hir.ensures.clone() {
+            self.contract(e, TrapClass::Postcondition);
+        }
+        if let Some(r) = result {
+            self.cfg
+                .assign(Local::RETURN, Rvalue::Use(Operand::Move(Place::local(r))));
         }
     }
 }

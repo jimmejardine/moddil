@@ -40,6 +40,8 @@ pub struct ItemTree {
     pub fns: Vec<FnSig>,
     /// The structs and enums.
     pub adts: Vec<AdtDef>,
+    /// The `type` items: aliases and refinements.
+    pub types: Vec<TypeDef>,
     /// The traits.
     pub traits: Vec<TraitDef>,
     /// The impls.
@@ -80,6 +82,8 @@ pub enum Def {
     Fn(u32),
     /// A struct or enum.
     Adt(u32),
+    /// A `type` item: an alias or a refinement.
+    Type(u32),
     /// A trait.
     Trait(u32),
     /// A variant named on its own (`Some`): its enum and index.
@@ -256,6 +260,9 @@ pub struct FnSig {
     pub intrinsic: bool,
     /// Whether it may run at compile time: a `const fn`, or a const item.
     pub is_const: bool,
+    /// For the hidden functions of a refinement (`type X = T where p;`): its index among the
+    /// `type` items, and whether this is `X::new` (or else `X::holds`, the predicate).
+    pub refine: Option<(u32, bool)>,
     /// Whether it is a const item (`const N: T = e;`), kept as a function with no parameters
     /// whose body is the initialiser: a use of `N` calls it, and its value is computed when
     /// compiling.
@@ -305,6 +312,7 @@ impl FnSig {
             intrinsic: false,
             is_const: false,
             const_item: false,
+            refine: None,
             vis,
             module,
         }
@@ -352,6 +360,38 @@ pub struct AdtDef {
     pub vis: Vis,
     /// The module it is declared in.
     pub module: u32,
+}
+
+/// A `type` item (`refine.1`): `type X = T;`, an alias, or `type X = T where p;`, a refinement.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TypeDef {
+    /// The name.
+    pub name: String,
+    /// Where the name is.
+    pub name_range: TextRange,
+    /// Which source it is in.
+    pub src: Src,
+    /// The module it is declared in.
+    pub module: u32,
+    /// Who can name it.
+    pub vis: Vis,
+    /// The `type` item's range.
+    pub node: TextRange,
+    /// The type it names (an alias), or its base (a refinement).
+    pub ty: Ty,
+    /// For a refinement: the predicate's text, and the functions `X::holds` and `X::new`.
+    pub refinement: Option<Refinement>,
+}
+
+/// What makes a `type` item a refinement.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Refinement {
+    /// The predicate as written, which `RefinementError` names.
+    pub clause: String,
+    /// `X::holds(self: T) -> (bool, T)`: whether the predicate holds, and the value back.
+    pub holds: u32,
+    /// `X::new(self: T) -> X with fail(RefinementError)`.
+    pub new: u32,
 }
 
 /// One variant of an enum, or a struct's shape.
@@ -525,6 +565,7 @@ const LANG: &[&str] = &[
     "FromArrayLiteral",
     "Debug",
     "Default",
+    "RefinementError",
 ];
 
 impl ItemTree {
@@ -636,6 +677,14 @@ impl ItemTree {
         }
     }
 
+    /// The base of a refined type, or the type itself (`refine.base.1`).
+    pub fn base(&self, ty: &Ty) -> Ty {
+        match ty {
+            Ty::Refined(t, _) => self.types[*t as usize].ty.clone(),
+            t => t.clone(),
+        }
+    }
+
     /// The prelude item the language refers to by `name` (`"Copy"`, `"Option"`): a trait's or
     /// a struct's or enum's index.
     pub fn lang(&self, name: &str) -> Option<u32> {
@@ -719,6 +768,10 @@ impl ItemTree {
             return (0, 1);
         }
         match ty {
+            Ty::Refined(t, _) => match self.types.get(*t as usize) {
+                Some(d) => self.size_of_depth(&d.ty, depth + 1),
+                None => (0, 1),
+            },
             Ty::Int | Ty::Ref(..) => (8, 8),
             Ty::Bool => (1, 1),
             Ty::Char => (4, 4),

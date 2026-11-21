@@ -166,6 +166,19 @@ pub(crate) struct Program {
     mods: Vec<ModEntry>,
     /// The const items, by key: their initialiser and the module whose names it uses.
     pub(crate) consts: HashMap<String, (ast::Expr, usize)>,
+    /// The `type` items, by key (`refine.1`).
+    pub(crate) types: HashMap<String, TypeInfo>,
+}
+
+/// A `type` item: an alias, or a refinement with its predicate.
+#[derive(Clone, Debug)]
+pub(crate) struct TypeInfo {
+    pub(crate) name: String,
+    /// The type it names, or the refinement's base.
+    pub(crate) ty: ast::Type,
+    /// A refinement's predicate, and its text as written.
+    pub(crate) pred: Option<(ast::Expr, String)>,
+    pub(crate) module: usize,
 }
 
 impl Program {
@@ -174,6 +187,7 @@ impl Program {
             texts: files.iter().map(|f| f.text.clone()).collect(),
             fns: HashMap::new(),
             consts: HashMap::new(),
+            types: HashMap::new(),
             adts: HashMap::new(),
             traits: HashMap::new(),
             impls: Vec::new(),
@@ -359,6 +373,11 @@ impl Program {
                     ["String"] => Head::String,
                     ["Buf"] => Head::Buf,
                     _ => match self.resolve(module, &path) {
+                        // A refined value is its base's, and an alias names its type.
+                        Some((Def::Item(k), _)) if self.types.contains_key(&k) => {
+                            let t = &self.types[&k];
+                            self.head_in(t.module, &t.ty)
+                        }
                         Some((Def::Item(k), _)) => Head::Adt(k),
                         _ => Head::Adt(path.join("::")),
                     },
@@ -377,6 +396,29 @@ impl Program {
                     use_tree(&t, &[], &mut out);
                     self.modules[module].imports.extend(out);
                 }
+            }
+            // `type X = T;` and `type X = T where p;` (`refine.1`).
+            K::TYPE_ITEM => {
+                let name = name_of(&item);
+                let key = Program::key(module, &name);
+                self.declare(module, &name, Def::Item(key.clone()));
+                let ty = item
+                    .children()
+                    .find_map(ast::Type::cast)
+                    .expect("a checked `type` names a type");
+                let pred = item.children().find_map(ast::Expr::cast).map(|e| {
+                    let text = e.syntax().text().to_string().trim().to_string();
+                    (e, text)
+                });
+                self.types.insert(
+                    key,
+                    TypeInfo {
+                        name,
+                        ty,
+                        pred,
+                        module,
+                    },
+                );
             }
             // `const NAME: T = e;` (`comptime.const.1`).
             K::CONST_ITEM => {

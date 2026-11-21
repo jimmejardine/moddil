@@ -28,6 +28,24 @@ impl Collector<'_> {
         let node = f.syntax();
         let origin = self.reporter.origin(src, node.text_range());
         self.unsupported_parts(src, node, true);
+        // Contracts (`contract.1`): not yet on a trait's method, nor `requires always`.
+        for c in node.children().filter(|c| c.kind() == K::CONTRACT) {
+            let what = if matches!(container, Container::Trait(_)) {
+                Some("a contract on a trait's method")
+            } else if c.token(K::ALWAYS_KW).is_some() {
+                Some("`requires always`")
+            } else {
+                None
+            };
+            if let Some(what) = what {
+                let origin = self.reporter.origin(src, node.text_range());
+                self.reporter.report(
+                    src,
+                    origin,
+                    vec![Diagnostic::unsupported(c.text_range(), what)],
+                );
+            }
+        }
         let mut ds = Vec::new();
         // `#[track_caller]` (`attr.track-caller.1`); other attributes on a function wait.
         let mut track_caller = false;
@@ -250,6 +268,7 @@ impl Collector<'_> {
             intrinsic,
             is_const,
             const_item: false,
+            refine: None,
             vis: match (src, container) {
                 (Src::File(_), Container::Free | Container::Impl(_)) => super::vis_of(node),
                 _ => crate::items::Vis::Pub,
@@ -300,6 +319,7 @@ impl Collector<'_> {
             intrinsic: false,
             is_const: true,
             const_item: true,
+            refine: None,
             vis: match src {
                 Src::File(_) => super::vis_of(node),
                 _ => crate::items::Vis::Pub,

@@ -470,6 +470,10 @@ pub enum TrapClass {
     CapacityExceeded,
     /// Compile-time evaluation that ran out of its steps.
     OutOfFuel,
+    /// A `requires` that does not hold: the caller's bug, reported at the call.
+    Precondition,
+    /// An `ensures` that does not hold: the function's bug.
+    Postcondition,
     /// An error that `?!` said cannot happen.
     Unexpected,
 }
@@ -485,6 +489,8 @@ impl TrapClass {
             TrapClass::IndexOutOfBounds => "index out of bounds",
             TrapClass::CapacityExceeded => "capacity exceeded",
             TrapClass::OutOfFuel => "out of fuel",
+            TrapClass::Precondition => "precondition broken",
+            TrapClass::Postcondition => "postcondition broken",
             TrapClass::Unexpected => "unexpected error",
         }
     }

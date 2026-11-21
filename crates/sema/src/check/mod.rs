@@ -106,6 +106,7 @@ pub struct Inference {
     fmt_calls: HashMap<ExprId, Callee>,
     index_calls: HashMap<ExprId, Callee>,
     literal_calls: HashMap<ExprId, Callee>,
+    refined_literals: Vec<(ExprId, u32)>,
     adjusts: HashMap<ExprId, Adjust>,
     propagated: HashMap<ExprId, Propagated>,
     try_errors: HashMap<ExprId, Ty>,
@@ -180,6 +181,12 @@ impl Inference {
     /// `FromArrayLiteral::from_array` (or `from_repeat`) that makes it.
     pub fn literal_callee(&self, e: ExprId) -> Option<&Callee> {
         self.literal_calls.get(&e)
+    }
+
+    /// The literals taken as refined values (`let q: Port = 8080;`), each with its refinement:
+    /// compiling checks the predicate holds for them (`refine.lit.1`).
+    pub fn refined_literals(&self) -> &[(ExprId, u32)] {
+        &self.refined_literals
     }
 
     /// For a hole of `fmt"…"`: the `Display::fmt` it calls.
@@ -313,6 +320,7 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         kind_reqs: Vec::new(),
         assoc_eqs: Vec::new(),
         hint: None,
+        refined_results: HashMap::new(),
         sig_hint: None,
         anon_fails: Vec::new(),
         out: Inference {
@@ -333,7 +341,31 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         }
         cx.effect_locals(i);
     }
+    // Contracts (`contract.1`): each a `bool`; `old(e)` is `e`'s value, of a `Copy` type, and
+    // `result` the value returned.
+    for &e in &body.requires {
+        cx.check(e, &Ty::Bool);
+    }
+    for &(local, e) in &body.olds {
+        let t = cx.infer(e);
+        cx.out.local_types[index(local)] = t;
+    }
+    if let Some(r) = body.result {
+        cx.out.local_types[index(r)] = ret.clone();
+    }
+    for &e in &body.ensures {
+        cx.check(e, &Ty::Bool);
+    }
     if let Some(root) = body.root {
+        // A literal the function's refined result may be is taken as one (`refine.lit.1`).
+        if !is_test && matches!(ret, Ty::Refined(..)) {
+            cx.result_literals(root, &ret);
+            for (_, x) in body.exprs.iter() {
+                if let ExprKind::Return(Some(v)) = x.kind {
+                    cx.result_literals(v, &ret);
+                }
+            }
+        }
         let t = cx.infer(root);
         // A test's final value is observed, not returned, so it may have any type.
         if !is_test && !cx.unsize(root, &t, &ret) && !cx.coerce(&t, &ret) {
@@ -410,6 +442,8 @@ struct Checker<'a> {
     assoc_eqs: Vec<(Ty, Ty, TextRange)>,
     /// For a closure about to be checked: the type expected of it.
     hint: Option<closures::Hint>,
+    /// The literals that may be a function's refined result, with the refined type.
+    refined_results: HashMap<ExprId, Ty>,
     /// For an anonymous impl's method about to be checked: its parameters' and result types.
     sig_hint: Option<(Vec<Ty>, Option<Ty>)>,
     /// Anonymous impls' methods, and the errors their trait's methods allow.
@@ -466,6 +500,11 @@ impl Checker<'_> {
         match (&f, &e) {
             (Ty::Never | Ty::Error, _) | (_, Ty::Error) => true,
             (Ty::Ref(true, a), Ty::Ref(false, b)) => self.solver.unify(a, b),
+            // A refined value where its base is wanted (`refine.base.1`).
+            (Ty::Refined(..), _) if !self.solver.can_unify(&f, &e) => {
+                let base = self.items.base(&f);
+                self.solver.unify(&base, &e)
+            }
             _ => self.solver.unify(&f, &e),
         }
     }
@@ -488,6 +527,9 @@ impl Checker<'_> {
         if let Some(t) = self.array_literal(e, expected) {
             return t;
         }
+        if let Some(t) = self.refined_literal(e, expected) {
+            return t;
+        }
         let t = self.infer(e);
         if !self.unsize(e, &t, expected) && !self.coerce(&t, expected) {
             self.mismatch(e, expected, &t);
@@ -495,7 +537,36 @@ impl Checker<'_> {
         t
     }
 
+    /// Marks the literals that `e`'s value may be (through blocks, `if` and `match`) as of
+    /// refined type `ty`.
+    fn result_literals(&mut self, e: ExprId, ty: &Ty) {
+        match &self.body.exprs[e].kind {
+            ExprKind::Block { tail: Some(t), .. } => self.result_literals(*t, ty),
+            ExprKind::If { then, else_, .. } => {
+                let (then, else_) = (*then, *else_);
+                self.result_literals(then, ty);
+                if let Some(x) = else_ {
+                    self.result_literals(x, ty);
+                }
+            }
+            ExprKind::Match { arms, .. } => {
+                let bodies: Vec<ExprId> = arms.iter().map(|a| a.body).collect();
+                for b in bodies {
+                    self.result_literals(b, ty);
+                }
+            }
+            _ => {
+                self.refined_results.insert(e, ty.clone());
+            }
+        }
+    }
+
     fn infer(&mut self, e: ExprId) -> Ty {
+        if let Some(ty) = self.refined_results.remove(&e)
+            && let Some(t) = self.refined_literal(e, &ty)
+        {
+            return t;
+        }
         let t = self.infer_inner(e);
         self.out.expr_types[index(e)] = t.clone();
         t

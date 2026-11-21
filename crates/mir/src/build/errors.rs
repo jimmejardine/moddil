@@ -96,6 +96,7 @@ impl Builder<'_> {
             }
             _ => {
                 self.wrap(Local::RETURN, "Option", 0, Vec::new());
+                self.ensures();
                 self.leave_scopes_as(0, false);
                 self.cfg.terminate(Terminator::Return);
             }

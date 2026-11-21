@@ -171,6 +171,7 @@ impl ItemTree {
                 (self.adts[a as usize].vis, self.adts[a as usize].module)
             }
             Def::Trait(t) => (self.traits[t as usize].vis, self.traits[t as usize].module),
+            Def::Type(t) => (self.types[t as usize].vis, self.types[t as usize].module),
             Def::Module(m) => (Vis::Pub, m),
         };
         let name = self.def_name(def);

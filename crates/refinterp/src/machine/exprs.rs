@@ -116,6 +116,7 @@ impl Machine<'_> {
                 let pat = node.children().find_map(ast::Pat::cast).expect("a pattern");
                 let mut binds = Vec::new();
                 let matched = self.matches(&pat, &src, &mut binds);
+                self.matched(range)?;
                 if matched {
                     // In scope for the rest of the condition and the block it guards.
                     self.bind(binds);
@@ -251,7 +252,9 @@ impl Machine<'_> {
         for arm in list.children().filter(|c| c.kind() == K::MATCH_ARM) {
             let pat = arm.children().find_map(ast::Pat::cast).expect("a pattern");
             let mut binds = Vec::new();
-            if !self.matches(&pat, &src, &mut binds) {
+            let matched = self.matches(&pat, &src, &mut binds);
+            self.matched(pat.syntax().text_range())?;
+            if !matched {
                 continue;
             }
             let mark = self.memory.mark();

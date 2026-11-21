@@ -260,6 +260,21 @@ something runs from the first slice.
   - the reference interpreter finds a derived `Default`'s fields' defaults by their types as
     written, and a `Default::default()` call's type by its context as it does a collection
     literal's.
+- **S8b's scope and interim rules (decided November 2026):** refinements, `type X = T where p`, a
+  distinct type used as its base (it converts to it, and has its methods, operators and traits),
+  made by `X::new(v)` (failing with `RefinementError { ty, clause, value }`, `value` the rejected
+  value's `Debug`), by a literal checked when compiling, or by a `q: X` pattern; plain aliases,
+  `type X = T;`; contracts, `requires` and `ensures` with `result` and `old(e)`, pure, every one
+  checked, a broken precondition reported at the call; and `Iterator::all` and `any`. Until the
+  features they wait for arrive:
+  - `type` items are not generic, and a refinement has no impls of its own; its base holds no
+    borrow;
+  - a refinement pattern's base is `Copy`; a refined literal is recognised where the type is
+    written (a `let`, a parameter) or is the function's result; parenthesised refinements in
+    types (`(u32 where self >= 1)`), niches and proofs wait;
+  - `old(e)` needs a `Copy` value; `invariant`, `requires always`, contracts on trait methods and
+    the `Contracts` handler's policies wait;
+  - an alias may name only the aliases before it.
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

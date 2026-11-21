@@ -1,0 +1,36 @@
+// covers: refine.1, refine.base.1, refine.new.1, refine.lit.1, refine.pat.1
+type Port = int where self >= 1024 && self <= 65535;
+type Code = String where self.len() == 3 && self.chars().all(|c| c.is_alphabetic());
+
+fn next_port(p: Port) -> int { p + 1 }
+
+fn classify(n: int) -> int {
+    match n {
+        p: Port => p + 0,
+        _ => 0,
+    }
+}
+
+test "refinements" {
+    let p = Port::new(8080) ?! "a port";
+    next_port(p)                            // => 8081
+    ;
+    let q: Port = 2000;
+    q * 2                                   // => 4000
+    ;
+    classify(5000)                          // => 5000
+    ;
+    classify(5)                             // => 0
+    ;
+    let mut s = String::new();
+    s.push_str("abc");
+    let c = Code::new(s) ?! "three letters";
+    c.len()                                 // => 3
+    ;
+    fmt"{c:?} {p}"                          // => "\"abc\" 8080"
+}
+
+test "bad input is an error" {
+    let r = try { Port::new(80)?; String::new() } catch { e => e.clause };
+    r                                       // => "self >= 1024 && self <= 65535"
+}

@@ -50,6 +50,10 @@ pub enum TrapClass {
     IndexOutOfBounds,
     /// More elements pushed into a `Buf` than its capacity (`collections.buf.1`).
     CapacityExceeded,
+    /// A `requires` that does not hold, reported at the call (`contract.requires.1`).
+    Precondition,
+    /// An `ensures` that does not hold (`contract.ensures.1`).
+    Postcondition,
 }
 
 impl fmt::Display for TrapClass {
@@ -62,6 +66,8 @@ impl fmt::Display for TrapClass {
             TrapClass::Unexpected => "unexpected error",
             TrapClass::IndexOutOfBounds => "index out of bounds",
             TrapClass::CapacityExceeded => "capacity exceeded",
+            TrapClass::Precondition => "precondition broken",
+            TrapClass::Postcondition => "postcondition broken",
         })
     }
 }

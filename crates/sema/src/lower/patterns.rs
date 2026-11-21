@@ -78,9 +78,38 @@ impl Lowerer<'_> {
                     None => PatKind::Missing,
                 }
             }
+            // `p: X` (`refine.pat.1`).
             ast::Pat::Typed(_) => {
-                self.error(Diagnostic::unsupported(range, "a refinement test"));
-                PatKind::Missing
+                let sub = node.children().find_map(ast::Pat::cast);
+                let ty = node.children().find_map(ast::Type::cast).map(|t| {
+                    let mut ds = Vec::new();
+                    let ty = crate::resolve::resolve_type(&t, &self.types, &mut ds);
+                    self.out.diagnostics.extend(ds);
+                    ty
+                });
+                match (sub, ty) {
+                    (Some(sub), Some(Ty::Refined(refinement, _))) => {
+                        let pat = self.pat(&sub, b);
+                        PatKind::Refined { refinement, pat }
+                    }
+                    (sub, ty) => {
+                        if ty != Some(Ty::Error) {
+                            self.report(
+                                Code::E0201,
+                                range,
+                                "`p: T` in a pattern tests a refinement: `T` is a refined type",
+                            );
+                        }
+                        // Its names are still bound, so the arm reports nothing more.
+                        match sub {
+                            Some(sub) => {
+                                let inner = self.pat(&sub, b);
+                                self.out.body.pats[inner].kind.clone()
+                            }
+                            None => PatKind::Missing,
+                        }
+                    }
+                }
             }
             _ => {
                 self.error(Diagnostic::unsupported(range, "this pattern"));

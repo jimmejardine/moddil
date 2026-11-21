@@ -36,6 +36,9 @@ pub enum Ty {
     Len(i64),
     /// A struct or enum, by its index in the item tree, with its name and type arguments.
     Adt(u32, Arc<str>, Arc<[Ty]>),
+    /// A refined type (`refine.1`), by its index among the `type` items, with its name. Its values
+    /// are its base's that its predicate holds for.
+    Refined(u32, Arc<str>),
     /// A borrow: `&T` (shared) or `&mut T` (exclusive).
     Ref(bool, Arc<Ty>),
     /// `dyn Trait`: a value of some type that implements the trait, known only through it. It
@@ -386,7 +389,7 @@ impl fmt::Debug for Ty {
             Ty::Never => f.write_str("!"),
             Ty::Error => f.write_str("{error}"),
             Ty::Infer(_) => f.write_str("_"),
-            Ty::Param(_, name) => f.write_str(name),
+            Ty::Param(_, name) | Ty::Refined(_, name) => f.write_str(name),
             Ty::Adt(_, name, args) => {
                 f.write_str(name)?;
                 if !args.is_empty() {

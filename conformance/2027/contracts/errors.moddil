@@ -1,0 +1,36 @@
+// covers: contract.2, contract.old.1
+
+struct Oops {}
+trait Time { fn now(&self) -> int; }
+
+fn risky(x: int) -> bool with fail(Oops) {
+    x > 0
+}
+
+fn timed() -> int with t: Time {
+    t.now()
+}
+
+fn not_bool(x: int) -> int
+    requires x                              //~ E0201
+{
+    x
+}
+
+fn fails_in_contract(x: int) -> int
+    requires risky(x) ?! "never"            //~ E1102
+{
+    x
+}
+
+fn effect_in_contract() -> int with t: Time
+    ensures result == timed()               //~ E1102
+{
+    0
+}
+
+fn old_of_text(s: &mut String)
+    ensures s.len() > old(s.clone()).len()  //~ E1103
+{
+    s.push('x');
+}

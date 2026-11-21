@@ -133,6 +133,22 @@ impl Lowerer<'_> {
                 );
                 None
             }
+            // `X::new` of a refinement (`refine.new.1`).
+            (Def::Type(t), [item]) => {
+                let def = &self.items.types[t as usize];
+                match &def.refinement {
+                    Some(r) if item.name == "new" => Some(Resolved::Fn(r.new, Vec::new())),
+                    _ => {
+                        let name = def.name.clone();
+                        self.report(
+                            Code::E0413,
+                            item.range,
+                            format!("`{name}` has nothing called `{}`", item.name),
+                        );
+                        None
+                    }
+                }
+            }
             // `Type::item`: an enum's variant, or a function of the type.
             (Def::Adt(a), [item]) => {
                 let ty_seg = &segs[n - 1];

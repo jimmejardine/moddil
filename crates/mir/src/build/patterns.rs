@@ -72,6 +72,33 @@ impl Builder<'_> {
             PatKind::Missing | PatKind::Wild | PatKind::Unit => {}
             // The error's type is tested before (`try_catch`); here the pattern matches it.
             PatKind::OfType { pat: inner, .. } => self.test_pat(inner, place, fail),
+            // `p: X`: `X::holds` on (a copy of) the value, then `p`.
+            PatKind::Refined {
+                refinement,
+                pat: inner,
+            } => {
+                let holds = self.items.types[refinement as usize]
+                    .refinement
+                    .as_ref()
+                    .expect("a refinement")
+                    .holds;
+                let base = self.items.types[refinement as usize].ty.clone();
+                let ok = self.temp(Ty::tuple(vec![Ty::Bool, base]));
+                let range = self.hir.pats[pat].range;
+                self.call_into(
+                    None,
+                    moddil_sema::Callee::Fn {
+                        func: holds,
+                        args: Vec::new(),
+                    },
+                    Place::local(ok),
+                    vec![Operand::Copy(place.clone())],
+                    range,
+                );
+                self.cfg
+                    .branch(Operand::Copy(Place::local(ok).field(0)), fail);
+                self.test_pat(inner, place, fail);
+            }
             PatKind::Bind { local, sub } => {
                 if let Some(s) = sub {
                     self.test_pat(s, place, fail);

@@ -187,6 +187,50 @@ impl Machine<'_> {
         self.run_method(m, &head, args, range)
     }
 
+    /// Whether refinement `key`'s predicate holds for `v`: the predicate, run in a call of its
+    /// own with `self` bound to `v`.
+    pub(super) fn holds(&mut self, key: &str, v: &Value, range: TextRange) -> Eval<bool> {
+        let t = self.program.types[key].clone();
+        let (pred, _) = t.pred.expect("a refinement");
+        let file = self.memory.file();
+        self.memory.push_frame(HashMap::new(), file, t.module, true);
+        self.memory.push("self".to_string(), v.clone());
+        let r = self.eval(&pred);
+        self.memory.pop_frame();
+        match r {
+            Ok(Value::Bool(b)) => Ok(b),
+            Ok(_) => unreachable!("a checked predicate"),
+            // A trap in the predicate is reported where it was asked.
+            Err(Flow::Trap(t, _)) => Err(trap(t.class, range)),
+            Err(f) => Err(f),
+        }
+    }
+
+    /// `X::new(v)`: `v`, if the predicate holds for it, or else the error
+    /// `RefinementError { ty, clause, value }`.
+    pub(super) fn refine(&mut self, key: &str, v: Value, range: TextRange) -> Eval {
+        if self.holds(key, &v, range)? {
+            return Ok(v);
+        }
+        let t = self.program.types[key].clone();
+        let clause = t.pred.expect("a refinement").1;
+        let out = self.memory.temp(Value::String(String::new()));
+        let at = self.memory.temp(v);
+        self.call_trait(
+            "Debug",
+            "fmt",
+            vec![Value::Ref(at, false), Value::Ref(out.clone(), true)],
+            range,
+        )?;
+        let shown = self.memory.load(&out);
+        let error = Value::Adt {
+            ty: "RefinementError".to_string(),
+            variant: "RefinementError".to_string(),
+            fields: vec![Value::String(t.name), Value::String(clause), shown],
+        };
+        Err(Flow::Fail(error, range))
+    }
+
     /// The derived `Default` (`attr.derive.default.1`): a struct of each field's default, by
     /// the field's type as written, or an enum's `#[default]` variant.
     pub(super) fn derived_default(&mut self, head: &Head, range: TextRange) -> Eval {
@@ -438,6 +482,70 @@ impl Machine<'_> {
             self.bind(binds);
         }
         self.bind_effects(&f.node);
+        // Contracts (`contract.1`): the preconditions hold, or the caller is at fault; then the
+        // values `old(e)` keeps.
+        let contracts: Vec<(bool, ast::Expr)> = f
+            .node
+            .syntax()
+            .children()
+            .filter(|c| c.kind() == K::CONTRACT)
+            .filter_map(|c| {
+                let requires = c.token(K::REQUIRES_KW).is_some();
+                c.children()
+                    .find_map(ast::Expr::cast)
+                    .map(|e| (requires, e))
+            })
+            .collect();
+        for (_, e) in contracts.iter().filter(|(r, _)| *r) {
+            match self.eval(e) {
+                Ok(Value::Bool(true)) => {}
+                Ok(_) => {
+                    self.memory.pop_frame();
+                    let t = crate::Trap {
+                        class: TrapClass::Precondition,
+                        file: caller_file,
+                        range,
+                    };
+                    return Err(Flow::Trap(t, caller_user && !caller_tracked));
+                }
+                Err(flow) => {
+                    self.memory.pop_frame();
+                    return Err(flow);
+                }
+            }
+        }
+        let mut olds = HashMap::new();
+        for (_, e) in contracts.iter().filter(|(r, _)| !*r) {
+            for call in e.syntax().descendants() {
+                if call.kind() != K::CALL_EXPR {
+                    continue;
+                }
+                let Some(callee) = call.children().find_map(ast::Expr::cast) else {
+                    continue;
+                };
+                if segments(callee.syntax()) != ["old"] {
+                    continue;
+                }
+                let Some(arg) = call
+                    .child(K::ARG_LIST)
+                    .and_then(ast::ArgList::cast)
+                    .and_then(|l| l.args().next())
+                    .and_then(|a| a.expr())
+                else {
+                    continue;
+                };
+                match self.eval(&arg) {
+                    Ok(v) => {
+                        olds.insert(call.text_range(), v);
+                    }
+                    Err(flow) => {
+                        self.memory.pop_frame();
+                        return Err(flow);
+                    }
+                }
+            }
+        }
+        self.olds.push(olds);
         let result = self.block(&f.node.body().expect("a body"));
         let result = match result {
             Ok(v) | Err(Flow::Return(v)) => Ok(v),
@@ -449,6 +557,36 @@ impl Machine<'_> {
             }),
             Err(f) => Err(f),
         };
+        // The postconditions, with `result` the value returned.
+        let result = match result {
+            Ok(v) if contracts.iter().any(|(r, _)| !*r) => {
+                let mark = self.memory.mark();
+                self.memory.push("result".to_string(), v);
+                let mut broken = None;
+                for (_, e) in contracts.iter().filter(|(r, _)| !*r) {
+                    match self.eval(e) {
+                        Ok(Value::Bool(true)) => {}
+                        Ok(_) => {
+                            broken = Some(trap(TrapClass::Postcondition, e.syntax().text_range()));
+                            break;
+                        }
+                        Err(flow) => {
+                            broken = Some(flow);
+                            break;
+                        }
+                    }
+                }
+                let slot = self.memory.slot("result").expect("`result`");
+                let v = self.memory.load(&self.memory.here(slot));
+                self.memory.truncate(mark);
+                match broken {
+                    Some(flow) => Err(flow),
+                    None => Ok(v),
+                }
+            }
+            r => r,
+        };
+        self.olds.pop();
         // The parameters are dropped at the end of the call; a destructor's `self` only by its
         // fields.
         let result = if matches!(result, Err(Flow::Trap(..))) {
@@ -494,6 +632,13 @@ impl Machine<'_> {
             .unwrap_or_default();
         let segments = segments(callee.syntax());
         let local = matches!(segments.as_slice(), [one] if self.memory.slot(one).is_some());
+        // `old(e)` in a postcondition: `e` as it was on entry (`contract.old.1`).
+        if segments == ["old"]
+            && !local
+            && let Some(v) = self.olds.last().and_then(|o| o.get(&node.text_range()))
+        {
+            return Ok(v.clone());
+        }
         // A closure (`expr.closure.call.1`).
         if local {
             let slot = self.memory.slot(&segments[0]).expect("a local");
@@ -547,6 +692,14 @@ impl Machine<'_> {
             [] => unreachable!("a checked call"),
             ty => {
                 let values = self.eval_all(&args)?;
+                // `X::new(v)` of a refinement (`refine.new.1`).
+                if let Some((Def::Item(k), n)) = self.resolve(ty)
+                    && n == ty.len()
+                    && name == "new"
+                    && self.program.types.get(&k).is_some_and(|t| t.pred.is_some())
+                {
+                    return self.refine(&k, values.into_iter().next().expect("a value"), range);
+                }
                 // `Trait::method(x, …)`: for the kind of value `x` is.
                 if let Some((Def::Item(k), n)) = self.resolve(ty)
                     && n == ty.len()
@@ -698,7 +851,12 @@ impl Machine<'_> {
                     .into_iter()
                     .find(|m| m.self_kind() == Some(kind))
                 {
-                    found = Some((m, head.clone(), Value::Ref(p.clone(), mutable)));
+                    // A `&str` is its text already: it is passed as it is, not borrowed again.
+                    let recv = match v {
+                        Value::Str(_) if !mutable => v.clone(),
+                        _ => Value::Ref(p.clone(), mutable),
+                    };
+                    found = Some((m, head.clone(), recv));
                     break 'search;
                 }
             }

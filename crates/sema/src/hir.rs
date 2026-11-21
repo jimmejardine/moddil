@@ -31,6 +31,15 @@ pub struct Body {
     /// The locals of the effects a function's signature names (`with time: Time`), with the
     /// effect's index in the signature's effects.
     pub effect_locals: Vec<(LocalId, usize)>,
+    /// The function's preconditions (`contract.requires.1`), checked on entry.
+    pub requires: Vec<ExprId>,
+    /// Its postconditions (`contract.ensures.1`), checked at each return.
+    pub ensures: Vec<ExprId>,
+    /// The values `old(e)` in its postconditions names: a local for each, and `e`, evaluated on
+    /// entry.
+    pub olds: Vec<(LocalId, ExprId)>,
+    /// The local `result` names in its postconditions: the value returned.
+    pub result: Option<LocalId>,
 }
 
 /// A local variable.
@@ -92,6 +101,9 @@ pub enum ExprKind {
     /// `const { e }`: compile-time code (`comptime.block.1`), which names no local, type
     /// parameter or const parameter of the body around it.
     ConstBlock(ExprId),
+    /// A value of a refinement's base taken as the refined type (`X::new`'s body only): its
+    /// index among the `type` items.
+    Refine(ExprId, u32),
     /// A local.
     Local(LocalId),
     /// A function named by a path, by its index in the item tree, with the type arguments for
@@ -429,6 +441,14 @@ pub enum PatKind {
         variant: u32,
         /// The fields matched, by index; the others match anything.
         fields: Vec<(u32, PatId)>,
+    },
+    /// `p: X` at the top of a `match` arm (`refine.pat.1`): matches if refinement `X`'s
+    /// predicate holds, and then `p`, as an `X`.
+    Refined {
+        /// The refinement, by its index among the `type` items.
+        refinement: u32,
+        /// The pattern for the refined value.
+        pat: PatId,
     },
     /// `a | b`.
     Or(Vec<PatId>),

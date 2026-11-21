@@ -69,6 +69,7 @@ impl Checker<'_> {
         let range = self.range(e);
         let t = self.infer(x);
         let t = self.norm(&t);
+        let t = self.items.base(&t);
         let sym = if op == UnaryOp::Neg { "-" } else { "!" };
         match (op, &t) {
             (_, Ty::Error | Ty::Never) => Ty::Error,
@@ -104,7 +105,9 @@ impl Checker<'_> {
         lt: &Ty,
         r: ExprId,
     ) -> Ty {
+        // A refined operand is its base (`refine.base.1`).
         let lt = self.norm(lt);
+        let lt = self.items.base(&lt);
         let names = match op {
             BinaryOp::Add => Some(("Add", "add")),
             BinaryOp::Sub => Some(("Sub", "sub")),
@@ -168,9 +171,12 @@ impl Checker<'_> {
     pub(super) fn compare(&mut self, e: ExprId, first: ExprId, rest: &[(CompareOp, ExprId)]) -> Ty {
         let range = self.range(e);
         let t0 = self.infer(first);
-        let mut prev = (first, t0);
+        let t0 = self.norm(&t0);
+        let mut prev = (first, self.items.base(&t0));
         for (i, &(op, x)) in rest.iter().enumerate() {
             let t = self.infer(x);
+            let t = self.norm(&t);
+            let t = self.items.base(&t);
             let (_, pt) = prev.clone();
             let Some(j) = self.join(&pt, &t) else {
                 if op.is_ordering() {

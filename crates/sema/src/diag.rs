@@ -225,6 +225,12 @@ codes! {
     E1003 = "const holding a borrow",
     /// Compile-time evaluation that traps or runs out of fuel.
     E1004 = "compile-time evaluation failed",
+    /// A literal that its refined type's predicate does not hold for.
+    E1101 = "literal outside its refinement",
+    /// A contract that is not pure: it has an effect, an error or an assignment.
+    E1102 = "impure contract",
+    /// `old(e)` of a value that is not `Copy`, or outside an `ensures`.
+    E1103 = "invalid `old`",
     /// A type with no size of its own (`str`) used by value.
     E0901 = "unsized type",
     /// A text literal that is not well formed: an unknown escape, a block indented wrongly.

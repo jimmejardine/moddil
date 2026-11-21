@@ -285,6 +285,15 @@ pub(crate) fn dyn_type(node: &SyntaxNode, scope: &Scope, diags: &mut Vec<Diagnos
     }
 }
 
+/// The type a `type` item names: a refined type, or the type an alias stands for.
+fn type_of_item(tree: &ItemTree, t: u32) -> Ty {
+    let def = &tree.types[t as usize];
+    match def.refinement {
+        Some(_) => Ty::Refined(t, def.name.as_str().into()),
+        None => def.ty.clone(),
+    }
+}
+
 /// The length of an array type, `[T; n]`: an integer literal or a const parameter
 /// (`type.array.1`).
 pub(crate) fn array_len(e: &ast::Expr, scope: &Scope, diags: &mut Vec<Diagnostic>) -> Ty {
@@ -533,6 +542,10 @@ pub(crate) fn path_type(
                     let args = adt_args(a, one.args.as_ref(), range, scope, diags);
                     return tree.adts[a as usize].ty_with(a, args);
                 }
+                Some(Def::Type(t)) => {
+                    no_args(one, diags);
+                    return type_of_item(tree, t);
+                }
                 Some(Def::Trait(_)) => format!("`{name}` is a trait, not a type"),
                 Some(Def::Module(_)) => format!("`{name}` is a module, not a type"),
                 Some(_) => format!("`{name}` is not a type"),
@@ -558,6 +571,10 @@ pub(crate) fn path_type(
                 Ok((Def::Adt(a), n)) if n == segs.len() => {
                     let args = adt_args(a, last.args.as_ref(), range, scope, diags);
                     tree.adts[a as usize].ty_with(a, args)
+                }
+                Ok((Def::Type(t), n)) if n == segs.len() => {
+                    no_args(last, diags);
+                    type_of_item(tree, t)
                 }
                 Ok((Def::Adt(a), n)) if n + 1 == segs.len() => {
                     let base = &segs[n - 1];

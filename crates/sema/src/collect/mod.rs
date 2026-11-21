@@ -11,12 +11,12 @@ use moddil_syntax::{Parse, SyntaxKind as K, SyntaxNode, TextRange};
 use crate::db::Program;
 use crate::derive::{self, Expansion};
 use crate::items::{
-    Container, Def, Entry, GenericParam, Generics, Import, ItemTree, ModDef, ModuleDef,
+    Container, Def, Entry, FnSig, GenericParam, Generics, Import, ItemTree, ModDef, ModuleDef,
     PRELUDE_MOD, PRELUDE_MODULE, Src, Vis,
 };
-use crate::resolve::Scope;
+use crate::resolve::{Scope, resolve_type};
 use crate::validate;
-use crate::{Code, Db, Diagnostic, SourceFile};
+use crate::{Code, Db, Diagnostic, SourceFile, Ty};
 
 mod adts;
 mod report;
@@ -186,6 +186,7 @@ type Site = (Src, u32, SyntaxNode);
 #[derive(Default)]
 struct Nodes {
     adts: Vec<Site>,
+    types: Vec<Site>,
     traits: Vec<Site>,
     impls: Vec<Site>,
     fns: Vec<Site>,
@@ -387,6 +388,7 @@ impl Collector<'_> {
                     K::TRAIT_ITEM => nodes.traits.push((*src, module, node)),
                     K::IMPL_ITEM => nodes.impls.push((*src, module, node)),
                     K::FN_ITEM | K::CONST_ITEM => nodes.fns.push((*src, module, node)),
+                    K::TYPE_ITEM => nodes.types.push((*src, module, node)),
                     K::TEST_ITEM if src.is_file() => {
                         nodes.tests.push((src.file().unwrap_or(0), module, node));
                     }
@@ -430,7 +432,16 @@ impl Collector<'_> {
             self.trait_skeleton(*src, node);
         }
         // The functions are declared before any signature is resolved, so `use` can name them.
+        // The `type` items' names come before any type is resolved.
+        for (src, module, node) in &nodes.types {
+            self.enter(*src, *module);
+            self.type_skeleton(*src, node);
+        }
         let first_free = self.free_fns(&nodes.fns);
+        for (k, (src, module, node)) in nodes.types.iter().enumerate() {
+            self.enter(*src, *module);
+            self.type_item(k, *src, node);
+        }
         for (i, (src, module, node)) in nodes.adts.iter().enumerate() {
             self.enter(*src, *module);
             self.adt_fields(i, *src, node);
@@ -481,6 +492,31 @@ impl Collector<'_> {
         for d in validate::derived_fields(&self.tree) {
             self.reporter.push_in(d.file, d);
         }
+        // A refinement's base is `Debug`, for `RefinementError` (`refine.new.1`).
+        if let Some(debug) = self.tree.lang_ref("Debug") {
+            let mut found = Vec::new();
+            for t in &self.tree.types {
+                if t.refinement.is_none() || t.ty == Ty::Error {
+                    continue;
+                }
+                let mut solver = crate::traits::Solver::new(&self.tree, &[]);
+                if solver.implements(&t.ty, &debug) == crate::traits::Answer::No {
+                    found.push((
+                        t.src,
+                        None,
+                        Diagnostic::error(
+                            Code::E0402,
+                            t.name_range,
+                            format!(
+                                "`{}` refines `{}`, which must implement `Debug` for `RefinementError`",
+                                t.name, t.ty
+                            ),
+                        ),
+                    ));
+                }
+            }
+            self.report_found(found);
+        }
         let found = validate::check_impls(&self.tree);
         self.report_found(found);
         let found = validate::overlap(&self.tree);
@@ -509,7 +545,7 @@ impl Collector<'_> {
             self.declare(*src, &name, Def::Fn((first + k) as u32), vis, range);
             self.tree
                 .fns
-                .push(crate::items::FnSig::placeholder(name, *src, *module, vis));
+                .push(FnSig::placeholder(name, *src, *module, vis));
         }
         first
     }
@@ -610,8 +646,8 @@ impl Collector<'_> {
             let what = match c.kind() {
                 K::OUTER_ATTR if attrs_handled => continue,
                 K::OUTER_ATTR => "an attribute",
-                // A function's effects are read with its signature.
-                K::EFFECT_CLAUSE if node.kind() == K::FN_ITEM => continue,
+                // A function's effects are read with its signature, its contracts with its body.
+                K::EFFECT_CLAUSE | K::CONTRACT if node.kind() == K::FN_ITEM => continue,
                 K::EFFECT_CLAUSE => "an effect clause",
                 K::CONTRACT => "a contract",
                 K::RESUME_CLAUSE => "a `resume` clause",
@@ -674,4 +710,112 @@ fn use_tree(
         vis,
         range,
     });
+}
+
+impl Collector<'_> {
+    /// Declares a `type` item's name (`refine.1`); its type is resolved with
+    /// [`Collector::type_item`].
+    fn type_skeleton(&mut self, src: Src, node: &SyntaxNode) {
+        let (name, name_range) = name_of(node);
+        let vis = match src {
+            Src::File(_) => vis_of(node),
+            _ => Vis::Pub,
+        };
+        let index = self.tree.types.len() as u32;
+        self.declare(src, &name, Def::Type(index), vis, name_range);
+        self.tree.types.push(crate::items::TypeDef {
+            name,
+            name_range,
+            src,
+            module: self.module,
+            vis,
+            node: node.text_range(),
+            ty: Ty::Error,
+            refinement: None,
+        });
+    }
+
+    /// A `type` item's type: an alias's, or a refinement's base, with the refinement's functions
+    /// `X::holds` and `X::new`.
+    fn type_item(&mut self, k: usize, src: Src, node: &SyntaxNode) {
+        let mut ds = Vec::new();
+        if let Some(g) = node.child(K::GENERIC_PARAMS) {
+            ds.push(Diagnostic::unsupported(
+                g.text_range(),
+                "a generic `type` item",
+            ));
+        }
+        let ty = match node.children().find_map(ast::Type::cast) {
+            Some(t) => resolve_type(&t, &self.scope(), &mut ds),
+            None => Ty::Error,
+        };
+        let pred = node.children().find_map(ast::Expr::cast);
+        let name_range = self.tree.types[k].name_range;
+        if pred.is_some() && self.tree.is_view(&ty) {
+            ds.push(Diagnostic::error(
+                Code::E0309,
+                name_range,
+                "a refinement's base holds no borrow: its values are kept as the base's are",
+            ));
+        }
+        let origin = self.reporter.origin(src, node.text_range());
+        self.reporter.report(src, origin, ds);
+        self.tree.types[k].ty = ty.clone();
+        let Some(pred) = pred else {
+            return;
+        };
+        let def = &self.tree.types[k];
+        let refined = Ty::Refined(k as u32, def.name.as_str().into());
+        let param = crate::items::ParamSig {
+            name: Some("self".to_string()),
+            mutable: false,
+            range: name_range,
+            ty: ty.clone(),
+            destructures: false,
+        };
+        let error = self.tree.lang("RefinementError").map_or(Ty::Error, |a| {
+            self.tree.adts[a as usize].ty_with(a, Vec::new())
+        });
+        let sig = |name: &str, ret: Ty, fails: Ty, is_new: bool| FnSig {
+            name: name.to_string(),
+            name_range,
+            src,
+            node: node.text_range(),
+            container: Container::Free,
+            generics: Generics::default(),
+            self_kind: None,
+            params: vec![param.clone()],
+            ret,
+            ret_range: None,
+            ret_from: Vec::new(),
+            has_body: true,
+            origin,
+            fails,
+            fails_range: None,
+            effects: Vec::new(),
+            track_caller: true,
+            intrinsic: false,
+            is_const: !is_new,
+            const_item: false,
+            refine: Some((k as u32, is_new)),
+            vis: def.vis,
+            module: def.module,
+        };
+        let holds = self.tree.fns.len() as u32;
+        // `holds` gives the value back, so a base that is not `Copy` is not used up.
+        let holds_sig = sig(
+            "holds",
+            Ty::tuple(vec![Ty::Bool, ty.clone()]),
+            Ty::Never,
+            false,
+        );
+        let new_sig = sig("new", refined, error, true);
+        self.tree.fns.push(holds_sig);
+        self.tree.fns.push(new_sig);
+        self.tree.types[k].refinement = Some(crate::items::Refinement {
+            clause: pred.syntax().text().to_string().trim().to_string(),
+            holds,
+            new: holds + 1,
+        });
+    }
 }

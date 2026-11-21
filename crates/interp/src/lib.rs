@@ -135,8 +135,66 @@ pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
         let d = Diagnostic::error(Code::E1004, f.name_range, why);
         out.extend(moddil_sema::in_file(items, Item::Fn(i as u32), &[d]));
     }
+    // Each literal taken as a refined value satisfies the refinement (`refine.lit.1`).
+    for owner in moddil_sema::owners(db, program) {
+        let item = owner.item(db);
+        let types = moddil_sema::infer(db, owner);
+        if types.refined_literals().is_empty() {
+            continue;
+        }
+        let body = &moddil_sema::body(db, owner).body;
+        for &(e, t) in types.refined_literals() {
+            let def = &items.types[t as usize];
+            let Some(r) = &def.refinement else {
+                continue;
+            };
+            let Some(v) = literal_value(body, e) else {
+                continue;
+            };
+            let why = match machine::run(
+                db,
+                program,
+                Item::Fn(r.holds),
+                &[v],
+                &mut |_, _, _| {},
+                Some(FUEL),
+            ) {
+                Ok(Value::Tuple(xs)) if xs.first() == Some(&Value::Bool(true)) => continue,
+                Ok(_) => Diagnostic::error(
+                    Code::E1101,
+                    body.exprs[e].range,
+                    format!(
+                        "this is not a `{}`: `{}` does not hold for it",
+                        def.name, r.clause
+                    ),
+                ),
+                Err(_) => Diagnostic::error(
+                    Code::E1004,
+                    body.exprs[e].range,
+                    format!("checking this is a `{}` when compiling fails", def.name),
+                ),
+            };
+            out.extend(moddil_sema::in_file(items, item, &[why]));
+        }
+    }
     out.sort_by_key(|d| (d.file, d.range.start, d.range.end, d.code));
     out
+}
+
+/// The value of a literal expression of a body.
+fn literal_value(body: &moddil_sema::hir::Body, e: moddil_sema::hir::ExprId) -> Option<Value> {
+    use moddil_sema::hir::{ExprKind, UnaryOp};
+    Some(match &body.exprs[e].kind {
+        ExprKind::Int(v) => Value::Int(i64::try_from(*v).ok()?),
+        ExprKind::Bool(b) => Value::Bool(*b),
+        ExprKind::Char(c) => Value::Char(*c),
+        ExprKind::Str(s) => Value::Str(s.as_str().into()),
+        ExprKind::Unary(UnaryOp::Neg, x) => match literal_value(body, *x)? {
+            Value::Int(v) => Value::Int(v.checked_neg()?),
+            _ => return None,
+        },
+        _ => return None,
+    })
 }
 
 /// Whether `program` has any errors, including those of evaluating its consts.

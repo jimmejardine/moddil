@@ -62,10 +62,25 @@ impl Machine<'_> {
     }
 
     /// Whether `src` matches `p`; if it does, `binds` gets the names it binds (`pat.1`).
-    pub(super) fn matches(&self, p: &ast::Pat, src: &Src, binds: &mut Vec<Bind>) -> bool {
+    pub(super) fn matches(&mut self, p: &ast::Pat, src: &Src, binds: &mut Vec<Bind>) -> bool {
         let node = p.syntax();
         match p {
             ast::Pat::Wildcard(_) => true,
+            // `p: X` (`refine.pat.1`): `X`'s predicate holds, and `p` matches.
+            ast::Pat::Typed(_) => {
+                let ty = node.children().find_map(ast::Type::cast).expect("a type");
+                let path = crate::program::first_name(ty.syntax());
+                let Some((crate::program::Def::Item(key), _)) = self.resolve(&[path]) else {
+                    unreachable!("a checked refinement")
+                };
+                let v = self.value_of(src);
+                // A predicate that traps does not match; the match raises the trap.
+                if !matches!(self.holds_quietly(&key, &v), Some(true)) {
+                    return false;
+                }
+                let sub = node.children().find_map(ast::Pat::cast).expect("a pattern");
+                self.matches(&sub, src, binds)
+            }
             ast::Pat::Literal(_) => match literal_pat(node) {
                 Value::Str(s) => {
                     super::text::text_of(self, &self.value_of(src)).as_deref() == Some(&*s)
@@ -194,7 +209,7 @@ impl Machine<'_> {
     /// The positional sub-patterns of `node` (with an optional `..`) against the `len` parts of
     /// `src`.
     pub(super) fn positional(
-        &self,
+        &mut self,
         node: &SyntaxNode,
         src: &Src,
         len: usize,
@@ -215,6 +230,29 @@ impl Machine<'_> {
             };
             self.matches(p, &self.part(src, at), binds)
         })
+    }
+}
+
+impl Machine<'_> {
+    /// Whether refinement `key`'s predicate holds for `v`, for a pattern: a trap is kept, to be
+    /// raised by what is matching ([`Machine::matched`]), and the pattern does not match.
+    pub(super) fn holds_quietly(&mut self, key: &str, v: &Value) -> Option<bool> {
+        match self.holds(key, v, moddil_syntax::TextRange::default()) {
+            Ok(b) => Some(b),
+            Err(f) => {
+                self.pending_trap.get_or_insert(f);
+                None
+            }
+        }
+    }
+
+    /// A trap a refinement test raised while a pattern was matched, if one did.
+    pub(super) fn matched(&mut self, range: moddil_syntax::TextRange) -> crate::Eval<()> {
+        match self.pending_trap.take() {
+            Some(crate::Flow::Trap(t, _)) => Err(crate::trap(t.class, range)),
+            Some(f) => Err(f),
+            None => Ok(()),
+        }
     }
 }
 

@@ -214,8 +214,28 @@ impl<'a> Stack<'a> {
     /// is tracked (`#[track_caller]`, the prelude's or derived code), the call of the nearest
     /// untracked caller. The flag says whether the trap is in the top frame's own code, where
     /// the details of a failed `assert` belong.
-    pub(crate) fn trap_site(&self, range: Option<TextRange>) -> (u32, TextRange, bool) {
+    /// If `at_call`, it is the call of the top frame's nearest untracked caller whatever the top
+    /// frame is (a broken precondition is the caller's).
+    pub(crate) fn trap_site_from(
+        &self,
+        range: Option<TextRange>,
+        at_call: bool,
+    ) -> (u32, TextRange, bool) {
         let top = self.top();
+        if at_call && self.frames.len() > 1 {
+            let caller = self
+                .frames
+                .iter()
+                .rev()
+                .skip(1)
+                .find(|f| !f.tracked())
+                .unwrap_or(top);
+            return (
+                caller.body.src.file().unwrap_or(0),
+                caller.terminator_span(),
+                false,
+            );
+        }
         if !top.tracked()
             && let Src::File(file) = top.body.src
         {

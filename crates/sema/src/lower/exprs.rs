@@ -902,6 +902,37 @@ impl Lowerer<'_> {
                 .child(K::PATH)
                 .and_then(|p| path_segments(&p))
                 .unwrap_or_default();
+            // `old(e)` in a postcondition: `e` as it was on entry (`contract.old.1`).
+            if let [one] = segments.as_slice()
+                && one.name == "old"
+                && self.olds.is_some()
+                && self.lookup("old").is_none()
+                && self.item("old").is_none()
+            {
+                let args: Vec<ast::Expr> = node
+                    .child(K::ARG_LIST)
+                    .and_then(ast::ArgList::cast)
+                    .map(|l| l.args().filter_map(|a| a.expr()).collect())
+                    .unwrap_or_default();
+                let [arg] = args.as_slice() else {
+                    self.report(Code::E1103, range, "`old` takes one value: `old(e)`");
+                    return self.missing(range);
+                };
+                // Evaluated on entry, where `old` means nothing more.
+                let olds = self.olds.take();
+                let value = self.expr(arg);
+                self.olds = olds;
+                let local = self.out.body.locals.alloc(crate::hir::Local {
+                    name: "{old}".to_string(),
+                    mutable: false,
+                    range,
+                    closure: self.closure,
+                });
+                if let Some(o) = &mut self.olds {
+                    o.push((local, value));
+                }
+                return self.alloc(ExprKind::Local(local), range);
+            }
             // `discard` is in the prelude too.
             if let [one] = segments.as_slice()
                 && one.name == "discard"

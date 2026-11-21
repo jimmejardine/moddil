@@ -35,7 +35,8 @@ impl Builder<'_> {
             | ExprKind::Fail(c)
             | ExprKind::Discard(c)
             | ExprKind::Repeat(c, _)
-            | ExprKind::ConstBlock(c) => self.assigns(*c),
+            | ExprKind::ConstBlock(c)
+            | ExprKind::Refine(c, _) => self.assigns(*c),
             ExprKind::With { handlers, body } => {
                 handlers.iter().any(|h| self.assigns(h.value)) || self.assigns(*body)
             }

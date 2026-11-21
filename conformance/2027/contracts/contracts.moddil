@@ -1,0 +1,60 @@
+// covers: contract.1, contract.requires.1, contract.ensures.1, contract.old.1
+
+struct Account { balance: int }
+
+fn withdraw(account: &mut Account, amount: int) -> int
+    requires amount > 0
+    requires account.balance >= amount
+    ensures account.balance == old(account.balance) - amount
+    ensures result == amount
+{
+    account.balance -= amount;
+    amount
+}
+
+fn abs(x: int) -> int
+    ensures result >= 0
+{
+    if x < 0 {
+        return 0 - x;
+    }
+    x
+}
+
+fn first(xs: &[int]) -> Option<int>
+    ensures result.is_some() || xs.is_empty()
+{
+    let n = xs.len();
+    if n == 0 {
+        return None;
+    }
+    Some(xs[0])
+}
+
+fn broken(x: int) -> int
+    ensures result > x                      //~ trap
+{
+    x
+}
+
+test "contracts that hold" {
+    let mut a = Account { balance: 10 };
+    withdraw(&mut a, 3)                     // => 3
+    ;
+    a.balance                               // => 7
+    ;
+    abs(-4)                                 // => 4
+    ;
+    abs(5)                                  // => 5
+    ;
+    first(&[9, 8])                          // => Some(9)
+}
+
+test "a broken precondition traps where it is called" {
+    let mut a = Account { balance: 1 };
+    withdraw(&mut a, 5);                    //~ trap
+}
+
+test "a broken postcondition traps at its clause" {
+    broken(1);
+}

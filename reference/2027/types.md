@@ -31,7 +31,8 @@ its elements where a slice borrow is expected.
 fields are different types.
 
 **type.match.1** Where an expression of one type is expected, an expression of another type is an
-error (E0201); `!` fits everywhere. No conversions are implicit but four of borrows: `&mut T` to
+error (E0201); `!` fits everywhere, and a refined value fits where its base is expected
+([Refinements](refinements.md)). No other conversions are implicit but four of borrows: `&mut T` to
 `&T` ([Borrows](borrows.md)), a borrow to a `dyn` borrow (**type.dyn.coerce.1**), `&String` to
 `&str` ([Text](text.md)), and an array borrow to a slice borrow (**type.slice.coerce.1**).
 

@@ -5,7 +5,7 @@ desugared and name-resolved, carrying inferred types, effects and error sets. Th
 `moddil explain` and MIR building all read it
 ([`specs/mir.md`: Pipeline](../../specs/mir.md#pipeline)). Ownership is checked later, on MIR.
 
-**Status:** slices S0 to S8a: functions and tests, `let`, `int`, `bool` and `()`, operators, `if`,
+**Status:** slices S0 to S8b: functions and tests, `let`, `int`, `bool` and `()`, operators, `if`,
 blocks, calls and `return` (S0); tuples, structs, enums, patterns, `match` with exhaustiveness
 checking, `if let`, `let … else`, loops and `assert` (S1); borrow types and their mutability
 rules, `*`, binding modes, `Copy` and `defer` (S2; moves and borrows are checked on MIR); type
@@ -24,8 +24,9 @@ slices and const parameters, views and borrows as type arguments, `for` (lowered
 `IntoIterator` and `Iterator`), ranges, indexing through `Index`, collection literals typed by
 context, `Buf`, `#[derive(Hash)]`, the built-in `core` mod, and borrows of static data (S7c);
 const items, `const fn` and `const { }` with the rules of compile-time code, and the `Debug` and
-`Default` derives (S8a), with the diagnostics of
-[`reference/2027/diagnostics.md`](../../reference/2027/diagnostics.md). Valid Moddil beyond S8a is
+`Default` derives (S8a); refinements (`type X = T where p`, with `X::new`, refined literals and
+patterns) and contracts (`requires`, `ensures`, `old`) (S8b), with the diagnostics of
+[`reference/2027/diagnostics.md`](../../reference/2027/diagnostics.md). Valid Moddil beyond S8b is
 reported as "not supported yet" (`I0001`). It starts as one crate and
 splits as it grows (names, types, effects).
 

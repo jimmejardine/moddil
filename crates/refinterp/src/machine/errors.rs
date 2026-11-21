@@ -148,7 +148,7 @@ impl Machine<'_> {
 
     /// Whether a `catch` arm's pattern matches error `err` (held at `src`): `Type(p)` matches an
     /// error of that type that `p` matches; any other pattern is matched as usual.
-    fn catches(&self, pat: &ast::Pat, err: &Value, src: &Src, binds: &mut Vec<Bind>) -> bool {
+    fn catches(&mut self, pat: &ast::Pat, err: &Value, src: &Src, binds: &mut Vec<Bind>) -> bool {
         let node = pat.syntax();
         if let ast::Pat::TupleStruct(_) = pat {
             let segs = segments(node);

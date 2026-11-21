@@ -66,6 +66,30 @@ impl Checker<'_> {
         match &self.body.pats[p].kind {
             PatKind::Missing | PatKind::Wild => {}
             &PatKind::OfType { pat, .. } => self.check_pat(pat, expected, mode),
+            // `p: X` (`refine.pat.1`): a value of `X`'s base (or an `X`) tested by its predicate.
+            &PatKind::Refined { refinement, pat } => {
+                let def = &self.items.types[refinement as usize];
+                let refined = Ty::Refined(refinement, def.name.as_str().into());
+                let base = def.ty.clone();
+                if !self.coerce(expected, &base) && !self.coerce(expected, &refined) {
+                    let shown = self.show(expected);
+                    let name = def.name.clone();
+                    self.report(
+                        Code::E0201,
+                        range,
+                        format!("`{name}` refines `{base}`, but the value matched is a `{shown}`"),
+                    );
+                    return;
+                }
+                // The predicate runs on a copy of the value.
+                if !self.solver.is_copy(&base) && base != Ty::Error {
+                    self.out.diagnostics.push(crate::Diagnostic::unsupported(
+                        range,
+                        "a refinement test of a value that is not `Copy`",
+                    ));
+                }
+                self.check_pat(pat, &refined, mode);
+            }
             &PatKind::Bind { local, sub } => {
                 self.out.local_types[index(local)] = match mode {
                     Some(m) => {

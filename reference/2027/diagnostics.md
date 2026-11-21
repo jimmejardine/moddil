@@ -17,6 +17,7 @@ and a code never changes meaning.
 | E08xx | Closures |
 | E09xx | Text |
 | E10xx | Compile-time evaluation |
+| E11xx | Refinements and contracts |
 
 | Code | Meaning | Rule |
 |---|---|---|
@@ -106,6 +107,9 @@ and a code never changes meaning.
 | E1002 | Compile-time code with an effect or an error | [comptime.const-fn.2](comptime.md) |
 | E1003 | A const whose type holds a borrow that is not of text | [comptime.static.1](comptime.md) |
 | E1004 | Evaluating a const when compiling traps or runs out of steps | [comptime.eval.1](comptime.md) |
+| E1101 | A literal its refined type's predicate does not hold for | [refine.lit.1](refinements.md) |
+| E1102 | A contract that is not pure | [contract.2](contracts.md) |
+| E1103 | `old(e)` of a value that is not `Copy`, or with other than one value | [contract.old.1](contracts.md) |
 
 **Warnings** have codes of the same form starting with `W`, in the same blocks. They do not stop a
 program from running, and conformance tests expect them like errors.

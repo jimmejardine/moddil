@@ -130,8 +130,9 @@ impl Builder<'_> {
                 let place = self.place(expr);
                 self.cfg.assign(dest, Rvalue::Ref(mutable, place));
             }
-            // Evaluated where it is, for now.
-            ExprKind::ConstBlock(x) => self.eval_into(dest, x),
+            // A `const { }` block is evaluated where it is, for now; a refined value is its
+            // base's, as it is.
+            ExprKind::ConstBlock(x) | ExprKind::Refine(x, _) => self.eval_into(dest, x),
             ExprKind::Fmt(pieces) => self.fmt(dest, &pieces, range),
             ExprKind::Array(_) | ExprKind::Repeat(..) | ExprKind::RepeatN(..)
                 if self.types.literal_callee(e).is_some() =>
@@ -379,6 +380,7 @@ impl Builder<'_> {
                         .cfg
                         .assign(Local::RETURN, Rvalue::Use(Operand::Const(Const::Unit))),
                 }
+                self.ensures();
                 self.leave_scopes(0);
                 self.cfg.terminate(Terminator::Return);
             }

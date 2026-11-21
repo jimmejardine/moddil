@@ -82,6 +82,7 @@ impl Cx<'_> {
         match &self.body.pats[p].kind {
             PatKind::Missing | PatKind::Wild | PatKind::Bind { sub: None, .. } => DPat::wild(ty),
             &PatKind::Bind { sub: Some(s), .. }
+            | &PatKind::Refined { pat: s, .. }
             | &PatKind::Ref { pat: s, .. }
             | &PatKind::OfType { pat: s, .. } => self.lower(s),
             &PatKind::Int(v) => DPat {
@@ -180,6 +181,7 @@ impl Cx<'_> {
     fn all_ctors(&self, ty: &Ty, heads: &[&DPat]) -> Option<Vec<Ctor>> {
         Some(match ty.strip_ref() {
             Ty::Bool => vec![Ctor::Bool(false), Ctor::Bool(true)],
+            Ty::Refined(..) => return self.all_ctors(&self.items.base(ty.strip_ref()), heads),
             Ty::Int => split_ints(heads, INT_MIN, INT_MAX),
             Ty::Char => split_ints(heads, 0, CHAR_MAX),
             // The literals the rows name, and the strings they do not.
@@ -411,7 +413,9 @@ pub(crate) fn check_match(
                 "no value reaches this arm: the arms before it match everything it does",
             ));
         }
-        if arm.guard.is_none() {
+        // A refinement test is a guard too (`refine.pat.1`).
+        let refined = matches!(body.pats[arm.pat].kind, PatKind::Refined { .. });
+        if arm.guard.is_none() && !refined {
             rows.push(vec![p]);
         }
     }

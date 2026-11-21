@@ -307,6 +307,11 @@ impl<'a> Solver<'a> {
         match &ty {
             Ty::Infer(_) => return Answer::Maybe,
             Ty::Error | Ty::Never => return Answer::Yes(Source::Builtin),
+            // A refined type has its base's traits (`refine.base.1`).
+            Ty::Refined(..) => {
+                let base = self.tree.base(&ty);
+                return self.implements(&base, trait_ref);
+            }
             _ => {}
         }
         // A closure implements the closure traits for its parameters' types; whether it may be
@@ -511,6 +516,10 @@ impl<'a> Solver<'a> {
             | Ty::String
             | Ty::Len(_) => false,
             Ty::Array(t, _) | Ty::Slice(t) | Ty::Buf(t) => self.needs_drop_inner(t, depth + 1),
+            Ty::Refined(..) => {
+                let base = self.tree.base(ty);
+                self.needs_drop_inner(&base, depth + 1)
+            }
             Ty::Param(..) | Ty::Assoc(_) | Ty::Infer(_) => true,
             Ty::Errors(ts) => ts.iter().any(|t| self.needs_drop_inner(t, depth + 1)),
             Ty::Closure(c) => c
@@ -551,6 +560,11 @@ impl<'a> Solver<'a> {
         let mut steps = vec![(r.clone(), false)];
         if let Ty::Ref(_, inner) = &r {
             steps.push(((**inner).clone(), true));
+        }
+        // A refined value has its base's methods (`refine.base.1`).
+        let last = steps.last().cloned();
+        if let Some((t @ Ty::Refined(..), deref)) = last {
+            steps.push((self.tree.base(&t), deref));
         }
         for (u, deref) in steps {
             for autoref in [None, Some(false), Some(true)] {

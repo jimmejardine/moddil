@@ -192,6 +192,7 @@ impl ItemTree {
         match def {
             Def::Fn(f) => self.fns[f as usize].name.clone(),
             Def::Adt(a) => self.adts[a as usize].name.clone(),
+            Def::Type(t) => self.types[t as usize].name.clone(),
             Def::Trait(t) => self.traits[t as usize].name.clone(),
             Def::Variant(a, v) => self.variant(a, v).name.clone(),
             Def::Module(m) => self.modules[m as usize]

@@ -102,6 +102,11 @@ impl Checker<'_> {
             }
             ExprKind::ConstParam(_) => Ty::Int,
             &ExprKind::ConstBlock(x) => self.infer(x),
+            &ExprKind::Refine(x, t) => {
+                let base = self.items.types[t as usize].ty.clone();
+                self.check(x, &base);
+                Ty::Refined(t, self.items.types[t as usize].name.as_str().into())
+            }
             &ExprKind::Local(l) => self.out.local_types[index(l)].clone(),
             ExprKind::Fn { .. } | ExprKind::AssocFn { .. } | ExprKind::TraitFn { .. } => {
                 self.out
@@ -516,6 +521,34 @@ impl Checker<'_> {
             _ => return None,
         }
         self.require(target.clone(), tr, range);
+        self.out.expr_types[index(e)] = target.clone();
+        Some(target)
+    }
+
+    /// A literal where a refined type is expected (`refine.lit.1`): a value of the refinement,
+    /// which compiling checks.
+    pub(super) fn refined_literal(&mut self, e: ExprId, expected: &Ty) -> Option<Ty> {
+        let target = self.norm(expected);
+        let Ty::Refined(t, _) = &target else {
+            return None;
+        };
+        let literal = match &self.body.exprs[e].kind {
+            ExprKind::Int(_) | ExprKind::Bool(_) | ExprKind::Char(_) | ExprKind::Str(_) => true,
+            ExprKind::Unary(crate::hir::UnaryOp::Neg, x) => {
+                matches!(self.body.exprs[*x].kind, ExprKind::Int(_))
+            }
+            _ => false,
+        };
+        if !literal {
+            return None;
+        }
+        let t = *t;
+        let base = self.items.types[t as usize].ty.clone();
+        let found = self.infer(e);
+        if !self.coerce(&found, &base) {
+            return None;
+        }
+        self.out.refined_literals.push((e, t));
         self.out.expr_types[index(e)] = target.clone();
         Some(target)
     }

@@ -381,7 +381,9 @@ impl<'a> Machine<'a> {
         range: Option<TextRange>,
         parts: Vec<(TextRange, Option<Value>)>,
     ) -> Trap {
-        let (file, range, here) = self.stack.trap_site(range);
+        let (file, range, here) = self
+            .stack
+            .trap_site_from(range, class == TrapClass::Precondition);
         Trap {
             class,
             file,

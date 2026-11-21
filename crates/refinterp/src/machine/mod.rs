@@ -40,6 +40,12 @@ struct Machine<'p> {
     /// The handlers installed by the `with` blocks being run, innermost last: how the effect is
     /// looked up, and a borrow of the handler.
     handlers: Vec<(String, Value)>,
+    /// A trap a refinement test raised while a pattern was matched, until what is matching
+    /// raises it.
+    pending_trap: Option<Flow>,
+    /// For each call being run, innermost last: the values its postconditions' `old(e)` calls
+    /// stand for, by the call's range.
+    olds: Vec<HashMap<TextRange, Value>>,
 }
 
 impl Program {
@@ -53,6 +59,8 @@ impl Program {
             observed: Vec::new(),
             try_modes: Vec::new(),
             handlers: Vec::new(),
+            pending_trap: None,
+            olds: Vec::new(),
         };
         let result = m.block(body);
         // A test's value is dropped at its end, like its variables.
