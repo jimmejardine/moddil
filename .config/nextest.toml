@@ -1,0 +1,6 @@
+# cargo-nextest settings (tools/ci.py uses nextest when it is installed).
+
+[profile.default]
+# The conformance suite starts many test processes at once, and on Windows tearing them down can
+# take longer than the default 100ms, which nextest reports as a leak.
+leak-timeout = "500ms"

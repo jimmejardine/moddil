@@ -1,18 +1,74 @@
 //! Runs the conformance suite (`conformance/2027/`) on the MIR interpreter and the reference
 //! interpreter, and checks that every paragraph of the reference (`reference/2027/`) is cited by
 //! a test and every cited paragraph exists.
+//!
+//! Each area (a directory of the suite) is its own test, so the test runner spreads the suite
+//! over every core; `every_area_has_a_test` catches an area missing from the list.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use moddil_conformance::{
-    EDITION, Implementation, MirInterpreter, ReferenceInterpreter, run_suite,
+    EDITION, Implementation, MirInterpreter, ReferenceInterpreter, areas, coverage, run_area,
 };
 
-#[test]
-fn the_suite_passes_and_covers_the_reference() {
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+fn repo() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn run(area: &str) {
     let implementations: [&dyn Implementation; 2] = [&MirInterpreter, &ReferenceInterpreter];
-    let report = run_suite(&repo, EDITION, &implementations);
+    let report = run_area(&repo(), EDITION, area, &implementations);
+    println!(
+        "{area}: {} files, {} disputed",
+        report.files,
+        report.disputed.len()
+    );
+    assert!(report.files > 0, "no conformance tests in {area}");
+    assert!(
+        report.failures.is_empty(),
+        "\n{}",
+        report.failures.join("\n")
+    );
+}
+
+/// One test per area, named like its directory.
+macro_rules! areas {
+    ($($area:ident),* $(,)?) => {
+        const AREAS: &[&str] = &[$(stringify!($area)),*];
+        $(
+            #[test]
+            fn $area() {
+                run(stringify!($area).trim_start_matches("r#"));
+            }
+        )*
+    };
+}
+
+areas!(
+    arithmetic, assert, assignment, attributes, bitwise, blocks, borrows, calls, closures,
+    comparison, derive, effects, enums, errors, generics, r#if, items, literals, logic, loops,
+    r#match, modules, names, operators, ownership, patterns, prelude, statements, structs, syntax,
+    traits, tuples, types,
+);
+
+#[test]
+fn every_area_has_a_test() {
+    let listed: Vec<String> = AREAS
+        .iter()
+        .map(|a| a.trim_start_matches("r#").to_string())
+        .collect();
+    let found = areas(&repo(), EDITION);
+    let missing: Vec<&String> = found.iter().filter(|a| !listed.contains(a)).collect();
+    let gone: Vec<&String> = listed.iter().filter(|a| !found.contains(a)).collect();
+    assert!(
+        missing.is_empty() && gone.is_empty(),
+        "add {missing:?} to, and remove {gone:?} from, the `areas!` list in suite.rs"
+    );
+}
+
+#[test]
+fn every_reference_paragraph_is_cited() {
+    let report = coverage(&repo(), EDITION);
     println!(
         "{} files, {} reference paragraphs, {} disputed",
         report.files,
