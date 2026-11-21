@@ -238,7 +238,7 @@ pub(super) fn borrowed_type_args(body: &Body, out: &Inference) -> Vec<Diagnostic
 }
 
 /// `t` with its inference variables replaced by the error type.
-fn erase(t: &Ty) -> Ty {
+pub(super) fn erase(t: &Ty) -> Ty {
     match t {
         Ty::Infer(_) => Ty::Error,
         t => t.map(&mut erase),

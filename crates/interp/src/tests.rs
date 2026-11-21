@@ -361,3 +361,17 @@ fn errors_return_through_their_edge() {
              fn main() -> int { check(12) ?! \"small\" }";
     assert_eq!(trap(t), TrapClass::Unexpected);
 }
+
+#[test]
+fn handlers_are_passed_and_called_through_dyn() {
+    let t = "trait Time { fn now(&self) -> int; }\n\
+             trait Steady: Time {}\n\
+             struct Clock { t: int }\n\
+             impl Time for Clock { fn now(&self) -> int { self.t } }\n\
+             impl Steady for Clock {}\n\
+             fn uses(n: int) -> int with time: Time { time.now() + n }\n\
+             fn passes() -> int { uses(1) }\n\
+             fn up(s: &dyn Steady) -> int { with Time = s { passes() } }\n\
+             fn main() -> int { let c = Clock { t: 4 }; with Time = &c { passes() * 10 + up(&c) } }";
+    assert_eq!(value(t), Value::Int(55));
+}

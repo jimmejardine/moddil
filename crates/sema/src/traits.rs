@@ -226,6 +226,13 @@ impl<'a> Solver<'a> {
                 i == j && xs.iter().zip(ys.iter()).all(|(x, y)| self.unify(x, y))
             }
             (Ty::Ref(m, x), Ty::Ref(n, y)) => m == n && self.unify(x, y),
+            (Ty::Dyn(x), Ty::Dyn(y)) => {
+                x.trait_ == y.trait_
+                    && x.args
+                        .iter()
+                        .zip(y.args.iter())
+                        .all(|(p, q)| self.unify(p, q))
+            }
             (Ty::Errors(xs), Ty::Errors(ys)) => {
                 xs.len() == ys.len() && xs.iter().zip(ys.iter()).all(|(x, y)| self.unify(x, y))
             }
@@ -279,6 +286,30 @@ impl<'a> Solver<'a> {
             Ty::Infer(_) => return Answer::Maybe,
             Ty::Error | Ty::Never => return Answer::Yes(Source::Builtin),
             _ => {}
+        }
+        // `dyn Trait` implements its trait and the trait's supertraits.
+        if let Ty::Dyn(d) = &ty {
+            let pred = Pred {
+                ty: ty.clone(),
+                trait_ref: d.clone(),
+                assoc: Vec::new(),
+                range: moddil_syntax::TextRange::new(0, 0),
+            };
+            for p in elaborate(self.tree, &[pred]) {
+                if p.trait_ref.trait_ != tr {
+                    continue;
+                }
+                let saved = self.table.clone();
+                if p.trait_ref
+                    .args
+                    .iter()
+                    .zip(trait_ref.args.iter())
+                    .all(|(x, y)| self.unify(x, y))
+                {
+                    return Answer::Yes(Source::Builtin);
+                }
+                self.table = saved;
+            }
         }
         if self.is_lang(tr, "Copy") || self.is_lang(tr, "Clone") {
             match &ty {
@@ -399,7 +430,9 @@ impl<'a> Solver<'a> {
             return true;
         }
         match ty {
-            Ty::Int | Ty::Bool | Ty::Unit | Ty::Never | Ty::Error | Ty::Ref(..) => false,
+            Ty::Int | Ty::Bool | Ty::Unit | Ty::Never | Ty::Error | Ty::Ref(..) | Ty::Dyn(_) => {
+                false
+            }
             Ty::Param(..) | Ty::Assoc(_) | Ty::Infer(_) => true,
             Ty::Errors(ts) => ts.iter().any(|t| self.needs_drop_inner(t, depth + 1)),
             Ty::Tuple(ts) => ts.iter().any(|t| self.needs_drop_inner(t, depth + 1)),

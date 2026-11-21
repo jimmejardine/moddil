@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
 
-use crate::items::{Container, FnSig, Generics, ParamSig, SelfKind, Src, TestSig};
-use crate::resolve::{Scope, preds_of, resolve_type};
+use crate::items::{Container, EffectSig, FnSig, Generics, ParamSig, SelfKind, Src, TestSig};
+use crate::resolve::{Scope, effect_type, preds_of, resolve_type};
 use crate::ty::TraitRef;
 use crate::{Code, Diagnostic, Ty};
 
@@ -163,10 +163,26 @@ impl Collector<'_> {
             None => (Ty::Unit, None),
         };
         let ret_from = ret_sources(node, &params, &ret, ret_range, &mut ds);
-        let (fails, fails_range) = match node.child(K::EFFECT_CLAUSE) {
-            Some(c) => (effects(&c, &scope, &mut ds), Some(c.text_range())),
-            None => (Ty::Never, None),
+        let (fails, fails_range, effects) = match node.child(K::EFFECT_CLAUSE) {
+            Some(c) => effect_clause(&c, &scope, &mut ds),
+            None => (Ty::Never, None, Vec::new()),
         };
+        for e in &effects {
+            if let Some(n) = &e.name {
+                if let Some(first) = names.get(n) {
+                    ds.push(
+                        Diagnostic::error(
+                            Code::E0104,
+                            e.range,
+                            format!("`{n}` is already a parameter"),
+                        )
+                        .with_label(*first, "first declared here"),
+                    );
+                } else {
+                    names.insert(n.clone(), e.range);
+                }
+            }
+        }
         self.reporter.report(src, origin, ds);
         FnSig {
             name,
@@ -184,6 +200,8 @@ impl Collector<'_> {
             origin,
             fails,
             fails_range,
+            effects,
+            public: node.child(K::VIS).is_some(),
         }
     }
 
@@ -235,27 +253,70 @@ impl Collector<'_> {
     }
 }
 
-/// The errors an effect clause lets a function fail with: `with fail(A | B)`. Other effects come
-/// with slice S5.
-fn effects(clause: &SyntaxNode, scope: &Scope, ds: &mut Vec<Diagnostic>) -> Ty {
+/// What an effect clause lists: the errors it lets a function fail with (`fail(A | B)`) and
+/// where that is written, and the other effects (`time: Time`, `Db`, `config: &AppConfig`).
+fn effect_clause(
+    clause: &SyntaxNode,
+    scope: &Scope,
+    ds: &mut Vec<Diagnostic>,
+) -> (Ty, Option<TextRange>, Vec<EffectSig>) {
     let mut members = Vec::new();
+    let mut fails_range: Option<TextRange> = None;
+    let mut effects = Vec::new();
     for e in clause.children().filter(|c| c.kind() == K::SIG_EFFECT) {
-        let fail = e.child(K::EFFECT).filter(|x| x.token(K::FAIL_KW).is_some());
-        let Some(types) = fail.and_then(|f| f.child(K::ERROR_TYPES)) else {
+        let Some(effect) = e.child(K::EFFECT) else {
             ds.push(Diagnostic::unsupported(e.text_range(), "this effect"));
             continue;
         };
-        if e.token(K::IDENT).is_some() {
-            ds.push(Diagnostic::unsupported(e.text_range(), "a named effect"));
-        }
-        for t in types.children().filter_map(ast::Type::cast) {
-            let ty = resolve_type(&t, scope, ds);
-            if error_type(&ty, t.syntax().text_range(), &members, ds) {
-                members.push(ty);
+        let name = e.token(K::IDENT).map(|t| t.text().to_string());
+        if effect.token(K::FAIL_KW).is_some() {
+            let Some(types) = effect.child(K::ERROR_TYPES) else {
+                ds.push(Diagnostic::unsupported(e.text_range(), "this effect"));
+                continue;
+            };
+            if name.is_some() {
+                ds.push(Diagnostic::error(
+                    Code::E0601,
+                    e.text_range(),
+                    "`fail` is not given a name: write `fail(E)`",
+                ));
             }
+            fails_range.get_or_insert(e.text_range());
+            for t in types.children().filter_map(ast::Type::cast) {
+                let ty = resolve_type(&t, scope, ds);
+                if error_type(&ty, t.syntax().text_range(), &members, ds) {
+                    members.push(ty);
+                }
+            }
+            continue;
         }
+        let Some(t) = effect.children().find_map(ast::Type::cast) else {
+            ds.push(Diagnostic::unsupported(e.text_range(), "this effect"));
+            continue;
+        };
+        let borrowed = effect.token(K::AMP).is_some();
+        let ty = effect_type(&t, scope, ds);
+        match (&ty, borrowed, &name) {
+            (Ty::Dyn(_), true, _) => ds.push(Diagnostic::error(
+                Code::E0601,
+                effect.text_range(),
+                "an effect's trait is written without `&`: its name is a borrow already \
+                 (`time: Time` binds a `&dyn Time`)",
+            )),
+            (Ty::Adt(..), false, Some(_)) => ds.push(Diagnostic::error(
+                Code::E0601,
+                effect.text_range(),
+                format!("context data is read-only, so its name is a shared borrow: write `&{ty}`"),
+            )),
+            _ => {}
+        }
+        effects.push(EffectSig {
+            ty,
+            name,
+            range: e.text_range(),
+        });
     }
-    Ty::errors(members)
+    (Ty::errors(members), fails_range, effects)
 }
 
 /// Whether `ty` can be in an error set with `others`: it is a struct or enum (E0508), and not

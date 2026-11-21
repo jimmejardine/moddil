@@ -16,6 +16,7 @@ use crate::{Eval, Flow, TestRun};
 
 mod blocks;
 mod calls;
+mod effects;
 mod errors;
 mod exprs;
 mod ops;
@@ -34,6 +35,9 @@ struct Machine<'p> {
     /// For each `try` block being run, innermost last: whether its `?`s are on `Option`s, once
     /// one has said.
     try_modes: Vec<Option<bool>>,
+    /// The handlers installed by the `with` blocks being run, innermost last: how the effect is
+    /// looked up, and a borrow of the handler.
+    handlers: Vec<(String, Value)>,
 }
 
 impl Program {
@@ -45,6 +49,7 @@ impl Program {
             defers: Vec::new(),
             observed: Vec::new(),
             try_modes: Vec::new(),
+            handlers: Vec::new(),
         };
         let result = m.block(body);
         // A test's value is dropped at its end, like its variables.

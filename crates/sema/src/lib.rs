@@ -1,4 +1,4 @@
-//! Semantic analysis: names and types (later effects and error sets). Produces the typed HIR.
+//! Semantic analysis: names, types, effects and error sets. Produces the typed HIR.
 //!
 //! Every analysis is a Salsa query over [`SourceFile`] inputs, so results are memoised and
 //! recomputed only when what they read changes:
@@ -9,13 +9,15 @@
 //! - [`body`]: one function's or test's body in HIR;
 //! - [`infer`]: the types of a body's expressions, patterns and locals, and what its calls and
 //!   operators run;
+//! - [`effects`]: every function's effects and errors, inferred for private functions;
 //! - [`diagnostics`]: everything wrong with a file.
 //!
-//! Slices S0 to S4 cover `fn`, `test`, `let`, `int`, `bool`, `()`, arithmetic, comparisons,
+//! Slices S0 to S5 cover `fn`, `test`, `let`, `int`, `bool`, `()`, arithmetic, comparisons,
 //! logic, `if`, blocks, calls and `return`; tuples, structs, enums, patterns, `match` (with
 //! exhaustiveness checking), `if let`, `let … else`, loops and `assert`; borrow types, `*`,
 //! binding modes, `Copy` and `defer`; generics, traits, impls, methods, operators through traits,
-//! derives, destructors and the prelude; errors, `fail`, `?`, `try` and `catch`. Moves and
+//! derives, destructors and the prelude; errors, `fail`, `?`, `try` and `catch`; effects, `with`
+//! and `dyn` borrows. Moves and
 //! borrows are checked on MIR (`moddil-mir`).
 //! Valid Moddil beyond that is reported as "not supported yet" (`I0001`). See this crate's
 //! `README.md`.
@@ -34,13 +36,15 @@ mod traits;
 mod ty;
 mod validate;
 
-pub use check::{Callee, Inference, Propagated, infer, tuple_positions};
+pub use check::{
+    Callee, Effects, Evidence, FnEffects, Inference, Propagated, effects, infer, tuple_positions,
+};
 pub use collect::{item_tree, parse};
 pub use db::{Database, Db, Item, Owner, SourceFile};
 pub use diag::{CODES, Code, Diagnostic, Severity};
 pub use items::{
-    AdtDef, Container, FieldDef, FnSig, GenericParam, Generics, ImplDef, ItemTree, ParamSig, Pred,
-    SelfKind, Shape, Src, TestSig, TraitDef, VariantDef,
+    AdtDef, Container, EffectSig, FieldDef, FnSig, GenericParam, Generics, ImplDef, ItemTree,
+    ParamSig, Pred, SelfKind, Shape, Src, TestSig, TraitDef, VariantDef,
 };
 pub use lower::{Lowered, body};
 pub use traits::{Adjust, Answer, Pick, Solver, Source, Table, elaborate};
@@ -65,6 +69,7 @@ pub fn diagnostics(db: &dyn Db, file: SourceFile) -> Vec<Diagnostic> {
     if out.is_empty() {
         let items = item_tree(db, file);
         out.extend(items.diagnostics.iter().cloned());
+        out.extend(effects(db, file).diagnostics.iter().cloned());
         for owner in owners(db, file) {
             let ds = body(db, owner)
                 .diagnostics

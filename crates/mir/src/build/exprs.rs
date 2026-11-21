@@ -1,7 +1,7 @@
 //! Expressions and statements: each HIR expression kind as blocks and statements.
 
-use moddil_sema::hir::{ExprId, ExprKind, LogicOp, PatKind, Stmt, UnaryOp};
-use moddil_sema::{Callee, Ty};
+use moddil_sema::hir::{ExprId, ExprKind, Handler, LogicOp, PatKind, Stmt, UnaryOp};
+use moddil_sema::{Callee, Evidence, Ty};
 use moddil_syntax::TextRange;
 
 use super::scopes::{LoopCx, ScopeItem};
@@ -15,6 +15,27 @@ impl Builder<'_> {
     /// Evaluates `e` and stores its value in `dest`. A part of an `assert`'s condition is
     /// evaluated into its own local first, and marked as evaluated.
     pub(super) fn eval_into(&mut self, dest: Local, e: ExprId) {
+        // A borrow used as a `dyn` borrow is converted.
+        if let Some(target) = self.coercion(e) {
+            let ty = self.ty(e);
+            let t = self.cfg.new_local(ty.clone(), None);
+            let outer = self.uncoerced.replace(e);
+            self.eval_dyn_part(t, e);
+            self.uncoerced = outer;
+            let op = self.use_place(Place::local(t), &ty);
+            let from = match ty {
+                Ty::Ref(_, inner) => (*inner).clone(),
+                t => t,
+            };
+            debug_assert!(matches!(target, Ty::Ref(..)));
+            self.cfg.assign(dest, Rvalue::Unsize(op, from));
+            return;
+        }
+        self.eval_dyn_part(dest, e);
+    }
+
+    /// [`Builder::eval_into`], once any conversion to a `dyn` borrow is done.
+    fn eval_dyn_part(&mut self, dest: Local, e: ExprId) {
         // Each part is built once, so it leaves the table as it is built.
         if let Some((v, flag)) = self.recording.remove(&e) {
             self.eval_plain(v, e);
@@ -314,6 +335,7 @@ impl Builder<'_> {
                 body,
                 catch: Some(arms),
             } => self.try_catch(e, dest, body, &arms),
+            ExprKind::With { handlers, body } => self.with_into(e, dest, &handlers, body),
             ExprKind::Return(v) => {
                 match v {
                     Some(v) => self.eval_into(Local::RETURN, v),
@@ -475,9 +497,55 @@ impl Builder<'_> {
     }
 
     /// Calls what `e` (a call, method call or operator) runs, with `args`, into `dest`.
-    pub(super) fn call(&mut self, e: ExprId, dest: Local, args: Vec<Operand>) {
+    pub(super) fn call(&mut self, e: ExprId, dest: Local, mut args: Vec<Operand>) {
         let callee = self.types.callee(e).expect("a checked call").clone();
+        // The handlers it needs, after its arguments.
+        for ev in self.types.evidence(e) {
+            let local = match *ev {
+                Evidence::Param(i) => self.evidence[i],
+                Evidence::Install(w, k) => self.installed[&(w, k)],
+            };
+            args.push(Operand::Copy(Place::local(local)));
+        }
         self.call_into(Some(e), callee, Place::local(dest), args, self.range(e));
+    }
+
+    /// `with E = value, … { body }`: each handler is evaluated, then the block runs with them
+    /// installed. A handler that is a value lives until the block ends, then is dropped; each
+    /// installed handler is a borrow (as `dyn`, for a trait).
+    fn with_into(&mut self, e: ExprId, dest: Local, handlers: &[Handler], body: ExprId) {
+        self.scopes.open();
+        for (k, h) in handlers.iter().enumerate() {
+            let ty = self.ty(h.value);
+            let borrow = match self.solver.norm(&ty) {
+                Ty::Ref(_, inner) => {
+                    let op = self.operand(h.value, &[]);
+                    (op, (*inner).clone())
+                }
+                t => {
+                    let held = self.cfg.new_local(t.clone(), None);
+                    self.scopes.push(ScopeItem::Local(held));
+                    self.eval_into(held, h.value);
+                    let r = self.temp(Ty::reference(false, t.clone()));
+                    self.cfg.assign(r, Rvalue::Ref(false, Place::local(held)));
+                    (Operand::Move(Place::local(r)), t)
+                }
+            };
+            let installed = self
+                .cfg
+                .new_local(Ty::reference(false, h.effect.clone()), None);
+            self.scopes.push(ScopeItem::Local(installed));
+            let value = match &h.effect {
+                Ty::Dyn(_) => Rvalue::Unsize(borrow.0, borrow.1),
+                _ => Rvalue::Use(borrow.0),
+            };
+            self.cfg.assign(installed, value);
+            self.installed.insert((e, k), installed);
+        }
+        self.eval_into(dest, body);
+        let depth = self.scopes.depth() - 1;
+        self.leave_scopes(depth);
+        self.scopes.close();
     }
 
     /// A call; if its function can fail, its error edge goes where the `?` or `?!` around
@@ -491,7 +559,7 @@ impl Builder<'_> {
         range: TextRange,
     ) {
         let name = fn_name(self.items, callee.func());
-        let fails = self.items.fns[callee.func() as usize]
+        let fails = self.fx.fns[callee.func() as usize]
             .fails
             .subst(callee.args());
         let edge = self.error_edge(e, &fails);

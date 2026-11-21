@@ -1,0 +1,84 @@
+---
+source: crates/mir/src/tests.rs
+expression: "dump(\"trait Time { fn now(&self) -> int; }\\n\\\n         struct Clock { t: int }\\n\\\n         impl Time for Clock { fn now(&self) -> int { self.t } }\\n\\\n         fn uses(n: int) -> int with time: Time { time.now() + n }\\n\\\n         fn passes() -> int { uses(1) }\\n\\\n         fn installs(c: Clock) -> int { with Time = c { passes() } }\\n\\\n         fn coerces(c: &Clock) -> int { let t: &dyn Time = c; t.now() }\")"
+---
+fn <Clock as Time>::now(_1: &Clock) -> int {
+    // _1: self
+
+    bb0: {
+        _0 = (*_1).0;
+        StorageDead(_1);
+        return;
+    }
+}
+
+fn uses(_1: int, _2: &dyn Time) -> int {
+    // _1: n
+    // _2: time
+    let _3: int;
+    let _4: bool;
+
+    bb0: {
+        _3 = Time::now::<dyn Time>(_2) -> bb1 @ 158..168;
+    }
+
+    bb1: {
+        _4 = AddOverflows(_3, _1);
+        assert(!_4, overflow) @ 158..172;
+        _0 = Add(_3, _1);
+        StorageDead(_1);
+        return;
+    }
+}
+
+fn passes(_1: &dyn Time) -> int {
+
+    bb0: {
+        _0 = uses(const 1, _1) -> bb1 @ 196..203;
+    }
+
+    bb1: {
+        return;
+    }
+}
+
+fn installs(_1: Clock) -> int {
+    // _1: c
+    let _2: Clock;
+    let _3: &Clock;
+    let _4: &dyn Time;
+
+    bb0: {
+        _2 = move _1;
+        _3 = &_2;
+        _4 = Unsize(move _3, Clock);
+        _0 = passes(_4) -> bb1 @ 253..261;
+    }
+
+    bb1: {
+        StorageDead(_4);
+        StorageDead(_2);
+        StorageDead(_1);
+        return;
+    }
+}
+
+fn coerces(_1: &Clock) -> int {
+    // _1: c
+    let _2: &dyn Time;
+    let _3: &Clock;
+    let _4: &dyn Time; // t
+
+    bb0: {
+        _3 = _1;
+        _2 = Unsize(_3, Clock);
+        _4 = _2;
+        _0 = Time::now::<dyn Time>(_4) -> bb1 @ 319..326;
+    }
+
+    bb1: {
+        StorageDead(_4);
+        StorageDead(_1);
+        return;
+    }
+}

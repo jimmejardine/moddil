@@ -516,7 +516,7 @@ impl<'a> Checker<'a> {
             Statement::Assign(dest, r) => {
                 let mut flowing = BTreeSet::new();
                 match r {
-                    Rvalue::Use(o) => {
+                    Rvalue::Use(o) | Rvalue::Unsize(o, _) => {
                         flowing = Self::flows(o, h);
                         self.operand(at, span, o, h, m, check);
                     }
@@ -751,7 +751,9 @@ fn operand_local(o: &Operand) -> Option<Local> {
 fn rvalue_uses(r: &Rvalue, local: Local) -> bool {
     let uses = |o: &Operand| operand_local(o) == Some(local);
     match r {
-        Rvalue::Use(a) | Rvalue::Unary(_, a) | Rvalue::NegOverflows(a) => uses(a),
+        Rvalue::Use(a) | Rvalue::Unsize(a, _) | Rvalue::Unary(_, a) | Rvalue::NegOverflows(a) => {
+            uses(a)
+        }
         Rvalue::Binary(_, a, b) | Rvalue::Overflows(_, a, b) => uses(a) || uses(b),
         Rvalue::Aggregate(_, ops) => ops.iter().any(uses),
         Rvalue::Discriminant(p) | Rvalue::ErrorIs(p, _) | Rvalue::Ref(_, p) => p.local == local,
@@ -771,7 +773,10 @@ fn uses_defs(stmt: Option<&Statement>, term: Option<&Terminator>) -> (Vec<Local>
         match s {
             Statement::Assign(dest, r) => {
                 match r {
-                    Rvalue::Use(a) | Rvalue::Unary(_, a) | Rvalue::NegOverflows(a) => {
+                    Rvalue::Use(a)
+                    | Rvalue::Unsize(a, _)
+                    | Rvalue::Unary(_, a)
+                    | Rvalue::NegOverflows(a) => {
                         op(a, &mut uses);
                     }
                     Rvalue::Binary(_, a, b) | Rvalue::Overflows(_, a, b) => {

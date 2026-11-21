@@ -259,3 +259,16 @@ fn errors() {
          fn safe(n: int) -> int { try { check(n)? } catch { E(e) => e.n } }"
     ));
 }
+
+#[test]
+fn effects() {
+    insta::assert_snapshot!(dump(
+        "trait Time { fn now(&self) -> int; }\n\
+         struct Clock { t: int }\n\
+         impl Time for Clock { fn now(&self) -> int { self.t } }\n\
+         fn uses(n: int) -> int with time: Time { time.now() + n }\n\
+         fn passes() -> int { uses(1) }\n\
+         fn installs(c: Clock) -> int { with Time = c { passes() } }\n\
+         fn coerces(c: &Clock) -> int { let t: &dyn Time = c; t.now() }"
+    ));
+}

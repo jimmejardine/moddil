@@ -291,21 +291,42 @@ The full cost model, including calls, effects and checks, is in
 
 No case required first-class references with explicit lifetimes.
 
+## The allocator in scope
+
+**Decided: the allocator in scope is an ambient scoped handler** (decided November 2026).
+`.to_rc()` and growing collections ([Conversion](#conversion)) use the allocator that the innermost
+`with Alloc = a { … }` installs, as Jai's `push_allocator` and context allocator do, and the
+profile's default allocator where none is installed.
+
+```rust
+let frame = Arena::new(1[MiB]);
+with Alloc = &frame {
+    let path = find_path(&map, from, to);   // its `Vec`s grow in `frame`
+    steer(&path);
+}                                           // `frame` is reset or dropped after the block
+```
+
+- **Ambient, not an effect in signatures.** `Alloc` is never written after `with` in a signature,
+  and never inferred into one, like the ambient write-only effects
+  ([`effects-and-capabilities.md`: The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)).
+  So allocation does not spread into every signature: a library that grows a `Vec` uses whatever
+  allocator its caller installed.
+- **Installed like any handler.** `with Alloc = … { … }` takes a value or a borrow of an allocator,
+  and the innermost one wins. Explicit `_in(alloc)` constructors (`Vec::new_in(&tmp)`) remain for a
+  value that must use a particular allocator whatever is in scope.
+- **Lifetimes are checked by the borrow rules.** A handler borrowed from an arena lives as long as
+  the `with` block, and what is allocated in the arena is a view tied to it, so it cannot leave the
+  block ([View types](#view-types)); as before, arena allocations cannot become `Rc`s.
+- **`#[no_alloc]` is unchanged.** It forbids any call into an allocator, whichever one is in scope
+  ([`performance.md`: Hot-path guarantees](performance.md#hot-path-guarantees)); installing an
+  arena does not make allocation allowed there.
+- Scratch arenas install themselves the same way
+  ([`stdlib.md`: Scratch arenas](stdlib.md#scratch-arenas)). It is implemented with `Vec` in slice
+  S7 ([`roadmap.md`](roadmap.md#m0-the-v0-language-in-slices)).
+
 ## Open questions
 
-- **What "the allocator in scope" is.** `.to_rc()` and growing collections use the allocator in
-  scope ([Conversion](#conversion)), but the effect catalogue says allocation is not an effect, only a
-  capability chosen per profile ([`effects-and-capabilities.md`: The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)),
-  and no spec says how code puts an arena in scope. The options:
-  - **explicit only**: `_in(alloc)` constructors such as `Vec::new_in(tmp)`, and everything else
-    uses the profile's default allocator;
-  - **a scoped handler**: `with Alloc = tmp { … }`, as Jai's `push_allocator` and context
-    allocator, with arena lifetimes checked by the borrow rules.
-
-  Game and HFT code expects the second. Either way, allocation must not become an effect that
-  spreads into every signature, and the answer must say what `#[no_alloc]` means under it
-  ([`performance.md`: Hot-path guarantees](performance.md#hot-path-guarantees)). Scratch arenas are
-  decided either way ([`stdlib.md`: Scratch arenas](stdlib.md#scratch-arenas)).
+None at present.
 
 ## Background
 

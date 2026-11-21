@@ -192,6 +192,24 @@ codes! {
     E0507 = "entry point with errors",
     /// A type in an error set that is not a struct or enum, or a second instance of one.
     E0508 = "not an error type",
+    /// Something after `with` that is not an effect: a trait that cannot be used as `&dyn Trait`
+    /// with methods taking `&self`, or a type that is not a struct or enum of this program.
+    E0601 = "not an effect",
+    /// An entry point (`main`, a test) that needs an effect no `with` installs a handler for.
+    E0602 = "no handler",
+    /// A function whose effects are written out (`pub`, a trait's method or its impl's) that
+    /// needs an effect it does not list.
+    E0603 = "effect not in the signature",
+    /// A trait's method, or a method of an impl of a trait, that lists an effect other than
+    /// `fail`.
+    E0604 = "effect on a trait method",
+    /// `dyn` used wrongly: not behind a borrow, of a trait that is not dyn-compatible, or of
+    /// something that is not one trait.
+    E0605 = "invalid `dyn` type",
+    /// An effect listed twice in one signature or one `with`.
+    E0606 = "effect listed twice",
+    /// Effects inferred without end (a generic function calling itself with ever larger types).
+    E0607 = "effects do not settle",
     /// A `match` arm no value can reach.
     W0201 = "unreachable pattern",
     /// Valid Moddil that this implementation does not support yet.

@@ -45,6 +45,7 @@ impl fmt::Display for Rvalue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Rvalue::Use(a) => write!(f, "{a:?}"),
+            Rvalue::Unsize(a, t) => write!(f, "Unsize({a:?}, {t:?})"),
             Rvalue::Unary(UnOp::Neg, a) => write!(f, "Neg({a:?})"),
             Rvalue::Unary(UnOp::Not, a) => write!(f, "Not({a:?})"),
             Rvalue::Binary(op, a, b) => write!(f, "{op:?}({a:?}, {b:?})"),

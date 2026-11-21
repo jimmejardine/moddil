@@ -5,7 +5,7 @@ use moddil_syntax::{SyntaxKind as K, SyntaxNode, SyntaxToken, TextRange};
 
 use super::names::JumpError;
 use super::{Binds, Lowerer, Resolved};
-use crate::hir::{Arm, BinaryOp, CompareOp, ExprId, ExprKind, LogicOp, PatKind, UnaryOp};
+use crate::hir::{Arm, BinaryOp, CompareOp, ExprId, ExprKind, Handler, LogicOp, PatKind, UnaryOp};
 use crate::items::Shape;
 use crate::resolve::{generic_args, path_segments};
 use crate::{Code, Diagnostic, Ty};
@@ -118,6 +118,7 @@ impl Lowerer<'_> {
                 self.alloc(ExprKind::Fail(x), range)
             }
             ast::Expr::Try(_) => self.try_expr(&node),
+            ast::Expr::With(_) => self.with_expr(&node),
             _ => self.unsupported(range, "this expression"),
         }
     }
@@ -695,6 +696,55 @@ impl Lowerer<'_> {
     }
 
     /// `try { … }`, maybe with `catch { arms }`.
+    /// `with E = value, … { body }` (`eff.with.1`): each effect named once (E0606), each an
+    /// effect (E0601).
+    fn with_expr(&mut self, node: &SyntaxNode) -> ExprId {
+        let range = node.text_range();
+        let mut handlers: Vec<Handler> = Vec::new();
+        for h in node.children().filter(|c| c.kind() == K::HANDLER) {
+            let effect = match h.children().find_map(ast::Type::cast) {
+                Some(t) => {
+                    let mut ds = Vec::new();
+                    let ty = crate::resolve::effect_type(&t, &self.types, &mut ds);
+                    self.out.diagnostics.extend(ds);
+                    if let Some(why) = self.items.not_an_effect(&ty) {
+                        self.report(Code::E0601, t.syntax().text_range(), why);
+                        Ty::Error
+                    } else {
+                        ty
+                    }
+                }
+                None => Ty::Error,
+            };
+            if effect != Ty::Error
+                && let Some(first) = handlers.iter().find(|x| x.effect == effect)
+            {
+                let d = Diagnostic::error(
+                    Code::E0606,
+                    h.text_range(),
+                    format!(
+                        "`{}` is given two handlers here",
+                        crate::check::show_effect(&effect)
+                    ),
+                )
+                .with_label(first.range, "first given here");
+                self.error(d);
+            }
+            let value = h.children().find_map(ast::Expr::cast);
+            let value = self.expr_or_missing(value, h.text_range());
+            handlers.push(Handler {
+                effect,
+                value,
+                range: h.text_range(),
+            });
+        }
+        let body = match node.child(K::BLOCK).and_then(ast::Block::cast) {
+            Some(b) => self.block(&b),
+            None => self.missing(range),
+        };
+        self.alloc(ExprKind::With { handlers, body }, range)
+    }
+
     fn try_expr(&mut self, node: &SyntaxNode) -> ExprId {
         let range = node.text_range();
         let Some(block) = node.child(K::BLOCK).and_then(ast::Block::cast) else {

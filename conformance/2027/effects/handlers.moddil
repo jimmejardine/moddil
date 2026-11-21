@@ -1,0 +1,138 @@
+// covers: eff.1, eff.name.1, eff.with.1, eff.need.1
+
+trait Time {
+    fn now(&self) -> int;
+}
+
+struct Clock { t: int }
+impl Time for Clock {
+    fn now(&self) -> int { self.t }
+}
+
+struct Config { scale: int }
+
+fn deadline(after: int) -> int with time: Time {
+    time.now() + after
+}
+
+fn scaled(n: int) -> int with config: &Config {
+    n * config.scale
+}
+
+pub fn plan() -> int with Time, Config {
+    scaled(deadline(5))
+}
+
+test "a handler is found by its effect" {
+    let clock = Clock { t: 10 };
+    let config = Config { scale: 2 };
+    with Time = clock, Config = config {
+        plan()                              // => 30
+    }
+}
+
+test "the innermost handler wins" {
+    let a = Clock { t: 1 };
+    let b = Clock { t: 100 };
+    with Time = &a {
+        deadline(0)                         // => 1
+        ;
+        with Time = &b {
+            deadline(0)                     // => 100
+        };
+        deadline(0)                         // => 1
+    }
+}
+
+test "a with block has its block's value" {
+    let c = Clock { t: 3 };
+    let n = with Time = &c { deadline(1) * 2 };
+    n                                       // => 8
+}
+
+// A generic trait's instances are separate effects.
+trait Store<T> {
+    fn count(&self) -> int;
+}
+struct User;
+struct Order;
+struct Users { n: int }
+impl Store<User> for Users {
+    fn count(&self) -> int { self.n }
+}
+struct Orders { n: int }
+impl Store<Order> for Orders {
+    fn count(&self) -> int { self.n }
+}
+
+fn users() -> int with s: Store<User> { s.count() }
+fn orders() -> int with s: Store<Order> { s.count() }
+
+test "each instance of a generic trait is its own effect" {
+    let u = Users { n: 2 };
+    let o = Orders { n: 7 };
+    with Store<User> = &u, Store<Order> = &o {
+        users() * 10 + orders()             // => 27
+    }
+}
+
+// A handler that is a value is dropped when its block ends; one that is a borrow is not.
+struct K1;
+impl Drop for K1 { fn drop(self) { assert(false); } }          //~ trap
+impl Time for K1 {
+    fn now(&self) -> int { 0 }
+}
+
+struct Guard { armed: bool }
+impl Drop for Guard { fn drop(self) { assert(!self.armed); } }
+impl Time for Guard {
+    fn now(&self) -> int { 5 }
+}
+fn disarm(g: &mut Guard) { g.armed = false; }
+
+test "a handler that is a value is dropped at the end of its block" {
+    with Time = K1 {
+        deadline(0)
+    };
+    assert(false);
+}
+
+test "a handler that is a borrow is not dropped" {
+    let mut g = Guard { armed: true };
+    with Time = &g {
+        deadline(1)                         // => 6
+    };
+    disarm(&mut g);
+}
+
+struct Stop;
+trait Visitor {
+    fn visit(&self, n: int) with fail(Stop);
+}
+struct At { n: int }
+impl Visitor for At {
+    fn visit(&self, n: int) with fail(Stop) {
+        if n == self.n { fail(Stop); }
+    }
+}
+
+fn walk(limit: int) -> int with v: Visitor {
+    let mut i = 0;
+    while i < limit {
+        v.visit(i)?;
+        i += 1;
+    }
+    i
+}
+
+test "a handler ends a block early by failing" {
+    let at = At { n: 3 };
+    let r = try {
+        with Visitor = &at { walk(10)? }
+    } catch {
+        Stop => -1,
+    };
+    r                                       // => -1
+    ;
+    try { with Visitor = &at { walk(2)? } } // => Ok(2)
+}

@@ -139,6 +139,23 @@ pub struct FnSig {
     pub fails: Ty,
     /// Where its `with fail(…)` is written, if it is.
     pub fails_range: Option<TextRange>,
+    /// The effects its `with` clause lists, other than `fail`, in order.
+    pub effects: Vec<EffectSig>,
+    /// Whether it is declared `pub`.
+    pub public: bool,
+}
+
+/// An effect a signature lists: `time: Time` (named, for a body that calls it), `Time` (only
+/// passed on), `config: &AppConfig` (context data).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct EffectSig {
+    /// The effect, as a type: `dyn Time` for a trait, `AppConfig` for context data. The body sees
+    /// it as a shared borrow of this type.
+    pub ty: Ty,
+    /// The name it is bound to, if any.
+    pub name: Option<String>,
+    /// Where it is written.
+    pub range: TextRange,
 }
 
 /// A parameter.
@@ -325,6 +342,96 @@ const LANG: &[&str] = &[
 ];
 
 impl ItemTree {
+    /// Why `ty` cannot be an effect, if it cannot: an effect is a trait whose methods, its
+    /// supertraits' included, all take `&self` and which can be used as `dyn` (there is at least
+    /// one such method), or a struct or enum of the program without type parameters (context
+    /// data).
+    pub fn not_an_effect(&self, ty: &Ty) -> Option<String> {
+        match ty {
+            Ty::Error => None,
+            Ty::Dyn(tr) => {
+                let name = &self.traits[tr.trait_ as usize].name;
+                if let Some(why) = self.not_dyn(tr.trait_, true) {
+                    return Some(format!("`{name}` cannot be an effect: {why}"));
+                }
+                let any = self
+                    .supertraits_of(tr.trait_)
+                    .iter()
+                    .any(|&t| !self.traits[t as usize].methods.is_empty());
+                (!any).then(|| format!("`{name}` has no methods, so it cannot be an effect"))
+            }
+            Ty::Adt(a, _, args) => {
+                let def = &self.adts[*a as usize];
+                if def.src == Src::Prelude {
+                    Some(format!(
+                        "`{}` is the prelude's: context data is a type of this program, so wrap \
+                         it in one",
+                        def.name
+                    ))
+                } else if !args.is_empty() {
+                    Some(format!(
+                        "`{ty}` is generic: context data is a type without type parameters, so \
+                         wrap it in one"
+                    ))
+                } else {
+                    None
+                }
+            }
+            t => Some(format!(
+                "`{t}` is not an effect: effects are traits, or structs and enums as context data"
+            )),
+        }
+    }
+
+    /// Why trait `t` cannot be used as `dyn Trait`, if it cannot: an associated type, or a
+    /// method (its own or a supertrait's) that does not take `self` by borrow (by `&self` only,
+    /// if `shared`), has type parameters of its own, or names `Self` other than as `self`.
+    pub fn not_dyn(&self, t: u32, shared: bool) -> Option<String> {
+        for s in self.supertraits_of(t) {
+            let def = &self.traits[s as usize];
+            if let Some((a, _)) = def.assoc.first() {
+                return Some(format!("`{}` has an associated type, `{a}`", def.name));
+            }
+            for &m in &def.methods {
+                let f = &self.fns[m as usize];
+                let why = match f.self_kind {
+                    None => Some("takes no `self`"),
+                    Some(SelfKind::Value) => Some("takes `self` by value"),
+                    Some(SelfKind::RefMut) if shared => Some("takes `&mut self`"),
+                    _ => None,
+                };
+                let why = why.or_else(|| {
+                    (f.generics.params.len() > f.generics.parent as usize)
+                        .then_some("has type parameters")
+                });
+                let names_self = |t: &Ty| t.any(&|x| matches!(x, Ty::Param(0, _)));
+                let why = why.or_else(|| {
+                    (f.params.iter().skip(1).any(|p| names_self(&p.ty)) || names_self(&f.ret))
+                        .then_some("names `Self`")
+                });
+                if let Some(why) = why {
+                    return Some(format!("its method `{}` {why}", f.name));
+                }
+            }
+        }
+        None
+    }
+
+    /// Trait `t` and its supertraits, transitively, each once.
+    pub fn supertraits_of(&self, t: u32) -> Vec<u32> {
+        let mut out = vec![t];
+        let mut i = 0;
+        while i < out.len() {
+            for s in &self.traits[out[i] as usize].supertraits {
+                if !out.contains(&s.trait_) {
+                    out.push(s.trait_);
+                }
+            }
+            i += 1;
+        }
+        out
+    }
+
     /// The free function called `name`.
     pub fn fn_named(&self, name: &str) -> Option<u32> {
         self.fns
@@ -445,6 +552,7 @@ impl ItemTree {
             | Ty::Param(..)
             | Ty::Assoc(_)
             | Ty::Infer(_)
+            | Ty::Dyn(_)
             | Ty::Errors(_) => (0, 1),
             Ty::Tuple(ts) => layout(ts),
             Ty::Adt(a, _, _) => {

@@ -234,6 +234,8 @@ impl Collector<'_> {
         self.report_found(found);
         let found = validate::entry_points(&self.tree);
         self.report_found(found);
+        let found = validate::signature_effects(&mut self.tree);
+        self.report_found(found);
     }
 
     fn report_found(&mut self, found: Vec<validate::Found>) {

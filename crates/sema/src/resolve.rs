@@ -130,6 +130,7 @@ pub(crate) fn resolve_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnos
         ast::Type::Ref(_) => {
             let mutable = node.token(K::MUT_KW).is_some();
             let inner = match node.children().find_map(ast::Type::cast) {
+                Some(t @ ast::Type::Dyn(_)) => dyn_type(t.syntax(), scope, diags),
                 Some(t) => resolve_type(&t, scope, diags),
                 None => Ty::Error,
             };
@@ -148,6 +149,14 @@ pub(crate) fn resolve_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnos
             None => Ty::Error,
         },
         ast::Type::Never(_) => Ty::Never,
+        ast::Type::Dyn(_) => {
+            diags.push(Diagnostic::error(
+                Code::E0605,
+                range,
+                "`dyn Trait` has no size of its own, so it is used behind a borrow: `&dyn Trait`",
+            ));
+            Ty::Error
+        }
         ast::Type::Infer(_) if scope.holes => hole(),
         ast::Type::Infer(_) => {
             diags.push(Diagnostic::error(
@@ -161,6 +170,59 @@ pub(crate) fn resolve_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnos
             diags.push(Diagnostic::unsupported(range, "this type"));
             Ty::Error
         }
+    }
+}
+
+/// The effect a type after `with` names: `dyn Time` for a trait `Time`, or the type itself
+/// (context data).
+pub(crate) fn effect_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnostic>) -> Ty {
+    if let ast::Type::Path(_) = t
+        && let Some(path) = t.syntax().child(K::PATH)
+        && let Some(segs) = path_segments(&path)
+        && let [seg] = segs.as_slice()
+        && scope.tree.trait_named(&seg.name).is_some()
+        && scope.param(&seg.name).is_none()
+    {
+        return match trait_path(&path, scope, diags) {
+            Some((trait_ref, fixed)) if fixed.is_empty() => Ty::Dyn(trait_ref),
+            Some(_) => {
+                diags.push(Diagnostic::unsupported(
+                    t.syntax().text_range(),
+                    "associated types fixed on an effect",
+                ));
+                Ty::Error
+            }
+            None => Ty::Error,
+        };
+    }
+    resolve_type(t, scope, diags)
+}
+
+/// `dyn Trait`, the `DYN_TYPE` node `node`: one trait, with no associated types fixed.
+pub(crate) fn dyn_type(node: &SyntaxNode, scope: &Scope, diags: &mut Vec<Diagnostic>) -> Ty {
+    let bounds: Vec<SyntaxNode> = node.children().filter(|c| c.kind() == K::BOUND).collect();
+    let [bound] = bounds.as_slice() else {
+        diags.push(Diagnostic::error(
+            Code::E0605,
+            node.text_range(),
+            "`dyn` takes exactly one trait",
+        ));
+        return Ty::Error;
+    };
+    let Some(path) = bound.child(K::PATH) else {
+        diags.push(Diagnostic::unsupported(bound.text_range(), "this bound"));
+        return Ty::Error;
+    };
+    match trait_path(&path, scope, diags) {
+        Some((trait_ref, fixed)) if fixed.is_empty() => Ty::Dyn(trait_ref),
+        Some(_) => {
+            diags.push(Diagnostic::unsupported(
+                bound.text_range(),
+                "associated types fixed on a `dyn` type",
+            ));
+            Ty::Error
+        }
+        None => Ty::Error,
     }
 }
 

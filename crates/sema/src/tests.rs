@@ -451,16 +451,16 @@ fn errors() {
         &[("E0501", 2)],
     );
     err2(
-        "fn f() -> int with fail(A) { 1 }\nfn g() -> int { f()? }",
+        "fn f() -> int with fail(A) { 1 }\npub fn g() -> int { f()? }",
         &[("E0501", 2)],
     );
     err2(
-        "fn f() -> int with fail(A | B) { 1 }\nfn g() -> int with fail(A) { f()? }",
+        "fn f() -> int with fail(A | B) { 1 }\npub fn g() -> int with fail(A) { f()? }",
         &[("E0502", 2)],
     );
     err2("fn f() -> int { 1? }", &[("E0504", 1)]);
     err2(
-        "fn f() -> int with fail(A) { 1 }\nfn g() -> int { try { f()? } catch { B::X => 0 } }",
+        "fn f() -> int with fail(A) { 1 }\npub fn g() -> int { try { f()? } catch { B::X => 0 } }",
         &[("E0501", 2), ("E0505", 2)],
     );
     err2("fn f(o: Option<int>) -> int { o? }", &[("E0506", 1)]);
@@ -470,5 +470,36 @@ fn errors() {
     err2(
         "fn f() -> int with fail(A) { defer { fail(A { n: 1 }); } 1 }",
         &[("E0501", 1)],
+    );
+    // A private function's errors are inferred.
+    ok2(
+        "fn f() -> int with fail(A) { 1 }\nfn g() -> int { f()? }\npub fn h() -> int with fail(A) { g()? }",
+    );
+}
+
+#[test]
+fn effects() {
+    let e = "trait Time { fn now(&self) -> int; }\nstruct Clock { t: int }\n\
+             impl Time for Clock { fn now(&self) -> int { self.t } }\n\
+             fn uses() -> int with time: Time { time.now() }\n";
+    let ok2 = |t: &str| ok(&format!("{e}{t}"));
+    let err2 = |t: &str, x: &[(&str, u32)]| {
+        let shifted: Vec<(&str, u32)> = x.iter().map(|&(c, l)| (c, l + 4)).collect();
+        err(&format!("{e}{t}"), &shifted);
+    };
+    ok2("fn f() -> int { uses() }\nfn g(c: Clock) -> int { with Time = c { f() } }");
+    ok2("fn f() -> int { uses() }\npub fn g() -> int with Time { f() }");
+    ok2("fn f(c: &Clock) -> int { let t: &dyn Time = c; t.now() }");
+    ok2("fn f(n: int) -> int { if n == 0 { uses() } else { f(n - 1) } }");
+    err2("pub fn f() -> int { uses() }", &[("E0603", 1)]);
+    err2("fn main() -> int { uses() }", &[("E0602", 1)]);
+    err2("test \"t\" { uses(); }", &[("E0602", 1)]);
+    err2("fn f() with int {}", &[("E0601", 1)]);
+    err2("trait T { fn f(&self) with Time; }", &[("E0604", 1)]);
+    err2("fn f(t: dyn Time) {}", &[("E0605", 1)]);
+    err2("fn f() with Time, Time {}", &[("E0606", 1)]);
+    err2(
+        "fn f(c: &Clock) -> int { with Time = c, Time = c { uses() } }",
+        &[("E0606", 1)],
     );
 }

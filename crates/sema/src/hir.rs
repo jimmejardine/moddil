@@ -28,6 +28,9 @@ pub struct Body {
     pub param_pats: Vec<(LocalId, PatId)>,
     /// The body's block; `None` if the body is missing.
     pub root: Option<ExprId>,
+    /// The locals of the effects a function's signature names (`with time: Time`), with the
+    /// effect's index in the signature's effects.
+    pub effect_locals: Vec<(LocalId, usize)>,
 }
 
 /// A local variable.
@@ -214,6 +217,13 @@ pub enum ExprKind {
     },
     /// `discard(r, "reason")`: drops the `Result` `r` on purpose.
     Discard(ExprId),
+    /// `with E = value, … { body }`: runs the block with handlers installed for its effects.
+    With {
+        /// The handlers, in order: their values are evaluated first, outside the block.
+        handlers: Vec<Handler>,
+        /// The block.
+        body: ExprId,
+    },
     /// `&e` or `&mut e`: a borrow of the place `e` (or of a temporary holding its value).
     Ref {
         /// Whether it is `&mut`.
@@ -246,6 +256,18 @@ pub enum ExprKind {
         /// The value.
         value: ExprId,
     },
+}
+
+/// A handler a `with` installs: `Time = clock`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Handler {
+    /// The effect, as a type (`dyn Time`, or context data's type).
+    pub effect: crate::Ty,
+    /// The handler: a value whose type implements the trait (or is the context data's type), or
+    /// a borrow of one.
+    pub value: ExprId,
+    /// Where it is written.
+    pub range: TextRange,
 }
 
 /// One arm of a `match`.

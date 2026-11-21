@@ -5,15 +5,18 @@ desugared and name-resolved, carrying inferred types, effects and error sets. Th
 `moddil explain` and MIR building all read it
 ([`specs/mir.md`: Pipeline](../../specs/mir.md#pipeline)). Ownership is checked later, on MIR.
 
-**Status:** slices S0 to S4: functions and tests, `let`, `int`, `bool` and `()`, operators, `if`,
+**Status:** slices S0 to S5: functions and tests, `let`, `int`, `bool` and `()`, operators, `if`,
 blocks, calls and `return` (S0); tuples, structs, enums, patterns, `match` with exhaustiveness
 checking, `if let`, `let … else`, loops and `assert` (S1); borrow types and their mutability
 rules, `*`, binding modes, `Copy` and `defer` (S2; moves and borrows are checked on MIR); type
 parameters and bounds, traits, impls, methods, operators through traits, derives (expanded to
 Moddil source and checked like it), destructors and the prelude, inference by unification, trait
 solving and the one-impl-per-trait-and-type check (S3); error sets, `fail`, `?`, `?!`, `try` and
-`catch`, `errdefer`, unused `Result`s and entry points (S4), with the diagnostics of
-[`reference/2027/diagnostics.md`](../../reference/2027/diagnostics.md). Valid Moddil beyond S4 is
+`catch`, `errdefer`, unused `Result`s and entry points (S4); effects in signatures, `with`
+handlers, where each call's needs are met, the inference of private functions' effects and errors
+(the `effects` query, which checks them until they settle), and `dyn` borrows (S5), with the
+diagnostics of [`reference/2027/diagnostics.md`](../../reference/2027/diagnostics.md). Valid Moddil
+beyond S5 is
 reported as "not supported yet" (`I0001`). It starts as one crate and
 splits as it grows (names, types, effects).
 

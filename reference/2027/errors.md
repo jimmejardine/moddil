@@ -23,11 +23,13 @@ crash the program.
 **err.fail.1** `fail(e)` fails with the error `e`, and has type `!`. An error is a value of a
 struct or enum (E0508), or of an error set (**err.set.1**), which `fail(e)` fails with again.
 
-**err.set.1** A function that can fail lists the errors it can fail with after its result type:
-`-> T with fail(A | B)`, each a struct or enum, at most one instance of a generic one (E0508). An
-error that reaches the end of a function must be one it lists (E0502); a function without
-`with fail(…)` cannot fail (E0501). An impl's method fails with no error its trait's does not list
-([Impls](items/impls.md)). Errors of several types together form an **error set**, written
+**err.set.1** A function lists the errors it can fail with after its result type:
+`-> T with fail(A | B)`, each a struct or enum, at most one instance of a generic one (E0508). A
+private function's errors are inferred: those it lists, and those that reach the end of its body
+([Effects](effects.md)). A function whose errors are written out (a `pub` function, `main`, a
+trait's method or an impl's) fails only with those it lists: an error that reaches the end of it
+must be one it lists (E0502), and without `with fail(…)` it cannot fail (E0501). An impl's method
+fails with no error its trait's does not list ([Impls](items/impls.md)). Errors of several types together form an **error set**, written
 `A | B` when shown; it is a type only as the error of a `Result` and of `fail(…)`.
 
 **err.question.1** A call of a function that can fail is marked: with `?`, `?!` or inside `try`

@@ -43,6 +43,9 @@ pub enum Value {
     },
     /// A borrow, while the program runs: where it points, and whether it is `&mut`.
     Ref(Pointer, bool),
+    /// A `dyn` borrow (`&dyn Time`): where it points, whether it is `&mut`, and the type of what
+    /// it points to, which chooses the methods called through it (its **vtable**).
+    Dyn(Pointer, bool, Ty),
     /// A borrow as reported outside the program (an observed value, a result): what it pointed
     /// to, and whether it was `&mut`.
     Borrowed(Box<Value>, bool),
@@ -97,7 +100,7 @@ impl Value {
             }
             Value::Borrowed(v, true) => format!("&mut {}", v.render(items)),
             Value::Borrowed(v, false) => format!("&{}", v.render(items)),
-            Value::Ref(..) => "&…".to_string(),
+            Value::Ref(..) | Value::Dyn(..) => "&…".to_string(),
             Value::Empty => "<moved>".to_string(),
         }
     }
@@ -253,7 +256,7 @@ impl Machine<'_> {
                 Projection::Field(i) => ptr.path.push(*i),
                 Projection::Downcast(_) => {}
                 Projection::Deref => match self.load(&ptr) {
-                    Value::Ref(target, _) => ptr = target,
+                    Value::Ref(target, _) | Value::Dyn(target, _, _) => ptr = target,
                     other => unreachable!("dereferencing {other:?}"),
                 },
             }
@@ -383,7 +386,9 @@ impl Machine<'_> {
     /// `v` with every borrow replaced by what it points to, for reporting outside the program.
     fn shown(&self, v: Value) -> Value {
         match v {
-            Value::Ref(ptr, m) => Value::Borrowed(Box::new(self.shown(self.load(&ptr))), m),
+            Value::Ref(ptr, m) | Value::Dyn(ptr, m, _) => {
+                Value::Borrowed(Box::new(self.shown(self.load(&ptr))), m)
+            }
             Value::Tuple(xs) => Value::Tuple(xs.into_iter().map(|x| self.shown(x)).collect()),
             Value::Adt {
                 adt,
@@ -439,7 +444,28 @@ impl Machine<'_> {
                 Value::Adt { variant, .. } => Value::Int(i64::from(variant)),
                 other => unreachable!("the discriminant of {other:?}"),
             },
-            Rvalue::Ref(m, p) => Value::Ref(self.resolve(p), *m),
+            Rvalue::Ref(m, p) => {
+                let ptr = self.resolve(p);
+                // A borrow of what a `dyn` borrow points to is one too.
+                let (Some(Projection::Deref), Some(base)) = (
+                    p.projection.last(),
+                    p.projection.len().checked_sub(1).map(|n| Place {
+                        local: p.local,
+                        projection: p.projection[..n].to_vec(),
+                    }),
+                ) else {
+                    return Value::Ref(ptr, *m);
+                };
+                match self.read(&base) {
+                    Value::Dyn(_, _, t) => Value::Dyn(ptr, *m, t),
+                    _ => Value::Ref(ptr, *m),
+                }
+            }
+            Rvalue::Unsize(a, from) => match self.take(a) {
+                Value::Ref(ptr, m) => Value::Dyn(ptr, m, self.concrete(from)),
+                v @ Value::Dyn(..) => v,
+                other => unreachable!("a `dyn` borrow of {other:?}"),
+            },
         }
     }
 }
@@ -564,7 +590,21 @@ fn run<'db>(
                 }
                 let (callee, args, dest, target) =
                     (callee.clone(), args.clone(), dest.clone(), *target);
-                let values: Vec<Value> = args.iter().map(|a| m.take(a)).collect();
+                let mut values: Vec<Value> = args.iter().map(|a| m.take(a)).collect();
+                // A method called through a `dyn` borrow is the one of the type it points to.
+                let callee = match callee {
+                    Callee::Trait {
+                        func,
+                        args: mut targs,
+                    } if matches!(m.concrete(&targs[0]), Ty::Dyn(_)) => {
+                        if let Some(Value::Dyn(ptr, mutable, t)) = values.first().cloned() {
+                            values[0] = Value::Ref(ptr, mutable);
+                            targs[0] = t;
+                        }
+                        Callee::Trait { func, args: targs }
+                    }
+                    c => c,
+                };
                 let dest = m.resolve(&dest);
                 let on_error = on_error.clone().map(|(p, b)| (m.resolve(&p), b.index()));
                 match m.target(&callee) {

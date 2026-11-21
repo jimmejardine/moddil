@@ -3,7 +3,9 @@
 The **MIR interpreter**, part of the compiler. It runs *analysed* or *runtime* MIR and never needs
 target lowering ([`specs/mir.md`: Pipeline](../../specs/mir.md#pipeline)).
 
-**Status:** slices S0 to S4: errors return through the error edge of the call that raised them
+**Status:** slices S0 to S5: a function's handlers arrive as hidden arguments after the others,
+and a `dyn` borrow carries the type of what it points to, which chooses the methods called through
+it; errors return through the error edge of the call that raised them
 (a test, or a function the interpreter is asked to run, that an error leaves reports
 `Stop::Failed`); `int`, `bool`, `()`, tuple, struct and enum values, borrows as
 pointers into frames, places with projections, generic code run once for every type (each frame

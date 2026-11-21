@@ -156,7 +156,9 @@ impl Cx<'_> {
             Ty::Bool => vec![Ctor::Bool(false), Ctor::Bool(true)],
             Ty::Int => split_ints(heads, INT_MIN, INT_MAX),
             // A value of a type parameter can only be bound: one constructor covers it.
-            Ty::Unit | Ty::Tuple(_) | Ty::Param(..) | Ty::Assoc(_) => vec![Ctor::Single],
+            Ty::Unit | Ty::Tuple(_) | Ty::Param(..) | Ty::Assoc(_) | Ty::Dyn(_) => {
+                vec![Ctor::Single]
+            }
             Ty::Adt(a, ..) => {
                 let def = &self.items.adts[*a as usize];
                 if def.is_enum {

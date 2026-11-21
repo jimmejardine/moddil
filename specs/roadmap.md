@@ -117,19 +117,36 @@ something runs from the first slice.
   wait for arrive:
   - errors are values of named types (structs and enums); inferred tags wait for their syntax
     ([`error-handling.md`: Open questions](error-handling.md#open-questions));
-  - a function writes its error set (`with fail(A | B)`): inference comes with S5's effects;
+  - a function writes its error set (`with fail(A | B)`), until S5 infers a private function's;
   - an error set is a type only as `Result`'s error and in `fail(…)`, and cannot be written
     there yet (it is inferred: `let r = try { … }`);
   - a note after `?` is checked but not kept, since traces and `fmt` strings come later; string
     literals appear only as reasons and notes until `String` arrives in S7.
+- **S5's scope and interim rules (decided):** traits and context data after `with` in a
+  signature, named or not; handlers installed with `with E = h { … }`, values of named types or
+  borrows of them, found by exact effect; a private function's effects and errors inferred inside
+  the file, which is one mod until S6, and written out on `pub` functions, trait methods and entry
+  points; `&dyn Trait` and `&mut dyn Trait` borrows, with upcasting to a supertrait; handlers passed
+  as hidden `&dyn` parameters in MIR. Until the features they wait for arrive:
+  - a handler is a value of a named type, or a borrow of one: anonymous impls (`impl Time { … }`
+    as an expression), and closures installed as handlers, come with closures in S7;
+  - a handler cannot hold another handler it captured when built, since a struct cannot hold a
+    borrow until view types arrive;
+  - `main` takes no root capabilities, and there are no standard effect traits (`Time`, `Net`)
+    yet: a program defines its own;
+  - `suspend` and `spawn` wait for S9, and effect polymorphism over closures for S7;
+  - `dyn` names one trait, with no associated types fixed, and a trait with associated types
+    cannot be used as `dyn`;
+  - the reference interpreter finds a generic function's effect (`Store<T>`) by the types it knows
+    its type parameters stand for, from the values of its arguments.
 - **Two open questions must be settled before S7**, because S7 writes the first library code in
   Moddil:
   - **caller locations** ([`error-handling.md`: Open questions](error-handling.md#open-questions)),
     so that a trap in `unwrap`, `expect` or `xs[i]` reports the user's line, not one inside the
     prelude or `Vec`. Settle it before the prelude gains a method that traps;
-  - **the allocator in scope** ([`memory.md`: Open questions](memory.md#open-questions)), which
-    fixes the constructors of `Vec` and `Map`. Settle it by S5 if the answer is a scoped
-    handler, since S5 builds handlers.
+  - **the allocator in scope**, which fixes the constructors of `Vec` and `Map`: settled as an
+    ambient scoped handler ([`memory.md`: The allocator in scope](memory.md#the-allocator-in-scope)),
+    built on S5's handlers.
 - **Deferred past M0:** units; `Fixed` and `Simd`; views and linear types; generators and coroutines;
   full comptime and reflection; `unsafe` and FFI; GPU; distribution; data contracts.
 - **The tour only has to check at M0**, so its library dependencies (HTTP, serde, `Url`) are

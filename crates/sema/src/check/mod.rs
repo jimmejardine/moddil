@@ -15,6 +15,7 @@ use moddil_syntax::TextRange;
 
 use crate::collect::item_tree;
 use crate::hir::{Body, ExprId, ExprKind, LocalId, PatId};
+use crate::items::{Container, Src};
 use crate::lower::body;
 use crate::traits::{Adjust, Solver};
 use crate::ty::TraitRef;
@@ -25,12 +26,16 @@ mod calls;
 mod errors;
 mod exprs;
 mod finish;
+mod needs;
 mod operators;
 mod patterns;
 
 use errors::FailCx;
 pub use errors::Propagated;
 use finish::{Deferred, DeferredChecks, Obligation, Obligations};
+pub(crate) use needs::show_effect;
+pub use needs::{Effects, Evidence, FnEffects, effects};
+use needs::{EvidenceMap, Mode, Need, inferred};
 
 /// The function a call, method call or operator runs.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -99,6 +104,13 @@ pub struct Inference {
     adjusts: HashMap<ExprId, Adjust>,
     propagated: HashMap<ExprId, Propagated>,
     try_errors: HashMap<ExprId, Ty>,
+    evidence: EvidenceMap,
+    dyn_coercions: HashMap<ExprId, Ty>,
+    /// For a function whose effects are inferred: the effects its body needs that nothing in it
+    /// meets.
+    escaping_needs: Vec<Ty>,
+    /// For a function whose errors are inferred: the errors that leave its body.
+    escaping_errors: Vec<Ty>,
     /// Type errors, and exhaustiveness errors and warnings.
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -161,6 +173,18 @@ impl Inference {
         self.try_errors.get(&e).cloned()
     }
 
+    /// For a call of a function that needs effects: where each of its needs (in the order of
+    /// its [`FnEffects::needs`]) is met.
+    pub fn evidence(&self, e: ExprId) -> &[Evidence] {
+        self.evidence.get(&e).map_or(&[], Vec::as_slice)
+    }
+
+    /// For an expression whose borrow is used as a `dyn` borrow (`&clock` as `&dyn Time`): the
+    /// `dyn` borrow type.
+    pub fn dyn_coercion(&self, e: ExprId) -> Option<&Ty> {
+        self.dyn_coercions.get(&e)
+    }
+
     /// How a method call's receiver is adjusted to the method's `self`.
     pub fn adjust(&self, e: ExprId) -> Adjust {
         self.adjusts.get(&e).copied().unwrap_or(Adjust {
@@ -178,6 +202,11 @@ pub(crate) fn index<T>(id: la_arena::Idx<T>) -> usize {
 /// Type checks the body of `owner`.
 #[salsa::tracked(returns(ref))]
 pub fn infer<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Inference {
+    check_body(db, owner, effects(db, owner.file(db)))
+}
+
+/// Type checks the body of `owner`, with the effects and errors of the functions `fx` says.
+pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) -> Inference {
     let lowered = body(db, owner);
     let items = item_tree(db, owner.file(db));
     let body = &lowered.body;
@@ -200,9 +229,27 @@ pub fn infer<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Inference {
             FailCx::Never("a destructor")
         }
         Item::Fn(i) => FailCx::Fn {
-            allowed: items.fns[i as usize].fails.members(),
+            allowed: fx.fns[i as usize].fails.members(),
             option: matches!(&ret, Ty::Adt(a, ..) if Some(*a) == items.lang("Option")),
+            infer: inferred(items, i),
         },
+    };
+    // How its needs are met (`eff.need.1`).
+    let (mode, own) = match owner.item(db) {
+        Item::Test(_) => (Mode::Entry("a test"), Vec::new()),
+        Item::Fn(i) => {
+            let f = &items.fns[i as usize];
+            let mode = if inferred(items, i) {
+                Mode::Inferred
+            } else if f.src == Src::File && f.container == Container::Free && f.name == "main" {
+                Mode::Entry("`main`")
+            } else if items.trait_of(i).is_some() {
+                Mode::Method
+            } else {
+                Mode::Written
+            };
+            (mode, fx.fns[i as usize].needs.clone())
+        }
     };
     let mut cx = Checker {
         body,
@@ -216,6 +263,11 @@ pub fn infer<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Inference {
         fail_cx: vec![fail_cx],
         marked: None,
         call_fails: None,
+        fx,
+        mode,
+        own,
+        installs: Vec::new(),
+        needs: Vec::new(),
         out: Inference {
             expr_types: vec![Ty::Error; body.exprs.len()],
             pat_types: vec![Ty::Error; body.pats.len()],
@@ -232,11 +284,12 @@ pub fn infer<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Inference {
             cx.check_pat(pat, &t, None);
             cx.deferred.push(Deferred::Irrefutable(pat, "a parameter"));
         }
+        cx.effect_locals(i);
     }
     if let Some(root) = body.root {
         let t = cx.infer(root);
         // A test's final value is observed, not returned, so it may have any type.
-        if !is_test && !cx.coerce(&t, &ret) {
+        if !is_test && !cx.unsize(root, &t, &ret) && !cx.coerce(&t, &ret) {
             let at = match &body.exprs[root].kind {
                 ExprKind::Block {
                     tail: Some(tail), ..
@@ -284,6 +337,17 @@ struct Checker<'a> {
     marked: Option<ExprId>,
     /// The errors of the marked call, once it is found to be one that can fail.
     call_fails: Option<Ty>,
+    /// Every function's effects and errors.
+    fx: &'a Effects,
+    /// How the body's needs are met.
+    mode: Mode,
+    /// The function's own effects, in order.
+    own: Vec<Ty>,
+    /// The `with` expressions around what is being checked, innermost last, with the effects
+    /// each installs.
+    installs: Vec<(ExprId, Vec<Ty>)>,
+    /// The needs of the calls checked so far.
+    needs: Vec<Need>,
     out: Inference,
 }
 
@@ -353,7 +417,7 @@ impl Checker<'_> {
 
     fn check(&mut self, e: ExprId, expected: &Ty) -> Ty {
         let t = self.infer(e);
-        if !self.coerce(&t, expected) {
+        if !self.unsize(e, &t, expected) && !self.coerce(&t, expected) {
             self.mismatch(e, expected, &t);
         }
         t
@@ -397,6 +461,7 @@ impl Checker<'_> {
         let deferred = std::mem::take(&mut self.deferred);
         let ds = deferred.run(self.items, self.body, &self.out, &mut self.solver);
         self.out.diagnostics.extend(ds);
+        self.meet_needs();
     }
 }
 

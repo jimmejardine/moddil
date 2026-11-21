@@ -21,6 +21,9 @@ pub enum Ty {
     Adt(u32, Arc<str>, Arc<[Ty]>),
     /// A borrow: `&T` (shared) or `&mut T` (exclusive).
     Ref(bool, Arc<Ty>),
+    /// `dyn Trait`: a value of some type that implements the trait, known only through it. It
+    /// has no size, so it is only ever behind a borrow (`&dyn Trait`).
+    Dyn(TraitRef),
     /// A type parameter of the item being checked, by its index in the item's generics (for a
     /// trait's items, `Self` is parameter 0), with its name.
     Param(u32, Arc<str>),
@@ -123,6 +126,7 @@ impl Ty {
         match self {
             Ty::Tuple(ts) | Ty::Adt(_, _, ts) | Ty::Errors(ts) => ts.iter().any(|t| t.any(f)),
             Ty::Ref(_, t) => t.any(f),
+            Ty::Dyn(tr) => tr.args.iter().any(|t| t.any(f)),
             Ty::Assoc(a) => a.self_ty.any(f) || a.trait_ref.args.iter().any(|t| t.any(f)),
             _ => false,
         }
@@ -136,6 +140,7 @@ impl Ty {
             Ty::Errors(ts) => Ty::errors(ts.iter().map(&mut *f).collect()),
             Ty::Adt(a, n, ts) => Ty::Adt(*a, n.clone(), ts.iter().map(&mut *f).collect()),
             Ty::Ref(m, t) => Ty::Ref(*m, Arc::new(f(t))),
+            Ty::Dyn(tr) => Ty::Dyn(tr.map(f)),
             Ty::Assoc(a) => Ty::Assoc(Arc::new(AssocTy {
                 self_ty: f(&a.self_ty),
                 trait_ref: a.trait_ref.map(f),
@@ -282,6 +287,7 @@ impl fmt::Debug for Ty {
                 }
                 Ok(())
             }
+            Ty::Dyn(tr) => write!(f, "dyn {tr:?}"),
             Ty::Ref(true, t) => write!(f, "&mut {t:?}"),
             Ty::Ref(false, t) => write!(f, "&{t:?}"),
             Ty::Tuple(ts) => {

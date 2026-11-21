@@ -29,6 +29,9 @@ impl Builder<'_> {
             | ExprKind::Bang(c, _)
             | ExprKind::Fail(c)
             | ExprKind::Discard(c) => self.assigns(*c),
+            ExprKind::With { handlers, body } => {
+                handlers.iter().any(|h| self.assigns(h.value)) || self.assigns(*body)
+            }
             ExprKind::Try { body, catch } => {
                 self.assigns(*body)
                     || catch
@@ -80,6 +83,9 @@ impl Builder<'_> {
     /// The place `e` denotes without evaluating anything, if it is a local, or fields and
     /// dereferences of one.
     pub(super) fn place_of(&mut self, e: ExprId) -> Option<Place> {
+        if self.coercion(e).is_some() {
+            return None;
+        }
         match self.hir.exprs[e].kind {
             ExprKind::Local(l) => Some(Place::local(self.local(l))),
             ExprKind::Field { base, .. } => {
@@ -116,7 +122,7 @@ impl Builder<'_> {
             }
             ExprKind::Deref(x) => self.place(x).deref(),
             _ => {
-                let t = self.temp(self.ty(e));
+                let t = self.temp(self.value_ty(e));
                 self.eval_into(t, e);
                 Place::local(t)
             }
@@ -140,6 +146,16 @@ impl Builder<'_> {
     /// `e` as an operand. If an expression evaluated later (`later`) may assign to a local, a
     /// place's value is taken into a temporary first, so the operand keeps the value it had here.
     pub(super) fn operand(&mut self, e: ExprId, later: &[ExprId]) -> Operand {
+        if let Some(target) = self.coercion(e) {
+            let shared = matches!(target, Ty::Ref(false, _));
+            let t = self.temp(target);
+            self.eval_into(t, e);
+            return if shared {
+                Operand::Copy(Place::local(t))
+            } else {
+                Operand::Move(Place::local(t))
+            };
+        }
         if let Some(&(v, _)) = self.recording.get(&e) {
             self.eval_into(v, e);
             return Operand::Copy(Place::local(v));
@@ -179,7 +195,7 @@ impl Builder<'_> {
         if let Some(p) = self.place_of(e) {
             return p;
         }
-        let t = self.temp(self.ty(e));
+        let t = self.temp(self.value_ty(e));
         self.eval_into(t, e);
         Place::local(t)
     }

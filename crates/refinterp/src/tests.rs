@@ -154,3 +154,23 @@ fn errors() {
         )]
     );
 }
+
+#[test]
+fn effects() {
+    let text = "trait Time { fn now(&self) -> int; }\n\
+                struct Clock { t: int }\n\
+                impl Time for Clock { fn now(&self) -> int { self.t } }\n\
+                fn uses(n: int) -> int with time: Time { time.now() + n }\n\
+                fn passes() -> int { uses(1) }\n\
+                test \"t\" {\n\
+                    let a = Clock { t: 1 };\n\
+                    let b = Clock { t: 10 };\n\
+                    with Time = &a { passes() // => 2\n\
+                    ; with Time = &b { passes() } // => 11\n\
+                    }\n\
+                }\n";
+    assert_eq!(
+        runs(text),
+        vec![(vec!["2".to_string(), "11".to_string()], None)]
+    );
+}

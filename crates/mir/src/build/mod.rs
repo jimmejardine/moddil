@@ -37,6 +37,12 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
     let items = moddil_sema::item_tree(db, file);
     let hir = &moddil_sema::body(db, owner).body;
     let types = moddil_sema::infer(db, owner);
+    let fx = moddil_sema::effects(db, file);
+    // The function's effects, which its callers pass as hidden parameters after the others.
+    let needs: Vec<Ty> = match owner.item(db) {
+        Item::Fn(i) => fx.fns[i as usize].needs.clone(),
+        Item::Test(_) => Vec::new(),
+    };
     let (name, ret, src, preds) = match owner.item(db) {
         Item::Fn(i) => {
             let sig = &items.fns[i as usize];
@@ -79,7 +85,7 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
                 ty: ret,
                 name: None,
             }],
-            arg_count: hir.params.len(),
+            arg_count: hir.params.len() + needs.len(),
             blocks: Vec::new(),
         }),
         scopes: Scopes::new(),
@@ -89,9 +95,29 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
         targets: vec![Target::Out],
         on_error: HashMap::new(),
         binds: None,
+        fx,
+        evidence: Vec::new(),
+        installed: HashMap::new(),
+        uncoerced: None,
     };
     for &p in &hir.params {
         b.local(p);
+    }
+    // The handlers of the function's effects, each named as its signature names it, if it does.
+    for t in &needs {
+        let named = match owner.item(db) {
+            Item::Fn(i) => hir
+                .effect_locals
+                .iter()
+                .find(|&&(_, k)| items.fns[i as usize].effects.get(k).map(|e| &e.ty) == Some(t)),
+            Item::Test(_) => None,
+        };
+        let name = named.map(|&(l, _)| hir.locals[l].name.clone());
+        let local = b.cfg.new_local(Ty::reference(false, t.clone()), name);
+        if let Some(&(l, _)) = named {
+            b.locals[idx(l)] = Some(local);
+        }
+        b.evidence.push(local);
     }
     for &(local, pat) in &hir.param_pats {
         let place = Place::local(b.local(local));
@@ -142,6 +168,32 @@ struct Builder<'a> {
     /// While a pattern is tested with [`Builder::match_pat`]: the bindings to make once it
     /// matches.
     binds: Option<Vec<patterns::Binding>>,
+    /// Every function's effects and errors.
+    fx: &'a moddil_sema::Effects,
+    /// The hidden parameters holding the function's own handlers, in the order of its needs.
+    evidence: Vec<Local>,
+    /// The locals holding the handlers each `with` installs: by the `with` and the handler's
+    /// index.
+    installed: HashMap<(ExprId, usize), Local>,
+    /// The expression being evaluated before its conversion to a `dyn` borrow, which is not
+    /// converted again.
+    uncoerced: Option<ExprId>,
+}
+
+impl Builder<'_> {
+    /// The `dyn` borrow type `e`'s value is converted to, if it is.
+    fn coercion(&self, e: ExprId) -> Option<Ty> {
+        if self.uncoerced == Some(e) {
+            return None;
+        }
+        self.types.dyn_coercion(e).cloned()
+    }
+
+    /// The type of the value `e` gives where it is used: its own, or the `dyn` borrow it is
+    /// converted to.
+    fn value_ty(&self, e: ExprId) -> Ty {
+        self.coercion(e).unwrap_or_else(|| self.types.expr(e))
+    }
 }
 
 impl Builder<'_> {

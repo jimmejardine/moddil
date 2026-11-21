@@ -1,0 +1,115 @@
+// covers: type.dyn.1, type.dyn.coerce.1, eff.need.1
+
+trait Shape {
+    fn area(&self) -> int;
+    fn twice(&self) -> int { self.area() * 2 }
+}
+trait Named: Shape {
+    fn id(&self) -> int;
+}
+trait Grow {
+    fn grow(&mut self, by: int);
+    fn size(&self) -> int;
+}
+
+struct Square { side: int }
+impl Shape for Square {
+    fn area(&self) -> int { self.side * self.side }
+}
+impl Named for Square {
+    fn id(&self) -> int { 4 }
+}
+impl Grow for Square {
+    fn grow(&mut self, by: int) { self.side += by; }
+    fn size(&self) -> int { self.side }
+}
+
+struct Circle { r: int }
+impl Shape for Circle {
+    fn area(&self) -> int { 3 * self.r * self.r }
+    fn twice(&self) -> int { 0 }
+}
+
+fn area_of(s: &dyn Shape) -> int { s.area() }
+fn both(a: &dyn Shape, b: &dyn Shape) -> int { a.area() + b.twice() }
+fn named(n: &dyn Named) -> int { n.id() * 100 + area_of(n) }
+fn grown(g: &mut dyn Grow) -> int {
+    g.grow(1);
+    g.size()
+}
+
+test "a dyn borrow calls the method of what it points to" {
+    let sq = Square { side: 2 };
+    let c = Circle { r: 1 };
+    area_of(&sq)                            // => 4
+    ;
+    area_of(&c)                             // => 3
+    ;
+    both(&sq, &c)                           // => 4
+    ;
+    both(&c, &sq)                           // => 11
+}
+
+test "a dyn borrow of a subtrait is one of its supertrait" {
+    let sq = Square { side: 3 };
+    named(&sq)                              // => 409
+    ;
+    let n: &dyn Named = &sq;
+    n.twice()                               // => 18
+}
+
+test "a mutable dyn borrow" {
+    let mut sq = Square { side: 1 };
+    grown(&mut sq)                          // => 2
+    ;
+    grown(&mut sq)                          // => 3
+    ;
+    sq.side                                 // => 3
+}
+
+// A handler can be passed as a value, and installed again from one.
+trait Time {
+    fn now(&self) -> int;
+}
+trait Steady: Time {}
+struct Clock { t: int }
+impl Time for Clock {
+    fn now(&self) -> int { self.t }
+}
+impl Steady for Clock {}
+
+fn deadline() -> int with time: Time { time.now() }
+fn compare(a: &dyn Time, b: &dyn Time) -> int { a.now() - b.now() }
+fn handed(t: &dyn Steady) -> int {
+    with Time = t { deadline() }
+}
+
+test "handlers as values" {
+    let a = Clock { t: 9 };
+    let b = Clock { t: 4 };
+    compare(&a, &b)                         // => 5
+    ;
+    handed(&a)                              // => 9
+}
+
+trait Make {
+    fn make() -> int;
+}
+trait Same {
+    fn same(&self, other: &Self) -> bool;
+}
+trait Pick {
+    fn pick<T>(&self, x: T) -> T;
+}
+trait Sized {
+    type Out;
+    fn get(&self) -> int;
+}
+
+fn no_self(m: &dyn Make) {}                                     //~ E0605
+fn names_self(s: &dyn Same) {}                                  //~ E0605
+fn generic_method(p: &dyn Pick) {}                              //~ E0605
+fn assoc(s: &dyn Sized) {}                                      //~ E0605
+fn unsized(s: dyn Shape) {}                                     //~ E0605
+fn not_shape(c: &Clock) -> int { area_of(c) }                   //~ E0402
+fn not_a_trait(c: &dyn Clock) {}                                //~ E0401

@@ -176,6 +176,10 @@ impl Checker<'_> {
                 let (body, catch) = (*body, catch.clone());
                 self.try_expr(e, body, catch.as_deref())
             }
+            ExprKind::With { handlers, body } => {
+                let (handlers, body) = (handlers.clone(), *body);
+                self.with_expr(e, &handlers, body)
+            }
             &ExprKind::Assert(cond) => {
                 self.check(cond, &Ty::Bool);
                 Ty::Unit

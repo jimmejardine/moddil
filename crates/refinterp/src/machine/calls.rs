@@ -310,6 +310,7 @@ impl Machine<'_> {
             debug_assert!(matched, "parameter patterns are irrefutable");
             self.bind(binds);
         }
+        self.bind_effects(&f.node);
         let result = self.block(&f.node.body().expect("a body"));
         let result = match result {
             Ok(v) | Err(Flow::Return(v)) => Ok(v),

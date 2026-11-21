@@ -95,6 +95,17 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
                 }
             }
             cx.names.bind_all(binds.into_names());
+            for (k, e) in sig.effects.iter().enumerate() {
+                if let Some(name) = &e.name {
+                    let local = cx.out.body.locals.alloc(Local {
+                        name: name.clone(),
+                        mutable: false,
+                        range: e.range,
+                    });
+                    cx.out.body.effect_locals.push((local, k));
+                    cx.names.bind(name.clone(), local);
+                }
+            }
             node.and_then(|f| f.body())
         }
         Item::Test(i) => root

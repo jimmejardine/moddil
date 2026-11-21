@@ -255,6 +255,10 @@ pub enum Rvalue {
     ErrorIs(Place, u32),
     /// A borrow of a place: `&mut` if the flag is set.
     Ref(bool, Place),
+    /// A borrow of a value of the given type (in terms of the body's type parameters) as a
+    /// `dyn` borrow of a trait it implements: `&clock` as `&dyn Time`. If the borrow is already
+    /// a `dyn` borrow, of a subtrait, it stays as it is.
+    Unsize(Operand, Ty),
 }
 
 /// What an [`Rvalue::Aggregate`] builds.

@@ -9,10 +9,10 @@ fn a() -> int with fail(A) { 1 }
 fn ab() -> int with fail(A | B) { 1 }
 
 fn unmarked() -> int with fail(A) { a() }                      //~ E0501
-fn cannot_fail() -> int { a()? }                               //~ E0501
-fn not_listed() -> int with fail(A) { ab()? }                  //~ E0502
+pub fn cannot_fail() -> int { a()? }                           //~ E0501
+pub fn not_listed() -> int with fail(A) { ab()? }              //~ E0502
 fn nothing_to_propagate() -> int { 1? }                        //~ E0504
-fn not_caught() -> int { try { a()? } catch { B::X => 0 } }    //~ E0505 E0501
+pub fn not_caught() -> int { try { a()? } catch { B::X => 0 } } //~ E0505 E0501
 fn nothing_to_catch() -> int { try { 1 } catch { A(_) => 0 } } //~ E0505
 fn absent(o: Option<int>) -> int { o? }                        //~ E0506
 fn mixed(o: Option<int>) -> bool { let r = try { o? + a()? }; true } //~ E0506

@@ -59,7 +59,7 @@ and a code never changes meaning.
 | E0313 | `return`, `break` or `continue` out of a `defer` block | [stmt.defer.1](statements.md) |
 | E0314 | A field moved out of a value whose type has a destructor | [own.drop.partial.1](ownership.md) |
 | E0401 | A name used as a trait that is not one | [item.trait.1](items/traits.md) |
-| E0402 | A type that does not implement a trait it must | [generic.bound.1](generics.md), [item.trait.super.1](items/traits.md), [attr.derive.1](attributes.md) |
+| E0402 | A type that does not implement a trait it must | [generic.bound.1](generics.md), [item.trait.super.1](items/traits.md), [attr.derive.1](attributes.md), [type.dyn.coerce.1](types.md), [eff.with.1](effects.md) |
 | E0403 | A method or function that the type does not have | [expr.method.1](expressions/methods.md), [expr.path.assoc.1](expressions/methods.md), [generic.bound.1](generics.md) |
 | E0404 | Wrong number of type arguments | [generic.1](generics.md) |
 | E0405 | A type that cannot be inferred | [generic.infer.1](generics.md) |
@@ -81,6 +81,13 @@ and a code never changes meaning.
 | E0506 | `?` on an `Option` where absence cannot go, or on both `Option`s and errors in one `try` | [err.question.1](errors.md), [err.try.1](errors.md) |
 | E0507 | An entry point that declares errors | [err.entry.1](errors.md) |
 | E0508 | An error type that is not a struct or enum, or a second instance of a generic one | [err.fail.1](errors.md), [err.set.1](errors.md) |
+| E0601 | Something after `with` that is not an effect, or an effect named wrongly | [eff.1](effects.md), [eff.name.1](effects.md) |
+| E0602 | An entry point whose call needs an effect nothing installs | [eff.entry.1](effects.md) |
+| E0603 | A need that a function whose effects are written out does not list | [eff.infer.1](effects.md), [eff.method.1](effects.md) |
+| E0604 | An effect other than `fail` on a trait's method or an impl's | [eff.method.1](effects.md) |
+| E0605 | A `dyn` type not behind a borrow, of more than one trait, or of a trait that cannot be used as `dyn` | [type.dyn.1](types.md) |
+| E0606 | An effect listed twice, or given two handlers by one `with` | [eff.1](effects.md), [eff.with.1](effects.md) |
+| E0607 | Effects inferred without end | [eff.infer.1](effects.md) |
 
 **Warnings** have codes of the same form starting with `W`, in the same blocks. They do not stop a
 program from running, and conformance tests expect them like errors.

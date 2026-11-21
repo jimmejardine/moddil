@@ -13,9 +13,13 @@ use super::Checker;
 
 /// Where an error raised here goes.
 pub(super) enum FailCx {
-    /// Out of the function: its declared errors, and whether it returns an `Option` (so `?` on
-    /// `None` returns `None`).
-    Fn { allowed: Vec<Ty>, option: bool },
+    /// Out of the function: its errors, whether it returns an `Option` (so `?` on `None` returns
+    /// `None`), and whether its errors are inferred (so any error can leave it).
+    Fn {
+        allowed: Vec<Ty>,
+        option: bool,
+        infer: bool,
+    },
     /// Out of a test, which fails.
     Test,
     /// To a `try` block: the errors found so far, and whether its `?`s are on `Option`s (once one
@@ -72,6 +76,25 @@ impl Checker<'_> {
                     *e = errors;
                     *option = Some(false);
                 }
+            }
+            Some(FailCx::Fn {
+                allowed,
+                infer: true,
+                ..
+            }) => {
+                let mut all = allowed.clone();
+                all.extend(self.out.escaping_errors.iter().cloned());
+                let mut ds = Vec::new();
+                for m in members {
+                    if !all.contains(m)
+                        && !m.has_error()
+                        && crate::collect::error_type(m, range, &all, &mut ds)
+                    {
+                        all.push(m.clone());
+                        self.out.escaping_errors.push(m.clone());
+                    }
+                }
+                self.out.diagnostics.extend(ds);
             }
             Some(FailCx::Never(why)) => {
                 let why = *why;
@@ -136,7 +159,7 @@ impl Checker<'_> {
     /// Whether a call of `func` with type arguments `args` can fail, and so must be marked: the
     /// errors it can fail with, recorded for the `?` or `?!` around it (E0501 if there is none).
     pub(super) fn fallible_call(&mut self, e: ExprId, func: u32, args: &[Ty], range: TextRange) {
-        let fails = self.items.fns[func as usize].fails.subst(args);
+        let fails = self.fx.fns[func as usize].fails.subst(args);
         if fails == Ty::Never {
             return;
         }
