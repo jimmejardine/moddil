@@ -30,19 +30,27 @@ fn version_has_three_parts() {
 }
 
 #[test]
-fn well_typed_programs() {
+fn well_typed_programs_1() {
     ok("fn main() {}");
     ok("fn add(a: int, b: int) -> int { a + b }");
     ok("fn f(x: int) -> bool { let y = x * 2; y > 3 && !(y == 10) }");
     ok("fn f(x: int) -> int { if x < 0 { return -x; } x }");
     ok("fn f(x: int) -> int { if x < 0 { -x } else if x == 0 { 1 } else { x } }");
     ok("fn f() -> int { let mut n = 1; n += 2; n <<= 1; n }");
+}
+
+#[test]
+fn well_typed_programs_2() {
     ok("fn f(a: int, b: int, c: int) -> bool { a <= b < c }");
     ok("fn f() -> int { g(1, true) } fn g(a: int, b: bool) -> int { if b { a } else { 0 } }");
     ok("fn f() -> int { -9223372036854775808 }");
     ok("fn f() -> () { () }");
     ok("fn f() -> int { return 1 }");
     ok("test \"adds\" { 1 + 2 }");
+}
+
+#[test]
+fn well_typed_programs_3() {
     ok("fn f(_: int, mut x: int) -> int { x = 3; x }");
     ok("fn f() -> bool { true & false ^ true }");
 }
@@ -60,7 +68,7 @@ fn names() {
 }
 
 #[test]
-fn types() {
+fn types_1() {
     err("fn f() -> int { true }", &[("E0201", 1)]);
     err("fn f() -> int { }", &[("E0201", 1)]);
     err("fn f() -> int {\n  return;\n}", &[("E0201", 2)]);
@@ -70,12 +78,20 @@ fn types() {
         &[("E0201", 1)],
     );
     err("fn f() { if true { 1 } }", &[("E0201", 1)]);
+}
+
+#[test]
+fn types_2() {
     err("fn f() -> int { f(1) }", &[("E0202", 1)]);
     err("fn f(x: int) -> int { x(1) }", &[("E0203", 1)]);
     err("fn f() -> int { 9223372036854775808 }", &[("E0204", 1)]);
     err("fn f() -> bool { -true }", &[("E0205", 1)]);
     err("fn f() -> bool { (1, 2) < (3, 4) }", &[("E0205", 1)]);
     err("fn f() -> bool { 1 == true }", &[("E0201", 1)]);
+}
+
+#[test]
+fn types_3() {
     err("fn f() -> int { true + 1 }", &[("E0205", 1)]);
     err("fn f() { let x: bool = 1; }", &[("E0201", 1)]);
     err(
@@ -196,13 +212,17 @@ fn err1(text: &str, expected: &[(&str, u32)]) {
 }
 
 #[test]
-fn structs_enums_and_tuples() {
+fn structs_enums_and_tuples_1() {
     ok1("fn f() -> int { let p = Point { y: 2, x: 1 }; p.x + p.y }");
     ok1("fn f(x: int) -> Point { Point { x, y: x } }");
     ok1("fn f() -> bool { let p = Pair(1, true); p.1 }");
     ok1("fn f() -> Unit { Unit }");
     ok1("fn f() -> Shape { if true { Shape::Circle(1) } else { Shape::Rect { w: 1, h: 2 } } }");
     ok1("fn f() -> int { let t = (1, (true, 2)); t.1.1 }");
+}
+
+#[test]
+fn structs_enums_and_tuples_2() {
     ok1("fn f() -> int { let mut p = Point { x: 1, y: 2 }; p.x = 5; p.y += 1; p.x }");
     ok1("fn f() -> (int,) { (1,) }");
     err1("fn f() -> int { Point { x: 1 }.x }", &[("E0207", 1)]);
@@ -215,6 +235,10 @@ fn structs_enums_and_tuples() {
         &[("E0108", 1)],
     );
     err1("fn f() -> int { Pair(1).0 }", &[("E0202", 1)]);
+}
+
+#[test]
+fn structs_enums_and_tuples_3() {
     err1("fn f() -> int { (1, 2).2 }", &[("E0107", 1)]);
     err1("fn f() -> int { Shape::Dot.x }", &[("E0107", 1)]);
     err1("fn f() -> Shape { Shape::Square }", &[("E0101", 1)]);
@@ -224,6 +248,10 @@ fn structs_enums_and_tuples() {
         &[("E0301", 1)],
     );
     err1("fn f() -> bool { Unit == Unit }", &[("E0205", 1)]);
+}
+
+#[test]
+fn structs_enums_and_tuples_4() {
     err(
         "struct A { b: B }\nstruct B { a: A }",
         &[("E0211", 1), ("E0211", 2)],
@@ -233,7 +261,7 @@ fn structs_enums_and_tuples() {
 }
 
 #[test]
-fn matching() {
+fn matching_1() {
     ok1(
         "fn area(s: Shape) -> int { match s { Shape::Dot => 0, Shape::Circle(r) => 3 * r * r, Shape::Rect { w, h } => w * h } }",
     );
@@ -250,6 +278,10 @@ fn matching() {
     ok1(
         "fn f(s: Shape) -> int { match s { Shape::Circle(r) | Shape::Rect { w: r, .. } => r, Shape::Dot => 0 } }",
     );
+}
+
+#[test]
+fn matching_2() {
     ok1("fn f(p: Pair) -> int { let Pair(n, _) = p; n }");
     ok1("fn f((a, b): (int, int)) -> int { a + b }");
     ok1("fn f(s: Shape) -> int { let Shape::Circle(r) = s else { return 0; }; r }");
@@ -262,6 +294,10 @@ fn matching() {
         "fn f(n: int) -> int { match n { 0..=5 => 0, 7.. => 1 } }",
         &[("E0208", 1)],
     );
+}
+
+#[test]
+fn matching_3() {
     err1(
         "fn f(n: int) -> int { match n { _ => 0, 1 => 1 } }",
         &[("W0201", 1)],
@@ -286,6 +322,10 @@ fn matching() {
         "fn f(p: (int, int)) -> int { let (a, a) = p; a }",
         &[("E0106", 1)],
     );
+}
+
+#[test]
+fn matching_4() {
     err1(
         "fn f(p: Pair) -> int { let Pair(a) = p; a }",
         &[("E0213", 1)],
@@ -306,13 +346,17 @@ fn matching() {
 }
 
 #[test]
-fn loops() {
+fn loops_1() {
     ok("fn f() -> int { let mut i = 0; while i < 10 { i += 1; } i }");
     ok("fn f() -> int { let mut i = 0; loop { i += 1; if i == 5 { break i * 2; } } }");
     ok("fn f() -> int { 'outer: loop { loop { break 'outer 1; } } }");
     ok("fn f() -> int { let mut n = 0; while n < 3 { n += 1; continue; } n }");
     ok("fn f() -> ! { loop {} }");
     err("fn f() { break; }", &[("E0109", 1)]);
+}
+
+#[test]
+fn loops_2() {
     err("fn f() { loop { break 'a; } }", &[("E0110", 1)]);
     err("fn f() { while true { break 1; } }", &[("E0212", 1)]);
     err(
@@ -333,13 +377,17 @@ fn assert_is_a_prelude_built_in() {
 }
 
 #[test]
-fn borrows_and_copy() {
+fn borrows_and_copy_1() {
     ok("fn f(a: &int, b: &mut int) { *b = *a + 1; }");
     ok("struct P { x: int }\nfn f(p: &mut P) -> int { p.x += 1; p.x }");
     ok("fn f() -> int { let mut x = 1; let r = &mut x; *r += 1; x }");
     ok("fn first(a: &int, b: &int) -> &int from a { a }");
     ok("fn f(a: &mut int) -> &int { a }");
     ok("#[derive(Copy, Clone)]\nstruct P { x: int, y: bool }");
+}
+
+#[test]
+fn borrows_and_copy_2() {
     ok("enum S { A(int), B }\nfn f(s: &S) -> int { match s { S::A(n) => *n, S::B => 0 } }");
     ok("fn f(t: &(int, bool)) -> int { let &(n, _) = t; n }");
     ok("fn f() { let mut n = 0; defer { n += 1; } }");
@@ -349,6 +397,10 @@ fn borrows_and_copy() {
         &[("E0302", 2)],
     );
     err("fn f() { let x = 1; let r = &mut x; }", &[("E0301", 1)]);
+}
+
+#[test]
+fn borrows_and_copy_3() {
     err("fn f(a: int) -> int { *a }", &[("E0205", 1)]);
     err("fn f(a: &int, b: &int) -> bool { a == b }", &[("E0205", 1)]);
     err("struct P { r: &int }", &[("E0309", 1)]);
@@ -358,6 +410,10 @@ fn borrows_and_copy() {
         "fn f(a: int, b: &int) -> &int from a { b }",
         &[("E0310", 1)],
     );
+}
+
+#[test]
+fn borrows_and_copy_4() {
     err(
         "struct S { v: P }\nstruct P { x: int }\n#[derive(Copy, Clone)]\nenum E { A(S) }",
         &[("E0311", 4)],
@@ -376,7 +432,7 @@ fn borrows_and_copy() {
 }
 
 #[test]
-fn generics_and_traits() {
+fn generics_and_traits_1() {
     ok("fn id<T>(x: T) -> T { x }\nfn f() -> int { id(1) + id::<int>(2) }");
     ok("struct Pair<A, B> { a: A, b: B }\nfn f() -> bool { let p = Pair { a: 1, b: true }; p.b }");
     ok("fn f() -> int { let x = Some(3); x.unwrap_or(0) }");
@@ -385,6 +441,10 @@ fn generics_and_traits() {
     ok(
         "trait Area { fn area(&self) -> int; }\nstruct Sq { s: int }\nimpl Area for Sq { fn area(&self) -> int { self.s * self.s } }\nfn f(x: Sq) -> int { x.area() }",
     );
+}
+
+#[test]
+fn generics_and_traits_2() {
     ok(
         "trait Area { fn area(&self) -> int; }\nfn total<T: Area>(a: &T, b: &T) -> int { a.area() + b.area() }",
     );
@@ -401,6 +461,10 @@ fn generics_and_traits() {
     ok(
         "struct P { x: int }\nimpl P { fn new(x: int) -> P { P { x } } fn get(&self) -> int { self.x } }\nfn f() -> int { P::new(3).get() }",
     );
+}
+
+#[test]
+fn generics_and_traits_3() {
     ok("fn f() -> bool { 1.cmp(&2) == Ordering::Less }");
     ok(
         "trait Zero { fn zero() -> Self; }\nimpl Zero for int { fn zero() -> int { 0 } }\nfn f() -> int { int::zero() + Zero::zero() }",
@@ -412,6 +476,10 @@ fn generics_and_traits() {
         "trait T { fn m(&self); }\nstruct S;\nimpl T for S {}",
         &[("E0407", 3)],
     );
+}
+
+#[test]
+fn generics_and_traits_4() {
     err(
         "struct S;\nimpl Clone for S { fn clone(&self) -> S { S } }\nimpl Clone for S { fn clone(&self) -> S { S } }",
         &[("E0406", 3)],
@@ -425,13 +493,9 @@ fn generics_and_traits() {
 }
 
 #[test]
-fn errors() {
+fn errors_1() {
     let e = "pub struct A { n: int }\npub enum B { X, Y(int) }\n";
     let ok2 = |t: &str| ok(&format!("{e}{t}"));
-    let err2 = |t: &str, x: &[(&str, u32)]| {
-        let shifted: Vec<(&str, u32)> = x.iter().map(|&(c, l)| (c, l + 2)).collect();
-        err(&format!("{e}{t}"), &shifted);
-    };
     ok2("fn f(x: int) -> int with fail(A) { if x < 0 { fail(A { n: x }); } x }");
     ok2("fn f() -> int with fail(A) { 1 }\nfn g() -> int with fail(A | B) { f()? + 1 }");
     ok2("fn f() -> int with fail(A) { 1 }\nfn g() -> int { f() ?! \"never\" }");
@@ -442,6 +506,16 @@ fn errors() {
     ok2(
         "fn f() -> int with fail(A | B) { 1 }\nfn g() -> int { try { f()? } catch { A(_) => 0, B::X => 1, B::Y(n) => n } }",
     );
+}
+
+#[test]
+fn errors_2() {
+    let e = "pub struct A { n: int }\npub enum B { X, Y(int) }\n";
+    let ok2 = |t: &str| ok(&format!("{e}{t}"));
+    let err2 = |t: &str, x: &[(&str, u32)]| {
+        let shifted: Vec<(&str, u32)> = x.iter().map(|&(c, l)| (c, l + 2)).collect();
+        err(&format!("{e}{t}"), &shifted);
+    };
     ok2("fn f() -> int with fail(A) { 1 }\nfn g() -> bool { let r = try { f()? }; r.is_ok() }");
     ok2("fn f(o: Option<int>) -> Option<int> { let x = o?; Some(x + 1) }");
     ok2("fn f(r: Result<int, A>) -> int with fail(A) { r? }");
@@ -451,6 +525,15 @@ fn errors() {
         "fn f() -> int with fail(A) { 1 }\nfn g() -> int { f() }",
         &[("E0501", 2)],
     );
+}
+
+#[test]
+fn errors_3() {
+    let e = "pub struct A { n: int }\npub enum B { X, Y(int) }\n";
+    let err2 = |t: &str, x: &[(&str, u32)]| {
+        let shifted: Vec<(&str, u32)> = x.iter().map(|&(c, l)| (c, l + 2)).collect();
+        err(&format!("{e}{t}"), &shifted);
+    };
     err2(
         "fn f() -> int with fail(A) { 1 }\npub fn g() -> int { f()? }",
         &[("E0501", 2)],
@@ -466,6 +549,16 @@ fn errors() {
     );
     err2("fn f(o: Option<int>) -> int { o? }", &[("E0506", 1)]);
     err2("fn main() with fail(A) {}", &[("E0507", 1)]);
+}
+
+#[test]
+fn errors_4() {
+    let e = "pub struct A { n: int }\npub enum B { X, Y(int) }\n";
+    let ok2 = |t: &str| ok(&format!("{e}{t}"));
+    let err2 = |t: &str, x: &[(&str, u32)]| {
+        let shifted: Vec<(&str, u32)> = x.iter().map(|&(c, l)| (c, l + 2)).collect();
+        err(&format!("{e}{t}"), &shifted);
+    };
     err2("fn f() with fail(int) {}", &[("E0508", 1)]);
     err2("fn f(r: Result<int, A>) { r; }", &[("E0503", 1)]);
     err2(
@@ -479,7 +572,7 @@ fn errors() {
 }
 
 #[test]
-fn effects() {
+fn effects_1() {
     let e = "pub trait Time { fn now(&self) -> int; }\nstruct Clock { t: int }\n\
              impl Time for Clock { fn now(&self) -> int { self.t } }\n\
              fn uses() -> int with time: Time { time.now() }\n";
@@ -494,6 +587,17 @@ fn effects() {
     ok2("fn f(n: int) -> int { if n == 0 { uses() } else { f(n - 1) } }");
     err2("pub fn f() -> int { uses() }", &[("E0603", 1)]);
     err2("fn main() -> int { uses() }", &[("E0602", 1)]);
+}
+
+#[test]
+fn effects_2() {
+    let e = "pub trait Time { fn now(&self) -> int; }\nstruct Clock { t: int }\n\
+             impl Time for Clock { fn now(&self) -> int { self.t } }\n\
+             fn uses() -> int with time: Time { time.now() }\n";
+    let err2 = |t: &str, x: &[(&str, u32)]| {
+        let shifted: Vec<(&str, u32)> = x.iter().map(|&(c, l)| (c, l + 4)).collect();
+        err(&format!("{e}{t}"), &shifted);
+    };
     err2("test \"t\" { uses(); }", &[("E0602", 1)]);
     err2("fn f() with int {}", &[("E0601", 1)]);
     err2("trait T { fn f(&self) with Time; }", &[("E0604", 1)]);

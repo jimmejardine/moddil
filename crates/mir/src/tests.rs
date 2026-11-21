@@ -139,7 +139,7 @@ const S: &str =
     "struct S { a: P, b: P }\nstruct P { x: int }\n#[derive(Copy, Clone)]\nstruct C { x: int }\n";
 
 #[test]
-fn moves() {
+fn moves_1() {
     accepted(&format!("{S}fn f(p: P) -> P {{ let q = p; q }}"));
     accepted(&format!("{S}fn f(c: C) -> (C, C) {{ let d = c; (c, d) }}"));
     accepted(&format!(
@@ -153,6 +153,10 @@ fn moves() {
         &format!("{S}fn f(p: P) -> P {{\nlet q = p;\np\n}}"),
         &[("E0303", 7)],
     );
+}
+
+#[test]
+fn moves_2() {
     rejected(
         &format!("{S}fn f(s: S) -> S {{\nlet a = s.a;\ns\n}}"),
         &[("E0303", 7)],
@@ -170,7 +174,7 @@ fn moves() {
 }
 
 #[test]
-fn borrows() {
+fn borrows_1() {
     accepted("fn f() -> int { let mut x = 1; let r = &mut x; *r += 1; x }");
     accepted("fn f() -> int { let x = 1; let a = &x; let b = &x; *a + *b }");
     accepted(
@@ -184,6 +188,10 @@ fn borrows() {
         "fn f() -> int {\nlet mut x = 1;\nlet r = &mut x;\nlet y = x;\n*r += 1;\ny\n}",
         &[("E0307", 4)],
     );
+}
+
+#[test]
+fn borrows_2() {
     rejected(
         "fn f() {\nlet mut x = 1;\nlet r = &x;\nx = 2;\nlet y = *r;\n}",
         &[("E0306", 4)],
@@ -203,6 +211,10 @@ fn borrows() {
     // With no borrowed parameter, only static data can be returned.
     rejected("fn f() -> &int {\nlet x = 1;\n&x\n}", &[("E0308", 3)]);
     rejected("fn f(a: int) -> &int from a {\n&a\n}", &[("E0310", 1)]);
+}
+
+#[test]
+fn borrows_3() {
     rejected(
         "fn f(a: &int) -> &int {\nlet x = 1;\n&x\n}",
         &[("E0308", 3)],
