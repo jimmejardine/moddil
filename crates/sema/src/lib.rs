@@ -76,6 +76,7 @@ pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
         let items = item_tree(db, program);
         out.extend(items.diagnostics.iter().cloned());
         out.extend(effects(db, program).diagnostics.iter().cloned());
+        out.extend(check::comptime::diagnostics(db, program));
         for owner in owners(db, program) {
             let ds = body(db, owner)
                 .diagnostics

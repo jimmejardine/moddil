@@ -350,12 +350,7 @@ fn segments(node: &SyntaxNode) -> Vec<String> {
                 .filter(|c| c.kind() == K::PATH_SEGMENT)
                 .filter_map(|s| {
                     s.child_tokens()
-                        .find(|t| {
-                            matches!(
-                                t.kind(),
-                                K::IDENT | K::SELF_TYPE_KW | K::SELF_KW | K::MOD_KW
-                            )
-                        })
+                        .find(|t| t.kind() == K::IDENT || t.kind().is_keyword())
                         .map(|t| t.text().to_string())
                 })
                 .collect()

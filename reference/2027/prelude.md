@@ -12,7 +12,9 @@ and `swap`, their impls for `int`, `bool` and `()`, and the methods and impls of
 `String` ([Text](text.md)), and of arrays and slices ([Arrays and indexing](expressions/arrays.md)).
 It also holds `Index`, `IndexMut` and `FromArrayLiteral`, the iteration traits `Iterator` and
 `IntoIterator`, the ranges `Range`, `RangeInclusive` and `RangeFrom`, `Iter` and `Chars`, `Buf`,
-`Vec`, and `Hash` and `Hasher` ([Collections](collections.md)). `replace(&mut x, v)` puts `v` in
+`Vec`, and `Hash` and `Hasher` ([Collections](collections.md)), and `Debug` and `Default`
+(**expr.fmt.debug.1**, **attr.derive.default.1**), with `Default` for `int` (0), `bool`
+(`false`), `String`, `()`, `Vec` and `Option` (`None`). `replace(&mut x, v)` puts `v` in
 `x` and gives back what was there; `swap(&mut a, &mut b)` exchanges two values. The built-in
 `core` mod's `collections` module holds the maps and sets (**coll.core.1**). Every module sees them, and
 `Option`'s and `Result`'s variants, without importing them; an item or import of the module with the

@@ -55,6 +55,8 @@ impl Natives<'_> {
             (Ty::Char, "is_lowercase") => Value::Bool(ch(stack, 0).is_lowercase()),
             (Ty::Char, "len_utf8") => Value::Int(ch(stack, 0).len_utf8() as i64),
             (Ty::Str, "len") => Value::Int(text(stack, 0).len() as i64),
+            (Ty::Str, "quoted") => Value::String(format!("{:?}", text(stack, 0))),
+            (Ty::Char, "quoted") => Value::String(format!("{:?}", ch(stack, 0))),
             (Ty::Str, "char_at_byte") => {
                 let at = arg(stack, 1).as_int();
                 let s = text(stack, 0);

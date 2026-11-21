@@ -127,7 +127,8 @@ file           ::= inner_attr* item*
 inner_attr     ::= '#![' attr_list ']' | DOC_INNER
 outer_attr     ::= '#[' attr_list ']' | DOC_OUTER                    # doc comments attach like attributes
 attr_list      ::= attr ( ',' attr )* ','?
-attr           ::= simple_path attr_input?
+attr           ::= attr_path attr_input?
+attr_path      ::= member_name ( '::' member_name )*                  # a keyword too: #[default]
 attr_input     ::= '(' token_tree* ')' | '=' literal
 token_tree     ::= '(' token_tree* ')' | '[' token_tree* ']' | '{' token_tree* '}' | any_token
 any_token      ::= IDENT | KEYWORD | LABEL | literal_token | PUNCT_NOT_DELIMITER   # any token but ( ) [ ] { }

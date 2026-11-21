@@ -32,6 +32,8 @@ pub(crate) struct VariantInfo {
     pub(crate) fields: Vec<String>,
     /// The fields' types as written.
     pub(crate) types: Vec<Option<ast::Type>>,
+    /// Whether it is marked `#[default]`.
+    pub(crate) default: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -46,6 +48,8 @@ pub(crate) struct AdtInfo {
     pub(crate) derives: Vec<String>,
     /// Whether its variants are named on their own (`Some`, `None`).
     pub(crate) bare: bool,
+    /// The module it is declared in, whose names its fields' types use.
+    pub(crate) module: usize,
 }
 
 /// How a method takes `self`.
@@ -160,6 +164,8 @@ pub(crate) struct Program {
     pub(crate) tests: Vec<TestDef>,
     pub(crate) modules: Vec<Module>,
     mods: Vec<ModEntry>,
+    /// The const items, by key: their initialiser and the module whose names it uses.
+    pub(crate) consts: HashMap<String, (ast::Expr, usize)>,
 }
 
 impl Program {
@@ -167,6 +173,7 @@ impl Program {
         let mut p = Program {
             texts: files.iter().map(|f| f.text.clone()).collect(),
             fns: HashMap::new(),
+            consts: HashMap::new(),
             adts: HashMap::new(),
             traits: HashMap::new(),
             impls: Vec::new(),
@@ -371,6 +378,17 @@ impl Program {
                     self.modules[module].imports.extend(out);
                 }
             }
+            // `const NAME: T = e;` (`comptime.const.1`).
+            K::CONST_ITEM => {
+                let name = name_of(&item);
+                let key = Program::key(module, &name);
+                self.declare(module, &name, Def::Item(key.clone()));
+                let init = item
+                    .children()
+                    .find_map(ast::Expr::cast)
+                    .expect("a checked const has a value");
+                self.consts.insert(key, (init, module));
+            }
             K::FN_ITEM => {
                 let f = ast::FnItem::cast(item).expect("a function");
                 let name = f.name().expect("a checked function has a name").text();
@@ -410,6 +428,7 @@ impl Program {
                         params: generic_names(&item),
                         derives,
                         bare,
+                        module,
                     },
                 );
             }
@@ -718,6 +737,7 @@ pub(crate) fn variant_info(node: &SyntaxNode, name: String) -> VariantInfo {
                 .iter()
                 .map(|f| f.children().find_map(ast::Type::cast))
                 .collect(),
+            default: false,
         }
     } else if let Some(list) = node.child(K::TUPLE_FIELDS) {
         let fields: Vec<SyntaxNode> = list
@@ -732,6 +752,7 @@ pub(crate) fn variant_info(node: &SyntaxNode, name: String) -> VariantInfo {
                 .iter()
                 .map(|f| f.children().find_map(ast::Type::cast))
                 .collect(),
+            default: false,
         }
     } else {
         VariantInfo {
@@ -739,6 +760,12 @@ pub(crate) fn variant_info(node: &SyntaxNode, name: String) -> VariantInfo {
             shape: Shape::Unit,
             fields: Vec::new(),
             types: Vec::new(),
+            default: node
+                .children()
+                .filter(|c| c.kind() == K::OUTER_ATTR)
+                .filter_map(|a| a.child(K::ATTR))
+                .filter_map(|a| a.child(K::PATH))
+                .any(|p| p.text().to_string().trim() == "default"),
         }
     }
 }

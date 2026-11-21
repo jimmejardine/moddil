@@ -92,7 +92,13 @@ impl Collector<'_> {
                 .filter(|c| c.kind() == K::VARIANT)
             {
                 for c in v.children() {
-                    if c.kind() == K::OUTER_ATTR {
+                    // `#[default]` marks the variant `#[derive(Default)]` gives.
+                    let is_default = c
+                        .child(K::ATTR)
+                        .and_then(|a| a.child(K::PATH))
+                        .and_then(ast::Path::cast)
+                        .is_some_and(|p| p.segments() == ["default"]);
+                    if c.kind() == K::OUTER_ATTR && !is_default {
                         ds.push(Diagnostic::unsupported(c.text_range(), "an attribute"));
                     }
                 }
@@ -133,6 +139,31 @@ impl Collector<'_> {
             for n in &names {
                 if !DERIVABLE.contains(&n.as_str()) {
                     ds.push(Diagnostic::unsupported(range, &format!("deriving `{n}`")));
+                }
+            }
+            // An enum's default is one of its unit variants, marked `#[default]`.
+            if names.iter().any(|n| n == "Default") && node.kind() == K::ENUM_ITEM {
+                let marked: Vec<SyntaxNode> = node
+                    .child(K::VARIANT_LIST)
+                    .into_iter()
+                    .flat_map(|l| l.children().collect::<Vec<_>>())
+                    .filter(|v| {
+                        v.children()
+                            .filter_map(|c| c.child(K::ATTR))
+                            .filter_map(|a| a.child(K::PATH))
+                            .filter_map(ast::Path::cast)
+                            .any(|p| p.segments() == ["default"])
+                    })
+                    .collect();
+                let unit = |v: &SyntaxNode| {
+                    v.child(K::STRUCT_BODY).is_none() && v.child(K::TUPLE_FIELDS).is_none()
+                };
+                if marked.len() != 1 || !unit(&marked[0]) {
+                    ds.push(Diagnostic::error(
+                        Code::E0416,
+                        range,
+                        "an enum derives `Default` from one unit variant marked `#[default]`",
+                    ));
                 }
             }
             if names.iter().any(|n| n == "Copy") {

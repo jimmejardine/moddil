@@ -40,10 +40,11 @@ again, for as long as the new borrow is used, and leaves the original usable aft
 **borrow.scope.1** A borrow may not be used after the variable it borrows goes out of scope
 (E0308).
 
-**borrow.static.1** A borrow of **static data** (a string literal) borrows nothing: it freezes no
-place, never ends, and can be returned from a function with no borrowed parameter
-(`fn greeting() -> &str { "hi" }`). Only literals are static: a borrow of any other value borrows
-a temporary.
+**borrow.static.1** A borrow of **static data** (a string literal, or a const's value,
+`&NAME`, [Compile-time evaluation](comptime.md)) borrows nothing: it freezes no place, never ends,
+and can be returned from a function with no borrowed parameter
+(`fn greeting() -> &str { "hi" }`). Only literals and consts are static: a borrow of any other
+value borrows a temporary.
 
 **borrow.guard.1** While the guards of a `match` run, the matched place is borrowed with `&`, so a
 guard cannot change it (E0306).

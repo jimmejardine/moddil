@@ -1,0 +1,11 @@
+// covers: attr.derive.default.1
+
+#[derive(Default)]                          //~ E0416
+enum NoDefault { A, B }
+
+#[derive(Default)]                          //~ E0416
+enum NotUnit {
+    #[default]
+    A(int),
+    B,
+}

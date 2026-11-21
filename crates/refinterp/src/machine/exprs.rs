@@ -34,6 +34,10 @@ impl Machine<'_> {
                 {
                     return Ok(Value::Int(*v));
                 }
+                // A const item's value (`comptime.const.1`).
+                if let Some(p) = self.const_place(node)? {
+                    return Ok(self.memory.load(&p));
+                }
                 let segments = segments(node);
                 let (ty, info) = self.ctor(&segments).expect("a checked path");
                 Ok(Value::Adt {
@@ -88,8 +92,21 @@ impl Machine<'_> {
             }
             ast::Expr::Ref(_) => {
                 let mutable = node.token(K::MUT_KW).is_some();
-                let p = self.place(&e.sub_exprs()[0])?;
+                let inner = &e.sub_exprs()[0];
+                // A borrow of a const is of its static value (`borrow.static.1`).
+                if !mutable
+                    && let ast::Expr::Path(_) = inner
+                    && let Some(p) = self.const_place(inner.syntax())?
+                {
+                    return Ok(Value::Ref(p, false));
+                }
+                let p = self.place(inner)?;
                 Ok(Value::Ref(p, mutable))
+            }
+            // `const { e }` (`comptime.block.1`): evaluated where it is.
+            ast::Expr::ConstBlock(_) => {
+                let b = node.children().find_map(ast::Block::cast).expect("a block");
+                self.block(&b)
             }
             ast::Expr::Block(_) => self.block(&ast::Block::cast(node.clone()).expect("a block")),
             ast::Expr::If(_) => self.if_expr(e),
@@ -371,6 +388,14 @@ impl Machine<'_> {
     /// type written where it is used (a `let`'s type, a function's parameter, or the result of the
     /// function it is the value of), if it implements `FromArrayLiteral`.
     pub(super) fn literal_target(&self, node: &SyntaxNode) -> Option<Head> {
+        let head = self.context_head(node)?;
+        (matches!(head, Head::Adt(_)) && self.program.implements(&head, "FromArrayLiteral"))
+            .then_some(head)
+    }
+
+    /// The kind of value the type written where `node` is used names, if one is: a `let`'s
+    /// type, a called function's parameter, or the result of the function it is the value of.
+    pub(super) fn context_head(&self, node: &SyntaxNode) -> Option<Head> {
         let parent = node.parent()?;
         let (ty, module) = match parent.kind() {
             K::LET_STMT => (
@@ -421,9 +446,36 @@ impl Machine<'_> {
                 (f.ret_type()?.ty()?, self.memory.module())
             }
         };
-        let head = self.program.head_in(module, &ty);
-        (matches!(head, Head::Adt(_)) && self.program.implements(&head, "FromArrayLiteral"))
-            .then_some(head)
+        Some(self.program.head_in(module, &ty))
+    }
+
+    /// Where the value of the const item a path names is, computing it the first time: its
+    /// initialiser, run in a call of its own in the const's module.
+    pub(super) fn const_place(&mut self, node: &SyntaxNode) -> Eval<Option<crate::value::Pointer>> {
+        let segs = segments(node);
+        if let [n] = segs.as_slice()
+            && self.memory.slot(n).is_some()
+        {
+            return Ok(None);
+        }
+        let Some((crate::program::Def::Item(k), used)) = self.resolve(&segs) else {
+            return Ok(None);
+        };
+        if used != segs.len() {
+            return Ok(None);
+        }
+        let Some((init, module)) = self.program.consts.get(&k).cloned() else {
+            return Ok(None);
+        };
+        if let Some(p) = self.memory.static_of(&k) {
+            return Ok(Some(p));
+        }
+        let file = self.memory.file();
+        self.memory
+            .push_frame(std::collections::HashMap::new(), file, module, false);
+        let v = self.eval(&init);
+        self.memory.pop_frame();
+        Ok(Some(self.memory.add_static(k, v?)))
     }
 
     /// `a..b`, `a..=b` and `a..` (`expr.range.1`): values of the prelude's range structs.

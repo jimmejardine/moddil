@@ -5,7 +5,7 @@ done only when it has paragraphs here, conformance tests in
 [`conformance/2027/`](../../conformance/README.md) and an implementation
 ([`specs/definition.md`: Written with the compiler](../../specs/definition.md#written-with-the-compiler)).
 
-**Status:** slices S0 to S7c: functions, tests, `let`, `int`, `bool` and `()`, arithmetic with
+**Status:** slices S0 to S8a: functions, tests, `let`, `int`, `bool` and `()`, arithmetic with
 traps, comparisons, logic, `if`, blocks and calls (S0); tuples, structs, enums, patterns, `match`,
 `if let`, `let … else`, loops and `assert` (S1); moves, `Copy`, borrows and `defer` (S2); generics,
 traits, impls, methods, operators through traits, derives, destructors and the prelude (S3);
@@ -16,7 +16,8 @@ dependencies (S6); closures, the closure traits, captures and anonymous impls, a
 `#[track_caller]` (S7a); text: `char`, `str` and `String`, their literals, `Display` and `fmt"…"`
 (S7b); arrays, slices and const parameters, views, `for` and iterators, `Vec` over a built-in
 buffer, collection literals, hashing, and the `core` mod's maps and sets, and borrows of static
-data (S7c).
+data (S7c); const items, `const fn` and `const { }`, evaluated when compiling, and the `Debug` and
+`Default` derives (S8a).
 
 ## Paragraphs
 
@@ -35,7 +36,8 @@ Each page lists its diagnostics by code; the codes are in [Diagnostics](diagnost
 - Items: [Functions](items/functions.md), [Tests](items/tests.md), [Structs](items/structs.md),
   [Enums](items/enums.md), [Traits](items/traits.md), [Impls](items/impls.md)
 - [Attributes](attributes.md)
-- [Types](types.md), [Generics](generics.md), [Text](text.md)
+- [Types](types.md), [Generics](generics.md), [Text](text.md),
+  [Compile-time evaluation](comptime.md)
 - [The prelude](prelude.md) ([source](prelude.moddil))
 - [Statements](statements.md)
 - [Patterns](patterns.md)

@@ -1,0 +1,17 @@
+// covers: comptime.const-fn.2, comptime.static.1
+
+trait Time { fn now(&self) -> int; }
+
+fn plain(x: int) -> int { x }
+
+const A: int = plain(1);                    //~ E1001
+
+const fn now() -> int with clock: Time {    //~ E1002
+    clock.now()
+}
+
+fn uses_block() -> int {
+    const { plain(2) }                      //~ E1001
+}
+
+const LOCAL: &int = &1;                     //~ E1003

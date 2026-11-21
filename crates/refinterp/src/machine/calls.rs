@@ -153,6 +153,7 @@ impl Machine<'_> {
                 Value::Ref(p, _) => Ok(self.memory.load(p)),
                 v => Ok(v.clone()),
             },
+            Method::Derived(tr) if tr == "Default" => self.derived_default(self_head, range),
             Method::Derived(tr) => self.derived(&tr, &args, range),
             Method::Code(f, imp) => {
                 let mut types = HashMap::new();
@@ -184,6 +185,47 @@ impl Machine<'_> {
             .trait_method(tr, &head, name)
             .expect("a checked trait call");
         self.run_method(m, &head, args, range)
+    }
+
+    /// The derived `Default` (`attr.derive.default.1`): a struct of each field's default, by
+    /// the field's type as written, or an enum's `#[default]` variant.
+    pub(super) fn derived_default(&mut self, head: &Head, range: TextRange) -> Eval {
+        let Head::Adt(ty) = head else {
+            unreachable!("a struct or enum")
+        };
+        let info = self.program.adts[ty].clone();
+        if info.is_enum {
+            let v = info
+                .variants
+                .iter()
+                .find(|v| v.default)
+                .expect("a checked derive");
+            return Ok(Value::Adt {
+                ty: ty.clone(),
+                variant: v.name.clone(),
+                fields: Vec::new(),
+            });
+        }
+        let v = &info.variants[0];
+        let mut fields = Vec::new();
+        for t in &v.types {
+            let t = t.as_ref().expect("a field's type");
+            fields.push(self.default_of(&self.program.head_in(info.module, t), range)?);
+        }
+        Ok(Value::Adt {
+            ty: ty.clone(),
+            variant: v.name.clone(),
+            fields,
+        })
+    }
+
+    /// The default value of the kind of value `head`.
+    pub(super) fn default_of(&mut self, head: &Head, range: TextRange) -> Eval {
+        let m = self
+            .program
+            .trait_method("Default", head, "default")
+            .expect("a checked `Default`");
+        self.run_method(m, head, Vec::new(), range)
     }
 
     /// The derived methods, built in and structural (`attr.derive.1`): `self` and `other` are
@@ -220,6 +262,44 @@ impl Machine<'_> {
                     variant: variant.clone(),
                     fields: out,
                 })
+            }
+            // As Moddil source writes the value (`attr.derive.debug.1`).
+            "Debug" => {
+                let Value::Ref(out, _) = args[1].clone() else {
+                    unreachable!("a `&mut String`")
+                };
+                let info = &self.program.adts[ty];
+                let path = if info.is_enum {
+                    format!("{}::{variant}", info.name)
+                } else {
+                    info.name.clone()
+                };
+                let v = self.program.variant(ty, variant).clone();
+                match v.shape {
+                    crate::program::Shape::Unit => self.push_text(&out, &path),
+                    crate::program::Shape::Named => {
+                        self.push_text(&out, &format!("{path} {{ "));
+                        for (i, f) in v.fields.iter().enumerate() {
+                            let sep = if i == 0 { "" } else { ", " };
+                            self.push_text(&out, &format!("{sep}{f}: "));
+                            let x = vec![Value::Ref(field(&a, i), false), args[1].clone()];
+                            self.call_trait("Debug", "fmt", x, range)?;
+                        }
+                        self.push_text(&out, " }");
+                    }
+                    crate::program::Shape::Tuple => {
+                        self.push_text(&out, &format!("{path}("));
+                        for i in 0..fields.len() {
+                            if i > 0 {
+                                self.push_text(&out, ", ");
+                            }
+                            let x = vec![Value::Ref(field(&a, i), false), args[1].clone()];
+                            self.call_trait("Debug", "fmt", x, range)?;
+                        }
+                        self.push_text(&out, ")");
+                    }
+                }
+                Ok(Value::Unit)
             }
             // An enum's variant's index, then each field in order (`coll.hash.derive.1`).
             "Hash" => {
@@ -472,6 +552,16 @@ impl Machine<'_> {
                     && n == ty.len()
                     && self.program.traits.contains_key(&k)
                 {
+                    // With no value to choose the impl by (`Default::default()`): by the type
+                    // its context names.
+                    if values.is_empty() {
+                        let head = self.context_head(node).expect("a checked call");
+                        let m = self
+                            .program
+                            .trait_method(&k, &head, name)
+                            .expect("a checked call");
+                        return self.run_method(m, &head, values, range);
+                    }
                     return self.call_trait(&k, name, values, range);
                 }
                 let head = match ty {

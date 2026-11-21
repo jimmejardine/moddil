@@ -118,10 +118,20 @@ impl Builder<'_> {
                 };
                 self.cfg.assign(dest, Rvalue::Use(op));
             }
+            // `&N` of a const item borrows its static value.
+            ExprKind::Ref {
+                mutable: false,
+                expr,
+            } if self.static_const(expr).is_some() => {
+                let f = self.static_const(expr).expect("a const");
+                self.cfg.assign(dest, Rvalue::StaticRef(f));
+            }
             ExprKind::Ref { mutable, expr } => {
                 let place = self.place(expr);
                 self.cfg.assign(dest, Rvalue::Ref(mutable, place));
             }
+            // Evaluated where it is, for now.
+            ExprKind::ConstBlock(x) => self.eval_into(dest, x),
             ExprKind::Fmt(pieces) => self.fmt(dest, &pieces, range),
             ExprKind::Array(_) | ExprKind::Repeat(..) | ExprKind::RepeatN(..)
                 if self.types.literal_callee(e).is_some() =>
@@ -592,6 +602,21 @@ impl Builder<'_> {
 
     /// A call; if its function can fail, its error edge goes where the `?` or `?!` around
     /// call `e` says.
+    /// The const item whose value `e` is, if it is a use of one.
+    fn static_const(&self, e: ExprId) -> Option<u32> {
+        let ExprKind::Call { args, .. } = &self.hir.exprs[e].kind else {
+            return None;
+        };
+        match self.types.callee(e) {
+            Some(Callee::Fn { func, .. })
+                if args.is_empty() && self.items.fns[*func as usize].const_item =>
+            {
+                Some(*func)
+            }
+            _ => None,
+        }
+    }
+
     /// An array literal made into the type its context expects (`expr.array.from.1`):
     /// `FromArrayLiteral::from_array([a, b])`, or `from_repeat(x, n)` for `[x; n]`.
     fn literal_into(&mut self, e: ExprId, dest: Local) {
@@ -649,7 +674,7 @@ impl Builder<'_> {
                         range,
                     );
                 }
-                &FmtPiece::Hole(h) => {
+                &(FmtPiece::Hole(h) | FmtPiece::Debug(h)) => {
                     let ty = self.ty(h);
                     // A borrow is written as what it points to.
                     let this = match &ty {

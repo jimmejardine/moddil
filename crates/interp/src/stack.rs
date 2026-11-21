@@ -78,13 +78,39 @@ pub(crate) enum PendingDrop {
 /// The stack of frames. The running frame is the top one.
 pub(crate) struct Stack<'a> {
     frames: Vec<Frame<'a>>,
+    /// The values of the const items borrowed so far: static data, which a [`Pointer`] with
+    /// [`STATIC`] for its frame points into.
+    statics: std::collections::HashMap<u32, Value>,
 }
+
+/// The frame of a pointer to static data: the const item is its local.
+pub(crate) const STATIC: usize = usize::MAX;
 
 impl<'a> Stack<'a> {
     pub(crate) fn new(first: Frame<'a>) -> Self {
         Stack {
             frames: vec![first],
+            statics: std::collections::HashMap::new(),
         }
+    }
+
+    /// A borrow of const item `f`'s value, if it has been computed.
+    pub(crate) fn static_ref(&self, f: u32) -> Option<Value> {
+        self.statics.contains_key(&f).then(|| {
+            Value::Ref(
+                Pointer {
+                    frame: STATIC,
+                    local: f,
+                    path: Vec::new(),
+                },
+                false,
+            )
+        })
+    }
+
+    /// Keeps const item `f`'s value as static data.
+    pub(crate) fn set_static(&mut self, f: u32, v: Value) {
+        self.statics.insert(f, v);
     }
 
     pub(crate) fn depth(&self) -> usize {
@@ -233,7 +259,11 @@ impl<'a> Stack<'a> {
     }
 
     pub(crate) fn load(&self, ptr: &Pointer) -> Value {
-        let mut v = &self.frames[ptr.frame].locals[ptr.local as usize];
+        let mut v = if ptr.frame == STATIC {
+            &self.statics[&ptr.local]
+        } else {
+            &self.frames[ptr.frame].locals[ptr.local as usize]
+        };
         for &i in &ptr.path {
             v = match v {
                 Value::Tuple(xs)

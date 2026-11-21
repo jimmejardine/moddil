@@ -16,6 +16,8 @@ pub(crate) const DERIVABLE: &[&str] = &[
     "PartialOrd",
     "Ord",
     "Hash",
+    "Debug",
+    "Default",
 ];
 
 /// The impls derived for the structs and enums of a file, as Moddil source, with where each one
@@ -39,6 +41,8 @@ struct Variant {
     named: bool,
     /// Whether it has no fields at all (`Colour::Red`, `struct Marker;`).
     unit: bool,
+    /// Whether it is marked `#[default]`.
+    default: bool,
 }
 
 /// The derive names of each `#[derive(…)]` attribute on `node`, with the attribute's range.
@@ -86,6 +90,7 @@ fn variant(node: &SyntaxNode, path: String) -> Variant {
             fields,
             named: true,
             unit: false,
+            default: false,
         }
     } else if let Some(list) = node.child(K::TUPLE_FIELDS) {
         let n = list
@@ -97,6 +102,7 @@ fn variant(node: &SyntaxNode, path: String) -> Variant {
             fields: vec![String::new(); n],
             named: false,
             unit: false,
+            default: false,
         }
     } else {
         Variant {
@@ -104,8 +110,21 @@ fn variant(node: &SyntaxNode, path: String) -> Variant {
             fields: Vec::new(),
             named: false,
             unit: true,
+            default: is_default(node),
         }
     }
+}
+
+/// Whether a variant is marked `#[default]`.
+fn is_default(node: &SyntaxNode) -> bool {
+    node.children()
+        .filter(|c| c.kind() == K::OUTER_ATTR)
+        .filter_map(|a| a.child(K::ATTR))
+        .any(|a| {
+            a.child(K::PATH)
+                .and_then(ast::Path::cast)
+                .is_some_and(|p| p.segments() == ["default"])
+        })
 }
 
 impl Variant {
@@ -199,6 +218,8 @@ pub(crate) fn expand(items: impl Iterator<Item = (Src, SyntaxNode)>) -> Expansio
                     "Clone" => clone(&variants),
                     "PartialEq" => partial_eq(&variants),
                     "Hash" => hash(&variants, node.kind() == K::ENUM_ITEM),
+                    "Debug" => debug(&variants),
+                    "Default" => default(&variants, node.kind() == K::ENUM_ITEM),
                     "PartialOrd" => ordering(&variants, true),
                     _ => ordering(&variants, false),
                 };
@@ -240,6 +261,61 @@ fn clone(variants: &[Variant]) -> String {
         "fn clone(&self) -> Self {{ match self {{ {} }} }}",
         arms.join(" ")
     )
+}
+
+/// `Debug` (`attr.derive.debug.1`): the value as Moddil source writes it, `Point { x: 1, y: 2 }`
+/// or `Shape::Circle(3)`, each field by its own `Debug`.
+fn debug(variants: &[Variant]) -> String {
+    let arms: Vec<String> = variants
+        .iter()
+        .map(|v| {
+            let mut parts = Vec::new();
+            let text = |s: &str| format!("out.push_str({s:?});");
+            if v.unit {
+                parts.push(text(&v.path));
+            } else if v.named {
+                parts.push(text(&format!("{} {{ ", v.path)));
+                for (i, f) in v.fields.iter().enumerate() {
+                    let sep = if i == 0 { "" } else { ", " };
+                    parts.push(text(&format!("{sep}{f}: ")));
+                    parts.push(format!("Debug::fmt(a{i}, out);"));
+                }
+                parts.push(text(" }"));
+            } else {
+                parts.push(text(&format!("{}(", v.path)));
+                for i in 0..v.fields.len() {
+                    if i > 0 {
+                        parts.push(text(", "));
+                    }
+                    parts.push(format!("Debug::fmt(a{i}, out);"));
+                }
+                parts.push(text(")"));
+            }
+            format!("{} => {{ {} }}", v.bind("a"), parts.join(" "))
+        })
+        .collect();
+    format!(
+        "fn fmt(&self, out: &mut String) {{ match self {{ {} }} }}",
+        arms.join(" ")
+    )
+}
+
+/// `Default` (`attr.derive.default.1`): a struct of its fields' defaults, or an enum's
+/// `#[default]` unit variant.
+fn default(variants: &[Variant], is_enum: bool) -> String {
+    let value = if is_enum {
+        variants
+            .iter()
+            .find(|v| v.default)
+            .map_or_else(|| "loop {}".to_string(), |v| v.path.clone())
+    } else {
+        let v = &variants[0];
+        let values: Vec<String> = (0..v.fields.len())
+            .map(|_| "Default::default()".to_string())
+            .collect();
+        v.build(&values)
+    };
+    format!("fn default() -> Self {{ {value} }}")
 }
 
 /// `Hash` (`coll.hash.derive.1`): an enum's variant's index, then each field in order.

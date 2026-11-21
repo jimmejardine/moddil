@@ -958,6 +958,8 @@ fn x ( ) with fail ( ! | ! ) ;
 // ---
 const x : ! = "s" || "s" ;
 // ---
+unit x = x :: x ;
+// ---
 fn x ( - 1 ) ;
 // ---
 fn x ( < ! as Self > ) ;

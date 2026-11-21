@@ -1,0 +1,17 @@
+// covers: comptime.eval.1
+
+const fn deep(n: int) -> int {
+    if n == 0 { 0 } else { deep(n - 1) }
+}
+
+const fn spin() -> int {
+    let mut i = 0;
+    while true {
+        i += 1;
+    }
+    i
+}
+
+const BROKEN: int = 1 / 0;                  //~ E1004
+const TOO_DEEP: int = deep(100000);         //~ E1004
+const ENDLESS: int = spin();                //~ E1004

@@ -89,6 +89,9 @@ pub enum ExprKind {
     },
     /// A const parameter used as a value: its index in the item's generics.
     ConstParam(u32),
+    /// `const { e }`: compile-time code (`comptime.block.1`), which names no local, type
+    /// parameter or const parameter of the body around it.
+    ConstBlock(ExprId),
     /// A local.
     Local(LocalId),
     /// A function named by a path, by its index in the item tree, with the type arguments for
@@ -309,6 +312,8 @@ pub enum FmtPiece {
     Lit(String),
     /// A hole: an expression whose `Display` goes here.
     Hole(ExprId),
+    /// A hole with `:?`: an expression whose `Debug` goes here.
+    Debug(ExprId),
 }
 
 /// A handler a `with` installs: `Time = clock`.

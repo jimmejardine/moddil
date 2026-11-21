@@ -352,3 +352,52 @@ impl<T: Hash + Eq> FromArrayLiteral<T> for HashSet<T> {
         s
     }
 }
+
+// `{k: v, …}`, in the map's order.
+impl<K: Debug, V: Debug> Debug for HashMap<K, V> {
+    fn fmt(&self, out: &mut String) {
+        out.push('{');
+        let mut first = true;
+        for bucket in self.buckets.as_slice() {
+            for e in bucket.as_slice() {
+                if !first {
+                    out.push_str(", ");
+                }
+                first = false;
+                Debug::fmt(&e.0, out);
+                out.push_str(": ");
+                Debug::fmt(&e.1, out);
+            }
+        }
+        out.push('}');
+    }
+}
+
+impl<T: Debug> Debug for HashSet<T> {
+    fn fmt(&self, out: &mut String) {
+        out.push('{');
+        let mut first = true;
+        for bucket in self.map.buckets.as_slice() {
+            for e in bucket.as_slice() {
+                if !first {
+                    out.push_str(", ");
+                }
+                first = false;
+                Debug::fmt(&e.0, out);
+            }
+        }
+        out.push('}');
+    }
+}
+
+impl<K: Hash + Eq, V> Default for HashMap<K, V> {
+    fn default() -> HashMap<K, V> {
+        HashMap::new()
+    }
+}
+
+impl<T: Hash + Eq> Default for HashSet<T> {
+    fn default() -> HashSet<T> {
+        HashSet::new()
+    }
+}

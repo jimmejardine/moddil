@@ -65,13 +65,13 @@ pub(super) fn outer_attrs(p: &mut Parser) {
     }
 }
 
-/// `attr_list ::= attr ( ',' attr )* ','?` and `attr ::= simple_path attr_input?`
+/// `attr_list ::= attr ( ',' attr )* ','?` and `attr ::= attr_path attr_input?`
 fn attr_list(p: &mut Parser) {
     let mut first = true;
-    while first || (p.at(K::IDENT)) {
+    while first || at_member_name(p) {
         first = false;
         let m = p.start();
-        simple_path(p);
+        attr_path(p);
         if p.at(T!["("]) {
             let input = p.start();
             p.bump(T!["("]);
@@ -95,6 +95,22 @@ fn attr_list(p: &mut Parser) {
             break;
         }
     }
+}
+
+/// `attr_path ::= member_name ( '::' member_name )*`: an attribute's name may be a keyword
+/// (`#[default]`).
+fn attr_path(p: &mut Parser) {
+    let m = p.start();
+    let seg = p.start();
+    super::member_name(p);
+    seg.complete(p, K::PATH_SEGMENT);
+    while p.at(T!["::"]) && (p.nth_at(1, K::IDENT) || p.nth(1).is_keyword()) {
+        p.bump(T!["::"]);
+        let seg = p.start();
+        super::member_name(p);
+        seg.complete(p, K::PATH_SEGMENT);
+    }
+    m.complete(p, K::PATH);
 }
 
 /// `note ::= 'note' ( STRING | BLOCK_STRING )`

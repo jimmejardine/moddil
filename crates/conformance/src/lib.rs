@@ -132,7 +132,7 @@ impl Implementation for MirInterpreter {
         let db = Database::default();
         let program = program(&db, project);
         let mut outcome = Outcome {
-            diagnostics: moddil_mir::diagnostics(&db, program)
+            diagnostics: moddil_interp::diagnostics(&db, program)
                 .iter()
                 .map(|d| {
                     (
@@ -143,7 +143,7 @@ impl Implementation for MirInterpreter {
                 .collect(),
             ..Outcome::default()
         };
-        if moddil_mir::has_errors(&db, program) {
+        if moddil_interp::has_errors(&db, program) {
             return outcome;
         }
         let items = moddil_sema::item_tree(&db, program);

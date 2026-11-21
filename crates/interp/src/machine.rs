@@ -22,6 +22,8 @@ struct Machine<'a> {
     stack: Stack<'a>,
     dispatch: Dispatch<'a>,
     natives: Natives<'a>,
+    /// For compile-time evaluation: the steps it may still take.
+    fuel: Option<u64>,
 }
 
 /// The MIR of a function, test or closure of a checked program.
@@ -38,6 +40,7 @@ pub(crate) fn run(
     item: Item,
     args: &[Value],
     observer: Observer<'_>,
+    fuel: Option<u64>,
 ) -> Result<Value, Stop> {
     let items = moddil_sema::item_tree(db, program);
     let first = Frame::new(
@@ -52,8 +55,16 @@ pub(crate) fn run(
         stack: Stack::new(first),
         dispatch: Dispatch::new(items),
         natives: Natives::new(items),
+        fuel,
     };
     loop {
+        if let Some(f) = &mut m.fuel {
+            if *f == 0 {
+                let trap = m.trap(TrapClass::OutOfFuel, None, Vec::new());
+                return Err(Stop::Trap(trap));
+            }
+            *f -= 1;
+        }
         if let Some(done) = m.step(observer) {
             return done;
         }
@@ -260,6 +271,23 @@ impl<'a> Machine<'a> {
 
     fn rvalue(&mut self, r: &Rvalue) -> Value {
         match r {
+            // A const's value, computed once (it was checked when compiling).
+            Rvalue::StaticRef(f) => {
+                if let Some(r) = self.stack.static_ref(*f) {
+                    return r;
+                }
+                let v = run(
+                    self.db,
+                    self.program,
+                    Item::Fn(*f),
+                    &[],
+                    &mut |_, _, _| {},
+                    None,
+                )
+                .unwrap_or_else(|_| unreachable!("a const evaluated when compiling"));
+                self.stack.set_static(*f, v);
+                self.stack.static_ref(*f).expect("just set")
+            }
             Rvalue::Use(a) => self.stack.take(a),
             Rvalue::Unary(op, a) => ops::unary(*op, self.stack.operand(a)),
             Rvalue::NegOverflows(a) => Value::Bool(ops::neg_overflows(&self.stack.operand(a))),

@@ -65,6 +65,8 @@ impl Program {
                         | ("PartialOrd", "partial_cmp")
                         | ("Ord", "cmp")
                         | ("Hash", "hash")
+                        | ("Debug", "fmt")
+                        | ("Default", "default")
                 );
                 if provides {
                     out.push(Method::Derived(d.clone()));
@@ -114,6 +116,8 @@ impl Program {
                     | ("PartialOrd", "partial_cmp")
                     | ("Ord", "cmp")
                     | ("Hash", "hash")
+                    | ("Debug", "fmt")
+                    | ("Default", "default")
             )
         {
             return Some(Method::Derived(tr.to_string()));

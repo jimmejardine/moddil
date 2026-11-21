@@ -254,6 +254,12 @@ pub struct FnSig {
     /// Whether it is the prelude's and built in (`#[intrinsic]`): it has no body, and the
     /// implementations run it themselves.
     pub intrinsic: bool,
+    /// Whether it may run at compile time: a `const fn`, or a const item.
+    pub is_const: bool,
+    /// Whether it is a const item (`const N: T = e;`), kept as a function with no parameters
+    /// whose body is the initialiser: a use of `N` calls it, and its value is computed when
+    /// compiling.
+    pub const_item: bool,
     /// Who can name it.
     pub vis: Vis,
     /// The module it is declared in (for a derived method, its type's).
@@ -297,6 +303,8 @@ impl FnSig {
             effects: Vec::new(),
             track_caller: false,
             intrinsic: false,
+            is_const: false,
+            const_item: false,
             vis,
             module,
         }
@@ -515,6 +523,8 @@ const LANG: &[&str] = &[
     "Index",
     "IndexMut",
     "FromArrayLiteral",
+    "Debug",
+    "Default",
 ];
 
 impl ItemTree {

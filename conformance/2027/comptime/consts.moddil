@@ -1,0 +1,54 @@
+// covers: comptime.const.1, comptime.const-fn.1, comptime.block.1, comptime.static.1
+
+const fn square(x: int) -> int {
+    x * x
+}
+
+const fn fib(n: int) -> int {
+    if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+}
+
+const LIMIT: int = square(12);
+const FIB: int = fib(15);
+const NAME: &str = "moddil";
+const PRIMES: [int; 4] = [2, 3, 5, 7];
+const ORIGIN: (int, int) = (0, 0);
+
+fn primes() -> &[int; 4] {
+    &PRIMES
+}
+
+fn name() -> &str {
+    NAME
+}
+
+test "consts are values" {
+    LIMIT                                   // => 144
+    ;
+    FIB                                     // => 610
+    ;
+    NAME.len()                              // => 6
+    ;
+    PRIMES[2]                               // => 5
+    ;
+    ORIGIN.1                                // => 0
+}
+
+test "a borrow of a const is static data" {
+    primes()[3]                             // => 7
+    ;
+    name()                                  // => "moddil"
+    ;
+    let mut total = 0;
+    for p in primes() {
+        total += *p;
+    }
+    total                                   // => 17
+}
+
+test "const blocks" {
+    const { square(3) + 1 }                 // => 10
+    ;
+    let n = 2;
+    n + const { fib(10) }                   // => 57
+}

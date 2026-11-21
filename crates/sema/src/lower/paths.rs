@@ -259,6 +259,17 @@ impl Lowerer<'_> {
     pub(super) fn resolved(&mut self, r: Resolved, range: TextRange) -> ExprId {
         match r {
             Resolved::Local(l) => self.alloc(ExprKind::Local(l), range),
+            // A const item's value: a call of it.
+            Resolved::Fn(func, args) if self.items.fns[func as usize].const_item => {
+                let callee = self.alloc(ExprKind::Fn { func, args }, range);
+                self.alloc(
+                    ExprKind::Call {
+                        callee,
+                        args: Vec::new(),
+                    },
+                    range,
+                )
+            }
             Resolved::Fn(func, args) => self.alloc(ExprKind::Fn { func, args }, range),
             Resolved::AssocFn(ty, name, name_range, args) => self.alloc(
                 ExprKind::AssocFn {

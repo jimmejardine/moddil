@@ -23,6 +23,7 @@ use crate::{Code, Db, Diagnostic, Item, ItemTree, Owner, Ty};
 mod blocks;
 mod calls;
 mod closures;
+pub(crate) mod comptime;
 mod errors;
 mod exprs;
 mod finish;

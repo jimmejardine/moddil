@@ -281,6 +281,9 @@ pub enum Rvalue {
     Length(Ty),
     /// Whether the index is in bounds for the array or slice at the place.
     InBounds(Operand, Place),
+    /// A borrow of the value of const item `n` (by its function's index): static data, which
+    /// borrows nothing (`borrow.static.1`).
+    StaticRef(u32),
 }
 
 /// What an [`Rvalue::Aggregate`] builds.
@@ -465,6 +468,8 @@ pub enum TrapClass {
     IndexOutOfBounds,
     /// More elements pushed into a `Buf` than its capacity.
     CapacityExceeded,
+    /// Compile-time evaluation that ran out of its steps.
+    OutOfFuel,
     /// An error that `?!` said cannot happen.
     Unexpected,
 }
@@ -479,6 +484,7 @@ impl TrapClass {
             TrapClass::Assertion => "assertion failed",
             TrapClass::IndexOutOfBounds => "index out of bounds",
             TrapClass::CapacityExceeded => "capacity exceeded",
+            TrapClass::OutOfFuel => "out of fuel",
             TrapClass::Unexpected => "unexpected error",
         }
     }

@@ -67,8 +67,14 @@ literal and `{{` and `}}` for `{` and `}`, and each **hole** `{e}` is an express
 is evaluated, borrowed, and written by its `Display::fmt`. A hole whose value is a borrow writes
 what it points to.
 
+**expr.fmt.debug.1** A hole `{e:?}` writes `e`'s `Debug` in place of its `Display`. The
+prelude's `Debug`, `fn fmt(&self, out: &mut String)`, writes a value as Moddil source does: text
+and characters in quotes and escaped, `[1, 2]`, `Some(x)`, `(a, b)`; `int`, `bool`, `char`, `str`,
+`String`, `()`, slices, arrays, `Vec`, `Option`, `Result`, pairs, and the core mod's maps
+(`{k: v}`) and sets implement it. Other format specs wait.
+
 **expr.fmt.2** The type of each hole, or what a borrow in it points to, implements `Display`
-(E0402). A hole holds one expression (E0902).
+(E0402); for `{e:?}`, `Debug`. A hole holds one expression (E0902).
 
 ## Patterns
 

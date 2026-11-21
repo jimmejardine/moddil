@@ -34,7 +34,8 @@ impl Builder<'_> {
             | ExprKind::Bang(c, _)
             | ExprKind::Fail(c)
             | ExprKind::Discard(c)
-            | ExprKind::Repeat(c, _) => self.assigns(*c),
+            | ExprKind::Repeat(c, _)
+            | ExprKind::ConstBlock(c) => self.assigns(*c),
             ExprKind::With { handlers, body } => {
                 handlers.iter().any(|h| self.assigns(h.value)) || self.assigns(*body)
             }
@@ -50,7 +51,7 @@ impl Builder<'_> {
             ExprKind::Index { base, index } => self.assigns(*base) || self.assigns(*index),
             ExprKind::Fmt(pieces) => pieces
                 .iter()
-                .any(|p| matches!(p, FmtPiece::Hole(h) if self.assigns(*h))),
+                .any(|p| matches!(p, FmtPiece::Hole(h) | FmtPiece::Debug(h) if self.assigns(*h))),
             ExprKind::Adt { fields, .. } => fields.iter().any(|&(_, x)| self.assigns(x)),
             ExprKind::Field { base, .. } => self.assigns(*base),
             ExprKind::Call { args, .. } => any(args),

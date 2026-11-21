@@ -21,7 +21,7 @@ mod stack;
 mod value;
 
 use moddil_mir::TrapClass;
-use moddil_sema::{Db, Item, Program};
+use moddil_sema::{Code, Db, Diagnostic, Item, Program};
 use moddil_syntax::TextRange;
 
 pub use value::{Pointer, Value};
@@ -84,7 +84,66 @@ pub fn call_fn(
     args: &[Value],
     observer: Observer<'_>,
 ) -> Result<Value, Stop> {
-    machine::run(db, program, Item::Fn(index), args, observer)
+    machine::run(db, program, Item::Fn(index), args, observer, None)
+}
+
+/// The steps compile-time evaluation may take (`comptime.md`: Evaluation model).
+pub const FUEL: u64 = 10_000_000;
+
+/// Evaluates const item `index` of `program` (a function with no parameters), as compiling does:
+/// with [`FUEL`] steps at most.
+///
+/// # Errors
+///
+/// The trap, if it traps or runs out of fuel.
+pub fn eval_const(db: &dyn Db, program: Program, index: u32) -> Result<Value, Stop> {
+    machine::run(
+        db,
+        program,
+        Item::Fn(index),
+        &[],
+        &mut |_, _, _| {},
+        Some(FUEL),
+    )
+}
+
+/// Every diagnostic for `program`: the front end's and the ownership check's, then, if it has
+/// no errors, those of evaluating its const items when compiling (E1004).
+pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
+    let mut out = moddil_mir::diagnostics(db, program).clone();
+    if moddil_mir::has_errors(db, program) {
+        return out;
+    }
+    let items = moddil_sema::item_tree(db, program);
+    for (i, f) in items.fns.iter().enumerate() {
+        if !f.const_item || !f.src.is_file() {
+            continue;
+        }
+        let why = match eval_const(db, program, i as u32) {
+            Ok(_) => continue,
+            Err(Stop::Trap(t)) if t.class == TrapClass::OutOfFuel => format!(
+                "evaluating `{}` when compiling takes more than {FUEL} steps",
+                f.name
+            ),
+            Err(Stop::Trap(t)) => format!(
+                "evaluating `{}` when compiling traps: {}",
+                f.name,
+                t.class.name()
+            ),
+            Err(Stop::Failed { .. }) => format!("evaluating `{}` when compiling fails", f.name),
+        };
+        let d = Diagnostic::error(Code::E1004, f.name_range, why);
+        out.extend(moddil_sema::in_file(items, Item::Fn(i as u32), &[d]));
+    }
+    out.sort_by_key(|d| (d.file, d.range.start, d.range.end, d.code));
+    out
+}
+
+/// Whether `program` has any errors, including those of evaluating its consts.
+pub fn has_errors(db: &dyn Db, program: Program) -> bool {
+    diagnostics(db, program)
+        .iter()
+        .any(|d| d.severity == moddil_sema::Severity::Error)
 }
 
 /// Runs test `index` of `program`.
@@ -102,7 +161,7 @@ pub fn run_test(
     index: u32,
     observer: Observer<'_>,
 ) -> Result<(), Stop> {
-    machine::run(db, program, Item::Test(index), &[], observer).map(|_| ())
+    machine::run(db, program, Item::Test(index), &[], observer, None).map(|_| ())
 }
 
 /// This crate's version.

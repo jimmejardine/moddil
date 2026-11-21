@@ -66,12 +66,12 @@ fn main() -> ExitCode {
         .collect();
     let db = Database::default();
     let program = program(&db, &project);
-    let diagnostics = moddil_mir::diagnostics(&db, program);
-    for d in diagnostics {
+    let diagnostics = moddil_interp::diagnostics(&db, program);
+    for d in &diagnostics {
         let (name, text) = &files[d.file as usize];
         report(name, text, d);
     }
-    if moddil_mir::has_errors(&db, program) {
+    if moddil_interp::has_errors(&db, program) {
         let n = diagnostics.len();
         eprintln!("moddil: {n} error{}", if n == 1 { "" } else { "s" });
         return ExitCode::FAILURE;

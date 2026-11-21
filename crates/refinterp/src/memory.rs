@@ -26,7 +26,13 @@ struct Frame {
 pub(crate) struct Memory {
     /// One frame per active call (the test first).
     frames: Vec<Frame>,
+    /// The values of the const items used so far, by key: static data, which a [`Pointer`] with
+    /// [`STATIC`] for its frame points into (`borrow.static.1`).
+    statics: Vec<(String, Value)>,
 }
+
+/// The frame of a pointer to static data: its slot is the const's place among the statics.
+pub(crate) const STATIC: usize = usize::MAX;
 
 impl Memory {
     /// The memory of a test: one frame, running the code of `file`, in `module`.
@@ -39,6 +45,29 @@ impl Memory {
                 module,
                 tracked: false,
             }],
+            statics: Vec::new(),
+        }
+    }
+
+    /// Where const item `key`'s value is, if it has been computed.
+    pub(crate) fn static_of(&self, key: &str) -> Option<Pointer> {
+        self.statics
+            .iter()
+            .position(|(k, _)| k == key)
+            .map(|slot| Pointer {
+                frame: STATIC,
+                slot,
+                path: Vec::new(),
+            })
+    }
+
+    /// Keeps const item `key`'s value, and gives where it is.
+    pub(crate) fn add_static(&mut self, key: String, v: Value) -> Pointer {
+        self.statics.push((key, v));
+        Pointer {
+            frame: STATIC,
+            slot: self.statics.len() - 1,
+            path: Vec::new(),
         }
     }
 
@@ -181,7 +210,11 @@ impl Memory {
 
     /// The value at `ptr`.
     pub(crate) fn load(&self, ptr: &Pointer) -> Value {
-        let mut v = &self.frames[ptr.frame].vars[ptr.slot].1;
+        let mut v = if ptr.frame == STATIC {
+            &self.statics[ptr.slot].1
+        } else {
+            &self.frames[ptr.frame].vars[ptr.slot].1
+        };
         for &i in &ptr.path {
             v = match v {
                 Value::Tuple(xs)

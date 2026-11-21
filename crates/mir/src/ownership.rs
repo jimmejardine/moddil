@@ -553,7 +553,7 @@ impl<'a> Checker<'a> {
                         flowing = self.flows(o, h);
                         self.operand(at, span, o, h, m, check);
                     }
-                    Rvalue::Length(_) => {}
+                    Rvalue::Length(_) | Rvalue::StaticRef(_) => {}
                     Rvalue::InBounds(a, p) => {
                         self.operand(at, span, a, h, m, check);
                         if check {
@@ -851,7 +851,7 @@ fn rvalue_uses(r: &Rvalue, local: Local) -> bool {
         | Rvalue::Unary(_, a)
         | Rvalue::NegOverflows(a)
         | Rvalue::Repeat(a, _) => uses(a),
-        Rvalue::Length(_) => false,
+        Rvalue::Length(_) | Rvalue::StaticRef(_) => false,
         Rvalue::InBounds(a, p) => uses(a) || p.local == local,
         Rvalue::Binary(_, a, b) | Rvalue::Overflows(_, a, b) => uses(a) || uses(b),
         Rvalue::Aggregate(_, ops) => ops.iter().any(uses),
@@ -879,7 +879,7 @@ fn uses_defs(stmt: Option<&Statement>, term: Option<&Terminator>) -> (Vec<Local>
                     | Rvalue::Repeat(a, _) => {
                         op(a, &mut uses);
                     }
-                    Rvalue::Length(_) => {}
+                    Rvalue::Length(_) | Rvalue::StaticRef(_) => {}
                     Rvalue::InBounds(a, p) => {
                         op(a, &mut uses);
                         uses.push(p.local);

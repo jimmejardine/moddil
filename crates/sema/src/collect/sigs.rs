@@ -10,7 +10,7 @@ use crate::resolve::{Scope, effect_type, preds_of, resolve_type};
 use crate::ty::TraitRef;
 use crate::{Code, Diagnostic, Ty};
 
-use super::{Collector, simple_binding};
+use super::{Collector, name_of, simple_binding};
 
 impl Collector<'_> {
     #[allow(clippy::too_many_arguments)]
@@ -48,9 +48,15 @@ impl Collector<'_> {
                 ds.push(Diagnostic::unsupported(attr.text_range(), "this attribute"));
             }
         }
+        // `const fn` (`comptime.const-fn.1`).
+        let mut is_const = false;
         for t in node.child_tokens() {
             if t.kind() == K::FN_KW {
                 break;
+            }
+            if t.kind() == K::CONST_KW {
+                is_const = true;
+                continue;
             }
             if t.kind().is_keyword() && !matches!(t.kind(), K::PUB_KW | K::MOD_KW | K::DEFAULT_KW) {
                 ds.push(Diagnostic::unsupported(
@@ -242,8 +248,60 @@ impl Collector<'_> {
             effects,
             track_caller,
             intrinsic,
+            is_const,
+            const_item: false,
             vis: match (src, container) {
                 (Src::File(_), Container::Free | Container::Impl(_)) => super::vis_of(node),
+                _ => crate::items::Vis::Pub,
+            },
+            module: self.module,
+        }
+    }
+
+    /// A const item, `const NAME: T = e;` (`comptime.const.1`), as a function of no parameters
+    /// returning `T`.
+    pub(super) fn const_sig(&mut self, node: &SyntaxNode, src: Src) -> FnSig {
+        let (name, name_range) = name_of(node);
+        let mut ds = Vec::new();
+        let ret = match node.children().find_map(ast::Type::cast) {
+            Some(t) => resolve_type(&t, &self.scope(), &mut ds),
+            None => Ty::Error,
+        };
+        // Its value is static data, which holds no borrow but of text (`borrow.static.1`).
+        let text = matches!(&ret, Ty::Ref(false, t) if **t == Ty::Str);
+        if !text && self.tree.is_view(&ret) {
+            ds.push(Diagnostic::error(
+                Code::E1003,
+                name_range,
+                "a const holds no borrow but of text: its value is static data, kept for the \
+                 whole run",
+            ));
+        }
+        let origin = self.reporter.origin(src, node.text_range());
+        self.reporter.report(src, origin, ds);
+        FnSig {
+            name,
+            name_range,
+            src,
+            node: node.text_range(),
+            container: Container::Free,
+            generics: Generics::default(),
+            self_kind: None,
+            params: Vec::new(),
+            ret,
+            ret_range: None,
+            ret_from: Vec::new(),
+            has_body: true,
+            origin,
+            fails: Ty::Never,
+            fails_range: None,
+            effects: Vec::new(),
+            track_caller: false,
+            intrinsic: false,
+            is_const: true,
+            const_item: true,
+            vis: match src {
+                Src::File(_) => super::vis_of(node),
                 _ => crate::items::Vis::Pub,
             },
             module: self.module,

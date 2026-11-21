@@ -175,6 +175,8 @@ codes! {
     E0414 = "inherent impl for a foreign type",
     /// An impl's type parameter that neither the type nor the trait uses.
     E0415 = "unconstrained type parameter",
+    /// `#[derive(Default)]` on an enum with no `#[default]` unit variant.
+    E0416 = "no default variant",
     /// An error with nowhere to go: a fallible call not marked with `?`, `?!` or `try`, or an
     /// error where nothing can fail (a function without `with fail`, `main`, a `defer` block, a
     /// destructor).
@@ -215,6 +217,14 @@ codes! {
     /// A closure whose kind is weaker than a bound needs: it changes or moves what it captures,
     /// where `Fn` or `FnMut` is needed.
     E0801 = "closure of the wrong kind",
+    /// Compile-time code calling a function that is not `const fn`.
+    E1001 = "non-const call in compile-time code",
+    /// Compile-time code with an effect or an error.
+    E1002 = "effect in compile-time code",
+    /// A const whose type holds a borrow that is not of text.
+    E1003 = "const holding a borrow",
+    /// Compile-time evaluation that traps or runs out of fuel.
+    E1004 = "compile-time evaluation failed",
     /// A type with no size of its own (`str`) used by value.
     E0901 = "unsized type",
     /// A text literal that is not well formed: an unknown escape, a block indented wrongly.

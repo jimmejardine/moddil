@@ -1156,3 +1156,166 @@ impl String {
         self.as_str().chars()
     }
 }
+
+// How a value is shown to a developer (`expr.fmt.debug.1`): by `{x:?}` in `fmt"…"`, written as
+// Moddil source writes it.
+trait Debug {
+    fn fmt(&self, out: &mut String);
+}
+
+impl Debug for int {
+    fn fmt(&self, out: &mut String) {
+        Display::fmt(self, out);
+    }
+}
+
+impl Debug for bool {
+    fn fmt(&self, out: &mut String) {
+        Display::fmt(self, out);
+    }
+}
+
+impl Debug for char {
+    fn fmt(&self, out: &mut String) {
+        out.push_str(&self.quoted());
+    }
+}
+
+impl Debug for str {
+    fn fmt(&self, out: &mut String) {
+        out.push_str(&self.quoted());
+    }
+}
+
+impl Debug for String {
+    fn fmt(&self, out: &mut String) {
+        out.push_str(&self.as_str().quoted());
+    }
+}
+
+impl Debug for () {
+    fn fmt(&self, out: &mut String) {
+        out.push_str("()");
+    }
+}
+
+impl<T: Debug> Debug for [T] {
+    fn fmt(&self, out: &mut String) {
+        out.push('[');
+        let mut first = true;
+        for x in self {
+            if !first {
+                out.push_str(", ");
+            }
+            first = false;
+            Debug::fmt(x, out);
+        }
+        out.push(']');
+    }
+}
+
+impl<T: Debug, const N: int> Debug for [T; N] {
+    fn fmt(&self, out: &mut String) {
+        Debug::fmt(self.as_slice(), out);
+    }
+}
+
+impl<T: Debug> Debug for Vec<T> {
+    fn fmt(&self, out: &mut String) {
+        Debug::fmt(self.as_slice(), out);
+    }
+}
+
+impl<T: Debug> Debug for Option<T> {
+    fn fmt(&self, out: &mut String) {
+        match self {
+            None => out.push_str("None"),
+            Some(x) => {
+                out.push_str("Some(");
+                Debug::fmt(x, out);
+                out.push(')');
+            }
+        }
+    }
+}
+
+impl<T: Debug, E: Debug> Debug for Result<T, E> {
+    fn fmt(&self, out: &mut String) {
+        match self {
+            Ok(x) => {
+                out.push_str("Ok(");
+                Debug::fmt(x, out);
+                out.push(')');
+            }
+            Err(e) => {
+                out.push_str("Err(");
+                Debug::fmt(e, out);
+                out.push(')');
+            }
+        }
+    }
+}
+
+impl<A: Debug, B: Debug> Debug for (A, B) {
+    fn fmt(&self, out: &mut String) {
+        out.push('(');
+        Debug::fmt(&self.0, out);
+        out.push_str(", ");
+        Debug::fmt(&self.1, out);
+        out.push(')');
+    }
+}
+
+impl char {
+    // The character as Debug shows it: in quotes, escaped.
+    #[intrinsic]
+    fn quoted(self) -> String;
+}
+
+impl str {
+    // The text as Debug shows it: in quotes, escaped.
+    #[intrinsic]
+    fn quoted(&self) -> String;
+}
+
+// A type's default value (`attr.derive.default.1`).
+trait Default {
+    fn default() -> Self;
+}
+
+impl Default for int {
+    fn default() -> int {
+        0
+    }
+}
+
+impl Default for bool {
+    fn default() -> bool {
+        false
+    }
+}
+
+impl Default for String {
+    fn default() -> String {
+        String::new()
+    }
+}
+
+impl Default for () {
+    fn default() -> () {
+        ()
+    }
+}
+
+impl<T> Default for Vec<T> {
+    fn default() -> Vec<T> {
+        Vec::new()
+    }
+}
+
+impl<T> Default for Option<T> {
+    fn default() -> Option<T> {
+        None
+    }
+}
+

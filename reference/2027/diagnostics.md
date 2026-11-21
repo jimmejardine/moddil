@@ -16,6 +16,7 @@ and a code never changes meaning.
 | E07xx | Modules and mods |
 | E08xx | Closures |
 | E09xx | Text |
+| E10xx | Compile-time evaluation |
 
 | Code | Meaning | Rule |
 |---|---|---|
@@ -98,8 +99,13 @@ and a code never changes meaning.
 | E0703 | An item whose signature names something less visible than itself | [mod.expose.1](modules.md) |
 | E0704 | A manifest that is not as a manifest is, or names files that are not there | [mod.1](modules.md), [mod.tree.1](modules.md) |
 | E0705 | Mods that depend on each other in a cycle | [mod.dep.1](modules.md) |
+| E0416 | `#[derive(Default)]` on an enum without one `#[default]` unit variant | [attr.derive.default.1](attributes.md) |
 | E0901 | `str` or a slice named where it would need a size | [text.str.2](text.md), [type.slice.1](types.md) |
 | E0902 | A `fmt` hole without an expression | [expr.fmt.2](text.md) |
+| E1001 | Compile-time code calling a function that is not a `const fn` | [comptime.const-fn.2](comptime.md) |
+| E1002 | Compile-time code with an effect or an error | [comptime.const-fn.2](comptime.md) |
+| E1003 | A const whose type holds a borrow that is not of text | [comptime.static.1](comptime.md) |
+| E1004 | Evaluating a const when compiling traps or runs out of steps | [comptime.eval.1](comptime.md) |
 
 **Warnings** have codes of the same form starting with `W`, in the same blocks. They do not stop a
 program from running, and conformance tests expect them like errors.

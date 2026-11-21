@@ -57,6 +57,7 @@ areas!(
     closures,
     collections,
     comparison,
+    comptime,
     derive,
     effects,
     enums,

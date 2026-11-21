@@ -30,12 +30,10 @@ pub(crate) fn path_segments(path: &SyntaxNode) -> Option<Vec<Segment>> {
         match c.kind() {
             K::QUALIFIED_PATH => return None,
             K::PATH_SEGMENT => {
-                let tok = c.child_tokens().find(|t| {
-                    matches!(
-                        t.kind(),
-                        K::IDENT | K::SELF_TYPE_KW | K::SELF_KW | K::SUPER_KW | K::MOD_KW
-                    )
-                });
+                // A keyword is a name here too (`Default::default`).
+                let tok = c
+                    .child_tokens()
+                    .find(|t| t.kind() == K::IDENT || t.kind().is_keyword());
                 out.push(Segment {
                     name: tok
                         .as_ref()

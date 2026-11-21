@@ -12,17 +12,21 @@ impl Checker<'_> {
     /// `fmt"…"` (`expr.fmt.1`): each hole's type (or what a borrow in it points to) is
     /// `Display`.
     pub(super) fn fmt(&mut self, pieces: &[crate::hir::FmtPiece]) {
-        let display = self.items.lang_ref("Display");
         for p in pieces {
-            if let crate::hir::FmtPiece::Hole(h) = p {
+            let (h, tr) = match p {
+                crate::hir::FmtPiece::Hole(h) => (h, "Display"),
+                crate::hir::FmtPiece::Debug(h) => (h, "Debug"),
+                crate::hir::FmtPiece::Lit(_) => continue,
+            };
+            {
                 let t = self.infer(*h);
                 let t = match self.norm(&t) {
                     Ty::Ref(_, x) => (*x).clone(),
                     t => t,
                 };
-                if let Some(d) = &display {
+                if let Some(d) = &self.items.lang_ref(tr) {
                     self.require(t.clone(), d.clone(), self.range(*h));
-                    if let Some((_, func)) = self.op_trait("Display", "fmt") {
+                    if let Some((_, func)) = self.op_trait(tr, "fmt") {
                         self.out.fmt_calls.insert(
                             *h,
                             Callee::Trait {
@@ -97,6 +101,7 @@ impl Checker<'_> {
                 Ty::Error
             }
             ExprKind::ConstParam(_) => Ty::Int,
+            &ExprKind::ConstBlock(x) => self.infer(x),
             &ExprKind::Local(l) => self.out.local_types[index(l)].clone(),
             ExprKind::Fn { .. } | ExprKind::AssocFn { .. } | ExprKind::TraitFn { .. } => {
                 self.out

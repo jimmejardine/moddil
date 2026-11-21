@@ -686,7 +686,7 @@ impl Walk<'_, '_> {
             // A hole is written through `Display::fmt(&self, …)`: it is borrowed.
             ExprKind::Fmt(pieces) => {
                 for p in pieces {
-                    if let crate::hir::FmtPiece::Hole(h) = p {
+                    if let crate::hir::FmtPiece::Hole(h) | crate::hir::FmtPiece::Debug(h) = p {
                         self.expr(h, Use::Read);
                     }
                 }
@@ -741,6 +741,7 @@ fn children(k: &ExprKind) -> Vec<ExprId> {
         | ExprKind::Fail(x)
         | ExprKind::Discard(x)
         | ExprKind::Repeat(x, _)
+        | ExprKind::ConstBlock(x)
         | ExprKind::Unary(_, x) => vec![*x],
         ExprKind::Binary(_, a, b) | ExprKind::Logic(_, a, b) => vec![*a, *b],
         ExprKind::Compare { first, rest } => std::iter::once(*first)

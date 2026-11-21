@@ -16,7 +16,7 @@ item_2_rep: (note item_2_rep)?
 vis: "pub" vis_2_opt
 item_3_opt: (vis)?
 item_kind: fn_item | struct_item | view_item | enum_item | trait_item | impl_item | type_item | const_item | use_item | mod_item | test_item | property_item | bench_item | group_item | unit_item | dimension_item
-attr: simple_path attr_1_opt
+attr: attr_path attr_1_opt
 attr_list_1_grp: "," attr
 attr_list_2_rep: (attr_list_1_grp attr_list_2_rep)?
 attr_list_3_opt: (",")?
@@ -39,7 +39,7 @@ bench_item: "bench" STRING bench_item_2_opt block
 group_item: "group" IDENT STRING ";"
 unit_item: "unit" IDENT unit_item_1_grp ";"
 dimension_item: "dimension" IDENT dimension_item_2_opt ";"
-simple_path: IDENT simple_path_2_rep
+attr_path: member_name attr_path_2_rep
 attr_input: "(" attr_input_1_rep ")" | "=" literal
 attr_1_opt: (attr_input)?
 fn_qualifier: "const" | "unsafe" | "gen"
@@ -112,8 +112,8 @@ unit_def: scale_expr unit_def_3_opt
 dimension_item_1_grp: "=" unit_expr
 unit_expr: unit_power unit_expr_3_rep
 dimension_item_2_opt: (dimension_item_1_grp)?
-simple_path_1_grp: "::" IDENT
-simple_path_2_rep: (simple_path_1_grp simple_path_2_rep)?
+attr_path_1_grp: "::" member_name
+attr_path_2_rep: (attr_path_1_grp attr_path_2_rep)?
 token_tree: "(" token_tree_1_rep ")" | "[" token_tree_2_rep "]" | "{" token_tree_3_rep "}" | any_token
 attr_input_1_rep: (token_tree attr_input_1_rep)?
 literal: number literal_1_opt_opt | STRING | RAW_STRING | BYTE_STRING | BLOCK_STRING | TAGGED_STRING | CHAR | BYTE | "true" | "false"
@@ -358,6 +358,7 @@ type_segment_1_opt: (generic_args)?
 scale_atom: simple_path | number | "(" scale_expr ")"
 scale_power_1_grp: "^" exponent
 scale_power_2_opt: (scale_power_1_grp)?
+simple_path: IDENT simple_path_2_rep
 exponent_1_opt: ("-")?
 exponent_2_opt: ("-")?
 exponent_3_grp: "/" INTEGER
@@ -409,6 +410,8 @@ error_types_2_rep: (error_types_1_grp error_types_2_rep)?
 and: and_operand and_2_rep
 or_1_grp: "||" and
 or_2_rep: (or_1_grp or_2_rep)?
+simple_path_1_grp: "::" IDENT
+simple_path_2_rep: (simple_path_1_grp simple_path_2_rep)?
 literal_pat_1_opt: ("-")?
 pattern_path_1_grp: qualified_path | IDENT | "Self" | "super" | "mod"
 pattern_path_2_grp: "::" pattern_path_3_grp

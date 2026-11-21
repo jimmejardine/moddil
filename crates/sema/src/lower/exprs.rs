@@ -127,6 +127,19 @@ impl Lowerer<'_> {
             ast::Expr::Closure(_) => self.closure_expr(&node),
             ast::Expr::Impl(_) => self.anon_impl(&node),
             ast::Expr::Array(_) => self.array(&node),
+            // `const { e }`: the body's locals and parameters are out of its reach.
+            ast::Expr::ConstBlock(_) => {
+                let names = std::mem::take(&mut self.names);
+                let params = std::mem::take(&mut self.types.params);
+                let inner = node
+                    .children()
+                    .find_map(ast::Block::cast)
+                    .map(|b| self.block(&b));
+                self.names = names;
+                self.types.params = params;
+                let inner = inner.unwrap_or_else(|| self.missing(range));
+                self.alloc(ExprKind::ConstBlock(inner), range)
+            }
             ast::Expr::Index(_) => {
                 let parts: Vec<ast::Expr> = node.children().filter_map(ast::Expr::cast).collect();
                 match parts.as_slice() {

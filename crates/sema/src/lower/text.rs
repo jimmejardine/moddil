@@ -221,7 +221,13 @@ impl Lowerer<'_> {
                     let hole: String = bytes[i + 1..end].iter().collect();
                     let hole_start = start + offset + 1;
                     let at = TextRange::new(hole_start as u32, (hole_start + hole.len()) as u32);
-                    match self.hole(&hole, hole_start, at) {
+                    // `{x:?}` writes `x`'s `Debug` (`expr.fmt.debug.1`).
+                    let (expr_text, debug) = match hole.strip_suffix(":?") {
+                        Some(e) if !format_spec(e) => (e.to_string(), true),
+                        _ => (hole.clone(), false),
+                    };
+                    match self.hole(&expr_text, hole_start, at) {
+                        Some(e) if debug => pieces.push(FmtPiece::Debug(e)),
                         Some(e) => pieces.push(FmtPiece::Hole(e)),
                         None => return self.missing(range),
                     }

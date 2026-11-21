@@ -153,7 +153,7 @@ impl Machine<'_> {
         Ok(self.memory.load(&out))
     }
 
-    fn push_text(&mut self, out: &crate::value::Pointer, s: &str) {
+    pub(super) fn push_text(&mut self, out: &crate::value::Pointer, s: &str) {
         if let Value::String(mut t) = self.memory.load(out) {
             t.push_str(s);
             self.memory.store(out, Value::String(t));
@@ -163,6 +163,11 @@ impl Machine<'_> {
     /// One hole: its expression, parsed where it stands in the file so its ranges are the
     /// file's, then written onto `out` by `Display::fmt` with a borrow of its value.
     fn hole(&mut self, text: &str, start: usize, out: &crate::value::Pointer) -> Eval<()> {
+        // `{x:?}` writes `x`'s `Debug` (`expr.fmt.debug.1`).
+        let (text, tr) = match text.strip_suffix(":?") {
+            Some(t) => (t, "Debug"),
+            None => (text, "Display"),
+        };
         let wrapper = "fn f(){(";
         let pad = start.saturating_sub(wrapper.len());
         let source = format!("{}{wrapper}{text})}}", " ".repeat(pad));
@@ -185,12 +190,7 @@ impl Machine<'_> {
             },
         };
         let range = expr.syntax().text_range();
-        self.call_trait(
-            "Display",
-            "fmt",
-            vec![this, Value::Ref(out.clone(), true)],
-            range,
-        )?;
+        self.call_trait(tr, "fmt", vec![this, Value::Ref(out.clone(), true)], range)?;
         Ok(())
     }
 
@@ -256,6 +256,8 @@ impl Machine<'_> {
             (Head::Char, "is_lowercase") => Value::Bool(ch(self, 0).is_lowercase()),
             (Head::Char, "len_utf8") => Value::Int(ch(self, 0).len_utf8() as i64),
             (Head::Str, "len") => Value::Int(text(self, 0).len() as i64),
+            (Head::Str, "quoted") => Value::String(format!("{:?}", text(self, 0))),
+            (Head::Char, "quoted") => Value::String(format!("{:?}", ch(self, 0))),
             (Head::Str, "char_at_byte") => {
                 let Value::Int(at) = self.target(args[1].clone()) else {
                     unreachable!("an `int`")

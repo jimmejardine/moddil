@@ -188,6 +188,16 @@ something runs from the first slice.
     specs (`{x:>8}`) and `Debug` waits for derives of it; tagged literals other than `fmt` wait
     for comptime;
   - `#[intrinsic]` is the prelude's alone (and the built-in `core` mod's).
+- **Check the prelude once, not for every program: a step for the next slice.** Every
+  program's checks and MIR include the prelude's bodies, so each `Database` checks the whole
+  prelude again: about 0.4 s per program even at opt-level 1, and most of the test suite's time.
+  Nothing in a program can change the prelude, so:
+  - check and lower the prelude's bodies in queries keyed on the prelude alone (an input of its
+    own), which every program's database shares, or else leave them out of a program's
+    diagnostics and lower them on first call;
+  - the prelude's own test (`the_prelude_and_its_derives_check_cleanly`) keeps checking it whole;
+  - done when a program's check no longer grows with the prelude: time
+    `moddil-sema tests::borrows_and_copy` before and after.
 - **Borrows of static data borrow nothing (decided, [`memory.md`: Borrows of static data](memory.md#borrows-of-static-data)):
   done in S7c (November 2026).** A string literal (and, once S10 brings `const`, a
   `const`'s value) is static data:
@@ -227,6 +237,29 @@ something runs from the first slice.
     a called function's parameter or a function's result names the type;
   - `core` is built into the implementations; the `moddil/core-*` mods and their names come with
     packaging, and `String` is rewritten over `Buf` once S10 brings `u8`.
+- **S8 is built in three parts (decided November 2026)**, each committed on its own: **S8a**
+  compile-time evaluation (`const` items, `const fn`, `const { }`) and the `Debug` and `Default`
+  derives; **S8b** refinements (`type X = T where p`: a distinct type, `X::new` failing with
+  `RefinementError`, conversion to the base type, refined literals checked when compiling, `p: X`
+  patterns) and contracts (`requires`, `ensures` and `old`, pure, trapping when broken, every one
+  checked for now); **S8c** `#[around]` wrappers. Comptime stays minimal: derives remain written
+  by the compiler, and `reflect(T)`, user-written derives and the typed construction API wait.
+- **S8a's scope and interim rules (decided):** const items, kept as functions of no parameters
+  whose value is computed when compiling, by the MIR interpreter, with fuel (10 million steps);
+  `const fn`; compile-time code calls only `const fn`s and the prelude's functions, with no effect
+  and no error; a borrow of a const is static data; `Debug` (with `{x:?}`) and `Default`, derived
+  and for the built-in types; attributes may be named by keywords (`#[default]`). Until the
+  features they wait for arrive:
+  - array lengths and const arguments are still literals or const parameters, not consts, since
+    types are checked before consts are evaluated; there are no associated consts;
+  - a const holds no borrow but of text; a `const { }` block is checked as compile-time code but
+    evaluated where it is, each time; `#[fuel(…)]` waits;
+  - `Debug` is `fn fmt(&self, out: &mut String)`, as `Display` is, and other format specs
+    (`{x:>8}`) wait; `Debug` is not implemented for borrows (`&T`), which needs a borrow of a
+    borrow;
+  - the reference interpreter finds a derived `Default`'s fields' defaults by their types as
+    written, and a `Default::default()` call's type by its context as it does a collection
+    literal's.
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

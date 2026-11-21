@@ -116,6 +116,16 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
                     cx.names.bind(name.clone(), local);
                 }
             }
+            // A const item's body is its initialiser.
+            if sig.const_item {
+                let init = node_at(&root, K::CONST_ITEM, sig.node)
+                    .and_then(|n| n.children().find_map(ast::Expr::cast));
+                if let Some(e) = init {
+                    let id = cx.expr(&e);
+                    cx.out.body.root = Some(id);
+                }
+                return cx.out;
+            }
             node.and_then(|f| f.body())
         }
         Item::Closure(..) => None,

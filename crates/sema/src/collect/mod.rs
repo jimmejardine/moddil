@@ -386,7 +386,7 @@ impl Collector<'_> {
                     }
                     K::TRAIT_ITEM => nodes.traits.push((*src, module, node)),
                     K::IMPL_ITEM => nodes.impls.push((*src, module, node)),
-                    K::FN_ITEM => nodes.fns.push((*src, module, node)),
+                    K::FN_ITEM | K::CONST_ITEM => nodes.fns.push((*src, module, node)),
                     K::TEST_ITEM if src.is_file() => {
                         nodes.tests.push((src.file().unwrap_or(0), module, node));
                     }
@@ -449,7 +449,10 @@ impl Collector<'_> {
         }
         for (k, (src, module, node)) in nodes.fns.iter().enumerate() {
             self.enter(*src, *module);
-            if let Some(f) = ast::FnItem::cast(node.clone()) {
+            if node.kind() == K::CONST_ITEM {
+                let sig = self.const_sig(node, *src);
+                self.tree.fns[first_free + k] = sig;
+            } else if let Some(f) = ast::FnItem::cast(node.clone()) {
                 let sig = self.fn_sig(
                     &f,
                     *src,
