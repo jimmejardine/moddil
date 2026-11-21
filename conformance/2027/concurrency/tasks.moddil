@@ -1,0 +1,112 @@
+// covers: task.scope.1, task.spawn.1, task.join.1, task.sched.1, task.borrow.1, task.effects.1
+
+fn sum(xs: &[int]) -> int {
+    let mut t = 0;
+    for x in xs.iter() {
+        t += *x;
+    }
+    t
+}
+
+fn fill(v: &mut Vec<int>, n: int) {
+    let mut i = 0;
+    while i < n {
+        v.push(i);
+        i += 1;
+    }
+}
+
+// Its `spawn` and `suspend` are inferred.
+fn halves(xs: &[int], mid: int) -> int {
+    let (left, right) = (xs, xs);
+    scope(|s| {
+        let a = s.spawn(|| sum(left) - mid);
+        let b = s.spawn(|| sum(right) + mid);
+        a.join() + b.join()
+    })
+}
+
+pub fn written(x: int) -> int with spawn, suspend {
+    scope(|s| s.spawn(|| x * 2).join())
+}
+
+struct Config { factor: int }
+
+fn scaled(x: int) -> int with config: &Config {
+    x * config.factor
+}
+
+test "a scope gives its body's value once its tasks have ended" {
+    let xs = [1, 2, 3, 4];
+    let r = scope(|s| {
+        let a = s.spawn(|| sum(&xs));
+        let b = s.spawn(|| 10);
+        a.join() + b.join()
+    });
+    r                                       // => 20
+    ;
+    halves(&xs, 3)                          // => 20
+    ;
+    written(21)                             // => 42
+}
+
+test "tasks borrow what outlives the scope: shared by many, `&mut` by one" {
+    let xs = [5, 6];
+    let mut v: Vec<int> = [];
+    let mut w: Vec<int> = [];
+    scope(|s| {
+        s.spawn(|| fill(&mut v, sum(&xs)));
+        s.spawn(|| fill(&mut w, sum(&xs) - 8));
+    });
+    v.len()                                 // => 11
+    ;
+    w.len()                                 // => 3
+}
+
+test "a task not joined still runs before the scope ends" {
+    let mut n = 0;
+    scope(|s| {
+        s.spawn(|| {
+            yield_now();
+            n += 1;
+        });
+    });
+    n                                       // => 1
+}
+
+test "tasks spawn tasks of their own scopes" {
+    let r = scope(|s| {
+        let outer = s.spawn(|| scope(|t| {
+            let a = t.spawn(|| 1);
+            let b = t.spawn(|| 2);
+            a.join() + b.join()
+        }));
+        outer.join() * 10
+    });
+    r                                       // => 30
+}
+
+test "a task's effects are met where its closure is written" {
+    let r = with Config = (Config { factor: 3 }) {
+        scope(|s| s.spawn(|| scaled(5)).join())
+    };
+    r                                       // => 15
+}
+
+test "waiting at a join lets the other ready tasks run, in order" {
+    let mut a: Vec<int> = [];
+    let mut b: Vec<int> = [];
+    scope(|s| {
+        let first = s.spawn(|| {
+            a.push(1);
+            yield_now();
+            a.push(2);
+            a.len()
+        });
+        let second = s.spawn(|| {
+            b.push(1);
+            b.len()
+        });
+        first.join() + second.join()        // => 3
+    });
+}

@@ -36,6 +36,8 @@ pub struct FnEffects {
     pub needs: Vec<Ty>,
     /// The errors it can fail with, as an error set (`!` if none).
     pub fails: Ty,
+    /// The control effects it needs (`eff.control.1`).
+    pub control: crate::Control,
 }
 
 /// Where a call's need is met.
@@ -141,6 +143,7 @@ pub fn effects(db: &dyn Db, program: Program) -> Effects {
             .map(|f| FnEffects {
                 needs: canonical(f.effects.iter().map(|e| e.ty.clone()).collect()),
                 fails: with_closure_fails(items, f),
+                control: f.control,
             })
             .collect(),
         diagnostics: Vec::new(),
@@ -163,6 +166,7 @@ pub fn effects(db: &dyn Db, program: Program) -> Effects {
             fails.extend(out.escaping_errors.iter().cloned());
             fails.retain(|t| !t.has_error());
             f.fails = Ty::errors(fails);
+            f.control |= out.escaping_control;
         }
         if next == fx.fns {
             return fx;
@@ -187,6 +191,10 @@ pub fn effects(db: &dyn Db, program: Program) -> Effects {
 impl Checker<'_> {
     /// Records what a call of `func` with type arguments `args` needs.
     pub(super) fn needs_of_call(&mut self, e: ExprId, func: u32, args: &[Ty], range: TextRange) {
+        let control = self.fx.fns[func as usize].control;
+        if control != 0 {
+            self.control_uses.push((control, range));
+        }
         let needs: Vec<Ty> = self.fx.fns[func as usize]
             .needs
             .iter()
@@ -263,6 +271,26 @@ impl Checker<'_> {
     /// installed for exactly that effect, or by the function's own effects; records the need
     /// as the function's if they are inferred, and reports it if not.
     pub(super) fn meet_needs(&mut self) {
+        // The control effects (`eff.control.1`): an entry point has them from the runtime.
+        for (c, range) in std::mem::take(&mut self.control_uses) {
+            let missing = c & !self.own_control;
+            if missing == 0 {
+                continue;
+            }
+            let name = crate::items::show_control(missing);
+            match self.mode {
+                Mode::Inferred => self.out.escaping_control |= missing,
+                Mode::Entry(_) => {}
+                Mode::Written | Mode::Method => self.report(
+                    Code::E0603,
+                    range,
+                    format!(
+                        "this call needs `{name}`, which this function's signature does not list: \
+                         add `with {name}`"
+                    ),
+                ),
+            }
+        }
         let needs = std::mem::take(&mut self.needs);
         for n in needs {
             let mut found = Vec::new();

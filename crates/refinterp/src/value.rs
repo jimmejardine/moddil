@@ -38,7 +38,7 @@ pub(crate) enum Value {
 /// written (which its body names as its own), and the handlers installed there.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Closure {
-    pub(crate) node: moddil_syntax::SyntaxNode,
+    pub(crate) node: NodeRef,
     pub(crate) vars: Vec<(String, Pointer)>,
     pub(crate) handlers: Vec<(String, Value)>,
     pub(crate) types: std::collections::HashMap<String, Head>,
@@ -49,9 +49,21 @@ pub(crate) struct Closure {
     pub(crate) wrapped: Option<(String, usize)>,
 }
 
-/// Where a borrow points: a call's frame, a variable in it, and a path of field positions.
+/// A node of the program's syntax, as values hold it: which tree (the prelude's, `core`'s or a
+/// file's), where, and its kind. Every task parses the program itself (a syntax node is not
+/// shared between threads), and finds the node in its own trees.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct NodeRef {
+    pub(crate) tree: usize,
+    pub(crate) range: moddil_syntax::TextRange,
+    pub(crate) kind: moddil_syntax::SyntaxKind,
+}
+
+/// Where a borrow points: a task's call's frame, a variable in it, and a path of field
+/// positions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Pointer {
+    pub(crate) task: usize,
     pub(crate) frame: usize,
     pub(crate) slot: usize,
     pub(crate) path: Vec<usize>,

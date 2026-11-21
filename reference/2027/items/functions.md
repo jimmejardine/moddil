@@ -20,8 +20,8 @@ holding the argument's value.
 
 **item.fn.ret-borrow.1** A function may return a borrow (`-> &T`, `-> &mut T`) or a view. The
 borrow must come from a borrowed parameter (or a view): with `from a, b` after the result type,
-from one of those parameters, which must be borrowed (E0310); without it, from any borrowed
-parameter. A function with no borrowed parameter may return only static data
+from one of those parameters, which must be borrowed, a view, or of a type parameter, whose value
+may hold borrows (E0310); without it, from any borrowed parameter. A function with no borrowed parameter may return only static data
 (**borrow.static.1**). Returning a borrow of the function's own variables or temporaries is an
 error (E0308). A caller treats the result as borrowing what it passed for those parameters, for as
 long as the result is used ([Borrows](../borrows.md)).

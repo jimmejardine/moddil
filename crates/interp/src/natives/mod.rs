@@ -25,6 +25,7 @@ struct Prelude {
     less: u32,
     equal: u32,
     greater: u32,
+    task: u32,
 }
 
 impl<'a> Natives<'a> {
@@ -54,6 +55,7 @@ impl<'a> Natives<'a> {
                 less: variant(ordering, "Less"),
                 equal: variant(ordering, "Equal"),
                 greater: variant(ordering, "Greater"),
+                task: adt("Task"),
             },
         }
     }
@@ -102,6 +104,15 @@ impl<'a> Natives<'a> {
             ),
             _ => self.text(&self_ty, name, args, stack),
         })
+    }
+
+    /// A value of the prelude's `Task`, for task `t`.
+    pub(crate) fn task(&self, t: usize) -> Value {
+        Value::Adt {
+            adt: self.prelude.task,
+            variant: 0,
+            fields: vec![Value::Int(t as i64)],
+        }
     }
 
     /// A value of the prelude's `Option`.

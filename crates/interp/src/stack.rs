@@ -16,6 +16,8 @@ pub(crate) enum Ret {
     To(Pointer, usize, Option<(Pointer, usize)>),
     /// Nowhere: the call is a destructor, run while the caller drops a value.
     Drop,
+    /// To the scheduler: the call is a task's closure (`task.spawn.1`).
+    Task,
 }
 
 /// A destructor call waiting to run: the function, its type arguments, and the value.
@@ -75,9 +77,13 @@ pub(crate) enum PendingDrop {
     Call(DropCall),
 }
 
-/// The stack of frames. The running frame is the top one.
+/// The stacks of frames, one per task (`task.sched.1`). The running frame is the top one of the
+/// running task's.
 pub(crate) struct Stack<'a> {
-    frames: Vec<Frame<'a>>,
+    /// Each task's frames, by the task's index; a task that has ended has none.
+    tasks: Vec<Vec<Frame<'a>>>,
+    /// The running task.
+    current: usize,
     /// The values of the const items borrowed so far: static data, which a [`Pointer`] with
     /// [`STATIC`] for its frame points into.
     statics: std::collections::HashMap<u32, Value>,
@@ -89,9 +95,35 @@ pub(crate) const STATIC: usize = usize::MAX;
 impl<'a> Stack<'a> {
     pub(crate) fn new(first: Frame<'a>) -> Self {
         Stack {
-            frames: vec![first],
+            tasks: vec![vec![first]],
+            current: 0,
             statics: std::collections::HashMap::new(),
         }
+    }
+
+    /// The running task's frames.
+    fn frames(&self) -> &Vec<Frame<'a>> {
+        &self.tasks[self.current]
+    }
+
+    fn frames_mut(&mut self) -> &mut Vec<Frame<'a>> {
+        &mut self.tasks[self.current]
+    }
+
+    /// Starts a task whose first frame is `first`, and gives its index.
+    pub(crate) fn add_task(&mut self, first: Frame<'a>) -> usize {
+        self.tasks.push(vec![first]);
+        self.tasks.len() - 1
+    }
+
+    /// The running task.
+    pub(crate) fn current(&self) -> usize {
+        self.current
+    }
+
+    /// Runs task `t` from now on.
+    pub(crate) fn switch(&mut self, t: usize) {
+        self.current = t;
     }
 
     /// A borrow of const item `f`'s value, if it has been computed.
@@ -99,6 +131,7 @@ impl<'a> Stack<'a> {
         self.statics.contains_key(&f).then(|| {
             Value::Ref(
                 Pointer {
+                    task: 0,
                     frame: STATIC,
                     local: f,
                     path: Vec::new(),
@@ -114,28 +147,28 @@ impl<'a> Stack<'a> {
     }
 
     pub(crate) fn depth(&self) -> usize {
-        self.frames.len()
+        self.frames().len()
     }
 
     pub(crate) fn push(&mut self, frame: Frame<'a>) {
-        self.frames.push(frame);
+        self.frames_mut().push(frame);
     }
 
     /// Ends the top frame's call, giving where its result goes.
     pub(crate) fn pop(&mut self) -> Ret {
-        self.frames.pop().expect("a frame").ret
+        self.frames_mut().pop().expect("a frame").ret
     }
 
     fn top_index(&self) -> usize {
-        self.frames.len() - 1
+        self.frames().len() - 1
     }
 
     fn top(&self) -> &Frame<'a> {
-        self.frames.last().expect("a frame")
+        self.frames().last().expect("a frame")
     }
 
     fn top_mut(&mut self) -> &mut Frame<'a> {
-        self.frames.last_mut().expect("a frame")
+        self.frames_mut().last_mut().expect("a frame")
     }
 
     /// The body the top frame runs.
@@ -222,9 +255,9 @@ impl<'a> Stack<'a> {
         at_call: bool,
     ) -> (u32, TextRange, bool) {
         let top = self.top();
-        if at_call && self.frames.len() > 1 {
+        if at_call && self.frames().len() > 1 {
             let caller = self
-                .frames
+                .frames()
                 .iter()
                 .rev()
                 .skip(1)
@@ -242,7 +275,7 @@ impl<'a> Stack<'a> {
             return (file, range.unwrap_or_else(|| top.terminator_span()), true);
         }
         let caller = self
-            .frames
+            .frames()
             .iter()
             .rev()
             .find(|f| !f.tracked())
@@ -257,6 +290,7 @@ impl<'a> Stack<'a> {
     /// Where `place` of the top frame is, following borrows.
     pub(crate) fn resolve(&self, place: &Place) -> Pointer {
         let mut ptr = Pointer {
+            task: self.current,
             frame: self.top_index(),
             local: place.local.0,
             path: Vec::new(),
@@ -282,7 +316,7 @@ impl<'a> Stack<'a> {
         let mut v = if ptr.frame == STATIC {
             &self.statics[&ptr.local]
         } else {
-            &self.frames[ptr.frame].locals[ptr.local as usize]
+            &self.tasks[ptr.task][ptr.frame].locals[ptr.local as usize]
         };
         for &i in &ptr.path {
             v = match v {
@@ -297,7 +331,7 @@ impl<'a> Stack<'a> {
     }
 
     pub(crate) fn store(&mut self, ptr: &Pointer, value: Value) {
-        let mut v = &mut self.frames[ptr.frame].locals[ptr.local as usize];
+        let mut v = &mut self.tasks[ptr.task][ptr.frame].locals[ptr.local as usize];
         for &i in &ptr.path {
             v = match v {
                 Value::Tuple(xs)

@@ -801,6 +801,7 @@ impl Collector<'_> {
             fails_range: None,
             effects: Vec::new(),
             track_caller: true,
+            control: 0,
             intrinsic: false,
             is_const: !is_new,
             const_item: false,

@@ -1363,3 +1363,54 @@ struct ParamInfo {
     name: String,
     ty: String,
 }
+
+// Structured concurrency (`task.scope.1`): `scope` runs its body with a handle tasks are spawned
+// into, and ends once every one of them has. A task's errors go to its `join`, or, if it is never
+// joined, to the scope.
+
+// A scope's handle. It holds what its tasks borrow, until the scope ends.
+view Scope {
+    id: int,
+}
+
+// A task spawned into a scope, running closure `F`, which gives a `T`.
+view Task<F, T> {
+    id: int,
+}
+
+fn scope<F: FnOnce(&mut Scope) -> R, R>(body: F) -> R with spawn {
+    let mut s = Scope { id: __scope_open() };
+    errdefer {
+        __scope_wait(s.id);
+    }
+    let r = body(&mut s);
+    __scope_close::<F, R>(s.id)?;
+    r
+}
+
+impl Scope {
+    // Starts a task running `f`, queued to run when the running task suspends.
+    #[intrinsic]
+    fn spawn<F: FnOnce() -> T, T>(&mut self, f: F) -> Task<F, T> from f with spawn;
+}
+
+impl<F: FnOnce() -> T, T> Task<F, T> {
+    // Waits for the task to end: its result, or its error.
+    #[intrinsic]
+    fn join(self) -> T with suspend, fail(F::Fails);
+}
+
+// Lets the other tasks that are ready run first.
+#[intrinsic]
+fn yield_now() with suspend;
+
+#[intrinsic]
+fn __scope_open() -> int;
+
+// Waits for the scope's tasks.
+#[intrinsic]
+fn __scope_wait(id: int) with spawn;
+
+// Waits for the scope's tasks, and fails with the first error of one never joined.
+#[intrinsic]
+fn __scope_close<F: FnOnce(&mut Scope) -> R, R>(id: int) with spawn;

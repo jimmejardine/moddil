@@ -1,0 +1,18 @@
+// covers: task.borrow.1
+//
+// The ownership check runs once the types check, so these errors are in a file of their own.
+
+fn lent_mutably() {
+    let mut v: Vec<int> = [];
+    scope(|s| {
+        s.spawn(|| v.push(1));
+        v.push(2);                          //~ E0305
+    });
+}
+
+fn body_local() {
+    scope(|s| {
+        let x = 5;
+        s.spawn(|| x + 1);                  //~ E0308
+    });
+}

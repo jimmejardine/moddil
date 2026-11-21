@@ -18,7 +18,7 @@ impl Machine<'_> {
     /// `|p, …| body`: a closure value.
     pub(super) fn closure_value(&mut self, node: &SyntaxNode) -> Value {
         Value::Closure(Arc::new(Closure {
-            node: node.clone(),
+            node: self.program.node_ref(node),
             vars: self.memory.visible(),
             handlers: self.handlers.clone(),
             types: self.memory.types(),
@@ -88,15 +88,14 @@ impl Machine<'_> {
             self.try_modes = saved_modes;
             return self.end_closure(c, result, caller_file, range);
         }
-        let method = c.node.kind() == K::FN_ITEM;
+        let node = self.node(&c.node);
+        let method = node.kind() == K::FN_ITEM;
         let params: Vec<SyntaxNode> = if method {
-            c.node
-                .child(K::PARAM_LIST)
+            node.child(K::PARAM_LIST)
                 .map(|ps| ps.children().filter(|p| p.kind() == K::PARAM).collect())
                 .unwrap_or_default()
         } else {
-            c.node
-                .child(K::CLOSURE_PARAMS)
+            node.child(K::CLOSURE_PARAMS)
                 .map(|ps| {
                     ps.children()
                         .filter(|p| p.kind() == K::CLOSURE_PARAM)
@@ -118,13 +117,11 @@ impl Machine<'_> {
         let saved = std::mem::replace(&mut self.handlers, c.handlers.clone());
         let saved_modes = std::mem::take(&mut self.try_modes);
         let body = if method {
-            c.node
-                .child(K::BLOCK)
+            node.child(K::BLOCK)
                 .and_then(ast::Expr::cast)
                 .expect("a method's body")
         } else {
-            c.node
-                .children()
+            node.children()
                 .filter_map(ast::Expr::cast)
                 .last()
                 .expect("a closure's body")

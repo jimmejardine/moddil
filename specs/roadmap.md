@@ -292,6 +292,23 @@ something runs from the first slice.
     a borrowed parameter;
   - a wrapper's errors are reported where `?` would report them: E0501 on a `pub` function that
     does not list them.
+- **S9 is built in three parts (decided November 2026)**, each committed on its own: **S9a**
+  `scope`, `spawn`, `join`, the control effects `suspend` and `spawn`, and a deterministic
+  scheduler; **S9b** cancellation and the unwinding it needs (with `isolate: true` and `Trapped`,
+  which need it too), `select`, channels and `stop_requested`; **S9c** the tour as
+  `tour/shorty/`, checked in CI, with what it still needs, decided then.
+- **S9a's scope and interim rules (decided November 2026):** the prelude's `scope(|s| …)`,
+  `s.spawn(f)` and `t.join()`, and `yield_now()`; one task runs at a time, switching only where
+  it suspends, first in, first out; a task's error goes to its `join`, or, if it is never joined,
+  fails the scope (the first to end wins); `s.spawn(f)` is marked as any call passing a closure
+  that can fail is, so the scope's errors are its tasks' too; the scope keeps what its tasks
+  borrow until it ends. Until the features they wait for arrive:
+  - no cancellation: a scope waits for every task, however many have failed, and a failed body
+    waits for them too (S9b);
+  - the errors of tasks that lose are dropped, not kept as suppressed;
+  - entry points have `suspend` and `spawn` from the runtime; a trap in any task ends the run;
+  - the reference interpreter runs each task on a thread of its own, parsing the program again,
+    and hands the turn on at suspension points.
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

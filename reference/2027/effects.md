@@ -60,8 +60,14 @@ without end (a generic function calling itself with ever larger type arguments) 
 (E0607).
 
 **eff.method.1** A trait's method, and a method of an impl of a trait, lists no effect but `fail`
-(E0604), so it uses none it does not meet itself (E0603): a handler gets what else it needs when
-it is built. A destructor, as a trait's method, uses no effects.
+and the control effects (E0604), so it uses none it does not meet itself (E0603): a handler gets
+what else it needs when it is built. A destructor, as a trait's method, uses no effects.
 
 **eff.entry.1** An entry point (`main`, a test) has no effects: each need of its calls is met by a
-`with` inside it (E0602).
+`with` inside it (E0602). It has the control effects, from the runtime.
+
+**eff.control.1** `suspend` and `spawn` are the **control effects** ([Concurrency](concurrency.md)),
+listed after `with` as keywords, each once (E0606) and without a name (E0601): `with suspend,
+spawn`. A call needs the control effects of the function it calls, and no handler meets them:
+they are the function's own, inferred like its other effects (**eff.infer.1**), or listed on a
+`pub` function's signature, which is an error to leave out (E0603).

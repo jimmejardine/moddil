@@ -187,6 +187,10 @@ pub(crate) struct Program {
     pub(crate) types: HashMap<String, TypeInfo>,
     /// Each file's module path.
     file_paths: Vec<Vec<String>>,
+    /// The syntax trees: the prelude's, `core`'s, then each file's.
+    roots: Vec<SyntaxNode>,
+    /// The sources, which each task parses again (`task.sched.1`).
+    sources: crate::machine::tasks::Sources,
 }
 
 /// A `type` item: an alias, or a refinement with its predicate.
@@ -214,6 +218,8 @@ impl Program {
             modules: vec![Module::default()],
             mods: Vec::new(),
             file_paths: files.iter().map(|f| f.module.clone()).collect(),
+            roots: Vec::new(),
+            sources: std::sync::Arc::new((files.to_vec(), mods.to_vec())),
         };
         for (i, m) in mods.iter().enumerate() {
             let root = p.modules.len();
@@ -279,11 +285,14 @@ impl Program {
         for item in core_items.children() {
             p.item(None, collections, item);
         }
+        p.roots.push(prelude);
+        p.roots.push(core_items);
         for (f, file) in files.iter().enumerate() {
             let root = moddil_syntax::parse(&file.text).syntax();
             for item in root.children() {
                 p.item(Some(f as u32), file_modules[f], item);
             }
+            p.roots.push(root);
         }
         // Now every name is known: what each impl is for, and of which trait.
         for i in 0..p.impls.len() {
@@ -300,6 +309,35 @@ impl Program {
             p.impls[i].trait_ = trait_;
         }
         p
+    }
+
+    /// The program's sources.
+    pub(crate) fn sources(&self) -> crate::machine::tasks::Sources {
+        self.sources.clone()
+    }
+
+    /// How a value holds `node` (`NodeRef`).
+    pub(crate) fn node_ref(&self, node: &SyntaxNode) -> crate::value::NodeRef {
+        let root = node.ancestors().last().expect("a root");
+        let tree = self
+            .roots
+            .iter()
+            .position(|r| *r == root)
+            .expect("a node of the program");
+        crate::value::NodeRef {
+            tree,
+            range: node.text_range(),
+            kind: node.kind(),
+        }
+    }
+
+    /// The node `r` is, in this program's trees.
+    pub(crate) fn node(&self, r: &crate::value::NodeRef) -> SyntaxNode {
+        self.roots[r.tree]
+            .descendants()
+            .into_iter()
+            .find(|n| n.text_range() == r.range && n.kind() == r.kind)
+            .expect("a node of the program")
     }
 
     /// The key of item `name` of module `module`.

@@ -22,6 +22,7 @@ mod errors;
 mod exprs;
 mod ops;
 mod patterns;
+pub(crate) mod tasks;
 mod text;
 mod wrappers;
 
@@ -47,28 +48,22 @@ struct Machine<'p> {
     /// For each call being run, innermost last: the values its postconditions' `old(e)` calls
     /// stand for, by the call's range.
     olds: Vec<HashMap<TextRange, Value>>,
+    /// The nodes closure values have named so far, found once.
+    nodes: HashMap<crate::value::NodeRef, SyntaxNode>,
 }
 
 impl Program {
     pub(crate) fn run_test(&self, index: usize) -> TestRun {
         let test = &self.tests[index];
         let (name, body) = (&test.name, &test.body);
-        let mut m = Machine {
-            program: self,
-            memory: Memory::new(test.file, test.module as usize),
-            defers: Vec::new(),
-            observed: Vec::new(),
-            try_modes: Vec::new(),
-            handlers: Vec::new(),
-            pending_trap: None,
-            olds: Vec::new(),
-        };
+        let mut m = Machine::new(self, Memory::new(test.file, test.module as usize));
         let result = m.block(body);
         // A test's value is dropped at its end, like its variables.
         let result = match result {
             Ok(v) => m.drop_value(v, true, body.syntax().text_range()),
             Err(f) => Err(f),
         };
+        m.end_tasks();
         let (trap, error) = match result {
             Err(Flow::Trap(t, true)) => (Some(t), None),
             Err(Flow::Trap(t, false)) => (
@@ -91,7 +86,34 @@ impl Program {
     }
 }
 
+impl<'p> Machine<'p> {
+    /// A machine running `program`'s code with `memory`.
+    fn new(program: &'p Program, memory: Memory) -> Self {
+        Machine {
+            program,
+            memory,
+            defers: Vec::new(),
+            observed: Vec::new(),
+            try_modes: Vec::new(),
+            handlers: Vec::new(),
+            pending_trap: None,
+            olds: Vec::new(),
+            nodes: HashMap::new(),
+        }
+    }
+}
+
 impl Machine<'_> {
+    /// The node a closure value names.
+    fn node(&mut self, r: &crate::value::NodeRef) -> SyntaxNode {
+        if let Some(n) = self.nodes.get(r) {
+            return n.clone();
+        }
+        let n = self.program.node(r);
+        self.nodes.insert(*r, n.clone());
+        n
+    }
+
     fn bind(&mut self, binds: Vec<Bind>) {
         for (name, v, from) in binds {
             if let Some(p) = from
@@ -337,7 +359,7 @@ impl Machine<'_> {
             if self
                 .memory
                 .temp_value(i)
-                .is_some_and(|v| self.needs_drop(v))
+                .is_some_and(|v| self.needs_drop(&v))
             {
                 let v = self.memory.take(i);
                 self.drop_value(v, true, range)?;

@@ -54,7 +54,7 @@ impl Machine<'_> {
             fields,
         });
         values.push(Value::Closure(Arc::new(Closure {
-            node: f.node.syntax().clone(),
+            node: self.program.node_ref(f.node.syntax()),
             vars: self.memory.visible(),
             handlers: self.handlers.clone(),
             types: self.memory.types(),

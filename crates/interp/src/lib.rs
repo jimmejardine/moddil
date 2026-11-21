@@ -17,6 +17,7 @@ mod dispatch;
 mod machine;
 mod natives;
 mod ops;
+mod sched;
 mod stack;
 mod value;
 

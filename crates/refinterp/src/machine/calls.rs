@@ -771,9 +771,8 @@ impl Machine<'_> {
         range: TextRange,
     ) -> Eval {
         let receiver = &e.sub_exprs()[0];
-        let name = node
-            .child_tokens()
-            .find(|t| t.kind() == K::IDENT)
+        // A method's name may be a keyword (`s.spawn(…)`).
+        let name = ast::member_name(node)
             .expect("a method name")
             .text()
             .to_string();

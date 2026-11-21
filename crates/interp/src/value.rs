@@ -47,10 +47,11 @@ pub enum Value {
     Empty,
 }
 
-/// Where a borrow points: a local of a frame, and a path of field indices into it. Only the
-/// frame stack makes one.
+/// Where a borrow points: a local of a frame of a task, and a path of field indices into it.
+/// Only the frame stack makes one.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Pointer {
+    pub(crate) task: usize,
     pub(crate) frame: usize,
     pub(crate) local: u32,
     pub(crate) path: Vec<u32>,

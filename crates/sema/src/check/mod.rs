@@ -117,6 +117,8 @@ pub struct Inference {
     escaping_needs: Vec<Ty>,
     /// For a function whose errors are inferred: the errors that leave its body.
     escaping_errors: Vec<Ty>,
+    /// For a function whose effects are inferred: the control effects its body needs.
+    escaping_control: crate::Control,
     captures: HashMap<ExprId, Vec<Capture>>,
     passes_on: HashSet<ExprId>,
     /// Type errors, and exhaustiveness errors and warnings.
@@ -310,6 +312,11 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         own,
         installs: Vec::new(),
         needs: Vec::new(),
+        control_uses: Vec::new(),
+        own_control: match owner.item(db) {
+            Item::Fn(i) => fx.fns[i as usize].control,
+            Item::Test(_) | Item::Closure(..) => 0,
+        },
         owner: owner.item(db),
         owner_args: match owner.item(db) {
             Item::Fn(i) => items.fns[i as usize].generics.identity(),
@@ -427,6 +434,10 @@ struct Checker<'a> {
     installs: Vec<(ExprId, Vec<Ty>)>,
     /// The needs of the calls checked so far.
     needs: Vec<Need>,
+    /// Each call's control effects, with where it is.
+    control_uses: Vec<(crate::Control, TextRange)>,
+    /// The function's own control effects.
+    own_control: crate::Control,
     /// The function or test being checked.
     owner: Item,
     /// Its type parameters, as types.

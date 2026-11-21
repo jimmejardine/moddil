@@ -354,7 +354,8 @@ impl Lowerer<'_> {
             types
         });
         let args = self.args(node);
-        let Some(name) = node.child_tokens().find(|t| t.kind() == K::IDENT) else {
+        // A method's name may be a keyword (`s.spawn(…)`).
+        let Some(name) = ast::member_name(node) else {
             return self.missing(range);
         };
         self.alloc(

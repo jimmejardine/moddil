@@ -203,6 +203,9 @@ impl Machine<'_> {
         range: moddil_syntax::TextRange,
     ) -> Eval {
         let name = f.node.name().map(|n| n.text()).unwrap_or_default();
+        if let Some(r) = self.task_intrinsic(&name, head, args, range) {
+            return r;
+        }
         let text = |m: &Self, i: usize| text_of(m, &args[i]).expect("text");
         let ch = |m: &Self, i: usize| match m.target(args[i].clone()) {
             Value::Char(c) => c,

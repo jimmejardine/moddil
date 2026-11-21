@@ -87,12 +87,12 @@ and a code never changes meaning.
 | E0506 | `?` on an `Option` where absence cannot go, or on both `Option`s and errors in one `try` | [err.question.1](errors.md), [err.try.1](errors.md) |
 | E0507 | An entry point that declares errors | [err.entry.1](errors.md) |
 | E0508 | An error type that is not a struct or enum, or a second instance of a generic one | [err.fail.1](errors.md), [err.set.1](errors.md) |
-| E0601 | Something after `with` that is not an effect, or an effect named wrongly | [eff.1](effects.md), [eff.name.1](effects.md) |
+| E0601 | Something after `with` that is not an effect, or an effect named wrongly | [eff.1](effects.md), [eff.name.1](effects.md), [eff.control.1](effects.md) |
 | E0602 | An entry point whose call needs an effect nothing installs | [eff.entry.1](effects.md) |
-| E0603 | A need that a function whose effects are written out does not list | [eff.infer.1](effects.md), [eff.method.1](effects.md) |
+| E0603 | A need that a function whose effects are written out does not list | [eff.infer.1](effects.md), [eff.method.1](effects.md), [eff.control.1](effects.md) |
 | E0604 | An effect other than `fail` on a trait's method or an impl's | [eff.method.1](effects.md) |
 | E0605 | A `dyn` type not behind a borrow, of more than one trait, or of a trait that cannot be used as `dyn` | [type.dyn.1](types.md) |
-| E0606 | An effect listed twice, or given two handlers by one `with` | [eff.1](effects.md), [eff.with.1](effects.md) |
+| E0606 | An effect listed twice, or given two handlers by one `with` | [eff.1](effects.md), [eff.with.1](effects.md), [eff.control.1](effects.md) |
 | E0607 | Effects inferred without end | [eff.infer.1](effects.md) |
 | E0801 | A closure whose kind is weaker than a bound needs | [expr.closure.param.1](expressions/closures.md) |
 | E0701 | A path or import naming an item its module cannot see | [mod.vis.1](modules.md), [mod.use.1](modules.md) |

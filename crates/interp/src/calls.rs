@@ -84,7 +84,7 @@ pub(crate) fn plan(
 }
 
 /// Values as one argument: `()` for none, else a tuple.
-fn tuple(xs: Vec<Value>) -> Value {
+pub(crate) fn tuple(xs: Vec<Value>) -> Value {
     if xs.is_empty() {
         Value::Unit
     } else {

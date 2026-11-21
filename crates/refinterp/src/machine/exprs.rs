@@ -32,7 +32,7 @@ impl Machine<'_> {
                 if let [n] = segments(node).as_slice()
                     && let Some(Head::Len(v)) = self.memory.type_of(n)
                 {
-                    return Ok(Value::Int(*v));
+                    return Ok(Value::Int(v));
                 }
                 // A const item's value (`comptime.const.1`).
                 if let Some(p) = self.const_place(node)? {

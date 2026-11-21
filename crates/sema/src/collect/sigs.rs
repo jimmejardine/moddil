@@ -256,9 +256,9 @@ impl Collector<'_> {
             None => (Ty::Unit, None),
         };
         let ret_from = ret_sources(&self.tree, node, &params, &ret, &mut ds);
-        let (fails, fails_range, effects) = match node.child(K::EFFECT_CLAUSE) {
+        let (fails, fails_range, effects, control) = match node.child(K::EFFECT_CLAUSE) {
             Some(c) => effect_clause(&c, &scope, &mut ds),
-            None => (Ty::Never, None, Vec::new()),
+            None => (Ty::Never, None, Vec::new(), 0),
         };
         for e in &effects {
             if let Some(n) = &e.name {
@@ -295,6 +295,7 @@ impl Collector<'_> {
             fails_range,
             effects,
             track_caller,
+            control,
             intrinsic,
             is_const,
             const_item: false,
@@ -346,6 +347,7 @@ impl Collector<'_> {
             fails_range: None,
             effects: Vec::new(),
             track_caller: false,
+            control: 0,
             intrinsic: false,
             is_const: true,
             const_item: true,
@@ -433,7 +435,8 @@ fn effect_clause(
     clause: &SyntaxNode,
     scope: &Scope,
     ds: &mut Vec<Diagnostic>,
-) -> (Ty, Option<TextRange>, Vec<EffectSig>) {
+) -> (Ty, Option<TextRange>, Vec<EffectSig>, crate::items::Control) {
+    let mut control = 0;
     let mut members = Vec::new();
     let mut fails_range: Option<TextRange> = None;
     let mut effects = Vec::new();
@@ -443,6 +446,32 @@ fn effect_clause(
             continue;
         };
         let name = e.token(K::IDENT).map(|t| t.text().to_string());
+        // The control effects (`eff.control.1`), which are not named.
+        let bit = if effect.token(K::SUSPEND_KW).is_some() {
+            crate::items::SUSPEND
+        } else if effect.token(K::SPAWN_KW).is_some() {
+            crate::items::SPAWN
+        } else {
+            0
+        };
+        if bit != 0 {
+            if name.is_some() {
+                ds.push(Diagnostic::error(
+                    Code::E0601,
+                    e.text_range(),
+                    "`suspend` and `spawn` are not given names",
+                ));
+            }
+            if control & bit != 0 {
+                ds.push(Diagnostic::error(
+                    Code::E0606,
+                    e.text_range(),
+                    "an effect is listed once",
+                ));
+            }
+            control |= bit;
+            continue;
+        }
         if effect.token(K::FAIL_KW).is_some() {
             let Some(types) = effect.child(K::ERROR_TYPES) else {
                 ds.push(Diagnostic::unsupported(e.text_range(), "this effect"));
@@ -490,7 +519,7 @@ fn effect_clause(
             range: e.text_range(),
         });
     }
-    (Ty::errors(members), fails_range, effects)
+    (Ty::errors(members), fails_range, effects, control)
 }
 
 /// Whether `ty` can be in an error set with `others`: it is a struct or enum (E0508), and not
@@ -562,7 +591,10 @@ pub(super) fn ret_sources(
             .iter()
             .position(|p| p.name.as_deref() == Some(t.text()))
         {
-            Some(i) if borrowed.contains(&(i as u32)) => from.push(i as u32),
+            // A type parameter's value may hold borrows too (a closure, `Wrap<&int>`).
+            Some(i) if borrowed.contains(&(i as u32)) || matches!(params[i].ty, Ty::Param(..)) => {
+                from.push(i as u32);
+            }
             Some(_) => diagnostics.push(Diagnostic::error(
                 Code::E0310,
                 t.text_range(),

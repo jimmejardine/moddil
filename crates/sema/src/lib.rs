@@ -46,9 +46,9 @@ pub use collect::{item_tree, parse};
 pub use db::{Database, Db, FileId, Item, ModInfo, Owner, Program, ProgramFile, SourceFile};
 pub use diag::{CODES, Code, Diagnostic, Severity};
 pub use items::{
-    AdtDef, Container, Def, EffectSig, Entry, FieldDef, FnSig, GenericParam, Generics, ImplDef,
-    Import, ItemTree, ModDef, ModuleDef, PRELUDE_MOD, PRELUDE_MODULE, ParamSig, Pred, SelfKind,
-    Shape, Src, TestSig, TraitDef, VariantDef, Vis,
+    AdtDef, Container, Control, Def, EffectSig, Entry, FieldDef, FnSig, GenericParam, Generics,
+    ImplDef, Import, ItemTree, ModDef, ModuleDef, PRELUDE_MOD, PRELUDE_MODULE, ParamSig, Pred,
+    SPAWN, SUSPEND, SelfKind, Shape, Src, TestSig, TraitDef, VariantDef, Vis,
 };
 pub use lower::{Lowered, body};
 pub use modules::{Member, PathError};

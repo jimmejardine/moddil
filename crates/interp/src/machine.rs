@@ -7,10 +7,11 @@ use moddil_mir::{
 use moddil_sema::{Callee, Db, Item, Owner, Program, Ty};
 use moddil_syntax::TextRange;
 
-use crate::calls::{CallPlan, plan};
+use crate::calls::{CallPlan, plan, tuple};
 use crate::dispatch::Dispatch;
 use crate::natives::Natives;
 use crate::ops;
+use crate::sched::{Outcome, Scheduler, Wait};
 use crate::stack::{Frame, PendingDrop, Ret, Stack};
 use crate::value::{Pointer, Value};
 use crate::{MAX_DEPTH, Observer, Stop, Trap};
@@ -24,6 +25,20 @@ struct Machine<'a> {
     natives: Natives<'a>,
     /// For compile-time evaluation: the steps it may still take.
     fuel: Option<u64>,
+    /// The tasks and scopes (`task.sched.1`).
+    sched: Scheduler,
+    /// For each suspended task: the call it is suspended in, and where its result goes.
+    pending: std::collections::HashMap<usize, (Pending, Ret)>,
+}
+
+/// The call a suspended task is in.
+#[derive(Clone, Copy)]
+enum Pending {
+    Join(usize),
+    Yield,
+    /// A scope's end: after its body (`__scope_close`, which can fail), or after the body failed
+    /// (`__scope_wait`).
+    Scope(usize, bool),
 }
 
 /// The MIR of a function, test or closure of a checked program.
@@ -56,6 +71,8 @@ pub(crate) fn run(
         dispatch: Dispatch::new(items),
         natives: Natives::new(items),
         fuel,
+        sched: Scheduler::new(),
+        pending: std::collections::HashMap::new(),
     };
     loop {
         if let Some(f) = &mut m.fuel {
@@ -193,6 +210,10 @@ impl<'a> Machine<'a> {
                         self.stack.store(&dest, value);
                         self.stack.goto(target);
                     }
+                    Ret::Task => {
+                        self.sched.end(self.stack.current(), Ok(value));
+                        return self.switch_next().map(Err);
+                    }
                     Ret::Drop | Ret::Top => {}
                 }
             }
@@ -209,6 +230,10 @@ impl<'a> Machine<'a> {
                     Ret::To(_, _, Some((err, target))) => {
                         self.stack.store(&err, error);
                         self.stack.goto(target);
+                    }
+                    Ret::Task => {
+                        self.sched.end(self.stack.current(), Err(error));
+                        return self.switch_next().map(Err);
                     }
                     _ => unreachable!("a checked program handles every error"),
                 }
@@ -234,6 +259,24 @@ impl<'a> Machine<'a> {
         ret: Ret,
         range: TextRange,
     ) -> Option<Stop> {
+        // The prelude's tasks and scopes (`task.scope.1`), which the scheduler runs.
+        if let Callee::Fn { func, args } = callee {
+            let sig = &self.dispatch.items().fns[*func as usize];
+            if sig.intrinsic
+                && matches!(
+                    sig.name.as_str(),
+                    "spawn"
+                        | "join"
+                        | "yield_now"
+                        | "__scope_open"
+                        | "__scope_wait"
+                        | "__scope_close"
+                )
+            {
+                let name = sig.name.clone();
+                return self.task_call(&name, args, &values, ret);
+            }
+        }
         let result = match plan(callee, values, &self.stack, &mut self.dispatch) {
             CallPlan::Closure {
                 item,
@@ -262,6 +305,115 @@ impl<'a> Machine<'a> {
         self.stack.store(dest, result);
         self.stack.goto(target);
         None
+    }
+
+    /// A call of the prelude's tasks and scopes: `name`, with type arguments `args`, on
+    /// `values`; its result goes where `ret` says, now or once the task resumes.
+    fn task_call(&mut self, name: &str, args: &[Ty], values: &[Value], ret: Ret) -> Option<Stop> {
+        let me = self.stack.current();
+        let id = |v: &Value| match v {
+            Value::Int(i) => *i as usize,
+            Value::Adt { fields, .. } => fields[0].as_int() as usize,
+            other => unreachable!("a task or scope: {other:?}"),
+        };
+        match name {
+            "__scope_open" => {
+                let s = self.sched.open_scope();
+                self.deliver(ret, Ok(Value::Int(s as i64)));
+            }
+            // A task starts queued, running its closure in a stack of its own (`task.spawn.1`).
+            "spawn" => {
+                let scope = id(&self.stack.deref(&values[0]));
+                let Ty::Closure(c) = self.concrete(&args[0]) else {
+                    unreachable!("a task's closure")
+                };
+                let Value::Closure(captures) = values[1].clone() else {
+                    unreachable!("a closure value")
+                };
+                let code = self.body(Item::closure(c.owner, c.expr));
+                let frame = Frame::new(
+                    code,
+                    vec![tuple(captures), Value::Unit],
+                    c.args.to_vec(),
+                    Ret::Task,
+                );
+                let t = self.stack.add_task(frame);
+                self.sched.spawn(t, scope);
+                let task = self.natives.task(t);
+                self.deliver(ret, Ok(task));
+            }
+            "join" => {
+                let t = id(&values[0]);
+                match self.sched.take(t) {
+                    Some(outcome) => self.deliver(ret, outcome),
+                    None => {
+                        self.sched.block(me, Wait::Join(t));
+                        self.pending.insert(me, (Pending::Join(t), ret));
+                        return self.switch_next();
+                    }
+                }
+            }
+            "yield_now" => {
+                self.sched.requeue(me);
+                self.pending.insert(me, (Pending::Yield, ret));
+                return self.switch_next();
+            }
+            _ => {
+                let s = id(&values[0]);
+                let close = name == "__scope_close";
+                if self.sched.scope_done(s) {
+                    let outcome = self.scope_outcome(s, close);
+                    self.deliver(ret, outcome);
+                } else {
+                    self.sched.block(me, Wait::Scope(s));
+                    self.pending.insert(me, (Pending::Scope(s, close), ret));
+                    return self.switch_next();
+                }
+            }
+        }
+        None
+    }
+
+    /// How a scope's end goes once its tasks have: after its body, it fails with the error of a
+    /// task never joined (`task.error.1`).
+    fn scope_outcome(&mut self, s: usize, close: bool) -> Outcome {
+        match self.sched.scope_error(s) {
+            Some(e) if close => Err(e),
+            _ => Ok(Value::Unit),
+        }
+    }
+
+    /// Runs the next ready task, finishing the call it was suspended in.
+    fn switch_next(&mut self) -> Option<Stop> {
+        let t = self
+            .sched
+            .next()
+            .expect("a task is ready while the run has not ended");
+        self.stack.switch(t);
+        if let Some((p, ret)) = self.pending.remove(&t) {
+            let outcome = match p {
+                Pending::Join(j) => self.sched.take(j).expect("an ended task"),
+                Pending::Yield => Ok(Value::Unit),
+                Pending::Scope(s, close) => self.scope_outcome(s, close),
+            };
+            self.deliver(ret, outcome);
+        }
+        None
+    }
+
+    /// Gives the running task's top frame the result of the call it is at.
+    fn deliver(&mut self, ret: Ret, outcome: Outcome) {
+        match (ret, outcome) {
+            (Ret::To(dest, target, _), Ok(v)) => {
+                self.stack.store(&dest, v);
+                self.stack.goto(target);
+            }
+            (Ret::To(_, _, Some((err, target))), Err(e)) => {
+                self.stack.store(&err, e);
+                self.stack.goto(target);
+            }
+            _ => unreachable!("a checked program handles every error"),
+        }
     }
 
     /// `ty` as the top frame runs it.

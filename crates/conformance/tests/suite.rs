@@ -58,6 +58,7 @@ areas!(
     collections,
     comparison,
     comptime,
+    concurrency,
     contracts,
     derive,
     effects,

@@ -2,7 +2,7 @@
 
 The runner for the [conformance suite](../../conformance/README.md).
 
-**Status:** slices S0 to S8c: runs the suite on the MIR interpreter and the reference interpreter,
+**Status:** slices S0 to S9a: runs the suite on the MIR interpreter and the reference interpreter,
 and checks reference coverage; `cargo test -p moddil-conformance` runs it (`tests/suite.rs`), one
 test per area so the test runner spreads it over every core (a new area joins the `areas!` list
 there). The reference interpreter does not check programs, so it runs only files that expect no

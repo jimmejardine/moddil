@@ -134,6 +134,8 @@ struct Checker<'a> {
 }
 
 /// The loans each local may hold.
+/// Who holds each loan: by local, and, last, the loans kept in a view the caller lent, which live
+/// until the body ends.
 type Holders = Vec<BTreeSet<usize>>;
 
 /// The places that may have been moved out of.
@@ -324,7 +326,7 @@ impl<'a> Checker<'a> {
         // Forward analyses to a fixed point: loan holders and moved places at each block entry.
         let mut holders_in: Vec<Option<Holders>> = vec![None; n];
         let mut moved_in: Vec<Option<Moved>> = vec![None; n];
-        let mut entry = vec![BTreeSet::new(); locals];
+        let mut entry = vec![BTreeSet::new(); locals + 1];
         for (i, l) in self.loans.iter().enumerate() {
             if l.param.is_some() {
                 entry[l.place.local.index()].insert(i);
@@ -386,6 +388,7 @@ impl<'a> Checker<'a> {
         let live = &self.live_out[at.0][at.1];
         live.iter()
             .flat_map(|l| h[l.index()].iter().copied())
+            .chain(h.last().into_iter().flatten().copied())
             .collect()
     }
 
@@ -721,14 +724,32 @@ impl<'a> Checker<'a> {
                     let Some(target) = flows.get(i) else { continue };
                     for &li in target {
                         let loan = &self.loans[li];
-                        if loan.param.is_some() {
-                            if check && others.iter().any(|&o| self.loans[o].param.is_none()) {
+                        // A view the caller lent: a parameter's, or reached through a local
+                        // holding a parameter's borrow (`&mut *s`).
+                        let lent = loan.param.is_some()
+                            || (loan.place.is_indirect()
+                                && h[loan.place.local.index()]
+                                    .iter()
+                                    .any(|&p| self.loans[p].param.is_some()));
+                        if lent {
+                            // A borrow through a reference (a closure's capture, a parameter)
+                            // is not of a local: what that reference borrows is in `others` too.
+                            if check
+                                && others.iter().any(|&o| {
+                                    self.loans[o].param.is_none()
+                                        && !self.loans[o].place.is_indirect()
+                                })
+                            {
                                 self.report(Diagnostic::error(
                                     Code::E0308,
                                     span,
                                     "this stores a borrow of a local where it outlives the \
                                      function: in a view the caller lent",
                                 ));
+                            }
+                            // What it keeps lives as long as the caller's view: until the end.
+                            if let Some(kept) = h.last_mut() {
+                                kept.extend(others.iter().copied());
                             }
                         } else {
                             h[loan.place.local.index()].extend(others.iter().copied());

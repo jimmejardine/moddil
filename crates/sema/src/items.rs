@@ -255,6 +255,8 @@ pub struct FnSig {
     pub effects: Vec<EffectSig>,
     /// Whether it is `#[track_caller]`: a trap in it is reported where its caller called it.
     pub track_caller: bool,
+    /// The control effects it lists (`with suspend, spawn`).
+    pub control: Control,
     /// Whether it is the prelude's and built in (`#[intrinsic]`): it has no body, and the
     /// implementations run it themselves.
     pub intrinsic: bool,
@@ -271,6 +273,26 @@ pub struct FnSig {
     pub vis: Vis,
     /// The module it is declared in (for a derived method, its type's).
     pub module: u32,
+}
+
+/// The built-in control effects a function lists or needs (`eff.control.1`), as bits:
+/// [`SUSPEND`] and [`SPAWN`].
+pub type Control = u8;
+/// `suspend`: it may pause its task.
+pub const SUSPEND: Control = 1;
+/// `spawn`: it may start tasks.
+pub const SPAWN: Control = 2;
+
+/// How control effects `c` are written: `suspend, spawn`.
+pub(crate) fn show_control(c: Control) -> String {
+    let mut out = Vec::new();
+    if c & SUSPEND != 0 {
+        out.push("suspend");
+    }
+    if c & SPAWN != 0 {
+        out.push("spawn");
+    }
+    out.join(", ")
 }
 
 /// An effect a signature lists: `time: Time` (named, for a body that calls it), `Time` (only
@@ -309,6 +331,7 @@ impl FnSig {
             fails_range: None,
             effects: Vec::new(),
             track_caller: false,
+            control: 0,
             intrinsic: false,
             is_const: false,
             const_item: false,
