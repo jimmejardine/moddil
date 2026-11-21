@@ -1,0 +1,79 @@
+// The Mandelbulb and its distance estimator.
+
+use crate::vec3::Vec3;
+
+/// The fractal's shape, set from the overlay's sliders.
+#[derive(Copy, Clone)]
+pub struct Params {
+    /// The exponent; 8 gives the classic bulb.
+    pub power: f32,
+    /// More iterations give finer detail, at a higher cost per step.
+    pub iterations: int,
+    /// A point whose orbit leaves this radius has escaped.
+    pub bailout: f32,
+}
+
+impl Params {
+    pub fn classic() -> Params {
+        Params { power: 8.0, iterations: 12, bailout: 2.0 }
+    }
+}
+
+/// A lower bound on the distance from `p` to the surface of the Mandelbulb: marching a ray by
+/// this much can never step through the surface. Zero inside the set.
+///
+/// The CPU calls it to set the camera's speed, and the GPU kernel calls it for every pixel.
+pub fn distance(p: Vec3, params: Params) -> f32 {
+    let n = params.power;
+    let mut z = p;
+    let mut dr: f32 = 1.0;
+    let mut r: f32 = 0.0;
+    let mut i = 0;
+    while i < params.iterations {
+        r = z.length();
+        if r > params.bailout {
+            break;
+        }
+        if r == 0.0 {
+            return 0.0;                          // the orbit is stuck at the origin: inside
+        }
+        let theta = (z.z / r).acos() * n;
+        let phi = z.y.atan2(z.x) * n;
+        dr = r.powf(n - 1.0) * n * dr + 1.0;
+        z = Vec3::from_spherical(r.powf(n), theta, phi) + p;
+        i += 1;
+    }
+    if r <= params.bailout {
+        return 0.0;                              // never escaped: inside
+    }
+    0.5 * r.ln() * r / dr
+}
+
+/// The surface normal at `p`, from central differences of the distance field.
+pub fn normal(p: Vec3, params: Params, eps: f32) -> Vec3 {
+    let dx = Vec3::new(eps, 0.0, 0.0);
+    let dy = Vec3::new(0.0, eps, 0.0);
+    let dz = Vec3::new(0.0, 0.0, eps);
+    Vec3::new(
+        distance(p + dx, params) - distance(p - dx, params),
+        distance(p + dy, params) - distance(p - dy, params),
+        distance(p + dz, params) - distance(p - dz, params),
+    )
+    .normalized()
+}
+
+test "the origin is inside the bulb" {
+    assert(distance(Vec3::zero(), Params::classic()) == 0.0);
+}
+
+test "a far point is far from the surface" {
+    let d = distance(Vec3::new(4.0, 0.0, 0.0), Params::classic());
+    assert(d > 1.0 && d < 4.0);
+}
+
+test "the estimate shrinks towards the surface" {
+    let params = Params::classic();
+    let far = distance(Vec3::new(3.0, 0.0, 0.0), params);
+    let near = distance(Vec3::new(1.5, 0.0, 0.0), params);
+    assert(near < far);
+}

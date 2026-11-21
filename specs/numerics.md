@@ -135,6 +135,11 @@ for i in (0..xs.len()).rev() { … }
   and `Hash`, so it can be sorted and used as a map key. Constructing one from an `f64` is checked
   ([`correctness.md`](correctness.md)).
 - Float division by zero gives ±∞ or NaN, as IEEE says; only integer division traps.
+- **Float functions are methods (decided):** `x.sqrt()`, `y.atan2(x)`, `r.powf(n)`, `t.sin()`,
+  `a.max(b)`, `v.clamp(lo, hi)` and the rest are inherent methods on `f32` and `f64` in the
+  prelude, so numeric code needs no import, on the CPU or in kernels. They are correctly rounded
+  ([`determinism.md`: Deterministic maths](determinism.md#deterministic-maths)); the faster
+  approximations stay explicit, in `math::fast`.
 
 ### Decimals for money
 

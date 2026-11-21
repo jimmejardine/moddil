@@ -3,7 +3,8 @@
 The **reference examples as real programs**: the yardstick every language decision is measured
 against ([`specs/examples/README.md`](../specs/examples/README.md)).
 
-**Status:** empty until M2. Their design documents are in [`specs/examples/`](../specs/examples/README.md).
+**Status:** [`mandelbulb/`](mandelbulb/README.md) is written and parses; it checks once slice S10
+(numbers) lands, and runs in browsers at M2. The others are empty until their milestones. Their design documents are in [`specs/examples/`](../specs/examples/README.md).
 
 | Directory | Example | Milestone |
 |---|---|---|

@@ -1,0 +1,7 @@
+[mod]
+name = "mandelbulb-web"
+edition = "2027"
+
+[dependencies]
+mandelbulb = { path = ".." }
+# Not yet available (M2): gpu = "moddil.com/gpu", for devices, surfaces, textures and tiles.

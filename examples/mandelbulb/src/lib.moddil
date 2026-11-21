@@ -1,0 +1,10 @@
+// Mandelbulb flight: the pure part.
+//
+// Everything here is ordinary Moddil with no effects, so the same functions run on the CPU (the
+// camera, the preview, the tests) and inside the GPU kernel in `web/`
+// (`specs/examples/mandelbulb.md`).
+
+pub use crate::vec3::Vec3;
+pub use crate::fractal::{Params, distance, normal};
+pub use crate::trace::{Ray, Quality, Hit, march, shade};
+pub use crate::camera::{Camera, Input, fly};

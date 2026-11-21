@@ -1,0 +1,106 @@
+// The flying camera. Pure: input in, a new camera out, so it is tested without a browser.
+
+use crate::vec3::{Vec3, float};
+use crate::fractal::{Params, distance};
+use crate::trace::Ray;
+
+#[derive(Copy, Clone)]
+pub struct Camera {
+    pub position: Vec3,
+    /// Turn left and right, in radians.
+    pub yaw: f32,
+    /// Look up and down, in radians, kept short of straight up or down.
+    pub pitch: f32,
+    /// The vertical field of view, in radians.
+    pub fov: f32,
+}
+
+/// One frame's input, already mapped from keys, mouse and touch by the page.
+#[derive(Copy, Clone)]
+pub struct Input {
+    /// W and S: from -1 (back) to 1 (forward).
+    pub forward: f32,
+    /// A and D: from -1 (left) to 1 (right).
+    pub strafe: f32,
+    /// Mouse movement since the last frame, in radians.
+    pub look_yaw: f32,
+    pub look_pitch: f32,
+    /// The scroll wheel's speed multiplier.
+    pub speed: f32,
+}
+
+/// The pitch limit: just short of straight up or down, where yaw stops meaning anything.
+const MAX_PITCH: f32 = 1.5;
+
+/// Never get closer to the surface than this.
+const MIN_DISTANCE: f32 = 0.0001;
+
+impl Camera {
+    pub fn start() -> Camera {
+        Camera { position: Vec3::new(0.0, 0.0, -2.5), yaw: 0.0, pitch: 0.0, fov: 1.0 }
+    }
+
+    pub fn forward(&self) -> Vec3 {
+        Vec3::new(
+            self.yaw.sin() * self.pitch.cos(),
+            self.pitch.sin(),
+            self.yaw.cos() * self.pitch.cos(),
+        )
+    }
+
+    pub fn right(&self) -> Vec3 {
+        Vec3::new(self.yaw.cos(), 0.0, -self.yaw.sin())
+    }
+
+    pub fn up(&self) -> Vec3 {
+        self.forward().cross(self.right())
+    }
+
+    /// The ray through the centre of pixel (`x`, `y`) of a `width` × `height` image; y grows down.
+    pub fn ray(&self, x: int, y: int, width: int, height: int) -> Ray {
+        let w = float(width);
+        let h = float(height);
+        let half = (self.fov * 0.5).tan();
+        let u = (2.0 * (float(x) + 0.5) / w - 1.0) * half * w / h;
+        let v = (1.0 - 2.0 * (float(y) + 0.5) / h) * half;
+        let dir = self.forward() + self.right().scale(u) + self.up().scale(v);
+        Ray { origin: self.position, dir: dir.normalized() }
+    }
+}
+
+/// Moves the camera for one frame of `dt` seconds. Speed is proportional to the distance from the
+/// surface, so flight feels the same at every scale, and the camera slows to a stop at the surface
+/// instead of passing through it.
+pub fn fly(camera: Camera, input: Input, params: Params, dt: f32) -> Camera {
+    let mut next = camera;
+    next.yaw = camera.yaw + input.look_yaw;
+    next.pitch = (camera.pitch + input.look_pitch).clamp(-MAX_PITCH, MAX_PITCH);
+
+    let here = distance(camera.position, params);
+    let step = here * input.speed * dt;
+    let motion = next.forward().scale(input.forward) + next.right().scale(input.strafe);
+    let moved = camera.position + motion.scale(step);
+    if distance(moved, params) > MIN_DISTANCE {
+        next.position = moved;
+    }
+    next
+}
+
+test "flying straight at the bulb never reaches the surface" {
+    let params = Params::classic();
+    let input = Input { forward: 1.0, strafe: 0.0, look_yaw: 0.0, look_pitch: 0.0, speed: 2.0 };
+    let mut camera = Camera::start();
+    let mut frame = 0;
+    while frame < 600 {
+        camera = fly(camera, input, params, 1.0 / 60.0);
+        frame += 1;
+    }
+    assert(distance(camera.position, params) > 0.0);
+    assert(camera.position.z > -2.5);
+}
+
+test "looking up stops short of straight up" {
+    let input = Input { forward: 0.0, strafe: 0.0, look_yaw: 0.0, look_pitch: 10.0, speed: 1.0 };
+    let camera = fly(Camera::start(), input, Params::classic(), 1.0 / 60.0);
+    assert(camera.pitch == MAX_PITCH);
+}

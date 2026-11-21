@@ -81,6 +81,7 @@ something runs from the first slice.
 | **S7** | Closures, strings, `Vec` and `Map` written in Moddil as the first core mods; collection literals through `FromArrayLiteral` ([`stdlib.md`: Collections](stdlib.md#collections)) | Dogfooding starts |
 | **S8** | Refinements (`where`), runtime `requires`, derives (a minimal comptime); `#[around]` wrappers ([`comptime.md`: Function wrappers](comptime.md#function-wrappers)) | The tour's `Code` and `Target` types and its derives |
 | **S9** | `scope`, `spawn` and `suspend` under a deterministic interpreter scheduler | The tour's `serve`; **the tour parses and checks**, M0's exit gate |
+| **S10** | Numbers: the sized integers, `f32` and `f64`, literals typed by context, the explicit conversions (`to::<T>()` and the others), wrapping operators, `const` items, and the float methods ([`numerics.md`](numerics.md)) | The [Mandelbulb](examples/mandelbulb.md) core checks, and its tests and CPU preview run; its GPU path follows in M2 |
 
 - **S1 is monomorphic (decided):** structs and enums take no type parameters until generics arrive
   in S3, so `Option` comes with them. S1 has no ownership checking yet and copies aggregates; its
@@ -154,6 +155,20 @@ something runs from the first slice.
     generating attribute waits for comptime;
   - `moddil test` runs the tests of the mod being built, and the conformance runner those of every
     mod of a test.
+- **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): the first
+  step of the slice after S7.** S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`
+  becomes `use mod::a`, matching `pub(mod)`. `mod::a` and the item `mod name;` differ at their
+  second token, so the grammar stays LL(3). A mechanical change, with no other change in behaviour:
+  - the grammar: drop `crate` from the keywords; `mod` starts a path in `use_segment`,
+    `type_segment`, `pattern_path` and `path_start`; regenerate `kinds.rs` and the tree-sitter
+    grammar;
+  - `sema` (`modules.rs`, `resolve.rs`, `collect/mod.rs`) and `refinterp` (`program`, `machine`),
+    including the diagnostics that print paths;
+  - the grammar corpus, `conformance/2027/modules/`, `reference/2027/modules.md` and `names.md`,
+    and a conformance case in which `crate::x` is an ordinary unknown name;
+  - `examples/mandelbulb/src/`;
+  - done when `python tools/ci.py fmt clippy test grammars` passes and `grep -rw crate` finds no
+    Moddil source outside that conformance case.
 - **Two open questions must be settled before S7**, because S7 writes the first library code in
   Moddil:
   - **caller locations** ([`error-handling.md`: Open questions](error-handling.md#open-questions)),

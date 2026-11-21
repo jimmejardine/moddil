@@ -75,7 +75,8 @@
 | **Exported** | `pub fn f` | Every mod that depends on this one | Written out in full |
 
 There is no `pub(super)` or `pub(in path)`: a mod is small enough that "this module" and "this mod"
-cover real needs. The spelling `pub(mod)` is decided: it mirrors Rust's `pub(crate)`.
+cover real needs. The spelling `pub(mod)` is decided: it is Rust's `pub(crate)`, named after the mod, as the path
+root `mod::` is ([Imports](#imports)).
 
 ### The mod boundary is where things become explicit
 
@@ -103,12 +104,16 @@ cover real needs. The spelling `pub(mod)` is decided: it mirrors Rust's `pub(cra
 
 ```rust
 use moddil::collections::{HashMap, OrderedMap};
-use crate::book::levels::Level;
-pub use crate::book::levels::Level as PriceLevel;    // re-export: a facade for users
+use mod::book::levels::Level;
+pub use mod::book::levels::Level as PriceLevel;      // re-export: a facade for users
 use moddil::units::si::prelude::*                     // allowed: a declared prelude
 ```
 
 - Imports name what they bring in.
+- **A path starts at `mod`, `self`, `super`, a dependency, or a name in scope (decided).** `mod::`
+  is the root module of the current mod, as in `use mod::book::levels::Level`. Moddil has mods,
+  not crates, so Rust's `crate::` is not used, and `crate` is not a keyword; `mod::` matches
+  `pub(mod)`, which means visible anywhere in this mod.
 - **`pub use` re-exports** let a mod present a facade over its internal layout.
 - **No glob imports**, with one exception: a mod may declare **one `prelude` module**, which can be
   imported with `*`. This keeps unit packs and similar vocabularies convenient
@@ -216,7 +221,7 @@ shapes = { path = "../shapes" }    # a local mod, by the name the code uses for 
 ```
 
 - The mod's **source directory** is the directory of its library's root, or `src`; every
-  `.moddil` file under it is a module, and the library root is the root module (`crate`).
+  `.moddil` file under it is a module, and the library root is the root module (`mod`).
 - A dependency is named by the identifier the code uses as its first path segment (`shapes::Point`).
 - Versions, registries, the lockfile, capability ceilings, targets, profiles and lint levels are
   added to the same file as they are built ([`packages-and-supply-chain.md`](packages-and-supply-chain.md),

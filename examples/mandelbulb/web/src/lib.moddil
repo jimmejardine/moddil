@@ -1,0 +1,117 @@
+// Mandelbulb flight in the browser: the GPU kernel, and the `Flight` type that the Svelte page
+// drives once per animation frame (`specs/examples/mandelbulb.md`).
+//
+// The page owns the frame loop and the input: on each `requestAnimationFrame` it calls
+// `flight.frame(input, dt)`. Everything that decides what is drawn is in Moddil, and the camera
+// and the fractal are the pure `mandelbulb` mod, shared with the CPU preview and the tests.
+
+use mandelbulb::{Camera, Input, Params, Quality, Vec3, fly, march, shade};
+use gpu::{Device, Surface, Tile, Rgba8};
+
+/// Everything the kernel reads: one frame's camera, fractal and quality.
+#[derive(Copy, Clone)]
+pub struct Scene {
+    camera: Camera,
+    params: Params,
+    quality: Quality,
+    light: Vec3,
+    width: int,
+    height: int,
+}
+
+/// One program instance draws one 8 × 8 tile of the image: it ray-marches each of its pixels with
+/// the same `march` and `shade` the CPU preview uses.
+#[kernel]
+fn render(scene: &Scene, out: &mut Tile<Rgba8, 8, 8>) {
+    let mut py = 0;
+    while py < 8 {
+        let mut px = 0;
+        while px < 8 {
+            let ray = scene.camera.ray(out.x + px, out.y + py, scene.width, scene.height);
+            let hit = march(ray, scene.params, scene.quality);
+            let brightness = shade(hit, scene.params, scene.quality, scene.light);
+            out.set(px, py, Rgba8::grey(brightness));
+            px += 1;
+        }
+        py += 1;
+    }
+}
+
+/// A frame budget of 60 fps, with some room: slower frames lower the quality.
+const BUDGET: f32 = 0.018;
+
+/// The state of one flight, bound into TypeScript for the page.
+#[export]
+pub struct Flight {
+    camera: Camera,
+    params: Params,
+    quality: Quality,
+    device: Device,
+    surface: Surface,
+}
+
+#[export]
+impl Flight {
+    /// Starts a flight drawing into `surface`, the page's canvas as WebGPU sees it.
+    pub fn new(surface: Surface) -> Flight with Gpu, fail(gpu::Error) {
+        Flight {
+            camera: Camera::start(),
+            params: Params::classic(),
+            quality: Quality::standard(),
+            device: surface.device()?,
+            surface: surface,
+        }
+    }
+
+    /// Moves the camera by one frame's `input` and draws the frame. `dt` is the time since the
+    /// last frame, in seconds.
+    pub fn frame(&mut self, input: Input, dt: f32) with Gpu, fail(gpu::Error) {
+        self.camera = fly(self.camera, input, self.params, dt);
+        let mut image = self.surface.next_texture()?;
+        let scene = Scene {
+            camera: self.camera,
+            params: self.params,
+            quality: self.quality,
+            light: Vec3::new(-0.5, 0.7, -0.5).normalized(),
+            width: image.width(),
+            height: image.height(),
+        };
+        scope(|s| {
+            s.launch(self.device, render, &scene, &mut image, grid: image.tiles(8, 8));
+        });                                      // the end of the scope is the fence
+        self.surface.present(image)?;
+        self.adapt(dt);
+    }
+
+    /// Lowers the quality when frames are slow, and raises it again when there is room.
+    fn adapt(&mut self, dt: f32) {
+        if dt > BUDGET && self.quality.max_steps > 32 {
+            self.quality.max_steps -= 8;
+        } else if dt < BUDGET * 0.6 && self.quality.max_steps < 256 {
+            self.quality.max_steps += 8;
+        }
+    }
+
+    pub fn set_power(&mut self, power: f32) {
+        self.params.power = power;
+    }
+
+    pub fn set_iterations(&mut self, iterations: int) {
+        self.params.iterations = iterations;
+    }
+
+    /// The camera, for the "copy link" button.
+    pub fn camera(&self) -> Camera {
+        self.camera
+    }
+
+    /// Restores a camera from a shared link.
+    pub fn set_camera(&mut self, camera: Camera) {
+        self.camera = camera;
+    }
+
+    /// For the overlay: the steps each ray may take now.
+    pub fn max_steps(&self) -> int {
+        self.quality.max_steps
+    }
+}

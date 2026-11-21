@@ -1,0 +1,7 @@
+[mod]
+name = "mandelbulb"
+edition = "2027"
+
+[[exe]]
+name = "preview"
+main = "src/preview.moddil"

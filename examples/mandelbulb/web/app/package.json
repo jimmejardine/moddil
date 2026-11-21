@@ -1,0 +1,16 @@
+{
+  "name": "mandelbulb-flight",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "core": "moddil build --target wasm32-browser .. && moddil bind --lang typescript .. --out src/core",
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "svelte": "^5.0.0",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0"
+  }
+}

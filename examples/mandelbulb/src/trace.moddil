@@ -1,0 +1,78 @@
+// Sphere tracing: marching a ray by the distance estimate until it reaches the surface.
+
+use crate::vec3::Vec3;
+use crate::fractal::{Params, distance, normal};
+
+#[derive(Copy, Clone)]
+pub struct Ray {
+    pub origin: Vec3,
+    /// Length 1.
+    pub dir: Vec3,
+}
+
+/// How hard to look: the overlay's quality slider, lowered automatically when frames are slow.
+#[derive(Copy, Clone)]
+pub struct Quality {
+    pub max_steps: int,
+    /// A ray this close to the surface has hit it.
+    pub epsilon: f32,
+    /// A ray this far from its origin has missed.
+    pub max_distance: f32,
+}
+
+impl Quality {
+    pub fn standard() -> Quality {
+        Quality { max_steps: 128, epsilon: 0.0005, max_distance: 8.0 }
+    }
+}
+
+/// Where a ray ended up, and how many steps it took to get there.
+#[derive(Copy, Clone)]
+pub enum Hit {
+    Surface { at: Vec3, steps: int },
+    Miss { steps: int },
+}
+
+pub fn march(ray: Ray, params: Params, quality: Quality) -> Hit {
+    let mut t: f32 = 0.0;
+    let mut steps = 0;
+    while steps < quality.max_steps {
+        let p = ray.origin + ray.dir.scale(t);
+        let d = distance(p, params);
+        if d < quality.epsilon {
+            return Hit::Surface { at: p, steps: steps };
+        }
+        t += d;
+        if t > quality.max_distance {
+            break;
+        }
+        steps += 1;
+    }
+    Hit::Miss { steps: steps }
+}
+
+/// Brightness in [0, 1]: diffuse light from `light` (length 1), darkened where the ray needed
+/// many steps, which happens in crevices (a cheap ambient occlusion).
+pub fn shade(hit: Hit, params: Params, quality: Quality, light: Vec3) -> f32 {
+    match hit {
+        Hit::Surface { at, steps } => {
+            let n = normal(at, params, quality.epsilon);
+            let diffuse = n.dot(light).max(0.0);
+            let occlusion = 1.0 - crate::vec3::float(steps) / crate::vec3::float(quality.max_steps);
+            0.1 + 0.9 * diffuse * occlusion
+        }
+        Hit::Miss { .. } => 0.0,
+    }
+}
+
+test "a ray at the bulb's centre hits it" {
+    let ray = Ray { origin: Vec3::new(0.0, 0.0, -3.0), dir: Vec3::new(0.0, 0.0, 1.0) };
+    let hit = march(ray, Params::classic(), Quality::standard());
+    assert(match hit { Hit::Surface { .. } => true, Hit::Miss { .. } => false });
+}
+
+test "a ray past the bulb misses it" {
+    let ray = Ray { origin: Vec3::new(0.0, 3.0, -3.0), dir: Vec3::new(0.0, 0.0, 1.0) };
+    let hit = march(ray, Params::classic(), Quality::standard());
+    assert(match hit { Hit::Surface { .. } => false, Hit::Miss { .. } => true });
+}
