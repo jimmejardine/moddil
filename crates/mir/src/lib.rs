@@ -387,6 +387,19 @@ pub enum Terminator {
     Unreachable,
 }
 
+impl Terminator {
+    /// The blocks this terminator can go to.
+    pub fn successors(&self) -> Vec<BlockId> {
+        match self {
+            Terminator::Goto(t)
+            | Terminator::Call { target: t, .. }
+            | Terminator::Drop { target: t, .. } => vec![*t],
+            Terminator::SwitchBool { then, else_, .. } => vec![*then, *else_],
+            Terminator::Return | Terminator::Unreachable => vec![],
+        }
+    }
+}
+
 /// Why a program traps.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TrapClass {

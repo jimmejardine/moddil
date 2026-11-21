@@ -26,7 +26,6 @@ use moddil_sema::{
 };
 use moddil_syntax::TextRange;
 
-use crate::build::successors;
 use crate::{Body, Local, Operand, Place, Projection, Rvalue, Statement, Terminator, mir};
 
 /// Every diagnostic for `file`: the front end's, then, if it found no errors, the ownership and
@@ -329,7 +328,7 @@ impl<'a> Checker<'a> {
                 self.step(b, s, stmt, &mut h, &mut m, false);
             }
             self.step_terminator(b, &mut h, &mut m, false);
-            for succ in successors(&block.terminator) {
+            for succ in block.terminator.successors() {
                 let i = succ.index();
                 let changed = match (&mut holders_in[i], &mut moved_in[i]) {
                     (Some(hi), Some(mi)) => {
@@ -814,7 +813,9 @@ fn liveness(body: &Body) -> Vec<Vec<HashSet<Local>>> {
         changed = false;
         for b in (0..n).rev() {
             let block = &body.blocks[b];
-            let mut live: HashSet<Local> = successors(&block.terminator)
+            let mut live: HashSet<Local> = block
+                .terminator
+                .successors()
                 .iter()
                 .flat_map(|s| live_in[s.index()].iter().copied())
                 .collect();
@@ -840,7 +841,9 @@ fn liveness(body: &Body) -> Vec<Vec<HashSet<Local>>> {
     for b in 0..n {
         let block = &body.blocks[b];
         let mut points = vec![HashSet::new(); block.statements.len() + 1];
-        let mut live: HashSet<Local> = successors(&block.terminator)
+        let mut live: HashSet<Local> = block
+            .terminator
+            .successors()
             .iter()
             .flat_map(|s| live_in[s.index()].iter().copied())
             .collect();
