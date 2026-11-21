@@ -59,8 +59,11 @@ cargo_metadata = "0.23.1"   # the refinterp independence check
 
 [profile.dev]
 debug = "line-tables-only"
+# Our crates are optimised a little too: the tests check the prelude for every program, which is
+# four times faster at opt-level 1, and an incremental rebuild costs the same as at opt-level 0.
+opt-level = 1
 
-# Dependencies are optimised a little even in debug builds; our own crates stay fast to rebuild.
+# Dependencies likewise.
 [profile.dev.package."*"]
 opt-level = 1
 
