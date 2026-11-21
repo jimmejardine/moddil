@@ -391,6 +391,11 @@ All decided:
     Swift's `#fileID` and `#line` defaults.
 
   Either way it must show in the signature and cost nothing when it is unused.
+- **How an inferred tag is written.** Error sets hold named types and inferred tags such as
+  `Io(NotFound)` and `Toml{line}` ([Error types](#error-types)), but nothing yet says how a tag is
+  written where it is raised, how it differs from a call of a struct or variant of the same name,
+  or what type its payload has. Until this is settled, errors are named types only (slice S4,
+  [`roadmap.md`](roadmap.md)).
 
 ## Background
 

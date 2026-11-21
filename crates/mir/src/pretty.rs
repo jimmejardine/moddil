@@ -59,6 +59,7 @@ impl fmt::Display for Rvalue {
                 }
             }
             Rvalue::Discriminant(p) => write!(f, "discriminant({p:?})"),
+            Rvalue::ErrorIs(p, a) => write!(f, "error_is({p:?}, #{a})"),
             Rvalue::Ref(true, p) => write!(f, "&mut {p:?}"),
             Rvalue::Ref(false, p) => write!(f, "&{p:?}"),
         }
@@ -172,6 +173,7 @@ impl fmt::Debug for Body {
                     args,
                     dest,
                     target,
+                    on_error,
                     range,
                 } => {
                     let args: Vec<String> = args.iter().map(|a| format!("{a:?}")).collect();
@@ -182,11 +184,19 @@ impl fmt::Debug for Body {
                         let ts: Vec<String> = targs.iter().map(|t| format!("{t:?}")).collect();
                         format!("::<{}>", ts.join(", "))
                     };
+                    let error = match on_error {
+                        Some((p, b)) => format!(", error {p:?} -> {b:?}"),
+                        None => String::new(),
+                    };
                     writeln!(
                         f,
-                        "        {dest:?} = {name}{targs}({}) -> {target:?} @ {range:?};",
+                        "        {dest:?} = {name}{targs}({}) -> {target:?}{error} @ {range:?};",
                         args.join(", ")
                     )?;
+                }
+                Terminator::Fail(e) => writeln!(f, "        fail({e:?});")?,
+                Terminator::Trap(class, reason) => {
+                    writeln!(f, "        trap({class}, {reason:?});")?;
                 }
                 Terminator::Drop {
                     place,

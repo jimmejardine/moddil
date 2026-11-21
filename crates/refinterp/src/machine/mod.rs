@@ -16,6 +16,7 @@ use crate::{Eval, Flow, TestRun};
 
 mod blocks;
 mod calls;
+mod errors;
 mod exprs;
 mod ops;
 mod patterns;
@@ -27,9 +28,12 @@ struct Machine<'p> {
     program: &'p Program,
     memory: Memory,
     /// The `defer` blocks of each open block, innermost last, with how many variables there
-    /// were when each was reached.
-    defers: Vec<Vec<(ast::Block, usize)>>,
+    /// were when each was reached, and whether it is an `errdefer`.
+    defers: Vec<Vec<(ast::Block, usize, bool)>>,
     observed: Vec<(TextRange, String)>,
+    /// For each `try` block being run, innermost last: whether its `?`s are on `Option`s, once
+    /// one has said.
+    try_modes: Vec<Option<bool>>,
 }
 
 impl Program {
@@ -40,6 +44,7 @@ impl Program {
             memory: Memory::new(),
             defers: Vec::new(),
             observed: Vec::new(),
+            try_modes: Vec::new(),
         };
         let result = m.block(body);
         // A test's value is dropped at its end, like its variables.
@@ -47,14 +52,17 @@ impl Program {
             Ok(v) => m.drop_value(v, true, body.syntax().text_range()),
             Err(f) => Err(f),
         };
-        let trap = match result {
-            Err(Flow::Trap(t, _)) => Some(t),
-            _ => None,
+        let (trap, error) = match result {
+            Err(Flow::Trap(t, _)) => (Some(t), None),
+            // An error that leaves a test fails it (`err.test.1`).
+            Err(Flow::Fail(_, at)) => (None, Some(at)),
+            _ => (None, None),
         };
         TestRun {
             name: name.clone(),
             observed: m.observed,
             trap,
+            error,
         }
     }
 }

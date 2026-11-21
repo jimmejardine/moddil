@@ -135,6 +135,10 @@ pub struct FnSig {
     pub has_body: bool,
     /// For a derived method: the `derive` attribute it comes from, in the file.
     pub origin: Option<TextRange>,
+    /// The errors it can fail with (`with fail(A | B)`), as an error set: `!` if it cannot fail.
+    pub fails: Ty,
+    /// Where its `with fail(…)` is written, if it is.
+    pub fails_range: Option<TextRange>,
 }
 
 /// A parameter.
@@ -302,6 +306,7 @@ impl AdtDef {
 /// The traits, types and functions of the prelude the language itself refers to.
 const LANG: &[&str] = &[
     "Option",
+    "Result",
     "Ordering",
     "Clone",
     "Copy",
@@ -434,9 +439,13 @@ impl ItemTree {
         match ty {
             Ty::Int | Ty::Ref(..) => (8, 8),
             Ty::Bool => (1, 1),
-            Ty::Unit | Ty::Never | Ty::Error | Ty::Param(..) | Ty::Assoc(_) | Ty::Infer(_) => {
-                (0, 1)
-            }
+            Ty::Unit
+            | Ty::Never
+            | Ty::Error
+            | Ty::Param(..)
+            | Ty::Assoc(_)
+            | Ty::Infer(_)
+            | Ty::Errors(_) => (0, 1),
             Ty::Tuple(ts) => layout(ts),
             Ty::Adt(a, _, _) => {
                 let def = &self.adts[*a as usize];

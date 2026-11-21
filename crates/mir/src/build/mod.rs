@@ -17,12 +17,14 @@ use crate::{Body, Const, Local, LocalDecl, Operand, Place, Rvalue, Statement, Te
 
 mod arith;
 mod cfg;
+mod errors;
 mod exprs;
 mod patterns;
 mod places;
 mod scopes;
 
 use cfg::Cfg;
+use errors::{OnError, Target};
 use scopes::{ScopeItem, Scopes};
 
 /// The MIR of `owner`, or `None` if its file has errors.
@@ -84,6 +86,9 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
         locals: vec![None; hir.locals.len()],
         recording: HashMap::new(),
         compare_expr: ExprId::from_raw(la_arena::RawIdx::from_u32(0)),
+        targets: vec![Target::Out],
+        on_error: HashMap::new(),
+        binds: None,
     };
     for &p in &hir.params {
         b.local(p);
@@ -130,6 +135,13 @@ struct Builder<'a> {
     recording: HashMap<ExprId, (Local, Local)>,
     /// The comparison chain being built.
     compare_expr: ExprId,
+    /// Where an error raised now goes, innermost last.
+    targets: Vec<Target>,
+    /// For a call marked with `?` or `?!`: what happens to its error.
+    on_error: HashMap<ExprId, OnError>,
+    /// While a pattern is tested with [`Builder::match_pat`]: the bindings to make once it
+    /// matches.
+    binds: Option<Vec<patterns::Binding>>,
 }
 
 impl Builder<'_> {
@@ -186,9 +198,15 @@ impl Builder<'_> {
         local
     }
 
-    /// Emits the code for leaving every scope deeper than `depth`: runs their `defer` blocks,
-    /// drops their values and ends their locals' storage, in the order [`Scopes::unwind`] gives.
+    /// Emits the code for leaving every scope deeper than `depth` normally.
     fn leave_scopes(&mut self, depth: usize) {
+        self.leave_scopes_as(depth, false);
+    }
+
+    /// Emits the code for leaving every scope deeper than `depth`: runs their `defer` blocks
+    /// (and, if they are left with an error, their `errdefer` blocks), drops their values and
+    /// ends their locals' storage, in the order [`Scopes::unwind`] gives.
+    fn leave_scopes_as(&mut self, depth: usize, error: bool) {
         for item in self.scopes.unwind(depth) {
             match item {
                 ScopeItem::Local(l) => {
@@ -205,6 +223,8 @@ impl Builder<'_> {
                     let t = self.temp(Ty::Unit);
                     self.eval_into(t, body);
                 }
+                ScopeItem::ErrDefer(body) if error => self.run_errdefer(body),
+                ScopeItem::ErrDefer(_) => {}
             }
         }
     }

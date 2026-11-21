@@ -168,6 +168,14 @@ impl Checker<'_> {
             }
             &ExprKind::Break { target, value } => self.break_expr(range, target, value),
             ExprKind::Continue { .. } => Ty::Never,
+            &ExprKind::Question(x) => self.question(e, x),
+            &ExprKind::Bang(x, _) => self.bang(e, x),
+            &ExprKind::Fail(x) => self.fail(e, x),
+            &ExprKind::Discard(x) => self.discard(x),
+            ExprKind::Try { body, catch } => {
+                let (body, catch) = (*body, catch.clone());
+                self.try_expr(e, body, catch.as_deref())
+            }
             &ExprKind::Assert(cond) => {
                 self.check(cond, &Ty::Bool);
                 Ty::Unit

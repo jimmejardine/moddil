@@ -114,6 +114,23 @@ pub struct Trap {
     /// For a failed `assert`: each part of the condition and its value, or `None` if it was not
     /// evaluated.
     pub parts: Vec<(TextRange, Option<Value>)>,
+    /// For a failed `?!`: its reason.
+    pub reason: Option<String>,
+}
+
+/// Why running a function or test stopped without a result.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Stop {
+    /// A trap.
+    Trap(Trap),
+    /// An error escaped it (a test's, or a function asked to run that can fail): where it left
+    /// the function or test, and the error.
+    Failed {
+        /// Where the error left.
+        range: TextRange,
+        /// The error.
+        error: Value,
+    },
 }
 
 /// How deeply calls may nest before a [`TrapClass::StackOverflow`] trap.
@@ -131,14 +148,14 @@ pub type Observer<'a> = &'a mut dyn FnMut(TextRange, Value);
 ///
 /// # Errors
 ///
-/// The trap, if the program traps.
+/// The trap, if the program traps, or the error, if one escapes.
 pub fn call_fn(
     db: &dyn Db,
     file: SourceFile,
     index: u32,
     args: &[Value],
     observer: Observer<'_>,
-) -> Result<Value, Trap> {
+) -> Result<Value, Stop> {
     run(db, Owner::new(db, file, Item::Fn(index)), args, observer)
 }
 
@@ -150,13 +167,13 @@ pub fn call_fn(
 ///
 /// # Errors
 ///
-/// The trap, if the test traps.
+/// The trap, if the test traps, or the error, if one escapes it (which fails it).
 pub fn run_test(
     db: &dyn Db,
     file: SourceFile,
     index: u32,
     observer: Observer<'_>,
-) -> Result<(), Trap> {
+) -> Result<(), Stop> {
     run(db, Owner::new(db, file, Item::Test(index)), &[], observer).map(|_| ())
 }
 
@@ -164,8 +181,9 @@ pub fn run_test(
 enum Ret {
     /// Out of the interpreter: the function or test it was asked to run.
     Top,
-    /// To a place of the caller, which then continues at a block.
-    To(Pointer, usize),
+    /// To a place of the caller, which then continues at a block; and, for a function that can
+    /// fail, where its error goes and where the caller continues then.
+    To(Pointer, usize, Option<(Pointer, usize)>),
     /// Nowhere: the call is a destructor, run while the caller drops a value.
     Drop,
 }
@@ -414,6 +432,9 @@ impl Machine<'_> {
                     },
                 }
             }
+            Rvalue::ErrorIs(p, a) => {
+                Value::Bool(matches!(self.read(p), Value::Adt { adt, .. } if adt == *a))
+            }
             Rvalue::Discriminant(p) => match self.read(p) {
                 Value::Adt { variant, .. } => Value::Int(i64::from(variant)),
                 other => unreachable!("the discriminant of {other:?}"),
@@ -434,7 +455,7 @@ fn run<'db>(
     owner: Owner<'db>,
     args: &[Value],
     observer: Observer<'_>,
-) -> Result<Value, Trap> {
+) -> Result<Value, Stop> {
     let file = owner.file(db);
     let mut m = Machine {
         stack: vec![Frame::new(
@@ -458,7 +479,11 @@ fn run<'db>(
             } else {
                 let (f, type_args, v) = m.stack[top].drops.remove(0);
                 if depth >= MAX_DEPTH {
-                    return Err(m.trap(TrapClass::StackOverflow, None, Vec::new()));
+                    return Err(Stop::Trap(m.trap(
+                        TrapClass::StackOverflow,
+                        None,
+                        Vec::new(),
+                    )));
                 }
                 let callee = body(db, Owner::new(db, file, Item::Fn(f)));
                 m.stack
@@ -495,7 +520,7 @@ fn run<'db>(
                                 (p.range, value)
                             })
                             .collect();
-                        return Err(m.trap(*trap, Some(*range), parts));
+                        return Err(Stop::Trap(m.trap(*trap, Some(*range), parts)));
                     }
                 }
                 Statement::Observe { range, value } => {
@@ -526,16 +551,22 @@ fn run<'db>(
                 args,
                 dest,
                 target,
+                on_error,
                 range,
                 ..
             } => {
                 if depth >= MAX_DEPTH {
-                    return Err(m.trap(TrapClass::StackOverflow, Some(*range), Vec::new()));
+                    return Err(Stop::Trap(m.trap(
+                        TrapClass::StackOverflow,
+                        Some(*range),
+                        Vec::new(),
+                    )));
                 }
                 let (callee, args, dest, target) =
                     (callee.clone(), args.clone(), dest.clone(), *target);
                 let values: Vec<Value> = args.iter().map(|a| m.take(a)).collect();
                 let dest = m.resolve(&dest);
+                let on_error = on_error.clone().map(|(p, b)| (m.resolve(&p), b.index()));
                 match m.target(&callee) {
                     Some((f, type_args)) => {
                         let code = body(db, Owner::new(db, file, Item::Fn(f)));
@@ -543,7 +574,7 @@ fn run<'db>(
                             code,
                             values,
                             type_args,
-                            Ret::To(dest, target.index()),
+                            Ret::To(dest, target.index(), on_error),
                         ));
                     }
                     None => {
@@ -581,7 +612,7 @@ fn run<'db>(
                 }
                 let done = m.stack.pop().expect("a frame");
                 match done.ret {
-                    Ret::To(dest, target) => {
+                    Ret::To(dest, target, _) => {
                         m.store(&dest, value);
                         let caller = m.stack.last_mut().expect("a caller");
                         caller.block = target;
@@ -589,6 +620,31 @@ fn run<'db>(
                     }
                     Ret::Drop | Ret::Top => {}
                 }
+            }
+            Terminator::Fail(e) => {
+                let error = m.operand(e);
+                if let Ret::Top = m.stack[top].ret {
+                    let range = code.blocks[m.stack[top].block].terminator_span;
+                    return Err(Stop::Failed {
+                        range,
+                        error: m.shown(error),
+                    });
+                }
+                let done = m.stack.pop().expect("a frame");
+                match done.ret {
+                    Ret::To(_, _, Some((err, target))) => {
+                        m.store(&err, error);
+                        let caller = m.stack.last_mut().expect("a caller");
+                        caller.block = target;
+                        caller.stmt = 0;
+                    }
+                    _ => unreachable!("a checked program handles every error"),
+                }
+            }
+            Terminator::Trap(class, reason) => {
+                let mut t = m.trap(*class, None, Vec::new());
+                t.reason = Some(reason.clone());
+                return Err(Stop::Trap(t));
             }
             Terminator::Unreachable => unreachable!("MIR reached an unreachable block"),
         }
@@ -611,6 +667,7 @@ impl Machine<'_> {
                 class,
                 range,
                 parts,
+                reason: None,
             };
         }
         let caller = self
@@ -623,6 +680,7 @@ impl Machine<'_> {
             class,
             range: caller.body.blocks[caller.block].terminator_span,
             parts: Vec::new(),
+            reason: None,
         }
     }
 }

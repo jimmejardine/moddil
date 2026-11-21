@@ -30,7 +30,7 @@ impl Collector<'_> {
             ));
         }
         self.reporter.report(src, None, ds);
-        let bare = src == Src::Prelude && name == "Option";
+        let bare = src == Src::Prelude && matches!(name.as_str(), "Option" | "Result");
         self.tree.adts.push(AdtDef {
             name,
             name_range,

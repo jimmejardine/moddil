@@ -155,7 +155,7 @@ impl Program {
                         variants,
                         params: generic_names(&item),
                         derives,
-                        bare: !user && name == "Option",
+                        bare: !user && matches!(name.as_str(), "Option" | "Result"),
                     },
                 );
             }

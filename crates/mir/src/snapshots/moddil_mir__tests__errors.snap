@@ -1,0 +1,101 @@
+---
+source: crates/mir/src/tests.rs
+expression: "dump(\"struct E { n: int }\\n\\\n         fn check(n: int) -> int with fail(E) { if n > 9 { fail(E { n }); } n }\\n\\\n         fn twice(n: int) -> int with fail(E) { errdefer { assert(true); } check(n)? * 2 }\\n\\\n         fn safe(n: int) -> int { try { check(n)? } catch { E(e) => e.n } }\")"
+---
+fn check(_1: int) -> int {
+    // _1: n
+    let _2: ();
+    let _3: bool;
+    let _4: !;
+    let _5: E;
+    let _6: E;
+
+    bb0: {
+        _3 = Gt(_1, const 9);
+        _2 = const ();
+        switch(_3) -> [true: bb1, false: bb2];
+    }
+
+    bb1: {
+        _5 = E(_1);
+        _6 = move _5;
+        StorageDead(_1);
+        fail(move _6);
+    }
+
+    bb2: {
+        _0 = _1;
+        StorageDead(_1);
+        return;
+    }
+}
+
+fn twice(_1: int) -> int {
+    // _1: n
+    let _2: int;
+    let _3: E;
+    let _4: E;
+    let _5: ();
+    let _6: ();
+    let _7: bool;
+
+    bb0: {
+        _2 = check(_1) -> bb1, error _3 -> bb2 @ 157..165;
+    }
+
+    bb1: {
+        _7 = MulOverflows(_2, const 2);
+        assert(!_7, overflow) @ 157..170;
+        _0 = Mul(_2, const 2);
+        StorageDead(_1);
+        return;
+    }
+
+    bb2: {
+        _4 = move _3;
+        assert(const true, assertion failed) @ 141..153;
+        _6 = const ();
+        _5 = const ();
+        goto -> bb3;
+    }
+
+    bb3: {
+        StorageDead(_1);
+        fail(move _4);
+    }
+}
+
+fn safe(_1: int) -> int {
+    // _1: n
+    let _2: E;
+    let _3: E;
+    let _4: E;
+    let _5: E; // e
+    let _6: E;
+
+    bb0: {
+        _0 = check(_1) -> bb3, error _3 -> bb4 @ 204..212;
+    }
+
+    bb1: {
+        _5 = move _2;
+        _0 = _5.0;
+        goto -> bb2;
+    }
+
+    bb2: {
+        StorageDead(_5);
+        StorageDead(_1);
+        return;
+    }
+
+    bb3: {
+        goto -> bb2;
+    }
+
+    bb4: {
+        _4 = move _3;
+        _2 = move _4;
+        goto -> bb1;
+    }
+}

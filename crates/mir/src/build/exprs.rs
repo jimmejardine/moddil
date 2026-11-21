@@ -183,7 +183,7 @@ impl Builder<'_> {
                 let place = self.scrutinee(init);
                 let fail = self.cfg.new_block();
                 let join = self.cfg.new_block();
-                self.test_pat(pat, &place, fail);
+                self.match_pat(pat, &place, fail);
                 self.cfg
                     .assign(dest, Rvalue::Use(Operand::Const(Const::Bool(true))));
                 self.cfg.terminate_into(Terminator::Goto(join), fail);
@@ -203,13 +203,13 @@ impl Builder<'_> {
                 let join = self.cfg.new_block();
                 for arm in &arms {
                     let next = self.cfg.new_block();
-                    self.test_pat(arm.pat, &place, next);
+                    let moved = self.match_pat(arm.pat, &place, next);
                     if let Some(g) = arm.guard {
                         let c = self.operand(g, &[]);
                         if let Some(f) = fake {
                             self.cfg.push(Statement::Read(Place::local(f)));
                         }
-                        self.cfg.branch(c, next);
+                        self.guard_branch(c, &moved, next);
                     }
                     self.eval_into(dest, arm.body);
                     self.cfg.terminate_into(Terminator::Goto(join), next);
@@ -290,6 +290,30 @@ impl Builder<'_> {
                 self.leave_scopes(depth);
                 self.cfg.terminate(Terminator::Goto(header));
             }
+            ExprKind::Question(x) => self.question(e, x, dest, None),
+            ExprKind::Bang(x, reason) => self.question(e, x, dest, Some(&reason)),
+            ExprKind::Fail(x) => {
+                let ty = self.ty(x);
+                let op = self.operand(x, &[]);
+                self.raise(op, &ty);
+            }
+            ExprKind::Discard(x) => {
+                let t = self.temp(self.ty(x));
+                self.eval_into(t, x);
+                self.cfg
+                    .assign(dest, Rvalue::Use(Operand::Const(Const::Unit)));
+            }
+            ExprKind::Try { body, catch: None } => {
+                let option = matches!(
+                    self.ty(e),
+                    Ty::Adt(a, ..) if Some(a) == self.items.lang("Option")
+                );
+                self.try_block(dest, body, option);
+            }
+            ExprKind::Try {
+                body,
+                catch: Some(arms),
+            } => self.try_catch(e, dest, body, &arms),
             ExprKind::Return(v) => {
                 match v {
                     Some(v) => self.eval_into(Local::RETURN, v),
@@ -453,18 +477,30 @@ impl Builder<'_> {
     /// Calls what `e` (a call, method call or operator) runs, with `args`, into `dest`.
     pub(super) fn call(&mut self, e: ExprId, dest: Local, args: Vec<Operand>) {
         let callee = self.types.callee(e).expect("a checked call").clone();
-        self.call_into(callee, Place::local(dest), args, self.range(e));
+        self.call_into(Some(e), callee, Place::local(dest), args, self.range(e));
     }
 
+    /// A call; if its function can fail, its error edge goes where the `?` or `?!` around
+    /// call `e` says.
     pub(super) fn call_into(
         &mut self,
+        e: Option<ExprId>,
         callee: Callee,
         dest: Place,
         args: Vec<Operand>,
         range: TextRange,
     ) {
         let name = fn_name(self.items, callee.func());
+        let fails = self.items.fns[callee.func() as usize]
+            .fails
+            .subst(callee.args());
+        let edge = self.error_edge(e, &fails);
         let target = self.cfg.new_block();
+        let error_bb = edge.as_ref().map(|_| self.cfg.new_block());
+        let on_error = edge
+            .as_ref()
+            .zip(error_bb)
+            .map(|((err, _), b)| (Place::local(*err), b));
         self.cfg.terminate_into(
             Terminator::Call {
                 callee,
@@ -472,10 +508,16 @@ impl Builder<'_> {
                 args,
                 dest,
                 target,
+                on_error,
                 range,
             },
             target,
         );
+        if let (Some((err, action)), Some(b)) = (edge, error_bb) {
+            self.cfg.continue_in(b);
+            self.on_error_block(err, action);
+            self.cfg.continue_in(target);
+        }
     }
 
     pub(super) fn stmt(&mut self, s: &Stmt) {
@@ -496,7 +538,7 @@ impl Builder<'_> {
                 }
                 let place = self.scrutinee(init);
                 let fail = self.cfg.new_block();
-                self.test_pat(pat, &place, fail);
+                self.match_pat(pat, &place, fail);
                 if let Some(x) = else_ {
                     let matched = self.cfg.current();
                     self.cfg.continue_in(fail);
@@ -509,6 +551,7 @@ impl Builder<'_> {
             Stmt::Defer(body) => {
                 self.scopes.push(ScopeItem::Defer(body));
             }
+            Stmt::ErrDefer(body) => self.errdefer(body),
             Stmt::Expr {
                 expr,
                 observe: true,

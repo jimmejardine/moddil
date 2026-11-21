@@ -532,7 +532,7 @@ impl<'a> Checker<'a> {
                             self.operand(at, span, o, h, m, check);
                         }
                     }
-                    Rvalue::Discriminant(p) => {
+                    Rvalue::Discriminant(p) | Rvalue::ErrorIs(p, _) => {
                         if check {
                             self.access((at, span), p, Access::Read, h, m, None);
                         }
@@ -624,7 +624,11 @@ impl<'a> Checker<'a> {
                 }
             }
             Terminator::Call {
-                callee, args, dest, ..
+                callee,
+                args,
+                dest,
+                on_error,
+                ..
             } => {
                 let sig = &self.items.fns[callee.func() as usize];
                 let mut flowing = BTreeSet::new();
@@ -642,7 +646,13 @@ impl<'a> Checker<'a> {
                     self.access((at, span), dest, Access::Write, h, m, None);
                 }
                 self.define(dest, flowing, h, m);
+                // The error is defined on the error edge; defining it on both is harmless, as
+                // nothing reads it on the other.
+                if let Some((e, _)) = on_error {
+                    self.define(e, BTreeSet::new(), h, m);
+                }
             }
+            Terminator::Fail(e) => self.operand(at, span, e, h, m, check),
             Terminator::Return => {
                 if check {
                     // Point at where the returned value was last set, if it was in this block.
@@ -658,7 +668,7 @@ impl<'a> Checker<'a> {
                     self.returned(set, h);
                 }
             }
-            Terminator::Goto(_) | Terminator::Unreachable => {}
+            Terminator::Goto(_) | Terminator::Unreachable | Terminator::Trap(..) => {}
         }
     }
 
@@ -744,7 +754,7 @@ fn rvalue_uses(r: &Rvalue, local: Local) -> bool {
         Rvalue::Use(a) | Rvalue::Unary(_, a) | Rvalue::NegOverflows(a) => uses(a),
         Rvalue::Binary(_, a, b) | Rvalue::Overflows(_, a, b) => uses(a) || uses(b),
         Rvalue::Aggregate(_, ops) => ops.iter().any(uses),
-        Rvalue::Discriminant(p) | Rvalue::Ref(_, p) => p.local == local,
+        Rvalue::Discriminant(p) | Rvalue::ErrorIs(p, _) | Rvalue::Ref(_, p) => p.local == local,
     }
 }
 
@@ -769,7 +779,9 @@ fn uses_defs(stmt: Option<&Statement>, term: Option<&Terminator>) -> (Vec<Local>
                         op(b, &mut uses);
                     }
                     Rvalue::Aggregate(_, ops) => ops.iter().for_each(|o| op(o, &mut uses)),
-                    Rvalue::Discriminant(p) | Rvalue::Ref(_, p) => uses.push(p.local),
+                    Rvalue::Discriminant(p) | Rvalue::ErrorIs(p, _) | Rvalue::Ref(_, p) => {
+                        uses.push(p.local);
+                    }
                 }
                 if dest.projection.is_empty() {
                     def = Some(dest.local);
@@ -797,7 +809,8 @@ fn uses_defs(stmt: Option<&Statement>, term: Option<&Terminator>) -> (Vec<Local>
             }
             Terminator::Return => uses.push(Local::RETURN),
             Terminator::Drop { place, .. } => uses.push(place.local),
-            Terminator::Goto(_) | Terminator::Unreachable => {}
+            Terminator::Fail(e) => op(e, &mut uses),
+            Terminator::Goto(_) | Terminator::Unreachable | Terminator::Trap(..) => {}
         }
     }
     (uses, def)

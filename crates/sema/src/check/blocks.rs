@@ -1,9 +1,10 @@
 //! Blocks and their statements.
 
-use crate::hir::{ExprId, Stmt};
+use crate::hir::{ExprId, PatKind, Stmt};
 use crate::{Code, Ty};
 
 use super::Checker;
+use super::errors::FailCx;
 use super::finish::Deferred;
 
 impl Checker<'_> {
@@ -26,6 +27,10 @@ impl Checker<'_> {
                         None => self.infer(init),
                     };
                     diverges |= self.norm(&t) == Ty::Never;
+                    if matches!(self.body.pats[pat].kind, PatKind::Wild) {
+                        let at = self.body.pats[pat].range;
+                        self.dropped_result(&t, at);
+                    }
                     self.check_pat(pat, &t, None);
                     match else_ {
                         None => self
@@ -49,8 +54,13 @@ impl Checker<'_> {
                         }
                     }
                 }
+                // `defer` cannot fail; `errdefer`'s errors are suppressed (`stmt.defer.1`,
+                // `stmt.errdefer.1`).
                 Stmt::Defer(body) => {
-                    self.check(body, &Ty::Unit);
+                    self.within(FailCx::Never("a `defer` block"), body, &Ty::Unit);
+                }
+                Stmt::ErrDefer(body) => {
+                    self.within(FailCx::Suppressed, body, &Ty::Unit);
                 }
                 Stmt::Expr {
                     expr,
@@ -60,6 +70,9 @@ impl Checker<'_> {
                     let t = self.infer(expr);
                     let t = self.norm(&t);
                     diverges |= t == Ty::Never;
+                    if !observe && !self.is_discard(expr) {
+                        self.dropped_result(&t, self.range(expr));
+                    }
                     // A value followed by a `// =>` expectation is used by it.
                     if !semi && !observe && !self.coerce(&t, &Ty::Unit) {
                         let t = self.show(&t);

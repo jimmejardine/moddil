@@ -111,6 +111,17 @@ something runs from the first slice.
   - a temporary that needs dropping is dropped at the end of its statement
     ([`resources.md`](resources.md)); one that does not still lives to the end of its function,
     as in S2, which nothing can observe.
+- **S4's scope and interim rules (decided):** `fail(e)`, `?` (on calls, `Result` and `Option`),
+  `?!`, `try` and `catch`, `errdefer`, `discard`, `Result` in the prelude, and R3 for `main`,
+  `defer` blocks and destructors; tests fail when an error escapes them. Until the features they
+  wait for arrive:
+  - errors are values of named types (structs and enums); inferred tags wait for their syntax
+    ([`error-handling.md`: Open questions](error-handling.md#open-questions));
+  - a function writes its error set (`with fail(A | B)`): inference comes with S5's effects;
+  - an error set is a type only as `Result`'s error and in `fail(…)`, and cannot be written
+    there yet (it is inferred: `let r = try { … }`);
+  - a note after `?` is checked but not kept, since traces and `fmt` strings come later; string
+    literals appear only as reasons and notes until `String` arrives in S7.
 - **Two open questions must be settled before S7**, because S7 writes the first library code in
   Moddil:
   - **caller locations** ([`error-handling.md`: Open questions](error-handling.md#open-questions)),

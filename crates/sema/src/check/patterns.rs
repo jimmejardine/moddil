@@ -57,6 +57,7 @@ impl Checker<'_> {
         };
         match &self.body.pats[p].kind {
             PatKind::Missing | PatKind::Wild => {}
+            &PatKind::OfType { pat, .. } => self.check_pat(pat, expected, mode),
             &PatKind::Bind { local, sub } => {
                 self.out.local_types[index(local)] = match mode {
                     Some(m) => {

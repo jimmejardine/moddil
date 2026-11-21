@@ -249,3 +249,13 @@ fn destructors() {
         &[("E0308", 3)],
     );
 }
+
+#[test]
+fn errors() {
+    insta::assert_snapshot!(dump(
+        "struct E { n: int }\n\
+         fn check(n: int) -> int with fail(E) { if n > 9 { fail(E { n }); } n }\n\
+         fn twice(n: int) -> int with fail(E) { errdefer { assert(true); } check(n)? * 2 }\n\
+         fn safe(n: int) -> int { try { check(n)? } catch { E(e) => e.n } }"
+    ));
+}

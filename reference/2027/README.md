@@ -5,10 +5,11 @@ done only when it has paragraphs here, conformance tests in
 [`conformance/2027/`](../../conformance/README.md) and an implementation
 ([`specs/definition.md`: Written with the compiler](../../specs/definition.md#written-with-the-compiler)).
 
-**Status:** slices S0 to S3: functions, tests, `let`, `int`, `bool` and `()`, arithmetic with
+**Status:** slices S0 to S4: functions, tests, `let`, `int`, `bool` and `()`, arithmetic with
 traps, comparisons, logic, `if`, blocks and calls (S0); tuples, structs, enums, patterns, `match`,
 `if let`, `let … else`, loops and `assert` (S1); moves, `Copy`, borrows and `defer` (S2); generics,
-traits, impls, methods, operators through traits, derives, destructors and the prelude (S3).
+traits, impls, methods, operators through traits, derives, destructors and the prelude (S3);
+errors: `fail`, `?`, `?!`, `try` and `catch`, `errdefer` and `Result` (S4).
 
 ## Paragraphs
 
@@ -32,6 +33,7 @@ Each page lists its diagnostics by code; the codes are in [Diagnostics](diagnost
 - [Statements](statements.md)
 - [Patterns](patterns.md)
 - [Ownership](ownership.md), [Borrows](borrows.md)
+- [Errors](errors.md)
 - Expressions: [Evaluation](expressions/evaluation.md), [Literals](expressions/literals.md),
   [Arithmetic](expressions/arithmetic.md), [Bitwise operators](expressions/bitwise.md),
   [Comparisons](expressions/comparison.md), [Logic](expressions/logic.md),

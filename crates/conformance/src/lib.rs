@@ -36,6 +36,8 @@ pub struct Expectations {
     pub diagnostics: BTreeSet<(u32, String)>,
     /// `//~ trap` lines.
     pub traps: BTreeSet<u32>,
+    /// `//~ error` lines: where an error leaves a test, failing it.
+    pub errors: BTreeSet<u32>,
     /// Marked `// disputed`.
     pub disputed: bool,
 }
@@ -49,6 +51,8 @@ pub struct Outcome {
     pub observed: Vec<(u32, String)>,
     /// The lines traps happened on (where the failing check starts), one per trapping test.
     pub traps: BTreeSet<u32>,
+    /// The lines errors left tests on, one per test that failed with one.
+    pub errors: BTreeSet<u32>,
 }
 
 /// An implementation of Moddil the suite can run.
@@ -93,8 +97,14 @@ impl Implementation for MirInterpreter {
                 observed.push((line(range.end), value.render(items)));
             });
             outcome.observed.extend(observed);
-            if let Err(trap) = result {
-                outcome.traps.insert(line(trap.range.start));
+            match result {
+                Ok(()) => {}
+                Err(moddil_interp::Stop::Trap(trap)) => {
+                    outcome.traps.insert(line(trap.range.start));
+                }
+                Err(moddil_interp::Stop::Failed { range, .. }) => {
+                    outcome.errors.insert(line(range.start));
+                }
             }
         }
         outcome
@@ -126,6 +136,9 @@ impl Implementation for ReferenceInterpreter {
             );
             if let Some(trap) = run.trap {
                 outcome.traps.insert(line(trap.range.start));
+            }
+            if let Some(range) = run.error {
+                outcome.errors.insert(line(range.start));
             }
         }
         outcome
@@ -160,11 +173,13 @@ pub fn expectations(text: &str) -> Result<Expectations, String> {
             for w in words {
                 if w == "trap" {
                     e.traps.insert(line);
+                } else if w == "error" {
+                    e.errors.insert(line);
                 } else if is_code(w) {
                     e.diagnostics.insert((line, w.to_string()));
                 } else {
                     return Err(format!(
-                        "line {line}: `{w}` is not `trap` or a code like E0201 or W0201"
+                        "line {line}: `{w}` is not `trap`, `error` or a code like E0201 or W0201"
                     ));
                 }
             }
@@ -231,6 +246,14 @@ pub fn compare(expected: &Expectations, outcome: &Outcome) -> Vec<String> {
     }
     for line in expected.traps.difference(&outcome.traps) {
         problems.push(format!("line {line}: expected a trap, none happened"));
+    }
+    for line in outcome.errors.difference(&expected.errors) {
+        problems.push(format!("line {line}: an error unexpectedly left a test"));
+    }
+    for line in expected.errors.difference(&outcome.errors) {
+        problems.push(format!(
+            "line {line}: expected an error to leave a test, none did"
+        ));
     }
     problems
 }

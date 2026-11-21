@@ -74,7 +74,9 @@ impl Cx<'_> {
         let ty = self.types.pat(p);
         match &self.body.pats[p].kind {
             PatKind::Missing | PatKind::Wild | PatKind::Bind { sub: None, .. } => DPat::wild(ty),
-            &PatKind::Bind { sub: Some(s), .. } | &PatKind::Ref { pat: s, .. } => self.lower(s),
+            &PatKind::Bind { sub: Some(s), .. }
+            | &PatKind::Ref { pat: s, .. }
+            | &PatKind::OfType { pat: s, .. } => self.lower(s),
             &PatKind::Int(v) => DPat {
                 ctor: Ctor::Int(v, v),
                 ty,
@@ -164,7 +166,7 @@ impl Cx<'_> {
                 }
             }
             Ty::Never => Vec::new(),
-            Ty::Error | Ty::Ref(..) | Ty::Infer(_) => return None,
+            Ty::Error | Ty::Ref(..) | Ty::Infer(_) | Ty::Errors(_) => return None,
         })
     }
 
@@ -365,6 +367,20 @@ pub(crate) fn check_match(
 
 fn has_empty_range(p: &DPat) -> bool {
     matches!(p.ctor, Ctor::Int(a, b) if a > b) || p.fields.iter().any(has_empty_range)
+}
+
+/// Whether the patterns `pats` together match every value of type `ty`: whether a `catch`'s
+/// arms handle every error of one type.
+pub(crate) fn covers(
+    items: &ItemTree,
+    body: &Body,
+    types: &Inference,
+    ty: &Ty,
+    pats: &[PatId],
+) -> bool {
+    let cx = Cx { items, body, types };
+    let rows: Vec<Vec<DPat>> = pats.iter().map(|&p| vec![cx.lower(p)]).collect();
+    cx.useful(&rows, &[DPat::wild(ty.clone())]).is_none()
 }
 
 /// A value of `pat`'s type that `pat` does not match, if there is one, rendered as a pattern.

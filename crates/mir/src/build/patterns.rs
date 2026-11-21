@@ -4,9 +4,54 @@ use moddil_sema::hir::{PatId, PatKind};
 use moddil_sema::{Ty, tuple_positions};
 
 use super::Builder;
-use crate::{BinOp, BlockId, Const, Operand, Place, Rvalue, Terminator};
+use crate::{BinOp, BlockId, Const, Local, Operand, Place, Rvalue, Terminator};
+
+/// A binding a pattern makes once it has matched: the local, its value, and the place it moves
+/// out of, if it does.
+pub(super) type Binding = (Local, Rvalue, Option<Place>);
 
 impl Builder<'_> {
+    /// Tests whether the value at `place` matches `pat`, and only then binds its names, so a
+    /// pattern that fails part way moves nothing; continues in the current block if it matches
+    /// and goes to `fail` if not. Returns the locals bound by moving, and where from, so that a
+    /// guard that fails can move them back.
+    pub(super) fn match_pat(
+        &mut self,
+        pat: PatId,
+        place: &Place,
+        fail: BlockId,
+    ) -> Vec<(Local, Place)> {
+        let outer = self.binds.replace(Vec::new());
+        self.test_pat(pat, place, fail);
+        let found = std::mem::replace(&mut self.binds, outer).unwrap_or_default();
+        let mut moved = Vec::new();
+        for (l, value, from) in found {
+            self.cfg.assign(l, value);
+            if let Some(p) = from {
+                moved.push((l, p));
+            }
+        }
+        moved
+    }
+
+    /// Continues if `cond` (a guard) holds; if not, moves the values `moved` back where they
+    /// came from and goes to `fail`.
+    pub(super) fn guard_branch(&mut self, cond: Operand, moved: &[(Local, Place)], fail: BlockId) {
+        if moved.is_empty() {
+            self.cfg.branch(cond, fail);
+            return;
+        }
+        let back = self.cfg.new_block();
+        self.cfg.branch(cond, back);
+        let matched = self.cfg.current();
+        self.cfg.continue_in(back);
+        for (l, p) in moved {
+            self.cfg
+                .assign(p.clone(), Rvalue::Use(Operand::Move(Place::local(*l))));
+        }
+        self.cfg.terminate_into(Terminator::Goto(fail), matched);
+    }
+
     /// Tests whether the value at `place` matches `pat`, binding its names as it goes; continues
     /// in the current block if it does and goes to `fail` if not.
     pub(super) fn test_pat(&mut self, pat: PatId, place: &Place, fail: BlockId) {
@@ -25,6 +70,8 @@ impl Builder<'_> {
         };
         match self.hir.pats[pat].kind.clone() {
             PatKind::Missing | PatKind::Wild | PatKind::Unit => {}
+            // The error's type is tested before (`try_catch`); here the pattern matches it.
+            PatKind::OfType { pat: inner, .. } => self.test_pat(inner, place, fail),
             PatKind::Bind { local, sub } => {
                 if let Some(s) = sub {
                     self.test_pat(s, place, fail);
@@ -37,7 +84,16 @@ impl Builder<'_> {
                         Rvalue::Use(self.use_place(place.clone(), &ty))
                     }
                 };
-                self.cfg.assign(l, value);
+                match &mut self.binds {
+                    Some(found) => {
+                        let from = match &value {
+                            Rvalue::Use(Operand::Move(p)) if !p.is_indirect() => Some(p.clone()),
+                            _ => None,
+                        };
+                        found.push((l, value, from));
+                    }
+                    None => self.cfg.assign(l, value),
+                }
             }
             PatKind::Ref { pat: inner, .. } => self.test_pat(inner, &place.deref(), fail),
             PatKind::Int(v) => self.test_cmp(BinOp::Eq, place, Const::Int(v as i64), fail),
@@ -88,7 +144,10 @@ impl Builder<'_> {
                     } else {
                         self.cfg.new_block()
                     };
+                    // Each alternative binds on its own path to the join.
+                    let outer = self.binds.take();
                     self.test_pat(alt, place, next);
+                    self.binds = outer;
                     self.cfg.terminate_into(Terminator::Goto(matched), next);
                 }
                 self.cfg.continue_in(matched);

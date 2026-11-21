@@ -252,6 +252,7 @@ impl Checker<'_> {
         let func = target.func();
         self.not_drop(func, range);
         let (params, ret) = self.instantiate_sig(func, target.args(), range);
+        self.fallible_call(e, func, target.args(), range);
         self.out.calls.insert(e, target);
         self.args(range, func, &params, args);
         self.norm(&ret)
@@ -374,6 +375,7 @@ impl Checker<'_> {
             }
         }
         self.out.adjusts.insert(e, pick.adjust);
+        self.fallible_call(e, pick.func, target.args(), range);
         self.out.calls.insert(e, target);
         let func = pick.func;
         self.args(range, func, params.get(1..).unwrap_or(&[]), args);

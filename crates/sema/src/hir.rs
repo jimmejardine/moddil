@@ -197,6 +197,23 @@ pub enum ExprKind {
     Return(Option<ExprId>),
     /// `assert(cond)`: traps unless `cond` holds.
     Assert(ExprId),
+    /// `e?`: the error of a fallible call, or of an `Err`, goes to the enclosing `try` block or
+    /// out of the function; `None` likewise. Otherwise it is the value.
+    Question(ExprId),
+    /// `e ?! "reason"`: as `e?`, but an error traps, with the reason.
+    Bang(ExprId, String),
+    /// `fail(e)`: fails with the error `e`.
+    Fail(ExprId),
+    /// `try { body }`, a `Result` (or an `Option`), or `try { body } catch { arms }`, which
+    /// handles the errors the arms match.
+    Try {
+        /// The block.
+        body: ExprId,
+        /// The `catch` arms, if any.
+        catch: Option<Vec<Arm>>,
+    },
+    /// `discard(r, "reason")`: drops the `Result` `r` on purpose.
+    Discard(ExprId),
     /// `&e` or `&mut e`: a borrow of the place `e` (or of a temporary holding its value).
     Ref {
         /// Whether it is `&mut`.
@@ -259,6 +276,8 @@ pub enum Stmt {
     /// `defer block`: the block runs when the enclosing block is left, in last-in, first-out
     /// order with the other deferred blocks.
     Defer(ExprId),
+    /// `errdefer block`: as `defer`, but only when the block is left because of an error.
+    ErrDefer(ExprId),
     /// An expression statement.
     Expr {
         /// The expression.
@@ -327,6 +346,13 @@ pub enum PatKind {
     },
     /// `a | b`.
     Or(Vec<PatId>),
+    /// In a `catch` arm, `Type(p)`: an error of the struct or enum `adt`, matched by `p`.
+    OfType {
+        /// The error's type.
+        adt: u32,
+        /// The pattern for the error.
+        pat: PatId,
+    },
     /// `&p` or `&mut p`: matches through a borrow, binding by copying.
     Ref {
         /// Whether it is `&mut p`.

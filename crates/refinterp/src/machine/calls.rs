@@ -313,6 +313,12 @@ impl Machine<'_> {
         let result = self.block(&f.node.body().expect("a body"));
         let result = match result {
             Ok(v) | Err(Flow::Return(v)) => Ok(v),
+            // `?` on `None` in a function returning an `Option` returns `None`.
+            Err(Flow::Absent) => Ok(Value::Adt {
+                ty: "Option".to_string(),
+                variant: "None".to_string(),
+                fields: Vec::new(),
+            }),
             Err(f) => Err(f),
         };
         // The parameters are dropped at the end of the call; a destructor's `self` only by its
@@ -356,6 +362,10 @@ impl Machine<'_> {
         let local = matches!(segments.as_slice(), [one] if self.memory.slot(one).is_some());
         let item =
             |one: &str| self.program.fns.contains_key(one) || self.program.adts.contains_key(one);
+        // `discard` is in the prelude too (`err.discard.1`).
+        if !local && matches!(segments.as_slice(), [one] if one == "discard" && !item(one)) {
+            return self.discard(&args, range);
+        }
         // `assert` is in the prelude, so a local or item of that name comes first
         // (`expr.assert.1`).
         if !local && matches!(segments.as_slice(), [one] if one == "assert" && !item(one)) {

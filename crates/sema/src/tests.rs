@@ -422,3 +422,53 @@ fn generics_and_traits() {
     );
     err("struct Option;", &[("E0103", 1)]);
 }
+
+#[test]
+fn errors() {
+    let e = "struct A { n: int }\nenum B { X, Y(int) }\n";
+    let ok2 = |t: &str| ok(&format!("{e}{t}"));
+    let err2 = |t: &str, x: &[(&str, u32)]| {
+        let shifted: Vec<(&str, u32)> = x.iter().map(|&(c, l)| (c, l + 2)).collect();
+        err(&format!("{e}{t}"), &shifted);
+    };
+    ok2("fn f(x: int) -> int with fail(A) { if x < 0 { fail(A { n: x }); } x }");
+    ok2("fn f() -> int with fail(A) { 1 }\nfn g() -> int with fail(A | B) { f()? + 1 }");
+    ok2("fn f() -> int with fail(A) { 1 }\nfn g() -> int { f() ?! \"never\" }");
+    ok2("fn f() -> int with fail(A) { 1 }\nfn g() -> int { try { f()? } catch { A(a) => a.n } }");
+    ok2(
+        "fn f() -> int with fail(A | B) { 1 }\nfn g() -> int with fail(B) { try { f()? } catch { A(_) => 0 } }",
+    );
+    ok2(
+        "fn f() -> int with fail(A | B) { 1 }\nfn g() -> int { try { f()? } catch { A(_) => 0, B::X => 1, B::Y(n) => n } }",
+    );
+    ok2("fn f() -> int with fail(A) { 1 }\nfn g() -> bool { let r = try { f()? }; r.is_ok() }");
+    ok2("fn f(o: Option<int>) -> Option<int> { let x = o?; Some(x + 1) }");
+    ok2("fn f(r: Result<int, A>) -> int with fail(A) { r? }");
+    ok2("fn f(r: Result<int, A>) { discard(r, \"why\"); }");
+    ok2("fn f() -> int with fail(A) { 1 }\ntest \"t\" { f()?; }");
+    err2(
+        "fn f() -> int with fail(A) { 1 }\nfn g() -> int { f() }",
+        &[("E0501", 2)],
+    );
+    err2(
+        "fn f() -> int with fail(A) { 1 }\nfn g() -> int { f()? }",
+        &[("E0501", 2)],
+    );
+    err2(
+        "fn f() -> int with fail(A | B) { 1 }\nfn g() -> int with fail(A) { f()? }",
+        &[("E0502", 2)],
+    );
+    err2("fn f() -> int { 1? }", &[("E0504", 1)]);
+    err2(
+        "fn f() -> int with fail(A) { 1 }\nfn g() -> int { try { f()? } catch { B::X => 0 } }",
+        &[("E0501", 2), ("E0505", 2)],
+    );
+    err2("fn f(o: Option<int>) -> int { o? }", &[("E0506", 1)]);
+    err2("fn main() with fail(A) {}", &[("E0507", 1)]);
+    err2("fn f() with fail(int) {}", &[("E0508", 1)]);
+    err2("fn f(r: Result<int, A>) { r; }", &[("E0503", 1)]);
+    err2(
+        "fn f() -> int with fail(A) { defer { fail(A { n: 1 }); } 1 }",
+        &[("E0501", 1)],
+    );
+}

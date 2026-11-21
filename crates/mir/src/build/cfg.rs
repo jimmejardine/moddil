@@ -130,14 +130,25 @@ impl Cfg {
                 continue;
             }
             match &mut block.terminator {
-                Terminator::Goto(t)
-                | Terminator::Call { target: t, .. }
-                | Terminator::Drop { target: t, .. } => *t = renumber[t.index()],
+                Terminator::Call {
+                    target, on_error, ..
+                } => {
+                    *target = renumber[target.index()];
+                    if let Some((_, e)) = on_error {
+                        *e = renumber[e.index()];
+                    }
+                }
+                Terminator::Goto(t) | Terminator::Drop { target: t, .. } => {
+                    *t = renumber[t.index()];
+                }
                 Terminator::SwitchBool { then, else_, .. } => {
                     *then = renumber[then.index()];
                     *else_ = renumber[else_.index()];
                 }
-                Terminator::Return | Terminator::Unreachable => {}
+                Terminator::Return
+                | Terminator::Unreachable
+                | Terminator::Fail(_)
+                | Terminator::Trap(..) => {}
             }
             body.blocks.push(block);
         }

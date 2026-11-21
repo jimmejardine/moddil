@@ -251,6 +251,8 @@ pub enum Rvalue {
     Aggregate(AggregateKind, Vec<Operand>),
     /// Which variant an enum holds, as an `int` (the variant's index).
     Discriminant(Place),
+    /// Whether the error at a place (of an error set) is a value of struct or enum `n`.
+    ErrorIs(Place, u32),
     /// A borrow of a place: `&mut` if the flag is set.
     Ref(bool, Place),
 }
@@ -366,9 +368,15 @@ pub enum Terminator {
         dest: Place,
         /// Where control goes after the call returns.
         target: BlockId,
+        /// For a function that can fail: where its error goes, and where control goes then.
+        on_error: Option<(Place, BlockId)>,
         /// The call's source.
         range: TextRange,
     },
+    /// Leaves the function with an error: its caller continues where the call's error goes.
+    Fail(Operand),
+    /// Traps: for `?!`, with its reason, when the error it says cannot happen does.
+    Trap(TrapClass, String),
     /// Drops the value at `place`, if it holds one (it may have been moved out of): runs its
     /// destructor if its type has one, then drops its fields, last first. Then control goes to
     /// `target`.
@@ -391,11 +399,19 @@ impl Terminator {
     /// The blocks this terminator can go to.
     pub fn successors(&self) -> Vec<BlockId> {
         match self {
+            Terminator::Call {
+                target,
+                on_error: Some((_, e)),
+                ..
+            } => vec![*target, *e],
             Terminator::Goto(t)
             | Terminator::Call { target: t, .. }
             | Terminator::Drop { target: t, .. } => vec![*t],
             Terminator::SwitchBool { then, else_, .. } => vec![*then, *else_],
-            Terminator::Return | Terminator::Unreachable => vec![],
+            Terminator::Return
+            | Terminator::Unreachable
+            | Terminator::Fail(_)
+            | Terminator::Trap(..) => vec![],
         }
     }
 }
@@ -411,6 +427,8 @@ pub enum TrapClass {
     StackOverflow,
     /// A failed `assert`.
     Assertion,
+    /// An error that `?!` said cannot happen.
+    Unexpected,
 }
 
 impl TrapClass {
@@ -421,6 +439,7 @@ impl TrapClass {
             TrapClass::DivisionByZero => "division by zero",
             TrapClass::StackOverflow => "stack overflow",
             TrapClass::Assertion => "assertion failed",
+            TrapClass::Unexpected => "unexpected error",
         }
     }
 }

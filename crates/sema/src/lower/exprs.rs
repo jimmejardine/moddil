@@ -90,6 +90,34 @@ impl Lowerer<'_> {
             ast::Expr::Call(_) => self.call(&node, e),
             ast::Expr::For(_) => self.unsupported(range, "`for`"),
             ast::Expr::MethodCall(_) => self.method_call(&node, e),
+            ast::Expr::Propagate(_) => {
+                if let Some(note) = node.child(K::ERROR_CONTEXT)
+                    && note.token(K::STRING).is_none()
+                {
+                    self.error(Diagnostic::unsupported(
+                        note.text_range(),
+                        "a formatted note",
+                    ));
+                }
+                let inner = e.sub_exprs().into_iter().next();
+                let x = self.expr_or_missing(inner, range);
+                self.alloc(ExprKind::Question(x), range)
+            }
+            ast::Expr::Unwrap(_) => {
+                let reason = node
+                    .token(K::STRING)
+                    .map(|t| unquote(t.text()))
+                    .unwrap_or_default();
+                let inner = e.sub_exprs().into_iter().next();
+                let x = self.expr_or_missing(inner, range);
+                self.alloc(ExprKind::Bang(x, reason), range)
+            }
+            ast::Expr::Fail(_) => {
+                let inner = e.sub_exprs().into_iter().next();
+                let x = self.expr_or_missing(inner, range);
+                self.alloc(ExprKind::Fail(x), range)
+            }
+            ast::Expr::Try(_) => self.try_expr(&node),
             _ => self.unsupported(range, "this expression"),
         }
     }
@@ -598,6 +626,14 @@ impl Lowerer<'_> {
                 .child(K::PATH)
                 .and_then(|p| path_segments(&p))
                 .unwrap_or_default();
+            // `discard` is in the prelude too.
+            if let [one] = segments.as_slice()
+                && one.name == "discard"
+                && self.lookup("discard").is_none()
+                && self.items.fn_named("discard").is_none()
+            {
+                return self.discard(node, range);
+            }
             // `assert` is in the prelude: a local or item of the same name shadows it.
             if let [one] = segments.as_slice()
                 && one.name == "assert"
@@ -634,6 +670,82 @@ impl Lowerer<'_> {
         let callee = self.expr_or_missing(callee_node, range);
         let args = self.args(node);
         self.alloc(ExprKind::Call { callee, args }, range)
+    }
+
+    /// `discard(r, "reason")`: the reason is a string literal.
+    fn discard(&mut self, node: &SyntaxNode, range: TextRange) -> ExprId {
+        let args: Vec<ast::Expr> = node
+            .child(K::ARG_LIST)
+            .and_then(ast::ArgList::cast)
+            .map(|l| l.args().filter_map(|a| a.expr()).collect())
+            .unwrap_or_default();
+        let reason = args
+            .get(1)
+            .is_some_and(|r| matches!(r, ast::Expr::Literal(l) if l.token(K::STRING).is_some()));
+        if args.len() != 2 || !reason {
+            self.report(
+                Code::E0202,
+                range,
+                "`discard` takes the `Result` and a string saying why: `discard(r, \"reason\")`",
+            );
+            return self.missing(range);
+        }
+        let r = self.expr(&args[0]);
+        self.alloc(ExprKind::Discard(r), range)
+    }
+
+    /// `try { … }`, maybe with `catch { arms }`.
+    fn try_expr(&mut self, node: &SyntaxNode) -> ExprId {
+        let range = node.text_range();
+        let Some(block) = node.child(K::BLOCK).and_then(ast::Block::cast) else {
+            return self.missing(range);
+        };
+        let body = self.block(&block);
+        let catch = node
+            .child(K::CATCH)
+            .and_then(|c| c.child(K::MATCH_ARM_LIST))
+            .map(|list| {
+                let mut arms = Vec::new();
+                for arm in list.children().filter(|c| c.kind() == K::MATCH_ARM) {
+                    let mark = self.names.mark();
+                    let mut binds = Binds::default();
+                    let pat = match arm.children().find_map(ast::Pat::cast) {
+                        Some(p) => self.catch_pat(&p, &mut binds),
+                        None => self.alloc_pat(PatKind::Missing, arm.text_range()),
+                    };
+                    self.bring_into_scope(binds);
+                    let guard = arm.child(K::MATCH_GUARD).map(|g| {
+                        let cond = g.children().find_map(ast::Expr::cast);
+                        self.expr_or_missing(cond, g.text_range())
+                    });
+                    let body = arm.children().filter_map(ast::Expr::cast).last();
+                    let body = self.expr_or_missing(body, arm.text_range());
+                    self.names.restore(mark);
+                    arms.push(Arm { pat, guard, body });
+                }
+                arms
+            });
+        self.alloc(ExprKind::Try { body, catch }, range)
+    }
+
+    /// A `catch` arm's pattern: `Type(p)` names an error's type (`err.catch.1`); anything else
+    /// is an ordinary pattern.
+    fn catch_pat(&mut self, p: &ast::Pat, b: &mut Binds) -> crate::hir::PatId {
+        let node = p.syntax();
+        if let ast::Pat::TupleStruct(_) = p
+            && let Some(segs) = node.child(K::PATH).and_then(|x| path_segments(&x))
+            && let [one] = segs.as_slice()
+            && let Some(adt) = self.items.adt_named(&one.name)
+        {
+            let subs: Vec<ast::Pat> = node.children().filter_map(ast::Pat::cast).collect();
+            if let [sub] = subs.as_slice()
+                && !matches!(sub, ast::Pat::Rest(_))
+            {
+                let pat = self.pat(sub, b);
+                return self.alloc_pat(PatKind::OfType { adt, pat }, node.text_range());
+            }
+        }
+        self.pat(p, b)
     }
 
     pub(super) fn ctor_call(
@@ -713,4 +825,12 @@ pub(super) fn binary_op(tok: &SyntaxToken) -> Option<BinaryOp> {
         K::GT_GT => BinaryOp::Shr,
         _ => return None,
     })
+}
+
+/// A string literal's text, without its quotes (escapes are kept as written).
+fn unquote(text: &str) -> String {
+    text.strip_prefix('"')
+        .and_then(|t| t.strip_suffix('"'))
+        .unwrap_or(text)
+        .to_string()
 }

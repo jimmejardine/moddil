@@ -31,6 +31,27 @@ impl<T> Option<T> {
     }
 }
 
+// Results: a value or an error (`errors.md`).
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Result<T, E> {
+    Ok(T),
+    Err(E),
+}
+
+impl<T, E> Result<T, E> {
+    fn is_ok(&self) -> bool {
+        match self {
+            Ok(_) => true,
+            Err(_) => false,
+        }
+    }
+
+    fn is_err(&self) -> bool {
+        !self.is_ok()
+    }
+}
+
 // Copying and cloning.
 
 trait Clone {

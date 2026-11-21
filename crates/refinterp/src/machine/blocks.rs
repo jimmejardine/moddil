@@ -12,7 +12,8 @@ use super::patterns::Src;
 impl Machine<'_> {
     /// A block. Leaving it in any way but a trap runs its `defer` blocks and drops its
     /// variables, in the reverse of the order they were reached (`stmt.defer.1`,
-    /// `own.drop.1`).
+    /// `own.drop.1`). Leaving it with an error also runs its `errdefer` blocks, whose own
+    /// errors are suppressed (`stmt.errdefer.1`).
     pub(super) fn block(&mut self, b: &ast::Block) -> Eval {
         let range = b.syntax().text_range();
         let mark = self.memory.mark();
@@ -20,11 +21,24 @@ impl Machine<'_> {
         let mut result = self.block_inner(b);
         let defers = self.defers.pop().expect("this block's defers");
         if !matches!(result, Err(Flow::Trap(..))) {
-            for (d, at) in defers.iter().rev() {
+            for (d, at, err) in defers.iter().rev() {
                 // The variables declared after the `defer` are dropped before it runs.
                 result = self.exit(*at, result, range);
                 if matches!(result, Err(Flow::Trap(..))) {
                     break;
+                }
+                if *err {
+                    if !matches!(result, Err(Flow::Fail(..))) {
+                        continue;
+                    }
+                    match self.block(d) {
+                        Ok(_) | Err(Flow::Fail(..)) => {}
+                        Err(f) => {
+                            result = Err(f);
+                            break;
+                        }
+                    }
+                    continue;
                 }
                 if let Err(f) = self.block(d) {
                     result = Err(f);
@@ -56,7 +70,8 @@ impl Machine<'_> {
                         && let Some(d) = n.child(K::BLOCK).and_then(ast::Block::cast)
                     {
                         let at = self.memory.mark();
-                        self.defers.last_mut().expect("a block").push((d, at));
+                        let err = n.token(K::ERRDEFER_KW).is_some();
+                        self.defers.last_mut().expect("a block").push((d, at, err));
                     }
                 }
             }

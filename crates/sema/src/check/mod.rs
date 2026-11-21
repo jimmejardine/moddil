@@ -22,11 +22,14 @@ use crate::{Code, Db, Diagnostic, Item, ItemTree, Owner, Ty};
 
 mod blocks;
 mod calls;
+mod errors;
 mod exprs;
 mod finish;
 mod operators;
 mod patterns;
 
+use errors::FailCx;
+pub use errors::Propagated;
 use finish::{Deferred, DeferredChecks, Obligation, Obligations};
 
 /// The function a call, method call or operator runs.
@@ -94,6 +97,8 @@ pub struct Inference {
     calls: HashMap<ExprId, Callee>,
     compare_calls: HashMap<(ExprId, usize), Callee>,
     adjusts: HashMap<ExprId, Adjust>,
+    propagated: HashMap<ExprId, Propagated>,
+    try_errors: HashMap<ExprId, Ty>,
     /// Type errors, and exhaustiveness errors and warnings.
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -146,6 +151,16 @@ impl Inference {
         self.compare_calls.get(&(e, i))
     }
 
+    /// For `e?` and `e ?! "…"`: what `e` is (a fallible call, a `Result` or an `Option`).
+    pub fn propagated(&self, e: ExprId) -> Option<Propagated> {
+        self.propagated.get(&e).copied()
+    }
+
+    /// For `try { … } catch { … }`: the errors its block can fail with, as an error set.
+    pub fn try_errors(&self, e: ExprId) -> Option<Ty> {
+        self.try_errors.get(&e).cloned()
+    }
+
     /// How a method call's receiver is adjusted to the method's `self`.
     pub fn adjust(&self, e: ExprId) -> Adjust {
         self.adjusts.get(&e).copied().unwrap_or(Adjust {
@@ -178,6 +193,17 @@ pub fn infer<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Inference {
         }
         Item::Test(_) => (Ty::Unit, None, true, &[][..]),
     };
+    // Where the body's errors go (`err.set.1`, `err.entry.1`).
+    let fail_cx = match owner.item(db) {
+        Item::Test(_) => FailCx::Test,
+        Item::Fn(i) if items.trait_of(i) == items.lang("Drop") && items.lang("Drop").is_some() => {
+            FailCx::Never("a destructor")
+        }
+        Item::Fn(i) => FailCx::Fn {
+            allowed: items.fns[i as usize].fails.members(),
+            option: matches!(&ret, Ty::Adt(a, ..) if Some(*a) == items.lang("Option")),
+        },
+    };
     let mut cx = Checker {
         body,
         items,
@@ -187,6 +213,9 @@ pub fn infer<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Inference {
         loops: Vec::new(),
         obligations: Obligations::default(),
         deferred: DeferredChecks::default(),
+        fail_cx: vec![fail_cx],
+        marked: None,
+        call_fails: None,
         out: Inference {
             expr_types: vec![Ty::Error; body.exprs.len()],
             pat_types: vec![Ty::Error; body.pats.len()],
@@ -249,6 +278,12 @@ struct Checker<'a> {
     loops: Vec<LoopCx>,
     obligations: Obligations,
     deferred: DeferredChecks,
+    /// Where errors raised here go, innermost last.
+    fail_cx: Vec<FailCx>,
+    /// The call a `?` or `?!` is around, while it is checked.
+    marked: Option<ExprId>,
+    /// The errors of the marked call, once it is found to be one that can fail.
+    call_fails: Option<Ty>,
     out: Inference,
 }
 

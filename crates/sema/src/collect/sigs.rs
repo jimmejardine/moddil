@@ -163,6 +163,10 @@ impl Collector<'_> {
             None => (Ty::Unit, None),
         };
         let ret_from = ret_sources(node, &params, &ret, ret_range, &mut ds);
+        let (fails, fails_range) = match node.child(K::EFFECT_CLAUSE) {
+            Some(c) => (effects(&c, &scope, &mut ds), Some(c.text_range())),
+            None => (Ty::Never, None),
+        };
         self.reporter.report(src, origin, ds);
         FnSig {
             name,
@@ -178,6 +182,8 @@ impl Collector<'_> {
             ret_from,
             has_body,
             origin,
+            fails,
+            fails_range,
         }
     }
 
@@ -226,6 +232,56 @@ impl Collector<'_> {
             );
         }
         sig
+    }
+}
+
+/// The errors an effect clause lets a function fail with: `with fail(A | B)`. Other effects come
+/// with slice S5.
+fn effects(clause: &SyntaxNode, scope: &Scope, ds: &mut Vec<Diagnostic>) -> Ty {
+    let mut members = Vec::new();
+    for e in clause.children().filter(|c| c.kind() == K::SIG_EFFECT) {
+        let fail = e.child(K::EFFECT).filter(|x| x.token(K::FAIL_KW).is_some());
+        let Some(types) = fail.and_then(|f| f.child(K::ERROR_TYPES)) else {
+            ds.push(Diagnostic::unsupported(e.text_range(), "this effect"));
+            continue;
+        };
+        if e.token(K::IDENT).is_some() {
+            ds.push(Diagnostic::unsupported(e.text_range(), "a named effect"));
+        }
+        for t in types.children().filter_map(ast::Type::cast) {
+            let ty = resolve_type(&t, scope, ds);
+            if error_type(&ty, t.syntax().text_range(), &members, ds) {
+                members.push(ty);
+            }
+        }
+    }
+    Ty::errors(members)
+}
+
+/// Whether `ty` can be in an error set with `others`: it is a struct or enum (E0508), and not
+/// another instance of a generic one already there.
+pub(crate) fn error_type(ty: &Ty, at: TextRange, others: &[Ty], ds: &mut Vec<Diagnostic>) -> bool {
+    match ty {
+        Ty::Error => false,
+        Ty::Adt(a, ..) => {
+            if others.iter().any(|o| o.adt() == Some(*a) && o != ty) {
+                ds.push(Diagnostic::error(
+                    Code::E0508,
+                    at,
+                    format!("an error set holds one instance of each type, and `{ty}` is another"),
+                ));
+                return false;
+            }
+            true
+        }
+        t => {
+            ds.push(Diagnostic::error(
+                Code::E0508,
+                at,
+                format!("`{t}` is not an error type: errors are structs and enums"),
+            ));
+            false
+        }
     }
 }
 

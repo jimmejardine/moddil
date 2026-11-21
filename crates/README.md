@@ -6,7 +6,7 @@ whose `Cargo.toml` sits at the repository root
 
 **Status:** the grammar checker and the parser cover the whole grammar; names, types, MIR, the
 MIR interpreter, the reference interpreter, the `moddil` command and the conformance runner cover
-slices S0 to S3 ([M0 slices](../specs/roadmap.md#m0-the-v0-language-in-slices)).
+slices S0 to S4 ([M0 slices](../specs/roadmap.md#m0-the-v0-language-in-slices)).
 
 ## Building and checking
 

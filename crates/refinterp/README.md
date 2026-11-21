@@ -3,7 +3,7 @@
 The **reference interpreter**: the executable form of the language reference, running the canonical
 AST directly ([`specs/compiler.md`: Two interpreters](../../specs/compiler.md#two-interpreters)).
 
-**Status:** slices S0 to S3, and every slice after: it walks the syntax tree of a checked program
+**Status:** slices S0 to S4, and every slice after: it walks the syntax tree of a checked program
 and runs its tests (`run_tests`), on a thread with a large stack so that recursion 10,000 calls
 deep traps as the reference says. The conformance runner runs every test on it and on the MIR
 interpreter. It reads the prelude's source with the program, implements derives itself, and

@@ -290,5 +290,17 @@ fn signature_mismatch(
             tsig.ret.subst(&subst)
         ));
     }
+    // An impl may fail with fewer errors than the trait declares, never more.
+    let allowed: Vec<Ty> = tsig.fails.subst(&subst).members();
+    if let Some(extra) = isig
+        .fails
+        .members()
+        .into_iter()
+        .find(|m| !allowed.contains(m))
+    {
+        return mismatch(format!(
+            "it can fail with `{extra}`, which the trait's does not declare"
+        ));
+    }
     None
 }

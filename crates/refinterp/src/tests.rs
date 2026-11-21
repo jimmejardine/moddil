@@ -134,3 +134,23 @@ fn traits_derives_and_drops() {
         ]
     );
 }
+
+#[test]
+fn errors() {
+    let text = "struct E { n: int }\n\
+                fn check(n: int) -> int with fail(E) { if n > 9 { fail(E { n }); } n }\n\
+                test \"t\" {\n\
+                    try { check(12)? } catch { E(e) => e.n } // => 12\n\
+                    ;\n\
+                    try { check(1)? } // => Ok(1)\n\
+                    ;\n\
+                    check(3) ?! \"small\"; check(20) ?! \"small\";\n\
+                }\n";
+    assert_eq!(
+        runs(text),
+        vec![(
+            vec!["12".to_string(), "Ok(1)".to_string()],
+            Some(TrapClass::Unexpected)
+        )]
+    );
+}

@@ -17,6 +17,8 @@ pub(super) enum ScopeItem {
     Temp(Local),
     /// A `defer` block, which runs.
     Defer(ExprId),
+    /// An `errdefer` block, which runs only when the scope is left with an error.
+    ErrDefer(ExprId),
 }
 
 /// An enclosing loop while its body is built.

@@ -22,9 +22,15 @@ pattern's names.
 enclosing block, not in its own initialiser. A later `let` of the same name shadows it.
 
 **stmt.defer.1** `defer block` runs `block` when the enclosing block is left in any way but a
-trap: at its end, or by `break`, `continue` or `return`. The `defer` blocks of a block run last
-first. A `return` value is evaluated before them. The block has type `()` (E0201), and cannot
-leave itself with `return`, or with `break` or `continue` out of it (E0313).
+trap: at its end, by `break`, `continue` or `return`, or with an error
+([Errors](errors.md)). The `defer` blocks of a block run last first, with its values dropped
+among them ([Ownership](ownership.md)). A `return` value is evaluated before them. The block has
+type `()` (E0201), cannot fail (E0501), and cannot leave itself with `return`, or with `break` or
+`continue` out of it (E0313).
+
+**stmt.errdefer.1** `errdefer block` is as `defer`, but runs only when the enclosing block is left
+with an error. Its own errors are suppressed: an error raised in it ends it, and the error that
+left the block goes on.
 
 **stmt.expr.1** An expression followed by `;` is evaluated and its value discarded. A block-like
 expression (such as `if`) may stand as a statement without `;`; then its type must be `()` (E0201).

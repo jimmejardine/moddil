@@ -3,11 +3,11 @@
 The **shared test suite** every Moddil implementation must pass to use the name "Moddil <edition>"
 ([`specs/definition.md`: A shared conformance suite](../specs/definition.md#a-shared-conformance-suite)).
 
-**Status:** slices S0 to S3: [`2027/`](2027) tests functions, tests, `let`, `int`, `bool` and `()`,
+**Status:** slices S0 to S4: [`2027/`](2027) tests functions, tests, `let`, `int`, `bool` and `()`,
 arithmetic and its traps, comparisons, logic, `if`, blocks and calls (S0); tuples, structs, enums,
 patterns, `match`, `if let`, `let … else`, loops and `assert` (S1); moves, `Copy`, borrows and
 `defer` (S2); generics, traits, impls, methods, operators through traits, derives, destructors and
-the prelude (S3). It cites every paragraph of the
+the prelude (S3); errors, `try` and `catch` (S4). It cites every paragraph of the
 [2027 reference](../reference/2027/README.md), and every test runs on both the MIR interpreter and
 the reference interpreter. The runner is [`crates/conformance`](../crates/conformance/README.md);
 `cargo test -p moddil-conformance` runs the suite.
@@ -53,11 +53,13 @@ fn f() -> int {
 | `// => value` | The expression statement or block's final expression it follows evaluates to `value`, written as Moddil source (`3`, `-1`, `true`, `()`) |
 | `//~ E0202` | A diagnostic with that code starting on this line; several codes may follow (wording is not part of conformance). Warnings have `W` codes, such as `//~ W0201` |
 | `//~ trap` | A trap on this line: the line of the operation that fails, which may be inside a function the test calls |
+| `//~ error` | An error leaves a test on this line (the `?`, `fail` or `try` in the test's body it leaves through), failing the test |
 | `// disputed` | The test does not count until the reference is clarified |
 
 - **Values are observed in `test` items.** A file has only items at the top level, so the runner
   runs every `test` in the file, and every `// =>` line must run and produce exactly its value.
-  Traps must happen exactly on the `//~ trap` lines; a test stops at its trap.
+  Traps must happen exactly on the `//~ trap` lines, and errors leave tests exactly on the
+  `//~ error` lines; a test stops at its trap or error.
 - **A file with expected diagnostics is only checked, not run**, and must report exactly the
   diagnostics marked. Error tests therefore live in their own files.
 - **Coverage:** the runner fails if a reference paragraph is cited by no test, or a test cites a

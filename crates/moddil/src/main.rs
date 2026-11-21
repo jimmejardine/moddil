@@ -7,8 +7,9 @@ use std::process::ExitCode;
 
 use ariadne::{Config, IndexType, Label, Report, ReportKind, Source};
 use clap::{Parser, Subcommand};
-use moddil_interp::{Trap, Value};
+use moddil_interp::{Stop, Trap, Value};
 use moddil_sema::{Database, Diagnostic, ItemTree, Severity, SourceFile};
+use moddil_syntax::TextRange;
 
 /// Moddil: check and run programs.
 #[derive(Parser)]
@@ -87,10 +88,12 @@ fn run(db: &Database, file: SourceFile, name: &str, text: &str) -> ExitCode {
             println!("{}", v.render(items));
             ExitCode::SUCCESS
         }
-        Err(trap) => {
+        Err(Stop::Trap(trap)) => {
             report_trap(name, text, items, &trap);
             ExitCode::from(TRAPPED)
         }
+        // `main` cannot fail (R3), so no error can escape it.
+        Err(Stop::Failed { .. }) => unreachable!("a checked `main` cannot fail"),
     }
 }
 
@@ -100,10 +103,15 @@ fn test(db: &Database, file: SourceFile, name: &str, text: &str) -> ExitCode {
     for (i, t) in items.tests.iter().enumerate() {
         match moddil_interp::run_test(db, file, i as u32, &mut |_, _| {}) {
             Ok(()) => println!("test \"{}\" ... ok", t.name),
-            Err(trap) => {
+            Err(Stop::Trap(trap)) => {
                 failed += 1;
                 println!("test \"{}\" ... trapped", t.name);
                 report_trap(name, text, items, &trap);
+            }
+            Err(Stop::Failed { range, error }) => {
+                failed += 1;
+                println!("test \"{}\" ... failed", t.name);
+                report_error(name, text, items, range, &error);
             }
         }
     }
@@ -140,11 +148,25 @@ fn report(name: &str, text: &str, d: &Diagnostic) {
     let _ = r.finish().eprint((name, Source::from(text)));
 }
 
+/// An error that escaped a test: where it left the test, and the error.
+fn report_error(name: &str, text: &str, items: &ItemTree, range: TextRange, error: &Value) {
+    let span = (name, range.to_range());
+    let report = Report::build(ReportKind::Error, span.clone())
+        .with_config(config())
+        .with_message(format!("error: {}", error.render(items)))
+        .with_label(Label::new(span).with_message("the error leaves the test here"));
+    let _ = report.finish().eprint((name, Source::from(text)));
+}
+
 fn report_trap(name: &str, text: &str, items: &ItemTree, trap: &Trap) {
     let span = (name, trap.range.to_range());
+    let message = match &trap.reason {
+        Some(r) => format!("trap: {}: {r}", trap.class),
+        None => format!("trap: {}", trap.class),
+    };
     let mut report = Report::build(ReportKind::Error, span.clone())
         .with_config(config())
-        .with_message(format!("trap: {}", trap.class))
+        .with_message(message)
         .with_label(Label::new(span).with_message("here"));
     // A failed `assert` shows the value of each part of its condition.
     if !trap.parts.is_empty() {

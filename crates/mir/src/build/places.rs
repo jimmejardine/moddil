@@ -22,8 +22,19 @@ impl Builder<'_> {
             | ExprKind::AssocFn { .. }
             | ExprKind::TraitFn { .. }
             | ExprKind::Continue { .. } => false,
-            ExprKind::Assert(c) | ExprKind::Deref(c) | ExprKind::Ref { expr: c, .. } => {
-                self.assigns(*c)
+            ExprKind::Assert(c)
+            | ExprKind::Deref(c)
+            | ExprKind::Ref { expr: c, .. }
+            | ExprKind::Question(c)
+            | ExprKind::Bang(c, _)
+            | ExprKind::Fail(c)
+            | ExprKind::Discard(c) => self.assigns(*c),
+            ExprKind::Try { body, catch } => {
+                self.assigns(*body)
+                    || catch
+                        .iter()
+                        .flatten()
+                        .any(|a| self.assigns(a.body) || a.guard.is_some_and(|g| self.assigns(g)))
             }
             ExprKind::Tuple(xs) => any(xs),
             ExprKind::Adt { fields, .. } => fields.iter().any(|&(_, x)| self.assigns(x)),
@@ -35,7 +46,9 @@ impl Builder<'_> {
                     Stmt::Let { init, else_, .. } => {
                         self.assigns(init) || else_.is_some_and(|x| self.assigns(x))
                     }
-                    Stmt::Expr { expr, .. } | Stmt::Defer(expr) => self.assigns(expr),
+                    Stmt::Expr { expr, .. } | Stmt::Defer(expr) | Stmt::ErrDefer(expr) => {
+                        self.assigns(expr)
+                    }
                 }) || tail.is_some_and(|t| self.assigns(t))
             }
             ExprKind::If { cond, then, else_ } => {

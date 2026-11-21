@@ -247,24 +247,25 @@ impl Lowerer<'_> {
                         observe,
                     });
                 }
-                ast::Stmt::Item(n)
-                    if n.kind() == K::DEFER_STMT && n.token(K::ERRDEFER_KW).is_none() =>
-                {
+                ast::Stmt::Item(n) if n.kind() == K::DEFER_STMT => {
                     let Some(b) = n.child(K::BLOCK).and_then(ast::Block::cast) else {
+                        self.error(Diagnostic::unsupported(
+                            n.text_range(),
+                            "a `defer` without a block",
+                        ));
                         continue;
                     };
                     let outer = self.names.enter_defer();
                     let body = self.block(&b);
                     self.names.exit_defer(outer);
-                    stmts.push(Stmt::Defer(body));
+                    stmts.push(if n.token(K::ERRDEFER_KW).is_some() {
+                        Stmt::ErrDefer(body)
+                    } else {
+                        Stmt::Defer(body)
+                    });
                 }
                 ast::Stmt::Item(n) => {
-                    let what = if n.kind() == K::DEFER_STMT {
-                        "`errdefer`"
-                    } else {
-                        "a local item"
-                    };
-                    self.error(Diagnostic::unsupported(n.text_range(), what));
+                    self.error(Diagnostic::unsupported(n.text_range(), "a local item"));
                 }
             }
         }

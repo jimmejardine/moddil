@@ -40,6 +40,8 @@ pub enum TrapClass {
     StackOverflow,
     /// A failed `assert`.
     Assertion,
+    /// An error that `?!` said cannot happen.
+    Unexpected,
 }
 
 impl fmt::Display for TrapClass {
@@ -49,6 +51,7 @@ impl fmt::Display for TrapClass {
             TrapClass::DivisionByZero => "division by zero",
             TrapClass::StackOverflow => "stack overflow",
             TrapClass::Assertion => "assertion failed",
+            TrapClass::Unexpected => "unexpected error",
         })
     }
 }
@@ -75,6 +78,8 @@ pub struct TestRun {
     pub observed: Vec<(TextRange, String)>,
     /// The trap that stopped the test, if one did.
     pub trap: Option<Trap>,
+    /// Where an error left the test, failing it, if one did.
+    pub error: Option<TextRange>,
 }
 
 /// Runs every `test` item of a checked program, in order.
@@ -109,6 +114,10 @@ pub(crate) enum Flow {
     Break(Option<String>, Value),
     /// `continue`, with its label.
     Continue(Option<String>),
+    /// An error, and where it was last raised (by `fail`, `?`, or a `catch` that let it go on).
+    Fail(Value, TextRange),
+    /// `?` on `None`: the function returns `None`, or the `try` block is `None`.
+    Absent,
 }
 
 pub(crate) type Eval<T = Value> = Result<T, Flow>;

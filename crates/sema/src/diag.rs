@@ -173,6 +173,25 @@ codes! {
     E0414 = "inherent impl for a foreign type",
     /// An impl's type parameter that neither the type nor the trait uses.
     E0415 = "unconstrained type parameter",
+    /// An error with nowhere to go: a fallible call not marked with `?`, `?!` or `try`, or an
+    /// error where nothing can fail (a function without `with fail`, `main`, a `defer` block, a
+    /// destructor).
+    E0501 = "unhandled error",
+    /// An error that the function's `with fail(…)` does not list.
+    E0502 = "error not in the declared set",
+    /// A `Result` dropped without being used or `discard`ed.
+    E0503 = "unused `Result`",
+    /// `?` or `?!` on something that cannot fail.
+    E0504 = "nothing to propagate",
+    /// A `catch` arm for an error that cannot occur, or a `catch` with nothing to catch.
+    E0505 = "error that cannot occur",
+    /// `?` on an `Option` where absence cannot propagate, or `?`s on both `Option` and errors in
+    /// one `try` block.
+    E0506 = "absence that cannot propagate",
+    /// An entry point (`main`) that declares errors.
+    E0507 = "entry point with errors",
+    /// A type in an error set that is not a struct or enum, or a second instance of one.
+    E0508 = "not an error type",
     /// A `match` arm no value can reach.
     W0201 = "unreachable pattern",
     /// Valid Moddil that this implementation does not support yet.

@@ -4,6 +4,15 @@ use super::*;
 
 /// Calls `main` in `text` with `args`.
 fn eval(text: &str, args: &[Value]) -> Result<Value, Trap> {
+    match run_main(text, args) {
+        Ok(v) => Ok(v),
+        Err(Stop::Trap(t)) => Err(t),
+        Err(Stop::Failed { .. }) => panic!("an error escaped"),
+    }
+}
+
+/// Calls `main` in `text` with `args`, which may stop with an error.
+fn run_main(text: &str, args: &[Value]) -> Result<Value, Stop> {
     let db = Database::default();
     let file = SourceFile::new(&db, "t.moddil".to_string(), text.to_string());
     let diagnostics = moddil_mir::diagnostics(&db, file);
@@ -278,7 +287,9 @@ fn a_failed_assert_shows_its_parts() {
     let file = SourceFile::new(&db, "t.moddil".to_string(), text.to_string());
     let items = moddil_sema::item_tree(&db, file);
     let main = items.fn_named("main").expect("a main");
-    let t = call_fn(&db, file, main, &[], &mut |_, _| {}).expect_err("a trap");
+    let Err(Stop::Trap(t)) = call_fn(&db, file, main, &[], &mut |_, _| {}) else {
+        panic!("a trap");
+    };
     assert_eq!(t.class, TrapClass::Assertion);
     let parts: Vec<(String, String)> = t
         .parts
@@ -337,4 +348,16 @@ fn destructors_run() {
              fn keep(g: G) -> G { g }\n\
              fn main() -> bool { let g = keep(G { armed: false }); g.armed }";
     assert_eq!(value(t), Value::Bool(false));
+}
+
+#[test]
+fn errors_return_through_their_edge() {
+    let t = "struct E { n: int }\n\
+             fn check(n: int) -> int with fail(E) { if n > 9 { fail(E { n }); } n }\n\
+             fn main() -> int { try { check(12)? } catch { E(e) => e.n + 1 } }";
+    assert_eq!(value(t), Value::Int(13));
+    let t = "struct E { n: int }\n\
+             fn check(n: int) -> int with fail(E) { if n > 9 { fail(E { n }); } n }\n\
+             fn main() -> int { check(12) ?! \"small\" }";
+    assert_eq!(trap(t), TrapClass::Unexpected);
 }

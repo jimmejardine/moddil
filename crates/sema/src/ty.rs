@@ -26,6 +26,10 @@ pub enum Ty {
     Param(u32, Arc<str>),
     /// An associated type that cannot be resolved yet: `T::Output` for a type parameter `T`.
     Assoc(Arc<AssocTy>),
+    /// An error set of two or more error types (structs and enums), in a canonical order: the
+    /// error of a `Result` or of a `fail(…)` that can be any of them (`A | B`). Make one with
+    /// [`Ty::errors`].
+    Errors(Arc<[Ty]>),
     /// A type being inferred, by its index in the checker's table (or [`Ty::HOLE`] in HIR: a
     /// type left for inference, such as the arguments of `Pair::new`).
     Infer(u32),
@@ -117,7 +121,7 @@ impl Ty {
             return true;
         }
         match self {
-            Ty::Tuple(ts) | Ty::Adt(_, _, ts) => ts.iter().any(|t| t.any(f)),
+            Ty::Tuple(ts) | Ty::Adt(_, _, ts) | Ty::Errors(ts) => ts.iter().any(|t| t.any(f)),
             Ty::Ref(_, t) => t.any(f),
             Ty::Assoc(a) => a.self_ty.any(f) || a.trait_ref.args.iter().any(|t| t.any(f)),
             _ => false,
@@ -129,6 +133,7 @@ impl Ty {
     pub fn map(&self, f: &mut impl FnMut(&Ty) -> Ty) -> Ty {
         match self {
             Ty::Tuple(ts) => Ty::Tuple(ts.iter().map(&mut *f).collect()),
+            Ty::Errors(ts) => Ty::errors(ts.iter().map(&mut *f).collect()),
             Ty::Adt(a, n, ts) => Ty::Adt(*a, n.clone(), ts.iter().map(&mut *f).collect()),
             Ty::Ref(m, t) => Ty::Ref(*m, Arc::new(f(t))),
             Ty::Assoc(a) => Ty::Assoc(Arc::new(AssocTy {
@@ -160,6 +165,34 @@ impl Ty {
             Ty::Unit
         } else {
             Ty::Tuple(elements.into())
+        }
+    }
+
+    /// The error set of `members` (error types, or error sets, which are flattened): `!` when
+    /// there are none, the type itself when there is one.
+    pub fn errors(members: Vec<Ty>) -> Ty {
+        let mut flat: Vec<Ty> = Vec::new();
+        for m in members {
+            for t in m.members() {
+                if !flat.contains(&t) {
+                    flat.push(t);
+                }
+            }
+        }
+        flat.sort_by_key(|t| format!("{t:?}"));
+        match flat.len() {
+            0 => Ty::Never,
+            1 => flat.pop().expect("one"),
+            _ => Ty::Errors(flat.into()),
+        }
+    }
+
+    /// The error types an error set is made of: its members, none for `!`, or the type itself.
+    pub fn members(&self) -> Vec<Ty> {
+        match self {
+            Ty::Errors(ts) => ts.to_vec(),
+            Ty::Never => Vec::new(),
+            t => vec![t.clone()],
         }
     }
 
@@ -240,6 +273,15 @@ impl fmt::Debug for Ty {
                 Ty::Param(..) => write!(f, "{:?}::{}", a.self_ty, a.name),
                 t => write!(f, "<{t:?} as {:?}>::{}", a.trait_ref, a.name),
             },
+            Ty::Errors(ts) => {
+                for (i, t) in ts.iter().enumerate() {
+                    if i > 0 {
+                        f.write_str(" | ")?;
+                    }
+                    write!(f, "{t:?}")?;
+                }
+                Ok(())
+            }
             Ty::Ref(true, t) => write!(f, "&mut {t:?}"),
             Ty::Ref(false, t) => write!(f, "&{t:?}"),
             Ty::Tuple(ts) => {

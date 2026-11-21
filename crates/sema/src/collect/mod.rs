@@ -18,6 +18,8 @@ use crate::{Code, Db, Diagnostic, SourceFile};
 mod adts;
 mod report;
 mod sigs;
+
+pub(crate) use sigs::error_type;
 mod traits;
 
 use report::Reporter;
@@ -230,6 +232,8 @@ impl Collector<'_> {
         self.report_found(found);
         let found = validate::overlap(&self.tree);
         self.report_found(found);
+        let found = validate::entry_points(&self.tree);
+        self.report_found(found);
     }
 
     fn report_found(&mut self, found: Vec<validate::Found>) {
@@ -253,7 +257,9 @@ impl Collector<'_> {
             match src {
                 Src::Prelude => {
                     prelude.insert(name, ());
-                    if node.kind() == K::ENUM_ITEM && name_of(node).0 == "Option" {
+                    if node.kind() == K::ENUM_ITEM
+                        && matches!(name_of(node).0.as_str(), "Option" | "Result")
+                    {
                         for v in node
                             .child(K::VARIANT_LIST)
                             .into_iter()
@@ -348,6 +354,8 @@ impl Collector<'_> {
             let what = match c.kind() {
                 K::OUTER_ATTR if attrs_handled => continue,
                 K::OUTER_ATTR => "an attribute",
+                // A function's effects are read with its signature.
+                K::EFFECT_CLAUSE if node.kind() == K::FN_ITEM => continue,
                 K::EFFECT_CLAUSE => "an effect clause",
                 K::CONTRACT => "a contract",
                 K::RESUME_CLAUSE => "a `resume` clause",

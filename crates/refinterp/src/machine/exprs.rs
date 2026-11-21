@@ -96,7 +96,11 @@ impl Machine<'_> {
             ast::Expr::Assign(_) => self.assign(node, e),
             ast::Expr::Call(_) => self.call(node, e, range),
             ast::Expr::MethodCall(_) => self.method_call(node, e, range),
-            _ => unreachable!("a checked program of slices S0 to S3"),
+            ast::Expr::Propagate(_) => self.question(node, e, false),
+            ast::Expr::Unwrap(_) => self.question(node, e, true),
+            ast::Expr::Fail(_) => self.fail(node, e),
+            ast::Expr::Try(_) => self.try_expr(node),
+            _ => unreachable!("a checked program of slices S0 to S4"),
         }
     }
 

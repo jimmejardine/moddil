@@ -226,6 +226,9 @@ impl<'a> Solver<'a> {
                 i == j && xs.iter().zip(ys.iter()).all(|(x, y)| self.unify(x, y))
             }
             (Ty::Ref(m, x), Ty::Ref(n, y)) => m == n && self.unify(x, y),
+            (Ty::Errors(xs), Ty::Errors(ys)) => {
+                xs.len() == ys.len() && xs.iter().zip(ys.iter()).all(|(x, y)| self.unify(x, y))
+            }
             (Ty::Assoc(x), Ty::Assoc(y)) => {
                 x.index == y.index
                     && x.trait_ref.trait_ == y.trait_ref.trait_
@@ -398,6 +401,7 @@ impl<'a> Solver<'a> {
         match ty {
             Ty::Int | Ty::Bool | Ty::Unit | Ty::Never | Ty::Error | Ty::Ref(..) => false,
             Ty::Param(..) | Ty::Assoc(_) | Ty::Infer(_) => true,
+            Ty::Errors(ts) => ts.iter().any(|t| self.needs_drop_inner(t, depth + 1)),
             Ty::Tuple(ts) => ts.iter().any(|t| self.needs_drop_inner(t, depth + 1)),
             Ty::Adt(a, _, args) => {
                 if self.tree.has_drop_impl(*a) {
