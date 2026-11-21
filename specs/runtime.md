@@ -44,7 +44,7 @@ dependency tree.
 
 The same mechanism generalises the pluggable traits that real projects build by hand. Hashiverse,
 for example, has `TransportFactory`, `TimeProvider`, `ClientStorage` and `KeyLockerManager` traits plus
-an in-memory transport for tests (see [`examples/04-hashiverse.md`](examples/04-hashiverse.md)). In
+an in-memory transport for tests (see [`examples/hashiverse.md`](examples/hashiverse.md)). In
 Moddil these are effects, and the test versions are handlers.
 
 ## Runtime contract

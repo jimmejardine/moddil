@@ -203,10 +203,10 @@ arguments ([`units.md`: Why square brackets](units.md#why-square-brackets)).
 
 | Example | Uses |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | `f32` and `Simd<f32, 8>` for physics; strict IEEE for deterministic rollback |
-| [HFT](examples/02-hft-platform.md) | `Fixed<4>[USD]` prices; overflow traps in risk limits; `Soa<Order>` for scans; `u64be` exchange formats |
-| [Web store](examples/03-web-store.md) | `Fixed<2>` or `BigDecimal` for money; exact literals for prices |
-| [Hashiverse](examples/04-hashiverse.md) | `Wrapping<u64>` hashes; `u32be` wire formats; `BigInt` where cryptography needs it |
+| [Multiplayer game](examples/multiplayer-game.md) | `f32` and `Simd<f32, 8>` for physics; strict IEEE for deterministic rollback |
+| [HFT](examples/hft-platform.md) | `Fixed<4>[USD]` prices; overflow traps in risk limits; `Soa<Order>` for scans; `u64be` exchange formats |
+| [Web store](examples/web-store.md) | `Fixed<2>` or `BigDecimal` for money; exact literals for prices |
+| [Hashiverse](examples/hashiverse.md) | `Wrapping<u64>` hashes; `u32be` wire formats; `BigInt` where cryptography needs it |
 
 ## Directions (not yet decided)
 

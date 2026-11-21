@@ -197,10 +197,10 @@ applications get their performance without holding the capability.
 
 | Example | Uses |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | GPU scatter writes checked on the CPU simulator; no `unsafe` in game logic |
-| [HFT](examples/02-hft-platform.md) | Kernel-bypass networking and `FromBytes` wire views in a small, human-reviewed, checker-verified mod |
-| [Web store](examples/03-web-store.md) | No `unsafe` at all; dependencies that hold it are flagged in audits |
-| [Hashiverse](examples/04-hashiverse.md) | Crypto through FFI wrappers with safety contracts; human review of every unsafe delta |
+| [Multiplayer game](examples/multiplayer-game.md) | GPU scatter writes checked on the CPU simulator; no `unsafe` in game logic |
+| [HFT](examples/hft-platform.md) | Kernel-bypass networking and `FromBytes` wire views in a small, human-reviewed, checker-verified mod |
+| [Web store](examples/web-store.md) | No `unsafe` at all; dependencies that hold it are flagged in audits |
+| [Hashiverse](examples/hashiverse.md) | Crypto through FFI wrappers with safety contracts; human review of every unsafe delta |
 
 ## Open questions
 

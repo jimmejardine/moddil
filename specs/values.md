@@ -158,10 +158,10 @@ struct Quote { price: Fixed<4>, qty: Fixed<0>, venue: VenueId }
 
 | Example | Uses |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | `Copy` vectors and entity IDs; seeded maps that replay identically in rollback |
-| [HFT](examples/02-hft-platform.md) | `Copy` order IDs and `Fixed<4>` prices; `.share()` for reference data shared across strategy tasks; no hidden copies on the hot path |
-| [Web store](examples/03-web-store.md) | Derived `Eq`/`Hash` on IDs; `OrderedMap` where API output order must be stable |
-| [Hashiverse](examples/04-hashiverse.md) | `[u8; 32]` hashes as `Copy` keys; flood-resistant hashing for peer-supplied keys |
+| [Multiplayer game](examples/multiplayer-game.md) | `Copy` vectors and entity IDs; seeded maps that replay identically in rollback |
+| [HFT](examples/hft-platform.md) | `Copy` order IDs and `Fixed<4>` prices; `.share()` for reference data shared across strategy tasks; no hidden copies on the hot path |
+| [Web store](examples/web-store.md) | Derived `Eq`/`Hash` on IDs; `OrderedMap` where API output order must be stable |
+| [Hashiverse](examples/hashiverse.md) | `[u8; 32]` hashes as `Copy` keys; flood-resistant hashing for peer-supplied keys |
 
 ## Open questions
 

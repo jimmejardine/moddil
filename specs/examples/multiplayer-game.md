@@ -1,4 +1,4 @@
-# Example 1: Multiplayer Game
+# Multiplayer Game
 
 ## Overview
 

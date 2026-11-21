@@ -1,4 +1,4 @@
-# Example 5: Sensor Firmware
+# Sensor Firmware
 
 ## Overview
 

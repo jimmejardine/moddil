@@ -370,10 +370,10 @@ fn serve(listener: &Listener) with Net, suspend, spawn {
 
 | Example | Uses |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | The server declares `NetRoot` and `Clock` only; the browser client gets its roots from the WASM host |
-| [HFT](examples/02-hft-platform.md) | Typed configuration with risk limits as refined types; traps kill the process (no partial trading state) |
-| [Web store](examples/03-web-store.md) | Isolated scopes per request; secrets from the environment; layered configuration per environment |
-| [Hashiverse](examples/04-hashiverse.md) | Volunteer binaries sandboxed to the roots they declare; layered shutdown on Ctrl-C |
+| [Multiplayer game](examples/multiplayer-game.md) | The server declares `NetRoot` and `Clock` only; the browser client gets its roots from the WASM host |
+| [HFT](examples/hft-platform.md) | Typed configuration with risk limits as refined types; traps kill the process (no partial trading state) |
+| [Web store](examples/web-store.md) | Isolated scopes per request; secrets from the environment; layered configuration per environment |
+| [Hashiverse](examples/hashiverse.md) | Volunteer binaries sandboxed to the roots they declare; layered shutdown on Ctrl-C |
 
 ## Open questions
 

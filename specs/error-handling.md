@@ -328,7 +328,7 @@ proposal, and the older JavaScript-based emulation was very slow.
 **Moddil:** errors are values returned through the normal return channel (as in Rust, Swift, Zig,
 and P0709):
 - no allocation, no RTTI (sets are static, so matching is a tag switch), no unwind tables, no lock;
-- the error path costs about the same as a normal return, with predictable timing (example 2, HFT);
+- the error path costs about the same as a normal return, with predictable timing (HFT);
 - functions that cannot fail are known from their types, so they are effectively `noexcept` and the
   optimiser is unconstrained;
 - every exit point is visible as `?`;

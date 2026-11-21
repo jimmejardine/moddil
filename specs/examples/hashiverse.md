@@ -1,4 +1,4 @@
-# Example 4: Hashiverse Reference Client (and later Server)
+# Hashiverse Reference Client (and later Server)
 
 ## Overview
 

@@ -226,10 +226,10 @@ shapes = { path = "../shapes" }    # a local mod, by the name the code uses for 
 
 | Example | Uses |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | Shared simulation mod used by the WASM client and native server executables; comptime `if` for platform input and rendering |
-| [HFT](examples/02-hft-platform.md) | `pub(mod)` internals of the matching engine; Linux-only kernel-bypass paths checked on every developer's machine |
-| [Web store](examples/03-web-store.md) | Separate mods instead of features (`store-core`, `store-payments`), each with its own capability ceiling |
-| [Hashiverse](examples/04-hashiverse.md) | One repository holding the protocol, client and server mods; a `pub use` facade for the protocol API |
+| [Multiplayer game](examples/multiplayer-game.md) | Shared simulation mod used by the WASM client and native server executables; comptime `if` for platform input and rendering |
+| [HFT](examples/hft-platform.md) | `pub(mod)` internals of the matching engine; Linux-only kernel-bypass paths checked on every developer's machine |
+| [Web store](examples/web-store.md) | Separate mods instead of features (`store-core`, `store-payments`), each with its own capability ceiling |
+| [Hashiverse](examples/hashiverse.md) | One repository holding the protocol, client and server mods; a `pub use` facade for the protocol API |
 
 ## Open questions
 

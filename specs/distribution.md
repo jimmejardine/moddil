@@ -223,10 +223,10 @@ What ships in v0, v1 and later is in [`roadmap.md`: Staging: distributed program
 
 | Example | Uses |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | `client`, hub and chat components; reliable and unreliable channels distinguished in types; whole match simulated in one process |
-| [HFT](examples/02-hft-platform.md) | Collector, store, research and execution as separate deployment units and binaries; latency-critical paths with no mesh in the way; one strategy mod placed in both research and execution |
-| [Web store](examples/03-web-store.md) | Client, API and database; skew checks against months-old mobile clients; Postgres provisioned by Terraform and bound as a requirement; payment keys as `Secret<T>` |
-| [Hashiverse](examples/04-hashiverse.md) | `peer` placement; wire compatibility with existing Rust servers via consumed contracts; a single static binary for volunteers |
+| [Multiplayer game](examples/multiplayer-game.md) | `client`, hub and chat components; reliable and unreliable channels distinguished in types; whole match simulated in one process |
+| [HFT](examples/hft-platform.md) | Collector, store, research and execution as separate deployment units and binaries; latency-critical paths with no mesh in the way; one strategy mod placed in both research and execution |
+| [Web store](examples/web-store.md) | Client, API and database; skew checks against months-old mobile clients; Postgres provisioned by Terraform and bound as a requirement; payment keys as `Secret<T>` |
+| [Hashiverse](examples/hashiverse.md) | `peer` placement; wire compatibility with existing Rust servers via consumed contracts; a single static binary for volunteers |
 
 ## Open questions
 

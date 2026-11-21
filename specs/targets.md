@@ -170,7 +170,7 @@ build or the repository.
   libraries for apps.
 - **iOS:** Moddil produces static libraries or frameworks; final app packaging needs Apple's tools.
 - This matches the web store's "shared logic, native UI shells" approach
-  ([`examples/03-web-store.md`](examples/03-web-store.md)). **Decided scope:** Moddil builds the
+  ([`examples/web-store.md`](examples/web-store.md)). **Decided scope:** Moddil builds the
   XCFramework and AAR plus generated bindings; Xcode and Gradle build and sign the app
   ([`ui.md`: Mobile packaging](ui.md#mobile-packaging)).
 
@@ -178,10 +178,10 @@ build or the repository.
 
 | Example | Uses |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | WASM client and a static Linux server, built from any developer machine |
-| [HFT](examples/02-hft-platform.md) | Static Linux binaries pinned to the servers' CPU level (`+v3`/`+v4`); research GPU boxes on a dynamic glibc target for CUDA |
-| [Web store](examples/03-web-store.md) | OCI images built on any host; shared-logic libraries for Android and iOS |
-| [Hashiverse](examples/04-hashiverse.md) | One CI host producing static volunteer binaries for Linux, Windows and macOS, signed for each |
+| [Multiplayer game](examples/multiplayer-game.md) | WASM client and a static Linux server, built from any developer machine |
+| [HFT](examples/hft-platform.md) | Static Linux binaries pinned to the servers' CPU level (`+v3`/`+v4`); research GPU boxes on a dynamic glibc target for CUDA |
+| [Web store](examples/web-store.md) | OCI images built on any host; shared-logic libraries for Android and iOS |
+| [Hashiverse](examples/hashiverse.md) | One CI host producing static volunteer binaries for Linux, Windows and macOS, signed for each |
 
 ## Open questions
 

@@ -250,10 +250,10 @@ Decided in [`packages-and-supply-chain.md`](packages-and-supply-chain.md) and su
 
 | Example | Main threats | Moddil's defences |
 |---|---|---|
-| [Web store](examples/03-web-store.md) | Payment credentials, customer data, hostile clients | `Secret` payment keys; `Personal` customer data kept out of logs; `Untrusted` cart contents validated on the server |
-| [Hashiverse](examples/04-hashiverse.md) | Hostile peers, key theft, timing attacks | `Untrusted` peer data; keys as `Secret` behind a key-locker handler; constant-time crypto |
-| [HFT platform](examples/02-hft-platform.md) | Credential theft, insiders, compromised dependencies | Capability ceilings on market-data and FIX mods; secrets from providers; audit trail |
-| [Multiplayer game](examples/01-multiplayer-game.md) | Cheating clients, malformed packets | Authoritative server; `Untrusted` inputs; parse-don't-validate decoding |
+| [Web store](examples/web-store.md) | Payment credentials, customer data, hostile clients | `Secret` payment keys; `Personal` customer data kept out of logs; `Untrusted` cart contents validated on the server |
+| [Hashiverse](examples/hashiverse.md) | Hostile peers, key theft, timing attacks | `Untrusted` peer data; keys as `Secret` behind a key-locker handler; constant-time crypto |
+| [HFT platform](examples/hft-platform.md) | Credential theft, insiders, compromised dependencies | Capability ceilings on market-data and FIX mods; secrets from providers; audit trail |
+| [Multiplayer game](examples/multiplayer-game.md) | Cheating clients, malformed packets | Authoritative server; `Untrusted` inputs; parse-don't-validate decoding |
 
 ## Open questions
 

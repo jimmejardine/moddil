@@ -200,7 +200,7 @@ in CI**.
 | ESP32 / ESP32-S3 (e.g. Arduino Nano ESP32) | **Xtensa** | Not supported: no mainline LLVM backend (only Espressif's fork) | No |
 
 **Bare-metal tiers (decided):** tier 1 is `thumbv7em` (Cortex-M4F, on Renode) and `riscv64` QEMU
-`virt`, matching the [fifth reference example](examples/05-sensor-firmware.md); tier 2 is Cortex-M0+
+`virt`, matching the [fifth reference example](examples/sensor-firmware.md); tier 2 is Cortex-M0+
 and M33, x86_64 bare metal and AArch64 `virt`; others are tier 3
 ([`targets.md`: Target names and tiers](targets.md#target-names-and-tiers)).
 
@@ -210,7 +210,7 @@ emulator models. Classic 8-bit Arduinos are a stretch. Xtensa-based ESP32s are o
 
 ### Proving the profile end to end
 
-**Decided:** the fifth reference example, [sensor firmware](examples/05-sensor-firmware.md), runs in
+**Decided:** the fifth reference example, [sensor firmware](examples/sensor-firmware.md), runs in
 this CI. The options considered were:
 - sensor firmware on Renode (Cortex-M4F) and QEMU (Cortex-M33, RISC-V); and/or
 - a tiny kernel that boots on QEMU `x86_64` and RISC-V `virt` and runs its own test suite.

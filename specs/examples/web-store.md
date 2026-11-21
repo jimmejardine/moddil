@@ -1,4 +1,4 @@
-# Example 3: Web Store
+# Web Store
 
 ## Overview
 

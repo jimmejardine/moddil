@@ -321,10 +321,10 @@ Working-copy overrides are unpinned by nature, so they are for development only 
 
 | Example | Uses |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | Capability ceilings keep asset and maths libraries pure; vendoring for reproducible console builds |
-| [HFT](examples/02-hft-platform.md) | Private mods over internal git; cooldown plus a strict `vet` policy; no `Net` in strategy libraries |
-| [Web store](examples/03-web-store.md) | Capability diffs on upgrades of payment and auth mods; shared audits across teams |
-| [Hashiverse](examples/04-hashiverse.md) | `hashiverse/protocol` published from its own repository; no central service, in keeping with a decentralised project |
+| [Multiplayer game](examples/multiplayer-game.md) | Capability ceilings keep asset and maths libraries pure; vendoring for reproducible console builds |
+| [HFT](examples/hft-platform.md) | Private mods over internal git; cooldown plus a strict `vet` policy; no `Net` in strategy libraries |
+| [Web store](examples/web-store.md) | Capability diffs on upgrades of payment and auth mods; shared audits across teams |
+| [Hashiverse](examples/hashiverse.md) | `hashiverse/protocol` published from its own repository; no central service, in keeping with a decentralised project |
 
 ## Directions (not yet decided)
 

@@ -220,7 +220,7 @@ verifier inferring loop invariants where it can. This is measured on the referen
 annotation lines per 100 lines of code (at most 5 for L1) and published with each release.
 
 The level is part of mod metadata and the audit trail ([Package management and supply-chain security](packages-and-supply-chain.md)), so a dependency's assurance
-is visible before you depend on it. The HFT risk module (example 2) would target L2.
+is visible before you depend on it. The HFT risk module would target L2.
 
 ### Refinement types with automatic proofs
 
@@ -288,10 +288,10 @@ These are cheap now and expensive to change once code exists. All are **decided*
 
 | Example | What correctness tooling gives it |
 |---|---|
-| [Game](examples/01-multiplayer-game.md) | Differential tests that the shared simulation gives identical results on WASM and native; simulation tests with many clients |
-| [HFT](examples/02-hft-platform.md) | Risk limits as contracts, with the risk module at L1 or L2; property tests on the order book; interleaving tests for lock-free queues |
-| [Web store](examples/03-web-store.md) | Validated newtypes for money, IDs and quantities; contracts on checkout; property tests on pricing |
-| [Hashiverse](examples/04-hashiverse.md) | Fuzzing the wire protocol against the Rust implementation; contracts and L1 on crypto and PoW code |
+| [Game](examples/multiplayer-game.md) | Differential tests that the shared simulation gives identical results on WASM and native; simulation tests with many clients |
+| [HFT](examples/hft-platform.md) | Risk limits as contracts, with the risk module at L1 or L2; property tests on the order book; interleaving tests for lock-free queues |
+| [Web store](examples/web-store.md) | Validated newtypes for money, IDs and quantities; contracts on checkout; property tests on pricing |
+| [Hashiverse](examples/hashiverse.md) | Fuzzing the wire protocol against the Rust implementation; contracts and L1 on crypto and PoW code |
 
 ## Open questions
 

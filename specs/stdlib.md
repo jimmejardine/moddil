@@ -285,7 +285,7 @@ let action = guard.resume(frame);
 - **Same lowering as generators:** a state machine, with no stack of its own; the same linearity and
   effect rules.
 - **Snapshots:** a coroutine is `Clone` when all the state it holds is, so rollback netcode can
-  snapshot and restore it ([multiplayer game](examples/01-multiplayer-game.md)).
+  snapshot and restore it ([multiplayer game](examples/multiplayer-game.md)).
 
 ## Collections
 
@@ -493,13 +493,16 @@ http::serve(listener, app)?;
 
 | Example | What it needs from the standard library |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | Collections and ring buffers in the frame loop, `net` (UDP, WebTransport), `serde` binary formats, the browser runtime |
-| [HFT platform](examples/02-hft-platform.md) | Zero-copy reads, io_uring with borrowed buffers, lock-free queues, `decimal`, `timeseries` |
-| [Web store](examples/03-web-store.md) | HTTP, `sql`, `serde` JSON, `i18n`, `crypto` for sessions; streams of rows as ordinary iterators |
-| [Hashiverse](examples/04-hashiverse.md) | `crypto`, `net`, `storage`, simulation handlers; generators for protocol state machines |
+| [Multiplayer game](examples/multiplayer-game.md) | Collections and ring buffers in the frame loop, `net` (UDP, WebTransport), `serde` binary formats, the browser runtime |
+| [HFT platform](examples/hft-platform.md) | Zero-copy reads, io_uring with borrowed buffers, lock-free queues, `decimal`, `timeseries` |
+| [Web store](examples/web-store.md) | HTTP, `sql`, `serde` JSON, `i18n`, `crypto` for sessions; streams of rows as ordinary iterators |
+| [Hashiverse](examples/hashiverse.md) | `crypto`, `net`, `storage`, simulation handlers; generators for protocol state machines |
 
 ## Open questions
 
+- **Audio output.** [Talk](examples/talk.md)'s `say` plays sound. Is that a standard
+  `moddil/audio` mod, with an `Audio` effect and handlers for CoreAudio, WASAPI, ALSA or PipeWire,
+  and Web Audio, or a community mod? A simulated handler would let tests capture the samples.
 - **Opt-in runtime type information.** `reflect(T)` exists only at compile time
   ([`comptime.md`: Static reflection](comptime.md#static-reflection)). In-game editors, inspectors and
   generic debug UIs need a runtime description of a value's fields; Jai gives every type a

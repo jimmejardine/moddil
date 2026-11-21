@@ -79,7 +79,7 @@ Why these two:
 
 - Backend and infrastructure code is where effects, deterministic simulation, fast builds and
   supply-chain controls pay off most, and two of the reference examples (the
-  [web store](examples/03-web-store.md) and [Hashiverse](examples/04-hashiverse.md)) live there.
+  [web store](examples/web-store.md) and [Hashiverse](examples/hashiverse.md)) live there.
 - Python's audience is enormous, and its "this function is too slow" moment is a natural, low-risk
   first contact: one module, inside an existing project, with no rewrite.
 
@@ -219,14 +219,21 @@ Models write well only in languages they have seen. Moddil's plan is in
 - **Moddil for Rust developers**: the baggage dropped, chapter by chapter, with the migration table.
 - **Moddil for Python developers**: ownership explained for people who have never managed memory,
   starting from a single extension function.
-- **The reference examples as tutorials**: the [web store](examples/03-web-store.md) and
-  [Hashiverse](examples/04-hashiverse.md) built step by step.
+- **The reference examples as tutorials**: the [web store](examples/web-store.md) and
+  [Hashiverse](examples/hashiverse.md) built step by step.
 
 ## Flagship software
 
 - The **Hashiverse client** (milestones M3 and M5, [`roadmap.md`: Milestones](roadmap.md#milestones)) is the
   first real application, and it is used by a real network.
-- The four [reference examples](examples/README.md) are published as complete, idiomatic programs.
+- The [reference examples](examples/README.md) are published as complete, idiomatic programs.
+- **Flagship showcases** are built to market Moddil:
+  - [**Mandelbulb flight**](examples/mandelbulb.md), first: fly through a 3D fractal rendered on
+    the GPU by a kernel written in Moddil, small enough to embed on moddil.com;
+  - [**Talk**](examples/talk.md), for Python teams: `pip install`, and Python speaks on any
+    GPU, with no torch and no CUDA;
+  - [**fumoca**](examples/fumoca.md), for web teams: a Monte Carlo spreadsheet with a Svelte 5 UI over
+    one Moddil core, running a billion iterations in the browser without blocking the page.
 - **A widely used Python package** accelerated with Moddil would do more for adoption than any feature;
   finding one is a goal for the first year.
 

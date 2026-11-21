@@ -3,14 +3,17 @@
 The **reference examples as real programs**: the yardstick every language decision is measured
 against ([`specs/examples/README.md`](../specs/examples/README.md)).
 
-**Status:** empty until M3. Their design documents are in [`specs/examples/`](../specs/examples/README.md).
+**Status:** empty until M2. Their design documents are in [`specs/examples/`](../specs/examples/README.md).
 
 | Directory | Example | Milestone |
 |---|---|---|
+| `mandelbulb/` | Showcase: fly through the Mandelbulb, ray-marched on WebGPU; the first to be built | M2 |
 | `hashiverse/` | Hashiverse client: CLI/native first, then the browser | M3, M5 |
 | `web-store/` | Web store API with `sql`, HTTP and deterministic simulation | M4 |
 | `game/` | Multiplayer game: browser client, server, WebGPU | M5 |
 | `hft/` | HFT platform: same code in simulation and live | Later |
+| `fumoca/` | Showcase: the fumoca Monte Carlo spreadsheet, a Svelte 5 UI over a Moddil core | M5 |
+| `talk/` | Showcase: text to speech for Python; the CPU pool first, then WebGPU | M3 |
 
 - Each is a real mod (or a few), **built and tested in CI on every change**, so a language change that
   breaks an example is caught at once.

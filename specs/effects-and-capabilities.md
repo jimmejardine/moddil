@@ -530,10 +530,10 @@ No mainstream language has made a typed effect system popular. The measures:
 
 | Example | Uses |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | Simulation handlers for `Net` and `Time` in rollback tests; the restricted kernel set for GPU work |
-| [HFT](examples/02-hft-platform.md) | Statically known handlers in production (zero cost); recorded `Net` and `Time` for whole-day replay |
-| [Web store](examples/03-web-store.md) | A user-defined `Db` trait instead of threading a pool; narrowed `Fs` for uploads |
-| [Hashiverse](examples/04-hashiverse.md) | `TimeProvider`, `TransportFactory` and `ClientStorage` stay traits but are used after `with`, so the `RuntimeServices` plumbing disappears; the in-memory transport becomes a handler |
+| [Multiplayer game](examples/multiplayer-game.md) | Simulation handlers for `Net` and `Time` in rollback tests; the restricted kernel set for GPU work |
+| [HFT](examples/hft-platform.md) | Statically known handlers in production (zero cost); recorded `Net` and `Time` for whole-day replay |
+| [Web store](examples/web-store.md) | A user-defined `Db` trait instead of threading a pool; narrowed `Fs` for uploads |
+| [Hashiverse](examples/hashiverse.md) | `TimeProvider`, `TransportFactory` and `ClientStorage` stay traits but are used after `with`, so the `RuntimeServices` plumbing disappears; the in-memory transport becomes a handler |
 
 ## Open questions
 

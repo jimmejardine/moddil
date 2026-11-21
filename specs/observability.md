@@ -185,10 +185,10 @@ of the task that failed", or "which tasks have been blocked on the database for 
 
 | Example | Uses |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | Replay of a desynchronised match from the server's recording; spans across client, hub and chat |
-| [HFT](examples/02-hft-platform.md) | Interned logs on the tick-to-trade path; bit-for-bit replay of a trading day; latency histograms |
-| [Web store](examples/03-web-store.md) | OTLP traces across client, API and database; payment keys and personal data blocked from logs by type |
-| [Hashiverse](examples/04-hashiverse.md) | Opt-in live introspection of a volunteer node; replay of P2P incidents in simulation |
+| [Multiplayer game](examples/multiplayer-game.md) | Replay of a desynchronised match from the server's recording; spans across client, hub and chat |
+| [HFT](examples/hft-platform.md) | Interned logs on the tick-to-trade path; bit-for-bit replay of a trading day; latency histograms |
+| [Web store](examples/web-store.md) | OTLP traces across client, API and database; payment keys and personal data blocked from logs by type |
+| [Hashiverse](examples/hashiverse.md) | Opt-in live introspection of a volunteer node; replay of P2P incidents in simulation |
 
 ## Open questions
 

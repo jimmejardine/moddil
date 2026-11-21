@@ -100,10 +100,10 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
 
 | Example | What evolution means for it |
 |---|---|
-| [Game](examples/01-multiplayer-game.md) | Client and server code shared across editions; each side upgrades independently |
-| [HFT](examples/02-hft-platform.md) | Pinned toolchains; migrations verified as behaviour-preserving, which supports audit |
-| [Web store](examples/03-web-store.md) | A large codebase moves edition with `moddil migrate`; library upgrades applied with `moddil fix` |
-| [Hashiverse](examples/04-hashiverse.md) | Long-lived volunteer nodes run mixed versions, so wire compatibility matters more than source compatibility |
+| [Game](examples/multiplayer-game.md) | Client and server code shared across editions; each side upgrades independently |
+| [HFT](examples/hft-platform.md) | Pinned toolchains; migrations verified as behaviour-preserving, which supports audit |
+| [Web store](examples/web-store.md) | A large codebase moves edition with `moddil migrate`; library upgrades applied with `moddil fix` |
+| [Hashiverse](examples/hashiverse.md) | Long-lived volunteer nodes run mixed versions, so wire compatibility matters more than source compatibility |
 
 ## Open questions
 

@@ -215,7 +215,7 @@ portable and much cheaper. Recorded runs also supply reproducible PGO profiles
 Uses:
 - reproducing production incidents;
 - time-travel debugging (as in rr, WinDbg TTD, Replay.io, Elm's debugger);
-- replaying a whole trading day ([HFT example](examples/02-hft-platform.md));
+- replaying a whole trading day ([HFT example](examples/hft-platform.md));
 - **replaying production traffic through a new code version**, with detection of where the runs
   diverge, as regression and shadow testing.
 
@@ -258,7 +258,7 @@ reproducible.
 ## Cross-platform determinism
 
 Bit-identical results across x86, ARM, WASM and GPU (for code without `nondet`), for game lockstep
-([game example](examples/01-multiplayer-game.md)), HFT replay on different hardware, and consensus
+([game example](examples/multiplayer-game.md)), HFT replay on different hardware, and consensus
 systems. It follows from [Sources of nondeterminism](#sources-of-nondeterminism): strict floating
 point, correctly rounded maths, and fixed-width integers.
 
@@ -269,7 +269,7 @@ Tensor-core paths whose accumulation order a vendor leaves open, and fast intrin
 
 ## Prior art: Hashiverse
 
-[Hashiverse](examples/04-hashiverse.md) already applies the core idea by hand, and is the strongest
+[Hashiverse](examples/hashiverse.md) already applies the core idea by hand, and is the strongest
 real-world evidence for it.
 
 **What it does** (`hashiverse-lib/src/tools/`):
@@ -310,10 +310,10 @@ real-world evidence for it.
 
 | Example | What determinism gives it |
 |---|---|
-| [Game](examples/01-multiplayer-game.md) | Identical simulation on browser WASM and native server; whole system simulated with latency and packet loss; `nondet` kept out of the lockstep code |
-| [HFT](examples/02-hft-platform.md) | Bit-identical backtest and replay of a trading day; replay of production traffic through new strategy versions |
-| [Web store](examples/03-web-store.md) | Simulated rolling deploys with mixed versions; reproducible order-flow tests |
-| [Hashiverse](examples/04-hashiverse.md) | The existing harness, plus deterministic randomness and interleavings, record and replay, and the self-check |
+| [Game](examples/multiplayer-game.md) | Identical simulation on browser WASM and native server; whole system simulated with latency and packet loss; `nondet` kept out of the lockstep code |
+| [HFT](examples/hft-platform.md) | Bit-identical backtest and replay of a trading day; replay of production traffic through new strategy versions |
+| [Web store](examples/web-store.md) | Simulated rolling deploys with mixed versions; reproducible order-flow tests |
+| [Hashiverse](examples/hashiverse.md) | The existing harness, plus deterministic randomness and interleavings, record and replay, and the self-check |
 
 ## Open questions
 

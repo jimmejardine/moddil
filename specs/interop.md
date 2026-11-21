@@ -167,10 +167,10 @@ let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → 
 
 | Example | Uses |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | A physics engine through its C API, a shim, or as a WASM component in the browser |
-| [HFT](examples/02-hft-platform.md) | DPDK / ef_vi-style kernel-bypass through C with zero overhead; C++ exchange SDKs and FIX engines through shims; `blocking` overlays for SDK calls that block |
-| [Web store](examples/03-web-store.md) | PostgreSQL through libpq or a native mod; mobile platform APIs through JNI and the Objective-C/Swift C surface |
-| [Hashiverse](examples/04-hashiverse.md) | The generated Rust bridge to `hashiverse-lib` during migration, replaced module by module by native Moddil |
+| [Multiplayer game](examples/multiplayer-game.md) | A physics engine through its C API, a shim, or as a WASM component in the browser |
+| [HFT](examples/hft-platform.md) | DPDK / ef_vi-style kernel-bypass through C with zero overhead; C++ exchange SDKs and FIX engines through shims; `blocking` overlays for SDK calls that block |
+| [Web store](examples/web-store.md) | PostgreSQL through libpq or a native mod; mobile platform APIs through JNI and the Objective-C/Swift C surface |
+| [Hashiverse](examples/hashiverse.md) | The generated Rust bridge to `hashiverse-lib` during migration, replaced module by module by native Moddil |
 
 ## Open questions
 

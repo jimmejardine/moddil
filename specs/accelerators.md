@@ -270,14 +270,32 @@ Following [`error-handling.md`](error-handling.md):
 
 | Example | Uses |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | WebGPU rendering and physics kernels in the browser; the same kernels run on the server through a CPU pool for authoritative simulation |
-| [HFT](examples/02-hft-platform.md) | Research Monte Carlo, option pricing and ML on CUDA; tensor expressions for models; FPGA feed handlers through FFI |
-| [Web store](examples/03-web-store.md) | None needed |
-| [Hashiverse](examples/04-hashiverse.md) | Possibly proof-of-work on a GPU or CPU pool (to evaluate) |
+| [Multiplayer game](examples/multiplayer-game.md) | WebGPU rendering and physics kernels in the browser; the same kernels run on the server through a CPU pool for authoritative simulation |
+| [HFT](examples/hft-platform.md) | Research Monte Carlo, option pricing and ML on CUDA; tensor expressions for models; FPGA feed handlers through FFI |
+| [Web store](examples/web-store.md) | None needed |
+| [Hashiverse](examples/hashiverse.md) | Possibly proof-of-work on a GPU or CPU pool (to evaluate) |
+| [Mandelbulb flight](examples/mandelbulb.md) | A ray-marching tile kernel on WebGPU; its distance estimator also runs on the CPU; golden images on the CPU simulator |
+| [fumoca](examples/fumoca.md) | Monte Carlo iterations on WebGPU, with the RNG and samplers shared with the CPU workers; kernels that depend on the workbook |
+| [Talk](examples/talk.md) | Tensor expressions for a text-to-speech model, tile kernels for its vocoder; WebGPU and the CPU simulator |
 
 ## Open questions
 
-None at present.
+- **Kernels that depend on run-time data.** Kernels are compile-time code, but
+  [fumoca](examples/fumoca.md) compiles each user's workbook into its own kernel, as do
+  database query engines and shader-graph editors. Options:
+  - **an interpreter kernel:** a fixed `#[kernel]` that runs a compact instruction tape built at
+    run time. It is safe and checked like any kernel, and needs no new feature, but is slower than
+    specialised code;
+  - **a shader builder in a mod:** the program generates WGSL or SPIR-V text and launches it
+    through a `dyn_kernel` API with typed bindings checked at launch. It is as fast as fumoca
+    today, but the kernel itself is not checked by the compiler;
+  - **a JIT:** the compiler's kernel back end shipped in the program. It is the fastest and is
+    checked, but it is large, and it runs the compiler at run time.
+- **Loading model weights.** [Talk](examples/talk.md) needs to load published weights:
+  safetensors files, memory-mapped, in `f16` and `bf16`, perhaps quantised. Open: whether
+  `moddil/tensor` reads safetensors (and GGUF) itself, how a tensor's static shape is checked
+  against a file read at run time, and whether loading straight to device memory is a `Gpu`
+  operation.
 
 ## Background
 

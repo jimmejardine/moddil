@@ -17,8 +17,8 @@
 ## Problem
 
 Moddil promises that cost is visible ([`vision.md`: Cross-cutting themes](vision.md#cross-cutting-themes)), and two reference examples
-depend on it: the [HFT platform](examples/02-hft-platform.md) needs tick-to-trade latency competitive
-with tuned C++, with zero allocation on the hot path, and the [multiplayer game](examples/01-multiplayer-game.md)
+depend on it: the [HFT platform](examples/hft-platform.md) needs tick-to-trade latency competitive
+with tuned C++, with zero allocation on the hot path, and the [multiplayer game](examples/multiplayer-game.md)
 must hit its frame budget, including in debug builds. The relevant decisions are spread across memory,
 values, numerics, concurrency and build times. What is missing is one model: what each construct costs,
 how a programmer guarantees that a hot path stays fast, and how regressions are caught.
@@ -287,10 +287,10 @@ bench "one tick" for on_tick {
 
 | Example | What it needs | Moddil's answer |
 |---|---|---|
-| [HFT platform](examples/02-hft-platform.md) | Predictable tick-to-trade latency; zero allocation on the hot path | `#[no_alloc, no_lock]` hot loop; pinned executors; kernel-bypass reads, busy-polling in production and interrupt-driven in development; PGO from a replayed trading day; counter budgets in CI |
-| [Multiplayer game](examples/01-multiplayer-game.md) | Frame budget in release and debug; cache-friendly entity data | Struct-of-arrays; optimised dependencies in debug; debug frame-rate benchmark |
-| [Web store](examples/03-web-store.md) | Throughput per request; low memory per request | Allocation counters per request handler; visible rc and clone costs |
-| [Hashiverse](examples/04-hashiverse.md) | Crypto and proof-of-work throughput | Constant-time crypto that is still vectorised; PGO from simulated network runs |
+| [HFT platform](examples/hft-platform.md) | Predictable tick-to-trade latency; zero allocation on the hot path | `#[no_alloc, no_lock]` hot loop; pinned executors; kernel-bypass reads, busy-polling in production and interrupt-driven in development; PGO from a replayed trading day; counter budgets in CI |
+| [Multiplayer game](examples/multiplayer-game.md) | Frame budget in release and debug; cache-friendly entity data | Struct-of-arrays; optimised dependencies in debug; debug frame-rate benchmark |
+| [Web store](examples/web-store.md) | Throughput per request; low memory per request | Allocation counters per request handler; visible rc and clone costs |
+| [Hashiverse](examples/hashiverse.md) | Crypto and proof-of-work throughput | Constant-time crypto that is still vectorised; PGO from simulated network runs |
 
 ## Open questions
 

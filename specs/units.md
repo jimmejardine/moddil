@@ -193,10 +193,10 @@ seconds, the other expected newton-seconds.
 
 | Example | Units |
 |---|---|
-| [Game](examples/01-multiplayer-game.md) | Metres, seconds, radians, `m/s^2` in physics shared by client and server |
-| [HFT](examples/02-hft-platform.md) | `Fixed<4>[USD]` prices, quantities, notional (`Price * Qty`); `i64[ns]` latencies |
-| [Web store](examples/03-web-store.md) | Money per currency; shipping weights and dimensions |
-| [Hashiverse](examples/04-hashiverse.md) | `500[ms]` durations and `64[MiB]` sizes, where today raw integer types (`TimeMillis`, `DurationMillis`) are used |
+| [Game](examples/multiplayer-game.md) | Metres, seconds, radians, `m/s^2` in physics shared by client and server |
+| [HFT](examples/hft-platform.md) | `Fixed<4>[USD]` prices, quantities, notional (`Price * Qty`); `i64[ns]` latencies |
+| [Web store](examples/web-store.md) | Money per currency; shipping weights and dimensions |
+| [Hashiverse](examples/hashiverse.md) | `500[ms]` durations and `64[MiB]` sizes, where today raw integer types (`TimeMillis`, `DurationMillis`) are used |
 
 ## Open questions
 

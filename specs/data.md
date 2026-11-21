@@ -165,10 +165,10 @@ values are contracts, so a newer app version can always read what an older one s
 
 | Example | Uses |
 |---|---|
-| [Multiplayer game](examples/01-multiplayer-game.md) | Compact binary snapshots with locked tags; saved games as contracts |
-| [HFT](examples/02-hft-platform.md) | SBE-style zero-copy views for exchange feeds; typed SQL for reference data |
-| [Web store](examples/03-web-store.md) | Migrations-first PostgreSQL; `Db` effect with linear transactions; generated API contracts with old mobile clients still checked |
-| [Hashiverse](examples/04-hashiverse.md) | Wire compatibility with the Rust implementation through consumed contracts; local storage as contracts |
+| [Multiplayer game](examples/multiplayer-game.md) | Compact binary snapshots with locked tags; saved games as contracts |
+| [HFT](examples/hft-platform.md) | SBE-style zero-copy views for exchange feeds; typed SQL for reference data |
+| [Web store](examples/web-store.md) | Migrations-first PostgreSQL; `Db` effect with linear transactions; generated API contracts with old mobile clients still checked |
+| [Hashiverse](examples/hashiverse.md) | Wire compatibility with the Rust implementation through consumed contracts; local storage as contracts |
 
 ## Open questions
 

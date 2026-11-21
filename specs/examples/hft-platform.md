@@ -1,4 +1,4 @@
-# Example 2: High-Frequency Trading Platform
+# High-Frequency Trading Platform
 
 ## Overview
 

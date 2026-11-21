@@ -23,9 +23,9 @@ a large team.
 Yet three of the four [reference examples](examples/README.md) have a UI, and the browser is a required
 target ([R1](requirements.md#firm-requirements-decided)):
 
-- the [web store](examples/03-web-store.md) needs web, Android and iOS clients;
-- the [multiplayer game](examples/01-multiplayer-game.md) renders with WebGPU and has a chat UI;
-- [Hashiverse](examples/04-hashiverse.md) runs its client core in a Web Worker under a TypeScript and React app.
+- the [web store](examples/web-store.md) needs web, Android and iOS clients;
+- the [multiplayer game](examples/multiplayer-game.md) renders with WebGPU and has a chat UI;
+- [Hashiverse](examples/hashiverse.md) runs its client core in a Web Worker under a TypeScript and React app.
 
 Moddil has to answer how its code reaches the screen without becoming a UI toolkit project.
 
@@ -195,7 +195,16 @@ TypeScript UI.
   bindings marshalling calls through `postMessage`.
 - **Packaging:** output is an ES module plus generated `.d.ts` types, usable from any bundler (Vite,
   webpack, esbuild) ([`compiler.md`](compiler.md)). Binary size and start-up time are tracked as
-  release metrics for the game and web store.
+  release metrics for the game, the web store and fumoca.
+- **Framework adapters (decided).** The generated bindings are framework-agnostic: plain functions,
+  classes and an event subscription. `moddil/web` adds thin adapters that turn a core's views into
+  each framework's reactive state:
+  - **React**, through `useSyncExternalStore`;
+  - **Svelte 5**, through runes (`$state`).
+
+  `moddil new --template web` starts a Svelte 5 app over a Moddil core, in the patterns of the
+  [fumoca](examples/fumoca.md) showcase. Other frameworks need only
+  the plain bindings, or a community adapter.
 
 ## Mobile packaging
 
@@ -244,10 +253,13 @@ Moddil does not standardise a UI framework, but nothing stops community mods fro
 
 | Example | UI | Moddil's part |
 |---|---|---|
-| [Web store](examples/03-web-store.md) | SwiftUI, Jetpack Compose, TypeScript web app | Shared core (cart, catalogue, offline sync, API client) bound to all three |
-| [Multiplayer game](examples/01-multiplayer-game.md) | WebGPU rendering; DOM chat | Rendering, prediction and netcode in Moddil; chat through `moddil/web` or a TS component |
-| [Hashiverse](examples/04-hashiverse.md) | TypeScript and React | Client core in a Web Worker with generated TS bindings (replacing today's hand-written wrapper) |
-| [HFT platform](examples/02-hft-platform.md) | Operator dashboards | A web dashboard over a core, or an external tool reading metrics ([`observability.md`](observability.md)) |
+| [Web store](examples/web-store.md) | SwiftUI, Jetpack Compose, TypeScript web app | Shared core (cart, catalogue, offline sync, API client) bound to all three |
+| [Multiplayer game](examples/multiplayer-game.md) | WebGPU rendering; DOM chat | Rendering, prediction and netcode in Moddil; chat through `moddil/web` or a TS component |
+| [Hashiverse](examples/hashiverse.md) | TypeScript and React | Client core in a Web Worker with generated TS bindings (replacing today's hand-written wrapper) |
+| [Mandelbulb flight](examples/mandelbulb.md) | A Svelte 5 overlay | Input, camera and frame loop on the main thread; rendering in a kernel |
+| [fumoca](examples/fumoca.md) | Svelte 5 | Formula engine, simulation and GPU kernels in an engine Web Worker, through the Svelte adapter |
+| [Talk](examples/talk.md) | A Svelte 5 demo page; Python has no UI | The model, through the Svelte adapter |
+| [HFT platform](examples/hft-platform.md) | Operator dashboards | A web dashboard over a core, or an external tool reading metrics ([`observability.md`](observability.md)) |
 
 ## Open questions
 

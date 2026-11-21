@@ -213,10 +213,10 @@ than for humans:
 
 | Example | What it needs |
 |---|---|
-| [Game](examples/01-multiplayer-game.md) | Live update of game rules and rendering in the browser, keeping game state |
-| [HFT](examples/02-hft-platform.md) | A fast dev loop; long release builds are acceptable if cached |
-| [Web store](examples/03-web-store.md) | Large-team iteration; sub-second rebuilds; patching an API handler without dropping sessions; a shared team cache |
-| [Hashiverse](examples/04-hashiverse.md) | Fast hash and crypto code in dev builds without manual overrides; tests in the default profile; live-patching one node of a running simulation |
+| [Game](examples/multiplayer-game.md) | Live update of game rules and rendering in the browser, keeping game state |
+| [HFT](examples/hft-platform.md) | A fast dev loop; long release builds are acceptable if cached |
+| [Web store](examples/web-store.md) | Large-team iteration; sub-second rebuilds; patching an API handler without dropping sessions; a shared team cache |
+| [Hashiverse](examples/hashiverse.md) | Fast hash and crypto code in dev builds without manual overrides; tests in the default profile; live-patching one node of a running simulation |
 
 ## Open questions
 

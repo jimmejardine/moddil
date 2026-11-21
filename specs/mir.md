@@ -202,9 +202,9 @@ Proposed lowering of [`effects-and-capabilities.md`: Compilation](effects-and-ca
 | Example | What the MIR must do |
 |---|---|
 | [Tour](tour.md) | Evidence parameters for `Links` and `Rand`; `?!` as a trap edge; isolated scopes with unwind edges per connection |
-| [HFT](examples/02-hft-platform.md) | Devirtualise every handler on the hot path; no `dup`/`drop` or allocation left where `#[no_alloc]` is checked |
-| [Firmware](examples/05-sensor-firmware.md) | Static tasks: the `Suspend` terminators let the compiler size every task's stack at compile time |
-| [Game](examples/01-multiplayer-game.md) | Kernels in the GPU subset; strict floats for bit-identical simulation on WASM and native |
+| [HFT](examples/hft-platform.md) | Devirtualise every handler on the hot path; no `dup`/`drop` or allocation left where `#[no_alloc]` is checked |
+| [Firmware](examples/sensor-firmware.md) | Static tasks: the `Suspend` terminators let the compiler size every task's stack at compile time |
+| [Game](examples/multiplayer-game.md) | Kernels in the GPU subset; strict floats for bit-identical simulation on WASM and native |
 
 ## Open questions
 
