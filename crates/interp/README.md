@@ -25,6 +25,19 @@ moddil_interp::call_fn(&db, file, index, &args, &mut |_, _| {})   // -> Result<V
 moddil_interp::run_test(&db, file, index, &mut |range, value| …) // observed values
 ```
 
+## Layout
+
+| Module | Owns |
+|---|---|
+| `lib.rs` | The public API: `Value`, `Pointer`, `Trap`, `Stop`, `call_fn`, `run_test` |
+| `machine.rs` | The loop: one statement, terminator or destructor call per step, using the parts below |
+| `stack.rs` | The frame stack and all memory: locals, places, loads and stores through borrows, pending destructors, and where a trap is reported |
+| `dispatch.rs` | Types as a frame runs them, the witness tables of trait methods, and drop glue |
+| `calls.rs` | What a call runs: through `dyn` borrows, anonymous impls and closures |
+| `natives/` | The prelude's `#[intrinsic]` functions: the core ones, `Buf`'s and the text types' |
+| `ops.rs` | The operators on values |
+| `value.rs` | `Value`, `Pointer`, and how values are shown |
+
 ## Used for
 
 - Running programs and tests before any backend exists.

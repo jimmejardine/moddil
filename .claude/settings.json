@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(**/.obsidian/**)",
+      "Edit(**/.obsidian/**)"
+    ]
+  }
+}

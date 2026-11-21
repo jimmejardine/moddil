@@ -1,0 +1,319 @@
+//! The frame stack: every frame's locals and where it is in its body. All memory lives here, so a
+//! borrow is a [`Pointer`] into a frame, and only this module reads or writes through one.
+
+use moddil_mir::{Body, Const, Local, Operand, Place, Projection, Statement, Terminator};
+use moddil_sema::{Src, Ty};
+use moddil_syntax::TextRange;
+
+use crate::value::{Pointer, Value};
+
+/// Where a call's result goes.
+pub(crate) enum Ret {
+    /// Out of the interpreter: the function or test it was asked to run.
+    Top,
+    /// To a place of the caller, which then continues at a block; and, for a function that can
+    /// fail, where its error goes and where the caller continues then.
+    To(Pointer, usize, Option<(Pointer, usize)>),
+    /// Nowhere: the call is a destructor, run while the caller drops a value.
+    Drop,
+}
+
+/// A destructor call waiting to run: the function, its type arguments, and the value.
+pub(crate) type DropCall = (u32, Vec<Ty>, Value);
+
+/// One call being run.
+pub(crate) struct Frame<'a> {
+    body: &'a Body,
+    /// The type arguments it runs with (none for a function that is not generic).
+    type_args: Vec<Ty>,
+    locals: Vec<Value>,
+    block: usize,
+    stmt: usize,
+    ret: Ret,
+    /// While a `Drop` terminator runs: the destructors still to call, and where to go after.
+    drops: Vec<DropCall>,
+    after_drops: Option<usize>,
+}
+
+impl<'a> Frame<'a> {
+    pub(crate) fn new(body: &'a Body, args: Vec<Value>, type_args: Vec<Ty>, ret: Ret) -> Self {
+        assert_eq!(args.len(), body.arg_count, "argument count");
+        let mut locals = vec![Value::Empty; body.locals.len()];
+        for (slot, a) in locals[1..].iter_mut().zip(args) {
+            *slot = a;
+        }
+        Frame {
+            body,
+            type_args,
+            locals,
+            block: 0,
+            stmt: 0,
+            ret,
+            drops: Vec::new(),
+            after_drops: None,
+        }
+    }
+
+    /// Whether a trap here is reported where its caller called it: in a `#[track_caller]`
+    /// function, or in the prelude's or derived code.
+    fn tracked(&self) -> bool {
+        self.body.track_caller || !self.body.src.is_file()
+    }
+
+    fn terminator_span(&self) -> TextRange {
+        self.body.blocks[self.block].terminator_span
+    }
+}
+
+/// What the top frame's pending destructors ask for next.
+pub(crate) enum PendingDrop {
+    /// No `Drop` terminator is running.
+    None,
+    /// All of its destructors have run; the frame has moved on to the block after it.
+    Finished,
+    /// Call this destructor next.
+    Call(DropCall),
+}
+
+/// The stack of frames. The running frame is the top one.
+pub(crate) struct Stack<'a> {
+    frames: Vec<Frame<'a>>,
+}
+
+impl<'a> Stack<'a> {
+    pub(crate) fn new(first: Frame<'a>) -> Self {
+        Stack {
+            frames: vec![first],
+        }
+    }
+
+    pub(crate) fn depth(&self) -> usize {
+        self.frames.len()
+    }
+
+    pub(crate) fn push(&mut self, frame: Frame<'a>) {
+        self.frames.push(frame);
+    }
+
+    /// Ends the top frame's call, giving where its result goes.
+    pub(crate) fn pop(&mut self) -> Ret {
+        self.frames.pop().expect("a frame").ret
+    }
+
+    fn top_index(&self) -> usize {
+        self.frames.len() - 1
+    }
+
+    fn top(&self) -> &Frame<'a> {
+        self.frames.last().expect("a frame")
+    }
+
+    fn top_mut(&mut self) -> &mut Frame<'a> {
+        self.frames.last_mut().expect("a frame")
+    }
+
+    /// The body the top frame runs.
+    pub(crate) fn body(&self) -> &'a Body {
+        self.top().body
+    }
+
+    /// The type arguments the top frame runs with.
+    pub(crate) fn type_args(&self) -> &[Ty] {
+        &self.top().type_args
+    }
+
+    /// Whether the top frame is the call the interpreter was asked to run.
+    pub(crate) fn at_root(&self) -> bool {
+        matches!(self.top().ret, Ret::Top)
+    }
+
+    /// A local of the top frame.
+    pub(crate) fn local(&self, l: Local) -> &Value {
+        &self.top().locals[l.index()]
+    }
+
+    /// The span of the top frame's current terminator.
+    pub(crate) fn terminator_span(&self) -> TextRange {
+        self.top().terminator_span()
+    }
+
+    /// The top frame's next statement, moving past it; `None` when only its block's terminator
+    /// is left.
+    pub(crate) fn next_statement(&mut self) -> Option<&'a Statement> {
+        let frame = self.top_mut();
+        let body: &'a Body = frame.body;
+        let s = body.blocks[frame.block].statements.get(frame.stmt)?;
+        frame.stmt += 1;
+        Some(s)
+    }
+
+    /// The top frame's current terminator.
+    pub(crate) fn terminator(&self) -> &'a Terminator {
+        let frame = self.top();
+        let body: &'a Body = frame.body;
+        &body.blocks[frame.block].terminator
+    }
+
+    /// Continues the top frame at the start of `block`.
+    pub(crate) fn goto(&mut self, block: usize) {
+        let frame = self.top_mut();
+        frame.block = block;
+        frame.stmt = 0;
+    }
+
+    /// Starts running destructors for the top frame's `Drop` terminator, then continues at
+    /// `after`.
+    pub(crate) fn start_drops(&mut self, calls: Vec<DropCall>, after: usize) {
+        let frame = self.top_mut();
+        frame.drops = calls;
+        frame.after_drops = Some(after);
+    }
+
+    /// The next destructor of a running `Drop` terminator, if one is running.
+    pub(crate) fn pending_drop(&mut self) -> PendingDrop {
+        let frame = self.top_mut();
+        let Some(after) = frame.after_drops else {
+            return PendingDrop::None;
+        };
+        if frame.drops.is_empty() {
+            frame.after_drops = None;
+            self.goto(after);
+            PendingDrop::Finished
+        } else {
+            PendingDrop::Call(frame.drops.remove(0))
+        }
+    }
+
+    /// Where a trap is reported: the file and range of the top frame's code, or, when that code
+    /// is tracked (`#[track_caller]`, the prelude's or derived code), the call of the nearest
+    /// untracked caller. The flag says whether the trap is in the top frame's own code, where
+    /// the details of a failed `assert` belong.
+    pub(crate) fn trap_site(&self, range: Option<TextRange>) -> (u32, TextRange, bool) {
+        let top = self.top();
+        if !top.tracked()
+            && let Src::File(file) = top.body.src
+        {
+            return (file, range.unwrap_or_else(|| top.terminator_span()), true);
+        }
+        let caller = self
+            .frames
+            .iter()
+            .rev()
+            .find(|f| !f.tracked())
+            .unwrap_or(top);
+        (
+            caller.body.src.file().unwrap_or(0),
+            caller.terminator_span(),
+            false,
+        )
+    }
+
+    /// Where `place` of the top frame is, following borrows.
+    pub(crate) fn resolve(&self, place: &Place) -> Pointer {
+        let mut ptr = Pointer {
+            frame: self.top_index(),
+            local: place.local.0,
+            path: Vec::new(),
+        };
+        for p in &place.projection {
+            match p {
+                Projection::Field(i) => ptr.path.push(*i),
+                Projection::Downcast(_) => {}
+                Projection::Deref => match self.load(&ptr) {
+                    Value::Ref(target, _) | Value::Dyn(target, _, _) => ptr = target,
+                    other => unreachable!("dereferencing {other:?}"),
+                },
+                Projection::Index(l) => match self.local(*l) {
+                    Value::Int(i) => ptr.path.push(*i as u32),
+                    other => unreachable!("an index: {other:?}"),
+                },
+            }
+        }
+        ptr
+    }
+
+    pub(crate) fn load(&self, ptr: &Pointer) -> Value {
+        let mut v = &self.frames[ptr.frame].locals[ptr.local as usize];
+        for &i in &ptr.path {
+            v = match v {
+                Value::Tuple(xs)
+                | Value::Array(xs)
+                | Value::Buf(_, xs)
+                | Value::Adt { fields: xs, .. } => &xs[i as usize],
+                other => unreachable!("a field of {other:?}"),
+            };
+        }
+        v.clone()
+    }
+
+    pub(crate) fn store(&mut self, ptr: &Pointer, value: Value) {
+        let mut v = &mut self.frames[ptr.frame].locals[ptr.local as usize];
+        for &i in &ptr.path {
+            v = match v {
+                Value::Tuple(xs)
+                | Value::Array(xs)
+                | Value::Buf(_, xs)
+                | Value::Adt { fields: xs, .. } => &mut xs[i as usize],
+                other => unreachable!("a field of {other:?}"),
+            };
+        }
+        *v = value;
+    }
+
+    pub(crate) fn read(&self, place: &Place) -> Value {
+        self.load(&self.resolve(place))
+    }
+
+    pub(crate) fn operand(&self, o: &Operand) -> Value {
+        match o {
+            Operand::Copy(p) | Operand::Move(p) => self.read(p),
+            Operand::Const(Const::Int(v)) => Value::Int(*v),
+            Operand::Const(Const::Bool(v)) => Value::Bool(*v),
+            Operand::Const(Const::Unit) => Value::Unit,
+            Operand::Const(Const::Char(c)) => Value::Char(*c),
+            Operand::Const(Const::Str(i)) => {
+                Value::Str(self.body().strs[*i as usize].as_str().into())
+            }
+        }
+    }
+
+    /// Like [`Stack::operand`], but a moved value leaves its place empty.
+    pub(crate) fn take(&mut self, o: &Operand) -> Value {
+        let v = self.operand(o);
+        if let Operand::Move(p) = o
+            && !p.is_indirect()
+        {
+            let ptr = self.resolve(p);
+            self.store(&ptr, Value::Empty);
+        }
+        v
+    }
+
+    /// What a borrow points to, or the value itself if it is not a borrow.
+    pub(crate) fn deref(&self, v: &Value) -> Value {
+        match v {
+            Value::Ref(ptr, _) => self.load(ptr),
+            v => v.clone(),
+        }
+    }
+
+    /// `v` with every borrow replaced by what it points to, for reporting outside the program.
+    pub(crate) fn shown(&self, v: Value) -> Value {
+        match v {
+            Value::Ref(ptr, m) | Value::Dyn(ptr, m, _) => {
+                Value::Borrowed(Box::new(self.shown(self.load(&ptr))), m)
+            }
+            Value::Tuple(xs) => Value::Tuple(xs.into_iter().map(|x| self.shown(x)).collect()),
+            Value::Adt {
+                adt,
+                variant,
+                fields,
+            } => Value::Adt {
+                adt,
+                variant,
+                fields: fields.into_iter().map(|x| self.shown(x)).collect(),
+            },
+            v => v,
+        }
+    }
+}
