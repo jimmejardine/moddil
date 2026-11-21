@@ -112,6 +112,7 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
         installed: HashMap::new(),
         uncoerced: None,
         captured: HashMap::new(),
+        in_closure: false,
     };
     for &p in &hir.params {
         b.local(p);
@@ -220,6 +221,7 @@ fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
         installed: HashMap::new(),
         uncoerced: None,
         captured: HashMap::new(),
+        in_closure: true,
     };
     let env = b.cfg.new_local(
         Ty::tuple(c.captures.to_vec()),
@@ -294,6 +296,9 @@ struct Builder<'a> {
     installed: HashMap<(ExprId, usize), Place>,
     /// In a closure's body: where each local of the enclosing body it captures is.
     captured: HashMap<hir::LocalId, Place>,
+    /// Whether the body built is a closure's, whose returns check none of its function's
+    /// postconditions.
+    in_closure: bool,
     /// The expression being evaluated before its conversion to a `dyn` borrow, which is not
     /// converted again.
     uncoerced: Option<ExprId>,
@@ -446,7 +451,7 @@ impl Builder<'_> {
 
     /// Before returning: the postconditions, with `result` holding the value returned.
     pub(super) fn ensures(&mut self) {
-        if self.hir.ensures.is_empty() {
+        if self.hir.ensures.is_empty() || self.in_closure {
             return;
         }
         let result = self.hir.result.map(|r| self.local(r));

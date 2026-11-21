@@ -546,7 +546,7 @@ impl Machine<'_> {
             }
         }
         self.olds.push(olds);
-        let result = self.block(&f.node.body().expect("a body"));
+        let result = self.wrapped_body(f, 0, range);
         let result = match result {
             Ok(v) | Err(Flow::Return(v)) => Ok(v),
             // `?` on `None` in a function returning an `Option` returns `None`.

@@ -47,8 +47,10 @@ impl Collector<'_> {
             }
         }
         let mut ds = Vec::new();
-        // `#[track_caller]` (`attr.track-caller.1`); other attributes on a function wait.
+        // `#[track_caller]` (`attr.track-caller.1`) and `#[around(w)]` (`attr.around.1`); other
+        // attributes on a function wait.
         let mut track_caller = false;
+        let mut around = Vec::new();
         let mut intrinsic = false;
         for attr in node.children().filter(|c| c.kind() == K::OUTER_ATTR) {
             let path = attr
@@ -60,10 +62,38 @@ impl Collector<'_> {
             let input = attr.child(K::ATTR).and_then(|a| a.child(K::ATTR_INPUT));
             if path == ["track_caller"] && input.is_none() {
                 track_caller = true;
+            } else if path == ["around"] && src.is_file() {
+                if input.is_none() {
+                    ds.push(Diagnostic::error(
+                        Code::E1005,
+                        attr.text_range(),
+                        "`#[around(w)]` names the function that wraps this one",
+                    ));
+                }
+                around.push(attr.text_range());
             } else if path == ["intrinsic"] && input.is_none() && src == Src::Prelude {
                 intrinsic = true;
             } else {
                 ds.push(Diagnostic::unsupported(attr.text_range(), "this attribute"));
+            }
+        }
+        // A wrapped function is free, not `const`, and has plain parameters, for now.
+        if let Some(&at) = around.first() {
+            let what = if !matches!(container, Container::Free) {
+                Some("a wrapper on a method")
+            } else if node
+                .child_tokens()
+                .take_while(|t| t.kind() != K::FN_KW)
+                .any(|t| t.kind() == K::CONST_KW)
+            {
+                Some("a wrapper on a `const fn`")
+            } else if crate::wrap::params(node).is_none() {
+                Some("a wrapper on a function with a parameter written as a pattern")
+            } else {
+                None
+            };
+            if let Some(what) = what {
+                ds.push(Diagnostic::unsupported(at, what));
             }
         }
         // `const fn` (`comptime.const-fn.1`).

@@ -44,6 +44,9 @@ pub(crate) struct Closure {
     pub(crate) types: std::collections::HashMap<String, Head>,
     pub(crate) file: Option<u32>,
     pub(crate) module: usize,
+    /// For the closure a wrapper is given (`attr.around.1`): the wrapped function's key, and
+    /// the wrapper after which the closure runs the rest.
+    pub(crate) wrapped: Option<(String, usize)>,
 }
 
 /// Where a borrow points: a call's frame, a variable in it, and a path of field positions.

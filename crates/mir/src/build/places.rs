@@ -31,6 +31,7 @@ impl Builder<'_> {
             | ExprKind::Deref(c)
             | ExprKind::Ref { expr: c, .. }
             | ExprKind::Question(c)
+            | ExprKind::Pass(c)
             | ExprKind::Bang(c, _)
             | ExprKind::Fail(c)
             | ExprKind::Discard(c)

@@ -244,6 +244,7 @@ impl Checker<'_> {
             &ExprKind::Break { target, value } => self.break_expr(range, target, value),
             ExprKind::Continue { .. } => Ty::Never,
             &ExprKind::Question(x) => self.question(e, x),
+            &ExprKind::Pass(x) => self.pass(e, x),
             &ExprKind::Bang(x, _) => self.bang(e, x),
             &ExprKind::Fail(x) => self.fail(e, x),
             &ExprKind::Discard(x) => self.discard(x),

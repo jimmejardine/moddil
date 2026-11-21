@@ -20,6 +20,7 @@ mod names;
 mod paths;
 mod patterns;
 pub(crate) mod text;
+mod wrappers;
 
 use names::Names;
 
@@ -246,6 +247,21 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
                 && !matches!(sig.container, Container::Trait(_))
             {
                 cx.contracts(f.syntax(), &sig.ret);
+            }
+            // Wrappers (`attr.around.1`), on a free function that is not `const`, with plain
+            // parameters.
+            if let Some(f) = &node
+                && matches!(sig.container, Container::Free)
+                && !sig.is_const
+                && sig.src.is_file()
+                && crate::wrap::params(f.syntax()).is_some()
+            {
+                let attrs = crate::wrap::around_attrs(f.syntax());
+                if !attrs.is_empty() {
+                    let id = cx.wrapped(sig, &attrs, f.body().as_ref());
+                    cx.out.body.root = Some(id);
+                    return cx.out;
+                }
             }
             node.and_then(|f| f.body())
         }

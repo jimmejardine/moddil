@@ -3,7 +3,7 @@
 Moddil's **mid-level IR**, built from the typed HIR, and the passes over it
 ([`specs/mir.md`](../../specs/mir.md)).
 
-**Status:** slices S0 to S8b: the `mir(owner)` query builds a body from the typed HIR, for files
+**Status:** slices S0 to S8c: the `mir(owner)` query builds a body from the typed HIR, for files
 without errors (a string literal is a constant whose text the body holds, and `fmt"…"` a run of
 `String` and `Display` calls; an element is a place with an `Index` projection, checked to be in
 bounds first, and a collection literal a call of `FromArrayLiteral`), once for a generic function: calls name their callee and its type arguments, and a

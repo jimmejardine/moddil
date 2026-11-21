@@ -723,3 +723,21 @@ fn closures() {
         &[("E0501", 4)],
     );
 }
+
+#[test]
+fn wrappers_not_supported_yet() {
+    let w = "fn w<A, R>(f: &FnInfo, a: A, inner: impl FnOnce(A) -> R) -> R { inner(a) }\n";
+    ok(&format!("{w}#[around(w)] fn f(x: int) -> int {{ x }}"));
+    err(
+        &format!("{w}struct S;\nimpl S {{\n#[around(w)] fn m(&self) -> int {{ 1 }}\n}}"),
+        &[("I0001", 4)],
+    );
+    err(
+        &format!("{w}#[around(w)] const fn c() -> int {{ 1 }}"),
+        &[("I0001", 2)],
+    );
+    err(
+        &format!("{w}#[around(w)] fn d((a, b): (int, int)) -> int {{ a + b }}"),
+        &[("I0001", 2)],
+    );
+}

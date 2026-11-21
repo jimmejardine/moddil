@@ -1,0 +1,194 @@
+// covers: attr.around.1, attr.around.args.1, attr.around.info.1, attr.around.order.1, attr.around.body.1, attr.around.contracts.1
+
+#[derive(Debug, Clone, PartialEq)]
+enum Denied { No }
+
+// Describes the call: the function's path, its arguments, and what it returned.
+fn describe<A: Debug>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> String) -> String {
+    let shown = fmt"{args:?}";
+    let r = inner(args);
+    let p = f.path.clone();
+    fmt"{p} {shown} = {r}"
+}
+
+fn plain<A, R>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> R) -> R {
+    inner(args)
+}
+
+// Calls `inner` twice, so the arguments are `Clone`.
+fn twice<A: Clone>(f: &FnInfo, args: A, inner: impl Fn(A) -> int) -> int {
+    inner(args.clone()) + inner(args)
+}
+
+// Refuses unless `open`.
+fn gate<A, R>(open: bool, f: &FnInfo, args: A, inner: impl FnOnce(A) -> R) -> R with fail(Denied) {
+    if !open {
+        fail(Denied::No)
+    }
+    inner(args)
+}
+
+fn plus<A>(k: int, f: &FnInfo, args: A, inner: impl FnOnce(A) -> int) -> int {
+    inner(args) + k
+}
+
+fn times<A>(k: int, f: &FnInfo, args: A, inner: impl FnOnce(A) -> int) -> int {
+    inner(args) * k
+}
+
+// What `FnInfo` says of the parameters.
+fn params<A>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> String) -> String {
+    let mut out = String::new();
+    for p in f.params.iter() {
+        let n = p.name.clone();
+        let t = p.ty.clone();
+        out.push_str(&fmt"{n}: {t}; ");
+    }
+    out
+}
+
+// Reads context data, which the wrapped function then needs too.
+struct Role { admin: bool }
+
+fn admin_only<A>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> int) -> int with role: &Role {
+    if role.admin { inner(args) } else { 0 }
+}
+
+#[around(admin_only)]
+fn secret(x: int) -> int {
+    x * 2
+}
+
+#[around(describe)]
+fn greet(name: String, n: int) -> String {
+    fmt"hello {name} {n}"
+}
+
+#[around(twice)]
+fn add(a: int, b: int) -> int {
+    a + b
+}
+
+#[around(gate(false))]
+fn closed() -> int {
+    1
+}
+
+#[around(gate(true))]
+fn opened(x: int) -> int {
+    x
+}
+
+#[around(plus(1))]
+#[around(times(10))]
+fn ordered(x: int) -> int {
+    x
+}
+
+#[around(plain)]
+fn early(x: int) -> int {
+    if x > 0 {
+        return 7;
+    }
+    x
+}
+
+#[around(plain)]
+fn borrowed(xs: &[int]) -> int {
+    xs.len()
+}
+
+#[around(plain)]
+fn bump(v: &mut Vec<int>) {
+    v.push(1);
+}
+
+#[around(params)]
+fn three(a: int, b: &[bool], c: Vec<String>) -> String {
+    String::new()
+}
+
+#[around(plain)]
+fn id<T>(x: T) -> T {
+    x
+}
+
+#[around(plain)]
+fn checked(x: int) -> int
+    requires x > 0
+    ensures result == x + 1
+{
+    x + 1
+}
+
+#[around(plain)]
+fn denies(x: int) -> int with fail(Denied) {
+    if x < 0 {
+        fail(Denied::No)
+    }
+    x
+}
+
+#[around(plain)]
+fn none_early(x: int) -> Option<int> {
+    let y = if x > 0 { Some(x) } else { None }?;
+    Some(y * 2)
+}
+
+test "a wrapper sees the description and the arguments" {
+    greet(fmt"bob", 3)                      // => "greet greet::Args { name: \"bob\", n: 3 } = hello bob 3"
+    ;
+    three(1, &[true], [])                   // => "a: int; b: &[bool]; c: Vec<String>; "
+}
+
+test "a wrapper calls the body once, twice or never" {
+    add(1, 2)                               // => 6
+    ;
+    let r = try { closed()? };
+    r                                       // => Err(Denied::No)
+    ;
+    let s = try { opened(4)? };
+    s                                       // => Ok(4)
+}
+
+test "a wrapper's effects are the function's" {
+    with Role = (Role { admin: true }) {
+        secret(4)                           // => 8
+    }
+    ;
+    with Role = (Role { admin: false }) {
+        secret(4)                           // => 0
+    }
+}
+
+test "wrappers apply in order, the first outermost" {
+    ordered(2)                              // => 21
+}
+
+test "the body as written" {
+    early(5)                                // => 7
+    ;
+    early(-1)                               // => -1
+    ;
+    borrowed(&[1, 2, 3])                    // => 3
+    ;
+    let mut v: Vec<int> = [];
+    bump(&mut v);
+    bump(&mut v);
+    v.len()                                 // => 2
+    ;
+    id(true)                                // => true
+    ;
+    let e = try { denies(-1)? };
+    e                                       // => Err(Denied::No)
+    ;
+    none_early(0)                           // => None
+    ;
+    none_early(2)                           // => Some(4)
+}
+
+test "contracts are the function's, around its wrappers" {
+    checked(2)                              // => 3
+    ;
+    checked(0);                             //~ trap
+}

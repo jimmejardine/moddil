@@ -56,12 +56,18 @@ pub(crate) fn prelude_parse(db: &dyn Db, program: Program) -> Parse {
 #[salsa::tracked(returns(ref))]
 pub(crate) fn derived(db: &dyn Db, program: Program) -> (Expansion, Parse) {
     let prelude = prelude_parse(db, program).syntax();
-    let mut items: Vec<(Src, SyntaxNode)> = prelude.children().map(|n| (Src::Prelude, n)).collect();
+    let mut items: Vec<(Src, &str, SyntaxNode)> = prelude
+        .children()
+        .map(|n| (Src::Prelude, PRELUDE, n))
+        .collect();
+    let mut paths = Vec::new();
     for (f, file) in program.files(db).iter().enumerate() {
         let root = parse(db, file.source).syntax();
-        items.extend(root.children().map(|n| (Src::File(f as u32), n)));
+        let text = file.source.text(db).as_str();
+        items.extend(root.children().map(|n| (Src::File(f as u32), text, n)));
+        paths.push(file.module.clone());
     }
-    let expansion = derive::expand(items.into_iter());
+    let expansion = derive::expand(items.into_iter(), &paths);
     let parse = moddil_syntax::parse(&expansion.text);
     (expansion, parse)
 }
@@ -299,7 +305,8 @@ impl Collector<'_> {
 
     /// Declares `name` in module `module` (E0103 if the module already has the name).
     fn declare(&mut self, src: Src, name: &str, def: Def, vis: Vis, range: TextRange) {
-        if name.is_empty() || src == Src::Derived {
+        // Of derived code, only the items a wrapped function's expansion names have names.
+        if name.is_empty() || (src == Src::Derived && !name.starts_with("__")) {
             return;
         }
         let m = &mut self.tree.modules[self.module as usize];

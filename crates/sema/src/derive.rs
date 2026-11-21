@@ -35,6 +35,8 @@ pub(crate) struct Expansion {
 struct Variant {
     /// How it is written in a pattern or expression: `Point`, `Shape::Circle`.
     path: String,
+    /// How `Debug` shows it: its path, but for a wrapped function's `f::Args`.
+    shown: String,
     /// The fields' names (empty for positional fields).
     fields: Vec<String>,
     /// Whether the fields are named.
@@ -86,6 +88,7 @@ fn variant(node: &SyntaxNode, path: String) -> Variant {
             .map(|f| name_of(&f))
             .collect();
         Variant {
+            shown: path.clone(),
             path,
             fields,
             named: true,
@@ -98,6 +101,7 @@ fn variant(node: &SyntaxNode, path: String) -> Variant {
             .filter(|f| f.kind() == K::TUPLE_FIELD)
             .count();
         Variant {
+            shown: path.clone(),
             path,
             fields: vec![String::new(); n],
             named: false,
@@ -106,6 +110,7 @@ fn variant(node: &SyntaxNode, path: String) -> Variant {
         }
     } else {
         Variant {
+            shown: path.clone(),
             path,
             fields: Vec::new(),
             named: false,
@@ -167,10 +172,35 @@ impl Variant {
     }
 }
 
-/// The derived impls of every struct and enum among `items` (top-level nodes, with their source).
-pub(crate) fn expand(items: impl Iterator<Item = (Src, SyntaxNode)>) -> Expansion {
+/// The derived impls of every struct and enum among `items` (top-level nodes, with their source
+/// and its text), and the items each wrapped function's expansion names (`crate::wrap`);
+/// `paths` is each file's module path.
+pub(crate) fn expand<'t>(
+    items: impl Iterator<Item = (Src, &'t str, SyntaxNode)>,
+    paths: &[Vec<String>],
+) -> Expansion {
     let mut out = Expansion::default();
-    for (src, node) in items {
+    for (src, _text, node) in items {
+        if node.kind() == K::FN_ITEM {
+            let attrs = crate::wrap::around_attrs(&node);
+            let (Some(first), Some(params), Src::File(f)) =
+                (attrs.first(), crate::wrap::params(&node), src)
+            else {
+                continue;
+            };
+            let name = name_of(&node);
+            let mut path = paths.get(f as usize).cloned().unwrap_or_default();
+            path.push(name.clone());
+            let range = first.text_range();
+            for line in crate::wrap::items(&name, &path.join("::"), &params) {
+                let start = out.text.len() as u32;
+                out.text.push_str(&line);
+                let end = out.text.len() as u32;
+                out.text.push('\n');
+                out.origins.push((TextRange::new(start, end), src, range));
+            }
+            continue;
+        }
         if !matches!(node.kind(), K::STRUCT_ITEM | K::ENUM_ITEM) {
             continue;
         }
@@ -234,6 +264,31 @@ pub(crate) fn expand(items: impl Iterator<Item = (Src, SyntaxNode)>) -> Expansio
     out
 }
 
+/// The derived impl of trait `tr` for struct `name` with type parameters `params` and named
+/// fields `fields` (a unit struct if none), shown by `Debug` as `shown`.
+pub(crate) fn struct_impl(
+    tr: &str,
+    name: &str,
+    shown: &str,
+    params: &[String],
+    fields: &[String],
+) -> String {
+    let v = [Variant {
+        path: name.to_string(),
+        shown: shown.to_string(),
+        fields: fields.to_vec(),
+        named: !fields.is_empty(),
+        unit: fields.is_empty(),
+        default: false,
+    }];
+    let body = match tr {
+        "Debug" => debug(&v),
+        "Clone" => clone(&v),
+        _ => partial_eq(&v),
+    };
+    format!("{} {{ {body} }}", header(tr, name, params))
+}
+
 /// `impl<T: Trait> Trait for Name<T>`.
 fn header(tr: &str, name: &str, params: &[String]) -> String {
     if params.is_empty() {
@@ -272,9 +327,9 @@ fn debug(variants: &[Variant]) -> String {
             let mut parts = Vec::new();
             let text = |s: &str| format!("out.push_str({s:?});");
             if v.unit {
-                parts.push(text(&v.path));
+                parts.push(text(&v.shown));
             } else if v.named {
-                parts.push(text(&format!("{} {{ ", v.path)));
+                parts.push(text(&format!("{} {{ ", v.shown)));
                 for (i, f) in v.fields.iter().enumerate() {
                     let sep = if i == 0 { "" } else { ", " };
                     parts.push(text(&format!("{sep}{f}: ")));
@@ -282,7 +337,7 @@ fn debug(variants: &[Variant]) -> String {
                 }
                 parts.push(text(" }"));
             } else {
-                parts.push(text(&format!("{}(", v.path)));
+                parts.push(text(&format!("{}(", v.shown)));
                 for i in 0..v.fields.len() {
                     if i > 0 {
                         parts.push(text(", "));

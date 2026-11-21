@@ -36,6 +36,7 @@ mod resolve;
 mod traits;
 mod ty;
 mod validate;
+mod wrap;
 
 pub use check::{
     Callee, Capture, CaptureMode, Effects, Evidence, FnEffects, Inference, Propagated, effects,

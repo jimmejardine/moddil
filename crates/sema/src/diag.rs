@@ -225,6 +225,8 @@ codes! {
     E1003 = "const holding a borrow",
     /// Compile-time evaluation that traps or runs out of fuel.
     E1004 = "compile-time evaluation failed",
+    /// An `#[around(…)]` that names no function, nor calls one.
+    E1005 = "invalid wrapper",
     /// A literal that its refined type's predicate does not hold for.
     E1101 = "literal outside its refinement",
     /// A contract that is not pure: it has an effect, an error or an assignment.

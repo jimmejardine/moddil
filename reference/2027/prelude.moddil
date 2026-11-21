@@ -1349,3 +1349,17 @@ struct RefinementError {
     clause: String,
     value: String,
 }
+
+// What a wrapper is told of the function it wraps (`attr.around.1`): its path, and each
+// parameter's name and type as written.
+#[derive(Debug, Clone, PartialEq)]
+struct FnInfo {
+    path: String,
+    params: Vec<ParamInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ParamInfo {
+    name: String,
+    ty: String,
+}

@@ -349,6 +349,14 @@ impl Builder<'_> {
                 self.cfg.terminate(Terminator::Goto(header));
             }
             ExprKind::Question(x) => self.question(e, x, dest, None),
+            // A wrapper's call (`attr.around.1`): its errors pass on, if it has any.
+            ExprKind::Pass(x) => {
+                if self.types.propagated(e).is_some() {
+                    self.question(e, x, dest, None);
+                } else {
+                    self.eval_into(dest, x);
+                }
+            }
             ExprKind::Bang(x, reason) => self.question(e, x, dest, Some(&reason)),
             ExprKind::Fail(x) => {
                 let ty = self.ty(x);

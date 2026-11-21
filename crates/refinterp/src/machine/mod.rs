@@ -23,6 +23,7 @@ mod exprs;
 mod ops;
 mod patterns;
 mod text;
+mod wrappers;
 
 use patterns::Bind;
 

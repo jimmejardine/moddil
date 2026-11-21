@@ -15,7 +15,7 @@ It also holds `Index`, `IndexMut` and `FromArrayLiteral`, the iteration traits `
 `Vec`, and `Hash` and `Hasher` ([Collections](collections.md)), and `Debug` and `Default`
 (**expr.fmt.debug.1**, **attr.derive.default.1**), with `Default` for `int` (0), `bool`
 (`false`), `String`, `()`, `Vec` and `Option` (`None`); `RefinementError`
-([Refinements](refinements.md)); and `Iterator`'s `all` and `any`, which say whether a closure
+([Refinements](refinements.md)); `FnInfo` and `ParamInfo` ([Attributes](attributes.md)); and `Iterator`'s `all` and `any`, which say whether a closure
 holds for every item, or some. `replace(&mut x, v)` puts `v` in
 `x` and gives back what was there; `swap(&mut a, &mut b)` exchanges two values. The built-in
 `core` mod's `collections` module holds the maps and sets (**coll.core.1**). Every module sees them, and

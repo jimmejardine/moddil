@@ -24,6 +24,7 @@ impl Machine<'_> {
             types: self.memory.types(),
             file: self.memory.file(),
             module: self.memory.module(),
+            wrapped: None,
         }))
     }
 
@@ -70,6 +71,23 @@ impl Machine<'_> {
         for (name, p) in &c.vars {
             self.memory.push(name.clone(), Value::Alias(p.clone()));
         }
+        // The closure a wrapper is given: it takes the arguments back from `f::Args`, then runs
+        // the next wrapper, or the function's body.
+        if let Some((key, k)) = &c.wrapped {
+            let f = self.program.fns[key].clone();
+            let w = f.wrapping.clone().expect("a wrapped function");
+            if let Some(Value::Adt { fields, .. }) = args.into_iter().next() {
+                for ((name, _), v) in w.params.iter().zip(fields) {
+                    self.memory.push(name.clone(), v);
+                }
+            }
+            let saved = std::mem::replace(&mut self.handlers, c.handlers.clone());
+            let saved_modes = std::mem::take(&mut self.try_modes);
+            let result = self.wrapped_body(&f, *k, range);
+            self.handlers = saved;
+            self.try_modes = saved_modes;
+            return self.end_closure(c, result, caller_file, range);
+        }
         let method = c.node.kind() == K::FN_ITEM;
         let params: Vec<SyntaxNode> = if method {
             c.node
@@ -111,7 +129,22 @@ impl Machine<'_> {
                 .last()
                 .expect("a closure's body")
         };
-        let result = match self.eval(&body) {
+        let result = self.eval(&body);
+        self.handlers = saved;
+        self.try_modes = saved_modes;
+        self.end_closure(c, result, caller_file, range)
+    }
+
+    /// Ends the call of closure `c`, whose body gave `result`: what it returns, after its
+    /// variables are dropped.
+    fn end_closure(
+        &mut self,
+        c: &Closure,
+        result: Eval,
+        caller_file: u32,
+        range: TextRange,
+    ) -> Eval {
+        let result = match result {
             Ok(v) | Err(Flow::Return(v)) => Ok(v),
             Err(Flow::Absent) => Ok(Value::Adt {
                 ty: "Option".to_string(),
@@ -120,8 +153,6 @@ impl Machine<'_> {
             }),
             Err(f) => Err(f),
         };
-        self.handlers = saved;
-        self.try_modes = saved_modes;
         let result = if matches!(result, Err(Flow::Trap(..))) {
             result
         } else {

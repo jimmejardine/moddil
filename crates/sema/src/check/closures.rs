@@ -737,6 +737,7 @@ fn children(k: &ExprKind) -> Vec<ExprId> {
         ExprKind::Break { value, .. } | ExprKind::Return(value) => value.iter().copied().collect(),
         ExprKind::Assert(x)
         | ExprKind::Question(x)
+        | ExprKind::Pass(x)
         | ExprKind::Bang(x, _)
         | ExprKind::Fail(x)
         | ExprKind::Discard(x)

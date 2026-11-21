@@ -243,6 +243,9 @@ pub enum ExprKind {
     /// `e?`: the error of a fallible call, or of an `Err`, goes to the enclosing `try` block or
     /// out of the function; `None` likewise. Otherwise it is the value.
     Question(ExprId),
+    /// In a wrapped function's body (`attr.around.1`), a wrapper's call: the errors it can fail
+    /// with pass on, as through `?`, but its value is not taken apart.
+    Pass(ExprId),
     /// `e ?! "reason"`: as `e?`, but an error traps, with the reason.
     Bang(ExprId, String),
     /// `fail(e)`: fails with the error `e`.

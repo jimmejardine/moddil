@@ -86,6 +86,7 @@ areas!(
     tuples,
     types,
     views,
+    wrappers,
 );
 
 #[test]

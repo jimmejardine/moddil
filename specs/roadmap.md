@@ -275,6 +275,23 @@ something runs from the first slice.
   - `old(e)` needs a `Copy` value; `invariant`, `requires always`, contracts on trait methods and
     the `Contracts` handler's policies wait;
   - an alias may name only the aliases before it.
+- **S8c's scope and interim rules (decided November 2026):** function wrappers, `#[around(w)]`,
+  expanded as [`comptime.md`: Function wrappers](comptime.md#function-wrappers) says: `f::Args` a
+  generated struct with a field per parameter (a view when one is a borrow, with `Debug`, `Clone`
+  and `PartialEq` when every parameter has them, its `Debug` showing `f::Args { … }`); `&INFO` a
+  const `FnInfo { path, params: Vec<ParamInfo { name, ty }> }`, the types as written; wrapper
+  arguments, `#[around(w(c, …))]`, compile-time code passed before `&INFO`; several wrappers in
+  written order, the first outermost; contracts checked around the wrappers. Until the features
+  they wait for arrive:
+  - a wrapped function is free, not `const`, and its parameters are names; methods wait for a
+    field to hold `self`;
+  - wrapper arguments are evaluated at each call, as a `const { }` block is, and `f::Args` cannot
+    be named in code;
+  - `FnInfo` has no attributes or effects (they wait for `reflect`), `moddil explain` does not
+    print the expansion yet, and `Debug` of a borrow still waits, so `A: Debug` does not hold for
+    a borrowed parameter;
+  - a wrapper's errors are reported where `?` would report them: E0501 on a `pub` function that
+    does not list them.
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

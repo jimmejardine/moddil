@@ -252,6 +252,21 @@ impl Checker<'_> {
         t
     }
 
+    /// A wrapper's call in a wrapped function's body (`attr.around.1`): its errors, if it can
+    /// fail, pass on as a marked call's do.
+    pub(super) fn pass(&mut self, e: ExprId, x: ExprId) -> Ty {
+        let range = self.range(e);
+        let outer = self.marked.replace(x);
+        let saved = self.call_fails.take();
+        let t = self.infer(x);
+        self.marked = outer;
+        if let Some(fails) = std::mem::replace(&mut self.call_fails, saved) {
+            self.out.propagated.insert(e, Propagated::Call);
+            self.deliver(&fails.members(), range);
+        }
+        t
+    }
+
     /// `x ?! "reason"`: an error, or `None`, traps.
     pub(super) fn bang(&mut self, e: ExprId, x: ExprId) -> Ty {
         self.propagate(e, x).0

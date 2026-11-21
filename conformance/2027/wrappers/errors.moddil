@@ -1,0 +1,69 @@
+// covers: attr.around.1, attr.around.args.1, attr.around.limits.1
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Denied { No }
+
+struct Opaque {}
+
+fn shown<A: Debug, R>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> R) -> R {
+    inner(args)
+}
+
+fn plain<A, R>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> R) -> R {
+    inner(args)
+}
+
+fn gate<A, R>(open: bool, f: &FnInfo, args: A, inner: impl FnOnce(A) -> R) -> R with fail(Denied) {
+    if !open {
+        fail(Denied::No)
+    }
+    inner(args)
+}
+
+fn two(f: &FnInfo) -> int {
+    0
+}
+
+fn level() -> bool {
+    true
+}
+
+// `A: Debug` does not hold: `Opaque` is not `Debug`.
+#[around(shown)]                            //~ E0402
+fn hidden(o: Opaque) -> int {
+    1
+}
+
+// A `pub` function lists the errors its wrappers fail with.
+#[around(gate(true))]                       //~ E0501
+pub fn listed() -> int {
+    1
+}
+
+// A wrapper's arguments are compile-time code.
+#[around(gate(level()))]                    //~ E1001
+fn runtime() -> int {
+    1
+}
+
+// They cannot name the parameters.
+#[around(gate(x > 0))]                      //~ E0101
+fn named(x: int) -> int {
+    x
+}
+
+#[around(1 + 2)]                            //~ E1005
+fn not_a_function() -> int {
+    1
+}
+
+#[around]                                   //~ E1005
+fn no_wrapper() -> int {
+    1
+}
+
+// The wrapper's own signature must fit.
+#[around(two)]                              //~ E0202
+fn misfit() -> int {
+    1
+}

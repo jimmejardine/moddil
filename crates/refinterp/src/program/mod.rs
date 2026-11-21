@@ -77,6 +77,23 @@ pub(crate) struct FnDef {
     pub(crate) destructor: bool,
     /// Whether it is `#[track_caller]` (`attr.track-caller.1`).
     pub(crate) tracked: bool,
+    /// Its wrappers, if it has any (`attr.around.1`).
+    pub(crate) wrapping: Option<std::sync::Arc<Wrapping>>,
+}
+
+/// What a wrapped function's expansion needs (`attr.around.1`).
+#[derive(Debug)]
+pub(crate) struct Wrapping {
+    /// The function's key.
+    pub(crate) key: String,
+    /// Each `#[around(…)]`'s input, outermost first: a function's path, or a call of one.
+    pub(crate) wrappers: Vec<ast::Expr>,
+    /// The key of its `f::Args` struct.
+    pub(crate) args: String,
+    /// Its path, as `FnInfo` gives it.
+    pub(crate) path: String,
+    /// Its parameters: each one's name and type as written.
+    pub(crate) params: Vec<(String, String)>,
 }
 
 pub(crate) struct ImplInfo {
@@ -168,6 +185,8 @@ pub(crate) struct Program {
     pub(crate) consts: HashMap<String, (ast::Expr, usize)>,
     /// The `type` items, by key (`refine.1`).
     pub(crate) types: HashMap<String, TypeInfo>,
+    /// Each file's module path.
+    file_paths: Vec<Vec<String>>,
 }
 
 /// A `type` item: an alias, or a refinement with its predicate.
@@ -194,6 +213,7 @@ impl Program {
             tests: Vec::new(),
             modules: vec![Module::default()],
             mods: Vec::new(),
+            file_paths: files.iter().map(|f| f.module.clone()).collect(),
         };
         for (i, m) in mods.iter().enumerate() {
             let root = p.modules.len();
@@ -436,7 +456,14 @@ impl Program {
                 let name = f.name().expect("a checked function has a name").text();
                 let key = Program::key(module, &name);
                 self.declare(module, &name, Def::Item(key.clone()));
-                self.fns.insert(key, fn_def(&f, user, false, site));
+                let mut def = fn_def(&f, user, false, site);
+                if let Some(file) = file {
+                    def.wrapping = self.wrapping(&f, &name, file, module).map(|mut w| {
+                        w.key = key.clone();
+                        std::sync::Arc::new(w)
+                    });
+                }
+                self.fns.insert(key, def);
             }
             K::STRUCT_ITEM | K::ENUM_ITEM | K::VIEW_ITEM => {
                 let name = name_of(&item);
@@ -538,6 +565,93 @@ impl Program {
             }
             _ => {}
         }
+    }
+
+    /// The wrappers of function `f`, named `name`, in `file` and `module`, if it has any
+    /// (`attr.around.1`); its `f::Args` struct is added, with `Debug`, `Clone` and `PartialEq`.
+    fn wrapping(
+        &mut self,
+        f: &ast::FnItem,
+        name: &str,
+        file: u32,
+        module: usize,
+    ) -> Option<Wrapping> {
+        let wrappers: Vec<ast::Expr> = f
+            .syntax()
+            .children()
+            .filter(|c| c.kind() == K::OUTER_ATTR)
+            .flat_map(|a| {
+                a.children()
+                    .filter(|c| c.kind() == K::ATTR)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|a| {
+                a.child(K::PATH)
+                    .and_then(ast::Path::cast)
+                    .is_some_and(|p| p.segments() == ["around"])
+            })
+            .filter_map(|a| around_input(&a))
+            .collect();
+        if wrappers.is_empty() {
+            return None;
+        }
+        let params: Vec<(String, String)> = f
+            .params()
+            .map(|l| l.params().collect::<Vec<_>>())
+            .unwrap_or_default()
+            .iter()
+            .map(|p| {
+                let name = p
+                    .pat()
+                    .map(|q| {
+                        q.syntax()
+                            .text()
+                            .to_string()
+                            .trim_start_matches("mut")
+                            .trim()
+                            .to_string()
+                    })
+                    .unwrap_or_default();
+                let ty = p
+                    .ty()
+                    .map(|t| t.syntax().text().to_string())
+                    .unwrap_or_default();
+                (name, ty.split_whitespace().collect::<Vec<_>>().join(" "))
+            })
+            .collect();
+        let args = Program::key(module, &format!("{name}::Args"));
+        let fields: Vec<String> = params.iter().map(|(n, _)| n.clone()).collect();
+        self.adts.insert(
+            args.clone(),
+            AdtInfo {
+                name: format!("{name}::Args"),
+                is_enum: false,
+                variants: vec![VariantInfo {
+                    name: format!("{name}::Args"),
+                    shape: if fields.is_empty() {
+                        Shape::Unit
+                    } else {
+                        Shape::Named
+                    },
+                    types: vec![None; fields.len()],
+                    fields,
+                    default: false,
+                }],
+                params: (0..params.len()).map(|i| format!("P{i}")).collect(),
+                derives: ["Debug", "Clone", "PartialEq"].map(String::from).to_vec(),
+                bare: false,
+                module,
+            },
+        );
+        let mut path = self.file_paths[file as usize].clone();
+        path.push(name.to_string());
+        Some(Wrapping {
+            key: String::new(),
+            wrappers,
+            args,
+            path: path.join("::"),
+            params,
+        })
     }
 
     /// The struct or variant a path names in `module`: `Point`, `Shape::Circle`, `Some`,
@@ -680,6 +794,7 @@ pub(crate) fn fn_def(f: &ast::FnItem, user: bool, destructor: bool, site: (u32, 
         params: generic_names(f.syntax()),
         self_kind,
         destructor,
+        wrapping: None,
     }
 }
 
@@ -810,4 +925,28 @@ pub(crate) fn variant_info(node: &SyntaxNode, name: String) -> VariantInfo {
                 .any(|p| p.text().to_string().trim() == "default"),
         }
     }
+}
+
+/// The input of an `#[around(…)]` attribute, `attr`, parsed as an expression where it is in its
+/// file: a function's path, or a call of one.
+fn around_input(attr: &SyntaxNode) -> Option<ast::Expr> {
+    let input = attr.child(K::ATTR_INPUT)?;
+    let text = input.text().to_string();
+    let inner = text.strip_prefix('(')?.strip_suffix(')')?;
+    let start = input.text_range().start as usize + 1;
+    // `#[around(` comes before it, so the prefix fits.
+    let prefix = "fn f(){";
+    let pad = start.checked_sub(prefix.len())?;
+    let source = format!("{prefix}{}{inner}}}", " ".repeat(pad));
+    let parse = moddil_syntax::parse(&source);
+    if !parse.errors().is_empty() {
+        return None;
+    }
+    let body = parse
+        .syntax()
+        .children()
+        .find_map(ast::FnItem::cast)?
+        .body()?;
+    let e = body.syntax().children().find_map(ast::Expr::cast)?;
+    Some(e)
 }
