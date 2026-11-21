@@ -117,10 +117,19 @@ pub(crate) fn resolve_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnos
             let Some(path) = node.child(K::PATH) else {
                 return Ty::Error;
             };
-            match path_segments(&path) {
+            let t = match path_segments(&path) {
                 Some(segs) => path_type(&segs, range, scope, diags),
                 None => qualified_type(&path, scope, diags),
+            };
+            if t == Ty::Str && !behind_borrow(node) {
+                diags.push(Diagnostic::error(
+                    Code::E0901,
+                    range,
+                    "`str` has no size of its own, so it is used behind a borrow: `&str`",
+                ));
+                return Ty::Error;
             }
+            t
         }
         ast::Type::Tuple(_) => {
             let elements: Vec<Ty> = node
@@ -248,6 +257,13 @@ pub(crate) fn dyn_type(node: &SyntaxNode, scope: &Scope, diags: &mut Vec<Diagnos
     }
 }
 
+/// Whether the type node `node` is what a borrow (`&T`) points to, or the type an impl is for:
+/// the places a type without a size of its own may be named.
+fn behind_borrow(node: &SyntaxNode) -> bool {
+    node.parent()
+        .is_some_and(|p| matches!(p.kind(), K::REF_TYPE | K::IMPL_ITEM))
+}
+
 /// The type arguments and associated-type bindings (`Item = int`) of a `GENERIC_ARGS` node.
 pub(crate) fn generic_args(
     node: &SyntaxNode,
@@ -370,6 +386,18 @@ pub(crate) fn path_type(
                 "bool" => {
                     no_args(one, diags);
                     return Ty::Bool;
+                }
+                "char" => {
+                    no_args(one, diags);
+                    return Ty::Char;
+                }
+                "String" => {
+                    no_args(one, diags);
+                    return Ty::String;
+                }
+                "str" => {
+                    no_args(one, diags);
+                    return Ty::Str;
                 }
                 "Self" => {
                     no_args(one, diags);

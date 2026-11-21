@@ -98,11 +98,28 @@ impl Builder<'_> {
             PatKind::Ref { pat: inner, .. } => self.test_pat(inner, &place.deref(), fail),
             PatKind::Int(v) => self.test_cmp(BinOp::Eq, place, Const::Int(v as i64), fail),
             PatKind::Bool(v) => self.test_cmp(BinOp::Eq, place, Const::Bool(v), fail),
-            PatKind::Range { lo, hi, inclusive } => {
-                self.test_cmp(BinOp::Ge, place, Const::Int(lo as i64), fail);
+            PatKind::Char(c) => self.test_cmp(BinOp::Eq, place, Const::Char(c), fail),
+            PatKind::Str(ref s) => {
+                let c = self.cfg.str_const(s);
+                self.test_cmp(BinOp::Eq, place, c, fail);
+            }
+            PatKind::Range {
+                lo,
+                hi,
+                inclusive,
+                chars,
+            } => {
+                let bound = |v: i128| {
+                    if chars {
+                        Const::Char(char::from_u32(v as u32).expect("a checked `char`"))
+                    } else {
+                        Const::Int(v as i64)
+                    }
+                };
+                self.test_cmp(BinOp::Ge, place, bound(lo), fail);
                 if let Some(hi) = hi {
                     let op = if inclusive { BinOp::Le } else { BinOp::Lt };
-                    self.test_cmp(op, place, Const::Int(hi as i64), fail);
+                    self.test_cmp(op, place, bound(hi), fail);
                 }
             }
             PatKind::Tuple { pats, rest } => {

@@ -11,6 +11,12 @@ pub enum Ty {
     Int,
     /// `bool`.
     Bool,
+    /// `char`: a Unicode scalar value.
+    Char,
+    /// `str`: a run of valid UTF-8, with no size of its own, so only behind a borrow (`&str`).
+    Str,
+    /// `String`: owned, growable UTF-8 text.
+    String,
     /// `()`: the empty tuple.
     Unit,
     /// `!`: the type of expressions that never produce a value, such as `return`.
@@ -347,6 +353,9 @@ impl fmt::Debug for Ty {
         match self {
             Ty::Int => f.write_str("int"),
             Ty::Bool => f.write_str("bool"),
+            Ty::Char => f.write_str("char"),
+            Ty::Str => f.write_str("str"),
+            Ty::String => f.write_str("String"),
             Ty::Unit => f.write_str("()"),
             Ty::Never => f.write_str("!"),
             Ty::Error => f.write_str("{error}"),

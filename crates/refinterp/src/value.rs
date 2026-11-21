@@ -6,6 +6,10 @@ pub(crate) enum Value {
     Int(i64),
     Bool(bool),
     Unit,
+    Char(char),
+    /// A `&str`: its text (what it points to cannot change while it lives).
+    Str(std::sync::Arc<str>),
+    String(String),
     Tuple(Vec<Value>),
     /// A struct (whose variant is named like it) or an enum's variant.
     Adt {
@@ -51,6 +55,9 @@ pub(crate) struct Pointer {
 pub(crate) enum Head {
     Int,
     Bool,
+    Char,
+    Str,
+    String,
     Unit,
     Tuple,
     Ref,
@@ -64,6 +71,9 @@ impl Value {
         match self {
             Value::Int(_) => Head::Int,
             Value::Bool(_) => Head::Bool,
+            Value::Char(_) => Head::Char,
+            Value::Str(_) => Head::Str,
+            Value::String(_) => Head::String,
             Value::Unit | Value::Moved | Value::Alias(_) => Head::Unit,
             Value::Closure(_) | Value::Anon(..) => Head::Closure,
             Value::Tuple(_) => Head::Tuple,

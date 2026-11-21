@@ -478,9 +478,16 @@ impl<'a> Solver<'a> {
             return true;
         }
         match ty {
-            Ty::Int | Ty::Bool | Ty::Unit | Ty::Never | Ty::Error | Ty::Ref(..) | Ty::Dyn(_) => {
-                false
-            }
+            Ty::Int
+            | Ty::Bool
+            | Ty::Unit
+            | Ty::Never
+            | Ty::Error
+            | Ty::Ref(..)
+            | Ty::Dyn(_)
+            | Ty::Char
+            | Ty::Str
+            | Ty::String => false,
             Ty::Param(..) | Ty::Assoc(_) | Ty::Infer(_) => true,
             Ty::Errors(ts) => ts.iter().any(|t| self.needs_drop_inner(t, depth + 1)),
             Ty::Closure(c) => c

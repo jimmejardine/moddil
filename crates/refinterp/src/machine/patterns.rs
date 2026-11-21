@@ -66,22 +66,31 @@ impl Machine<'_> {
         let node = p.syntax();
         match p {
             ast::Pat::Wildcard(_) => true,
-            ast::Pat::Literal(_) => literal_pat(node) == self.value_of(src),
+            ast::Pat::Literal(_) => match literal_pat(node) {
+                Value::Str(s) => {
+                    super::text::text_of(self, &self.value_of(src)).as_deref() == Some(&*s)
+                }
+                lit => lit == self.value_of(src),
+            },
             ast::Pat::Range(_) => {
                 let bounds: Vec<Value> = node
                     .children()
                     .filter(|c| c.kind() == K::LITERAL_PAT)
                     .map(|b| literal_pat(&b))
                     .collect();
-                let (Value::Int(x), Some(Value::Int(lo))) = (self.value_of(src), bounds.first())
-                else {
-                    unreachable!("a checked range pattern");
+                // A `char` is compared by its code point.
+                let num = |v: &Value| match v {
+                    Value::Int(x) => *x,
+                    Value::Char(c) => i64::from(u32::from(*c)),
+                    _ => unreachable!("a checked range pattern"),
                 };
+                let x = num(&self.value_of(src));
+                let lo = num(bounds.first().expect("a lower bound"));
+                let lo = &lo;
                 let below = match bounds.get(1) {
                     None => true,
-                    Some(Value::Int(hi)) if node.token(K::DOT_DOT_EQ).is_some() => x <= *hi,
-                    Some(Value::Int(hi)) => x < *hi,
-                    Some(_) => unreachable!("an integer bound"),
+                    Some(hi) if node.token(K::DOT_DOT_EQ).is_some() => x <= num(hi),
+                    Some(hi) => x < num(hi),
                 };
                 *lo <= x && below
             }

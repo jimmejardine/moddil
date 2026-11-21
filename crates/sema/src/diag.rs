@@ -213,6 +213,10 @@ codes! {
     /// A closure whose kind is weaker than a bound needs: it changes or moves what it captures,
     /// where `Fn` or `FnMut` is needed.
     E0801 = "closure of the wrong kind",
+    /// A type with no size of its own (`str`) used by value.
+    E0901 = "unsized type",
+    /// A text literal that is not well formed: an unknown escape, a block indented wrongly.
+    E0902 = "invalid literal",
     /// A name another module may not name: private to its module, or `pub(mod)` and in
     /// another mod.
     E0701 = "not visible here",

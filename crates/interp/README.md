@@ -3,9 +3,10 @@
 The **MIR interpreter**, part of the compiler. It runs *analysed* or *runtime* MIR and never needs
 target lowering ([`specs/mir.md`: Pipeline](../../specs/mir.md#pipeline)).
 
-**Status:** slices S0 to S7a (traps, errors and observed values say which file of the program
+**Status:** slices S0 to S7b (traps, errors and observed values say which file of the program
 they are in, and a trap in a `#[track_caller]` function where its caller called it): a closure's
-call runs its own body, with its captures and its arguments as two tuples; a function's handlers arrive as hidden arguments after the others,
+call runs its own body, with its captures and its arguments as two tuples; `char`, `&str` (its
+text) and `String` are values, and the prelude's `#[intrinsic]` methods run built in; a function's handlers arrive as hidden arguments after the others,
 and a `dyn` borrow carries the type of what it points to, which chooses the methods called through
 it; errors return through the error edge of the call that raised them
 (a test, or a function the interpreter is asked to run, that an error leaves reports

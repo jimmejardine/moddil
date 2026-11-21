@@ -320,6 +320,9 @@ impl Program {
                 {
                     ["int"] => Head::Int,
                     ["bool"] => Head::Bool,
+                    ["char"] => Head::Char,
+                    ["str"] => Head::Str,
+                    ["String"] => Head::String,
                     _ => match self.resolve(module, &path) {
                         Some((Def::Item(k), _)) => Head::Adt(k),
                         _ => Head::Adt(path.join("::")),
@@ -495,6 +498,9 @@ impl Program {
         match v {
             Value::Int(i) => i.to_string(),
             Value::Bool(b) => b.to_string(),
+            Value::Char(c) => format!("{c:?}"),
+            Value::Str(s) => format!("{:?}", &**s),
+            Value::String(s) => format!("{s:?}"),
             Value::Unit => "()".to_string(),
             Value::Tuple(xs) if xs.len() == 1 => format!("({},)", self.render(&xs[0])),
             Value::Tuple(xs) => {

@@ -25,6 +25,10 @@ enum Ctor {
     Single,
     /// An enum's variant.
     Variant(u32),
+    /// A string literal.
+    Str(String),
+    /// Any string no literal among the rows is: strings are too many to list.
+    OtherStr,
     /// Anything.
     Wild,
     /// Any of the alternatives (held in the pattern's fields).
@@ -48,6 +52,9 @@ impl DPat {
         }
     }
 }
+
+/// The largest code point.
+const CHAR_MAX: i128 = 0x10_FFFF;
 
 const INT_MIN: i128 = i64::MIN as i128;
 const INT_MAX: i128 = i64::MAX as i128;
@@ -87,8 +94,27 @@ impl Cx<'_> {
                 ty,
                 fields: Vec::new(),
             },
-            &PatKind::Range { lo, hi, inclusive } => {
+            &PatKind::Char(c) => {
+                let c = i128::from(u32::from(c));
+                DPat {
+                    ctor: Ctor::Int(c, c),
+                    ty,
+                    fields: Vec::new(),
+                }
+            }
+            PatKind::Str(s) => DPat {
+                ctor: Ctor::Str(s.clone()),
+                ty,
+                fields: Vec::new(),
+            },
+            &PatKind::Range {
+                lo,
+                hi,
+                inclusive,
+                chars,
+            } => {
                 let hi = match hi {
+                    None if chars => CHAR_MAX,
                     None => INT_MAX,
                     Some(h) if inclusive => h,
                     Some(h) => h - 1,
@@ -155,6 +181,20 @@ impl Cx<'_> {
         Some(match ty.strip_ref() {
             Ty::Bool => vec![Ctor::Bool(false), Ctor::Bool(true)],
             Ty::Int => split_ints(heads, INT_MIN, INT_MAX),
+            Ty::Char => split_ints(heads, 0, CHAR_MAX),
+            // The literals the rows name, and the strings they do not.
+            Ty::Str | Ty::String => {
+                let mut cs: Vec<Ctor> = Vec::new();
+                for h in heads {
+                    if let Ctor::Str(_) = &h.ctor
+                        && !cs.contains(&h.ctor)
+                    {
+                        cs.push(h.ctor.clone());
+                    }
+                }
+                cs.push(Ctor::OtherStr);
+                cs
+            }
             // A value of a type parameter can only be bound: one constructor covers it.
             Ty::Unit
             | Ty::Tuple(_)
@@ -292,6 +332,21 @@ impl Witness {
         let fields: Vec<String> = fields.iter().map(|f| f.render(items)).collect();
         match (c, ty.strip_ref()) {
             (Ctor::Bool(b), _) => b.to_string(),
+            (Ctor::Str(s), _) => format!("{s:?}"),
+            (Ctor::OtherStr, _) | (Ctor::Int(0, CHAR_MAX), Ty::Char) => "_".to_string(),
+            (Ctor::Int(lo, hi), Ty::Char) => {
+                let c = |v: &i128| {
+                    u32::try_from(*v)
+                        .ok()
+                        .and_then(char::from_u32)
+                        .map_or_else(|| format!("'\\u{{{v:x}}}'"), |c| format!("{c:?}"))
+                };
+                if lo == hi {
+                    c(lo)
+                } else {
+                    format!("{}..={}", c(lo), c(hi))
+                }
+            }
             (Ctor::Int(INT_MIN, INT_MAX), _) => "_".to_string(),
             (Ctor::Int(lo, hi), _) if lo == hi => lo.to_string(),
             (Ctor::Int(lo, hi), _) if *hi == INT_MAX => format!("{lo}.."),

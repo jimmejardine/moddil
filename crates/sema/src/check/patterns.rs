@@ -32,13 +32,21 @@ impl Checker<'_> {
         let tests_value = matches!(
             self.body.pats[p].kind,
             PatKind::Int(_)
+                | PatKind::Char(_)
+                | PatKind::Str(_)
                 | PatKind::Bool(_)
                 | PatKind::Range { .. }
                 | PatKind::Unit
                 | PatKind::Tuple { .. }
                 | PatKind::Adt { .. }
         );
-        if tests_value && let Ty::Ref(m, inner) = &expected {
+        // A string literal matches a `&str` itself.
+        let str_lit = matches!(self.body.pats[p].kind, PatKind::Str(_))
+            && matches!(&expected, Ty::Ref(_, t) if **t == Ty::Str);
+        if tests_value
+            && !str_lit
+            && let Ty::Ref(m, inner) = &expected
+        {
             // Matching through a borrow: test what it points to, and bind borrows.
             self.out.pat_derefs.insert(p);
             let mode = Some(mode.map_or(*m, |outer| outer && *m));
@@ -108,7 +116,39 @@ impl Checker<'_> {
                     self.report(Code::E0201, range, wrong("a `bool`"));
                 }
             }
-            &PatKind::Range { lo, hi, inclusive } => {
+            PatKind::Char(_) => {
+                if !self.coerce(&Ty::Char, expected) {
+                    self.report(Code::E0201, range, wrong("a `char`"));
+                }
+            }
+            PatKind::Str(_) => {
+                if !self.coerce(&Ty::reference(false, Ty::Str), expected) {
+                    self.report(Code::E0201, range, wrong("a `&str`"));
+                }
+            }
+            &PatKind::Range {
+                lo,
+                hi,
+                inclusive,
+                chars: true,
+            } => {
+                if !self.coerce(&Ty::Char, expected) {
+                    self.report(Code::E0201, range, wrong("a `char`"));
+                    return;
+                }
+                if let Some(hi) = hi
+                    && (hi < lo || (hi == lo && !inclusive))
+                {
+                    self.report(
+                        Code::E0214,
+                        range,
+                        "this range is empty, so the pattern matches nothing",
+                    );
+                }
+            }
+            &PatKind::Range {
+                lo, hi, inclusive, ..
+            } => {
                 if !self.coerce(&Ty::Int, expected) {
                     self.report(Code::E0201, range, wrong("an `int`"));
                     return;

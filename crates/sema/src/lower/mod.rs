@@ -17,6 +17,7 @@ mod exprs;
 mod names;
 mod paths;
 mod patterns;
+pub(crate) mod text;
 
 use names::Names;
 

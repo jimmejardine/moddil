@@ -220,6 +220,9 @@ impl Inference {
         for c in self.compare_calls.values_mut() {
             *c = c.map(&mut |t| erase(&solver.deep(t)));
         }
+        for c in self.fmt_calls.values_mut() {
+            *c = c.map(&mut |t| erase(&solver.deep(t)));
+        }
     }
 }
 

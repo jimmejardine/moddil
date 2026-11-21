@@ -11,13 +11,19 @@ use super::patterns::Bind;
 use super::{Machine, literal, member_name, segments};
 
 use super::ops::{arith, compare, compound};
+use super::text;
 
 impl Machine<'_> {
     pub(super) fn eval(&mut self, e: &ast::Expr) -> Eval {
         let node = e.syntax();
         let range = node.text_range();
         match e {
-            ast::Expr::Literal(_) => Ok(literal(node, false)),
+            ast::Expr::Literal(_) => {
+                match node.child_tokens().find(|t| t.kind() == K::TAGGED_STRING) {
+                    Some(tok) => self.fmt(&tok),
+                    None => Ok(literal(node, false)),
+                }
+            }
             ast::Expr::Path(_) => {
                 if let Some((p, indirect)) = self.place_of(e)? {
                     return Ok(self.take(&p, indirect));
@@ -350,9 +356,18 @@ impl Machine<'_> {
         for (op, x) in rest {
             let cur = self.place(x)?;
             let (a, b) = (self.memory.load(&prev), self.memory.load(&cur));
+            let texts = (text::text_of(self, &a), text::text_of(self, &b));
             let holds = match (&a, &b) {
                 (Value::Int(_) | Value::Bool(_) | Value::Unit, _) => {
                     compare(*op).expect("a comparison")(&a, &b)
+                }
+                (Value::Char(x), Value::Char(y)) => text::ordered(*op, x, y),
+                // `&str`s compare their text (`text.cmp.1`).
+                _ if matches!(texts, (Some(_), Some(_))) => {
+                    let (Some(x), Some(y)) = texts else {
+                        unreachable!()
+                    };
+                    text::ordered(*op, &x, &y)
                 }
                 _ => {
                     let (tr, method) = match *op {

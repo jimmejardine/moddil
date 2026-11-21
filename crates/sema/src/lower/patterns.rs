@@ -168,6 +168,20 @@ impl Lowerer<'_> {
                     PatKind::Missing
                 }
             },
+            K::CHAR if !negate => match super::text::char_value(tok.text()) {
+                Ok(c) => PatKind::Char(c),
+                Err(why) => {
+                    self.report(Code::E0902, range, why);
+                    PatKind::Missing
+                }
+            },
+            K::STRING | K::RAW_STRING if !negate => match super::text::string_value(tok.text()) {
+                Ok(s) => PatKind::Str(s),
+                Err(why) => {
+                    self.report(Code::E0902, range, why);
+                    PatKind::Missing
+                }
+            },
             _ => {
                 self.error(Diagnostic::unsupported(range, "this kind of literal"));
                 PatKind::Missing
@@ -183,30 +197,44 @@ impl Lowerer<'_> {
             .collect();
         let inclusive = node.token(K::DOT_DOT_EQ).is_some();
         let mut values = Vec::new();
+        let mut chars = None;
         for b in &bounds {
-            match self.literal_pat(b) {
-                PatKind::Int(v) => values.push(v),
+            let (v, c) = match self.literal_pat(b) {
+                PatKind::Int(v) => (v, false),
+                PatKind::Char(c) => (i128::from(u32::from(c)), true),
                 PatKind::Missing => return PatKind::Missing,
                 _ => {
                     self.report(
                         Code::E0201,
                         b.text_range(),
-                        "the bounds of a range pattern are integers",
+                        "the bounds of a range pattern are integers or characters",
                     );
                     return PatKind::Missing;
                 }
+            };
+            if chars.is_some_and(|x| x != c) {
+                self.report(
+                    Code::E0201,
+                    b.text_range(),
+                    "the bounds of a range pattern are of one type",
+                );
+                return PatKind::Missing;
             }
+            chars = Some(c);
+            values.push(v);
         }
         match values.as_slice() {
             [lo] => PatKind::Range {
                 lo: *lo,
                 hi: None,
                 inclusive,
+                chars: chars == Some(true),
             },
             [lo, hi] => PatKind::Range {
                 lo: *lo,
                 hi: Some(*hi),
                 inclusive,
+                chars: chars == Some(true),
             },
             _ => {
                 self.error(Diagnostic::unsupported(range, "this range pattern"));

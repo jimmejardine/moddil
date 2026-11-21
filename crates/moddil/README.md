@@ -3,7 +3,7 @@
 The **`moddil` command**: one tool for building, testing, formatting and everything else
 ([`specs/toolchain.md`](../../specs/toolchain.md)).
 
-**Status:** slices S0 to S7a. At M0 it checks programs (a file, or a mod's directory with a
+**Status:** slices S0 to S7b. At M0 it checks programs (a file, or a mod's directory with a
 `moddil.toml`, read with [`moddil-project`](../project/README.md)) and runs them and their tests on
 the MIR interpreter, and a failed `assert` shows the value of each part of its condition;
 the full command set (`build`, `fmt`, `diff`, `audit`, `bind`, …) arrives over the milestones.

@@ -1,0 +1,33 @@
+// covers: text.pat.1, text.pat.2
+
+fn kind(c: char) -> int {
+    match c {
+        'a'..='z' => 1,
+        'A'..='Z' => 2,
+        '0'..='9' => 3,
+        _ => 0,
+    }
+}
+
+fn answer(s: &str) -> bool {
+    match s {
+        "yes" | "y" => true,
+        _ => false,
+    }
+}
+
+test "character ranges" {
+    kind('q')                               // => 1
+    ;
+    kind('Q')                               // => 2
+    ;
+    kind('5')                               // => 3
+    ;
+    kind('-')                               // => 0
+}
+
+test "string literals" {
+    answer("y")                             // => true
+    ;
+    answer("no")                            // => false
+}

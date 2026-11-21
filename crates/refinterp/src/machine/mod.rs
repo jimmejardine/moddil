@@ -22,6 +22,7 @@ mod errors;
 mod exprs;
 mod ops;
 mod patterns;
+mod text;
 
 use patterns::Bind;
 
@@ -337,7 +338,9 @@ fn literal(node: &SyntaxNode, negate: bool) -> Value {
             let v = if negate { -v } else { v };
             Value::Int(i64::try_from(v).expect("a checked literal fits in `int`"))
         }
-        _ => unreachable!("a literal of slices S0 and S1"),
+        K::CHAR => Value::Char(text::character(tok.text())),
+        K::STRING | K::RAW_STRING | K::BLOCK_STRING => Value::Str(text::string(tok.text()).into()),
+        _ => unreachable!("a literal checked to be supported"),
     }
 }
 

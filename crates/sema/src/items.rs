@@ -248,6 +248,9 @@ pub struct FnSig {
     pub effects: Vec<EffectSig>,
     /// Whether it is `#[track_caller]`: a trap in it is reported where its caller called it.
     pub track_caller: bool,
+    /// Whether it is the prelude's and built in (`#[intrinsic]`): it has no body, and the
+    /// implementations run it themselves.
+    pub intrinsic: bool,
     /// Who can name it.
     pub vis: Vis,
     /// The module it is declared in (for a derived method, its type's).
@@ -290,6 +293,7 @@ impl FnSig {
             fails_range: None,
             effects: Vec::new(),
             track_caller: false,
+            intrinsic: false,
             vis,
             module,
         }
@@ -496,6 +500,7 @@ const LANG: &[&str] = &[
     "FnOnce",
     "FnMut",
     "Fn",
+    "Display",
 ];
 
 impl ItemTree {
@@ -633,6 +638,15 @@ impl ItemTree {
         })
     }
 
+    /// The method `name` of the prelude's inherent impl for a built-in type (`String::new`).
+    pub fn builtin_method(&self, ty: &Ty, name: &str) -> Option<u32> {
+        self.impls
+            .iter()
+            .filter(|i| i.trait_ref.is_none() && i.src == Src::Prelude && i.self_ty == *ty)
+            .flat_map(|i| i.methods.iter().copied())
+            .find(|&m| self.fns[m as usize].name == name)
+    }
+
     /// The prelude's free function `drop`.
     pub fn drop_fn(&self) -> Option<u32> {
         self.fns
@@ -673,7 +687,11 @@ impl ItemTree {
         match ty {
             Ty::Int | Ty::Ref(..) => (8, 8),
             Ty::Bool => (1, 1),
-            Ty::Unit
+            Ty::Char => (4, 4),
+            // A `String` is 24 bytes, holding up to 23 inline (`text.md`).
+            Ty::String => (24, 8),
+            Ty::Str
+            | Ty::Unit
             | Ty::Never
             | Ty::Error
             | Ty::Param(..)

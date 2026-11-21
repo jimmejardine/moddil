@@ -195,13 +195,16 @@ impl Lowerer<'_> {
         }
     }
 
-    /// For `ty::item` where `ty` is not an item: `Self`, a type parameter, `int` or `bool`
+    /// For `ty::item` where `ty` is not an item: `Self`, a type parameter or a built-in type
     /// (`Some(None)` after reporting a `Self` with no type), or `None` if it is an item's name.
     fn non_item_type(&mut self, ty: &crate::resolve::Segment) -> Option<Option<Ty>> {
         let name = ty.name.as_str();
         Some(Some(match name {
             "int" => Ty::Int,
             "bool" => Ty::Bool,
+            "char" => Ty::Char,
+            "str" => Ty::Str,
+            "String" => Ty::String,
             "Self" => match &self.types.self_ty {
                 Some(t) => t.clone(),
                 None => {

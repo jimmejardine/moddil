@@ -173,6 +173,23 @@ something runs from the first slice.
     by move;
   - the reference interpreter calls a closure by name (`f(x)`), not through its trait
     (`Fn::call(&f, (x,))`).
+- **S7b's scope and interim rules (decided):** `char`, `str` (only behind a borrow) and `String`;
+  character, string, raw and dedented block literals; `&String` converted to `&str` where one is
+  expected; byte-wise equality and ordering; character and string patterns; the prelude's
+  `Display` and checked `fmt"…"` holes; `len`, `push_str`, `push`, `pop`, `trim`, case conversion
+  and the like. `String` and `str` are **built in for now**: both interpreters implement them
+  natively, through the prelude's `#[intrinsic]` methods. Once S7c's raw buffer and S10's `u8`
+  exist, `String` is rewritten in a core mod as the decided small-string form, inline `[u8; 23]`
+  or a heap buffer ([`text.md`: String types](text.md#string-types)), not as a wrap of `Vec`. Until
+  the features they wait for arrive:
+  - no `StrPos` or slicing (views), no `chars()` (`Iterator`, S7c), and no `b"…"` or `b'c'`
+    (`u8`, S10);
+  - `Display` is `fn fmt(&self, out: &mut String)`, not a `Write` sink; `fmt` holes take no format
+    specs (`{x:>8}`) and `Debug` waits for derives of it; tagged literals other than `fmt` wait
+    for comptime;
+  - a function with no borrowed parameter cannot return a string literal as a `&str` (E0310):
+    literals are not yet a borrow of static data;
+  - `#[intrinsic]` is the prelude's alone.
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

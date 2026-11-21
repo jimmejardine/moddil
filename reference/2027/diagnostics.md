@@ -13,6 +13,9 @@ and a code never changes meaning.
 | E04xx | Traits and generics |
 | E05xx | Errors and `fail` |
 | E06xx | Effects |
+| E07xx | Modules and mods |
+| E08xx | Closures |
+| E09xx | Text |
 
 | Code | Meaning | Rule |
 |---|---|---|
@@ -37,7 +40,7 @@ and a code never changes meaning.
 | E0205 | Operator not defined for these types | [expr.arith.types.1](expressions/arithmetic.md), [expr.op.trait.1](expressions/arithmetic.md), [expr.cmp.order.1](expressions/comparison.md), [expr.cmp.trait.1](expressions/comparison.md), [generic.bound.1](generics.md) |
 | E0206 | Invalid assignment target | [expr.assign.1](expressions/assignment.md) |
 | E0207 | Missing fields | [expr.struct.1](expressions/structs.md), [pat.struct.1](patterns.md) |
-| E0208 | Non-exhaustive `match` | [expr.match.exhaustive.1](expressions/match.md) |
+| E0208 | Non-exhaustive `match` | [expr.match.exhaustive.1](expressions/match.md), [text.pat.2](text.md) |
 | E0209 | A pattern that can fail where one that cannot is needed | [pat.irrefutable.1](patterns.md) |
 | E0210 | `let … else` whose block can finish normally | [stmt.let.else.1](statements.md) |
 | E0211 | A recursive type of infinite size | [item.struct.recursive.1](items/structs.md) |
@@ -59,7 +62,7 @@ and a code never changes meaning.
 | E0313 | `return`, `break` or `continue` out of a `defer` block | [stmt.defer.1](statements.md) |
 | E0314 | A field moved out of a value whose type has a destructor | [own.drop.partial.1](ownership.md) |
 | E0401 | A name used as a trait that is not one | [item.trait.1](items/traits.md) |
-| E0402 | A type that does not implement a trait it must | [generic.bound.1](generics.md), [item.trait.super.1](items/traits.md), [attr.derive.1](attributes.md), [type.dyn.coerce.1](types.md), [eff.with.1](effects.md) |
+| E0402 | A type that does not implement a trait it must | [generic.bound.1](generics.md), [item.trait.super.1](items/traits.md), [attr.derive.1](attributes.md), [type.dyn.coerce.1](types.md), [eff.with.1](effects.md), [expr.fmt.2](text.md) |
 | E0403 | A method or function that the type does not have | [expr.method.1](expressions/methods.md), [expr.path.assoc.1](expressions/methods.md), [generic.bound.1](generics.md) |
 | E0404 | Wrong number of type arguments | [generic.1](generics.md) |
 | E0405 | A type that cannot be inferred | [generic.infer.1](generics.md) |
@@ -94,6 +97,8 @@ and a code never changes meaning.
 | E0703 | An item whose signature names something less visible than itself | [mod.expose.1](modules.md) |
 | E0704 | A manifest that is not as a manifest is, or names files that are not there | [mod.1](modules.md), [mod.tree.1](modules.md) |
 | E0705 | Mods that depend on each other in a cycle | [mod.dep.1](modules.md) |
+| E0901 | `str` named where it would need a size | [text.str.2](text.md) |
+| E0902 | A `fmt` hole without an expression | [expr.fmt.2](text.md) |
 
 **Warnings** have codes of the same form starting with `W`, in the same blocks. They do not stop a
 program from running, and conformance tests expect them like errors.

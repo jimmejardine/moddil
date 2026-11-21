@@ -66,6 +66,12 @@ pub enum ExprKind {
     Bool(bool),
     /// `()`.
     Unit,
+    /// A `char` literal.
+    Char(char),
+    /// A string literal (plain, raw or a block), with its text: a `&str`.
+    Str(String),
+    /// `fmt"…"`: a `String` of its pieces.
+    Fmt(Vec<FmtPiece>),
     /// A local.
     Local(LocalId),
     /// A function named by a path, by its index in the item tree, with the type arguments for
@@ -279,6 +285,15 @@ pub enum ExprKind {
     },
 }
 
+/// A piece of a `fmt"…"` literal.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FmtPiece {
+    /// Text as it is.
+    Lit(String),
+    /// A hole: an expression whose `Display` goes here.
+    Hole(ExprId),
+}
+
 /// A handler a `with` installs: `Time = clock`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Handler {
@@ -357,6 +372,10 @@ pub enum PatKind {
     },
     /// An integer literal (a leading `-` folded in).
     Int(i128),
+    /// A `char` literal.
+    Char(char),
+    /// A string literal, matched against a `&str`.
+    Str(String),
     /// `true` or `false`.
     Bool(bool),
     /// `lo..hi`, `lo..=hi` or `lo..`: the integers from `lo` to `hi`, with `hi` included as
@@ -366,6 +385,8 @@ pub enum PatKind {
         lo: i128,
         /// The upper bound, if any.
         hi: Option<i128>,
+        /// Whether the bounds are `char`s (as code points).
+        chars: bool,
         /// Whether the upper bound is included (`..=`).
         inclusive: bool,
     },

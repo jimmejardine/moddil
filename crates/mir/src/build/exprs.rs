@@ -1,6 +1,6 @@
 //! Expressions and statements: each HIR expression kind as blocks and statements.
 
-use moddil_sema::hir::{ExprId, ExprKind, Handler, LogicOp, PatKind, Stmt, UnaryOp};
+use moddil_sema::hir::{ExprId, ExprKind, FmtPiece, Handler, LogicOp, PatKind, Stmt, UnaryOp};
 use moddil_sema::{Callee, Evidence, Ty};
 use moddil_syntax::TextRange;
 
@@ -97,6 +97,8 @@ impl Builder<'_> {
             ExprKind::Int(_)
             | ExprKind::Bool(_)
             | ExprKind::Unit
+            | ExprKind::Char(_)
+            | ExprKind::Str(_)
             | ExprKind::Local(_)
             | ExprKind::Field { .. }
             | ExprKind::Deref(_) => {
@@ -117,6 +119,7 @@ impl Builder<'_> {
                 let place = self.place(expr);
                 self.cfg.assign(dest, Rvalue::Ref(mutable, place));
             }
+            ExprKind::Fmt(pieces) => self.fmt(dest, &pieces, range),
             ExprKind::Tuple(xs) => {
                 let ops = self.operands(&xs);
                 self.cfg
@@ -566,6 +569,65 @@ impl Builder<'_> {
 
     /// A call; if its function can fail, its error edge goes where the `?` or `?!` around
     /// call `e` says.
+    /// `fmt"…"`: a new `String`, then each piece in order: text is pushed onto it, and each
+    /// hole is borrowed and written by its `Display::fmt`.
+    fn fmt(&mut self, dest: Local, pieces: &[FmtPiece], range: TextRange) {
+        let string = |name: &str| {
+            let func = self
+                .items
+                .builtin_method(&Ty::String, name)
+                .expect("the prelude's `String`");
+            Callee::Fn {
+                func,
+                args: Vec::new(),
+            }
+        };
+        self.call_into(None, string("new"), Place::local(dest), Vec::new(), range);
+        let push_str = string("push_str");
+        for p in pieces {
+            let out = self.temp(Ty::reference(true, Ty::String));
+            self.cfg.assign(out, Rvalue::Ref(true, Place::local(dest)));
+            let unit = self.temp(Ty::Unit);
+            match p {
+                FmtPiece::Lit(s) => {
+                    let c = self.cfg.str_const(s);
+                    self.call_into(
+                        None,
+                        push_str.clone(),
+                        Place::local(unit),
+                        vec![Operand::Move(Place::local(out)), Operand::Const(c)],
+                        range,
+                    );
+                }
+                &FmtPiece::Hole(h) => {
+                    let ty = self.ty(h);
+                    // A borrow is written as what it points to.
+                    let this = match &ty {
+                        Ty::Ref(..) => self.operand(h, &[]),
+                        t => {
+                            let place = self.place(h);
+                            let r = self.temp(Ty::reference(false, t.clone()));
+                            self.cfg.assign(r, Rvalue::Ref(false, place));
+                            Operand::Move(Place::local(r))
+                        }
+                    };
+                    let callee = self
+                        .types
+                        .fmt_callee(h)
+                        .expect("a checked `fmt` hole")
+                        .clone();
+                    self.call_into(
+                        None,
+                        callee,
+                        Place::local(unit),
+                        vec![this, Operand::Move(Place::local(out))],
+                        self.range(h),
+                    );
+                }
+            }
+        }
+    }
+
     pub(super) fn call_into(
         &mut self,
         e: Option<ExprId>,

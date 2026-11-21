@@ -3,8 +3,9 @@
 Moddil's **mid-level IR**, built from the typed HIR, and the passes over it
 ([`specs/mir.md`](../../specs/mir.md)).
 
-**Status:** slices S0 to S7a: the `mir(owner)` query builds a body from the typed HIR, for files
-without errors, once for a generic function: calls name their callee and its type arguments, and a
+**Status:** slices S0 to S7b: the `mir(owner)` query builds a body from the typed HIR, for files
+without errors (a string literal is a constant whose text the body holds, and `fmt"…"` a run of
+`String` and `Display` calls), once for a generic function: calls name their callee and its type arguments, and a
 trait's method is resolved when the call runs. Values that need dropping get `Drop` terminators at
 the end of their scope, before assignments, and at the end of a temporary's statement. A call of
 a function that can fail has an error edge, and `Fail` leaves a function with an error; `?`,

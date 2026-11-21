@@ -321,13 +321,17 @@ impl Checker<'_> {
     }
 
     /// Where a value of type `found` is used as an `expected` that is a `dyn` borrow of a trait
-    /// it implements (`&Clock` as `&dyn Time`): records the conversion of `e` and the bound, and
-    /// says whether it is one.
+    /// it implements (`&Clock` as `&dyn Time`), or a `&String` as a `&str`: records the conversion
+    /// of `e` (and the bound), and says whether it is one.
     pub(super) fn unsize(&mut self, e: ExprId, found: &Ty, expected: &Ty) -> bool {
         let (f, x) = (self.norm(found), self.norm(expected));
         let (Ty::Ref(m1, a), Ty::Ref(m2, b)) = (&f, &x) else {
             return false;
         };
+        if self.norm(a) == Ty::String && self.norm(b) == Ty::Str && (*m1 || !*m2) {
+            self.out.dyn_coercions.insert(e, x.clone());
+            return true;
+        }
         let Ty::Dyn(tr) = self.norm(b) else {
             return false;
         };

@@ -673,6 +673,14 @@ impl Walk<'_, '_> {
                 }
             }
             ExprKind::Let { init, .. } => self.expr(init, Use::Read),
+            // A hole is written through `Display::fmt(&self, …)`: it is borrowed.
+            ExprKind::Fmt(pieces) => {
+                for p in pieces {
+                    if let crate::hir::FmtPiece::Hole(h) = p {
+                        self.expr(h, Use::Read);
+                    }
+                }
+            }
             ExprKind::Closure { body, .. } => self.expr(body, Use::Value),
             ExprKind::AnonImpl { methods, .. } => {
                 for (_, c) in methods {

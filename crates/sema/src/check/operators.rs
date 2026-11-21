@@ -191,8 +191,13 @@ impl Checker<'_> {
                 continue;
             };
             let j = self.norm(&j);
+            let j = match &j {
+                Ty::Ref(_, t) if **t == Ty::Str => Ty::Str,
+                _ => j,
+            };
             match &j {
-                Ty::Error | Ty::Never | Ty::Int => {}
+                // `&str`s compare their text, built in.
+                Ty::Error | Ty::Never | Ty::Int | Ty::Char | Ty::Str => {}
                 Ty::Bool | Ty::Unit if !op.is_ordering() => {}
                 Ty::Infer(_) => {
                     self.unknown(range, &format!("to compare it with `{}`", op.symbol()));

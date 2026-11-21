@@ -347,3 +347,213 @@ impl PartialEq for () {
 }
 
 impl Eq for () {}
+
+// Text: `char`, `str` and `String`. Their methods marked `#[intrinsic]` are built in.
+
+// How a value is written as text: in `fmt"…"`'s holes, and by `to_string`.
+trait Display {
+    fn fmt(&self, out: &mut String);
+
+    fn to_string(&self) -> String {
+        let mut s = String::new();
+        self.fmt(&mut s);
+        s
+    }
+}
+
+impl Display for int {
+    #[intrinsic]
+    fn fmt(&self, out: &mut String);
+}
+
+impl Display for bool {
+    #[intrinsic]
+    fn fmt(&self, out: &mut String);
+}
+
+impl Display for char {
+    #[intrinsic]
+    fn fmt(&self, out: &mut String);
+}
+
+impl Display for str {
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self);
+    }
+}
+
+impl Display for String {
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self.as_str());
+    }
+}
+
+impl char {
+    // The code point, and the `char` of one (`None` for a surrogate or past U+10FFFF).
+    #[intrinsic]
+    fn code(self) -> int;
+    #[intrinsic]
+    fn from_code(n: int) -> Option<char>;
+    #[intrinsic]
+    fn is_alphabetic(self) -> bool;
+    #[intrinsic]
+    fn is_numeric(self) -> bool;
+    #[intrinsic]
+    fn is_whitespace(self) -> bool;
+    #[intrinsic]
+    fn is_uppercase(self) -> bool;
+    #[intrinsic]
+    fn is_lowercase(self) -> bool;
+    // How many bytes it takes in UTF-8.
+    #[intrinsic]
+    fn len_utf8(self) -> int;
+}
+
+impl Clone for char {
+    fn clone(&self) -> char {
+        *self
+    }
+}
+
+impl Copy for char {}
+
+impl PartialEq for char {
+    fn eq(&self, other: &char) -> bool {
+        *self == *other
+    }
+}
+
+impl Eq for char {}
+
+impl PartialOrd for char {
+    fn partial_cmp(&self, other: &char) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for char {
+    fn cmp(&self, other: &char) -> Ordering {
+        if *self < *other {
+            Ordering::Less
+        } else if *self == *other {
+            Ordering::Equal
+        } else {
+            Ordering::Greater
+        }
+    }
+}
+
+impl str {
+    // Its length in bytes.
+    #[intrinsic]
+    fn len(&self) -> int;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    #[intrinsic]
+    fn starts_with(&self, prefix: &str) -> bool;
+    #[intrinsic]
+    fn ends_with(&self, suffix: &str) -> bool;
+    #[intrinsic]
+    fn contains(&self, part: &str) -> bool;
+    // Without the white space at its ends.
+    #[intrinsic]
+    fn trim(&self) -> &str;
+    #[intrinsic]
+    fn to_uppercase(&self) -> String;
+    #[intrinsic]
+    fn to_lowercase(&self) -> String;
+}
+
+impl PartialEq for str {
+    #[intrinsic]
+    fn eq(&self, other: &str) -> bool;
+}
+
+impl Eq for str {}
+
+impl PartialOrd for str {
+    fn partial_cmp(&self, other: &str) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+// Byte by byte, which for UTF-8 is by code point.
+impl Ord for str {
+    #[intrinsic]
+    fn cmp(&self, other: &str) -> Ordering;
+}
+
+impl String {
+    #[intrinsic]
+    fn new() -> String;
+    #[intrinsic]
+    fn push_str(&mut self, s: &str);
+    #[intrinsic]
+    fn push(&mut self, c: char);
+    #[intrinsic]
+    fn pop(&mut self) -> Option<char>;
+    #[intrinsic]
+    fn clear(&mut self);
+    #[intrinsic]
+    fn as_str(&self) -> &str;
+
+    fn len(&self) -> int {
+        self.as_str().len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    fn starts_with(&self, prefix: &str) -> bool {
+        self.as_str().starts_with(prefix)
+    }
+
+    fn ends_with(&self, suffix: &str) -> bool {
+        self.as_str().ends_with(suffix)
+    }
+
+    fn contains(&self, part: &str) -> bool {
+        self.as_str().contains(part)
+    }
+
+    fn trim(&self) -> &str {
+        self.as_str().trim()
+    }
+
+    fn to_uppercase(&self) -> String {
+        self.as_str().to_uppercase()
+    }
+
+    fn to_lowercase(&self) -> String {
+        self.as_str().to_lowercase()
+    }
+}
+
+impl Clone for String {
+    #[intrinsic]
+    fn clone(&self) -> String;
+}
+
+impl PartialEq for String {
+    fn eq(&self, other: &String) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+impl Eq for String {}
+
+impl PartialOrd for String {
+    fn partial_cmp(&self, other: &String) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for String {
+    fn cmp(&self, other: &String) -> Ordering {
+        self.as_str().cmp(other.as_str())
+    }
+}

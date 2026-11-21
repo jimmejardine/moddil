@@ -20,8 +20,9 @@ value of each element type, in order. `()` is the tuple with no elements, and `(
 fields are different types.
 
 **type.match.1** Where an expression of one type is expected, an expression of another type is an
-error (E0201); `!` fits everywhere. No conversions are implicit but two of borrows: `&mut T` to
-`&T` ([Borrows](borrows.md)), and a borrow to a `dyn` borrow (**type.dyn.coerce.1**).
+error (E0201); `!` fits everywhere. No conversions are implicit but three of borrows: `&mut T` to
+`&T` ([Borrows](borrows.md)), a borrow to a `dyn` borrow (**type.dyn.coerce.1**), and `&String`
+to `&str` ([Text](text.md)).
 
 **type.dyn.1** `dyn Trait` is the type of a value of some type that implements `Trait`, known only
 through it. It has no size of its own, so it is written behind a borrow, `&dyn Trait` or

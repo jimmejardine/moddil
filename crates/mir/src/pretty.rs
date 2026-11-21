@@ -37,6 +37,8 @@ impl fmt::Debug for Const {
             Const::Int(v) => write!(f, "const {v}"),
             Const::Bool(v) => write!(f, "const {v}"),
             Const::Unit => write!(f, "const ()"),
+            Const::Char(c) => write!(f, "const {c:?}"),
+            Const::Str(i) => write!(f, "const str{i}"),
         }
     }
 }

@@ -21,6 +21,9 @@ pub(crate) fn check_impls(tree: &ItemTree) -> Vec<Found> {
             match imp.self_ty.adt() {
                 Some(a) if tree.adts[a as usize].src == imp.src => {}
                 Some(_) | None if imp.self_ty == Ty::Error => {}
+                // The prelude gives the built-in text types their methods.
+                None if imp.src == Src::Prelude
+                    && matches!(imp.self_ty, Ty::Char | Ty::Str | Ty::String) => {}
                 _ => push(
                     &mut found,
                     Diagnostic::error(

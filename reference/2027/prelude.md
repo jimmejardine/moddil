@@ -7,7 +7,7 @@ behaviour are as written there.
 **prelude.1** The prelude holds `assert` ([`assert`](expressions/assert.md)) and `discard`
 ([Errors](errors.md)), the types `Option`, `Result` and `Ordering`, the traits `Clone`, `Copy`,
 `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, `Not` and
-`Drop`, the closure traits `FnOnce`, `FnMut` and `Fn`, the function `drop`, and their impls for `int`, `bool` and `()`. Every module sees them, and
+`Drop`, the closure traits `FnOnce`, `FnMut` and `Fn`, `Display`, the function `drop`, their impls for `int`, `bool` and `()`, and the methods and impls of `char`, `str` and `String` ([Text](text.md)). Every module sees them, and
 `Option`'s and `Result`'s variants, without importing them; an item or import of the module with the
 same name shadows them ([Modules](modules.md)). The operators, `?` and `try` use the prelude's traits
 and types whatever the module calls its own.

@@ -102,6 +102,7 @@ pub struct Inference {
     by_ref: HashMap<PatId, bool>,
     calls: HashMap<ExprId, Callee>,
     compare_calls: HashMap<(ExprId, usize), Callee>,
+    fmt_calls: HashMap<ExprId, Callee>,
     adjusts: HashMap<ExprId, Adjust>,
     propagated: HashMap<ExprId, Propagated>,
     try_errors: HashMap<ExprId, Ty>,
@@ -164,6 +165,11 @@ impl Inference {
     /// What comparison `i` of a comparison chain runs, if it is not on `int`, `bool` or `()`.
     pub fn compare_callee(&self, e: ExprId, i: usize) -> Option<&Callee> {
         self.compare_calls.get(&(e, i))
+    }
+
+    /// For a hole of `fmt"…"`: the `Display::fmt` it calls.
+    pub fn fmt_callee(&self, hole: ExprId) -> Option<&Callee> {
+        self.fmt_calls.get(&hole)
     }
 
     /// For `e?` and `e ?! "…"`: what `e` is (a fallible call, a `Result` or an `Option`).

@@ -3,12 +3,39 @@
 use moddil_syntax::TextRange;
 
 use crate::hir::{Arm, ExprId, ExprKind};
-use crate::{Code, Diagnostic, Ty};
+use crate::{Callee, Code, Diagnostic, Ty};
 
 use super::finish::Deferred;
 use super::{Checker, LoopCx, index};
 
 impl Checker<'_> {
+    /// `fmt"…"` (`expr.fmt.1`): each hole's type (or what a borrow in it points to) is
+    /// `Display`.
+    pub(super) fn fmt(&mut self, pieces: &[crate::hir::FmtPiece]) {
+        let display = self.items.lang_ref("Display");
+        for p in pieces {
+            if let crate::hir::FmtPiece::Hole(h) = p {
+                let t = self.infer(*h);
+                let t = match self.norm(&t) {
+                    Ty::Ref(_, x) => (*x).clone(),
+                    t => t,
+                };
+                if let Some(d) = &display {
+                    self.require(t.clone(), d.clone(), self.range(*h));
+                    if let Some((_, func)) = self.op_trait("Display", "fmt") {
+                        self.out.fmt_calls.insert(
+                            *h,
+                            Callee::Trait {
+                                func,
+                                args: vec![t],
+                            },
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     pub(super) fn infer_inner(&mut self, e: ExprId) -> Ty {
         let range = self.range(e);
         match &self.body.exprs[e].kind {
@@ -25,6 +52,13 @@ impl Checker<'_> {
             }
             ExprKind::Bool(_) => Ty::Bool,
             ExprKind::Unit => Ty::Unit,
+            ExprKind::Char(_) => Ty::Char,
+            ExprKind::Str(_) => Ty::reference(false, Ty::Str),
+            ExprKind::Fmt(pieces) => {
+                let pieces = pieces.clone();
+                self.fmt(&pieces);
+                Ty::String
+            }
             &ExprKind::Local(l) => self.out.local_types[index(l)].clone(),
             ExprKind::Fn { .. } | ExprKind::AssocFn { .. } | ExprKind::TraitFn { .. } => {
                 self.out

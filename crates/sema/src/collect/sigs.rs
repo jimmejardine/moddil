@@ -31,6 +31,7 @@ impl Collector<'_> {
         let mut ds = Vec::new();
         // `#[track_caller]` (`attr.track-caller.1`); other attributes on a function wait.
         let mut track_caller = false;
+        let mut intrinsic = false;
         for attr in node.children().filter(|c| c.kind() == K::OUTER_ATTR) {
             let path = attr
                 .child(K::ATTR)
@@ -41,6 +42,8 @@ impl Collector<'_> {
             let input = attr.child(K::ATTR).and_then(|a| a.child(K::ATTR_INPUT));
             if path == ["track_caller"] && input.is_none() {
                 track_caller = true;
+            } else if path == ["intrinsic"] && input.is_none() && src == Src::Prelude {
+                intrinsic = true;
             } else {
                 ds.push(Diagnostic::unsupported(attr.text_range(), "this attribute"));
             }
@@ -61,7 +64,7 @@ impl Collector<'_> {
             |n| (n.text(), n.syntax().text_range()),
         );
         let has_body = f.body().is_some();
-        if !has_body && !matches!(container, Container::Trait(_)) {
+        if !has_body && !intrinsic && !matches!(container, Container::Trait(_)) {
             ds.push(Diagnostic::unsupported(
                 name_range,
                 "a function without a body",
@@ -234,6 +237,7 @@ impl Collector<'_> {
             fails_range,
             effects,
             track_caller,
+            intrinsic,
             vis: match (src, container) {
                 (Src::File(_), Container::Free | Container::Impl(_)) => super::vis_of(node),
                 _ => crate::items::Vis::Pub,

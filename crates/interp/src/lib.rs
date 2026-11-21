@@ -30,6 +30,13 @@ pub enum Value {
     Bool(bool),
     /// `()`.
     Unit,
+    /// A `char`.
+    Char(char),
+    /// A `&str`: the text it points to. A shared borrow keeps what it points to from changing,
+    /// so the text is held, not where it is.
+    Str(std::sync::Arc<str>),
+    /// A `String`.
+    String(String),
     /// A tuple of one or more elements.
     Tuple(Vec<Value>),
     /// A struct (variant 0) or an enum's variant, with its fields in order.
@@ -71,6 +78,9 @@ impl Value {
             Value::Int(v) => v.to_string(),
             Value::Bool(v) => v.to_string(),
             Value::Unit => "()".to_string(),
+            Value::Char(c) => format!("{c:?}"),
+            Value::Str(s) => format!("{:?}", &**s),
+            Value::String(s) => format!("{s:?}"),
             Value::Tuple(xs) if xs.len() == 1 => format!("({},)", xs[0].render(items)),
             Value::Tuple(xs) => {
                 let xs: Vec<String> = xs.iter().map(|x| x.render(items)).collect();
@@ -310,6 +320,12 @@ impl Machine<'_> {
             Operand::Const(Const::Int(v)) => Value::Int(*v),
             Operand::Const(Const::Bool(v)) => Value::Bool(*v),
             Operand::Const(Const::Unit) => Value::Unit,
+            Operand::Const(Const::Char(c)) => Value::Char(*c),
+            Operand::Const(Const::Str(i)) => Value::Str(
+                self.stack[self.top()].body.strs[*i as usize]
+                    .as_str()
+                    .into(),
+            ),
         }
     }
 
@@ -491,6 +507,13 @@ impl Machine<'_> {
                     _ => Value::Ref(ptr, *m),
                 }
             }
+            Rvalue::Unsize(a, Ty::String) => match self.take(a) {
+                Value::Ref(ptr, _) => match self.load(&ptr) {
+                    Value::String(s) => Value::Str(s.as_str().into()),
+                    other => unreachable!("a `String`: {other:?}"),
+                },
+                other => unreachable!("a borrow of a `String`: {other:?}"),
+            },
             Rvalue::Unsize(a, from) => match self.take(a) {
                 Value::Ref(ptr, m) => Value::Dyn(ptr, m, self.concrete(from)),
                 v @ Value::Dyn(..) => v,
@@ -692,6 +715,12 @@ fn run<'db>(
                     continue;
                 }
                 match m.target(&callee) {
+                    Some((f, _)) if m.items.fns[f as usize].intrinsic => {
+                        let v = m.intrinsic(f, &values);
+                        m.store(&dest, v);
+                        m.stack[top].block = target.index();
+                        m.stack[top].stmt = 0;
+                    }
                     Some((f, type_args)) => {
                         let code = body(db, Owner::new(db, file, Item::Fn(f)));
                         m.stack.push(Frame::new(
@@ -820,10 +849,18 @@ fn int(v: &Value) -> i64 {
 }
 
 fn binary(op: BinOp, a: Value, b: Value) -> Value {
-    use Value::{Bool, Int};
+    use Value::{Bool, Char, Int, Str};
     match (op, a, b) {
         (BinOp::Eq, a, b) => Bool(a == b),
         (BinOp::Ne, a, b) => Bool(a != b),
+        (BinOp::Lt, Char(a), Char(b)) => Bool(a < b),
+        (BinOp::Le, Char(a), Char(b)) => Bool(a <= b),
+        (BinOp::Gt, Char(a), Char(b)) => Bool(a > b),
+        (BinOp::Ge, Char(a), Char(b)) => Bool(a >= b),
+        (BinOp::Lt, Str(a), Str(b)) => Bool(a < b),
+        (BinOp::Le, Str(a), Str(b)) => Bool(a <= b),
+        (BinOp::Gt, Str(a), Str(b)) => Bool(a > b),
+        (BinOp::Ge, Str(a), Str(b)) => Bool(a >= b),
         (BinOp::Lt, Int(a), Int(b)) => Bool(a < b),
         (BinOp::Le, Int(a), Int(b)) => Bool(a <= b),
         (BinOp::Gt, Int(a), Int(b)) => Bool(a > b),
@@ -842,6 +879,162 @@ fn binary(op: BinOp, a: Value, b: Value) -> Value {
         (BinOp::BitOr, Bool(a), Bool(b)) => Bool(a | b),
         (BinOp::BitXor, Bool(a), Bool(b)) => Bool(a ^ b),
         (op, a, b) => unreachable!("{op:?} on {a:?} and {b:?}"),
+    }
+}
+
+impl Machine<'_> {
+    /// Runs the prelude's built-in function `f` (`#[intrinsic]`) on `args`.
+    fn intrinsic(&mut self, f: u32, args: &[Value]) -> Value {
+        let sig = &self.items.fns[f as usize];
+        let self_ty = match sig.container {
+            moddil_sema::Container::Impl(k) => self.items.impls[k as usize].self_ty.clone(),
+            _ => Ty::Unit,
+        };
+        let name = sig.name.clone();
+        // An argument as a value: a borrow is read, a `&str` is its text.
+        let arg = |m: &Self, i: usize| match &args[i] {
+            Value::Ref(p, _) => m.load(p),
+            v => v.clone(),
+        };
+        let text = |m: &Self, i: usize| -> String {
+            match arg(m, i) {
+                Value::Str(s) => s.to_string(),
+                Value::String(s) => s,
+                other => unreachable!("text: {other:?}"),
+            }
+        };
+        let ch = |m: &Self, i: usize| match arg(m, i) {
+            Value::Char(c) => c,
+            other => unreachable!("a `char`: {other:?}"),
+        };
+        // Changes the `String` the first argument borrows.
+        let edit = |m: &mut Self, f: &mut dyn FnMut(&mut String) -> Value| {
+            let Value::Ref(p, _) = &args[0] else {
+                unreachable!("a `&mut String`")
+            };
+            let Value::String(mut s) = m.load(p) else {
+                unreachable!("a `String`")
+            };
+            let v = f(&mut s);
+            m.store(p, Value::String(s));
+            v
+        };
+        match (&self_ty, name.as_str()) {
+            (Ty::Int | Ty::Bool | Ty::Char, "fmt") => {
+                let s = match arg(self, 0) {
+                    Value::Int(v) => v.to_string(),
+                    Value::Bool(v) => v.to_string(),
+                    Value::Char(c) => c.to_string(),
+                    other => unreachable!("`Display` of {other:?}"),
+                };
+                let Value::Ref(p, _) = &args[1] else {
+                    unreachable!("a `&mut String`")
+                };
+                let Value::String(mut out) = self.load(p) else {
+                    unreachable!("a `String`")
+                };
+                out.push_str(&s);
+                self.store(p, Value::String(out));
+                Value::Unit
+            }
+            (Ty::Char, "code") => Value::Int(i64::from(u32::from(ch(self, 0)))),
+            (Ty::Char, "from_code") => {
+                let Value::Int(n) = arg(self, 0) else {
+                    unreachable!("an `int`")
+                };
+                let c = u32::try_from(n).ok().and_then(char::from_u32);
+                self.option(c.map(Value::Char))
+            }
+            (Ty::Char, "is_alphabetic") => Value::Bool(ch(self, 0).is_alphabetic()),
+            (Ty::Char, "is_numeric") => Value::Bool(ch(self, 0).is_numeric()),
+            (Ty::Char, "is_whitespace") => Value::Bool(ch(self, 0).is_whitespace()),
+            (Ty::Char, "is_uppercase") => Value::Bool(ch(self, 0).is_uppercase()),
+            (Ty::Char, "is_lowercase") => Value::Bool(ch(self, 0).is_lowercase()),
+            (Ty::Char, "len_utf8") => Value::Int(ch(self, 0).len_utf8() as i64),
+            (Ty::Str, "len") => Value::Int(text(self, 0).len() as i64),
+            (Ty::Str, "starts_with") => Value::Bool(text(self, 0).starts_with(&text(self, 1))),
+            (Ty::Str, "ends_with") => Value::Bool(text(self, 0).ends_with(&text(self, 1))),
+            (Ty::Str, "contains") => Value::Bool(text(self, 0).contains(&text(self, 1))),
+            (Ty::Str, "trim") => Value::Str(text(self, 0).trim().into()),
+            (Ty::Str, "to_uppercase") => Value::String(text(self, 0).to_uppercase()),
+            (Ty::Str, "to_lowercase") => Value::String(text(self, 0).to_lowercase()),
+            (Ty::Str, "eq") => Value::Bool(text(self, 0) == text(self, 1)),
+            (Ty::Str, "cmp") => {
+                let o = text(self, 0).cmp(&text(self, 1));
+                self.ordering(o)
+            }
+            (Ty::String, "new") => Value::String(String::new()),
+            (Ty::String, "as_str") => Value::Str(text(self, 0).into()),
+            (Ty::String, "clone") => Value::String(text(self, 0)),
+            (Ty::String, "push_str") => {
+                let s = text(self, 1);
+                edit(self, &mut |out| {
+                    out.push_str(&s);
+                    Value::Unit
+                })
+            }
+            (Ty::String, "push") => {
+                let c = ch(self, 1);
+                edit(self, &mut |out| {
+                    out.push(c);
+                    Value::Unit
+                })
+            }
+            (Ty::String, "clear") => edit(self, &mut |out| {
+                out.clear();
+                Value::Unit
+            }),
+            (Ty::String, "pop") => {
+                let c = edit(self, &mut |out| match out.pop() {
+                    Some(c) => Value::Char(c),
+                    None => Value::Empty,
+                });
+                self.option((c != Value::Empty).then_some(c))
+            }
+            (t, n) => unreachable!("no built-in `{n}` for `{t}`"),
+        }
+    }
+
+    /// A value of the prelude's `Option`.
+    fn option(&self, v: Option<Value>) -> Value {
+        let adt = self.prelude_adt("Option");
+        let name = if v.is_some() { "Some" } else { "None" };
+        Value::Adt {
+            adt,
+            variant: self.variant(adt, name),
+            fields: v.into_iter().collect(),
+        }
+    }
+
+    /// A value of the prelude's `Ordering`.
+    fn ordering(&self, o: std::cmp::Ordering) -> Value {
+        let adt = self.prelude_adt("Ordering");
+        let name = match o {
+            std::cmp::Ordering::Less => "Less",
+            std::cmp::Ordering::Equal => "Equal",
+            std::cmp::Ordering::Greater => "Greater",
+        };
+        Value::Adt {
+            adt,
+            variant: self.variant(adt, name),
+            fields: Vec::new(),
+        }
+    }
+
+    fn prelude_adt(&self, name: &str) -> u32 {
+        self.items
+            .adts
+            .iter()
+            .position(|a| a.src == Src::Prelude && a.name == name)
+            .expect("a prelude type") as u32
+    }
+
+    fn variant(&self, adt: u32, name: &str) -> u32 {
+        self.items.adts[adt as usize]
+            .variants
+            .iter()
+            .position(|v| v.name == name)
+            .expect("a variant") as u32
     }
 }
 

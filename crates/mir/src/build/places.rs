@@ -2,7 +2,7 @@
 //! moved or reborrowed), keeping each operand's value if a later operand assigns.
 
 use moddil_sema::Ty;
-use moddil_sema::hir::{ExprId, ExprKind, Stmt};
+use moddil_sema::hir::{ExprId, ExprKind, FmtPiece, Stmt};
 
 use super::Builder;
 use crate::{Const, Operand, Place, Rvalue};
@@ -17,6 +17,8 @@ impl Builder<'_> {
             | ExprKind::Int(_)
             | ExprKind::Bool(_)
             | ExprKind::Unit
+            | ExprKind::Char(_)
+            | ExprKind::Str(_)
             | ExprKind::Local(_)
             | ExprKind::Fn { .. }
             | ExprKind::AssocFn { .. }
@@ -42,6 +44,9 @@ impl Builder<'_> {
                         .any(|a| self.assigns(a.body) || a.guard.is_some_and(|g| self.assigns(g)))
             }
             ExprKind::Tuple(xs) => any(xs),
+            ExprKind::Fmt(pieces) => pieces
+                .iter()
+                .any(|p| matches!(p, FmtPiece::Hole(h) if self.assigns(*h))),
             ExprKind::Adt { fields, .. } => fields.iter().any(|&(_, x)| self.assigns(x)),
             ExprKind::Field { base, .. } => self.assigns(*base),
             ExprKind::Call { args, .. } => any(args),
@@ -166,6 +171,11 @@ impl Builder<'_> {
             ExprKind::Int(v) => return Operand::Const(Const::Int(v as i64)),
             ExprKind::Bool(v) => return Operand::Const(Const::Bool(v)),
             ExprKind::Unit => return Operand::Const(Const::Unit),
+            ExprKind::Char(c) => return Operand::Const(Const::Char(c)),
+            ExprKind::Str(ref s) => {
+                let s = s.clone();
+                return Operand::Const(self.cfg.str_const(&s));
+            }
             _ => {}
         }
         if !later.iter().any(|&x| self.assigns(x))

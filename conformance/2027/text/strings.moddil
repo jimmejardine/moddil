@@ -1,0 +1,82 @@
+// covers: text.string.1, text.string.2, text.coerce.1, text.cmp.1, text.method.1
+
+fn shout(s: &str) -> String {
+    let mut out = s.to_uppercase();
+    out.push('!');
+    out
+}
+
+fn first_word(s: &str) -> &str {
+    s.trim()
+}
+
+test "building a string" {
+    let mut s = String::new();
+    s.is_empty()                            // => true
+    ;
+    s.push_str("hello");
+    s.push(',');
+    s.push_str(" world");
+    s                                       // => "hello, world"
+    ;
+    s.len()                                 // => 12
+    ;
+    s.pop()                                 // => Some('d')
+    ;
+    s.clear();
+    s.pop()                                 // => None
+}
+
+test "a `&String` is a `&str` where one is expected" {
+    let s = String::new();
+    let mut t = s.clone();
+    t.push_str("abc");
+    shout(&t)                               // => "ABC!"
+    ;
+    t                                       // => "abc"
+}
+
+test "methods of `str`" {
+    "  padded  ".trim()                     // => "padded"
+    ;
+    first_word("  x ")                      // => "x"
+    ;
+    "moddil".starts_with("mod")             // => true
+    ;
+    "moddil".ends_with("dil")               // => true
+    ;
+    "moddil".contains("ddi")                // => true
+    ;
+    "MiXeD".to_lowercase()                  // => "mixed"
+}
+
+test "comparing text" {
+    "abc" == "abc"                          // => true
+    ;
+    "abc" < "abd"                           // => true
+    ;
+    "Z" < "a"                               // => true
+    ;
+    "" < "a" < "b"                          // => true
+    ;
+    let mut a = String::new();
+    a.push_str("same");
+    let b = a.clone();
+    a == b                                  // => true
+    ;
+    a.as_str() == "same"                    // => true
+    ;
+    'a' < 'b'                               // => true
+}
+
+test "characters" {
+    char::from_code(65)                     // => Some('A')
+    ;
+    char::from_code(0xD800)                 // => None
+    ;
+    '7'.is_numeric()                        // => true
+    ;
+    ' '.is_whitespace()                     // => true
+    ;
+    'Q'.is_uppercase()                      // => true
+}

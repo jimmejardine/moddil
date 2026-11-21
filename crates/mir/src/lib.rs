@@ -76,6 +76,8 @@ pub struct Body {
     pub arg_count: usize,
     /// The blocks; `bb0` is the entry.
     pub blocks: Vec<BasicBlock>,
+    /// The text of its string literals ([`Const::Str`]).
+    pub strs: Vec<String>,
 }
 
 /// A local's declaration.
@@ -301,6 +303,10 @@ pub enum Const {
     Bool(bool),
     /// `()`.
     Unit,
+    /// A `char`.
+    Char(char),
+    /// A `&str` literal: its text, by its index in [`Body::strs`].
+    Str(u32),
 }
 
 /// Prefix operators.

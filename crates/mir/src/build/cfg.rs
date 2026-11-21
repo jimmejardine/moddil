@@ -8,7 +8,8 @@ use moddil_sema::Ty;
 use moddil_syntax::TextRange;
 
 use crate::{
-    BasicBlock, BlockId, Body, Local, LocalDecl, Operand, Place, Rvalue, Statement, Terminator,
+    BasicBlock, BlockId, Body, Const, Local, LocalDecl, Operand, Place, Rvalue, Statement,
+    Terminator,
 };
 
 pub(super) struct Cfg {
@@ -106,6 +107,16 @@ impl Cfg {
 
     /// The finished body, without the blocks control never reaches (those after a `return`,
     /// say), the rest renumbered in order.
+    /// The constant for the string literal `s`.
+    pub(super) fn str_const(&mut self, s: &str) -> Const {
+        let strs = &mut self.body.strs;
+        let i = strs.iter().position(|x| x == s).unwrap_or_else(|| {
+            strs.push(s.to_string());
+            strs.len() - 1
+        });
+        Const::Str(i as u32)
+    }
+
     pub(super) fn finish(mut self) -> Body {
         let body = &mut self.body;
         let mut reachable = vec![false; body.blocks.len()];

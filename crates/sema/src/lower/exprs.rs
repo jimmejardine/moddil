@@ -147,6 +147,15 @@ impl Lowerer<'_> {
                     self.missing(range)
                 }
             },
+            K::CHAR => match super::text::char_value(tok.text()) {
+                Ok(c) => self.alloc(ExprKind::Char(c), range),
+                Err(why) => {
+                    self.report(Code::E0902, range, why);
+                    self.missing(range)
+                }
+            },
+            K::STRING | K::RAW_STRING | K::BLOCK_STRING => self.string_lit(&tok, range),
+            K::TAGGED_STRING => self.tagged(&tok, range),
             _ => self.unsupported(range, "this kind of literal"),
         }
     }

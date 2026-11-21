@@ -1,0 +1,37 @@
+// covers: expr.fmt.1, expr.fmt.2, text.display.1
+
+struct Point { x: int, y: int }
+
+impl Display for Point {
+    fn fmt(&self, out: &mut String) {
+        out.push_str(&fmt"({self.x}, {self.y})");
+    }
+}
+
+fn describe(n: int) -> String {
+    fmt"{n} is {if n % 2 == 0 { "even" } else { "odd" }}"
+}
+
+test "holes are expressions" {
+    let name = "Ada";
+    let n = 3;
+    fmt"hello {name}, {n + 1} times"        // => "hello Ada, 4 times"
+    ;
+    describe(7)                             // => "7 is odd"
+    ;
+    fmt"{true} {'c'} {-5}"                  // => "true c -5"
+}
+
+test "braces are doubled" {
+    fmt"{{x}}"                              // => "{x}"
+}
+
+test "a type's own `Display`" {
+    let p = Point { x: 1, y: -2 };
+    fmt"at {p}"                             // => "at (1, -2)"
+    ;
+    p.to_string()                           // => "(1, -2)"
+    ;
+    let s = 42.to_string();
+    s                                       // => "42"
+}

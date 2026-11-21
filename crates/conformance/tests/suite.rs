@@ -48,7 +48,7 @@ areas!(
     arithmetic, assert, assignment, attributes, bitwise, blocks, borrows, calls, closures,
     comparison, derive, effects, enums, errors, generics, r#if, items, literals, logic, loops,
     r#match, modules, names, operators, ownership, patterns, prelude, statements, structs, syntax,
-    traits, tuples, types,
+    text, traits, tuples, types,
 );
 
 #[test]

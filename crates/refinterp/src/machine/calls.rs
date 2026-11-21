@@ -288,6 +288,11 @@ impl Machine<'_> {
         if self.memory.depth() >= MAX_DEPTH {
             return Err(trap(TrapClass::StackOverflow, range));
         }
+        // The prelude's built-in methods have no body (`#[intrinsic]`).
+        if f.node.body().is_none() {
+            let head = types.get("Self").cloned().unwrap_or(Head::Unit);
+            return self.intrinsic(f, &head, &args);
+        }
         let params: Vec<ast::Param> = f
             .node
             .params()
@@ -439,6 +444,9 @@ impl Machine<'_> {
                 let head = match ty {
                     [t] if t == "int" => Head::Int,
                     [t] if t == "bool" => Head::Bool,
+                    [t] if t == "char" => Head::Char,
+                    [t] if t == "str" => Head::Str,
+                    [t] if t == "String" => Head::String,
                     [t] if self.memory.type_of(t).is_some() => {
                         self.memory.type_of(t).expect("known").clone()
                     }
