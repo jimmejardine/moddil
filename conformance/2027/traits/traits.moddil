@@ -1,0 +1,80 @@
+// covers: item.trait.1, item.trait.default.1, item.trait.super.1, item.impl.trait.1, generic.bound.1, generic.assoc.1, expr.path.assoc.1
+
+trait Shape {
+    fn area(&self) -> int;
+    fn twice(&self) -> int { self.area() * 2 }
+}
+
+trait Named: Shape {
+    fn id(&self) -> int;
+    fn score(&self) -> int { self.id() + self.area() }
+}
+
+struct Square { side: int }
+struct Rect { w: int, h: int }
+
+impl Shape for Square {
+    fn area(&self) -> int { self.side * self.side }
+}
+
+impl Shape for Rect {
+    fn area(&self) -> int { self.w * self.h }
+    fn twice(&self) -> int { 0 }
+}
+
+impl Named for Square {
+    fn id(&self) -> int { 100 }
+}
+
+fn total<T: Shape>(a: &T, b: &T) -> int { a.area() + b.area() }
+fn scored<T>(x: &T) -> int where T: Named { x.score() + x.twice() }
+
+trait Zero { fn zero() -> Self; }
+impl Zero for int { fn zero() -> int { 0 } }
+impl Zero for bool { fn zero() -> bool { false } }
+fn zeros<T: Zero>(x: T) -> (T, T) { (T::zero(), T::zero()) }
+
+trait Container {
+    type Item;
+    fn get(&self) -> Self::Item;
+}
+struct Boxed { n: int }
+impl Container for Boxed {
+    type Item = int;
+    fn get(&self) -> int { self.n }
+}
+fn unbox<C: Container>(c: &C) -> C::Item { c.get() }
+fn plus_one<C: Container<Item = int>>(c: &C) -> int { c.get() + 1 }
+
+test "methods from impls and defaults" {
+    let s = Square { side: 3 };
+    let r = Rect { w: 2, h: 5 };
+    s.area()                                // => 9
+    ;
+    s.twice()                               // => 18
+    ;
+    r.twice()                               // => 0
+    ;
+    total(&r, &Rect { w: 1, h: 1 })         // => 11
+    ;
+    scored(&s)                              // => 127
+    ;
+    Shape::area(&r)                         // => 10
+    ;
+    Square::area(&s)                        // => 9
+}
+
+test "functions without self" {
+    zeros(5)                                // => (0, 0)
+    ;
+    zeros(true)                             // => (false, false)
+    ;
+    int::zero()                             // => 0
+}
+
+test "associated types" {
+    let b = Boxed { n: 41 };
+    unbox(&b)                               // => 41
+    ;
+    plus_one(&b)                            // => 42
+}

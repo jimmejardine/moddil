@@ -89,6 +89,28 @@ something runs from the first slice.
   S2, checked as [`values.md`](values.md#opt-in-copy-with-a-size-cap) says, although derives in
   general arrive with S8; `Clone` gains its method with traits in S3. S2's drops have no
   hand-written `drop` yet (that needs `impl`, S3), so RAII is observable through `defer`.
+- **S3's scope (decided):** type parameters with bounds and `where`; traits with default methods,
+  supertraits and associated types; inherent and trait impls, with one impl per trait and type;
+  method calls; operators through the prelude's traits; `#[derive(Copy, Clone, PartialEq, Eq,
+  PartialOrd, Ord)]`; destructors (`impl Drop`); and the prelude, written in Moddil
+  ([`reference/2027/prelude.moddil`](../reference/2027/prelude.moddil)). Specialisation, `dyn`,
+  GATs, const generics, default type parameters, `impl Trait`, inferred generic signatures and
+  trait aliases come later.
+- **S3's interim rules**, until the features they wait for arrive:
+  - the operator traits take `Self` on the right (`Add` has no `Rhs` parameter until default type
+    parameters arrive), and compound assignment (`+=`) is only for `int` and `bool`;
+  - `Ordering`, `PartialEq`, `PartialOrd`, the operator traits and `drop` are in the prelude, and a
+    file may not redefine a prelude name, until modules (S6) let the prelude be an import that
+    names can shadow and operator traits live in a core mod;
+  - a type argument cannot be a borrow, since borrows are second-class and a type parameter can be
+    stored in a struct;
+  - tuples are `Copy` and `Clone` when their elements are `Copy`, and do not implement
+    `PartialEq` or `PartialOrd` yet;
+  - a trap in the prelude's code is reported where the file's code called it, pending the
+    caller-locations question below;
+  - a temporary that needs dropping is dropped at the end of its statement
+    ([`resources.md`](resources.md)); one that does not still lives to the end of its function,
+    as in S2, which nothing can observe.
 - **Two open questions must be settled before S7**, because S7 writes the first library code in
   Moddil:
   - **caller locations** ([`error-handling.md`: Open questions](error-handling.md#open-questions)),

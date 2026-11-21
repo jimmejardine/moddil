@@ -1,0 +1,303 @@
+// The prelude: the items every Moddil file can name without importing them (`prelude.md`).
+//
+// The compiler and the reference interpreter both read this file. A file may not define an item
+// with the same name as one of these.
+
+// Optional values.
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Option<T> {
+    None,
+    Some(T),
+}
+
+impl<T> Option<T> {
+    fn is_some(&self) -> bool {
+        match self {
+            Some(_) => true,
+            None => false,
+        }
+    }
+
+    fn is_none(&self) -> bool {
+        !self.is_some()
+    }
+
+    fn unwrap_or(self, fallback: T) -> T {
+        match self {
+            Some(x) => x,
+            None => fallback,
+        }
+    }
+}
+
+// Copying and cloning.
+
+trait Clone {
+    fn clone(&self) -> Self;
+}
+
+trait Copy: Clone {}
+
+// Equality and ordering.
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Ordering {
+    Less,
+    Equal,
+    Greater,
+}
+
+trait PartialEq {
+    fn eq(&self, other: &Self) -> bool;
+
+    fn ne(&self, other: &Self) -> bool {
+        !self.eq(other)
+    }
+}
+
+trait Eq: PartialEq {}
+
+trait PartialOrd: PartialEq {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering>;
+
+    fn lt(&self, other: &Self) -> bool {
+        match self.partial_cmp(other) {
+            Some(Ordering::Less) => true,
+            _ => false,
+        }
+    }
+
+    fn le(&self, other: &Self) -> bool {
+        match self.partial_cmp(other) {
+            Some(Ordering::Less) | Some(Ordering::Equal) => true,
+            _ => false,
+        }
+    }
+
+    fn gt(&self, other: &Self) -> bool {
+        match self.partial_cmp(other) {
+            Some(Ordering::Greater) => true,
+            _ => false,
+        }
+    }
+
+    fn ge(&self, other: &Self) -> bool {
+        match self.partial_cmp(other) {
+            Some(Ordering::Greater) | Some(Ordering::Equal) => true,
+            _ => false,
+        }
+    }
+}
+
+trait Ord: Eq + PartialOrd {
+    fn cmp(&self, other: &Self) -> Ordering;
+}
+
+// Operators.
+
+trait Add {
+    type Output;
+    fn add(self, rhs: Self) -> Self::Output;
+}
+
+trait Sub {
+    type Output;
+    fn sub(self, rhs: Self) -> Self::Output;
+}
+
+trait Mul {
+    type Output;
+    fn mul(self, rhs: Self) -> Self::Output;
+}
+
+trait Div {
+    type Output;
+    fn div(self, rhs: Self) -> Self::Output;
+}
+
+trait Rem {
+    type Output;
+    fn rem(self, rhs: Self) -> Self::Output;
+}
+
+trait Neg {
+    type Output;
+    fn neg(self) -> Self::Output;
+}
+
+trait Not {
+    type Output;
+    fn not(self) -> Self::Output;
+}
+
+// Destructors.
+
+trait Drop {
+    fn drop(self);
+}
+
+// Ends `x` early: it is moved in, and dropped at the end of the call.
+fn drop<T>(x: T) {}
+
+// `int`.
+
+impl Clone for int {
+    fn clone(&self) -> int {
+        *self
+    }
+}
+
+impl Copy for int {}
+
+impl PartialEq for int {
+    fn eq(&self, other: &int) -> bool {
+        *self == *other
+    }
+}
+
+impl Eq for int {}
+
+impl PartialOrd for int {
+    fn partial_cmp(&self, other: &int) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+
+    fn lt(&self, other: &int) -> bool {
+        *self < *other
+    }
+
+    fn le(&self, other: &int) -> bool {
+        *self <= *other
+    }
+
+    fn gt(&self, other: &int) -> bool {
+        *self > *other
+    }
+
+    fn ge(&self, other: &int) -> bool {
+        *self >= *other
+    }
+}
+
+impl Ord for int {
+    fn cmp(&self, other: &int) -> Ordering {
+        if *self < *other {
+            Ordering::Less
+        } else if *self == *other {
+            Ordering::Equal
+        } else {
+            Ordering::Greater
+        }
+    }
+}
+
+impl Add for int {
+    type Output = int;
+    fn add(self, rhs: int) -> int {
+        self + rhs
+    }
+}
+
+impl Sub for int {
+    type Output = int;
+    fn sub(self, rhs: int) -> int {
+        self - rhs
+    }
+}
+
+impl Mul for int {
+    type Output = int;
+    fn mul(self, rhs: int) -> int {
+        self * rhs
+    }
+}
+
+impl Div for int {
+    type Output = int;
+    fn div(self, rhs: int) -> int {
+        self / rhs
+    }
+}
+
+impl Rem for int {
+    type Output = int;
+    fn rem(self, rhs: int) -> int {
+        self % rhs
+    }
+}
+
+impl Neg for int {
+    type Output = int;
+    fn neg(self) -> int {
+        -self
+    }
+}
+
+impl Not for int {
+    type Output = int;
+    fn not(self) -> int {
+        !self
+    }
+}
+
+// `bool`: `false` orders before `true`.
+
+impl Clone for bool {
+    fn clone(&self) -> bool {
+        *self
+    }
+}
+
+impl Copy for bool {}
+
+impl PartialEq for bool {
+    fn eq(&self, other: &bool) -> bool {
+        *self == *other
+    }
+}
+
+impl Eq for bool {}
+
+impl PartialOrd for bool {
+    fn partial_cmp(&self, other: &bool) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for bool {
+    fn cmp(&self, other: &bool) -> Ordering {
+        if *self == *other {
+            Ordering::Equal
+        } else if *other {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        }
+    }
+}
+
+impl Not for bool {
+    type Output = bool;
+    fn not(self) -> bool {
+        !self
+    }
+}
+
+// `()`.
+
+impl Clone for () {
+    fn clone(&self) -> () {
+        ()
+    }
+}
+
+impl Copy for () {}
+
+impl PartialEq for () {
+    fn eq(&self, other: &()) -> bool {
+        true
+    }
+}
+
+impl Eq for () {}

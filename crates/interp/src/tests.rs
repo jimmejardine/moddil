@@ -303,3 +303,38 @@ fn a_failed_assert_shows_its_parts() {
     assert_eq!(find("fee(1) > 0"), "not evaluated");
     assert!(value("fn main() { assert(true); }") == Value::Unit);
 }
+
+#[test]
+fn generics_and_traits() {
+    let t = "trait Area { fn area(&self) -> int; }\n\
+             struct Sq { s: int }\n\
+             impl Area for Sq { fn area(&self) -> int { self.s * self.s } }\n\
+             fn total<T: Area>(a: &T, b: &T) -> int { a.area() + b.area() }\n\
+             fn main() -> int { total(&Sq { s: 2 }, &Sq { s: 3 }) }";
+    assert_eq!(value(t), Value::Int(13));
+    assert_eq!(
+        value(
+            "fn sum<T: Add<Output = T>>(a: T, b: T) -> T { a + b }\nfn main() -> int { sum(2, 5) }"
+        ),
+        Value::Int(7)
+    );
+    // An overflow in the prelude's `add` is reported where the file's code called it.
+    let t = "fn sum<T: Add<Output = T>>(a: T, b: T) -> T { a + b }\n\
+             fn main() -> int { sum(9223372036854775807, 1) }";
+    let e = eval(t, &[]).expect_err("a trap");
+    assert_eq!(e.class, TrapClass::Overflow);
+    assert_eq!(&t[e.range.start as usize..e.range.end as usize], "a + b");
+}
+
+#[test]
+fn destructors_run() {
+    let t = "struct G { armed: bool }\n\
+             impl Drop for G { fn drop(self) { assert(!self.armed); } }\n\
+             fn main() -> int { let g = G { armed: true }; 1 }";
+    assert_eq!(trap(t), TrapClass::Assertion);
+    let t = "struct G { armed: bool }\n\
+             impl Drop for G { fn drop(self) { assert(!self.armed); } }\n\
+             fn keep(g: G) -> G { g }\n\
+             fn main() -> bool { let g = keep(G { armed: false }); g.armed }";
+    assert_eq!(value(t), Value::Bool(false));
+}

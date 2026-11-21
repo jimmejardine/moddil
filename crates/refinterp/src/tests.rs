@@ -107,3 +107,30 @@ fn data_and_patterns() {
         )]
     );
 }
+
+#[test]
+fn traits_derives_and_drops() {
+    let text = "#[derive(Clone, PartialEq, PartialOrd)]\n\
+                enum E { A(int), B }\n\
+                struct G { armed: bool }\n\
+                impl Drop for G { fn drop(self) { assert(!self.armed); } }\n\
+                fn big<T: PartialOrd>(a: T, b: T) -> T { if a < b { b } else { a } }\n\
+                test \"t\" {\n\
+                    big(E::A(3), E::B) // => E::B\n\
+                    ;\n\
+                    E::A(1) == E::A(1).clone() // => true\n\
+                    ;\n\
+                    Some(2).unwrap_or(0) // => 2\n\
+                }\n\
+                test \"u\" { let g = G { armed: true }; }\n";
+    assert_eq!(
+        runs(text),
+        vec![
+            (
+                vec!["E::B".to_string(), "true".to_string(), "2".to_string()],
+                None
+            ),
+            (vec![], Some(TrapClass::Assertion)),
+        ]
+    );
+}

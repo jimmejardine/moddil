@@ -3,13 +3,16 @@
 Moddil's **mid-level IR**, built from the typed HIR, and the passes over it
 ([`specs/mir.md`](../../specs/mir.md)).
 
-**Status:** slices S0 to S2: the `mir(owner)` query builds a body from the typed HIR, for files
-without errors. Places are a local with field, downcast and deref projections; operands copy or
+**Status:** slices S0 to S3: the `mir(owner)` query builds a body from the typed HIR, for files
+without errors, once for a generic function: calls name their callee and its type arguments, and a
+trait's method is resolved when the call runs. Values that need dropping get `Drop` terminators at
+the end of their scope, before assignments, and at the end of a temporary's statement. Places are a local with field, downcast and deref projections; operands copy or
 move; aggregates build tuples, structs and variants; patterns become tests on places and
 discriminants, tried arm by arm; loops are back edges; `defer` blocks are emitted on every exit of
 their scope, and locals end with `StorageDead`. The `borrowck(owner)` query checks ownership on
 it: moves (maybe-moved places), loans (which locals hold which borrows, and which locals are live)
-and their conflicts, borrows outliving their locals, and returned borrows. `diagnostics(file)`
+and their conflicts, borrows outliving their locals or temporaries, returned borrows, and moves out
+of values with destructors. `diagnostics(file)`
 combines it with the front end's.
 
 - **Checks:** `+`, `-`, `*`, `/`, negation and shifts are preceded by an `Overflows` test and an

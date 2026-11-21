@@ -2,5 +2,5 @@
 
 fn f() {
     let a = 1 == true;        //~ E0201
-    let b = true < false;     //~ E0205 E0205
+    let b = (1, 2) < (3, 4);  //~ E0205
 }

@@ -3,8 +3,11 @@
 The **MIR interpreter**, part of the compiler. It runs *analysed* or *runtime* MIR and never needs
 target lowering ([`specs/mir.md`: Pipeline](../../specs/mir.md#pipeline)).
 
-**Status:** slices S0 to S2: `int`, `bool`, `()`, tuple, struct and enum values, borrows as
-pointers into frames, places with projections, calls on its own frame stack (so deep recursion is a `stack overflow` trap at 10,000
+**Status:** slices S0 to S3: `int`, `bool`, `()`, tuple, struct and enum values, borrows as
+pointers into frames, places with projections, generic code run once for every type (each frame
+has its type arguments, and a trait's method is found through a witness table built per type on
+first use), drops (a moved-from place is empty, which is its drop flag, and destructors run as
+calls), calls on its own frame stack (so deep recursion is a `stack overflow` trap at 10,000
 frames, never a host crash), and every trap class. A failed `assert` returns the value of each part
 of its condition with the trap. It runs every M0 slice, since no code-generation backend exists
 until M1.

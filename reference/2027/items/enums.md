@@ -11,7 +11,7 @@ enum Shape {
 **item.enum.decl.1** `enum Name { V₁, …, Vₙ }` declares an enum: a type whose value is exactly one
 of its **variants**, together with that variant's fields. Each variant has named fields, positional
 fields or none, written as for a struct ([Structs](structs.md)). An enum with no variants has no
-values.
+values. An enum may have type parameters, as a struct may: `enum Tree<T> { Leaf, Node(T) }`.
 
 **item.enum.variants.1** The variants of an enum have distinct names (E0103), and so do the fields
 of each variant. A variant is named through its enum: `Shape::Circle`.

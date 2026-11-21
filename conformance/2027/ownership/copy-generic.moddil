@@ -1,0 +1,16 @@
+// covers: own.copy.1, own.copy.derive.1, generic.bound.1
+
+#[derive(Copy, Clone)]
+struct Wrap<T> { x: T }
+
+fn twice<T: Copy>(x: T) -> (T, T) { (x, x) }
+
+test "Copy through bounds and generic derives" {
+    twice(3)                                // => (3, 3)
+    ;
+    twice(Wrap { x: true })                 // => (Wrap { x: true }, Wrap { x: true })
+    ;
+    let w = Wrap { x: 2 };
+    let v = w;
+    w.x + v.x                               // => 4
+}

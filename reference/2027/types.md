@@ -15,8 +15,9 @@ expression of type `!` fits where any type is expected.
 value of each element type, in order. `()` is the tuple with no elements, and `(T)` is `T`.
 
 **type.adt.1** Each struct and enum declares a new type ([Structs](items/structs.md),
-[Enums](items/enums.md)). Types are **nominal**: two structs with the same fields are different
-types.
+[Enums](items/enums.md)); a generic one, a type for each list of type arguments
+([Generics](generics.md)): `Pair<int, bool>`. Types are **nominal**: two structs with the same
+fields are different types.
 
 **type.match.1** Where an expression of one type is expected, an expression of another type is an
 error (E0201); `!` fits everywhere. No conversions are implicit.

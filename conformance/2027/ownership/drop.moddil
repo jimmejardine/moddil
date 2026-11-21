@@ -1,0 +1,111 @@
+// covers: own.drop.1, own.drop.destructor.1, own.drop.partial.1, prelude.drop.1, stmt.defer.1
+
+// Each type traps when an armed value of it is dropped, so the line a test traps on says which
+// value was dropped first.
+struct Guard { armed: bool }
+impl Drop for Guard { fn drop(self) { assert(!self.armed); } }
+fn disarm(g: &mut Guard) { g.armed = false; }
+
+struct A1;
+impl Drop for A1 { fn drop(self) { assert(false); } }          //~ trap
+
+struct B1;
+impl Drop for B1 { fn drop(self) { assert(false); } }
+struct B2;
+impl Drop for B2 { fn drop(self) { assert(false); } }          //~ trap
+
+struct C1;
+impl Drop for C1 { fn drop(self) { assert(false); } }
+struct C2;
+impl Drop for C2 { fn drop(self) { assert(false); } }          //~ trap
+struct Fields { c1: C1, c2: C2 }
+
+struct D1;
+impl Drop for D1 { fn drop(self) { assert(false); } }
+struct Outer { d: D1 }
+impl Drop for Outer { fn drop(self) { assert(false); } }       //~ trap
+
+struct E1 { armed: bool }
+impl Drop for E1 { fn drop(self) { assert(!self.armed); } }    //~ trap
+
+struct G1 { armed: bool }
+impl Drop for G1 { fn drop(self) { assert(!self.armed); } }    //~ trap
+
+struct H1;
+impl Drop for H1 { fn drop(self) { assert(false); } }          //~ trap
+
+struct J1;
+impl Drop for J1 { fn drop(self) { assert(false); } }          //~ trap
+fn hold<T>(x: T) {}
+
+struct Holder { g: Guard, n: int }
+
+test "a value is dropped at the end of its scope" {
+    let a = A1;
+}
+
+test "a value that does not trap is dropped quietly" {
+    let mut g = Guard { armed: true };
+    disarm(&mut g);
+}
+
+test "the last declared is dropped first" {
+    let b1 = B1;
+    let b2 = B2;
+}
+
+test "fields are dropped last first" {
+    let f = Fields { c1: C1, c2: C2 };
+}
+
+test "a destructor runs before the fields are dropped" {
+    let o = Outer { d: D1 };
+}
+
+test "assigning drops the old value" {
+    let mut e = E1 { armed: true };
+    e = E1 { armed: false };
+    assert(false);
+}
+
+test "a temporary is dropped at the end of its statement" {
+    G1 { armed: true }.armed;
+    assert(false);
+}
+
+test "drop ends a value early" {
+    let h = H1;
+    drop(h);
+    assert(false);
+}
+
+test "a generic function drops what it is given" {
+    hold(J1);
+    assert(false);
+}
+
+test "a moved value is not dropped where it was" {
+    let x = Guard { armed: true };
+    let mut y = x;
+    disarm(&mut y);
+}
+
+test "parts moved out are not dropped with the rest" {
+    let h = Holder { g: Guard { armed: true }, n: 1 };
+    let mut g = h.g;
+    disarm(&mut g);
+    h.n                                     // => 1
+}
+
+test "a binding moves out of what is matched" {
+    let o = Some(Guard { armed: true });
+    match o {
+        Some(mut g) => disarm(&mut g),
+        None => {}
+    }
+}
+
+test "defer blocks and drops run in reverse order" {
+    let mut g = Guard { armed: true };
+    defer { disarm(&mut g); }
+}

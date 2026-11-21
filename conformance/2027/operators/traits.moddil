@@ -1,0 +1,65 @@
+// covers: expr.op.trait.1, expr.cmp.trait.1, generic.bound.1
+
+struct V { x: int, y: int }
+
+impl Add for V {
+    type Output = V;
+    fn add(self, rhs: V) -> V { V { x: self.x + rhs.x, y: self.y + rhs.y } }
+}
+
+impl Neg for V {
+    type Output = V;
+    fn neg(self) -> V { V { x: -self.x, y: -self.y } }
+}
+
+impl PartialEq for V {
+    fn eq(&self, other: &V) -> bool { self.x == other.x }
+}
+
+struct Level { n: int }
+
+impl PartialEq for Level {
+    fn eq(&self, other: &Level) -> bool { self.n == other.n }
+}
+
+impl PartialOrd for Level {
+    fn partial_cmp(&self, other: &Level) -> Option<Ordering> { Some(self.n.cmp(&other.n)) }
+}
+
+fn sum<T: Add<Output = T>>(a: T, b: T) -> T { a + b }
+fn largest<T: PartialOrd>(a: T, b: T) -> T { if a < b { b } else { a } }
+fn same<T: PartialEq>(a: &T, b: &T) -> bool { *a == *b }
+
+test "operators call their traits" {
+    let v = V { x: 1, y: 2 } + V { x: 3, y: 4 };
+    v                                       // => V { x: 4, y: 6 }
+    ;
+    -v                                      // => V { x: -4, y: -6 }
+    ;
+    V { x: 1, y: 2 } == V { x: 1, y: 9 }    // => true
+    ;
+    V { x: 1, y: 2 } != V { x: 2, y: 2 }    // => true
+    ;
+    sum(V { x: 1, y: 1 }, V { x: 2, y: 2 }) // => V { x: 3, y: 3 }
+    ;
+    sum(2, 3)                               // => 5
+}
+
+test "comparisons through PartialOrd" {
+    let a = Level { n: 1 };
+    let b = Level { n: 2 };
+    let c = Level { n: 3 };
+    a < b                                   // => true
+    ;
+    a < b < c                               // => true
+    ;
+    c <= b                                  // => false
+    ;
+    largest(Level { n: 5 }, Level { n: 4 }) // => Level { n: 5 }
+    ;
+    largest(7, 9)                           // => 9
+    ;
+    false < true                            // => true
+    ;
+    same(&a, &Level { n: 1 })               // => true
+}

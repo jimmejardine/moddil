@@ -64,19 +64,10 @@ impl Cx<'_> {
         // A borrow has the constructors of what it points to.
         match (c, ty.strip_ref()) {
             (Ctor::Single, Ty::Tuple(ts)) => ts.to_vec(),
-            (Ctor::Single, Ty::Adt(a, _)) => self.variant_fields(*a, 0),
-            (Ctor::Variant(v), Ty::Adt(a, _)) => self.variant_fields(*a, *v),
+            (Ctor::Single, t @ Ty::Adt(..)) => self.items.field_types(t, 0),
+            (Ctor::Variant(v), t @ Ty::Adt(..)) => self.items.field_types(t, *v),
             _ => Vec::new(),
         }
-    }
-
-    fn variant_fields(&self, adt: u32, variant: u32) -> Vec<Ty> {
-        self.items
-            .variant(adt, variant)
-            .fields
-            .iter()
-            .map(|f| f.ty.clone())
-            .collect()
     }
 
     fn lower(&self, p: PatId) -> DPat {
@@ -138,7 +129,10 @@ impl Cx<'_> {
                 } else {
                     Ctor::Single
                 };
-                let types = self.variant_fields(*adt, *variant);
+                let types = match ty.strip_ref() {
+                    t @ Ty::Adt(..) => self.items.field_types(t, *variant),
+                    _ => vec![Ty::Error; self.items.variant(*adt, *variant).fields.len()],
+                };
                 let mut fields: Vec<DPat> = types.into_iter().map(DPat::wild).collect();
                 for &(i, s) in given {
                     fields[i as usize] = self.lower(s);
@@ -159,8 +153,9 @@ impl Cx<'_> {
         Some(match ty.strip_ref() {
             Ty::Bool => vec![Ctor::Bool(false), Ctor::Bool(true)],
             Ty::Int => split_ints(heads, INT_MIN, INT_MAX),
-            Ty::Unit | Ty::Tuple(_) => vec![Ctor::Single],
-            Ty::Adt(a, _) => {
+            // A value of a type parameter can only be bound: one constructor covers it.
+            Ty::Unit | Ty::Tuple(_) | Ty::Param(..) | Ty::Assoc(_) => vec![Ctor::Single],
+            Ty::Adt(a, ..) => {
                 let def = &self.items.adts[*a as usize];
                 if def.is_enum {
                     (0..def.variants.len() as u32).map(Ctor::Variant).collect()
@@ -169,7 +164,7 @@ impl Cx<'_> {
                 }
             }
             Ty::Never => Vec::new(),
-            Ty::Error | Ty::Ref(..) => return None,
+            Ty::Error | Ty::Ref(..) | Ty::Infer(_) => return None,
         })
     }
 
@@ -294,8 +289,8 @@ impl Witness {
             (Ctor::Single, Ty::Unit) => "()".to_string(),
             (Ctor::Single, Ty::Tuple(_)) if fields.len() == 1 => format!("({},)", fields[0]),
             (Ctor::Single, Ty::Tuple(_)) => format!("({})", fields.join(", ")),
-            (Ctor::Single, Ty::Adt(a, _)) => adt_witness(items, *a, 0, &fields),
-            (Ctor::Variant(v), Ty::Adt(a, _)) => adt_witness(items, *a, *v, &fields),
+            (Ctor::Single, Ty::Adt(a, ..)) => adt_witness(items, *a, 0, &fields),
+            (Ctor::Variant(v), Ty::Adt(a, ..)) => adt_witness(items, *a, *v, &fields),
             _ => "_".to_string(),
         }
     }

@@ -7,7 +7,9 @@ fn gcd(a: int, b: int) -> int {
 ```
 
 **item.fn.decl.1** `fn name(p₁: T₁, …, pₙ: Tₙ) -> R block` declares a function with parameters of
-types `T₁ … Tₙ` and result type `R`. Without `-> R`, the result type is `()`.
+types `T₁ … Tₙ` and result type `R`. Without `-> R`, the result type is `()`. A function may have
+type parameters, `fn name<T>(…)` ([Generics](../generics.md)); a function in an impl or trait may
+take `self` ([Impls](impls.md)).
 
 **item.fn.params.1** Each parameter binds a name (`x`), a mutable name (`mut x`) or nothing (`_`).
 The names of one function's parameters are distinct (E0104). A parameter is a local of the body,

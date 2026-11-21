@@ -34,7 +34,7 @@ and a code never changes meaning.
 | E0202 | Wrong number of arguments | [expr.call.1](expressions/calls.md) |
 | E0203 | Not a function | [expr.call.1](expressions/calls.md) |
 | E0204 | Literal out of range | [expr.lit.int.2](expressions/literals.md) |
-| E0205 | Operator not defined for these types | [expr.arith.types.1](expressions/arithmetic.md), [expr.cmp.order.1](expressions/comparison.md) |
+| E0205 | Operator not defined for these types | [expr.arith.types.1](expressions/arithmetic.md), [expr.op.trait.1](expressions/arithmetic.md), [expr.cmp.order.1](expressions/comparison.md), [expr.cmp.trait.1](expressions/comparison.md), [generic.bound.1](generics.md) |
 | E0206 | Invalid assignment target | [expr.assign.1](expressions/assignment.md) |
 | E0207 | Missing fields | [expr.struct.1](expressions/structs.md), [pat.struct.1](patterns.md) |
 | E0208 | Non-exhaustive `match` | [expr.match.exhaustive.1](expressions/match.md) |
@@ -52,11 +52,27 @@ and a code never changes meaning.
 | E0306 | Assignment to or move of a borrowed value | [borrow.rules.1](borrows.md), [borrow.guard.1](borrows.md) |
 | E0307 | Use of a value borrowed with `&mut` | [borrow.rules.1](borrows.md) |
 | E0308 | A borrow that outlives its value | [borrow.scope.1](borrows.md), [item.fn.ret-borrow.1](items/functions.md) |
-| E0309 | A borrow stored in a struct, enum or tuple, or a borrow of a borrow | [borrow.type.1](borrows.md) |
+| E0309 | A borrow stored in a struct, enum or tuple, a borrow of a borrow, or a borrow as a type argument | [borrow.type.1](borrows.md), [generic.borrow.1](generics.md) |
 | E0310 | A returned borrow without a borrowed parameter to come from | [item.fn.ret-borrow.1](items/functions.md) |
 | E0311 | A type that cannot be `Copy` | [own.copy.derive.1](ownership.md) |
 | E0312 | A `Copy` type over 64 bytes | [own.copy.derive.1](ownership.md) |
 | E0313 | `return`, `break` or `continue` out of a `defer` block | [stmt.defer.1](statements.md) |
+| E0314 | A field moved out of a value whose type has a destructor | [own.drop.partial.1](ownership.md) |
+| E0401 | A name used as a trait that is not one | [item.trait.1](items/traits.md) |
+| E0402 | A type that does not implement a trait it must | [generic.bound.1](generics.md), [item.trait.super.1](items/traits.md), [attr.derive.1](attributes.md) |
+| E0403 | A method or function that the type does not have | [expr.method.1](expressions/methods.md), [expr.path.assoc.1](expressions/methods.md), [generic.bound.1](generics.md) |
+| E0404 | Wrong number of type arguments | [generic.1](generics.md) |
+| E0405 | A type that cannot be inferred | [generic.infer.1](generics.md) |
+| E0406 | Two impls of a trait for the same type | [item.impl.coherence.1](items/impls.md) |
+| E0407 | An impl that leaves out a method or associated type of its trait | [item.impl.trait.1](items/impls.md) |
+| E0408 | An impl that defines something its trait does not declare | [item.impl.trait.1](items/impls.md) |
+| E0409 | An impl's method whose signature differs from the trait's | [item.impl.trait.1](items/impls.md) |
+| E0410 | A method that more than one trait gives the type | [expr.method.ambiguous.1](expressions/methods.md) |
+| E0411 | A destructor that is not for the impl's own type and all its type arguments, has bounds, or is for a `Copy` type | [own.drop.destructor.1](ownership.md), [own.copy.derive.1](ownership.md) |
+| E0412 | A call of a destructor | [own.drop.destructor.1](ownership.md) |
+| E0413 | An associated type or function that does not exist | [generic.assoc.1](generics.md) |
+| E0414 | Methods added to a type not declared in the module | [item.impl.1](items/impls.md) |
+| E0415 | An impl's type parameter that neither its type nor its trait uses | [item.impl.coherence.1](items/impls.md) |
 
 **Warnings** have codes of the same form starting with `W`, in the same blocks. They do not stop a
 program from running, and conformance tests expect them like errors.

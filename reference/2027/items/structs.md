@@ -9,7 +9,9 @@ struct Marker;
 **item.struct.decl.1** `struct Name { f₁: T₁, …, fₙ: Tₙ }` declares a struct with **named fields**;
 `struct Name(T₁, …, Tₙ);` one with **positional fields**, named `0` to `n − 1`; and
 `struct Name;` a **unit struct**, with no fields and one value. A struct is a type
-([Types](../types.md)), and its value holds one value of each field's type.
+([Types](../types.md)), and its value holds one value of each field's type. A struct may have type
+parameters, `struct Pair<A, B> { first: A, second: B }`, which its fields' types may use
+([Generics](../generics.md)).
 
 **item.struct.fields.1** The fields of a struct have distinct names (E0103).
 

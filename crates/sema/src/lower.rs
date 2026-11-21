@@ -3,12 +3,16 @@
 use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode, SyntaxToken, TextRange};
 
+use crate::collect::{
+    Scope, adt_args, generic_args, item_tree, node_at, path_segments, resolve_type, source,
+};
 use crate::hir::{
     Arm, BinaryOp, Body, CompareOp, Expr, ExprId, ExprKind, Local, LocalId, LogicOp, Pat, PatId,
     PatKind, Stmt, UnaryOp,
 };
-use crate::items::{Shape, item_node, item_tree, parse, resolve_type};
-use crate::{Code, Db, Diagnostic, Item, ItemTree, Owner};
+use crate::items::{Container, GenericParam, Pred, Shape, Src};
+use crate::ty::TraitRef;
+use crate::{Code, Db, Diagnostic, Item, ItemTree, Owner, Ty};
 
 /// A body in HIR, with the problems found while lowering it.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -23,25 +27,50 @@ pub struct Lowered {
 #[salsa::tracked(returns(ref))]
 pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
     let file = owner.file(db);
-    let root = parse(db, file).syntax();
     let items = item_tree(db, file);
+    let src = match owner.item(db) {
+        Item::Fn(i) => items.fns[i as usize].src,
+        Item::Test(_) => Src::File,
+    };
+    let (root, text) = source(db, file, src);
     let mut cx = Lowerer {
-        text: file.text(db),
+        text,
         items,
         out: Lowered::default(),
         scopes: Vec::new(),
         loops: Vec::new(),
         defer_floor: None,
+        params: &[],
+        preds: &[],
+        self_ty: None,
+        trait_ctx: None,
+        impl_assoc: None,
     };
     let block = match owner.item(db) {
         Item::Fn(i) => {
-            let node = item_node(&root, K::FN_ITEM, i).and_then(ast::FnItem::cast);
             let sig = &items.fns[i as usize];
+            let node = node_at(&root, K::FN_ITEM, sig.node).and_then(ast::FnItem::cast);
+            cx.params = &sig.generics.params;
+            cx.preds = &sig.generics.preds;
+            match sig.container {
+                Container::Impl(k) => {
+                    let imp = &items.impls[k as usize];
+                    cx.self_ty = Some(imp.self_ty.clone());
+                    cx.impl_assoc = imp.trait_ref.clone().map(|t| (t, imp.assoc.clone()));
+                }
+                Container::Trait(t) => {
+                    cx.self_ty = Some(Ty::Param(0, "Self".into()));
+                    cx.trait_ctx = Some(t);
+                }
+                Container::Free => {}
+            }
             let param_nodes: Vec<ast::Param> = node
                 .as_ref()
                 .and_then(ast::FnItem::params)
                 .map(|l| l.params().collect())
                 .unwrap_or_default();
+            // `self` has no `PARAM` node.
+            let skip = usize::from(sig.self_kind.is_some());
             let mut binds = Binds::default();
             for (k, p) in sig.params.iter().enumerate() {
                 let local = cx.out.body.locals.alloc(Local {
@@ -53,7 +82,10 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
                 if let Some(name) = &p.name {
                     cx.scopes.push((name.clone(), local));
                 } else if p.destructures
-                    && let Some(pat) = param_nodes.get(k).and_then(ast::Param::pat)
+                    && let Some(pat) = k
+                        .checked_sub(skip)
+                        .and_then(|k| param_nodes.get(k))
+                        .and_then(ast::Param::pat)
                 {
                     let id = cx.pat(&pat, &mut binds);
                     cx.out.body.param_pats.push((local, id));
@@ -63,7 +95,10 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
                 .extend(binds.names.into_iter().map(|(n, l, _)| (n, l)));
             node.and_then(|f| f.body())
         }
-        Item::Test(i) => item_node(&root, K::TEST_ITEM, i)
+        Item::Test(i) => root
+            .children()
+            .filter(|c| c.kind() == K::TEST_ITEM)
+            .nth(i as usize)
             .and_then(ast::TestItem::cast)
             .and_then(|t| t.body()),
     };
@@ -87,9 +122,14 @@ struct Binds {
 /// What a value path names.
 enum Resolved {
     Local(LocalId),
-    Fn(u32),
-    /// A struct (variant 0) or an enum's variant.
-    Ctor(u32, u32),
+    /// A function, with the type arguments for its own parameters.
+    Fn(u32, Vec<Ty>),
+    /// A struct (variant 0) or an enum's variant, with the type's arguments.
+    Ctor(u32, u32, Vec<Ty>),
+    /// `Type::name`.
+    AssocFn(Ty, String, TextRange, Option<Vec<Ty>>),
+    /// `Trait::name`: the trait, the method, the trait's arguments and the method's.
+    TraitFn(u32, u32, Vec<Ty>, Option<Vec<Ty>>),
 }
 
 struct Lowerer<'a> {
@@ -102,9 +142,48 @@ struct Lowerer<'a> {
     loops: Vec<(Option<String>, ExprId)>,
     /// Inside a `defer` block: how many loops enclose the block, so jumps out of it are errors.
     defer_floor: Option<usize>,
+    /// The type parameters in scope.
+    params: &'a [GenericParam],
+    /// The bounds in scope.
+    preds: &'a [Pred],
+    /// What `Self` is.
+    self_ty: Option<Ty>,
+    /// Inside a trait's method: the trait.
+    trait_ctx: Option<u32>,
+    /// Inside a method of an impl of a trait: the trait and the impl's associated types.
+    impl_assoc: Option<(TraitRef, Vec<Option<Ty>>)>,
 }
 
 impl Lowerer<'_> {
+    /// What type names mean in this body; types left out are inferred.
+    fn scope(&self) -> Scope<'_> {
+        Scope {
+            tree: self.items,
+            params: self.params,
+            preds: self.preds,
+            self_ty: self.self_ty.clone(),
+            trait_ctx: self.trait_ctx,
+            impl_assoc: self.impl_assoc.clone(),
+            holes: true,
+        }
+    }
+
+    /// The types in a `GENERIC_ARGS` node, for something with `want` parameters.
+    fn type_args(&mut self, node: &SyntaxNode, want: usize, what: &str) -> Vec<Ty> {
+        let mut ds = Vec::new();
+        let (types, assoc) = generic_args(node, &self.scope(), &mut ds);
+        for (_, r, _) in assoc {
+            ds.push(Diagnostic::error(
+                Code::E0413,
+                r,
+                "associated types are fixed in bounds, not in a call",
+            ));
+        }
+        let ok = crate::collect::arity(what, want, types.len(), node.text_range(), &mut ds);
+        self.out.diagnostics.extend(ds);
+        if ok { types } else { vec![Ty::Error; want] }
+    }
+
     fn alloc(&mut self, kind: ExprKind, range: TextRange) -> ExprId {
         self.out.body.exprs.alloc(Expr { kind, range })
     }
@@ -228,9 +307,12 @@ impl Lowerer<'_> {
         if let Some(attr) = node.child(K::OUTER_ATTR) {
             self.error(Diagnostic::unsupported(attr.text_range(), "an attribute"));
         }
-        let ty = l
-            .ty()
-            .map(|t| resolve_type(&t, &self.items.adts, &mut self.out.diagnostics));
+        let ty = l.ty().map(|t| {
+            let mut ds = Vec::new();
+            let ty = resolve_type(&t, &self.scope(), &mut ds);
+            self.out.diagnostics.extend(ds);
+            ty
+        });
         let init = match l.init() {
             Some(e) => self.expr(&e),
             None => self.unsupported(node.text_range(), "`let` without an initialiser"),
@@ -266,16 +348,12 @@ impl Lowerer<'_> {
             .map(|&(_, id)| id)
     }
 
-    /// The segments of the `PATH` in `node`, or `None` after reporting a path this slice does not
-    /// support (generic arguments, qualified paths).
+    /// The segments of the `PATH` in `node` (without generic arguments), or `None` after
+    /// reporting a path this slice does not support.
     fn segments(&mut self, node: &SyntaxNode) -> Option<Vec<String>> {
-        let path = node.child(K::PATH).and_then(ast::Path::cast);
-        let generic = node
-            .descendants()
-            .iter()
-            .any(|d| matches!(d.kind(), K::GENERIC_ARGS | K::QUALIFIED_PATH));
-        match path.map(|p| p.segments()) {
-            Some(segments) if !segments.is_empty() && !generic => Some(segments),
+        let segs = node.child(K::PATH).and_then(|p| path_segments(&p));
+        match segs {
+            Some(segs) if !segs.is_empty() => Some(segs.into_iter().map(|s| s.name).collect()),
             _ => {
                 self.error(Diagnostic::unsupported(node.text_range(), "this path"));
                 None
@@ -283,21 +361,51 @@ impl Lowerer<'_> {
         }
     }
 
+    /// The type arguments of struct or enum `adt` written on a segment, or holes.
+    fn adt_args(&mut self, adt: u32, args: Option<&SyntaxNode>, range: TextRange) -> Vec<Ty> {
+        let mut ds = Vec::new();
+        let args = adt_args(adt, args, range, &self.scope(), &mut ds);
+        self.out.diagnostics.extend(ds);
+        args
+    }
+
     /// What the value path in `node` names, or `None` after reporting why it names nothing.
     fn resolve(&mut self, node: &SyntaxNode) -> Option<Resolved> {
         let range = node.text_range();
-        let segments = self.segments(node)?;
-        match segments.as_slice() {
-            [name] => {
+        let Some(segs) = node.child(K::PATH).and_then(|p| path_segments(&p)) else {
+            self.error(Diagnostic::unsupported(range, "this path"));
+            return None;
+        };
+        match segs.as_slice() {
+            [seg] => {
+                let name = seg.name.as_str();
                 if let Some(local) = self.lookup(name) {
+                    if seg.args.is_some() {
+                        self.report(
+                            Code::E0404,
+                            range,
+                            format!("`{name}` takes no type arguments"),
+                        );
+                    }
                     return Some(Resolved::Local(local));
                 }
                 if let Some(f) = self.items.fn_named(name) {
-                    return Some(Resolved::Fn(f));
+                    let sig = &self.items.fns[f as usize];
+                    let want = sig.generics.params.len() - sig.generics.parent as usize;
+                    let args = match &seg.args {
+                        Some(a) => self.type_args(a, want, &format!("`{name}`")),
+                        None => vec![Ty::Infer(Ty::HOLE); want],
+                    };
+                    return Some(Resolved::Fn(f, args));
+                }
+                if let Some((a, v)) = self.items.bare_variant(name) {
+                    let args = self.adt_args(a, seg.args.as_ref(), range);
+                    return Some(Resolved::Ctor(a, v, args));
                 }
                 if let Some(a) = self.items.adt_named(name) {
                     if !self.items.adts[a as usize].is_enum {
-                        return Some(Resolved::Ctor(a, 0));
+                        let args = self.adt_args(a, seg.args.as_ref(), range);
+                        return Some(Resolved::Ctor(a, 0, args));
                     }
                     self.report(
                         Code::E0111,
@@ -305,6 +413,12 @@ impl Lowerer<'_> {
                         format!("`{name}` is an enum; name one of its variants: `{name}::…`"),
                     );
                     return None;
+                }
+                if name == "Self"
+                    && let Some(Ty::Adt(a, _, args)) = self.self_ty.clone()
+                    && !self.items.adts[a as usize].is_enum
+                {
+                    return Some(Resolved::Ctor(a, 0, args.to_vec()));
                 }
                 if name == "assert" {
                     self.report(
@@ -321,31 +435,140 @@ impl Lowerer<'_> {
                 );
                 None
             }
-            [ty, variant] => {
-                let Some(a) = self.items.adt_named(ty) else {
-                    self.report(
-                        Code::E0101,
-                        range,
-                        format!("there is no enum called `{ty}`"),
-                    );
-                    return None;
+            [ty, item] => {
+                let own_args = |cx: &mut Self| -> Option<Vec<Ty>> {
+                    item.args.as_ref().map(|a| {
+                        let mut ds = Vec::new();
+                        let (types, _) = generic_args(a, &cx.scope(), &mut ds);
+                        cx.out.diagnostics.extend(ds);
+                        types
+                    })
                 };
-                let adt = &self.items.adts[a as usize];
-                match adt.variant(variant).filter(|_| adt.is_enum) {
-                    Some(v) => Some(Resolved::Ctor(a, v)),
-                    None => {
+                // `Trait::method`.
+                if let Some(t) = self.items.trait_named(&ty.name) {
+                    let def = &self.items.traits[t as usize];
+                    let Some(&func) = def
+                        .methods
+                        .iter()
+                        .find(|&&m| self.items.fns[m as usize].name == item.name)
+                    else {
                         self.report(
-                            Code::E0101,
-                            range,
-                            format!("`{ty}` has no variant called `{variant}`"),
+                            Code::E0413,
+                            item.range,
+                            format!("`{}` has no method `{}`", ty.name, item.name),
                         );
-                        None
+                        return None;
+                    };
+                    let want = def.generics.params.len() - 1;
+                    let trait_args = match &ty.args {
+                        Some(a) => self.type_args(a, want, &format!("`{}`", ty.name)),
+                        None => vec![Ty::Infer(Ty::HOLE); want],
+                    };
+                    let args = own_args(self);
+                    return Some(Resolved::TraitFn(t, func, trait_args, args));
+                }
+                // The type: an enum's variant, or a function of the type.
+                let base = match ty.name.as_str() {
+                    "int" => Ty::Int,
+                    "bool" => Ty::Bool,
+                    "Self" => match &self.self_ty {
+                        Some(t) => t.clone(),
+                        None => {
+                            self.report(
+                                Code::E0102,
+                                ty.range,
+                                "`Self` is the type of an impl or trait, and there is none here",
+                            );
+                            return None;
+                        }
+                    },
+                    name => {
+                        if let Some(i) = self.params.iter().rposition(|p| p.name == name) {
+                            Ty::Param(i as u32, name.into())
+                        } else if let Some(a) = self.items.adt_named(name) {
+                            let args = self.adt_args(a, ty.args.as_ref(), ty.range);
+                            self.items.adts[a as usize].ty_with(a, args)
+                        } else {
+                            self.report(
+                                Code::E0101,
+                                ty.range,
+                                format!("there is no type called `{name}`"),
+                            );
+                            return None;
+                        }
+                    }
+                };
+                if let Ty::Adt(a, _, args) = &base {
+                    let def = &self.items.adts[*a as usize];
+                    if def.is_enum
+                        && let Some(v) = def.variant(&item.name)
+                    {
+                        if item.args.is_some() {
+                            self.report(
+                                Code::E0404,
+                                item.range,
+                                "a variant takes no type arguments: write them on the enum",
+                            );
+                        }
+                        return Some(Resolved::Ctor(*a, v, args.to_vec()));
                     }
                 }
+                let args = own_args(self);
+                Some(Resolved::AssocFn(base, item.name.clone(), item.range, args))
             }
             _ => {
                 self.error(Diagnostic::unsupported(range, "this path"));
                 None
+            }
+        }
+    }
+
+    /// The expression for a resolved path.
+    fn resolved(&mut self, r: Resolved, range: TextRange) -> ExprId {
+        match r {
+            Resolved::Local(l) => self.alloc(ExprKind::Local(l), range),
+            Resolved::Fn(func, args) => self.alloc(ExprKind::Fn { func, args }, range),
+            Resolved::AssocFn(ty, name, name_range, args) => self.alloc(
+                ExprKind::AssocFn {
+                    ty,
+                    name,
+                    name_range,
+                    args,
+                },
+                range,
+            ),
+            Resolved::TraitFn(trait_, func, trait_args, args) => self.alloc(
+                ExprKind::TraitFn {
+                    trait_,
+                    func,
+                    trait_args,
+                    args,
+                },
+                range,
+            ),
+            Resolved::Ctor(adt, variant, args) => {
+                let def = self.items.variant(adt, variant);
+                match def.shape {
+                    Shape::Unit => self.alloc(
+                        ExprKind::Adt {
+                            adt,
+                            variant,
+                            fields: Vec::new(),
+                            args,
+                        },
+                        range,
+                    ),
+                    Shape::Tuple => self.unsupported(range, "a constructor used as a value"),
+                    Shape::Named => {
+                        let path = self.items.adts[adt as usize].path(variant);
+                        self.report(
+                            Code::E0111,
+                            range,
+                            format!("`{path}` has named fields: write `{path} {{ … }}`"),
+                        );
+                        self.missing(range)
+                    }
+                }
             }
         }
     }
@@ -356,31 +579,19 @@ impl Lowerer<'_> {
         match e {
             ast::Expr::Literal(_) => self.literal(&node, false),
             ast::Expr::Path(_) => match self.resolve(&node) {
-                Some(Resolved::Local(l)) => self.alloc(ExprKind::Local(l), range),
-                Some(Resolved::Fn(f)) => self.alloc(ExprKind::Fn(f), range),
-                Some(Resolved::Ctor(adt, variant)) => {
-                    let def = self.items.variant(adt, variant);
-                    match def.shape {
-                        Shape::Unit => self.alloc(
-                            ExprKind::Adt {
-                                adt,
-                                variant,
-                                fields: Vec::new(),
-                            },
-                            range,
-                        ),
-                        Shape::Tuple => self.unsupported(range, "a constructor used as a value"),
-                        Shape::Named => {
-                            let path = self.items.adts[adt as usize].path(variant);
-                            self.report(
-                                Code::E0111,
-                                range,
-                                format!("`{path}` has named fields: write `{path} {{ … }}`"),
-                            );
-                            self.missing(range)
-                        }
-                    }
+                // An enum's name followed by something that is not one of its variants.
+                Some(Resolved::AssocFn(Ty::Adt(a, ..), name, at, _))
+                    if self.items.adts[a as usize].is_enum =>
+                {
+                    let ty = &self.items.adts[a as usize].name;
+                    self.report(
+                        Code::E0101,
+                        at,
+                        format!("`{ty}` has no variant called `{name}`"),
+                    );
+                    self.missing(range)
                 }
+                Some(r) => self.resolved(r, range),
                 None => self.missing(range),
             },
             ast::Expr::Paren(_) => {
@@ -440,7 +651,7 @@ impl Lowerer<'_> {
             ast::Expr::Assign(_) => self.assign(&node, e),
             ast::Expr::Call(_) => self.call(&node, e),
             ast::Expr::For(_) => self.unsupported(range, "`for`"),
-            ast::Expr::MethodCall(_) => self.unsupported(range, "a method call"),
+            ast::Expr::MethodCall(_) => self.method_call(&node, e),
             _ => self.unsupported(range, "this expression"),
         }
     }
@@ -474,9 +685,11 @@ impl Lowerer<'_> {
     /// `Path { field: value, … }`.
     fn struct_lit(&mut self, node: &SyntaxNode) -> ExprId {
         let range = node.text_range();
+        let mut ty_args = Vec::new();
         let target = match self.resolve(node) {
-            Some(Resolved::Ctor(adt, variant)) => {
+            Some(Resolved::Ctor(adt, variant, args)) => {
                 let def = self.items.variant(adt, variant);
+                ty_args = args;
                 if def.shape == Shape::Named {
                     Some((adt, variant))
                 } else {
@@ -491,7 +704,7 @@ impl Lowerer<'_> {
                     None
                 }
             }
-            Some(Resolved::Local(_) | Resolved::Fn(_)) => {
+            Some(_) => {
                 self.report(Code::E0111, range, "this is not a struct or variant");
                 None
             }
@@ -573,9 +786,55 @@ impl Lowerer<'_> {
                 adt,
                 variant,
                 fields,
+                args: ty_args,
             },
             range,
         )
+    }
+
+    /// `receiver.name::<T>(args)`.
+    fn method_call(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {
+        let range = node.text_range();
+        let receiver = e.sub_exprs().into_iter().next();
+        let receiver = self.expr_or_missing(receiver, range);
+        let generic_args = node.child(K::GENERIC_ARGS).map(|a| {
+            let mut ds = Vec::new();
+            let (types, _) = generic_args(&a, &self.scope(), &mut ds);
+            self.out.diagnostics.extend(ds);
+            types
+        });
+        let args = self.args(node);
+        let Some(name) = node.child_tokens().find(|t| t.kind() == K::IDENT) else {
+            return self.missing(range);
+        };
+        self.alloc(
+            ExprKind::MethodCall {
+                receiver,
+                name: name.text().to_string(),
+                name_range: name.text_range(),
+                generic_args,
+                args,
+            },
+            range,
+        )
+    }
+
+    /// The arguments of a call or method call.
+    fn args(&mut self, node: &SyntaxNode) -> Vec<ExprId> {
+        let mut args = Vec::new();
+        if let Some(list) = node.child(K::ARG_LIST).and_then(ast::ArgList::cast) {
+            for a in list.args() {
+                if let Some(label) = a.label() {
+                    self.error(Diagnostic::unsupported(
+                        label.text_range(),
+                        "a named argument",
+                    ));
+                }
+                let x = a.expr();
+                args.push(self.expr_or_missing(x, a.syntax().text_range()));
+            }
+        }
+        args
     }
 
     /// `base.name` or `base.0`.
@@ -889,7 +1148,7 @@ impl Lowerer<'_> {
         }
         match self.out.body.exprs[root].kind {
             ExprKind::Local(_) | ExprKind::Deref(_) | ExprKind::Missing => {}
-            ExprKind::Fn(_) => {
+            ExprKind::Fn { .. } | ExprKind::AssocFn { .. } | ExprKind::TraitFn { .. } => {
                 self.report(
                     Code::E0206,
                     target_range,
@@ -910,34 +1169,20 @@ impl Lowerer<'_> {
     fn call(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {
         let range = node.text_range();
         let callee_node = e.sub_exprs().into_iter().next();
-        let mut args = Vec::new();
-        if let Some(list) = node.child(K::ARG_LIST).and_then(ast::ArgList::cast) {
-            for a in list.args() {
-                if let Some(label) = a.label() {
-                    self.error(Diagnostic::unsupported(
-                        label.text_range(),
-                        "a named argument",
-                    ));
-                }
-                let x = a.expr();
-                args.push(self.expr_or_missing(x, a.syntax().text_range()));
-            }
-        }
-        // A tuple struct or variant applied to its fields.
         if let Some(c @ ast::Expr::Path(_)) = &callee_node {
             let segments = c
                 .syntax()
                 .child(K::PATH)
-                .and_then(ast::Path::cast)
-                .map(|p| p.segments())
+                .and_then(|p| path_segments(&p))
                 .unwrap_or_default();
-            let item = |one: &str| self.lookup(one).is_none() && self.items.fn_named(one).is_none();
             // `assert` is in the prelude: a local or item of the same name shadows it.
             if let [one] = segments.as_slice()
-                && one == "assert"
-                && item(one)
-                && self.items.adt_named(one).is_none()
+                && one.name == "assert"
+                && self.lookup("assert").is_none()
+                && self.items.fn_named("assert").is_none()
+                && self.items.adt_named("assert").is_none()
             {
+                let args = self.args(node);
                 if args.len() != 1 {
                     self.report(
                         Code::E0202,
@@ -951,23 +1196,31 @@ impl Lowerer<'_> {
                 }
                 return self.alloc(ExprKind::Assert(args[0]), range);
             }
-            let is_ctor = match segments.as_slice() {
-                [one] => item(one) && self.items.adt_named(one).is_some(),
-                [_, _] => true,
-                _ => false,
+            let resolved = self.resolve(c.syntax());
+            let args = self.args(node);
+            let callee = match resolved {
+                // A tuple struct or variant applied to its fields.
+                Some(Resolved::Ctor(adt, variant, ty_args)) => {
+                    return self.ctor_call(range, adt, variant, ty_args, args);
+                }
+                Some(r) => self.resolved(r, c.syntax().text_range()),
+                None => self.missing(c.syntax().text_range()),
             };
-            if is_ctor {
-                return match self.resolve(c.syntax()) {
-                    Some(Resolved::Ctor(adt, variant)) => self.ctor_call(range, adt, variant, args),
-                    _ => self.missing(range),
-                };
-            }
+            return self.alloc(ExprKind::Call { callee, args }, range);
         }
         let callee = self.expr_or_missing(callee_node, range);
+        let args = self.args(node);
         self.alloc(ExprKind::Call { callee, args }, range)
     }
 
-    fn ctor_call(&mut self, range: TextRange, adt: u32, variant: u32, args: Vec<ExprId>) -> ExprId {
+    fn ctor_call(
+        &mut self,
+        range: TextRange,
+        adt: u32,
+        variant: u32,
+        ty_args: Vec<Ty>,
+        args: Vec<ExprId>,
+    ) -> ExprId {
         let def = self.items.variant(adt, variant);
         let path = self.items.adts[adt as usize].path(variant);
         if def.shape != Shape::Tuple {
@@ -1004,6 +1257,7 @@ impl Lowerer<'_> {
                 adt,
                 variant,
                 fields,
+                args: ty_args,
             },
             range,
         )
@@ -1214,6 +1468,8 @@ impl Lowerer<'_> {
         };
         if let [name] = segments.as_slice()
             && self.items.adt_named(name).is_none()
+            && self.items.bare_variant(name).is_none()
+            && name != "Self"
         {
             let local = self.bind(name, false, range, b);
             return PatKind::Bind { local, sub: None };
@@ -1247,8 +1503,24 @@ impl Lowerer<'_> {
     fn ctor_pat_target(&mut self, node: &SyntaxNode) -> Option<(u32, u32)> {
         let range = node.text_range();
         let segments = self.segments(node)?;
+        if let [name] = segments.as_slice()
+            && let Some(found) = self.items.bare_variant(name)
+        {
+            return Some(found);
+        }
+        let self_adt = match &self.self_ty {
+            Some(Ty::Adt(a, ..)) => Some(*a),
+            _ => None,
+        };
+        let adt_named = |cx: &Self, name: &str| {
+            if name == "Self" {
+                self_adt
+            } else {
+                cx.items.adt_named(name)
+            }
+        };
         match segments.as_slice() {
-            [name] => match self.items.adt_named(name) {
+            [name] => match adt_named(self, name) {
                 Some(a) if !self.items.adts[a as usize].is_enum => Some((a, 0)),
                 Some(_) => {
                     self.report(
@@ -1268,7 +1540,7 @@ impl Lowerer<'_> {
                 }
             },
             [ty, variant] => {
-                let Some(a) = self.items.adt_named(ty) else {
+                let Some(a) = adt_named(self, ty) else {
                     self.report(
                         Code::E0101,
                         range,

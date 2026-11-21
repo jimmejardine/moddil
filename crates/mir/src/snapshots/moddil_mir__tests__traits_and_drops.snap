@@ -1,0 +1,122 @@
+---
+source: crates/mir/src/tests.rs
+expression: "dump(\"struct G { n: int }\\n\\\n         impl Drop for G { fn drop(self) {} }\\n\\\n         fn eq<T: PartialEq>(a: &T, b: &T) -> bool { *a == *b }\\n\\\n         fn first<T>(x: T, y: T) -> T { x }\\n\\\n         fn f(g: G) -> int { let h = G { n: 1 }; let mut k = g; k = G { n: 2 }; h.n.cmp(&k.n); 0 }\")"
+---
+fn <G as Drop>::drop(_1: G) -> () {
+    // _1: self
+
+    bb0: {
+        _0 = const ();
+        drop_fields(_1) -> bb1;
+    }
+
+    bb1: {
+        StorageDead(_1);
+        return;
+    }
+}
+
+fn eq(_1: &T, _2: &T) -> bool {
+    // _1: a
+    // _2: b
+    let _3: &T;
+    let _4: &T;
+
+    bb0: {
+        _3 = &(*_1);
+        _4 = &(*_2);
+        _0 = PartialEq::eq::<T>(move _3, move _4) -> bb2 @ 101..109;
+    }
+
+    bb1: {
+        StorageDead(_2);
+        StorageDead(_1);
+        return;
+    }
+
+    bb2: {
+        goto -> bb1;
+    }
+}
+
+fn first(_1: T, _2: T) -> T {
+    // _1: x
+    // _2: y
+
+    bb0: {
+        _0 = move _1;
+        drop(_2) -> bb1;
+    }
+
+    bb1: {
+        StorageDead(_2);
+        drop(_1) -> bb2;
+    }
+
+    bb2: {
+        StorageDead(_1);
+        return;
+    }
+}
+
+fn f(_1: G) -> int {
+    // _1: g
+    let _2: G;
+    let _3: G; // h
+    let _4: G;
+    let _5: G; // k
+    let _6: ();
+    let _7: G;
+    let _8: Ordering;
+    let _9: &int;
+    let _10: &int;
+
+    bb0: {
+        _2 = G(const 1);
+        _3 = move _2;
+        drop(_2) -> bb1;
+    }
+
+    bb1: {
+        _4 = move _1;
+        _5 = move _4;
+        drop(_4) -> bb2;
+    }
+
+    bb2: {
+        _7 = G(const 2);
+        drop(_5) -> bb3;
+    }
+
+    bb3: {
+        _5 = move _7;
+        _6 = const ();
+        drop(_7) -> bb4;
+    }
+
+    bb4: {
+        _9 = &_3.0;
+        _10 = &_5.0;
+        _8 = Ord::cmp::<int>(move _9, _10) -> bb5 @ 218..231;
+    }
+
+    bb5: {
+        _0 = const 0;
+        drop(_5) -> bb6;
+    }
+
+    bb6: {
+        StorageDead(_5);
+        drop(_3) -> bb7;
+    }
+
+    bb7: {
+        StorageDead(_3);
+        drop(_1) -> bb8;
+    }
+
+    bb8: {
+        StorageDead(_1);
+        return;
+    }
+}

@@ -3,10 +3,21 @@
 The **reference interpreter**: the executable form of the language reference, running the canonical
 AST directly ([`specs/compiler.md`: Two interpreters](../../specs/compiler.md#two-interpreters)).
 
-**Status:** slices S0 to S2, and every slice after: it walks the syntax tree of a checked program
+**Status:** slices S0 to S3, and every slice after: it walks the syntax tree of a checked program
 and runs its tests (`run_tests`), on a thread with a large stack so that recursion 10,000 calls
 deep traps as the reference says. The conformance runner runs every test on it and on the MIR
-interpreter.
+interpreter. It reads the prelude's source with the program, implements derives itself, and
+tracks moves so that a moved value is not dropped.
+
+Since it does not infer types, it chooses a trait's method from the kind of value it is called on,
+and knows a type parameter (for `T::f()`) only from the values of the arguments given for it or
+from type arguments written at the call. Three things it cannot run yet, so the suite avoids them:
+a trait's function without `self` called through the trait (`Zero::zero()`), where only the
+expected type says which impl; two impls of a trait for different arguments of one generic type
+(`impl Tr for Wrap<int>` and `impl Tr for Wrap<bool>`), which it does not tell apart; and, in
+generic code, an inherent method that has the same name as the bound trait's method, which it
+prefers. Closing these needs type information the compiler has; whether the reference
+interpreter should get its own inference is an open question.
 
 ## Rules
 

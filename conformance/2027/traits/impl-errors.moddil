@@ -1,0 +1,20 @@
+// covers: item.trait.1, item.trait.super.1, item.impl.1, item.impl.trait.1, item.impl.coherence.1, generic.assoc.1
+
+trait Shape { fn area(&self) -> int; }
+trait Named: Shape { fn id(&self) -> int; }
+trait Unit { type Item; }
+struct Square { side: int }
+struct Wrap<T> { x: T }
+
+impl Shape for Square {}                                        //~ E0407
+impl Unit for Square {}                                         //~ E0407
+impl Named for Square { fn id(&self) -> int { 1 } }
+impl Shape for Wrap<int> { fn area(&self) -> int { 1 } fn size(&self) {} } //~ E0408
+impl Shape for Wrap<bool> { fn area(self) -> int { 1 } }        //~ E0409
+impl Shape for (int, int) { fn area(&self) -> bool { true } }   //~ E0409
+impl Named for (int, int) { fn id(&self) -> int { 2 } }
+impl Square for int {}                                          //~ E0401
+impl Clone for int { fn clone(&self) -> int { 1 } }             //~ E0406
+impl int { fn double(&self) -> int { 2 } }                      //~ E0414
+impl<T> Shape for bool { fn area(&self) -> int { 1 } }          //~ E0415
+fn assoc<T: Shape>(x: T) -> T::Item { x }                       //~ E0413

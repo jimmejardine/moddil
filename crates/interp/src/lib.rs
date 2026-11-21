@@ -6,12 +6,19 @@
 //! a pointer to a frame's local and a path of fields in it; borrows cannot outlive what they
 //! point to (the borrow checker sees to that), so the frame is always there. See this crate's
 //! `README.md`.
+//!
+//! Generic code runs once for every type: each frame carries its type arguments, and a call of a
+//! trait's method is resolved from them, through a **witness table** built the first time a type
+//! is asked for that trait (`types.md`: Generics). Moving a value out of a place leaves the place
+//! empty, which is the drop flag: dropping an empty place does nothing.
+
+use std::collections::HashMap;
 
 use moddil_mir::{
     AggregateKind, BinOp, Body, Const, Local, Operand, Place, Projection, Rvalue, Statement,
     Terminator, TrapClass, UnOp, mir,
 };
-use moddil_sema::{Db, Item, ItemTree, Owner, Shape, SourceFile};
+use moddil_sema::{Callee, Db, Item, ItemTree, Owner, Shape, Solver, SourceFile, Src, Ty};
 use moddil_syntax::TextRange;
 
 /// A value.
@@ -39,6 +46,8 @@ pub enum Value {
     /// A borrow as reported outside the program (an observed value, a result): what it pointed
     /// to, and whether it was `&mut`.
     Borrowed(Box<Value>, bool),
+    /// Nothing: a place not assigned yet, or moved out of.
+    Empty,
 }
 
 /// Where a borrow points: a local of a frame, and a path of field indices into it.
@@ -89,6 +98,7 @@ impl Value {
             Value::Borrowed(v, true) => format!("&mut {}", v.render(items)),
             Value::Borrowed(v, false) => format!("&{}", v.render(items)),
             Value::Ref(..) => "&…".to_string(),
+            Value::Empty => "<moved>".to_string(),
         }
     }
 }
@@ -150,35 +160,62 @@ pub fn run_test(
     run(db, Owner::new(db, file, Item::Test(index)), &[], observer).map(|_| ())
 }
 
+/// Where a call's result goes.
+enum Ret {
+    /// Out of the interpreter: the function or test it was asked to run.
+    Top,
+    /// To a place of the caller, which then continues at a block.
+    To(Pointer, usize),
+    /// Nowhere: the call is a destructor, run while the caller drops a value.
+    Drop,
+}
+
+/// A function to run, with its type arguments.
+type Target = (u32, Vec<Ty>);
+
+/// A destructor call waiting to run: the function, its type arguments, and the value.
+type DropCall = (u32, Vec<Ty>, Value);
+
 struct Frame<'a> {
     body: &'a Body,
+    /// The type arguments it runs with (none for a function that is not generic).
+    type_args: Vec<Ty>,
     locals: Vec<Value>,
     block: usize,
     stmt: usize,
-    /// Where the caller wants the result, and where it continues.
-    ret: Option<(Pointer, usize)>,
+    ret: Ret,
+    /// While a `Drop` terminator runs: the destructors still to call, and where to go after.
+    drops: Vec<DropCall>,
+    after_drops: Option<usize>,
 }
 
 impl<'a> Frame<'a> {
-    fn new(body: &'a Body, args: Vec<Value>, ret: Option<(Pointer, usize)>) -> Self {
+    fn new(body: &'a Body, args: Vec<Value>, type_args: Vec<Ty>, ret: Ret) -> Self {
         assert_eq!(args.len(), body.arg_count, "argument count");
-        let mut locals = vec![Value::Unit; body.locals.len()];
+        let mut locals = vec![Value::Empty; body.locals.len()];
         for (slot, a) in locals[1..].iter_mut().zip(args) {
             *slot = a;
         }
         Frame {
             body,
+            type_args,
             locals,
             block: 0,
             stmt: 0,
             ret,
+            drops: Vec::new(),
+            after_drops: None,
         }
     }
 }
 
-/// The interpreter's state: the stack of frames.
+/// The interpreter's state: the stack of frames, and the witness tables built so far.
 struct Machine<'a> {
     stack: Vec<Frame<'a>>,
+    items: &'a ItemTree,
+    /// For a trait's method and the type arguments of a call of it: the function that runs
+    /// and its type arguments.
+    witnesses: HashMap<(u32, Vec<Ty>), Option<Target>>,
 }
 
 impl Machine<'_> {
@@ -241,6 +278,90 @@ impl Machine<'_> {
         }
     }
 
+    /// Like [`Machine::operand`], but a moved value leaves its place empty.
+    fn take(&mut self, o: &Operand) -> Value {
+        let v = self.operand(o);
+        if let Operand::Move(p) = o
+            && !p.is_indirect()
+        {
+            let ptr = self.resolve(p);
+            self.store(&ptr, Value::Empty);
+        }
+        v
+    }
+
+    /// `ty` as the top frame runs it: its type parameters replaced, associated types resolved.
+    fn concrete(&self, ty: &Ty) -> Ty {
+        let args = &self.stack[self.top()].type_args;
+        Solver::new(self.items, &[]).deep(&ty.subst(args))
+    }
+
+    /// The function a call runs and its type arguments: for a trait's method, the impl's method
+    /// (or the trait's default) for the type it is called for. `None` for the built-in `Clone`
+    /// of a borrow or tuple, which copies.
+    fn target(&mut self, callee: &Callee) -> Option<(u32, Vec<Ty>)> {
+        let args: Vec<Ty> = callee.args().iter().map(|t| self.concrete(t)).collect();
+        match callee {
+            Callee::Fn { func, .. } => Some((*func, args)),
+            Callee::Trait { func, .. } => {
+                let key = (*func, args.clone());
+                if let Some(w) = self.witnesses.get(&key) {
+                    return w.clone();
+                }
+                let items = self.items;
+                let sig = &items.fns[*func as usize];
+                let t = items.trait_of(*func).expect("a trait's method");
+                let def = &items.traits[t as usize];
+                let n = def.generics.params.len();
+                let trait_ref = moddil_sema::TraitRef {
+                    trait_: t,
+                    name: def.name.as_str().into(),
+                    args: args[1..n].to_vec().into(),
+                };
+                let found = Solver::new(items, &[])
+                    .impl_method(*func, &args[0], &trait_ref)
+                    .map(|(f, mut parent)| {
+                        parent.extend(args[sig.generics.parent as usize..].iter().cloned());
+                        (f, parent)
+                    });
+                self.witnesses.insert(key, found.clone());
+                found
+            }
+        }
+    }
+
+    /// The destructors to run, in order, to drop `v` of type `ty`: its own (if `own` and its type
+    /// has one; the destructor then drops the fields), or else its fields', last first.
+    fn drop_glue(&self, v: Value, ty: &Ty, own: bool, out: &mut Vec<DropCall>) {
+        match (v, ty) {
+            (v @ Value::Adt { .. }, Ty::Adt(a, ..)) if own && self.items.has_drop_impl(*a) => {
+                let drop = self.items.lang_ref("Drop").expect("the prelude's `Drop`");
+                let decl = self.items.traits[drop.trait_ as usize].methods[0];
+                let (f, args) = Solver::new(self.items, &[])
+                    .impl_method(decl, ty, &drop)
+                    .expect("a destructor");
+                out.push((f, args, v));
+            }
+            (
+                Value::Adt {
+                    variant, fields, ..
+                },
+                t @ Ty::Adt(..),
+            ) => {
+                let types = self.items.field_types(t, variant);
+                for (f, ft) in fields.into_iter().zip(types).rev() {
+                    self.drop_glue(f, &ft, true, out);
+                }
+            }
+            (Value::Tuple(xs), Ty::Tuple(ts)) => {
+                for (x, t) in xs.into_iter().zip(ts.iter()).rev() {
+                    self.drop_glue(x, t, true, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// `v` with every borrow replaced by what it points to, for reporting outside the program.
     fn shown(&self, v: Value) -> Value {
         match v {
@@ -259,9 +380,9 @@ impl Machine<'_> {
         }
     }
 
-    fn rvalue(&self, r: &Rvalue) -> Value {
+    fn rvalue(&mut self, r: &Rvalue) -> Value {
         match r {
-            Rvalue::Use(a) => self.operand(a),
+            Rvalue::Use(a) => self.take(a),
             Rvalue::Unary(op, a) => match (op, self.operand(a)) {
                 (UnOp::Neg, Value::Int(v)) => Value::Int(v.wrapping_neg()),
                 (UnOp::Not, Value::Int(v)) => Value::Int(!v),
@@ -283,7 +404,7 @@ impl Machine<'_> {
             }
             Rvalue::Binary(op, a, b) => binary(*op, self.operand(a), self.operand(b)),
             Rvalue::Aggregate(kind, ops) => {
-                let fields: Vec<Value> = ops.iter().map(|o| self.operand(o)).collect();
+                let fields: Vec<Value> = ops.iter().map(|o| self.take(o)).collect();
                 match kind {
                     AggregateKind::Tuple => Value::Tuple(fields),
                     AggregateKind::Adt { adt, variant, .. } => Value::Adt {
@@ -316,11 +437,35 @@ fn run<'db>(
 ) -> Result<Value, Trap> {
     let file = owner.file(db);
     let mut m = Machine {
-        stack: vec![Frame::new(body(db, owner), args.to_vec(), None)],
+        stack: vec![Frame::new(
+            body(db, owner),
+            args.to_vec(),
+            Vec::new(),
+            Ret::Top,
+        )],
+        items: moddil_sema::item_tree(db, file),
+        witnesses: HashMap::new(),
     };
     loop {
         let depth = m.stack.len();
         let top = m.top();
+        // Running the destructors of a `Drop` terminator, one call at a time.
+        if let Some(after) = m.stack[top].after_drops {
+            if m.stack[top].drops.is_empty() {
+                m.stack[top].after_drops = None;
+                m.stack[top].block = after;
+                m.stack[top].stmt = 0;
+            } else {
+                let (f, type_args, v) = m.stack[top].drops.remove(0);
+                if depth >= MAX_DEPTH {
+                    return Err(m.trap(TrapClass::StackOverflow, None, Vec::new()));
+                }
+                let callee = body(db, Owner::new(db, file, Item::Fn(f)));
+                m.stack
+                    .push(Frame::new(callee, vec![v], type_args, Ret::Drop));
+            }
+            continue;
+        }
         let frame = &m.stack[top];
         let code = frame.body;
         let block = &code.blocks[frame.block];
@@ -350,15 +495,12 @@ fn run<'db>(
                                 (p.range, value)
                             })
                             .collect();
-                        return Err(Trap {
-                            class: *trap,
-                            range: *range,
-                            parts,
-                        });
+                        return Err(m.trap(*trap, Some(*range), parts));
                     }
                 }
                 Statement::Observe { range, value } => {
-                    let v = m.shown(m.operand(value));
+                    let v = m.operand(value);
+                    let v = m.shown(v);
                     observer(*range, v);
                 }
                 Statement::Read(_) | Statement::StorageDead(_) => {}
@@ -380,39 +522,107 @@ fn run<'db>(
                 m.stack[top].stmt = 0;
             }
             Terminator::Call {
-                func,
+                callee,
                 args,
                 dest,
                 target,
                 range,
+                ..
             } => {
                 if depth >= MAX_DEPTH {
-                    return Err(Trap {
-                        class: TrapClass::StackOverflow,
-                        range: *range,
-                        parts: Vec::new(),
-                    });
+                    return Err(m.trap(TrapClass::StackOverflow, Some(*range), Vec::new()));
                 }
-                let values: Vec<Value> = args.iter().map(|a| m.operand(a)).collect();
-                let dest = m.resolve(dest);
-                let callee = body(db, Owner::new(db, file, Item::Fn(*func)));
-                m.stack
-                    .push(Frame::new(callee, values, Some((dest, target.index()))));
+                let (callee, args, dest, target) =
+                    (callee.clone(), args.clone(), dest.clone(), *target);
+                let values: Vec<Value> = args.iter().map(|a| m.take(a)).collect();
+                let dest = m.resolve(&dest);
+                match m.target(&callee) {
+                    Some((f, type_args)) => {
+                        let code = body(db, Owner::new(db, file, Item::Fn(f)));
+                        m.stack.push(Frame::new(
+                            code,
+                            values,
+                            type_args,
+                            Ret::To(dest, target.index()),
+                        ));
+                    }
+                    None => {
+                        // The built-in `Clone` of a borrow or a tuple: a copy.
+                        let copy = match &values[0] {
+                            Value::Ref(ptr, _) => m.load(ptr),
+                            v => v.clone(),
+                        };
+                        m.store(&dest, copy);
+                        m.stack[top].block = target.index();
+                        m.stack[top].stmt = 0;
+                    }
+                }
+            }
+            Terminator::Drop {
+                place,
+                target,
+                glue_only,
+            } => {
+                let (place, target, glue_only) = (place.clone(), *target, *glue_only);
+                let ptr = m.resolve(&place);
+                let v = m.load(&ptr);
+                m.store(&ptr, Value::Empty);
+                let ty = m.concrete(&code.place_ty(m.items, &place));
+                let mut calls = Vec::new();
+                m.drop_glue(v, &ty, !glue_only, &mut calls);
+                m.stack[top].drops = calls;
+                m.stack[top].after_drops = Some(target.index());
             }
             Terminator::Return => {
                 let value = m.stack[top].locals[Local::RETURN.index()].clone();
-                if m.stack[top].ret.is_none() {
+                if let Ret::Top = m.stack[top].ret {
                     // Show borrows while what they point to still exists.
                     return Ok(m.shown(value));
                 }
                 let done = m.stack.pop().expect("a frame");
-                let (dest, target) = done.ret.expect("a caller");
-                m.store(&dest, value);
-                let caller = m.stack.last_mut().expect("a caller");
-                caller.block = target;
-                caller.stmt = 0;
+                match done.ret {
+                    Ret::To(dest, target) => {
+                        m.store(&dest, value);
+                        let caller = m.stack.last_mut().expect("a caller");
+                        caller.block = target;
+                        caller.stmt = 0;
+                    }
+                    Ret::Drop | Ret::Top => {}
+                }
             }
             Terminator::Unreachable => unreachable!("MIR reached an unreachable block"),
+        }
+    }
+}
+
+impl Machine<'_> {
+    /// A trap of `class` at `range` (or at the current terminator). A trap in the prelude's or
+    /// derived code is reported where the file's code called it.
+    fn trap(
+        &self,
+        class: TrapClass,
+        range: Option<TextRange>,
+        parts: Vec<(TextRange, Option<Value>)>,
+    ) -> Trap {
+        let top = &self.stack[self.top()];
+        if top.body.src == Src::File {
+            let range = range.unwrap_or(top.body.blocks[top.block].terminator_span);
+            return Trap {
+                class,
+                range,
+                parts,
+            };
+        }
+        let caller = self
+            .stack
+            .iter()
+            .rev()
+            .find(|f| f.body.src == Src::File)
+            .unwrap_or(top);
+        Trap {
+            class,
+            range: caller.body.blocks[caller.block].terminator_span,
+            parts: Vec::new(),
         }
     }
 }

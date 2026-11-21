@@ -1,0 +1,15 @@
+// covers: attr.derive.1, own.copy.derive.1
+
+struct Label { id: int }
+
+#[derive(PartialEq)]                        //~ E0402
+struct Tagged { label: Label }
+
+#[derive(Eq)]                               //~ E0402
+struct Plain { n: int }
+
+#[derive(Copy, Clone)]
+struct Holder<T> { x: T, label: Label }     //~ E0311
+
+#[derive(Clone)]                            //~ E0402
+enum Choice { One(Label), Two }

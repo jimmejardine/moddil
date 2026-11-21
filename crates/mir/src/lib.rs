@@ -12,7 +12,7 @@
 
 use std::fmt;
 
-use moddil_sema::Ty;
+use moddil_sema::{Callee, Src, Ty};
 use moddil_syntax::TextRange;
 
 mod build;
@@ -65,6 +65,9 @@ impl fmt::Debug for BlockId {
 pub struct Body {
     /// The function's name, or the test's name in quotes.
     pub name: String,
+    /// Which source its code is in: a trap in the prelude's or derived code is reported where
+    /// the file's code called it.
+    pub src: Src,
     /// Every local; the first is the return value, the next `arg_count` the arguments.
     pub locals: Vec<LocalDecl>,
     /// How many arguments there are.
@@ -151,6 +154,31 @@ impl Place {
         let mut p = self.clone();
         p.projection.push(Projection::Downcast(n));
         p
+    }
+}
+
+impl Body {
+    /// The type of `place` in this body (in terms of its type parameters).
+    pub fn place_ty(&self, items: &moddil_sema::ItemTree, place: &Place) -> Ty {
+        let mut ty = self.locals[place.local.index()].ty.clone();
+        let mut variant = 0;
+        for proj in &place.projection {
+            ty = match (proj, &ty) {
+                (Projection::Deref, Ty::Ref(_, t)) => (**t).clone(),
+                (Projection::Downcast(v), t) => {
+                    variant = *v;
+                    t.clone()
+                }
+                (Projection::Field(i), Ty::Tuple(ts)) => ts[*i as usize].clone(),
+                (Projection::Field(i), t @ Ty::Adt(..)) => {
+                    let f = items.field_types(t, variant);
+                    variant = 0;
+                    f.get(*i as usize).cloned().unwrap_or(Ty::Error)
+                }
+                _ => Ty::Error,
+            };
+        }
+        ty
     }
 }
 
@@ -325,11 +353,13 @@ pub enum Terminator {
         /// The block taken when it is false.
         else_: BlockId,
     },
-    /// Calls function `func` of the same file; its result goes to `dest`, then control to
-    /// `target`.
+    /// Calls a function; its result goes to `dest`, then control to `target`.
     Call {
-        /// The function, by its index in the file's item tree.
-        func: u32,
+        /// The function, with its type arguments (which may name the body's own type
+        /// parameters). A trait's method is found from the type arguments when the call runs.
+        callee: Callee,
+        /// How the function is named, for printing: `add`, `PartialEq::eq`.
+        name: String,
         /// The arguments.
         args: Vec<Operand>,
         /// Where the result goes.
@@ -338,6 +368,18 @@ pub enum Terminator {
         target: BlockId,
         /// The call's source.
         range: TextRange,
+    },
+    /// Drops the value at `place`, if it holds one (it may have been moved out of): runs its
+    /// destructor if its type has one, then drops its fields, last first. Then control goes to
+    /// `target`.
+    Drop {
+        /// The place dropped.
+        place: Place,
+        /// Where control goes next.
+        target: BlockId,
+        /// Drop only the fields, not the value itself: for `self` at the end of its own
+        /// destructor.
+        glue_only: bool,
     },
     /// Returns `_0`.
     Return,

@@ -1,0 +1,57 @@
+// covers: attr.derive.1, prelude.ordering.1, own.copy.derive.1
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct Version { major: int, minor: int }
+
+#[derive(Clone, PartialEq, PartialOrd)]
+enum Size { Small, Medium(int), Large { w: int, h: int } }
+
+#[derive(Copy, Clone, PartialEq)]
+struct Wrap<T> { x: T }
+
+struct Odd { n: int }
+impl Clone for Odd {
+    fn clone(&self) -> Odd { Odd { n: self.n + 1 } }
+}
+
+#[derive(Clone)]
+struct Holder { odd: Odd, n: int }
+
+test "equality and ordering field by field" {
+    let a = Version { major: 1, minor: 2 };
+    let b = Version { major: 1, minor: 3 };
+    a == b                                  // => false
+    ;
+    a == a.clone()                          // => true
+    ;
+    a < b                                   // => true
+    ;
+    a.cmp(&b)                               // => Ordering::Less
+    ;
+    Version { major: 2, minor: 0 } > b      // => true
+}
+
+test "variants in declaration order" {
+    Size::Small < Size::Medium(0)           // => true
+    ;
+    Size::Medium(5) < Size::Medium(3)       // => false
+    ;
+    Size::Large { w: 1, h: 2 } > Size::Medium(9) // => true
+    ;
+    Size::Medium(2) == Size::Medium(2)      // => true
+    ;
+    Size::Small.partial_cmp(&Size::Small)   // => Some(Ordering::Equal)
+}
+
+test "generic derives and hand-written fields" {
+    let w = Wrap { x: 3 };
+    let v = w;
+    w == v                                  // => true
+    ;
+    let h = Holder { odd: Odd { n: 1 }, n: 7 };
+    h.clone().odd.n                         // => 2
+    ;
+    Some(1) < Some(2)                       // => true
+    ;
+    None < Some(0)                          // => true
+}

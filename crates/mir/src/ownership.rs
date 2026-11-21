@@ -15,10 +15,15 @@
 //!   local it borrows may not leave scope (E0308).
 //! - **Returns.** A returned borrow must come from a borrowed parameter that the signature allows
 //!   (E0308, E0310).
+//! - **Drops.** Dropping a value is like moving it out, except that one that may have been moved
+//!   already is not an error (a drop flag decides at run time). A value whose type has a
+//!   destructor cannot be partly moved out of (E0314), except by its own destructor.
 
 use std::collections::{BTreeSet, HashSet};
 
-use moddil_sema::{Code, Db, Diagnostic, Item, ItemTree, Owner, Severity, SourceFile, Ty};
+use moddil_sema::{
+    Code, Container, Db, Diagnostic, Item, ItemTree, Owner, Severity, SourceFile, Ty,
+};
 use moddil_syntax::TextRange;
 
 use crate::build::successors;
@@ -30,8 +35,13 @@ use crate::{Body, Local, Operand, Place, Projection, Rvalue, Statement, Terminat
 pub fn diagnostics(db: &dyn Db, file: SourceFile) -> Vec<Diagnostic> {
     let mut out = moddil_sema::diagnostics(db, file).clone();
     if !moddil_sema::has_errors(db, file) {
+        let items = moddil_sema::item_tree(db, file);
         for owner in moddil_sema::owners(db, file) {
-            out.extend(borrowck(db, owner).iter().cloned());
+            out.extend(moddil_sema::in_file(
+                items,
+                owner.item(db),
+                borrowck(db, owner),
+            ));
         }
         out.sort_by_key(|d| (d.range.start, d.range.end, d.code));
         out.dedup();
@@ -57,7 +67,20 @@ pub fn borrowck<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Vec<Diagnostic> {
         Item::Fn(i) => items.fns[i as usize].ret_from.clone(),
         Item::Test(_) => Vec::new(),
     };
+    // A destructor may move the fields out of its `self`.
+    let drop = items.lang("Drop");
+    let destructor = match owner.item(db) {
+        Item::Fn(i) => match items.fns[i as usize].container {
+            Container::Impl(k) => {
+                drop.is_some()
+                    && items.impls[k as usize].trait_ref.as_ref().map(|t| t.trait_) == drop
+            }
+            _ => false,
+        },
+        Item::Test(_) => false,
+    };
     let mut cx = Checker::new(body, items, ret_from);
+    cx.destructor = destructor;
     cx.run();
     cx.diagnostics
 }
@@ -98,6 +121,8 @@ struct Checker<'a> {
     live_out: Vec<Vec<HashSet<Local>>>,
     diagnostics: Vec<Diagnostic>,
     reported: HashSet<(Code, u32, u32)>,
+    /// Whether the body is a destructor, which may move fields out of its `self` (`_1`).
+    destructor: bool,
 }
 
 /// The loans each local may hold.
@@ -197,6 +222,56 @@ impl<'a> Checker<'a> {
             live_out,
             diagnostics: Vec::new(),
             reported: HashSet::new(),
+            destructor: false,
+        }
+    }
+
+    /// The type of the part of `p` before its projection `upto`.
+    fn type_upto(&self, p: &Place, upto: usize) -> Ty {
+        let mut ty = self.body.locals[p.local.index()].ty.clone();
+        let mut variant = 0;
+        for proj in &p.projection[..upto] {
+            ty = match (proj, &ty) {
+                (Projection::Deref, Ty::Ref(_, t)) => (**t).clone(),
+                (Projection::Downcast(v), t) => {
+                    variant = *v;
+                    t.clone()
+                }
+                (Projection::Field(i), Ty::Tuple(ts)) => ts[*i as usize].clone(),
+                (Projection::Field(i), t @ Ty::Adt(..)) => {
+                    let f = self.items.field_types(t, variant);
+                    variant = 0;
+                    f.get(*i as usize).cloned().unwrap_or(Ty::Error)
+                }
+                _ => Ty::Error,
+            };
+        }
+        ty
+    }
+
+    /// Moving out a field of a value whose type has a destructor (E0314): the destructor would
+    /// then see a value with a part missing.
+    fn move_out_of_drop(&mut self, span: TextRange, p: &Place) {
+        for (k, proj) in p.projection.iter().enumerate() {
+            if !matches!(proj, Projection::Field(_)) {
+                continue;
+            }
+            let base = self.type_upto(p, k);
+            if let Some(a) = base.adt()
+                && self.items.has_drop_impl(a)
+                && !(self.destructor && p.local == Local(1) && k == 0)
+            {
+                let what = self.name(p);
+                let ty = self.items.adts[a as usize].name.clone();
+                self.report(Diagnostic::error(
+                    Code::E0314,
+                    span,
+                    format!(
+                        "{what} cannot be moved out: `{ty}` has a destructor, which needs all of                          the value (borrow it, or match it by reference)"
+                    ),
+                ));
+                return;
+            }
         }
     }
 
@@ -394,6 +469,7 @@ impl<'a> Checker<'a> {
             Operand::Move(p) => {
                 if check {
                     self.access((at, span), p, Access::Move, h, m, None);
+                    self.move_out_of_drop(span, p);
                 }
                 if !p.is_indirect() {
                     m.insert(PlaceKey::of(p));
@@ -523,10 +599,35 @@ impl<'a> Checker<'a> {
         let span = block.terminator_span;
         match &block.terminator {
             Terminator::SwitchBool { cond, .. } => self.operand(at, span, cond, h, m, check),
+            Terminator::Drop { place, .. } => {
+                // Like a move, but a value already moved out of is simply not dropped.
+                if check {
+                    let full = PlaceKey::of(place);
+                    for li in self.live_loans(at, h) {
+                        let loan = &self.loans[li];
+                        if loan.param.is_some() || !PlaceKey::of(&loan.place).overlaps(&full) {
+                            continue;
+                        }
+                        let what = self.name(place);
+                        let d = Diagnostic::error(
+                            Code::E0308,
+                            loan.span,
+                            format!(
+                                "this borrows {what}, which is dropped while the borrow is still                                  used"
+                            ),
+                        )
+                        .with_label(span, "dropped here");
+                        self.report(d);
+                    }
+                }
+                if !place.is_indirect() {
+                    m.insert(PlaceKey::of(place));
+                }
+            }
             Terminator::Call {
-                func, args, dest, ..
+                callee, args, dest, ..
             } => {
-                let sig = &self.items.fns[*func as usize];
+                let sig = &self.items.fns[callee.func() as usize];
                 let mut flowing = BTreeSet::new();
                 if sig.ret.has_ref() {
                     for &i in &sig.ret_from {
@@ -696,6 +797,7 @@ fn uses_defs(stmt: Option<&Statement>, term: Option<&Terminator>) -> (Vec<Local>
                 }
             }
             Terminator::Return => uses.push(Local::RETURN),
+            Terminator::Drop { place, .. } => uses.push(place.local),
             Terminator::Goto(_) | Terminator::Unreachable => {}
         }
     }

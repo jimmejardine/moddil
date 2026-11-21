@@ -1,4 +1,4 @@
-use moddil_sema::{Database, Item, Owner, SourceFile};
+use moddil_sema::{Database, Item, Owner, SourceFile, Src};
 
 use super::*;
 
@@ -8,8 +8,13 @@ fn dump(text: &str) -> String {
     let file = SourceFile::new(&db, "t.moddil".to_string(), text.to_string());
     let diagnostics = moddil_sema::diagnostics(&db, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    let items = moddil_sema::item_tree(&db, file);
     moddil_sema::owners(&db, file)
         .into_iter()
+        .filter(|o| match o.item(&db) {
+            Item::Fn(i) => items.fns[i as usize].src == Src::File,
+            Item::Test(_) => true,
+        })
         .map(|o| format!("{:?}", mir(&db, o).as_ref().expect("no errors")))
         .collect::<Vec<_>>()
         .join("\n")
@@ -215,4 +220,32 @@ fn defer_runs_on_every_exit() {
     insta::assert_snapshot!(dump(
         "fn f(b: bool) -> int { let mut n = 0; { defer { n += 1; } if b { return n; } } n }"
     ));
+}
+
+#[test]
+fn traits_and_drops() {
+    insta::assert_snapshot!(dump(
+        "struct G { n: int }\n\
+         impl Drop for G { fn drop(self) {} }\n\
+         fn eq<T: PartialEq>(a: &T, b: &T) -> bool { *a == *b }\n\
+         fn first<T>(x: T, y: T) -> T { x }\n\
+         fn f(g: G) -> int { let h = G { n: 1 }; let mut k = g; k = G { n: 2 }; h.n.cmp(&k.n); 0 }"
+    ));
+}
+
+#[test]
+fn destructors() {
+    let g = "struct G { n: int }\nimpl Drop for G { fn drop(self) { let G { n } = self; } }\n";
+    accepted(&format!("{g}fn f(g: G) -> int {{ g.n }}"));
+    accepted(&format!("{g}fn f(g: G) {{ let h = g; drop(h); }}"));
+    rejected(
+        &format!(
+            "{g}struct H {{ g: G }}\nimpl Drop for H {{ fn drop(self) {{}} }}\nfn f(h: H) -> G {{ h.g }}"
+        ),
+        &[("E0314", 5)],
+    );
+    rejected(
+        &format!("{g}fn f() -> int {{ let r = &G {{ n: 1 }}; r.n }}"),
+        &[("E0308", 3)],
+    );
 }

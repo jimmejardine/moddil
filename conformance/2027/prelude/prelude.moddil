@@ -1,0 +1,31 @@
+// covers: prelude.1, prelude.option.1, prelude.ordering.1, prelude.clone.1
+
+struct Label { id: int }
+
+fn pick(b: bool) -> Option<Label> { if b { Some(Label { id: 7 }) } else { None } }
+
+test "the prelude's names" {
+    let a: Option<int> = Some(1);
+    let b = Option::Some(2);
+    let c = Option::<int>::None;
+    (a, b, c)                               // => (Some(1), Some(2), None)
+    ;
+    match pick(true) { Some(l) => l.id, None => 0 } // => 7
+    ;
+    pick(false).is_none()                   // => true
+    ;
+    Ordering::Less < Ordering::Greater      // => true
+    ;
+    2.cmp(&2)                               // => Ordering::Equal
+}
+
+test "Clone and Copy" {
+    let t = (1, true);
+    t.clone()                               // => (1, true)
+    ;
+    let n = 4;
+    let r = &n;
+    r.clone()                               // => 4
+    ;
+    ().clone()                              // => ()
+}

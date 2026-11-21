@@ -167,18 +167,34 @@ impl fmt::Debug for Body {
                     "        switch({cond:?}) -> [true: {then:?}, false: {else_:?}];"
                 )?,
                 Terminator::Call {
-                    func,
+                    callee,
+                    name,
                     args,
                     dest,
                     target,
                     range,
                 } => {
                     let args: Vec<String> = args.iter().map(|a| format!("{a:?}")).collect();
+                    let targs = callee.args();
+                    let targs = if targs.is_empty() {
+                        String::new()
+                    } else {
+                        let ts: Vec<String> = targs.iter().map(|t| format!("{t:?}")).collect();
+                        format!("::<{}>", ts.join(", "))
+                    };
                     writeln!(
                         f,
-                        "        {dest:?} = fn#{func}({}) -> {target:?} @ {range:?};",
+                        "        {dest:?} = {name}{targs}({}) -> {target:?} @ {range:?};",
                         args.join(", ")
                     )?;
+                }
+                Terminator::Drop {
+                    place,
+                    target,
+                    glue_only,
+                } => {
+                    let what = if *glue_only { "drop_fields" } else { "drop" };
+                    writeln!(f, "        {what}({place:?}) -> {target:?};")?;
                 }
                 Terminator::Return => writeln!(f, "        return;")?,
                 Terminator::Unreachable => writeln!(f, "        unreachable;")?,

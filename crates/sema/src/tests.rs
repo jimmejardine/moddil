@@ -74,10 +74,7 @@ fn types() {
     err("fn f(x: int) -> int { x(1) }", &[("E0203", 1)]);
     err("fn f() -> int { 9223372036854775808 }", &[("E0204", 1)]);
     err("fn f() -> bool { -true }", &[("E0205", 1)]);
-    err(
-        "fn f() -> bool { true < false }",
-        &[("E0205", 1), ("E0205", 1)],
-    );
+    err("fn f() -> bool { (1, 2) < (3, 4) }", &[("E0205", 1)]);
     err("fn f() -> bool { 1 == true }", &[("E0201", 1)]);
     err("fn f() -> int { true + 1 }", &[("E0205", 1)]);
     err("fn f() { let x: bool = 1; }", &[("E0201", 1)]);
@@ -114,9 +111,30 @@ fn syntax_errors_hide_the_rest() {
 }
 
 #[test]
+fn the_prelude_and_its_derives_check_cleanly() {
+    let db = Database::default();
+    let file = SourceFile::new(&db, "t.moddil".to_string(), String::new());
+    let items = item_tree(&db, file);
+    assert_eq!(items.hidden, vec![], "the prelude's items");
+    assert_eq!(items.diagnostics, vec![]);
+    for owner in owners(&db, file) {
+        let Item::Fn(i) = owner.item(&db) else {
+            continue;
+        };
+        let ds: Vec<&Diagnostic> = body(&db, owner)
+            .diagnostics
+            .iter()
+            .chain(&infer(&db, owner).diagnostics)
+            .collect();
+        let sig = &items.fns[i as usize];
+        assert!(ds.is_empty(), "`{}` ({:?}): {ds:#?}", sig.name, sig.src);
+    }
+}
+
+#[test]
 fn beyond_s0_is_not_supported_yet() {
-    err("trait T {}", &[("I0001", 1)]);
-    err("fn f<T>() {}", &[("I0001", 1)]);
+    err("fn f() -> impl Clone { 1 }", &[("I0001", 1)]);
+    err("trait T { const N: int = 1; }", &[("I0001", 1)]);
     err("fn f() { let s = \"x\"; }", &[("I0001", 1)]);
     err("fn f() { for x in y {} }", &[("I0001", 1)]);
     err("fn f() { let x = [1]; }", &[("I0001", 1)]);
@@ -355,4 +373,52 @@ fn borrows_and_copy() {
     );
     err("fn f() { loop { defer { break; } } }", &[("E0313", 1)]);
     err("fn f() { defer { return; } }", &[("E0313", 1)]);
+}
+
+#[test]
+fn generics_and_traits() {
+    ok("fn id<T>(x: T) -> T { x }\nfn f() -> int { id(1) + id::<int>(2) }");
+    ok("struct Pair<A, B> { a: A, b: B }\nfn f() -> bool { let p = Pair { a: 1, b: true }; p.b }");
+    ok("fn f() -> int { let x = Some(3); x.unwrap_or(0) }");
+    ok("fn f() -> bool { let x: Option<int> = None; x.is_none() }");
+    ok("fn f() -> int { match Some(1) { Some(n) => n, None => 0 } }");
+    ok(
+        "trait Area { fn area(&self) -> int; }\nstruct Sq { s: int }\nimpl Area for Sq { fn area(&self) -> int { self.s * self.s } }\nfn f(x: Sq) -> int { x.area() }",
+    );
+    ok(
+        "trait Area { fn area(&self) -> int; }\nfn total<T: Area>(a: &T, b: &T) -> int { a.area() + b.area() }",
+    );
+    ok(
+        "fn max<T: PartialOrd>(a: T, b: T) -> T { if a > b { a } else { b } }\nfn f() -> int { max(1, 2) }",
+    );
+    ok(
+        "#[derive(Clone, PartialEq)]\nstruct P { x: int }\nfn f(a: P, b: &P) -> bool { a == b.clone() }",
+    );
+    ok(
+        "struct V { x: int }\nimpl Add for V { type Output = V; fn add(self, rhs: V) -> V { V { x: self.x + rhs.x } } }\nfn f(a: V, b: V) -> int { (a + b).x }",
+    );
+    ok("fn sum<T: Add<Output = T>>(a: T, b: T) -> T { a + b }\nfn f() -> int { sum(1, 2) }");
+    ok(
+        "struct P { x: int }\nimpl P { fn new(x: int) -> P { P { x } } fn get(&self) -> int { self.x } }\nfn f() -> int { P::new(3).get() }",
+    );
+    ok("fn f() -> bool { 1.cmp(&2) == Ordering::Less }");
+    ok(
+        "trait Zero { fn zero() -> Self; }\nimpl Zero for int { fn zero() -> int { 0 } }\nfn f() -> int { int::zero() + Zero::zero() }",
+    );
+    err("fn f<T>(a: T, b: T) -> bool { a == b }", &[("E0205", 1)]);
+    err("struct P;\nfn f() -> P { P.clone() }", &[("E0403", 2)]);
+    err("fn f() { let x = None; }", &[("E0405", 1)]);
+    err(
+        "trait T { fn m(&self); }\nstruct S;\nimpl T for S {}",
+        &[("E0407", 3)],
+    );
+    err(
+        "struct S;\nimpl Clone for S { fn clone(&self) -> S { S } }\nimpl Clone for S { fn clone(&self) -> S { S } }",
+        &[("E0406", 3)],
+    );
+    err(
+        "fn f<T: Clone>(x: T) {}\nstruct S;\nfn g() { f(S) }",
+        &[("E0402", 3)],
+    );
+    err("struct Option;", &[("E0103", 1)]);
 }

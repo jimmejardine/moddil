@@ -1,0 +1,62 @@
+// covers: item.impl.1, expr.method.1, expr.path.assoc.1
+
+struct Counter { n: int }
+
+impl Counter {
+    fn new(n: int) -> Counter { Counter { n } }
+    fn zero() -> Self { Self { n: 0 } }
+    fn get(&self) -> int { self.n }
+    fn bump(&mut self) { self.n += 1; }
+    fn into_n(self) -> int { self.n }
+    fn plus(&self, k: int) -> Counter { Counter::new(self.n + k) }
+}
+
+struct Wrap<T> { x: T }
+
+impl<T> Wrap<T> {
+    fn new(x: T) -> Wrap<T> { Wrap { x } }
+    fn get(&self) -> &T { &self.x }
+    fn take(self) -> T { self.x }
+}
+
+fn through(c: &mut Counter) -> int {
+    c.bump();
+    c.get()
+}
+
+test "methods borrow or take their receiver" {
+    let mut c = Counter::new(1);
+    c.bump();
+    c.get()                                 // => 2
+    ;
+    through(&mut c)                         // => 3
+    ;
+    let r = &c;
+    r.get()                                 // => 3
+    ;
+    c.plus(2).plus(3).get()                 // => 8
+    ;
+    Counter::zero().into_n()                // => 0
+    ;
+    c.into_n()                              // => 3
+}
+
+test "methods of generic types" {
+    let w = Wrap::new(5);
+    *w.get()                                // => 5
+    ;
+    w.take()                                // => 5
+    ;
+    Wrap::new(true).take()                  // => true
+}
+
+test "methods of int and bool from the prelude" {
+    let a = 3;
+    a.clone()                               // => 3
+    ;
+    a.cmp(&4)                               // => Ordering::Less
+    ;
+    true.eq(&false)                         // => false
+    ;
+    (1, 2).clone()                          // => (1, 2)
+}

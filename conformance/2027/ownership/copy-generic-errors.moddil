@@ -1,0 +1,16 @@
+// covers: own.copy.1, own.copy.derive.1, own.move.1
+
+#[derive(Copy, Clone)]
+struct Wrap<T> { x: T }
+struct Label { id: int }
+
+fn reuse<T>(x: T) -> T {
+    let y = x;
+    x                                       //~ E0303
+}
+
+fn not_copy() {
+    let w = Wrap { x: Label { id: 1 } };
+    let v = w;
+    w;                                      //~ E0303
+}

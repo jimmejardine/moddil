@@ -13,5 +13,15 @@ instead ([Traps](../traps.md)).
 **expr.arith.div-zero.1** Division or remainder by zero traps. `int::MIN % -1` is `0`, as its exact
 result is.
 
-**expr.arith.types.1** Both operands of an arithmetic operator are `int`s; for other operand types
-the operator is not defined (E0205), and a right operand of another type is a mismatch (E0201).
+**expr.arith.types.1** Both operands of an arithmetic operator on `int`s are `int`s: a right
+operand of another type is a mismatch (E0201). For a left operand of another type, the operator
+calls its trait (**expr.op.trait.1**), and is not defined if the type does not implement it
+(E0205). A compound assignment (`a += b`) is defined only for `int`s, and for `bool`s with `&=`,
+`|=` and `^=` (E0205).
+
+**expr.op.trait.1** On a type other than `int` (and `bool` for `!`), an operator calls a method of
+a prelude trait ([Prelude](../prelude.md)): `a + b` is `Add::add(a, b)`, and likewise `-` `Sub::sub`,
+`*` `Mul::mul`, `/` `Div::div`, `%` `Rem::rem`; unary `-a` is `Neg::neg(a)` and `!a` `Not::not(a)`.
+The operands are moved in; the right operand has the left operand's type (E0201), and the result
+has the trait's `Output` type. An operator applied to a borrow is not defined (E0205): dereference
+it with `*`.

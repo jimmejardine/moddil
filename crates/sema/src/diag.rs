@@ -140,6 +140,39 @@ codes! {
     E0312 = "`Copy` type over the size cap",
     /// `return`, `break` or `continue` out of a `defer` block.
     E0313 = "leaving a `defer` block",
+    /// A move out of a field of a value whose type has a destructor.
+    E0314 = "move out of a type with a destructor",
+    /// A name used as a trait that is not one.
+    E0401 = "not a trait",
+    /// A type that does not implement a trait it must.
+    E0402 = "unsatisfied bound",
+    /// A method or associated function that the type does not have.
+    E0403 = "no such method",
+    /// A generic item given the wrong number of type arguments.
+    E0404 = "wrong number of type arguments",
+    /// A type that cannot be inferred and must be written.
+    E0405 = "type annotations needed",
+    /// Two impls of a trait that apply to the same type.
+    E0406 = "conflicting impls",
+    /// An impl that leaves out a method or associated type of its trait.
+    E0407 = "missing item in impl",
+    /// An impl that defines something its trait does not have.
+    E0408 = "item not in trait",
+    /// An impl's method whose signature differs from the trait's.
+    E0409 = "impl method does not match the trait",
+    /// A method that several traits give the type.
+    E0410 = "ambiguous method",
+    /// A destructor for a type that is not the impl's own, for only some of its type arguments,
+    /// with bounds, or on a `Copy` type.
+    E0411 = "invalid destructor",
+    /// A call of a destructor.
+    E0412 = "explicit call of a destructor",
+    /// An associated type or function that does not exist.
+    E0413 = "no such associated item",
+    /// Methods added to a type not defined here.
+    E0414 = "inherent impl for a foreign type",
+    /// An impl's type parameter that neither the type nor the trait uses.
+    E0415 = "unconstrained type parameter",
     /// A `match` arm no value can reach.
     W0201 = "unreachable pattern",
     /// Valid Moddil that this implementation does not support yet.

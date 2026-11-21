@@ -63,8 +63,50 @@ pub enum ExprKind {
     Unit,
     /// A local.
     Local(LocalId),
-    /// A function of this file, by its index in the item tree.
-    Fn(u32),
+    /// A function named by a path, by its index in the item tree, with the type arguments for
+    /// its own type parameters ([`Ty::HOLE`](crate::Ty::HOLE) where they are inferred).
+    Fn {
+        /// The function.
+        func: u32,
+        /// Its type arguments.
+        args: Vec<crate::Ty>,
+    },
+    /// `Type::name`: a function of an inherent impl of the type, or a method of a trait it
+    /// implements.
+    AssocFn {
+        /// The type (with holes for arguments to infer).
+        ty: crate::Ty,
+        /// The function's name.
+        name: String,
+        /// Where the name is.
+        name_range: TextRange,
+        /// Type arguments written for the function's own parameters, if any.
+        args: Option<Vec<crate::Ty>>,
+    },
+    /// `Trait::name`: a trait's method, for a `Self` to infer.
+    TraitFn {
+        /// The trait.
+        trait_: u32,
+        /// The method's declaration in the trait.
+        func: u32,
+        /// The trait's type arguments (holes when not written).
+        trait_args: Vec<crate::Ty>,
+        /// Type arguments written for the method's own parameters, if any.
+        args: Option<Vec<crate::Ty>>,
+    },
+    /// `receiver.name(args)`.
+    MethodCall {
+        /// The value the method is called on.
+        receiver: ExprId,
+        /// The method's name.
+        name: String,
+        /// Where the name is.
+        name_range: TextRange,
+        /// Type arguments written for the method's own parameters (`x.f::<int>()`), if any.
+        generic_args: Option<Vec<crate::Ty>>,
+        /// The other arguments.
+        args: Vec<ExprId>,
+    },
     /// `(a, b)`: a tuple of one or more elements.
     Tuple(Vec<ExprId>),
     /// A struct or variant value: `Point { x: 1, y: 2 }`, `Pair(1, 2)`, `Colour::Red`.
@@ -75,6 +117,8 @@ pub enum ExprKind {
         variant: u32,
         /// Each field's index and value, in source order (the order they are evaluated in).
         fields: Vec<(u32, ExprId)>,
+        /// The struct's or enum's type arguments (holes where they are inferred).
+        args: Vec<crate::Ty>,
     },
     /// `base.name` or `base.0`.
     Field {

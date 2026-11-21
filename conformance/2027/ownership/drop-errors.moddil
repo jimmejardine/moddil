@@ -1,0 +1,25 @@
+// covers: own.drop.destructor.1, own.drop.partial.1, own.drop.1
+
+struct Guard { armed: bool }
+impl Drop for Guard { fn drop(self) { assert(!self.armed); } }
+
+struct Holder { g: Guard, n: int }
+impl Drop for Holder {
+    fn drop(self) {
+        let Holder { g, n } = self;
+    }
+}
+
+struct Wrap<T> { x: T }
+struct Pair<T> { x: T }
+
+impl Drop for Option<int> { fn drop(self) {} }                  //~ E0411
+impl Drop for Wrap<int> { fn drop(self) {} }                    //~ E0411
+impl<T: Clone> Drop for Pair<T> { fn drop(self) {} }            //~ E0411
+
+#[derive(Copy, Clone)]
+struct Point { x: int }                                         //~ E0411
+impl Drop for Point { fn drop(self) {} }
+
+fn call(g: Guard) { g.drop(); }                                 //~ E0412
+fn call_path(g: Guard) { Drop::drop(g); }                       //~ E0412
