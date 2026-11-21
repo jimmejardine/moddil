@@ -44,9 +44,9 @@ declared `mut`.
 **expr.closure.capture.1** A closure **captures** the locals of the enclosing body that its body
 names: by a shared borrow if it only reads one, by an `&mut` borrow if it changes it (or calls it
 through `&mut`), and by moving it in if it moves it out, which makes the closure `FnOnce`. A closure
-is second-class, as a borrow is ([Borrows](../borrows.md)): it cannot be held in a tuple, struct or
-enum, or be a type argument other than for a closure parameter (E0309), and the borrows it holds
-last as long as it does.
+is second-class, as a borrow is ([Borrows](../borrows.md)): a value holding one is a view
+([Views](../views.md)), a field of a struct or enum that is not a view cannot hold one (E0309), and
+the borrows it holds last as long as it does.
 
 **expr.closure.fails.1** A closure's errors are those its body raises. A function with a closure
 parameter can fail with that closure's errors (written `F::Fails` when shown); a call of the

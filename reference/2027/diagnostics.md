@@ -22,7 +22,7 @@ and a code never changes meaning.
 | E0001 | Syntax error | [syntax.grammar.1](syntax.md) |
 | E0002 | A comparison chain in more than one direction | [expr.cmp.chain.2](expressions/comparison.md) |
 | E0101 | Unresolved name | [names.resolve.1](names.md) |
-| E0102 | Unresolved type | [names.type.1](names.md) |
+| E0102 | Unresolved type, or a const parameter where a type is expected | [names.type.1](names.md), [generic.const.2](generics.md) |
 | E0103 | Duplicate definition, or an item with the name of an import | [names.item.1](names.md), [names.item.2](names.md), [mod.names.1](modules.md) |
 | E0104 | Duplicate parameter | [item.fn.params.1](items/functions.md) |
 | E0105 | A name not bound in every alternative of `\|` | [pat.or.1](patterns.md) |
@@ -37,10 +37,10 @@ and a code never changes meaning.
 | E0202 | Wrong number of arguments | [expr.call.1](expressions/calls.md), [expr.closure.call.1](expressions/closures.md) |
 | E0203 | Not a function | [expr.call.1](expressions/calls.md), [expr.closure.call.1](expressions/closures.md) |
 | E0204 | Literal out of range | [expr.lit.int.2](expressions/literals.md) |
-| E0205 | Operator not defined for these types | [expr.arith.types.1](expressions/arithmetic.md), [expr.op.trait.1](expressions/arithmetic.md), [expr.cmp.order.1](expressions/comparison.md), [expr.cmp.trait.1](expressions/comparison.md), [generic.bound.1](generics.md) |
+| E0205 | Operator not defined for these types | [expr.arith.types.1](expressions/arithmetic.md), [expr.op.trait.1](expressions/arithmetic.md), [expr.cmp.order.1](expressions/comparison.md), [expr.cmp.trait.1](expressions/comparison.md), [generic.bound.1](generics.md), [expr.index.2](expressions/arrays.md), [expr.index.trait.1](expressions/arrays.md) |
 | E0206 | Invalid assignment target | [expr.assign.1](expressions/assignment.md) |
 | E0207 | Missing fields | [expr.struct.1](expressions/structs.md), [pat.struct.1](patterns.md) |
-| E0208 | Non-exhaustive `match` | [expr.match.exhaustive.1](expressions/match.md), [text.pat.2](text.md) |
+| E0208 | Non-exhaustive `match` | [expr.match.exhaustive.1](expressions/match.md), [text.pat.2](text.md), [expr.for.2](expressions/loops.md) |
 | E0209 | A pattern that can fail where one that cannot is needed | [pat.irrefutable.1](patterns.md) |
 | E0210 | `let … else` whose block can finish normally | [stmt.let.else.1](statements.md) |
 | E0211 | A recursive type of infinite size | [item.struct.recursive.1](items/structs.md) |
@@ -55,12 +55,13 @@ and a code never changes meaning.
 | E0306 | Assignment to or move of a borrowed value | [borrow.rules.1](borrows.md), [borrow.guard.1](borrows.md) |
 | E0307 | Use of a value borrowed with `&mut` | [borrow.rules.1](borrows.md) |
 | E0308 | A borrow that outlives its value | [borrow.scope.1](borrows.md), [item.fn.ret-borrow.1](items/functions.md) |
-| E0309 | A borrow (or closure) stored in a struct, enum or tuple, a borrow of a borrow, or a borrow as a type argument | [borrow.type.1](borrows.md), [generic.borrow.1](generics.md), [expr.closure.capture.1](expressions/closures.md) |
-| E0310 | A returned borrow without a borrowed parameter to come from | [item.fn.ret-borrow.1](items/functions.md) |
+| E0309 | A borrow, closure or view stored in a field of a struct or enum that is not a view, or a borrow of a borrow | [borrow.type.1](borrows.md), [view.2](views.md), [expr.closure.capture.1](expressions/closures.md) |
+| E0310 | A returned borrow from a parameter the signature does not allow | [item.fn.ret-borrow.1](items/functions.md) |
 | E0311 | A type that cannot be `Copy` | [own.copy.derive.1](ownership.md) |
 | E0312 | A `Copy` type over 64 bytes | [own.copy.derive.1](ownership.md) |
 | E0313 | `return`, `break` or `continue` out of a `defer` block | [stmt.defer.1](statements.md) |
 | E0314 | A field moved out of a value whose type has a destructor | [own.drop.partial.1](ownership.md) |
+| E0315 | An element moved out of an array or slice | [expr.index.move.1](expressions/arrays.md) |
 | E0401 | A name used as a trait that is not one | [item.trait.1](items/traits.md) |
 | E0402 | A type that does not implement a trait it must | [generic.bound.1](generics.md), [item.trait.super.1](items/traits.md), [attr.derive.1](attributes.md), [type.dyn.coerce.1](types.md), [eff.with.1](effects.md), [expr.fmt.2](text.md) |
 | E0403 | A method or function that the type does not have | [expr.method.1](expressions/methods.md), [expr.path.assoc.1](expressions/methods.md), [generic.bound.1](generics.md) |
@@ -97,7 +98,7 @@ and a code never changes meaning.
 | E0703 | An item whose signature names something less visible than itself | [mod.expose.1](modules.md) |
 | E0704 | A manifest that is not as a manifest is, or names files that are not there | [mod.1](modules.md), [mod.tree.1](modules.md) |
 | E0705 | Mods that depend on each other in a cycle | [mod.dep.1](modules.md) |
-| E0901 | `str` named where it would need a size | [text.str.2](text.md) |
+| E0901 | `str` or a slice named where it would need a size | [text.str.2](text.md), [type.slice.1](types.md) |
 | E0902 | A `fmt` hole without an expression | [expr.fmt.2](text.md) |
 
 **Warnings** have codes of the same form starting with `W`, in the same blocks. They do not stop a

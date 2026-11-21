@@ -35,6 +35,15 @@ trait in `T`'s bounds ([Traits](items/traits.md)) (E0413 if none has one). A bou
 associated type: `T: Add<Output = T>`; `T::Output` is then that type. For a type that implements
 the trait, the associated type is the one its impl defines.
 
-**generic.borrow.1** Borrows are second-class ([Borrows](borrows.md)), and a type parameter may be
-stored in a struct: so a type argument cannot be a borrow or contain one (E0309).
-`Some(&x)` is an error; a function that takes a borrow says so in its signature (`x: &T`).
+**generic.borrow.1** A type argument may be a borrow, or hold one: `Some(&x)` is an
+`Option<&int>`. A type with such an argument is a view ([Views](views.md)), second-class as a
+borrow is.
+
+**generic.const.1** A **const parameter**, `const N: int`, stands for a length: it is given by an
+array type's length (`fn len<T, const N: int>(a: &[T; N]) -> int`), inferred from the arguments as
+a type parameter is, or written as an integer (`f::<3>()`). In the item it is the length of array
+types (`[T; N]`), and its value as an `int` where it is named in an expression.
+
+**generic.const.2** A const parameter is a length, not a type, and a type parameter a type, not a
+length: naming one where the other is expected is an error (E0102, E0201). For now a const
+parameter is an `int`, and a length is a literal or a const parameter, with no arithmetic.

@@ -76,6 +76,20 @@ impl Machine<'_> {
                     self.infer_types(&inner, x, names, out);
                 }
             }
+            // `[T; N]`: `N` is the array's length, and `T` its elements' kind.
+            (ast::Type::Array(_) | ast::Type::Slice(_), Value::Array(xs) | Value::Buf(_, xs)) => {
+                if let Some(inner) = t.syntax().children().find_map(ast::Type::cast)
+                    && let Some(x) = xs.first()
+                {
+                    self.infer_types(&inner, x, names, out);
+                }
+                if let Some(len) = t.syntax().children().find_map(ast::Expr::cast) {
+                    let name = len.syntax().text().to_string();
+                    if names.contains(&name) {
+                        out.entry(name).or_insert(Head::Len(xs.len() as i64));
+                    }
+                }
+            }
             (ast::Type::Path(_), v) => {
                 let name = first_name(t.syntax());
                 if names.contains(&name) {
@@ -207,6 +221,25 @@ impl Machine<'_> {
                     fields: out,
                 })
             }
+            // An enum's variant's index, then each field in order (`coll.hash.derive.1`).
+            "Hash" => {
+                let state = args[1].clone();
+                let info = &self.program.adts[ty];
+                if info.is_enum {
+                    let k = info
+                        .variants
+                        .iter()
+                        .position(|v| v.name == *variant)
+                        .expect("a variant");
+                    let x = vec![state.clone(), Value::Int(k as i64)];
+                    self.call_trait("Hasher", "write_int", x, range)?;
+                }
+                for i in 0..fields.len() {
+                    let x = vec![Value::Ref(field(&a, i), false), state.clone()];
+                    self.call_trait("Hash", "hash", x, range)?;
+                }
+                Ok(Value::Unit)
+            }
             "PartialEq" => {
                 let b = ptr(&args[1]);
                 let Value::Adt { variant: bv, .. } = self.memory.load(&b) else {
@@ -291,7 +324,7 @@ impl Machine<'_> {
         // The prelude's built-in methods have no body (`#[intrinsic]`).
         if f.node.body().is_none() {
             let head = types.get("Self").cloned().unwrap_or(Head::Unit);
-            return self.intrinsic(f, &head, &args);
+            return self.intrinsic(f, &head, &args, range);
         }
         let params: Vec<ast::Param> = f
             .node
@@ -447,6 +480,7 @@ impl Machine<'_> {
                     [t] if t == "char" => Head::Char,
                     [t] if t == "str" => Head::Str,
                     [t] if t == "String" => Head::String,
+                    [t] if t == "Buf" => Head::Buf,
                     [t] if self.memory.type_of(t).is_some() => {
                         self.memory.type_of(t).expect("known").clone()
                     }

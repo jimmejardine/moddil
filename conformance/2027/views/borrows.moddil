@@ -1,0 +1,32 @@
+// covers: view.borrow.1
+
+view Window { data: &[int] }
+
+struct Wrap<T> { x: T }
+
+fn no_source() -> Window {
+    let a = [1];
+    Window { data: &a }                     //~ E0308
+}
+
+fn escapes(d: &[int]) -> Window {
+    let a = [1];
+    Window { data: &a }                     //~ E0308
+}
+
+fn frozen() -> int {
+    let mut a = [1, 2];
+    let w = Window { data: &a };
+    a[0] = 5;                               //~ E0306
+    w.data[0]
+}
+
+fn option_escapes(d: &int) -> Option<&int> {
+    let x = 1;
+    Some(&x)                                //~ E0308
+}
+
+fn wrapped_escapes(d: &int) -> Wrap<&int> {
+    let x = 1;
+    Wrap { x: &x }                          //~ E0308
+}

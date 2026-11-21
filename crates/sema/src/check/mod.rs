@@ -103,6 +103,8 @@ pub struct Inference {
     calls: HashMap<ExprId, Callee>,
     compare_calls: HashMap<(ExprId, usize), Callee>,
     fmt_calls: HashMap<ExprId, Callee>,
+    index_calls: HashMap<ExprId, Callee>,
+    literal_calls: HashMap<ExprId, Callee>,
     adjusts: HashMap<ExprId, Adjust>,
     propagated: HashMap<ExprId, Propagated>,
     try_errors: HashMap<ExprId, Ty>,
@@ -165,6 +167,18 @@ impl Inference {
     /// What comparison `i` of a comparison chain runs, if it is not on `int`, `bool` or `()`.
     pub fn compare_callee(&self, e: ExprId, i: usize) -> Option<&Callee> {
         self.compare_calls.get(&(e, i))
+    }
+
+    /// For `base[i]` on a type other than an array or slice: the `Index::index` or
+    /// `IndexMut::index_mut` it calls, which gives a borrow of the element.
+    pub fn index_callee(&self, e: ExprId) -> Option<&Callee> {
+        self.index_calls.get(&e)
+    }
+
+    /// For an array literal whose context expects another type: the
+    /// `FromArrayLiteral::from_array` (or `from_repeat`) that makes it.
+    pub fn literal_callee(&self, e: ExprId) -> Option<&Callee> {
+        self.literal_calls.get(&e)
     }
 
     /// For a hole of `fmt"…"`: the `Display::fmt` it calls.
@@ -470,6 +484,9 @@ impl Checker<'_> {
         if matches!(self.body.exprs[e].kind, ExprKind::Closure { .. }) {
             self.hint = Some(closures::Hint(expected.clone()));
         }
+        if let Some(t) = self.array_literal(e, expected) {
+            return t;
+        }
         let t = self.infer(e);
         if !self.unsize(e, &t, expected) && !self.coerce(&t, expected) {
             self.mismatch(e, expected, &t);
@@ -519,8 +536,6 @@ impl Checker<'_> {
         self.out.resolve_all(&mut self.solver);
         self.meet_needs();
         self.finish_closures();
-        let ds = finish::borrowed_type_args(self.items, self.body, &self.out);
-        self.out.diagnostics.extend(ds);
         let deferred = std::mem::take(&mut self.deferred);
         let ds = deferred.run(self.items, self.body, &self.out, &mut self.solver);
         self.out.diagnostics.extend(ds);

@@ -120,9 +120,20 @@ pub enum Projection {
     Downcast(u32),
     /// What the borrow at this place points to.
     Deref,
+    /// The element of an array or slice at the index in a local (an `int`, checked to be in
+    /// bounds before).
+    Index(Local),
 }
 
 impl Place {
+    /// The element of this array or slice at the index in `i`.
+    #[must_use]
+    pub fn index(&self, i: Local) -> Place {
+        let mut p = self.clone();
+        p.projection.push(Projection::Index(i));
+        p
+    }
+
     /// The place `local` itself.
     pub fn local(local: Local) -> Place {
         Place {
@@ -263,6 +274,13 @@ pub enum Rvalue {
     /// `dyn` borrow of a trait it implements: `&clock` as `&dyn Time`. If the borrow is already
     /// a `dyn` borrow, of a subtrait, it stays as it is.
     Unsize(Operand, Ty),
+    /// `[x; n]`: an array of `n` copies of the operand, `n` a length type (in terms of the body's
+    /// type parameters).
+    Repeat(Operand, Ty),
+    /// The value of a length type (a const parameter's argument), as an `int`.
+    Length(Ty),
+    /// Whether the index is in bounds for the array or slice at the place.
+    InBounds(Operand, Place),
 }
 
 /// What an [`Rvalue::Aggregate`] builds.
@@ -270,6 +288,8 @@ pub enum Rvalue {
 pub enum AggregateKind {
     /// A tuple.
     Tuple,
+    /// An array.
+    Array,
     /// A struct (variant 0) or an enum's variant.
     Adt {
         /// The struct or enum, by its index in the file's item tree.
@@ -441,6 +461,10 @@ pub enum TrapClass {
     StackOverflow,
     /// A failed `assert`.
     Assertion,
+    /// An index out of bounds.
+    IndexOutOfBounds,
+    /// More elements pushed into a `Buf` than its capacity.
+    CapacityExceeded,
     /// An error that `?!` said cannot happen.
     Unexpected,
 }
@@ -453,6 +477,8 @@ impl TrapClass {
             TrapClass::DivisionByZero => "division by zero",
             TrapClass::StackOverflow => "stack overflow",
             TrapClass::Assertion => "assertion failed",
+            TrapClass::IndexOutOfBounds => "index out of bounds",
+            TrapClass::CapacityExceeded => "capacity exceeded",
             TrapClass::Unexpected => "unexpected error",
         }
     }

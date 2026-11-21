@@ -1,0 +1,108 @@
+// covers: expr.for.1, expr.for.2, expr.range.1, iter.1, iter.into.1, iter.slice.1
+
+struct Countdown { n: int }
+
+impl Iterator for Countdown {
+    type Item = int;
+    fn next(&mut self) -> Option<int> {
+        if self.n == 0 {
+            None
+        } else {
+            self.n -= 1;
+            Some(self.n + 1)
+        }
+    }
+}
+
+fn total(xs: &[int]) -> int {
+    let mut t = 0;
+    for x in xs {
+        t += *x;
+    }
+    t
+}
+
+test "ranges" {
+    let mut t = 0;
+    for i in 0..4 {
+        t += i;
+    }
+    t                                       // => 6
+    ;
+    let mut u = 0;
+    for i in 1..=4 {
+        u += i;
+    }
+    u                                       // => 10
+    ;
+    (5..5).count()                          // => 0
+    ;
+    (3..=1).count()                         // => 0
+    ;
+    let mut r = 10..;
+    r.next()                                // => Some(10)
+    ;
+    r.next()                                // => Some(11)
+}
+
+test "slices and arrays" {
+    let a = [10, 20, 30];
+    total(&a)                               // => 60
+    ;
+    let mut s = 0;
+    for x in a.iter() {
+        s += *x;
+    }
+    s                                       // => 60
+    ;
+    let mut u = 0;
+    for x in a {
+        u += x;
+    }
+    u                                       // => 60
+}
+
+test "an iterator of one's own" {
+    let mut seen = 0;
+    for n in (Countdown { n: 3 }) {
+        seen = seen * 10 + n;
+    }
+    seen                                    // => 321
+}
+
+test "break and continue" {
+    let mut t = 0;
+    for i in 0.. {
+        if i % 2 == 0 {
+            continue;
+        }
+        if i > 7 {
+            break;
+        }
+        t += i;
+    }
+    t                                       // => 16
+    ;
+    let mut pairs = 0;
+    'outer: for i in 0..5 {
+        for j in 0..5 {
+            if j > i {
+                continue 'outer;
+            }
+            if i == 4 {
+                break 'outer;
+            }
+            pairs += 1;
+        }
+    }
+    pairs                                   // => 10
+}
+
+test "patterns in `for`" {
+    let pts = [(1, 2), (3, 4)];
+    let mut t = 0;
+    for (a, b) in pts {
+        t += a * b;
+    }
+    t                                       // => 14
+}

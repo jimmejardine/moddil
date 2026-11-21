@@ -5,7 +5,7 @@ desugared and name-resolved, carrying inferred types, effects and error sets. Th
 `moddil explain` and MIR building all read it
 ([`specs/mir.md`: Pipeline](../../specs/mir.md#pipeline)). Ownership is checked later, on MIR.
 
-**Status:** slices S0 to S7b: functions and tests, `let`, `int`, `bool` and `()`, operators, `if`,
+**Status:** slices S0 to S7c: functions and tests, `let`, `int`, `bool` and `()`, operators, `if`,
 blocks, calls and `return` (S0); tuples, structs, enums, patterns, `match` with exhaustiveness
 checking, `if let`, `let … else`, loops and `assert` (S1); borrow types and their mutability
 rules, `*`, binding modes, `Copy` and `defer` (S2; moves and borrows are checked on MIR); type
@@ -19,9 +19,12 @@ several files and mods (a `Program` input), the module tree, names per module wi
 paths, visibility and what `pub` items may expose (S6); closures (checked with their enclosing
 body, their captures and kind found at its end), `impl Fn` parameters, closure bounds, anonymous
 impls and `#[track_caller]` (S7a); `char`, `str` and `String`, text literals and blocks, `fmt"…"`
-with its holes checked against `Display`, and character and string patterns (S7b), with the
-diagnostics of
-[`reference/2027/diagnostics.md`](../../reference/2027/diagnostics.md). Valid Moddil beyond S7b is
+with its holes checked against `Display`, and character and string patterns (S7b); arrays,
+slices and const parameters, views and borrows as type arguments, `for` (lowered to
+`IntoIterator` and `Iterator`), ranges, indexing through `Index`, collection literals typed by
+context, `Buf`, `#[derive(Hash)]`, the built-in `core` mod, and borrows of static data (S7c), with
+the diagnostics of
+[`reference/2027/diagnostics.md`](../../reference/2027/diagnostics.md). Valid Moddil beyond S7c is
 reported as "not supported yet" (`I0001`). It starts as one crate and
 splits as it grows (names, types, effects).
 

@@ -1,0 +1,75 @@
+# Iteration and collections
+
+The prelude's `Iterator`, `IntoIterator`, `Buf` and `Vec`, and the built-in `core` mod's maps and
+sets. They are written in Moddil ([`prelude.moddil`](prelude.moddil),
+[`core/collections.moddil`](core/collections.moddil)), but for the methods of `Buf`, which are
+built in.
+
+## Iteration
+
+**iter.1** An iterator implements `Iterator`, with `type Item` and
+`fn next(&mut self) -> Option<Self::Item>`: each call gives the next item, or `None` when there
+are no more. `it.count()` uses an iterator up and gives how many items it had.
+
+**iter.into.1** `IntoIterator`, with `type Item`, `type IntoIter` and
+`fn into_iter(self) -> Self::IntoIter`, is what `for` iterates over
+([Loops](expressions/loops.md)). Every iterator implements it, as itself; so do `&[T]` and
+`&[T; N]` (borrowing each element, an `&T`), `[T; N]` and `Vec<T>` (giving up each element),
+`&Vec<T>`, `&HashMap<K, V>` (each entry, a `(&K, &V)`) and `&HashSet<T>`.
+
+**iter.slice.1** `xs.iter()`, for a slice, an array or a `Vec`, is a view of type `Iter<T>` that
+gives a borrow of each element in order ([Views](views.md)). `s.chars()`, for a `str` or `String`,
+gives its characters in order.
+
+## Buffers and vectors
+
+**coll.buf.1** `Buf<T>` is built-in storage with a fixed capacity, of which a prefix holds
+elements: `Buf::with_capacity(n)` is empty, `Buf::from_array(a)` holds an array's elements, and
+`len`, `capacity`, `set_capacity` (no less than its length), `push`, `pop`, `insert`, `remove`,
+`swap`, `as_slice` and `as_mut_slice` are its methods. Pushing or inserting into a full buffer
+traps (capacity exceeded), as do `insert`, `remove` and `swap` at an index out of bounds
+([Traps](traps.md)). Its elements are dropped with it, first to last.
+
+**coll.vec.1** `Vec<T>` is a growable array over a `Buf`: `Vec::new()` and
+`Vec::with_capacity(n)` are empty, and `push`, `pop`, `insert`, `remove`, `swap`, `truncate`,
+`clear`, `len`, `is_empty`, `capacity`, `reserve`, `get`, `get_mut`, `first`, `last`, `as_slice`,
+`as_mut_slice`, `iter` and (for `T: PartialEq`) `contains` are its methods. Pushing into a full
+`Vec` gives it more room, at least twice as much.
+
+**coll.vec.2** A `Vec` is `Clone` if `T` is, and `PartialEq` and `Eq` element by element.
+
+**coll.vec.index.1** `v[i]` on a `Vec` is its element `i`, through `Index` and `IndexMut`
+([Arrays and indexing](expressions/arrays.md)); an index out of bounds traps.
+
+**coll.vec.borrow.1** A borrow of an element of a `Vec` borrows the `Vec`, so it cannot be changed
+while the borrow is used (E0305). A `Vec` of borrows is a view, which keeps what it holds borrowed
+(E0308).
+
+## Hashing
+
+**coll.hash.1** `Hash`, with `fn hash<H: Hasher>(&self, state: &mut H)`, says what a value hashes;
+a `Hasher`, with `fn write_int(&mut self, x: int)` and `fn finish(&self) -> int`, how. `int`,
+`bool`, `char`, `str`, `String`, slices, `Vec`, `Option` and pairs implement `Hash`.
+
+**coll.hash.derive.1** `#[derive(Hash)]` hashes an enum's variant's index, then each field in
+order ([Attributes](attributes.md)).
+
+**coll.hash.2** The `core` mod's default hasher, `SipHasher`, is SipHash-1-3 over `int`s, with a
+fixed key for now, so a map's order is the same on every run and implementation.
+`hash_of(&x)` is `x`'s hash under it.
+
+## Maps and sets
+
+**coll.core.1** Every mod depends on the built-in `core` mod, which it names `core` (unless it
+names a dependency so): `use core::collections::HashMap;`.
+
+**coll.map.1** `HashMap<K, V>`, for `K: Hash + Eq`, maps keys to values: `new`, `len`, `is_empty`,
+`insert` (giving back the value it replaces), `get`, `get_mut`, `contains_key`, `remove` and
+`iter` are its methods. It iterates in hash order under its hasher's key. A literal of pairs makes
+one, later pairs winning (**expr.array.from.1**).
+
+**coll.map.2** The traits `Map<K, V>` and `Set<T>` let code take any map or set; `HashMap` and
+`HashSet` implement them.
+
+**coll.set.1** `HashSet<T>` is a set of values: `insert` (saying whether the value was new),
+`contains`, `remove`, `len`, `is_empty` and `iter` are its methods.

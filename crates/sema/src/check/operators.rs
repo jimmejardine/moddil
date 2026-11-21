@@ -191,8 +191,10 @@ impl Checker<'_> {
                 continue;
             };
             let j = self.norm(&j);
+            // Two `&str`s, or two slices, compare what they point to.
             let j = match &j {
                 Ty::Ref(_, t) if **t == Ty::Str => Ty::Str,
+                Ty::Ref(_, t) if matches!(**t, Ty::Slice(_)) => (**t).clone(),
                 _ => j,
             };
             match &j {

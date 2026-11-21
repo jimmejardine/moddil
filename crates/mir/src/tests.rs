@@ -200,7 +200,8 @@ fn borrows() {
         "fn f() -> int {\nlet mut r = &0;\n{ let x = 1; r = &x; }\n*r\n}",
         &[("E0308", 3)],
     );
-    rejected("fn f() -> &int {\nlet x = 1;\n&x\n}", &[("E0310", 1)]);
+    // With no borrowed parameter, only static data can be returned.
+    rejected("fn f() -> &int {\nlet x = 1;\n&x\n}", &[("E0308", 3)]);
     rejected("fn f(a: int) -> &int from a {\n&a\n}", &[("E0310", 1)]);
     rejected(
         "fn f(a: &int) -> &int {\nlet x = 1;\n&x\n}",

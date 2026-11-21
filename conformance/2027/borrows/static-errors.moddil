@@ -1,0 +1,10 @@
+// covers: borrow.static.1
+
+fn local() -> &int {
+    let x = 1;
+    &x                                      //~ E0308
+}
+
+fn temporary() -> &int {
+    &1                                      //~ E0308
+}

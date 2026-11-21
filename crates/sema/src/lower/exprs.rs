@@ -16,6 +16,10 @@ impl Lowerer<'_> {
         let range = node.text_range();
         match e {
             ast::Expr::Literal(_) => self.literal(&node, false),
+            ast::Expr::Path(_) if self.const_param(&node).is_some() => {
+                let i = self.const_param(&node).expect("a const parameter");
+                self.alloc(ExprKind::ConstParam(i), range)
+            }
             ast::Expr::Path(_) => match self.resolve(&node) {
                 // An enum's name followed by something that is not one of its variants.
                 Some(Resolved::AssocFn(Ty::Adt(a, ..), name, at, _))
@@ -60,7 +64,7 @@ impl Lowerer<'_> {
                     Some(inner @ (ast::Expr::Loop(_) | ast::Expr::While(_))) => {
                         self.loop_expr(inner.syntax(), label)
                     }
-                    Some(ast::Expr::For(_)) => self.unsupported(range, "`for`"),
+                    Some(inner @ ast::Expr::For(_)) => self.for_expr(inner.syntax(), label),
                     _ => self.unsupported(range, "a labelled block"),
                 }
             }
@@ -88,7 +92,8 @@ impl Lowerer<'_> {
             ast::Expr::CompareChain(_) => self.compare(&node, e),
             ast::Expr::Assign(_) => self.assign(&node, e),
             ast::Expr::Call(_) => self.call(&node, e),
-            ast::Expr::For(_) => self.unsupported(range, "`for`"),
+            ast::Expr::For(_) => self.for_expr(&node, None),
+            ast::Expr::Range(_) => self.range_expr(&node, e),
             ast::Expr::MethodCall(_) => self.method_call(&node, e),
             ast::Expr::Propagate(_) => {
                 if let Some(note) = node.child(K::ERROR_CONTEXT)
@@ -121,8 +126,62 @@ impl Lowerer<'_> {
             ast::Expr::With(_) => self.with_expr(&node),
             ast::Expr::Closure(_) => self.closure_expr(&node),
             ast::Expr::Impl(_) => self.anon_impl(&node),
+            ast::Expr::Array(_) => self.array(&node),
+            ast::Expr::Index(_) => {
+                let parts: Vec<ast::Expr> = node.children().filter_map(ast::Expr::cast).collect();
+                match parts.as_slice() {
+                    [b, i] => {
+                        let base = self.expr(b);
+                        let index = self.expr(i);
+                        self.alloc(ExprKind::Index { base, index }, range)
+                    }
+                    _ => self.unsupported(range, "this kind of index"),
+                }
+            }
             _ => self.unsupported(range, "this expression"),
         }
+    }
+
+    /// A single-segment path naming a const parameter in scope (and no local).
+    fn const_param(&self, node: &SyntaxNode) -> Option<u32> {
+        let segs = node.child(K::PATH).and_then(|p| path_segments(&p))?;
+        let [one] = segs.as_slice() else {
+            return None;
+        };
+        if self.lookup(&one.name).is_some() {
+            return None;
+        }
+        let i = self.types.params.iter().rposition(|p| p.name == one.name)?;
+        self.types.params[i].konst.then_some(i as u32)
+    }
+
+    /// `[a, b, c]` or `[x; n]` (`expr.array.1`).
+    fn array(&mut self, node: &SyntaxNode) -> ExprId {
+        let range = node.text_range();
+        let parts: Vec<ast::Expr> = node.children().filter_map(ast::Expr::cast).collect();
+        if node.token(K::SEMI).is_some() {
+            let [value, len] = parts.as_slice() else {
+                return self.missing(range);
+            };
+            let value = self.expr(value);
+            // A literal or a const parameter is a length; anything else is a value, for a type
+            // made with `from_repeat`.
+            let constant = match len {
+                ast::Expr::Literal(_) => true,
+                ast::Expr::Path(_) => self.const_param(len.syntax()).is_some(),
+                _ => false,
+            };
+            if !constant {
+                let n = self.expr(len);
+                return self.alloc(ExprKind::RepeatN(value, n), range);
+            }
+            let mut ds = Vec::new();
+            let n = crate::resolve::array_len(len, &self.types, &mut ds);
+            self.out.diagnostics.extend(ds);
+            return self.alloc(ExprKind::Repeat(value, n), range);
+        }
+        let elements: Vec<ExprId> = parts.iter().map(|x| self.expr(x)).collect();
+        self.alloc(ExprKind::Array(elements), range)
     }
 
     pub(super) fn literal(&mut self, node: &SyntaxNode, negate: bool) -> ExprId {
@@ -434,6 +493,199 @@ impl Lowerer<'_> {
         id
     }
 
+    /// `for p in e { body }` (`expr.for.1`), as
+    /// `{ let mut it = IntoIterator::into_iter(e); loop { match Iterator::next(&mut it) {
+    /// Some(p) => body, None => break } } }`.
+    pub(super) fn for_expr(&mut self, node: &SyntaxNode, label: Option<String>) -> ExprId {
+        let range = node.text_range();
+        let exprs: Vec<ast::Expr> = node.children().filter_map(ast::Expr::cast).collect();
+        let (Some(iterable), Some(pat_node)) = (
+            exprs.first().cloned(),
+            node.children().find_map(ast::Pat::cast),
+        ) else {
+            return self.missing(range);
+        };
+        let lang = |cx: &Self, tr: &str, method: &str| -> Option<(u32, u32)> {
+            let t = cx.items.lang(tr)?;
+            let f = cx.items.traits[t as usize]
+                .methods
+                .iter()
+                .copied()
+                .find(|&f| cx.items.fns[f as usize].name == method)?;
+            Some((t, f))
+        };
+        let (Some((into_t, into_f)), Some((iter_t, next_f)), Some(option)) = (
+            lang(self, "IntoIterator", "into_iter"),
+            lang(self, "Iterator", "next"),
+            self.items.lang("Option"),
+        ) else {
+            return self.unsupported(range, "`for` without the prelude's iterators");
+        };
+        let variant = |cx: &Self, name: &str| {
+            cx.items.adts[option as usize]
+                .variants
+                .iter()
+                .position(|v| v.name == name)
+                .unwrap_or(0) as u32
+        };
+        let (some, none) = (variant(self, "Some"), variant(self, "None"));
+        let trait_fn = |cx: &mut Self, trait_: u32, func: u32| {
+            cx.alloc(
+                ExprKind::TraitFn {
+                    trait_,
+                    func,
+                    trait_args: Vec::new(),
+                    args: None,
+                },
+                range,
+            )
+        };
+        // The iterator, in a local the program cannot name.
+        let iterable = self.expr(&iterable);
+        let into = trait_fn(self, into_t, into_f);
+        let init = self.alloc(
+            ExprKind::Call {
+                callee: into,
+                args: vec![iterable],
+            },
+            range,
+        );
+        let it = self.out.body.locals.alloc(crate::hir::Local {
+            name: "{iterator}".to_string(),
+            mutable: true,
+            range,
+            closure: self.closure,
+        });
+        let it_pat = self.alloc_pat(
+            PatKind::Bind {
+                local: it,
+                sub: None,
+            },
+            range,
+        );
+        // The loop.
+        let id = self.missing(range);
+        self.names.enter_loop(label, id);
+        let mark = self.names.mark();
+        let next = trait_fn(self, iter_t, next_f);
+        let it_expr = self.alloc(ExprKind::Local(it), range);
+        let borrow = self.alloc(
+            ExprKind::Ref {
+                mutable: true,
+                expr: it_expr,
+            },
+            range,
+        );
+        let scrutinee = self.alloc(
+            ExprKind::Call {
+                callee: next,
+                args: vec![borrow],
+            },
+            range,
+        );
+        let mut binds = Binds::default();
+        let p = self.pat(&pat_node, &mut binds);
+        self.bring_into_scope(binds);
+        let body = node
+            .children()
+            .filter(|n| n.kind() == K::BLOCK)
+            .last()
+            .and_then(ast::Block::cast);
+        let body = match body {
+            Some(b) => self.block(&b),
+            None => self.missing(range),
+        };
+        self.names.restore(mark);
+        self.names.exit_loop();
+        let some_pat = self.alloc_pat(
+            PatKind::Adt {
+                adt: option,
+                variant: some,
+                fields: vec![(0, p)],
+            },
+            range,
+        );
+        let none_pat = self.alloc_pat(
+            PatKind::Adt {
+                adt: option,
+                variant: none,
+                fields: Vec::new(),
+            },
+            range,
+        );
+        let leave = self.alloc(
+            ExprKind::Break {
+                target: id,
+                value: None,
+            },
+            range,
+        );
+        let arms = vec![
+            Arm {
+                pat: some_pat,
+                guard: None,
+                body,
+            },
+            Arm {
+                pat: none_pat,
+                guard: None,
+                body: leave,
+            },
+        ];
+        let m = self.alloc(ExprKind::Match { scrutinee, arms }, range);
+        self.out.body.exprs[id].kind = ExprKind::Loop { body: m };
+        self.alloc(
+            ExprKind::Block {
+                stmts: vec![crate::hir::Stmt::Let {
+                    pat: it_pat,
+                    ty: None,
+                    init,
+                    else_: None,
+                }],
+                tail: Some(id),
+                observe_tail: false,
+            },
+            range,
+        )
+    }
+
+    /// `a..b`, `a..=b` and `a..` (`expr.range.1`): the prelude's `Range`, `RangeInclusive` and
+    /// `RangeFrom`.
+    fn range_expr(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {
+        let range = node.text_range();
+        let parts = e.sub_exprs();
+        let inclusive = node.token(K::DOT_DOT_EQ).is_some();
+        let starts = parts
+            .first()
+            .is_some_and(|p| p.syntax().text_range().start == range.start);
+        let (name, ends) = match (starts, parts.len(), inclusive) {
+            (true, 2, false) => ("Range", true),
+            (true, 2, true) => ("RangeInclusive", true),
+            (true, 1, false) => ("RangeFrom", false),
+            _ => return self.unsupported(range, "this kind of range"),
+        };
+        let Some(adt) = self.items.lang(name) else {
+            return self.missing(range);
+        };
+        let mut fields = vec![(0, self.expr(&parts[0]))];
+        if ends {
+            fields.push((1, self.expr(&parts[1])));
+        }
+        if inclusive {
+            let done = self.alloc(ExprKind::Bool(false), range);
+            fields.push((2, done));
+        }
+        self.alloc(
+            ExprKind::Adt {
+                adt,
+                variant: 0,
+                fields,
+                args: Vec::new(),
+            },
+            range,
+        )
+    }
+
     /// `break` or `continue`, with an optional label (and a value for `break`).
     pub(super) fn jump(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {
         let range = node.text_range();
@@ -599,14 +851,13 @@ impl Lowerer<'_> {
             return self.missing(range);
         };
         let target_range = target.syntax().text_range();
-        if matches!(target, ast::Expr::Index(_)) {
-            return self.unsupported(target_range, "assigning to this place");
-        }
         let target = self.expr(&target);
-        // The place must be a local or a dereferenced borrow, or fields of one. Whether it may
-        // be changed needs types, so the checker decides that.
+        // The place must be a local or a dereferenced borrow, or fields or elements of one.
+        // Whether it may be changed needs types, so the checker decides that.
         let mut root = target;
-        while let ExprKind::Field { base, .. } = self.out.body.exprs[root].kind {
+        while let ExprKind::Field { base, .. } | ExprKind::Index { base, .. } =
+            self.out.body.exprs[root].kind
+        {
             root = base;
         }
         match self.out.body.exprs[root].kind {

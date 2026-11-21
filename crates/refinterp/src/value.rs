@@ -11,6 +11,10 @@ pub(crate) enum Value {
     Str(std::sync::Arc<str>),
     String(String),
     Tuple(Vec<Value>),
+    /// An array's elements. A slice borrow points to one, or to a `Buf`.
+    Array(Vec<Value>),
+    /// A `Buf`: its capacity and its elements.
+    Buf(usize, Vec<Value>),
     /// A struct (whose variant is named like it) or an enum's variant.
     Adt {
         ty: String,
@@ -60,6 +64,12 @@ pub(crate) enum Head {
     String,
     Unit,
     Tuple,
+    /// An array or a slice.
+    Array,
+    /// The argument of a const parameter: a length.
+    Len(i64),
+    /// A `Buf`, which is also a slice's storage.
+    Buf,
     Ref,
     Adt(String),
     Closure,
@@ -77,6 +87,8 @@ impl Value {
             Value::Unit | Value::Moved | Value::Alias(_) => Head::Unit,
             Value::Closure(_) | Value::Anon(..) => Head::Closure,
             Value::Tuple(_) => Head::Tuple,
+            Value::Array(_) => Head::Array,
+            Value::Buf(..) => Head::Buf,
             Value::Ref(..) => Head::Ref,
             Value::Adt { ty, .. } => Head::Adt(ty.clone()),
         }

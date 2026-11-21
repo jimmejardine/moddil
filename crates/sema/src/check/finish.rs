@@ -9,7 +9,7 @@ use crate::hir::{Arm, Body, ExprId, LocalId, PatId};
 use crate::items::ItemTree;
 use crate::traits::{Answer, Solver};
 use crate::ty::TraitRef;
-use crate::{Callee, Code, Diagnostic, Ty, exhaust};
+use crate::{Code, Diagnostic, Ty, exhaust};
 
 /// A bound a type must meet, found while checking.
 pub(super) struct Obligation {
@@ -223,59 +223,14 @@ impl Inference {
         for c in self.fmt_calls.values_mut() {
             *c = c.map(&mut |t| erase(&solver.deep(t)));
         }
-    }
-}
-
-/// Borrows are second-class: a type argument (which a struct could store) cannot be one. `Self`
-/// may be, for the built-in `Clone` of a shared borrow, and so may a closure passed for a closure
-/// parameter (`F: Fn(…)`), which is second-class too.
-pub(super) fn borrowed_type_args(
-    items: &ItemTree,
-    body: &Body,
-    out: &Inference,
-) -> Vec<Diagnostic> {
-    let mut found = Vec::new();
-    let once = items.lang("FnOnce");
-    for (&e, c) in &out.calls {
-        let closure_param = |i: usize| match c {
-            Callee::Trait { func, .. } => {
-                // A closure trait's own `Self` and `Args`.
-                items.trait_of(*func).is_some_and(|t| {
-                    [items.lang("Fn"), items.lang("FnMut"), once].contains(&Some(t))
-                }) || i == 0
-            }
-            Callee::Fn { func, .. } => items.fns[*func as usize].generics.preds.iter().any(|p| {
-                Some(p.trait_ref.trait_) == once
-                    && matches!(&p.ty, Ty::Param(k, _) if *k as usize == i)
-            }),
-        };
-        if c.args()
-            .iter()
-            .enumerate()
-            .any(|(i, t)| !closure_param(i) && t.has_ref_inside())
+        for c in self
+            .index_calls
+            .values_mut()
+            .chain(self.literal_calls.values_mut())
         {
-            found.push(body.exprs[e].range);
+            *c = c.map(&mut |t| erase(&solver.deep(t)));
         }
     }
-    for (e, _) in body.exprs.iter() {
-        if let Ty::Adt(_, _, args) = &out.expr_types[index(e)]
-            && args.iter().any(Ty::has_ref_inside)
-        {
-            found.push(body.exprs[e].range);
-        }
-    }
-    found.sort_by_key(|r| (r.start, r.end));
-    found.dedup();
-    found
-        .into_iter()
-        .map(|r| {
-            Diagnostic::error(
-                Code::E0309,
-                r,
-                "a type argument cannot be a borrow: borrows live only in parameters and locals",
-            )
-        })
-        .collect()
 }
 
 /// `t` with its inference variables replaced by the error type.

@@ -1,0 +1,77 @@
+// covers: type.array.1, type.slice.1, expr.array.1, expr.array.repeat.1, expr.index.1, generic.const.1, type.slice.coerce.1
+
+fn sum(xs: &[int]) -> int {
+    let mut i = 0;
+    let mut t = 0;
+    while i < xs.len() {
+        t += xs[i];
+        i += 1;
+    }
+    t
+}
+
+fn first<T: Copy, const N: int>(a: [T; N]) -> T {
+    a[0]
+}
+
+fn size<const N: int>(a: &[int; N]) -> int {
+    N
+}
+
+fn bump(xs: &mut [int]) {
+    xs[0] += 100;
+}
+
+test "array literals and indexing" {
+    let mut a = [1, 2, 3];
+    a[1] = 20;
+    a                                       // => [1, 20, 3]
+    ;
+    a[2]                                    // => 3
+    ;
+    let z = [0; 4];
+    z                                       // => [0, 0, 0, 0]
+    ;
+    z.len()                                 // => 4
+    ;
+    let nested = [[1, 2], [3, 4]];
+    nested[1][0]                            // => 3
+}
+
+test "slices" {
+    let mut a = [1, 2, 3];
+    sum(&a)                                 // => 6
+    ;
+    bump(&mut a);
+    a                                       // => [101, 2, 3]
+    ;
+    a.as_slice().is_empty()                 // => false
+}
+
+test "const parameters" {
+    let a = [true, false];
+    first(a)                                // => true
+    ;
+    size(&[1, 2, 3, 4, 5])                  // => 5
+}
+
+test "comparing arrays" {
+    let a = [1, 2, 3];
+    a == [1, 2, 3]                          // => true
+    ;
+    a != [1, 2, 4]                          // => true
+    ;
+    a.as_slice() == [1, 2].as_slice()       // => false
+}
+
+test "an index past the end traps" {
+    let a = [1, 2];
+    let i = 2;
+    a[i];                                   //~ trap
+}
+
+test "a negative index traps" {
+    let a = [1, 2];
+    let i = 0 - 1;
+    a[i];                                   //~ trap
+}

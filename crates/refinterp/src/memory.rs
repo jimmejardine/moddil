@@ -184,7 +184,10 @@ impl Memory {
         let mut v = &self.frames[ptr.frame].vars[ptr.slot].1;
         for &i in &ptr.path {
             v = match v {
-                Value::Tuple(xs) | Value::Adt { fields: xs, .. } => &xs[i],
+                Value::Tuple(xs)
+                | Value::Array(xs)
+                | Value::Buf(_, xs)
+                | Value::Adt { fields: xs, .. } => &xs[i],
                 _ => unreachable!("a checked field"),
             };
         }
@@ -196,7 +199,10 @@ impl Memory {
         let mut v = &mut self.frames[ptr.frame].vars[ptr.slot].1;
         for &i in &ptr.path {
             v = match v {
-                Value::Tuple(xs) | Value::Adt { fields: xs, .. } => &mut xs[i],
+                Value::Tuple(xs)
+                | Value::Array(xs)
+                | Value::Buf(_, xs)
+                | Value::Adt { fields: xs, .. } => &mut xs[i],
                 _ => unreachable!("a checked field"),
             };
         }

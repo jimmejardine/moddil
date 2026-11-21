@@ -1,4 +1,4 @@
-// covers: generic.1, generic.infer.1, generic.bound.1, generic.borrow.1
+// covers: generic.1, generic.infer.1, generic.bound.1
 
 struct Pair<A, B> { first: A, second: B }
 struct Label { id: int }
@@ -12,5 +12,3 @@ fn unknown() { let x = None; }                      //~ E0405
 fn unbounded<T>(a: T, b: T) -> bool { a == b }      //~ E0205
 fn no_method<T>(x: T) -> T { x.clone() }            //~ E0403
 fn not_clone() { keep(Label { id: 1 }); }           //~ E0402
-fn borrowed(x: &int) -> &int { id(x) }              //~ E0309
-fn stored(x: &int) { let o = Some(x); }             //~ E0309

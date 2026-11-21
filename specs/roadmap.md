@@ -187,11 +187,9 @@ something runs from the first slice.
   - `Display` is `fn fmt(&self, out: &mut String)`, not a `Write` sink; `fmt` holes take no format
     specs (`{x:>8}`) and `Debug` waits for derives of it; tagged literals other than `fmt` wait
     for comptime;
-  - a function with no borrowed parameter cannot return a string literal as a `&str` (E0310),
-    until the next slice's first step below;
-  - `#[intrinsic]` is the prelude's alone.
+  - `#[intrinsic]` is the prelude's alone (and the built-in `core` mod's).
 - **Borrows of static data borrow nothing (decided, [`memory.md`: Borrows of static data](memory.md#borrows-of-static-data)):
-  a step at the start of the next slice.** A string literal (and, once S10 brings `const`, a
+  done in S7c (November 2026).** A string literal (and, once S10 brings `const`, a
   `const`'s value) is static data:
   - drop E0310 for a function with no borrowed parameter; at each return of such a function, the
     borrow must be of static data, or it is E0308;
@@ -200,6 +198,35 @@ something runs from the first slice.
     and the E0310 test in `crates/sema/src/tests.rs`;
   - conformance cases: `fn greeting() -> &str { "hi" }` runs; `fn f() -> &int { &1 }` is E0308;
     a static result stays usable after everything else is moved.
+- **S7c's scope and interim rules (decided November 2026: one slice, maps included):** arrays
+  `[T; N]` and slices `[T]` with indexing that traps out of bounds; const parameters
+  (`const N: int`); views (`view Name { … }`), with borrows allowed as type arguments and in
+  tuples, which makes them views; `for` over `IntoIterator` and `Iterator`, and ranges; `Buf<T>`,
+  built-in storage of fixed capacity, and `Vec<T>` written over it in Moddil; `Index` and
+  `IndexMut`; collection literals typed by context through `FromArrayLiteral`; `Hash`, `Hasher`
+  and `#[derive(Hash)]`; and a built-in mod `core`, every mod's dependency, whose
+  `core::collections` holds SipHash-1-3, `HashMap`, `HashSet` and the `Map` and `Set` traits,
+  written in Moddil. Until the features they wait for arrive:
+  - `Buf` uses the default allocator: `with Alloc = …` waits for an allocator to install
+    (`Arena`), and `Vec::new_in` with it;
+  - const parameters are `int`s; a length is a literal or a const parameter, with no arithmetic
+    (comptime, S8); `[x; n]` as an array needs `Copy` elements, and an array is `Clone` only when
+    it is `Copy`;
+  - no slice patterns, no slicing by a range (`xs[a..b]`), no `IterMut` and no iterator adaptors
+    (`map`, `filter`), which need closures stored in views; `Index` takes an `int`;
+  - a borrow still cannot point to a borrow, so a map's keys cannot be borrows
+    (`HashMap<&str, V>`): `PartialEq` and `Hash` for `&T` need it; use `String`;
+  - the hasher's key is fixed, so map order is the same on every run; keying it from `Rand`, and
+    tests printing a fresh seed, come with randomness; `OrderedMap` and `TreeMap` are for
+    `moddil/collections`;
+  - a `for` over a value of a type parameter needs the parameter bounded by `Iterator` (an
+    `IntoIterator` bound cannot yet say its iterator's type is one);
+  - a method of a view that returns, through a trait whose signature holds no borrow, a borrow of
+    one of the view's own fields (not of what it borrows) is not caught;
+  - the reference interpreter types a collection literal by its context only where a `let`'s type,
+    a called function's parameter or a function's result names the type;
+  - `core` is built into the implementations; the `moddil/core-*` mods and their names come with
+    packaging, and `String` is rewritten over `Buf` once S10 brings `u8`.
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

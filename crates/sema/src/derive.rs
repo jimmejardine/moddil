@@ -8,7 +8,15 @@ use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
 use crate::items::Src;
 
 /// The traits that can be derived.
-pub(crate) const DERIVABLE: &[&str] = &["Copy", "Clone", "PartialEq", "Eq", "PartialOrd", "Ord"];
+pub(crate) const DERIVABLE: &[&str] = &[
+    "Copy",
+    "Clone",
+    "PartialEq",
+    "Eq",
+    "PartialOrd",
+    "Ord",
+    "Hash",
+];
 
 /// The impls derived for the structs and enums of a file, as Moddil source, with where each one
 /// comes from.
@@ -190,6 +198,7 @@ pub(crate) fn expand(items: impl Iterator<Item = (Src, SyntaxNode)>) -> Expansio
                     }
                     "Clone" => clone(&variants),
                     "PartialEq" => partial_eq(&variants),
+                    "Hash" => hash(&variants, node.kind() == K::ENUM_ITEM),
                     "PartialOrd" => ordering(&variants, true),
                     _ => ordering(&variants, false),
                 };
@@ -229,6 +238,26 @@ fn clone(variants: &[Variant]) -> String {
         .collect();
     format!(
         "fn clone(&self) -> Self {{ match self {{ {} }} }}",
+        arms.join(" ")
+    )
+}
+
+/// `Hash` (`coll.hash.derive.1`): an enum's variant's index, then each field in order.
+fn hash(variants: &[Variant], is_enum: bool) -> String {
+    let arms: Vec<String> = variants
+        .iter()
+        .enumerate()
+        .map(|(k, v)| {
+            let mut parts = Vec::new();
+            if is_enum {
+                parts.push(format!("state.write_int({k});"));
+            }
+            parts.extend((0..v.fields.len()).map(|i| format!("a{i}.hash(state);")));
+            format!("{} => {{ {} }}", v.bind("a"), parts.join(" "))
+        })
+        .collect();
+    format!(
+        "fn hash<H: Hasher>(&self, state: &mut H) {{ match self {{ {} }} }}",
         arms.join(" ")
     )
 }

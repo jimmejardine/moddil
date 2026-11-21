@@ -332,6 +332,14 @@ impl Checker<'_> {
             self.out.dyn_coercions.insert(e, x.clone());
             return true;
         }
+        // `&[T; N]` as `&[T]`.
+        if let (Ty::Array(t, _), Ty::Slice(u)) = (self.norm(a), self.norm(b))
+            && (*m1 || !*m2)
+            && self.solver.unify(&t, &u)
+        {
+            self.out.dyn_coercions.insert(e, x.clone());
+            return true;
+        }
         let Ty::Dyn(tr) = self.norm(b) else {
             return false;
         };

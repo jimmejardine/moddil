@@ -158,6 +158,8 @@ impl PlaceKey {
                     // Different variants share the same storage, so they overlap.
                     Projection::Downcast(_) => (1, 0),
                     Projection::Deref => (2, 0),
+                    // Which element is known only when it runs, so any two overlap.
+                    Projection::Index(_) => (3, 0),
                 })
                 .collect(),
         }
@@ -190,12 +192,14 @@ fn direct(p: &Place) -> Place {
 impl<'a> Checker<'a> {
     fn new(body: &'a Body, items: &'a ItemTree, ret_from: Vec<u32>) -> Self {
         let mut loans = Vec::new();
-        // Each borrowed parameter arrives holding a borrow of something outside the function.
+        // Each borrowed parameter, and each view, arrives holding a borrow of something outside
+        // the function.
         for i in 0..body.arg_count {
-            if let Ty::Ref(m, _) = &body.locals[i + 1].ty {
+            let ty = &body.locals[i + 1].ty;
+            if items.is_view(ty) {
                 loans.push(Loan {
                     place: Place::local(Local(i as u32 + 1)).deref(),
-                    mutable: *m,
+                    mutable: matches!(ty, Ty::Ref(true, _)),
                     span: TextRange::default(),
                     param: Some(i as u32),
                     guard: false,
@@ -240,7 +244,8 @@ impl<'a> Checker<'a> {
         let mut variant = 0;
         for proj in &p.projection[..upto] {
             ty = match (proj, &ty) {
-                (Projection::Deref, Ty::Ref(_, t)) => (**t).clone(),
+                (Projection::Deref, Ty::Ref(_, t))
+                | (Projection::Index(_), Ty::Array(t, _) | Ty::Slice(t)) => (**t).clone(),
                 (Projection::Downcast(v), t) => {
                     variant = *v;
                     t.clone()
@@ -303,6 +308,7 @@ impl<'a> Checker<'a> {
                     indirect = true;
                     s = format!("*{s}");
                 }
+                Projection::Index(_) => s = format!("{s}[…]"),
             }
         }
         let _ = indirect;
@@ -413,7 +419,21 @@ impl<'a> Checker<'a> {
                 ));
             }
         }
-        if kind == Access::Move && place.is_indirect() {
+        if kind == Access::Move
+            && place
+                .projection
+                .iter()
+                .any(|p| matches!(p, Projection::Index(_)))
+        {
+            let what = self.name(place);
+            self.report(Diagnostic::error(
+                Code::E0315,
+                span,
+                format!(
+                    "{what} is an element of an array or slice, which cannot be moved out of                      (it is not `Copy`): swap or clone it instead"
+                ),
+            ));
+        } else if kind == Access::Move && place.is_indirect() {
             let what = self.name(place);
             self.report(Diagnostic::error(
                 Code::E0304,
@@ -487,10 +507,14 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// The loans flowing out of an operand: those its local holds, if it is a borrow.
-    fn flows(o: &Operand, h: &Holders) -> BTreeSet<usize> {
+    /// The loans flowing out of an operand: those its local holds, if it is a borrow or a view,
+    /// or a part of one that is a borrow or a view (a view's field).
+    fn flows(&self, o: &Operand, h: &Holders) -> BTreeSet<usize> {
         match o {
-            Operand::Copy(p) | Operand::Move(p) if p.projection.is_empty() => {
+            Operand::Copy(p) | Operand::Move(p)
+                if p.projection.is_empty()
+                    || self.items.is_view(&self.type_upto(p, p.projection.len())) =>
+            {
                 h[p.local.index()].clone()
             }
             _ => BTreeSet::new(),
@@ -526,18 +550,27 @@ impl<'a> Checker<'a> {
                 let mut flowing = BTreeSet::new();
                 match r {
                     Rvalue::Use(o) | Rvalue::Unsize(o, _) => {
-                        flowing = Self::flows(o, h);
+                        flowing = self.flows(o, h);
                         self.operand(at, span, o, h, m, check);
                     }
-                    Rvalue::Unary(_, a) | Rvalue::NegOverflows(a) => {
+                    Rvalue::Length(_) => {}
+                    Rvalue::InBounds(a, p) => {
+                        self.operand(at, span, a, h, m, check);
+                        if check {
+                            self.access((at, span), p, Access::Read, h, m, None);
+                        }
+                    }
+                    Rvalue::Unary(_, a) | Rvalue::NegOverflows(a) | Rvalue::Repeat(a, _) => {
                         self.operand(at, span, a, h, m, check);
                     }
                     Rvalue::Binary(_, a, b2) | Rvalue::Overflows(_, a, b2) => {
                         self.operand(at, span, a, h, m, check);
                         self.operand(at, span, b2, h, m, check);
                     }
+                    // A tuple, struct or view holds the loans of what it is built from.
                     Rvalue::Aggregate(_, ops) => {
                         for o in ops {
+                            flowing.extend(self.flows(o, h));
                             self.operand(at, span, o, h, m, check);
                         }
                     }
@@ -641,10 +674,64 @@ impl<'a> Checker<'a> {
             } => {
                 let sig = &self.items.fns[callee.func() as usize];
                 let mut flowing = BTreeSet::new();
-                if sig.ret.has_ref() {
+                let flows: Vec<BTreeSet<usize>> = args.iter().map(|a| self.flows(a, h)).collect();
+                if self.items.is_view(&sig.ret) {
                     for &i in &sig.ret_from {
-                        if let Some(a) = args.get(i as usize) {
-                            flowing.extend(Self::flows(a, h));
+                        if let Some(f) = flows.get(i as usize) {
+                            flowing.extend(f.iter().copied());
+                        }
+                    }
+                } else if self.items.is_view(&sig.ret.subst(callee.args())) {
+                    // The signature's result holds no borrow, so any borrow in it comes from a
+                    // type argument: from what the arguments are or point to, not from the
+                    // borrows passed (`it.next()` gives what the iterator holds, not `&mut it`).
+                    for (i, f) in flows.iter().enumerate() {
+                        let by_ref = sig
+                            .params
+                            .get(i)
+                            .is_some_and(|p| matches!(p.ty.subst(callee.args()), Ty::Ref(..)));
+                        for &li in f {
+                            let loan = &self.loans[li];
+                            if by_ref && loan.param.is_none() && !loan.place.is_indirect() {
+                                flowing.extend(h[loan.place.local.index()].iter().copied());
+                            } else {
+                                flowing.insert(li);
+                            }
+                        }
+                    }
+                }
+                // A view changed through a `&mut` argument may keep what the other arguments
+                // borrow (`v.push(&x)`).
+                for (i, p) in sig.params.iter().enumerate() {
+                    let Ty::Ref(true, inner) = p.ty.subst(callee.args()) else {
+                        continue;
+                    };
+                    if !self.items.is_view(&inner) {
+                        continue;
+                    }
+                    let others: BTreeSet<usize> = flows
+                        .iter()
+                        .enumerate()
+                        .filter(|&(j, _)| j != i)
+                        .flat_map(|(_, f)| f.iter().copied())
+                        .collect();
+                    if others.is_empty() {
+                        continue;
+                    }
+                    let Some(target) = flows.get(i) else { continue };
+                    for &li in target {
+                        let loan = &self.loans[li];
+                        if loan.param.is_some() {
+                            if check && others.iter().any(|&o| self.loans[o].param.is_none()) {
+                                self.report(Diagnostic::error(
+                                    Code::E0308,
+                                    span,
+                                    "this stores a borrow of a local where it outlives the \
+                                     function: in a view the caller lent",
+                                ));
+                            }
+                        } else {
+                            h[loan.place.local.index()].extend(others.iter().copied());
                         }
                     }
                 }
@@ -686,10 +773,9 @@ impl<'a> Checker<'a> {
         let mut found = Vec::new();
         for &li in &h[Local::RETURN.index()] {
             let loan = &self.loans[li];
-            let root = loan.place.local.0;
-            let from_param = root >= 1
-                && root as usize <= self.body.arg_count
-                && loan.place.projection.first() == Some(&Projection::Deref);
+            // A borrow through a borrow borrows what that one points to, whose own loans are
+            // checked with it.
+            let from_param = loan.place.projection.first() == Some(&Projection::Deref);
             match loan.param {
                 Some(p) if !self.ret_from.contains(&p) => found.push(Diagnostic::error(
                     Code::E0310,
@@ -760,9 +846,13 @@ fn operand_local(o: &Operand) -> Option<Local> {
 fn rvalue_uses(r: &Rvalue, local: Local) -> bool {
     let uses = |o: &Operand| operand_local(o) == Some(local);
     match r {
-        Rvalue::Use(a) | Rvalue::Unsize(a, _) | Rvalue::Unary(_, a) | Rvalue::NegOverflows(a) => {
-            uses(a)
-        }
+        Rvalue::Use(a)
+        | Rvalue::Unsize(a, _)
+        | Rvalue::Unary(_, a)
+        | Rvalue::NegOverflows(a)
+        | Rvalue::Repeat(a, _) => uses(a),
+        Rvalue::Length(_) => false,
+        Rvalue::InBounds(a, p) => uses(a) || p.local == local,
         Rvalue::Binary(_, a, b) | Rvalue::Overflows(_, a, b) => uses(a) || uses(b),
         Rvalue::Aggregate(_, ops) => ops.iter().any(uses),
         Rvalue::Discriminant(p) | Rvalue::ErrorIs(p, _) | Rvalue::Ref(_, p) => p.local == local,
@@ -785,8 +875,14 @@ fn uses_defs(stmt: Option<&Statement>, term: Option<&Terminator>) -> (Vec<Local>
                     Rvalue::Use(a)
                     | Rvalue::Unsize(a, _)
                     | Rvalue::Unary(_, a)
-                    | Rvalue::NegOverflows(a) => {
+                    | Rvalue::NegOverflows(a)
+                    | Rvalue::Repeat(a, _) => {
                         op(a, &mut uses);
+                    }
+                    Rvalue::Length(_) => {}
+                    Rvalue::InBounds(a, p) => {
+                        op(a, &mut uses);
+                        uses.push(p.local);
                     }
                     Rvalue::Binary(_, a, b) | Rvalue::Overflows(_, a, b) => {
                         op(a, &mut uses);

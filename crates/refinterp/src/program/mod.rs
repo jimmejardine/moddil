@@ -11,8 +11,8 @@ use std::collections::HashMap;
 use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode};
 
-use crate::PRELUDE;
 use crate::value::{Head, Value};
+use crate::{CORE_COLLECTIONS, PRELUDE};
 
 mod dispatch;
 
@@ -208,9 +208,35 @@ impl Program {
             }
             file_modules.push(at);
         }
+        // The built-in `core` mod and its `collections` module; every mod depends on it.
+        let core = p.mods.len();
+        let core_root = p.modules.len();
+        p.modules.push(Module {
+            mod_: core,
+            ..Module::default()
+        });
+        let collections = p.modules.len();
+        p.modules.push(Module {
+            mod_: core,
+            ..Module::default()
+        });
+        p.modules[core_root]
+            .children
+            .insert("collections".to_string(), collections);
+        for m in &mut p.mods {
+            m.deps.entry("core".to_string()).or_insert(core);
+        }
+        p.mods.push(ModEntry {
+            root: core_root,
+            deps: HashMap::new(),
+        });
         let prelude = moddil_syntax::parse(PRELUDE).syntax();
         for item in prelude.children() {
             p.item(None, PRELUDE_MODULE, item);
+        }
+        let core_items = moddil_syntax::parse(CORE_COLLECTIONS).syntax();
+        for item in core_items.children() {
+            p.item(None, collections, item);
         }
         for (f, file) in files.iter().enumerate() {
             let root = moddil_syntax::parse(&file.text).syntax();
@@ -309,6 +335,7 @@ impl Program {
         match t {
             ast::Type::Tuple(n) if n.children().next().is_none() => Head::Unit,
             ast::Type::Tuple(_) => Head::Tuple,
+            ast::Type::Array(_) | ast::Type::Slice(_) => Head::Array,
             ast::Type::Ref(_) => Head::Ref,
             _ => {
                 let path = type_path(t.syntax());
@@ -323,6 +350,7 @@ impl Program {
                     ["char"] => Head::Char,
                     ["str"] => Head::Str,
                     ["String"] => Head::String,
+                    ["Buf"] => Head::Buf,
                     _ => match self.resolve(module, &path) {
                         Some((Def::Item(k), _)) => Head::Adt(k),
                         _ => Head::Adt(path.join("::")),
@@ -350,9 +378,9 @@ impl Program {
                 self.declare(module, &name, Def::Item(key.clone()));
                 self.fns.insert(key, fn_def(&f, user, false, site));
             }
-            K::STRUCT_ITEM | K::ENUM_ITEM => {
+            K::STRUCT_ITEM | K::ENUM_ITEM | K::VIEW_ITEM => {
                 let name = name_of(&item);
-                let variants = if item.kind() == K::STRUCT_ITEM {
+                let variants = if matches!(item.kind(), K::STRUCT_ITEM | K::VIEW_ITEM) {
                     vec![variant_info(&item, name.clone())]
                 } else {
                     item.child(K::VARIANT_LIST)
@@ -493,8 +521,9 @@ impl Program {
             .expect("a known variant")
     }
 
-    /// `v` as Moddil source.
-    pub(crate) fn render(&self, v: &Value) -> String {
+    /// `v` as Moddil source, with `part` rendering the values inside it (a machine shows the
+    /// borrows among them as what they point to).
+    pub(crate) fn render_with(&self, v: &Value, part: &dyn Fn(&Value) -> String) -> String {
         match v {
             Value::Int(i) => i.to_string(),
             Value::Bool(b) => b.to_string(),
@@ -502,9 +531,15 @@ impl Program {
             Value::Str(s) => format!("{:?}", &**s),
             Value::String(s) => format!("{s:?}"),
             Value::Unit => "()".to_string(),
-            Value::Tuple(xs) if xs.len() == 1 => format!("({},)", self.render(&xs[0])),
+            Value::Array(xs) | Value::Buf(_, xs) => {
+                let xs: Vec<String> = xs.iter().map(part).collect();
+                format!("[{}]", xs.join(", "))
+            }
+            // A `Vec` is shown as the literal that makes one.
+            Value::Adt { ty, fields, .. } if ty == "Vec" && fields.len() == 1 => part(&fields[0]),
+            Value::Tuple(xs) if xs.len() == 1 => format!("({},)", part(&xs[0])),
             Value::Tuple(xs) => {
-                let xs: Vec<String> = xs.iter().map(|x| self.render(x)).collect();
+                let xs: Vec<String> = xs.iter().map(part).collect();
                 format!("({})", xs.join(", "))
             }
             Value::Ref(..) => unreachable!("a borrow is shown by the machine"),
@@ -529,7 +564,7 @@ impl Program {
                 match info.shape {
                     Shape::Unit => path,
                     Shape::Tuple => {
-                        let xs: Vec<String> = fields.iter().map(|x| self.render(x)).collect();
+                        let xs: Vec<String> = fields.iter().map(part).collect();
                         format!("{path}({})", xs.join(", "))
                     }
                     Shape::Named => {
@@ -537,7 +572,7 @@ impl Program {
                             .fields
                             .iter()
                             .zip(fields)
-                            .map(|(n, x)| format!("{n}: {}", self.render(x)))
+                            .map(|(n, x)| format!("{n}: {}", part(x)))
                             .collect();
                         format!("{path} {{ {} }}", xs.join(", "))
                     }
@@ -551,7 +586,7 @@ pub(crate) fn generic_names(node: &SyntaxNode) -> Vec<String> {
     node.child(K::GENERIC_PARAMS)
         .map(|g| {
             g.children()
-                .filter(|c| c.kind() == K::TYPE_PARAM)
+                .filter(|c| matches!(c.kind(), K::TYPE_PARAM | K::CONST_PARAM))
                 .map(|p| name_of(&p))
                 .collect()
         })

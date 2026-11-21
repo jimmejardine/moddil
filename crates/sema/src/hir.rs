@@ -72,6 +72,23 @@ pub enum ExprKind {
     Str(String),
     /// `fmt"…"`: a `String` of its pieces.
     Fmt(Vec<FmtPiece>),
+    /// An array literal, `[a, b, c]`.
+    Array(Vec<ExprId>),
+    /// `[x; n]`: `n` copies of `x`, with `n` a length known at compile time ([`Ty::Len`] or a
+    /// const parameter).
+    Repeat(ExprId, crate::Ty),
+    /// `[x; n]` where `n` is not known when compiling: only for a type made by
+    /// `FromArrayLiteral::from_repeat`.
+    RepeatN(ExprId, ExprId),
+    /// `base[index]`.
+    Index {
+        /// What is indexed.
+        base: ExprId,
+        /// The index.
+        index: ExprId,
+    },
+    /// A const parameter used as a value: its index in the item's generics.
+    ConstParam(u32),
     /// A local.
     Local(LocalId),
     /// A function named by a path, by its index in the item tree, with the type arguments for

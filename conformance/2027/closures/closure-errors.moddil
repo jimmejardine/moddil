@@ -12,14 +12,6 @@ fn moves() {
     let w = Wrap { x: 1 };
     each(|x| { let Wrap { x } = w; });      //~ E0801
 }
-fn stored() {
-    let f = |x: int| x;
-    let w = Wrap { x: f };                  //~ E0309
-}
-fn in_tuple() {
-    let f = |x: int| x;
-    let t = (f, 1);                         //~ E0309
-}
 fn arity() -> int {
     let f = |x: int| x;
     f(1, 2)                                 //~ E0202

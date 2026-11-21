@@ -14,8 +14,9 @@ exclusively. A borrow of any other expression borrows a temporary holding its va
 `&T` and `&mut e` type `&mut T`, where `e` has type `T`.
 
 **borrow.type.1** Borrows are **second-class**: `&T` and `&mut T` are the types of parameters,
-variables and results only. A struct or enum field, a tuple, or another borrow cannot hold one
-(E0309).
+variables and results, and of the parts of views ([Views](views.md)): a value holding a borrow is a
+view. A field of a struct or enum that is not a view cannot hold one, and a borrow cannot point to
+a borrow (E0309).
 
 **borrow.deref.1** `*e`, for a borrow `e`, is the place it points to, of type `T`. A field access
 looks through a borrow (`r.x` is `(*r).x`); operators and comparisons do not, so they need `*`: an
@@ -38,6 +39,11 @@ again, for as long as the new borrow is used, and leaves the original usable aft
 
 **borrow.scope.1** A borrow may not be used after the variable it borrows goes out of scope
 (E0308).
+
+**borrow.static.1** A borrow of **static data** (a string literal) borrows nothing: it freezes no
+place, never ends, and can be returned from a function with no borrowed parameter
+(`fn greeting() -> &str { "hi" }`). Only literals are static: a borrow of any other value borrows
+a temporary.
 
 **borrow.guard.1** While the guards of a `match` run, the matched place is borrowed with `&`, so a
 guard cannot change it (E0306).

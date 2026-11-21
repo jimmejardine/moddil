@@ -235,6 +235,8 @@ impl<'a> Solver<'a> {
                 i == j && xs.iter().zip(ys.iter()).all(|(x, y)| self.unify(x, y))
             }
             (Ty::Ref(m, x), Ty::Ref(n, y)) => m == n && self.unify(x, y),
+            (Ty::Array(x, n), Ty::Array(y, k)) => self.unify(x, y) && self.unify(n, k),
+            (Ty::Slice(x), Ty::Slice(y)) | (Ty::Buf(x), Ty::Buf(y)) => self.unify(x, y),
             (Ty::Anon(x), Ty::Anon(y)) => x.owner == y.owner && x.expr == y.expr,
             (Ty::Closure(x), Ty::Closure(y)) => {
                 x.owner == y.owner
@@ -379,6 +381,24 @@ impl<'a> Solver<'a> {
                     }
                     return all;
                 }
+                // So is an array of `Copy` elements, within the size cap.
+                Ty::Array(t, _) => {
+                    let Some(copy) = self.tree.lang_ref("Copy") else {
+                        return Answer::No;
+                    };
+                    let t = (**t).clone();
+                    return match self.implements(&t, &copy) {
+                        Answer::Yes(_)
+                            if ty.has_infer()
+                                || ty.has_param()
+                                || self.tree.size_of(&ty).0 <= COPY_CAP =>
+                        {
+                            Answer::Yes(Source::Builtin)
+                        }
+                        Answer::Yes(_) | Answer::No => Answer::No,
+                        Answer::Maybe => Answer::Maybe,
+                    };
+                }
                 _ => {}
             }
         }
@@ -453,7 +473,8 @@ impl<'a> Solver<'a> {
                 self.table = table;
                 Answer::Yes(Source::Impl(i, args))
             }
-            _ if maybe || ty.has_infer() => Answer::Maybe,
+            // No impl's type unifies with `ty`, even where it is still being inferred.
+            _ if maybe => Answer::Maybe,
             _ => Answer::No,
         }
     }
@@ -487,7 +508,9 @@ impl<'a> Solver<'a> {
             | Ty::Dyn(_)
             | Ty::Char
             | Ty::Str
-            | Ty::String => false,
+            | Ty::String
+            | Ty::Len(_) => false,
+            Ty::Array(t, _) | Ty::Slice(t) | Ty::Buf(t) => self.needs_drop_inner(t, depth + 1),
             Ty::Param(..) | Ty::Assoc(_) | Ty::Infer(_) => true,
             Ty::Errors(ts) => ts.iter().any(|t| self.needs_drop_inner(t, depth + 1)),
             Ty::Closure(c) => c

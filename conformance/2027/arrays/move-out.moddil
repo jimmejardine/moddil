@@ -1,0 +1,11 @@
+// covers: expr.index.move.1
+
+struct Name { text: String }
+
+fn move_out(names: [Name; 2]) -> Name {
+    names[0]                                //~ E0315
+}
+
+fn copy_out(xs: [int; 2]) -> int {
+    xs[0]
+}

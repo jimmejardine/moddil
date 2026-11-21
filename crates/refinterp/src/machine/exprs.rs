@@ -28,6 +28,12 @@ impl Machine<'_> {
                 if let Some((p, indirect)) = self.place_of(e)? {
                     return Ok(self.take(&p, indirect));
                 }
+                // A const parameter's value (`generic.const.1`).
+                if let [n] = segments(node).as_slice()
+                    && let Some(Head::Len(v)) = self.memory.type_of(n)
+                {
+                    return Ok(Value::Int(*v));
+                }
                 let segments = segments(node);
                 let (ty, info) = self.ctor(&segments).expect("a checked path");
                 Ok(Value::Adt {
@@ -46,6 +52,35 @@ impl Machine<'_> {
                 })
             }
             ast::Expr::StructLit(_) => self.struct_lit(node),
+            // A literal of a type its context names (`expr.array.from.1`).
+            ast::Expr::Array(_) if self.literal_target(node).is_some() => {
+                let head = self.literal_target(node).expect("a target");
+                let parts = e.sub_exprs();
+                let (name, args) = if node.token(K::SEMI).is_some() {
+                    ("from_repeat", self.eval_all(&parts)?)
+                } else {
+                    ("from_array", vec![Value::Array(self.eval_all(&parts)?)])
+                };
+                let m = self
+                    .program
+                    .trait_method("FromArrayLiteral", &head, name)
+                    .expect("a checked literal");
+                self.run_method(m, &head, args, range)
+            }
+            // `[a, b]` and `[x; n]` (`expr.array.1`, `expr.array.repeat.1`).
+            ast::Expr::Array(_) if node.token(K::SEMI).is_some() => {
+                let parts = e.sub_exprs();
+                let x = self.eval(&parts[0])?;
+                let Value::Int(n) = self.eval(&parts[1])? else {
+                    unreachable!("a checked length")
+                };
+                Ok(Value::Array(vec![x; usize::try_from(n).unwrap_or(0)]))
+            }
+            ast::Expr::Array(_) => Ok(Value::Array(self.eval_all(&e.sub_exprs())?)),
+            ast::Expr::Index(_) => {
+                let (p, indirect) = self.place_of(e)?.expect("an element is a place");
+                Ok(self.take(&p, indirect))
+            }
             ast::Expr::Field(_) => {
                 // Field access looks through a borrow (`expr.field.1`).
                 let (p, indirect) = self.place_of(e)?.expect("a field is a place");
@@ -72,9 +107,14 @@ impl Machine<'_> {
             }
             ast::Expr::Match(_) => self.match_expr(node),
             ast::Expr::Loop(_) | ast::Expr::While(_) => self.loop_expr(node, None),
+            ast::Expr::For(_) => self.for_expr(node, None),
+            ast::Expr::Range(_) => self.range_value(node, e),
             ast::Expr::Labelled(_) => {
                 let label = node.token(K::LABEL).map(|t| t.text().to_string());
                 let inner = node.children().find_map(ast::Expr::cast).expect("a loop");
+                if inner.syntax().kind() == K::FOR_EXPR {
+                    return self.for_expr(inner.syntax(), label.as_deref());
+                }
                 self.loop_expr(inner.syntax(), label.as_deref())
             }
             ast::Expr::Break(_) => {
@@ -259,6 +299,152 @@ impl Machine<'_> {
         }
     }
 
+    /// `for p in e { body }` (`expr.for.1`): `e` itself if it is an iterator, or else what its
+    /// `IntoIterator::into_iter` gives; then the body for each item `next` gives, until `None`.
+    pub(super) fn for_expr(&mut self, node: &SyntaxNode, label: Option<&str>) -> Eval {
+        let range = node.text_range();
+        let exprs: Vec<ast::Expr> = node.children().filter_map(ast::Expr::cast).collect();
+        let pat = node.children().find_map(ast::Pat::cast).expect("a pattern");
+        let body = ast::Block::cast(
+            node.children()
+                .filter(|n| n.kind() == K::BLOCK)
+                .last()
+                .expect("a body"),
+        )
+        .expect("a block");
+        let v = self.eval(&exprs[0])?;
+        let head = v.head();
+        let it = if self.program.implements(&head, "Iterator") {
+            v
+        } else {
+            let m = self
+                .program
+                .trait_method("IntoIterator", &head, "into_iter")
+                .expect("a checked `for`");
+            self.run_method(m, &head, vec![v], range)?
+        };
+        let outer = self.memory.mark();
+        self.memory.push("{iterator}".to_string(), it);
+        let slot = self.memory.slot("{iterator}").expect("the iterator");
+        let place = self.memory.here(slot);
+        let ours = |l: &Option<String>| l.is_none() || l.as_deref() == label;
+        loop {
+            let it_head = self.memory.load(&place).head();
+            let m = self
+                .program
+                .trait_method("Iterator", &it_head, "next")
+                .expect("a checked iterator");
+            let next =
+                match self.run_method(m, &it_head, vec![Value::Ref(place.clone(), true)], range) {
+                    Ok(v) => v,
+                    Err(f) => return self.exit(outer, Err(f), range),
+                };
+            let Value::Adt {
+                variant, fields, ..
+            } = next
+            else {
+                unreachable!("an `Option`")
+            };
+            if variant == "None" {
+                return self.exit(outer, Ok(Value::Unit), range);
+            }
+            let mark = self.memory.mark();
+            let mut binds = Vec::new();
+            let item = fields.into_iter().next().expect("the item");
+            let matched = self.matches(&pat, &super::patterns::Src::Val(item), &mut binds);
+            debug_assert!(matched, "a `for` pattern is irrefutable");
+            self.bind(binds);
+            let result = self.block(&body);
+            let result = self.exit(mark, result, range);
+            match result {
+                Ok(_) => {}
+                Err(Flow::Break(l, _)) if ours(&l) => {
+                    return self.exit(outer, Ok(Value::Unit), range);
+                }
+                Err(Flow::Continue(l)) if ours(&l) => {}
+                Err(f) => return self.exit(outer, Err(f), range),
+            }
+        }
+    }
+
+    /// The kind of value an array literal's context makes of it, if that is not an array: the
+    /// type written where it is used (a `let`'s type, a function's parameter, or the result of the
+    /// function it is the value of), if it implements `FromArrayLiteral`.
+    pub(super) fn literal_target(&self, node: &SyntaxNode) -> Option<Head> {
+        let parent = node.parent()?;
+        let (ty, module) = match parent.kind() {
+            K::LET_STMT => (
+                parent.children().find_map(ast::Type::cast)?,
+                self.memory.module(),
+            ),
+            K::ARG => {
+                let list = parent.parent()?;
+                let call = list.parent()?;
+                if call.kind() != K::CALL_EXPR {
+                    return None;
+                }
+                let at = list
+                    .children()
+                    .filter(|c| c.kind() == K::ARG)
+                    .position(|c| c == parent)?;
+                let callee = call.children().find_map(ast::Expr::cast)?;
+                let Some((crate::program::Def::Item(k), _)) =
+                    self.resolve(&segments(callee.syntax()))
+                else {
+                    return None;
+                };
+                let f = self.program.fns.get(&k)?;
+                let p = f.node.params()?.params().nth(at)?;
+                (p.ty()?, f.module as usize)
+            }
+            _ => {
+                // The value of a function's body, or what it returns.
+                let fn_node = if parent.kind() == K::RETURN_EXPR {
+                    parent.ancestors().find(|a| a.kind() == K::FN_ITEM)?
+                } else if parent.kind() == K::BLOCK
+                    && parent.parent()?.kind() == K::FN_ITEM
+                    && parent
+                        .children()
+                        .filter_map(ast::Expr::cast)
+                        .last()?
+                        .syntax()
+                        == node
+                    && !parent.child_tokens().any(|t| {
+                        t.kind() == K::SEMI && t.text_range().start > node.text_range().end
+                    })
+                {
+                    parent.parent()?
+                } else {
+                    return None;
+                };
+                let f = ast::FnItem::cast(fn_node)?;
+                (f.ret_type()?.ty()?, self.memory.module())
+            }
+        };
+        let head = self.program.head_in(module, &ty);
+        (matches!(head, Head::Adt(_)) && self.program.implements(&head, "FromArrayLiteral"))
+            .then_some(head)
+    }
+
+    /// `a..b`, `a..=b` and `a..` (`expr.range.1`): values of the prelude's range structs.
+    fn range_value(&mut self, node: &SyntaxNode, e: &ast::Expr) -> Eval {
+        let parts = e.sub_exprs();
+        let mut fields = self.eval_all(&parts)?;
+        let name = if node.token(K::DOT_DOT_EQ).is_some() {
+            fields.push(Value::Bool(false));
+            "RangeInclusive"
+        } else if parts.len() == 2 {
+            "Range"
+        } else {
+            "RangeFrom"
+        };
+        Ok(Value::Adt {
+            ty: name.to_string(),
+            variant: name.to_string(),
+            fields,
+        })
+    }
+
     pub(super) fn prefix(&mut self, node: &SyntaxNode, e: &ast::Expr) -> Eval {
         let range = node.text_range();
         let op = node
@@ -378,10 +564,16 @@ impl Machine<'_> {
                         K::GT => ("PartialOrd", "gt"),
                         _ => ("PartialOrd", "ge"),
                     };
-                    let args = vec![
-                        Value::Ref(prev.clone(), false),
-                        Value::Ref(cur.clone(), false),
-                    ];
+                    // A slice borrow is passed as it is; other operands are borrowed.
+                    let arg = |m: &Self, v: &Value, p: &crate::value::Pointer| match v {
+                        Value::Ref(q, _)
+                            if matches!(m.memory.load(q), Value::Array(_) | Value::Buf(..)) =>
+                        {
+                            v.clone()
+                        }
+                        _ => Value::Ref(p.clone(), false),
+                    };
+                    let args = vec![arg(self, &a, &prev), arg(self, &b, &cur)];
                     self.call_trait(tr, method, args, range)? == Value::Bool(true)
                 }
             };

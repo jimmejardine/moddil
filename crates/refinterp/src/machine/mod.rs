@@ -148,6 +148,50 @@ impl Machine<'_> {
                 p.path.push(i);
                 Some((p, indirect))
             }
+            ast::Expr::Index(_) => {
+                let parts = e.sub_exprs();
+                let (mut p, mut indirect) = match self.place_of(&parts[0])? {
+                    Some(p) => p,
+                    None => {
+                        let v = self.eval(&parts[0])?;
+                        (self.memory.temp(v), false)
+                    }
+                };
+                if let Value::Ref(target, _) = self.memory.load(&p) {
+                    p = target;
+                    indirect = true;
+                }
+                let Value::Int(i) = self.eval(&parts[1])? else {
+                    unreachable!("a checked index")
+                };
+                let (Value::Array(xs) | Value::Buf(_, xs)) = self.memory.load(&p) else {
+                    // Through `Index` (`expr.index.trait.1`): the element its borrow points to.
+                    let head = self.memory.load(&p).head();
+                    let m = self
+                        .program
+                        .trait_method("Index", &head, "index")
+                        .expect("a checked index");
+                    let r = self.run_method(
+                        m,
+                        &head,
+                        vec![Value::Ref(p, false), Value::Int(i)],
+                        e.syntax().text_range(),
+                    )?;
+                    let Value::Ref(q, _) = r else {
+                        unreachable!("a borrow of the element")
+                    };
+                    return Ok(Some((q, true)));
+                };
+                // `expr.index.1`: out of bounds traps.
+                if i < 0 || i as usize >= xs.len() {
+                    return Err(crate::trap(
+                        crate::TrapClass::IndexOutOfBounds,
+                        e.syntax().text_range(),
+                    ));
+                }
+                p.path.push(i as usize);
+                Some((p, indirect))
+            }
             ast::Expr::Prefix(_) if e.syntax().token(K::STAR).is_some() => {
                 let v = self.eval(&e.sub_exprs()[0])?;
                 match v {
@@ -184,15 +228,7 @@ impl Machine<'_> {
         match v {
             Value::Ref(ptr, true) => format!("&mut {}", self.show(&self.memory.load(ptr))),
             Value::Ref(ptr, false) => format!("&{}", self.show(&self.memory.load(ptr))),
-            Value::Tuple(xs) => {
-                let xs: Vec<String> = xs.iter().map(|x| self.show(x)).collect();
-                if xs.len() == 1 {
-                    format!("({},)", xs[0])
-                } else {
-                    format!("({})", xs.join(", "))
-                }
-            }
-            v => self.program.render(v),
+            v => self.program.render_with(v, &|x| self.show(x)),
         }
     }
 
@@ -227,7 +263,9 @@ impl Machine<'_> {
             Value::Adt { ty, fields, .. } => {
                 self.has_destructor(ty) || fields.iter().any(|f| self.needs_drop(f))
             }
-            Value::Tuple(xs) => xs.iter().any(|x| self.needs_drop(x)),
+            Value::Tuple(xs) | Value::Array(xs) | Value::Buf(_, xs) => {
+                xs.iter().any(|x| self.needs_drop(x))
+            }
             _ => false,
         }
     }
@@ -254,6 +292,13 @@ impl Machine<'_> {
             }
             Value::Adt { fields: xs, .. } | Value::Tuple(xs) => {
                 for x in xs.into_iter().rev() {
+                    self.drop_value(x, true, range)?;
+                }
+                Ok(())
+            }
+            // Elements are dropped first to last.
+            Value::Array(xs) | Value::Buf(_, xs) => {
+                for x in xs {
                     self.drop_value(x, true, range)?;
                 }
                 Ok(())

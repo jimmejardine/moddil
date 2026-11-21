@@ -175,7 +175,11 @@ impl ItemTree {
         if m == PRELUDE_MODULE {
             return "the prelude".to_string();
         }
-        let mut s = "mod".to_string();
+        // Another mod's modules start at its name.
+        let mut s = match self.mods.get(module.mod_ as usize) {
+            Some(m) if module.mod_ != 0 => m.name.clone(),
+            _ => "mod".to_string(),
+        };
         for p in &module.path {
             s.push_str("::");
             s.push_str(p);

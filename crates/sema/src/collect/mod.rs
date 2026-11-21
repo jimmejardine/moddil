@@ -27,8 +27,16 @@ mod traits;
 
 use report::Reporter;
 
-/// The prelude's source.
-pub(crate) const PRELUDE: &str = include_str!("../../../../reference/2027/prelude.moddil");
+/// The prelude's source, followed by the built-in `core` mod's `collections` module
+/// (`reference/2027/core/collections.moddil`), whose items start at [`CORE_START`].
+pub(crate) const PRELUDE: &str = concat!(
+    include_str!("../../../../reference/2027/prelude.moddil"),
+    include_str!("../../../../reference/2027/core/collections.moddil")
+);
+
+/// Where the `core` mod's items start in [`PRELUDE`].
+pub(crate) const CORE_START: usize =
+    include_str!("../../../../reference/2027/prelude.moddil").len();
 
 /// The file parsed.
 #[salsa::tracked(returns(ref))]
@@ -160,6 +168,7 @@ pub fn item_tree(db: &dyn Db, program: Program) -> ItemTree {
         module: PRELUDE_MODULE,
         prelude_first: false,
         file_modules: Vec::new(),
+        core_module: PRELUDE_MODULE,
     };
     c.modules(program.files(db), program.mods(db));
     c.run(&sources);
@@ -192,6 +201,8 @@ struct Collector<'a> {
     prelude_first: bool,
     /// The module of each file of the program.
     file_modules: Vec<u32>,
+    /// The built-in `core` mod's `collections` module.
+    core_module: u32,
 }
 
 impl Collector<'_> {
@@ -254,6 +265,27 @@ impl Collector<'_> {
             m.exe = file.exe;
             self.file_modules.push(at);
         }
+        // The built-in `core` mod, which every mod depends on (as `core`, unless it names a
+        // dependency so itself), and its `collections` module.
+        let core = self.tree.mods.len() as u32;
+        let root = self.tree.modules.len() as u32;
+        self.tree.modules.push(module(core, Vec::new()));
+        let collections = root + 1;
+        self.tree
+            .modules
+            .push(module(core, vec!["collections".to_string()]));
+        self.tree.modules[root as usize]
+            .children
+            .insert("collections".to_string(), collections);
+        for m in &mut self.tree.mods {
+            m.deps.entry("core".to_string()).or_insert(core);
+        }
+        self.tree.mods.push(ModDef {
+            name: "core".to_string(),
+            root,
+            deps: std::collections::BTreeMap::new(),
+        });
+        self.core_module = collections;
     }
 
     /// The module the derived item `node` belongs to: its type's.
@@ -341,12 +373,17 @@ impl Collector<'_> {
         for (src, root) in sources {
             for node in root.children() {
                 let module = match src {
+                    Src::Prelude if node.text_range().start as usize >= CORE_START => {
+                        self.core_module
+                    }
                     Src::Prelude => PRELUDE_MODULE,
                     Src::File(f) => self.file_modules[*f as usize],
                     Src::Derived => self.derived_module(&node),
                 };
                 match node.kind() {
-                    K::STRUCT_ITEM | K::ENUM_ITEM => nodes.adts.push((*src, module, node)),
+                    K::STRUCT_ITEM | K::ENUM_ITEM | K::VIEW_ITEM => {
+                        nodes.adts.push((*src, module, node));
+                    }
                     K::TRAIT_ITEM => nodes.traits.push((*src, module, node)),
                     K::IMPL_ITEM => nodes.impls.push((*src, module, node)),
                     K::FN_ITEM => nodes.fns.push((*src, module, node)),
@@ -514,13 +551,45 @@ impl Collector<'_> {
                             ));
                         }
                         bounded.push((params.len(), p.clone()));
-                        params.push(GenericParam { name, range });
+                        params.push(GenericParam {
+                            name,
+                            range,
+                            konst: false,
+                        });
                     }
+                    // `const N: int` (`generic.const.1`): its arguments are lengths.
                     K::CONST_PARAM => {
-                        ds.push(Diagnostic::unsupported(
-                            p.text_range(),
-                            "this kind of parameter",
-                        ));
+                        let (name, range) = name_of(&p);
+                        if let Some(first) = params.iter().find(|q| q.name == name) {
+                            ds.push(
+                                Diagnostic::error(
+                                    Code::E0104,
+                                    range,
+                                    format!("the parameter `{name}` is declared twice"),
+                                )
+                                .with_label(first.range, "first declared here"),
+                            );
+                        }
+                        let ty = p
+                            .children()
+                            .find_map(ast::Type::cast)
+                            .map(|t| t.syntax().text().to_string());
+                        if ty.as_deref() != Some("int") {
+                            ds.push(Diagnostic::unsupported(
+                                p.text_range(),
+                                "a const parameter of a type other than `int`",
+                            ));
+                        } else if p.token(K::EQ).is_some() {
+                            ds.push(Diagnostic::unsupported(
+                                p.text_range(),
+                                "a default const parameter",
+                            ));
+                        }
+                        params.push(GenericParam {
+                            name,
+                            range,
+                            konst: true,
+                        });
                     }
                     _ => {}
                 }

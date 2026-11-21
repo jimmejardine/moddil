@@ -1,0 +1,5 @@
+// covers: view.2
+
+view Window { data: &[int] }
+
+struct Holder { w: Window }                 //~ E0309

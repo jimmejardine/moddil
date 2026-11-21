@@ -55,6 +55,7 @@ impl Collector<'_> {
             name_range,
             src,
             is_enum: node.kind() == K::ENUM_ITEM,
+            is_view: node.kind() == K::VIEW_ITEM,
             copy: false,
             generics: Generics {
                 params,
@@ -79,7 +80,7 @@ impl Collector<'_> {
             params: &params,
             ..self.scope()
         };
-        let variants = if node.kind() == K::STRUCT_ITEM {
+        let variants = if matches!(node.kind(), K::STRUCT_ITEM | K::VIEW_ITEM) {
             let (name, name_range) = name_of(node);
             vec![variant_def(node, name, name_range, &scope, &mut ds)]
         } else {
@@ -235,14 +236,17 @@ pub(super) fn variant_def(
     }
 }
 
-/// A field's type: borrows are second-class, so a field cannot hold one (E0309).
+/// A field's type: borrows and views are second-class, so only a view's field can hold one
+/// (E0309).
 pub(super) fn field_type(t: &ast::Type, scope: &Scope, diagnostics: &mut Vec<Diagnostic>) -> Ty {
     let ty = resolve_type(t, scope, diagnostics);
-    if ty.has_ref() {
+    let in_view = t.syntax().ancestors().any(|a| a.kind() == K::VIEW_ITEM);
+    if !in_view && scope.tree.is_view(&ty) {
         diagnostics.push(Diagnostic::error(
             Code::E0309,
             t.syntax().text_range(),
-            "a field cannot hold a borrow: borrows live only in parameters and locals",
+            "a field cannot hold a borrow or a view: borrows live only in parameters, locals \
+             and views (`view Name { … }`)",
         ));
         return Ty::Error;
     }

@@ -83,7 +83,11 @@ impl Collector<'_> {
                     let name = t.syntax().text().to_string();
                     impls.push((range, params.len()));
                     bounded.push((params.len(), t.syntax().clone()));
-                    params.push(crate::items::GenericParam { name, range });
+                    params.push(crate::items::GenericParam {
+                        name,
+                        range,
+                        konst: false,
+                    });
                 }
             }
         }
@@ -197,7 +201,7 @@ impl Collector<'_> {
             ),
             None => (Ty::Unit, None),
         };
-        let ret_from = ret_sources(node, &params, &ret, ret_range, &mut ds);
+        let ret_from = ret_sources(&self.tree, node, &params, &ret, &mut ds);
         let (fails, fails_range, effects) = match node.child(K::EFFECT_CLAUSE) {
             Some(c) => effect_clause(&c, &scope, &mut ds),
             None => (Ty::Never, None, Vec::new()),
@@ -411,32 +415,29 @@ pub(crate) fn error_type(ty: &Ty, at: TextRange, others: &[Ty], ds: &mut Vec<Dia
 }
 
 /// The parameters a returned borrow may come from (`memory.md`: Returning borrows): those a `from`
-/// clause names, which must be borrowed parameters, or else every borrowed parameter. A function
-/// that returns a borrow needs at least one (E0310).
+/// clause names, which must be borrowed parameters, or else every borrowed parameter. With none,
+/// it may return only static data (`memory.md`: Borrows of static data).
 pub(super) fn ret_sources(
+    tree: &crate::ItemTree,
     node: &SyntaxNode,
     params: &[ParamSig],
     ret: &Ty,
-    ret_range: Option<TextRange>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Vec<u32> {
+    // Borrowed parameters, and views, which hold borrows of their own.
     let borrowed: Vec<u32> = params
         .iter()
         .enumerate()
-        .filter(|(_, p)| matches!(p.ty, Ty::Ref(..)))
+        .filter(|(_, p)| tree.is_view(&p.ty))
         .map(|(i, _)| i as u32)
         .collect();
+    let returns = tree.is_view(ret);
+    // With no borrowed parameter, what it returns borrows static data (`memory.md`: Borrows of
+    // static data), which the ownership check sees to.
     let Some(clause) = node.child(K::FROM_CLAUSE) else {
-        if ret.has_ref() && borrowed.is_empty() {
-            diagnostics.push(Diagnostic::error(
-                Code::E0310,
-                ret_range.unwrap_or_else(|| node.text_range()),
-                "a function returning a borrow needs a borrowed parameter for it to come from",
-            ));
-        }
         return borrowed;
     };
-    if !ret.has_ref() {
+    if !returns {
         diagnostics.push(Diagnostic::error(
             Code::E0310,
             clause.text_range(),

@@ -7,7 +7,14 @@ behaviour are as written there.
 **prelude.1** The prelude holds `assert` ([`assert`](expressions/assert.md)) and `discard`
 ([Errors](errors.md)), the types `Option`, `Result` and `Ordering`, the traits `Clone`, `Copy`,
 `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, `Not` and
-`Drop`, the closure traits `FnOnce`, `FnMut` and `Fn`, `Display`, the function `drop`, their impls for `int`, `bool` and `()`, and the methods and impls of `char`, `str` and `String` ([Text](text.md)). Every module sees them, and
+`Drop`, the closure traits `FnOnce`, `FnMut` and `Fn`, `Display`, the functions `drop`, `replace`
+and `swap`, their impls for `int`, `bool` and `()`, and the methods and impls of `char`, `str` and
+`String` ([Text](text.md)), and of arrays and slices ([Arrays and indexing](expressions/arrays.md)).
+It also holds `Index`, `IndexMut` and `FromArrayLiteral`, the iteration traits `Iterator` and
+`IntoIterator`, the ranges `Range`, `RangeInclusive` and `RangeFrom`, `Iter` and `Chars`, `Buf`,
+`Vec`, and `Hash` and `Hasher` ([Collections](collections.md)). `replace(&mut x, v)` puts `v` in
+`x` and gives back what was there; `swap(&mut a, &mut b)` exchanges two values. The built-in
+`core` mod's `collections` module holds the maps and sets (**coll.core.1**). Every module sees them, and
 `Option`'s and `Result`'s variants, without importing them; an item or import of the module with the
 same name shadows them ([Modules](modules.md)). The operators, `?` and `try` use the prelude's traits
 and types whatever the module calls its own.

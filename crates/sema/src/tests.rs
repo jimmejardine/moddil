@@ -136,8 +136,7 @@ fn beyond_s0_is_not_supported_yet() {
     err("fn f() -> impl Clone { 1 }", &[("I0001", 1)]);
     err("trait T { const N: int = 1; }", &[("I0001", 1)]);
     err("fn f() { let s = b\"x\"; }", &[("I0001", 1)]);
-    err("fn f() { for x in y {} }", &[("I0001", 1)]);
-    err("fn f() { let x = [1]; }", &[("I0001", 1)]);
+    err("fn f() { let [a, b] = [1, 2]; }", &[("I0001", 1)]);
 }
 
 #[test]
@@ -353,9 +352,8 @@ fn borrows_and_copy() {
     err("fn f(a: int) -> int { *a }", &[("E0205", 1)]);
     err("fn f(a: &int, b: &int) -> bool { a == b }", &[("E0205", 1)]);
     err("struct P { r: &int }", &[("E0309", 1)]);
-    err("fn f(a: &int) { let t = (a, 1); }", &[("E0309", 1)]);
     err("fn f(a: &&int) {}", &[("E0309", 1)]);
-    err("fn f() -> &int { 1 }", &[("E0310", 1), ("E0201", 1)]);
+    err("fn f() -> &int { 1 }", &[("E0201", 1)]);
     err(
         "fn f(a: int, b: &int) -> &int from a { b }",
         &[("E0310", 1)],
@@ -607,10 +605,8 @@ fn closures() {
          fn g() -> int { let mut n = 0; apply(|x| { n += x; x }, 1) }",
         &[("E0801", 2)],
     );
-    err(
-        "fn g() { let f = |x: int| x; let t = (f, 1); }",
-        &[("E0309", 1)],
-    );
+    // A tuple holding a closure is a view.
+    ok("fn g() { let f = |x: int| x; let t = (f, 1); }");
     err(
         "fn g() -> int { let f = |x: int| x; f(1, 2) }",
         &[("E0202", 1)],

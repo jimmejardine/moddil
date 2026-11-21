@@ -23,6 +23,17 @@ pub enum Ty {
     Never,
     /// A tuple of one or more elements: `(int, bool)`, `(int,)`.
     Tuple(Arc<[Ty]>),
+    /// An array, `[T; N]`: its element type and its length, which is a [`Ty::Len`], a const
+    /// parameter, or a length being inferred.
+    Array(Arc<Ty>, Arc<Ty>),
+    /// A slice, `[T]`: a run of elements with no size of its own, so only behind a borrow.
+    Slice(Arc<Ty>),
+    /// `Buf<T>`: the built-in storage `Vec` is written over, a fixed capacity of which a prefix
+    /// holds elements.
+    Buf(Arc<Ty>),
+    /// A length known at compile time, as the length of an array type or the argument of a const
+    /// parameter.
+    Len(i64),
     /// A struct or enum, by its index in the item tree, with its name and type arguments.
     Adt(u32, Arc<str>, Arc<[Ty]>),
     /// A borrow: `&T` (shared) or `&mut T` (exclusive).
@@ -200,7 +211,8 @@ impl Ty {
         }
         match self {
             Ty::Tuple(ts) | Ty::Adt(_, _, ts) | Ty::Errors(ts) => ts.iter().any(|t| t.any(f)),
-            Ty::Ref(_, t) => t.any(f),
+            Ty::Ref(_, t) | Ty::Slice(t) | Ty::Buf(t) => t.any(f),
+            Ty::Array(t, n) => t.any(f) || n.any(f),
             Ty::Dyn(tr) => tr.args.iter().any(|t| t.any(f)),
             Ty::Anon(a) => {
                 a.trait_ref.args.iter().any(|t| t.any(f)) || a.methods.iter().any(|(_, t)| t.any(f))
@@ -225,6 +237,9 @@ impl Ty {
             Ty::Errors(ts) => Ty::errors(ts.iter().map(&mut *f).collect()),
             Ty::Adt(a, n, ts) => Ty::Adt(*a, n.clone(), ts.iter().map(&mut *f).collect()),
             Ty::Ref(m, t) => Ty::Ref(*m, Arc::new(f(t))),
+            Ty::Array(t, n) => Ty::Array(Arc::new(f(t)), Arc::new(f(n))),
+            Ty::Slice(t) => Ty::Slice(Arc::new(f(t))),
+            Ty::Buf(t) => Ty::Buf(Arc::new(f(t))),
             Ty::Dyn(tr) => Ty::Dyn(tr.map(f)),
             Ty::Closure(c) => Ty::Closure(Arc::new(c.map(f))),
             Ty::Anon(a) => Ty::Anon(Arc::new(AnonTy {
@@ -317,8 +332,19 @@ impl Ty {
         match self {
             Ty::Ref(..) | Ty::Closure(_) | Ty::Anon(_) => true,
             Ty::Tuple(ts) => ts.iter().any(Ty::has_ref),
+            Ty::Array(t, _) => t.has_ref(),
             _ => false,
         }
+    }
+
+    /// An array type of `n` elements of type `t`.
+    pub fn array(t: Ty, n: Ty) -> Ty {
+        Ty::Array(Arc::new(t), Arc::new(n))
+    }
+
+    /// The slice type of elements of type `t`.
+    pub fn slice(t: Ty) -> Ty {
+        Ty::Slice(Arc::new(t))
     }
 
     /// The struct or enum's index in the item tree, if it is one.
@@ -390,6 +416,10 @@ impl fmt::Debug for Ty {
                 list(f, &c.params)?;
                 write!(f, ") -> {:?}}}", c.ret)
             }
+            Ty::Array(t, n) => write!(f, "[{t:?}; {n:?}]"),
+            Ty::Slice(t) => write!(f, "[{t:?}]"),
+            Ty::Buf(t) => write!(f, "Buf<{t:?}>"),
+            Ty::Len(n) => write!(f, "{n}"),
             Ty::Ref(true, t) => write!(f, "&mut {t:?}"),
             Ty::Ref(false, t) => write!(f, "&{t:?}"),
             Ty::Tuple(ts) => {

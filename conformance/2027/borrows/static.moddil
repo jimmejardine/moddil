@@ -1,0 +1,20 @@
+// covers: borrow.static.1, item.fn.ret-borrow.1
+
+fn greeting() -> &str {
+    "hi"
+}
+
+fn name_or(found: bool, name: &str) -> &str {
+    if found { name } else { "anonymous" }
+}
+
+test "static data borrows nothing" {
+    let g = greeting();
+    g                                       // => "hi"
+    ;
+    let s = String::new();
+    name_or(false, s.as_str())              // => "anonymous"
+    ;
+    drop(s);
+    g.len()                                 // => 2
+}

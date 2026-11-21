@@ -39,6 +39,10 @@ pub enum Value {
     String(String),
     /// A tuple of one or more elements.
     Tuple(Vec<Value>),
+    /// An array's elements, in order. A slice borrow points to one, or to a `Buf`.
+    Array(Vec<Value>),
+    /// A `Buf`: its capacity, and the elements it holds.
+    Buf(usize, Vec<Value>),
     /// A struct (variant 0) or an enum's variant, with its fields in order.
     Adt {
         /// The struct or enum, by its index in the file's item tree.
@@ -81,6 +85,18 @@ impl Value {
             Value::Char(c) => format!("{c:?}"),
             Value::Str(s) => format!("{:?}", &**s),
             Value::String(s) => format!("{s:?}"),
+            Value::Array(xs) | Value::Buf(_, xs) => {
+                let xs: Vec<String> = xs.iter().map(|x| x.render(items)).collect();
+                format!("[{}]", xs.join(", "))
+            }
+            // A `Vec` is shown as the literal that makes one.
+            Value::Adt { adt, fields, .. }
+                if items.adts[*adt as usize].src == Src::Prelude
+                    && items.adts[*adt as usize].name == "Vec"
+                    && fields.len() == 1 =>
+            {
+                fields[0].render(items)
+            }
             Value::Tuple(xs) if xs.len() == 1 => format!("({},)", xs[0].render(items)),
             Value::Tuple(xs) => {
                 let xs: Vec<String> = xs.iter().map(|x| x.render(items)).collect();
@@ -283,6 +299,10 @@ impl Machine<'_> {
                     Value::Ref(target, _) | Value::Dyn(target, _, _) => ptr = target,
                     other => unreachable!("dereferencing {other:?}"),
                 },
+                Projection::Index(l) => match &self.stack[self.top()].locals[l.index()] {
+                    Value::Int(i) => ptr.path.push(*i as u32),
+                    other => unreachable!("an index: {other:?}"),
+                },
             }
         }
         ptr
@@ -292,7 +312,10 @@ impl Machine<'_> {
         let mut v = &self.stack[ptr.frame].locals[ptr.local as usize];
         for &i in &ptr.path {
             v = match v {
-                Value::Tuple(xs) | Value::Adt { fields: xs, .. } => &xs[i as usize],
+                Value::Tuple(xs)
+                | Value::Array(xs)
+                | Value::Buf(_, xs)
+                | Value::Adt { fields: xs, .. } => &xs[i as usize],
                 other => unreachable!("a field of {other:?}"),
             };
         }
@@ -303,7 +326,10 @@ impl Machine<'_> {
         let mut v = &mut self.stack[ptr.frame].locals[ptr.local as usize];
         for &i in &ptr.path {
             v = match v {
-                Value::Tuple(xs) | Value::Adt { fields: xs, .. } => &mut xs[i as usize],
+                Value::Tuple(xs)
+                | Value::Array(xs)
+                | Value::Buf(_, xs)
+                | Value::Adt { fields: xs, .. } => &mut xs[i as usize],
                 other => unreachable!("a field of {other:?}"),
             };
         }
@@ -339,6 +365,14 @@ impl Machine<'_> {
             self.store(&ptr, Value::Empty);
         }
         v
+    }
+
+    /// The length a length type stands for as the top frame runs it.
+    fn length(&self, n: &Ty) -> usize {
+        match self.concrete(n) {
+            Ty::Len(k) => usize::try_from(k).unwrap_or(0),
+            other => unreachable!("a length: {other:?}"),
+        }
     }
 
     /// `ty` as the top frame runs it: its type parameters replaced, associated types resolved.
@@ -414,6 +448,12 @@ impl Machine<'_> {
                     self.drop_glue(x, t, true, out);
                 }
             }
+            // Elements are dropped first to last.
+            (Value::Array(xs) | Value::Buf(_, xs), Ty::Array(t, _) | Ty::Buf(t)) => {
+                for x in xs {
+                    self.drop_glue(x, t, true, out);
+                }
+            }
             (Value::Closure(xs), Ty::Closure(c)) => {
                 for (x, t) in xs.into_iter().zip(c.captures.iter()).rev() {
                     self.drop_glue(x, t, true, out);
@@ -475,6 +515,7 @@ impl Machine<'_> {
                 let fields: Vec<Value> = ops.iter().map(|o| self.take(o)).collect();
                 match kind {
                     AggregateKind::Tuple => Value::Tuple(fields),
+                    AggregateKind::Array => Value::Array(fields),
                     AggregateKind::Adt { adt, variant, .. } => Value::Adt {
                         adt: *adt,
                         variant: *variant,
@@ -507,6 +548,24 @@ impl Machine<'_> {
                     _ => Value::Ref(ptr, *m),
                 }
             }
+            Rvalue::Repeat(a, n) => {
+                let v = self.take(a);
+                Value::Array(vec![v; self.length(n)])
+            }
+            Rvalue::Length(n) => Value::Int(self.length(n) as i64),
+            Rvalue::InBounds(i, p) => {
+                let Value::Int(i) = self.operand(i) else {
+                    unreachable!("an index")
+                };
+                match self.read(p) {
+                    Value::Array(xs) | Value::Buf(_, xs) => {
+                        Value::Bool(i >= 0 && (i as usize) < xs.len())
+                    }
+                    other => unreachable!("indexing {other:?}"),
+                }
+            }
+            // An array borrow is a slice borrow as it is.
+            Rvalue::Unsize(a, from) if matches!(self.concrete(from), Ty::Array(..)) => self.take(a),
             Rvalue::Unsize(a, Ty::String) => match self.take(a) {
                 Value::Ref(ptr, _) => match self.load(&ptr) {
                     Value::String(s) => Value::Str(s.as_str().into()),
@@ -716,7 +775,12 @@ fn run<'db>(
                 }
                 match m.target(&callee) {
                     Some((f, _)) if m.items.fns[f as usize].intrinsic => {
-                        let v = m.intrinsic(f, &values);
+                        let v = match m.intrinsic(f, &values) {
+                            Ok(v) => v,
+                            Err(class) => {
+                                return Err(Stop::Trap(m.trap(class, Some(*range), Vec::new())));
+                            }
+                        };
                         m.store(&dest, v);
                         m.stack[top].block = target.index();
                         m.stack[top].stmt = 0;
@@ -884,7 +948,118 @@ fn binary(op: BinOp, a: Value, b: Value) -> Value {
 
 impl Machine<'_> {
     /// Runs the prelude's built-in function `f` (`#[intrinsic]`) on `args`.
-    fn intrinsic(&mut self, f: u32, args: &[Value]) -> Value {
+    fn intrinsic(&mut self, f: u32, args: &[Value]) -> Result<Value, TrapClass> {
+        let sig = &self.items.fns[f as usize];
+        if let moddil_sema::Container::Impl(k) = sig.container
+            && let Ty::Buf(_) = self.items.impls[k as usize].self_ty
+        {
+            let name = sig.name.clone();
+            return self.buf_intrinsic(&name, args);
+        }
+        let ptr = |v: &Value| match v {
+            Value::Ref(p, _) => p.clone(),
+            other => unreachable!("a borrow: {other:?}"),
+        };
+        let int = |v: &Value| match v {
+            Value::Int(i) => *i,
+            other => unreachable!("an `int`: {other:?}"),
+        };
+        let self_ty = match sig.container {
+            moddil_sema::Container::Impl(k) => self.items.impls[k as usize].self_ty.clone(),
+            _ => Ty::Unit,
+        };
+        Ok(match (&self_ty, sig.name.as_str()) {
+            (Ty::Unit, "replace") => {
+                let p = ptr(&args[0]);
+                let old = self.load(&p);
+                self.store(&p, args[1].clone());
+                old
+            }
+            (Ty::Unit, "swap") => {
+                let (a, b) = (ptr(&args[0]), ptr(&args[1]));
+                let (x, y) = (self.load(&a), self.load(&b));
+                self.store(&a, y);
+                self.store(&b, x);
+                Value::Unit
+            }
+            (Ty::Int, "wrapping_add") => Value::Int(int(&args[0]).wrapping_add(int(&args[1]))),
+            (Ty::Int, "wrapping_sub") => Value::Int(int(&args[0]).wrapping_sub(int(&args[1]))),
+            (Ty::Int, "wrapping_mul") => Value::Int(int(&args[0]).wrapping_mul(int(&args[1]))),
+            (Ty::Int, "rotate_left") => {
+                Value::Int(int(&args[0]).rotate_left(int(&args[1]).rem_euclid(64) as u32))
+            }
+            _ => self.text_intrinsic(f, args),
+        })
+    }
+
+    /// The methods of `Buf<T>` (`collections.buf.1`).
+    fn buf_intrinsic(&mut self, name: &str, args: &[Value]) -> Result<Value, TrapClass> {
+        let int = |v: &Value| match v {
+            Value::Int(i) => *i,
+            other => unreachable!("an `int`: {other:?}"),
+        };
+        let ptr = |v: &Value| match v {
+            Value::Ref(p, _) => p.clone(),
+            other => unreachable!("a borrow of a `Buf`: {other:?}"),
+        };
+        let load = |m: &Self, v: &Value| match m.load(&ptr(v)) {
+            Value::Buf(cap, xs) => (cap, xs),
+            other => unreachable!("a `Buf`: {other:?}"),
+        };
+        Ok(match name {
+            "with_capacity" => Value::Buf(usize::try_from(int(&args[0])).unwrap_or(0), Vec::new()),
+            "from_array" => match args[0].clone() {
+                Value::Array(xs) => Value::Buf(xs.len(), xs),
+                other => unreachable!("an array: {other:?}"),
+            },
+            "len" => Value::Int(load(self, &args[0]).1.len() as i64),
+            "capacity" => Value::Int(load(self, &args[0]).0 as i64),
+            "as_slice" => Value::Ref(ptr(&args[0]), false),
+            "as_mut_slice" => Value::Ref(ptr(&args[0]), true),
+            _ => {
+                let (mut cap, mut xs) = load(self, &args[0]);
+                let at = |i: &Value, len: usize| usize::try_from(int(i)).ok().filter(|&i| i < len);
+                let out = match name {
+                    "set_capacity" => {
+                        cap = usize::try_from(int(&args[1])).unwrap_or(0).max(xs.len());
+                        Value::Unit
+                    }
+                    "push" | "insert" if xs.len() >= cap => {
+                        return Err(TrapClass::CapacityExceeded);
+                    }
+                    "push" => {
+                        xs.push(args[1].clone());
+                        Value::Unit
+                    }
+                    "pop" => {
+                        let x = xs.pop();
+                        self.option(x)
+                    }
+                    "insert" => {
+                        let i = at(&args[1], xs.len() + 1).ok_or(TrapClass::IndexOutOfBounds)?;
+                        xs.insert(i, args[2].clone());
+                        Value::Unit
+                    }
+                    "remove" => {
+                        let i = at(&args[1], xs.len()).ok_or(TrapClass::IndexOutOfBounds)?;
+                        xs.remove(i)
+                    }
+                    "swap" => {
+                        let i = at(&args[1], xs.len()).ok_or(TrapClass::IndexOutOfBounds)?;
+                        let j = at(&args[2], xs.len()).ok_or(TrapClass::IndexOutOfBounds)?;
+                        xs.swap(i, j);
+                        Value::Unit
+                    }
+                    other => unreachable!("no built-in `{other}` for `Buf`"),
+                };
+                self.store(&ptr(&args[0]), Value::Buf(cap, xs));
+                out
+            }
+        })
+    }
+
+    /// The built-in methods of the text types and the slice `len`.
+    fn text_intrinsic(&mut self, f: u32, args: &[Value]) -> Value {
         let sig = &self.items.fns[f as usize];
         let self_ty = match sig.container {
             moddil_sema::Container::Impl(k) => self.items.impls[k as usize].self_ty.clone(),
@@ -952,6 +1127,21 @@ impl Machine<'_> {
             (Ty::Char, "is_lowercase") => Value::Bool(ch(self, 0).is_lowercase()),
             (Ty::Char, "len_utf8") => Value::Int(ch(self, 0).len_utf8() as i64),
             (Ty::Str, "len") => Value::Int(text(self, 0).len() as i64),
+            (Ty::Str, "char_at_byte") => {
+                let Value::Int(at) = arg(self, 1) else {
+                    unreachable!("an `int`")
+                };
+                let s = text(self, 0);
+                let c = usize::try_from(at)
+                    .ok()
+                    .and_then(|at| s.get(at..))
+                    .and_then(|rest| rest.chars().next());
+                self.option(c.map(Value::Char))
+            }
+            (Ty::Slice(_), "len") => match arg(self, 0) {
+                Value::Array(xs) | Value::Buf(_, xs) => Value::Int(xs.len() as i64),
+                other => unreachable!("a slice: {other:?}"),
+            },
             (Ty::Str, "starts_with") => Value::Bool(text(self, 0).starts_with(&text(self, 1))),
             (Ty::Str, "ends_with") => Value::Bool(text(self, 0).ends_with(&text(self, 1))),
             (Ty::Str, "contains") => Value::Bool(text(self, 0).contains(&text(self, 1))),

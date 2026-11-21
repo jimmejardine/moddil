@@ -59,6 +59,44 @@ impl Checker<'_> {
                 self.fmt(&pieces);
                 Ty::String
             }
+            ExprKind::Array(elements) => {
+                let elements = elements.clone();
+                let elem = self.solver.fresh_n(1).remove(0);
+                for &x in &elements {
+                    self.check(x, &elem);
+                }
+                let elem = self.norm(&elem);
+                if elem.has_ref() {
+                    self.report(
+                        Code::E0309,
+                        range,
+                        "an array cannot hold a borrow: borrows live only in parameters and locals",
+                    );
+                    return Ty::Error;
+                }
+                Ty::array(elem, Ty::Len(elements.len() as i64))
+            }
+            ExprKind::Repeat(value, n) => {
+                let (value, n) = (*value, n.clone());
+                let t = self.infer(value);
+                let t = self.norm(&t);
+                // Each element is a copy of the one value (`expr.array.repeat.1`).
+                if let Some(copy) = self.items.lang_ref("Copy") {
+                    self.require(t.clone(), copy, self.range(value));
+                }
+                Ty::array(t, n)
+            }
+            &ExprKind::Index { base, index } => self.index(e, base, index),
+            ExprKind::RepeatN(..) => {
+                self.report(
+                    Code::E0201,
+                    range,
+                    "the length of an array is known when it is compiled: a literal or a const \
+                     parameter (a `Vec` can be made with any length: `let v: Vec<T> = [x; n];`)",
+                );
+                Ty::Error
+            }
+            ExprKind::ConstParam(_) => Ty::Int,
             &ExprKind::Local(l) => self.out.local_types[index(l)].clone(),
             ExprKind::Fn { .. } | ExprKind::AssocFn { .. } | ExprKind::TraitFn { .. } => {
                 self.out
@@ -68,15 +106,8 @@ impl Checker<'_> {
             }
             ExprKind::Tuple(elements) => {
                 let ts: Vec<Ty> = elements.iter().map(|&x| self.infer(x)).collect();
+                // A tuple holding a borrow is a view (`view.infect.1`).
                 let ts: Vec<Ty> = ts.iter().map(|t| self.norm(t)).collect();
-                if ts.iter().any(Ty::has_ref) {
-                    self.report(
-                        Code::E0309,
-                        range,
-                        "a tuple cannot hold a borrow: borrows live only in parameters and locals",
-                    );
-                    return Ty::Error;
-                }
                 Ty::tuple(ts)
             }
             &ExprKind::Ref { mutable, expr } => {
@@ -368,10 +399,52 @@ impl Checker<'_> {
                     self.out.diagnostics.push(d);
                 }
             }
-            ExprKind::Field { base, .. } if !self.out.field_derefs.contains(&e) => {
+            // Changing an element through `IndexMut`: the indexed value is borrowed `&mut`.
+            ExprKind::Index { base, .. } if self.out.index_calls.contains_key(&e) => {
+                let bt = self.out.expr(base);
+                let bt = match self.norm(&bt) {
+                    Ty::Ref(_, t) => (*t).clone(),
+                    t => t,
+                };
+                if let Some((tr, func)) = self.op_trait("IndexMut", "index_mut") {
+                    if self.solver.implements(&bt, &tr) == crate::traits::Answer::No {
+                        let s = self.show(&bt);
+                        self.report(
+                            Code::E0205,
+                            range,
+                            format!(
+                                "`{s}` cannot be {what} by index: it does not implement `IndexMut`"
+                            ),
+                        );
+                        return;
+                    }
+                    self.require(bt.clone(), tr, range);
+                    self.out.index_calls.insert(
+                        e,
+                        Callee::Trait {
+                            func,
+                            args: vec![bt],
+                        },
+                    );
+                }
+                if !self.out.field_derefs.contains(&e) {
+                    self.check_mutable(base, what);
+                } else if let Ty::Ref(false, _) = self.norm(&self.out.expr(base)) {
+                    self.report(
+                        Code::E0302,
+                        range,
+                        format!("this is behind a shared borrow (`&`), so it cannot be {what}"),
+                    );
+                }
+            }
+            ExprKind::Field { base, .. } | ExprKind::Index { base, .. }
+                if !self.out.field_derefs.contains(&e) =>
+            {
                 self.check_mutable(base, what);
             }
-            ExprKind::Field { base: x, .. } | ExprKind::Deref(x) => {
+            ExprKind::Field { base: x, .. }
+            | ExprKind::Index { base: x, .. }
+            | ExprKind::Deref(x) => {
                 let t = self.out.expr(x);
                 if let Ty::Ref(false, _) = self.norm(&t) {
                     self.report(
@@ -382,6 +455,89 @@ impl Checker<'_> {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// An array literal where another type is expected (`expr.array.from.1`): made by the
+    /// expected type's `FromArrayLiteral`, `from_array` for `[a, b]` and `from_repeat` for
+    /// `[x; n]`. `None` when it is not one, so it is checked as an array.
+    pub(super) fn array_literal(&mut self, e: ExprId, expected: &Ty) -> Option<Ty> {
+        let target = self.norm(expected);
+        let is_literal = matches!(
+            self.body.exprs[e].kind,
+            ExprKind::Array(_) | ExprKind::Repeat(..) | ExprKind::RepeatN(..)
+        );
+        if !is_literal || !matches!(target, Ty::Adt(..) | Ty::Param(..)) {
+            return None;
+        }
+        let elem = self.solver.fresh_n(1).remove(0);
+        let tr = self.items.lang_ref("FromArrayLiteral")?;
+        let tr = crate::ty::TraitRef {
+            args: std::sync::Arc::from([elem.clone()]),
+            ..tr
+        };
+        let range = self.range(e);
+        match self.body.exprs[e].kind.clone() {
+            ExprKind::Array(xs) => {
+                for &x in &xs {
+                    self.check(x, &elem);
+                }
+                let (_, f) = self.op_trait("FromArrayLiteral", "from_array")?;
+                self.out.literal_calls.insert(
+                    e,
+                    Callee::Trait {
+                        func: f,
+                        args: vec![target.clone(), elem.clone(), Ty::Len(xs.len() as i64)],
+                    },
+                );
+            }
+            ExprKind::Repeat(x, _) | ExprKind::RepeatN(x, _) => {
+                self.check(x, &elem);
+                if let ExprKind::RepeatN(_, n) = self.body.exprs[e].kind {
+                    self.check(n, &Ty::Int);
+                }
+                if let Some(clone) = self.items.lang_ref("Clone") {
+                    self.require(elem.clone(), clone, range);
+                }
+                let (_, f) = self.op_trait("FromArrayLiteral", "from_repeat")?;
+                self.out.literal_calls.insert(
+                    e,
+                    Callee::Trait {
+                        func: f,
+                        args: vec![target.clone(), elem.clone()],
+                    },
+                );
+            }
+            _ => return None,
+        }
+        self.require(target.clone(), tr, range);
+        self.out.expr_types[index(e)] = target.clone();
+        Some(target)
+    }
+
+    /// `base[index]` on an array or a slice (`expr.index.1`), looking through a borrow.
+    pub(super) fn index(&mut self, e: ExprId, base: ExprId, index: ExprId) -> Ty {
+        let t = self.infer(base);
+        let mut bt = self.norm(&t);
+        if let Ty::Ref(_, inner) = &bt {
+            self.out.field_derefs.insert(e);
+            bt = self.norm(inner);
+        }
+        self.check(index, &Ty::Int);
+        match &bt {
+            Ty::Error => Ty::Error,
+            Ty::Infer(_) => self.unknown(self.range(base), "to index it"),
+            Ty::Array(t, _) | Ty::Slice(t) => (**t).clone(),
+            // Through `Index` (`expr.index.trait.1`); `IndexMut` where it is changed.
+            _ => match self.operator(e, self.range(e), "[]", &bt, ("Index", "index")) {
+                Some(t) => {
+                    if let Some(c) = self.out.calls.remove(&e) {
+                        self.out.index_calls.insert(e, c);
+                    }
+                    t
+                }
+                None => Ty::Error,
+            },
         }
     }
 

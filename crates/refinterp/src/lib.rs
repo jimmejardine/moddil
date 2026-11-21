@@ -29,6 +29,10 @@ use value::Value;
 /// The prelude's source.
 pub(crate) const PRELUDE: &str = include_str!("../../../reference/2027/prelude.moddil");
 
+/// The built-in `core` mod's `collections` module, which every mod depends on as `core`.
+pub(crate) const CORE_COLLECTIONS: &str =
+    include_str!("../../../reference/2027/core/collections.moddil");
+
 /// Why a program traps.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TrapClass {
@@ -42,6 +46,10 @@ pub enum TrapClass {
     Assertion,
     /// An error that `?!` said cannot happen.
     Unexpected,
+    /// An index out of bounds (`expr.index.1`).
+    IndexOutOfBounds,
+    /// More elements pushed into a `Buf` than its capacity (`collections.buf.1`).
+    CapacityExceeded,
 }
 
 impl fmt::Display for TrapClass {
@@ -52,6 +60,8 @@ impl fmt::Display for TrapClass {
             TrapClass::StackOverflow => "stack overflow",
             TrapClass::Assertion => "assertion failed",
             TrapClass::Unexpected => "unexpected error",
+            TrapClass::IndexOutOfBounds => "index out of bounds",
+            TrapClass::CapacityExceeded => "capacity exceeded",
         })
     }
 }

@@ -600,6 +600,16 @@ impl Walk<'_, '_> {
             ExprKind::Ref { mutable, expr } => {
                 self.expr(expr, if mutable { Use::Write } else { Use::Read });
             }
+            ExprKind::Index { base, index: i } => {
+                let ft = &self.cx.out.expr_types[index(e)];
+                let inner = match u {
+                    Use::Value if !self.is_copy(ft) => Use::Value,
+                    Use::Write => Use::Write,
+                    _ => Use::Read,
+                };
+                self.expr(base, inner);
+                self.expr(i, Use::Value);
+            }
             ExprKind::Field { base, .. } => {
                 let ft = &self.cx.out.expr_types[index(e)];
                 let inner = match u {
@@ -714,7 +724,8 @@ impl Walk<'_, '_> {
 /// The sub-expressions of an expression kind not handled on its own above, all used by value.
 fn children(k: &ExprKind) -> Vec<ExprId> {
     match k {
-        ExprKind::Tuple(xs) => xs.clone(),
+        ExprKind::Tuple(xs) | ExprKind::Array(xs) => xs.clone(),
+        ExprKind::RepeatN(x, n) => vec![*x, *n],
         ExprKind::Adt { fields, .. } => fields.iter().map(|&(_, x)| x).collect(),
         ExprKind::If { cond, then, else_ } => {
             let mut v = vec![*cond, *then];
@@ -729,6 +740,7 @@ fn children(k: &ExprKind) -> Vec<ExprId> {
         | ExprKind::Bang(x, _)
         | ExprKind::Fail(x)
         | ExprKind::Discard(x)
+        | ExprKind::Repeat(x, _)
         | ExprKind::Unary(_, x) => vec![*x],
         ExprKind::Binary(_, a, b) | ExprKind::Logic(_, a, b) => vec![*a, *b],
         ExprKind::Compare { first, rest } => std::iter::once(*first)

@@ -142,6 +142,8 @@ codes! {
     E0313 = "leaving a `defer` block",
     /// A move out of a field of a value whose type has a destructor.
     E0314 = "move out of a type with a destructor",
+    /// Moving a value that is not `Copy` out of an element of an array or slice.
+    E0315 = "move out of an element",
     /// A name used as a trait that is not one.
     E0401 = "not a trait",
     /// A type that does not implement a trait it must.

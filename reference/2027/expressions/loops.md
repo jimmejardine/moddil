@@ -22,6 +22,17 @@ the block, which has type `()`, and starts again; when `cond` is `false` the loo
 `()`. The condition may contain `let` conditions as `if` can ([`if`](if.md)), so
 `while let p = e { … }` runs while `e` matches `p`.
 
+**expr.for.1** `for p in e block` iterates: it evaluates `e` once, makes it an iterator with
+`IntoIterator::into_iter` ([Collections](../collections.md)), and runs the block, of type `()`, for
+each item `Iterator::next` gives, with `p` matched against it, until `next` gives `None`. Its type
+is `()`. `break` and `continue` (and labels) work in it as in the other loops.
+
+**expr.for.2** `e`'s type implements `IntoIterator` (E0402), and `p` matches every item (E0208).
+
+**expr.range.1** `a..b`, `a..=b` and `a..`, for `int`s `a` and `b`, are the prelude's `Range`,
+`RangeInclusive` and `RangeFrom`, iterators of the integers from `a` up to but not including `b`,
+up to and including `b`, and on without end.
+
 **expr.break.1** `break` leaves the innermost enclosing loop, and `continue` goes on to its next
 iteration (for `while`, evaluating the condition again). Outside a loop both are errors (E0109).
 Both have type `!`.

@@ -15,6 +15,7 @@ impl fmt::Debug for Place {
                 Projection::Field(n) => format!("{s}.{n}"),
                 Projection::Downcast(v) => format!("({s} as #{v})"),
                 Projection::Deref => format!("(*{s})"),
+                Projection::Index(i) => format!("{s}[{i:?}]"),
             };
         }
         f.write_str(&s)
@@ -58,6 +59,7 @@ impl fmt::Display for Rvalue {
                 match kind {
                     AggregateKind::Tuple if ops.len() == 1 => write!(f, "({},)", ops[0]),
                     AggregateKind::Tuple => write!(f, "({})", ops.join(", ")),
+                    AggregateKind::Array => write!(f, "[{}]", ops.join(", ")),
                     AggregateKind::Adt { path, .. } => write!(f, "{path}({})", ops.join(", ")),
                     AggregateKind::Closure(_) => write!(f, "{{closure}}({})", ops.join(", ")),
                 }
@@ -66,6 +68,9 @@ impl fmt::Display for Rvalue {
             Rvalue::ErrorIs(p, a) => write!(f, "error_is({p:?}, #{a})"),
             Rvalue::Ref(true, p) => write!(f, "&mut {p:?}"),
             Rvalue::Ref(false, p) => write!(f, "&{p:?}"),
+            Rvalue::Repeat(a, n) => write!(f, "[{a:?}; {n:?}]"),
+            Rvalue::Length(n) => write!(f, "length({n:?})"),
+            Rvalue::InBounds(i, p) => write!(f, "in_bounds({i:?}, {p:?})"),
         }
     }
 }

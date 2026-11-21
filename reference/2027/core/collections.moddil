@@ -1,0 +1,354 @@
+// The built-in `core` mod's `collections` module: `use core::collections::HashMap;`. Every mod
+// depends on `core`. For now its key is fixed, so a map's order is the same on every run.
+
+// The default hasher: SipHash-1-3 (`coll.hash.2`), over `int`s.
+pub struct SipHasher {
+    v0: int,
+    v1: int,
+    v2: int,
+    v3: int,
+}
+
+impl SipHasher {
+    pub fn new() -> SipHasher {
+        let k0 = 0x0706050403020100;
+        let k1 = 0x0f0e0d0c0b0a0908;
+        SipHasher {
+            v0: k0 ^ 0x736f6d6570736575,
+            v1: k1 ^ 0x646f72616e646f6d,
+            v2: k0 ^ 0x6c7967656e657261,
+            v3: k1 ^ 0x7465646279746573,
+        }
+    }
+
+    fn round(&mut self) {
+        self.v0 = self.v0.wrapping_add(self.v1);
+        self.v1 = self.v1.rotate_left(13) ^ self.v0;
+        self.v0 = self.v0.rotate_left(32);
+        self.v2 = self.v2.wrapping_add(self.v3);
+        self.v3 = self.v3.rotate_left(16) ^ self.v2;
+        self.v0 = self.v0.wrapping_add(self.v3);
+        self.v3 = self.v3.rotate_left(21) ^ self.v0;
+        self.v2 = self.v2.wrapping_add(self.v1);
+        self.v1 = self.v1.rotate_left(17) ^ self.v2;
+        self.v2 = self.v2.rotate_left(32);
+    }
+}
+
+impl Hasher for SipHasher {
+    fn write_int(&mut self, m: int) {
+        self.v3 = self.v3 ^ m;
+        self.round();
+        self.v0 = self.v0 ^ m;
+    }
+
+    fn finish(&self) -> int {
+        let mut s = SipHasher { v0: self.v0, v1: self.v1, v2: self.v2 ^ 0xff, v3: self.v3 };
+        s.round();
+        s.round();
+        s.round();
+        s.v0 ^ s.v1 ^ s.v2 ^ s.v3
+    }
+}
+
+// The hash of `x` under the default hasher.
+pub fn hash_of<T: Hash>(x: &T) -> int {
+    let mut h = SipHasher::new();
+    x.hash(&mut h);
+    h.finish()
+}
+
+// What any map can do, for code that takes one (`coll.map.2`).
+pub trait Map<K, V> {
+    fn len(&self) -> int;
+    fn get(&self, k: &K) -> Option<&V>;
+    fn insert(&mut self, k: K, v: V) -> Option<V>;
+    fn remove(&mut self, k: &K) -> Option<V>;
+}
+
+// What any set can do.
+pub trait Set<T> {
+    fn len(&self) -> int;
+    fn contains(&self, x: &T) -> bool;
+    fn insert(&mut self, x: T) -> bool;
+    fn remove(&mut self, x: &T) -> bool;
+}
+
+// A map by hash (`coll.map.1`): buckets of entries, a power of two of them, grown before they are
+// three quarters full. It iterates in hash order: by bucket, then in the order entries joined it.
+pub struct HashMap<K, V> {
+    buckets: Vec<Vec<(K, V)>>,
+    len: int,
+}
+
+impl<K: Hash + Eq, V> HashMap<K, V> {
+    pub fn new() -> HashMap<K, V> {
+        HashMap { buckets: Vec::new(), len: 0 }
+    }
+
+    pub fn len(&self) -> int {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    fn slot(&self, k: &K) -> int {
+        hash_of(k) & (self.buckets.len() - 1)
+    }
+
+    fn grow(&mut self) {
+        let n = if self.buckets.len() == 0 { 8 } else { self.buckets.len() * 2 };
+        let mut fresh: Vec<Vec<(K, V)>> = Vec::with_capacity(n);
+        for _ in 0..n {
+            fresh.push(Vec::new());
+        }
+        let old = replace(&mut self.buckets, fresh);
+        for bucket in old {
+            for (k, v) in bucket {
+                let s = self.slot(&k);
+                self.buckets[s].push((k, v));
+            }
+        }
+    }
+
+    // Puts `v` at `k`, giving back the value it replaces, if any.
+    pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+        if self.buckets.len() == 0 || self.len * 4 >= self.buckets.len() * 3 {
+            self.grow();
+        }
+        let s = self.slot(&k);
+        let bucket = &mut self.buckets[s];
+        let mut i = 0;
+        while i < bucket.len() {
+            if bucket[i].0 == k {
+                return Some(replace(&mut bucket[i].1, v));
+            }
+            i += 1;
+        }
+        bucket.push((k, v));
+        self.len += 1;
+        None
+    }
+
+    pub fn get(&self, k: &K) -> Option<&V> {
+        if self.len == 0 {
+            return None;
+        }
+        for e in &self.buckets[self.slot(k)] {
+            if e.0 == *k {
+                return Some(&e.1);
+            }
+        }
+        None
+    }
+
+    pub fn get_mut(&mut self, k: &K) -> Option<&mut V> {
+        if self.len == 0 {
+            return None;
+        }
+        let s = self.slot(k);
+        let bucket = &mut self.buckets[s];
+        let mut i = 0;
+        while i < bucket.len() {
+            if bucket[i].0 == *k {
+                return Some(&mut bucket[i].1);
+            }
+            i += 1;
+        }
+        None
+    }
+
+    pub fn contains_key(&self, k: &K) -> bool {
+        self.get(k).is_some()
+    }
+
+    // Takes out the value at `k`, if there is one.
+    pub fn remove(&mut self, k: &K) -> Option<V> {
+        if self.len == 0 {
+            return None;
+        }
+        let s = self.slot(k);
+        let bucket = &mut self.buckets[s];
+        let mut i = 0;
+        while i < bucket.len() {
+            if bucket[i].0 == *k {
+                let (_, v) = bucket.remove(i);
+                self.len -= 1;
+                return Some(v);
+            }
+            i += 1;
+        }
+        None
+    }
+
+    pub fn iter(&self) -> MapIter<K, V> {
+        MapIter { buckets: self.buckets.as_slice(), bucket: 0, at: 0 }
+    }
+}
+
+// A map's entries, borrowed, in hash order.
+pub view MapIter<K, V> {
+    buckets: &[Vec<(K, V)>],
+    bucket: int,
+    at: int,
+}
+
+impl<K, V> Iterator for MapIter<K, V> {
+    type Item = (&K, &V);
+    fn next(&mut self) -> Option<(&K, &V)> {
+        while self.bucket < self.buckets.len() {
+            let b = &self.buckets[self.bucket];
+            if self.at < b.len() {
+                let e = &b[self.at];
+                self.at += 1;
+                return Some((&e.0, &e.1));
+            }
+            self.bucket += 1;
+            self.at = 0;
+        }
+        None
+    }
+}
+
+impl<K: Hash + Eq, V> IntoIterator for &HashMap<K, V> {
+    type Item = (&K, &V);
+    type IntoIter = MapIter<K, V>;
+    fn into_iter(self) -> MapIter<K, V> {
+        self.iter()
+    }
+}
+
+impl<K: Hash + Eq, V> Map<K, V> for HashMap<K, V> {
+    fn len(&self) -> int {
+        self.len
+    }
+
+    fn get(&self, k: &K) -> Option<&V> {
+        HashMap::get(self, k)
+    }
+
+    fn insert(&mut self, k: K, v: V) -> Option<V> {
+        HashMap::insert(self, k, v)
+    }
+
+    fn remove(&mut self, k: &K) -> Option<V> {
+        HashMap::remove(self, k)
+    }
+}
+
+// `[(k, v), …]`: later pairs win, as with `insert`.
+impl<K: Hash + Eq, V> FromArrayLiteral<(K, V)> for HashMap<K, V> {
+    fn from_array<const N: int>(items: [(K, V); N]) -> HashMap<K, V> {
+        let mut m = HashMap::new();
+        for (k, v) in items {
+            m.insert(k, v);
+        }
+        m
+    }
+
+    fn from_repeat(x: (K, V), n: int) -> HashMap<K, V> where (K, V): Clone {
+        let mut m = HashMap::new();
+        if n > 0 {
+            let (k, v) = x;
+            m.insert(k, v);
+        }
+        m
+    }
+}
+
+// A set by hash: the keys of a map to `()`.
+pub struct HashSet<T> {
+    map: HashMap<T, ()>,
+}
+
+impl<T: Hash + Eq> HashSet<T> {
+    pub fn new() -> HashSet<T> {
+        HashSet { map: HashMap::new() }
+    }
+
+    pub fn len(&self) -> int {
+        self.map.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.map.len() == 0
+    }
+
+    // Adds `x`, saying whether it was not there already.
+    pub fn insert(&mut self, x: T) -> bool {
+        self.map.insert(x, ()).is_none()
+    }
+
+    pub fn contains(&self, x: &T) -> bool {
+        self.map.contains_key(x)
+    }
+
+    pub fn remove(&mut self, x: &T) -> bool {
+        self.map.remove(x).is_some()
+    }
+
+    pub fn iter(&self) -> SetIter<T> {
+        SetIter { inner: self.map.iter() }
+    }
+}
+
+// A set's members, borrowed, in hash order.
+pub view SetIter<T> {
+    inner: MapIter<T, ()>,
+}
+
+impl<T> Iterator for SetIter<T> {
+    type Item = &T;
+    fn next(&mut self) -> Option<&T> {
+        match self.inner.next() {
+            Some((x, _)) => Some(x),
+            None => None,
+        }
+    }
+}
+
+impl<T: Hash + Eq> IntoIterator for &HashSet<T> {
+    type Item = &T;
+    type IntoIter = SetIter<T>;
+    fn into_iter(self) -> SetIter<T> {
+        self.iter()
+    }
+}
+
+impl<T: Hash + Eq> Set<T> for HashSet<T> {
+    fn len(&self) -> int {
+        self.map.len()
+    }
+
+    fn contains(&self, x: &T) -> bool {
+        HashSet::contains(self, x)
+    }
+
+    fn insert(&mut self, x: T) -> bool {
+        HashSet::insert(self, x)
+    }
+
+    fn remove(&mut self, x: &T) -> bool {
+        HashSet::remove(self, x)
+    }
+}
+
+impl<T: Hash + Eq> FromArrayLiteral<T> for HashSet<T> {
+    fn from_array<const N: int>(items: [T; N]) -> HashSet<T> {
+        let mut s = HashSet::new();
+        for x in items {
+            s.insert(x);
+        }
+        s
+    }
+
+    fn from_repeat(x: T, n: int) -> HashSet<T> where T: Clone {
+        let mut s = HashSet::new();
+        if n > 0 {
+            s.insert(x);
+        }
+        s
+    }
+}

@@ -101,9 +101,12 @@ impl Builder<'_> {
             | ExprKind::Str(_)
             | ExprKind::Local(_)
             | ExprKind::Field { .. }
+            | ExprKind::Index { .. }
             | ExprKind::Deref(_) => {
                 let place = match self.hir.exprs[e].kind {
-                    ExprKind::Field { .. } | ExprKind::Deref(_) => Some(self.place(e)),
+                    ExprKind::Field { .. } | ExprKind::Index { .. } | ExprKind::Deref(_) => {
+                        Some(self.place(e))
+                    }
                     _ => None,
                 };
                 let op = match place {
@@ -120,6 +123,26 @@ impl Builder<'_> {
                 self.cfg.assign(dest, Rvalue::Ref(mutable, place));
             }
             ExprKind::Fmt(pieces) => self.fmt(dest, &pieces, range),
+            ExprKind::Array(_) | ExprKind::Repeat(..) | ExprKind::RepeatN(..)
+                if self.types.literal_callee(e).is_some() =>
+            {
+                self.literal_into(e, dest);
+            }
+            ExprKind::Array(xs) => {
+                let ops = self.operands(&xs);
+                self.cfg
+                    .assign(dest, Rvalue::Aggregate(AggregateKind::Array, ops));
+            }
+            ExprKind::Repeat(x, n) => {
+                let op = self.operand(x, &[]);
+                self.cfg.assign(dest, Rvalue::Repeat(op, n));
+            }
+            ExprKind::RepeatN(..) => unreachable!("a checked `[x; n]` makes a value of a type"),
+            ExprKind::ConstParam(i) => {
+                // Substitution goes by index, so the name is only for printing.
+                self.cfg
+                    .assign(dest, Rvalue::Length(Ty::Param(i, "const".into())));
+            }
             ExprKind::Tuple(xs) => {
                 let ops = self.operands(&xs);
                 self.cfg
@@ -569,6 +592,33 @@ impl Builder<'_> {
 
     /// A call; if its function can fail, its error edge goes where the `?` or `?!` around
     /// call `e` says.
+    /// An array literal made into the type its context expects (`expr.array.from.1`):
+    /// `FromArrayLiteral::from_array([a, b])`, or `from_repeat(x, n)` for `[x; n]`.
+    fn literal_into(&mut self, e: ExprId, dest: Local) {
+        let callee = self.types.literal_callee(e).expect("checked").clone();
+        let range = self.range(e);
+        let args = match self.hir.exprs[e].kind.clone() {
+            ExprKind::Array(xs) => {
+                let elem = callee.args()[1].clone();
+                let n = callee.args()[2].clone();
+                let ops = self.operands(&xs);
+                let a = self.temp(Ty::array(elem, n));
+                self.cfg
+                    .assign(a, Rvalue::Aggregate(AggregateKind::Array, ops));
+                vec![Operand::Move(Place::local(a))]
+            }
+            ExprKind::Repeat(x, n) => {
+                let op = self.operand(x, &[]);
+                let k = self.temp(Ty::Int);
+                self.cfg.assign(k, Rvalue::Length(n));
+                vec![op, Operand::Copy(Place::local(k))]
+            }
+            ExprKind::RepeatN(x, n) => self.operands(&[x, n]),
+            _ => unreachable!("an array literal"),
+        };
+        self.call_into(None, callee, Place::local(dest), args, range);
+    }
+
     /// `fmt"…"`: a new `String`, then each piece in order: text is pushed onto it, and each
     /// hole is borrowed and written by its `Display::fmt`.
     fn fmt(&mut self, dest: Local, pieces: &[FmtPiece], range: TextRange) {

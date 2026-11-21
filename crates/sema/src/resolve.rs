@@ -129,7 +129,45 @@ pub(crate) fn resolve_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnos
                 ));
                 return Ty::Error;
             }
+            // A const parameter is a length, not a type, but for the argument of another one.
+            if let Ty::Param(i, name) = &t
+                && scope.params.get(*i as usize).is_some_and(|p| p.konst)
+                && node.parent().is_none_or(|p| p.kind() != K::TYPE_ARG)
+            {
+                diags.push(Diagnostic::error(
+                    Code::E0102,
+                    range,
+                    format!("`{name}` is a const parameter, a length, not a type"),
+                ));
+                return Ty::Error;
+            }
             t
+        }
+        ast::Type::Array(_) => {
+            let elem = match node.children().find_map(ast::Type::cast) {
+                Some(t) => resolve_type(&t, scope, diags),
+                None => Ty::Error,
+            };
+            let len = match node.children().find_map(ast::Expr::cast) {
+                Some(e) => array_len(&e, scope, diags),
+                None => Ty::Error,
+            };
+            Ty::array(elem, len)
+        }
+        ast::Type::Slice(_) => {
+            let elem = match node.children().find_map(ast::Type::cast) {
+                Some(t) => resolve_type(&t, scope, diags),
+                None => Ty::Error,
+            };
+            if !behind_borrow(node) {
+                diags.push(Diagnostic::error(
+                    Code::E0901,
+                    range,
+                    "a slice has no size of its own, so it is used behind a borrow: `&[T]`",
+                ));
+                return Ty::Error;
+            }
+            Ty::slice(elem)
         }
         ast::Type::Tuple(_) => {
             let elements: Vec<Ty> = node
@@ -137,14 +175,6 @@ pub(crate) fn resolve_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnos
                 .filter_map(ast::Type::cast)
                 .map(|t| resolve_type(&t, scope, diags))
                 .collect();
-            if elements.iter().any(Ty::has_ref) {
-                diags.push(Diagnostic::error(
-                    Code::E0309,
-                    range,
-                    "a tuple cannot hold a borrow: borrows live only in parameters and locals",
-                ));
-                return Ty::Error;
-            }
             Ty::tuple(elements)
         }
         ast::Type::Ref(_) => {
@@ -257,6 +287,48 @@ pub(crate) fn dyn_type(node: &SyntaxNode, scope: &Scope, diags: &mut Vec<Diagnos
     }
 }
 
+/// The length of an array type, `[T; n]`: an integer literal or a const parameter
+/// (`type.array.1`).
+pub(crate) fn array_len(e: &ast::Expr, scope: &Scope, diags: &mut Vec<Diagnostic>) -> Ty {
+    let node = e.syntax();
+    let range = node.text_range();
+    if let ast::Expr::Literal(_) = e
+        && let Some(tok) = node.child_tokens().find(|t| t.kind() == K::INTEGER)
+    {
+        return match ast::int_value(tok.text()).and_then(|v| i64::try_from(v).ok()) {
+            Some(v) => Ty::Len(v),
+            None => {
+                diags.push(Diagnostic::error(
+                    Code::E0204,
+                    range,
+                    "this length does not fit in `int`",
+                ));
+                Ty::Error
+            }
+        };
+    }
+    if let ast::Expr::Path(_) = e
+        && let Some(segs) = node.child(K::PATH).and_then(|p| path_segments(&p))
+        && let [one] = segs.as_slice()
+        && let Some(i) = scope.params.iter().rposition(|p| p.name == one.name)
+    {
+        if scope.params[i].konst {
+            return Ty::Param(i as u32, one.name.as_str().into());
+        }
+        diags.push(Diagnostic::error(
+            Code::E0201,
+            range,
+            format!("`{}` is a type, not a length", one.name),
+        ));
+        return Ty::Error;
+    }
+    diags.push(Diagnostic::unsupported(
+        range,
+        "an array length other than a literal or a const parameter",
+    ));
+    Ty::Error
+}
+
 /// Whether the type node `node` is what a borrow (`&T`) points to, or the type an impl is for:
 /// the places a type without a size of its own may be named.
 fn behind_borrow(node: &SyntaxNode) -> bool {
@@ -292,8 +364,28 @@ pub(crate) fn generic_args(
                 }
             }
             K::CONST_ARG => {
-                diags.push(Diagnostic::unsupported(c.text_range(), "a const argument"));
-                types.push(Ty::Error);
+                let lit = c.child_tokens().find(|t| t.kind() == K::INTEGER);
+                let neg = c.token(K::MINUS).is_some();
+                match lit.and_then(|t| ast::int_value(t.text())) {
+                    Some(v) => match i64::try_from(if neg { -v } else { v }) {
+                        Ok(v) => types.push(Ty::Len(v)),
+                        Err(_) => {
+                            diags.push(Diagnostic::error(
+                                Code::E0204,
+                                c.text_range(),
+                                "this length does not fit in `int`",
+                            ));
+                            types.push(Ty::Error);
+                        }
+                    },
+                    None => {
+                        diags.push(Diagnostic::unsupported(
+                            c.text_range(),
+                            "a const argument other than an integer",
+                        ));
+                        types.push(Ty::Error);
+                    }
+                }
             }
             _ => {}
         }
@@ -398,6 +490,25 @@ pub(crate) fn path_type(
                 "str" => {
                     no_args(one, diags);
                     return Ty::Str;
+                }
+                // The prelude's buffer, for the code that builds collections on it.
+                "Buf" if scope.param("Buf").is_none() => {
+                    let args = match &one.args {
+                        Some(a) => generic_args(a, scope, diags).0,
+                        None if scope.holes => vec![hole()],
+                        None => Vec::new(),
+                    };
+                    return match args.as_slice() {
+                        [t] => Ty::Buf(t.clone().into()),
+                        _ => {
+                            diags.push(Diagnostic::error(
+                                Code::E0404,
+                                range,
+                                "`Buf` takes one type argument: `Buf<T>`",
+                            ));
+                            Ty::Error
+                        }
+                    };
                 }
                 "Self" => {
                     no_args(one, diags);

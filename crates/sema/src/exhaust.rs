@@ -198,6 +198,9 @@ impl Cx<'_> {
             // A value of a type parameter can only be bound: one constructor covers it.
             Ty::Unit
             | Ty::Tuple(_)
+            | Ty::Array(..)
+            | Ty::Slice(_)
+            | Ty::Buf(_)
             | Ty::Param(..)
             | Ty::Assoc(_)
             | Ty::Dyn(_)
@@ -214,7 +217,7 @@ impl Cx<'_> {
                 }
             }
             Ty::Never => Vec::new(),
-            Ty::Error | Ty::Ref(..) | Ty::Infer(_) | Ty::Errors(_) => return None,
+            Ty::Error | Ty::Ref(..) | Ty::Infer(_) | Ty::Errors(_) | Ty::Len(_) => return None,
         })
     }
 

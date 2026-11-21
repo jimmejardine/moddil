@@ -19,6 +19,7 @@ impl Builder<'_> {
             | ExprKind::Unit
             | ExprKind::Char(_)
             | ExprKind::Str(_)
+            | ExprKind::ConstParam(_)
             | ExprKind::Local(_)
             | ExprKind::Fn { .. }
             | ExprKind::AssocFn { .. }
@@ -32,7 +33,8 @@ impl Builder<'_> {
             | ExprKind::Question(c)
             | ExprKind::Bang(c, _)
             | ExprKind::Fail(c)
-            | ExprKind::Discard(c) => self.assigns(*c),
+            | ExprKind::Discard(c)
+            | ExprKind::Repeat(c, _) => self.assigns(*c),
             ExprKind::With { handlers, body } => {
                 handlers.iter().any(|h| self.assigns(h.value)) || self.assigns(*body)
             }
@@ -43,7 +45,9 @@ impl Builder<'_> {
                         .flatten()
                         .any(|a| self.assigns(a.body) || a.guard.is_some_and(|g| self.assigns(g)))
             }
-            ExprKind::Tuple(xs) => any(xs),
+            ExprKind::Tuple(xs) | ExprKind::Array(xs) => any(xs),
+            ExprKind::RepeatN(x, n) => self.assigns(*x) || self.assigns(*n),
+            ExprKind::Index { base, index } => self.assigns(*base) || self.assigns(*index),
             ExprKind::Fmt(pieces) => pieces
                 .iter()
                 .any(|p| matches!(p, FmtPiece::Hole(h) if self.assigns(*h))),
@@ -128,6 +132,63 @@ impl Builder<'_> {
                 p.field(i)
             }
             ExprKind::Deref(x) => self.place(x).deref(),
+            ExprKind::Index { base, index } if self.types.index_callee(e).is_some() => {
+                // `*Index::index(&base, i)`, or `index_mut` with `&mut base`.
+                let callee = self.types.index_callee(e).expect("checked").clone();
+                let mutable = self
+                    .items
+                    .fns
+                    .get(callee.func() as usize)
+                    .is_some_and(|f| f.name == "index_mut");
+                let p = self.place(base);
+                let p = if self.types.field_through_borrow(e) {
+                    p.deref()
+                } else {
+                    p
+                };
+                let base_ty = callee.args()[0].clone();
+                let b = self.temp(Ty::reference(mutable, base_ty));
+                self.cfg.assign(b, Rvalue::Ref(mutable, p));
+                let i = self.temp(Ty::Int);
+                self.eval_into(i, index);
+                let r = self.temp(Ty::reference(mutable, self.ty(e)));
+                let range = self.range(e);
+                self.call_into(
+                    None,
+                    callee,
+                    Place::local(r),
+                    vec![
+                        Operand::Move(Place::local(b)),
+                        Operand::Copy(Place::local(i)),
+                    ],
+                    range,
+                );
+                Place::local(r).deref()
+            }
+            ExprKind::Index { base, index } => {
+                let p = self.place(base);
+                let p = if self.types.field_through_borrow(e) {
+                    p.deref()
+                } else {
+                    p
+                };
+                let i = self.temp(Ty::Int);
+                self.eval_into(i, index);
+                let ok = self.temp(Ty::Bool);
+                self.cfg.assign(
+                    ok,
+                    Rvalue::InBounds(Operand::Copy(Place::local(i)), p.clone()),
+                );
+                let range = self.range(e);
+                self.cfg.push(crate::Statement::Assert {
+                    cond: Operand::Copy(Place::local(ok)),
+                    expected: true,
+                    trap: crate::TrapClass::IndexOutOfBounds,
+                    range,
+                    parts: Vec::new(),
+                });
+                p.index(i)
+            }
             _ => {
                 let t = self.temp(self.value_ty(e));
                 self.eval_into(t, e);

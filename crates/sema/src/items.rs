@@ -149,6 +149,9 @@ pub struct GenericParam {
     pub name: String,
     /// Where it is declared.
     pub range: TextRange,
+    /// Whether it is a const parameter (`const N: int`), whose arguments are lengths
+    /// ([`Ty::Len`]) rather than types.
+    pub konst: bool,
 }
 
 /// The type parameters an item can name, and the bounds on them.
@@ -326,6 +329,9 @@ pub struct AdtDef {
     pub src: Src,
     /// Whether it is an enum.
     pub is_enum: bool,
+    /// Whether it is a view (`view Name { … }`): a struct whose fields may hold borrows, and
+    /// whose values are second-class like a borrow.
+    pub is_view: bool,
     /// Whether it is declared `#[derive(Copy, Clone)]`.
     pub copy: bool,
     /// Its type parameters.
@@ -501,6 +507,14 @@ const LANG: &[&str] = &[
     "FnMut",
     "Fn",
     "Display",
+    "Iterator",
+    "IntoIterator",
+    "Range",
+    "RangeInclusive",
+    "RangeFrom",
+    "Index",
+    "IndexMut",
+    "FromArrayLiteral",
 ];
 
 impl ItemTree {
@@ -638,6 +652,16 @@ impl ItemTree {
         })
     }
 
+    /// Whether values of `ty` are second-class (`memory.md`: View types): it is or holds a borrow,
+    /// a closure or a view, including in its type arguments.
+    pub fn is_view(&self, ty: &Ty) -> bool {
+        ty.any(&|t| match t {
+            Ty::Ref(..) | Ty::Closure(_) | Ty::Anon(_) => true,
+            Ty::Adt(a, ..) => self.adts.get(*a as usize).is_some_and(|d| d.is_view),
+            _ => false,
+        })
+    }
+
     /// The method `name` of the prelude's inherent impl for a built-in type (`String::new`).
     pub fn builtin_method(&self, ty: &Ty, name: &str) -> Option<u32> {
         self.impls
@@ -688,9 +712,19 @@ impl ItemTree {
             Ty::Int | Ty::Ref(..) => (8, 8),
             Ty::Bool => (1, 1),
             Ty::Char => (4, 4),
-            // A `String` is 24 bytes, holding up to 23 inline (`text.md`).
-            Ty::String => (24, 8),
+            // A `String` is 24 bytes, holding up to 23 inline (`text.md`); a `Buf` is a pointer,
+            // a length and a capacity.
+            Ty::String | Ty::Buf(_) => (24, 8),
+            Ty::Array(t, n) => {
+                let (s, a) = self.size_of_depth(t, depth + 1);
+                match **n {
+                    Ty::Len(n) => (s.div_ceil(a) * a * n.max(0) as u64, a),
+                    _ => (0, a),
+                }
+            }
             Ty::Str
+            | Ty::Slice(_)
+            | Ty::Len(_)
             | Ty::Unit
             | Ty::Never
             | Ty::Error

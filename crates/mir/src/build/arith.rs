@@ -114,10 +114,19 @@ impl Builder<'_> {
         for (i, &(_, x)) in rest.iter().enumerate() {
             let cur = self.place(x);
             let cur_ty = self.ty(x);
-            let a = self.temp(Ty::reference(false, prev_ty.clone()));
-            self.cfg.assign(a, Rvalue::Ref(false, prev));
-            let b = self.temp(Ty::reference(false, cur_ty.clone()));
-            self.cfg.assign(b, Rvalue::Ref(false, cur.clone()));
+            // A slice borrow is passed as it is; other operands are borrowed.
+            let borrow = |b: &mut Self, place: Place, ty: &Ty| {
+                let t = b.temp(Ty::reference(false, ty.clone()));
+                match ty {
+                    Ty::Ref(_, inner) if matches!(**inner, Ty::Slice(_)) => {
+                        b.cfg.assign(t, Rvalue::Use(Operand::Copy(place)));
+                    }
+                    _ => b.cfg.assign(t, Rvalue::Ref(false, place)),
+                }
+                t
+            };
+            let a = borrow(self, prev, &prev_ty);
+            let b = borrow(self, cur.clone(), &cur_ty);
             let callee = self
                 .types
                 .compare_callee(e, i)

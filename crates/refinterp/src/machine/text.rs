@@ -195,7 +195,13 @@ impl Machine<'_> {
     }
 
     /// The prelude's built-in function `f`, for values of kind `head`.
-    pub(super) fn intrinsic(&mut self, f: &FnDef, head: &Head, args: &[Value]) -> Eval {
+    pub(super) fn intrinsic(
+        &mut self,
+        f: &FnDef,
+        head: &Head,
+        args: &[Value],
+        range: moddil_syntax::TextRange,
+    ) -> Eval {
         let name = f.node.name().map(|n| n.text()).unwrap_or_default();
         let text = |m: &Self, i: usize| text_of(m, &args[i]).expect("text");
         let ch = |m: &Self, i: usize| match m.target(args[i].clone()) {
@@ -250,6 +256,53 @@ impl Machine<'_> {
             (Head::Char, "is_lowercase") => Value::Bool(ch(self, 0).is_lowercase()),
             (Head::Char, "len_utf8") => Value::Int(ch(self, 0).len_utf8() as i64),
             (Head::Str, "len") => Value::Int(text(self, 0).len() as i64),
+            (Head::Str, "char_at_byte") => {
+                let Value::Int(at) = self.target(args[1].clone()) else {
+                    unreachable!("an `int`")
+                };
+                let s = text(self, 0);
+                let c = usize::try_from(at)
+                    .ok()
+                    .and_then(|at| s.get(at..))
+                    .and_then(|rest| rest.chars().next());
+                option(c.map(Value::Char))
+            }
+            (Head::Unit, "replace") => {
+                let Value::Ref(p, _) = args[0].clone() else {
+                    unreachable!("a borrow")
+                };
+                let old = self.memory.load(&p);
+                self.memory.store(&p, args[1].clone());
+                old
+            }
+            (Head::Unit, "swap") => {
+                let (Value::Ref(a, _), Value::Ref(b, _)) = (args[0].clone(), args[1].clone())
+                else {
+                    unreachable!("two borrows")
+                };
+                let (x, y) = (self.memory.load(&a), self.memory.load(&b));
+                self.memory.store(&a, y);
+                self.memory.store(&b, x);
+                Value::Unit
+            }
+            (Head::Int, "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "rotate_left") => {
+                let (Value::Int(a), Value::Int(b)) =
+                    (self.target(args[0].clone()), self.target(args[1].clone()))
+                else {
+                    unreachable!("two `int`s")
+                };
+                Value::Int(match name.as_str() {
+                    "wrapping_add" => a.wrapping_add(b),
+                    "wrapping_sub" => a.wrapping_sub(b),
+                    "wrapping_mul" => a.wrapping_mul(b),
+                    _ => a.rotate_left(b.rem_euclid(64) as u32),
+                })
+            }
+            (Head::Array | Head::Buf, "len") => match self.target(args[0].clone()) {
+                Value::Array(xs) | Value::Buf(_, xs) => Value::Int(xs.len() as i64),
+                other => unreachable!("a slice: {other:?}"),
+            },
+            (Head::Buf, _) => return self.buf_intrinsic(&name, args, range),
             (Head::Str, "starts_with") => Value::Bool(text(self, 0).starts_with(&text(self, 1))),
             (Head::Str, "ends_with") => Value::Bool(text(self, 0).ends_with(&text(self, 1))),
             (Head::Str, "contains") => Value::Bool(text(self, 0).contains(&text(self, 1))),
@@ -298,6 +351,87 @@ impl Machine<'_> {
             }
             (h, n) => unreachable!("no built-in `{n}` for {h:?}"),
         })
+    }
+}
+
+impl Machine<'_> {
+    /// The methods of `Buf<T>` (`collections.buf.1`).
+    fn buf_intrinsic(
+        &mut self,
+        name: &str,
+        args: &[Value],
+        range: moddil_syntax::TextRange,
+    ) -> Eval {
+        let int = |v: &Value| match v {
+            Value::Int(i) => *i,
+            other => unreachable!("an `int`: {other:?}"),
+        };
+        // The place of the `Buf` a borrow argument points to.
+        let place = |m: &Self, v: &Value| {
+            let Value::Ref(mut p, _) = v.clone() else {
+                unreachable!("a borrow of a `Buf`")
+            };
+            while let Value::Ref(q, _) = m.memory.load(&p) {
+                p = q;
+            }
+            p
+        };
+        let oob = || crate::trap(crate::TrapClass::IndexOutOfBounds, range);
+        let full = || crate::trap(crate::TrapClass::CapacityExceeded, range);
+        match name {
+            "with_capacity" => {
+                return Ok(Value::Buf(
+                    usize::try_from(int(&args[0])).unwrap_or(0),
+                    Vec::new(),
+                ));
+            }
+            "from_array" => {
+                let Value::Array(xs) = args[0].clone() else {
+                    unreachable!("an array")
+                };
+                return Ok(Value::Buf(xs.len(), xs));
+            }
+            "as_slice" => return Ok(Value::Ref(place(self, &args[0]), false)),
+            "as_mut_slice" => return Ok(Value::Ref(place(self, &args[0]), true)),
+            _ => {}
+        }
+        let p = place(self, &args[0]);
+        let Value::Buf(mut cap, mut xs) = self.memory.load(&p) else {
+            unreachable!("a `Buf`")
+        };
+        let at = |i: &Value, len: usize| usize::try_from(int(i)).ok().filter(|&i| i < len);
+        let out = match name {
+            "len" => Value::Int(xs.len() as i64),
+            "capacity" => Value::Int(cap as i64),
+            "set_capacity" => {
+                cap = usize::try_from(int(&args[1])).unwrap_or(0).max(xs.len());
+                Value::Unit
+            }
+            "push" | "insert" if xs.len() >= cap => return Err(full()),
+            "push" => {
+                xs.push(args[1].clone());
+                Value::Unit
+            }
+            "pop" => option(xs.pop()),
+            "insert" => {
+                let i = at(&args[1], xs.len() + 1).ok_or_else(oob)?;
+                xs.insert(i, args[2].clone());
+                Value::Unit
+            }
+            "remove" => {
+                let i = at(&args[1], xs.len()).ok_or_else(oob)?;
+                xs.remove(i)
+            }
+            "swap" => {
+                let i = at(&args[1], xs.len()).ok_or_else(oob)?;
+                let j = at(&args[2], xs.len()).ok_or_else(oob)?;
+                xs.swap(i, j);
+                Value::Unit
+            }
+            other => unreachable!("no built-in `{other}` for `Buf`"),
+        };
+        self.memory.store(&p, Value::Buf(cap, xs));
+        Ok(out)
     }
 }
 
