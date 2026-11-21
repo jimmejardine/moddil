@@ -28,8 +28,10 @@ mod exhaust;
 pub mod hir;
 mod items;
 mod lower;
+mod resolve;
 mod traits;
 mod ty;
+mod validate;
 
 pub use check::{Callee, Inference, infer, tuple_positions};
 pub use collect::{item_tree, parse};

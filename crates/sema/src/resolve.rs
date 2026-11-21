@@ -1,0 +1,549 @@
+//! Resolving the types written in source: paths, generic arguments, associated types and
+//! bounds, against a [`Scope`] that says what the names in a type refer to.
+//!
+//! Collecting signatures and lowering bodies both use it.
+
+use std::sync::Arc;
+
+use moddil_syntax::ast::{self, AstNode};
+use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
+
+use crate::items::{GenericParam, ItemTree, Pred};
+use crate::traits::elaborate;
+use crate::ty::{AssocTy, TraitRef};
+use crate::{Code, Diagnostic, Ty};
+
+/// One segment of a path: its name, where it is, and its generic arguments (`Vec::<int>`).
+#[derive(Clone, Debug)]
+pub(crate) struct Segment {
+    pub name: String,
+    pub range: TextRange,
+    pub args: Option<SyntaxNode>,
+}
+
+/// The segments of the `PATH` node `path`, with the generic arguments written on each (inside the
+/// segment in types, after `::` in expressions). `None` for a qualified path (`<T as Tr>::X`).
+pub(crate) fn path_segments(path: &SyntaxNode) -> Option<Vec<Segment>> {
+    let mut out: Vec<Segment> = Vec::new();
+    for c in path.children() {
+        match c.kind() {
+            K::QUALIFIED_PATH => return None,
+            K::PATH_SEGMENT => {
+                let tok = c.child_tokens().find(|t| {
+                    matches!(
+                        t.kind(),
+                        K::IDENT | K::SELF_TYPE_KW | K::SELF_KW | K::SUPER_KW | K::CRATE_KW
+                    )
+                });
+                out.push(Segment {
+                    name: tok
+                        .as_ref()
+                        .map(|t| t.text().to_string())
+                        .unwrap_or_default(),
+                    range: tok.map_or_else(|| c.text_range(), |t| t.text_range()),
+                    args: c.child(K::GENERIC_ARGS),
+                });
+            }
+            K::GENERIC_ARGS => {
+                if let Some(last) = out.last_mut() {
+                    last.args = Some(c);
+                }
+            }
+            _ => {}
+        }
+    }
+    Some(out)
+}
+
+/// What the names in a type refer to.
+pub(crate) struct Scope<'a> {
+    pub tree: &'a ItemTree,
+    /// The type parameters in scope.
+    pub params: &'a [GenericParam],
+    /// The bounds in scope, for `T::Name`.
+    pub preds: &'a [Pred],
+    /// What `Self` is.
+    pub self_ty: Option<Ty>,
+    /// Inside a trait: the trait, so `Self::Name` is its associated type.
+    pub trait_ctx: Option<u32>,
+    /// Inside an impl of a trait: the trait and the impl's associated types.
+    pub impl_assoc: Option<(TraitRef, Vec<Option<Ty>>)>,
+    /// Whether `_` and a generic struct or enum without arguments leave types to infer.
+    pub holes: bool,
+}
+
+impl<'a> Scope<'a> {
+    pub(crate) fn new(tree: &'a ItemTree) -> Self {
+        Scope {
+            tree,
+            params: &[],
+            preds: &[],
+            self_ty: None,
+            trait_ctx: None,
+            impl_assoc: None,
+            holes: false,
+        }
+    }
+
+    fn param(&self, name: &str) -> Option<Ty> {
+        self.params
+            .iter()
+            .rposition(|p| p.name == name)
+            .map(|i| Ty::Param(i as u32, name.into()))
+    }
+}
+
+pub(crate) fn hole() -> Ty {
+    Ty::Infer(Ty::HOLE)
+}
+
+/// The type written as `t`.
+pub(crate) fn resolve_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnostic>) -> Ty {
+    let node = t.syntax();
+    let range = node.text_range();
+    match t {
+        ast::Type::Path(_) => {
+            let Some(path) = node.child(K::PATH) else {
+                return Ty::Error;
+            };
+            match path_segments(&path) {
+                Some(segs) => path_type(&segs, range, scope, diags),
+                None => qualified_type(&path, scope, diags),
+            }
+        }
+        ast::Type::Tuple(_) => {
+            let elements: Vec<Ty> = node
+                .children()
+                .filter_map(ast::Type::cast)
+                .map(|t| resolve_type(&t, scope, diags))
+                .collect();
+            if elements.iter().any(Ty::has_ref) {
+                diags.push(Diagnostic::error(
+                    Code::E0309,
+                    range,
+                    "a tuple cannot hold a borrow: borrows live only in parameters and locals",
+                ));
+                return Ty::Error;
+            }
+            Ty::tuple(elements)
+        }
+        ast::Type::Ref(_) => {
+            let mutable = node.token(K::MUT_KW).is_some();
+            let inner = match node.children().find_map(ast::Type::cast) {
+                Some(t) => resolve_type(&t, scope, diags),
+                None => Ty::Error,
+            };
+            if inner.has_ref() {
+                diags.push(Diagnostic::error(
+                    Code::E0309,
+                    range,
+                    "a borrow cannot point to a borrow",
+                ));
+                return Ty::Error;
+            }
+            Ty::reference(mutable, inner)
+        }
+        ast::Type::Paren(_) => match node.children().find_map(ast::Type::cast) {
+            Some(inner) => resolve_type(&inner, scope, diags),
+            None => Ty::Error,
+        },
+        ast::Type::Never(_) => Ty::Never,
+        ast::Type::Infer(_) if scope.holes => hole(),
+        ast::Type::Infer(_) => {
+            diags.push(Diagnostic::error(
+                Code::E0102,
+                range,
+                "`_` stands for a type to infer, which a signature must write out",
+            ));
+            Ty::Error
+        }
+        _ => {
+            diags.push(Diagnostic::unsupported(range, "this type"));
+            Ty::Error
+        }
+    }
+}
+
+/// The type arguments and associated-type bindings (`Item = int`) of a `GENERIC_ARGS` node.
+pub(crate) fn generic_args(
+    node: &SyntaxNode,
+    scope: &Scope,
+    diags: &mut Vec<Diagnostic>,
+) -> (Vec<Ty>, Vec<(String, TextRange, Ty)>) {
+    let mut types = Vec::new();
+    let mut assoc = Vec::new();
+    for c in node.children() {
+        match c.kind() {
+            K::TYPE_ARG => match c.children().find_map(ast::Type::cast) {
+                Some(t) => types.push(resolve_type(&t, scope, diags)),
+                None => {
+                    diags.push(Diagnostic::unsupported(c.text_range(), "a const argument"));
+                    types.push(Ty::Error);
+                }
+            },
+            K::ASSOC_ARG => {
+                let name = c.token(K::IDENT);
+                let t = match c.children().find_map(ast::Type::cast) {
+                    Some(t) => resolve_type(&t, scope, diags),
+                    None => Ty::Error,
+                };
+                if let Some(n) = name {
+                    assoc.push((n.text().to_string(), n.text_range(), t));
+                }
+            }
+            K::CONST_ARG => {
+                diags.push(Diagnostic::unsupported(c.text_range(), "a const argument"));
+                types.push(Ty::Error);
+            }
+            _ => {}
+        }
+    }
+    (types, assoc)
+}
+
+/// Checks that `n` arguments were given for `want` parameters (E0404).
+pub(crate) fn arity(
+    what: &str,
+    want: usize,
+    n: usize,
+    range: TextRange,
+    diags: &mut Vec<Diagnostic>,
+) -> bool {
+    if want == n {
+        return true;
+    }
+    diags.push(Diagnostic::error(
+        Code::E0404,
+        range,
+        format!(
+            "{what} takes {want} type argument{}, but {n} {} given",
+            if want == 1 { "" } else { "s" },
+            if n == 1 { "was" } else { "were" },
+        ),
+    ));
+    false
+}
+
+/// The arguments of a struct or enum written with `args` (or without any).
+pub(crate) fn adt_args(
+    adt: u32,
+    args: Option<&SyntaxNode>,
+    range: TextRange,
+    scope: &Scope,
+    diags: &mut Vec<Diagnostic>,
+) -> Vec<Ty> {
+    let def = &scope.tree.adts[adt as usize];
+    let want = def.generics.params.len();
+    match args {
+        Some(a) => {
+            let (types, assoc) = generic_args(a, scope, diags);
+            for (_, r, _) in assoc {
+                diags.push(Diagnostic::error(
+                    Code::E0413,
+                    r,
+                    format!("`{}` has no associated types", def.name),
+                ));
+            }
+            if arity(&format!("`{}`", def.name), want, types.len(), range, diags) {
+                types
+            } else {
+                vec![Ty::Error; want]
+            }
+        }
+        None if want == 0 => Vec::new(),
+        None if scope.holes => vec![hole(); want],
+        None => {
+            arity(&format!("`{}`", def.name), want, 0, range, diags);
+            vec![Ty::Error; want]
+        }
+    }
+}
+
+pub(crate) fn path_type(
+    segs: &[Segment],
+    range: TextRange,
+    scope: &Scope,
+    diags: &mut Vec<Diagnostic>,
+) -> Ty {
+    let tree = scope.tree;
+    let no_args = |s: &Segment, diags: &mut Vec<Diagnostic>| {
+        if let Some(a) = &s.args {
+            diags.push(Diagnostic::error(
+                Code::E0404,
+                a.text_range(),
+                format!("`{}` takes no type arguments", s.name),
+            ));
+        }
+    };
+    match segs {
+        [one] => {
+            let name = one.name.as_str();
+            match name {
+                "int" => {
+                    no_args(one, diags);
+                    return Ty::Int;
+                }
+                "bool" => {
+                    no_args(one, diags);
+                    return Ty::Bool;
+                }
+                "Self" => {
+                    no_args(one, diags);
+                    return match &scope.self_ty {
+                        Some(t) => t.clone(),
+                        None => {
+                            diags.push(Diagnostic::error(
+                                Code::E0102,
+                                range,
+                                "`Self` is the type of an impl or trait, and there is none here",
+                            ));
+                            Ty::Error
+                        }
+                    };
+                }
+                _ => {}
+            }
+            if let Some(p) = scope.param(name) {
+                no_args(one, diags);
+                return p;
+            }
+            if let Some(a) = tree.adt_named(name) {
+                let args = adt_args(a, one.args.as_ref(), range, scope, diags);
+                return tree.adts[a as usize].ty_with(a, args);
+            }
+            let what = if tree.trait_named(name).is_some() {
+                format!("`{name}` is a trait, not a type")
+            } else {
+                format!("there is no type called `{name}`")
+            };
+            diags.push(Diagnostic::error(Code::E0102, range, what));
+            Ty::Error
+        }
+        [base, assoc] => {
+            let b = path_type(std::slice::from_ref(base), base.range, scope, diags);
+            if b == Ty::Error {
+                return Ty::Error;
+            }
+            no_args(assoc, diags);
+            assoc_type(&b, base.name == "Self", &assoc.name, range, scope, diags)
+        }
+        _ => {
+            diags.push(Diagnostic::unsupported(range, "this path"));
+            Ty::Error
+        }
+    }
+}
+
+/// `base::name`: an associated type of a trait `base` implements.
+pub(crate) fn assoc_type(
+    base: &Ty,
+    is_self: bool,
+    name: &str,
+    range: TextRange,
+    scope: &Scope,
+    diags: &mut Vec<Diagnostic>,
+) -> Ty {
+    let tree = scope.tree;
+    if is_self && let Some((tr, assoc)) = &scope.impl_assoc {
+        let def = &tree.traits[tr.trait_ as usize];
+        if let Some(i) = def.assoc.iter().position(|(n, _)| n == name) {
+            return assoc.get(i).cloned().flatten().unwrap_or(Ty::Error);
+        }
+    }
+    if is_self && let Some(t) = scope.trait_ctx {
+        let def = &tree.traits[t as usize];
+        if let Some(i) = def.assoc.iter().position(|(n, _)| n == name) {
+            let args: Vec<Ty> = def.generics.identity().into_iter().skip(1).collect();
+            return Ty::Assoc(Arc::new(AssocTy {
+                self_ty: base.clone(),
+                trait_ref: TraitRef {
+                    trait_: t,
+                    name: def.name.as_str().into(),
+                    args: args.into(),
+                },
+                index: i as u32,
+                name: name.into(),
+            }));
+        }
+    }
+    for p in elaborate(tree, scope.preds) {
+        if p.ty != *base {
+            continue;
+        }
+        let def = &tree.traits[p.trait_ref.trait_ as usize];
+        if let Some(i) = def.assoc.iter().position(|(n, _)| n == name) {
+            if let Some((_, t)) = p.assoc.iter().find(|(k, _)| *k == i as u32) {
+                return t.clone();
+            }
+            return Ty::Assoc(Arc::new(AssocTy {
+                self_ty: base.clone(),
+                trait_ref: p.trait_ref.clone(),
+                index: i as u32,
+                name: name.into(),
+            }));
+        }
+    }
+    diags.push(Diagnostic::error(
+        Code::E0413,
+        range,
+        format!("`{base}` has no associated type `{name}` through the bounds in scope"),
+    ));
+    Ty::Error
+}
+
+/// `<T as Trait>::Name`.
+pub(crate) fn qualified_type(path: &SyntaxNode, scope: &Scope, diags: &mut Vec<Diagnostic>) -> Ty {
+    let range = path.text_range();
+    let Some(q) = path.child(K::QUALIFIED_PATH) else {
+        return Ty::Error;
+    };
+    let base = match q.children().find_map(ast::Type::cast) {
+        Some(t) => resolve_type(&t, scope, diags),
+        None => return Ty::Error,
+    };
+    let Some(tpath) = q.child(K::PATH) else {
+        diags.push(Diagnostic::unsupported(range, "this path"));
+        return Ty::Error;
+    };
+    let Some((trait_ref, _)) = trait_path(&tpath, scope, diags) else {
+        return Ty::Error;
+    };
+    let name = path
+        .children()
+        .filter(|c| c.kind() == K::PATH_SEGMENT)
+        .last()
+        .map(|s| s.text().trim().to_string());
+    let Some(name) = name else {
+        return Ty::Error;
+    };
+    let def = &scope.tree.traits[trait_ref.trait_ as usize];
+    match def.assoc.iter().position(|(n, _)| *n == name) {
+        Some(i) => Ty::Assoc(Arc::new(AssocTy {
+            self_ty: base,
+            trait_ref,
+            index: i as u32,
+            name: name.as_str().into(),
+        })),
+        None => {
+            diags.push(Diagnostic::error(
+                Code::E0413,
+                range,
+                format!("`{}` has no associated type `{name}`", def.name),
+            ));
+            Ty::Error
+        }
+    }
+}
+
+/// The trait named by the `PATH` `path` (`Clone`, `Add<Output = int>`), with the associated
+/// types it fixes.
+pub(crate) fn trait_path(
+    path: &SyntaxNode,
+    scope: &Scope,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<(TraitRef, Vec<(u32, Ty)>)> {
+    let range = path.text_range();
+    let segs = path_segments(path)?;
+    let [seg] = segs.as_slice() else {
+        diags.push(Diagnostic::unsupported(range, "this path"));
+        return None;
+    };
+    let Some(t) = scope.tree.trait_named(&seg.name) else {
+        let what = if scope.tree.adt_named(&seg.name).is_some()
+            || scope.param(&seg.name).is_some()
+            || matches!(seg.name.as_str(), "int" | "bool")
+        {
+            format!("`{}` is a type, not a trait", seg.name)
+        } else {
+            format!("there is no trait called `{}`", seg.name)
+        };
+        diags.push(Diagnostic::error(Code::E0401, range, what));
+        return None;
+    };
+    let def = &scope.tree.traits[t as usize];
+    let want = def.generics.params.len() - 1;
+    let (args, assoc) = match &seg.args {
+        Some(a) => generic_args(a, scope, diags),
+        None => (Vec::new(), Vec::new()),
+    };
+    let args = if arity(&format!("`{}`", def.name), want, args.len(), range, diags) {
+        args
+    } else {
+        vec![Ty::Error; want]
+    };
+    let mut fixed = Vec::new();
+    for (name, r, ty) in assoc {
+        match def.assoc.iter().position(|(n, _)| *n == name) {
+            Some(i) => fixed.push((i as u32, ty)),
+            None => diags.push(Diagnostic::error(
+                Code::E0413,
+                r,
+                format!("`{}` has no associated type `{name}`", def.name),
+            )),
+        }
+    }
+    Some((
+        TraitRef {
+            trait_: t,
+            name: def.name.as_str().into(),
+            args: args.into(),
+        },
+        fixed,
+    ))
+}
+
+/// The bounds of `bounded` parameters and of the `where` clause of `item`.
+pub(crate) fn preds_of(
+    item: &SyntaxNode,
+    bounded: &[(usize, SyntaxNode)],
+    scope: &Scope,
+    ds: &mut Vec<Diagnostic>,
+) -> Vec<Pred> {
+    let mut out = Vec::new();
+    for (i, node) in bounded {
+        let ty = Ty::Param(*i as u32, scope.params[*i].name.as_str().into());
+        out.extend(bounds(node, &ty, scope, ds));
+    }
+    if let Some(w) = item.child(K::WHERE_CLAUSE) {
+        for p in w.children().filter(|c| c.kind() == K::WHERE_PRED) {
+            let Some(t) = p.children().find_map(ast::Type::cast) else {
+                continue;
+            };
+            let ty = resolve_type(&t, scope, ds);
+            out.extend(bounds(&p, &ty, scope, ds));
+        }
+    }
+    out
+}
+
+/// The bounds `node` (a `TYPE_PARAM`, `WHERE_PRED` or trait item) puts on `ty`: its `BOUND`
+/// children.
+pub(crate) fn bounds(
+    node: &SyntaxNode,
+    ty: &Ty,
+    scope: &Scope,
+    diags: &mut Vec<Diagnostic>,
+) -> Vec<Pred> {
+    let mut out = Vec::new();
+    for b in node.children().filter(|c| c.kind() == K::BOUND) {
+        if b.child(K::FN_SUGAR).is_some() || b.token(K::L_PAREN).is_some() {
+            diags.push(Diagnostic::unsupported(
+                b.text_range(),
+                "a function-type bound",
+            ));
+            continue;
+        }
+        let Some(path) = b.child(K::PATH) else {
+            continue;
+        };
+        if let Some((trait_ref, assoc)) = trait_path(&path, scope, diags) {
+            out.push(Pred {
+                ty: ty.clone(),
+                trait_ref,
+                assoc,
+                range: b.text_range(),
+            });
+        }
+    }
+    out
+}

@@ -1,0 +1,364 @@
+//! Traits and impls: trait headers, their methods and associated types, and each impl.
+
+use std::collections::HashMap;
+
+use moddil_syntax::ast::{self, AstNode};
+use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
+
+use crate::items::{Container, GenericParam, Generics, ImplDef, Pred, Src, TraitDef};
+use crate::resolve::{Scope, bounds, preds_of, resolve_type, trait_path};
+use crate::ty::TraitRef;
+use crate::{Code, Diagnostic, Ty};
+
+use super::{Collector, name_of};
+
+impl Collector<'_> {
+    pub(super) fn trait_skeleton(&mut self, src: Src, node: &SyntaxNode) {
+        let (name, name_range) = name_of(node);
+        let self_param = GenericParam {
+            name: "Self".to_string(),
+            range: name_range,
+        };
+        let (params, _) = self.params(src, None, node.child(K::GENERIC_PARAMS), &[self_param]);
+        let mut assoc = Vec::new();
+        let mut ds = Vec::new();
+        if let Some(t) = node.token(K::UNSAFE_KW) {
+            ds.push(Diagnostic::unsupported(t.text_range(), "an `unsafe` trait"));
+        }
+        for m in node
+            .child(K::TRAIT_BODY)
+            .into_iter()
+            .flat_map(|b| b.children().collect::<Vec<_>>())
+        {
+            if m.kind() == K::ASSOC_TYPE {
+                let (n, r) = name_of(&m);
+                if m.child(K::BOUND).is_some() || m.token(K::COLON).is_some() {
+                    ds.push(Diagnostic::unsupported(
+                        m.text_range(),
+                        "a bound on an associated type",
+                    ));
+                }
+                if m.token(K::EQ).is_some() {
+                    ds.push(Diagnostic::unsupported(
+                        m.text_range(),
+                        "a default for an associated type",
+                    ));
+                }
+                if let Some((_, first)) = assoc.iter().find(|(x, _): &&(String, TextRange)| *x == n)
+                {
+                    ds.push(
+                        Diagnostic::error(
+                            Code::E0103,
+                            r,
+                            format!("the associated type `{n}` is declared twice"),
+                        )
+                        .with_label(*first, "first declared here"),
+                    );
+                }
+                assoc.push((n, r));
+            } else if m.kind() == K::CONST_ITEM {
+                ds.push(Diagnostic::unsupported(
+                    m.text_range(),
+                    "an associated const",
+                ));
+            }
+        }
+        self.reporter.report(src, None, ds);
+        self.tree.traits.push(TraitDef {
+            name,
+            name_range,
+            src,
+            generics: Generics {
+                params,
+                parent: 0,
+                preds: Vec::new(),
+            },
+            supertraits: Vec::new(),
+            assoc,
+            methods: Vec::new(),
+        });
+    }
+
+    pub(super) fn trait_header(&mut self, i: usize, src: Src, node: &SyntaxNode) {
+        self.unsupported_parts(src, node, false);
+        let def = &self.tree.traits[i];
+        let params = def.generics.params.clone();
+        let bounded: Vec<(usize, SyntaxNode)> = node
+            .child(K::GENERIC_PARAMS)
+            .into_iter()
+            .flat_map(|g| g.children().collect::<Vec<_>>())
+            .filter(|c| c.kind() == K::TYPE_PARAM)
+            .enumerate()
+            .map(|(k, p)| (k + 1, p))
+            .collect();
+        let self_ty = Ty::Param(0, "Self".into());
+        let scope = Scope {
+            params: &params,
+            self_ty: Some(self_ty.clone()),
+            trait_ctx: Some(i as u32),
+            ..Scope::new(&self.tree)
+        };
+        let mut ds = Vec::new();
+        let supers: Vec<TraitRef> = bounds(node, &self_ty, &scope, &mut ds)
+            .into_iter()
+            .map(|p| p.trait_ref)
+            .collect();
+        let preds = preds_of(
+            node,
+            &bounded,
+            &Scope {
+                params: &params,
+                self_ty: Some(self_ty),
+                trait_ctx: Some(i as u32),
+                ..Scope::new(&self.tree)
+            },
+            &mut ds,
+        );
+        self.reporter.report(src, None, ds);
+        let def = &mut self.tree.traits[i];
+        def.supertraits = supers;
+        def.generics.preds = preds;
+    }
+
+    /// The bound a trait's items have on `Self`: `Self: Trait<…>`.
+    pub(super) fn self_pred(&self, t: u32) -> Pred {
+        let def = &self.tree.traits[t as usize];
+        let args: Vec<Ty> = def.generics.identity().into_iter().skip(1).collect();
+        Pred {
+            ty: Ty::Param(0, "Self".into()),
+            trait_ref: TraitRef {
+                trait_: t,
+                name: def.name.as_str().into(),
+                args: args.into(),
+            },
+            assoc: Vec::new(),
+            range: def.name_range,
+        }
+    }
+
+    pub(super) fn trait_methods(&mut self, i: usize, src: Src, node: &SyntaxNode) {
+        let mut generics = self.tree.traits[i].generics.clone();
+        generics.preds.insert(0, self.self_pred(i as u32));
+        generics.parent = generics.params.len() as u32;
+        let mut names: HashMap<String, TextRange> = HashMap::new();
+        for m in node
+            .child(K::TRAIT_BODY)
+            .into_iter()
+            .flat_map(|b| b.children().collect::<Vec<_>>())
+        {
+            let Some(f) = ast::FnItem::cast(m) else {
+                continue;
+            };
+            let sig = self.fn_sig(
+                &f,
+                src,
+                Container::Trait(i as u32),
+                &generics,
+                Some(&Ty::Param(0, "Self".into())),
+                Some(i as u32),
+                None,
+            );
+            if let Some(first) = names.get(&sig.name) {
+                let d = Diagnostic::error(
+                    Code::E0103,
+                    sig.name_range,
+                    format!("the method `{}` is declared twice", sig.name),
+                )
+                .with_label(*first, "first declared here");
+                self.reporter.report(src, None, vec![d]);
+            } else {
+                names.insert(sig.name.clone(), sig.name_range);
+            }
+            self.tree.traits[i].methods.push(self.tree.fns.len() as u32);
+            self.tree.fns.push(sig);
+        }
+    }
+
+    pub(super) fn impl_item(&mut self, src: Src, node: &SyntaxNode) {
+        let origin = self.reporter.origin(src, node.text_range());
+        self.unsupported_parts(src, node, false);
+        let index = self.tree.impls.len() as u32;
+        let (params, bounded) = self.params(src, origin, node.child(K::GENERIC_PARAMS), &[]);
+        let types: Vec<ast::Type> = node.children().filter_map(ast::Type::cast).collect();
+        let is_trait = node.token(K::FOR_KW).is_some();
+        let mut ds = Vec::new();
+        if let Some(t) = node.token(K::UNSAFE_KW) {
+            ds.push(Diagnostic::unsupported(t.text_range(), "an `unsafe` impl"));
+        }
+        let scope = Scope {
+            params: &params,
+            ..Scope::new(&self.tree)
+        };
+        let self_node = if is_trait {
+            types.get(1)
+        } else {
+            types.first()
+        };
+        let self_ty = match self_node {
+            Some(t) => resolve_type(t, &scope, &mut ds),
+            None => Ty::Error,
+        };
+        let header_end = self_node.map_or(node.text_range().end, |t| t.syntax().text_range().end);
+        let start = node
+            .child_tokens()
+            .find(|t| matches!(t.kind(), K::IMPL_KW | K::UNSAFE_KW))
+            .map_or(node.text_range().start, |t| t.text_range().start);
+        let range = TextRange::new(start, header_end);
+        let trait_ref = if is_trait {
+            types
+                .first()
+                .and_then(|t| t.syntax().child(K::PATH))
+                .and_then(|p| {
+                    let r = trait_path(&p, &scope, &mut ds);
+                    if let Some((_, fixed)) = &r
+                        && !fixed.is_empty()
+                    {
+                        ds.push(Diagnostic::error(
+                            Code::E0413,
+                            p.text_range(),
+                            "an impl defines associated types in its body, not in the trait's \
+                             arguments",
+                        ));
+                    }
+                    r.map(|(t, _)| t)
+                })
+        } else {
+            None
+        };
+        self.reporter.report(src, origin, ds);
+        // An impl of something that is not a trait is already reported; it is not inherent.
+        let self_ty = if is_trait && trait_ref.is_none() {
+            Ty::Error
+        } else {
+            self_ty
+        };
+        let scope = Scope {
+            params: &params,
+            self_ty: Some(self_ty.clone()),
+            ..Scope::new(&self.tree)
+        };
+        let mut ds = Vec::new();
+        let preds = preds_of(node, &bounded, &scope, &mut ds);
+        // Every parameter must be fixed by the self type or the trait's arguments.
+        for (k, p) in params.iter().enumerate() {
+            let me = Ty::Param(k as u32, p.name.as_str().into());
+            let used = self_ty.any(&|t| *t == me)
+                || trait_ref
+                    .as_ref()
+                    .is_some_and(|t| t.args.iter().any(|a| a.any(&|x| *x == me)));
+            if !used {
+                ds.push(Diagnostic::error(
+                    Code::E0415,
+                    p.range,
+                    format!(
+                        "`{}` is not used by the type or trait the impl is for, so nothing can \
+                         say what it is",
+                        p.name
+                    ),
+                ));
+            }
+        }
+        // Associated types.
+        let n_assoc = trait_ref
+            .as_ref()
+            .map_or(0, |t| self.tree.traits[t.trait_ as usize].assoc.len());
+        let mut assoc: Vec<Option<Ty>> = vec![None; n_assoc];
+        let members: Vec<SyntaxNode> = node
+            .child(K::IMPL_BODY)
+            .into_iter()
+            .flat_map(|b| b.children().collect::<Vec<_>>())
+            .collect();
+        for m in &members {
+            if m.token(K::DEFAULT_KW).is_some() {
+                ds.push(Diagnostic::unsupported(
+                    m.text_range(),
+                    "specialisation (`default`)",
+                ));
+            }
+            match m.kind() {
+                K::ASSOC_TYPE => {
+                    let (n, r) = name_of(m);
+                    let Some(tr) = &trait_ref else {
+                        ds.push(Diagnostic::unsupported(
+                            m.text_range(),
+                            "an associated type in an inherent impl",
+                        ));
+                        continue;
+                    };
+                    let tdef = &self.tree.traits[tr.trait_ as usize];
+                    let Some(k) = tdef.assoc.iter().position(|(x, _)| *x == n) else {
+                        ds.push(Diagnostic::error(
+                            Code::E0408,
+                            r,
+                            format!("`{}` has no associated type `{n}`", tdef.name),
+                        ));
+                        continue;
+                    };
+                    let ty = match m.children().find_map(ast::Type::cast) {
+                        Some(t) => resolve_type(&t, &scope, &mut ds),
+                        None => Ty::Error,
+                    };
+                    assoc[k] = Some(ty);
+                }
+                K::CONST_ITEM => {
+                    ds.push(Diagnostic::unsupported(
+                        m.text_range(),
+                        "an associated const",
+                    ));
+                }
+                _ => {}
+            }
+        }
+        self.reporter.report(src, origin, ds);
+        self.tree.impls.push(ImplDef {
+            src,
+            range,
+            generics: Generics {
+                params: params.clone(),
+                parent: 0,
+                preds: preds.clone(),
+            },
+            trait_ref: trait_ref.clone(),
+            self_ty: self_ty.clone(),
+            assoc: assoc.clone(),
+            methods: Vec::new(),
+            origin,
+        });
+        // Methods.
+        let generics = Generics {
+            parent: params.len() as u32,
+            params,
+            preds,
+        };
+        let mut names: HashMap<String, TextRange> = HashMap::new();
+        for m in members {
+            let Some(f) = ast::FnItem::cast(m) else {
+                continue;
+            };
+            let sig = self.fn_sig(
+                &f,
+                src,
+                Container::Impl(index),
+                &generics,
+                Some(&self_ty),
+                None,
+                trait_ref.clone().map(|t| (t, assoc.clone())),
+            );
+            if let Some(first) = names.get(&sig.name) {
+                let d = Diagnostic::error(
+                    Code::E0103,
+                    sig.name_range,
+                    format!("the method `{}` is defined twice", sig.name),
+                )
+                .with_label(*first, "first defined here");
+                self.reporter.report(src, origin, vec![d]);
+            } else {
+                names.insert(sig.name.clone(), sig.name_range);
+            }
+            self.tree.impls[index as usize]
+                .methods
+                .push(self.tree.fns.len() as u32);
+            self.tree.fns.push(sig);
+        }
+    }
+}

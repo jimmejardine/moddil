@@ -1272,7 +1272,7 @@ impl Checker<'_> {
         match given {
             Some(g) => {
                 let mut ds = Vec::new();
-                let ok = crate::collect::arity(&format!("`{name}`"), want, g.len(), range, &mut ds);
+                let ok = crate::resolve::arity(&format!("`{name}`"), want, g.len(), range, &mut ds);
                 self.out.diagnostics.extend(ds);
                 if ok {
                     g.iter().map(|t| self.instantiate(t)).collect()

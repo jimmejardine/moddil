@@ -3,14 +3,13 @@
 use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode, SyntaxToken, TextRange};
 
-use crate::collect::{
-    Scope, adt_args, generic_args, item_tree, node_at, path_segments, resolve_type, source,
-};
+use crate::collect::{item_tree, node_at, source};
 use crate::hir::{
     Arm, BinaryOp, Body, CompareOp, Expr, ExprId, ExprKind, Local, LocalId, LogicOp, Pat, PatId,
     PatKind, Stmt, UnaryOp,
 };
 use crate::items::{Container, GenericParam, Pred, Shape, Src};
+use crate::resolve::{Scope, adt_args, generic_args, path_segments, resolve_type};
 use crate::ty::TraitRef;
 use crate::{Code, Db, Diagnostic, Item, ItemTree, Owner, Ty};
 
@@ -179,7 +178,7 @@ impl Lowerer<'_> {
                 "associated types are fixed in bounds, not in a call",
             ));
         }
-        let ok = crate::collect::arity(what, want, types.len(), node.text_range(), &mut ds);
+        let ok = crate::resolve::arity(what, want, types.len(), node.text_range(), &mut ds);
         self.out.diagnostics.extend(ds);
         if ok { types } else { vec![Ty::Error; want] }
     }
