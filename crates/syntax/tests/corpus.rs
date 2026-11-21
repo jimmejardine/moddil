@@ -58,7 +58,7 @@ fn valid_cases_parse_without_errors() {
         .into_iter()
         .chain(cases("samples.moddil"))
         .collect();
-    assert_eq!(cases.len(), 764);
+    assert_eq!(cases.len(), 763);
     let mut failures = Vec::new();
     for (i, case) in cases.iter().enumerate() {
         if let Some(e) = lossless(case).errors().first() {
@@ -89,14 +89,20 @@ fn invalid_cases_report_errors() {
     );
 }
 
-#[test]
-fn the_parser_agrees_with_the_grammar_on_random_edits() {
+/// The random edits are split into this many tests, so the test runner checks them in parallel.
+/// Each pays the grammar's set-up once, so more shards stop paying off quickly.
+const EDIT_SHARDS: u64 = 4;
+
+/// One shard of the differential test: its share of the edits, from its own seed.
+fn the_parser_agrees_with_the_grammar_on_random_edits(shard: u64) {
     let source = std::fs::read_to_string(grammar_dir().join("moddil.ebnf")).expect("the grammar");
-    // 1000 by default; CI's grammars step runs many more in release (`MODDIL_EDITS`), and
-    // `MODDIL_SEED` explores other edits.
+    // 1000 in all by default; CI's grammars step runs many more in release (`MODDIL_EDITS`, the
+    // total over the shards), and `MODDIL_SEED` explores other edits.
     let var = |name: &str| std::env::var(name).ok().and_then(|n| n.parse::<u64>().ok());
-    let count = var("MODDIL_EDITS").map_or(1000, |n| usize::try_from(n).expect("a count"));
-    let seed = var("MODDIL_SEED").unwrap_or(0x0005_EED0_F6A3_3A12);
+    let total = var("MODDIL_EDITS").map_or(1000, |n| n);
+    let count = usize::try_from(total.div_ceil(EDIT_SHARDS)).expect("a count");
+    let seed = var("MODDIL_SEED").unwrap_or(0x0005_EED0_F6A3_3A12)
+        ^ shard.wrapping_mul(0x9E37_79B9_7F4A_7C15);
     let cases = moddil_grammar::edited_cases(&source, count, seed).expect("the grammar is valid");
     let mut disagreements = Vec::new();
     let accepted = cases.iter().filter(|c| c.1).count();
@@ -128,6 +134,28 @@ fn the_parser_agrees_with_the_grammar_on_random_edits() {
         show(&disagreements, cases.len(), "edits get a different verdict")
     );
 }
+
+macro_rules! edit_shards {
+    ($($name:ident = $shard:literal),* $(,)?) => {
+        $(
+            #[test]
+            fn $name() {
+                the_parser_agrees_with_the_grammar_on_random_edits($shard);
+            }
+        )*
+        #[test]
+        fn every_edit_shard_has_a_test() {
+            assert_eq!(u64::try_from([$($shard),*].len()).ok(), Some(EDIT_SHARDS));
+        }
+    };
+}
+
+edit_shards!(
+    random_edits_0 = 0,
+    random_edits_1 = 1,
+    random_edits_2 = 2,
+    random_edits_3 = 3
+);
 
 #[test]
 fn every_prefix_of_the_samples_parses_losslessly() {

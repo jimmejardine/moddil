@@ -276,7 +276,7 @@ impl Lowerer<'_> {
                 }
             }
         };
-        // A path through modules: `crate::shapes::Shape::Circle`, `shapes::Point`.
+        // A path through modules: `mod::shapes::Shape::Circle`, `shapes::Point`.
         if segments.len() > 2 || (segments.len() == 2 && adt_named(self, &segments[0]).is_none()) {
             let names: Vec<&str> = segments.iter().map(String::as_str).collect();
             let found = self.items.path(self.types.module, &names, false);

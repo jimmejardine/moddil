@@ -99,7 +99,7 @@ pub struct Entry {
     pub range: TextRange,
 }
 
-/// A `use` of one name: `use crate::a::b as c;` imports `b` as `c`.
+/// A `use` of one name: `use mod::a::b as c;` imports `b` as `c`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Import {
     /// The name it brings in.
@@ -136,7 +136,7 @@ pub struct ModuleDef {
 pub struct ModDef {
     /// Its name.
     pub name: String,
-    /// Its root module (`crate`).
+    /// Its root module (`mod`).
     pub root: u32,
     /// The mods it depends on, by the name it calls them.
     pub deps: std::collections::BTreeMap<String, u32>,

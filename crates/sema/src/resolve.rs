@@ -33,7 +33,7 @@ pub(crate) fn path_segments(path: &SyntaxNode) -> Option<Vec<Segment>> {
                 let tok = c.child_tokens().find(|t| {
                     matches!(
                         t.kind(),
-                        K::IDENT | K::SELF_TYPE_KW | K::SELF_KW | K::SUPER_KW | K::CRATE_KW
+                        K::IDENT | K::SELF_TYPE_KW | K::SELF_KW | K::SUPER_KW | K::MOD_KW
                     )
                 });
                 out.push(Segment {
@@ -414,7 +414,7 @@ pub(crate) fn path_type(
             assoc_type(&b, base.name == "Self", &assoc.name, range, scope, diags)
         }
         _ => {
-            // A path through modules: `crate::shapes::Point`.
+            // A path through modules: `mod::shapes::Point`.
             let names: Vec<&str> = segs.iter().map(|s| s.name.as_str()).collect();
             let last = segs.last().expect("two or more segments");
             match tree.path(scope.module, &names, scope.prelude_first) {

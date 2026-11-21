@@ -193,8 +193,6 @@ fn const ( ) ;
 // ---
 fn continue ( ) ;
 // ---
-fn crate ( ) ;
-// ---
 fn default ( ) ;
 // ---
 fn defer ( ) ;
@@ -577,7 +575,7 @@ use self ;
 // ---
 use super ;
 // ---
-use crate ;
+use mod ;
 // ---
 use x :: x ;
 // ---
@@ -595,19 +593,19 @@ property "s" for Self ( ) { }
 // ---
 property "s" for super ( ) { }
 // ---
-property "s" for crate ( ) { }
+property "s" for mod ( ) { }
 // ---
 property "s" for x :: x ( ) { }
 // ---
 property "s" for x :: < > ( ) { }
+// ---
+unit x : mod :: Self ;
 // ---
 unit x : x ;
 // ---
 unit x : self ;
 // ---
 unit x : super ;
-// ---
-unit x : crate ;
 // ---
 unit x : Self :: Self ;
 // ---
@@ -968,7 +966,7 @@ fn x ( Self ) ;
 // ---
 fn x ( super ) ;
 // ---
-fn x ( crate ) ;
+fn x ( mod ) ;
 // ---
 fn x ( x :: x ) ;
 // ---

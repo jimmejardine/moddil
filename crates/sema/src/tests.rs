@@ -547,10 +547,9 @@ fn program_codes(
 
 #[test]
 fn modules() {
-    let root =
-        "use crate::a::Point;\npub(mod) fn f() -> int { a::norm(Point { x: 1 }) + b::g() }\n";
+    let root = "use mod::a::Point;\npub(mod) fn f() -> int { a::norm(Point { x: 1 }) + b::g() }\n";
     let a = "pub(mod) struct Point { x: int }\npub(mod) fn norm(p: Point) -> int { p.x }\n";
-    let b = "pub(mod) fn g() -> int { crate::f() }\n";
+    let b = "pub(mod) fn g() -> int { mod::f() }\n";
     let one: &[(&str, &[(&str, u32)])] = &[("m", &[])];
     assert_eq!(
         program_codes(&[(0, &[], root), (0, &["a"], a), (0, &["b"], b)], one),
@@ -586,7 +585,7 @@ fn modules() {
     assert_eq!(
         program_codes(
             &[
-                (0, &[], "use crate::a::X;\nstruct X;\n"),
+                (0, &[], "use mod::a::X;\nstruct X;\n"),
                 (0, &["a"], "pub(mod) struct X;\n")
             ],
             one

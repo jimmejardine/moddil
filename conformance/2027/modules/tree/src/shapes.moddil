@@ -5,7 +5,7 @@ pub(mod) fn area(s: Shape) -> int {
 }
 
 pub(mod) fn perimeter(s: Shape) -> int {
-    match s { Shape::Square(n) => crate::double(crate::double(n)) }
+    match s { Shape::Square(n) => mod::double(mod::double(n)) }
 }
 
 // A private item is named only by its own module.

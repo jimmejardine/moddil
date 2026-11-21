@@ -185,7 +185,7 @@ fn modules_and_mods() {
     let runs = run_program(
         vec![
             file(
-                "use crate::a::Point;\ntest \"t\" {\n    a::norm(Point { x: 2 }) + dep::three() // => 5\n}\n",
+                "use mod::a::Point;\ntest \"t\" {\n    a::norm(Point { x: 2 }) + dep::three() // => 5\n}\n",
                 0,
                 &[],
             ),

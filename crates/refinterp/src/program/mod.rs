@@ -285,7 +285,7 @@ impl Program {
         let first = path.first()?;
         let here = self.modules[module].mod_;
         let mut def = match first.as_str() {
-            "crate" => Def::Module(self.mods[here].root),
+            "mod" => Def::Module(self.mods[here].root),
             "self" => Def::Module(module),
             name => match self
                 .member(module, name, depth)
@@ -581,7 +581,7 @@ pub(crate) fn fn_def(f: &ast::FnItem, user: bool, destructor: bool, site: (u32, 
     }
 }
 
-/// The path a type's first `PATH` writes, without generic arguments: `["crate", "a", "Point"]`.
+/// The path a type's first `PATH` writes, without generic arguments: `["mod", "a", "Point"]`.
 pub(crate) fn type_path(node: &SyntaxNode) -> Vec<String> {
     let path = if node.kind() == K::PATH {
         Some(node.clone())

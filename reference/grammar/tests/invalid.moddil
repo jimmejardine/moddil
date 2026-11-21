@@ -8,23 +8,24 @@ x ;
 #[ x ] ] mod x ;
 // ---
 /// doc
-mod x 1 ;
+mod x return ;
 // ---
 note "s" mod mod x ;
 // ---
 pub mod x ; ;
 // ---
-^= fn x ( ) ;
+/= fn x ( ) ;
 // ---
 struct x x ;
 // ---
 view x { } }
 // ---
-enum && x { }
+enum //! doc
+x { }
 // ---
 trait x { { }
 // ---
-&& impl ! { }
+< impl ! { }
 // ---
 type x = ! ! ;
 // ---
@@ -76,7 +77,7 @@ fn x ( ) { } }
 // ---
 linear struct ;
 // ---
-struct x in < x > ;
+struct x b"s" < x > ;
 // ---
 x struct ( ) ;
 // ---
@@ -94,9 +95,9 @@ enum < x x > { }
 // ---
 enum x where ! Self : { }
 // ---
-enum x { x unsafe , x }
+enum x { x -%= , x }
 // ---
-enum x { x , - }
+enum x { x , * }
 // ---
 unsafe trait trait x { }
 // ---
@@ -108,7 +109,7 @@ trait x where ! : Self {
 // ---
 trait x { type x ; ; }
 // ---
-unsafe impl &= ! { }
+unsafe impl false ! { }
 // ---
 impl x < > ! { }
 // ---
@@ -124,10 +125,9 @@ const x : : ! = || escape ;
 // ---
 const x : ! = ..
 // ---
-use { } /// doc
-;
+use { } *%= ;
 // ---
-with test "s" for x { }
+continue test "s" for x { }
 // ---
 test "s" for x with x in ! ] { }
 // ---
@@ -139,13 +139,15 @@ test "s" Self with { }
 // ---
 unit x < ! as Self > ;
 // ---
+test "s" with Self , Self { != }
+// ---
 property "s" for x ( * ) { { }
 // ---
-bench 'c' "s" for x { }
+bench & "s" for x { }
 // ---
-unit x = : 1 ;
+unit x = b"s" 1 ;
 // ---
-dimension x = x -= ;
+dimension x = x => ;
 // ---
 x #![ :: x ]
 // ---
@@ -153,25 +155,25 @@ x #![ :: x ]
 // ---
 #![ x ( [ ) ]
 // ---
-#![ type x ( { } ) ]
+#![ always x ( { } ) ]
 // ---
-#![ x match ( x ) ]
+#![ x impl ( x ) ]
 // ---
 #![ x = ]
 // ---
 #![ x = = r#"raw "text""# ]
 // ---
-#![ x = b"s" self ]
+#![ x = b"s" * ]
 // ---
 #![ x = """
     text
-    """ nondet ]
+    """ - ]
 // ---
 #![ #![ x = fmt"{x.f("y")}" ]
 // ---
-#![ x = 'c' < ]
+#![ x = 'c' dimension ]
 // ---
-+%= #![ x = b'c' ]
+_ #![ x = b'c' ]
 // ---
 #![ x = true ] ]
 // ---
@@ -189,222 +191,228 @@ fn const ( ( ) ;
 // ---
 fn continue ( ) ) ;
 // ---
-fn >>= crate ( ) ;
+fn > default ( ) ;
 // ---
-fn default ) ;
+fn defer ) ;
 // ---
-fn defer super ( ) ;
+fn dimension where ( ) ;
 // ---
-fn dimension ( ( ) ;
+fn dyn ( ( ) ;
 // ---
-fn dyn ( ) +% ;
-// ---
-fn else ( ) ; ;
+fn else ( ) ?! ;
 // ---
 fn ensures ( ) ; ;
 // ---
-enum fn ( ) ;
+fn enum ( ) *% ;
 // ---
-fn \ errdefer ( ) ;
+errdefer fn ( ) ;
 // ---
-fn escape escape ( ) ;
+fn +% escape ( ) ;
 // ---
-fn ( extern ) ;
+fn extern extern ( ) ;
 // ---
-fn false ) ;
+fn ( fail ) ;
 // ---
-fn fn fn ( ) ;
+fn false ( ] ) ;
+// ---
+fn fn ) ;
+// ---
+fn for for ( ) ;
 // ---
 fn ( ) ;
 // ---
-fn from ( ) ) ;
+fn gen ( ) ) ;
 // ---
-enum fn gen ( ) ;
+type fn group ( ) ;
 // ---
-fn group ( try ) ;
+fn if ( type ) ;
 // ---
-fn invariant if ( ) ;
+fn > impl ( ) ;
 // ---
-try fn let ( ) ;
+fn let ( match ) ;
 // ---
-fn linear ( ) |= ;
+self fn linear ( ) ;
 // ---
-fn loop loop ( ) ;
+fn loop ( ) fmt"{x.f("y")}" ;
 // ---
-fn match ( ) ; ;
+fn match match ( ) ;
 // ---
-fn mod ( ) ) ;
+fn mod ( ) ; ;
 // ---
-mut fn ( ) ;
+fn mut ( ) ) ;
 // ---
-fn nondet ( ! ) ;
+nondet fn ( ) ;
 // ---
-fn note note ( ) ;
+fn note ( &= ) ;
 // ---
-fn property ) ( ;
+fn property property ( ) ;
 // ---
-fn if ref ( ) ;
+fn pub ) ( ;
 // ---
-fn requires ( ; )
+fn < requires ( ) ;
 // ---
-fn resume loop ( ) ;
+fn resume ( ; )
 // ---
-fn return invariant ( ) ;
+fn return & ( ) ;
 // ---
-fn select ( ) in ;
+fn select >>= ( ) ;
 // ---
-fn self ( catch ) ;
+fn self ( ) *%= ;
 // ---
-Self fn ( ) ;
+fn Self ( +% ) ;
 // ---
-fn ( spawn ) ;
+spawn fn ( ) ;
 // ---
-fn struct ) ( ;
+fn ( static ) ;
 // ---
-fn super ) ;
+fn super ) ( ;
 // ---
-fn errdefer suspend ( ) ;
+fn suspend ) ;
 // ---
-fn test ( ) && ;
+fn : test ( ) ;
 // ---
-fn trait ) ;
+fn trait ( ) + ;
 // ---
-fn true ( )
+fn true ) ;
 // ---
-fn try ( ) ) ;
+fn try ( )
 // ---
-fn type r#"raw "text""# ( ) ;
+fn type ( ) ) ;
 // ---
-fn fn unit ( ) ;
+fn unit where ( ) ;
 // ---
-fn unsafe ( )
+fn fn unsafe ( ) ;
 // ---
-fn use ( ) ; ;
+fn use ( )
 // ---
-return fn while ( ) ;
+fn view ( ) ; ;
 // ---
-fn let with ( ) ;
+#![ fn with ( ) ;
 // ---
-yield ( ) ;
+fn fmt"{x.f("y")}" yield ( ) ;
 // ---
-fn x < x , x > ( )
+fn x < x , > ( )
 // ---
-x < x , > ( ) ;
+fn x * , * ) ;
 // ---
-fn x ( * * , ) ;
+fn ( * , ) ;
 // ---
-fn x ( ) -> -> ! ;
+fn x ( ) ) -> ! ;
 // ---
-impl impl { }
+impl impl Self Self { }
 // ---
-impl dyn Self { { }
+impl dyn { }
 // ---
-x ( ) resume x : ! ;
+fn x ( ) resume x : ! ; ;
 // ---
-fn ( ) from x ;
+fn x ( from x ;
 // ---
-fn x ( ) with ; suspend ;
+fn ( ) with suspend ;
 // ---
-fn x ( where ) ! : Self ;
+fn x ( ) where ! <= : Self ;
+// ---
+fn x ( requires ) escape ;
 // ---
 fn x ( ) escape ;
 // ---
-fn x ( ( ) ensures escape ;
+test test "s" { //! doc
+}
 // ---
-view x where ! : Self , : ! Self { }
+view x where ! : , ! : Self { }
 // ---
-view x { escape invariant }
+view { x invariant escape }
 // ---
-view x { invariant escape += , invariant escape }
+view x { escape invariant , invariant escape }
 // ---
-view x { invariant invariant escape , }
+view x { invariant escape , & }
 // ---
-struct x ( ! ) += ;
+struct x ( ( ! ) ;
 // ---
-struct x ( ! linear , ! ) ;
+struct ( x ! , ! ) ;
 // ---
-struct x ( ! , ;
+struct x ( , ) ;
 // ---
-enum x .. { x { } }
+enum ) x { /// doc
+x }
 // ---
-enum x x { ( ) }
+enum x { x &= { } }
 // ---
-, enum x { x = escape }
+enum x gen { x ( ) }
 // ---
-trait x : + Self Self { }
+enum x x { = escape }
 // ---
-trait x { /// doc
-type x enum ; }
+trait x : Self + with Self { }
 // ---
-trait x { note type x ; }
+trait x { type /// doc
+x ; }
 // ---
-trait x { fn x ( ) ; ( }
+trait x { note "s" defer type x ; }
 // ---
-trait x { const const x : ! = escape ; }
+trait x { fn ( ) ; }
 // ---
-impl r#"raw "text""# ! with suspend { }
+trait x { const x : ! = escape ; return }
 // ---
-impl ! { type x ;
+impl ! with suspend suspend { }
 // ---
-const const x : ! = return ;
+impl ! { type x ( ; }
 // ---
-x const : ! = break ;
+const x : ! = yield
 // ---
-const x : ^ ! = continue ;
+const const x : ! = break ;
 // ---
-use x :: * ; ;
+x const : ! = continue ;
 // ---
-use x x :: { } ;
+\ use x :: * ;
 // ---
--%= use x as x ;
+use x :: { } } ;
 // ---
-unit x : < ! as Self :: > x ;
+use x x as x ;
 // ---
-unit x = 1 + ;
+unit x : < ! as loop Self > :: x ;
 // ---
-unit x = 1 - 1
+unit x = + 1 1 ;
 // ---
-#![ extern x = 1.5 ]
+unit x = 1 - ;
 // ---
-dimension defer x = x * x ;
+#![ x = 1.5
 // ---
-#[ dimension x = x / x ;
+dimension x = x match * x ;
 // ---
-#![ x ( ( x ) ) ) ]
+dimension ] x = x / x ;
 // ---
-#![ x ( ( { x } ) ]
+#![ x ( [ x ] ) ) ]
 // ---
-Self #![ x ( always ) ]
+#![ #![ x ( always ) ]
 // ---
-#![ x ( 1 ]
+enum #![ x ( 'a ) ]
 // ---
-#![ x ( + ) ] ]
+#![ x ( + ]
 // ---
-#![ x = 1 x ] ]
+#![ x = 1 1 [ x ] ]
 // ---
 fn x < /// doc
-x ( > ) ;
+x ( ) ;
 // ---
-fn x < const x : ! > ( ) ? ;
+fn x < const x : ! > ) ( ;
 // ---
-fn x < x const : ! = "s" > ( ) ;
+fn x < const x : ! = "s" ( > ) ;
 // ---
-fn x < const x : . ! = 1 > ( ) ;
+fn x < const x : ! 1 > ( ) ;
 // ---
-fn x < x : ! = true > ( ) ;
+fn x < const x : ! = true > ( ) +% ;
 // ---
-fn x < < const x : ! = false > ( ) ;
+fn x < const x x : ! = false > ( ) ;
 // ---
-fn x < const const x : ! = { } > ( ) ;
+fn x < const : ! = { } > ( ) ;
 // ---
-fn x < x : > Self ( ) ;
+fn x < , x : Self > ( ) ;
 // ---
-fn < x x = ! > ( ) ;
+fn x < x = > ! ( ) ;
 // ---
 fn x ( /// doc
-* ) ) ;
+* ) defer ;
 // ---
-x ( self ) ;
+fn x ( _ -% ) ;
 // ---
 fn x & ( self ) ;
 // ---
@@ -424,31 +432,29 @@ impl fn ) { }
 // ---
 _ { }
 // ---
-fn x ( ) from x , x ref ;
+fn x ( ) from x , x super ;
 // ---
-fn linear x ( ) with suspend , suspend ;
+fn /= x ( ) with suspend , suspend ;
 // ---
 fn fn x ( ) requires always escape ;
 // ---
-test "s" { { } >>= }
+test "s" { { } fn }
 // ---
 test "s" escape }
 // ---
 test { "s" || escape }
-// ---
-test "s" { -= .. }
 // ---
 test test "s" { escape ; }
 // ---
 view x { /// doc
 invariant escape } }
 // ---
-view x { x : == ! }
+view x { x : 'a ! }
 // ---
 struct x ( ! /// doc
 ) ;
 // ---
-struct x ( pub ! += ) ;
+struct x ( pub ! bench ) ;
 // ---
 trait x : Self ( ( ) { }
 // ---
@@ -456,14 +462,13 @@ trait x { type x Self ; }
 // ---
 trait trait x { type x = ! ; }
 // ---
-impl ! with ( trait suspend ) { }
+impl ! with ( >> suspend ) { }
 // ---
 fn x ( with ) spawn ;
 // ---
-fn /// doc
-x ( ) with nondet ;
+fn for x ( ) with nondet ;
 // ---
-fn x ( ) with fail ( ! type ) ;
+fn x ( ) with fail ( ! 1 ) ;
 // ---
 x fn ( ) with & ! ;
 // ---
@@ -478,7 +483,7 @@ impl ! { note "s" type x ;
 // ---
 impl ! { pub type ; x }
 // ---
-impl :: ! { default type x ; }
+impl as ! { default type x ; }
 // ---
 impl ! { fn x ( ) ) ; }
 // ---
@@ -486,15 +491,15 @@ impl ! { const x : ! = = escape ; }
 // ---
 const x : = escape escape ;
 // ---
-const x spawn : ! = yield escape ;
+const x + : ! = yield escape ;
 // ---
-const x : default ! = return escape ;
+const x : static ! = return escape ;
 // ---
-const x : ! = . break 'a ;
+const x : ! = continue break 'a ;
 // ---
-const x : ! = ; break escape ;
+const x : ! = * break escape ;
 // ---
-const x : ! -% = continue 'a ;
+const x : ! gen = continue 'a ;
 // ---
 const x : ! = | escape ;
 // ---
@@ -504,7 +509,7 @@ const x : = | _ , _ | escape ;
 // ---
 const x : ! = | _ , | | escape ;
 // ---
-const x : ! = || -> ! from { } ;
+const x : ! = || -> ! group { } ;
 // ---
 const x : ! = ;
 // ---
@@ -516,9 +521,9 @@ const x : = .. -= escape ;
 // ---
 const x : ! = .. *= escape
 // ---
-const : x : ! = .. /= escape ;
+const resume x : ! = .. /= escape ;
 // ---
-const x : -= ! = .. %= escape ;
+const x : unit ! = .. %= escape ;
 // ---
 const x : ! .. ^= escape ;
 // ---
@@ -528,7 +533,7 @@ const x ! : = .. |= escape ;
 // ---
 x : ! = .. <<= escape ;
 // ---
-const x : ! = .. >>= escape always ;
+const x : ! = .. >>= escape else ;
 // ---
 const x : : ! = .. +%= escape ;
 // ---
@@ -538,9 +543,9 @@ const x : ! = .. *%= ;
 // ---
 use self
 // ---
-use super && ;
+use super continue ;
 // ---
-use crate crate ;
+use mod mod ;
 // ---
 use x :: x x ;
 // ---
@@ -550,37 +555,37 @@ use { x x , } ;
 // ---
 use { x , ; }
 // ---
-property "s" -= for < ! as Self > ( ) { }
+property "s" => for < ! as Self > ( ) { }
 // ---
-property "s" for self ( ) { >= }
+property "s" for self ( ) { /= }
 // ---
 property "s" Self ( ) { }
 // ---
-property "s" for super ( r#"raw "text""# ) { }
+property "s" for super ( yield ) { }
 // ---
-property property "s" for crate ( ) { }
+property property "s" for mod ( ) { }
 // ---
 property for "s" x :: x ( ) { }
 // ---
-|| property "s" for x :: < > ( ) { }
++%= property "s" for x :: < > ( ) { }
 // ---
-x unit : x ;
+unit x : mod :: ; Self
 // ---
-unit x : self self ;
+unit x : x x ;
 // ---
-unit x : super <<= ;
+unit x : self static ;
 // ---
-unit x : crate b'c' ;
+unit x : super suspend ;
 // ---
 x unit : Self :: Self ;
 // ---
-unit x : Self [ x .. ] ;
+unit x : Self [ x view ] ;
 // ---
-unit x = 1 * 1 [ ;
+unit x = 1 * 1 *= ;
 // ---
 unit x = 1 / 1 1 ;
 // ---
-% dimension x = ( x ) ;
+requires dimension x = ( x ) ;
 // ---
 dimension x = x ^ 1 1 ;
 // ---
@@ -594,13 +599,11 @@ unit x = 1 ^ ( 1 1 ) ;
     text
     """ ) ]
 // ---
-#![ x ( fmt"{x.f("y")}" ) where ]
+#![ x ( fmt"{x.f("y")}" ) & ]
 // ---
 #![ x ( ( b'c' ) ]
 // ---
 #![ x ( - ) ] ]
-// ---
-== #![ x ( / ) ]
 // ---
 #![ x ( % )
 // ---
@@ -608,12 +611,10 @@ unit x = 1 ^ ( 1 1 ) ;
 // ---
 #![ x ! ) ]
 // ---
-#![ \ x ( | ) ]
+#![ bench x ( | ) ]
 // ---
 #![ x ( ( && ) ]
 // ---
 #![ #![ x ( || ) ]
 // ---
-#![ x ( << ) ensures ]
-// ---
-#![ x ( >> ]
+#![ x ( << ) dimension ]

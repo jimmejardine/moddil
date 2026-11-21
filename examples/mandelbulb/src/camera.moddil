@@ -1,8 +1,8 @@
 // The flying camera. Pure: input in, a new camera out, so it is tested without a browser.
 
-use crate::vec3::{Vec3, float};
-use crate::fractal::{Params, distance};
-use crate::trace::Ray;
+use mod::vec3::{Vec3, float};
+use mod::fractal::{Params, distance};
+use mod::trace::Ray;
 
 #[derive(Copy, Clone)]
 pub struct Camera {

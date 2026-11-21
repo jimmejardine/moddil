@@ -173,8 +173,9 @@ something runs from the first slice.
     by move;
   - the reference interpreter calls a closure by name (`f(x)`), not through its trait
     (`Fn::call(&f, (x,))`).
-- **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): the first
-  step of the slice after S7.** S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`
+- **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
+  after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
+  parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`
   becomes `use mod::a`, matching `pub(mod)`. `mod::a` and the item `mod name;` differ at their
   second token, so the grammar stays LL(3). A mechanical change, with no other change in behaviour:
   - the grammar: drop `crate` from the keywords; `mod` starts a path in `use_segment`,

@@ -2,15 +2,15 @@
 
 ```text
 moddil.toml                  [mod] name = "shop"     [dependencies] geo = { path = "geo" }
-src/lib.moddil               the root module: `crate`
-src/cart.moddil              the module `crate::cart`
-src/cart/lines.moddil        the module `crate::cart::lines`
+src/lib.moddil               the root module: `mod`
+src/cart.moddil              the module `mod::cart`
+src/cart/lines.moddil        the module `mod::cart::lines`
 geo/moddil.toml              another mod, which `shop` calls `geo`
 ```
 
 ```rust
 // src/cart.moddil
-use crate::cart::lines::Line;
+use mod::cart::lines::Line;
 use geo::Point as Place;
 
 pub(mod) fn total(ls: &Line) -> int { ls.qty * 2 }   // any module of `shop` may call it
@@ -42,10 +42,10 @@ such file). A file whose name is not a name cannot be a module (E0704). Modules 
 inside it; then the prelude's ([The prelude](prelude.md)), which any of them shadow. A module names
 each of its items and imports once (E0103). Its names can be used anywhere in it, in any order.
 
-**mod.path.1** A path names an item through modules. It starts at `crate` (the root module of the
+**mod.path.1** A path names an item through modules. It starts at `mod` (the root module of the
 mod), `self` (this module), the name of a mod this mod depends on (its root module), or a name in
 scope (an imported module, or a module inside this one); each further segment is a name in the
-module before it: `crate::cart::total`, `geo::Point`, `cart::lines::Line`. The last segments may
+module before it: `mod::cart::total`, `geo::Point`, `cart::lines::Line`. The last segments may
 name a variant or a function of a type, as in `Shape::Circle` (**names.resolve.2**). A segment that
 names nothing is an error (E0101 for a value, E0102 for a type, E0401 for a trait). Modules may
 name each other's items in cycles.

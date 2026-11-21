@@ -116,7 +116,7 @@ fn vis(p: &mut Parser) {
     }
     let m = p.start();
     p.bump(T![pub]);
-    if p.at(T!["("]) && p.nth_at(1, T![mod]) {
+    if p.at(T!["("]) && p.nth_at(1, T![mod]) && p.nth_at(2, T![")"]) {
         p.bump(T!["("]);
         p.bump(T![mod]);
         p.expect(T![")"]);
@@ -748,7 +748,7 @@ fn use_item(p: &mut Parser, m: Marker) -> CompletedMarker {
 }
 
 fn at_use_segment(p: &mut Parser) -> bool {
-    matches!(p.current(), K::IDENT | T![self] | T![super] | T![crate])
+    matches!(p.current(), K::IDENT | T![self] | T![super] | T![mod])
 }
 
 /// `use_tree ::= use_path ( '::' ( '*' | '{' use_list '}' ) )? ( 'as' IDENT )? | '{' use_list '}'`
@@ -762,7 +762,7 @@ fn use_tree(p: &mut Parser) {
         let seg = p.start();
         p.bump_any();
         seg.complete(p, K::PATH_SEGMENT);
-        while p.at(T!["::"]) && matches!(p.nth(1), K::IDENT | T![self] | T![super] | T![crate]) {
+        while p.at(T!["::"]) && matches!(p.nth(1), K::IDENT | T![self] | T![super] | T![mod]) {
             p.bump(T!["::"]);
             let seg = p.start();
             p.bump_any();

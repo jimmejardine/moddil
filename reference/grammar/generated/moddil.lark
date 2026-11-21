@@ -117,7 +117,7 @@ simple_path_2_rep: (simple_path_1_grp simple_path_2_rep)?
 token_tree: "(" token_tree_1_rep ")" | "[" token_tree_2_rep "]" | "{" token_tree_3_rep "}" | any_token
 attr_input_1_rep: (token_tree attr_input_1_rep)?
 literal: number literal_1_opt_opt | STRING | RAW_STRING | BYTE_STRING | BLOCK_STRING | TAGGED_STRING | CHAR | BYTE | "true" | "false"
-keyword: "always" | "as" | "bench" | "break" | "catch" | "const" | "continue" | "crate" | "default" | "defer" | "dimension" | "dyn" | "else" | "ensures" | "enum" | "errdefer" | "escape" | "extern" | "fail" | "false" | "fn" | "for" | "from" | "gen" | "group" | "if" | "impl" | "in" | "invariant" | "let" | "linear" | "loop" | "match" | "mod" | "mut" | "nondet" | "note" | "property" | "pub" | "ref" | "requires" | "resume" | "return" | "select" | "self" | "Self" | "spawn" | "static" | "struct" | "super" | "suspend" | "test" | "trait" | "true" | "try" | "type" | "unit" | "unsafe" | "use" | "view" | "where" | "while" | "with" | "yield"
+keyword: "always" | "as" | "bench" | "break" | "catch" | "const" | "continue" | "default" | "defer" | "dimension" | "dyn" | "else" | "ensures" | "enum" | "errdefer" | "escape" | "extern" | "fail" | "false" | "fn" | "for" | "from" | "gen" | "group" | "if" | "impl" | "in" | "invariant" | "let" | "linear" | "loop" | "match" | "mod" | "mut" | "nondet" | "note" | "property" | "pub" | "ref" | "requires" | "resume" | "return" | "select" | "self" | "Self" | "spawn" | "static" | "struct" | "super" | "suspend" | "test" | "trait" | "true" | "try" | "type" | "unit" | "unsafe" | "use" | "view" | "where" | "while" | "with" | "yield"
 generic_param: generic_param_1_rep generic_param_2_grp
 generic_params_1_grp: "," generic_param
 generic_params_2_rep: (generic_params_1_grp generic_params_2_rep)?
@@ -185,7 +185,7 @@ expr_path: expr_path_1_grp expr_path_4_rep
 qualified_path: "<" type "as" type_path ">"
 path_type_1_grp: "::" member_name
 path_type_2_rep: (path_type_1_grp path_type_2_rep)?
-type_path: type_segment type_path_2_rep type_path_3_opt
+type_path: type_path_2_opt type_segment type_path_4_rep type_path_5_opt
 scale_expr: scale_power scale_expr_3_rep
 unit_def_1_grp: unit_def_2_grp number
 unit_def_2_grp: "+" | "-"
@@ -267,7 +267,7 @@ range: or range_3_opt | range_op range_4_opt
 assign_1_grp: assign_op expr
 assign_op: "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "^=" | "&=" | "|=" | "<<=" | ">>=" | "+%=" | "-%=" | "*%="
 assign_2_opt: (assign_1_grp)?
-use_segment: IDENT | "self" | "super" | "crate"
+use_segment: IDENT | "self" | "super" | "mod"
 use_path_1_grp: "::" use_segment
 use_path_2_rep: (use_path_1_grp use_path_2_rep)?
 use_list_1_grp: use_tree use_list_3_rep use_list_4_opt
@@ -276,15 +276,17 @@ use_list_3_rep: (use_list_2_grp use_list_3_rep)?
 use_list_4_opt: (",")?
 use_list_5_opt: (use_list_1_grp)?
 expr_path_1_grp: qualified_path | path_start
-path_start: IDENT | "self" | "Self" | "super" | "crate"
+path_start: IDENT | "self" | "Self" | "super" | "mod"
 expr_path_2_grp: "::" expr_path_3_grp
 expr_path_3_grp: member_name | generic_args
 generic_args: "<" generic_args_5_opt ">"
 expr_path_4_rep: (expr_path_2_grp expr_path_4_rep)?
-type_segment: IDENT type_segment_1_opt | "Self" | "self" | "super" | "crate"
-type_path_1_grp: "::" type_segment
-type_path_2_rep: (type_path_1_grp type_path_2_rep)?
-type_path_3_opt: (unit_suffix)?
+type_path_1_grp: "mod" "::"
+type_path_2_opt: (type_path_1_grp)?
+type_segment: IDENT type_segment_1_opt | "Self" | "self" | "super"
+type_path_3_grp: "::" type_segment
+type_path_4_rep: (type_path_3_grp type_path_4_rep)?
+type_path_5_opt: (unit_suffix)?
 scale_power: scale_atom scale_power_2_opt
 scale_expr_1_grp: scale_expr_2_grp scale_power
 scale_expr_2_grp: "*" | "/"
@@ -408,7 +410,7 @@ and: and_operand and_2_rep
 or_1_grp: "||" and
 or_2_rep: (or_1_grp or_2_rep)?
 literal_pat_1_opt: ("-")?
-pattern_path_1_grp: qualified_path | IDENT | "Self" | "super" | "crate"
+pattern_path_1_grp: qualified_path | IDENT | "Self" | "super" | "mod"
 pattern_path_2_grp: "::" pattern_path_3_grp
 pattern_path_3_grp: member_name | generic_args
 pattern_path_4_rep: (pattern_path_2_grp pattern_path_4_rep)?
@@ -797,7 +799,7 @@ LINE_COMMENT: /(?:\/\/(?:[^\/!\n](?:[^\n])*)?|\/\/\/\/(?:[^\n])*)/
 BLOCK_COMMENT: /\/\*(?:[^*\/]|\*(?!\/)|\/(?!\*)|\/\*(?:[^*]|\*(?!\/))*\*\/)*\*\//
 DOC_OUTER: /\/\/\/(?:[^\/\n](?:[^\n])*)?/
 DOC_INNER: /\/\/!(?:[^\n])*/
-IDENT: /(?!(?:dimension|invariant|continue|errdefer|property|requires|default|ensures|suspend|always|escape|extern|linear|nondet|resume|return|select|static|struct|unsafe|bench|break|catch|const|crate|defer|false|group|match|spawn|super|trait|where|while|yield|else|enum|fail|from|impl|loop|note|self|Self|test|true|type|unit|view|with|dyn|for|gen|let|mod|mut|pub|ref|try|use|as|fn|if|in)\b)(?:(?:[^\W\d](?:\w)*|_(?:\w)+))/
+IDENT: /(?!(?:dimension|invariant|continue|errdefer|property|requires|default|ensures|suspend|always|escape|extern|linear|nondet|resume|return|select|static|struct|unsafe|bench|break|catch|const|defer|false|group|match|spawn|super|trait|where|while|yield|else|enum|fail|from|impl|loop|note|self|Self|test|true|type|unit|view|with|dyn|for|gen|let|mod|mut|pub|ref|try|use|as|fn|if|in)\b)(?:(?:[^\W\d](?:\w)*|_(?:\w)+))/
 IDENT_TEXT: /(?:[^\W\d](?:\w)*|_(?:\w)+)/
 LABEL: /'(?:(?:[^\W\d](?:\w)*|_(?:\w)+))/
 INTEGER: /(?:(?:[0-9](?:[0-9_])*)|0x(?:[0-9a-fA-F_])+|0o(?:[0-7_])+|0b(?:[01_])+)/

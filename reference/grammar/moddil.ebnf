@@ -64,7 +64,7 @@ DOC_INNER     ::= '//!' [^\n]*                                # documents the en
 # ─── Names ───────────────────────────────────────────────────────────────────
 IDENT         ::= IDENT_TEXT - KEYWORD
 IDENT_TEXT    ::= XID_START XID_CONTINUE* | '_' XID_CONTINUE+
-KEYWORD       ::= 'always' | 'as' | 'bench' | 'break' | 'catch' | 'const' | 'continue' | 'crate'
+KEYWORD       ::= 'always' | 'as' | 'bench' | 'break' | 'catch' | 'const' | 'continue'
                 | 'default' | 'defer' | 'dimension' | 'dyn' | 'else' | 'ensures' | 'enum'
                 | 'errdefer' | 'escape' | 'extern' | 'fail' | 'false' | 'fn' | 'for' | 'from'
                 | 'gen' | 'group' | 'if' | 'impl' | 'in' | 'invariant' | 'let' | 'linear' | 'loop'
@@ -198,7 +198,7 @@ use_tree       ::= use_path ( '::' ( '*' | '{' use_list '}' ) )? ( 'as' IDENT )?
                  | '{' use_list '}'
 use_list       ::= ( use_tree ( ',' use_tree )* ','? )?
 use_path       ::= use_segment ( '::' use_segment )*                  # LL(2): '::' then a name, '*' or '{'
-use_segment    ::= IDENT | 'self' | 'super' | 'crate'
+use_segment    ::= IDENT | 'self' | 'super' | 'mod'
 mod_item       ::= 'mod' IDENT ';'          # only with a generating attribute: #[c_import(…)] mod sqlite3;
 
 # ─── Tests, documentation groups ─────────────────────────────────────────────
@@ -246,8 +246,8 @@ paren_type_rest ::= ')'                                               # unit typ
                         | 'where' expr ')' )                           # refinement: (u32 where self >= 1)
 type_list      ::= type ( ',' type )* ','?
 path_type      ::= qualified_path ( '::' member_name )* | type_path
-type_path      ::= type_segment ( '::' type_segment )* unit_suffix?   # f64[m], Fixed<4>[USD]
-type_segment   ::= IDENT generic_args? | 'Self' | 'self' | 'super' | 'crate'
+type_path      ::= ( 'mod' '::' )? type_segment ( '::' type_segment )* unit_suffix?   # f64[m], Fixed<4>[USD]
+type_segment   ::= IDENT generic_args? | 'Self' | 'self' | 'super'      # `mod` starts a path, never ends one
 qualified_path ::= '<' type 'as' type_path '>'                       # <Money as Display>
 generic_args   ::= '<' ( generic_arg ( ',' generic_arg )* ','? )? '>'
 generic_arg    ::= type | const_arg | IDENT '=' type                  # LL(2): Item = int
@@ -277,7 +277,7 @@ pattern_no_alt ::= '_'
                  | '(' ( pattern ( ',' pattern )* ','? )? ')'
                  | '[' ( pattern ( ',' pattern )* ','? )? ']'
                  | '{' field_pats '}'                                 # anonymous record: { host, port, .. }
-pattern_path   ::= ( qualified_path | IDENT | 'Self' | 'super' | 'crate' ) ( '::' ( member_name | generic_args ) )*
+pattern_path   ::= ( qualified_path | IDENT | 'Self' | 'super' | 'mod' ) ( '::' ( member_name | generic_args ) )*
 # Not `self`, so a parameter beginning `self` is always self_param.
 path_pat_tail  ::= '(' ( pattern ( ',' pattern )* ','? )? ')'
                  | '{' field_pats '}'
@@ -371,7 +371,7 @@ literal        ::= number unit_suffix??                               # 100[cm],
                  | CHAR | BYTE | 'true' | 'false'
 
 expr_path      ::= ( qualified_path | path_start ) ( '::' ( member_name | generic_args ) )*
-path_start     ::= IDENT | 'self' | 'Self' | 'super' | 'crate'
+path_start     ::= IDENT | 'self' | 'Self' | 'super' | 'mod'
 # In expressions generic arguments need the turbofish: Vec::<T>::new(), x.to::<u8>().
 
 member_name    ::= IDENT | KEYWORD

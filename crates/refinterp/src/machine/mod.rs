@@ -307,7 +307,7 @@ fn segments(node: &SyntaxNode) -> Vec<String> {
                         .find(|t| {
                             matches!(
                                 t.kind(),
-                                K::IDENT | K::SELF_TYPE_KW | K::SELF_KW | K::CRATE_KW
+                                K::IDENT | K::SELF_TYPE_KW | K::SELF_KW | K::MOD_KW
                             )
                         })
                         .map(|t| t.text().to_string())

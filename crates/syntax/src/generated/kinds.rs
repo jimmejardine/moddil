@@ -166,129 +166,127 @@ impl SyntaxKind {
     pub const CONST_KW: SyntaxKind = SyntaxKind(80);
     /// 'continue'
     pub const CONTINUE_KW: SyntaxKind = SyntaxKind(81);
-    /// 'crate'
-    pub const CRATE_KW: SyntaxKind = SyntaxKind(82);
     /// 'default'
-    pub const DEFAULT_KW: SyntaxKind = SyntaxKind(83);
+    pub const DEFAULT_KW: SyntaxKind = SyntaxKind(82);
     /// 'defer'
-    pub const DEFER_KW: SyntaxKind = SyntaxKind(84);
+    pub const DEFER_KW: SyntaxKind = SyntaxKind(83);
     /// 'dimension'
-    pub const DIMENSION_KW: SyntaxKind = SyntaxKind(85);
+    pub const DIMENSION_KW: SyntaxKind = SyntaxKind(84);
     /// 'dyn'
-    pub const DYN_KW: SyntaxKind = SyntaxKind(86);
+    pub const DYN_KW: SyntaxKind = SyntaxKind(85);
     /// 'else'
-    pub const ELSE_KW: SyntaxKind = SyntaxKind(87);
+    pub const ELSE_KW: SyntaxKind = SyntaxKind(86);
     /// 'ensures'
-    pub const ENSURES_KW: SyntaxKind = SyntaxKind(88);
+    pub const ENSURES_KW: SyntaxKind = SyntaxKind(87);
     /// 'enum'
-    pub const ENUM_KW: SyntaxKind = SyntaxKind(89);
+    pub const ENUM_KW: SyntaxKind = SyntaxKind(88);
     /// 'errdefer'
-    pub const ERRDEFER_KW: SyntaxKind = SyntaxKind(90);
+    pub const ERRDEFER_KW: SyntaxKind = SyntaxKind(89);
     /// 'escape'
-    pub const ESCAPE_KW: SyntaxKind = SyntaxKind(91);
+    pub const ESCAPE_KW: SyntaxKind = SyntaxKind(90);
     /// 'extern'
-    pub const EXTERN_KW: SyntaxKind = SyntaxKind(92);
+    pub const EXTERN_KW: SyntaxKind = SyntaxKind(91);
     /// 'fail'
-    pub const FAIL_KW: SyntaxKind = SyntaxKind(93);
+    pub const FAIL_KW: SyntaxKind = SyntaxKind(92);
     /// 'false'
-    pub const FALSE_KW: SyntaxKind = SyntaxKind(94);
+    pub const FALSE_KW: SyntaxKind = SyntaxKind(93);
     /// 'fn'
-    pub const FN_KW: SyntaxKind = SyntaxKind(95);
+    pub const FN_KW: SyntaxKind = SyntaxKind(94);
     /// 'for'
-    pub const FOR_KW: SyntaxKind = SyntaxKind(96);
+    pub const FOR_KW: SyntaxKind = SyntaxKind(95);
     /// 'from'
-    pub const FROM_KW: SyntaxKind = SyntaxKind(97);
+    pub const FROM_KW: SyntaxKind = SyntaxKind(96);
     /// 'gen'
-    pub const GEN_KW: SyntaxKind = SyntaxKind(98);
+    pub const GEN_KW: SyntaxKind = SyntaxKind(97);
     /// 'group'
-    pub const GROUP_KW: SyntaxKind = SyntaxKind(99);
+    pub const GROUP_KW: SyntaxKind = SyntaxKind(98);
     /// 'if'
-    pub const IF_KW: SyntaxKind = SyntaxKind(100);
+    pub const IF_KW: SyntaxKind = SyntaxKind(99);
     /// 'impl'
-    pub const IMPL_KW: SyntaxKind = SyntaxKind(101);
+    pub const IMPL_KW: SyntaxKind = SyntaxKind(100);
     /// 'in'
-    pub const IN_KW: SyntaxKind = SyntaxKind(102);
+    pub const IN_KW: SyntaxKind = SyntaxKind(101);
     /// 'invariant'
-    pub const INVARIANT_KW: SyntaxKind = SyntaxKind(103);
+    pub const INVARIANT_KW: SyntaxKind = SyntaxKind(102);
     /// 'let'
-    pub const LET_KW: SyntaxKind = SyntaxKind(104);
+    pub const LET_KW: SyntaxKind = SyntaxKind(103);
     /// 'linear'
-    pub const LINEAR_KW: SyntaxKind = SyntaxKind(105);
+    pub const LINEAR_KW: SyntaxKind = SyntaxKind(104);
     /// 'loop'
-    pub const LOOP_KW: SyntaxKind = SyntaxKind(106);
+    pub const LOOP_KW: SyntaxKind = SyntaxKind(105);
     /// 'match'
-    pub const MATCH_KW: SyntaxKind = SyntaxKind(107);
+    pub const MATCH_KW: SyntaxKind = SyntaxKind(106);
     /// 'mod'
-    pub const MOD_KW: SyntaxKind = SyntaxKind(108);
+    pub const MOD_KW: SyntaxKind = SyntaxKind(107);
     /// 'mut'
-    pub const MUT_KW: SyntaxKind = SyntaxKind(109);
+    pub const MUT_KW: SyntaxKind = SyntaxKind(108);
     /// 'nondet'
-    pub const NONDET_KW: SyntaxKind = SyntaxKind(110);
+    pub const NONDET_KW: SyntaxKind = SyntaxKind(109);
     /// 'note'
-    pub const NOTE_KW: SyntaxKind = SyntaxKind(111);
+    pub const NOTE_KW: SyntaxKind = SyntaxKind(110);
     /// 'property'
-    pub const PROPERTY_KW: SyntaxKind = SyntaxKind(112);
+    pub const PROPERTY_KW: SyntaxKind = SyntaxKind(111);
     /// 'pub'
-    pub const PUB_KW: SyntaxKind = SyntaxKind(113);
+    pub const PUB_KW: SyntaxKind = SyntaxKind(112);
     /// 'ref'
-    pub const REF_KW: SyntaxKind = SyntaxKind(114);
+    pub const REF_KW: SyntaxKind = SyntaxKind(113);
     /// 'requires'
-    pub const REQUIRES_KW: SyntaxKind = SyntaxKind(115);
+    pub const REQUIRES_KW: SyntaxKind = SyntaxKind(114);
     /// 'resume'
-    pub const RESUME_KW: SyntaxKind = SyntaxKind(116);
+    pub const RESUME_KW: SyntaxKind = SyntaxKind(115);
     /// 'return'
-    pub const RETURN_KW: SyntaxKind = SyntaxKind(117);
+    pub const RETURN_KW: SyntaxKind = SyntaxKind(116);
     /// 'select'
-    pub const SELECT_KW: SyntaxKind = SyntaxKind(118);
+    pub const SELECT_KW: SyntaxKind = SyntaxKind(117);
     /// 'self'
-    pub const SELF_KW: SyntaxKind = SyntaxKind(119);
+    pub const SELF_KW: SyntaxKind = SyntaxKind(118);
     /// 'Self'
-    pub const SELF_TYPE_KW: SyntaxKind = SyntaxKind(120);
+    pub const SELF_TYPE_KW: SyntaxKind = SyntaxKind(119);
     /// 'spawn'
-    pub const SPAWN_KW: SyntaxKind = SyntaxKind(121);
+    pub const SPAWN_KW: SyntaxKind = SyntaxKind(120);
     /// 'static'
-    pub const STATIC_KW: SyntaxKind = SyntaxKind(122);
+    pub const STATIC_KW: SyntaxKind = SyntaxKind(121);
     /// 'struct'
-    pub const STRUCT_KW: SyntaxKind = SyntaxKind(123);
+    pub const STRUCT_KW: SyntaxKind = SyntaxKind(122);
     /// 'super'
-    pub const SUPER_KW: SyntaxKind = SyntaxKind(124);
+    pub const SUPER_KW: SyntaxKind = SyntaxKind(123);
     /// 'suspend'
-    pub const SUSPEND_KW: SyntaxKind = SyntaxKind(125);
+    pub const SUSPEND_KW: SyntaxKind = SyntaxKind(124);
     /// 'test'
-    pub const TEST_KW: SyntaxKind = SyntaxKind(126);
+    pub const TEST_KW: SyntaxKind = SyntaxKind(125);
     /// 'trait'
-    pub const TRAIT_KW: SyntaxKind = SyntaxKind(127);
+    pub const TRAIT_KW: SyntaxKind = SyntaxKind(126);
     /// 'true'
-    pub const TRUE_KW: SyntaxKind = SyntaxKind(128);
+    pub const TRUE_KW: SyntaxKind = SyntaxKind(127);
     /// 'try'
-    pub const TRY_KW: SyntaxKind = SyntaxKind(129);
+    pub const TRY_KW: SyntaxKind = SyntaxKind(128);
     /// 'type'
-    pub const TYPE_KW: SyntaxKind = SyntaxKind(130);
+    pub const TYPE_KW: SyntaxKind = SyntaxKind(129);
     /// 'unit'
-    pub const UNIT_KW: SyntaxKind = SyntaxKind(131);
+    pub const UNIT_KW: SyntaxKind = SyntaxKind(130);
     /// 'unsafe'
-    pub const UNSAFE_KW: SyntaxKind = SyntaxKind(132);
+    pub const UNSAFE_KW: SyntaxKind = SyntaxKind(131);
     /// 'use'
-    pub const USE_KW: SyntaxKind = SyntaxKind(133);
+    pub const USE_KW: SyntaxKind = SyntaxKind(132);
     /// 'view'
-    pub const VIEW_KW: SyntaxKind = SyntaxKind(134);
+    pub const VIEW_KW: SyntaxKind = SyntaxKind(133);
     /// 'where'
-    pub const WHERE_KW: SyntaxKind = SyntaxKind(135);
+    pub const WHERE_KW: SyntaxKind = SyntaxKind(134);
     /// 'while'
-    pub const WHILE_KW: SyntaxKind = SyntaxKind(136);
+    pub const WHILE_KW: SyntaxKind = SyntaxKind(135);
     /// 'with'
-    pub const WITH_KW: SyntaxKind = SyntaxKind(137);
+    pub const WITH_KW: SyntaxKind = SyntaxKind(136);
     /// 'yield'
-    pub const YIELD_KW: SyntaxKind = SyntaxKind(138);
+    pub const YIELD_KW: SyntaxKind = SyntaxKind(137);
     /// '_'
-    pub const UNDERSCORE: SyntaxKind = SyntaxKind(139);
+    pub const UNDERSCORE: SyntaxKind = SyntaxKind(138);
 }
 
 /// The number of token kinds; node kinds follow.
-pub(crate) const TOKEN_COUNT: u16 = 140;
+pub(crate) const TOKEN_COUNT: u16 = 139;
 
 /// Each token kind's name, as in the grammar.
-pub(crate) const TOKEN_NAMES: [&str; 140] = [
+pub(crate) const TOKEN_NAMES: [&str; 139] = [
     "EOF",
     "ERROR",
     "WHITESPACE",
@@ -371,7 +369,6 @@ pub(crate) const TOKEN_NAMES: [&str; 140] = [
     "CATCH_KW",
     "CONST_KW",
     "CONTINUE_KW",
-    "CRATE_KW",
     "DEFAULT_KW",
     "DEFER_KW",
     "DIMENSION_KW",
@@ -432,7 +429,7 @@ pub(crate) const TOKEN_NAMES: [&str; 140] = [
 ];
 
 /// Each token kind's fixed text (punctuation, keywords, `_`), or "".
-pub(crate) const TOKEN_TEXT: [&str; 140] = [
+pub(crate) const TOKEN_TEXT: [&str; 139] = [
     "",
     "",
     "",
@@ -515,7 +512,6 @@ pub(crate) const TOKEN_TEXT: [&str; 140] = [
     "catch",
     "const",
     "continue",
-    "crate",
     "default",
     "defer",
     "dimension",
@@ -584,7 +580,6 @@ pub(crate) const KEYWORDS: &[(&str, SyntaxKind)] = &[
     ("catch", SyntaxKind::CATCH_KW),
     ("const", SyntaxKind::CONST_KW),
     ("continue", SyntaxKind::CONTINUE_KW),
-    ("crate", SyntaxKind::CRATE_KW),
     ("default", SyntaxKind::DEFAULT_KW),
     ("defer", SyntaxKind::DEFER_KW),
     ("dimension", SyntaxKind::DIMENSION_KW),
@@ -775,7 +770,6 @@ macro_rules! T {
     [catch] => { $crate::SyntaxKind::CATCH_KW };
     [const] => { $crate::SyntaxKind::CONST_KW };
     [continue] => { $crate::SyntaxKind::CONTINUE_KW };
-    [crate] => { $crate::SyntaxKind::CRATE_KW };
     [default] => { $crate::SyntaxKind::DEFAULT_KW };
     [defer] => { $crate::SyntaxKind::DEFER_KW };
     [dimension] => { $crate::SyntaxKind::DIMENSION_KW };

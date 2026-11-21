@@ -1,7 +1,7 @@
 // Sphere tracing: marching a ray by the distance estimate until it reaches the surface.
 
-use crate::vec3::Vec3;
-use crate::fractal::{Params, distance, normal};
+use mod::vec3::Vec3;
+use mod::fractal::{Params, distance, normal};
 
 #[derive(Copy, Clone)]
 pub struct Ray {
@@ -58,7 +58,7 @@ pub fn shade(hit: Hit, params: Params, quality: Quality, light: Vec3) -> f32 {
         Hit::Surface { at, steps } => {
             let n = normal(at, params, quality.epsilon);
             let diffuse = n.dot(light).max(0.0);
-            let occlusion = 1.0 - crate::vec3::float(steps) / crate::vec3::float(quality.max_steps);
+            let occlusion = 1.0 - mod::vec3::float(steps) / mod::vec3::float(quality.max_steps);
             0.1 + 0.9 * diffuse * occlusion
         }
         Hit::Miss { .. } => 0.0,

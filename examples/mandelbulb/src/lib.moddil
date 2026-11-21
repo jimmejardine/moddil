@@ -4,7 +4,7 @@
 // camera, the preview, the tests) and inside the GPU kernel in `web/`
 // (`specs/examples/mandelbulb.md`).
 
-pub use crate::vec3::Vec3;
-pub use crate::fractal::{Params, distance, normal};
-pub use crate::trace::{Ray, Quality, Hit, march, shade};
-pub use crate::camera::{Camera, Input, fly};
+pub use mod::vec3::Vec3;
+pub use mod::fractal::{Params, distance, normal};
+pub use mod::trace::{Ray, Quality, Hit, march, shade};
+pub use mod::camera::{Camera, Input, fly};

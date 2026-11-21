@@ -7,7 +7,7 @@ such as `Some`: [Tuples, structs and variants](expressions/structs.md)). Otherwi
 (E0101).
 
 **names.resolve.2** `Enum::Variant` names a variant of an enum the module can name (or, after a
-path through modules, `crate::shapes::Shape::Circle`). An enum or variant that does not exist is an
+path through modules, `mod::shapes::Shape::Circle`). An enum or variant that does not exist is an
 error (E0101).
 
 **names.prelude.1** The prelude holds the items every module sees without importing them
@@ -22,5 +22,5 @@ in the module ([Modules](modules.md)).
 
 **names.type.1** A type name must name a type (E0102). The built-in types are `int` and `bool`
 ([Types](types.md)); the structs and enums the module can name and the prelude's are types too
-(written with a path through modules if need be: `crate::shapes::Point`), as are the type
+(written with a path through modules if need be: `mod::shapes::Point`), as are the type
 parameters in scope ([Generics](generics.md)) and, in an impl or trait, `Self`.

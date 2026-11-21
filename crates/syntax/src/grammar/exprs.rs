@@ -218,7 +218,7 @@ fn can_start_primary(p: &mut Parser, r: R) -> bool {
         | T![self]
         | T![Self]
         | T![super]
-        | T![crate]
+        | T![mod]
         | T!["<"]
         | T!["("]
         | T!["["]
@@ -619,7 +619,7 @@ fn at_unit_suffix(p: &mut Parser) -> bool {
 pub(super) fn at_expr_path(p: &mut Parser) -> bool {
     matches!(
         p.current(),
-        K::IDENT | T![self] | T![Self] | T![super] | T![crate] | T!["<"]
+        K::IDENT | T![self] | T![Self] | T![super] | T![mod] | T!["<"]
     )
 }
 
@@ -660,7 +660,7 @@ fn primary(p: &mut Parser, r: R) -> Option<CompletedMarker> {
         return literal(p);
     }
     match k {
-        K::IDENT | T![self] | T![Self] | T![super] | T![crate] | T!["<"] => {
+        K::IDENT | T![self] | T![Self] | T![super] | T![mod] | T!["<"] => {
             // expr_path struct_tail@?
             let m = p.start();
             expr_path(p);

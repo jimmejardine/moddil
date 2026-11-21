@@ -2,7 +2,7 @@
 //! who can see what.
 //!
 //! A module's names are the items it declares, the names it imports with `use`, and the modules
-//! inside it; then the prelude's, which any of those shadow. A path starts at `crate` (the root
+//! inside it; then the prelude's, which any of those shadow. A path starts at `mod` (the root
 //! module of the mod), at a dependency's name (its root module), at `self`, or at a name in scope,
 //! and each further segment is a name in the module before it that the naming module can see.
 //! Imports are followed when a name is looked up, so they may name each other in any order.
@@ -143,7 +143,7 @@ impl ItemTree {
         let here = self.mod_of(from);
         let mod_def = self.mods.get(here as usize);
         let mut def = match first {
-            "crate" => match mod_def {
+            "mod" => match mod_def {
                 Some(m) => Def::Module(m.root),
                 None => return Err(PathError::Unresolved(0)),
             },
@@ -169,13 +169,13 @@ impl ItemTree {
         Ok((def, segs.len()))
     }
 
-    /// How module `m` is written as a path: `crate::book::levels`, or the prelude's.
+    /// How module `m` is written as a path: `mod::book::levels`, or the prelude's.
     pub fn module_path(&self, m: u32) -> String {
         let module = &self.modules[m as usize];
         if m == PRELUDE_MODULE {
             return "the prelude".to_string();
         }
-        let mut s = "crate".to_string();
+        let mut s = "mod".to_string();
         for p in &module.path {
             s.push_str("::");
             s.push_str(p);
@@ -194,7 +194,7 @@ impl ItemTree {
                 .path
                 .last()
                 .cloned()
-                .unwrap_or_else(|| "crate".to_string()),
+                .unwrap_or_else(|| "mod".to_string()),
         }
     }
 

@@ -33,7 +33,7 @@ pub(crate) fn imports(tree: &ItemTree) -> Vec<Found> {
                     Code::E0702,
                     at(0),
                     format!(
-                        "there is nothing called `{}` here: a path starts at `crate`, a \
+                        "there is nothing called `{}` here: a path starts at `mod`, a \
                          dependency, or a name in scope",
                         segs[0]
                     ),

@@ -13,7 +13,7 @@ const TYPE_START: TokenSet = TokenSet::new(&[
     T![Self],
     T![self],
     T![super],
-    T![crate],
+    T![mod],
     T!["<"],
     T!["&"],
     T!["&&"],
@@ -95,7 +95,7 @@ fn type_ne_inner(p: &mut Parser, bounds_list: bool) -> Option<crate::parser::Com
 fn type_core(p: &mut Parser) -> Option<crate::parser::CompletedMarker> {
     let m = p.start();
     let kind = match p.current() {
-        K::IDENT | T![Self] | T![self] | T![super] | T![crate] | T!["<"] => {
+        K::IDENT | T![Self] | T![self] | T![super] | T![mod] | T!["<"] => {
             m.abandon(p);
             return Some(path_type(p));
         }
@@ -210,7 +210,7 @@ fn type_list_parens(p: &mut Parser) {
 pub(super) fn at_path_type(p: &mut Parser) -> bool {
     matches!(
         p.current(),
-        K::IDENT | T![Self] | T![self] | T![super] | T![crate] | T!["<"]
+        K::IDENT | T![Self] | T![self] | T![super] | T![mod] | T!["<"]
     )
 }
 
@@ -232,14 +232,21 @@ pub(super) fn path_type(p: &mut Parser) -> crate::parser::CompletedMarker {
     m.complete(p, K::PATH_TYPE)
 }
 
-/// `type_path ::= type_segment ( '::' type_segment )* unit_suffix?`, as a `PATH` (plus the
-/// suffix).
+/// `type_path ::= ( 'mod' '::' )? type_segment ( '::' type_segment )* unit_suffix?`, as a `PATH`
+/// (plus the suffix).
 pub(super) fn type_path(p: &mut Parser) {
     type_path_inner(p);
 }
 
 fn type_path_inner(p: &mut Parser) {
     let path = p.start();
+    // `mod::`: the root module of the mod.
+    if p.at(T![mod]) {
+        let seg = p.start();
+        p.bump(T![mod]);
+        seg.complete(p, K::PATH_SEGMENT);
+        p.expect(T!["::"]);
+    }
     type_segment(p);
     while p.at(T!["::"]) {
         p.bump(T!["::"]);
@@ -261,7 +268,7 @@ fn type_segment(p: &mut Parser) {
                 generic_args(p);
             }
         }
-        T![Self] | T![self] | T![super] | T![crate] => p.bump_any(),
+        T![Self] | T![self] | T![super] => p.bump_any(),
         found => p.err_recover(
             format!("expected a type name, found {}", found.describe()),
             RECOVERY,
@@ -362,7 +369,7 @@ fn bound(p: &mut Parser) {
     let m = p.start();
     if matches!(
         p.current(),
-        K::IDENT | T![Self] | T![self] | T![super] | T![crate]
+        K::IDENT | T![Self] | T![self] | T![super] | T![mod]
     ) {
         type_path(p);
     } else {

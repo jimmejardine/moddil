@@ -2,7 +2,7 @@
 // returns how many of its pixels show the surface. It is a smoke test for the whole pure path,
 // usable before there is a GPU back end.
 
-use crate::{Camera, Params, Quality, Hit, Vec3, march, shade};
+use mod::{Camera, Params, Quality, Hit, Vec3, march, shade};
 
 const WIDTH: int = 48;
 const HEIGHT: int = 24;

@@ -513,8 +513,54 @@ fn shown_path(dir: &Path, f: &Path) -> String {
 /// Runs every test of `edition` under `repo/conformance/` on each implementation, and checks the
 /// paragraph IDs the tests cite against `repo/reference/`.
 pub fn run_suite(repo: &Path, edition: &str, implementations: &[&dyn Implementation]) -> Report {
+    run_tests(repo, edition, None, implementations)
+}
+
+/// Runs only the tests of one area, `repo/conformance/<edition>/<area>/`, so that areas can run
+/// in parallel. Its coverage lists describe only that area's tests; [`coverage`] checks the
+/// whole suite's.
+pub fn run_area(
+    repo: &Path,
+    edition: &str,
+    area: &str,
+    implementations: &[&dyn Implementation],
+) -> Report {
+    run_tests(repo, edition, Some(area), implementations)
+}
+
+/// Reads every test's expectations without running anything, and checks the paragraph IDs they
+/// cite against `repo/reference/`: the suite's coverage, cheaply.
+pub fn coverage(repo: &Path, edition: &str) -> Report {
+    run_tests(repo, edition, None, &[])
+}
+
+/// The suite's areas: the directories directly under `repo/conformance/<edition>/`, sorted. A
+/// directory with a manifest is a test, not an area, and is not listed.
+pub fn areas(repo: &Path, edition: &str) -> Vec<String> {
+    let Ok(entries) = fs::read_dir(repo.join("conformance").join(edition)) else {
+        return Vec::new();
+    };
+    let mut areas: Vec<String> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.is_dir() && !p.join(moddil_project::MANIFEST).is_file())
+        .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .collect();
+    areas.sort();
+    areas
+}
+
+fn run_tests(
+    repo: &Path,
+    edition: &str,
+    area: Option<&str>,
+    implementations: &[&dyn Implementation],
+) -> Report {
+    let mut root = repo.join("conformance").join(edition);
+    if let Some(area) = area {
+        root.push(area);
+    }
     let mut tests = Vec::new();
-    tests_in(&repo.join("conformance").join(edition), &mut tests);
+    tests_in(&root, &mut tests);
     let ids = paragraph_ids(repo, edition);
     let mut report = Report {
         paragraphs: ids.len(),

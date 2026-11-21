@@ -1,6 +1,6 @@
 // The Mandelbulb and its distance estimator.
 
-use crate::vec3::Vec3;
+use mod::vec3::Vec3;
 
 /// The fractal's shape, set from the overlay's sliders.
 #[derive(Copy, Clone)]

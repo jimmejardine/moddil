@@ -588,7 +588,7 @@ fn use_tree(
             None => return,
         },
     };
-    if matches!(name.as_str(), "crate" | "self" | "super") {
+    if matches!(name.as_str(), "mod" | "self" | "super") {
         ds.push(Diagnostic::error(
             Code::E0702,
             range,

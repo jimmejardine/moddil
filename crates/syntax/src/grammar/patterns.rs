@@ -22,7 +22,7 @@ const PATTERN_START: TokenSet = TokenSet::new(&[
     K::IDENT,
     T![Self],
     T![super],
-    T![crate],
+    T![mod],
     T!["<"],
     T!["&"],
     T!["&&"],
@@ -124,7 +124,7 @@ pub(super) fn pattern_no_alt(p: &mut Parser) -> Option<CompletedMarker> {
             }
             K::IDENT_PAT
         }
-        K::IDENT | T![Self] | T![super] | T![crate] | T!["<"] => {
+        K::IDENT | T![Self] | T![super] | T![mod] | T!["<"] => {
             // pattern_path path_pat_tail?
             pattern_path(p);
             match p.current() {

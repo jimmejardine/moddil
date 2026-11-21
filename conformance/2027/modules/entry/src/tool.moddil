@@ -1,5 +1,5 @@
 pub(mod) struct E;
 
 fn main() -> int with fail(E) {                 //~ E0507
-    crate::uses()                               //~ E0602
+    mod::uses()                               //~ E0602
 }
