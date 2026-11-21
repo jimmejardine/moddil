@@ -1,0 +1,5 @@
+[mod]
+name = "a"
+
+[dependencies]
+b = { path = "b" }

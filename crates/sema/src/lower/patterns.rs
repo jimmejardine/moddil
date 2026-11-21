@@ -5,7 +5,7 @@ use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
 
 use super::{Binds, Lowerer};
 use crate::hir::{Local, LocalId, PatId, PatKind};
-use crate::items::Shape;
+use crate::items::{Def, Shape};
 use crate::{Code, Diagnostic, Ty};
 
 impl Lowerer<'_> {
@@ -221,8 +221,7 @@ impl Lowerer<'_> {
             return PatKind::Missing;
         };
         if let [name] = segments.as_slice()
-            && self.items.adt_named(name).is_none()
-            && self.items.bare_variant(name).is_none()
+            && !matches!(self.item(name), Some(Def::Adt(_) | Def::Variant(..)))
             && name != "Self"
         {
             let local = self.bind(name, false, range, b);
@@ -258,9 +257,9 @@ impl Lowerer<'_> {
         let range = node.text_range();
         let segments = self.segments(node)?;
         if let [name] = segments.as_slice()
-            && let Some(found) = self.items.bare_variant(name)
+            && let Some(Def::Variant(a, v)) = self.item(name)
         {
-            return Some(found);
+            return Some((a, v));
         }
         let self_adt = match &self.types.self_ty {
             Some(Ty::Adt(a, ..)) => Some(*a),
@@ -270,9 +269,55 @@ impl Lowerer<'_> {
             if name == "Self" {
                 self_adt
             } else {
-                cx.items.adt_named(name)
+                match cx.item(name) {
+                    Some(Def::Adt(a)) => Some(a),
+                    _ => None,
+                }
             }
         };
+        // A path through modules: `crate::shapes::Shape::Circle`, `shapes::Point`.
+        if segments.len() > 2 || (segments.len() == 2 && adt_named(self, &segments[0]).is_none()) {
+            let names: Vec<&str> = segments.iter().map(String::as_str).collect();
+            let found = self.items.path(self.types.module, &names, false);
+            return match found {
+                Ok((Def::Adt(a), n))
+                    if n == names.len() && !self.items.adts[a as usize].is_enum =>
+                {
+                    Some((a, 0))
+                }
+                Ok((Def::Variant(a, v), n)) if n == names.len() => Some((a, v)),
+                Ok((Def::Adt(a), n)) if n + 1 == names.len() => {
+                    let adt = &self.items.adts[a as usize];
+                    match adt.variant(names[n]).filter(|_| adt.is_enum) {
+                        Some(v) => Some((a, v)),
+                        None => {
+                            self.report(
+                                Code::E0101,
+                                range,
+                                format!("`{}` has no variant called `{}`", adt.name, names[n]),
+                            );
+                            None
+                        }
+                    }
+                }
+                Err(crate::PathError::Private(_, def)) => {
+                    let d = self.items.hidden(def, range);
+                    self.error(d);
+                    None
+                }
+                _ => {
+                    self.report(
+                        Code::E0101,
+                        range,
+                        format!(
+                            "there is no struct or variant called `{}`",
+                            names.join("::")
+                        ),
+                    );
+                    None
+                }
+            };
+        }
         match segments.as_slice() {
             [name] => match adt_named(self, name) {
                 Some(a) if !self.items.adts[a as usize].is_enum => Some((a, 0)),

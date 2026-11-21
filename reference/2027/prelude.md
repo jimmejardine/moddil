@@ -7,8 +7,10 @@ behaviour are as written there.
 **prelude.1** The prelude holds `assert` ([`assert`](expressions/assert.md)) and `discard`
 ([Errors](errors.md)), the types `Option`, `Result` and `Ordering`, the traits `Clone`, `Copy`,
 `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, `Not` and
-`Drop`, the function `drop`, and their impls for `int`, `bool` and `()`. A module may not define an item with the name of one of the prelude's items or
-of `Option`'s and `Result`'s variants (E0103).
+`Drop`, the function `drop`, and their impls for `int`, `bool` and `()`. Every module sees them, and
+`Option`'s and `Result`'s variants, without importing them; an item or import of the module with the
+same name shadows them ([Modules](modules.md)). The operators, `?` and `try` use the prelude's traits
+and types whatever the module calls its own.
 
 **prelude.option.1** `enum Option<T> { None, Some(T) }` is an optional value. Its variants are
 named on their own: `Some(3)`, `None` (and also `Option::Some`). Its methods `is_some`, `is_none`

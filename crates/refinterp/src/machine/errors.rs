@@ -153,13 +153,15 @@ impl Machine<'_> {
         if let ast::Pat::TupleStruct(_) = pat {
             let segs = segments(node);
             if let [one] = segs.as_slice()
-                && self.program.adts.contains_key(one)
+                && let Some(crate::program::Def::Item(key)) =
+                    self.program.lookup(self.memory.module(), one)
+                && self.program.adts.contains_key(&key)
             {
                 let subs: Vec<ast::Pat> = node.children().filter_map(ast::Pat::cast).collect();
                 if let [sub] = subs.as_slice()
                     && !matches!(sub, ast::Pat::Rest(_))
                 {
-                    let of_type = matches!(err, Value::Adt { ty, .. } if ty == one);
+                    let of_type = matches!(err, Value::Adt { ty, .. } if *ty == key);
                     return of_type && self.matches(sub, src, binds);
                 }
             }

@@ -1,6 +1,6 @@
 // covers: eff.1, eff.name.1, eff.with.1, eff.need.1
 
-trait Time {
+pub trait Time {
     fn now(&self) -> int;
 }
 
@@ -9,7 +9,7 @@ impl Time for Clock {
     fn now(&self) -> int { self.t }
 }
 
-struct Config { scale: int }
+pub struct Config { scale: int }
 
 fn deadline(after: int) -> int with time: Time {
     time.now() + after

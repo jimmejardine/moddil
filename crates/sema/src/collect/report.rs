@@ -25,16 +25,17 @@ impl<'a> Reporter<'a> {
         }
     }
 
-    /// Reports `ds`, found in source `src` (at `origin`, for a derived item).
+    /// Reports `ds`, found in source `src` (at `origin`, for a derived item: the `derive`
+    /// attribute, in the file the derived code comes from).
     pub(super) fn report(&mut self, src: Src, origin: Option<TextRange>, ds: Vec<Diagnostic>) {
         for mut d in ds {
             match src {
-                Src::File => self.shown.push(d),
-                Src::Derived => match origin {
-                    Some(o) => {
+                Src::File(f) => self.shown.push(d.in_file(f)),
+                Src::Derived => match origin.and_then(|o| self.origin_file(o).map(|f| (o, f))) {
+                    Some((o, f)) => {
                         d.range = o;
                         d.labels.clear();
-                        self.shown.push(d);
+                        self.shown.push(d.in_file(f));
                     }
                     None => self.hidden.push(d),
                 },
@@ -43,9 +44,9 @@ impl<'a> Reporter<'a> {
         }
     }
 
-    /// Reports `d`, found in the file.
-    pub(super) fn push(&mut self, d: Diagnostic) {
-        self.shown.push(d);
+    /// Reports `d`, found in file `file`.
+    pub(super) fn push_in(&mut self, file: u32, d: Diagnostic) {
+        self.shown.push(d.in_file(file));
     }
 
     /// For an item in the derived source: the `derive` attribute in the file it comes from.
@@ -57,7 +58,25 @@ impl<'a> Reporter<'a> {
             .origins
             .iter()
             .find(|(r, _, _)| r.start <= range.start && range.end <= r.end)
-            .and_then(|&(_, s, attr)| (s == Src::File).then_some(attr))
+            .and_then(|&(_, s, attr)| s.is_file().then_some(attr))
+    }
+
+    /// For an item in the derived source: the source its `derive` attribute is in.
+    pub(super) fn origin_src(&self, range: TextRange) -> Option<Src> {
+        self.expansion
+            .origins
+            .iter()
+            .find(|(r, _, _)| r.start <= range.start && range.end <= r.end)
+            .map(|&(_, s, _)| s)
+    }
+
+    /// The file of the `derive` attribute at `attr`.
+    fn origin_file(&self, attr: TextRange) -> Option<u32> {
+        self.expansion
+            .origins
+            .iter()
+            .find(|(_, _, a)| *a == attr)
+            .and_then(|&(_, s, _)| s.file())
     }
 
     /// The problems shown, and those hidden.

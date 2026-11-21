@@ -1,0 +1,18 @@
+// covers: mod.1, mod.dep.1, mod.infer.1
+
+use geo::Point;
+
+struct Doubling;
+impl geo::Log for Doubling {
+    fn line(&self, n: int) -> int { n * 2 }
+}
+
+test "a mod uses its dependency's pub items" {
+    geo::norm(Point { x: 3, y: -4 })        // => 7
+    ;
+    geo::norm(geo::origin())                // => 0
+    ;
+    with geo::Log = Doubling {
+        geo::report(5)                      // => 10
+    }
+}

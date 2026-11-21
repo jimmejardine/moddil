@@ -1,0 +1,4 @@
+fn hidden() -> int { 1 }
+struct Secret;
+pub(mod) struct Shared;
+pub(mod) struct Open;

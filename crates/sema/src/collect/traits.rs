@@ -5,12 +5,12 @@ use std::collections::HashMap;
 use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
 
-use crate::items::{Container, GenericParam, Generics, ImplDef, Pred, Src, TraitDef};
+use crate::items::{Container, Def, GenericParam, Generics, ImplDef, Pred, Src, TraitDef, Vis};
 use crate::resolve::{Scope, bounds, preds_of, resolve_type, trait_path};
 use crate::ty::TraitRef;
 use crate::{Code, Diagnostic, Ty};
 
-use super::{Collector, name_of};
+use super::{Collector, name_of, vis_of};
 
 impl Collector<'_> {
     pub(super) fn trait_skeleton(&mut self, src: Src, node: &SyntaxNode) {
@@ -64,6 +64,12 @@ impl Collector<'_> {
             }
         }
         self.reporter.report(src, None, ds);
+        let vis = match src {
+            Src::File(_) => vis_of(node),
+            _ => Vis::Pub,
+        };
+        let index = self.tree.traits.len() as u32;
+        self.declare(src, &name, Def::Trait(index), vis, name_range);
         self.tree.traits.push(TraitDef {
             name,
             name_range,
@@ -76,6 +82,8 @@ impl Collector<'_> {
             supertraits: Vec::new(),
             assoc,
             methods: Vec::new(),
+            vis,
+            module: self.module,
         });
     }
 
@@ -96,7 +104,7 @@ impl Collector<'_> {
             params: &params,
             self_ty: Some(self_ty.clone()),
             trait_ctx: Some(i as u32),
-            ..Scope::new(&self.tree)
+            ..self.scope()
         };
         let mut ds = Vec::new();
         let supers: Vec<TraitRef> = bounds(node, &self_ty, &scope, &mut ds)
@@ -110,7 +118,7 @@ impl Collector<'_> {
                 params: &params,
                 self_ty: Some(self_ty),
                 trait_ctx: Some(i as u32),
-                ..Scope::new(&self.tree)
+                ..self.scope()
             },
             &mut ds,
         );
@@ -187,7 +195,7 @@ impl Collector<'_> {
         }
         let scope = Scope {
             params: &params,
-            ..Scope::new(&self.tree)
+            ..self.scope()
         };
         let self_node = if is_trait {
             types.get(1)
@@ -235,7 +243,7 @@ impl Collector<'_> {
         let scope = Scope {
             params: &params,
             self_ty: Some(self_ty.clone()),
-            ..Scope::new(&self.tree)
+            ..self.scope()
         };
         let mut ds = Vec::new();
         let preds = preds_of(node, &bounded, &scope, &mut ds);
@@ -322,6 +330,7 @@ impl Collector<'_> {
             self_ty: self_ty.clone(),
             assoc: assoc.clone(),
             methods: Vec::new(),
+            module: self.module,
             origin,
         });
         // Methods.

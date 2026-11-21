@@ -9,7 +9,7 @@ use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
 
 use crate::collect::{item_tree, node_at, source};
 use crate::hir::{Body, Expr, ExprId, ExprKind, Local, LocalId, Pat, PatId, PatKind, Stmt};
-use crate::items::{Container, Src};
+use crate::items::{Container, Def, Src};
 use crate::resolve::{Scope, generic_args, resolve_type};
 use crate::{Code, Db, Diagnostic, Item, ItemTree, Owner, Ty};
 
@@ -32,13 +32,16 @@ pub struct Lowered {
 /// The HIR of a function's or a test's body.
 #[salsa::tracked(returns(ref))]
 pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
-    let file = owner.file(db);
-    let items = item_tree(db, file);
-    let src = match owner.item(db) {
-        Item::Fn(i) => items.fns[i as usize].src,
-        Item::Test(_) => Src::File,
+    let program = owner.program(db);
+    let items = item_tree(db, program);
+    let (src, module) = match owner.item(db) {
+        Item::Fn(i) => (items.fns[i as usize].src, items.fns[i as usize].module),
+        Item::Test(t) => {
+            let t = &items.tests[t as usize];
+            (Src::File(t.file), t.module)
+        }
     };
-    let (root, text) = source(db, file, src);
+    let (root, text) = source(db, program, src);
     let mut cx = Lowerer {
         text,
         items,
@@ -46,6 +49,8 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
         names: Names::default(),
         types: Scope {
             holes: true,
+            module,
+            prelude_first: src == Src::Derived,
             ..Scope::new(items)
         },
     };
@@ -108,10 +113,7 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
             }
             node.and_then(|f| f.body())
         }
-        Item::Test(i) => root
-            .children()
-            .filter(|c| c.kind() == K::TEST_ITEM)
-            .nth(i as usize)
+        Item::Test(i) => node_at(&root, K::TEST_ITEM, items.tests[i as usize].node)
             .and_then(ast::TestItem::cast)
             .and_then(|t| t.body()),
     };
@@ -163,6 +165,12 @@ struct Lowerer<'a> {
 }
 
 impl Lowerer<'_> {
+    /// What the item name `name` means in the body's module.
+    fn item(&self, name: &str) -> Option<Def> {
+        self.items
+            .lookup(self.types.module, name, self.types.prelude_first)
+    }
+
     /// The types in a `GENERIC_ARGS` node, for something with `want` parameters.
     fn type_args(&mut self, node: &SyntaxNode, want: usize, what: &str) -> Vec<Ty> {
         let mut ds = Vec::new();

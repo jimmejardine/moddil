@@ -2,16 +2,6 @@
 source: crates/mir/src/tests.rs
 expression: "dump(\"trait Time { fn now(&self) -> int; }\\n\\\n         struct Clock { t: int }\\n\\\n         impl Time for Clock { fn now(&self) -> int { self.t } }\\n\\\n         fn uses(n: int) -> int with time: Time { time.now() + n }\\n\\\n         fn passes() -> int { uses(1) }\\n\\\n         fn installs(c: Clock) -> int { with Time = c { passes() } }\\n\\\n         fn coerces(c: &Clock) -> int { let t: &dyn Time = c; t.now() }\")"
 ---
-fn <Clock as Time>::now(_1: &Clock) -> int {
-    // _1: self
-
-    bb0: {
-        _0 = (*_1).0;
-        StorageDead(_1);
-        return;
-    }
-}
-
 fn uses(_1: int, _2: &dyn Time) -> int {
     // _1: n
     // _2: time
@@ -78,6 +68,16 @@ fn coerces(_1: &Clock) -> int {
 
     bb1: {
         StorageDead(_4);
+        StorageDead(_1);
+        return;
+    }
+}
+
+fn <Clock as Time>::now(_1: &Clock) -> int {
+    // _1: self
+
+    bb0: {
+        _0 = (*_1).0;
         StorageDead(_1);
         return;
     }

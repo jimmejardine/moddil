@@ -16,6 +16,7 @@ path = "src/main.rs"
 [dependencies]
 moddil-interp.workspace = true
 moddil-mir.workspace = true
+moddil-project.workspace = true
 moddil-sema.workspace = true
 moddil-syntax.workspace = true
 ariadne.workspace = true

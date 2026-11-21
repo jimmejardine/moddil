@@ -1,7 +1,7 @@
 //! Semantic analysis: names, types, effects and error sets. Produces the typed HIR.
 //!
-//! Every analysis is a Salsa query over [`SourceFile`] inputs, so results are memoised and
-//! recomputed only when what they read changes:
+//! Every analysis is a Salsa query over a [`Program`] input (its files and mods), so results are
+//! memoised and recomputed only when what they read changes:
 //!
 //! - [`parse`]: the syntax tree;
 //! - [`item_tree`]: the program's items with their signatures: the prelude's, the file's, and the
@@ -12,12 +12,12 @@
 //! - [`effects`]: every function's effects and errors, inferred for private functions;
 //! - [`diagnostics`]: everything wrong with a file.
 //!
-//! Slices S0 to S5 cover `fn`, `test`, `let`, `int`, `bool`, `()`, arithmetic, comparisons,
+//! Slices S0 to S6 cover `fn`, `test`, `let`, `int`, `bool`, `()`, arithmetic, comparisons,
 //! logic, `if`, blocks, calls and `return`; tuples, structs, enums, patterns, `match` (with
 //! exhaustiveness checking), `if let`, `let … else`, loops and `assert`; borrow types, `*`,
 //! binding modes, `Copy` and `defer`; generics, traits, impls, methods, operators through traits,
 //! derives, destructors and the prelude; errors, `fail`, `?`, `try` and `catch`; effects, `with`
-//! and `dyn` borrows. Moves and
+//! and `dyn` borrows; modules, mods, `use` and visibility. Moves and
 //! borrows are checked on MIR (`moddil-mir`).
 //! Valid Moddil beyond that is reported as "not supported yet" (`I0001`). See this crate's
 //! `README.md`.
@@ -31,6 +31,7 @@ mod exhaust;
 pub mod hir;
 mod items;
 mod lower;
+mod modules;
 mod resolve;
 mod traits;
 mod ty;
@@ -40,13 +41,15 @@ pub use check::{
     Callee, Effects, Evidence, FnEffects, Inference, Propagated, effects, infer, tuple_positions,
 };
 pub use collect::{item_tree, parse};
-pub use db::{Database, Db, Item, Owner, SourceFile};
+pub use db::{Database, Db, FileId, Item, ModInfo, Owner, Program, ProgramFile, SourceFile};
 pub use diag::{CODES, Code, Diagnostic, Severity};
 pub use items::{
-    AdtDef, Container, EffectSig, FieldDef, FnSig, GenericParam, Generics, ImplDef, ItemTree,
-    ParamSig, Pred, SelfKind, Shape, Src, TestSig, TraitDef, VariantDef,
+    AdtDef, Container, Def, EffectSig, Entry, FieldDef, FnSig, GenericParam, Generics, ImplDef,
+    Import, ItemTree, ModDef, ModuleDef, PRELUDE_MOD, PRELUDE_MODULE, ParamSig, Pred, SelfKind,
+    Shape, Src, TestSig, TraitDef, VariantDef, Vis,
 };
 pub use lower::{Lowered, body};
+pub use modules::{Member, PathError};
 pub use traits::{Adjust, Answer, Pick, Solver, Source, Table, elaborate};
 pub use ty::{AssocTy, TraitRef, Ty};
 
@@ -55,22 +58,24 @@ use moddil_syntax::TextRange;
 /// The prelude's source (`reference/2027/prelude.moddil`).
 pub const PRELUDE: &str = collect::PRELUDE;
 
-/// Every diagnostic for `file`, in source order. If the file has syntax errors, only those are
-/// reported, since analysing a broken tree mostly produces noise. Problems in derived code are
-/// reported at the `derive` attribute; the prelude has none.
+/// Every diagnostic for `program`, by file and then in source order. If a file has syntax errors,
+/// only those are reported, since analysing a broken tree mostly produces noise. Problems in
+/// derived code are reported at the `derive` attribute; the prelude has none.
 #[salsa::tracked(returns(ref))]
-pub fn diagnostics(db: &dyn Db, file: SourceFile) -> Vec<Diagnostic> {
-    let parsed = parse(db, file);
-    let mut out: Vec<Diagnostic> = parsed
-        .errors()
-        .iter()
-        .map(|e| Diagnostic::error(Code::E0001, e.range, e.message.clone()))
-        .collect();
+pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
+    let mut out: Vec<Diagnostic> = Vec::new();
+    for (f, file) in program.files(db).iter().enumerate() {
+        out.extend(
+            parse(db, file.source).errors().iter().map(|e| {
+                Diagnostic::error(Code::E0001, e.range, e.message.clone()).in_file(f as u32)
+            }),
+        );
+    }
     if out.is_empty() {
-        let items = item_tree(db, file);
+        let items = item_tree(db, program);
         out.extend(items.diagnostics.iter().cloned());
-        out.extend(effects(db, file).diagnostics.iter().cloned());
-        for owner in owners(db, file) {
+        out.extend(effects(db, program).diagnostics.iter().cloned());
+        for owner in owners(db, program) {
             let ds = body(db, owner)
                 .diagnostics
                 .iter()
@@ -78,13 +83,13 @@ pub fn diagnostics(db: &dyn Db, file: SourceFile) -> Vec<Diagnostic> {
             out.extend(in_file(items, owner.item(db), ds));
         }
     }
-    out.sort_by_key(|d| (d.range.start, d.range.end, d.code));
+    out.sort_by_key(|d| (d.file, d.range.start, d.range.end, d.code));
     out.dedup();
     out
 }
 
-/// The diagnostics `ds` of `item`'s body, as the file shows them: as they are for the file's
-/// items, at the `derive` attribute for derived code, and not at all for the prelude.
+/// The diagnostics `ds` of `item`'s body, as the program's files show them: as they are for the
+/// files' items, at the `derive` attribute for derived code, and not at all for the prelude.
 pub fn in_file<'a>(
     items: &ItemTree,
     item: Item,
@@ -99,24 +104,28 @@ pub fn in_file<'a>(
             };
             (sig.src, sig.origin, adt)
         }
-        Item::Test(_) => (Src::File, None, None),
+        Item::Test(t) => (Src::File(items.tests[t as usize].file), None, None),
     };
+    // Derived code is shown in the file of its type.
+    let derived_file = adt.and_then(|a| items.adts[a as usize].src.file());
     // A derive already reported as wrong, or for a type that is, would only report noise.
     let reported = |at: TextRange| {
         let name = adt.map(|a| items.adts[a as usize].name_range);
-        items
-            .diagnostics
-            .iter()
-            .any(|d| d.severity == Severity::Error && (d.range == at || Some(d.range) == name))
+        items.diagnostics.iter().any(|d| {
+            d.severity == Severity::Error
+                && Some(d.file) == derived_file
+                && (d.range == at || Some(d.range) == name)
+        })
     };
     match (src, origin) {
-        (Src::File, _) => ds.into_iter().cloned().collect(),
+        (Src::File(f), _) => ds.into_iter().map(|d| d.clone().in_file(f)).collect(),
         (Src::Derived, Some(at)) if reported(at) => Vec::new(),
         (Src::Derived, Some(at)) => ds
             .into_iter()
             .map(|d| Diagnostic {
                 range: at,
                 labels: Vec::new(),
+                file: derived_file.unwrap_or(0),
                 ..d.clone()
             })
             .collect(),
@@ -124,23 +133,23 @@ pub fn in_file<'a>(
     }
 }
 
-/// Whether `file` has any errors.
-pub fn has_errors(db: &dyn Db, file: SourceFile) -> bool {
-    diagnostics(db, file)
+/// Whether `program` has any errors.
+pub fn has_errors(db: &dyn Db, program: Program) -> bool {
+    diagnostics(db, program)
         .iter()
         .any(|d| d.severity == Severity::Error)
 }
 
-/// Every function with a body and every test of the program (the prelude's, the file's and the
+/// Every function with a body and every test of the program (the prelude's, the files' and the
 /// derived ones), functions first.
-pub fn owners(db: &dyn Db, file: SourceFile) -> Vec<Owner<'_>> {
-    let items = item_tree(db, file);
+pub fn owners(db: &dyn Db, program: Program) -> Vec<Owner<'_>> {
+    let items = item_tree(db, program);
     let fns = (0..items.fns.len() as u32)
         .filter(|&i| items.fns[i as usize].has_body)
         .map(Item::Fn);
     let tests = (0..items.tests.len() as u32).map(Item::Test);
     fns.chain(tests)
-        .map(|item| Owner::new(db, file, item))
+        .map(|item| Owner::new(db, program, item))
         .collect()
 }
 

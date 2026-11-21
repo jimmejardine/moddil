@@ -1,0 +1,78 @@
+# Modules and mods
+
+```text
+moddil.toml                  [mod] name = "shop"     [dependencies] geo = { path = "geo" }
+src/lib.moddil               the root module: `crate`
+src/cart.moddil              the module `crate::cart`
+src/cart/lines.moddil        the module `crate::cart::lines`
+geo/moddil.toml              another mod, which `shop` calls `geo`
+```
+
+```rust
+// src/cart.moddil
+use crate::cart::lines::Line;
+use geo::Point as Place;
+
+pub(mod) fn total(ls: &Line) -> int { ls.qty * 2 }   // any module of `shop` may call it
+fn round(n: int) -> int { n }                        // only this module may
+```
+
+A **mod** is a unit of code with a manifest: a library, executables, and the mods it depends on.
+A **module** is a file of a mod.
+
+**mod.1** A program is a mod and the mods it depends on. A mod is a directory with a manifest,
+`moddil.toml`, a subset of TOML (`#` comments, `[table]` and `[[table]]` headers, and lines
+`key = "string"` or `key = { key = "string", … }`): `[mod]` gives its `name` and, optionally, its
+`edition`, which is `"2027"`; `[lib] root` names its library's root file (by default
+`src/lib.moddil`, if there is one); each `[[exe]]` names an executable's `main` file; and
+`[dependencies]` names the mods it depends on, each by the name it calls it and its directory:
+`geo = { path = "geo" }`. A manifest that is not like this, or names a file or directory that is
+not there, is an error (E0704). A single `.moddil` file is a program too: the root module of a mod
+of its own.
+
+**mod.tree.1** The file tree is the module tree. Every `.moddil` file under a mod's source
+directory (the directory of its library's root file, or `src`) is a module, except those under a
+directory with a manifest of its own, which is another mod. The library's root file is the root
+module; any other file is the module its path names, without the extension: `src/cart/lines.moddil`
+is `cart::lines`, inside the module `cart` (which is `src/cart.moddil`, or empty if there is no
+such file). A file whose name is not a name cannot be a module (E0704). Modules are not declared:
+`mod name;` is an error (E0702).
+
+**mod.names.1** A module's names are the items it declares, the names it imports, and the modules
+inside it; then the prelude's ([The prelude](prelude.md)), which any of them shadow. A module names
+each of its items and imports once (E0103). Its names can be used anywhere in it, in any order.
+
+**mod.path.1** A path names an item through modules. It starts at `crate` (the root module of the
+mod), `self` (this module), the name of a mod this mod depends on (its root module), or a name in
+scope (an imported module, or a module inside this one); each further segment is a name in the
+module before it: `crate::cart::total`, `geo::Point`, `cart::lines::Line`. The last segments may
+name a variant or a function of a type, as in `Shape::Circle` (**names.resolve.2**). A segment that
+names nothing is an error (E0101 for a value, E0102 for a type, E0401 for a trait). Modules may
+name each other's items in cycles.
+
+**mod.use.1** `use path;` imports what the path names (an item, a module, or a variant) under its
+last segment's name, and `use path as name;` under `name`; `use a::{b, c as d};` imports several.
+The path must name something the module can see (E0702 if it names nothing, E0701 if it is not
+visible). An import is private to its module unless it is `pub use` or `pub(mod) use`, which
+re-exports it. There are no glob imports: `use x::*` is an error (E0702).
+
+**mod.vis.1** An item is visible to its own module only; `pub(mod)`, to every module of its mod;
+`pub`, to every mod. A path or import that names an item its module cannot see is an error
+(E0701). The methods of impls and the fields of structs are not yet limited by visibility.
+
+**mod.expose.1** An item may not name in its signature something less visible than itself (E0703):
+a `pub` function's parameter, result, error and effect types and the traits of its bounds must be
+`pub` (or the prelude's), as must a `pub` struct's or enum's field types; a `pub(mod)` item's must be
+`pub(mod)` or `pub`.
+
+**mod.dep.1** The mods a program's mods depend on form a DAG: mods that depend on each other in a
+cycle are an error (E0705). A mod sees only another mod's `pub` items.
+
+**mod.infer.1** Effects and errors are written out at a mod's boundary: a `pub` function writes
+its own ([Effects](effects.md)); a private or `pub(mod)` function's are inferred, across the
+modules of its mod.
+
+**mod.entry.1** The entry points of the mod being built are the `fn main` of its root module and
+of each executable's main module, and its tests ([Errors](errors.md), [Effects](effects.md)); a
+function `main` of any other module is an ordinary function. The tests of every mod of the program
+are checked; the conformance runner runs them all.

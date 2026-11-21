@@ -172,14 +172,17 @@ pub(crate) fn derived_fields(tree: &ItemTree) -> Vec<Diagnostic> {
             .flat_map(|v| tree.field_types(&imp.self_ty, v))
             .find(|t| !matches!(t, Ty::Param(..)) && solver.implements(t, tr) == Answer::No);
         if let Some(t) = bad {
-            found.push(Diagnostic::error(
-                Code::E0402,
-                origin,
-                format!(
-                    "`{}` cannot derive `{tr}`: its field of type `{t}` does not implement it",
-                    def.name
-                ),
-            ));
+            found.push(
+                Diagnostic::error(
+                    Code::E0402,
+                    origin,
+                    format!(
+                        "`{}` cannot derive `{tr}`: its field of type `{t}` does not implement it",
+                        def.name
+                    ),
+                )
+                .in_file(def.src.file().unwrap_or(0)),
+            );
         }
     }
     found

@@ -67,7 +67,7 @@ impl Collector<'_> {
                 self_ty: self_ty.clone(),
                 trait_ctx,
                 impl_assoc: impl_assoc.clone(),
-                ..Scope::new(&self.tree)
+                ..self.scope()
             };
             preds_of(node, &bounded, &scope, &mut ds)
         };
@@ -79,7 +79,7 @@ impl Collector<'_> {
             self_ty: self_ty.clone(),
             trait_ctx,
             impl_assoc,
-            ..Scope::new(&self.tree)
+            ..self.scope()
         };
         let mut ds = Vec::new();
         let mut params = Vec::new();
@@ -201,25 +201,37 @@ impl Collector<'_> {
             fails,
             fails_range,
             effects,
-            public: node.child(K::VIS).is_some(),
+            vis: match (src, container) {
+                (Src::File(_), Container::Free | Container::Impl(_)) => super::vis_of(node),
+                _ => crate::items::Vis::Pub,
+            },
+            module: self.module,
         }
     }
 
-    pub(super) fn test_sig(&mut self, t: &ast::TestItem) -> TestSig {
+    pub(super) fn test_sig(&mut self, t: &ast::TestItem, file: u32) -> TestSig {
         let node = t.syntax();
-        self.unsupported_parts(Src::File, node, false);
+        let src = Src::File(file);
+        self.unsupported_parts(src, node, false);
         if node.child(K::GENERIC_PARAMS).is_some() || node.child(K::WHERE_CLAUSE).is_some() {
-            self.reporter
-                .push(Diagnostic::unsupported(node.text_range(), "a generic test"));
+            self.reporter.report(
+                src,
+                None,
+                vec![Diagnostic::unsupported(node.text_range(), "a generic test")],
+            );
         }
         if node
             .child_tokens()
             .any(|t| matches!(t.kind(), K::FOR_KW | K::WITH_KW))
         {
-            self.reporter.push(Diagnostic::unsupported(
-                node.text_range(),
-                "a test with `for` or `with`",
-            ));
+            self.reporter.report(
+                src,
+                None,
+                vec![Diagnostic::unsupported(
+                    node.text_range(),
+                    "a test with `for` or `with`",
+                )],
+            );
         }
         let sig = match t.name_token() {
             Some(tok) => {
@@ -232,15 +244,28 @@ impl Collector<'_> {
                 TestSig {
                     name,
                     name_range: tok.text_range(),
+                    file,
+                    node: node.text_range(),
+                    module: self.module,
                 }
             }
             None => TestSig {
                 name: String::new(),
                 name_range: node.text_range(),
+                file,
+                node: node.text_range(),
+                module: self.module,
             },
         };
-        if let Some(first) = self.tree.tests.iter().find(|s| s.name == sig.name) {
-            self.reporter.push(
+        // Tests are named once per module.
+        if let Some(first) = self
+            .tree
+            .tests
+            .iter()
+            .find(|s| s.name == sig.name && s.module == self.module)
+        {
+            self.reporter.push_in(
+                file,
                 Diagnostic::error(
                     Code::E0103,
                     sig.name_range,
@@ -426,7 +451,7 @@ pub(super) fn param_sig(
         ));
     }
     let (name, mutable, range, destructures) = match p.pat() {
-        Some(pat) => match simple_binding(&pat, scope.tree) {
+        Some(pat) => match simple_binding(&pat, scope.tree, scope.module) {
             Some((name, mutable)) => (name, mutable, pat.syntax().text_range(), false),
             None => (None, false, pat.syntax().text_range(), true),
         },

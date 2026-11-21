@@ -1,4 +1,4 @@
-use moddil_sema::{Database, SourceFile};
+use moddil_sema::{Database, Program};
 
 use super::*;
 
@@ -14,13 +14,11 @@ fn eval(text: &str, args: &[Value]) -> Result<Value, Trap> {
 /// Calls `main` in `text` with `args`, which may stop with an error.
 fn run_main(text: &str, args: &[Value]) -> Result<Value, Stop> {
     let db = Database::default();
-    let file = SourceFile::new(&db, "t.moddil".to_string(), text.to_string());
+    let file = Program::single(&db, "t.moddil".to_string(), text.to_string());
     let diagnostics = moddil_mir::diagnostics(&db, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
-    let main = moddil_sema::item_tree(&db, file)
-        .fn_named("main")
-        .expect("a main");
-    call_fn(&db, file, main, args, &mut |_, _| {})
+    let main = moddil_sema::item_tree(&db, file).main_fn().expect("a main");
+    call_fn(&db, file, main, args, &mut |_, _, _| {})
 }
 
 fn value(text: &str) -> Value {
@@ -148,9 +146,9 @@ fn logic_short_circuits() {
 fn tests_report_observed_values() {
     let text = "test \"t\" {\n  let x = 2;\n  x + 1; // => 3\n  x // => 2\n}";
     let db = Database::default();
-    let file = SourceFile::new(&db, "t.moddil".to_string(), text.to_string());
+    let file = Program::single(&db, "t.moddil".to_string(), text.to_string());
     let mut seen = Vec::new();
-    run_test(&db, file, 0, &mut |range, v| {
+    run_test(&db, file, 0, &mut |_, range, v| {
         seen.push((moddil_syntax::line_col(text, range.start).0, v));
     })
     .expect("no trap");
@@ -160,12 +158,12 @@ fn tests_report_observed_values() {
 /// Runs `main` in `text` and renders its value.
 fn shown(text: &str) -> String {
     let db = Database::default();
-    let file = SourceFile::new(&db, "t.moddil".to_string(), text.to_string());
+    let file = Program::single(&db, "t.moddil".to_string(), text.to_string());
     let diagnostics = moddil_mir::diagnostics(&db, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let items = moddil_sema::item_tree(&db, file);
-    let main = items.fn_named("main").expect("a main");
-    call_fn(&db, file, main, &[], &mut |_, _| {})
+    let main = items.main_fn().expect("a main");
+    call_fn(&db, file, main, &[], &mut |_, _, _| {})
         .expect("no trap")
         .render(items)
 }
@@ -284,10 +282,10 @@ fn a_failed_assert_shows_its_parts() {
     let db = Database::default();
     let text = "fn fee(a: int) -> int { a / 10 }\n\
                 fn main() { let amount = 250; assert(fee(amount) + amount == 260 || amount < 0 && fee(1) > 0); }";
-    let file = SourceFile::new(&db, "t.moddil".to_string(), text.to_string());
+    let file = Program::single(&db, "t.moddil".to_string(), text.to_string());
     let items = moddil_sema::item_tree(&db, file);
-    let main = items.fn_named("main").expect("a main");
-    let Err(Stop::Trap(t)) = call_fn(&db, file, main, &[], &mut |_, _| {}) else {
+    let main = items.main_fn().expect("a main");
+    let Err(Stop::Trap(t)) = call_fn(&db, file, main, &[], &mut |_, _, _| {}) else {
         panic!("a trap");
     };
     assert_eq!(t.class, TrapClass::Assertion);

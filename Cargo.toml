@@ -44,6 +44,7 @@ moddil-mir = { path = "crates/mir", version = "0.0.0" }
 moddil-interp = { path = "crates/interp", version = "0.0.0" }
 moddil-refinterp = { path = "crates/refinterp", version = "0.0.0" }
 moddil-conformance = { path = "crates/conformance", version = "0.0.0" }
+moddil-project = { path = "crates/project", version = "0.0.0" }
 
 # External crates (versions checked on crates.io, November 2026).
 salsa = "0.28.5"            # query-based incremental compilation

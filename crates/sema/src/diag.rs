@@ -210,6 +210,17 @@ codes! {
     E0606 = "effect listed twice",
     /// Effects inferred without end (a generic function calling itself with ever larger types).
     E0607 = "effects do not settle",
+    /// A name another module may not name: private to its module, or `pub(mod)` and in
+    /// another mod.
+    E0701 = "not visible here",
+    /// A `use` that names nothing, a glob import, or a declared module.
+    E0702 = "invalid import",
+    /// A `pub` item whose signature names something less visible than itself.
+    E0703 = "private type in a public signature",
+    /// A manifest that cannot be read, or names files or mods that are not there.
+    E0704 = "invalid manifest",
+    /// Mods that depend on each other in a cycle.
+    E0705 = "dependency cycle",
     /// A `match` arm no value can reach.
     W0201 = "unreachable pattern",
     /// Valid Moddil that this implementation does not support yet.
@@ -236,8 +247,10 @@ pub struct Diagnostic {
     pub range: TextRange,
     /// The message.
     pub message: String,
-    /// Secondary ranges with their messages.
+    /// Secondary ranges with their messages, in the same file.
     pub labels: Vec<(TextRange, String)>,
+    /// The file it is in, by its index in the program.
+    pub file: u32,
 }
 
 impl Diagnostic {
@@ -249,7 +262,15 @@ impl Diagnostic {
             range,
             message: message.into(),
             labels: Vec::new(),
+            file: 0,
         }
+    }
+
+    /// The same diagnostic, in file `file`.
+    #[must_use]
+    pub fn in_file(mut self, file: u32) -> Self {
+        self.file = file;
+        self
     }
 
     /// A warning.

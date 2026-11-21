@@ -1,7 +1,0 @@
-// covers: prelude.1
-
-struct Option { x: int }                    //~ E0103
-enum Ordering { Up, Down }                  //~ E0103
-fn drop(x: int) {}                          //~ E0103
-trait Clone {}                              //~ E0103
-fn Some() {}                                //~ E0103

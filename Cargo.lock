@@ -377,6 +377,7 @@ dependencies = [
  "clap",
  "moddil-interp",
  "moddil-mir",
+ "moddil-project",
  "moddil-sema",
  "moddil-syntax",
 ]
@@ -387,6 +388,7 @@ version = "0.0.0"
 dependencies = [
  "moddil-interp",
  "moddil-mir",
+ "moddil-project",
  "moddil-refinterp",
  "moddil-sema",
  "moddil-syntax",
@@ -415,6 +417,10 @@ dependencies = [
  "moddil-syntax",
  "salsa",
 ]
+
+[[package]]
+name = "moddil-project"
+version = "0.0.0"
 
 [[package]]
 name = "moddil-refinterp"

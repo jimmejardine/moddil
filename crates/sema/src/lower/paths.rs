@@ -5,7 +5,8 @@ use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
 
 use super::{Lowerer, Resolved};
 use crate::hir::{ExprId, ExprKind};
-use crate::items::Shape;
+use crate::items::{Def, Shape};
+use crate::modules::PathError;
 use crate::resolve::{adt_args, generic_args, path_segments};
 use crate::{Code, Diagnostic, Ty};
 
@@ -43,51 +44,45 @@ impl Lowerer<'_> {
             self.error(Diagnostic::unsupported(range, "this path"));
             return None;
         };
-        match segs.as_slice() {
-            [seg] => {
-                let name = seg.name.as_str();
-                if let Some(local) = self.lookup(name) {
-                    if seg.args.is_some() {
-                        self.report(
-                            Code::E0404,
-                            range,
-                            format!("`{name}` takes no type arguments"),
-                        );
+        if let [seg] = segs.as_slice()
+            && let Some(local) = self.lookup(&seg.name)
+        {
+            if seg.args.is_some() {
+                self.report(
+                    Code::E0404,
+                    range,
+                    format!("`{}` takes no type arguments", seg.name),
+                );
+            }
+            return Some(Resolved::Local(local));
+        }
+        // `Self::f`, `T::f`, `int::f`: a function of a type that is not an item.
+        if let [ty, item] = segs.as_slice()
+            && let Some(base) = self.non_item_type(ty)
+        {
+            let base = base?;
+            return self.of_type(base, item);
+        }
+        let names: Vec<&str> = segs.iter().map(|s| s.name.as_str()).collect();
+        let (def, n) = match self
+            .items
+            .path(self.types.module, &names, self.types.prelude_first)
+        {
+            Ok(found) => found,
+            Err(PathError::Private(k, def)) => {
+                let d = self.items.hidden(def, segs[k].range);
+                self.error(d);
+                return None;
+            }
+            Err(PathError::Unresolved(k)) => {
+                let name = names[k];
+                if segs.len() == 1 && name == "Self" {
+                    if let Some(Ty::Adt(a, _, args)) = self.types.self_ty.clone()
+                        && !self.items.adts[a as usize].is_enum
+                    {
+                        return Some(Resolved::Ctor(a, 0, args.to_vec()));
                     }
-                    return Some(Resolved::Local(local));
-                }
-                if let Some(f) = self.items.fn_named(name) {
-                    let sig = &self.items.fns[f as usize];
-                    let want = sig.generics.params.len() - sig.generics.parent as usize;
-                    let args = match &seg.args {
-                        Some(a) => self.type_args(a, want, &format!("`{name}`")),
-                        None => vec![Ty::Infer(Ty::HOLE); want],
-                    };
-                    return Some(Resolved::Fn(f, args));
-                }
-                if let Some((a, v)) = self.items.bare_variant(name) {
-                    let args = self.adt_args(a, seg.args.as_ref(), range);
-                    return Some(Resolved::Ctor(a, v, args));
-                }
-                if let Some(a) = self.items.adt_named(name) {
-                    if !self.items.adts[a as usize].is_enum {
-                        let args = self.adt_args(a, seg.args.as_ref(), range);
-                        return Some(Resolved::Ctor(a, 0, args));
-                    }
-                    self.report(
-                        Code::E0111,
-                        range,
-                        format!("`{name}` is an enum; name one of its variants: `{name}::…`"),
-                    );
-                    return None;
-                }
-                if name == "Self"
-                    && let Some(Ty::Adt(a, _, args)) = self.types.self_ty.clone()
-                    && !self.items.adts[a as usize].is_enum
-                {
-                    return Some(Resolved::Ctor(a, 0, args.to_vec()));
-                }
-                if name == "assert" {
+                } else if segs.len() == 1 && name == "assert" {
                     self.report(
                         Code::E0112,
                         range,
@@ -95,99 +90,165 @@ impl Lowerer<'_> {
                     );
                     return None;
                 }
+                let what = if k == 0 && segs.len() == 1 {
+                    format!("there is nothing called `{name}` here")
+                } else if k == 0 {
+                    format!("there is no type or module called `{name}`")
+                } else {
+                    format!(
+                        "there is nothing called `{name}` in `{}`",
+                        names[..k].join("::")
+                    )
+                };
+                self.report(Code::E0101, segs[k].range, what);
+                return None;
+            }
+        };
+        let last = &segs[segs.len() - 1];
+        let rest = &segs[n..];
+        match (def, rest) {
+            (Def::Fn(f), []) => {
+                let sig = &self.items.fns[f as usize];
+                let want = sig.generics.params.len() - sig.generics.parent as usize;
+                let args = match &last.args {
+                    Some(a) => self.type_args(a, want, &format!("`{}`", last.name)),
+                    None => vec![Ty::Infer(Ty::HOLE); want],
+                };
+                Some(Resolved::Fn(f, args))
+            }
+            (Def::Variant(a, v), []) => {
+                let args = self.adt_args(a, last.args.as_ref(), range);
+                Some(Resolved::Ctor(a, v, args))
+            }
+            (Def::Adt(a), []) => {
+                if !self.items.adts[a as usize].is_enum {
+                    let args = self.adt_args(a, last.args.as_ref(), range);
+                    return Some(Resolved::Ctor(a, 0, args));
+                }
+                let name = &self.items.adts[a as usize].name;
                 self.report(
-                    Code::E0101,
+                    Code::E0111,
                     range,
-                    format!("there is nothing called `{name}` here"),
+                    format!("`{name}` is an enum; name one of its variants: `{name}::…`"),
                 );
                 None
             }
-            [ty, item] => {
-                let own_args = |cx: &mut Self| -> Option<Vec<Ty>> {
-                    item.args.as_ref().map(|a| {
-                        let mut ds = Vec::new();
-                        let (types, _) = generic_args(a, &cx.types, &mut ds);
-                        cx.out.diagnostics.extend(ds);
-                        types
-                    })
-                };
-                // `Trait::method`.
-                if let Some(t) = self.items.trait_named(&ty.name) {
-                    let def = &self.items.traits[t as usize];
-                    let Some(&func) = def
-                        .methods
-                        .iter()
-                        .find(|&&m| self.items.fns[m as usize].name == item.name)
-                    else {
-                        self.report(
-                            Code::E0413,
-                            item.range,
-                            format!("`{}` has no method `{}`", ty.name, item.name),
-                        );
-                        return None;
-                    };
-                    let want = def.generics.params.len() - 1;
-                    let trait_args = match &ty.args {
-                        Some(a) => self.type_args(a, want, &format!("`{}`", ty.name)),
-                        None => vec![Ty::Infer(Ty::HOLE); want],
-                    };
-                    let args = own_args(self);
-                    return Some(Resolved::TraitFn(t, func, trait_args, args));
-                }
-                // The type: an enum's variant, or a function of the type.
-                let base = match ty.name.as_str() {
-                    "int" => Ty::Int,
-                    "bool" => Ty::Bool,
-                    "Self" => match &self.types.self_ty {
-                        Some(t) => t.clone(),
-                        None => {
-                            self.report(
-                                Code::E0102,
-                                ty.range,
-                                "`Self` is the type of an impl or trait, and there is none here",
-                            );
-                            return None;
-                        }
-                    },
-                    name => {
-                        if let Some(i) = self.types.params.iter().rposition(|p| p.name == name) {
-                            Ty::Param(i as u32, name.into())
-                        } else if let Some(a) = self.items.adt_named(name) {
-                            let args = self.adt_args(a, ty.args.as_ref(), ty.range);
-                            self.items.adts[a as usize].ty_with(a, args)
-                        } else {
-                            self.report(
-                                Code::E0101,
-                                ty.range,
-                                format!("there is no type called `{name}`"),
-                            );
-                            return None;
-                        }
-                    }
-                };
-                if let Ty::Adt(a, _, args) = &base {
-                    let def = &self.items.adts[*a as usize];
-                    if def.is_enum
-                        && let Some(v) = def.variant(&item.name)
-                    {
-                        if item.args.is_some() {
-                            self.report(
-                                Code::E0404,
-                                item.range,
-                                "a variant takes no type arguments: write them on the enum",
-                            );
-                        }
-                        return Some(Resolved::Ctor(*a, v, args.to_vec()));
-                    }
-                }
-                let args = own_args(self);
-                Some(Resolved::AssocFn(base, item.name.clone(), item.range, args))
+            // `Type::item`: an enum's variant, or a function of the type.
+            (Def::Adt(a), [item]) => {
+                let ty_seg = &segs[n - 1];
+                let args = self.adt_args(a, ty_seg.args.as_ref(), ty_seg.range);
+                let base = self.items.adts[a as usize].ty_with(a, args);
+                self.of_type(base, item)
             }
-            _ => {
-                self.error(Diagnostic::unsupported(range, "this path"));
+            // `Trait::method`.
+            (Def::Trait(t), [item]) => {
+                let ty_seg = &segs[n - 1];
+                let def = &self.items.traits[t as usize];
+                let Some(&func) = def
+                    .methods
+                    .iter()
+                    .find(|&&m| self.items.fns[m as usize].name == item.name)
+                else {
+                    self.report(
+                        Code::E0413,
+                        item.range,
+                        format!("`{}` has no method `{}`", ty_seg.name, item.name),
+                    );
+                    return None;
+                };
+                let want = def.generics.params.len() - 1;
+                let trait_args = match &ty_seg.args {
+                    Some(a) => self.type_args(a, want, &format!("`{}`", ty_seg.name)),
+                    None => vec![Ty::Infer(Ty::HOLE); want],
+                };
+                let args = self.own_args(item);
+                Some(Resolved::TraitFn(t, func, trait_args, args))
+            }
+            (Def::Module(_), []) => {
+                self.report(
+                    Code::E0101,
+                    range,
+                    format!("`{}` is a module, not a value", names.join("::")),
+                );
+                None
+            }
+            (Def::Trait(_), []) => {
+                self.report(
+                    Code::E0101,
+                    range,
+                    format!("`{}` is a trait, not a value", names.join("::")),
+                );
+                None
+            }
+            (def, _) => {
+                self.report(
+                    Code::E0101,
+                    segs[n].range,
+                    format!(
+                        "`{}` has nothing called `{}`",
+                        self.items.def_name(def),
+                        names[n]
+                    ),
+                );
                 None
             }
         }
+    }
+
+    /// For `ty::item` where `ty` is not an item: `Self`, a type parameter, `int` or `bool`
+    /// (`Some(None)` after reporting a `Self` with no type), or `None` if it is an item's name.
+    fn non_item_type(&mut self, ty: &crate::resolve::Segment) -> Option<Option<Ty>> {
+        let name = ty.name.as_str();
+        Some(Some(match name {
+            "int" => Ty::Int,
+            "bool" => Ty::Bool,
+            "Self" => match &self.types.self_ty {
+                Some(t) => t.clone(),
+                None => {
+                    self.report(
+                        Code::E0102,
+                        ty.range,
+                        "`Self` is the type of an impl or trait, and there is none here",
+                    );
+                    return Some(None);
+                }
+            },
+            _ => match self.types.params.iter().rposition(|p| p.name == name) {
+                Some(i) => Ty::Param(i as u32, name.into()),
+                None => return None,
+            },
+        }))
+    }
+
+    /// The type arguments written on `item`'s segment, if any.
+    fn own_args(&mut self, item: &crate::resolve::Segment) -> Option<Vec<Ty>> {
+        item.args.as_ref().map(|a| {
+            let mut ds = Vec::new();
+            let (types, _) = generic_args(a, &self.types, &mut ds);
+            self.out.diagnostics.extend(ds);
+            types
+        })
+    }
+
+    /// `base::item`: an enum's variant, or a function of the type.
+    fn of_type(&mut self, base: Ty, item: &crate::resolve::Segment) -> Option<Resolved> {
+        if let Ty::Adt(a, _, args) = &base {
+            let def = &self.items.adts[*a as usize];
+            if def.is_enum
+                && let Some(v) = def.variant(&item.name)
+            {
+                if item.args.is_some() {
+                    self.report(
+                        Code::E0404,
+                        item.range,
+                        "a variant takes no type arguments: write them on the enum",
+                    );
+                }
+                return Some(Resolved::Ctor(*a, v, args.to_vec()));
+            }
+        }
+        let args = self.own_args(item);
+        Some(Resolved::AssocFn(base, item.name.clone(), item.range, args))
     }
 
     /// The expression for a resolved path.

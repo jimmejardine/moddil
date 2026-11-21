@@ -3,7 +3,7 @@
 Moddil's **mid-level IR**, built from the typed HIR, and the passes over it
 ([`specs/mir.md`](../../specs/mir.md)).
 
-**Status:** slices S0 to S5: the `mir(owner)` query builds a body from the typed HIR, for files
+**Status:** slices S0 to S6: the `mir(owner)` query builds a body from the typed HIR, for files
 without errors, once for a generic function: calls name their callee and its type arguments, and a
 trait's method is resolved when the call runs. Values that need dropping get `Drop` terminators at
 the end of their scope, before assignments, and at the end of a temporary's statement. A call of

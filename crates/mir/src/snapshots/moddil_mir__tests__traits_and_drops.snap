@@ -2,20 +2,6 @@
 source: crates/mir/src/tests.rs
 expression: "dump(\"struct G { n: int }\\n\\\n         impl Drop for G { fn drop(self) {} }\\n\\\n         fn eq<T: PartialEq>(a: &T, b: &T) -> bool { *a == *b }\\n\\\n         fn first<T>(x: T, y: T) -> T { x }\\n\\\n         fn f(g: G) -> int { let h = G { n: 1 }; let mut k = g; k = G { n: 2 }; h.n.cmp(&k.n); 0 }\")"
 ---
-fn <G as Drop>::drop(_1: G) -> () {
-    // _1: self
-
-    bb0: {
-        _0 = const ();
-        drop_fields(_1) -> bb1;
-    }
-
-    bb1: {
-        StorageDead(_1);
-        return;
-    }
-}
-
 fn eq(_1: &T, _2: &T) -> bool {
     // _1: a
     // _2: b
@@ -116,6 +102,20 @@ fn f(_1: G) -> int {
     }
 
     bb8: {
+        StorageDead(_1);
+        return;
+    }
+}
+
+fn <G as Drop>::drop(_1: G) -> () {
+    // _1: self
+
+    bb0: {
+        _0 = const ();
+        drop_fields(_1) -> bb1;
+    }
+
+    bb1: {
         StorageDead(_1);
         return;
     }

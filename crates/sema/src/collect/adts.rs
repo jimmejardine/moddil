@@ -4,11 +4,11 @@ use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
 
 use crate::derive::{self, DERIVABLE};
-use crate::items::{AdtDef, FieldDef, Generics, Shape, Src, VariantDef};
+use crate::items::{AdtDef, Def, FieldDef, Generics, Shape, Src, VariantDef, Vis};
 use crate::resolve::{Scope, resolve_type};
 use crate::{Code, Diagnostic, Ty};
 
-use super::{Collector, name_of};
+use super::{Collector, name_of, vis_of};
 
 impl Collector<'_> {
     pub(super) fn adt_skeleton(&mut self, src: Src, node: &SyntaxNode) {
@@ -31,6 +31,25 @@ impl Collector<'_> {
         }
         self.reporter.report(src, None, ds);
         let bare = src == Src::Prelude && matches!(name.as_str(), "Option" | "Result");
+        let vis = match src {
+            Src::File(_) => vis_of(node),
+            _ => Vis::Pub,
+        };
+        let index = self.tree.adts.len() as u32;
+        self.declare(src, &name, Def::Adt(index), vis, name_range);
+        if bare {
+            // `Some`, `None`, `Ok` and `Err` are the prelude's names too.
+            for (k, v) in node
+                .child(K::VARIANT_LIST)
+                .into_iter()
+                .flat_map(|l| l.children().collect::<Vec<_>>())
+                .filter(|v| v.kind() == K::VARIANT)
+                .enumerate()
+            {
+                let (n, r) = name_of(&v);
+                self.declare(src, &n, Def::Variant(index, k as u32), Vis::Pub, r);
+            }
+        }
         self.tree.adts.push(AdtDef {
             name,
             name_range,
@@ -44,6 +63,8 @@ impl Collector<'_> {
             },
             variants: Vec::new(),
             bare_variants: bare,
+            vis,
+            module: self.module,
         });
     }
 
@@ -56,7 +77,7 @@ impl Collector<'_> {
         let params = self.tree.adts[i].generics.params.clone();
         let scope = Scope {
             params: &params,
-            ..Scope::new(&self.tree)
+            ..self.scope()
         };
         let variants = if node.kind() == K::STRUCT_ITEM {
             let (name, name_range) = name_of(node);

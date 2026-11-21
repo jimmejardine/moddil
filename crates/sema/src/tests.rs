@@ -3,7 +3,7 @@ use super::*;
 /// The codes reported for `text`, with the 1-based line each starts on.
 fn codes(text: &str) -> Vec<(String, u32)> {
     let db = Database::default();
-    let file = SourceFile::new(&db, "test.moddil".to_string(), text.to_string());
+    let file = Program::single(&db, "test.moddil".to_string(), text.to_string());
     diagnostics(&db, file)
         .iter()
         .map(|d| {
@@ -113,7 +113,7 @@ fn syntax_errors_hide_the_rest() {
 #[test]
 fn the_prelude_and_its_derives_check_cleanly() {
     let db = Database::default();
-    let file = SourceFile::new(&db, "t.moddil".to_string(), String::new());
+    let file = Program::single(&db, "t.moddil".to_string(), String::new());
     let items = item_tree(&db, file);
     assert_eq!(items.hidden, vec![], "the prelude's items");
     assert_eq!(items.diagnostics, vec![]);
@@ -144,7 +144,7 @@ fn beyond_s0_is_not_supported_yet() {
 fn tests_observe_annotated_lines() {
     let text = "test \"t\" {\n  1 + 2; // => 3\n  if true { 4 } else { 5 } // => 4\n  6 // => 6\n}";
     let db = Database::default();
-    let file = SourceFile::new(&db, "t.moddil".to_string(), text.to_string());
+    let file = Program::single(&db, "t.moddil".to_string(), text.to_string());
     assert!(diagnostics(&db, file).is_empty());
     let owner = Owner::new(&db, file, Item::Test(0));
     let lowered = body(&db, owner);
@@ -169,13 +169,15 @@ fn tests_observe_annotated_lines() {
 fn queries_are_reused_after_an_edit() {
     use salsa::Setter;
     let mut db = Database::default();
-    let file = SourceFile::new(
+    let file = Program::single(
         &db,
         "t.moddil".to_string(),
         "fn f() -> int { 1 }".to_string(),
     );
     assert!(diagnostics(&db, file).is_empty());
-    file.set_text(&mut db)
+    file.files(&db)[0]
+        .source
+        .set_text(&mut db)
         .to("fn f() -> int { true }".to_string());
     assert_eq!(diagnostics(&db, file).len(), 1);
 }
@@ -420,12 +422,13 @@ fn generics_and_traits() {
         "fn f<T: Clone>(x: T) {}\nstruct S;\nfn g() { f(S) }",
         &[("E0402", 3)],
     );
-    err("struct Option;", &[("E0103", 1)]);
+    // The prelude's names are shadowed, not taken.
+    ok("struct Option;");
 }
 
 #[test]
 fn errors() {
-    let e = "struct A { n: int }\nenum B { X, Y(int) }\n";
+    let e = "pub struct A { n: int }\npub enum B { X, Y(int) }\n";
     let ok2 = |t: &str| ok(&format!("{e}{t}"));
     let err2 = |t: &str, x: &[(&str, u32)]| {
         let shifted: Vec<(&str, u32)> = x.iter().map(|&(c, l)| (c, l + 2)).collect();
@@ -479,7 +482,7 @@ fn errors() {
 
 #[test]
 fn effects() {
-    let e = "trait Time { fn now(&self) -> int; }\nstruct Clock { t: int }\n\
+    let e = "pub trait Time { fn now(&self) -> int; }\nstruct Clock { t: int }\n\
              impl Time for Clock { fn now(&self) -> int { self.t } }\n\
              fn uses() -> int with time: Time { time.now() }\n";
     let ok2 = |t: &str| ok(&format!("{e}{t}"));
@@ -501,5 +504,93 @@ fn effects() {
     err2(
         "fn f(c: &Clock) -> int { with Time = c, Time = c { uses() } }",
         &[("E0606", 1)],
+    );
+}
+
+/// The codes reported for a program of files (module path and text) in mods (name and
+/// dependencies), with each code's file and 1-based line.
+fn program_codes(
+    files: &[(u32, &[&str], &str)],
+    mods: &[(&str, &[(&str, u32)])],
+) -> Vec<(String, u32, u32)> {
+    let db = Database::default();
+    let pfiles = files
+        .iter()
+        .enumerate()
+        .map(|(i, (m, path, text))| ProgramFile {
+            source: SourceFile::new(&db, format!("f{i}.moddil"), (*text).to_string()),
+            mod_: *m,
+            module: path.iter().map(|s| (*s).to_string()).collect(),
+            exe: false,
+        })
+        .collect();
+    let pmods = mods
+        .iter()
+        .map(|(n, deps)| ModInfo {
+            name: (*n).to_string(),
+            deps: deps.iter().map(|(d, i)| ((*d).to_string(), *i)).collect(),
+        })
+        .collect();
+    let program = Program::new(&db, pfiles, pmods);
+    diagnostics(&db, program)
+        .iter()
+        .map(|d| {
+            let text = files[d.file as usize].2;
+            (
+                d.code.as_str().to_string(),
+                d.file,
+                moddil_syntax::line_col(text, d.range.start).0,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn modules() {
+    let root =
+        "use crate::a::Point;\npub(mod) fn f() -> int { a::norm(Point { x: 1 }) + b::g() }\n";
+    let a = "pub(mod) struct Point { x: int }\npub(mod) fn norm(p: Point) -> int { p.x }\n";
+    let b = "pub(mod) fn g() -> int { crate::f() }\n";
+    let one: &[(&str, &[(&str, u32)])] = &[("m", &[])];
+    assert_eq!(
+        program_codes(&[(0, &[], root), (0, &["a"], a), (0, &["b"], b)], one),
+        vec![]
+    );
+    // Private items are their module's own.
+    let a = "fn hidden() -> int { 1 }\n";
+    assert_eq!(
+        program_codes(
+            &[(0, &[], "fn f() -> int { a::hidden() }\n"), (0, &["a"], a)],
+            one
+        ),
+        vec![("E0701".to_string(), 0, 1)]
+    );
+    // Another mod sees only `pub` items.
+    let dep = "pub(mod) fn inner() -> int { 1 }\npub fn outer() -> int { inner() }\n";
+    let two: &[(&str, &[(&str, u32)])] = &[("app", &[("dep", 1)]), ("dep", &[])];
+    assert_eq!(
+        program_codes(
+            &[
+                (0, &[], "fn f() -> int { dep::outer() + dep::inner() }\n"),
+                (1, &[], dep)
+            ],
+            two
+        ),
+        vec![("E0701".to_string(), 0, 1)]
+    );
+    // The prelude's names can be shadowed; imports and items cannot clash.
+    assert_eq!(
+        program_codes(&[(0, &[], "struct Option;\nfn drop() {}\n")], one),
+        vec![]
+    );
+    assert_eq!(
+        program_codes(
+            &[
+                (0, &[], "use crate::a::X;\nstruct X;\n"),
+                (0, &["a"], "pub(mod) struct X;\n")
+            ],
+            one
+        ),
+        vec![("E0103".to_string(), 0, 2)]
     );
 }

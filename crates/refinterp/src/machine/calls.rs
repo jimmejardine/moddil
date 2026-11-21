@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
 
-use crate::program::{FnDef, Method, SelfKind, first_name, head_of_type};
+use crate::program::{Def, FnDef, Method, SelfKind, first_name};
 use crate::value::{Head, Pointer, Value};
 use crate::{Eval, Flow, MAX_DEPTH, TrapClass, trap};
 
@@ -22,7 +22,12 @@ impl Machine<'_> {
         {
             return h.clone();
         }
-        head_of_type(t)
+        self.program.head_in(self.memory.module(), t)
+    }
+
+    /// What `path` names in the running code's module.
+    pub(super) fn resolve(&self, path: &[String]) -> Option<(Def, usize)> {
+        self.program.resolve(self.memory.module(), path)
     }
 
     /// The kinds the type parameters `names` get from the types written in `args`.
@@ -295,8 +300,10 @@ impl Machine<'_> {
             }
         }
         let caller_user = self.memory.user();
+        let caller_file = self.memory.file().unwrap_or(0);
         // The callee sees only its parameters, in a frame of its own.
-        self.memory.push_frame(types, f.user);
+        let file = f.user.then_some(f.file);
+        self.memory.push_frame(types, file, f.module as usize);
         let mut args = args.into_iter();
         if f.self_kind.is_some() {
             let v = args.next().expect("`self`");
@@ -340,9 +347,13 @@ impl Machine<'_> {
         self.memory.pop_frame();
         // A trap in the prelude's code is reported where the file's code called it.
         match result {
-            Err(Flow::Trap(t, false)) if f.user => Err(Flow::Trap(t, true)),
+            Err(Flow::Trap(mut t, false)) if f.user => {
+                t.file = f.file;
+                Err(Flow::Trap(t, true))
+            }
             Err(Flow::Trap(mut t, false)) if caller_user => {
                 t.range = range;
+                t.file = caller_file;
                 Err(Flow::Trap(t, true))
             }
             r => r,
@@ -361,8 +372,7 @@ impl Machine<'_> {
             .unwrap_or_default();
         let segments = segments(callee.syntax());
         let local = matches!(segments.as_slice(), [one] if self.memory.slot(one).is_some());
-        let item =
-            |one: &str| self.program.fns.contains_key(one) || self.program.adts.contains_key(one);
+        let item = |one: &str| self.program.lookup(self.memory.module(), one).is_some();
         // `discard` is in the prelude too (`err.discard.1`).
         if !local && matches!(segments.as_slice(), [one] if one == "discard" && !item(one)) {
             return self.discard(&args, range);
@@ -375,8 +385,10 @@ impl Machine<'_> {
                 _ => Err(trap(TrapClass::Assertion, range)),
             };
         }
+        let resolved = self.resolve(&segments);
+        let is_fn = matches!(&resolved, Some((Def::Item(k), n)) if *n == segments.len() && self.program.fns.contains_key(k));
         if !local
-            && !matches!(segments.as_slice(), [one] if self.program.fns.contains_key(one))
+            && !is_fn
             && let Some((ty, info)) = self.ctor(&segments)
         {
             let variant = info.name.clone();
@@ -391,25 +403,34 @@ impl Machine<'_> {
             .syntax()
             .child(K::PATH)
             .and_then(|p| p.children().find(|c| c.kind() == K::GENERIC_ARGS));
-        match segments.as_slice() {
-            [name] => {
-                let f = self.program.fns[name].clone();
-                let types = self.turbofish(turbofish, &f.params);
+        if is_fn && let Some((Def::Item(k), _)) = &resolved {
+            let f = self.program.fns[k].clone();
+            let types = self.turbofish(turbofish, &f.params);
+            let values = self.eval_all(&args)?;
+            return self.invoke(&f, values, types, range);
+        }
+        let (ty, name) = segments.split_at(segments.len() - 1);
+        let name = &name[0];
+        match ty {
+            [] => unreachable!("a checked call"),
+            ty => {
                 let values = self.eval_all(&args)?;
-                self.invoke(&f, values, types, range)
-            }
-            [ty, name] => {
-                let values = self.eval_all(&args)?;
-                if self.program.traits.contains_key(ty) {
-                    // `Trait::method(x, …)`: for the kind of value `x` is.
-                    return self.call_trait(ty, name, values, range);
+                // `Trait::method(x, …)`: for the kind of value `x` is.
+                if let Some((Def::Item(k), n)) = self.resolve(ty)
+                    && n == ty.len()
+                    && self.program.traits.contains_key(&k)
+                {
+                    return self.call_trait(&k, name, values, range);
                 }
-                let head = match ty.as_str() {
-                    "int" => Head::Int,
-                    "bool" => Head::Bool,
-                    t => match self.memory.type_of(t) {
-                        Some(h) => h.clone(),
-                        None => Head::Adt(t.to_string()),
+                let head = match ty {
+                    [t] if t == "int" => Head::Int,
+                    [t] if t == "bool" => Head::Bool,
+                    [t] if self.memory.type_of(t).is_some() => {
+                        self.memory.type_of(t).expect("known").clone()
+                    }
+                    path => match self.resolve(path) {
+                        Some((Def::Item(k), _)) => Head::Adt(k),
+                        _ => Head::Adt(path.join("::")),
                     },
                 };
                 let m = self
@@ -438,7 +459,6 @@ impl Machine<'_> {
                 }
                 self.run_method(m, &head, values, range)
             }
-            _ => unreachable!("a checked call"),
         }
     }
 

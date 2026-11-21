@@ -1,0 +1,6 @@
+[mod]
+name = "entry"
+
+[[exe]]
+name = "tool"
+main = "src/tool.moddil"

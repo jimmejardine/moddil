@@ -31,7 +31,7 @@ struct Machine<'p> {
     /// The `defer` blocks of each open block, innermost last, with how many variables there
     /// were when each was reached, and whether it is an `errdefer`.
     defers: Vec<Vec<(ast::Block, usize, bool)>>,
-    observed: Vec<(TextRange, String)>,
+    observed: Vec<(u32, TextRange, String)>,
     /// For each `try` block being run, innermost last: whether its `?`s are on `Option`s, once
     /// one has said.
     try_modes: Vec<Option<bool>>,
@@ -42,10 +42,11 @@ struct Machine<'p> {
 
 impl Program {
     pub(crate) fn run_test(&self, index: usize) -> TestRun {
-        let (name, body) = &self.tests[index];
+        let test = &self.tests[index];
+        let (name, body) = (&test.name, &test.body);
         let mut m = Machine {
             program: self,
-            memory: Memory::new(),
+            memory: Memory::new(test.file, test.module as usize),
             defers: Vec::new(),
             observed: Vec::new(),
             try_modes: Vec::new(),
@@ -58,9 +59,16 @@ impl Program {
             Err(f) => Err(f),
         };
         let (trap, error) = match result {
-            Err(Flow::Trap(t, _)) => (Some(t), None),
+            Err(Flow::Trap(t, true)) => (Some(t), None),
+            Err(Flow::Trap(t, false)) => (
+                Some(crate::Trap {
+                    file: test.file,
+                    ..t
+                }),
+                None,
+            ),
             // An error that leaves a test fails it (`err.test.1`).
-            Err(Flow::Fail(_, at)) => (None, Some(at)),
+            Err(Flow::Fail(_, at)) => (None, Some((test.file, at))),
             _ => (None, None),
         };
         TestRun {
@@ -189,10 +197,11 @@ impl Machine<'_> {
     /// Whether a `// =>` expectation follows `end` on the same line, after an optional `;`
     /// (`items.test.observe.1`).
     fn observed(&self, end: u32) -> bool {
-        if !self.memory.user() {
+        let Some(file) = self.memory.file() else {
             return false;
-        }
-        let rest = self.program.text[end as usize..].trim_start_matches([' ', '\t']);
+        };
+        let rest =
+            self.program.texts[file as usize][end as usize..].trim_start_matches([' ', '\t']);
         let rest = rest
             .strip_prefix(';')
             .unwrap_or(rest)
@@ -203,7 +212,8 @@ impl Machine<'_> {
     fn observe(&mut self, range: TextRange, v: &Value) {
         if self.observed(range.end) {
             let shown = self.show(v);
-            self.observed.push((range, shown));
+            let file = self.memory.file().unwrap_or(0);
+            self.observed.push((file, range, shown));
         }
     }
 
@@ -293,7 +303,12 @@ fn segments(node: &SyntaxNode) -> Vec<String> {
                 .filter(|c| c.kind() == K::PATH_SEGMENT)
                 .filter_map(|s| {
                     s.child_tokens()
-                        .find(|t| matches!(t.kind(), K::IDENT | K::SELF_TYPE_KW | K::SELF_KW))
+                        .find(|t| {
+                            matches!(
+                                t.kind(),
+                                K::IDENT | K::SELF_TYPE_KW | K::SELF_KW | K::CRATE_KW
+                            )
+                        })
                         .map(|t| t.text().to_string())
                 })
                 .collect()

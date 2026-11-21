@@ -7,6 +7,7 @@ use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode};
 
 use crate::Eval;
+use crate::program::{Def, type_path};
 use crate::value::{Head, Value};
 
 use super::Machine;
@@ -82,22 +83,61 @@ impl Machine<'_> {
         }
     }
 
-    /// How an effect written as the type `t` is looked up: its text without spaces, with the
-    /// running call's type parameters replaced by the types they stand for (`Store<T>` as
-    /// `Store<User>`).
+    /// How an effect written as the type `t` is looked up: the item each path names (so two
+    /// modules naming one trait differently agree), with its type arguments, and the running
+    /// call's type parameters replaced by the types they stand for (`Store<T>` as `Store<User>`).
     fn effect_key(&self, t: &SyntaxNode) -> String {
-        let mut key = String::new();
-        for tok in t.tokens() {
-            if tok.kind().is_trivia() || tok.kind() == K::AMP {
-                continue;
+        match t.kind() {
+            K::REF_TYPE | K::PAREN_TYPE => t
+                .children()
+                .find(|c| ast::Type::can_cast(c.kind()))
+                .map(|c| self.effect_key(&c))
+                .unwrap_or_default(),
+            K::PATH_TYPE => {
+                let path = type_path(t);
+                let base = match path.as_slice() {
+                    [one] if self.memory.type_of(one).is_some() => {
+                        match self.memory.type_of(one).expect("known") {
+                            Head::Adt(k) => k.clone(),
+                            Head::Int => "int".to_string(),
+                            Head::Bool => "bool".to_string(),
+                            other => format!("{other:?}"),
+                        }
+                    }
+                    _ => match self.program.resolve(self.memory.module(), &path) {
+                        Some((Def::Item(k), _)) => k,
+                        _ => path.join("::"),
+                    },
+                };
+                let args: Vec<String> = t
+                    .child(K::PATH)
+                    .and_then(|p| {
+                        p.children()
+                            .filter(|c| c.kind() == K::PATH_SEGMENT)
+                            .last()
+                            .and_then(|s| s.child(K::GENERIC_ARGS))
+                            .or_else(|| p.child(K::GENERIC_ARGS))
+                    })
+                    .map(|g| {
+                        g.children()
+                            .filter(|c| c.kind() == K::TYPE_ARG)
+                            .filter_map(|a| a.children().find(|c| ast::Type::can_cast(c.kind())))
+                            .map(|a| self.effect_key(&a))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if args.is_empty() {
+                    base
+                } else {
+                    format!("{base}<{}>", args.join(","))
+                }
             }
-            match (tok.kind(), self.memory.type_of(tok.text())) {
-                (K::IDENT, Some(Head::Adt(name))) => key.push_str(name),
-                (K::IDENT, Some(Head::Int)) => key.push_str("int"),
-                (K::IDENT, Some(Head::Bool)) => key.push_str("bool"),
-                _ => key.push_str(tok.text()),
-            }
+            _ => t
+                .tokens()
+                .iter()
+                .filter(|x| !x.kind().is_trivia())
+                .map(|x| x.text().to_string())
+                .collect(),
         }
-        key
     }
 }

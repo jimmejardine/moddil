@@ -1,71 +1,110 @@
 //! The conformance runner: runs `conformance/` tests on every implementation and reports any
 //! disagreement with their expectations.
 //!
-//! A test file states its expectations in comments:
+//! A test is a `.moddil` file, or a directory with a `moddil.toml`: a mod, with its files and the
+//! mods it depends on by path. Its files state its expectations in comments:
 //!
 //! | Comment | Expects |
 //! |---|---|
-//! | `// covers: expr.arith.overflow.1, …` | The reference paragraphs the file tests |
+//! | `// covers: expr.arith.overflow.1, …` | The reference paragraphs the test covers |
 //! | `// => 3` | The expression statement or final expression it follows evaluates to `3` (in a `test` item) |
 //! | `//~ E0201` | A diagnostic with this code starting on this line (several codes may follow); warnings have `W` codes |
 //! | `//~ trap` | A trap on this line |
+//! | `//~ error` | An error leaves a test on this line, failing it |
 //! | `// disputed` | The test does not count until the reference is clarified |
 //!
-//! A file with expected diagnostics is only checked; otherwise every `test` item in it runs, every
-//! `// =>` line must run and produce exactly its value, and traps happen exactly on `//~ trap`
-//! lines. See this crate's `README.md`.
+//! In a manifest, `#~ E0705` expects a diagnostic on its line. A test with expected diagnostics
+//! is only checked; otherwise every `test` item of every mod in it runs, every `// =>` line must
+//! run and produce exactly its value, and traps happen exactly on `//~ trap` lines. See this
+//! crate's `README.md`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use moddil_sema::{Database, SourceFile};
+use moddil_project::Project;
+use moddil_sema::{Database, ModInfo, Program, ProgramFile, SourceFile};
 use moddil_syntax::{SyntaxKind, line_col};
 
 /// The edition the suite currently tests.
 pub const EDITION: &str = "2027";
 
-/// What a test file expects, by line (1-based).
+/// A line of a test: its file (as the project shows it) and its number (1-based).
+pub type Line = (String, u32);
+
+/// What a test expects, by line.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Expectations {
-    /// Reference paragraph IDs the file covers.
+    /// Reference paragraph IDs the test covers.
     pub covers: Vec<String>,
     /// `// =>` values.
-    pub values: BTreeMap<u32, String>,
+    pub values: BTreeMap<Line, String>,
     /// `//~ E…` codes.
-    pub diagnostics: BTreeSet<(u32, String)>,
+    pub diagnostics: BTreeSet<(Line, String)>,
     /// `//~ trap` lines.
-    pub traps: BTreeSet<u32>,
+    pub traps: BTreeSet<Line>,
     /// `//~ error` lines: where an error leaves a test, failing it.
-    pub errors: BTreeSet<u32>,
+    pub errors: BTreeSet<Line>,
     /// Marked `// disputed`.
     pub disputed: bool,
 }
 
-/// What an implementation did with a test file, by line (1-based).
+/// What an implementation did with a test, by line.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Outcome {
     /// The diagnostics: line and code.
-    pub diagnostics: BTreeSet<(u32, String)>,
+    pub diagnostics: BTreeSet<(Line, String)>,
     /// Observed values: the line the expression ends on, and the value as Moddil source.
-    pub observed: Vec<(u32, String)>,
+    pub observed: Vec<(Line, String)>,
     /// The lines traps happened on (where the failing check starts), one per trapping test.
-    pub traps: BTreeSet<u32>,
+    pub traps: BTreeSet<Line>,
     /// The lines errors left tests on, one per test that failed with one.
-    pub errors: BTreeSet<u32>,
+    pub errors: BTreeSet<Line>,
 }
+
+/// A test read from disk: the program, or the problems reading it.
+pub type Loaded = Result<Project, Vec<moddil_project::Problem>>;
 
 /// An implementation of Moddil the suite can run.
 pub trait Implementation {
     /// Its name, for reports.
     fn name(&self) -> &str;
-    /// Checks the file and, if it has no errors, runs all its tests.
-    fn run(&self, path: &str, text: &str) -> Outcome;
-    /// Whether it checks programs. One that does not (the reference interpreter) only runs files
+    /// Checks the program and, if it has no errors, runs all its tests.
+    fn run(&self, program: &Loaded) -> Outcome;
+    /// Whether it checks programs. One that does not (the reference interpreter) only runs tests
     /// that expect no diagnostics.
     fn checks(&self) -> bool {
         true
     }
+}
+
+/// The line `offset` of a project file is on.
+fn line_of(project: &Project, file: u32, offset: u32) -> Line {
+    let f = &project.files[file as usize];
+    (f.display.clone(), line_col(&f.text, offset).0)
+}
+
+/// The program `project` describes, as the compiler's input.
+pub fn program(db: &Database, project: &Project) -> Program {
+    let files = project
+        .files
+        .iter()
+        .map(|f| ProgramFile {
+            source: SourceFile::new(db, f.display.clone(), f.text.clone()),
+            mod_: f.mod_,
+            module: f.module.clone(),
+            exe: f.exe,
+        })
+        .collect();
+    let mods = project
+        .mods
+        .iter()
+        .map(|m| ModInfo {
+            name: m.name.clone(),
+            deps: m.deps.clone(),
+        })
+        .collect();
+    Program::new(db, files, mods)
 }
 
 /// The compiler's front end with the MIR interpreter.
@@ -76,34 +115,53 @@ impl Implementation for MirInterpreter {
         "MIR interpreter"
     }
 
-    fn run(&self, path: &str, text: &str) -> Outcome {
-        let line = |offset: u32| line_col(text, offset).0;
+    fn run(&self, loaded: &Loaded) -> Outcome {
+        let project = match loaded {
+            Ok(p) => p,
+            Err(problems) => {
+                let mut outcome = Outcome::default();
+                for p in problems {
+                    let line = line_col(&p.text, p.range.start as u32).0;
+                    outcome
+                        .diagnostics
+                        .insert(((p.display.clone(), line), p.code.to_string()));
+                }
+                return outcome;
+            }
+        };
         let db = Database::default();
-        let file = SourceFile::new(&db, path.to_string(), text.to_string());
+        let program = program(&db, project);
         let mut outcome = Outcome {
-            diagnostics: moddil_mir::diagnostics(&db, file)
+            diagnostics: moddil_mir::diagnostics(&db, program)
                 .iter()
-                .map(|d| (line(d.range.start), d.code.as_str().to_string()))
+                .map(|d| {
+                    (
+                        line_of(project, d.file, d.range.start),
+                        d.code.as_str().to_string(),
+                    )
+                })
                 .collect(),
             ..Outcome::default()
         };
-        if moddil_mir::has_errors(&db, file) {
+        if moddil_mir::has_errors(&db, program) {
             return outcome;
         }
-        let items = moddil_sema::item_tree(&db, file);
+        let items = moddil_sema::item_tree(&db, program);
         for i in 0..items.tests.len() as u32 {
             let mut observed = Vec::new();
-            let result = moddil_interp::run_test(&db, file, i, &mut |range, value| {
-                observed.push((line(range.end), value.render(items)));
+            let result = moddil_interp::run_test(&db, program, i, &mut |file, range, value| {
+                observed.push((line_of(project, file, range.end), value.render(items)));
             });
             outcome.observed.extend(observed);
             match result {
                 Ok(()) => {}
                 Err(moddil_interp::Stop::Trap(trap)) => {
-                    outcome.traps.insert(line(trap.range.start));
+                    outcome
+                        .traps
+                        .insert(line_of(project, trap.file, trap.range.start));
                 }
-                Err(moddil_interp::Stop::Failed { range, .. }) => {
-                    outcome.errors.insert(line(range.start));
+                Err(moddil_interp::Stop::Failed { file, range, .. }) => {
+                    outcome.errors.insert(line_of(project, file, range.start));
                 }
             }
         }
@@ -119,26 +177,46 @@ impl Implementation for ReferenceInterpreter {
         "reference interpreter"
     }
 
-    fn run(&self, _path: &str, text: &str) -> Outcome {
-        let line = |offset: u32| line_col(text, offset).0;
+    fn run(&self, loaded: &Loaded) -> Outcome {
         let mut outcome = Outcome::default();
-        let Some(runs) = moddil_refinterp::run_tests(text) else {
+        let Ok(project) = loaded else {
+            return outcome;
+        };
+        let files = project
+            .files
+            .iter()
+            .map(|f| moddil_refinterp::SourceSpec {
+                text: f.text.clone(),
+                mod_: f.mod_,
+                module: f.module.clone(),
+            })
+            .collect();
+        let mods = project
+            .mods
+            .iter()
+            .map(|m| moddil_refinterp::ModSpec {
+                deps: m.deps.clone(),
+            })
+            .collect();
+        let Some(runs) = moddil_refinterp::run_program(files, mods) else {
             outcome
                 .diagnostics
-                .insert((0, "(the interpreter panicked)".to_string()));
+                .insert(((String::new(), 0), "(the interpreter panicked)".to_string()));
             return outcome;
         };
         for run in runs {
             outcome.observed.extend(
                 run.observed
                     .into_iter()
-                    .map(|(range, value)| (line(range.end), value)),
+                    .map(|(file, range, value)| (line_of(project, file, range.end), value)),
             );
             if let Some(trap) = run.trap {
-                outcome.traps.insert(line(trap.range.start));
+                outcome
+                    .traps
+                    .insert(line_of(project, trap.file, trap.range.start));
             }
-            if let Some(range) = run.error {
-                outcome.errors.insert(line(range.start));
+            if let Some((file, range)) = run.error {
+                outcome.errors.insert(line_of(project, file, range.start));
             }
         }
         outcome
@@ -149,14 +227,14 @@ impl Implementation for ReferenceInterpreter {
     }
 }
 
-/// Reads the expectations in a test file's comments.
+/// Reads the expectations in a test file's comments into `e`, under the file's name `file`.
 ///
 /// # Errors
 ///
 /// A message for a malformed expectation comment.
-pub fn expectations(text: &str) -> Result<Expectations, String> {
-    let mut e = Expectations::default();
+pub fn read_expectations(file: &str, text: &str, e: &mut Expectations) -> Result<(), String> {
     let mut offset = 0u32;
+    let at_line = |line: u32| (file.to_string(), line);
     for tok in moddil_syntax::lex(text).0 {
         let at = offset;
         offset += tok.len;
@@ -166,29 +244,13 @@ pub fn expectations(text: &str) -> Result<Expectations, String> {
         let comment = &text[at as usize..offset as usize];
         let line = line_col(text, at).0;
         if let Some(rest) = comment.strip_prefix("//~") {
-            let words: Vec<&str> = rest.split_whitespace().collect();
-            if words.is_empty() {
-                return Err(format!("line {line}: `//~` without an expectation"));
-            }
-            for w in words {
-                if w == "trap" {
-                    e.traps.insert(line);
-                } else if w == "error" {
-                    e.errors.insert(line);
-                } else if is_code(w) {
-                    e.diagnostics.insert((line, w.to_string()));
-                } else {
-                    return Err(format!(
-                        "line {line}: `{w}` is not `trap`, `error` or a code like E0201 or W0201"
-                    ));
-                }
-            }
+            marks(rest, &at_line(line), e)?;
         } else if let Some(rest) = comment.strip_prefix("// =>") {
             let value = rest.trim();
             if value.is_empty() {
                 return Err(format!("line {line}: `// =>` without a value"));
             }
-            e.values.insert(line, value.to_string());
+            e.values.insert(at_line(line), value.to_string());
         } else if let Some(rest) = comment.strip_prefix("// covers:") {
             e.covers.extend(
                 rest.split(',')
@@ -200,7 +262,51 @@ pub fn expectations(text: &str) -> Result<Expectations, String> {
             e.disputed = true;
         }
     }
+    Ok(())
+}
+
+/// The expectations of a single test file.
+///
+/// # Errors
+///
+/// A message for a malformed expectation comment.
+pub fn expectations(text: &str) -> Result<Expectations, String> {
+    let mut e = Expectations::default();
+    read_expectations("", text, &mut e)?;
     Ok(e)
+}
+
+/// Reads a manifest's `#~ E…` expectations into `e`.
+fn manifest_expectations(file: &str, text: &str, e: &mut Expectations) -> Result<(), String> {
+    for (i, l) in text.lines().enumerate() {
+        if let Some(at) = l.find("#~") {
+            marks(&l[at + 2..], &(file.to_string(), i as u32 + 1), e)?;
+        }
+    }
+    Ok(())
+}
+
+/// The marks after `//~` (or `#~`) on `line`.
+fn marks(rest: &str, line: &Line, e: &mut Expectations) -> Result<(), String> {
+    let words: Vec<&str> = rest.split_whitespace().collect();
+    if words.is_empty() {
+        return Err(format!("line {}: `//~` without an expectation", line.1));
+    }
+    for w in words {
+        if w == "trap" {
+            e.traps.insert(line.clone());
+        } else if w == "error" {
+            e.errors.insert(line.clone());
+        } else if is_code(w) {
+            e.diagnostics.insert((line.clone(), w.to_string()));
+        } else {
+            return Err(format!(
+                "line {}: `{w}` is not `trap`, `error` or a code like E0201 or W0201",
+                line.1
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn is_code(w: &str) -> bool {
@@ -213,12 +319,12 @@ fn is_code(w: &str) -> bool {
 pub fn compare(expected: &Expectations, outcome: &Outcome) -> Vec<String> {
     let mut problems = Vec::new();
     for (line, code) in outcome.diagnostics.difference(&expected.diagnostics) {
-        problems.push(format!("line {line}: unexpected diagnostic {code}"));
+        let line = show(line);
+        problems.push(format!("{line}: unexpected diagnostic {code}"));
     }
     for (line, code) in expected.diagnostics.difference(&outcome.diagnostics) {
-        problems.push(format!(
-            "line {line}: expected diagnostic {code}, none reported"
-        ));
+        let line = show(line);
+        problems.push(format!("{line}: expected diagnostic {code}, none reported"));
     }
     if !outcome.diagnostics.is_empty() || !expected.diagnostics.is_empty() {
         return problems;
@@ -230,32 +336,41 @@ pub fn compare(expected: &Expectations, outcome: &Outcome) -> Vec<String> {
             .filter(|(l, _)| l == line)
             .map(|(_, v)| v)
             .collect();
+        let shown = show(line);
         if seen.is_empty() {
-            problems.push(format!(
-                "line {line}: expected {value}, but the line never ran"
-            ));
+            problems.push(format!("{shown}: expected {value}, but the line never ran"));
         }
         for v in seen {
             if v != value {
-                problems.push(format!("line {line}: expected {value}, found {v}"));
+                problems.push(format!("{shown}: expected {value}, found {v}"));
             }
         }
     }
     for line in outcome.traps.difference(&expected.traps) {
-        problems.push(format!("line {line}: unexpected trap"));
+        problems.push(format!("{}: unexpected trap", show(line)));
     }
     for line in expected.traps.difference(&outcome.traps) {
-        problems.push(format!("line {line}: expected a trap, none happened"));
+        problems.push(format!("{}: expected a trap, none happened", show(line)));
     }
     for line in outcome.errors.difference(&expected.errors) {
-        problems.push(format!("line {line}: an error unexpectedly left a test"));
+        problems.push(format!("{}: an error unexpectedly left a test", show(line)));
     }
     for line in expected.errors.difference(&outcome.errors) {
         problems.push(format!(
-            "line {line}: expected an error to leave a test, none did"
+            "{}: expected an error to leave a test, none did",
+            show(line)
         ));
     }
     problems
+}
+
+/// A line, for messages: `line 3`, or `src/a.moddil line 3` in a test of several files.
+fn show(line: &Line) -> String {
+    if line.0.is_empty() {
+        format!("line {}", line.1)
+    } else {
+        format!("{} line {}", line.0, line.1)
+    }
 }
 
 /// The result of running the suite.
@@ -334,35 +449,94 @@ fn paragraph_id(line: &str) -> Option<&str> {
     valid.then_some(id)
 }
 
+/// The tests under `dir`, sorted: each directory with a `moddil.toml` (whose contents are its
+/// own), and each other `.moddil` file.
+fn tests_in(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let mut entries: Vec<PathBuf> = entries.filter_map(|e| e.ok().map(|e| e.path())).collect();
+    entries.sort();
+    for p in entries {
+        if p.is_dir() && p.join(moddil_project::MANIFEST).is_file() {
+            out.push(p);
+        } else if p.is_dir() {
+            tests_in(&p, out);
+        } else if p.extension().is_some_and(|e| e == "moddil") {
+            out.push(p);
+        }
+    }
+}
+
+/// A test's expectations, from all its files and manifests.
+fn test_expectations(path: &Path, loaded: &Loaded) -> Result<Expectations, String> {
+    let mut e = Expectations::default();
+    if path.is_file() {
+        let text = fs::read_to_string(path)
+            .map_err(|x| x.to_string())?
+            .replace("\r\n", "\n");
+        let display = match loaded {
+            Ok(p) => p.files[0].display.clone(),
+            Err(_) => String::new(),
+        };
+        read_expectations(&display, &text, &mut e)?;
+        return Ok(e);
+    }
+    let mut files = Vec::new();
+    files_with_extension(path, "moddil", &mut files);
+    for f in files {
+        let text = fs::read_to_string(&f)
+            .map_err(|x| x.to_string())?
+            .replace("\r\n", "\n");
+        read_expectations(&shown_path(path, &f), &text, &mut e)
+            .map_err(|m| format!("{}: {m}", shown_path(path, &f)))?;
+    }
+    let mut manifests = Vec::new();
+    files_with_extension(path, "toml", &mut manifests);
+    for f in manifests {
+        let text = fs::read_to_string(&f)
+            .map_err(|x| x.to_string())?
+            .replace("\r\n", "\n");
+        manifest_expectations(&shown_path(path, &f), &text, &mut e)?;
+    }
+    Ok(e)
+}
+
+/// `f` as a project rooted at `dir` shows it: relative, with `/`.
+fn shown_path(dir: &Path, f: &Path) -> String {
+    f.strip_prefix(dir)
+        .unwrap_or(f)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
 /// Runs every test of `edition` under `repo/conformance/` on each implementation, and checks the
 /// paragraph IDs the tests cite against `repo/reference/`.
 pub fn run_suite(repo: &Path, edition: &str, implementations: &[&dyn Implementation]) -> Report {
-    let mut files = Vec::new();
-    files_with_extension(
-        &repo.join("conformance").join(edition),
-        "moddil",
-        &mut files,
-    );
+    let mut tests = Vec::new();
+    tests_in(&repo.join("conformance").join(edition), &mut tests);
     let ids = paragraph_ids(repo, edition);
     let mut report = Report {
         paragraphs: ids.len(),
         ..Report::default()
     };
     let mut cited = BTreeSet::new();
-    for f in files {
-        let rel = f
+    for t in tests {
+        let rel = t
             .strip_prefix(repo)
-            .unwrap_or(&f)
+            .unwrap_or(&t)
             .to_string_lossy()
             .replace('\\', "/");
-        let text = match fs::read_to_string(&f) {
-            Ok(t) => t.replace("\r\n", "\n"),
-            Err(e) => {
-                report.failures.push(format!("{rel}: {e}"));
-                continue;
-            }
+        let loaded = if t.is_file() {
+            // A single file is named by its path from the repository, as the suite shows it.
+            moddil_project::load(&t).map(|mut p| {
+                p.files[0].display = rel.clone();
+                p
+            })
+        } else {
+            moddil_project::load(&t)
         };
-        let expected = match expectations(&text) {
+        let expected = match test_expectations(&t, &loaded) {
             Ok(e) => e,
             Err(e) => {
                 report.failures.push(format!("{rel}: {e}"));
@@ -382,7 +556,7 @@ pub fn run_suite(repo: &Path, edition: &str, implementations: &[&dyn Implementat
             if !imp.checks() && !expected.diagnostics.is_empty() {
                 continue;
             }
-            let outcome = imp.run(&rel, &text);
+            let outcome = imp.run(&loaded);
             for p in compare(&expected, &outcome) {
                 report.failures.push(format!("{rel} ({}): {p}", imp.name()));
             }
@@ -416,9 +590,12 @@ mod tests {
         let e = expectations(text).expect("valid");
         assert_eq!(e.covers, vec!["a.b.1", "c.2"]);
         assert!(e.disputed);
-        assert_eq!(e.values.get(&4).map(String::as_str), Some("3"));
+        assert_eq!(
+            e.values.get(&(String::new(), 4)).map(String::as_str),
+            Some("3")
+        );
         assert_eq!(e.diagnostics.len(), 2);
-        assert!(e.traps.contains(&7));
+        assert!(e.traps.contains(&(String::new(), 7)));
         assert!(expectations("//~ E99\n").is_err());
         assert!(expectations("// =>\n").is_err());
     }
@@ -435,9 +612,24 @@ mod tests {
     }
 
     fn outcome(text: &str) -> Vec<String> {
+        let project = Project {
+            files: vec![moddil_project::File {
+                path: PathBuf::new(),
+                display: String::new(),
+                text: text.to_string(),
+                mod_: 0,
+                module: Vec::new(),
+                exe: false,
+            }],
+            mods: vec![moddil_project::Mod {
+                name: String::new(),
+                deps: Vec::new(),
+                manifest: None,
+            }],
+        };
         compare(
             &expectations(text).expect("valid"),
-            &MirInterpreter.run("t.moddil", text),
+            &MirInterpreter.run(&Ok(project)),
         )
     }
 

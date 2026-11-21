@@ -6,7 +6,7 @@
 //! leaves loops and functions through Rust's `?`. It runs **checked programs only**: a file the
 //! compiler rejects has no meaning to run, so it does not repeat the checks and may panic on one.
 //!
-//! Slices S0 to S5. A borrow is a pointer to a variable of some call and a path of fields in it.
+//! Slices S0 to S6. A borrow is a pointer to a variable of some call and a path of fields in it.
 //! The prelude (`reference/2027/prelude.moddil`) is read with the program. Values carry enough
 //! of their type to choose a method: a trait's method is found from the type of the value it is
 //! called on, and a type parameter (for `T::f()`) is known from the values of the arguments
@@ -61,6 +61,8 @@ impl fmt::Display for TrapClass {
 pub struct Trap {
     /// What kind of trap.
     pub class: TrapClass,
+    /// The file it is in, by its index in the program.
+    pub file: u32,
     /// Where.
     pub range: TextRange,
 }
@@ -73,13 +75,31 @@ pub const MAX_DEPTH: usize = 10_000;
 pub struct TestRun {
     /// The test's name.
     pub name: String,
-    /// Each observed value (an expression followed by `// =>`), in the order observed: its
+    /// Each observed value (an expression followed by `// =>`), in the order observed: its file,
     /// range and the value as Moddil source.
-    pub observed: Vec<(TextRange, String)>,
+    pub observed: Vec<(u32, TextRange, String)>,
     /// The trap that stopped the test, if one did.
     pub trap: Option<Trap>,
-    /// Where an error left the test, failing it, if one did.
-    pub error: Option<TextRange>,
+    /// Where an error left the test (its file and range), failing it, if one did.
+    pub error: Option<(u32, TextRange)>,
+}
+
+/// A source file of a program: its text, and the module it is (`modules.md`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourceSpec {
+    /// The text.
+    pub text: String,
+    /// The mod it belongs to, by index.
+    pub mod_: u32,
+    /// Its module path in the mod: empty for the root module.
+    pub module: Vec<String>,
+}
+
+/// A mod of a program: the mods it depends on, by the names it calls them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ModSpec {
+    /// The name it calls each dependency, and the dependency's index.
+    pub deps: Vec<(String, u32)>,
 }
 
 /// Runs every `test` item of a checked program, in order.
@@ -90,11 +110,22 @@ pub struct TestRun {
 /// `None` if the program could not run: it does not pass the compiler's checks, which this
 /// interpreter does not repeat.
 pub fn run_tests(text: &str) -> Option<Vec<TestRun>> {
-    let text = text.to_string();
+    let file = SourceSpec {
+        text: text.to_string(),
+        mod_: 0,
+        module: Vec::new(),
+    };
+    run_program(vec![file], vec![ModSpec::default()])
+}
+
+/// Runs every `test` item of a checked program of several files and mods, in order of the files.
+///
+/// `None` if the program could not run (see [`run_tests`]).
+pub fn run_program(files: Vec<SourceSpec>, mods: Vec<ModSpec>) -> Option<Vec<TestRun>> {
     std::thread::Builder::new()
         .stack_size(1 << 30)
         .spawn(move || {
-            let program = Program::new(&text);
+            let program = Program::new(&files, &mods);
             (0..program.tests.len())
                 .map(|i| program.run_test(i))
                 .collect()
@@ -122,8 +153,16 @@ pub(crate) enum Flow {
 
 pub(crate) type Eval<T = Value> = Result<T, Flow>;
 
+/// A trap of `class` at `range`, not yet placed in a file: the call it leaves places it.
 pub(crate) fn trap(class: TrapClass, range: TextRange) -> Flow {
-    Flow::Trap(Trap { class, range }, false)
+    Flow::Trap(
+        Trap {
+            class,
+            file: 0,
+            range,
+        },
+        false,
+    )
 }
 
 // Blocks and statements.

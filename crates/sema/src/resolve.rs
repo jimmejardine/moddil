@@ -8,7 +8,8 @@ use std::sync::Arc;
 use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
 
-use crate::items::{GenericParam, ItemTree, Pred};
+use crate::items::{Def, GenericParam, ItemTree, Pred};
+use crate::modules::PathError;
 use crate::traits::elaborate;
 use crate::ty::{AssocTy, TraitRef};
 use crate::{Code, Diagnostic, Ty};
@@ -70,6 +71,10 @@ pub(crate) struct Scope<'a> {
     pub impl_assoc: Option<(TraitRef, Vec<Option<Ty>>)>,
     /// Whether `_` and a generic struct or enum without arguments leave types to infer.
     pub holes: bool,
+    /// The module whose names are in scope.
+    pub module: u32,
+    /// Whether the prelude's names come before the module's (in derived code).
+    pub prelude_first: bool,
 }
 
 impl<'a> Scope<'a> {
@@ -82,6 +87,8 @@ impl<'a> Scope<'a> {
             trait_ctx: None,
             impl_assoc: None,
             holes: false,
+            module: crate::items::PRELUDE_MODULE,
+            prelude_first: false,
         }
     }
 
@@ -179,9 +186,10 @@ pub(crate) fn effect_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnost
     if let ast::Type::Path(_) = t
         && let Some(path) = t.syntax().child(K::PATH)
         && let Some(segs) = path_segments(&path)
-        && let [seg] = segs.as_slice()
-        && scope.tree.trait_named(&seg.name).is_some()
-        && scope.param(&seg.name).is_none()
+        && !(segs.len() == 1 && scope.param(&segs[0].name).is_some())
+        && let names = segs.iter().map(|s| s.name.as_str()).collect::<Vec<_>>()
+        && let Ok((Def::Trait(_), n)) = scope.tree.path(scope.module, &names, scope.prelude_first)
+        && n == names.len()
     {
         return match trait_path(&path, scope, diags) {
             Some((trait_ref, fixed)) if fixed.is_empty() => Ty::Dyn(trait_ref),
@@ -369,19 +377,21 @@ pub(crate) fn path_type(
                 no_args(one, diags);
                 return p;
             }
-            if let Some(a) = tree.adt_named(name) {
-                let args = adt_args(a, one.args.as_ref(), range, scope, diags);
-                return tree.adts[a as usize].ty_with(a, args);
-            }
-            let what = if tree.trait_named(name).is_some() {
-                format!("`{name}` is a trait, not a type")
-            } else {
-                format!("there is no type called `{name}`")
+            let what = match tree.lookup(scope.module, name, scope.prelude_first) {
+                Some(Def::Adt(a)) => {
+                    let args = adt_args(a, one.args.as_ref(), range, scope, diags);
+                    return tree.adts[a as usize].ty_with(a, args);
+                }
+                Some(Def::Trait(_)) => format!("`{name}` is a trait, not a type"),
+                Some(Def::Module(_)) => format!("`{name}` is a module, not a type"),
+                Some(_) => format!("`{name}` is not a type"),
+                None => format!("there is no type called `{name}`"),
             };
             diags.push(Diagnostic::error(Code::E0102, range, what));
             Ty::Error
         }
-        [base, assoc] => {
+        // `T::Name` and `Self::Name`: an associated type.
+        [base, assoc] if base.name == "Self" || scope.param(&base.name).is_some() => {
             let b = path_type(std::slice::from_ref(base), base.range, scope, diags);
             if b == Ty::Error {
                 return Ty::Error;
@@ -390,8 +400,48 @@ pub(crate) fn path_type(
             assoc_type(&b, base.name == "Self", &assoc.name, range, scope, diags)
         }
         _ => {
-            diags.push(Diagnostic::unsupported(range, "this path"));
-            Ty::Error
+            // A path through modules: `crate::shapes::Point`.
+            let names: Vec<&str> = segs.iter().map(|s| s.name.as_str()).collect();
+            let last = segs.last().expect("two or more segments");
+            match tree.path(scope.module, &names, scope.prelude_first) {
+                Ok((Def::Adt(a), n)) if n == segs.len() => {
+                    let args = adt_args(a, last.args.as_ref(), range, scope, diags);
+                    tree.adts[a as usize].ty_with(a, args)
+                }
+                Ok((Def::Adt(a), n)) if n + 1 == segs.len() => {
+                    let base = &segs[n - 1];
+                    let args = adt_args(a, base.args.as_ref(), base.range, scope, diags);
+                    let b = tree.adts[a as usize].ty_with(a, args);
+                    no_args(last, diags);
+                    assoc_type(&b, false, &last.name, range, scope, diags)
+                }
+                Ok((def, n)) => {
+                    let what = if n == segs.len() {
+                        format!("`{}` is not a type", names.join("::"))
+                    } else {
+                        format!("`{}` has nothing called `{}`", tree.def_name(def), names[n])
+                    };
+                    diags.push(Diagnostic::error(Code::E0102, range, what));
+                    Ty::Error
+                }
+                Err(PathError::Private(k, def)) => {
+                    diags.push(tree.hidden(def, segs[k].range));
+                    Ty::Error
+                }
+                Err(PathError::Unresolved(k)) => {
+                    let what = if k == 0 {
+                        format!("there is no type or module called `{}`", names[0])
+                    } else {
+                        format!(
+                            "there is nothing called `{}` in `{}`",
+                            names[k],
+                            names[..k].join("::")
+                        )
+                    };
+                    diags.push(Diagnostic::error(Code::E0102, segs[k].range, what));
+                    Ty::Error
+                }
+            }
         }
     }
 }
@@ -506,18 +556,28 @@ pub(crate) fn trait_path(
 ) -> Option<(TraitRef, Vec<(u32, Ty)>)> {
     let range = path.text_range();
     let segs = path_segments(path)?;
-    let [seg] = segs.as_slice() else {
-        diags.push(Diagnostic::unsupported(range, "this path"));
-        return None;
+    let seg = segs.last()?;
+    let names: Vec<&str> = segs.iter().map(|s| s.name.as_str()).collect();
+    let found = if segs.len() == 1 && scope.param(&seg.name).is_some() {
+        None
+    } else {
+        match scope.tree.path(scope.module, &names, scope.prelude_first) {
+            Ok((def, n)) if n == names.len() => Some(def),
+            Err(PathError::Private(k, def)) => {
+                diags.push(scope.tree.hidden(def, segs[k].range));
+                return None;
+            }
+            Ok(_) | Err(PathError::Unresolved(_)) => None,
+        }
     };
-    let Some(t) = scope.tree.trait_named(&seg.name) else {
-        let what = if scope.tree.adt_named(&seg.name).is_some()
-            || scope.param(&seg.name).is_some()
+    let Some(Def::Trait(t)) = found else {
+        let what = if matches!(found, Some(Def::Adt(_)))
+            || (segs.len() == 1 && scope.param(&seg.name).is_some())
             || matches!(seg.name.as_str(), "int" | "bool")
         {
             format!("`{}` is a type, not a trait", seg.name)
         } else {
-            format!("there is no trait called `{}`", seg.name)
+            format!("there is no trait called `{}`", names.join("::"))
         };
         diags.push(Diagnostic::error(Code::E0401, range, what));
         return None;

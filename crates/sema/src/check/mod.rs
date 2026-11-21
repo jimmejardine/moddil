@@ -15,7 +15,6 @@ use moddil_syntax::TextRange;
 
 use crate::collect::item_tree;
 use crate::hir::{Body, ExprId, ExprKind, LocalId, PatId};
-use crate::items::{Container, Src};
 use crate::lower::body;
 use crate::traits::{Adjust, Solver};
 use crate::ty::TraitRef;
@@ -202,13 +201,13 @@ pub(crate) fn index<T>(id: la_arena::Idx<T>) -> usize {
 /// Type checks the body of `owner`.
 #[salsa::tracked(returns(ref))]
 pub fn infer<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Inference {
-    check_body(db, owner, effects(db, owner.file(db)))
+    check_body(db, owner, effects(db, owner.program(db)))
 }
 
 /// Type checks the body of `owner`, with the effects and errors of the functions `fx` says.
 pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) -> Inference {
     let lowered = body(db, owner);
-    let items = item_tree(db, owner.file(db));
+    let items = item_tree(db, owner.program(db));
     let body = &lowered.body;
     let (ret, ret_range, is_test, preds) = match owner.item(db) {
         Item::Fn(i) => {
@@ -238,10 +237,9 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
     let (mode, own) = match owner.item(db) {
         Item::Test(_) => (Mode::Entry("a test"), Vec::new()),
         Item::Fn(i) => {
-            let f = &items.fns[i as usize];
             let mode = if inferred(items, i) {
                 Mode::Inferred
-            } else if f.src == Src::File && f.container == Container::Free && f.name == "main" {
+            } else if items.is_main(i) {
                 Mode::Entry("`main`")
             } else if items.trait_of(i).is_some() {
                 Mode::Method

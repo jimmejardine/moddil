@@ -12,9 +12,10 @@ use std::collections::HashMap;
 use moddil_syntax::TextRange;
 
 use crate::collect::item_tree;
+use crate::db::Program;
 use crate::hir::{ExprId, Handler};
-use crate::items::{Container, ItemTree, Src};
-use crate::{Code, Db, Diagnostic, Item, Owner, SourceFile, Ty};
+use crate::items::{Container, ItemTree, Vis};
+use crate::{Code, Db, Diagnostic, Item, Owner, Ty};
 
 use super::{Checker, check_body, index};
 
@@ -76,11 +77,11 @@ pub(super) struct Need {
 pub(crate) fn inferred(items: &ItemTree, i: u32) -> bool {
     let f = &items.fns[i as usize];
     let container = match f.container {
-        Container::Free => f.name != "main",
+        Container::Free => true,
         Container::Impl(k) => items.impls[k as usize].trait_ref.is_none(),
         Container::Trait(_) => false,
     };
-    f.src == Src::File && f.has_body && !f.public && container
+    f.src.is_file() && f.has_body && f.vis != Vis::Pub && container && !items.is_main(i)
 }
 
 /// `ts` in the canonical order of an effect set, each once.
@@ -105,8 +106,8 @@ const ROUNDS: usize = 64;
 
 /// Every function's effects and errors (`eff.infer.1`).
 #[salsa::tracked(returns(ref))]
-pub fn effects(db: &dyn Db, file: SourceFile) -> Effects {
-    let items = item_tree(db, file);
+pub fn effects(db: &dyn Db, program: Program) -> Effects {
+    let items = item_tree(db, program);
     let mut fx = Effects {
         fns: items
             .fns
@@ -127,7 +128,7 @@ pub fn effects(db: &dyn Db, file: SourceFile) -> Effects {
     for _ in 0..ROUNDS {
         let mut next = fx.fns.clone();
         for &i in &open {
-            let out = check_body(db, Owner::new(db, file, Item::Fn(i)), &fx);
+            let out = check_body(db, Owner::new(db, program, Item::Fn(i)), &fx);
             let f = &mut next[i as usize];
             let mut needs = f.needs.clone();
             needs.extend(out.escaping_needs.iter().cloned());

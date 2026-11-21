@@ -3,19 +3,23 @@
 The **shared test suite** every Moddil implementation must pass to use the name "Moddil <edition>"
 ([`specs/definition.md`: A shared conformance suite](../specs/definition.md#a-shared-conformance-suite)).
 
-**Status:** slices S0 to S5: [`2027/`](2027) tests functions, tests, `let`, `int`, `bool` and `()`,
+**Status:** slices S0 to S6: [`2027/`](2027) tests functions, tests, `let`, `int`, `bool` and `()`,
 arithmetic and its traps, comparisons, logic, `if`, blocks and calls (S0); tuples, structs, enums,
 patterns, `match`, `if let`, `let … else`, loops and `assert` (S1); moves, `Copy`, borrows and
 `defer` (S2); generics, traits, impls, methods, operators through traits, derives, destructors and
 the prelude (S3); errors, `try` and `catch` (S4); effects, handlers, inference and `dyn` borrows
-(S5). It cites every paragraph of the
+(S5); modules, mods, visibility and the manifest (S6). It cites every paragraph of the
 [2027 reference](../reference/2027/README.md), and every test runs on both the MIR interpreter and
 the reference interpreter. The runner is [`crates/conformance`](../crates/conformance/README.md);
 `cargo test -p moddil-conformance` runs the suite.
 
 ## Layout
 
-`conformance/<edition>/<feature>/*.moddil`, organised by feature and edition, like Test262.
+`conformance/<edition>/<feature>/*.moddil`, organised by feature and edition, like Test262. A test
+of several files is a directory with a `moddil.toml`
+([Modules and mods](../reference/2027/modules.md)): a mod, with its `src/` files and the mods it
+depends on by path, in directories of their own inside it. Its expectations may be in any of its
+files, and a manifest's in `#~ E0705` comments; every test of every mod in it runs.
 
 ## Writing a test
 

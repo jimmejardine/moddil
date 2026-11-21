@@ -73,7 +73,8 @@ keyword, but readers coming from Rust expect one, so documentation and diagnosti
 several mods, usually in one repository, because each library needs its own version, capability
 ceiling and audit record anyway.
 
-Illustrative manifest (syntax not decided):
+Illustrative manifest (the file, `moddil.toml`, and its basic form are decided in
+[`modules.md`: The manifest](modules.md#the-manifest); the rest of its syntax is not):
 
 ```toml
 [mod]

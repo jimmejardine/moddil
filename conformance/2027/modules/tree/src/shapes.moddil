@@ -1,0 +1,18 @@
+pub(mod) enum Shape { Square(int) }
+
+pub(mod) fn area(s: Shape) -> int {
+    match s { Shape::Square(n) => n * n }
+}
+
+pub(mod) fn perimeter(s: Shape) -> int {
+    match s { Shape::Square(n) => crate::double(crate::double(n)) }
+}
+
+// A private item is named only by its own module.
+fn side(s: Shape) -> int {
+    match s { Shape::Square(n) => n }
+}
+
+test "a module's tests use its private items" {
+    side(Shape::Square(5))                  // => 5
+}

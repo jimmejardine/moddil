@@ -6,7 +6,7 @@ whose `Cargo.toml` sits at the repository root
 
 **Status:** the grammar checker and the parser cover the whole grammar; names, types, MIR, the
 MIR interpreter, the reference interpreter, the `moddil` command and the conformance runner cover
-slices S0 to S5 ([M0 slices](../specs/roadmap.md#m0-the-v0-language-in-slices)).
+slices S0 to S6 ([M0 slices](../specs/roadmap.md#m0-the-v0-language-in-slices)).
 
 ## Building and checking
 
@@ -38,6 +38,7 @@ python tools/ci.py --wsl       # the same steps in WSL (Linux); --all runs both
 | [`interp/`](interp/README.md) | `moddil-interp` | The MIR interpreter |
 | [`refinterp/`](refinterp/README.md) | `moddil-refinterp` | The reference interpreter |
 | [`conformance/`](conformance/README.md) | `moddil-conformance` | The conformance runner |
+| [`project/`](project/README.md) | `moddil-project` | Reads a program from disk: the manifest, the module tree, dependencies by path |
 | [`moddil/`](moddil/README.md) | `moddil` | The `moddil` command |
 
 ## Rules

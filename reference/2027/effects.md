@@ -51,9 +51,10 @@ expression as a handler is written in parentheses, as after `if`.
 the call that installs exactly that effect, or else by the calling function's own: never by a
 handler of a subtrait or a supertrait.
 
-**eff.infer.1** A private function's effects are inferred: those it lists, and those its body needs
-and does not meet. So are its errors: those it lists, and those that reach the end of its body. A
-`pub` function's are written out, and a need it does not list is an error (E0603), as is an error
+**eff.infer.1** A private or `pub(mod)` function's effects are inferred, across the modules of its
+mod ([Modules](modules.md)): those it lists, and those its body needs and does not meet. So are its
+errors: those it lists, and those that reach the end of its body. A `pub` function's are written
+out, and a need it does not list is an error (E0603), as is an error
 it does not list (E0502); so are a trait's method's and its impls' methods'. Effects that grow
 without end (a generic function calling itself with ever larger type arguments) are an error
 (E0607).

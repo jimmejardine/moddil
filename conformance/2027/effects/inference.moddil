@@ -1,6 +1,6 @@
 // covers: eff.infer.1, eff.need.1, err.set.1
 
-trait Log {
+pub trait Log {
     fn line(&self, n: int) -> int;
 }
 struct Doubling;
@@ -38,8 +38,8 @@ test "private functions infer their effects" {
 }
 
 // A private function's errors are inferred, and its callers mark its calls.
-struct TooBig { n: int }
-struct Negative;
+pub struct TooBig { n: int }
+pub struct Negative;
 
 fn check(n: int) -> int {
     if n > 9 { fail(TooBig { n }); }

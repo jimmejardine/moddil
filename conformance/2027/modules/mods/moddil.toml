@@ -1,0 +1,5 @@
+[mod]
+name = "app"
+
+[dependencies]
+geo = { path = "geo" }

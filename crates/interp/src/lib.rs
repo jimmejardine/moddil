@@ -18,7 +18,7 @@ use moddil_mir::{
     AggregateKind, BinOp, Body, Const, Local, Operand, Place, Projection, Rvalue, Statement,
     Terminator, TrapClass, UnOp, mir,
 };
-use moddil_sema::{Callee, Db, Item, ItemTree, Owner, Shape, Solver, SourceFile, Src, Ty};
+use moddil_sema::{Callee, Db, Item, ItemTree, Owner, Program, Shape, Solver, Src, Ty};
 use moddil_syntax::TextRange;
 
 /// A value.
@@ -112,6 +112,8 @@ impl Value {
 pub struct Trap {
     /// What kind of trap.
     pub class: TrapClass,
+    /// The file it is in, by its index in the program.
+    pub file: u32,
     /// Where.
     pub range: TextRange,
     /// For a failed `assert`: each part of the condition and its value, or `None` if it was not
@@ -129,6 +131,8 @@ pub enum Stop {
     /// An error escaped it (a test's, or a function asked to run that can fail): where it left
     /// the function or test, and the error.
     Failed {
+        /// The file the error left from.
+        file: u32,
         /// Where the error left.
         range: TextRange,
         /// The error.
@@ -139,10 +143,11 @@ pub enum Stop {
 /// How deeply calls may nest before a [`TrapClass::StackOverflow`] trap.
 pub const MAX_DEPTH: usize = 10_000;
 
-/// Reports the values of observed expressions (those followed by `// =>`): their range and value.
-pub type Observer<'a> = &'a mut dyn FnMut(TextRange, Value);
+/// Reports the values of observed expressions (those followed by `// =>`): their file, range and
+/// value.
+pub type Observer<'a> = &'a mut dyn FnMut(u32, TextRange, Value);
 
-/// Calls function `index` of `file` with `args`.
+/// Calls function `index` of `program` with `args`.
 ///
 /// # Panics
 ///
@@ -154,15 +159,15 @@ pub type Observer<'a> = &'a mut dyn FnMut(TextRange, Value);
 /// The trap, if the program traps, or the error, if one escapes.
 pub fn call_fn(
     db: &dyn Db,
-    file: SourceFile,
+    program: Program,
     index: u32,
     args: &[Value],
     observer: Observer<'_>,
 ) -> Result<Value, Stop> {
-    run(db, Owner::new(db, file, Item::Fn(index)), args, observer)
+    run(db, Owner::new(db, program, Item::Fn(index)), args, observer)
 }
 
-/// Runs test `index` of `file`.
+/// Runs test `index` of `program`.
 ///
 /// # Panics
 ///
@@ -173,11 +178,17 @@ pub fn call_fn(
 /// The trap, if the test traps, or the error, if one escapes it (which fails it).
 pub fn run_test(
     db: &dyn Db,
-    file: SourceFile,
+    program: Program,
     index: u32,
     observer: Observer<'_>,
 ) -> Result<(), Stop> {
-    run(db, Owner::new(db, file, Item::Test(index)), &[], observer).map(|_| ())
+    run(
+        db,
+        Owner::new(db, program, Item::Test(index)),
+        &[],
+        observer,
+    )
+    .map(|_| ())
 }
 
 /// Where a call's result goes.
@@ -482,7 +493,7 @@ fn run<'db>(
     args: &[Value],
     observer: Observer<'_>,
 ) -> Result<Value, Stop> {
-    let file = owner.file(db);
+    let file = owner.program(db);
     let mut m = Machine {
         stack: vec![Frame::new(
             body(db, owner),
@@ -552,7 +563,7 @@ fn run<'db>(
                 Statement::Observe { range, value } => {
                     let v = m.operand(value);
                     let v = m.shown(v);
-                    observer(*range, v);
+                    observer(code.src.file().unwrap_or(0), *range, v);
                 }
                 Statement::Read(_) | Statement::StorageDead(_) => {}
             }
@@ -666,6 +677,7 @@ fn run<'db>(
                 if let Ret::Top = m.stack[top].ret {
                     let range = code.blocks[m.stack[top].block].terminator_span;
                     return Err(Stop::Failed {
+                        file: code.src.file().unwrap_or(0),
                         range,
                         error: m.shown(error),
                     });
@@ -701,10 +713,11 @@ impl Machine<'_> {
         parts: Vec<(TextRange, Option<Value>)>,
     ) -> Trap {
         let top = &self.stack[self.top()];
-        if top.body.src == Src::File {
+        if let Src::File(file) = top.body.src {
             let range = range.unwrap_or(top.body.blocks[top.block].terminator_span);
             return Trap {
                 class,
+                file,
                 range,
                 parts,
                 reason: None,
@@ -714,10 +727,11 @@ impl Machine<'_> {
             .stack
             .iter()
             .rev()
-            .find(|f| f.body.src == Src::File)
+            .find(|f| f.body.src.is_file())
             .unwrap_or(top);
         Trap {
             class,
+            file: caller.body.src.file().unwrap_or(0),
             range: caller.body.blocks[caller.block].terminator_span,
             parts: Vec::new(),
             reason: None,

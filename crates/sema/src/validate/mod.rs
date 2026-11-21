@@ -14,11 +14,13 @@ use crate::items::Src;
 mod effects;
 mod entry;
 mod impls;
+mod modules;
 mod types;
 
 pub(crate) use effects::signature_effects;
 pub(crate) use entry::entry_points;
 pub(crate) use impls::{check_impls, overlap};
+pub(crate) use modules::{exposed, imports};
 pub(crate) use types::{copy_types, derived_fields, recursive_types};
 
 /// A problem found, with the source it is in and, for a derived item, the `derive` attribute

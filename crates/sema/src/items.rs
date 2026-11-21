@@ -11,10 +11,25 @@ use crate::{Diagnostic, Ty};
 pub enum Src {
     /// The prelude (`reference/2027/prelude.moddil`).
     Prelude,
-    /// The file being compiled.
-    File,
+    /// A file of the program, by its index.
+    File(u32),
     /// The impls the derives of the prelude and the file expand to.
     Derived,
+}
+
+impl Src {
+    /// The file, if the source is one.
+    pub fn file(self) -> Option<u32> {
+        match self {
+            Src::File(f) => Some(f),
+            _ => None,
+        }
+    }
+
+    /// Whether the source is one of the program's files.
+    pub fn is_file(self) -> bool {
+        matches!(self, Src::File(_))
+    }
 }
 
 /// A program's items: the prelude's first, then the file's, then the derived impls. Items refer
@@ -29,12 +44,102 @@ pub struct ItemTree {
     pub traits: Vec<TraitDef>,
     /// The impls.
     pub impls: Vec<ImplDef>,
-    /// The file's tests, in source order.
+    /// The program's tests, in the order of its files.
     pub tests: Vec<TestSig>,
-    /// Problems found in the items' headers, in the file.
+    /// The modules: the prelude's first ([`PRELUDE_MODULE`]), then each mod's.
+    pub modules: Vec<ModuleDef>,
+    /// The mods, in the program's order: the first is the one being built.
+    pub mods: Vec<ModDef>,
+    /// Problems found in the items' headers, in the program's files.
     pub diagnostics: Vec<Diagnostic>,
     /// Problems found in the prelude and its derived impls, which a correct prelude has none of.
     pub hidden: Vec<Diagnostic>,
+}
+
+/// The prelude's module, the first.
+pub const PRELUDE_MODULE: u32 = 0;
+
+/// The mod the prelude's module belongs to: none of the program's.
+pub const PRELUDE_MOD: u32 = u32::MAX;
+
+/// Who can name an item (`modules.md`: Three visibility levels).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Vis {
+    /// Its own module only: the default.
+    Private,
+    /// Every module of its mod: `pub(mod)`.
+    Mod,
+    /// Every mod: `pub`.
+    Pub,
+}
+
+/// What a name in a module stands for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Def {
+    /// A free function.
+    Fn(u32),
+    /// A struct or enum.
+    Adt(u32),
+    /// A trait.
+    Trait(u32),
+    /// A variant named on its own (`Some`): its enum and index.
+    Variant(u32, u32),
+    /// A module.
+    Module(u32),
+}
+
+/// A name a module declares: its item, who can name it, and where it is declared.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Entry {
+    /// What it stands for.
+    pub def: Def,
+    /// Who can name it.
+    pub vis: Vis,
+    /// Where it is declared.
+    pub range: TextRange,
+}
+
+/// A `use` of one name: `use crate::a::b as c;` imports `b` as `c`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Import {
+    /// The name it brings in.
+    pub name: String,
+    /// The path it names, each segment with where it is.
+    pub path: Vec<(String, TextRange)>,
+    /// Who can name it through this module: a `pub use` re-exports it.
+    pub vis: Vis,
+    /// Where the imported name is written.
+    pub range: TextRange,
+}
+
+/// A module: a file of a mod, or a directory of them, or the prelude.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ModuleDef {
+    /// The mod it belongs to ([`PRELUDE_MOD`] for the prelude).
+    pub mod_: u32,
+    /// Its path in its mod (empty for the root module).
+    pub path: Vec<String>,
+    /// Its file, if it has one (a directory of modules may not).
+    pub file: Option<u32>,
+    /// Whether it is an executable's main module.
+    pub exe: bool,
+    /// The items it declares, by name.
+    pub items: std::collections::BTreeMap<String, Entry>,
+    /// Its imports.
+    pub imports: Vec<Import>,
+    /// The modules inside it, by name.
+    pub children: std::collections::BTreeMap<String, u32>,
+}
+
+/// A mod: its name, root module and dependencies.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ModDef {
+    /// Its name.
+    pub name: String,
+    /// Its root module (`crate`).
+    pub root: u32,
+    /// The mods it depends on, by the name it calls them.
+    pub deps: std::collections::BTreeMap<String, u32>,
 }
 
 /// A type parameter.
@@ -141,8 +246,10 @@ pub struct FnSig {
     pub fails_range: Option<TextRange>,
     /// The effects its `with` clause lists, other than `fail`, in order.
     pub effects: Vec<EffectSig>,
-    /// Whether it is declared `pub`.
-    pub public: bool,
+    /// Who can name it.
+    pub vis: Vis,
+    /// The module it is declared in (for a derived method, its type's).
+    pub module: u32,
 }
 
 /// An effect a signature lists: `time: Time` (named, for a body that calls it), `Time` (only
@@ -156,6 +263,34 @@ pub struct EffectSig {
     pub name: Option<String>,
     /// Where it is written.
     pub range: TextRange,
+}
+
+impl FnSig {
+    /// A free function's signature before it is collected: its name, where, and who can name
+    /// it.
+    pub(crate) fn placeholder(name: String, src: Src, module: u32, vis: Vis) -> FnSig {
+        let none = TextRange::new(0, 0);
+        FnSig {
+            name,
+            name_range: none,
+            src,
+            node: none,
+            container: Container::Free,
+            generics: Generics::default(),
+            self_kind: None,
+            params: Vec::new(),
+            ret: Ty::Unit,
+            ret_range: None,
+            ret_from: Vec::new(),
+            has_body: false,
+            origin: None,
+            fails: Ty::Never,
+            fails_range: None,
+            effects: Vec::new(),
+            vis,
+            module,
+        }
+    }
 }
 
 /// A parameter.
@@ -192,6 +327,10 @@ pub struct AdtDef {
     pub variants: Vec<VariantDef>,
     /// Whether its variants are named without the enum's name (`Some`, `None`).
     pub bare_variants: bool,
+    /// Who can name it.
+    pub vis: Vis,
+    /// The module it is declared in.
+    pub module: u32,
 }
 
 /// One variant of an enum, or a struct's shape.
@@ -246,6 +385,10 @@ pub struct TraitDef {
     pub assoc: Vec<(String, TextRange)>,
     /// The methods, by index among the functions.
     pub methods: Vec<u32>,
+    /// Who can name it.
+    pub vis: Vis,
+    /// The module it is declared in.
+    pub module: u32,
 }
 
 /// An impl: inherent (`impl Point { … }`) or of a trait (`impl Clone for Point { … }`).
@@ -267,6 +410,8 @@ pub struct ImplDef {
     pub methods: Vec<u32>,
     /// For a derived impl: the `derive` attribute it comes from, in the file.
     pub origin: Option<TextRange>,
+    /// The module it is declared in (for a derived impl, its type's).
+    pub module: u32,
 }
 
 /// A test.
@@ -276,6 +421,12 @@ pub struct TestSig {
     pub name: String,
     /// Where the name is.
     pub name_range: TextRange,
+    /// The file it is in.
+    pub file: u32,
+    /// The range of its `test` item.
+    pub node: TextRange,
+    /// The module it is in.
+    pub module: u32,
 }
 
 impl VariantDef {
@@ -432,41 +583,6 @@ impl ItemTree {
         out
     }
 
-    /// The free function called `name`.
-    pub fn fn_named(&self, name: &str) -> Option<u32> {
-        self.fns
-            .iter()
-            .position(|f| f.name == name && f.container == Container::Free)
-            .map(|i| i as u32)
-    }
-
-    /// The struct or enum called `name`.
-    pub fn adt_named(&self, name: &str) -> Option<u32> {
-        self.adts
-            .iter()
-            .position(|a| a.name == name)
-            .map(|i| i as u32)
-    }
-
-    /// The trait called `name`.
-    pub fn trait_named(&self, name: &str) -> Option<u32> {
-        self.traits
-            .iter()
-            .position(|t| t.name == name)
-            .map(|i| i as u32)
-    }
-
-    /// The variant named on its own (`Some`) called `name`: its enum and index.
-    pub fn bare_variant(&self, name: &str) -> Option<(u32, u32)> {
-        self.adts.iter().enumerate().find_map(|(i, a)| {
-            if a.bare_variants {
-                a.variant(name).map(|v| (i as u32, v))
-            } else {
-                None
-            }
-        })
-    }
-
     /// The variant of struct or enum `adt`.
     pub fn variant(&self, adt: u32, variant: u32) -> &VariantDef {
         &self.adts[adt as usize].variants[variant as usize]
@@ -489,11 +605,16 @@ impl ItemTree {
     /// a struct's or enum's index.
     pub fn lang(&self, name: &str) -> Option<u32> {
         debug_assert!(LANG.contains(&name), "not a language item: {name}");
-        if let Some(t) = self.trait_named(name) {
-            return (self.traits[t as usize].src == Src::Prelude).then_some(t);
+        match self
+            .modules
+            .get(PRELUDE_MODULE as usize)?
+            .items
+            .get(name)?
+            .def
+        {
+            Def::Trait(t) | Def::Adt(t) => Some(t),
+            _ => None,
         }
-        self.adt_named(name)
-            .filter(|&a| self.adts[a as usize].src == Src::Prelude)
     }
 
     /// The prelude trait `name`, as a trait with no arguments.

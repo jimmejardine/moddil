@@ -30,7 +30,7 @@ use scopes::{ScopeItem, Scopes};
 /// The MIR of `owner`, or `None` if its file has errors.
 #[salsa::tracked(returns(ref))]
 pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
-    let file = owner.file(db);
+    let file = owner.program(db);
     if moddil_sema::has_errors(db, file) {
         return None;
     }
@@ -56,7 +56,7 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
         Item::Test(i) => (
             format!("{:?}", items.tests[i as usize].name),
             Ty::Unit,
-            Src::File,
+            Src::File(items.tests[i as usize].file),
             &[][..],
         ),
     };

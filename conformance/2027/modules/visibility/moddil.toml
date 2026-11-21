@@ -1,0 +1,5 @@
+[mod]
+name = "visibility"
+
+[dependencies]
+dep = { path = "dep" }

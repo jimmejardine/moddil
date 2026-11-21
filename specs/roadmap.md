@@ -99,9 +99,8 @@ something runs from the first slice.
 - **S3's interim rules**, until the features they wait for arrive:
   - the operator traits take `Self` on the right (`Add` has no `Rhs` parameter until default type
     parameters arrive), and compound assignment (`+=`) is only for `int` and `bool`;
-  - `Ordering`, `PartialEq`, `PartialOrd`, the operator traits and `drop` are in the prelude, and a
-    file may not redefine a prelude name, until modules (S6) let the prelude be an import that
-    names can shadow and operator traits live in a core mod;
+  - `Ordering`, `PartialEq`, `PartialOrd`, the operator traits and `drop` are in the prelude, until
+    operator traits live in a core mod (S6 made the prelude's names shadowable);
   - a type argument cannot be a borrow, since borrows are second-class and a type parameter can be
     stored in a struct;
   - tuples are `Copy` and `Clone` when their elements are `Copy`, and do not implement
@@ -139,6 +138,22 @@ something runs from the first slice.
     cannot be used as `dyn`;
   - the reference interpreter finds a generic function's effect (`Store<T>`) by the types it knows
     its type parameters stand for, from the values of its arguments.
+- **S6's scope and interim rules (decided):** the module tree from the file tree; private,
+  `pub(mod)` and `pub` items; paths from `crate`, `self`, a dependency or a name in scope; `use`
+  with lists, `as` and `pub use`; no glob imports; the prelude as shadowable names; `pub` items
+  exposing nothing less visible; the manifest, `moddil.toml`
+  ([`modules.md`: The manifest](modules.md#the-manifest)), with a library root, executables and
+  dependencies by path, which form a DAG; inference within a mod, written out at `pub`. Until the
+  features they wait for arrive:
+  - a manifest has no versions, registry dependencies, lockfile, capabilities, targets or profiles,
+    and its edition is 2027;
+  - an executable's main file is a module of its mod's tree, and executables have no dependencies
+    of their own;
+  - visibility does not yet limit methods or fields;
+  - a mod cannot declare a prelude, so there are no glob imports at all, and `mod name;` with a
+    generating attribute waits for comptime;
+  - `moddil test` runs the tests of the mod being built, and the conformance runner those of every
+    mod of a test.
 - **Two open questions must be settled before S7**, because S7 writes the first library code in
   Moddil:
   - **caller locations** ([`error-handling.md`: Open questions](error-handling.md#open-questions)),

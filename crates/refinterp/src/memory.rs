@@ -15,8 +15,10 @@ struct Frame {
     vars: Vec<(String, Value)>,
     /// The kind of each type parameter it knows (and of `Self`).
     types: HashMap<String, Head>,
-    /// Whether it runs the file's code (not the prelude's).
-    user: bool,
+    /// The file of the code it runs, or `None` for the prelude's.
+    file: Option<u32>,
+    /// The module whose names its code uses.
+    module: usize,
 }
 
 pub(crate) struct Memory {
@@ -25,13 +27,14 @@ pub(crate) struct Memory {
 }
 
 impl Memory {
-    /// The memory of a test: one frame, running the file's code.
-    pub(crate) fn new() -> Memory {
+    /// The memory of a test: one frame, running the code of `file`, in `module`.
+    pub(crate) fn new(file: u32, module: usize) -> Memory {
         Memory {
             frames: vec![Frame {
                 vars: Vec::new(),
                 types: HashMap::new(),
-                user: true,
+                file: Some(file),
+                module,
             }],
         }
     }
@@ -41,12 +44,19 @@ impl Memory {
         self.frames.len()
     }
 
-    /// Enters a call, with the kinds of its type parameters and whether it is the file's code.
-    pub(crate) fn push_frame(&mut self, types: HashMap<String, Head>, user: bool) {
+    /// Enters a call, with the kinds of its type parameters, and the file (`None` for the
+    /// prelude) and module of its code.
+    pub(crate) fn push_frame(
+        &mut self,
+        types: HashMap<String, Head>,
+        file: Option<u32>,
+        module: usize,
+    ) {
         self.frames.push(Frame {
             vars: Vec::new(),
             types,
-            user,
+            file,
+            module,
         });
     }
 
@@ -63,9 +73,19 @@ impl Memory {
         self.frames.last_mut().expect("a frame")
     }
 
-    /// Whether the innermost call runs the file's code (not the prelude's).
+    /// Whether the innermost call runs the files' code (not the prelude's).
     pub(crate) fn user(&self) -> bool {
-        self.frame().user
+        self.frame().file.is_some()
+    }
+
+    /// The file of the innermost call's code, if it is one of the program's.
+    pub(crate) fn file(&self) -> Option<u32> {
+        self.frame().file
+    }
+
+    /// The module whose names the innermost call's code uses.
+    pub(crate) fn module(&self) -> usize {
+        self.frame().module
     }
 
     /// The kind of type parameter `name` in the innermost call, if it knows it.

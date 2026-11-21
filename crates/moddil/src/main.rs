@@ -8,7 +8,9 @@ use std::process::ExitCode;
 use ariadne::{Config, IndexType, Label, Report, ReportKind, Source};
 use clap::{Parser, Subcommand};
 use moddil_interp::{Stop, Trap, Value};
-use moddil_sema::{Database, Diagnostic, ItemTree, Severity, SourceFile};
+use moddil_sema::{
+    Database, Diagnostic, ItemTree, ModInfo, Program, ProgramFile, Severity, SourceFile,
+};
 use moddil_syntax::TextRange;
 
 /// Moddil: check and run programs.
@@ -21,19 +23,19 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Reports the errors in a file.
+    /// Reports the errors in a program.
     Check {
-        /// The file.
+        /// A file, or a mod's directory (with a `moddil.toml`).
         file: PathBuf,
     },
-    /// Runs a file's `fn main()` and prints its result.
+    /// Runs a program's `fn main()` and prints its result.
     Run {
-        /// The file.
+        /// A file, or a mod's directory (with a `moddil.toml`).
         file: PathBuf,
     },
-    /// Runs a file's tests.
+    /// Runs a program's tests (a mod's, not its dependencies').
     Test {
-        /// The file.
+        /// A file, or a mod's directory (with a `moddil.toml`).
         file: PathBuf,
     },
 }
@@ -46,35 +48,67 @@ fn main() -> ExitCode {
     let path = match &cli.command {
         Command::Check { file } | Command::Run { file } | Command::Test { file } => file,
     };
-    let text = match std::fs::read_to_string(path) {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("moddil: cannot read {}: {e}", path.display());
-            return ExitCode::from(2);
+    let project = match moddil_project::load(path) {
+        Ok(p) => p,
+        Err(problems) => {
+            for p in &problems {
+                report_problem(p);
+            }
+            let n = problems.len();
+            eprintln!("moddil: {n} error{}", if n == 1 { "" } else { "s" });
+            return ExitCode::FAILURE;
         }
     };
-    let name = path.display().to_string();
+    let files: Vec<(String, String)> = project
+        .files
+        .iter()
+        .map(|f| (f.display.clone(), f.text.clone()))
+        .collect();
     let db = Database::default();
-    let file = SourceFile::new(&db, name.clone(), text.clone());
-    let diagnostics = moddil_mir::diagnostics(&db, file);
+    let program = program(&db, &project);
+    let diagnostics = moddil_mir::diagnostics(&db, program);
     for d in diagnostics {
-        report(&name, &text, d);
+        let (name, text) = &files[d.file as usize];
+        report(name, text, d);
     }
-    if moddil_mir::has_errors(&db, file) {
+    if moddil_mir::has_errors(&db, program) {
         let n = diagnostics.len();
         eprintln!("moddil: {n} error{}", if n == 1 { "" } else { "s" });
         return ExitCode::FAILURE;
     }
     match cli.command {
         Command::Check { .. } => ExitCode::SUCCESS,
-        Command::Run { .. } => run(&db, file, &name, &text),
-        Command::Test { .. } => test(&db, file, &name, &text),
+        Command::Run { .. } => run(&db, program, &files, &path.display().to_string()),
+        Command::Test { .. } => test(&db, program, &files),
     }
 }
 
-fn run(db: &Database, file: SourceFile, name: &str, text: &str) -> ExitCode {
-    let items = moddil_sema::item_tree(db, file);
-    let Some(main) = items.fn_named("main") else {
+/// The program `project` describes, as the compiler's input.
+fn program(db: &Database, project: &moddil_project::Project) -> Program {
+    let files = project
+        .files
+        .iter()
+        .map(|f| ProgramFile {
+            source: SourceFile::new(db, f.display.clone(), f.text.clone()),
+            mod_: f.mod_,
+            module: f.module.clone(),
+            exe: f.exe,
+        })
+        .collect();
+    let mods = project
+        .mods
+        .iter()
+        .map(|m| ModInfo {
+            name: m.name.clone(),
+            deps: m.deps.clone(),
+        })
+        .collect();
+    Program::new(db, files, mods)
+}
+
+fn run(db: &Database, program: Program, files: &[(String, String)], name: &str) -> ExitCode {
+    let items = moddil_sema::item_tree(db, program);
+    let Some(main) = items.main_fn() else {
         eprintln!("moddil: {name} has no `fn main()`");
         return ExitCode::FAILURE;
     };
@@ -82,13 +116,14 @@ fn run(db: &Database, file: SourceFile, name: &str, text: &str) -> ExitCode {
         eprintln!("moddil: `main` must not take parameters");
         return ExitCode::FAILURE;
     }
-    match moddil_interp::call_fn(db, file, main, &[], &mut |_, _| {}) {
+    match moddil_interp::call_fn(db, program, main, &[], &mut |_, _, _| {}) {
         Ok(Value::Unit) => ExitCode::SUCCESS,
         Ok(v) => {
             println!("{}", v.render(items));
             ExitCode::SUCCESS
         }
         Err(Stop::Trap(trap)) => {
+            let (name, text) = &files[trap.file as usize];
             report_trap(name, text, items, &trap);
             ExitCode::from(TRAPPED)
         }
@@ -97,31 +132,55 @@ fn run(db: &Database, file: SourceFile, name: &str, text: &str) -> ExitCode {
     }
 }
 
-fn test(db: &Database, file: SourceFile, name: &str, text: &str) -> ExitCode {
-    let items = moddil_sema::item_tree(db, file);
+fn test(db: &Database, program: Program, files: &[(String, String)]) -> ExitCode {
+    let items = moddil_sema::item_tree(db, program);
     let mut failed = 0;
+    let mut run = 0;
     for (i, t) in items.tests.iter().enumerate() {
-        match moddil_interp::run_test(db, file, i as u32, &mut |_, _| {}) {
+        // The tests of the mod being built, not of its dependencies.
+        if items.mod_of(t.module) != 0 {
+            continue;
+        }
+        run += 1;
+        match moddil_interp::run_test(db, program, i as u32, &mut |_, _, _| {}) {
             Ok(()) => println!("test \"{}\" ... ok", t.name),
             Err(Stop::Trap(trap)) => {
                 failed += 1;
                 println!("test \"{}\" ... trapped", t.name);
+                let (name, text) = &files[trap.file as usize];
                 report_trap(name, text, items, &trap);
             }
-            Err(Stop::Failed { range, error }) => {
+            Err(Stop::Failed { file, range, error }) => {
                 failed += 1;
                 println!("test \"{}\" ... failed", t.name);
+                let (name, text) = &files[file as usize];
                 report_error(name, text, items, range, &error);
             }
         }
     }
-    let passed = items.tests.len() - failed;
+    let passed = run - failed;
     println!("{passed} passed, {failed} failed");
     if failed == 0 {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
     }
+}
+
+/// A problem reading the program (a manifest, a missing file).
+fn report_problem(p: &moddil_project::Problem) {
+    let name = p.display.as_str();
+    if p.text.is_empty() {
+        eprintln!("[{}] Error: {name}: {}", p.code, p.message);
+        return;
+    }
+    let span = (name, p.range.clone());
+    let r = Report::build(ReportKind::Error, span.clone())
+        .with_config(config())
+        .with_code(p.code)
+        .with_message(&p.message)
+        .with_label(Label::new(span).with_message("here"));
+    let _ = r.finish().eprint((name, Source::from(p.text.as_str())));
 }
 
 fn config() -> Config {

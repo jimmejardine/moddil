@@ -7,7 +7,7 @@ fn runs(text: &str) -> Vec<(Vec<String>, Option<TrapClass>)> {
         .into_iter()
         .map(|r| {
             (
-                r.observed.into_iter().map(|(_, v)| v).collect(),
+                r.observed.into_iter().map(|(_, _, v)| v).collect(),
                 r.trap.map(|t| t.class),
             )
         })
@@ -172,5 +172,41 @@ fn effects() {
     assert_eq!(
         runs(text),
         vec![(vec!["2".to_string(), "11".to_string()], None)]
+    );
+}
+
+#[test]
+fn modules_and_mods() {
+    let file = |text: &str, mod_: u32, module: &[&str]| SourceSpec {
+        text: text.to_string(),
+        mod_,
+        module: module.iter().map(|s| (*s).to_string()).collect(),
+    };
+    let runs = run_program(
+        vec![
+            file(
+                "use crate::a::Point;\ntest \"t\" {\n    a::norm(Point { x: 2 }) + dep::three() // => 5\n}\n",
+                0,
+                &[],
+            ),
+            file("pub(mod) struct Point { x: int }\npub(mod) fn norm(p: Point) -> int { p.x }\n", 0, &["a"]),
+            file("pub fn three() -> int { 3 }\n", 1, &[]),
+        ],
+        vec![
+            ModSpec {
+                deps: vec![("dep".to_string(), 1)],
+            },
+            ModSpec::default(),
+        ],
+    )
+    .expect("a checked program");
+    assert_eq!(runs.len(), 1);
+    assert_eq!(
+        runs[0]
+            .observed
+            .iter()
+            .map(|(f, _, v)| (*f, v.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(0, "5")]
     );
 }

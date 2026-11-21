@@ -25,8 +25,8 @@ struct or enum (E0508), or of an error set (**err.set.1**), which `fail(e)` fail
 
 **err.set.1** A function lists the errors it can fail with after its result type:
 `-> T with fail(A | B)`, each a struct or enum, at most one instance of a generic one (E0508). A
-private function's errors are inferred: those it lists, and those that reach the end of its body
-([Effects](effects.md)). A function whose errors are written out (a `pub` function, `main`, a
+private or `pub(mod)` function's errors are inferred: those it lists, and those that reach the end of
+its body ([Effects](effects.md)). A function whose errors are written out (a `pub` function, `main`, a
 trait's method or an impl's) fails only with those it lists: an error that reaches the end of it
 must be one it lists (E0502), and without `with fail(…)` it cannot fail (E0501). An impl's method
 fails with no error its trait's does not list ([Impls](items/impls.md)). Errors of several types together form an **error set**, written

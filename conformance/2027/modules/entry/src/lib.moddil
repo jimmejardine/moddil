@@ -1,0 +1,14 @@
+// covers: mod.entry.1, eff.entry.1, err.entry.1
+
+pub trait Time {
+    fn now(&self) -> int;
+}
+
+pub(mod) fn uses() -> int with time: Time { time.now() }
+
+// A `main` outside the root module and the executables' main modules is an ordinary function.
+pub(mod) fn helpers() -> int { other::main() }
+
+fn main() -> int {
+    uses()                                      //~ E0602
+}

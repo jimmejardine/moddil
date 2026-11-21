@@ -21,36 +21,34 @@
 
 use std::collections::{BTreeSet, HashSet};
 
-use moddil_sema::{
-    Code, Container, Db, Diagnostic, Item, ItemTree, Owner, Severity, SourceFile, Ty,
-};
+use moddil_sema::{Code, Container, Db, Diagnostic, Item, ItemTree, Owner, Program, Severity, Ty};
 use moddil_syntax::TextRange;
 
 use crate::{Body, Local, Operand, Place, Projection, Rvalue, Statement, Terminator, mir};
 
-/// Every diagnostic for `file`: the front end's, then, if it found no errors, the ownership and
-/// borrow errors of each function and test.
+/// Every diagnostic for `program`: the front end's, then, if it found no errors, the ownership
+/// and borrow errors of each function and test.
 #[salsa::tracked(returns(ref))]
-pub fn diagnostics(db: &dyn Db, file: SourceFile) -> Vec<Diagnostic> {
-    let mut out = moddil_sema::diagnostics(db, file).clone();
-    if !moddil_sema::has_errors(db, file) {
-        let items = moddil_sema::item_tree(db, file);
-        for owner in moddil_sema::owners(db, file) {
+pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
+    let mut out = moddil_sema::diagnostics(db, program).clone();
+    if !moddil_sema::has_errors(db, program) {
+        let items = moddil_sema::item_tree(db, program);
+        for owner in moddil_sema::owners(db, program) {
             out.extend(moddil_sema::in_file(
                 items,
                 owner.item(db),
                 borrowck(db, owner),
             ));
         }
-        out.sort_by_key(|d| (d.range.start, d.range.end, d.code));
+        out.sort_by_key(|d| (d.file, d.range.start, d.range.end, d.code));
         out.dedup();
     }
     out
 }
 
-/// Whether `file` has any errors, including ownership and borrow errors.
-pub fn has_errors(db: &dyn Db, file: SourceFile) -> bool {
-    diagnostics(db, file)
+/// Whether `program` has any errors, including ownership and borrow errors.
+pub fn has_errors(db: &dyn Db, program: Program) -> bool {
+    diagnostics(db, program)
         .iter()
         .any(|d| d.severity == Severity::Error)
 }
@@ -61,7 +59,7 @@ pub fn borrowck<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Vec<Diagnostic> {
     let Some(body) = mir(db, owner).as_ref() else {
         return Vec::new();
     };
-    let items = moddil_sema::item_tree(db, owner.file(db));
+    let items = moddil_sema::item_tree(db, owner.program(db));
     let ret_from = match owner.item(db) {
         Item::Fn(i) => items.fns[i as usize].ret_from.clone(),
         Item::Test(_) => Vec::new(),

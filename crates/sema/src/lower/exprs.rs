@@ -6,7 +6,7 @@ use moddil_syntax::{SyntaxKind as K, SyntaxNode, SyntaxToken, TextRange};
 use super::names::JumpError;
 use super::{Binds, Lowerer, Resolved};
 use crate::hir::{Arm, BinaryOp, CompareOp, ExprId, ExprKind, Handler, LogicOp, PatKind, UnaryOp};
-use crate::items::Shape;
+use crate::items::{Def, Shape};
 use crate::resolve::{generic_args, path_segments};
 use crate::{Code, Diagnostic, Ty};
 
@@ -631,7 +631,7 @@ impl Lowerer<'_> {
             if let [one] = segments.as_slice()
                 && one.name == "discard"
                 && self.lookup("discard").is_none()
-                && self.items.fn_named("discard").is_none()
+                && self.item("discard").is_none()
             {
                 return self.discard(node, range);
             }
@@ -639,8 +639,7 @@ impl Lowerer<'_> {
             if let [one] = segments.as_slice()
                 && one.name == "assert"
                 && self.lookup("assert").is_none()
-                && self.items.fn_named("assert").is_none()
-                && self.items.adt_named("assert").is_none()
+                && self.item("assert").is_none()
             {
                 let args = self.args(node);
                 if args.len() != 1 {
@@ -785,7 +784,7 @@ impl Lowerer<'_> {
         if let ast::Pat::TupleStruct(_) = p
             && let Some(segs) = node.child(K::PATH).and_then(|x| path_segments(&x))
             && let [one] = segs.as_slice()
-            && let Some(adt) = self.items.adt_named(&one.name)
+            && let Some(Def::Adt(adt)) = self.item(&one.name)
         {
             let subs: Vec<ast::Pat> = node.children().filter_map(ast::Pat::cast).collect();
             if let [sub] = subs.as_slice()

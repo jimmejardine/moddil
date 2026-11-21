@@ -20,7 +20,7 @@ and a code never changes meaning.
 | E0002 | A comparison chain in more than one direction | [expr.cmp.chain.2](expressions/comparison.md) |
 | E0101 | Unresolved name | [names.resolve.1](names.md) |
 | E0102 | Unresolved type | [names.type.1](names.md) |
-| E0103 | Duplicate definition | [names.item.1](names.md) |
+| E0103 | Duplicate definition, or an item with the name of an import | [names.item.1](names.md), [names.item.2](names.md), [mod.names.1](modules.md) |
 | E0104 | Duplicate parameter | [item.fn.params.1](items/functions.md) |
 | E0105 | A name not bound in every alternative of `\|` | [pat.or.1](patterns.md) |
 | E0106 | A name bound twice in one pattern | [pat.bind.unique.1](patterns.md) |
@@ -88,6 +88,11 @@ and a code never changes meaning.
 | E0605 | A `dyn` type not behind a borrow, of more than one trait, or of a trait that cannot be used as `dyn` | [type.dyn.1](types.md) |
 | E0606 | An effect listed twice, or given two handlers by one `with` | [eff.1](effects.md), [eff.with.1](effects.md) |
 | E0607 | Effects inferred without end | [eff.infer.1](effects.md) |
+| E0701 | A path or import naming an item its module cannot see | [mod.vis.1](modules.md), [mod.use.1](modules.md) |
+| E0702 | A `use` that names nothing, a glob import, or a declared module | [mod.use.1](modules.md), [mod.tree.1](modules.md) |
+| E0703 | An item whose signature names something less visible than itself | [mod.expose.1](modules.md) |
+| E0704 | A manifest that is not as a manifest is, or names files that are not there | [mod.1](modules.md), [mod.tree.1](modules.md) |
+| E0705 | Mods that depend on each other in a cycle | [mod.dep.1](modules.md) |
 
 **Warnings** have codes of the same form starting with `W`, in the same blocks. They do not stop a
 program from running, and conformance tests expect them like errors.

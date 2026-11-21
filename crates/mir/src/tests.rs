@@ -1,18 +1,18 @@
-use moddil_sema::{Database, Item, Owner, SourceFile, Src};
+use moddil_sema::{Database, Item, Owner, Program, Src};
 
 use super::*;
 
 /// The MIR of every function and test in `text`, one after another.
 fn dump(text: &str) -> String {
     let db = Database::default();
-    let file = SourceFile::new(&db, "t.moddil".to_string(), text.to_string());
+    let file = Program::single(&db, "t.moddil".to_string(), text.to_string());
     let diagnostics = moddil_sema::diagnostics(&db, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let items = moddil_sema::item_tree(&db, file);
     moddil_sema::owners(&db, file)
         .into_iter()
         .filter(|o| match o.item(&db) {
-            Item::Fn(i) => items.fns[i as usize].src == Src::File,
+            Item::Fn(i) => items.fns[i as usize].src == Src::File(0),
             Item::Test(_) => true,
         })
         .map(|o| format!("{:?}", mir(&db, o).as_ref().expect("no errors")))
@@ -28,7 +28,7 @@ fn version_has_three_parts() {
 #[test]
 fn no_mir_for_files_with_errors() {
     let db = Database::default();
-    let file = SourceFile::new(
+    let file = Program::single(
         &db,
         "t.moddil".to_string(),
         "fn f() -> int { true }".to_string(),
@@ -102,7 +102,7 @@ fn loops() {
 /// The ownership and borrow codes reported for `text`, with the 1-based line each starts on.
 fn ownership(text: &str) -> Vec<(String, u32)> {
     let db = Database::default();
-    let file = SourceFile::new(&db, "t.moddil".to_string(), text.to_string());
+    let file = Program::single(&db, "t.moddil".to_string(), text.to_string());
     diagnostics(&db, file)
         .iter()
         .map(|d| {

@@ -1,7 +1,7 @@
 //! Entry points: an error that reaches one has nowhere to go, so `main` cannot declare errors
 //! (R3, `err.entry.1`). A test may fail, and a destructor's trait method declares none.
 
-use crate::items::{Container, ItemTree, Src};
+use crate::items::ItemTree;
 use crate::{Code, Diagnostic};
 
 use super::Found;
@@ -10,8 +10,9 @@ use super::Found;
 pub(crate) fn entry_points(tree: &ItemTree) -> Vec<Found> {
     tree.fns
         .iter()
-        .filter(|f| f.src == Src::File && f.container == Container::Free && f.name == "main")
-        .filter_map(|f| {
+        .enumerate()
+        .filter(|&(i, _)| tree.is_main(i as u32))
+        .filter_map(|(_, f)| {
             let at = f.fails_range?;
             Some((
                 f.src,

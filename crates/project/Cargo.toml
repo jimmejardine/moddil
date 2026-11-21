@@ -1,0 +1,15 @@
+[package]
+name = "moddil-project"
+description = "Reads a Moddil mod from disk: its manifest, module tree and path dependencies"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

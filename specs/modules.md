@@ -192,6 +192,36 @@ main = "src/bin/cli.moddil"
 dependencies = { "github.com/acme/args" = "1.2" }
 ```
 
+### The manifest
+
+**Decided: the manifest is `moddil.toml`, in the mod's root directory, written in a subset of TOML**
+(decided November 2026): `#` comments, `[table]` and `[[table]]` headers, and lines whose value is a
+string or an inline table of strings, so it is read without a TOML library and is easy to edit by
+tools. What it holds so far:
+
+```toml
+[mod]
+name = "github.com/acme/matcher"
+edition = "2027"
+
+[lib]
+root = "src/lib.moddil"            # the default, if the file exists
+
+[[exe]]
+name = "matcher-server"
+main = "src/bin/server.moddil"     # a module of the mod's tree
+
+[dependencies]
+shapes = { path = "../shapes" }    # a local mod, by the name the code uses for it
+```
+
+- The mod's **source directory** is the directory of its library's root, or `src`; every
+  `.moddil` file under it is a module, and the library root is the root module (`crate`).
+- A dependency is named by the identifier the code uses as its first path segment (`shapes::Point`).
+- Versions, registries, the lockfile, capability ceilings, targets, profiles and lint levels are
+  added to the same file as they are built ([`packages-and-supply-chain.md`](packages-and-supply-chain.md),
+  [`toolchain.md`: Configuration](toolchain.md#configuration)).
+
 ## Fit check against the reference examples
 
 | Example | Uses |

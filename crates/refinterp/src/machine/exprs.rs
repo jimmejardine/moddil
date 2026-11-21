@@ -101,7 +101,7 @@ impl Machine<'_> {
             ast::Expr::Fail(_) => self.fail(node, e),
             ast::Expr::Try(_) => self.try_expr(node),
             ast::Expr::With(_) => self.with_expr(node),
-            _ => unreachable!("a checked program of slices S0 to S5"),
+            _ => unreachable!("a checked program of slices S0 to S6"),
         }
     }
 
@@ -122,7 +122,7 @@ impl Machine<'_> {
                 _ => s.clone(),
             })
             .collect();
-        self.program.ctor(&resolved)
+        self.program.ctor(self.memory.module(), &resolved)
     }
 
     /// `Point { x: 1, y }`: fields evaluated in the order written (`expr.struct.order.1`).

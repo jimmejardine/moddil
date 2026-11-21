@@ -1,7 +1,7 @@
 // covers: err.fail.1, err.set.1, err.question.1, err.catch.1, err.bang.1, err.entry.1, err.unused.1, stmt.defer.1
 
-struct A { n: int }
-enum B { X, Y(int) }
+pub struct A { n: int }
+pub enum B { X, Y(int) }
 struct G;
 impl Drop for G { fn drop(self) { fail(A { n: 0 }); } }        //~ E0501
 

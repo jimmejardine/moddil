@@ -1,0 +1,6 @@
+[mod]
+name = "manifest"
+edition = "2030"                                #~ E0704
+
+[lib]
+root = "src/missing.moddil"                     #~ E0704

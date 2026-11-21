@@ -1,0 +1,20 @@
+// covers: mod.tree.1, mod.names.1, mod.path.1, mod.use.1
+
+use crate::shapes::{Shape, area};
+use crate::shapes::circle::Circle as Round;
+
+// The shapes module calls this, and this module calls it: modules may name each other in cycles.
+pub(mod) fn double(n: int) -> int { n * 2 }
+
+test "modules name each other by path" {
+    area(Shape::Square(3))                  // => 9
+    ;
+    crate::shapes::area(Shape::Square(2))   // => 4
+    ;
+    shapes::perimeter(Shape::Square(1))     // => 4
+    ;
+    let r = Round { r: 2 };
+    r.area()                                // => 12
+    ;
+    shapes::circle::one().r                // => 1
+}
