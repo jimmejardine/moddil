@@ -61,7 +61,7 @@ Cost stays visible, as everywhere in Moddil ([`values.md`](values.md)):
 | `String` → `Rc<str>` | `s.to_rc()` | Moves into a shared allocation |
 | `Rc<str>` → another handle | `r.share()` | Count + 1 |
 | `RcStr` sub-slice | `r.slice(range)` | Count + 1, no copy |
-| String literal | `"abc"` is a `&str` with static storage | Free |
+| String literal | `"abc"` is a `&str` with static storage, which borrows nothing ([`memory.md`: Borrows of static data](memory.md#borrows-of-static-data)) | Free |
 
 `String` has no implicit copy and `+` on strings does not exist; building text uses `fmt"…"`,
 `push_str` or `join`.

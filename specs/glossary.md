@@ -92,6 +92,7 @@
 | **Simulation runtime** | `moddil/runtime-sim`: one deterministic thread with virtual time, seeded randomness and a simulated network ([Deterministic simulation testing](determinism.md#deterministic-simulation-testing)). |
 | **`spawn`** | The core effect of starting tasks in a scope, separate from `suspend` ([The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)). |
 | **Specialisation** | A restricted form of overlapping impls: strictly more specific, beside the general impl, and able to change a `default type` ([Specialisation](types.md#specialisation)). |
+| **Static data** | String literals and `const` values, in read-only memory for the whole run; a borrow of them borrows nothing, so it can be returned from a function with no borrowed parameter ([Borrows of static data](memory.md#borrows-of-static-data)). |
 | **Stop** | The graceful first stage of shutdown, observed where code asks with `stop_requested()` ([Two levels: stop, then cancel](lifecycle.md#two-levels-stop-then-cancel)). |
 | **`StrPos`** | A byte position on a character boundary, tied by type to its string ([Positions and slicing](text.md#positions-and-slicing)). |
 | **Suppressed error** | An error attached to a primary error rather than replacing it, from cleanup (D10) or from sibling tasks (D15) ([Cleanup that can fail](resources.md#cleanup-that-can-fail)). |

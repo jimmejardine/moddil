@@ -96,6 +96,37 @@ fn longer(a: &str, b: &str) -> &str                         // derives from a an
 fn first_word(text: &str, sep: &str) -> &str from text
 ```
 
+### Borrows of static data
+
+**Decided: a borrow of static data borrows nothing.** Static data is the text of a string literal
+(and of a byte-string literal) and the value of a `const` item, which comptime copies into
+read-only memory ([`comptime.md`: Evaluation model](comptime.md#evaluation-model)). A literal is
+in effect a borrow of an anonymous `const`. A borrow's rules protect its source, which must not be
+mutated, moved or dropped while the borrow lives; static data is immutable, never moves and lives
+as long as the program, so there is nothing to protect.
+
+- **It is an ordinary `&T`.** `"hi"` is a `&str` ([`text.md`: String types](text.md#string-types)),
+  accepted wherever a `&str` is, but it freezes no variable and is never ended by the checker.
+- **A function with no borrowed parameter may return a borrow**, which must then be of static
+  data:
+
+  ```rust
+  fn greeting() -> &str { "hi" }                              // static: fine
+  fn table() -> &[u32; 256] { &CRC_TABLE }                    // a const: fine
+  fn local() -> &int { let x = 1; &x }                        // a local: an error
+  ```
+
+  Its callers get a result that borrows nothing, and keep it as long as they like.
+- **With borrowed parameters,** a function may also return static data
+  (`if found { name } else { "anonymous" }`); its callers still treat the result as borrowing what
+  they passed.
+- **Only literals and `const`s are static.** `&(1 + 2)` and `&Point { x: 0, y: 0 }` borrow
+  temporaries: there is no implicit promotion as in Rust, so what is static stays one rule, and a
+  `const` makes anything else static explicitly.
+- **Still second-class.** There is no `'static` and no new type, so a `&str` is still not stored in
+  owned data: a struct with a `&str` field is a [view type](#view-types). Text a struct owns is a
+  `String`, inline when short ([`text.md`: Short strings are stored inline](text.md#short-strings-are-stored-inline)).
+
 ## View types
 
 A **view type** is a struct or container whose fields hold borrows, declared with

@@ -187,9 +187,19 @@ something runs from the first slice.
   - `Display` is `fn fmt(&self, out: &mut String)`, not a `Write` sink; `fmt` holes take no format
     specs (`{x:>8}`) and `Debug` waits for derives of it; tagged literals other than `fmt` wait
     for comptime;
-  - a function with no borrowed parameter cannot return a string literal as a `&str` (E0310):
-    literals are not yet a borrow of static data;
+  - a function with no borrowed parameter cannot return a string literal as a `&str` (E0310),
+    until the next slice's first step below;
   - `#[intrinsic]` is the prelude's alone.
+- **Borrows of static data borrow nothing (decided, [`memory.md`: Borrows of static data](memory.md#borrows-of-static-data)):
+  a step at the start of the next slice.** A string literal (and, once S10 brings `const`, a
+  `const`'s value) is static data:
+  - drop E0310 for a function with no borrowed parameter; at each return of such a function, the
+    borrow must be of static data, or it is E0308;
+  - in the ownership check, a borrow of static data freezes nothing and never ends;
+  - update **item.fn.ret-borrow.1** and `reference/2027/borrows.md` (a paragraph for static data),
+    and the E0310 test in `crates/sema/src/tests.rs`;
+  - conformance cases: `fn greeting() -> &str { "hi" }` runs; `fn f() -> &int { &1 }` is E0308;
+    a static result stays usable after everything else is moved.
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`
