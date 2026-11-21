@@ -246,6 +246,8 @@ pub struct FnSig {
     pub fails_range: Option<TextRange>,
     /// The effects its `with` clause lists, other than `fail`, in order.
     pub effects: Vec<EffectSig>,
+    /// Whether it is `#[track_caller]`: a trap in it is reported where its caller called it.
+    pub track_caller: bool,
     /// Who can name it.
     pub vis: Vis,
     /// The module it is declared in (for a derived method, its type's).
@@ -287,6 +289,7 @@ impl FnSig {
             fails: Ty::Never,
             fails_range: None,
             effects: Vec::new(),
+            track_caller: false,
             vis,
             module,
         }
@@ -490,6 +493,9 @@ const LANG: &[&str] = &[
     "Neg",
     "Not",
     "Drop",
+    "FnOnce",
+    "FnMut",
+    "Fn",
 ];
 
 impl ItemTree {
@@ -675,6 +681,8 @@ impl ItemTree {
             | Ty::Infer(_)
             | Ty::Dyn(_)
             | Ty::Errors(_) => (0, 1),
+            Ty::Closure(c) => layout(&c.captures),
+            Ty::Anon(a) => layout(&a.methods.iter().map(|(_, t)| t.clone()).collect::<Vec<_>>()),
             Ty::Tuple(ts) => layout(ts),
             Ty::Adt(a, _, _) => {
                 let def = &self.adts[*a as usize];

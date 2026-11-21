@@ -185,6 +185,15 @@ impl<'a> Solver<'a> {
         if self_ty == Ty::Error {
             return Ty::Error;
         }
+        // A closure's `Output` and `Fails` are its result and errors.
+        if let Ty::Closure(c) = &self_ty
+            && self.tree.lang("FnOnce") == Some(trait_ref.trait_)
+        {
+            return match a.name.as_ref() {
+                "Output" => self.norm(&c.ret),
+                _ => self.norm(&c.fails),
+            };
+        }
         // A bound that fixes it: `T: Add<Output = int>`.
         for i in 0..self.env.len() {
             let p = &self.env[i];
@@ -226,6 +235,17 @@ impl<'a> Solver<'a> {
                 i == j && xs.iter().zip(ys.iter()).all(|(x, y)| self.unify(x, y))
             }
             (Ty::Ref(m, x), Ty::Ref(n, y)) => m == n && self.unify(x, y),
+            (Ty::Anon(x), Ty::Anon(y)) => x.owner == y.owner && x.expr == y.expr,
+            (Ty::Closure(x), Ty::Closure(y)) => {
+                x.owner == y.owner
+                    && x.expr == y.expr
+                    && x.params.len() == y.params.len()
+                    && x.params
+                        .iter()
+                        .zip(y.params.iter())
+                        .all(|(p, q)| self.unify(p, q))
+                    && self.unify(&x.ret, &y.ret)
+            }
             (Ty::Dyn(x), Ty::Dyn(y)) => {
                 x.trait_ == y.trait_
                     && x.args
@@ -286,6 +306,34 @@ impl<'a> Solver<'a> {
             Ty::Infer(_) => return Answer::Maybe,
             Ty::Error | Ty::Never => return Answer::Yes(Source::Builtin),
             _ => {}
+        }
+        // A closure implements the closure traits for its parameters' types; whether it may be
+        // called through `FnMut` or `Fn` is checked once its captures are known.
+        if let Ty::Closure(c) = &ty
+            && (self.is_lang(tr, "FnOnce") || self.is_lang(tr, "FnMut") || self.is_lang(tr, "Fn"))
+        {
+            let args = Ty::tuple(c.params.to_vec());
+            return match trait_ref.args.first() {
+                Some(a) if self.unify(a, &args) => Answer::Yes(Source::Builtin),
+                Some(_) => Answer::No,
+                None => Answer::Yes(Source::Builtin),
+            };
+        }
+        // An anonymous impl implements its trait.
+        if let Ty::Anon(a) = &ty
+            && a.trait_ref.trait_ == tr
+        {
+            return if a
+                .trait_ref
+                .args
+                .iter()
+                .zip(trait_ref.args.iter())
+                .all(|(x, y)| self.unify(x, y))
+            {
+                Answer::Yes(Source::Builtin)
+            } else {
+                Answer::No
+            };
         }
         // `dyn Trait` implements its trait and the trait's supertraits.
         if let Ty::Dyn(d) = &ty {
@@ -435,6 +483,14 @@ impl<'a> Solver<'a> {
             }
             Ty::Param(..) | Ty::Assoc(_) | Ty::Infer(_) => true,
             Ty::Errors(ts) => ts.iter().any(|t| self.needs_drop_inner(t, depth + 1)),
+            Ty::Closure(c) => c
+                .captures
+                .iter()
+                .any(|t| self.needs_drop_inner(t, depth + 1)),
+            Ty::Anon(a) => a
+                .methods
+                .iter()
+                .any(|(_, t)| self.needs_drop_inner(t, depth + 1)),
             Ty::Tuple(ts) => ts.iter().any(|t| self.needs_drop_inner(t, depth + 1)),
             Ty::Adt(a, _, args) => {
                 if self.tree.has_drop_impl(*a) {

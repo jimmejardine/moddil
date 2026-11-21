@@ -42,6 +42,8 @@ pub struct Local {
     pub mutable: bool,
     /// Where the binding is.
     pub range: TextRange,
+    /// The innermost closure whose parameters or body declare it, if any.
+    pub closure: Option<ExprId>,
 }
 
 /// An expression and where it is.
@@ -217,6 +219,25 @@ pub enum ExprKind {
     },
     /// `discard(r, "reason")`: drops the `Result` `r` on purpose.
     Discard(ExprId),
+    /// `impl Trait { fn … }`: a value of a type of its own implementing the trait.
+    AnonImpl {
+        /// The trait, with its arguments.
+        trait_ref: crate::TraitRef,
+        /// Its methods: each the trait's method it defines, and the closure that is its body
+        /// (taking the method's parameters but `self`).
+        methods: Vec<(u32, ExprId)>,
+    },
+    /// `|p, …| body`: a closure.
+    Closure {
+        /// Its parameters: a pattern each, and the type written, if any.
+        params: Vec<(PatId, Option<crate::Ty>)>,
+        /// The result type written, if any.
+        ret: Option<crate::Ty>,
+        /// Its body.
+        body: ExprId,
+        /// The closure it is written in, if any.
+        parent: Option<ExprId>,
+    },
     /// `with E = value, … { body }`: runs the block with handlers installed for its effects.
     With {
         /// The handlers, in order: their values are evaluated first, outside the block.

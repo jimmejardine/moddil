@@ -373,3 +373,10 @@ fn handlers_are_passed_and_called_through_dyn() {
              fn main() -> int { let c = Clock { t: 4 }; with Time = &c { passes() * 10 + up(&c) } }";
     assert_eq!(value(t), Value::Int(55));
 }
+
+#[test]
+fn closures_capture_and_run() {
+    let t = "fn each(f: impl FnMut(int), a: int, b: int) { f(a); f(b); }\n\
+             fn main() -> int { let k = 10; let mut n = 0; each(|x| n += x * k, 1, 2); n }";
+    assert_eq!(value(t), Value::Int(30));
+}

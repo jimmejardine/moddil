@@ -24,6 +24,12 @@ pub enum Ty {
     /// `dyn Trait`: a value of some type that implements the trait, known only through it. It
     /// has no size, so it is only ever behind a borrow (`&dyn Trait`).
     Dyn(TraitRef),
+    /// A closure's own type: one per closure expression. It cannot be written; it implements the
+    /// closure traits (`FnOnce` and, by its kind, `FnMut` and `Fn`).
+    Closure(Arc<ClosureTy>),
+    /// An anonymous impl's own type (`impl Time { … }` as an expression): it implements the trait,
+    /// each method a closure.
+    Anon(Arc<AnonTy>),
     /// A type parameter of the item being checked, by its index in the item's generics (for a
     /// trait's items, `Self` is parameter 0), with its name.
     Param(u32, Arc<str>),
@@ -39,6 +45,69 @@ pub enum Ty {
     /// The type of an expression that already has an error; it matches everything, so one error
     /// is reported once.
     Error,
+}
+
+/// A closure's type: where it is written, and what checking it found.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct ClosureTy {
+    /// The function or test whose body it is written in.
+    pub owner: crate::Item,
+    /// Its expression in that body, by index.
+    pub expr: u32,
+    /// The type arguments of the owner's type parameters, which its types may name.
+    pub args: Arc<[Ty]>,
+    /// Its parameters' types.
+    pub params: Arc<[Ty]>,
+    /// Its result type.
+    pub ret: Ty,
+    /// The errors it can fail with, as an error set (`!` if none).
+    pub fails: Ty,
+    /// Which closure traits it implements.
+    pub kind: ClosureKind,
+    /// The types of what it captures, in order: a borrow of each place it borrows, and each value
+    /// it moves in, then the handlers it uses.
+    pub captures: Arc<[Ty]>,
+}
+
+/// An anonymous impl's type: where it is written, its trait, and its methods' closures.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct AnonTy {
+    /// The function or test whose body it is written in.
+    pub owner: crate::Item,
+    /// Its expression in that body, by index.
+    pub expr: u32,
+    /// The trait it implements.
+    pub trait_ref: TraitRef,
+    /// Its methods: each the trait's method it defines, and the closure type of its body.
+    pub methods: Arc<[(u32, Ty)]>,
+}
+
+/// Which closure traits a closure implements: every one does `FnOnce`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum ClosureKind {
+    /// `Fn`, `FnMut` and `FnOnce`: it only reads what it captures.
+    Fn,
+    /// `FnMut` and `FnOnce`: it changes what it captures.
+    FnMut,
+    /// Only `FnOnce`: it moves out what it captures.
+    FnOnce,
+}
+
+impl ClosureTy {
+    /// The closure type with `f` applied to each type in it.
+    #[must_use]
+    pub fn map(&self, f: &mut impl FnMut(&Ty) -> Ty) -> ClosureTy {
+        ClosureTy {
+            owner: self.owner,
+            expr: self.expr,
+            args: self.args.iter().map(&mut *f).collect(),
+            params: self.params.iter().map(&mut *f).collect(),
+            ret: f(&self.ret),
+            fails: f(&self.fails),
+            kind: self.kind,
+            captures: self.captures.iter().map(&mut *f).collect(),
+        }
+    }
 }
 
 /// An associated type of a trait, for some type: `<T as Add>::Output`.
@@ -127,6 +196,16 @@ impl Ty {
             Ty::Tuple(ts) | Ty::Adt(_, _, ts) | Ty::Errors(ts) => ts.iter().any(|t| t.any(f)),
             Ty::Ref(_, t) => t.any(f),
             Ty::Dyn(tr) => tr.args.iter().any(|t| t.any(f)),
+            Ty::Anon(a) => {
+                a.trait_ref.args.iter().any(|t| t.any(f)) || a.methods.iter().any(|(_, t)| t.any(f))
+            }
+            Ty::Closure(c) => {
+                c.args.iter().any(|t| t.any(f))
+                    || c.params.iter().any(|t| t.any(f))
+                    || c.ret.any(f)
+                    || c.fails.any(f)
+                    || c.captures.iter().any(|t| t.any(f))
+            }
             Ty::Assoc(a) => a.self_ty.any(f) || a.trait_ref.args.iter().any(|t| t.any(f)),
             _ => false,
         }
@@ -141,6 +220,13 @@ impl Ty {
             Ty::Adt(a, n, ts) => Ty::Adt(*a, n.clone(), ts.iter().map(&mut *f).collect()),
             Ty::Ref(m, t) => Ty::Ref(*m, Arc::new(f(t))),
             Ty::Dyn(tr) => Ty::Dyn(tr.map(f)),
+            Ty::Closure(c) => Ty::Closure(Arc::new(c.map(f))),
+            Ty::Anon(a) => Ty::Anon(Arc::new(AnonTy {
+                owner: a.owner,
+                expr: a.expr,
+                trait_ref: a.trait_ref.map(f),
+                methods: a.methods.iter().map(|(m, t)| (*m, f(t))).collect(),
+            })),
             Ty::Assoc(a) => Ty::Assoc(Arc::new(AssocTy {
                 self_ty: f(&a.self_ty),
                 trait_ref: a.trait_ref.map(f),
@@ -214,15 +300,16 @@ impl Ty {
         }
     }
 
-    /// Whether the type is or contains a borrow anywhere, including in type arguments.
+    /// Whether the type is or contains a borrow anywhere, including in type arguments. A closure
+    /// borrows what it captures, so it counts as one.
     pub fn has_ref_inside(&self) -> bool {
-        self.any(&|t| matches!(t, Ty::Ref(..)))
+        self.any(&|t| matches!(t, Ty::Ref(..) | Ty::Closure(_) | Ty::Anon(_)))
     }
 
-    /// Whether the type is or contains a borrow.
+    /// Whether the type is or contains a borrow (a closure counts as one).
     pub fn has_ref(&self) -> bool {
         match self {
-            Ty::Ref(..) => true,
+            Ty::Ref(..) | Ty::Closure(_) | Ty::Anon(_) => true,
             Ty::Tuple(ts) => ts.iter().any(Ty::has_ref),
             _ => false,
         }
@@ -288,6 +375,12 @@ impl fmt::Debug for Ty {
                 Ok(())
             }
             Ty::Dyn(tr) => write!(f, "dyn {tr:?}"),
+            Ty::Anon(a) => write!(f, "{{impl {:?}}}", a.trait_ref),
+            Ty::Closure(c) => {
+                f.write_str("{closure(")?;
+                list(f, &c.params)?;
+                write!(f, ") -> {:?}}}", c.ret)
+            }
             Ty::Ref(true, t) => write!(f, "&mut {t:?}"),
             Ty::Ref(false, t) => write!(f, "&{t:?}"),
             Ty::Tuple(ts) => {

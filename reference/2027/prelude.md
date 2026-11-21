@@ -7,7 +7,7 @@ behaviour are as written there.
 **prelude.1** The prelude holds `assert` ([`assert`](expressions/assert.md)) and `discard`
 ([Errors](errors.md)), the types `Option`, `Result` and `Ordering`, the traits `Clone`, `Copy`,
 `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, `Not` and
-`Drop`, the function `drop`, and their impls for `int`, `bool` and `()`. Every module sees them, and
+`Drop`, the closure traits `FnOnce`, `FnMut` and `Fn`, the function `drop`, and their impls for `int`, `bool` and `()`. Every module sees them, and
 `Option`'s and `Result`'s variants, without importing them; an item or import of the module with the
 same name shadows them ([Modules](modules.md)). The operators, `?` and `try` use the prelude's traits
 and types whatever the module calls its own.
@@ -35,3 +35,9 @@ borrows, and tuples whose elements are `Copy`, whose `clone` is a copy.
 
 **prelude.drop.1** `drop(x)` takes `x` by value and does nothing with it, so `x` is dropped at the
 end of the call ([Ownership](ownership.md)): it ends a value early.
+
+**prelude.fn.1** `FnOnce<Args>` (with `type Output` and `type Fails`, and `call_once(self, args)`),
+`FnMut<Args>: FnOnce<Args>` (`call_mut(&mut self, args)`) and `Fn<Args>: FnMut<Args>`
+(`call(&self, args)`) are the closure traits ([Closures](expressions/closures.md)): `Args` is the
+tuple of a closure's parameters' types, `Output` its result and `Fails` its errors. A closure
+implements them built in.

@@ -57,6 +57,7 @@ impl fmt::Display for Rvalue {
                     AggregateKind::Tuple if ops.len() == 1 => write!(f, "({},)", ops[0]),
                     AggregateKind::Tuple => write!(f, "({})", ops.join(", ")),
                     AggregateKind::Adt { path, .. } => write!(f, "{path}({})", ops.join(", ")),
+                    AggregateKind::Closure(_) => write!(f, "{{closure}}({})", ops.join(", ")),
                 }
             }
             Rvalue::Discriminant(p) => write!(f, "discriminant({p:?})"),

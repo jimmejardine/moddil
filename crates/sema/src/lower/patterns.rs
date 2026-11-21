@@ -113,6 +113,7 @@ impl Lowerer<'_> {
                 name: name.to_string(),
                 mutable,
                 range,
+                closure: self.closure,
             }),
         };
         b.names.push((name.to_string(), local, range));

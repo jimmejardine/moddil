@@ -32,6 +32,9 @@ pub(super) enum FailCx {
     Suppressed,
     /// Nowhere: a `defer` block or a destructor.
     Never(&'static str),
+    /// Out of a closure: the errors found so far, which become its type's, and whether it
+    /// returns an `Option` (so `?` on `None` returns `None`).
+    Closure { errors: Vec<Ty>, option: bool },
 }
 
 /// What a `?` or `?!` takes apart.
@@ -47,7 +50,7 @@ pub enum Propagated {
 
 impl Checker<'_> {
     /// `members` raised at `range`: they go to the innermost context that takes them.
-    fn deliver(&mut self, members: &[Ty], range: TextRange) {
+    pub(super) fn deliver(&mut self, members: &[Ty], range: TextRange) {
         if members.is_empty() {
             return;
         }
@@ -62,6 +65,20 @@ impl Checker<'_> {
                 range,
                 "this `try` block's `?`s are on `Option`s, so it cannot also fail with an error",
             ),
+            Some(FailCx::Closure { errors, .. }) => {
+                let mut errors = errors.clone();
+                let mut ds = Vec::new();
+                for m in members {
+                    if !errors.contains(m) && crate::collect::error_type(m, range, &errors, &mut ds)
+                    {
+                        errors.push(m.clone());
+                    }
+                }
+                self.out.diagnostics.extend(ds);
+                if let Some(FailCx::Closure { errors: e, .. }) = self.fail_cx.last_mut() {
+                    *e = errors;
+                }
+            }
             Some(FailCx::Try { errors, .. }) => {
                 let mut errors = errors.clone();
                 let mut ds = Vec::new();
@@ -137,7 +154,7 @@ impl Checker<'_> {
     /// `try` block of `Option`s.
     fn deliver_none(&mut self, range: TextRange) {
         let ok = match self.fail_cx.last_mut() {
-            Some(FailCx::Fn { option, .. }) => *option,
+            Some(FailCx::Fn { option, .. } | FailCx::Closure { option, .. }) => *option,
             Some(FailCx::Try { option, .. }) => {
                 let ok = *option != Some(false);
                 *option = Some(true);
@@ -160,6 +177,7 @@ impl Checker<'_> {
     /// errors it can fail with, recorded for the `?` or `?!` around it (E0501 if there is none).
     pub(super) fn fallible_call(&mut self, e: ExprId, func: u32, args: &[Ty], range: TextRange) {
         let fails = self.fx.fns[func as usize].fails.subst(args);
+        let fails = self.solver.deep(&fails);
         if fails == Ty::Never {
             return;
         }

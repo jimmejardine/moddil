@@ -6,7 +6,7 @@
 //! leaves loops and functions through Rust's `?`. It runs **checked programs only**: a file the
 //! compiler rejects has no meaning to run, so it does not repeat the checks and may panic on one.
 //!
-//! Slices S0 to S6. A borrow is a pointer to a variable of some call and a path of fields in it.
+//! Slices S0 to S7a. A borrow is a pointer to a variable of some call and a path of fields in it.
 //! The prelude (`reference/2027/prelude.moddil`) is read with the program. Values carry enough
 //! of their type to choose a method: a trait's method is found from the type of the value it is
 //! called on, and a type parameter (for `T::f()`) is known from the values of the arguments

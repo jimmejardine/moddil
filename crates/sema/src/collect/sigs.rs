@@ -27,8 +27,24 @@ impl Collector<'_> {
         let self_ty = self_ty.cloned();
         let node = f.syntax();
         let origin = self.reporter.origin(src, node.text_range());
-        self.unsupported_parts(src, node, false);
+        self.unsupported_parts(src, node, true);
         let mut ds = Vec::new();
+        // `#[track_caller]` (`attr.track-caller.1`); other attributes on a function wait.
+        let mut track_caller = false;
+        for attr in node.children().filter(|c| c.kind() == K::OUTER_ATTR) {
+            let path = attr
+                .child(K::ATTR)
+                .and_then(|a| a.child(K::PATH))
+                .and_then(ast::Path::cast)
+                .map(|p| p.segments())
+                .unwrap_or_default();
+            let input = attr.child(K::ATTR).and_then(|a| a.child(K::ATTR_INPUT));
+            if path == ["track_caller"] && input.is_none() {
+                track_caller = true;
+            } else {
+                ds.push(Diagnostic::unsupported(attr.text_range(), "this attribute"));
+            }
+        }
         for t in node.child_tokens() {
             if t.kind() == K::FN_KW {
                 break;
@@ -52,8 +68,22 @@ impl Collector<'_> {
             ));
         }
         self.reporter.report(src, origin, ds);
-        let (params, bounded) =
+        let (mut params, mut bounded) =
             self.params(src, origin, node.child(K::GENERIC_PARAMS), &parent.params);
+        // A parameter of type `impl Fn(A) -> R` has a type parameter of its own, bounded by it
+        // (`expr.closure.param.1`).
+        let mut impls = Vec::new();
+        if let Some(list) = f.params() {
+            for p in list.params() {
+                if let Some(t @ ast::Type::Impl(_)) = p.ty() {
+                    let range = t.syntax().text_range();
+                    let name = t.syntax().text().to_string();
+                    impls.push((range, params.len()));
+                    bounded.push((params.len(), t.syntax().clone()));
+                    params.push(crate::items::GenericParam { name, range });
+                }
+            }
+        }
         let mut generics = Generics {
             params,
             parent: parent.params.len() as u32,
@@ -64,6 +94,7 @@ impl Collector<'_> {
             let scope = Scope {
                 params: &generics.params,
                 preds: &generics.preds,
+                impls: &impls,
                 self_ty: self_ty.clone(),
                 trait_ctx,
                 impl_assoc: impl_assoc.clone(),
@@ -76,6 +107,7 @@ impl Collector<'_> {
         let scope = Scope {
             params: &generics.params,
             preds: &generics.preds,
+            impls: &impls,
             self_ty: self_ty.clone(),
             trait_ctx,
             impl_assoc,
@@ -201,6 +233,7 @@ impl Collector<'_> {
             fails,
             fails_range,
             effects,
+            track_caller,
             vis: match (src, container) {
                 (Src::File(_), Container::Free | Container::Impl(_)) => super::vis_of(node),
                 _ => crate::items::Vis::Pub,
@@ -349,6 +382,8 @@ fn effect_clause(
 pub(crate) fn error_type(ty: &Ty, at: TextRange, others: &[Ty], ds: &mut Vec<Diagnostic>) -> bool {
     match ty {
         Ty::Error => false,
+        // A closure's errors (`<F as FnOnce<Args>>::Fails`): whatever the closure fails with.
+        Ty::Assoc(a) if a.name.as_ref() == "Fails" => !others.contains(ty),
         Ty::Adt(a, ..) => {
             if others.iter().any(|o| o.adt() == Some(*a) && o != ty) {
                 ds.push(Diagnostic::error(

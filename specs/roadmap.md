@@ -106,8 +106,8 @@ something runs from the first slice.
     stored in a struct;
   - tuples are `Copy` and `Clone` when their elements are `Copy`, and do not implement
     `PartialEq` or `PartialOrd` yet;
-  - a trap in the prelude's code is reported where the file's code called it, pending the
-    caller-locations question below;
+  - a trap in the prelude's code is reported where the file's code called it (S7a made this
+    `#[track_caller]` on the prelude's functions that can trap);
   - a temporary that needs dropping is dropped at the end of its statement
     ([`resources.md`](resources.md)); one that does not still lives to the end of its function,
     as in S2, which nothing can observe.
@@ -155,6 +155,24 @@ something runs from the first slice.
     generating attribute waits for comptime;
   - `moddil test` runs the tests of the mod being built, and the conformance runner those of every
     mod of a test.
+- **S7 is built in three parts (decided November 2026)**, each committed on its own: **S7a**
+  closures, the closure traits, captures, anonymous impls and `#[track_caller]`; **S7b** `char`,
+  `str`, `String` and their literals; **S7c** arrays, slices, `Vec` and `Map` written in Moddil as
+  core mods, `FromArrayLiteral`, `for` and `Iterator`.
+- **S7a's scope and interim rules (decided):** closures `|p| body` with inferred captures (shared,
+  `&mut` or moved); `impl Fn(…) -> R` parameters and `F: Fn(…) -> R` bounds over the prelude's
+  `FnOnce`, `FnMut` and `Fn`; a closure's kind checked against the bound; closures second-class;
+  a closure's errors propagating through its callee, whose call is marked, and its effects met
+  where it is written; anonymous impls (`impl Trait { … }` expressions) as handlers and values;
+  `#[track_caller]`. Until the features they wait for arrive:
+  - a closure cannot be stored or returned: `Box<dyn Fn…>` and `impl Fn` results come with `Box`;
+  - closures are not `Copy`, and `escape` waits for S9;
+  - an anonymous impl's methods take `&self` and cannot name `self`, and it implements its trait
+    only, not the trait's supertraits;
+  - a `match` on a captured value borrows it, so moving out of it in a pattern is not a capture
+    by move;
+  - the reference interpreter calls a closure by name (`f(x)`), not through its trait
+    (`Fn::call(&f, (x,))`).
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): the first
   step of the slice after S7.** S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`
   becomes `use mod::a`, matching `pub(mod)`. `mod::a` and the item `mod name;` differ at their
@@ -171,9 +189,9 @@ something runs from the first slice.
     Moddil source outside that conformance case.
 - **Two open questions must be settled before S7**, because S7 writes the first library code in
   Moddil:
-  - **caller locations** ([`error-handling.md`: Open questions](error-handling.md#open-questions)),
-    so that a trap in `unwrap`, `expect` or `xs[i]` reports the user's line, not one inside the
-    prelude or `Vec`. Settle it before the prelude gains a method that traps;
+  - **caller locations**, so that a trap in `unwrap`, `expect` or `xs[i]` reports the user's
+    line, not one inside the prelude or `Vec`: settled as `#[track_caller]`
+    ([`error-handling.md`: Caller locations](error-handling.md#caller-locations)), built in S7a;
   - **the allocator in scope**, which fixes the constructors of `Vec` and `Map`: settled as an
     ambient scoped handler ([`memory.md`: The allocator in scope](memory.md#the-allocator-in-scope)),
     built on S5's handlers.

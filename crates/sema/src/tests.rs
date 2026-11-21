@@ -594,3 +594,33 @@ fn modules() {
         vec![("E0103".to_string(), 0, 2)]
     );
 }
+
+#[test]
+fn closures() {
+    ok("fn apply(f: impl Fn(int) -> int, x: int) -> int { f(x) }\n\
+        fn g() -> int { let k = 2; apply(|x| x * k, 3) }");
+    ok(
+        "fn each(f: impl FnMut(int)) { f(1); }\nfn g() -> int { let mut n = 0; each(|x| n += x); n }",
+    );
+    ok("fn g() -> int { let f = |a: int, b: int| a + b; f(1, 2) }");
+    err(
+        "fn apply(f: impl Fn(int) -> int, x: int) -> int { f(x) }\n\
+         fn g() -> int { let mut n = 0; apply(|x| { n += x; x }, 1) }",
+        &[("E0801", 2)],
+    );
+    err(
+        "fn g() { let f = |x: int| x; let t = (f, 1); }",
+        &[("E0309", 1)],
+    );
+    err(
+        "fn g() -> int { let f = |x: int| x; f(1, 2) }",
+        &[("E0202", 1)],
+    );
+    // A call passing a closure that can fail is marked.
+    err(
+        "struct E;\nfn c() -> int with fail(E) { 1 }\n\
+         fn apply(f: impl Fn(int) -> int) -> int { f(1) }\n\
+         pub fn g() -> int { apply(|x| c()?) }",
+        &[("E0501", 4)],
+    );
+}

@@ -300,10 +300,12 @@ impl Machine<'_> {
             }
         }
         let caller_user = self.memory.user();
+        let caller_tracked = self.memory.tracked();
         let caller_file = self.memory.file().unwrap_or(0);
         // The callee sees only its parameters, in a frame of its own.
         let file = f.user.then_some(f.file);
-        self.memory.push_frame(types, file, f.module as usize);
+        self.memory
+            .push_frame(types, file, f.module as usize, f.tracked);
         let mut args = args.into_iter();
         if f.self_kind.is_some() {
             let v = args.next().expect("`self`");
@@ -347,14 +349,16 @@ impl Machine<'_> {
         self.memory.pop_frame();
         // A trap in the prelude's code is reported where the file's code called it.
         match result {
-            Err(Flow::Trap(mut t, false)) if f.user => {
+            Err(Flow::Trap(mut t, false)) if f.user && !f.tracked => {
                 t.file = f.file;
                 Err(Flow::Trap(t, true))
             }
+            // A trap in the prelude's code or a `#[track_caller]` function is reported where it
+            // was called from, and on up while that is in one too (`attr.track-caller.1`).
             Err(Flow::Trap(mut t, false)) if caller_user => {
                 t.range = range;
                 t.file = caller_file;
-                Err(Flow::Trap(t, true))
+                Err(Flow::Trap(t, !caller_tracked))
             }
             r => r,
         }
@@ -372,6 +376,15 @@ impl Machine<'_> {
             .unwrap_or_default();
         let segments = segments(callee.syntax());
         let local = matches!(segments.as_slice(), [one] if self.memory.slot(one).is_some());
+        // A closure (`expr.closure.call.1`).
+        if local {
+            let slot = self.memory.slot(&segments[0]).expect("a local");
+            let v = self.target(self.memory.load(&self.memory.here(slot)));
+            if let Value::Closure(c) = v {
+                let values = self.eval_all(&args)?;
+                return self.call_closure(&c, values, range);
+            }
+        }
         let item = |one: &str| self.program.lookup(self.memory.module(), one).is_some();
         // `discard` is in the prelude too (`err.discard.1`).
         if !local && matches!(segments.as_slice(), [one] if one == "discard" && !item(one)) {
@@ -386,7 +399,8 @@ impl Machine<'_> {
             };
         }
         let resolved = self.resolve(&segments);
-        let is_fn = matches!(&resolved, Some((Def::Item(k), n)) if *n == segments.len() && self.program.fns.contains_key(k));
+        let is_fn = !local
+            && matches!(&resolved, Some((Def::Item(k), n)) if *n == segments.len() && self.program.fns.contains_key(k));
         if !local
             && !is_fn
             && let Some((ty, info)) = self.ctor(&segments)
@@ -491,6 +505,25 @@ impl Machine<'_> {
             }
         };
         let value = self.memory.load(&place);
+        // An anonymous impl's method is its closure; one it leaves out, the trait's default.
+        if let Value::Anon(tr, methods) = self.target(value.clone()) {
+            let values = self.eval_all(&args)?;
+            if let Some((_, c)) = methods.iter().find(|(n, _)| *n == name) {
+                return self.call_closure(c, values, range);
+            }
+            let f = self.program.traits[&tr]
+                .methods
+                .get(&name)
+                .cloned()
+                .expect("a checked method");
+            let recv = match value {
+                Value::Ref(..) => value,
+                _ => Value::Ref(place, false),
+            };
+            let mut all = vec![recv];
+            all.extend(values);
+            return self.invoke(&f, all, HashMap::new(), range);
+        }
         // The steps: the receiver itself, then what it points to.
         let mut steps = vec![(place.clone(), value.clone(), indirect)];
         if let Value::Ref(q, _) = &value {

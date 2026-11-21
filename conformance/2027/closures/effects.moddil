@@ -1,0 +1,28 @@
+// covers: expr.closure.effects.1
+
+pub trait Time {
+    fn now(&self) -> int;
+}
+struct Clock { t: int }
+impl Time for Clock {
+    fn now(&self) -> int { self.t }
+}
+
+fn now() -> int with time: Time { time.now() }
+
+fn apply(f: impl Fn(int) -> int, x: int) -> int { f(x) }
+
+// It installs a handler of its own around the call of `f`, which `f` does not see.
+fn shadowing(f: impl Fn(int) -> int) -> int {
+    let other = Clock { t: 1000 };
+    with Time = &other { f(0) + now() }
+}
+
+test "a closure's effects are met where it is written" {
+    let c = Clock { t: 5 };
+    with Time = &c {
+        apply(|x| x + now(), 1)             // => 6
+        ;
+        shadowing(|x| x + now())            // => 1005
+    }
+}

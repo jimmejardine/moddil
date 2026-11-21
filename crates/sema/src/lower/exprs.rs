@@ -119,6 +119,8 @@ impl Lowerer<'_> {
             }
             ast::Expr::Try(_) => self.try_expr(&node),
             ast::Expr::With(_) => self.with_expr(&node),
+            ast::Expr::Closure(_) => self.closure_expr(&node),
+            ast::Expr::Impl(_) => self.anon_impl(&node),
             _ => self.unsupported(range, "this expression"),
         }
     }
@@ -695,6 +697,155 @@ impl Lowerer<'_> {
     }
 
     /// `try { … }`, maybe with `catch { arms }`.
+    /// `|p, …| body` and `|p: T, …| -> R { … }` (`expr.closure.1`): its parameters are its own
+    /// locals; a jump out of it, or a `return` that would leave its enclosing function, cannot be
+    /// written.
+    fn closure_expr(&mut self, node: &SyntaxNode) -> ExprId {
+        let params: Vec<SyntaxNode> = node
+            .child(K::CLOSURE_PARAMS)
+            .into_iter()
+            .flat_map(|ps| ps.children().collect::<Vec<_>>())
+            .filter(|c| c.kind() == K::CLOSURE_PARAM)
+            .collect();
+        let body = node.children().filter_map(ast::Expr::cast).last();
+        self.closure_of(node, &params, body)
+    }
+
+    /// A closure from its parts: the node (for its range and result type), its parameters (each
+    /// a pattern and maybe a type) and its body.
+    fn closure_of(
+        &mut self,
+        node: &SyntaxNode,
+        param_nodes: &[SyntaxNode],
+        body: Option<ast::Expr>,
+    ) -> ExprId {
+        let range = node.text_range();
+        let id = self.alloc(ExprKind::Missing, range);
+        let parent = self.closure.replace(id);
+        let mark = self.names.mark();
+        let outer = self.names.enter_closure();
+        let mut binds = Binds::default();
+        let mut params = Vec::new();
+        for p in param_nodes {
+            let pat = match p.children().find_map(ast::Pat::cast) {
+                Some(pat) => self.pat(&pat, &mut binds),
+                None => self.alloc_pat(PatKind::Missing, p.text_range()),
+            };
+            let ty = p.children().find_map(ast::Type::cast).map(|t| {
+                let mut ds = Vec::new();
+                let ty = crate::resolve::resolve_type(&t, &self.types, &mut ds);
+                self.out.diagnostics.extend(ds);
+                ty
+            });
+            params.push((pat, ty));
+        }
+        self.bring_into_scope(binds);
+        let ret = node
+            .child(K::RET_TYPE)
+            .and_then(|r| r.children().find_map(ast::Type::cast))
+            .map(|t| {
+                let mut ds = Vec::new();
+                let ty = crate::resolve::resolve_type(&t, &self.types, &mut ds);
+                self.out.diagnostics.extend(ds);
+                ty
+            });
+        let body = self.expr_or_missing(body, range);
+        self.names.exit_closure(outer);
+        self.names.restore(mark);
+        self.closure = parent;
+        self.out.body.exprs[id].kind = ExprKind::Closure {
+            params,
+            ret,
+            body,
+            parent,
+        };
+        id
+    }
+
+    /// `impl Trait { fn … }` as an expression (`expr.anon-impl.1`): a value of a type of its own
+    /// that implements the trait, each method a closure over the enclosing body's locals.
+    fn anon_impl(&mut self, node: &SyntaxNode) -> ExprId {
+        let range = node.text_range();
+        let Some(path) = node.child(K::PATH_TYPE).and_then(|t| t.child(K::PATH)) else {
+            return self.unsupported(range, "this `impl` expression");
+        };
+        let mut ds = Vec::new();
+        let found = crate::resolve::trait_path(&path, &self.types, &mut ds);
+        self.out.diagnostics.extend(ds);
+        let Some((trait_ref, _)) = found else {
+            return self.missing(range);
+        };
+        let def = &self.items.traits[trait_ref.trait_ as usize];
+        if let Some(why) = self.items.not_dyn(trait_ref.trait_, false) {
+            let name = def.name.clone();
+            self.error(Diagnostic::unsupported(
+                range,
+                &format!("an anonymous impl of `{name}`, which cannot be used as `dyn` ({why}),"),
+            ));
+            return self.missing(range);
+        }
+        let mut methods = Vec::new();
+        for f in node
+            .child(K::IMPL_BODY)
+            .into_iter()
+            .flat_map(|b| b.children().collect::<Vec<_>>())
+            .filter(|c| c.kind() == K::FN_ITEM)
+        {
+            let name = f
+                .child(K::NAME)
+                .and_then(ast::Name::cast)
+                .map(|n| n.text())
+                .unwrap_or_default();
+            let def = &self.items.traits[trait_ref.trait_ as usize];
+            let Some(&func) = def
+                .methods
+                .iter()
+                .find(|&&m| self.items.fns[m as usize].name == name)
+            else {
+                let t = def.name.clone();
+                self.report(
+                    Code::E0408,
+                    f.text_range(),
+                    format!("`{t}` has no method `{name}`"),
+                );
+                continue;
+            };
+            let list = f.child(K::PARAM_LIST);
+            let by_ref = list
+                .as_ref()
+                .and_then(|l| l.child(K::SELF_PARAM))
+                .is_some_and(|s| s.token(K::AMP).is_some() && s.token(K::MUT_KW).is_none());
+            if !by_ref {
+                self.error(Diagnostic::unsupported(
+                    f.text_range(),
+                    "a method of an anonymous impl that does not take `&self`",
+                ));
+                continue;
+            }
+            let params: Vec<SyntaxNode> = list
+                .into_iter()
+                .flat_map(|l| l.children().collect::<Vec<_>>())
+                .filter(|c| c.kind() == K::PARAM)
+                .collect();
+            let body = f.child(K::BLOCK).and_then(ast::Expr::cast);
+            let closure = self.closure_of(&f, &params, body);
+            methods.push((func, closure));
+        }
+        let def = &self.items.traits[trait_ref.trait_ as usize];
+        for &m in &def.methods {
+            let sig = &self.items.fns[m as usize];
+            if !sig.has_body && !methods.iter().any(|&(f, _)| f == m) {
+                let (t, n) = (def.name.clone(), sig.name.clone());
+                self.report(
+                    Code::E0407,
+                    range,
+                    format!("this impl of `{t}` leaves out its method `{n}`"),
+                );
+            }
+        }
+        self.alloc(ExprKind::AnonImpl { trait_ref, methods }, range)
+    }
+
     /// `with E = value, … { body }` (`eff.with.1`): each effect named once (E0606), each an
     /// effect (E0601).
     fn with_expr(&mut self, node: &SyntaxNode) -> ExprId {

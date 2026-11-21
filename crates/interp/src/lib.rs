@@ -46,6 +46,8 @@ pub enum Value {
     /// A `dyn` borrow (`&dyn Time`): where it points, whether it is `&mut`, and the type of what
     /// it points to, which chooses the methods called through it (its **vtable**).
     Dyn(Pointer, bool, Ty),
+    /// A closure: what it captures, in order. Its type says which body it runs.
+    Closure(Vec<Value>),
     /// A borrow as reported outside the program (an observed value, a result): what it pointed
     /// to, and whether it was `&mut`.
     Borrowed(Box<Value>, bool),
@@ -101,6 +103,7 @@ impl Value {
             Value::Borrowed(v, true) => format!("&mut {}", v.render(items)),
             Value::Borrowed(v, false) => format!("&{}", v.render(items)),
             Value::Ref(..) | Value::Dyn(..) => "&…".to_string(),
+            Value::Closure(_) => "{closure}".to_string(),
             Value::Empty => "<moved>".to_string(),
         }
     }
@@ -350,6 +353,11 @@ impl Machine<'_> {
                     name: def.name.as_str().into(),
                     args: args[1..n].to_vec().into(),
                 };
+                if let Ty::Anon(_) = &args[0] {
+                    let found = Some((*func, args.clone()));
+                    self.witnesses.insert(key, found.clone());
+                    return found;
+                }
                 let found = Solver::new(items, &[])
                     .impl_method(*func, &args[0], &trait_ref)
                     .map(|(f, mut parent)| {
@@ -387,6 +395,16 @@ impl Machine<'_> {
             }
             (Value::Tuple(xs), Ty::Tuple(ts)) => {
                 for (x, t) in xs.into_iter().zip(ts.iter()).rev() {
+                    self.drop_glue(x, t, true, out);
+                }
+            }
+            (Value::Closure(xs), Ty::Closure(c)) => {
+                for (x, t) in xs.into_iter().zip(c.captures.iter()).rev() {
+                    self.drop_glue(x, t, true, out);
+                }
+            }
+            (Value::Tuple(xs), Ty::Anon(a)) => {
+                for (x, (_, t)) in xs.into_iter().zip(a.methods.iter()).rev() {
                     self.drop_glue(x, t, true, out);
                 }
             }
@@ -446,6 +464,7 @@ impl Machine<'_> {
                         variant: *variant,
                         fields,
                     },
+                    AggregateKind::Closure(_) => Value::Closure(fields),
                 }
             }
             Rvalue::ErrorIs(p, a) => {
@@ -618,6 +637,60 @@ fn run<'db>(
                 };
                 let dest = m.resolve(&dest);
                 let on_error = on_error.clone().map(|(p, b)| (m.resolve(&p), b.index()));
+                // An anonymous impl's method is a closure of its own: its value is the method's,
+                // the arguments but `self` its arguments. One it leaves out is the trait's default.
+                let mut anon = None;
+                if let Callee::Trait { func, args: targs } = &callee
+                    && let Ty::Anon(a) = m.concrete(&targs[0])
+                    && let Some(k) = a.methods.iter().position(|(f, _)| f == func)
+                {
+                    let this = match values[0].clone() {
+                        Value::Ref(ptr, _) => m.load(&ptr),
+                        v => v,
+                    };
+                    let Value::Tuple(methods) = this else {
+                        unreachable!("an anonymous impl's value")
+                    };
+                    let rest = values.split_off(1);
+                    let tuple = if rest.is_empty() {
+                        Value::Unit
+                    } else {
+                        Value::Tuple(rest)
+                    };
+                    values = vec![methods[k].clone(), tuple];
+                    anon = Some(a.methods[k].1.clone());
+                }
+                let closure_ty = match (&callee, &anon) {
+                    (_, Some(t)) => Some(t.clone()),
+                    (Callee::Trait { args: targs, .. }, None) => match m.concrete(&targs[0]) {
+                        t @ Ty::Closure(_) => Some(t),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                if let Some(Ty::Closure(c)) = closure_ty {
+                    let captures = match values[0].clone() {
+                        Value::Ref(ptr, _) => m.load(&ptr),
+                        v => v,
+                    };
+                    let Value::Closure(captures) = captures else {
+                        unreachable!("a closure's value")
+                    };
+                    let env = if captures.is_empty() {
+                        Value::Unit
+                    } else {
+                        Value::Tuple(captures)
+                    };
+                    let item = Item::closure(c.owner, c.expr);
+                    let code = body(db, Owner::new(db, file, item));
+                    m.stack.push(Frame::new(
+                        code,
+                        vec![env, values[1].clone()],
+                        c.args.to_vec(),
+                        Ret::To(dest, target.index(), on_error),
+                    ));
+                    continue;
+                }
                 match m.target(&callee) {
                     Some((f, type_args)) => {
                         let code = body(db, Owner::new(db, file, Item::Fn(f)));
@@ -713,7 +786,12 @@ impl Machine<'_> {
         parts: Vec<(TextRange, Option<Value>)>,
     ) -> Trap {
         let top = &self.stack[self.top()];
-        if let Src::File(file) = top.body.src {
+        // A trap in a `#[track_caller]` function, or in the prelude's or derived code, is reported
+        // where the nearest caller that is neither called it.
+        let tracked = |f: &Frame<'_>| f.body.track_caller || !f.body.src.is_file();
+        if !tracked(top)
+            && let Src::File(file) = top.body.src
+        {
             let range = range.unwrap_or(top.body.blocks[top.block].terminator_span);
             return Trap {
                 class,
@@ -723,12 +801,7 @@ impl Machine<'_> {
                 reason: None,
             };
         }
-        let caller = self
-            .stack
-            .iter()
-            .rev()
-            .find(|f| f.body.src.is_file())
-            .unwrap_or(top);
+        let caller = self.stack.iter().rev().find(|f| !tracked(f)).unwrap_or(top);
         Trap {
             class,
             file: caller.body.src.file().unwrap_or(0),

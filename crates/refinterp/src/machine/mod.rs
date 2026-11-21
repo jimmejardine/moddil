@@ -16,6 +16,7 @@ use crate::{Eval, Flow, TestRun};
 
 mod blocks;
 mod calls;
+mod closures;
 mod effects;
 mod errors;
 mod exprs;

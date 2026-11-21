@@ -210,6 +210,9 @@ codes! {
     E0606 = "effect listed twice",
     /// Effects inferred without end (a generic function calling itself with ever larger types).
     E0607 = "effects do not settle",
+    /// A closure whose kind is weaker than a bound needs: it changes or moves what it captures,
+    /// where `Fn` or `FnMut` is needed.
+    E0801 = "closure of the wrong kind",
     /// A name another module may not name: private to its module, or `pub(mod)` and in
     /// another mod.
     E0701 = "not visible here",

@@ -36,6 +36,7 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
     let items = item_tree(db, program);
     let (src, module) = match owner.item(db) {
         Item::Fn(i) => (items.fns[i as usize].src, items.fns[i as usize].module),
+        Item::Closure(..) => unreachable!("a closure's body is its function's or test's"),
         Item::Test(t) => {
             let t = &items.tests[t as usize];
             (Src::File(t.file), t.module)
@@ -47,6 +48,7 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
         items,
         out: Lowered::default(),
         names: Names::default(),
+        closure: None,
         types: Scope {
             holes: true,
             module,
@@ -85,6 +87,7 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
                     name: p.name.clone().unwrap_or_else(|| "_".to_string()),
                     mutable: p.mutable,
                     range: p.range,
+                    closure: None,
                 });
                 cx.out.body.params.push(local);
                 if let Some(name) = &p.name {
@@ -106,6 +109,7 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
                         name: name.clone(),
                         mutable: false,
                         range: e.range,
+                        closure: None,
                     });
                     cx.out.body.effect_locals.push((local, k));
                     cx.names.bind(name.clone(), local);
@@ -113,6 +117,7 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
             }
             node.and_then(|f| f.body())
         }
+        Item::Closure(..) => None,
         Item::Test(i) => node_at(&root, K::TEST_ITEM, items.tests[i as usize].node)
             .and_then(ast::TestItem::cast)
             .and_then(|t| t.body()),
@@ -160,6 +165,8 @@ struct Lowerer<'a> {
     out: Lowered,
     /// The locals, loops and `defer` blocks in scope.
     names: Names,
+    /// The innermost closure being lowered, if any.
+    closure: Option<ExprId>,
     /// What the names in types refer to; types left out are inferred.
     types: Scope<'a>,
 }

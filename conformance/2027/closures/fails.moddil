@@ -1,0 +1,31 @@
+// covers: expr.closure.fails.1, err.question.1
+
+struct TooBig { n: int }
+
+fn check(n: int) -> int with fail(TooBig) {
+    if n > 9 { fail(TooBig { n }); }
+    n
+}
+
+fn apply(f: impl Fn(int) -> int, x: int) -> int { f(x) }
+
+fn sum(f: impl Fn(int) -> int, a: int, b: int) -> int {
+    // Calls of a closure parameter pass its errors on: they are its callers'.
+    f(a) + f(b)
+}
+
+test "a call passing a closure that can fail is marked" {
+    try { apply(|x| check(x)? * 2, 3)? }    // => Ok(6)
+    ;
+    try { apply(|x| check(x)? * 2, 30)? }   // => Err(TooBig { n: 30 })
+    ;
+    let r = try { sum(|x| check(x)?, 1, 50)? } catch { TooBig(t) => t.n };
+    r                                       // => 50
+    ;
+    // A closure that cannot fail makes the call one that cannot.
+    apply(|x| x + 1, 1)                     // => 2
+}
+
+test "a closure's error leaves the test through the marked call" {
+    apply(|x| check(x)?, 99)?;              //~ error
+}

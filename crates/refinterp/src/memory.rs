@@ -19,6 +19,8 @@ struct Frame {
     file: Option<u32>,
     /// The module whose names its code uses.
     module: usize,
+    /// Whether its function is `#[track_caller]`.
+    tracked: bool,
 }
 
 pub(crate) struct Memory {
@@ -35,6 +37,7 @@ impl Memory {
                 types: HashMap::new(),
                 file: Some(file),
                 module,
+                tracked: false,
             }],
         }
     }
@@ -51,13 +54,20 @@ impl Memory {
         types: HashMap<String, Head>,
         file: Option<u32>,
         module: usize,
+        tracked: bool,
     ) {
         self.frames.push(Frame {
             vars: Vec::new(),
             types,
             file,
             module,
+            tracked,
         });
+    }
+
+    /// Whether the innermost call's function is `#[track_caller]`.
+    pub(crate) fn tracked(&self) -> bool {
+        self.frame().tracked
     }
 
     /// Leaves the innermost call; its variables must already be dropped.
@@ -131,11 +141,36 @@ impl Memory {
 
     /// A pointer to the innermost call's variable `slot`.
     pub(crate) fn here(&self, slot: usize) -> Pointer {
+        // A closure's body sees the variables it captures as aliases of them.
+        if let Value::Alias(p) = &self.frame().vars[slot].1 {
+            return p.clone();
+        }
         Pointer {
             frame: self.frames.len() - 1,
             slot,
             path: Vec::new(),
         }
+    }
+
+    /// The innermost call's named variables, each once (the innermost of a name), as pointers.
+    pub(crate) fn visible(&self) -> Vec<(String, Pointer)> {
+        let mut out: Vec<(String, Pointer)> = Vec::new();
+        for (slot, (name, _)) in self.frame().vars.iter().enumerate() {
+            if name.is_empty() {
+                continue;
+            }
+            let p = self.here(slot);
+            match out.iter_mut().find(|(n, _)| n == name) {
+                Some(e) => e.1 = p,
+                None => out.push((name.clone(), p)),
+            }
+        }
+        out
+    }
+
+    /// The kinds of the innermost call's type parameters.
+    pub(crate) fn types(&self) -> HashMap<String, Head> {
+        self.frame().types.clone()
     }
 
     /// A nameless variable holding `v`, so that it can be borrowed or dropped.

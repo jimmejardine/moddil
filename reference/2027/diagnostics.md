@@ -31,8 +31,8 @@ and a code never changes meaning.
 | E0111 | A struct or variant in a form it is not declared with | [expr.struct.form.1](expressions/structs.md), [pat.struct.tuple.1](patterns.md) |
 | E0112 | A built-in used as a value | [expr.assert.name.1](expressions/assert.md) |
 | E0201 | Mismatched types | [type.match.1](types.md) and the rules that expect a type |
-| E0202 | Wrong number of arguments | [expr.call.1](expressions/calls.md) |
-| E0203 | Not a function | [expr.call.1](expressions/calls.md) |
+| E0202 | Wrong number of arguments | [expr.call.1](expressions/calls.md), [expr.closure.call.1](expressions/closures.md) |
+| E0203 | Not a function | [expr.call.1](expressions/calls.md), [expr.closure.call.1](expressions/closures.md) |
 | E0204 | Literal out of range | [expr.lit.int.2](expressions/literals.md) |
 | E0205 | Operator not defined for these types | [expr.arith.types.1](expressions/arithmetic.md), [expr.op.trait.1](expressions/arithmetic.md), [expr.cmp.order.1](expressions/comparison.md), [expr.cmp.trait.1](expressions/comparison.md), [generic.bound.1](generics.md) |
 | E0206 | Invalid assignment target | [expr.assign.1](expressions/assignment.md) |
@@ -52,7 +52,7 @@ and a code never changes meaning.
 | E0306 | Assignment to or move of a borrowed value | [borrow.rules.1](borrows.md), [borrow.guard.1](borrows.md) |
 | E0307 | Use of a value borrowed with `&mut` | [borrow.rules.1](borrows.md) |
 | E0308 | A borrow that outlives its value | [borrow.scope.1](borrows.md), [item.fn.ret-borrow.1](items/functions.md) |
-| E0309 | A borrow stored in a struct, enum or tuple, a borrow of a borrow, or a borrow as a type argument | [borrow.type.1](borrows.md), [generic.borrow.1](generics.md) |
+| E0309 | A borrow (or closure) stored in a struct, enum or tuple, a borrow of a borrow, or a borrow as a type argument | [borrow.type.1](borrows.md), [generic.borrow.1](generics.md), [expr.closure.capture.1](expressions/closures.md) |
 | E0310 | A returned borrow without a borrowed parameter to come from | [item.fn.ret-borrow.1](items/functions.md) |
 | E0311 | A type that cannot be `Copy` | [own.copy.derive.1](ownership.md) |
 | E0312 | A `Copy` type over 64 bytes | [own.copy.derive.1](ownership.md) |
@@ -64,8 +64,8 @@ and a code never changes meaning.
 | E0404 | Wrong number of type arguments | [generic.1](generics.md) |
 | E0405 | A type that cannot be inferred | [generic.infer.1](generics.md) |
 | E0406 | Two impls of a trait for the same type | [item.impl.coherence.1](items/impls.md) |
-| E0407 | An impl that leaves out a method or associated type of its trait | [item.impl.trait.1](items/impls.md) |
-| E0408 | An impl that defines something its trait does not declare | [item.impl.trait.1](items/impls.md) |
+| E0407 | An impl that leaves out a method or associated type of its trait | [item.impl.trait.1](items/impls.md), [expr.anon-impl.1](expressions/closures.md) |
+| E0408 | An impl that defines something its trait does not declare | [item.impl.trait.1](items/impls.md), [expr.anon-impl.1](expressions/closures.md) |
 | E0409 | An impl's method whose signature differs from the trait's | [item.impl.trait.1](items/impls.md) |
 | E0410 | A method that more than one trait gives the type | [expr.method.ambiguous.1](expressions/methods.md) |
 | E0411 | A destructor that is not for the impl's own type and all its type arguments, has bounds, or is for a `Copy` type | [own.drop.destructor.1](ownership.md), [own.copy.derive.1](ownership.md) |
@@ -88,6 +88,7 @@ and a code never changes meaning.
 | E0605 | A `dyn` type not behind a borrow, of more than one trait, or of a trait that cannot be used as `dyn` | [type.dyn.1](types.md) |
 | E0606 | An effect listed twice, or given two handlers by one `with` | [eff.1](effects.md), [eff.with.1](effects.md) |
 | E0607 | Effects inferred without end | [eff.infer.1](effects.md) |
+| E0801 | A closure whose kind is weaker than a bound needs | [expr.closure.param.1](expressions/closures.md) |
 | E0701 | A path or import naming an item its module cannot see | [mod.vis.1](modules.md), [mod.use.1](modules.md) |
 | E0702 | A `use` that names nothing, a glob import, or a declared module | [mod.use.1](modules.md), [mod.tree.1](modules.md) |
 | E0703 | An item whose signature names something less visible than itself | [mod.expose.1](modules.md) |

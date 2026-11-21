@@ -169,7 +169,10 @@ impl Builder<'_> {
         if *fails == Ty::Never {
             return None;
         }
-        let action = e.and_then(|e| self.on_error.remove(&e))?;
+        let action = match e {
+            Some(e) if self.types.passes_on(e) => OnError::Propagate,
+            e => e.and_then(|e| self.on_error.remove(&e))?,
+        };
         let err = self.cfg.new_local(fails.clone(), None);
         Some((err, action))
     }

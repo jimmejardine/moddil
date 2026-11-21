@@ -24,7 +24,20 @@ impl Checker<'_> {
         let params: Vec<Ty> = sig.params.iter().map(|p| p.ty.subst(args)).collect();
         let ret = sig.ret.subst(args);
         for p in sig.generics.preds.clone() {
-            self.require(p.ty.subst(args), p.trait_ref.subst(args), range);
+            let (ty, tr) = (p.ty.subst(args), p.trait_ref.subst(args));
+            for (i, fixed) in &p.assoc {
+                let name = self.items.traits[tr.trait_ as usize].assoc[*i as usize]
+                    .0
+                    .clone();
+                let a = Ty::Assoc(std::sync::Arc::new(crate::ty::AssocTy {
+                    self_ty: ty.clone(),
+                    trait_ref: tr.clone(),
+                    index: *i,
+                    name: name.as_str().into(),
+                }));
+                self.assoc_eqs.push((a, fixed.subst(args), range));
+            }
+            self.require(ty, tr, range);
         }
         (params, ret)
     }
@@ -232,6 +245,13 @@ impl Checker<'_> {
             if !matches!(
                 self.body.exprs[callee].kind,
                 ExprKind::AssocFn { .. } | ExprKind::Missing
+            ) && let Some(t) = self.closure_call(e, callee, args)
+            {
+                return t;
+            }
+            if !matches!(
+                self.body.exprs[callee].kind,
+                ExprKind::AssocFn { .. } | ExprKind::Missing
             ) {
                 let t = self.infer(callee);
                 let t = self.show(&t);
@@ -252,10 +272,13 @@ impl Checker<'_> {
         let func = target.func();
         self.not_drop(func, range);
         let (params, ret) = self.instantiate_sig(func, target.args(), range);
-        self.fallible_call(e, func, target.args(), range);
         self.needs_of_call(e, func, target.args(), range);
+        let targs = target.args().to_vec();
         self.out.calls.insert(e, target);
         self.args(range, func, &params, args);
+        self.settle_assoc_eqs();
+        // After the arguments, since a closure argument's errors are the call's.
+        self.fallible_call(e, func, &targs, range);
         self.norm(&ret)
     }
 
@@ -376,11 +399,13 @@ impl Checker<'_> {
             }
         }
         self.out.adjusts.insert(e, pick.adjust);
-        self.fallible_call(e, pick.func, target.args(), range);
         self.needs_of_call(e, pick.func, target.args(), range);
+        let targs = target.args().to_vec();
         self.out.calls.insert(e, target);
         let func = pick.func;
         self.args(range, func, params.get(1..).unwrap_or(&[]), args);
+        self.settle_assoc_eqs();
+        self.fallible_call(e, func, &targs, range);
         self.norm(&ret)
     }
 }

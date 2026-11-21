@@ -180,6 +180,16 @@ impl Checker<'_> {
                 let (handlers, body) = (handlers.clone(), *body);
                 self.with_expr(e, &handlers, body)
             }
+            ExprKind::AnonImpl { trait_ref, methods } => {
+                let (trait_ref, methods) = (trait_ref.clone(), methods.clone());
+                self.anon_impl(e, &trait_ref, &methods)
+            }
+            ExprKind::Closure {
+                params, ret, body, ..
+            } => {
+                let (params, ret, body) = (params.clone(), ret.clone(), *body);
+                self.closure_expr(e, &params, ret.as_ref(), body)
+            }
             &ExprKind::Assert(cond) => {
                 self.check(cond, &Ty::Bool);
                 Ty::Unit

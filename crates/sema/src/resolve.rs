@@ -63,6 +63,9 @@ pub(crate) struct Scope<'a> {
     pub params: &'a [GenericParam],
     /// The bounds in scope, for `T::Name`.
     pub preds: &'a [Pred],
+    /// The `impl Trait` types written in a function's parameters, and the type parameter each
+    /// stands for.
+    pub impls: &'a [(TextRange, usize)],
     /// What `Self` is.
     pub self_ty: Option<Ty>,
     /// Inside a trait: the trait, so `Self::Name` is its associated type.
@@ -83,6 +86,7 @@ impl<'a> Scope<'a> {
             tree,
             params: &[],
             preds: &[],
+            impls: &[],
             self_ty: None,
             trait_ctx: None,
             impl_assoc: None,
@@ -156,6 +160,16 @@ pub(crate) fn resolve_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnos
             None => Ty::Error,
         },
         ast::Type::Never(_) => Ty::Never,
+        ast::Type::Impl(_) => match scope.impls.iter().find(|(r, _)| *r == range) {
+            Some(&(_, i)) => Ty::Param(i as u32, scope.params[i].name.as_str().into()),
+            None => {
+                diags.push(Diagnostic::unsupported(
+                    range,
+                    "`impl Trait` other than as a parameter's type",
+                ));
+                Ty::Error
+            }
+        },
         ast::Type::Dyn(_) => {
             diags.push(Diagnostic::error(
                 Code::E0605,
@@ -638,6 +652,80 @@ pub(crate) fn preds_of(
     out
 }
 
+/// `Fn(A, B) -> R` (or `FnMut`, `FnOnce`) as a bound on `ty` (`expr.closure.param.1`): the trait
+/// for the parameters' tuple, and `FnOnce` with its `Output` fixed (`()` if not written).
+fn closure_bound(
+    path: &SyntaxNode,
+    sugar: &SyntaxNode,
+    ty: &Ty,
+    range: TextRange,
+    scope: &Scope,
+    diags: &mut Vec<Diagnostic>,
+) -> Vec<Pred> {
+    let tree = scope.tree;
+    let segs: Vec<String> = path_segments(path)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|s| s.name)
+        .collect();
+    let names: Vec<&str> = segs.iter().map(String::as_str).collect();
+    let found = match tree.path(scope.module, &names, scope.prelude_first) {
+        Ok((Def::Trait(t), n)) if n == names.len() => Some(t),
+        _ => None,
+    };
+    let closure_trait = |name| tree.lang(name);
+    let Some(t) = found.filter(|t| {
+        [
+            closure_trait("Fn"),
+            closure_trait("FnMut"),
+            closure_trait("FnOnce"),
+        ]
+        .contains(&Some(*t))
+    }) else {
+        diags.push(Diagnostic::error(
+            Code::E0401,
+            range,
+            "only the closure traits `Fn`, `FnMut` and `FnOnce` are written with `(…) -> …`",
+        ));
+        return Vec::new();
+    };
+    let args: Vec<Ty> = sugar
+        .child(K::TYPE_LIST)
+        .map(|l| {
+            l.children()
+                .filter_map(ast::Type::cast)
+                .map(|t| resolve_type(&t, scope, diags))
+                .collect()
+        })
+        .unwrap_or_default();
+    let output = sugar
+        .children()
+        .filter(|c| c.kind() != K::TYPE_LIST)
+        .find_map(ast::Type::cast)
+        .map_or(Ty::Unit, |t| resolve_type(&t, scope, diags));
+    let args: Arc<[Ty]> = vec![Ty::tuple(args)].into();
+    let trait_ref = |t: u32| TraitRef {
+        trait_: t,
+        name: tree.traits[t as usize].name.as_str().into(),
+        args: args.clone(),
+    };
+    let once = closure_trait("FnOnce").expect("the prelude's `FnOnce`");
+    vec![
+        Pred {
+            ty: ty.clone(),
+            trait_ref: trait_ref(t),
+            assoc: Vec::new(),
+            range,
+        },
+        Pred {
+            ty: ty.clone(),
+            trait_ref: trait_ref(once),
+            assoc: vec![(0, output)],
+            range,
+        },
+    ]
+}
+
 /// The bounds `node` (a `TYPE_PARAM`, `WHERE_PRED` or trait item) puts on `ty`: its `BOUND`
 /// children.
 pub(crate) fn bounds(
@@ -648,16 +736,20 @@ pub(crate) fn bounds(
 ) -> Vec<Pred> {
     let mut out = Vec::new();
     for b in node.children().filter(|c| c.kind() == K::BOUND) {
-        if b.child(K::FN_SUGAR).is_some() || b.token(K::L_PAREN).is_some() {
-            diags.push(Diagnostic::unsupported(
-                b.text_range(),
-                "a function-type bound",
-            ));
-            continue;
-        }
         let Some(path) = b.child(K::PATH) else {
             continue;
         };
+        if let Some(sugar) = b.child(K::FN_SUGAR) {
+            out.extend(closure_bound(
+                &path,
+                &sugar,
+                ty,
+                b.text_range(),
+                scope,
+                diags,
+            ));
+            continue;
+        }
         if let Some((trait_ref, assoc)) = trait_path(&path, scope, diags) {
             out.push(Pred {
                 ty: ty.clone(),

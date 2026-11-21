@@ -1,0 +1,71 @@
+// covers: expr.closure.1, expr.closure.param.1, expr.closure.call.1, expr.closure.capture.1, prelude.fn.1
+
+fn apply(f: impl Fn(int) -> int, x: int) -> int { f(x) }
+
+fn each(f: impl FnMut(int), a: int, b: int) {
+    f(a);
+    f(b);
+}
+
+fn once<F: FnOnce() -> int>(f: F) -> int { f() }
+
+fn compose(f: impl Fn(int) -> int, g: impl Fn(int) -> int, x: int) -> int { g(f(x)) }
+
+test "a closure's parameters come from what it is passed for" {
+    apply(|x| x + 1, 2)                     // => 3
+    ;
+    compose(|x| x * 2, |y| y - 1, 5)        // => 9
+}
+
+test "a closure reads and changes what it captures" {
+    let k = 10;
+    apply(|x| x * k, 3)                     // => 30
+    ;
+    let mut total = 0;
+    each(|n| total += n, 4, 5);
+    total                                   // => 9
+}
+
+test "a closure in a local" {
+    let add = |a: int, b: int| -> int { a + b };
+    add(1, 2)                               // => 3
+    ;
+    let mut count = 0;
+    let mut bump = || count += 1;
+    bump();
+    bump();
+    count                                   // => 2
+}
+
+struct Token { n: int }
+
+test "a closure that moves what it captures is `FnOnce`" {
+    let t = Token { n: 7 };
+    once(|| { let Token { n } = t; n })     // => 7
+    ;
+    once(|| 3)                              // => 3
+}
+
+test "return leaves the closure, not the function" {
+    let f = |x: int| -> int {
+        if x > 5 { return 0; }
+        x
+    };
+    f(9) + f(2)                             // => 2
+}
+
+test "closures inside closures" {
+    let base = 100;
+    let outer = |x: int| {
+        let inner = |y: int| y + base;
+        inner(x) * 2
+    };
+    outer(1)                                // => 202
+}
+
+test "`?` on an `Option` in a closure that returns one" {
+    let first = |o: Option<int>| -> Option<int> { Some(o? + 1) };
+    first(Some(1))                          // => Some(2)
+    ;
+    first(None)                             // => None
+}

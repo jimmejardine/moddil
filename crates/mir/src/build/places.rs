@@ -21,6 +21,8 @@ impl Builder<'_> {
             | ExprKind::Fn { .. }
             | ExprKind::AssocFn { .. }
             | ExprKind::TraitFn { .. }
+            | ExprKind::Closure { .. }
+            | ExprKind::AnonImpl { .. }
             | ExprKind::Continue { .. } => false,
             ExprKind::Assert(c)
             | ExprKind::Deref(c)
@@ -87,7 +89,7 @@ impl Builder<'_> {
             return None;
         }
         match self.hir.exprs[e].kind {
-            ExprKind::Local(l) => Some(Place::local(self.local(l))),
+            ExprKind::Local(l) => Some(self.local_place(l)),
             ExprKind::Field { base, .. } => {
                 let i = self.types.field_index(e)?;
                 let p = self.place_of(base)?;

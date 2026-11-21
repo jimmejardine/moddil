@@ -17,6 +17,7 @@ use crate::{Body, Const, Local, LocalDecl, Operand, Place, Rvalue, Statement, Te
 
 mod arith;
 mod cfg;
+mod closures;
 mod errors;
 mod exprs;
 mod patterns;
@@ -34,6 +35,9 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
     if moddil_sema::has_errors(db, file) {
         return None;
     }
+    if let Item::Closure(_, _, expr) = owner.item(db) {
+        return Some(closure_mir(db, owner, expr));
+    }
     let items = moddil_sema::item_tree(db, file);
     let hir = &moddil_sema::body(db, owner).body;
     let types = moddil_sema::infer(db, owner);
@@ -41,7 +45,7 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
     // The function's effects, which its callers pass as hidden parameters after the others.
     let needs: Vec<Ty> = match owner.item(db) {
         Item::Fn(i) => fx.fns[i as usize].needs.clone(),
-        Item::Test(_) => Vec::new(),
+        _ => Vec::new(),
     };
     let (name, ret, src, preds) = match owner.item(db) {
         Item::Fn(i) => {
@@ -53,12 +57,13 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
                 sig.generics.preds.as_slice(),
             )
         }
-        Item::Test(i) => (
+        Item::Test(i) | Item::Closure(i, true, _) => (
             format!("{:?}", items.tests[i as usize].name),
             Ty::Unit,
             Src::File(items.tests[i as usize].file),
             &[][..],
         ),
+        Item::Closure(..) => unreachable!("built by `closure_mir`"),
     };
     // In a destructor, `self` is not dropped again at the end: only its fields are.
     let glue_only = match owner.item(db) {
@@ -70,7 +75,7 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
             }
             _ => false,
         },
-        Item::Test(_) => false,
+        _ => false,
     };
     let mut b = Builder {
         hir,
@@ -81,6 +86,10 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
         cfg: Cfg::new(Body {
             name,
             src,
+            track_caller: match owner.item(db) {
+                Item::Fn(i) => items.fns[i as usize].track_caller,
+                _ => false,
+            },
             locals: vec![LocalDecl {
                 ty: ret,
                 name: None,
@@ -96,28 +105,29 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
         on_error: HashMap::new(),
         binds: None,
         fx,
-        evidence: Vec::new(),
+        evidence: HashMap::new(),
         installed: HashMap::new(),
         uncoerced: None,
+        captured: HashMap::new(),
     };
     for &p in &hir.params {
         b.local(p);
     }
     // The handlers of the function's effects, each named as its signature names it, if it does.
-    for t in &needs {
+    for (n, t) in needs.iter().enumerate() {
         let named = match owner.item(db) {
             Item::Fn(i) => hir
                 .effect_locals
                 .iter()
                 .find(|&&(_, k)| items.fns[i as usize].effects.get(k).map(|e| &e.ty) == Some(t)),
-            Item::Test(_) => None,
+            _ => None,
         };
         let name = named.map(|&(l, _)| hir.locals[l].name.clone());
         let local = b.cfg.new_local(Ty::reference(false, t.clone()), name);
         if let Some(&(l, _)) = named {
             b.locals[idx(l)] = Some(local);
         }
-        b.evidence.push(local);
+        b.evidence.insert(n, Place::local(local));
     }
     for &(local, pat) in &hir.param_pats {
         let place = Place::local(b.local(local));
@@ -138,6 +148,100 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
     b.leave_scopes(0);
     b.cfg.terminate(Terminator::Return);
     Some(b.cfg.finish())
+}
+
+/// The MIR of the closure at expression `expr` of `owner`'s function's or test's body: its
+/// captures and its arguments are its two parameters, both tuples.
+fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
+    let program = owner.program(db);
+    let base = Owner::new(db, program, owner.item(db).owner());
+    let items = moddil_sema::item_tree(db, program);
+    let hir = &moddil_sema::body(db, base).body;
+    let types = moddil_sema::infer(db, base);
+    let fx = moddil_sema::effects(db, program);
+    let e = ExprId::from_raw(la_arena::RawIdx::from_u32(expr));
+    let Ty::Closure(c) = types.expr(e) else {
+        unreachable!("a closure's type")
+    };
+    let hir::ExprKind::Closure { params, body, .. } = &hir.exprs[e].kind else {
+        unreachable!("a closure expression")
+    };
+    let (src, preds, name) = match base.item(db) {
+        Item::Fn(i) => {
+            let sig = &items.fns[i as usize];
+            (sig.src, sig.generics.preds.as_slice(), fn_name(items, i))
+        }
+        Item::Test(i) => (
+            Src::File(items.tests[i as usize].file),
+            &[][..],
+            format!("{:?}", items.tests[i as usize].name),
+        ),
+        Item::Closure(..) => unreachable!("an owner is a function or test"),
+    };
+    let mut b = Builder {
+        hir,
+        types,
+        items,
+        solver: Solver::new(items, preds),
+        glue_only: None,
+        cfg: Cfg::new(Body {
+            name: format!("{name}::{{closure}}"),
+            src,
+            track_caller: false,
+            locals: vec![LocalDecl {
+                ty: c.ret.clone(),
+                name: None,
+            }],
+            arg_count: 2,
+            blocks: Vec::new(),
+        }),
+        scopes: Scopes::new(),
+        locals: vec![None; hir.locals.len()],
+        recording: HashMap::new(),
+        compare_expr: ExprId::from_raw(la_arena::RawIdx::from_u32(0)),
+        targets: vec![Target::Out],
+        on_error: HashMap::new(),
+        binds: None,
+        fx,
+        evidence: HashMap::new(),
+        installed: HashMap::new(),
+        uncoerced: None,
+        captured: HashMap::new(),
+    };
+    let env = b.cfg.new_local(
+        Ty::tuple(c.captures.to_vec()),
+        Some("{captures}".to_string()),
+    );
+    let args = b.cfg.new_local(
+        Ty::tuple(c.params.to_vec()),
+        Some("{arguments}".to_string()),
+    );
+    for (k, cap) in types.captures(e).iter().enumerate() {
+        let field = Place::local(env).field(k as u32);
+        match *cap {
+            moddil_sema::Capture::Local(l, moddil_sema::CaptureMode::Move) => {
+                b.captured.insert(l, field);
+            }
+            moddil_sema::Capture::Local(l, _) => {
+                b.captured.insert(l, field.deref());
+            }
+            moddil_sema::Capture::Evidence(moddil_sema::Evidence::Param(i)) => {
+                b.evidence.insert(i, field);
+            }
+            moddil_sema::Capture::Evidence(moddil_sema::Evidence::Install(w, k)) => {
+                b.installed.insert((w, k), field);
+            }
+        }
+    }
+    for (i, (pat, _)) in params.iter().enumerate() {
+        let place = Place::local(args).field(i as u32);
+        let fail = b.cfg.new_block();
+        b.match_pat(*pat, &place, fail);
+    }
+    b.eval_into(Local::RETURN, *body);
+    b.leave_scopes(0);
+    b.cfg.terminate(Terminator::Return);
+    b.cfg.finish()
 }
 
 fn idx<T>(id: la_arena::Idx<T>) -> usize {
@@ -170,11 +274,13 @@ struct Builder<'a> {
     binds: Option<Vec<patterns::Binding>>,
     /// Every function's effects and errors.
     fx: &'a moddil_sema::Effects,
-    /// The hidden parameters holding the function's own handlers, in the order of its needs.
-    evidence: Vec<Local>,
-    /// The locals holding the handlers each `with` installs: by the `with` and the handler's
-    /// index.
-    installed: HashMap<(ExprId, usize), Local>,
+    /// Where the function's own handlers are, by their index in its needs: its hidden
+    /// parameters, or, in a closure's body, its captures.
+    evidence: HashMap<usize, Place>,
+    /// Where the handlers each `with` installs are: by the `with` and the handler's index.
+    installed: HashMap<(ExprId, usize), Place>,
+    /// In a closure's body: where each local of the enclosing body it captures is.
+    captured: HashMap<hir::LocalId, Place>,
     /// The expression being evaluated before its conversion to a `dyn` borrow, which is not
     /// converted again.
     uncoerced: Option<ExprId>,

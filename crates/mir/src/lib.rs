@@ -68,6 +68,8 @@ pub struct Body {
     /// Which source its code is in: a trap in the prelude's or derived code is reported where
     /// the file's code called it.
     pub src: Src,
+    /// Whether it is `#[track_caller]`: a trap in it is reported where its caller called it.
+    pub track_caller: bool,
     /// Every local; the first is the return value, the next `arg_count` the arguments.
     pub locals: Vec<LocalDecl>,
     /// How many arguments there are.
@@ -275,6 +277,8 @@ pub enum AggregateKind {
         /// How it is written (`Point`, `Shape::Circle`), for printing.
         path: String,
     },
+    /// A closure, of this type, from its captures in order.
+    Closure(Ty),
 }
 
 /// A place's value or a constant.

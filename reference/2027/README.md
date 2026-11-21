@@ -5,14 +5,15 @@ done only when it has paragraphs here, conformance tests in
 [`conformance/2027/`](../../conformance/README.md) and an implementation
 ([`specs/definition.md`: Written with the compiler](../../specs/definition.md#written-with-the-compiler)).
 
-**Status:** slices S0 to S6: functions, tests, `let`, `int`, `bool` and `()`, arithmetic with
+**Status:** slices S0 to S7a: functions, tests, `let`, `int`, `bool` and `()`, arithmetic with
 traps, comparisons, logic, `if`, blocks and calls (S0); tuples, structs, enums, patterns, `match`,
 `if let`, `let … else`, loops and `assert` (S1); moves, `Copy`, borrows and `defer` (S2); generics,
 traits, impls, methods, operators through traits, derives, destructors and the prelude (S3);
 errors: `fail`, `?`, `?!`, `try` and `catch`, `errdefer` and `Result` (S4); effects: traits and
 context data after `with`, handlers installed with `with`, inference inside a mod, and `dyn`
 borrows (S5); modules and mods: the module tree, visibility, `use`, the manifest and path
-dependencies (S6).
+dependencies (S6); closures, the closure traits, captures and anonymous impls, and
+`#[track_caller]` (S7a).
 
 ## Paragraphs
 
@@ -42,7 +43,8 @@ Each page lists its diagnostics by code; the codes are in [Diagnostics](diagnost
   [Comparisons](expressions/comparison.md), [Logic](expressions/logic.md),
   [Blocks](expressions/blocks.md), [`if`](expressions/if.md), [Calls and `return`](expressions/calls.md),
   [Assignment](expressions/assignment.md), [Tuples, structs and variants](expressions/structs.md),
-  [Fields](expressions/fields.md), [Methods](expressions/methods.md), [`match`](expressions/match.md),
+  [Fields](expressions/fields.md), [Methods](expressions/methods.md),
+  [Closures and anonymous impls](expressions/closures.md), [`match`](expressions/match.md),
   [Loops](expressions/loops.md), [`assert`](expressions/assert.md)
 - [Traps](traps.md)
 - [Diagnostics](diagnostics.md)

@@ -27,6 +27,23 @@ impl Obligations {
         self.0.push(o);
     }
 
+    /// The trait arguments of the first bound on `ty` (a variable) of a trait `pick` picks: what
+    /// a closure passed for a type parameter is expected to take.
+    pub(super) fn closure_args(
+        &self,
+        solver: &mut Solver,
+        ty: &Ty,
+        pick: impl Fn(u32) -> bool,
+    ) -> Option<Ty> {
+        if !matches!(ty, Ty::Infer(_)) {
+            return None;
+        }
+        self.0
+            .iter()
+            .find(|o| pick(o.trait_ref.trait_) && solver.norm(&o.ty) == *ty)
+            .and_then(|o| o.trait_ref.args.first().cloned())
+    }
+
     /// Solves what can be solved, until nothing changes: the errors for bounds that do not
     /// hold, and the bounds still ambiguous.
     pub(super) fn solve(self, solver: &mut Solver) -> (Vec<Diagnostic>, Vec<Obligation>) {
@@ -207,12 +224,33 @@ impl Inference {
 }
 
 /// Borrows are second-class: a type argument (which a struct could store) cannot be one. `Self`
-/// may be, for the built-in `Clone` of a shared borrow.
-pub(super) fn borrowed_type_args(body: &Body, out: &Inference) -> Vec<Diagnostic> {
+/// may be, for the built-in `Clone` of a shared borrow, and so may a closure passed for a closure
+/// parameter (`F: Fn(…)`), which is second-class too.
+pub(super) fn borrowed_type_args(
+    items: &ItemTree,
+    body: &Body,
+    out: &Inference,
+) -> Vec<Diagnostic> {
     let mut found = Vec::new();
+    let once = items.lang("FnOnce");
     for (&e, c) in &out.calls {
-        let skip = usize::from(matches!(c, Callee::Trait { .. }));
-        if c.args().iter().skip(skip).any(Ty::has_ref_inside) {
+        let closure_param = |i: usize| match c {
+            Callee::Trait { func, .. } => {
+                // A closure trait's own `Self` and `Args`.
+                items.trait_of(*func).is_some_and(|t| {
+                    [items.lang("Fn"), items.lang("FnMut"), once].contains(&Some(t))
+                }) || i == 0
+            }
+            Callee::Fn { func, .. } => items.fns[*func as usize].generics.preds.iter().any(|p| {
+                Some(p.trait_ref.trait_) == once
+                    && matches!(&p.ty, Ty::Param(k, _) if *k as usize == i)
+            }),
+        };
+        if c.args()
+            .iter()
+            .enumerate()
+            .any(|(i, t)| !closure_param(i) && t.has_ref_inside())
+        {
             found.push(body.exprs[e].range);
         }
     }

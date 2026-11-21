@@ -71,6 +71,8 @@ pub(crate) struct FnDef {
     pub(crate) self_kind: Option<SelfKind>,
     /// Whether it is a destructor, whose `self` is not dropped again.
     pub(crate) destructor: bool,
+    /// Whether it is `#[track_caller]` (`attr.track-caller.1`).
+    pub(crate) tracked: bool,
 }
 
 pub(crate) struct ImplInfo {
@@ -501,6 +503,9 @@ impl Program {
             }
             Value::Ref(..) => unreachable!("a borrow is shown by the machine"),
             Value::Moved => "<moved>".to_string(),
+            Value::Closure(_) => "{closure}".to_string(),
+            Value::Anon(..) => "{impl}".to_string(),
+            Value::Alias(_) => unreachable!("an alias is followed"),
             Value::Adt {
                 ty,
                 variant,
@@ -559,8 +564,14 @@ pub(crate) fn fn_def(f: &ast::FnItem, user: bool, destructor: bool, site: (u32, 
                 (false, _) => SelfKind::Value,
             },
         );
+    let tracked = f
+        .syntax()
+        .children()
+        .filter(|c| c.kind() == K::OUTER_ATTR)
+        .any(|a| a.text().to_string().replace(' ', "") == "#[track_caller]");
     FnDef {
         node: f.clone(),
+        tracked,
         user,
         file: site.0,
         module: site.1,

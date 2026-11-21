@@ -210,3 +210,14 @@ fn modules_and_mods() {
         vec![(0, "5")]
     );
 }
+
+#[test]
+fn closures() {
+    let text = "fn each(f: impl FnMut(int), a: int, b: int) { f(a); f(b); }\n\
+                test \"t\" {\n\
+                    let mut n = 0;\n\
+                    each(|x| n += x, 1, 2);\n\
+                    n // => 3\n\
+                }\n";
+    assert_eq!(runs(text), vec![(vec!["3".to_string()], None)]);
+}

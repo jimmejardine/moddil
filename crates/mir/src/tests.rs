@@ -13,7 +13,19 @@ fn dump(text: &str) -> String {
         .into_iter()
         .filter(|o| match o.item(&db) {
             Item::Fn(i) => items.fns[i as usize].src == Src::File(0),
-            Item::Test(_) => true,
+            _ => true,
+        })
+        .flat_map(|o| {
+            // Then its closures' bodies.
+            let hir = &moddil_sema::body(&db, o).body;
+            let mut owners = vec![o];
+            for (e, x) in hir.exprs.iter() {
+                if let moddil_sema::hir::ExprKind::Closure { .. } = x.kind {
+                    let item = Item::closure(o.item(&db), e.into_raw().into_u32());
+                    owners.push(Owner::new(&db, file, item));
+                }
+            }
+            owners
         })
         .map(|o| format!("{:?}", mir(&db, o).as_ref().expect("no errors")))
         .collect::<Vec<_>>()
@@ -270,5 +282,13 @@ fn effects() {
          fn passes() -> int { uses(1) }\n\
          fn installs(c: Clock) -> int { with Time = c { passes() } }\n\
          fn coerces(c: &Clock) -> int { let t: &dyn Time = c; t.now() }"
+    ));
+}
+
+#[test]
+fn closures() {
+    insta::assert_snapshot!(dump(
+        "fn each(f: impl FnMut(int)) { f(1); }\n\
+         fn g() -> int { let mut n = 0; each(|x| n += x); n }"
     ));
 }

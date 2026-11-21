@@ -12,12 +12,12 @@
 //! - [`effects`]: every function's effects and errors, inferred for private functions;
 //! - [`diagnostics`]: everything wrong with a file.
 //!
-//! Slices S0 to S6 cover `fn`, `test`, `let`, `int`, `bool`, `()`, arithmetic, comparisons,
+//! Slices S0 to S7a cover `fn`, `test`, `let`, `int`, `bool`, `()`, arithmetic, comparisons,
 //! logic, `if`, blocks, calls and `return`; tuples, structs, enums, patterns, `match` (with
 //! exhaustiveness checking), `if let`, `let … else`, loops and `assert`; borrow types, `*`,
 //! binding modes, `Copy` and `defer`; generics, traits, impls, methods, operators through traits,
 //! derives, destructors and the prelude; errors, `fail`, `?`, `try` and `catch`; effects, `with`
-//! and `dyn` borrows; modules, mods, `use` and visibility. Moves and
+//! and `dyn` borrows; modules, mods, `use` and visibility; closures and anonymous impls. Moves and
 //! borrows are checked on MIR (`moddil-mir`).
 //! Valid Moddil beyond that is reported as "not supported yet" (`I0001`). See this crate's
 //! `README.md`.
@@ -38,7 +38,8 @@ mod ty;
 mod validate;
 
 pub use check::{
-    Callee, Effects, Evidence, FnEffects, Inference, Propagated, effects, infer, tuple_positions,
+    Callee, Capture, CaptureMode, Effects, Evidence, FnEffects, Inference, Propagated, effects,
+    infer, tuple_positions,
 };
 pub use collect::{item_tree, parse};
 pub use db::{Database, Db, FileId, Item, ModInfo, Owner, Program, ProgramFile, SourceFile};
@@ -51,7 +52,7 @@ pub use items::{
 pub use lower::{Lowered, body};
 pub use modules::{Member, PathError};
 pub use traits::{Adjust, Answer, Pick, Solver, Source, Table, elaborate};
-pub use ty::{AssocTy, TraitRef, Ty};
+pub use ty::{AnonTy, AssocTy, ClosureKind, ClosureTy, TraitRef, Ty};
 
 use moddil_syntax::TextRange;
 
@@ -95,7 +96,8 @@ pub fn in_file<'a>(
     item: Item,
     ds: impl IntoIterator<Item = &'a Diagnostic>,
 ) -> Vec<Diagnostic> {
-    let (src, origin, adt) = match item {
+    let (src, origin, adt) = match item.owner() {
+        Item::Closure(..) => unreachable!("an owner is a function or test"),
         Item::Fn(i) => {
             let sig = &items.fns[i as usize];
             let adt = match sig.container {

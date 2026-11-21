@@ -22,6 +22,7 @@ use crate::{Code, Db, Diagnostic, Item, ItemTree, Owner, Ty};
 
 mod blocks;
 mod calls;
+mod closures;
 mod errors;
 mod exprs;
 mod finish;
@@ -29,6 +30,7 @@ mod needs;
 mod operators;
 mod patterns;
 
+pub use closures::{Capture, CaptureMode};
 use errors::FailCx;
 pub use errors::Propagated;
 use finish::{Deferred, DeferredChecks, Obligation, Obligations};
@@ -110,6 +112,8 @@ pub struct Inference {
     escaping_needs: Vec<Ty>,
     /// For a function whose errors are inferred: the errors that leave its body.
     escaping_errors: Vec<Ty>,
+    captures: HashMap<ExprId, Vec<Capture>>,
+    passes_on: HashSet<ExprId>,
     /// Type errors, and exhaustiveness errors and warnings.
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -184,6 +188,17 @@ impl Inference {
         self.dyn_coercions.get(&e)
     }
 
+    /// Whether call `e`, of a closure parameter and not marked, passes its errors on as `?`
+    /// would.
+    pub fn passes_on(&self, e: ExprId) -> bool {
+        self.passes_on.contains(&e)
+    }
+
+    /// For a closure expression: what it captures, in the order of its type's captures.
+    pub fn captures(&self, e: ExprId) -> &[Capture] {
+        self.captures.get(&e).map_or(&[], Vec::as_slice)
+    }
+
     /// How a method call's receiver is adjusted to the method's `self`.
     pub fn adjust(&self, e: ExprId) -> Adjust {
         self.adjusts.get(&e).copied().unwrap_or(Adjust {
@@ -219,15 +234,16 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
                 sig.generics.preds.as_slice(),
             )
         }
-        Item::Test(_) => (Ty::Unit, None, true, &[][..]),
+        Item::Test(_) | Item::Closure(..) => (Ty::Unit, None, true, &[][..]),
     };
     // Where the body's errors go (`err.set.1`, `err.entry.1`).
     let fail_cx = match owner.item(db) {
-        Item::Test(_) => FailCx::Test,
+        Item::Test(_) | Item::Closure(..) => FailCx::Test,
         Item::Fn(i) if items.trait_of(i) == items.lang("Drop") && items.lang("Drop").is_some() => {
             FailCx::Never("a destructor")
         }
         Item::Fn(i) => FailCx::Fn {
+            // With its closure parameters' errors (`expr.closure.fails.1`).
             allowed: fx.fns[i as usize].fails.members(),
             option: matches!(&ret, Ty::Adt(a, ..) if Some(*a) == items.lang("Option")),
             infer: inferred(items, i),
@@ -235,7 +251,7 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
     };
     // How its needs are met (`eff.need.1`).
     let (mode, own) = match owner.item(db) {
-        Item::Test(_) => (Mode::Entry("a test"), Vec::new()),
+        Item::Test(_) | Item::Closure(..) => (Mode::Entry("a test"), Vec::new()),
         Item::Fn(i) => {
             let mode = if inferred(items, i) {
                 Mode::Inferred
@@ -266,6 +282,18 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         own,
         installs: Vec::new(),
         needs: Vec::new(),
+        owner: owner.item(db),
+        owner_args: match owner.item(db) {
+            Item::Fn(i) => items.fns[i as usize].generics.identity(),
+            Item::Test(_) | Item::Closure(..) => Vec::new(),
+        },
+        closures: Vec::new(),
+        closure_calls: Vec::new(),
+        kind_reqs: Vec::new(),
+        assoc_eqs: Vec::new(),
+        hint: None,
+        sig_hint: None,
+        anon_fails: Vec::new(),
         out: Inference {
             expr_types: vec![Ty::Error; body.exprs.len()],
             pat_types: vec![Ty::Error; body.pats.len()],
@@ -346,6 +374,25 @@ struct Checker<'a> {
     installs: Vec<(ExprId, Vec<Ty>)>,
     /// The needs of the calls checked so far.
     needs: Vec<Need>,
+    /// The function or test being checked.
+    owner: Item,
+    /// Its type parameters, as types.
+    owner_args: Vec<Ty>,
+    /// The closures checked so far, innermost first.
+    closures: Vec<ExprId>,
+    /// The calls of closures: the call, its callee, the callee's type and its arguments' tuple.
+    closure_calls: Vec<(ExprId, ExprId, Ty, Ty)>,
+    /// The closure traits bounds need (`F: Fn(…)`), checked once closures' kinds are known.
+    kind_reqs: Vec<(Ty, u32, TextRange)>,
+    /// Bounds' fixed associated types (`Output = R`) still to settle: the associated type, the
+    /// type it must be, and where.
+    assoc_eqs: Vec<(Ty, Ty, TextRange)>,
+    /// For a closure about to be checked: the type expected of it.
+    hint: Option<closures::Hint>,
+    /// For an anonymous impl's method about to be checked: its parameters' and result types.
+    sig_hint: Option<(Vec<Ty>, Option<Ty>)>,
+    /// Anonymous impls' methods, and the errors their trait's methods allow.
+    anon_fails: Vec<(ExprId, Ty)>,
     out: Inference,
 }
 
@@ -414,6 +461,9 @@ impl Checker<'_> {
     }
 
     fn check(&mut self, e: ExprId, expected: &Ty) -> Ty {
+        if matches!(self.body.exprs[e].kind, ExprKind::Closure { .. }) {
+            self.hint = Some(closures::Hint(expected.clone()));
+        }
         let t = self.infer(e);
         if !self.unsize(e, &t, expected) && !self.coerce(&t, expected) {
             self.mismatch(e, expected, &t);
@@ -438,6 +488,12 @@ impl Checker<'_> {
     }
 
     fn require(&mut self, ty: Ty, trait_ref: TraitRef, range: TextRange) {
+        if matches!(
+            self.closure_trait(trait_ref.trait_),
+            Some(crate::ty::ClosureKind::Fn | crate::ty::ClosureKind::FnMut)
+        ) {
+            self.kind_reqs.push((ty.clone(), trait_ref.trait_, range));
+        }
         self.obligations.push(Obligation {
             ty,
             trait_ref,
@@ -448,18 +504,20 @@ impl Checker<'_> {
     /// Checks the bounds recorded, resolves every type (reporting those that could not be
     /// inferred), and runs the checks that need resolved types.
     fn finish(&mut self) {
+        self.settle_assoc_eqs();
         let (errors, pending) = std::mem::take(&mut self.obligations).solve(&mut self.solver);
         self.out.diagnostics.extend(errors);
         if let Some(d) = finish::uninferred(self.body, &self.out, &mut self.solver, &pending) {
             self.out.diagnostics.push(d);
         }
         self.out.resolve_all(&mut self.solver);
-        let ds = finish::borrowed_type_args(self.body, &self.out);
+        self.meet_needs();
+        self.finish_closures();
+        let ds = finish::borrowed_type_args(self.items, self.body, &self.out);
         self.out.diagnostics.extend(ds);
         let deferred = std::mem::take(&mut self.deferred);
         let ds = deferred.run(self.items, self.body, &self.out, &mut self.solver);
         self.out.diagnostics.extend(ds);
-        self.meet_needs();
     }
 }
 

@@ -39,6 +39,15 @@ pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
                 owner.item(db),
                 borrowck(db, owner),
             ));
+            // Its closures' bodies too.
+            let hir = &moddil_sema::body(db, owner).body;
+            for (e, x) in hir.exprs.iter() {
+                if let moddil_sema::hir::ExprKind::Closure { .. } = x.kind {
+                    let item = Item::closure(owner.item(db), e.into_raw().into_u32());
+                    let closure = Owner::new(db, program, item);
+                    out.extend(moddil_sema::in_file(items, item, borrowck(db, closure)));
+                }
+            }
         }
         out.sort_by_key(|d| (d.file, d.range.start, d.range.end, d.code));
         out.dedup();
@@ -63,6 +72,8 @@ pub fn borrowck<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Vec<Diagnostic> {
     let ret_from = match owner.item(db) {
         Item::Fn(i) => items.fns[i as usize].ret_from.clone(),
         Item::Test(_) => Vec::new(),
+        // A closure may return a borrow of what it captures or is given.
+        Item::Closure(..) => vec![0, 1],
     };
     // A destructor may move the fields out of its `self`.
     let drop = items.lang("Drop");
@@ -74,7 +85,7 @@ pub fn borrowck<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Vec<Diagnostic> {
             }
             _ => false,
         },
-        Item::Test(_) => false,
+        _ => false,
     };
     let mut cx = Checker::new(body, items, ret_from);
     cx.destructor = destructor;

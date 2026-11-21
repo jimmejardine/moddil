@@ -19,3 +19,9 @@ the derived impl of a generic type bounds each type parameter by the trait
 (`impl<T: Clone> Clone for Wrap<T>`). A derive also needs the trait's supertraits (E0402), so
 `Eq` comes with `PartialEq` and `Ord` with `PartialOrd` and `Eq`. `Copy` is described in
 [Ownership](ownership.md).
+
+**attr.track-caller.1** `#[track_caller]` before a function makes a trap in it be reported where it
+was called ([Traps](traps.md)), and through a tracked caller, where that one was called, up to the
+first function that is not tracked. The prelude's functions that can trap are tracked, and so is
+derived code. The attribute takes no arguments; other attributes on functions are not supported
+yet (I0001).

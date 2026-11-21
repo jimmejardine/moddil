@@ -101,7 +101,9 @@ impl Machine<'_> {
             ast::Expr::Fail(_) => self.fail(node, e),
             ast::Expr::Try(_) => self.try_expr(node),
             ast::Expr::With(_) => self.with_expr(node),
-            _ => unreachable!("a checked program of slices S0 to S6"),
+            ast::Expr::Closure(_) => Ok(self.closure_value(node)),
+            ast::Expr::Impl(_) => Ok(self.anon_value(node)),
+            _ => unreachable!("a checked program of slices S0 to S7a"),
         }
     }
 

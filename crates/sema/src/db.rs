@@ -87,13 +87,37 @@ pub struct Owner<'db> {
     pub item: Item,
 }
 
-/// A function or a test, by its index in the program's [`ItemTree`](crate::ItemTree).
+/// A function or a test, by its index in the program's [`ItemTree`](crate::ItemTree), or a
+/// closure in one's body.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Item {
     /// `fn`.
     Fn(u32),
     /// `test`.
     Test(u32),
+    /// A closure: the index of the function (or, if the flag is set, test) whose body it is
+    /// written in, and its expression's index in that body. Its body has its own MIR; it is
+    /// checked with the body it is in.
+    Closure(u32, bool, u32),
+}
+
+impl Item {
+    /// The function or test whose body this is, or is written in.
+    pub fn owner(self) -> Item {
+        match self {
+            Item::Closure(i, false, _) => Item::Fn(i),
+            Item::Closure(i, true, _) => Item::Test(i),
+            item => item,
+        }
+    }
+
+    /// The closure at expression `expr` of the body of `owner` (a function or test).
+    pub fn closure(owner: Item, expr: u32) -> Item {
+        match owner.owner() {
+            Item::Test(i) => Item::Closure(i, true, expr),
+            Item::Fn(i) | Item::Closure(i, _, _) => Item::Closure(i, false, expr),
+        }
+    }
 }
 
 /// The queries `moddil-sema` defines need a database implementing this.

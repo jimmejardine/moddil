@@ -17,6 +17,25 @@ pub(crate) enum Value {
     Ref(Pointer, bool),
     /// Nothing: a variable whose value was moved out (`own.move.1`), so it is not dropped.
     Moved,
+    /// A closure: its expression and where it was made.
+    Closure(std::sync::Arc<Closure>),
+    /// An anonymous impl's value (`expr.anon-impl.1`): its trait's key, and its methods by name,
+    /// each a closure whose node is the method.
+    Anon(String, Vec<(String, std::sync::Arc<Closure>)>),
+    /// A variable of another call, seen from a closure's body: the variable itself.
+    Alias(Pointer),
+}
+
+/// A closure value (`expr.closure.1`): its expression, the variables in scope where it was
+/// written (which its body names as its own), and the handlers installed there.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Closure {
+    pub(crate) node: moddil_syntax::SyntaxNode,
+    pub(crate) vars: Vec<(String, Pointer)>,
+    pub(crate) handlers: Vec<(String, Value)>,
+    pub(crate) types: std::collections::HashMap<String, Head>,
+    pub(crate) file: Option<u32>,
+    pub(crate) module: usize,
 }
 
 /// Where a borrow points: a call's frame, a variable in it, and a path of field positions.
@@ -36,6 +55,7 @@ pub(crate) enum Head {
     Tuple,
     Ref,
     Adt(String),
+    Closure,
 }
 
 impl Value {
@@ -44,7 +64,8 @@ impl Value {
         match self {
             Value::Int(_) => Head::Int,
             Value::Bool(_) => Head::Bool,
-            Value::Unit | Value::Moved => Head::Unit,
+            Value::Unit | Value::Moved | Value::Alias(_) => Head::Unit,
+            Value::Closure(_) | Value::Anon(..) => Head::Closure,
             Value::Tuple(_) => Head::Tuple,
             Value::Ref(..) => Head::Ref,
             Value::Adt { ty, .. } => Head::Adt(ty.clone()),

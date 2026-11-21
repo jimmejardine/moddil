@@ -76,6 +76,18 @@ impl Names {
         self.defer_floor = outer;
     }
 
+    /// Enters a closure's body: no loop or `defer` block outside it can be jumped out of from
+    /// it. Returns what [`Names::exit_closure`] restores.
+    pub(super) fn enter_closure(&mut self) -> (Vec<(Option<String>, ExprId)>, Option<usize>) {
+        (std::mem::take(&mut self.loops), self.defer_floor.take())
+    }
+
+    /// Leaves a closure's body entered with [`Names::enter_closure`].
+    pub(super) fn exit_closure(&mut self, outer: (Vec<(Option<String>, ExprId)>, Option<usize>)) {
+        self.loops = outer.0;
+        self.defer_floor = outer.1;
+    }
+
     /// Whether the code is inside a `defer` block.
     pub(super) fn in_defer(&self) -> bool {
         self.defer_floor.is_some()

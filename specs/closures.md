@@ -22,7 +22,7 @@ fn sync_all(index: &Map<Path, Meta>, cache: &mut Cache) -> u64 with fs: Fs, stor
             cache.mark_clean(path);             // mutates a captured borrow
             uploaded += 1;                      // mutates a local
         }
-    });
+    })?;                                        // the closure can fail, so the call can
     uploaded
 }   // inferred in full: with Fs, Store, suspend, fail(Io | Store)
 ```
@@ -80,6 +80,16 @@ fn visit<E>(&self, f: impl FnMut(&K, &V) with E) with E
 - if `f` suspends, `visit` suspends.
 
 One implementation serves all cases; there is no `try_visit` or `visit_async`.
+
+- **A call that passes a closure that can fail is marked (decided November 2026):**
+  `index.visit(|p, m| upload(p)?)?`, like any call that can fail, so every way an error leaves a
+  function stays visible ([`error-handling.md`](error-handling.md)). Inside `visit`, a call of
+  `f` passes `f`'s errors on without a mark: they are not `visit`'s to handle, and its caller's
+  call is marked.
+- **A closure's other effects are met where it is written (decided):** a `with` around the closure,
+  or the enclosing function's own effects, provides them, not the function that calls it, as
+  Effekt's capabilities are lexical ([`effects-and-capabilities.md`](effects-and-capabilities.md)).
+  A callee that installs a handler of its own around a call of `f` does not change what `f` uses.
 
 ### Concurrency inside a visit
 

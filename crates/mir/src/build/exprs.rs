@@ -459,9 +459,25 @@ impl Builder<'_> {
                 self.cfg
                     .assign(dest, Rvalue::Use(Operand::Const(Const::Unit)));
             }
-            ExprKind::Call { args, .. } => {
+            ExprKind::Call { callee, args } => {
+                if let Some(func) = self.closure_call(e, callee) {
+                    self.call_closure(e, func, dest, callee, &args);
+                    return;
+                }
                 let ops = self.operands(&args);
                 self.call(e, dest, ops);
+            }
+            ExprKind::Closure { .. } => self.closure_value(dest, e),
+            ExprKind::AnonImpl { methods, .. } => {
+                // Its methods' closures, together.
+                let mut ops = Vec::new();
+                for (_, c) in methods {
+                    let t = self.temp(self.ty(c));
+                    self.closure_value(t, c);
+                    ops.push(Operand::Move(Place::local(t)));
+                }
+                self.cfg
+                    .assign(dest, Rvalue::Aggregate(AggregateKind::Tuple, ops));
             }
             ExprKind::MethodCall { receiver, args, .. } => {
                 let adjust = self.types.adjust(e);
@@ -502,10 +518,10 @@ impl Builder<'_> {
         // The handlers it needs, after its arguments.
         for ev in self.types.evidence(e) {
             let local = match *ev {
-                Evidence::Param(i) => self.evidence[i],
-                Evidence::Install(w, k) => self.installed[&(w, k)],
+                Evidence::Param(i) => self.evidence[&i].clone(),
+                Evidence::Install(w, k) => self.installed[&(w, k)].clone(),
             };
-            args.push(Operand::Copy(Place::local(local)));
+            args.push(Operand::Copy(local));
         }
         self.call_into(Some(e), callee, Place::local(dest), args, self.range(e));
     }
@@ -540,7 +556,7 @@ impl Builder<'_> {
                 _ => Rvalue::Use(borrow.0),
             };
             self.cfg.assign(installed, value);
-            self.installed.insert((e, k), installed);
+            self.installed.insert((e, k), Place::local(installed));
         }
         self.eval_into(dest, body);
         let depth = self.scopes.depth() - 1;
@@ -562,6 +578,7 @@ impl Builder<'_> {
         let fails = self.fx.fns[callee.func() as usize]
             .fails
             .subst(callee.args());
+        let fails = self.solver.deep(&fails);
         let edge = self.error_edge(e, &fails);
         let target = self.cfg.new_block();
         let error_bb = edge.as_ref().map(|_| self.cfg.new_block());

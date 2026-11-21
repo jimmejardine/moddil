@@ -289,6 +289,20 @@ fn start(p: Path) -> App {
 - Traces join the task-aware stacks and flight-recorder dumps described in
   [`observability.md`: Task-aware stacks and the task tree](observability.md#task-aware-stacks-and-the-task-tree)–[`observability.md`: Flight recorder and replay](observability.md#flight-recorder-and-replay).
 
+### Caller locations
+
+**Decided: `#[track_caller]` on a function** (decided November 2026), as in Rust. A trap in a
+tracked function is reported where its caller called it, and on up through tracked callers to the
+first untracked one, so `unwrap`, `expect`, `xs[i]` and assert-like helpers report the user's line.
+
+- It is part of the function's signature, visible to readers and in its API, and costs nothing
+  when nothing traps (the location travels in the trap, not in every call).
+- The prelude's and the core mods' functions that can trap are tracked; derived code is reported
+  at its `derive` attribute's callers the same way.
+- The alternative, a default argument `loc: Location = caller_location()` (Jai, Swift), gives a
+  location *value* for logging wrappers too; logging already records its own call site
+  ([`observability.md`](observability.md)), so the attribute is enough.
+
 ## Language server support
 
 The compiler must compute every function's error set to enforce R3, so the language server only has
@@ -383,14 +397,6 @@ All decided:
 
 ## Open questions
 
-- **Caller locations for helpers.** Error return traces record each `?` ([Traces](#traces)), but a
-  helper such as `expect`, an `assert`-like check or a logging wrapper cannot report *its caller's*
-  source location. There are two options:
-  - an attribute on the function, like Rust's `#[track_caller]`;
-  - a default argument, `loc: Location = caller_location()`, like Jai's `#caller_location` and
-    Swift's `#fileID` and `#line` defaults.
-
-  Either way it must show in the signature and cost nothing when it is unused.
 - **How an inferred tag is written.** Error sets hold named types and inferred tags such as
   `Io(NotFound)` and `Toml{line}` ([Error types](#error-types)), but nothing yet says how a tag is
   written where it is raised, how it differs from a call of a struct or variant of the same name,

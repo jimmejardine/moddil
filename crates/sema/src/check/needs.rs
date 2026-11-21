@@ -100,6 +100,32 @@ pub(crate) fn show_effect(t: &Ty) -> String {
     }
 }
 
+/// `f`'s errors as written, and those of its closure parameters (`F: FnOnce(…)`), which are
+/// its too (`expr.closure.fails.1`).
+fn with_closure_fails(items: &ItemTree, f: &crate::FnSig) -> Ty {
+    let mut members = f.fails.members();
+    let once = items.lang("FnOnce");
+    for p in &f.generics.preds {
+        if Some(p.trait_ref.trait_) == once && f.generics.parent as usize <= param_index(&p.ty) {
+            members.push(Ty::Assoc(std::sync::Arc::new(crate::ty::AssocTy {
+                self_ty: p.ty.clone(),
+                trait_ref: p.trait_ref.clone(),
+                index: 1,
+                name: "Fails".into(),
+            })));
+        }
+    }
+    Ty::errors(members)
+}
+
+/// The index of a type parameter, or 0.
+fn param_index(t: &Ty) -> usize {
+    match t {
+        Ty::Param(i, _) => *i as usize,
+        _ => 0,
+    }
+}
+
 /// How many times the private functions are checked, at most, before their effects are taken
 /// not to settle.
 const ROUNDS: usize = 64;
@@ -114,7 +140,7 @@ pub fn effects(db: &dyn Db, program: Program) -> Effects {
             .iter()
             .map(|f| FnEffects {
                 needs: canonical(f.effects.iter().map(|e| e.ty.clone()).collect()),
-                fails: f.fails.clone(),
+                fails: with_closure_fails(items, f),
             })
             .collect(),
         diagnostics: Vec::new(),
