@@ -30,3 +30,12 @@ fn wrapped_escapes(d: &int) -> Wrap<&int> {
     let x = 1;
     Wrap { x: &x }                          //~ E0308
 }
+
+// Building a view lends it the borrow, so `a` cannot be lent with `&mut` while `w` is used.
+fn lent() -> int {
+    let mut a = [1, 2];
+    let w = Window { data: &a };
+    let m = &mut a;                         //~ E0305
+    m[0] = 5;
+    w.data[0]
+}

@@ -13,8 +13,6 @@ the prelude (S3); errors, `try` and `catch` (S4); effects, handlers, inference a
 the reference interpreter. The runner is [`crates/conformance`](../crates/conformance/README.md);
 `cargo test -p moddil-conformance` runs the suite.
 
-**Under review:** [`REVIEW.md`](REVIEW.md) lists the suite's shortcomings, to be fixed in one sweep.
-
 ## Layout
 
 `conformance/<edition>/<feature>/*.moddil`, organised by feature and edition, like Test262. A test

@@ -199,18 +199,32 @@ something runs from the first slice.
     the fix, it saved only 14%, and then a broken prelude would show only in
     `the_prelude_and_its_derives_check_cleanly`, which does not borrow-check it. Revisit it
     only if the prelude's bodies become a large share of a check again.
-- **Sweep the conformance suite's shortcomings: in progress in a session of its own (November 2026), so not a slice's step.** A review of all 181
-  tests ([`conformance/REVIEW.md`](../conformance/REVIEW.md), November 2026) found:
-  - tests that skip the rule they cite (`closures/fails-bound`'s `serve` never calls `f`);
-  - results that cannot tell implementations apart (lengths and sums where the whole value
-    shows order);
-  - cases and error codes their paragraphs state but no test checks (`Buf` is used by none);
-  - wrong citations.
+- **The conformance suite's shortcomings: swept (November 2026).** A review of all 181 tests
+  found:
+  - tests that skipped the rule they cited;
+  - results that could not tell implementations apart, such as a length or a sum where the order
+    was the claim;
+  - cases, error codes and citations that the paragraphs called for and no test had.
 
-  The stronger `fails-bound` test shows a MIR interpreter bug: a trait's method called on an
-  error set runs nothing (`Dispatch::target`).
-  - Improve the tests in one pass, and fix what the stronger tests reveal.
-  - Done when `REVIEW.md` is deleted.
+  All of these are fixed: 19 new test files and 55 changed ones, about 860 lines.
+  - **The bugs the stronger tests showed, now fixed:**
+    - a trait's method called on an error set ran nothing;
+    - errors that a bound on `F::Fails` takes could leave the function (now E0502);
+    - a borrow passed for a type parameter came back borrowing nothing (`id(&x)`);
+    - a closure's call could name its arguments;
+    - E0607 was reported on every inferred function;
+    - the lexer rejected `'\''`, `_` in `\u{…}` and line continuations;
+    - a block literal's errors were reported where nothing could expect them.
+  - **The runner and the reference:**
+    - three files' 22 values never ran, because the files expected diagnostics too; the runner
+      now fails such a file;
+    - the reference now says what `set_capacity` does below the length, which code a block's
+      indentation errors are, and that a result of a type parameter can hold a borrow.
+  - **Left open:**
+    - a `send` in a `select` that doesn't wait for its value to be received;
+    - a `join` of a cancelled task unwinding the task that joins;
+    - the I0001 limits. Conformance doesn't test "not supported yet", which belongs to an
+      implementation.
 - **Borrows of static data borrow nothing (decided, [`memory.md`: Borrows of static data](memory.md#borrows-of-static-data)):
   done in S7c (November 2026).** A string literal (and, once S10 brings `const`, a
   `const`'s value) is static data:

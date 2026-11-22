@@ -1,4 +1,4 @@
-// covers: type.slice.1, expr.index.2, generic.const.2, expr.array.1, expr.array.repeat.1
+// covers: type.slice.1, expr.index.1, expr.index.2, generic.const.2, expr.array.1, expr.array.repeat.1, expr.array.from.1
 
 fn by_value(s: [int]) {}                    //~ E0901
 
@@ -19,3 +19,7 @@ struct Name { n: int }
 fn mixed() { let a = [1, true]; }           //~ E0201
 fn not_copy() { let a = [Name { n: 1 }; 2]; } //~ E0402
 fn run_time(n: int) { let a = [0; n]; }     //~ E0201
+
+// An array literal where another type is expected makes one only through `FromArrayLiteral`.
+struct Plain { n: int }
+fn not_from_array() { let p: Plain = [1, 2]; } //~ E0402

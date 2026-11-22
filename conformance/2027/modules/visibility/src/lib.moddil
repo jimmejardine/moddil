@@ -1,4 +1,4 @@
-// covers: mod.vis.1, mod.use.1, mod.expose.1, mod.names.1, mod.path.1, mod.dep.1
+// covers: mod.vis.1, mod.use.1, mod.expose.1, mod.names.1, mod.path.1, mod.dep.1, mod.tree.1
 
 use mod::inner::hidden;                       //~ E0701
 use mod::inner::missing;                      //~ E0702
