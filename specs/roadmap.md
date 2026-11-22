@@ -180,8 +180,9 @@ something runs from the first slice.
   `Display` and checked `fmt"…"` holes; `len`, `push_str`, `push`, `pop`, `trim`, case conversion
   and the like. `String` and `str` are **built in for now**: both interpreters implement them
   natively, through the prelude's `#[intrinsic]` methods. Once S7c's raw buffer and S10's `u8`
-  exist, `String` is rewritten in a core mod as the decided small-string form, inline `[u8; 23]`
-  or a heap buffer ([`text.md`: String types](text.md#string-types)), not as a wrap of `Vec`. Until
+  exist, `String` is rewritten as the decided small-string form, inline `[u8; 23]` or a heap
+  buffer ([`text.md`: String types](text.md#string-types)), not as a wrap of `Vec`: done in S11,
+  in the prelude (a core mod waits for packaging). Until
   the features they wait for arrive:
   - no `StrPos` or slicing (views), no `chars()` (`Iterator`, S7c), and no `b"…"` or `b'c'`
     (`u8`, S10);
@@ -263,7 +264,7 @@ something runs from the first slice.
   - the reference interpreter types a collection literal by its context only where a `let`'s type,
     a called function's parameter or a function's result names the type;
   - `core` is built into the implementations; the `moddil/core-*` mods and their names come with
-    packaging, and `String` is rewritten over `Buf` once S10 brings `u8`.
+    packaging; `String` was rewritten over `Buf<u8>` in S11, in the prelude.
 - **S8 is built in three parts (decided November 2026)**, each committed on its own: **S8a**
   compile-time evaluation (`const` items, `const fn`, `const { }`) and the `Debug` and `Default`
   derives; **S8b** refinements (`type X = T where p`: a distinct type, `X::new` failing with
@@ -406,6 +407,18 @@ something runs from the first slice.
     compiler where an unannotated variable takes its type from a later use, and where literals
     meet only each other; the conformance tests avoid both;
   - exhaustiveness on `i128` and `u128` leaves out their greatest value.
+- **S11's scope and interim rules (decided November 2026):** `String` is the prelude's struct,
+  written in Moddil over `u8` bytes in the decided small-string form: an enum of 23 inline bytes
+  with their length, or a heap `Buf<u8>`, so `capacity()` is never below 23. It stays in the
+  prelude, next to `Vec`, since the prelude's own `Display` and `fmt"…"` need it; moving both to
+  a core mod waits for packaging. `str` stays built in: `String::as_str` views its bytes through
+  `str::view`, and `str::byte_at` reads them. In Moddil now: `push` (UTF-8 encoding), `push_str`,
+  `pop`, `clear`, `len`, `clone`, comparisons, hashing, `contains`, `starts_with`, `ends_with` and
+  `Pattern`. Still native: case conversion, `trim`, the `char` classes, `quoted`, and each
+  number's, `bool`'s and `char`'s text for `Display`. Until the features they wait for arrive:
+  - the inline size is 23 on every target (11 on 32-bit targets comes with them);
+  - `String::from_utf8`, `StrPos`, slicing and `find` wait;
+  - strings are slower in the interpreters, byte by byte in Moddil.
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

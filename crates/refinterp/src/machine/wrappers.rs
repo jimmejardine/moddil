@@ -72,7 +72,7 @@ impl Machine<'_> {
         if let Some(p) = self.memory.static_of(&key) {
             return p;
         }
-        let string = |s: &str| Value::String(s.to_string());
+        let string = |s: &str| crate::value::make_string(s);
         let params: Vec<Value> = w
             .params
             .iter()

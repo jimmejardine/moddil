@@ -99,13 +99,27 @@ fn block(body: &str, raw: bool) -> String {
 pub(super) fn text_of(m: &Machine<'_>, v: &Value) -> Option<String> {
     match v {
         Value::Str(s) => Some(s.to_string()),
-        Value::String(s) => Some(s.clone()),
         Value::Ref(p, _) => text_of(m, &m.memory.load(p)),
+        v @ Value::Adt { .. } => crate::value::string_text(v),
         _ => None,
     }
 }
 
 impl Machine<'_> {
+    /// `v` stored where type `ty` is written: a literal takes a number type
+    /// (`num.lit.1`), and a `&String` where a `&str` is written is its text
+    /// (`text.coerce.1`), as the prelude's `as_str` gives it.
+    pub(super) fn typed(&self, v: Value, ty: Option<&ast::Type>) -> Value {
+        if let Some(t) = ty
+            && t.syntax().text() == "&str"
+            && let Value::Ref(..) = v
+            && let Some(s) = crate::value::string_text(&self.target(v.clone()))
+        {
+            return Value::Str(s.into());
+        }
+        crate::num::typed(v, ty)
+    }
+
     /// `fmt"…"` (`expr.fmt.1`): the text, and each hole's value written by its `Display`.
     pub(super) fn fmt(&mut self, tok: &SyntaxToken) -> Eval {
         let text = tok.text();
@@ -113,7 +127,8 @@ impl Machine<'_> {
         let inner: Vec<char> = text[open + 1..text.len() - 1].chars().collect();
         // Where the literal's inside starts in the file, for the holes' ranges.
         let mut at = tok.text_range().start as usize + open + 1;
-        let out = self.memory.temp(Value::String(String::new()));
+        let empty = self.string_call("new", Vec::new(), tok.text_range())?;
+        let out = self.memory.temp(empty);
         let mut lit = String::new();
         let mut i = 0;
         while i < inner.len() {
@@ -131,7 +146,7 @@ impl Machine<'_> {
                 at += c.len_utf8();
                 continue;
             }
-            self.push_text(&out, &unescape(&lit.replace("{{", "{").replace("}}", "}")));
+            self.push_text(&out, &unescape(&lit.replace("{{", "{").replace("}}", "}")))?;
             lit.clear();
             let mut depth = 0;
             let mut j = i + 1;
@@ -149,15 +164,36 @@ impl Machine<'_> {
             at = start + hole.len() + 1;
             i = j + 1;
         }
-        self.push_text(&out, &unescape(&lit.replace("{{", "{").replace("}}", "}")));
+        self.push_text(&out, &unescape(&lit.replace("{{", "{").replace("}}", "}")))?;
         Ok(self.memory.load(&out))
     }
 
-    pub(super) fn push_text(&mut self, out: &crate::value::Pointer, s: &str) {
-        if let Value::String(mut t) = self.memory.load(out) {
-            t.push_str(s);
-            self.memory.store(out, Value::String(t));
+    /// Pushes `s` onto the `String` at `out`, through the prelude's `push_str`, as the compiled
+    /// code does.
+    pub(super) fn push_text(&mut self, out: &crate::value::Pointer, s: &str) -> Eval<()> {
+        if s.is_empty() {
+            return Ok(());
         }
+        let args = vec![Value::Ref(out.clone(), true), Value::Str(s.into())];
+        self.string_call("push_str", args, moddil_syntax::TextRange::default())?;
+        Ok(())
+    }
+
+    /// The prelude `String`'s function `name` (`text.string.1`), run on `args`.
+    pub(super) fn string_call(
+        &mut self,
+        name: &str,
+        args: Vec<Value>,
+        range: moddil_syntax::TextRange,
+    ) -> Eval {
+        let head = Head::Adt("String".to_string());
+        let m = self
+            .program
+            .methods(&head, name)
+            .into_iter()
+            .next()
+            .expect("the prelude's `String`");
+        self.run_method(m, &head, args, range)
     }
 
     /// One hole: its expression, parsed where it stands in the file so its ranges are the
@@ -216,22 +252,6 @@ impl Machine<'_> {
             Value::Char(c) => c,
             other => unreachable!("a `char`: {other:?}"),
         };
-        // The `String` a `&mut String` argument points to, changed by `change`.
-        let change = |m: &mut Self, i: usize, change: &mut dyn FnMut(&mut String) -> Value| {
-            let mut p = match &args[i] {
-                Value::Ref(p, _) => p.clone(),
-                other => unreachable!("a `&mut String`: {other:?}"),
-            };
-            while let Value::Ref(q, _) = m.memory.load(&p) {
-                p = q;
-            }
-            let Value::String(mut s) = m.memory.load(&p) else {
-                unreachable!("a `String`")
-            };
-            let v = change(&mut s);
-            m.memory.store(&p, Value::String(s));
-            v
-        };
         Ok(match (head, name.as_str()) {
             // The conversions (`num.convert.1`), to the type the call names.
             (Head::Int | Head::Num(_), "checked_to" | "truncate" | "wrap" | "saturate") => {
@@ -263,33 +283,25 @@ impl Machine<'_> {
                 }
             }
             // The float functions (`num.float.fn.1`).
-            (Head::Num(k), _) if k.is_float() && name != "fmt" => {
+            (Head::Num(k), _) if k.is_float() && name != "text" => {
                 let x = self.target(args[0].clone());
                 let y = args.get(1).map(|a| self.target(a.clone()));
                 crate::num::float_fn(*k, &name, &x, y.as_ref()).expect("a float function")
             }
-            (Head::Num(k), "fmt") => {
-                let s = match crate::num::as_kind(self.target(args[0].clone()), *k) {
-                    Value::Num(k, bits) => crate::num::text(k, bits),
-                    other => unreachable!("`Display` of {other:?}"),
-                };
-                change(self, 1, &mut |out| {
-                    out.push_str(&s);
-                    Value::Unit
-                })
-            }
-            (Head::Int | Head::Bool | Head::Char, "fmt") => {
-                let s = match self.target(args[0].clone()) {
+            // What `Display` writes (`text.display.1`).
+            (Head::Num(k), "text") => match crate::num::as_kind(self.target(args[0].clone()), *k) {
+                Value::Num(k, bits) => Value::Str(crate::num::text(k, bits).into()),
+                other => unreachable!("`Display` of {other:?}"),
+            },
+            (Head::Int | Head::Bool | Head::Char, "text") => Value::Str(
+                match self.target(args[0].clone()) {
                     Value::Int(v) => v.to_string(),
                     Value::Bool(v) => v.to_string(),
                     Value::Char(c) => c.to_string(),
                     other => unreachable!("`Display` of {other:?}"),
-                };
-                change(self, 1, &mut |out| {
-                    out.push_str(&s);
-                    Value::Unit
-                })
-            }
+                }
+                .into(),
+            ),
             // The ambient log (`obs.log.1`).
             (Head::Adt(k), "debug" | "info" | "warn" | "error") if k == "Log" => {
                 eprintln!("[{name}] {}", text(self, 1));
@@ -314,8 +326,41 @@ impl Machine<'_> {
             (Head::Char, "is_lowercase") => Value::Bool(ch(self, 0).is_lowercase()),
             (Head::Char, "len_utf8") => Value::Int(ch(self, 0).len_utf8() as i64),
             (Head::Str, "len") => Value::Int(text(self, 0).len() as i64),
-            (Head::Str, "quoted") => Value::String(format!("{:?}", text(self, 0))),
-            (Head::Char, "quoted") => Value::String(format!("{:?}", ch(self, 0))),
+            (Head::Str, "quoted_text") => Value::Str(format!("{:?}", text(self, 0)).into()),
+            (Head::Char, "quoted_text") => Value::Str(format!("{:?}", ch(self, 0)).into()),
+            // A byte of the text, and the first `len` bytes of a byte slice as text
+            // (`text.string.inline.1`).
+            (Head::Str, "byte_at") => {
+                let t = text(self, 0);
+                let Value::Int(i) = self.target(args[1].clone()) else {
+                    unreachable!("an `int`")
+                };
+                match usize::try_from(i)
+                    .ok()
+                    .and_then(|i| t.as_bytes().get(i).copied())
+                {
+                    Some(b) => Value::Num(crate::num::Kind::U8, u128::from(b)),
+                    None => return Err(crate::trap(crate::TrapClass::IndexOutOfBounds, range)),
+                }
+            }
+            (Head::Str, "view") => {
+                let bytes = match self.target(args[0].clone()) {
+                    Value::Array(xs) | Value::Buf(_, xs) => xs,
+                    other => unreachable!("bytes: {other:?}"),
+                };
+                let Value::Int(len) = self.target(args[1].clone()) else {
+                    unreachable!("an `int`")
+                };
+                let bytes: Vec<u8> = bytes
+                    .iter()
+                    .take(usize::try_from(len).unwrap_or(0))
+                    .map(|b| match b {
+                        Value::Num(_, b) => *b as u8,
+                        other => unreachable!("a byte: {other:?}"),
+                    })
+                    .collect();
+                Value::Str(String::from_utf8(bytes).expect("UTF-8").into())
+            }
             (Head::Str, "char_at_byte") => {
                 let Value::Int(at) = self.target(args[1].clone()) else {
                     unreachable!("an `int`")
@@ -367,8 +412,8 @@ impl Machine<'_> {
             (Head::Str, "ends_with") => Value::Bool(text(self, 0).ends_with(&pattern(self, 1))),
             (Head::Str, "contains") => Value::Bool(text(self, 0).contains(&pattern(self, 1))),
             (Head::Str, "trim") => Value::Str(text(self, 0).trim().into()),
-            (Head::Str, "to_uppercase") => Value::String(text(self, 0).to_uppercase()),
-            (Head::Str, "to_lowercase") => Value::String(text(self, 0).to_lowercase()),
+            (Head::Str, "upper_text") => Value::Str(text(self, 0).to_uppercase().into()),
+            (Head::Str, "lower_text") => Value::Str(text(self, 0).to_lowercase().into()),
             (Head::Str, "eq") => Value::Bool(text(self, 0) == text(self, 1)),
             (Head::Str, "cmp") => {
                 let variant = match text(self, 0).cmp(&text(self, 1)) {
@@ -381,33 +426,6 @@ impl Machine<'_> {
                     variant: variant.to_string(),
                     fields: Vec::new(),
                 }
-            }
-            (Head::String, "new") => Value::String(String::new()),
-            (Head::String, "as_str") => Value::Str(text(self, 0).into()),
-            (Head::String, "clone") => Value::String(text(self, 0)),
-            (Head::String, "push_str") => {
-                let s = text(self, 1);
-                change(self, 0, &mut |out| {
-                    out.push_str(&s);
-                    Value::Unit
-                })
-            }
-            (Head::String, "push") => {
-                let c = ch(self, 1);
-                change(self, 0, &mut |out| {
-                    out.push(c);
-                    Value::Unit
-                })
-            }
-            (Head::String, "clear") => change(self, 0, &mut |out| {
-                out.clear();
-                Value::Unit
-            }),
-            (Head::String, "pop") => {
-                let c = change(self, 0, &mut |out| {
-                    out.pop().map_or(Value::Unit, Value::Char)
-                });
-                option((c != Value::Unit).then_some(c))
             }
             (h, n) => unreachable!("no built-in `{n}` for {h:?}"),
         })

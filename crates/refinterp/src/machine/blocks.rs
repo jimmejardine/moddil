@@ -117,9 +117,15 @@ impl Machine<'_> {
         let init = l.init().expect("a checked `let` has a value");
         // A literal takes the number type written (`num.lit.1`).
         let src = match l.ty() {
-            Some(t) if crate::num::Kind::named(t.syntax().text().to_string().trim()).is_some() => {
+            Some(t)
+                if {
+                    let n = t.syntax().text().to_string();
+                    let n = n.trim();
+                    crate::num::Kind::named(n).is_some() || n == "int" || n == "i64"
+                } =>
+            {
                 let v = self.eval(&init)?;
-                Src::Place(self.memory.temp(crate::num::typed(v, Some(&t))), false)
+                Src::Place(self.memory.temp(self.typed(v, Some(&t))), false)
             }
             _ => self.scrutinee(&init)?,
         };

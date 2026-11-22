@@ -104,7 +104,6 @@ impl Machine<'_> {
                             Head::Bool => "bool".to_string(),
                             Head::Char => "char".to_string(),
                             Head::Str => "str".to_string(),
-                            Head::String => "String".to_string(),
                             other => format!("{other:?}"),
                         }
                     }

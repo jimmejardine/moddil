@@ -57,7 +57,7 @@ impl Checker<'_> {
             ExprKind::Fmt(pieces) => {
                 let pieces = pieces.clone();
                 self.fmt(&pieces);
-                Ty::String
+                self.items.string_ty()
             }
             ExprKind::Array(elements) => {
                 let elements = elements.clone();

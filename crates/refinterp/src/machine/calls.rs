@@ -214,7 +214,8 @@ impl Machine<'_> {
         }
         let t = self.program.types[key].clone();
         let clause = t.pred.expect("a refinement").1;
-        let out = self.memory.temp(Value::String(String::new()));
+        let empty = self.string_call("new", Vec::new(), range)?;
+        let out = self.memory.temp(empty);
         let at = self.memory.temp(v);
         self.call_trait(
             "Debug",
@@ -226,7 +227,11 @@ impl Machine<'_> {
         let error = Value::Adt {
             ty: "RefinementError".to_string(),
             variant: "RefinementError".to_string(),
-            fields: vec![Value::String(t.name), Value::String(clause), shown],
+            fields: vec![
+                crate::value::make_string(&t.name),
+                crate::value::make_string(&clause),
+                shown,
+            ],
         };
         Err(Flow::Fail(error, range))
     }
@@ -320,27 +325,27 @@ impl Machine<'_> {
                 };
                 let v = self.program.variant(ty, variant).clone();
                 match v.shape {
-                    crate::program::Shape::Unit => self.push_text(&out, &path),
+                    crate::program::Shape::Unit => self.push_text(&out, &path)?,
                     crate::program::Shape::Named => {
-                        self.push_text(&out, &format!("{path} {{ "));
+                        self.push_text(&out, &format!("{path} {{ "))?;
                         for (i, f) in v.fields.iter().enumerate() {
                             let sep = if i == 0 { "" } else { ", " };
-                            self.push_text(&out, &format!("{sep}{f}: "));
+                            self.push_text(&out, &format!("{sep}{f}: "))?;
                             let x = vec![Value::Ref(field(&a, i), false), args[1].clone()];
                             self.call_trait("Debug", "fmt", x, range)?;
                         }
-                        self.push_text(&out, " }");
+                        self.push_text(&out, " }")?;
                     }
                     crate::program::Shape::Tuple => {
-                        self.push_text(&out, &format!("{path}("));
+                        self.push_text(&out, &format!("{path}("))?;
                         for i in 0..fields.len() {
                             if i > 0 {
-                                self.push_text(&out, ", ");
+                                self.push_text(&out, ", ")?;
                             }
                             let x = vec![Value::Ref(field(&a, i), false), args[1].clone()];
                             self.call_trait("Debug", "fmt", x, range)?;
                         }
-                        self.push_text(&out, ")");
+                        self.push_text(&out, ")")?;
                     }
                 }
                 Ok(Value::Unit)
@@ -481,7 +486,7 @@ impl Machine<'_> {
         }
         for (p, v) in params.iter().zip(args) {
             let pat = p.pat().expect("a parameter pattern");
-            let v = crate::num::typed(v, p.ty().as_ref());
+            let v = self.typed(v, p.ty().as_ref());
             let slot = self.memory.temp(v);
             let mut binds = Vec::new();
             let matched = self.matches(&pat, &Src::Place(slot, false), &mut binds);
@@ -784,7 +789,13 @@ impl Machine<'_> {
             && let Some((ty, info)) = self.ctor(&segments)
         {
             let variant = info.name.clone();
-            let fields = self.eval_all(&args)?;
+            let types = info.types.clone();
+            let fields: Vec<Value> = self
+                .eval_all(&args)?
+                .into_iter()
+                .enumerate()
+                .map(|(i, v)| self.typed(v, types.get(i).and_then(Option::as_ref)))
+                .collect();
             return Ok(Value::Adt {
                 ty,
                 variant,
@@ -841,7 +852,6 @@ impl Machine<'_> {
                     [t] if t == "bool" => Head::Bool,
                     [t] if t == "char" => Head::Char,
                     [t] if t == "str" => Head::Str,
-                    [t] if t == "String" => Head::String,
                     [t] if t == "Buf" => Head::Buf,
                     [t] if self.memory.type_of(t).is_some() => {
                         self.memory.type_of(t).expect("known").clone()
@@ -967,9 +977,13 @@ impl Machine<'_> {
             return self.invoke(&f, all, HashMap::new(), range);
         }
         // The steps: the receiver itself, then what it points to.
+        // Through every borrow: `self` of a method of an impl for `&str` is a `&&str`.
         let mut steps = vec![(place.clone(), value.clone(), indirect)];
-        if let Value::Ref(q, _) = &value {
-            steps.push((q.clone(), self.memory.load(q), true));
+        let mut at = value.clone();
+        while let Value::Ref(q, _) = &at {
+            let next = self.memory.load(q);
+            steps.push((q.clone(), next.clone(), true));
+            at = next;
         }
         let mut found = None;
         'search: for (p, v, ind) in &steps {
@@ -1018,7 +1032,12 @@ impl Machine<'_> {
                 }
             }
         }
-        let (m, head, recv) = found.expect("a checked method call");
+        let (m, head, recv) = found.unwrap_or_else(|| {
+            panic!(
+                "a checked method call: `{name}` on {:?}",
+                self.target(value.clone())
+            )
+        });
         let written = self.eval_all(&args)?;
         let values = match &m {
             Method::Code(f, imp) => {

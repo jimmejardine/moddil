@@ -193,7 +193,7 @@ impl Cx<'_> {
             Ty::Num(_) => vec![Ctor::Single],
             Ty::Char => split_ints(heads, 0, CHAR_MAX),
             // The literals the rows name, and the strings they do not.
-            Ty::Str | Ty::String => {
+            Ty::Str => {
                 let mut cs: Vec<Ctor> = Vec::new();
                 for h in heads {
                     if let Ctor::Str(_) = &h.ctor

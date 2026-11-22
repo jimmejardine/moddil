@@ -180,6 +180,16 @@ pub(crate) fn typed(v: Value, ty: Option<&moddil_syntax::ast::Type>) -> Value {
     let Some(t) = ty else {
         return v;
     };
+    // An array of numbers: each element (`[0; 23]` as a `[u8; 23]`).
+    if let moddil_syntax::ast::Type::Array(_) = t
+        && let Value::Array(xs) = &v
+        && let Some(elem) = t
+            .syntax()
+            .children()
+            .find_map(moddil_syntax::ast::Type::cast)
+    {
+        return Value::Array(xs.iter().cloned().map(|x| typed(x, Some(&elem))).collect());
+    }
     let text = t.syntax().text().to_string();
     let text = text.trim();
     match (Kind::named(text), &v) {

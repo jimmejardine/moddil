@@ -415,6 +415,14 @@ impl Program {
             ast::Type::Tuple(n) if n.children().next().is_none() => Head::Unit,
             ast::Type::Tuple(_) => Head::Tuple,
             ast::Type::Array(_) | ast::Type::Slice(_) => Head::Array,
+            // A `&str` is its text here, so an impl for `&str` is one for the text.
+            ast::Type::Ref(r)
+                if r.children()
+                    .find_map(ast::Type::cast)
+                    .is_some_and(|x| x.syntax().text() == "str") =>
+            {
+                Head::Str
+            }
             ast::Type::Ref(_) => Head::Ref,
             _ => {
                 let path = type_path(t.syntax());
@@ -431,7 +439,6 @@ impl Program {
                     ["bool"] => Head::Bool,
                     ["char"] => Head::Char,
                     ["str"] => Head::Str,
-                    ["String"] => Head::String,
                     ["Buf"] => Head::Buf,
                     _ => match self.resolve(module, &path) {
                         // A refined value is its base's, and an alias names its type.
@@ -749,7 +756,10 @@ impl Program {
             Value::Bool(b) => b.to_string(),
             Value::Char(c) => format!("{c:?}"),
             Value::Str(s) => format!("{:?}", &**s),
-            Value::String(s) => format!("{s:?}"),
+            // A `String` as its text, in quotes.
+            v @ Value::Adt { ty, .. } if ty == "String" => {
+                format!("{:?}", crate::value::string_text(v).unwrap_or_default())
+            }
             Value::Unit => "()".to_string(),
             Value::Array(xs) | Value::Buf(_, xs) => {
                 let xs: Vec<String> = xs.iter().map(part).collect();

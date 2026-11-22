@@ -495,10 +495,6 @@ pub(crate) fn path_type(
                     no_args(one, diags);
                     return Ty::Char;
                 }
-                "String" => {
-                    no_args(one, diags);
-                    return Ty::String;
-                }
                 "str" => {
                     no_args(one, diags);
                     return Ty::Str;

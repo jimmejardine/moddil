@@ -223,7 +223,6 @@ impl Lowerer<'_> {
             "bool" => Ty::Bool,
             "char" => Ty::Char,
             "str" => Ty::Str,
-            "String" => Ty::String,
             "Buf" => Ty::Buf(std::sync::Arc::new(crate::resolve::hole())),
             "Self" => match &self.types.self_ty {
                 Some(t) => t.clone(),

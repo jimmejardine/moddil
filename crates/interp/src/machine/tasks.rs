@@ -365,7 +365,7 @@ impl Machine<'_> {
             let (line, col) = moddil_syntax::line_col(f.source.text(self.db), t.range.start);
             format!("{line}:{col}")
         });
-        self.natives.trapped(t.class.to_string(), at)
+        self.natives.trapped(&t.class.to_string(), &at)
     }
 
     /// The pending `select` for a call of `__select`, from its arms' descriptions: each a

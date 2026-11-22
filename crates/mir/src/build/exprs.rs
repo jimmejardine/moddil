@@ -32,6 +32,20 @@ impl Builder<'_> {
                 self.cfg.assign(dest, Rvalue::Widen(op, target));
                 return;
             }
+            // A `&String` as a `&str`: its `as_str` (`text.coerce.1`).
+            if from == self.items.string_ty() {
+                let func = self
+                    .items
+                    .builtin_method(&from, "as_str")
+                    .expect("the prelude's `String::as_str`");
+                let callee = Callee::Fn {
+                    func,
+                    args: Vec::new(),
+                };
+                let range = self.range(e);
+                self.call_into(None, callee, Place::local(dest), vec![op], range);
+                return;
+            }
             debug_assert!(matches!(target, Ty::Ref(..)));
             self.cfg.assign(dest, Rvalue::Unsize(op, from));
             return;
@@ -704,7 +718,7 @@ impl Builder<'_> {
         let string = |name: &str| {
             let func = self
                 .items
-                .builtin_method(&Ty::String, name)
+                .builtin_method(&self.items.string_ty(), name)
                 .expect("the prelude's `String`");
             Callee::Fn {
                 func,
@@ -714,7 +728,7 @@ impl Builder<'_> {
         self.call_into(None, string("new"), Place::local(dest), Vec::new(), range);
         let push_str = string("push_str");
         for p in pieces {
-            let out = self.temp(Ty::reference(true, Ty::String));
+            let out = self.temp(Ty::reference(true, self.items.string_ty()));
             self.cfg.assign(out, Rvalue::Ref(true, Place::local(dest)));
             let unit = self.temp(Ty::Unit);
             match p {

@@ -413,8 +413,9 @@ impl Not for i8 {
 }
 
 impl Display for i8 {
-    #[intrinsic]
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self.text());
+    }
 }
 
 impl Debug for i8 {
@@ -545,8 +546,9 @@ impl Not for i16 {
 }
 
 impl Display for i16 {
-    #[intrinsic]
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self.text());
+    }
 }
 
 impl Debug for i16 {
@@ -677,8 +679,9 @@ impl Not for i32 {
 }
 
 impl Display for i32 {
-    #[intrinsic]
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self.text());
+    }
 }
 
 impl Debug for i32 {
@@ -809,8 +812,9 @@ impl Not for i128 {
 }
 
 impl Display for i128 {
-    #[intrinsic]
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self.text());
+    }
 }
 
 impl Debug for i128 {
@@ -933,8 +937,9 @@ impl Not for u8 {
 }
 
 impl Display for u8 {
-    #[intrinsic]
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self.text());
+    }
 }
 
 impl Debug for u8 {
@@ -1057,8 +1062,9 @@ impl Not for u16 {
 }
 
 impl Display for u16 {
-    #[intrinsic]
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self.text());
+    }
 }
 
 impl Debug for u16 {
@@ -1181,8 +1187,9 @@ impl Not for u32 {
 }
 
 impl Display for u32 {
-    #[intrinsic]
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self.text());
+    }
 }
 
 impl Debug for u32 {
@@ -1305,8 +1312,9 @@ impl Not for u64 {
 }
 
 impl Display for u64 {
-    #[intrinsic]
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self.text());
+    }
 }
 
 impl Debug for u64 {
@@ -1429,8 +1437,9 @@ impl Not for u128 {
 }
 
 impl Display for u128 {
-    #[intrinsic]
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self.text());
+    }
 }
 
 impl Debug for u128 {
@@ -1534,8 +1543,9 @@ impl Neg for f32 {
 }
 
 impl Display for f32 {
-    #[intrinsic]
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self.text());
+    }
 }
 
 impl Debug for f32 {
@@ -1639,8 +1649,9 @@ impl Neg for f64 {
 }
 
 impl Display for f64 {
-    #[intrinsic]
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self.text());
+    }
 }
 
 impl Debug for f64 {
@@ -1673,6 +1684,10 @@ impl Display for RangeError {
 }
 
 impl int {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
     #[intrinsic]
@@ -1698,6 +1713,10 @@ impl int {
 }
 
 impl i8 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
     #[intrinsic]
@@ -1723,6 +1742,10 @@ impl i8 {
 }
 
 impl i16 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
     #[intrinsic]
@@ -1748,6 +1771,10 @@ impl i16 {
 }
 
 impl i32 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
     #[intrinsic]
@@ -1773,6 +1800,10 @@ impl i32 {
 }
 
 impl i128 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
     #[intrinsic]
@@ -1798,6 +1829,10 @@ impl i128 {
 }
 
 impl u8 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
     #[intrinsic]
@@ -1823,6 +1858,10 @@ impl u8 {
 }
 
 impl u16 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
     #[intrinsic]
@@ -1848,6 +1887,10 @@ impl u16 {
 }
 
 impl u32 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
     #[intrinsic]
@@ -1873,6 +1916,10 @@ impl u32 {
 }
 
 impl u64 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
     #[intrinsic]
@@ -1898,6 +1945,10 @@ impl u64 {
 }
 
 impl u128 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
     #[intrinsic]
@@ -1923,6 +1974,10 @@ impl u128 {
 }
 
 impl f32 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
     #[intrinsic]
@@ -1938,6 +1993,10 @@ impl f32 {
 }
 
 impl f64 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
     #[intrinsic]
@@ -2173,18 +2232,27 @@ trait Display {
 }
 
 impl Display for int {
-    #[intrinsic]
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self.text());
+    }
 }
 
 impl Display for bool {
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self.text());
+    }
+}
+
+impl bool {
+    // `true` or `false`.
     #[intrinsic]
-    fn fmt(&self, out: &mut String);
+    fn text(&self) -> &str;
 }
 
 impl Display for char {
-    #[intrinsic]
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut String) {
+        out.push_str(self.text());
+    }
 }
 
 impl Display for str {
@@ -2263,19 +2331,67 @@ impl str {
         self.len() == 0
     }
 
+    // Its `i`th byte; traps if there is none.
     #[intrinsic]
-    fn starts_with<P: Pattern>(&self, prefix: P) -> bool;
+    fn byte_at(&self, i: int) -> u8;
+
+    // The first `len` bytes of `bytes`, which are UTF-8, as text (`text.string.inline.1`).
     #[intrinsic]
-    fn ends_with<P: Pattern>(&self, suffix: P) -> bool;
-    #[intrinsic]
-    fn contains<P: Pattern>(&self, part: P) -> bool;
+    fn view(bytes: &[u8], len: int) -> &str;
+
+    // Whether `part`'s bytes are at byte `at`.
+    fn has_at<P: Pattern>(&self, part: &P, at: int) -> bool {
+        let n = part.pattern_len();
+        if at < 0 || at + n > self.len() {
+            return false;
+        }
+        let mut i = 0;
+        while i < n {
+            if self.byte_at(at + i) != part.pattern_byte(i) {
+                return false;
+            }
+            i += 1;
+        }
+        true
+    }
+
+    fn starts_with<P: Pattern>(&self, prefix: P) -> bool {
+        self.has_at(&prefix, 0)
+    }
+
+    fn ends_with<P: Pattern>(&self, suffix: P) -> bool {
+        let at = self.len() - suffix.pattern_len();
+        self.has_at(&suffix, at)
+    }
+
+    fn contains<P: Pattern>(&self, part: P) -> bool {
+        let mut at = 0;
+        while at + part.pattern_len() <= self.len() {
+            if self.has_at(&part, at) {
+                return true;
+            }
+            at += 1;
+        }
+        false
+    }
+
     // Without the white space at its ends.
     #[intrinsic]
     fn trim(&self) -> &str;
+
+    // Unicode's case mappings, which need its tables.
     #[intrinsic]
-    fn to_uppercase(&self) -> String;
+    fn upper_text(&self) -> &str;
     #[intrinsic]
-    fn to_lowercase(&self) -> String;
+    fn lower_text(&self) -> &str;
+
+    fn to_uppercase(&self) -> String {
+        String::from_str(self.upper_text())
+    }
+
+    fn to_lowercase(&self) -> String {
+        String::from_str(self.lower_text())
+    }
 }
 
 impl PartialEq for str {
@@ -2297,22 +2413,160 @@ impl Ord for str {
     fn cmp(&self, other: &str) -> Ordering;
 }
 
-impl String {
-    #[intrinsic]
-    fn new() -> String;
-    #[intrinsic]
-    fn push_str(&mut self, s: &str);
-    #[intrinsic]
-    fn push(&mut self, c: char);
-    #[intrinsic]
-    fn pop(&mut self) -> Option<char>;
-    #[intrinsic]
-    fn clear(&mut self);
-    #[intrinsic]
-    fn as_str(&self) -> &str;
+// `String` (`text.string.1`): owned, growable UTF-8, over `u8` bytes in the small-string form
+// (`text.string.inline.1`): up to 23 bytes inside the `String` itself, more in a heap buffer.
+struct String {
+    repr: StringRepr,
+}
 
+// Where a `String`'s bytes are: inline, with how many there are, or in a heap buffer.
+enum StringRepr {
+    Inline([u8; 23], u8),
+    Heap(Buf<u8>),
+}
+
+impl String {
+    fn new() -> String {
+        String {
+            repr: StringRepr::Inline([0; 23], 0),
+        }
+    }
+
+    // Room for `capacity` bytes: on the heap if that is more than fit inline.
+    fn with_capacity(capacity: int) -> String {
+        if capacity <= 23 {
+            String::new()
+        } else {
+            String {
+                repr: StringRepr::Heap(Buf::with_capacity(capacity)),
+            }
+        }
+    }
+
+    // A `String` of the text `s`.
+    fn from_str(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        out.push_str(s);
+        out
+    }
+
+    // How many bytes it can hold before it grows: never fewer than the 23 inline.
+    fn capacity(&self) -> int {
+        match &self.repr {
+            StringRepr::Inline(_, _) => 23,
+            StringRepr::Heap(b) => b.capacity(),
+        }
+    }
+
+    // Its length in bytes.
     fn len(&self) -> int {
-        self.as_str().len()
+        match &self.repr {
+            StringRepr::Inline(_, n) => {
+                let k: int = *n;
+                k
+            }
+            StringRepr::Heap(b) => b.len(),
+        }
+    }
+
+    // Its `i`th byte.
+    fn byte(&self, i: int) -> u8 {
+        match &self.repr {
+            StringRepr::Inline(bytes, _) => bytes[i],
+            StringRepr::Heap(b) => b.as_slice()[i],
+        }
+    }
+
+    fn as_str(&self) -> &str {
+        match &self.repr {
+            StringRepr::Inline(bytes, n) => {
+                let k: int = *n;
+                str::view(bytes, k)
+            }
+            StringRepr::Heap(b) => str::view(b.as_slice(), b.len()),
+        }
+    }
+
+    // Adds byte `b` at the end; when the inline room is full the bytes move to the heap, and a
+    // full heap buffer doubles.
+    fn push_byte(&mut self, b: u8) {
+        match &mut self.repr {
+            StringRepr::Inline(bytes, n) => {
+                let k: int = *n;
+                if k < 23 {
+                    bytes[k] = b;
+                    *n = *n + 1;
+                    return;
+                }
+            }
+            StringRepr::Heap(buf) => {
+                if buf.len() == buf.capacity() {
+                    buf.set_capacity(buf.capacity() * 2);
+                }
+                buf.push(b);
+                return;
+            }
+        }
+        let mut buf: Buf<u8> = Buf::with_capacity(46);
+        let mut i = 0;
+        while i < 23 {
+            buf.push(self.byte(i));
+            i += 1;
+        }
+        buf.push(b);
+        self.repr = StringRepr::Heap(buf);
+    }
+
+    fn push_str(&mut self, s: &str) {
+        let mut i = 0;
+        while i < s.len() {
+            self.push_byte(s.byte_at(i));
+            i += 1;
+        }
+    }
+
+    // Adds `c`, encoded as UTF-8: one to four bytes.
+    fn push(&mut self, c: char) {
+        let n = c.len_utf8();
+        let mut i = 0;
+        while i < n {
+            self.push_byte(utf8_byte(c, i));
+            i += 1;
+        }
+    }
+
+    // Takes off its last character.
+    fn pop(&mut self) -> Option<char> {
+        let n = self.len();
+        if n == 0 {
+            return None;
+        }
+        // Back over the continuation bytes (`10xxxxxx`) to where the character starts.
+        let mut start = n - 1;
+        while start > 0 && self.byte(start) & 0xC0 == 0x80 {
+            start -= 1;
+        }
+        let c = self.as_str().char_at_byte(start);
+        self.cut(start);
+        c
+    }
+
+    // Keeps its first `len` bytes.
+    fn cut(&mut self, len: int) {
+        match &mut self.repr {
+            StringRepr::Inline(_, n) => {
+                *n = len.truncate::<u8>();
+            }
+            StringRepr::Heap(buf) => {
+                while buf.len() > len {
+                    buf.pop();
+                }
+            }
+        }
+    }
+
+    fn clear(&mut self) {
+        self.cut(0);
     }
 
     fn is_empty(&self) -> bool {
@@ -2357,15 +2611,65 @@ impl FromIterator<char> for String {
 
 // What `contains`, `starts_with` and `ends_with` look for (`text.pattern.1`): a string or a
 // character.
-trait Pattern {}
+trait Pattern {
+    // How many bytes it is.
+    fn pattern_len(&self) -> int;
+    // Its `i`th byte.
+    fn pattern_byte(&self, i: int) -> u8;
+}
 
-impl Pattern for &str {}
-impl Pattern for &String {}
-impl Pattern for char {}
+impl Pattern for &str {
+    fn pattern_len(&self) -> int {
+        self.len()
+    }
+    fn pattern_byte(&self, i: int) -> u8 {
+        self.byte_at(i)
+    }
+}
+
+impl Pattern for &String {
+    fn pattern_len(&self) -> int {
+        self.len()
+    }
+    fn pattern_byte(&self, i: int) -> u8 {
+        self.byte(i)
+    }
+}
+
+impl Pattern for char {
+    fn pattern_len(&self) -> int {
+        self.len_utf8()
+    }
+    fn pattern_byte(&self, i: int) -> u8 {
+        utf8_byte(*self, i)
+    }
+}
 
 impl Clone for String {
-    #[intrinsic]
-    fn clone(&self) -> String;
+    fn clone(&self) -> String {
+        String::from_str(self.as_str())
+    }
+}
+
+// Byte `i` of `c`'s UTF-8 encoding.
+fn utf8_byte(c: char, i: int) -> u8 {
+    let code = c.code();
+    let n = c.len_utf8();
+    if n == 1 {
+        return code.truncate::<u8>();
+    }
+    // The first byte holds the length and the top bits; each other byte six bits.
+    let shift = 6 * (n - 1 - i);
+    if i == 0 {
+        let lead = match n {
+            2 => 0xC0,
+            3 => 0xE0,
+            _ => 0xF0,
+        };
+        (lead | (code >> shift)).truncate::<u8>()
+    } else {
+        (0x80 | ((code >> shift) & 0x3F)).truncate::<u8>()
+    }
 }
 
 impl PartialEq for String {
@@ -3252,14 +3556,26 @@ impl<A: Debug, B: Debug> Debug for (A, B) {
 
 impl char {
     // The character as Debug shows it: in quotes, escaped.
+    fn quoted(self) -> String {
+        String::from_str((&self).quoted_text())
+    }
+
     #[intrinsic]
-    fn quoted(self) -> String;
+    fn quoted_text(&self) -> &str;
+
+    // The character itself, as text.
+    #[intrinsic]
+    fn text(&self) -> &str;
 }
 
 impl str {
     // The text as Debug shows it: in quotes, escaped.
+    fn quoted(&self) -> String {
+        String::from_str(self.quoted_text())
+    }
+
     #[intrinsic]
-    fn quoted(&self) -> String;
+    fn quoted_text(&self) -> &str;
 }
 
 // A type's default value (`attr.derive.default.1`).

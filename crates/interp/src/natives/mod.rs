@@ -74,6 +74,18 @@ impl<'a> Natives<'a> {
         let name = sig.name.as_str();
         Ok(match (&self_ty, name) {
             (Ty::Buf(_), _) => return self.buf(name, args, stack),
+            // A byte of the text (`text.string.inline.1`).
+            (Ty::Str, "byte_at") => {
+                let Value::Str(s) = stack.deref(&args[0]) else {
+                    unreachable!("text")
+                };
+                let i = args[1].as_int();
+                return usize::try_from(i)
+                    .ok()
+                    .and_then(|i| s.as_bytes().get(i).copied())
+                    .map(|b| Value::Num(moddil_sema::Num::U8, u128::from(b)))
+                    .ok_or(TrapClass::IndexOutOfBounds);
+            }
             // The conversions (`num.convert.1`): to the type the call names, its last type
             // argument.
             (Ty::Int | Ty::Num(_), "checked_to" | "truncate" | "wrap" | "saturate") => {
@@ -86,7 +98,7 @@ impl<'a> Natives<'a> {
                 }
             }
             // The float functions (`num.float.fn.1`).
-            (Ty::Num(n), _) if n.is_float() && name != "fmt" => {
+            (Ty::Num(n), _) if n.is_float() && name != "text" => {
                 let x = |i: usize| match args.get(i).map(|a| stack.deref(a)) {
                     Some(Value::Num(_, bits)) => crate::num::float(*n, bits),
                     _ => 0.0,
@@ -124,10 +136,8 @@ impl<'a> Natives<'a> {
             (Ty::Adt(a, ..), "debug" | "info" | "warn" | "error")
                 if self.items.adts[*a as usize].name == "Log" =>
             {
-                let msg = match &args[1] {
-                    Value::String(s) => s.clone(),
-                    other => format!("{other:?}"),
-                };
+                let msg = crate::value::string_text(self.items, &args[1])
+                    .unwrap_or_else(|| format!("{:?}", args[1]));
                 eprintln!("[{name}] {msg}");
                 Value::Unit
             }
@@ -154,11 +164,14 @@ impl<'a> Natives<'a> {
     }
 
     /// The prelude's `Trapped { class, at }`.
-    pub(crate) fn trapped(&self, class: String, at: String) -> Value {
+    pub(crate) fn trapped(&self, class: &str, at: &str) -> Value {
         Value::Adt {
             adt: self.prelude_adt("Trapped"),
             variant: 0,
-            fields: vec![Value::String(class), Value::String(at)],
+            fields: vec![
+                crate::value::make_string(self.items, class),
+                crate::value::make_string(self.items, at),
+            ],
         }
     }
 

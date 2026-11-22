@@ -41,9 +41,9 @@ pub(crate) fn check_impls(tree: &ItemTree) -> Vec<Found> {
                         imp.self_ty,
                         Ty::Int
                             | Ty::Num(_)
+                            | Ty::Bool
                             | Ty::Char
                             | Ty::Str
-                            | Ty::String
                             | Ty::Array(..)
                             | Ty::Slice(_)
                             | Ty::Buf(_)

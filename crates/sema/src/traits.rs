@@ -660,7 +660,6 @@ impl<'a> Solver<'a> {
             | Ty::Dyn(_)
             | Ty::Char
             | Ty::Str
-            | Ty::String
             | Ty::Len(_) => false,
             Ty::Array(t, _) | Ty::Slice(t) | Ty::Buf(t) => self.needs_drop_inner(t, depth + 1),
             Ty::Refined(..) => {

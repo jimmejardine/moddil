@@ -623,7 +623,10 @@ impl Machine<'_> {
         Value::Adt {
             ty: "Trapped".to_string(),
             variant: "Trapped".to_string(),
-            fields: vec![Value::String(t.class.to_string()), Value::String(at)],
+            fields: vec![
+                crate::value::make_string(&t.class.to_string()),
+                crate::value::make_string(&at),
+            ],
         }
     }
 

@@ -217,7 +217,7 @@ impl Machine<'_> {
                 .iter()
                 .position(|f| *f == name)
                 .expect("a checked field");
-            fields[i] = crate::num::typed(v, info.types.get(i).and_then(Option::as_ref));
+            fields[i] = self.typed(v, info.types.get(i).and_then(Option::as_ref));
         }
         Ok(Value::Adt {
             ty,

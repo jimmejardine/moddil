@@ -15,7 +15,6 @@ pub(crate) enum Value {
     Char(char),
     /// A `&str`: its text (what it points to cannot change while it lives).
     Str(std::sync::Arc<str>),
-    String(String),
     Tuple(Vec<Value>),
     /// An array's elements. A slice borrow points to one, or to a `Buf`.
     Array(Vec<Value>),
@@ -84,7 +83,6 @@ pub(crate) enum Head {
     Bool,
     Char,
     Str,
-    String,
     Unit,
     Tuple,
     /// An array or a slice.
@@ -109,7 +107,6 @@ impl Value {
             Value::Bool(_) => Head::Bool,
             Value::Char(_) => Head::Char,
             Value::Str(_) => Head::Str,
-            Value::String(_) => Head::String,
             Value::Unit | Value::Moved | Value::Alias(_) => Head::Unit,
             Value::Closure(_) | Value::Anon(..) => Head::Closure,
             Value::Tuple(_) => Head::Tuple,
@@ -119,4 +116,63 @@ impl Value {
             Value::Adt { ty, .. } => Head::Adt(ty.clone()),
         }
     }
+}
+
+/// A prelude `String` holding `text` (`text.string.inline.1`): inline if it fits in 23 bytes,
+/// else on the heap.
+pub(crate) fn make_string(text: &str) -> Value {
+    let byte = |b: u8| Value::Num(crate::num::Kind::U8, u128::from(b));
+    let bytes = text.as_bytes();
+    let (variant, fields) = if bytes.len() <= 23 {
+        let mut xs: Vec<Value> = bytes.iter().map(|&b| byte(b)).collect();
+        xs.resize(23, byte(0));
+        ("Inline", vec![Value::Array(xs), byte(bytes.len() as u8)])
+    } else {
+        (
+            "Heap",
+            vec![Value::Buf(
+                bytes.len(),
+                bytes.iter().map(|&b| byte(b)).collect(),
+            )],
+        )
+    };
+    Value::Adt {
+        ty: "String".to_string(),
+        variant: "String".to_string(),
+        fields: vec![Value::Adt {
+            ty: "StringRepr".to_string(),
+            variant: variant.to_string(),
+            fields,
+        }],
+    }
+}
+
+/// The text of a prelude `String` value: its bytes, inline or on the heap.
+pub(crate) fn string_text(v: &Value) -> Option<String> {
+    let Value::Adt { ty, fields, .. } = v else {
+        return None;
+    };
+    if ty != "String" {
+        return None;
+    }
+    let Some(Value::Adt { fields: repr, .. }) = fields.first() else {
+        return None;
+    };
+    let byte = |b: &Value| match b {
+        Value::Num(_, b) => *b as u8,
+        _ => 0,
+    };
+    let bytes: Vec<u8> = match repr.as_slice() {
+        [Value::Array(xs), n] => {
+            let n = match n {
+                Value::Num(_, n) => *n as usize,
+                Value::Int(n) => *n as usize,
+                _ => 0,
+            };
+            xs.iter().take(n).map(byte).collect()
+        }
+        [Value::Buf(_, xs)] => xs.iter().map(byte).collect(),
+        _ => return None,
+    };
+    String::from_utf8(bytes).ok()
 }

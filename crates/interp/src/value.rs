@@ -18,8 +18,6 @@ pub enum Value {
     /// A `&str`: the text it points to. A shared borrow keeps what it points to from changing,
     /// so the text is held, not where it is.
     Str(std::sync::Arc<str>),
-    /// A `String`.
-    String(String),
     /// A tuple of one or more elements.
     Tuple(Vec<Value>),
     /// An array's elements, in order. A slice borrow points to one, or to a `Buf`.
@@ -78,10 +76,16 @@ impl Value {
             Value::Unit => "()".to_string(),
             Value::Char(c) => format!("{c:?}"),
             Value::Str(s) => format!("{:?}", &**s),
-            Value::String(s) => format!("{s:?}"),
             Value::Array(xs) | Value::Buf(_, xs) => {
                 let xs: Vec<String> = xs.iter().map(|x| x.render(items)).collect();
                 format!("[{}]", xs.join(", "))
+            }
+            // A `String` is shown as its text, in quotes.
+            Value::Adt { adt, .. }
+                if items.adts[*adt as usize].src == Src::Prelude
+                    && items.adts[*adt as usize].name == "String" =>
+            {
+                format!("{:?}", string_text(items, self).unwrap_or_default())
             }
             // A `Vec` is shown as the literal that makes one.
             Value::Adt { adt, fields, .. }
@@ -126,5 +130,74 @@ impl Value {
             Value::Closure(_) => "{closure}".to_string(),
             Value::Empty => "<moved>".to_string(),
         }
+    }
+}
+
+/// The prelude's struct or enum `name`.
+fn prelude_adt(items: &ItemTree, name: &str) -> u32 {
+    items
+        .adts
+        .iter()
+        .position(|a| a.src == Src::Prelude && a.name == name)
+        .expect("a prelude type") as u32
+}
+
+/// The text of a prelude `String` value (`text.string.inline.1`): its bytes, inline or on the
+/// heap; `None` if `v` is not one.
+pub(crate) fn string_text(items: &ItemTree, v: &Value) -> Option<String> {
+    let Value::Adt { adt, fields, .. } = v else {
+        return None;
+    };
+    if *adt != prelude_adt(items, "String") {
+        return None;
+    }
+    let Some(Value::Adt {
+        variant,
+        fields: repr,
+        ..
+    }) = fields.first()
+    else {
+        return None;
+    };
+    let byte = |b: &Value| match b {
+        Value::Num(_, b) => *b as u8,
+        _ => 0,
+    };
+    let bytes: Vec<u8> = match (*variant, repr.as_slice()) {
+        (0, [Value::Array(xs), Value::Num(_, n)]) => {
+            xs.iter().take(*n as usize).map(byte).collect()
+        }
+        (_, [Value::Buf(_, xs)]) => xs.iter().map(byte).collect(),
+        _ => return None,
+    };
+    String::from_utf8(bytes).ok()
+}
+
+/// A prelude `String` value holding `text`: inline if it fits in 23 bytes, else on the heap.
+pub(crate) fn make_string(items: &ItemTree, text: &str) -> Value {
+    let byte = |b: u8| Value::Num(moddil_sema::Num::U8, u128::from(b));
+    let bytes = text.as_bytes();
+    let repr = if bytes.len() <= 23 {
+        let mut xs: Vec<Value> = bytes.iter().map(|&b| byte(b)).collect();
+        xs.resize(23, byte(0));
+        Value::Adt {
+            adt: prelude_adt(items, "StringRepr"),
+            variant: 0,
+            fields: vec![Value::Array(xs), byte(bytes.len() as u8)],
+        }
+    } else {
+        Value::Adt {
+            adt: prelude_adt(items, "StringRepr"),
+            variant: 1,
+            fields: vec![Value::Buf(
+                bytes.len(),
+                bytes.iter().map(|&b| byte(b)).collect(),
+            )],
+        }
+    };
+    Value::Adt {
+        adt: prelude_adt(items, "String"),
+        variant: 0,
+        fields: vec![repr],
     }
 }

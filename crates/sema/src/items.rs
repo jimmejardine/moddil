@@ -610,6 +610,7 @@ const LANG: &[&str] = &[
     "Default",
     "RefinementError",
     "Trapped",
+    "String",
 ];
 
 impl ItemTree {
@@ -784,6 +785,14 @@ impl ItemTree {
         })
     }
 
+    /// The prelude's `String` (`text.string.1`), written in Moddil.
+    pub fn string_ty(&self) -> Ty {
+        match self.lang("String") {
+            Some(a) => Ty::Adt(a, "String".into(), std::sync::Arc::from([])),
+            None => Ty::Error,
+        }
+    }
+
     /// The method `name` of the prelude's inherent impl for a built-in type (`String::new`).
     pub fn builtin_method(&self, ty: &Ty, name: &str) -> Option<u32> {
         self.impls
@@ -842,9 +851,8 @@ impl ItemTree {
             }
             Ty::Bool => (1, 1),
             Ty::Char => (4, 4),
-            // A `String` is 24 bytes, holding up to 23 inline (`text.md`); a `Buf` is a pointer,
-            // a length and a capacity.
-            Ty::String | Ty::Buf(_) => (24, 8),
+            // A `Buf` is a pointer, a length and a capacity.
+            Ty::Buf(_) => (24, 8),
             Ty::Array(t, n) => {
                 let (s, a) = self.size_of_depth(t, depth + 1);
                 match **n {

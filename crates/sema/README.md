@@ -5,7 +5,7 @@ desugared and name-resolved, carrying inferred types, effects and error sets. Th
 `moddil explain` and MIR building all read it
 ([`specs/mir.md`: Pipeline](../../specs/mir.md#pipeline)). Ownership is checked later, on MIR.
 
-**Status:** slices S0 to S10: functions and tests, `let`, `int`, `bool` and `()`, operators, `if`,
+**Status:** slices S0 to S11: functions and tests, `let`, `int`, `bool` and `()`, operators, `if`,
 blocks, calls and `return` (S0); tuples, structs, enums, patterns, `match` with exhaustiveness
 checking, `if let`, `let … else`, loops and `assert` (S1); borrow types and their mutability
 rules, `*`, binding modes, `Copy` and `defer` (S2; moves and borrows are checked on MIR); type
@@ -32,7 +32,7 @@ the prelude's channels, `Trapped` and stop (S9b); functions as values (as closur
 them), opaque `impl Trait` results, `test … for`, `main`'s root capabilities and `#[selectable]`
 (S9c), with the
 diagnostics of
-[`reference/2027/diagnostics.md`](../../reference/2027/diagnostics.md). Valid Moddil beyond S10 is
+[`reference/2027/diagnostics.md`](../../reference/2027/diagnostics.md). Valid Moddil beyond S11 is
 reported as "not supported yet" (`I0001`). It starts as one crate and
 splits as it grows (names, types, effects).
 

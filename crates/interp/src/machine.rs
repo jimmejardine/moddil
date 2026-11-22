@@ -401,13 +401,6 @@ impl<'a> Machine<'a> {
             Rvalue::Unsize(a, from) if matches!(self.concrete(from), Ty::Array(..)) => {
                 self.stack.take(a)
             }
-            Rvalue::Unsize(a, Ty::String) => match self.stack.take(a) {
-                Value::Ref(ptr, _) => match self.stack.load(&ptr) {
-                    Value::String(s) => Value::Str(s.as_str().into()),
-                    other => unreachable!("a `String`: {other:?}"),
-                },
-                other => unreachable!("a borrow of a `String`: {other:?}"),
-            },
             Rvalue::Unsize(a, from) => {
                 let from = self.concrete(from);
                 match self.stack.take(a) {

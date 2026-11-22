@@ -379,7 +379,7 @@ impl Checker<'_> {
         let (Ty::Ref(m1, a), Ty::Ref(m2, b)) = (&f, &x) else {
             return false;
         };
-        if self.norm(a) == Ty::String && self.norm(b) == Ty::Str && (*m1 || !*m2) {
+        if self.norm(a) == self.items.string_ty() && self.norm(b) == Ty::Str && (*m1 || !*m2) {
             self.out.dyn_coercions.insert(e, x.clone());
             return true;
         }
