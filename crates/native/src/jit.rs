@@ -3,6 +3,7 @@
 
 #![allow(unsafe_code)]
 
+use moddil_mir::TrapClass;
 use moddil_sema::{ItemTree, Num, Shape as VariantShape, Ty};
 
 use crate::layout::{Layouts, Shape, Tag};
@@ -15,9 +16,15 @@ const STACK: usize = 512 * 1024 * 1024;
 /// What the observer needs while a run goes on: the sites, the layouts, and what it has seen.
 struct Seen<'a> {
     sites: &'a [Site],
-    layouts: Layouts<'a>,
-    items: &'a ItemTree,
+    show: Show<'a>,
     observed: Vec<Observed>,
+}
+
+/// What showing a value needs: the items, the layouts, and the types `dyn` borrows point to.
+struct Show<'a> {
+    items: &'a ItemTree,
+    layouts: Layouts<'a>,
+    dyn_types: &'a [Ty],
 }
 
 /// `moddil-rt`'s observer: renders the value at `addr` for `site`.
@@ -28,7 +35,7 @@ fn observe(cx: *mut (), site: u32, addr: *const u8) {
     if let Some(Site::Observe(file, range, ty)) = seen.sites.get(site as usize) {
         let ty = ty.clone();
         // SAFETY: the generated code passes the address of a live value of type `ty`.
-        let text = unsafe { render(seen.items, &mut seen.layouts, &ty, addr) };
+        let text = unsafe { seen.show.render(&ty, addr) };
         seen.observed.push((*file, *range, text));
     }
 }
@@ -39,6 +46,7 @@ impl Compiled<'_> {
     pub(crate) fn run(self) -> (Vec<Observed>, Result<String, Native>) {
         let ptr = self.module.get_finalized_function(self.entry) as usize;
         let (sites, items, ret) = (&self.sites, self.items, &self.ret);
+        let dyn_types = &self.dyn_types;
         let (status, text, observed, record) = std::thread::scope(|s| {
             std::thread::Builder::new()
                 .stack_size(STACK)
@@ -46,13 +54,16 @@ impl Compiled<'_> {
                     moddil_rt::take();
                     let mut seen = Seen {
                         sites,
-                        layouts: Layouts::new(items),
-                        items,
+                        show: Show {
+                            items,
+                            layouts: Layouts::new(items),
+                            dyn_types,
+                        },
                         observed: Vec::new(),
                     };
                     moddil_rt::set_observer(Some((observe, (&raw mut seen).cast())));
                     // Room for any result, aligned for any field.
-                    let size = seen.layouts.of(ret).map_or(16, |l| l.size.max(16)) as usize;
+                    let size = seen.show.layouts.of(ret).map_or(16, |l| l.size.max(16)) as usize;
                     let mut out = vec![0u128; size.div_ceil(16)];
                     // SAFETY: `ptr` is the finished entry trampoline, whose signature is
                     // `fn(*mut u8) -> i8` in the platform's C calling convention; the module
@@ -64,7 +75,7 @@ impl Compiled<'_> {
                     moddil_rt::set_observer(None);
                     let text = (status == 0).then(|| {
                         // SAFETY: the run returned, so `out` holds a value of type `ret`.
-                        unsafe { render(items, &mut seen.layouts, ret, out.as_ptr().cast()) }
+                        unsafe { seen.show.render(ret, out.as_ptr().cast()) }
                     });
                     (status, text, seen.observed, moddil_rt::take())
                 })
@@ -74,14 +85,41 @@ impl Compiled<'_> {
         });
         let result = match text {
             Some(t) if status == 0 => Ok(t),
-            _ => match record.trap.map(|s| &self.sites[s as usize]) {
-                Some(Site::Trap(class, file, range)) => Err(Native::Trap(*class, *file, *range)),
-                _ => Err(Native::Unsupported("a trap without a site".to_string())),
+            _ => match record.trap {
+                Some(t) => Ok(self.reported(&t)).and_then(Err),
+                None => Err(Native::Unsupported("a trap without a site".to_string())),
             },
         };
         // SAFETY: nothing runs the module's code after this.
         unsafe { self.module.free_memory() };
         (observed, result)
+    }
+}
+
+impl Compiled<'_> {
+    /// A trap as the interpreters report it: where it happened, or, in tracked code, at the
+    /// innermost call untracked code made.
+    fn reported(&self, t: &moddil_rt::Trapped) -> Native {
+        let (class, file, range) = match &self.sites[t.site as usize] {
+            Site::Trap(class, file, range) => (*class, *file, *range),
+            Site::Call(file, range, _) => (TrapClass::StackOverflow, *file, *range),
+            Site::Observe(..) => {
+                return Native::Unsupported("a trap at an observation".to_string());
+            }
+        };
+        if !t.tracked {
+            return Native::Trap(class, file, range);
+        }
+        let at = t
+            .stack
+            .iter()
+            .rev()
+            .find_map(|s| match &self.sites[*s as usize] {
+                Site::Call(file, range, false) => Some((*file, *range)),
+                _ => None,
+            });
+        let (file, range) = at.unwrap_or((file, range));
+        Native::Trap(class, file, range)
     }
 }
 
@@ -97,87 +135,119 @@ unsafe fn bits_at(p: *const u8, n: u32) -> u128 {
     u128::from_le_bytes(bytes)
 }
 
-/// The value of type `ty` at `p`, as the interpreters write it.
-///
-/// # Safety
-///
-/// `p` points to a live value of type `ty`, whose borrows point to live values.
-unsafe fn render(items: &ItemTree, layouts: &mut Layouts<'_>, ty: &Ty, p: *const u8) -> String {
-    let Ok(l) = layouts.of(ty) else {
-        return format!("<{ty}>");
-    };
-    // SAFETY (for every read below): `p` is a live value of `ty`, laid out as `l`.
-    let field = |off: u32| unsafe { p.add(off as usize) };
-    match ty {
-        Ty::Unit | Ty::Never => "()".to_string(),
-        Ty::Int => (unsafe { bits_at(p, 8) } as u64 as i64).to_string(),
-        Ty::Bool => (unsafe { bits_at(p, 1) } & 1 == 1).to_string(),
-        Ty::Char => char::from_u32(unsafe { bits_at(p, 4) } as u32)
-            .map_or_else(|| "?".to_string(), |c| format!("{c:?}")),
-        Ty::Num(n) => moddil_mir::num_text(*n, unsafe { bits_at(p, num_bytes(*n)) }),
-        Ty::Ref(m, inner) => {
-            let q = unsafe { bits_at(p, 8) } as usize as *const u8;
-            let shown = unsafe { render(items, layouts, inner, q) };
-            if *m {
-                format!("&mut {shown}")
-            } else {
-                format!("&{shown}")
-            }
-        }
-        Ty::Tuple(_) => {
-            let Shape::Fields(fs) = &l.shape else {
-                return format!("<{ty}>");
-            };
-            let xs: Vec<String> = fs
-                .iter()
-                .map(|(off, t)| unsafe { render(items, layouts, t, field(*off)) })
-                .collect();
-            if xs.len() == 1 {
-                format!("({},)", xs[0])
-            } else {
-                format!("({})", xs.join(", "))
-            }
-        }
-        Ty::Array(..) => {
-            let Shape::Array { elem, stride, len } = &l.shape else {
-                return format!("<{ty}>");
-            };
-            let xs: Vec<String> = (0..*len)
-                .map(|k| unsafe { render(items, layouts, elem, field(k * stride)) })
-                .collect();
-            format!("[{}]", xs.join(", "))
-        }
-        Ty::Adt(a, ..) => {
-            let (variant, fields) = match &l.shape {
-                Shape::Fields(fs) => (0, fs.clone()),
-                Shape::Enum { tag, variants } => {
-                    let v = unsafe { variant_at(tag, variants.len() as u32, p) };
-                    (v, variants[v as usize].clone())
-                }
-                Shape::Empty => (0, Vec::new()),
-                _ => return format!("<{ty}>"),
-            };
-            let def = items.variant(*a, variant);
-            let path = items.adts[*a as usize].path(variant);
-            let xs: Vec<String> = fields
-                .iter()
-                .map(|(off, t)| unsafe { render(items, layouts, t, field(*off)) })
-                .collect();
-            match def.shape {
-                VariantShape::Unit => path,
-                VariantShape::Tuple => format!("{path}({})", xs.join(", ")),
-                VariantShape::Named => {
-                    let named: Vec<String> = def
-                        .fields
-                        .iter()
-                        .zip(&xs)
-                        .map(|(f, x)| format!("{}: {x}", f.name))
-                        .collect();
-                    format!("{path} {{ {} }}", named.join(", "))
+impl Show<'_> {
+    /// The value of type `ty` at `p`, as the interpreters write it.
+    ///
+    /// # Safety
+    ///
+    /// `p` points to a live value of type `ty`, whose borrows point to live values.
+    unsafe fn render(&mut self, ty: &Ty, p: *const u8) -> String {
+        let items = self.items;
+        let Ok(l) = self.layouts.of(ty) else {
+            return format!("<{ty}>");
+        };
+        // SAFETY (for every read below): `p` is a live value of `ty`, laid out as `l`.
+        let field = |off: u32| unsafe { p.add(off as usize) };
+        match ty {
+            Ty::Unit | Ty::Never => "()".to_string(),
+            Ty::Int => (unsafe { bits_at(p, 8) } as u64 as i64).to_string(),
+            Ty::Bool => (unsafe { bits_at(p, 1) } & 1 == 1).to_string(),
+            Ty::Char => char::from_u32(unsafe { bits_at(p, 4) } as u32)
+                .map_or_else(|| "?".to_string(), |c| format!("{c:?}")),
+            Ty::Num(n) => moddil_mir::num_text(*n, unsafe { bits_at(p, num_bytes(*n)) }),
+            Ty::Ref(m, inner) => {
+                let q = unsafe { bits_at(p, 8) } as usize as *const u8;
+                let shown = match &**inner {
+                    // Text is shown as itself, in quotes, as the interpreters show it.
+                    Ty::Str => {
+                        let n = unsafe { bits_at(p.add(8), 8) } as usize;
+                        // SAFETY: a `&str` is the address and length of live UTF-8.
+                        let bytes = unsafe { std::slice::from_raw_parts(q, n) };
+                        return format!("{:?}", String::from_utf8_lossy(bytes));
+                    }
+                    Ty::Slice(elem) => {
+                        let n = unsafe { bits_at(p.add(8), 8) } as u32;
+                        let stride = self
+                            .layouts
+                            .of(elem)
+                            .map_or(0, |l| l.size.div_ceil(l.align) * l.align);
+                        let xs: Vec<String> = (0..n)
+                            .map(|k| unsafe { self.render(elem, q.add((k * stride) as usize)) })
+                            .collect();
+                        format!("[{}]", xs.join(", "))
+                    }
+                    Ty::Dyn(..) => {
+                        // The vtable starts with the number of the type it is for.
+                        let vt = unsafe { bits_at(p.add(8), 8) } as usize as *const u8;
+                        let k = unsafe { bits_at(vt, 8) } as usize;
+                        match self.dyn_types.get(k).cloned() {
+                            Some(t) => unsafe { self.render(&t, q) },
+                            None => "…".to_string(),
+                        }
+                    }
+                    inner => unsafe { self.render(inner, q) },
+                };
+                if *m {
+                    format!("&mut {shown}")
+                } else {
+                    format!("&{shown}")
                 }
             }
+            Ty::Tuple(_) => {
+                let Shape::Fields(fs) = &l.shape else {
+                    return format!("<{ty}>");
+                };
+                let xs: Vec<String> = fs
+                    .iter()
+                    .map(|(off, t)| unsafe { self.render(t, field(*off)) })
+                    .collect();
+                if xs.len() == 1 {
+                    format!("({},)", xs[0])
+                } else {
+                    format!("({})", xs.join(", "))
+                }
+            }
+            Ty::Array(..) => {
+                let Shape::Array { elem, stride, len } = &l.shape else {
+                    return format!("<{ty}>");
+                };
+                let xs: Vec<String> = (0..*len)
+                    .map(|k| unsafe { self.render(elem, field(k * stride)) })
+                    .collect();
+                format!("[{}]", xs.join(", "))
+            }
+            Ty::Adt(a, ..) => {
+                let (variant, fields) = match &l.shape {
+                    Shape::Fields(fs) => (0, fs.clone()),
+                    Shape::Enum { tag, variants } => {
+                        let v = unsafe { variant_at(tag, variants.len() as u32, p) };
+                        (v, variants[v as usize].clone())
+                    }
+                    Shape::Empty => (0, Vec::new()),
+                    _ => return format!("<{ty}>"),
+                };
+                let def = items.variant(*a, variant);
+                let path = items.adts[*a as usize].path(variant);
+                let xs: Vec<String> = fields
+                    .iter()
+                    .map(|(off, t)| unsafe { self.render(t, field(*off)) })
+                    .collect();
+                match def.shape {
+                    VariantShape::Unit => path,
+                    VariantShape::Tuple => format!("{path}({})", xs.join(", ")),
+                    VariantShape::Named => {
+                        let named: Vec<String> = def
+                            .fields
+                            .iter()
+                            .zip(&xs)
+                            .map(|(f, x)| format!("{}: {x}", f.name))
+                            .collect();
+                        format!("{path} {{ {} }}", named.join(", "))
+                    }
+                }
+            }
+            t => format!("<{t}>"),
         }
-        t => format!("<{t}>"),
     }
 }
 

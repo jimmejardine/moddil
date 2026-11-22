@@ -15,6 +15,8 @@ The markers and how they bind are in the [suite's README](../../conformance/READ
   (read with [`moddil-project`](../project/README.md)), and their inline expectations: `// =>`
   values, `//~ E…` diagnostic codes, `//~ trap`, `//~ error`, and `#~ E…` in a manifest.
 - Runs each test on every available implementation (the reference interpreter, the MIR interpreter,
-  later compiled code) and reports any disagreement.
+  and native code) and reports any disagreement. The native backend runs only the files whose
+  code it compiles so far; `MODDIL_NATIVE_WHY=1` prints, for each file it skips, what it does not
+  compile yet.
 - Measures **reference coverage** from the paragraph IDs tests cite (`// covers: …`).
 - Skips tests marked *disputed*.

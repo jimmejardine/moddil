@@ -263,3 +263,68 @@ fn layouts_reorder_fields_and_use_niches() {
         "fields largest first, niches in bool, borrows and char, a tag for E"
     );
 }
+
+#[test]
+fn generic_functions() {
+    assert_eq!(
+        value("fn id<T>(x: T) -> T { x }  fn main() -> (int, bool) { (id(3), id(true)) }"),
+        "(3, true)"
+    );
+}
+
+#[test]
+fn traits_static_and_dyn() {
+    let shapes = "trait Shape { fn area(&self) -> int; fn twice(&self) -> int { self.area() * 2 } }
+        trait Named: Shape { fn id(&self) -> int; }
+        struct Sq { s: int }
+        impl Shape for Sq { fn area(&self) -> int { self.s * self.s } }
+        impl Named for Sq { fn id(&self) -> int { 7 } }
+        fn total<T: Shape>(x: &T) -> int { x.twice() }
+        fn by_dyn(x: &dyn Shape) -> int { x.area() }
+        fn named(n: &dyn Named) -> int { n.id() * 100 + by_dyn(n) }";
+    assert_eq!(
+        value(&format!(
+            "{shapes} fn main() -> int {{ total(&Sq {{ s: 3 }}) }}"
+        )),
+        "18"
+    );
+    assert_eq!(
+        value(&format!(
+            "{shapes} fn main() -> int {{ by_dyn(&Sq {{ s: 4 }}) }}"
+        )),
+        "16"
+    );
+    assert_eq!(
+        value(&format!(
+            "{shapes} fn main() -> int {{ named(&Sq {{ s: 2 }}) }}"
+        )),
+        "704"
+    );
+}
+
+#[test]
+fn slices_and_text() {
+    assert_eq!(
+        value("fn sum(xs: &[int]) -> int { let mut t = 0; let mut i = 0; while i < xs.len() { t += xs[i]; i += 1; } t }
+               fn main() -> int { let a = [1, 2, 3, 4]; sum(&a) + sum(&a[1..3]) }"),
+        "15"
+    );
+    assert_eq!(value(r#"fn main() -> int { "naïve".len() }"#), "6");
+    assert_eq!(value(r#"fn main() -> &str { "hi" }"#), "\"hi\"");
+    assert_eq!(
+        value(
+            r#"fn yes(s: &str) -> bool { match s { "y" | "yes" => true, _ => false } }  fn main() -> bool { yes("yes") && !yes("no") }"#
+        ),
+        "true"
+    );
+    assert_eq!(
+        trap("fn main() -> int { let a = [1, 2, 3]; let s = &a[0..2]; let i = 2; s[i] }"),
+        TrapClass::IndexOutOfBounds
+    );
+}
+
+#[test]
+fn float_functions() {
+    assert_eq!(value("fn main() -> f64 { 9.0.sqrt() }"), "3.0");
+    assert_eq!(value("fn main() -> bool { (0.0 / 0.0).is_nan() }"), "true");
+}

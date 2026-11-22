@@ -623,8 +623,38 @@ calls is a Rust crate, `moddil-rt`, for now.
     - no destructors;
     - no errors through the status channel;
     - `#[repr(C)]` is not honoured yet.
-- **Next, C2:** wide pointers (slices and `str`), then errors through the status channel, then
-  generics (monomorphised, the prelude's included), then drops.
+- **Slice C2 (decided November 2026): generics and wide pointers.**
+  - **Generics:** monomorphised. Each function is compiled once for each set of type arguments
+    it is called with, the prelude's and derived code included.
+  - **Trait methods:** called statically, through the impl's method or the trait's default. The
+    built-in `Clone` of a borrow or tuple is a copy.
+  - **`#[track_caller]`:** `moddil-rt` keeps the stack of call sites. A trap in tracked code (in
+    `#[track_caller]`, the prelude's or derived code) is reported at the innermost call that
+    untracked code makes, as the interpreters report it.
+  - **Wide pointers:** `&str`, `&[T]` and `&dyn Trait` are two words, an address then a length
+    or a vtable. They cross calls in registers, and the address is a niche.
+    - Text constants are read-only data.
+    - `&[T; N]` becomes `&[T]`; indexing, `Len` and subslices of slices are checked against
+      the length.
+  - **Vtables:** one per type and trait. Each starts with the type's number, so a value seen
+    through `&dyn` can be shown, then each method's address. A trait's first supertrait's methods
+    come first, so a `&dyn Sub` is a `&dyn Super` as it is. Converting to any other supertrait is
+    not compiled yet.
+  - **Built-in functions:**
+    - text: `len`, `byte_at`, `char_at_byte`, `bytes_between`, and comparing;
+    - a slice's `len`;
+    - the float functions, through `libm` as the interpreters compute them;
+    - `char`'s classes, `code` and `len_utf8`;
+    - `int`'s wrapping operations;
+    - `swap` and `replace`.
+  - **Checking:** 64 conformance files run natively (from 45). `MODDIL_NATIVE_WHY=1` says what
+    keeps each other file from running natively.
+  - **Interim limits:**
+    - no heap: `Buf`, so `Vec`, `String` and `Box`;
+    - no closures, destructors, or errors through the status channel;
+    - no number conversions (`checked_to` and the others), and no `const` items.
+- **Next, C3:** the heap (`Buf` in `moddil-rt`, so `Vec`, `String` and `Box`), then drops, then
+  closures, then errors through the status channel.
 
 ## Staging: distributed programs
 

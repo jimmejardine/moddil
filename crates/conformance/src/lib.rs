@@ -209,7 +209,14 @@ impl Implementation for Native {
                 Err(moddil_native::Native::Trap(_, file, range)) => {
                     outcome.traps.insert(line_of(project, file, range.start));
                 }
-                Err(moddil_native::Native::Unsupported(_)) => return None,
+                Err(moddil_native::Native::Unsupported(why)) => {
+                    // `MODDIL_NATIVE_WHY=1` says what keeps each file from running natively.
+                    if std::env::var_os("MODDIL_NATIVE_WHY").is_some() {
+                        let name = project.files.first().map_or("", |f| f.display.as_str());
+                        eprintln!("native skips {name}: {why}");
+                    }
+                    return None;
+                }
             }
         }
         Some(outcome)

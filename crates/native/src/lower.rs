@@ -28,12 +28,12 @@ use cranelift_codegen::isa::CallConv;
 use cranelift_codegen::settings::{self, Configurable};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{FuncId, Linkage, Module};
+use cranelift_module::{DataDescription, DataId, FuncId, Linkage, Module};
 use moddil_mir::{
     AggregateKind, BinOp, Body, Const, Local, Operand, Place, Projection, Rvalue, Statement,
     Terminator, TrapClass, UnOp,
 };
-use moddil_sema::{Callee, Db, Item, ItemTree, Num, Owner, Program, Src, Ty};
+use moddil_sema::{Callee, Db, Item, ItemTree, Num, Owner, Program, Solver, TraitRef, Ty};
 use moddil_syntax::TextRange;
 
 use crate::layout::{Layout, Layouts, Shape, Tag};
@@ -43,6 +43,10 @@ use crate::layout::{Layout, Layouts, Shape, Tag};
 pub(crate) enum Site {
     /// A check: its class, the file and where.
     Trap(TrapClass, u32, TextRange),
+    /// A call: the file, where, and whether the code that makes it is tracked
+    /// (`#[track_caller]`, the prelude's or derived code). Too deep a call traps here, and a
+    /// trap in tracked code is reported at the innermost call untracked code makes.
+    Call(u32, TextRange, bool),
     /// A `// =>` observation: the file, the expression, and its type.
     Observe(u32, TextRange, Ty),
 }
@@ -56,6 +60,8 @@ pub(crate) struct Compiled<'db> {
     pub(crate) ret: Ty,
     pub(crate) sites: Vec<Site>,
     pub(crate) items: &'db ItemTree,
+    /// The types `dyn` borrows point to, by the number their vtables start with.
+    pub(crate) dyn_types: Vec<Ty>,
 }
 
 /// The Cranelift type of a scalar `ty`: `None` for `()`, an error for a type that is not a
@@ -150,12 +156,22 @@ pub(crate) fn pass_of(l: &Layout) -> Pass {
 /// The runtime functions the code calls.
 struct Rt {
     trap: FuncId,
+    trap_tracked: FuncId,
     observe: FuncId,
     enter: FuncId,
     leave: FuncId,
     fmod: FuncId,
     fmodf: FuncId,
+    float_fn: FuncId,
+    float_fn_f32: FuncId,
+    char_at_byte: FuncId,
+    is_between: FuncId,
+    str_cmp: FuncId,
+    char_is: FuncId,
 }
+
+/// A function instance: a function and its (concrete) type arguments.
+type Instance = (u32, Vec<Ty>);
 
 struct Compiler<'db> {
     db: &'db dyn Db,
@@ -164,11 +180,16 @@ struct Compiler<'db> {
     layouts: Layouts<'db>,
     module: JITModule,
     rt: Rt,
-    /// Each function declared: its id, and its parameters' and result's types.
-    fns: HashMap<u32, (FuncId, Vec<Ty>, Ty)>,
-    /// The functions declared and not yet compiled.
-    queue: Vec<u32>,
+    /// Each instance declared: its id, and its parameters' and result's types.
+    fns: HashMap<Instance, (FuncId, Vec<Ty>, Ty)>,
+    /// The instances declared and not yet compiled.
+    queue: Vec<Instance>,
     sites: Vec<Site>,
+    /// Each text constant's data.
+    strs: HashMap<String, DataId>,
+    /// Each vtable: for a type and a trait (with its arguments).
+    vtables: HashMap<(Ty, TraitRef), DataId>,
+    dyn_types: Vec<Ty>,
 }
 
 /// Compiles what `item` (a test, or a function without parameters) reaches.
@@ -189,6 +210,22 @@ pub(crate) fn compile<'db>(
         .map_err(|e| e.to_string())?;
     let mut builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
     builder.symbol("moddil_rt_trap", moddil_rt::trap as *const u8);
+    builder.symbol(
+        "moddil_rt_trap_tracked",
+        moddil_rt::trap_tracked as *const u8,
+    );
+    builder.symbol("moddil_rt_float_fn", moddil_rt::float_fn as *const u8);
+    builder.symbol(
+        "moddil_rt_float_fn_f32",
+        moddil_rt::float_fn_f32 as *const u8,
+    );
+    builder.symbol(
+        "moddil_rt_char_at_byte",
+        moddil_rt::char_at_byte as *const u8,
+    );
+    builder.symbol("moddil_rt_is_between", moddil_rt::is_between as *const u8);
+    builder.symbol("moddil_rt_str_cmp", moddil_rt::str_cmp as *const u8);
+    builder.symbol("moddil_rt_char_is", moddil_rt::char_is as *const u8);
     builder.symbol("moddil_rt_observe", moddil_rt::observe as *const u8);
     builder.symbol("moddil_rt_enter", moddil_rt::enter as *const u8);
     builder.symbol("moddil_rt_leave", moddil_rt::leave as *const u8);
@@ -210,8 +247,39 @@ pub(crate) fn compile<'db>(
     };
     let rt = Rt {
         trap: import("moddil_rt_trap", &[types::I32], None)?,
+        trap_tracked: import("moddil_rt_trap_tracked", &[types::I32], None)?,
+        float_fn: import(
+            "moddil_rt_float_fn",
+            &[types::I32, types::F64, types::F64],
+            Some(types::F64),
+        )?,
+        float_fn_f32: import(
+            "moddil_rt_float_fn_f32",
+            &[types::I32, types::F32, types::F32],
+            Some(types::F32),
+        )?,
+        char_at_byte: import(
+            "moddil_rt_char_at_byte",
+            &[ptr, types::I64, types::I64],
+            Some(types::I32),
+        )?,
+        is_between: import(
+            "moddil_rt_is_between",
+            &[ptr, types::I64, types::I64, types::I64],
+            Some(types::I8),
+        )?,
+        str_cmp: import(
+            "moddil_rt_str_cmp",
+            &[ptr, types::I64, ptr, types::I64],
+            Some(types::I8),
+        )?,
+        char_is: import(
+            "moddil_rt_char_is",
+            &[types::I32, types::I32],
+            Some(types::I8),
+        )?,
         observe: import("moddil_rt_observe", &[types::I32, ptr], None)?,
-        enter: import("moddil_rt_enter", &[types::I32], Some(types::I8))?,
+        enter: import("moddil_rt_enter", &[types::I32, types::I8], Some(types::I8))?,
         leave: import("moddil_rt_leave", &[], None)?,
         fmod: import(
             "moddil_rt_fmod",
@@ -235,15 +303,18 @@ pub(crate) fn compile<'db>(
         fns: HashMap::new(),
         queue: Vec::new(),
         sites: Vec::new(),
+        strs: HashMap::new(),
+        vtables: HashMap::new(),
+        dyn_types: Vec::new(),
     };
     let (target, ret) = match item {
         Item::Test(_) => {
-            let id = c.declare_item(item, &[], &Ty::Unit)?;
-            c.body_of(item, id, &[], &Ty::Unit)?;
+            let id = c.declare_item("test", &[], &Ty::Unit)?;
+            c.body_of(item, &[], id, &[], &Ty::Unit)?;
             (id, Ty::Unit)
         }
         Item::Fn(f) => {
-            let (id, params, ret) = c.declare_fn(f)?;
+            let (id, params, ret) = c.declare_fn(f, &[])?;
             if !params.is_empty() {
                 return Err("an entry point with parameters".to_string());
             }
@@ -251,9 +322,9 @@ pub(crate) fn compile<'db>(
         }
         Item::Closure(..) => return Err("a closure as an entry point".to_string()),
     };
-    while let Some(f) = c.queue.pop() {
-        let (id, params, ret) = c.fns[&f].clone();
-        c.body_of(Item::Fn(f), id, &params, &ret)?;
+    while let Some(inst) = c.queue.pop() {
+        let (id, params, ret) = c.fns[&inst].clone();
+        c.body_of(Item::Fn(inst.0), &inst.1, id, &params, &ret)?;
     }
     let entry = c.trampoline(target, &ret)?;
     c.module.finalize_definitions().map_err(|e| e.to_string())?;
@@ -263,6 +334,7 @@ pub(crate) fn compile<'db>(
         ret,
         sites: c.sites,
         items,
+        dyn_types: c.dyn_types,
     })
 }
 
@@ -296,37 +368,140 @@ impl Compiler<'_> {
         Ok(sig)
     }
 
-    fn declare_item(&mut self, item: Item, params: &[Ty], ret: &Ty) -> Result<FuncId, String> {
+    fn declare_item(&mut self, name: &str, params: &[Ty], ret: &Ty) -> Result<FuncId, String> {
         let sig = self.signature(params, ret)?;
-        let name = match item {
-            Item::Fn(f) => format!("f{f}"),
-            Item::Test(t) => format!("t{t}"),
-            Item::Closure(..) => "closure".to_string(),
-        };
         self.module
-            .declare_function(&name, Linkage::Local, &sig)
-            .map_err(|e| e.to_string())
+            .declare_anonymous_function(&sig)
+            .map_err(|e| format!("{name}: {e}"))
     }
 
-    /// Function `f`, declared (and queued to be compiled) the first time it is named.
-    fn declare_fn(&mut self, f: u32) -> Result<(FuncId, Vec<Ty>, Ty), String> {
-        if let Some(d) = self.fns.get(&f) {
+    /// `ty` with the type arguments `targs` for its parameters, its associated types resolved.
+    fn concrete(&self, ty: &Ty, targs: &[Ty]) -> Ty {
+        Solver::new(self.items, &[]).deep(&ty.subst(targs))
+    }
+
+    /// Function `f` with type arguments `targs`: declared (and queued to be compiled) the first
+    /// time it is named.
+    fn declare_fn(&mut self, f: u32, targs: &[Ty]) -> Result<(FuncId, Vec<Ty>, Ty), String> {
+        let key = (f, targs.to_vec());
+        if let Some(d) = self.fns.get(&key) {
             return Ok(d.clone());
         }
         let sig = &self.items.fns[f as usize];
         if sig.intrinsic || !sig.has_body {
             return Err(format!("the built-in function `{}`", sig.name));
         }
+        let name = sig.name.clone();
         let body = self.mir(Item::Fn(f))?;
         let params: Vec<Ty> = body.locals[1..=body.arg_count]
             .iter()
-            .map(|l| l.ty.clone())
+            .map(|l| self.concrete(&l.ty, targs))
             .collect();
-        let ret = body.locals[0].ty.clone();
-        let id = self.declare_item(Item::Fn(f), &params, &ret)?;
-        self.fns.insert(f, (id, params.clone(), ret.clone()));
-        self.queue.push(f);
+        let ret = self.concrete(&body.locals[0].ty, targs);
+        let id = self.declare_item(&name, &params, &ret)?;
+        self.fns
+            .insert(key.clone(), (id, params.clone(), ret.clone()));
+        self.queue.push(key);
         Ok((id, params, ret))
+    }
+
+    /// The data holding text `t`'s bytes.
+    fn text_data(&mut self, t: &str) -> Result<DataId, String> {
+        if let Some(d) = self.strs.get(t) {
+            return Ok(*d);
+        }
+        let id = self
+            .module
+            .declare_anonymous_data(false, false)
+            .map_err(|e| e.to_string())?;
+        let mut desc = DataDescription::new();
+        // At least a byte, so that the text has an address of its own.
+        let mut bytes = t.as_bytes().to_vec();
+        bytes.push(0);
+        desc.define(bytes.into_boxed_slice());
+        self.module
+            .define_data(id, &desc)
+            .map_err(|e| e.to_string())?;
+        self.strs.insert(t.to_string(), id);
+        Ok(id)
+    }
+
+    /// The methods of `tr` and its supertraits, in vtable order, each with the trait (with
+    /// `Self` as `self_ty`) it is declared in: each supertrait's first, depth first, then the
+    /// trait's own. So the vtable of a trait starts with that of its first supertrait, and a
+    /// `dyn` borrow of it is one of that supertrait as it is.
+    fn dyn_methods(&self, self_ty: &Ty, tr: &TraitRef) -> Vec<(u32, TraitRef)> {
+        let mut out = Vec::new();
+        self.methods_into(self_ty, tr, &mut out, &mut HashSet::new());
+        out
+    }
+
+    fn methods_into(
+        &self,
+        self_ty: &Ty,
+        tr: &TraitRef,
+        out: &mut Vec<(u32, TraitRef)>,
+        seen: &mut HashSet<u32>,
+    ) {
+        if !seen.insert(tr.trait_) {
+            return;
+        }
+        let def = &self.items.traits[tr.trait_ as usize];
+        let mut args = vec![self_ty.clone()];
+        args.extend(tr.args.iter().cloned());
+        for sup in &def.supertraits {
+            self.methods_into(self_ty, &sup.subst(&args), out, seen);
+        }
+        for &m in &def.methods {
+            out.push((m, tr.clone()));
+        }
+    }
+
+    /// The vtable of `ty` for `tr`: its number in [`Compiled::dyn_types`], then each method's
+    /// address (null for one a `dyn` borrow cannot call).
+    fn vtable(&mut self, ty: &Ty, tr: &TraitRef) -> Result<DataId, String> {
+        let key = (ty.clone(), tr.clone());
+        if let Some(d) = self.vtables.get(&key) {
+            return Ok(*d);
+        }
+        let methods = self.dyn_methods(ty, tr);
+        let id = self
+            .module
+            .declare_anonymous_data(false, false)
+            .map_err(|e| e.to_string())?;
+        self.vtables.insert(key, id);
+        let mut desc = DataDescription::new();
+        let n = self.dyn_types.len() as u64;
+        self.dyn_types.push(ty.clone());
+        let mut bytes = n.to_le_bytes().to_vec();
+        bytes.resize(8 * (1 + methods.len()), 0);
+        desc.define(bytes.into_boxed_slice());
+        for (k, (m, t)) in methods.iter().enumerate() {
+            let sig = &self.items.fns[*m as usize];
+            // Only a method that takes `self` by borrow, with no type parameters of its own, is
+            // called through a `dyn` borrow.
+            if sig.generics.params.len() > sig.generics.parent as usize {
+                continue;
+            }
+            let Some((f, parent)) = Solver::new(self.items, &[]).impl_method(*m, ty, t) else {
+                continue;
+            };
+            let fsig = &self.items.fns[f as usize];
+            if fsig.intrinsic || !fsig.has_body {
+                continue;
+            }
+            let body = self.mir(Item::Fn(f))?;
+            if body.arg_count == 0 || !matches!(body.locals[1].ty, Ty::Ref(..)) {
+                continue;
+            }
+            let (fid, ..) = self.declare_fn(f, &parent)?;
+            let fref = self.module.declare_func_in_data(fid, &mut desc);
+            desc.write_function_addr(8 * (1 + k as u32), fref);
+        }
+        self.module
+            .define_data(id, &desc)
+            .map_err(|e| e.to_string())?;
+        Ok(id)
     }
 
     fn mir(&self, item: Item) -> Result<&Body, String> {
@@ -336,22 +511,34 @@ impl Compiler<'_> {
             .ok_or_else(|| "a program with errors".to_string())
     }
 
-    /// Compiles `item`'s body as function `id`.
-    fn body_of(&mut self, item: Item, id: FuncId, params: &[Ty], ret: &Ty) -> Result<(), String> {
+    /// Compiles `item`'s body, with type arguments `targs`, as function `id`.
+    fn body_of(
+        &mut self,
+        item: Item,
+        targs: &[Ty],
+        id: FuncId,
+        params: &[Ty],
+        ret: &Ty,
+    ) -> Result<(), String> {
         let body = self.mir(item)?.clone();
-        let Src::File(file) = body.src else {
-            return Err(format!("`{}`, of the prelude", body.name));
-        };
-        if body.track_caller {
-            return Err(format!("`{}`, which is `#[track_caller]`", body.name));
-        }
+        let file = body.src.file().unwrap_or(0);
+        // Its traps are reported where untracked code called it.
+        let tracked = body.track_caller || !body.src.is_file();
+        let tys = body
+            .locals
+            .iter()
+            .map(|l| self.concrete(&l.ty, targs))
+            .collect();
         let mut ctx = self.module.make_context();
         ctx.func.signature = self.signature(params, ret)?;
         let mut fctx = FunctionBuilderContext::new();
         let mut lw = Lower {
             c: self,
             body: &body,
+            targs,
+            tys,
             file,
+            tracked,
             b: FunctionBuilder::new(&mut ctx.func, &mut fctx),
             locs: Vec::new(),
             blocks: Vec::new(),
@@ -437,6 +624,8 @@ struct PlaceRef {
     ty: Ty,
     /// After a `Downcast`: the variant its fields are of.
     variant: Option<u32>,
+    /// For an unsized place (`str`, `[T]`, `dyn Trait`): its length, or its vtable.
+    meta: Option<ir::Value>,
 }
 
 /// A value, as an operand gives it.
@@ -454,7 +643,13 @@ enum Val {
 struct Lower<'a, 'c, 'db> {
     c: &'a mut Compiler<'db>,
     body: &'a Body,
+    /// Its type arguments.
+    targs: &'a [Ty],
+    /// Its locals' types, concrete.
+    tys: Vec<Ty>,
     file: u32,
+    /// Whether it is `#[track_caller]`, the prelude's or derived code.
+    tracked: bool,
     b: FunctionBuilder<'c>,
     locs: Vec<Loc>,
     /// Each MIR block's Cranelift block (`None` for cleanup code, which only unwinding runs).
@@ -504,8 +699,8 @@ impl Lower<'_, '_, '_> {
         let params = self.b.block_params(entry).to_vec();
         let borrowed = self.borrowed();
         let mut k = 0;
-        for (i, l) in self.body.locals.iter().enumerate() {
-            let layout = self.c.layouts.of(&l.ty)?;
+        for i in 0..self.tys.len() {
+            let layout = self.c.layouts.of(&self.tys[i])?;
             let pass = pass_of(&layout);
             let arg = (1..=self.body.arg_count).contains(&i);
             let loc = match (&layout.shape, borrowed.contains(&(i as u32))) {
@@ -559,7 +754,7 @@ impl Lower<'_, '_, '_> {
             self.locs.push(loc);
         }
         // A result returned indirectly is written where the caller says, the last parameter.
-        let ret_layout = self.c.layouts.of(&self.body.locals[0].ty)?;
+        let ret_layout = self.c.layouts.of(&self.tys[0])?;
         if pass_of(&ret_layout) == Pass::Indirect {
             self.locs[0] = Loc::Mem(*params.last().expect("the result's place"));
         }
@@ -606,8 +801,9 @@ impl Lower<'_, '_, '_> {
         let mut r = PlaceRef {
             var: None,
             addr: None,
-            ty: self.body.locals[p.local.index()].ty.clone(),
+            ty: self.tys[p.local.index()].clone(),
             variant: None,
+            meta: None,
         };
         match self.locs[p.local.index()] {
             Loc::Var(v) => r.var = Some(v),
@@ -617,13 +813,22 @@ impl Lower<'_, '_, '_> {
         for proj in &p.projection {
             match proj {
                 Projection::Deref => {
-                    let Val::Scalar(ptr) = self.read(&r)? else {
-                        return Err("a borrow of a value without bytes".to_string());
-                    };
                     let Ty::Ref(_, inner) = r.ty.clone() else {
                         return Err(format!("dereferencing a `{}`", r.ty));
                     };
+                    let (ptr, meta) = match self.read(&r)? {
+                        Val::Scalar(p) => (p, None),
+                        // A wide borrow: the address, then the length or vtable.
+                        Val::Mem(a) => {
+                            let flags = ir::MemFlagsData::trusted();
+                            let p = self.b.ins().load(types::I64, flags, a, 0);
+                            let m = self.b.ins().load(types::I64, flags, a, 8);
+                            (p, Some(m))
+                        }
+                        Val::Unit => return Err("a borrow of a value without bytes".to_string()),
+                    };
                     r = PlaceRef {
+                        meta,
                         var: None,
                         addr: Some(ptr),
                         ty: (*inner).clone(),
@@ -649,14 +854,11 @@ impl Lower<'_, '_, '_> {
                         addr: Some(self.offset(base, off)),
                         ty,
                         variant: None,
+                        meta: None,
                     };
                 }
                 Projection::Index(i) => {
-                    let l = self.layout(&r.ty)?;
-                    let Shape::Array { elem, stride, .. } = &l.shape else {
-                        return Err(format!("an element of `{}`", r.ty));
-                    };
-                    let (elem, stride) = (elem.clone(), *stride);
+                    let (elem, stride) = self.element(&r.ty)?;
                     let base = self.addr_of(&r)?;
                     let Val::Scalar(index) = self.read_local(*i)? else {
                         return Err("an index without a value".to_string());
@@ -668,12 +870,125 @@ impl Lower<'_, '_, '_> {
                         addr: Some(addr),
                         ty: elem,
                         variant: None,
+                        meta: None,
                     };
                 }
-                Projection::Subslice(..) => return Err("a part of an array".to_string()),
+                Projection::Subslice(from, to) => {
+                    let (elem, stride) = self.element(&r.ty)?;
+                    let base = self.addr_of(&r)?;
+                    let (Val::Scalar(a), Val::Scalar(b)) =
+                        (self.read_local(*from)?, self.read_local(*to)?)
+                    else {
+                        return Err("a part without bounds".to_string());
+                    };
+                    let scaled = self.b.ins().imul_imm_s(a, i64::from(stride));
+                    let addr = self.b.ins().iadd(base, scaled);
+                    let len = self.b.ins().isub(b, a);
+                    r = PlaceRef {
+                        var: None,
+                        addr: Some(addr),
+                        ty: Ty::Slice(Arc::new(elem)),
+                        variant: None,
+                        meta: Some(len),
+                    };
+                }
             }
         }
         Ok(r)
+    }
+
+    /// The element type of an array or slice type, and its stride.
+    fn element(&mut self, ty: &Ty) -> Result<(Ty, u32), String> {
+        if let Ty::Slice(e) = ty {
+            let l = self.layout(e)?;
+            return Ok(((**e).clone(), l.size.div_ceil(l.align) * l.align));
+        }
+        let l = self.layout(ty)?;
+        let Shape::Array { elem, stride, .. } = &l.shape else {
+            return Err(format!("an element of `{ty}`"));
+        };
+        Ok((elem.clone(), *stride))
+    }
+
+    /// The length of the array or slice at a place, as an `int`.
+    fn length(&mut self, r: &PlaceRef) -> Result<ir::Value, String> {
+        if let Some(m) = r.meta {
+            return Ok(m);
+        }
+        let l = self.layout(&r.ty)?;
+        let Shape::Array { len, .. } = l.shape else {
+            return Err(format!("the length of a `{}`", r.ty));
+        };
+        Ok(self.b.ins().iconst(types::I64, i64::from(len)))
+    }
+
+    /// `v`, of type `from`, as a `to`: a borrow of an array where a borrow of a slice is wanted
+    /// becomes one, with the array's length (the interpreters treat the two alike).
+    ///
+    /// A borrow of a borrow where the borrow is wanted is the borrow it points to, as the
+    /// interpreters look through it.
+    ///
+    /// And a borrow where a borrow of it is wanted (the MIR leaves out an automatic `&` at
+    /// times) is borrowed: put in a slot of its own, whose address is the value.
+    fn fit(&mut self, v: Val, from: &Ty, to: &Ty) -> Val {
+        if let (Ty::Ref(..), Ty::Ref(_, want)) = (from, to)
+            && **want == *from
+            && !matches!(v, Val::Unit)
+        {
+            let l = Layout {
+                size: 16,
+                align: 8,
+                shape: Shape::Wide,
+                niche: None,
+            };
+            let a = self.slot(&l);
+            match v {
+                Val::Scalar(x) => {
+                    self.b.ins().store(ir::MemFlagsData::trusted(), x, a, 0);
+                }
+                Val::Mem(src) => self.copy(a, src, 16),
+                Val::Unit => {}
+            }
+            return Val::Scalar(a);
+        }
+        if let (Val::Scalar(p), Ty::Ref(_, a)) = (v, from)
+            && let Ty::Ref(_, inner) = &**a
+            && let Ty::Ref(_, want) = to
+            && inner == want
+        {
+            return if matches!(**inner, Ty::Str | Ty::Slice(_) | Ty::Dyn(..)) {
+                Val::Mem(p)
+            } else {
+                Val::Scalar(
+                    self.b
+                        .ins()
+                        .load(types::I64, ir::MemFlagsData::trusted(), p, 0),
+                )
+            };
+        }
+        if let (Val::Scalar(p), Ty::Ref(_, a), Ty::Ref(_, b)) = (v, from, to)
+            && let (Ty::Array(_, n), Ty::Slice(_)) = (&**a, &**b)
+            && let Ty::Len(k) = **n
+        {
+            let n = self.b.ins().iconst(types::I64, k);
+            return Val::Mem(self.wide(p, n));
+        }
+        v
+    }
+
+    /// A wide borrow, in a new slot: an address and its length or vtable.
+    fn wide(&mut self, ptr: ir::Value, meta: ir::Value) -> ir::Value {
+        let l = Layout {
+            size: 16,
+            align: 8,
+            shape: Shape::Wide,
+            niche: None,
+        };
+        let a = self.slot(&l);
+        let flags = ir::MemFlagsData::trusted();
+        self.b.ins().store(flags, ptr, a, 0);
+        self.b.ins().store(flags, meta, a, 8);
+        a
     }
 
     fn offset(&mut self, base: ir::Value, off: u32) -> ir::Value {
@@ -761,7 +1076,7 @@ impl Lower<'_, '_, '_> {
             Operand::Const(Const::Bool(_)) => Ty::Bool,
             Operand::Const(Const::Unit) => Ty::Unit,
             Operand::Const(Const::Char(_)) => Ty::Char,
-            Operand::Const(Const::Str(_)) => return Err("text".to_string()),
+            Operand::Const(Const::Str(_)) => Ty::reference(false, Ty::Str),
         })
     }
 
@@ -779,7 +1094,15 @@ impl Lower<'_, '_, '_> {
                 }
                 Const::Unit => Val::Unit,
                 Const::Num(n, bits) => Val::Scalar(self.num_const(n, bits)?),
-                Const::Str(_) => return Err("text".to_string()),
+                Const::Str(i) => {
+                    let text = self.body.strs[i as usize].clone();
+                    let data = self.c.text_data(&text)?;
+                    let gv = self.c.module.declare_data_in_func(data, self.b.func);
+                    let ptr = self.ptr();
+                    let p = self.b.ins().symbol_value(ptr, gv);
+                    let n = self.b.ins().iconst(types::I64, text.len() as i64);
+                    Val::Mem(self.wide(p, n))
+                }
             },
         })
     }
@@ -827,10 +1150,13 @@ impl Lower<'_, '_, '_> {
     /// Records a trap at `site` and returns the trapped status.
     fn trap(&mut self, class: TrapClass, range: TextRange) -> Result<(), String> {
         let site = self.site(Site::Trap(class, self.file, range));
-        let f = self
-            .c
-            .module
-            .declare_func_in_func(self.c.rt.trap, self.b.func);
+        // A broken precondition is the caller's, wherever it is checked.
+        let rt = if self.tracked || class == TrapClass::Precondition {
+            self.c.rt.trap_tracked
+        } else {
+            self.c.rt.trap
+        };
+        let f = self.c.module.declare_func_in_func(rt, self.b.func);
         self.b.ins().call(f, &[site]);
         self.return_status(1)
     }
@@ -839,7 +1165,7 @@ impl Lower<'_, '_, '_> {
     fn return_status(&mut self, status: i64) -> Result<(), String> {
         let s = self.b.ins().iconst(types::I8, status);
         let mut rets = vec![s];
-        let ret = self.body.locals[0].ty.clone();
+        let ret = self.tys[0].clone();
         match self.c.pass(&ret)? {
             Pass::Scalar(t) => rets.push(self.zero(t)),
             Pass::Words(ts) => {
@@ -909,11 +1235,17 @@ impl Lower<'_, '_, '_> {
         match r {
             Rvalue::Use(o) => {
                 let v = self.operand(o)?;
+                let from = self.operand_ty(o)?;
+                let v = self.fit(v, &from, &dest.ty);
                 self.write(&dest, v)
             }
             Rvalue::Aggregate(kind, ops) => self.aggregate(&dest, kind, ops),
             Rvalue::Ref(_, p) => {
                 let target = self.place(p)?;
+                if let (Some(a), Some(m)) = (target.addr, target.meta) {
+                    let w = self.wide(a, m);
+                    return self.write(&dest, Val::Mem(w));
+                }
                 let a = match target.addr {
                     Some(a) => a,
                     // A borrow of something without bytes points nowhere in particular.
@@ -923,7 +1255,9 @@ impl Lower<'_, '_, '_> {
                     }
                     None => return Err("a borrow of a value kept in a register".to_string()),
                 };
-                self.write(&dest, Val::Scalar(a))
+                let from = Ty::reference(false, target.ty.clone());
+                let v = self.fit(Val::Scalar(a), &from, &dest.ty);
+                self.write(&dest, v)
             }
             Rvalue::Discriminant(p) => {
                 let target = self.place(p)?;
@@ -945,6 +1279,7 @@ impl Lower<'_, '_, '_> {
                         addr: Some(addr),
                         ty: elem.clone(),
                         variant: None,
+                        meta: None,
                     };
                     self.write(&at, v)?;
                 }
@@ -952,26 +1287,80 @@ impl Lower<'_, '_, '_> {
             }
             Rvalue::Len(p) => {
                 let target = self.place(p)?;
-                let l = self.layout(&target.ty)?;
-                let Shape::Array { len, .. } = l.shape else {
-                    return Err(format!("the length of a `{}`", target.ty));
-                };
-                let v = self.b.ins().iconst(types::I64, i64::from(len));
+                let v = self.length(&target)?;
                 self.write(&dest, Val::Scalar(v))
             }
             Rvalue::InBounds(i, p) => {
                 let target = self.place(p)?;
-                let l = self.layout(&target.ty)?;
-                let Shape::Array { len, .. } = l.shape else {
-                    return Err(format!("indexing a `{}`", target.ty));
-                };
+                let len = self.length(&target)?;
                 let i = self.value(i)?;
                 // One unsigned comparison: a negative index is a large one.
-                let ok = self
-                    .b
-                    .ins()
-                    .icmp_imm_s(IntCC::UnsignedLessThan, i, i64::from(len));
+                let ok = self.b.ins().icmp(IntCC::UnsignedLessThan, i, len);
                 self.write(&dest, Val::Scalar(ok))
+            }
+            Rvalue::SpanOk(a, b, p) => {
+                let target = self.place(p)?;
+                let len = self.length(&target)?;
+                let (a, b) = (self.value(a)?, self.value(b)?);
+                // `0 <= a <= b <= len`, unsigned: a negative bound is a large one.
+                let x = self.b.ins().icmp(IntCC::UnsignedLessThanOrEqual, a, b);
+                let y = self.b.ins().icmp(IntCC::UnsignedLessThanOrEqual, b, len);
+                let ok = self.b.ins().band(x, y);
+                self.write(&dest, Val::Scalar(ok))
+            }
+            Rvalue::Length(n) => {
+                let Ty::Len(k) = self.c.concrete(n, self.targs) else {
+                    return Err(format!("the length `{n}`"));
+                };
+                let v = self.b.ins().iconst(types::I64, k);
+                self.write(&dest, Val::Scalar(v))
+            }
+            Rvalue::Unsize(o, from) => {
+                let from = self.c.concrete(from, self.targs);
+                let v = self.operand(o)?;
+                let thin = match (v, &from) {
+                    // Already a `dyn` borrow (of a subtrait): as it is, if the supertrait's
+                    // vtable is where the subtrait's starts.
+                    (Val::Mem(_), Ty::Dyn(sub, _)) => {
+                        let Ty::Ref(_, to) = &dest.ty else {
+                            return Err(format!("a `{from}` as a `{}`", dest.ty));
+                        };
+                        let Ty::Dyn(sup, _) = &**to else {
+                            return Err(format!("a `{from}` as a `{}`", dest.ty));
+                        };
+                        let ids = |ms: Vec<(u32, TraitRef)>| -> Vec<u32> {
+                            ms.into_iter().map(|(m, _)| m).collect()
+                        };
+                        let a = ids(self.c.dyn_methods(&from, sub));
+                        let b = ids(self.c.dyn_methods(&from, sup));
+                        if !a.starts_with(&b) {
+                            return Err(format!("a `dyn {}` as a `dyn {}`", sub.name, sup.name));
+                        }
+                        return self.write(&dest, v);
+                    }
+                    (Val::Scalar(p), _) => p,
+                    _ => return Err(format!("a `{from}` as a `{}`", dest.ty)),
+                };
+                let meta = match (&from, &dest.ty) {
+                    (Ty::Array(_, n), _) => {
+                        let Ty::Len(k) = **n else {
+                            return Err(format!("an array of length `{n}`"));
+                        };
+                        self.b.ins().iconst(types::I64, k)
+                    }
+                    (_, Ty::Ref(_, to)) if matches!(**to, Ty::Dyn(..)) => {
+                        let Ty::Dyn(tr, _) = &**to else {
+                            unreachable!()
+                        };
+                        let vt = self.c.vtable(&from, tr)?;
+                        let gv = self.c.module.declare_data_in_func(vt, self.b.func);
+                        let ptr = self.ptr();
+                        self.b.ins().symbol_value(ptr, gv)
+                    }
+                    _ => return Err(format!("a `{from}` as a `{}`", dest.ty)),
+                };
+                let w = self.wide(thin, meta);
+                self.write(&dest, Val::Mem(w))
             }
             r => {
                 let v = self.scalar_rvalue(r)?;
@@ -1017,6 +1406,7 @@ impl Lower<'_, '_, '_> {
                 addr: Some(addr),
                 ty: ty.clone(),
                 variant: None,
+                meta: None,
             };
             self.write(&at, v)?;
         }
@@ -1100,6 +1490,27 @@ impl Lower<'_, '_, '_> {
                     (UnOp::Not, _) => self.b.ins().bnot(v),
                 }
             }
+            // `()` equals itself.
+            Rvalue::Binary(op, a, _) if self.operand_ty(a)? == Ty::Unit => {
+                let eq = matches!(op, BinOp::Eq | BinOp::Le | BinOp::Ge);
+                self.b.ins().iconst(types::I8, i64::from(eq))
+            }
+            Rvalue::Binary(op, a, b) if matches!(self.operand_ty(a)?, Ty::Ref(_, ref t) if **t == Ty::Str) =>
+            {
+                let (p, n) = self.text(a)?;
+                let (q, m) = self.text(b)?;
+                let c = self.rt_call(self.c.rt.str_cmp, &[p, n, q, m]);
+                let cc = match op {
+                    BinOp::Eq => IntCC::Equal,
+                    BinOp::Ne => IntCC::NotEqual,
+                    BinOp::Lt => IntCC::SignedLessThan,
+                    BinOp::Le => IntCC::SignedLessThanOrEqual,
+                    BinOp::Gt => IntCC::SignedGreaterThan,
+                    BinOp::Ge => IntCC::SignedGreaterThanOrEqual,
+                    op => return Err(format!("`{op:?}` on text")),
+                };
+                self.b.ins().icmp_imm_s(cc, c, 0)
+            }
             Rvalue::Binary(op, a, b) => {
                 let ty = self.operand_ty(a)?;
                 let (x, y) = (self.value(a)?, self.value(b)?);
@@ -1123,7 +1534,8 @@ impl Lower<'_, '_, '_> {
             Rvalue::Widen(a, to) => {
                 let from = self.operand_ty(a)?;
                 let v = self.value(a)?;
-                self.widen(&from, to, v)?
+                let to = self.c.concrete(to, self.targs);
+                self.widen(&from, &to, v)?
             }
             _ => return Err(format!("this operation (`{r}`)")),
         }))
@@ -1339,7 +1751,7 @@ impl Lower<'_, '_, '_> {
     fn ret(&mut self) -> Result<(), String> {
         let s = self.b.ins().iconst(types::I8, 0);
         let mut rets = vec![s];
-        let ty = self.body.locals[0].ty.clone();
+        let ty = self.tys[0].clone();
         let pass = self.c.pass(&ty)?;
         let r = self.place(&Place::local(Local(0)))?;
         match pass {
@@ -1362,29 +1774,14 @@ impl Lower<'_, '_, '_> {
         Ok(())
     }
 
-    fn call(
-        &mut self,
-        callee: &Callee,
-        args: &[Operand],
-        dest: &Place,
-        target: moddil_mir::BlockId,
-        can_fail: bool,
-        range: TextRange,
-    ) -> Result<(), String> {
-        if can_fail {
-            return Err("a call that can fail".to_string());
-        }
-        let Callee::Fn { func, args: targs } = callee else {
-            return Err("a trait's method".to_string());
-        };
-        if !targs.is_empty() {
-            return Err("a generic function".to_string());
-        }
-        let (id, params, ret) = self.c.declare_fn(*func)?;
+    /// The arguments' values, as a function with these parameter types takes them.
+    fn arguments(&mut self, args: &[Operand], params: &[Ty]) -> Result<Vec<ir::Value>, String> {
         let flags = ir::MemFlagsData::trusted();
         let mut vals = Vec::new();
-        for (a, pty) in args.iter().zip(&params) {
+        for (a, pty) in args.iter().zip(params) {
             let v = self.operand(a)?;
+            let from = self.operand_ty(a)?;
+            let v = self.fit(v, &from, pty);
             match (self.c.pass(pty)?, v) {
                 (Pass::Nothing, _) => {}
                 (Pass::Scalar(_), Val::Scalar(x)) => vals.push(x),
@@ -1402,21 +1799,125 @@ impl Lower<'_, '_, '_> {
                     self.copy(copy, addr, l.size);
                     vals.push(copy);
                 }
-                _ => return Err("an argument of an unexpected kind".to_string()),
+                _ => return Err(format!("an argument of an unexpected kind, a `{pty}`")),
             }
         }
+        Ok(vals)
+    }
+
+    fn call(
+        &mut self,
+        callee: &Callee,
+        args: &[Operand],
+        dest: &Place,
+        target: moddil_mir::BlockId,
+        can_fail: bool,
+        range: TextRange,
+    ) -> Result<(), String> {
+        if can_fail {
+            return Err("a call that can fail".to_string());
+        }
+        let cargs: Vec<Ty> = callee
+            .args()
+            .iter()
+            .map(|t| self.c.concrete(t, self.targs))
+            .collect();
         let d = self.place(dest)?;
+        // What runs: a function instance, or a method through a vtable.
+        enum Run {
+            Direct(FuncId, Ty),
+            Indirect(ir::Value, Vec<Ty>, Ty),
+        }
+        let mut args = args.to_vec();
+        let (run, mut vals) = match callee {
+            Callee::Fn { func, .. } => {
+                if self.c.items.fns[*func as usize].intrinsic {
+                    return self.intrinsic(*func, &cargs, &args, &d, target, range);
+                }
+                let (id, params, ret) = self.c.declare_fn(*func, &cargs)?;
+                let vals = self.arguments(&args, &params)?;
+                (Run::Direct(id, ret.clone()), vals)
+            }
+            Callee::Trait { func, .. } => match &cargs[0] {
+                Ty::Dyn(tr, _) => {
+                    let methods = self.c.dyn_methods(&cargs[0], tr);
+                    let k = methods
+                        .iter()
+                        .position(|(m, _)| m == func)
+                        .ok_or("a method missing from its vtable")?;
+                    let Val::Mem(w) = self.operand(&args[0])? else {
+                        return Err("a `dyn` call without a `dyn` borrow".to_string());
+                    };
+                    let flags = ir::MemFlagsData::trusted();
+                    let thin = self.b.ins().load(types::I64, flags, w, 0);
+                    let vt = self.b.ins().load(types::I64, flags, w, 8);
+                    let fp = self.b.ins().load(types::I64, flags, vt, 8 * (1 + k as i32));
+                    let mut params = vec![Ty::reference(false, Ty::Unit)];
+                    for a in &args[1..] {
+                        params.push(self.operand_ty(a)?);
+                    }
+                    let mut vals = vec![thin];
+                    vals.extend(self.arguments(&args[1..], &params[1..])?);
+                    args.clear();
+                    (Run::Indirect(fp, params, d.ty.clone()), vals)
+                }
+                Ty::Anon(_) => return Err("an anonymous impl's method".to_string()),
+                Ty::Errors(_) => return Err("a method of an error set".to_string()),
+                self_ty => {
+                    let items = self.c.items;
+                    let sig = &items.fns[*func as usize];
+                    let t = items.trait_of(*func).ok_or("a trait's method")?;
+                    let n = items.traits[t as usize].generics.params.len();
+                    let tr = TraitRef {
+                        trait_: t,
+                        name: items.traits[t as usize].name.as_str().into(),
+                        args: cargs[1..n].to_vec().into(),
+                    };
+                    let found = Solver::new(items, &[]).impl_method(*func, self_ty, &tr);
+                    let Some((f, mut parent)) = found else {
+                        // The built-in `Clone` of a borrow or tuple: a copy.
+                        let Val::Scalar(p) = self.operand(&args[0])? else {
+                            return Err("`clone` of a value without bytes".to_string());
+                        };
+                        let from = PlaceRef {
+                            var: None,
+                            addr: Some(p),
+                            ty: d.ty.clone(),
+                            variant: None,
+                            meta: None,
+                        };
+                        let v = self.read(&from)?;
+                        self.write(&d, v)?;
+                        let b = self.block(target.index())?;
+                        self.b.ins().jump(b, &[]);
+                        return Ok(());
+                    };
+                    parent.extend(cargs[sig.generics.parent as usize..].iter().cloned());
+                    if items.fns[f as usize].intrinsic {
+                        return self.intrinsic(f, &parent, &args, &d, target, range);
+                    }
+                    let (id, params, ret) = self.c.declare_fn(f, &parent)?;
+                    let vals = self.arguments(&args, &params)?;
+                    (Run::Direct(id, ret.clone()), vals)
+                }
+            },
+        };
+        let ret = match &run {
+            Run::Direct(_, r) | Run::Indirect(_, _, r) => r.clone(),
+        };
         let pass = self.c.pass(&ret)?;
         if pass == Pass::Indirect {
             vals.push(self.addr_of(&d)?);
         }
+        let flags = ir::MemFlagsData::trusted();
         // Count the frame, so that recursion without end traps.
-        let site = self.site(Site::Trap(TrapClass::StackOverflow, self.file, range));
+        let site = self.site(Site::Call(self.file, range, self.tracked));
+        let tracked = self.b.ins().iconst(types::I8, i64::from(self.tracked));
         let enter = self
             .c
             .module
             .declare_func_in_func(self.c.rt.enter, self.b.func);
-        let e = self.b.ins().call(enter, &[site]);
+        let e = self.b.ins().call(enter, &[site, tracked]);
         let deep = self.b.inst_results(e)[0];
         let call_block = self.b.create_block();
         let too_deep = self.b.create_block();
@@ -1424,8 +1925,17 @@ impl Lower<'_, '_, '_> {
         self.b.switch_to_block(too_deep);
         self.return_status(1)?;
         self.b.switch_to_block(call_block);
-        let f = self.c.module.declare_func_in_func(id, self.b.func);
-        let call = self.b.ins().call(f, &vals);
+        let call = match run {
+            Run::Direct(id, ..) => {
+                let f = self.c.module.declare_func_in_func(id, self.b.func);
+                self.b.ins().call(f, &vals)
+            }
+            Run::Indirect(fp, params, ret) => {
+                let sig = self.c.signature(&params, &ret)?;
+                let sig = self.b.import_signature(sig);
+                self.b.ins().call_indirect(sig, fp, &vals)
+            }
+        };
         let results = self.b.inst_results(call).to_vec();
         let leave = self
             .c
@@ -1450,6 +1960,271 @@ impl Lower<'_, '_, '_> {
             }
             Pass::Nothing | Pass::Indirect => {}
         }
+        let b = self.block(target.index())?;
+        self.b.ins().jump(b, &[]);
+        Ok(())
+    }
+
+    /// A text's address and length, from a borrow of it (or a borrow of such a borrow).
+    fn text(&mut self, o: &Operand) -> Result<(ir::Value, ir::Value), String> {
+        let ty = self.operand_ty(o)?;
+        let flags = ir::MemFlagsData::trusted();
+        let w = match (self.operand(o)?, &ty) {
+            (Val::Mem(w), _) => w,
+            // `&&str`: the borrow it points to.
+            (Val::Scalar(p), Ty::Ref(_, inner)) if matches!(**inner, Ty::Ref(..)) => p,
+            _ => return Err(format!("text from a `{ty}`")),
+        };
+        let p = self.b.ins().load(types::I64, flags, w, 0);
+        let n = self.b.ins().load(types::I64, flags, w, 8);
+        Ok((p, n))
+    }
+
+    /// Calls the runtime's `f` with `args`: its one result.
+    fn rt_call(&mut self, f: FuncId, args: &[ir::Value]) -> ir::Value {
+        let f = self.c.module.declare_func_in_func(f, self.b.func);
+        let call = self.b.ins().call(f, args);
+        self.b.inst_results(call)[0]
+    }
+
+    /// Branches to `fail` (a trap of `class` at the call) unless `ok`.
+    fn check(&mut self, ok: ir::Value, class: TrapClass, range: TextRange) -> Result<(), String> {
+        let good = self.b.create_block();
+        let bad = self.b.create_block();
+        self.b.ins().brif(ok, good, &[], bad, &[]);
+        self.b.switch_to_block(bad);
+        self.trap(class, range)?;
+        self.b.switch_to_block(good);
+        Ok(())
+    }
+
+    /// One of the prelude's built-in functions, inline.
+    fn intrinsic(
+        &mut self,
+        f: u32,
+        targs: &[Ty],
+        args: &[Operand],
+        d: &PlaceRef,
+        target: moddil_mir::BlockId,
+        range: TextRange,
+    ) -> Result<(), String> {
+        let items = self.c.items;
+        let sig = &items.fns[f as usize];
+        let self_ty = match sig.container {
+            moddil_sema::Container::Impl(k) => items.impls[k as usize].self_ty.clone(),
+            _ => Ty::Unit,
+        };
+        let name = sig.name.as_str();
+        let unsupported = || Err(format!("the built-in function `{name}`"));
+        let flags = ir::MemFlagsData::trusted();
+        let out = match (&self_ty, name) {
+            (Ty::Str, "len") => {
+                let (_, n) = self.text(&args[0])?;
+                Val::Scalar(n)
+            }
+            (Ty::Slice(_), "len") => {
+                let Val::Mem(w) = self.operand(&args[0])? else {
+                    return Err("a slice without its length".to_string());
+                };
+                Val::Scalar(self.b.ins().load(types::I64, flags, w, 8))
+            }
+            // A byte of the text (`text.string.inline.1`).
+            (Ty::Str, "byte_at") => {
+                let (p, n) = self.text(&args[0])?;
+                let i = self.value(&args[1])?;
+                let ok = self.b.ins().icmp(IntCC::UnsignedLessThan, i, n);
+                self.check(ok, TrapClass::IndexOutOfBounds, range)?;
+                let at = self.b.ins().iadd(p, i);
+                Val::Scalar(self.b.ins().load(types::I8, flags, at, 0))
+            }
+            // The character at a byte offset, if one starts there: an `Option<char>`, whose
+            // `None` is the first value past the last character (its niche).
+            (Ty::Str, "char_at_byte") => {
+                let l = self.layout(&d.ty)?;
+                let Shape::Enum {
+                    tag: Tag::Niche { niche, .. },
+                    ..
+                } = &l.shape
+                else {
+                    return unsupported();
+                };
+                if niche.first != 0x11_0000 || niche.offset != 0 {
+                    return unsupported();
+                }
+                let (p, n) = self.text(&args[0])?;
+                let i = self.value(&args[1])?;
+                Val::Scalar(self.rt_call(self.c.rt.char_at_byte, &[p, n, i]))
+            }
+            // The text between two byte offsets (`text.pos.1`).
+            (Ty::Str, "bytes_between") => {
+                let (p, n) = self.text(&args[0])?;
+                let (a, b) = (self.value(&args[1])?, self.value(&args[2])?);
+                let ok = self.rt_call(self.c.rt.is_between, &[p, n, a, b]);
+                self.check(ok, TrapClass::IndexOutOfBounds, range)?;
+                let start = self.b.ins().iadd(p, a);
+                let len = self.b.ins().isub(b, a);
+                Val::Mem(self.wide(start, len))
+            }
+            (Ty::Str, "eq" | "ne" | "cmp" | "lt" | "le" | "gt" | "ge") => {
+                let (p, n) = self.text(&args[0])?;
+                let (q, m) = self.text(&args[1])?;
+                let c = self.rt_call(self.c.rt.str_cmp, &[p, n, q, m]);
+                match name {
+                    "cmp" => {
+                        // `Ordering`'s variants are `Less`, `Equal` and `Greater`, in order.
+                        let l = self.layout(&d.ty)?;
+                        let Shape::Enum {
+                            tag: Tag::Direct { offset, ty },
+                            ..
+                        } = &l.shape
+                        else {
+                            return unsupported();
+                        };
+                        let (offset, ty) = (*offset, *ty);
+                        let v = self.b.ins().iadd_imm_s(c, 1);
+                        let v = if ty == types::I8 {
+                            v
+                        } else {
+                            self.b.ins().sextend(ty, v)
+                        };
+                        let a = self.addr_of(d)?;
+                        self.b.ins().store(flags, v, a, offset as i32);
+                        Val::Unit
+                    }
+                    _ => {
+                        let cc = match name {
+                            "eq" => IntCC::Equal,
+                            "ne" => IntCC::NotEqual,
+                            "lt" => IntCC::SignedLessThan,
+                            "le" => IntCC::SignedLessThanOrEqual,
+                            "gt" => IntCC::SignedGreaterThan,
+                            _ => IntCC::SignedGreaterThanOrEqual,
+                        };
+                        Val::Scalar(self.b.ins().icmp_imm_s(cc, c, 0))
+                    }
+                }
+            }
+            // The float functions (`num.float.fn.1`).
+            (Ty::Num(n @ (Num::F32 | Num::F64)), _) => {
+                let x = self.value(&args[0])?;
+                match name {
+                    "is_nan" => Val::Scalar(self.b.ins().fcmp(FloatCC::Unordered, x, x)),
+                    "is_finite" => {
+                        let a = self.b.ins().fabs(x);
+                        let inf = if *n == Num::F32 {
+                            self.b.ins().f32const(f32::INFINITY)
+                        } else {
+                            self.b.ins().f64const(f64::INFINITY)
+                        };
+                        Val::Scalar(self.b.ins().fcmp(FloatCC::LessThan, a, inf))
+                    }
+                    _ => {
+                        let Some(k) = moddil_rt::FLOAT_FNS.iter().position(|f| *f == name) else {
+                            return unsupported();
+                        };
+                        let y = match args.get(1) {
+                            Some(a) => self.value(a)?,
+                            None => x,
+                        };
+                        let k = self.b.ins().iconst(types::I32, k as i64);
+                        let rt = if *n == Num::F32 {
+                            self.c.rt.float_fn_f32
+                        } else {
+                            self.c.rt.float_fn
+                        };
+                        Val::Scalar(self.rt_call(rt, &[k, x, y]))
+                    }
+                }
+            }
+            (
+                Ty::Char,
+                "is_alphabetic" | "is_numeric" | "is_whitespace" | "is_uppercase" | "is_lowercase",
+            ) => {
+                let which = match name {
+                    "is_alphabetic" => 0,
+                    "is_numeric" => 1,
+                    "is_whitespace" => 2,
+                    "is_uppercase" => 3,
+                    _ => 4,
+                };
+                let c = self.value(&args[0])?;
+                let w = self.b.ins().iconst(types::I32, which);
+                Val::Scalar(self.rt_call(self.c.rt.char_is, &[w, c]))
+            }
+            (Ty::Char, "code") => {
+                let c = self.value(&args[0])?;
+                Val::Scalar(self.b.ins().uextend(types::I64, c))
+            }
+            (Ty::Char, "len_utf8") => {
+                let c = self.value(&args[0])?;
+                let mut n = self.b.ins().iconst(types::I64, 1);
+                for (limit, bytes) in [(0x80, 2), (0x800, 3), (0x1_0000, 4)] {
+                    let past = self
+                        .b
+                        .ins()
+                        .icmp_imm_s(IntCC::UnsignedGreaterThanOrEqual, c, limit);
+                    let k = self.b.ins().iconst(types::I64, bytes);
+                    n = self.b.ins().select(past, k, n);
+                }
+                Val::Scalar(n)
+            }
+            (Ty::Int, "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "rotate_left") => {
+                let (x, y) = (self.value(&args[0])?, self.value(&args[1])?);
+                Val::Scalar(match name {
+                    "wrapping_add" => self.b.ins().iadd(x, y),
+                    "wrapping_sub" => self.b.ins().isub(x, y),
+                    "wrapping_mul" => self.b.ins().imul(x, y),
+                    _ => {
+                        let k = self.b.ins().band_imm_s(y, 63);
+                        self.b.ins().rotl(x, k)
+                    }
+                })
+            }
+            (Ty::Unit, "swap") => {
+                let (Val::Scalar(a), Val::Scalar(b)) =
+                    (self.operand(&args[0])?, self.operand(&args[1])?)
+                else {
+                    return unsupported();
+                };
+                let Some(t) = targs.first().cloned() else {
+                    return unsupported();
+                };
+                let l = self.layout(&t)?;
+                let tmp = self.slot(&l);
+                self.copy(tmp, a, l.size);
+                self.copy(a, b, l.size);
+                self.copy(b, tmp, l.size);
+                Val::Unit
+            }
+            (Ty::Unit, "replace") => {
+                let Val::Scalar(p) = self.operand(&args[0])? else {
+                    return unsupported();
+                };
+                let at = PlaceRef {
+                    var: None,
+                    addr: Some(p),
+                    ty: d.ty.clone(),
+                    variant: None,
+                    meta: None,
+                };
+                // The old value, out first, then the new one in.
+                let old = self.read(&at)?;
+                let l = self.layout(&d.ty)?;
+                let old = match old {
+                    Val::Mem(a) => {
+                        let tmp = self.slot(&l);
+                        self.copy(tmp, a, l.size);
+                        Val::Mem(tmp)
+                    }
+                    v => v,
+                };
+                let new = self.operand(&args[1])?;
+                self.write(&at, new)?;
+                old
+            }
+            _ => return unsupported(),
+        };
+        self.write(d, out)?;
         let b = self.block(target.index())?;
         self.b.ins().jump(b, &[]);
         Ok(())

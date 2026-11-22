@@ -46,6 +46,9 @@ pub(crate) enum Tag {
 pub(crate) enum Shape {
     /// A scalar (a pointer included) of this Cranelift type.
     Scalar(ir::Type),
+    /// A borrow of an unsized value: its address, then its length (`str`, `[T]`) or its
+    /// vtable (`dyn Trait`), two words.
+    Wide,
     /// No bytes: `()`, `!`, a struct without fields.
     Empty,
     /// A tuple's or a struct's fields: each one's offset and type, by declared index.
@@ -103,9 +106,18 @@ impl<'a> Layouts<'a> {
             Ty::Unit | Ty::Never => Ok(empty()),
             Ty::Ref(_, inner) => {
                 if matches!(**inner, Ty::Str | Ty::Slice(_) | Ty::Dyn(..)) {
-                    return Err(format!(
-                        "a borrow of `{inner}`, which needs its length or type"
-                    ));
+                    return Ok(Layout {
+                        size: 16,
+                        align: 8,
+                        shape: Shape::Wide,
+                        // The address is never null.
+                        niche: Some(Niche {
+                            offset: 0,
+                            ty: types::I64,
+                            first: 0,
+                            count: 1,
+                        }),
+                    });
                 }
                 Ok(scalar(types::I64, Some((0, 1))))
             }
