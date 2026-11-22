@@ -8,14 +8,24 @@ built in.
 ## Iteration
 
 **iter.1** An iterator implements `Iterator`, with `type Item` and
-`fn next(&mut self) -> Option<Self::Item>`: each call gives the next item, or `None` when there
-are no more. `it.count()` uses an iterator up and gives how many items it had.
+`fn next(&mut self) -> Option<Self::Item> with fail(Self::Fails)`: each call gives the next item,
+or `None` when there are no more. `it.count()` uses an iterator up and gives how many items it had.
+
+**iter.fails.1** `Iterator`'s `type Fails` is what `next` can fail with: `!` unless an impl says
+otherwise (an associated type's default, as `type Fails = !;` declares, is what an impl that does
+not define it takes). `count`, `all`, `any` and `collect` fail as `next` does. In a generic
+function, a call whose errors are a type parameter's `Fails` (`I::Fails`, through a `for` loop or
+`it.next()`) passes them on without a mark, as a call of a closure parameter does
+(**expr.closure.fails.1**), so the function's errors must include them; a `for` loop over an
+iterator that can fail with known errors is an error for now (E0501): write
+`while let Some(x) = it.next()? { … }`, or take them with `collect()?`. An associated type's value
+may be an error set, `type Fails = I::Fails | F::Fails;`.
 
 **iter.adapt.1** `it.map(f)` gives the items passed through closure `f`, in order, and
-`it.filter(f)` the items for which `f` (given a borrow of each) holds. For now both run `f` over
-every item when they are called, and give an iterator over the results (so `f`'s errors are
-theirs, and they do not end on an iterator without end): adapters that run as their items are
-asked for wait for closures kept in fields.
+`it.filter(f)` the items for which `f` (given a borrow of each) holds. Both are lazy: they give a
+`Map<I, F>` or a `Filter<I, F>` holding the iterator and the closure, and `f` runs as each item is
+asked for, in `next`, so they work on an iterator without end, and `f`'s errors are the adapter's
+`Fails` (with the iterator's), not those of the call of `map` or `filter`.
 
 **iter.collect.1** `it.collect()` gathers the items left into a collection of the type the context
 names (`let v: Vec<int> = it.collect();`), one that implements `FromIterator<Item>`: `Vec<T>` from

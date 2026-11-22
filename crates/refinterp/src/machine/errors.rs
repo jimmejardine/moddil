@@ -27,6 +27,8 @@ impl Machine<'_> {
         let range = node.text_range();
         let inner = &e.sub_exprs()[0];
         let unexpected = || trap(TrapClass::Unexpected, range);
+        self.failing_call = false;
+        let call = matches!(inner, ast::Expr::Call(_) | ast::Expr::MethodCall(_));
         let v = match self.eval(inner) {
             Ok(v) => v,
             Err(Flow::Fail(_, _)) if bang => return Err(unexpected()),
@@ -36,6 +38,11 @@ impl Machine<'_> {
             }
             Err(f) => return Err(f),
         };
+        // A call that can fail and did not gives its value as it is, even an `Option`.
+        if call && std::mem::take(&mut self.failing_call) {
+            self.set_mode(false);
+            return Ok(v);
+        }
         match &v {
             Value::Adt {
                 ty,

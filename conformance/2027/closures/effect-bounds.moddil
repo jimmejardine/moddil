@@ -1,0 +1,61 @@
+// covers: expr.closure.effects.2
+
+struct Missing;
+struct Bad;
+
+fn lookup(x: int) -> int with fail(Missing | Bad) {
+    if x == 0 { fail(Missing) }
+    if x < 0 { fail(Bad) }
+    x
+}
+
+fn only_missing(x: int) -> int with fail(Missing) {
+    if x == 0 { fail(Missing) }
+    x
+}
+
+/// An effect variable names the closure's errors, and `with E` passes them on.
+fn map_all<T, U, E>(xs: &[T], f: impl Fn(&T) -> U with E) -> Vec<U> with E {
+    let mut out = Vec::new();
+    for x in xs {
+        out.push(f(x));
+    }
+    out
+}
+
+/// The same, written as a type parameter's bound.
+fn twice<F: Fn(int) -> int with E, E>(f: F, x: int) -> int with E {
+    f(f(x))
+}
+
+/// A bound that names its errors: the closure may fail with no others.
+fn tolerant<F>(f: F, x: int) -> int where F: Fn(int) -> int with fail(Missing) {
+    try { f(x)? } catch { Missing => -1 }
+}
+
+/// A bound that names no errors: the closure cannot fail.
+fn pure<F: Fn(int) -> int with suspend>(f: F, x: int) -> int {
+    f(x)
+}
+
+test "an effect variable passes the closure's errors on" {
+    let ys = map_all(&[1, 2, 3], |x| lookup(*x)?)?;
+    ys.len()                                        // => 3
+    ;
+    let r = try { map_all(&[1, 0], |x| lookup(*x)?)? } catch { Missing => Vec::new(), Bad => Vec::new() };
+    r.len()                                         // => 0
+    ;
+    map_all(&[1, 2], |x| *x + 1).len()             // => 2
+    ;
+    twice(|x| x * 3, 2)                             // => 18
+    ;
+    try { twice(|x| lookup(x - 1)?, 2)? } catch { Missing => 0, Bad => -1 }   // => 0
+}
+
+test "a bound that fixes the errors" {
+    tolerant(|x| only_missing(x)?, 0)               // => -1
+    ;
+    tolerant(|x| x, 5)                              // => 5
+    ;
+    pure(|x| x + 1, 1)                              // => 2
+}

@@ -1,0 +1,31 @@
+// covers: expr.closure.stored.1
+
+trait Clock { fn now(&self) -> int; }
+struct Fixed { at: int }
+impl Clock for Fixed { fn now(&self) -> int { self.at } }
+fn fixed(at: int) -> Fixed { Fixed { at } }
+
+fn now() -> int with clock: Clock { clock.now() }
+
+/// A stored closure's handler needs are met where it is called, by its caller's handlers.
+fn run(f: &Box<dyn Fn(int) -> int with Clock>, x: int) -> int with Clock {
+    (**f)(x)
+}
+
+test "a stored closure's needs are met where it is called" {
+    let stamp: Box<dyn Fn(int) -> int with Clock> = Box::new(|x| x + now());
+    with Clock = fixed(100) {
+        stamp(1)                                     // => 101
+    }
+    ;
+    with Clock = fixed(7) {
+        run(&stamp, 2)                               // => 9
+    }
+    ;
+    let inner: Box<dyn Fn() -> int with Clock> = Box::new(|| {
+        with Clock = fixed(1) { now() }
+    });
+    with Clock = fixed(50) {
+        inner()                                      // => 1
+    }
+}

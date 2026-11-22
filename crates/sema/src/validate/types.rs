@@ -10,13 +10,16 @@ use crate::{Code, Diagnostic, Ty};
 /// Reports every struct or enum that contains itself without indirection (E0211), and makes
 /// the fields of each an error so that later passes need not care.
 pub(crate) fn recursive_types(tree: &mut ItemTree) -> Vec<Found> {
-    fn contains(t: &Ty, out: &mut Vec<u32>) {
+    // A `Box` keeps its value on the heap: the indirection (`type.box.1`).
+    let boxed = tree.lang("Box");
+    fn contains(t: &Ty, boxed: Option<u32>, out: &mut Vec<u32>) {
         match t {
+            Ty::Adt(i, ..) if Some(*i) == boxed => {}
             Ty::Adt(i, _, args) => {
                 out.push(*i);
-                args.iter().for_each(|t| contains(t, out));
+                args.iter().for_each(|t| contains(t, boxed, out));
             }
-            Ty::Tuple(ts) => ts.iter().for_each(|t| contains(t, out)),
+            Ty::Tuple(ts) => ts.iter().for_each(|t| contains(t, boxed, out)),
             _ => {}
         }
     }
@@ -26,7 +29,7 @@ pub(crate) fn recursive_types(tree: &mut ItemTree) -> Vec<Found> {
         .map(|a| {
             let mut out = Vec::new();
             for f in a.variants.iter().flat_map(|v| &v.fields) {
-                contains(&f.ty, &mut out);
+                contains(&f.ty, boxed, &mut out);
             }
             out
         })

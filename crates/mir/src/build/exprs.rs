@@ -1,7 +1,7 @@
 //! Expressions and statements: each HIR expression kind as blocks and statements.
 
 use moddil_sema::hir::{ExprId, ExprKind, FmtPiece, Handler, LogicOp, PatKind, Stmt, UnaryOp};
-use moddil_sema::{Callee, Evidence, Ty};
+use moddil_sema::{Callee, Ty};
 use moddil_syntax::TextRange;
 
 use super::scopes::{LoopCx, ScopeItem};
@@ -46,7 +46,7 @@ impl Builder<'_> {
                 self.call_into(None, callee, Place::local(dest), vec![op], range);
                 return;
             }
-            debug_assert!(matches!(target, Ty::Ref(..)));
+            debug_assert!(matches!(target, Ty::Ref(..) | Ty::Adt(..)));
             self.cfg.assign(dest, Rvalue::Unsize(op, from));
             return;
         }
@@ -617,11 +617,8 @@ impl Builder<'_> {
             }
         }
         // The handlers it needs, after its arguments.
-        for ev in self.types.evidence(e) {
-            let local = match *ev {
-                Evidence::Param(i) => self.evidence[&i].clone(),
-                Evidence::Install(w, k) => self.installed[&(w, k)].clone(),
-            };
+        for ev in self.types.evidence(e).to_vec() {
+            let local = self.evidence_place(ev);
             args.push(Operand::Copy(local));
         }
         self.call_into(Some(e), callee, Place::local(dest), args, self.range(e));
@@ -655,7 +652,7 @@ impl Builder<'_> {
             self.scopes.push(ScopeItem::Local(installed));
             self.cfg.node = self.scopes.node();
             let value = match &h.effect {
-                Ty::Dyn(_) => Rvalue::Unsize(borrow.0, borrow.1),
+                Ty::Dyn(..) => Rvalue::Unsize(borrow.0, borrow.1),
                 _ => Rvalue::Use(borrow.0),
             };
             self.cfg.assign(installed, value);

@@ -1,0 +1,40 @@
+// covers: type.box.dyn.1, expr.closure.stored.1
+
+trait Shape { fn area(&self) -> int; }
+struct Square { side: int }
+impl Shape for Square { fn area(&self) -> int { self.side * self.side } }
+
+struct Missing;
+struct Bad;
+fn lookup(x: int) -> int with fail(Missing | Bad) {
+    if x == 0 { fail(Missing) }
+    if x < 0 { fail(Bad) }
+    x
+}
+
+fn unboxed(v: Vec<dyn Shape>) {}                                //~ E0605
+
+trait Clock { fn now(&self) -> int; }
+fn now() -> int with clock: Clock { clock.now() }
+fn wait() with suspend {}
+
+fn once(f: Box<dyn FnOnce()>) {}                                 //~ E0605
+
+fn unlisted() -> int with Clock {
+    let f: Box<dyn Fn() -> int> = Box::new(|| now());            //~ E0802
+    f()
+}
+
+fn not_suspending() with suspend {
+    let f: Box<dyn Fn()> = Box::new(|| wait());                  //~ E0603
+    f();
+}
+
+fn main() {
+    let n: Box<dyn Shape> = Box::new(Missing);                   //~ E0402
+    let names = Vec::from_array([1, 2]);
+    let r = &names;
+    let f: Box<dyn Fn() -> int> = Box::new(|| r.len());          //~ E0802
+    let h: Box<dyn Fn(int) -> int with fail(Missing)> = Box::new(|x| lookup(x)?);   //~ E0502
+    let k: Box<dyn Fn(int) -> int> = Box::new(|x| lookup(x)?);   //~ E0502
+}

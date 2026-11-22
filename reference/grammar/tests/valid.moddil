@@ -490,6 +490,8 @@ trait x { type x : Self ; }
 // ---
 trait x { type x = ! ; }
 // ---
+trait x { type x = ! | ! ; }
+// ---
 impl ! with ( suspend ) { }
 // ---
 fn x ( ) with spawn ;
@@ -741,6 +743,8 @@ unit x = 1 ^ ( 1 ) ;
 // ---
 fn x < const x : ! = - 1 > ( ) ;
 // ---
+view x where ! : Self + Self { }
+// ---
 fn x ( & mut self ) ;
 // ---
 fn x ( mut self ) ;
@@ -864,6 +868,10 @@ unit x = 1 ^ ( - 1 ) ;
 // ---
 unit x = 1 ^ ( 1 / 1 ) ;
 // ---
+view x where ! : Self ( ) { }
+// ---
+view x where ! : Self ( ) with suspend { }
+// ---
 fn x ( 1 ) ;
 // ---
 fn x ( 'c' ) ;
@@ -959,6 +967,20 @@ fn x ( ) with fail ( ! | ! ) ;
 const x : ! = "s" || "s" ;
 // ---
 unit x = x :: x ;
+// ---
+view x where ! : Self ( ) with ( suspend ) { }
+// ---
+view x where ! : Self ( ) with spawn { }
+// ---
+view x where ! : Self ( ) with nondet { }
+// ---
+view x where ! : Self ( ) with fail ( ! ) { }
+// ---
+view x where ! : Self ( ) with Self { }
+// ---
+view x where ! : Self ( ) with ( suspend , suspend ) { }
+// ---
+view x where ! : Self ( ) with ( suspend , ) { }
 // ---
 fn x ( - 1 ) ;
 // ---

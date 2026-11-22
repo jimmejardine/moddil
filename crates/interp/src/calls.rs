@@ -35,11 +35,23 @@ pub(crate) fn plan(
     let concrete = |d: &Dispatch<'_>, t: &Ty| d.concrete(t, stack.type_args());
     // A method called through a `dyn` borrow is the one of the type it points to.
     let callee = match callee {
-        Callee::Trait { func, args } if matches!(concrete(dispatch, &args[0]), Ty::Dyn(_)) => {
+        Callee::Trait { func, args } if matches!(concrete(dispatch, &args[0]), Ty::Dyn(..)) => {
             let mut args = args.clone();
-            if let Some(Value::Dyn(ptr, mutable, t)) = values.first().cloned() {
-                values[0] = Value::Ref(ptr, mutable);
-                args[0] = t;
+            match values.first().cloned() {
+                Some(Value::Dyn(ptr, mutable, t)) => {
+                    values[0] = Value::Ref(ptr, mutable);
+                    args[0] = *t;
+                }
+                // A borrow of the value a `Box<dyn Trait>` owns (`type.box.dyn.1`).
+                Some(Value::Ref(mut ptr, mutable)) => {
+                    if let Value::Owned(o) = stack.load(&ptr) {
+                        let t = o.1;
+                        ptr.path.push(0);
+                        values[0] = Value::Ref(ptr, mutable);
+                        args[0] = t;
+                    }
+                }
+                _ => {}
             }
             Callee::Trait { func: *func, args }
         }

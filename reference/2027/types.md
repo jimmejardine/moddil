@@ -44,6 +44,21 @@ no associated types, and each of its methods, its supertraits' included, takes `
 the trait, or of a supertrait, called on a `dyn` borrow runs the method of the type of the value it
 points to.
 
+**type.box.1** `Box<T>`, the prelude's, owns one value of type `T` kept apart from it, on the heap:
+`Box::new(x)` makes one, `b.into_inner()` takes the value out again, and the value is dropped
+with the box. `*b` is the value, as a place (it reads it, changes it where `b` is `mut`, and
+borrows it with `&*b` and `&mut *b`), through the prelude's `Deref` and `DerefMut`: `*x` on a type
+other than a borrow is `*x.deref()`, or `*x.deref_mut()` where it is changed. A value cannot be
+moved out through `*`, as out of a borrow ([Ownership](ownership.md)). A struct or enum may contain
+itself through a `Box` (`enum List { Cons(int, Box<List>), Nil }`), which is not an infinite size
+(E0211).
+
+**type.box.dyn.1** `Box<dyn Trait>` owns a value of some type that implements `Trait`, known only
+through it: a `Box<T>` can be used where a `Box<dyn Trait>` is expected if `T` implements `Trait`
+(E0402), as a borrow is converted to a `dyn` borrow (**type.dyn.coerce.1**). `*b` is the value as a
+`dyn Trait` place: its methods run those of its own type, and dropping the box drops the value as
+its own type. `dyn` is written without a borrow only as a `Box`'s argument (E0605).
+
 **type.impl.ret.1** `-> impl Trait` (or `impl A + B`, with associated types fixed as in a bound:
 `impl Get<Out = T>`) as a function's result type is an **opaque** type: the function's body gives
 a value of one type of its choice, its **hidden** type, which must meet the bounds (E0402), and a

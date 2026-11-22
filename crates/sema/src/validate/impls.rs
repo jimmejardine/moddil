@@ -318,12 +318,15 @@ fn signature_mismatch(
         ));
     }
     // An impl may fail with fewer errors than the trait declares, never more.
-    let allowed: Vec<Ty> = tsig.fails.subst(&subst).members();
+    // Each as the impl's bounds make it: `Self::Fails` is the impl's own.
+    let mut solver = Solver::new(tree, &isig.generics.preds);
+    let allowed: Vec<Ty> = solver.deep(&tsig.fails.subst(&subst)).members();
+    let allowed: Vec<Ty> = allowed.iter().map(|m| solver.deep(m)).collect();
     if let Some(extra) = isig
         .fails
         .members()
         .into_iter()
-        .find(|m| !allowed.contains(m))
+        .find(|m| !allowed.contains(&solver.deep(m)) && !m.has_error())
     {
         return mismatch(format!(
             "it can fail with `{extra}`, which the trait's does not declare"

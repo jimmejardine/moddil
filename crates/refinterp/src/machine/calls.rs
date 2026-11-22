@@ -444,6 +444,24 @@ impl Machine<'_> {
         &mut self,
         f: &FnDef,
         args: Vec<Value>,
+        types: HashMap<String, Head>,
+        range: TextRange,
+    ) -> Eval {
+        let result = self.invoke_inner(f, args, types, range);
+        // Whether a `?` on this call takes its errors, rather than an `Option` it gives: its
+        // signature says it can fail (`err.question.1`).
+        self.failing_call = f.node.syntax().child(K::EFFECT_CLAUSE).is_some_and(|c| {
+            c.descendants()
+                .iter()
+                .any(|d| d.token(K::FAIL_KW).is_some())
+        });
+        result
+    }
+
+    fn invoke_inner(
+        &mut self,
+        f: &FnDef,
+        args: Vec<Value>,
         mut types: HashMap<String, Head>,
         range: TextRange,
     ) -> Eval {
@@ -759,11 +777,11 @@ impl Machine<'_> {
         {
             return Ok(v.clone());
         }
-        // A closure (`expr.closure.call.1`).
-        if local {
-            let slot = self.memory.slot(&segments[0]).expect("a local");
-            let v = self.target(self.memory.load(&self.memory.here(slot)));
-            if let Value::Closure(c) = v {
+        // A closure (`expr.closure.call.1`), or one kept in a box (`expr.closure.stored.1`).
+        if local || !matches!(callee, ast::Expr::Path(_)) {
+            self.through_box = false;
+            let p = self.place(callee)?;
+            if let Some(c) = self.closure_at(p, range)? {
                 let values = self.eval_all(&args)?;
                 return self.call_closure(&c, values, range);
             }

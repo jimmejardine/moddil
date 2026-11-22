@@ -214,11 +214,29 @@ impl Checker<'_> {
                 .collect();
             fails = Ty::errors(kept);
         }
+        let fails = Ty::errors(
+            fails
+                .members()
+                .iter()
+                .map(|m| self.norm(m))
+                .filter(|m| !m.has_error())
+                .collect(),
+        );
         if fails == Ty::Never {
             return;
         }
+        // A type parameter's errors (`I::Fails`, an iterator's) are not the function's to
+        // handle: an unmarked call passes them on, as one of a closure parameter does
+        // (`expr.closure.fails.1`, `iter.fails.1`).
+        let abstract_fails = fails.members().iter().all(|m| {
+            matches!(m, Ty::Assoc(a) if a.name.as_ref() == "Fails"
+                && matches!(a.self_ty, Ty::Param(..) | Ty::Assoc(_)))
+        });
         if self.marked == Some(e) {
             self.call_fails = Some(fails);
+        } else if abstract_fails {
+            self.out.passes_on.insert(e);
+            self.deliver(&fails.members(), range);
         } else {
             self.report(
                 Code::E0501,

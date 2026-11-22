@@ -124,6 +124,9 @@ pub struct Inference {
     try_errors: HashMap<ExprId, Ty>,
     evidence: EvidenceMap,
     dyn_coercions: HashMap<ExprId, Ty>,
+    /// For a stored closure whose type lists needs: those needs, which each call of it passes
+    /// after its arguments (`expr.closure.stored.1`).
+    call_needs: HashMap<ExprId, Vec<Ty>>,
     /// For a function whose effects are inferred: the effects its body needs that nothing in it
     /// meets.
     escaping_needs: Vec<Ty>,
@@ -237,6 +240,12 @@ impl Inference {
     /// `dyn` borrow type.
     pub fn dyn_coercion(&self, e: ExprId) -> Option<&Ty> {
         self.dyn_coercions.get(&e)
+    }
+
+    /// For a stored closure whose type lists needs (`dyn Fn() with Time`): those needs, which
+    /// each call of it passes after its arguments.
+    pub fn call_needs(&self, e: ExprId) -> &[Ty] {
+        self.call_needs.get(&e).map_or(&[], Vec::as_slice)
     }
 
     /// Whether call `e`, of a closure parameter and not marked, passes its errors on as `?`
@@ -387,6 +396,9 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         },
         closures: Vec::new(),
         closure_calls: Vec::new(),
+        stored: Vec::new(),
+        boxed_hint: None,
+        stored_ctx: Vec::new(),
         kind_reqs: Vec::new(),
         assoc_eqs: Vec::new(),
         hint: None,
@@ -557,6 +569,15 @@ struct Checker<'a> {
     closures: Vec<ExprId>,
     /// The calls of closures: the call, its callee, the callee's type and its arguments' tuple.
     closure_calls: Vec<(ExprId, ExprId, Ty, Ty)>,
+    /// The closures kept in a `Box<dyn Fn…>`, with that `dyn` type and where: they own what
+    /// they capture (`expr.closure.stored.1`).
+    stored: Vec<(Ty, Ty, TextRange)>,
+    /// A closure passed to a call whose result is expected to be a `Box<dyn Fn…>`, and that
+    /// `dyn` type, which gives the closure's parameters their types.
+    boxed_hint: Option<(ExprId, Ty)>,
+    /// The stored closures being checked, innermost last: each closure, the needs and control
+    /// effects its type lists, and how many handlers are installed around it.
+    stored_ctx: Vec<(ExprId, Vec<Ty>, crate::Control, usize)>,
     /// The closure traits bounds need (`F: Fn(…)`), checked once closures' kinds are known.
     kind_reqs: Vec<(Ty, u32, TextRange)>,
     /// Bounds' fixed associated types (`Output = R`) still to settle: the associated type, the
@@ -656,7 +677,25 @@ impl Checker<'_> {
 
     fn check(&mut self, e: ExprId, expected: &Ty) -> Ty {
         if matches!(self.body.exprs[e].kind, ExprKind::Closure { .. }) {
-            self.hint = Some(closures::Hint(expected.clone()));
+            // A closure boxed where a `Box<dyn Fn…>` is expected takes its types from that
+            // (`expr.closure.stored.1`).
+            let hint = match self.boxed_hint.take() {
+                Some((c, d)) if c == e => d,
+                other => {
+                    self.boxed_hint = other;
+                    expected.clone()
+                }
+            };
+            self.hint = Some(closures::Hint(hint));
+        }
+        if let ExprKind::Call { args, .. } = &self.body.exprs[e].kind
+            && let [arg] = args.as_slice()
+            && matches!(self.body.exprs[*arg].kind, ExprKind::Closure { .. })
+            && let Ty::Adt(b, _, xs) = self.norm(expected)
+            && Some(b) == self.items.lang("Box")
+            && let d @ Ty::Dyn(..) = self.norm(&xs[0])
+        {
+            self.boxed_hint = Some((*arg, d));
         }
         if let Some(t) = self.array_literal(e, expected) {
             return t;

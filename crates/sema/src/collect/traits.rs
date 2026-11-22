@@ -39,12 +39,6 @@ impl Collector<'_> {
                         "a bound on an associated type",
                     ));
                 }
-                if m.token(K::EQ).is_some() {
-                    ds.push(Diagnostic::unsupported(
-                        m.text_range(),
-                        "a default for an associated type",
-                    ));
-                }
                 if let Some((_, first)) = assoc.iter().find(|(x, _): &&(String, TextRange)| *x == n)
                 {
                     ds.push(
@@ -81,6 +75,7 @@ impl Collector<'_> {
                 preds: Vec::new(),
             },
             supertraits: Vec::new(),
+            assoc_defaults: vec![None; assoc.len()],
             assoc,
             methods: Vec::new(),
             vis,
@@ -123,10 +118,37 @@ impl Collector<'_> {
             },
             &mut ds,
         );
+        // The associated types' defaults (`trait.assoc.default.1`).
+        let mut defaults = Vec::new();
+        for m in node
+            .child(K::TRAIT_BODY)
+            .into_iter()
+            .flat_map(|b| b.children().collect::<Vec<_>>())
+            .filter(|m| m.kind() == K::ASSOC_TYPE)
+        {
+            let ty = match m.token(K::EQ) {
+                Some(_) => m.children().find_map(ast::Type::cast).map(|t| {
+                    resolve_type(
+                        &t,
+                        &Scope {
+                            params: &params,
+                            trait_ctx: Some(i as u32),
+                            ..self.scope()
+                        },
+                        &mut ds,
+                    )
+                }),
+                None => None,
+            };
+            defaults.push(ty);
+        }
         self.reporter.report(src, None, ds);
         let def = &mut self.tree.traits[i];
         def.supertraits = supers;
         def.generics.preds = preds;
+        if defaults.len() == def.assoc.len() {
+            def.assoc_defaults = defaults;
+        }
     }
 
     /// The bound a trait's items have on `Self`: `Self: Trait<…>`.
@@ -303,6 +325,14 @@ impl Collector<'_> {
             .as_ref()
             .map_or(0, |t| self.tree.traits[t.trait_ as usize].assoc.len());
         let mut assoc: Vec<Option<Ty>> = vec![None; n_assoc];
+        // The associated types see the impl's bounds: `type Fails = I::Fails | F::Fails;`.
+        let scope = Scope {
+            preds: &preds,
+            ..scope
+        };
+        let defaults: Vec<Option<Ty>> = trait_ref.as_ref().map_or_else(Vec::new, |t| {
+            self.tree.traits[t.trait_ as usize].assoc_defaults.clone()
+        });
         let members: Vec<SyntaxNode> = node
             .child(K::IMPL_BODY)
             .into_iter()
@@ -334,9 +364,27 @@ impl Collector<'_> {
                         ));
                         continue;
                     };
-                    let ty = match m.children().find_map(ast::Type::cast) {
-                        Some(t) => resolve_type(&t, &scope, &mut ds),
-                        None => Ty::Error,
+                    // One type, or an error set (`type Fails = I::Fails | F::Fails;`).
+                    let written: Vec<ast::Type> =
+                        m.children().filter_map(ast::Type::cast).collect();
+                    let ty = match written.as_slice() {
+                        [] => Ty::Error,
+                        [t] => resolve_type(t, &scope, &mut ds),
+                        ts => {
+                            let mut members = Vec::new();
+                            for t in ts {
+                                let ty = resolve_type(t, &scope, &mut ds);
+                                if super::error_type(
+                                    &ty,
+                                    t.syntax().text_range(),
+                                    &members,
+                                    &mut ds,
+                                ) {
+                                    members.push(ty);
+                                }
+                            }
+                            Ty::errors(members)
+                        }
                     };
                     assoc[k] = Some(ty);
                 }
@@ -347,6 +395,11 @@ impl Collector<'_> {
                     ));
                 }
                 _ => {}
+            }
+        }
+        for (k, d) in defaults.into_iter().enumerate() {
+            if let Some(slot @ None) = assoc.get_mut(k) {
+                *slot = d;
             }
         }
         self.reporter.report(src, origin, ds);

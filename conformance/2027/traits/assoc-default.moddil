@@ -1,0 +1,53 @@
+// covers: item.trait.assoc.default.1
+
+trait Shape {
+    type Unit = int;
+    fn size(&self) -> Self::Unit;
+}
+
+struct Square { side: int }
+impl Shape for Square {
+    fn size(&self) -> int { self.side * self.side }
+}
+
+struct Named { name: String }
+impl Shape for Named {
+    type Unit = String;
+    fn size(&self) -> String { self.name.clone() }
+}
+
+struct Odd;
+struct Big;
+
+/// An impl's associated type may be an error set.
+trait Check {
+    type Fails = !;
+    fn check(&self, x: int) -> int with fail(Self::Fails);
+}
+
+struct Strict;
+impl Check for Strict {
+    type Fails = Odd | Big;
+    fn check(&self, x: int) -> int with fail(Odd | Big) {
+        if x % 2 == 1 { fail(Odd) }
+        if x > 100 { fail(Big) }
+        x
+    }
+}
+
+struct Lax;
+impl Check for Lax {
+    fn check(&self, x: int) -> int { x }
+}
+
+test "an impl takes the trait's default for an associated type" {
+    Square { side: 3 }.size()                       // => 9
+    ;
+    Named { name: "n".to_string() }.size()          // => "n"
+    ;
+    Lax.check(3)                                    // => 3
+    ;
+    try { Strict.check(3)? } catch { Odd => -1, Big => -2 }     // => -1
+    ;
+    try { Strict.check(200)? } catch { Odd => -1, Big => -2 }   // => -2
+}

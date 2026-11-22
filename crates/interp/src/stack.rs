@@ -350,6 +350,7 @@ impl<'a> Stack<'a> {
                 | Value::Array(xs)
                 | Value::Buf(_, xs)
                 | Value::Adt { fields: xs, .. } => &xs[i as usize],
+                Value::Owned(o) => &o.0,
                 other => unreachable!("a field of {other:?}"),
             };
         }
@@ -364,6 +365,7 @@ impl<'a> Stack<'a> {
                 | Value::Array(xs)
                 | Value::Buf(_, xs)
                 | Value::Adt { fields: xs, .. } => &mut xs[i as usize],
+                Value::Owned(o) => &mut o.0,
                 other => unreachable!("a field of {other:?}"),
             };
         }

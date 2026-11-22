@@ -487,6 +487,9 @@ pub struct TraitDef {
     pub supertraits: Vec<TraitRef>,
     /// The associated types' names and where they are declared.
     pub assoc: Vec<(String, TextRange)>,
+    /// Each associated type's default, which an impl that does not define it takes
+    /// (`item.trait.assoc.default.1`).
+    pub assoc_defaults: Vec<Option<Ty>>,
     /// The methods, by index among the functions.
     pub methods: Vec<u32>,
     /// Who can name it.
@@ -607,6 +610,9 @@ const LANG: &[&str] = &[
     "RangeFrom",
     "Index",
     "IndexMut",
+    "Deref",
+    "DerefMut",
+    "Box",
     "FromArrayLiteral",
     "Debug",
     "Default",
@@ -623,7 +629,7 @@ impl ItemTree {
     pub fn not_an_effect(&self, ty: &Ty) -> Option<String> {
         match ty {
             Ty::Error => None,
-            Ty::Dyn(tr) => {
+            Ty::Dyn(tr, _) => {
                 let name = &self.traits[tr.trait_ as usize].name;
                 if let Some(why) = self.not_dyn(tr.trait_, true) {
                     return Some(format!("`{name}` cannot be an effect: {why}"));
@@ -661,6 +667,18 @@ impl ItemTree {
     /// method (its own or a supertrait's) that does not take `self` by borrow (by `&self` only,
     /// if `shared`), has type parameters of its own, or names `Self` other than as `self`.
     pub fn not_dyn(&self, t: u32, shared: bool) -> Option<String> {
+        // A stored closure's type fixes `FnOnce`'s associated types (`type.box.dyn.1`); one
+        // called at most once cannot be stored yet.
+        if Some(t) == self.lang("Fn") || Some(t) == self.lang("FnMut") {
+            return None;
+        }
+        if Some(t) == self.lang("FnOnce") {
+            return Some(
+                "a stored closure is `Fn` or `FnMut` for now: one called at most once would be \
+                 moved out of its box"
+                    .to_string(),
+            );
+        }
         for s in self.supertraits_of(t) {
             let def = &self.traits[s as usize];
             if let Some((a, _)) = def.assoc.first() {
@@ -882,7 +900,7 @@ impl ItemTree {
             | Ty::Opaque(_)
             | Ty::Assoc(_)
             | Ty::Infer(_)
-            | Ty::Dyn(_)
+            | Ty::Dyn(..)
             | Ty::Errors(_) => (0, 1),
             Ty::Closure(c) => layout(&c.captures),
             Ty::Anon(a) => layout(&a.methods.iter().map(|(_, t)| t.clone()).collect::<Vec<_>>()),

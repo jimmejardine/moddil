@@ -114,6 +114,7 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
         fx,
         evidence: HashMap::new(),
         installed: HashMap::new(),
+        called: HashMap::new(),
         uncoerced: None,
         captured: HashMap::new(),
         in_closure: false,
@@ -242,6 +243,7 @@ fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
         fx,
         evidence: HashMap::new(),
         installed: HashMap::new(),
+        called: HashMap::new(),
         uncoerced: None,
         captured: HashMap::new(),
         in_closure: true,
@@ -250,10 +252,17 @@ fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
         Ty::tuple(c.captures.to_vec()),
         Some("{captures}".to_string()),
     );
-    let args = b.cfg.new_local(
-        Ty::tuple(c.params.to_vec()),
-        Some("{arguments}".to_string()),
-    );
+    // A stored closure whose type lists needs is given them after its arguments.
+    let given = types.call_needs(e).to_vec();
+    let mut arg_tys = c.params.to_vec();
+    arg_tys.extend(given.iter().map(|t| Ty::reference(false, t.clone())));
+    let args = b
+        .cfg
+        .new_local(Ty::tuple(arg_tys), Some("{arguments}".to_string()));
+    for k in 0..given.len() {
+        let place = Place::local(args).field((c.params.len() + k) as u32);
+        b.called.insert((e, k), place);
+    }
     for (k, cap) in types.captures(e).iter().enumerate() {
         let field = Place::local(env).field(k as u32);
         match *cap {
@@ -268,6 +277,9 @@ fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
             }
             moddil_sema::Capture::Evidence(moddil_sema::Evidence::Install(w, k)) => {
                 b.installed.insert((w, k), field);
+            }
+            moddil_sema::Capture::Evidence(moddil_sema::Evidence::Call(s, k)) => {
+                b.called.insert((s, k), field);
             }
         }
     }
@@ -318,6 +330,8 @@ struct Builder<'a> {
     evidence: HashMap<usize, Place>,
     /// Where the handlers each `with` installs are: by the `with` and the handler's index.
     installed: HashMap<(ExprId, usize), Place>,
+    /// Where each need a stored closure's caller gives is (`expr.closure.stored.1`).
+    called: HashMap<(ExprId, usize), Place>,
     /// In a closure's body: where each local of the enclosing body it captures is.
     captured: HashMap<hir::LocalId, Place>,
     /// Whether the body built is a closure's, whose returns check none of its function's

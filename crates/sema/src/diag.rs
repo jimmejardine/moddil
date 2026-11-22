@@ -222,9 +222,14 @@ codes! {
     E0607 = "effects do not settle",
     /// A parameter of `main` that is not a root capability, or a root capability taken twice.
     E0608 = "invalid parameter of `main`",
+    /// A handler's effect in the bound of a closure parameter, whose needs are met where the
+    /// closure is written.
+    E0609 = "need in a closure bound",
     /// A closure whose kind is weaker than a bound needs: it changes or moves what it captures,
     /// where `Fn` or `FnMut` is needed.
     E0801 = "closure of the wrong kind",
+    /// A stored closure (`Box<dyn Fn…>`) that captures a borrow, or borrows a handler.
+    E0802 = "stored closure capturing a borrow",
     /// Compile-time code calling a function that is not `const fn`.
     E1001 = "non-const call in compile-time code",
     /// Compile-time code with an effect or an error.

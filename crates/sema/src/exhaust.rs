@@ -214,7 +214,7 @@ impl Cx<'_> {
             | Ty::Param(..)
             | Ty::Opaque(_)
             | Ty::Assoc(_)
-            | Ty::Dyn(_)
+            | Ty::Dyn(..)
             | Ty::Closure(_)
             | Ty::Anon(_) => {
                 vec![Ctor::Single]

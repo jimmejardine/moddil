@@ -2662,7 +2662,7 @@ impl String {
 }
 
 impl FromIterator<char> for String {
-    fn from_iter<I: Iterator<Item = char>>(iter: I) -> String {
+    fn from_iter<I: Iterator<Item = char>>(iter: I) -> String with fail(I::Fails) {
         let mut s = String::new();
         let mut it = iter;
         while let Some(c) = it.next() {
@@ -2899,10 +2899,12 @@ const log: Log = Log;
 
 trait Iterator {
     type Item;
-    fn next(&mut self) -> Option<Self::Item>;
+    // What `next` can fail with (`iter.fails.1`): nothing, unless the impl says.
+    type Fails = !;
+    fn next(&mut self) -> Option<Self::Item> with fail(Self::Fails);
 
     // Whether `f` holds for every item left, stopping at the first it does not hold for.
-    fn all(self, f: impl FnMut(Self::Item) -> bool) -> bool {
+    fn all(self, f: impl FnMut(Self::Item) -> bool) -> bool with fail(Self::Fails) {
         let mut it = self;
         while let Some(x) = it.next() {
             if !f(x) {
@@ -2913,7 +2915,7 @@ trait Iterator {
     }
 
     // Whether `f` holds for some item left, stopping at the first it holds for.
-    fn any(self, f: impl FnMut(Self::Item) -> bool) -> bool {
+    fn any(self, f: impl FnMut(Self::Item) -> bool) -> bool with fail(Self::Fails) {
         let mut it = self;
         while let Some(x) = it.next() {
             if f(x) {
@@ -2924,7 +2926,7 @@ trait Iterator {
     }
 
     // How many items are left, using them up.
-    fn count(self) -> int {
+    fn count(self) -> int with fail(Self::Fails) {
         let mut it = self;
         let mut n = 0;
         while let Some(_) = it.next() {
@@ -2933,39 +2935,64 @@ trait Iterator {
         n
     }
 
-    // The items, each passed through `f`, in order (`iter.adapt.1`). For now `f` runs over every
-    // item when `map` is called, so its errors are `map`'s.
-    fn map<B, F: FnMut(Self::Item) -> B>(self, f: F) -> IntoIter<B> {
-        let mut out = Vec::new();
-        let mut it = self;
-        while let Some(x) = it.next() {
-            out.push(f(x));
-        }
-        out.into_iter()
+    // The items, each passed through `f` as it is asked for (`iter.adapt.1`): `f` runs in
+    // `next`, so its errors are the adapter's, not `map`'s, which names them (`E`) to say so.
+    fn map<B, F: FnMut(Self::Item) -> B with E, E>(self, f: F) -> Map<Self, F> {
+        Map { iter: self, f }
     }
 
-    // The items `f` holds for, in order; as `map`, it runs over every item when called.
-    fn filter<F: FnMut(&Self::Item) -> bool>(self, f: F) -> IntoIter<Self::Item> {
-        let mut out = Vec::new();
-        let mut it = self;
-        while let Some(x) = it.next() {
-            if f(&x) {
-                out.push(x);
-            }
-        }
-        out.into_iter()
+    // The items `f` holds for, each found as it is asked for.
+    fn filter<F: FnMut(&Self::Item) -> bool with E, E>(self, f: F) -> Filter<Self, F> {
+        Filter { iter: self, f }
     }
 
     // The items left, gathered into a collection of the type the context names
     // (`iter.collect.1`).
-    fn collect<C: FromIterator<Self::Item>>(self) -> C {
+    fn collect<C: FromIterator<Self::Item>>(self) -> C with fail(Self::Fails) {
         C::from_iter(self)
     }
 }
 
-// A collection that can be made from the items of an iterator (`iter.collect.1`).
+// `it.map(f)` (`iter.adapt.1`): it holds the closure, so it is a view of what that borrows.
+struct Map<I, F> {
+    iter: I,
+    f: F,
+}
+
+impl<I: Iterator, B, F: FnMut(I::Item) -> B> Iterator for Map<I, F> {
+    type Item = B;
+    type Fails = I::Fails | F::Fails;
+    fn next(&mut self) -> Option<B> with fail(I::Fails | F::Fails) {
+        match self.iter.next() {
+            Some(x) => Some((self.f)(x)),
+            None => None,
+        }
+    }
+}
+
+// `it.filter(f)` (`iter.adapt.1`).
+struct Filter<I, F> {
+    iter: I,
+    f: F,
+}
+
+impl<I: Iterator, F: FnMut(&I::Item) -> bool> Iterator for Filter<I, F> {
+    type Item = I::Item;
+    type Fails = I::Fails | F::Fails;
+    fn next(&mut self) -> Option<I::Item> with fail(I::Fails | F::Fails) {
+        while let Some(x) = self.iter.next() {
+            if (self.f)(&x) {
+                return Some(x);
+            }
+        }
+        None
+    }
+}
+
+// A collection that can be made from the items of an iterator (`iter.collect.1`); it fails as
+// the iterator does.
 trait FromIterator<A> {
-    fn from_iter<I: Iterator<Item = A>>(iter: I) -> Self;
+    fn from_iter<I: Iterator<Item = A>>(iter: I) -> Self with fail(I::Fails);
 }
 
 trait IntoIterator {
@@ -3105,6 +3132,51 @@ trait Index {
 
 trait IndexMut: Index {
     fn index_mut(&mut self, i: int) -> &mut Self::Output;
+}
+
+// Dereferencing (`type.box.1`): `*x` on a type other than a borrow is `*x.deref()`, or
+// `*x.deref_mut()` where the value is changed.
+
+trait Deref {
+    type Output;
+    fn deref(&self) -> &Self::Output;
+}
+
+trait DerefMut: Deref {
+    fn deref_mut(&mut self) -> &mut Self::Output;
+}
+
+// `Box<T>`: one value kept on the heap, owned (`type.box.1`); `Box<dyn Trait>` owns a value of
+// any type that implements the trait (`type.box.dyn.1`). Its value is dropped with it.
+struct Box<T> {
+    buf: Buf<T>,
+}
+
+impl<T> Box<T> {
+    fn new(x: T) -> Box<T> {
+        let mut buf = Buf::with_capacity(1);
+        buf.push(x);
+        Box { buf }
+    }
+
+    // Its value, out of the box.
+    fn into_inner(self) -> T {
+        let mut buf = self.buf;
+        buf.pop() ?! "a box holds its value"
+    }
+}
+
+impl<T> Deref for Box<T> {
+    type Output = T;
+    fn deref(&self) -> &T {
+        &self.buf.as_slice()[0]
+    }
+}
+
+impl<T> DerefMut for Box<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        &mut self.buf.as_mut_slice()[0]
+    }
 }
 
 // Collection literals (`expr.array.from.1`): `[a, b]` and `[x; n]` make the type the context
@@ -3311,7 +3383,7 @@ impl<T> FromArrayLiteral<T> for Vec<T> {
 }
 
 impl<T> FromIterator<T> for Vec<T> {
-    fn from_iter<I: Iterator<Item = T>>(iter: I) -> Vec<T> {
+    fn from_iter<I: Iterator<Item = T>>(iter: I) -> Vec<T> with fail(I::Fails) {
         let mut v = Vec::new();
         let mut it = iter;
         while let Some(x) = it.next() {

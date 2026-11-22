@@ -94,11 +94,13 @@ and a code never changes meaning.
 | E0602 | An entry point whose call needs an effect nothing installs | [eff.entry.1](effects.md) |
 | E0603 | A need that a function whose effects are written out does not list | [eff.infer.1](effects.md), [eff.method.1](effects.md), [eff.control.1](effects.md) |
 | E0604 | An effect other than `fail` on a trait's method or an impl's | [eff.method.1](effects.md) |
-| E0605 | A `dyn` type not behind a borrow, of more than one trait, or of a trait that cannot be used as `dyn` | [type.dyn.1](types.md) |
+| E0605 | A `dyn` type not behind a borrow or a `Box`, of more than one trait, or of a trait that cannot be used as `dyn` | [type.dyn.1](types.md), [type.box.dyn.1](types.md) |
 | E0606 | An effect listed twice, or given two handlers by one `with` | [eff.1](effects.md), [eff.with.1](effects.md), [eff.control.1](effects.md) |
 | E0607 | Effects inferred without end | [eff.infer.1](effects.md) |
 | E0608 | A parameter of `main` that is not a root capability (a struct marked `#[root_capability]`), or one taken twice | [main.root.1](items/functions.md) |
+| E0609 | A handler's effect in the bound of a closure parameter, whose needs are met where the closure is written | [expr.closure.effects.2](expressions/closures.md) |
 | E0801 | A closure whose kind is weaker than a bound needs | [expr.closure.param.1](expressions/closures.md) |
+| E0802 | A stored closure (`Box<dyn Fn…>`) that captures a borrow, or borrows a handler its type does not list | [expr.closure.stored.1](expressions/closures.md) |
 | E0701 | A path or import naming an item its module cannot see | [mod.vis.1](modules.md), [mod.use.1](modules.md) |
 | E0702 | A `use` that names nothing, a glob import, or a declared module | [mod.use.1](modules.md), [mod.tree.1](modules.md) |
 | E0703 | An item whose signature names something less visible than itself | [mod.expose.1](modules.md) |

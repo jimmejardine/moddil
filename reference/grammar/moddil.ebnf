@@ -155,7 +155,7 @@ sig_effect     ::= ( IDENT ':' )? effect_atom                     # `time: Time`
 effect_atom    ::= 'suspend' | 'spawn' | 'nondet' | 'fail' '(' error_types ')' | '&' type | path_type
 error_types    ::= type ( '|' type )*
 where_clause   ::= 'where' where_pred ( ',' where_pred )*            # bounds; never a refinement here
-where_pred     ::= type ':' bounds
+where_pred     ::= type ':' pred_bounds
 contract       ::= 'requires' 'always'? contract_body | 'ensures' contract_body
 contract_body  ::= ( IDENT ':' )? expr+ns                         # an optional name, cited by unsafe("name: …")
 
@@ -166,7 +166,7 @@ param          ::= pattern_no_alt ( ':' type )? ( '=' expr )?      # private fun
 
 generic_params ::= '<' generic_param ( ',' generic_param )* ','? '>'
 generic_param  ::= outer_attr* ( 'const' IDENT ':' type ( '=' const_arg )?
-                               | IDENT ( ':' bounds )? ( '=' type )? )
+                               | IDENT ( ':' pred_bounds )? ( '=' type )? )
 
 # ─── Data types ───────────────────────────────────────────────────────────────
 struct_item    ::= 'linear'? 'struct' IDENT generic_params?
@@ -184,7 +184,7 @@ variant        ::= outer_attr* IDENT ( struct_body | tuple_fields )? ( '=' expr 
 trait_item     ::= 'unsafe'? 'trait' IDENT generic_params? ( ':' bounds )? where_clause?
                    '{' trait_member* '}'
 trait_member   ::= outer_attr* note* ( fn_item | assoc_type | const_item )
-assoc_type     ::= 'type' IDENT ( ':' bounds )? ( '=' type )? ';'
+assoc_type     ::= 'type' IDENT ( ':' bounds )? ( '=' type ( '|' type )* )? ';'   # type Fails = I::Fails | F::Fails;
 
 impl_item      ::= 'unsafe'? 'impl' generic_params? type ( 'for' type )? where_clause? impl_body
 impl_body      ::= '{' impl_member* '}'
@@ -254,7 +254,11 @@ generic_args   ::= '<' ( generic_arg ( ',' generic_arg )* ','? )? '>'
 generic_arg    ::= type | const_arg | IDENT '=' type                  # LL(2): Item = int
 const_arg      ::= '-'? INTEGER | STRING | 'true' | 'false' | block
 bounds         ::= bound ( '+' bound )*
-bound          ::= type_path fn_sugar?                                # Fn(&T) -> U with E
+bound          ::= type_path fn_sugar?                                # Fn(&T) -> U; in a type, `with` is the type's
+pred_bounds    ::= pred_bound ( '+' pred_bound )*                     # a parameter's or a `where` clause's bounds
+pred_bound     ::= type_path ( fn_sugar pred_effects? )?              # F: Fn(&T) -> U with E
+pred_effects   ::= 'with' ( pred_effect | '(' effect_atom ( ',' effect_atom )* ','? ')' )
+pred_effect    ::= 'suspend' | 'spawn' | 'nondet' | 'fail' '(' error_types ')' | path_type   # bare: no `&T`, whose type would take a `+`
 fn_sugar       ::= '(' type_list? ')' ( '->' type_nb )?
 type_effects   ::= 'with' ( effect_atom | '(' effect_atom ( ',' effect_atom )* ','? ')' )
 # In type position one effect may be bare; several are parenthesised. A signature's return type

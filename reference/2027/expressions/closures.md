@@ -65,13 +65,39 @@ does, and a closure that cannot fail meets it too.
 by the `with`s around it there, and the enclosing function's own effects, not by those of the
 function that calls it.
 
+**expr.closure.effects.2** A closure bound may name the closure's effects after `with`:
+`impl Fn(&T) -> U with E`, `F: FnMut(I::Item) -> B with E`, `F: Fn(int) with fail(Missing)`; a
+bare effect has no `&T`, which is parenthesised. Named so, the closure's errors are what the bound
+says, and a closure passed for it that can fail with others is an error (E0502); `with suspend` and
+`with spawn` are allowed, and the bound with no `fail` takes a closure that cannot fail. An
+**effect variable** is a type parameter named after `with`, standing for the errors of the closures
+whose bounds name it: the function's `with E` passes them on, and a call of such a closure that is
+not marked passes them on as **expr.closure.fails.1** says; a function whose errors are written that
+names `E` in a bound but does not list it handles them itself (E0501, E0502). A closure's other
+needs are met where it is written, so the bound of a closure parameter lists no handler's effect
+(E0609).
+
+**expr.closure.stored.1** A closure is kept beyond the call it is passed to as a
+`Box<dyn Fn(A₁, …, Aₙ) -> R with …>` (or `FnMut`, `FnOnce`), a **stored closure**: a
+`Box::new(|…| …)` written where one is expected takes its parameters' and result's types from it.
+Its type names its effects, as a bound does (**expr.closure.effects.2**): the closure can fail only
+with the errors it lists, or not at all if it lists none (E0502), and suspend or spawn only if it
+lists `suspend` or `spawn` (E0603). It may run after the function it is written in has returned, so
+it owns what it captures: each local it uses is moved in (copied, if it is `Copy`), and one that
+holds a borrow is an error (E0802). The handlers' effects its type lists (`dyn Fn() with Clock`)
+are met where it is called, by the caller's handlers, not where it is written; one it uses that
+its type does not list is an error (E0802), as a handler it would borrow. `f(a₁, …, aₙ)`, for `f`
+such a box, calls the closure through it: the call can fail with its errors, and needs what its
+type lists. For now a stored closure is `Fn` or `FnMut`, not `FnOnce` (E0605), and only one
+written as `Box::new(|…| …)` where the box is expected meets its needs at the call.
+
 **expr.fn-value.1** A function named as a value, not called (`apply(inc, 41)`, `let f = mul;`,
 `Shout::shout`), is a closure that takes the function's arguments and calls it: it implements the
 closure traits with the function's parameters and result, fails with its errors
 (**expr.closure.fails.1**), and the needs of its effects are met where it is named
 (**expr.closure.effects.1**). A generic function's type arguments are inferred where it is named,
-from what the closure is used as. For now a type's function (`Vec::new`) and a variant
-(`Some`) cannot be used as values.
+from what the closure is used as. A type's function (`Point::at`, `Vec::new`) and a tuple variant
+(`Some`) are values too, the variant a closure that builds it.
 
 **expr.anon-impl.1** `impl Trait { fn … }` as an expression is a value of a type of its own that
 implements the trait, each method a closure over the enclosing body's locals (**expr.closure.capture.1**).

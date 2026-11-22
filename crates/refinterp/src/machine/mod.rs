@@ -42,6 +42,11 @@ struct Machine<'p> {
     /// The handlers installed by the `with` blocks being run, innermost last: how the effect is
     /// looked up, and a borrow of the handler.
     handlers: Vec<(String, Value)>,
+    /// Whether the last place found went through a box (`*b` through `Deref`), so a closure
+    /// called there is a stored one (`expr.closure.stored.1`).
+    through_box: bool,
+    /// Whether the call that last returned is one that can fail, for a `?` around it.
+    failing_call: bool,
     /// A trap a refinement test raised while a pattern was matched, until what is matching
     /// raises it.
     pending_trap: Option<Flow>,
@@ -98,6 +103,8 @@ impl<'p> Machine<'p> {
             observed: Vec::new(),
             try_modes: Vec::new(),
             handlers: Vec::new(),
+            through_box: false,
+            failing_call: false,
             pending_trap: None,
             olds: Vec::new(),
             nodes: HashMap::new(),
@@ -227,14 +234,75 @@ impl Machine<'_> {
                 Some((p, indirect))
             }
             ast::Expr::Prefix(_) if e.syntax().token(K::STAR).is_some() => {
-                let v = self.eval(&e.sub_exprs()[0])?;
-                match v {
+                let x = &e.sub_exprs()[0];
+                let p = match self.place_of(x)? {
+                    Some((p, _)) => p,
+                    None => {
+                        let v = self.eval(x)?;
+                        self.memory.temp(v)
+                    }
+                };
+                match self.memory.load(&p) {
                     Value::Ref(target, _) => Some((target, true)),
-                    _ => unreachable!("a checked dereference"),
+                    // Through `Deref` (`type.box.1`): the value its borrow points to.
+                    v => {
+                        let head = v.head();
+                        let m = self
+                            .program
+                            .trait_method("Deref", &head, "deref")
+                            .expect("a checked dereference");
+                        let r = self.run_method(
+                            m,
+                            &head,
+                            vec![Value::Ref(p, false)],
+                            e.syntax().text_range(),
+                        )?;
+                        let Value::Ref(q, _) = r else {
+                            unreachable!("a borrow of the value")
+                        };
+                        self.through_box = true;
+                        Some((q, true))
+                    }
                 }
             }
             _ => None,
         })
+    }
+
+    /// The closure at `p`, through borrows and boxes (`expr.closure.stored.1`), if there is one.
+    /// One kept in a box runs with its caller's handlers too, which meet the needs its type
+    /// lists.
+    pub(super) fn closure_at(
+        &mut self,
+        mut p: Pointer,
+        range: TextRange,
+    ) -> Eval<Option<std::sync::Arc<crate::value::Closure>>> {
+        let mut boxed = std::mem::take(&mut self.through_box);
+        loop {
+            match self.memory.load(&p) {
+                Value::Ref(q, _) => p = q,
+                Value::Closure(c) if boxed => {
+                    let mut c = (*c).clone();
+                    c.handlers.extend(self.handlers.iter().cloned());
+                    return Ok(Some(std::sync::Arc::new(c)));
+                }
+                Value::Closure(c) => return Ok(Some(c)),
+                v @ Value::Adt { .. } => {
+                    let head = v.head();
+                    let Some(m) = self.program.trait_method("Deref", &head, "deref") else {
+                        return Ok(None);
+                    };
+                    match self.run_method(m, &head, vec![Value::Ref(p, false)], range)? {
+                        Value::Ref(q, _) => {
+                            p = q;
+                            boxed = true;
+                        }
+                        _ => return Ok(None),
+                    }
+                }
+                _ => return Ok(None),
+            }
+        }
     }
 
     /// Where the place `e` is; any other expression is evaluated into a nameless variable, so

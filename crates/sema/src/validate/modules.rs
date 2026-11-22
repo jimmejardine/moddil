@@ -153,7 +153,7 @@ fn less_visible(
 fn defs_in(t: &Ty, out: &mut Vec<Def>) {
     match t {
         Ty::Adt(a, ..) => out.push(Def::Adt(*a)),
-        Ty::Dyn(tr) => out.push(Def::Trait(tr.trait_)),
+        Ty::Dyn(tr, _) => out.push(Def::Trait(tr.trait_)),
         _ => {}
     }
     let _ = t.map(&mut |x| {

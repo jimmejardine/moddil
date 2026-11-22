@@ -99,6 +99,11 @@ impl<'a> Dispatch<'a> {
 
     fn glue(&self, v: Value, ty: &Ty, own: bool, out: &mut Vec<DropCall>) {
         match (v, ty) {
+            // A `dyn` value is dropped as the type it is (`type.box.dyn.1`).
+            (Value::Owned(o), _) => {
+                let (v, t) = *o;
+                self.glue(v, &t, own, out);
+            }
             (v @ Value::Adt { .. }, Ty::Adt(a, ..)) if own && self.items.has_drop_impl(*a) => {
                 let drop = self.items.lang_ref("Drop").expect("the prelude's `Drop`");
                 let decl = self.items.traits[drop.trait_ as usize].methods[0];

@@ -36,30 +36,34 @@ pub(crate) fn type_(p: &mut Parser) {
         return;
     };
     if p.at(T![with]) {
-        // type_effects ::= 'with' ( effect_atom | '(' effect_atom ( ',' effect_atom )* ','? ')' )
         let m = t.precede(p);
-        let e = p.start();
-        p.bump(T![with]);
-        if p.eat(T!["("]) {
-            comma_list(
-                p,
-                T![")"],
-                "an effect",
-                |p| {
-                    matches!(
-                        p.current(),
-                        T![suspend] | T![spawn] | T![nondet] | T![fail] | T!["&"] | T!["&&"]
-                    ) || at_path_type(p)
-                },
-                effect_atom,
-            );
-            p.expect(T![")"]);
-        } else {
-            effect_atom(p);
-        }
-        e.complete(p, K::TYPE_EFFECTS);
+        type_effects(p);
         m.complete(p, K::EFFECT_TYPE);
     }
+}
+
+/// `type_effects ::= 'with' ( effect_atom | '(' effect_atom ( ',' effect_atom )* ','? ')' )`
+fn type_effects(p: &mut Parser) {
+    let e = p.start();
+    p.bump(T![with]);
+    if p.eat(T!["("]) {
+        comma_list(
+            p,
+            T![")"],
+            "an effect",
+            |p| {
+                matches!(
+                    p.current(),
+                    T![suspend] | T![spawn] | T![nondet] | T![fail] | T!["&"] | T!["&&"]
+                ) || at_path_type(p)
+            },
+            effect_atom,
+        );
+        p.expect(T![")"]);
+    } else {
+        effect_atom(p);
+    }
+    e.complete(p, K::TYPE_EFFECTS);
 }
 
 /// `type_ne ::= 'impl' bounds | 'dyn' bounds | type_core`: no trailing effects.
@@ -84,7 +88,7 @@ fn type_ne_inner(p: &mut Parser, bounds_list: bool) -> Option<crate::parser::Com
         if bounds_list {
             bounds(p);
         } else {
-            bound(p);
+            bound(p, false);
         }
         return Some(m.complete(p, kind));
     }
@@ -358,14 +362,24 @@ pub(crate) fn const_arg(p: &mut Parser) {
 
 /// `bounds ::= bound ( '+' bound )*`
 pub(crate) fn bounds(p: &mut Parser) {
-    bound(p);
+    bound(p, false);
     while p.eat(T!["+"]) {
-        bound(p);
+        bound(p, false);
     }
 }
 
-/// `bound ::= type_path fn_sugar?` with `fn_sugar ::= '(' type_list? ')' ( '->' type_nb )?`
-fn bound(p: &mut Parser) {
+/// `pred_bounds ::= pred_bound ( '+' pred_bound )*`: a parameter's or a `where` clause's, whose
+/// closure bounds may name their effects.
+pub(crate) fn pred_bounds(p: &mut Parser) {
+    bound(p, true);
+    while p.eat(T!["+"]) {
+        bound(p, true);
+    }
+}
+
+/// `bound ::= type_path fn_sugar?` with `fn_sugar ::= '(' type_list? ')' ( '->' type_nb )?`, and
+/// `pred_bound ::= type_path ( fn_sugar type_effects? )?` when `effects`.
+fn bound(p: &mut Parser, effects: bool) {
     let m = p.start();
     if matches!(
         p.current(),
@@ -384,6 +398,14 @@ fn bound(p: &mut Parser) {
         type_list_parens(p);
         if p.eat(T!["->"]) {
             type_nb(p);
+        }
+        // pred_effects: as type_effects, but a bare atom has no `&T`, whose type would take
+        // the next `+`.
+        if effects && p.at(T![with]) {
+            if matches!(p.nth(1), T!["&"] | T!["&&"]) {
+                p.error("context data in a bound's effects is parenthesised: `with (&T)`");
+            }
+            type_effects(p);
         }
         s.complete(p, K::FN_SUGAR);
     }

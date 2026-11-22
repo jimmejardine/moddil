@@ -37,9 +37,12 @@ pub enum Value {
     Ref(Pointer, bool),
     /// A `dyn` borrow (`&dyn Time`): where it points, whether it is `&mut`, and the type of what
     /// it points to, which chooses the methods called through it (its **vtable**).
-    Dyn(Pointer, bool, Ty),
+    Dyn(Pointer, bool, Box<Ty>),
     /// A closure: what it captures, in order. Its type says which body it runs.
     Closure(Vec<Value>),
+    /// A `dyn` value a `Box<dyn Trait>` owns (`type.box.dyn.1`): the value, and its type, which
+    /// chooses the methods called on it. A pointer goes into it by the field index 0.
+    Owned(Box<(Value, Ty)>),
     /// A borrow as reported outside the program (an observed value, a result): what it pointed
     /// to, and whether it was `&mut`.
     Borrowed(Box<Value>, bool),
@@ -128,6 +131,7 @@ impl Value {
             Value::Borrowed(v, false) => format!("&{}", v.render(items)),
             Value::Ref(..) | Value::Dyn(..) => "&…".to_string(),
             Value::Closure(_) => "{closure}".to_string(),
+            Value::Owned(o) => o.0.render(items),
             Value::Empty => "<moved>".to_string(),
         }
     }

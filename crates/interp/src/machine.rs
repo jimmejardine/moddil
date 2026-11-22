@@ -401,10 +401,40 @@ impl<'a> Machine<'a> {
             Rvalue::Unsize(a, from) if matches!(self.concrete(from), Ty::Array(..)) => {
                 self.stack.take(a)
             }
+            // `Box<T>` as `Box<dyn Trait>`: its value keeps its type (`type.box.dyn.1`).
+            Rvalue::Unsize(a, from) if matches!(self.concrete(from), Ty::Adt(b, ..) if Some(b) == self.dispatch.items().lang("Box")) =>
+            {
+                let Ty::Adt(_, _, args) = self.concrete(from) else {
+                    unreachable!()
+                };
+                let inner = args[0].clone();
+                match self.stack.take(a) {
+                    Value::Adt {
+                        adt,
+                        variant,
+                        mut fields,
+                    } => {
+                        if let Some(Value::Buf(_, xs)) = fields.first_mut() {
+                            for x in xs.iter_mut() {
+                                if !matches!(x, Value::Owned(..)) {
+                                    let v = std::mem::replace(x, Value::Empty);
+                                    *x = Value::Owned(Box::new((v, inner.clone())));
+                                }
+                            }
+                        }
+                        Value::Adt {
+                            adt,
+                            variant,
+                            fields,
+                        }
+                    }
+                    other => unreachable!("a box: {other:?}"),
+                }
+            }
             Rvalue::Unsize(a, from) => {
                 let from = self.concrete(from);
                 match self.stack.take(a) {
-                    Value::Ref(ptr, m) => Value::Dyn(ptr, m, from),
+                    Value::Ref(ptr, m) => Value::Dyn(ptr, m, Box::new(from)),
                     v @ Value::Dyn(..) => v,
                     other => unreachable!("a `dyn` borrow of {other:?}"),
                 }

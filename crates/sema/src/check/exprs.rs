@@ -142,6 +142,22 @@ impl Checker<'_> {
                     Ty::Ref(_, t) => (*t).clone(),
                     Ty::Error => Ty::Error,
                     Ty::Infer(_) => self.unknown(range, "to dereference it"),
+                    // Through `Deref` (`type.box.1`); `DerefMut` where it is changed.
+                    t @ Ty::Adt(..)
+                        if self.op_trait("Deref", "deref").is_some_and(|(tr, _)| {
+                            self.solver.implements(&t, &tr) != crate::traits::Answer::No
+                        }) =>
+                    {
+                        match self.operator(e, range, "*", &t, ("Deref", "deref")) {
+                            Some(t) => {
+                                if let Some(c) = self.out.calls.remove(&e) {
+                                    self.out.index_calls.insert(e, c);
+                                }
+                                t
+                            }
+                            None => Ty::Error,
+                        }
+                    }
                     t => {
                         let t = self.show(&t);
                         self.report(
@@ -417,22 +433,27 @@ impl Checker<'_> {
                     self.out.diagnostics.push(d);
                 }
             }
-            // Changing an element through `IndexMut`: the indexed value is borrowed `&mut`.
-            ExprKind::Index { base, .. } if self.out.index_calls.contains_key(&e) => {
+            // Changing an element through `IndexMut`, or a box's value through `DerefMut`: the
+            // indexed or dereferenced value is borrowed `&mut`.
+            ExprKind::Index { base, .. } | ExprKind::Deref(base)
+                if self.out.index_calls.contains_key(&e) =>
+            {
                 let bt = self.out.expr(base);
                 let bt = match self.norm(&bt) {
                     Ty::Ref(_, t) => (*t).clone(),
                     t => t,
                 };
-                if let Some((tr, func)) = self.op_trait("IndexMut", "index_mut") {
+                let (name, method, how) = match self.body.exprs[e].kind {
+                    ExprKind::Deref(_) => ("DerefMut", "deref_mut", "through `*`"),
+                    _ => ("IndexMut", "index_mut", "by index"),
+                };
+                if let Some((tr, func)) = self.op_trait(name, method) {
                     if self.solver.implements(&bt, &tr) == crate::traits::Answer::No {
                         let s = self.show(&bt);
                         self.report(
                             Code::E0205,
                             range,
-                            format!(
-                                "`{s}` cannot be {what} by index: it does not implement `IndexMut`"
-                            ),
+                            format!("`{s}` cannot be {what} {how}: it does not implement `{name}`"),
                         );
                         return;
                     }

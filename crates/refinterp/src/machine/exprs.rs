@@ -405,6 +405,10 @@ impl Machine<'_> {
     /// type, a called function's parameter, or the result of the function it is the value of.
     pub(super) fn context_head(&self, node: &SyntaxNode) -> Option<Head> {
         let parent = node.parent()?;
+        // `?` and `?!` give the call's value: the context of what they are part of.
+        if matches!(parent.kind(), K::PROPAGATE_EXPR | K::UNWRAP_EXPR) {
+            return self.context_head(&parent);
+        }
         let (ty, module) = match parent.kind() {
             K::LET_STMT => (
                 parent.children().find_map(ast::Type::cast)?,
@@ -520,9 +524,9 @@ impl Machine<'_> {
             return Ok(literal(lit, true));
         }
         if op.kind() == K::STAR {
-            // What a borrow points to (`expr.deref.1`).
-            let v = self.eval(operand)?;
-            return Ok(self.target(v));
+            // What a borrow points to (`expr.deref.1`), or a box's value (`type.box.1`).
+            let (p, _) = self.place_of(e)?.expect("a dereference is a place");
+            return Ok(self.memory.load(&p));
         }
         match (op.kind(), self.eval(operand)?) {
             (k, v @ (Value::Num(..) | Value::FloatLit(_) | Value::BigLit(_))) => {

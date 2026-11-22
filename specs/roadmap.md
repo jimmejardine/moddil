@@ -367,9 +367,8 @@ something runs from the first slice.
     sweep);
   - an `impl Trait` result is the whole result type, not in a trait's method, and its hidden type
     holds no borrow or closure; functions that return one cannot call each other recursively;
-  - `map` and `filter` run their closure over every item when called (lazy adapters wait for
-    closures in fields, which need `I::Item` in an impl's `where` clause, `F::Output` through
-    `FnMut`, and a stored closure's errors);
+  - `map` and `filter` run their closure over every item when called (lazy since S12, with
+    `Iterator::Fails`);
   - a test cannot be run for listed types or declare capabilities;
   - `log` prints to standard error, with no handlers;
   - the root capabilities have no operations (a program can no longer make one since the M0
@@ -436,7 +435,8 @@ something runs from the first slice.
   - **Deferred, each for its own step:**
     - lazy adapters, `Box<T>`, `Box<dyn Fn …>` and `impl Fn` results: a closure kept beyond the
       call needs its bound to name its effects (`Fn(A) -> R with E`, `closures.md`: Effects flow
-      through), which the grammar's `fn_sugar` does not have yet, and owned captures;
+      through), which the grammar's `fn_sugar` does not have yet, and owned captures (all but
+      `impl Fn` results done in S12);
     - slicing and text (`xs[a..b]`, slice patterns, `StrPos`, `find`, `from_utf8`): sub-slice
       borrows need a new kind of pointer in both interpreters;
     - the 8 open questions the tour exposed ([`tour.md`](tour.md#gaps-the-tour-exposed)), which
@@ -445,6 +445,46 @@ something runs from the first slice.
       body is ambiguous to tree-sitter;
     - suppressed errors (they need error return traces), and the destructors of a cancelled
       task's pending `send`.
+- **Slice S12 (decided November 2026): closure effects, `Box` and lazy adapters, in one slice.**
+  - **Effects in closure bounds** (`expr.closure.effects.2`):
+    - `F: Fn(A) -> R with E` in a parameter's or a `where` clause's bound, and
+      `impl Fn() with E`. The grammar's `pred_bound` takes the effects; a bare one has no `&T`,
+      whose type would take the next `+`.
+    - An effect variable `E` stands for the closure's errors. The function's `with E` passes them
+      on, and naming `E` without listing it keeps them in.
+    - `with fail(X)` fixes them (E0502 for more). A handler's effect in a closure parameter's
+      bound is E0609.
+  - **`Box<T>`** (`type.box.1`): a prelude struct over `Buf`, with `Deref` and `DerefMut` for
+    `*b`. It is the indirection a recursive type needs.
+  - **`Box<dyn Trait>`** (`type.box.dyn.1`):
+    - `Box<T>` coerces to it. `Ty::Dyn` keeps the associated types a `dyn Fn` fixes.
+    - The MIR interpreter keeps the value's type with it (`Value::Owned`); the reference
+      interpreter needs nothing new.
+  - **Stored closures** (`expr.closure.stored.1`):
+    - A `Box<dyn Fn(A) -> R with …>` holds a closure that owns its captures (E0802 for a borrow).
+    - Its type fixes its errors and control effects.
+    - The handlers' effects it lists are met where it is called (`closures.md`), passed after its
+      arguments.
+  - **Lazy adapters** (`iter.adapt.1`, `iter.fails.1`, `item.trait.assoc.default.1`):
+    - `Iterator` has `type Fails = !` (associated types may have defaults), and `next`,
+      `count`, `all`, `any` and `collect` fail with it.
+    - `map` and `filter` give `Map` and `Filter`, whose `Fails` is `I::Fails | F::Fails` (an
+      associated type may be an error set).
+    - A call whose errors are a type parameter's `Fails` passes them on unmarked, as a closure
+      parameter's call does.
+  - **Interim limits:**
+    - no `Box<dyn FnOnce>`, and no `impl Fn` result;
+    - only `Box::new(|…| …)` written where the box is expected meets its needs at the call (a
+      closure bound to a local first is checked as an ordinary one);
+    - a `Box<dyn Fn>` is called through its box (`f(x)`, `(**f)(x)`), not as a `&dyn Fn`
+      parameter;
+    - field access and method calls do not look through a `Box` (`(*b).x`);
+    - a `for` loop over an iterator that can fail with known errors is E0501 (use
+      `while let Some(x) = it.next()? { … }`), since how `for` marks one is not decided;
+    - the reference interpreter takes `?` on a call of a function whose signature lists `fail`
+      as the call's, so `?` on such a call whose errors turn out to be `!`, giving an `Option`,
+      differs between the interpreters;
+    - `escape` is not implemented, so its rule for stored closures waits.
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

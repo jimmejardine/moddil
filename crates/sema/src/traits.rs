@@ -268,6 +268,14 @@ impl<'a> Solver<'a> {
                 _ => self.norm(&c.fails),
             };
         }
+        // A stored closure's are what its type fixes (`type.box.dyn.1`).
+        if let Ty::Dyn(_, fixed) = &self_ty
+            && self.tree.lang("FnOnce") == Some(trait_ref.trait_)
+            && let Some((_, t)) = fixed.iter().find(|(k, _)| *k == a.index)
+        {
+            let t = t.clone();
+            return self.norm(&t);
+        }
         // A bound that fixes it: `T: Add<Output = int>`.
         for i in 0..self.env.len() {
             let p = &self.env[i];
@@ -338,12 +346,17 @@ impl<'a> Solver<'a> {
                         .all(|(p, q)| self.unify(p, q))
                     && self.unify(&x.ret, &y.ret)
             }
-            (Ty::Dyn(x), Ty::Dyn(y)) => {
+            (Ty::Dyn(x, xf), Ty::Dyn(y, yf)) => {
                 x.trait_ == y.trait_
+                    && xf.len() == yf.len()
                     && x.args
                         .iter()
                         .zip(y.args.iter())
                         .all(|(p, q)| self.unify(p, q))
+                    && xf
+                        .iter()
+                        .zip(yf.iter())
+                        .all(|((i, p), (j, q))| i == j && self.unify(p, q))
             }
             (Ty::Errors(xs), Ty::Errors(ys)) => {
                 xs.len() == ys.len() && xs.iter().zip(ys.iter()).all(|(x, y)| self.unify(x, y))
@@ -433,7 +446,7 @@ impl<'a> Solver<'a> {
             };
         }
         // `dyn Trait` implements its trait and the trait's supertraits.
-        if let Ty::Dyn(d) = &ty {
+        if let Ty::Dyn(d, _) = &ty {
             let pred = Pred {
                 ty: ty.clone(),
                 trait_ref: d.clone(),
@@ -657,7 +670,6 @@ impl<'a> Solver<'a> {
             | Ty::Never
             | Ty::Error
             | Ty::Ref(..)
-            | Ty::Dyn(_)
             | Ty::Char
             | Ty::Str
             | Ty::Len(_) => false,
@@ -666,7 +678,8 @@ impl<'a> Solver<'a> {
                 let base = self.tree.base(ty);
                 self.needs_drop_inner(&base, depth + 1)
             }
-            Ty::Param(..) | Ty::Opaque(_) | Ty::Assoc(_) | Ty::Infer(_) => true,
+            // A `dyn` value is owned only by a `Box`, and may be of any type (`type.box.dyn.1`).
+            Ty::Param(..) | Ty::Opaque(_) | Ty::Assoc(_) | Ty::Infer(_) | Ty::Dyn(..) => true,
             Ty::Errors(ts) => ts.iter().any(|t| self.needs_drop_inner(t, depth + 1)),
             Ty::Closure(c) => c
                 .captures

@@ -53,6 +53,7 @@ areas!(
     bitwise,
     blocks,
     borrows,
+    boxes,
     calls,
     closures,
     collections,

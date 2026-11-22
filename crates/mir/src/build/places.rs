@@ -116,9 +116,48 @@ impl Builder<'_> {
                 };
                 Some(p.field(i))
             }
+            ExprKind::Deref(_) if self.types.index_callee(e).is_some() => None,
             ExprKind::Deref(x) => Some(self.place_of(x)?.deref()),
             _ => None,
         }
+    }
+
+    /// The value box `place` (of type `box_ty`, holding an `inner`) owns, as a place: through
+    /// `Deref::deref`, or `DerefMut::deref_mut` if `mutable` (`type.box.1`).
+    pub(super) fn through_box(
+        &mut self,
+        place: Place,
+        box_ty: Ty,
+        inner: Ty,
+        mutable: bool,
+        range: moddil_syntax::TextRange,
+    ) -> Place {
+        let (tr, name) = if mutable {
+            ("DerefMut", "deref_mut")
+        } else {
+            ("Deref", "deref")
+        };
+        let t = self.items.lang(tr).expect("the prelude's `Deref`");
+        let func = self.items.traits[t as usize]
+            .methods
+            .iter()
+            .copied()
+            .find(|&f| self.items.fns[f as usize].name == name)
+            .expect("the prelude's `deref`");
+        let b = self.temp(Ty::reference(mutable, box_ty.clone()));
+        self.cfg.assign(b, Rvalue::Ref(mutable, place));
+        let r = self.temp(Ty::reference(mutable, inner));
+        self.call_into(
+            None,
+            moddil_sema::Callee::Trait {
+                func,
+                args: vec![box_ty],
+            },
+            Place::local(r),
+            vec![Operand::Move(Place::local(b))],
+            range,
+        );
+        Place::local(r).deref()
     }
 
     /// The place `e` denotes, evaluating what is not a place (a call returning a borrow, a
@@ -137,6 +176,28 @@ impl Builder<'_> {
                     p
                 };
                 p.field(i)
+            }
+            ExprKind::Deref(x) if self.types.index_callee(e).is_some() => {
+                // `*Deref::deref(&x)`, or `deref_mut` with `&mut x` (`type.box.1`).
+                let callee = self.types.index_callee(e).expect("checked").clone();
+                let mutable = self
+                    .items
+                    .fns
+                    .get(callee.func() as usize)
+                    .is_some_and(|f| f.name == "deref_mut");
+                let p = self.place(x);
+                let b = self.temp(Ty::reference(mutable, callee.args()[0].clone()));
+                self.cfg.assign(b, Rvalue::Ref(mutable, p));
+                let r = self.temp(Ty::reference(mutable, self.ty(e)));
+                let range = self.range(e);
+                self.call_into(
+                    None,
+                    callee,
+                    Place::local(r),
+                    vec![Operand::Move(Place::local(b))],
+                    range,
+                );
+                Place::local(r).deref()
             }
             ExprKind::Deref(x) => self.place(x).deref(),
             ExprKind::Index { base, index } if self.types.index_callee(e).is_some() => {

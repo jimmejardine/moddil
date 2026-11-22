@@ -44,7 +44,9 @@ pub enum Ty {
     Ref(bool, Arc<Ty>),
     /// `dyn Trait`: a value of some type that implements the trait, known only through it. It
     /// has no size, so it is only ever behind a borrow (`&dyn Trait`).
-    Dyn(TraitRef),
+    /// `dyn Trait`, and for a closure trait the associated types of `FnOnce` it fixes, by
+    /// index (`Output`, `Fails`): `dyn Fn(int) -> int with fail(E)`.
+    Dyn(TraitRef, Arc<[(u32, Ty)]>),
     /// A closure's own type: one per closure expression. It cannot be written; it implements the
     /// closure traits (`FnOnce` and, by its kind, `FnMut` and `Fn`).
     Closure(Arc<ClosureTy>),
@@ -71,6 +73,12 @@ pub enum Ty {
     /// is reported once.
     Error,
 }
+
+/// Where a `dyn` closure type keeps the handler needs its calls have, among its fixed
+/// associated types: past `FnOnce`'s own (`Output`, `Fails`).
+pub(crate) const DYN_NEEDS: u32 = 100;
+/// Where it keeps its control effects, as a `Len` of their bits.
+pub(crate) const DYN_CONTROL: u32 = 101;
 
 /// A closure's type: where it is written, and what checking it found.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -335,7 +343,9 @@ impl Ty {
             Ty::Tuple(ts) | Ty::Adt(_, _, ts) | Ty::Errors(ts) => ts.iter().any(|t| t.any(f)),
             Ty::Ref(_, t) | Ty::Slice(t) | Ty::Buf(t) => t.any(f),
             Ty::Array(t, n) => t.any(f) || n.any(f),
-            Ty::Dyn(tr) => tr.args.iter().any(|t| t.any(f)),
+            Ty::Dyn(tr, fixed) => {
+                tr.args.iter().any(|t| t.any(f)) || fixed.iter().any(|(_, t)| t.any(f))
+            }
             Ty::Anon(a) => {
                 a.trait_ref.args.iter().any(|t| t.any(f)) || a.methods.iter().any(|(_, t)| t.any(f))
             }
@@ -363,7 +373,9 @@ impl Ty {
             Ty::Array(t, n) => Ty::Array(Arc::new(f(t)), Arc::new(f(n))),
             Ty::Slice(t) => Ty::Slice(Arc::new(f(t))),
             Ty::Buf(t) => Ty::Buf(Arc::new(f(t))),
-            Ty::Dyn(tr) => Ty::Dyn(tr.map(f)),
+            Ty::Dyn(tr, fixed) => {
+                Ty::Dyn(tr.map(f), fixed.iter().map(|(i, t)| (*i, f(t))).collect())
+            }
             Ty::Closure(c) => Ty::Closure(Arc::new(c.map(f))),
             Ty::Opaque(o) => Ty::Opaque(Arc::new(OpaqueTy {
                 func: o.func,
@@ -406,6 +418,46 @@ impl Ty {
         } else {
             Ty::Tuple(elements.into())
         }
+    }
+
+    /// The handler needs a stored closure's call has (`dyn Fn() with Links`), if any: what
+    /// [`DYN_NEEDS`] fixes.
+    pub fn dyn_needs(&self) -> Vec<Ty> {
+        match self {
+            Ty::Dyn(_, fixed) => fixed
+                .iter()
+                .find(|(i, _)| *i == DYN_NEEDS)
+                .map(|(_, t)| t.members_of_tuple())
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// The control effects a stored closure's call has (`dyn Fn() with suspend`).
+    pub fn dyn_control(&self) -> u8 {
+        match self {
+            Ty::Dyn(_, fixed) => fixed
+                .iter()
+                .find_map(|(i, t)| match t {
+                    Ty::Len(c) if *i == DYN_CONTROL => u8::try_from(*c).ok(),
+                    _ => None,
+                })
+                .unwrap_or(0),
+            _ => 0,
+        }
+    }
+
+    fn members_of_tuple(&self) -> Vec<Ty> {
+        match self {
+            Ty::Tuple(ts) => ts.to_vec(),
+            Ty::Unit => Vec::new(),
+            t => vec![t.clone()],
+        }
+    }
+
+    /// `dyn tr`, fixing no associated types.
+    pub fn dyn_of(tr: TraitRef) -> Ty {
+        Ty::Dyn(tr, Arc::new([]))
     }
 
     /// The error set of `members` (error types, or error sets, which are flattened): `!` when
@@ -537,7 +589,7 @@ impl fmt::Debug for Ty {
                 }
                 Ok(())
             }
-            Ty::Dyn(tr) => write!(f, "dyn {tr:?}"),
+            Ty::Dyn(tr, _) => write!(f, "dyn {tr:?}"),
             Ty::Anon(a) => write!(f, "{{impl {:?}}}", a.trait_ref),
             Ty::Opaque(o) => f.write_str(&o.name),
             Ty::Closure(c) => {

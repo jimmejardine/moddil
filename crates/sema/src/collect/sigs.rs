@@ -147,9 +147,18 @@ impl Collector<'_> {
         let mut impls = Vec::new();
         if let Some(list) = f.params() {
             for p in list.params() {
-                if let Some(t @ ast::Type::Impl(_)) = p.ty() {
+                // `impl Fn() with E`: the bound's effects are the type's (`expr.closure.effects.2`).
+                let written = p.ty();
+                let ty = match &written {
+                    Some(ast::Type::Effect(e)) => e.children().find_map(ast::Type::cast),
+                    t => t.clone(),
+                };
+                if let Some(t @ ast::Type::Impl(_)) = ty {
                     let range = t.syntax().text_range();
-                    let name = t.syntax().text().to_string();
+                    let name = written.map_or_else(
+                        || t.syntax().text().to_string(),
+                        |w| w.syntax().text().to_string(),
+                    );
                     impls.push((range, params.len()));
                     bounded.push((params.len(), t.syntax().clone()));
                     params.push(crate::items::GenericParam {
@@ -590,8 +599,24 @@ fn effect_clause(
         };
         let borrowed = effect.token(K::AMP).is_some();
         let ty = effect_type(&t, scope, ds);
+        // An effect variable, `with E`: the errors of the closures whose bounds name it
+        // (`expr.closure.effects.2`).
+        if let Ty::Param(..) = ty
+            && !borrowed
+        {
+            if name.is_some() {
+                ds.push(Diagnostic::error(
+                    Code::E0601,
+                    e.text_range(),
+                    "an effect variable is not given a name",
+                ));
+            }
+            fails_range.get_or_insert(e.text_range());
+            members.push(ty);
+            continue;
+        }
         match (&ty, borrowed, &name) {
-            (Ty::Dyn(_), true, _) => ds.push(Diagnostic::error(
+            (Ty::Dyn(..), true, _) => ds.push(Diagnostic::error(
                 Code::E0601,
                 effect.text_range(),
                 "an effect's trait is written without `&`: its name is a borrow already \
@@ -618,8 +643,10 @@ fn effect_clause(
 pub(crate) fn error_type(ty: &Ty, at: TextRange, others: &[Ty], ds: &mut Vec<Diagnostic>) -> bool {
     match ty {
         Ty::Error => false,
-        // A closure's errors (`<F as FnOnce<Args>>::Fails`): whatever the closure fails with.
+        // A closure's errors (`<F as FnOnce<Args>>::Fails`): whatever the closure fails with;
+        // and an effect variable (`with E`), which stands for them.
         Ty::Assoc(a) if a.name.as_ref() == "Fails" => !others.contains(ty),
+        Ty::Param(..) => !others.contains(ty),
         Ty::Adt(a, ..) => {
             if others.iter().any(|o| o.adt() == Some(*a) && o != ty) {
                 ds.push(Diagnostic::error(

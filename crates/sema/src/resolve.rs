@@ -198,6 +198,14 @@ pub(crate) fn resolve_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnos
             None => Ty::Error,
         },
         ast::Type::Never(_) => Ty::Never,
+        // `impl Fn() with E` and `dyn Fn() with E`: the effects are its closure bound's
+        // (`expr.closure.effects.2`), which `bounds` reads.
+        ast::Type::Effect(_)
+            if let Some(inner @ (ast::Type::Impl(_) | ast::Type::Dyn(_))) =
+                node.children().find_map(ast::Type::cast) =>
+        {
+            resolve_type(&inner, scope, diags)
+        }
         ast::Type::Impl(_) => match scope.impls.iter().find(|(r, _)| *r == range) {
             Some(&(_, i)) => Ty::Param(i as u32, scope.params[i].name.as_str().into()),
             None => {
@@ -244,7 +252,7 @@ pub(crate) fn effect_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnost
         && n == names.len()
     {
         return match trait_path(&path, scope, diags) {
-            Some((trait_ref, fixed)) if fixed.is_empty() => Ty::Dyn(trait_ref),
+            Some((trait_ref, fixed)) if fixed.is_empty() => Ty::dyn_of(trait_ref),
             Some(_) => {
                 diags.push(Diagnostic::unsupported(
                     t.syntax().text_range(),
@@ -273,8 +281,46 @@ pub(crate) fn dyn_type(node: &SyntaxNode, scope: &Scope, diags: &mut Vec<Diagnos
         diags.push(Diagnostic::unsupported(bound.text_range(), "this bound"));
         return Ty::Error;
     };
+    // `dyn Fn(A) -> R with …`: the closure trait, with `FnOnce`'s `Output` and `Fails` fixed, and
+    // the needs and control effects a call has (`type.box.dyn.1`).
+    if let Some(sugar) = bound.child(K::FN_SUGAR) {
+        let effects = node
+            .parent()
+            .filter(|p| p.kind() == K::EFFECT_TYPE)
+            .and_then(|p| p.child(K::TYPE_EFFECTS));
+        let preds = closure_bound(
+            &path,
+            &sugar,
+            effects.as_ref(),
+            &Ty::Error,
+            true,
+            bound.text_range(),
+            scope,
+            diags,
+        );
+        let [p, once] = preds.as_slice() else {
+            return Ty::Error;
+        };
+        let mut fixed = once.assoc.clone();
+        if fixed.len() == 1 {
+            fixed.push((1, Ty::Never));
+        }
+        if let Some(e) = &effects {
+            let fx = bound_effects(e, scope, &mut Vec::new());
+            if !fx.needs.is_empty() {
+                fixed.push((
+                    crate::ty::DYN_NEEDS,
+                    Ty::Tuple(fx.needs.into_iter().map(|(t, _)| t).collect()),
+                ));
+            }
+            if fx.control != 0 {
+                fixed.push((crate::ty::DYN_CONTROL, Ty::Len(i64::from(fx.control))));
+            }
+        }
+        return Ty::Dyn(p.trait_ref.clone(), fixed.into());
+    }
     match trait_path(&path, scope, diags) {
-        Some((trait_ref, fixed)) if fixed.is_empty() => Ty::Dyn(trait_ref),
+        Some((trait_ref, fixed)) if fixed.is_empty() => Ty::dyn_of(trait_ref),
         Some(_) => {
             diags.push(Diagnostic::unsupported(
                 bound.text_range(),
@@ -344,6 +390,13 @@ fn behind_borrow(node: &SyntaxNode) -> bool {
         .is_some_and(|p| matches!(p.kind(), K::REF_TYPE | K::IMPL_ITEM))
 }
 
+/// Whether `GENERIC_ARGS` node `args` is a `Box`'s, whose argument may be a `dyn` type.
+fn boxed_arg(args: &SyntaxNode) -> bool {
+    args.parent()
+        .and_then(|seg| seg.token(K::IDENT))
+        .is_some_and(|t| t.text() == "Box")
+}
+
 /// The type arguments and associated-type bindings (`Item = int`) of a `GENERIC_ARGS` node.
 pub(crate) fn generic_args(
     node: &SyntaxNode,
@@ -355,6 +408,22 @@ pub(crate) fn generic_args(
     for c in node.children() {
         match c.kind() {
             K::TYPE_ARG => match c.children().find_map(ast::Type::cast) {
+                // A `Box` owns a value of any type that implements the trait
+                // (`type.box.dyn.1`): `Box<dyn Trait>`, `Box<dyn Fn() with E>`.
+                Some(t)
+                    if boxed_arg(node)
+                        && let Some(d) = match &t {
+                            ast::Type::Dyn(_) => Some(t.clone()),
+                            ast::Type::Effect(_) => t
+                                .syntax()
+                                .children()
+                                .find_map(ast::Type::cast)
+                                .filter(|d| matches!(d, ast::Type::Dyn(_))),
+                            _ => None,
+                        } =>
+                {
+                    types.push(dyn_type(d.syntax(), scope, diags));
+                }
                 Some(t) => types.push(resolve_type(&t, scope, diags)),
                 None => {
                     diags.push(Diagnostic::unsupported(c.text_range(), "a const argument"));
@@ -824,11 +893,15 @@ pub(crate) fn preds_of(
 }
 
 /// `Fn(A, B) -> R` (or `FnMut`, `FnOnce`) as a bound on `ty` (`expr.closure.param.1`): the trait
-/// for the parameters' tuple, and `FnOnce` with its `Output` fixed (`()` if not written).
+/// for the parameters' tuple, and `FnOnce` with its `Output` fixed (`()` if not written), and its
+/// `Fails` too if the bound names its effects (`expr.closure.effects.2`).
+#[allow(clippy::too_many_arguments)]
 fn closure_bound(
     path: &SyntaxNode,
     sugar: &SyntaxNode,
+    effects: Option<&SyntaxNode>,
     ty: &Ty,
+    stored: bool,
     range: TextRange,
     scope: &Scope,
     diags: &mut Vec<Diagnostic>,
@@ -891,10 +964,107 @@ fn closure_bound(
         Pred {
             ty: ty.clone(),
             trait_ref: trait_ref(once),
-            assoc: vec![(0, output)],
+            assoc: match effects.map(|e| bound_effects(e, scope, diags)) {
+                Some(fx) => {
+                    // A closure it bounds is not kept, so its needs are met where it is
+                    // written (`expr.closure.effects.1`); only a stored closure's type lists
+                    // them (`expr.closure.stored.1`).
+                    if !stored {
+                        for (need, at) in &fx.needs {
+                            diags.push(Diagnostic::error(
+                                Code::E0609,
+                                *at,
+                                format!(
+                                    "a closure parameter's needs are met where the closure is \
+                                     written, so its bound lists only `fail` and the control \
+                                     effects, not `{}`",
+                                    crate::check::show_effect(need)
+                                ),
+                            ));
+                        }
+                    }
+                    vec![(0, output), (1, fx.fails)]
+                }
+                None => vec![(0, output)],
+            },
             range,
         },
     ]
+}
+
+/// The effects a closure's bound or type names (`expr.closure.effects.2`).
+pub(crate) struct BoundEffects {
+    /// Its errors: those of `fail(…)`, and the effect variables (`with E`), which stand for
+    /// error sets.
+    pub fails: Ty,
+    /// The control effects.
+    pub control: crate::items::Control,
+    /// The needs a handler meets: only a stored closure's type lists them.
+    pub needs: Vec<(Ty, TextRange)>,
+}
+
+/// The effects of `with …` (a `TYPE_EFFECTS` node) on a closure's bound or type.
+pub(crate) fn bound_effects(
+    node: &SyntaxNode,
+    scope: &Scope,
+    diags: &mut Vec<Diagnostic>,
+) -> BoundEffects {
+    let mut members: Vec<Ty> = Vec::new();
+    let mut control = 0;
+    let mut needs = Vec::new();
+    for e in node.children().filter(|c| c.kind() == K::EFFECT) {
+        let bit = if e.token(K::SUSPEND_KW).is_some() {
+            crate::items::SUSPEND
+        } else if e.token(K::SPAWN_KW).is_some() {
+            crate::items::SPAWN
+        } else {
+            0
+        };
+        if bit != 0 {
+            if control & bit != 0 {
+                diags.push(Diagnostic::error(
+                    Code::E0606,
+                    e.text_range(),
+                    "an effect is listed once",
+                ));
+            }
+            control |= bit;
+            continue;
+        }
+        if e.token(K::FAIL_KW).is_some() {
+            for t in e.child(K::ERROR_TYPES).into_iter().flat_map(|ts| {
+                ts.children()
+                    .filter_map(ast::Type::cast)
+                    .collect::<Vec<_>>()
+            }) {
+                let ty = resolve_type(&t, scope, diags);
+                if crate::collect::error_type(&ty, t.syntax().text_range(), &members, diags) {
+                    members.push(ty);
+                }
+            }
+            continue;
+        }
+        let Some(t) = e.children().find_map(ast::Type::cast) else {
+            diags.push(Diagnostic::unsupported(e.text_range(), "this effect"));
+            continue;
+        };
+        // An effect variable: a type parameter standing for the closure's errors.
+        if let ast::Type::Path(_) = &t
+            && let Some(path) = t.syntax().child(K::PATH)
+            && let Some(segs) = path_segments(&path)
+            && segs.len() == 1
+            && let Some(p) = scope.param(&segs[0].name)
+        {
+            members.push(p);
+            continue;
+        }
+        needs.push((effect_type(&t, scope, diags), e.text_range()));
+    }
+    BoundEffects {
+        fails: Ty::errors(members),
+        control,
+        needs,
+    }
 }
 
 /// The bounds `node` (a `TYPE_PARAM`, `WHERE_PRED` or trait item) puts on `ty`: its `BOUND`
@@ -911,10 +1081,21 @@ pub(crate) fn bounds(
             continue;
         };
         if let Some(sugar) = b.child(K::FN_SUGAR) {
+            // Its effects: in a parameter's or a `where` clause's bound, after the sugar; in
+            // `impl Fn() with E` and `dyn Fn() with E`, the type's.
+            let effects = sugar.child(K::TYPE_EFFECTS).or_else(|| {
+                matches!(node.kind(), K::IMPL_TYPE | K::DYN_TYPE)
+                    .then(|| node.parent())
+                    .flatten()
+                    .filter(|p| p.kind() == K::EFFECT_TYPE)
+                    .and_then(|p| p.child(K::TYPE_EFFECTS))
+            });
             out.extend(closure_bound(
                 &path,
                 &sugar,
+                effects.as_ref(),
                 ty,
+                false,
                 b.text_range(),
                 scope,
                 diags,

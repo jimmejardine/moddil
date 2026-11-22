@@ -89,6 +89,21 @@ impl Checker<'_> {
         let Some(h) = hint.map(|h| self.norm(h)) else {
             return (Vec::new(), None);
         };
+        // A stored closure's type (`dyn Fn(A) -> R`).
+        if let Ty::Dyn(tr, fixed) = &h
+            && self.closure_trait(tr.trait_).is_some()
+        {
+            let params = match tr.args.first().map(|a| self.norm(a)) {
+                Some(Ty::Tuple(ts)) => ts.to_vec(),
+                _ => Vec::new(),
+            };
+            let ret = fixed.iter().find(|(k, _)| *k == 0).map(|(_, t)| t.clone());
+            return if params.len() == n {
+                (params, ret)
+            } else {
+                (Vec::new(), ret)
+            };
+        }
         let mut params = Vec::new();
         if let Some(args) = self.obligations.closure_args(&mut self.solver, &h, |t| {
             self.items.lang("Fn") == Some(t)
@@ -167,7 +182,24 @@ impl Checker<'_> {
             errors: Vec::new(),
             option,
         });
+        // A closure written for a `Box<dyn Fn… with …>`: its type meets its control effects and
+        // its caller its needs (`expr.closure.stored.1`).
+        let stored = match &hint {
+            Some(h @ Ty::Dyn(..)) => {
+                let needs = h.dyn_needs();
+                if !needs.is_empty() {
+                    self.out.call_needs.insert(e, needs.clone());
+                }
+                let depth = self.installs.iter().map(|(_, fx)| fx.len()).sum();
+                self.stored_ctx.push((e, needs, h.dyn_control(), depth));
+                true
+            }
+            _ => false,
+        };
         self.check(body, &rt);
+        if stored {
+            self.stored_ctx.pop();
+        }
         let Some(FailCx::Closure { errors, .. }) = self.fail_cx.pop() else {
             unreachable!("the closure's context")
         };
@@ -231,8 +263,28 @@ impl Checker<'_> {
     ) -> Option<Ty> {
         let range = self.range(e);
         let t = self.infer(callee);
-        let t = self.norm(&t);
+        let mut t = self.norm(&t);
+        // A stored closure is called through its box (`expr.closure.stored.1`).
+        if let Ty::Adt(b, _, xs) = &t
+            && Some(*b) == self.items.lang("Box")
+            && let d @ Ty::Dyn(..) = self.norm(&xs[0])
+        {
+            t = d;
+        }
         let (params, ret, fails, tuple) = match &t {
+            Ty::Dyn(tr, _) if self.closure_trait(tr.trait_).is_some() => {
+                let bound = tr.args.first().cloned().unwrap_or(Ty::Unit);
+                let params = match &bound {
+                    Ty::Tuple(ts) => ts.to_vec(),
+                    Ty::Unit => Vec::new(),
+                    t => vec![t.clone()],
+                };
+                let ret = self.closure_assoc(&t, &bound, 0);
+                let fails = self.closure_assoc(&t, &bound, 1);
+                // Its type's needs and control effects are this call's.
+                self.record_needs(e, t.dyn_control(), t.dyn_needs(), range);
+                (params, self.norm(&ret), self.norm(&fails), bound)
+            }
             Ty::Closure(c) => {
                 let tuple = Ty::tuple(c.params.to_vec());
                 (c.params.to_vec(), c.ret.clone(), c.fails.clone(), tuple)
@@ -291,9 +343,13 @@ impl Checker<'_> {
         }
         let fails = self.solver.deep(&fails);
         // A closure parameter's errors are not the function's to handle: an unmarked call of one
-        // passes them on, and its caller's call is marked (`expr.closure.fails.1`).
-        let passes_on =
-            matches!(t, Ty::Param(..)) && fails.members().iter().all(|m| matches!(m, Ty::Assoc(_)));
+        // passes them on, and its caller's call is marked (`expr.closure.fails.1`); so does one
+        // whose bound names them with an effect variable (`expr.closure.effects.2`).
+        let passes_on = matches!(t, Ty::Param(..))
+            && fails
+                .members()
+                .iter()
+                .all(|m| matches!(m, Ty::Assoc(_) | Ty::Param(..)));
         if fails != Ty::Never {
             if self.marked == Some(e) {
                 self.call_fails = Some(fails);
@@ -329,6 +385,38 @@ impl Checker<'_> {
                 keep.push((a, b, range));
                 continue;
             }
+            // A closure's errors fit a bound that names them when each is among them
+            // (`expr.closure.effects.2`); an effect variable takes them as they are.
+            if matches!(&a, Ty::Assoc(x) if x.name.as_ref() == "Fails") {
+                let b = self.solver.deep(&b);
+                let n = self.solver.deep(&n);
+                if !b.any(&|t| matches!(t, Ty::Infer(_))) {
+                    let allowed = b.members();
+                    let extra: Vec<String> = n
+                        .members()
+                        .iter()
+                        .filter(|m| !allowed.contains(m) && !m.has_error())
+                        .map(|m| format!("`{}`", self.show(m)))
+                        .collect();
+                    if !extra.is_empty() {
+                        let most = if b == Ty::Never {
+                            "it cannot fail".to_string()
+                        } else {
+                            format!("it fails with `{}` at most", self.show(&b))
+                        };
+                        self.report(
+                            Code::E0502,
+                            range,
+                            format!(
+                                "this closure can fail with {}, which its bound's effects do not \
+                                 list: {most}",
+                                extra.join(", ")
+                            ),
+                        );
+                    }
+                    continue;
+                }
+            }
             if !self.solver.unify(&n, &b) {
                 let (n, b) = (self.show(&n), self.show(&b));
                 self.report(
@@ -339,6 +427,38 @@ impl Checker<'_> {
             }
         }
         self.assoc_eqs.extend(keep);
+    }
+
+    /// A stored closure's captures (`expr.closure.stored.1`): each local moved in (copied, if it
+    /// is `Copy`), none a borrow and no handler it uses (E0802), since it may run after the
+    /// function it is written in has returned.
+    fn own_captures(&mut self, c: ExprId, captures: &mut [Capture]) {
+        let range = self.range(c);
+        for cap in captures.iter_mut() {
+            match cap {
+                Capture::Local(l, m) => {
+                    *m = CaptureMode::Move;
+                    let t = self.solver.deep(&self.out.local_types[index(*l)]);
+                    if self.items.is_view(&t) {
+                        let name = self.body.locals[*l].name.clone();
+                        self.report(
+                            Code::E0802,
+                            range,
+                            format!(
+                                "a stored closure owns what it captures, and `{name}` holds a \
+                                 borrow, which could outlive what it borrows"
+                            ),
+                        );
+                    }
+                }
+                Capture::Evidence(_) => self.report(
+                    Code::E0802,
+                    range,
+                    "a stored closure owns what it captures, and a handler is borrowed: list the \
+                     effect in its type (`dyn Fn() with Effect`) to have it met where it is called",
+                ),
+            }
+        }
     }
 
     /// Finds what each closure captures and so its kind, completes the closures' types, chooses
@@ -358,6 +478,14 @@ impl Checker<'_> {
             .collect();
         let mut finals: HashMap<u32, Arc<ClosureTy>> = HashMap::new();
         let mut kinds: HashMap<ExprId, ClosureKind> = HashMap::new();
+        // The closures kept in a box, which own what they capture (`expr.closure.stored.1`).
+        let stored: BTreeSet<u32> = std::mem::take(&mut self.stored)
+            .into_iter()
+            .filter_map(|(t, _, _)| match self.solver.deep(&t) {
+                Ty::Closure(c) => Some(c.expr),
+                _ => None,
+            })
+            .collect();
         for &c in &self.closures.clone() {
             let ExprKind::Closure { body, .. } = &self.body.exprs[c].kind else {
                 continue;
@@ -384,6 +512,10 @@ impl Checker<'_> {
                         Evidence::Install(w, k) if !visited.contains(&w) => {
                             evidence.insert((1, index(w), k));
                         }
+                        // A closure inside a stored closure uses what its caller gives it.
+                        Evidence::Call(s, k) if s != c => {
+                            evidence.insert((2, index(s), k));
+                        }
                         _ => {}
                     }
                 }
@@ -395,10 +527,10 @@ impl Checker<'_> {
                 .map(|(id, _)| (index(id), id))
                 .collect();
             for (kind, a, b) in evidence {
-                captures.push(Capture::Evidence(if kind == 0 {
-                    Evidence::Param(a)
-                } else {
-                    Evidence::Install(installs[&a], b)
+                captures.push(Capture::Evidence(match kind {
+                    0 => Evidence::Param(a),
+                    1 => Evidence::Install(installs[&a], b),
+                    _ => Evidence::Call(installs[&a], b),
                 }));
             }
             let kind = if locals.values().any(|m| *m == CaptureMode::Move) {
@@ -409,6 +541,9 @@ impl Checker<'_> {
                 ClosureKind::Fn
             };
             kinds.insert(c, kind);
+            if stored.contains(&(index(c) as u32)) {
+                self.own_captures(c, &mut captures);
+            }
             let types: Vec<Ty> = captures
                 .iter()
                 .map(|cap| match *cap {
@@ -423,6 +558,15 @@ impl Checker<'_> {
                     Capture::Evidence(Evidence::Param(i)) => {
                         Ty::reference(false, self.own.get(i).cloned().unwrap_or(Ty::Error))
                     }
+                    Capture::Evidence(Evidence::Call(s, k)) => Ty::reference(
+                        false,
+                        self.out
+                            .call_needs
+                            .get(&s)
+                            .and_then(|ns| ns.get(k))
+                            .cloned()
+                            .unwrap_or(Ty::Error),
+                    ),
                     Capture::Evidence(Evidence::Install(w, k)) => match &self.body.exprs[w].kind {
                         ExprKind::With { handlers, .. } => {
                             Ty::reference(false, handlers[k].effect.clone())
@@ -460,6 +604,7 @@ impl Checker<'_> {
             let tuple = f(&super::finish::erase(&self.solver.deep(&tuple)));
             let kind = match &t {
                 Ty::Closure(c) => c.kind,
+                Ty::Dyn(tr, _) => self.closure_trait(tr.trait_).unwrap_or(ClosureKind::FnOnce),
                 _ => self
                     .solver
                     .env

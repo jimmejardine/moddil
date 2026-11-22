@@ -43,11 +43,23 @@ impl Builder<'_> {
                 Capture::Evidence(Evidence::Install(w, k)) => {
                     Operand::Copy(self.installed[&(w, k)].clone())
                 }
+                Capture::Evidence(Evidence::Call(s, k)) => {
+                    Operand::Copy(self.called[&(s, k)].clone())
+                }
             };
             ops.push(op);
         }
         self.cfg
             .assign(dest, Rvalue::Aggregate(AggregateKind::Closure(ty), ops));
+    }
+
+    /// Where the handler `ev` names is, here.
+    pub(super) fn evidence_place(&self, ev: Evidence) -> Place {
+        match ev {
+            Evidence::Param(i) => self.evidence[&i].clone(),
+            Evidence::Install(w, k) => self.installed[&(w, k)].clone(),
+            Evidence::Call(s, k) => self.called[&(s, k)].clone(),
+        }
     }
 
     /// Whether call `e` calls a closure (or a value of a type bounded by a closure trait): its
@@ -80,18 +92,43 @@ impl Builder<'_> {
         let recv = match self.items.fns[func as usize].self_kind {
             Some(SelfKind::Ref | SelfKind::RefMut) => {
                 let m = self.items.fns[func as usize].self_kind == Some(SelfKind::RefMut);
-                let place = self.place(callee);
-                let t = self.temp(Ty::reference(m, self.ty(callee)));
+                let mut place = self.place(callee);
+                let mut ty = self.ty(callee);
+                // A stored closure is called through its box (`expr.closure.stored.1`).
+                if let Ty::Adt(b, _, xs) = &ty
+                    && Some(*b) == self.items.lang("Box")
+                {
+                    let inner = xs[0].clone();
+                    place = self.through_box(place, ty.clone(), inner.clone(), m, self.range(e));
+                    ty = inner;
+                }
+                let t = self.temp(Ty::reference(m, ty));
                 self.cfg.assign(t, Rvalue::Ref(m, place));
                 Operand::Move(Place::local(t))
             }
             _ => self.operand(callee, args),
         };
-        let tuple = if args.is_empty() {
+        // A stored closure's needs are given after its arguments (`expr.closure.stored.1`).
+        let given: Vec<Place> = self
+            .types
+            .evidence(e)
+            .to_vec()
+            .into_iter()
+            .map(|ev| self.evidence_place(ev))
+            .collect();
+        let given_tys: Vec<Ty> = match self.ty(callee) {
+            Ty::Adt(_, _, xs) if !xs.is_empty() => xs[0].dyn_needs(),
+            t => t.dyn_needs(),
+        };
+        let tuple = if args.is_empty() && given.is_empty() {
             Operand::Const(Const::Unit)
         } else {
-            let ops = self.operands(args);
-            let tys: Vec<Ty> = args.iter().map(|&a| self.ty(a)).collect();
+            let mut ops = self.operands(args);
+            let mut tys: Vec<Ty> = args.iter().map(|&a| self.ty(a)).collect();
+            for (p, t) in given.into_iter().zip(given_tys) {
+                tys.push(Ty::reference(false, t));
+                ops.push(Operand::Copy(p));
+            }
             let t = self.temp(Ty::tuple(tys));
             self.cfg
                 .assign(t, Rvalue::Aggregate(AggregateKind::Tuple, ops));

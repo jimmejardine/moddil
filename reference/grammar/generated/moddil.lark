@@ -140,7 +140,7 @@ contract: "requires" contract_1_opt contract_body | "ensures" contract_body
 signature_tail_7_rep: (contract signature_tail_7_rep)?
 block_1_rep: (inner_attr block_1_rep)?
 statements: statements_4_opt
-where_pred: type ":" bounds
+where_pred: type ":" pred_bounds
 where_clause_1_grp: "," where_pred
 where_clause_2_rep: (where_clause_1_grp where_clause_2_rep)?
 struct_body_1_grp: struct_member struct_body_3_rep struct_body_4_opt
@@ -166,7 +166,7 @@ bounds_2_rep: (bounds_1_grp bounds_2_rep)?
 trait_member_1_rep: (outer_attr trait_member_1_rep)?
 trait_member_2_rep: (note trait_member_2_rep)?
 trait_member_3_grp: fn_item | assoc_type | const_item
-assoc_type: "type" IDENT assoc_type_2_opt assoc_type_4_opt ";"
+assoc_type: "type" IDENT assoc_type_2_opt assoc_type_6_opt ";"
 type_effects: "with" type_effects_1_grp
 type_1_opt: (type_effects)?
 impl_member: impl_member_1_rep impl_member_2_rep impl_member_3_opt impl_member_4_opt impl_member_5_grp
@@ -206,7 +206,8 @@ generic_param_2_grp: "const" IDENT ":" type generic_param_4_opt | IDENT generic_
 generic_param_3_grp: "=" const_arg
 const_arg: const_arg_1_opt INTEGER | STRING | "true" | "false" | block
 generic_param_4_opt: (generic_param_3_grp)?
-generic_param_5_grp: ":" bounds
+generic_param_5_grp: ":" pred_bounds
+pred_bounds: pred_bound pred_bounds_2_rep
 generic_param_6_opt: (generic_param_5_grp)?
 generic_param_7_grp: "=" type
 generic_param_8_opt: (generic_param_7_grp)?
@@ -237,8 +238,10 @@ fn_sugar: "(" fn_sugar_1_opt ")" fn_sugar_3_opt
 bound_1_opt: (fn_sugar)?
 assoc_type_1_grp: ":" bounds
 assoc_type_2_opt: (assoc_type_1_grp)?
-assoc_type_3_grp: "=" type
-assoc_type_4_opt: (assoc_type_3_grp)?
+assoc_type_3_grp: "=" type assoc_type_5_rep
+assoc_type_4_grp: "|" type
+assoc_type_5_rep: (assoc_type_4_grp assoc_type_5_rep)?
+assoc_type_6_opt: (assoc_type_3_grp)?
 type_effects_1_grp: effect_atom | "(" effect_atom type_effects_3_rep type_effects_4_opt ")"
 effect_atom: "suspend" | "spawn" | "nondet" | "fail" "(" error_types ")" | "&" type | path_type
 type_effects_2_grp: "," effect_atom
@@ -298,6 +301,9 @@ unit_power_2_opt: (unit_power_1_grp)?
 literal_token: INTEGER | FLOAT | STRING | RAW_STRING | BYTE_STRING | BLOCK_STRING | TAGGED_STRING | CHAR | BYTE
 punct_not_delimiter: "+" | "-" | "*" | "/" | "%" | "^" | "!" | "&" | "|" | "&&" | "||" | "<<" | ">>" | "+%" | "-%" | "*%" | "@" | "\\" | "?" | "?!" | "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "^=" | "&=" | "|=" | "<<=" | ">>=" | "+%=" | "-%=" | "*%=" | "==" | "!=" | "<" | ">" | "<=" | ">=" | "." | ".." | "..=" | "," | ";" | ":" | "::" | "->" | "=>" | "#[" | "#!["
 const_arg_1_opt: ("-")?
+pred_bound: type_path pred_bound_3_opt
+pred_bounds_1_grp: "+" pred_bound
+pred_bounds_2_rep: (pred_bounds_1_grp pred_bounds_2_rep)?
 self_param_1_opt: ("mut")?
 self_param_2_opt: ("mut")?
 self_param_3_grp: ":" type
@@ -363,6 +369,10 @@ exponent_1_opt: ("-")?
 exponent_2_opt: ("-")?
 exponent_3_grp: "/" INTEGER
 exponent_4_opt: (exponent_3_grp)?
+pred_bound_1_grp: fn_sugar pred_bound_2_opt
+pred_effects: "with" pred_effects_1_grp
+pred_bound_2_opt: (pred_effects)?
+pred_bound_3_opt: (pred_bound_1_grp)?
 literal_pat: literal_pat_1_opt number | STRING | CHAR | BYTE | BYTE_STRING | "true" | "false"
 pattern_no_alt_1_grp: range_op pattern_no_alt_2_opt
 pattern_no_alt_2_opt: (literal_pat)?
@@ -412,6 +422,11 @@ or_1_grp: "||" and
 or_2_rep: (or_1_grp or_2_rep)?
 simple_path_1_grp: "::" IDENT
 simple_path_2_rep: (simple_path_1_grp simple_path_2_rep)?
+pred_effects_1_grp: pred_effect | "(" effect_atom pred_effects_3_rep pred_effects_4_opt ")"
+pred_effect: "suspend" | "spawn" | "nondet" | "fail" "(" error_types ")" | path_type
+pred_effects_2_grp: "," effect_atom
+pred_effects_3_rep: (pred_effects_2_grp pred_effects_3_rep)?
+pred_effects_4_opt: (",")?
 literal_pat_1_opt: ("-")?
 pattern_path_1_grp: qualified_path | IDENT | "Self" | "super" | "mod"
 pattern_path_2_grp: "::" pattern_path_3_grp

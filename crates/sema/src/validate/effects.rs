@@ -86,7 +86,7 @@ fn dyn_problem(tree: &ItemTree, t: &Ty, at: TextRange) -> Option<Diagnostic> {
 
 /// Calls `f` with the trait of each `dyn` type in `t`.
 fn find_dyn(t: &Ty, f: &mut impl FnMut(&TraitRef)) {
-    if let Ty::Dyn(tr) = t {
+    if let Ty::Dyn(tr, _) = t {
         f(tr);
     }
     let _ = t.map(&mut |x| {

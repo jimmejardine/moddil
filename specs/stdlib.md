@@ -193,9 +193,18 @@ from root capabilities ([`effects-and-capabilities.md`: Authority comes only fro
 ```rust
 trait Iterator {
     type Item;
-    fn next(&mut self) -> Option<Self::Item>;     // may perform effects, inferred per impl
+    type Fails = !;                               // what `next` can fail with
+    fn next(&mut self) -> Option<Self::Item> with fail(Self::Fails);
 }
 ```
+
+- **Errors are an associated type (decided November 2026).** `next`'s errors are `Self::Fails`, as
+  a closure's are `F::Fails` (`FnOnce` has the same associated type), rather than inferred per impl:
+  a trait's method declares the control effects it may perform, and an impl performs no more
+  ([`types.md`: Traits](types.md#traits)). A generic function over `I: Iterator` passes `I::Fails`
+  on, and the lazy adapters' are the union of their iterator's and their closure's
+  (`type Fails = I::Fails | F::Fails;`). Suspension is not part of it: like a closure's, an
+  iterator's suspension is met where its code is written.
 
 - **Effects make streams unnecessary.** An iterator over a socket has
   `next() with suspend, fail(NetError)`. It is used with the same `for` loop and the same adaptors as

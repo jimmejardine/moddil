@@ -2,7 +2,9 @@
 
 use super::exprs::{block, expr, expr_r};
 use super::patterns::pattern_no_alt;
-use super::types::{at_path_type, bounds, const_arg, exponent, path_type, type_, type_ne};
+use super::types::{
+    at_path_type, bounds, const_arg, exponent, path_type, pred_bounds, type_, type_ne,
+};
 use super::{
     R, RECOVERY, at_member_name, at_name_colon, comma_list, name, simple_path, token_tree,
 };
@@ -324,7 +326,7 @@ pub(super) fn generic_params(p: &mut Parser) {
         } else if p.at(K::IDENT) {
             name(p, false);
             if p.eat(T![":"]) {
-                bounds(p);
+                pred_bounds(p);
             }
             if p.eat(T!["="]) {
                 type_(p);
@@ -447,7 +449,8 @@ pub(super) fn effect_atom(p: &mut Parser) {
     m.complete(p, K::EFFECT);
 }
 
-/// `where_clause ::= 'where' where_pred ( ',' where_pred )*` with `where_pred ::= type ':' bounds`
+/// `where_clause ::= 'where' where_pred ( ',' where_pred )*` with
+/// `where_pred ::= type ':' pred_bounds`
 pub(super) fn where_clause(p: &mut Parser) {
     let m = p.start();
     p.bump(T![where]);
@@ -455,7 +458,7 @@ pub(super) fn where_clause(p: &mut Parser) {
         let w = p.start();
         type_(p);
         p.expect(T![":"]);
-        bounds(p);
+        pred_bounds(p);
         w.complete(p, K::WHERE_PRED);
         if !p.eat(T![","]) {
             break;
@@ -676,6 +679,10 @@ fn assoc_type(p: &mut Parser, m: Marker) -> CompletedMarker {
     }
     if p.eat(T!["="]) {
         type_(p);
+        // An error set: `type Fails = I::Fails | F::Fails;`.
+        while p.eat(T!["|"]) {
+            type_(p);
+        }
     }
     p.expect(T![";"]);
     m.complete(p, K::ASSOC_TYPE)

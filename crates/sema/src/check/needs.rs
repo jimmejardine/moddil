@@ -48,6 +48,9 @@ pub enum Evidence {
     /// By a handler of a `with` around the call: the `with` expression, and the handler's index
     /// in it.
     Install(ExprId, usize),
+    /// By the caller of a stored closure whose type lists the need (`expr.closure.stored.1`):
+    /// the closure, and the need's index in its type, passed after its arguments.
+    Call(ExprId, usize),
 }
 
 /// How a body's needs are checked.
@@ -72,6 +75,9 @@ pub(super) struct Need {
     /// and its effect.
     installs: Vec<(ExprId, usize, Ty)>,
     range: TextRange,
+    /// Inside a stored closure whose type lists needs: the closure, those needs, and how many of
+    /// `installs` are around it rather than in it.
+    stored: Option<(ExprId, Vec<Ty>, usize)>,
 }
 
 /// Whether function `i`'s effects and errors are inferred: it is a private function or method
@@ -97,14 +103,15 @@ fn canonical(mut ts: Vec<Ty>) -> Vec<Ty> {
 /// How an effect is written after `with`: `Time`, `AppConfig`.
 pub(crate) fn show_effect(t: &Ty) -> String {
     match t {
-        Ty::Dyn(tr) => tr.to_string(),
+        Ty::Dyn(tr, _) => tr.to_string(),
         t => t.to_string(),
     }
 }
 
 /// `f`'s errors as written, and those of its closure parameters (`F: FnOnce(…)`), which are
 /// its too (`expr.closure.fails.1`), but those a bound on `F::Fails` takes
-/// (`expr.closure.fails.2`).
+/// (`expr.closure.fails.2`) and those a bound names (`with E`, `expr.closure.effects.2`), which
+/// are its only if it lists them.
 fn with_closure_fails(items: &ItemTree, f: &crate::FnSig) -> Ty {
     let mut members = f.fails.members();
     let once = items.lang("FnOnce");
@@ -117,6 +124,7 @@ fn with_closure_fails(items: &ItemTree, f: &crate::FnSig) -> Ty {
         if Some(p.trait_ref.trait_) == once
             && f.generics.parent as usize <= param_index(&p.ty)
             && !taken(&p.ty)
+            && !p.assoc.iter().any(|(k, _)| *k == 1)
         {
             members.push(Ty::Assoc(std::sync::Arc::new(crate::ty::AssocTy {
                 self_ty: p.ty.clone(),
@@ -208,14 +216,43 @@ impl Checker<'_> {
     /// Records what a call of `func` with type arguments `args` needs.
     pub(super) fn needs_of_call(&mut self, e: ExprId, func: u32, args: &[Ty], range: TextRange) {
         let control = self.fx.fns[func as usize].control;
-        if control != 0 {
-            self.control_uses.push((control, range));
-        }
         let needs: Vec<Ty> = self.fx.fns[func as usize]
             .needs
             .iter()
             .map(|t| t.subst(args))
             .collect();
+        self.record_needs(e, control, needs, range);
+    }
+
+    /// Records that call `e` has the control effects `control` and the needs `needs`. Inside a
+    /// stored closure, its type meets the control effects it lists, and the needs, by each
+    /// call of it (`expr.closure.stored.1`).
+    pub(super) fn record_needs(
+        &mut self,
+        e: ExprId,
+        control: crate::Control,
+        needs: Vec<Ty>,
+        range: TextRange,
+    ) {
+        if control != 0 {
+            match self.stored_ctx.last() {
+                Some(&(_, _, own, _)) => {
+                    let missing = control & !own;
+                    if missing != 0 {
+                        let name = crate::items::show_control(missing);
+                        self.report(
+                            Code::E0603,
+                            range,
+                            format!(
+                                "this call needs `{name}`, which the stored closure's type does \
+                                 not list: add `with {name}` to it"
+                            ),
+                        );
+                    }
+                }
+                None => self.control_uses.push((control, range)),
+            }
+        }
         if needs.is_empty() {
             return;
         }
@@ -229,11 +266,16 @@ impl Checker<'_> {
                     .map(move |(k, t)| (*w, k, t.clone()))
             })
             .collect();
+        let stored = self
+            .stored_ctx
+            .last()
+            .map(|(c, ds, _, depth)| (*c, ds.clone(), *depth));
         self.needs.push(Need {
             call: e,
             needs,
             installs,
             range,
+            stored,
         });
     }
 
@@ -266,8 +308,8 @@ impl Checker<'_> {
             (_, Ty::Infer(_)) => {
                 self.unknown(range, "to install it as a handler");
             }
-            (Ty::Dyn(tr), Ty::Dyn(d)) if d == tr => {}
-            (Ty::Dyn(tr), _) => self.require(inner, tr.clone(), range),
+            (Ty::Dyn(tr, _), Ty::Dyn(d, _)) if d == tr => {}
+            (Ty::Dyn(tr, _), _) => self.require(inner, tr.clone(), range),
             (data, _) => {
                 if !self.solver.unify(&inner, data) {
                     let found = self.show(&t);
@@ -316,6 +358,23 @@ impl Checker<'_> {
                 if t.has_error() {
                     found.push(Evidence::Param(usize::MAX));
                     continue;
+                }
+                // In a stored closure, a handler installed in it meets the need, and else its
+                // caller does, if its type lists it (`expr.closure.stored.1`).
+                if let Some((c, listed, depth)) = &n.stored {
+                    let inside = n.installs.get(*depth..).unwrap_or_default();
+                    if let Some(&(w, k, _)) = inside.iter().rev().find(|(_, _, x)| *x == t) {
+                        found.push(Evidence::Install(w, k));
+                        continue;
+                    }
+                    let listed: Vec<Ty> = listed
+                        .iter()
+                        .map(|x| super::finish::erase(&self.solver.deep(x)))
+                        .collect();
+                    if let Some(k) = listed.iter().position(|x| *x == t) {
+                        found.push(Evidence::Call(*c, k));
+                        continue;
+                    }
                 }
                 if let Some(&(w, k, _)) = n.installs.iter().rev().find(|(_, _, x)| *x == t) {
                     found.push(Evidence::Install(w, k));
@@ -376,6 +435,41 @@ impl Checker<'_> {
             self.out.dyn_coercions.insert(e, x.clone());
             return true;
         }
+        // `Box<T>` as `Box<dyn Trait>`, `T` implementing it (`type.box.dyn.1`).
+        if let (Ty::Adt(a, _, xs), Ty::Adt(b, _, ys)) = (&f, &x)
+            && a == b
+            && Some(*a) == self.items.lang("Box")
+            && let Ty::Dyn(tr, fixed) = self.norm(&ys[0])
+        {
+            let inner = self.norm(&xs[0]);
+            if matches!(inner, Ty::Infer(_) | Ty::Error | Ty::Never | Ty::Dyn(..)) {
+                return false;
+            }
+            let range = self.range(e);
+            let closure = self.closure_trait(tr.trait_).is_some();
+            if !closure && let Some(why) = self.items.not_dyn(tr.trait_, false) {
+                self.report(
+                    Code::E0605,
+                    range,
+                    format!("`{}` cannot be used as `dyn`: {why}", tr.name),
+                );
+                return true;
+            }
+            self.require(inner.clone(), tr.clone(), range);
+            if closure {
+                let args = tr.args.first().cloned().unwrap_or(Ty::Unit);
+                for (k, t) in fixed.iter() {
+                    if *k < crate::ty::DYN_NEEDS {
+                        let a = self.closure_assoc(&inner, &args, *k);
+                        self.assoc_eqs.push((a, t.clone(), range));
+                    }
+                }
+                let d = self.norm(&ys[0]);
+                self.stored.push((inner, d, range));
+            }
+            self.out.dyn_coercions.insert(e, x.clone());
+            return true;
+        }
         let (Ty::Ref(m1, a), Ty::Ref(m2, b)) = (&f, &x) else {
             return false;
         };
@@ -391,13 +485,13 @@ impl Checker<'_> {
             self.out.dyn_coercions.insert(e, x.clone());
             return true;
         }
-        let Ty::Dyn(tr) = self.norm(b) else {
+        let Ty::Dyn(tr, _) = self.norm(b) else {
             return false;
         };
         let a = self.norm(a);
         match &a {
             Ty::Infer(_) | Ty::Error | Ty::Never => return false,
-            Ty::Dyn(d) if d.trait_ == tr.trait_ => return false,
+            Ty::Dyn(d, _) if d.trait_ == tr.trait_ => return false,
             _ => {}
         }
         if *m2 && !*m1 {

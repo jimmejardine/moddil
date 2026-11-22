@@ -1,0 +1,9 @@
+// covers: expr.closure.stored.1
+
+// A stored closure owns what it captures: a value it uses is moved in.
+fn main() {
+    let owned = Vec::from_array([1, 2]);
+    let g: Box<dyn Fn() -> int> = Box::new(|| owned.len());
+    g();
+    owned.len();                                                 //~ E0303
+}
