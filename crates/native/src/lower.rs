@@ -30,10 +30,12 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, DataId, FuncId, Linkage, Module};
 use moddil_mir::{
-    AggregateKind, BinOp, Body, Const, Local, Operand, Place, Projection, Rvalue, Statement,
-    Terminator, TrapClass, UnOp,
+    AggregateKind, BinOp, Body, Const, Local, LocalDecl, Operand, Place, Projection, Rvalue,
+    Statement, Terminator, TrapClass, UnOp,
 };
-use moddil_sema::{Callee, Db, Item, ItemTree, Num, Owner, Program, Solver, TraitRef, Ty};
+use moddil_sema::{
+    Callee, ClosureTy, Db, Item, ItemTree, Num, Owner, Program, Solver, Src, TraitRef, Ty,
+};
 use moddil_syntax::TextRange;
 
 use crate::layout::{Layout, Layouts, Shape, Tag};
@@ -56,6 +58,8 @@ pub(crate) struct Compiled<'db> {
     pub(crate) module: JITModule,
     /// The entry trampoline: `fn(out: *mut u8) -> i8`, which writes the result at `out`.
     pub(crate) entry: FuncId,
+    /// `fn(out: *mut u8) -> i8`: drops the result at `out`, once the host has shown it.
+    pub(crate) drop_result: FuncId,
     /// The entry's result type.
     pub(crate) ret: Ty,
     pub(crate) sites: Vec<Site>,
@@ -153,6 +157,9 @@ pub(crate) fn pass_of(l: &Layout) -> Pass {
     }
 }
 
+/// How many words a vtable starts with before its methods.
+pub(crate) const VTABLE_HEADER: usize = 4;
+
 /// The runtime functions the code calls.
 struct Rt {
     trap: FuncId,
@@ -168,10 +175,14 @@ struct Rt {
     is_between: FuncId,
     str_cmp: FuncId,
     char_is: FuncId,
+    alloc: FuncId,
+    free: FuncId,
+    realloc: FuncId,
+    memmove: FuncId,
 }
 
-/// A function instance: a function and its (concrete) type arguments.
-type Instance = (u32, Vec<Ty>);
+/// A function instance: a function (or a closure's body) and its (concrete) type arguments.
+type Instance = (Item, Vec<Ty>);
 
 struct Compiler<'db> {
     db: &'db dyn Db,
@@ -190,6 +201,10 @@ struct Compiler<'db> {
     /// Each vtable: for a type and a trait (with its arguments).
     vtables: HashMap<(Ty, TraitRef), DataId>,
     dyn_types: Vec<Ty>,
+    /// Each type's drop glue: `fn(*mut T) -> i8`.
+    glues: HashMap<Ty, FuncId>,
+    /// The drop glue declared and not yet compiled.
+    glue_queue: Vec<Ty>,
 }
 
 /// Compiles what `item` (a test, or a function without parameters) reaches.
@@ -226,6 +241,10 @@ pub(crate) fn compile<'db>(
     builder.symbol("moddil_rt_is_between", moddil_rt::is_between as *const u8);
     builder.symbol("moddil_rt_str_cmp", moddil_rt::str_cmp as *const u8);
     builder.symbol("moddil_rt_char_is", moddil_rt::char_is as *const u8);
+    builder.symbol("moddil_rt_alloc", moddil_rt::alloc as *const u8);
+    builder.symbol("moddil_rt_free", moddil_rt::free as *const u8);
+    builder.symbol("moddil_rt_realloc", moddil_rt::realloc as *const u8);
+    builder.symbol("moddil_rt_memmove", moddil_rt::memmove as *const u8);
     builder.symbol("moddil_rt_observe", moddil_rt::observe as *const u8);
     builder.symbol("moddil_rt_enter", moddil_rt::enter as *const u8);
     builder.symbol("moddil_rt_leave", moddil_rt::leave as *const u8);
@@ -278,6 +297,14 @@ pub(crate) fn compile<'db>(
             &[types::I32, types::I32],
             Some(types::I8),
         )?,
+        alloc: import("moddil_rt_alloc", &[types::I64, types::I64], Some(ptr))?,
+        free: import("moddil_rt_free", &[ptr, types::I64, types::I64], None)?,
+        realloc: import(
+            "moddil_rt_realloc",
+            &[ptr, types::I64, types::I64, types::I64],
+            Some(ptr),
+        )?,
+        memmove: import("moddil_rt_memmove", &[ptr, ptr, types::I64], None)?,
         observe: import("moddil_rt_observe", &[types::I32, ptr], None)?,
         enter: import("moddil_rt_enter", &[types::I32, types::I8], Some(types::I8))?,
         leave: import("moddil_rt_leave", &[], None)?,
@@ -306,10 +333,12 @@ pub(crate) fn compile<'db>(
         strs: HashMap::new(),
         vtables: HashMap::new(),
         dyn_types: Vec::new(),
+        glues: HashMap::new(),
+        glue_queue: Vec::new(),
     };
     let (target, ret) = match item {
         Item::Test(_) => {
-            let id = c.declare_item("test", &[], &Ty::Unit)?;
+            let id = c.declare_item("test", &[], &Ty::Unit, false)?;
             c.body_of(item, &[], id, &[], &Ty::Unit)?;
             (id, Ty::Unit)
         }
@@ -322,15 +351,23 @@ pub(crate) fn compile<'db>(
         }
         Item::Closure(..) => return Err("a closure as an entry point".to_string()),
     };
-    while let Some(inst) = c.queue.pop() {
-        let (id, params, ret) = c.fns[&inst].clone();
-        c.body_of(Item::Fn(inst.0), &inst.1, id, &params, &ret)?;
+    let drop_result = c.drop_result(&ret)?;
+    loop {
+        if let Some(inst) = c.queue.pop() {
+            let (id, params, ret) = c.fns[&inst].clone();
+            c.body_of(inst.0, &inst.1, id, &params, &ret)?;
+        } else if let Some(ty) = c.glue_queue.pop() {
+            c.glue_body(&ty)?;
+        } else {
+            break;
+        }
     }
     let entry = c.trampoline(target, &ret)?;
     c.module.finalize_definitions().map_err(|e| e.to_string())?;
     Ok(Compiled {
         module: c.module,
         entry,
+        drop_result,
         ret,
         sites: c.sites,
         items,
@@ -344,12 +381,18 @@ impl Compiler<'_> {
         Ok(pass_of(&l))
     }
 
-    /// The signature of a function with these parameters and result.
-    fn signature(&mut self, params: &[Ty], ret: &Ty) -> Result<Signature, String> {
+    /// The signature of a function with these parameters and result. A closure's body takes its
+    /// captures (its first parameter) by pointer, whatever their size: so a call through a
+    /// borrow works on the closure in place, and a `dyn` borrow's address is its captures'.
+    fn signature(&mut self, params: &[Ty], ret: &Ty, closure: bool) -> Result<Signature, String> {
         let ptr = self.module.target_config().pointer_type();
         let mut sig = self.module.make_signature();
         sig.call_conv = CallConv::Tail;
-        for p in params {
+        for (i, p) in params.iter().enumerate() {
+            if closure && i == 0 {
+                sig.params.push(AbiParam::new(ptr));
+                continue;
+            }
             match self.pass(p)? {
                 Pass::Nothing => {}
                 Pass::Scalar(t) => sig.params.push(AbiParam::new(t)),
@@ -368,8 +411,14 @@ impl Compiler<'_> {
         Ok(sig)
     }
 
-    fn declare_item(&mut self, name: &str, params: &[Ty], ret: &Ty) -> Result<FuncId, String> {
-        let sig = self.signature(params, ret)?;
+    fn declare_item(
+        &mut self,
+        name: &str,
+        params: &[Ty],
+        ret: &Ty,
+        closure: bool,
+    ) -> Result<FuncId, String> {
+        let sig = self.signature(params, ret, closure)?;
         self.module
             .declare_anonymous_function(&sig)
             .map_err(|e| format!("{name}: {e}"))
@@ -383,22 +432,32 @@ impl Compiler<'_> {
     /// Function `f` with type arguments `targs`: declared (and queued to be compiled) the first
     /// time it is named.
     fn declare_fn(&mut self, f: u32, targs: &[Ty]) -> Result<(FuncId, Vec<Ty>, Ty), String> {
-        let key = (f, targs.to_vec());
-        if let Some(d) = self.fns.get(&key) {
-            return Ok(d.clone());
-        }
         let sig = &self.items.fns[f as usize];
         if sig.intrinsic || !sig.has_body {
             return Err(format!("the built-in function `{}`", sig.name));
         }
-        let name = sig.name.clone();
-        let body = self.mir(Item::Fn(f))?;
+        self.declare_inst(Item::Fn(f), targs)
+    }
+
+    /// The body of closure type `c`, declared (and queued) the first time it is called.
+    fn declare_closure(&mut self, c: &ClosureTy) -> Result<(FuncId, Vec<Ty>, Ty), String> {
+        self.declare_inst(Item::closure(c.owner, c.expr), &c.args)
+    }
+
+    fn declare_inst(&mut self, item: Item, targs: &[Ty]) -> Result<(FuncId, Vec<Ty>, Ty), String> {
+        let key = (item, targs.to_vec());
+        if let Some(d) = self.fns.get(&key) {
+            return Ok(d.clone());
+        }
+        let closure = matches!(item, Item::Closure(..));
+        let body = self.mir(item)?;
+        let name = body.name.clone();
         let params: Vec<Ty> = body.locals[1..=body.arg_count]
             .iter()
             .map(|l| self.concrete(&l.ty, targs))
             .collect();
         let ret = self.concrete(&body.locals[0].ty, targs);
-        let id = self.declare_item(&name, &params, &ret)?;
+        let id = self.declare_item(&name, &params, &ret, closure)?;
         self.fns
             .insert(key.clone(), (id, params.clone(), ret.clone()));
         self.queue.push(key);
@@ -457,8 +516,10 @@ impl Compiler<'_> {
         }
     }
 
-    /// The vtable of `ty` for `tr`: its number in [`Compiled::dyn_types`], then each method's
-    /// address (null for one a `dyn` borrow cannot call).
+    /// The vtable of `ty` for `tr`: a header of [`VTABLE_HEADER`] words (its number in
+    /// [`Compiled::dyn_types`], its drop glue, its size and its alignment), then each method's
+    /// address (null for one a `dyn` borrow cannot call). A closure's methods (`call`,
+    /// `call_mut`, `call_once`) are all its body.
     fn vtable(&mut self, ty: &Ty, tr: &TraitRef) -> Result<DataId, String> {
         let key = (ty.clone(), tr.clone());
         if let Some(d) = self.vtables.get(&key) {
@@ -473,10 +534,27 @@ impl Compiler<'_> {
         let mut desc = DataDescription::new();
         let n = self.dyn_types.len() as u64;
         self.dyn_types.push(ty.clone());
+        let l = self.layouts.of(ty)?;
         let mut bytes = n.to_le_bytes().to_vec();
-        bytes.resize(8 * (1 + methods.len()), 0);
+        bytes.extend(0u64.to_le_bytes());
+        bytes.extend(u64::from(l.size).to_le_bytes());
+        bytes.extend(u64::from(l.align).to_le_bytes());
+        bytes.resize(8 * (VTABLE_HEADER + methods.len()), 0);
         desc.define(bytes.into_boxed_slice());
+        let glue = self.glue(ty)?;
+        let gref = self.module.declare_func_in_data(glue, &mut desc);
+        desc.write_function_addr(8, gref);
+        let closure_body = match ty {
+            Ty::Closure(c) => Some(self.declare_closure(c)?.0),
+            _ => None,
+        };
         for (k, (m, t)) in methods.iter().enumerate() {
+            let at = 8 * (VTABLE_HEADER + k) as u32;
+            if let Some(fid) = closure_body {
+                let fref = self.module.declare_func_in_data(fid, &mut desc);
+                desc.write_function_addr(at, fref);
+                continue;
+            }
             let sig = &self.items.fns[*m as usize];
             // Only a method that takes `self` by borrow, with no type parameters of its own, is
             // called through a `dyn` borrow.
@@ -496,7 +574,7 @@ impl Compiler<'_> {
             }
             let (fid, ..) = self.declare_fn(f, &parent)?;
             let fref = self.module.declare_func_in_data(fid, &mut desc);
-            desc.write_function_addr(8 * (1 + k as u32), fref);
+            desc.write_function_addr(at, fref);
         }
         self.module
             .define_data(id, &desc)
@@ -529,8 +607,9 @@ impl Compiler<'_> {
             .iter()
             .map(|l| self.concrete(&l.ty, targs))
             .collect();
+        let closure = matches!(item, Item::Closure(..));
         let mut ctx = self.module.make_context();
-        ctx.func.signature = self.signature(params, ret)?;
+        ctx.func.signature = self.signature(params, ret, closure)?;
         let mut fctx = FunctionBuilderContext::new();
         let mut lw = Lower {
             c: self,
@@ -539,9 +618,12 @@ impl Compiler<'_> {
             tys,
             file,
             tracked,
+            closure,
+            span: TextRange::default(),
             b: FunctionBuilder::new(&mut ctx.func, &mut fctx),
             locs: Vec::new(),
             blocks: Vec::new(),
+            flags: HashMap::new(),
         };
         lw.function()?;
         let config = lw.c.module.target_config();
@@ -551,6 +633,112 @@ impl Compiler<'_> {
             .map_err(|e| format!("Cranelift: {e:?}"))?;
         self.module.clear_context(&mut ctx);
         Ok(())
+    }
+
+    /// `ty`'s drop glue, `fn(*mut T) -> i8`: declared (and queued) the first time it is needed.
+    fn glue(&mut self, ty: &Ty) -> Result<FuncId, String> {
+        if let Some(f) = self.glues.get(ty) {
+            return Ok(*f);
+        }
+        let id = self.declare_item("drop", &[Ty::reference(true, Ty::Unit)], &Ty::Unit, false)?;
+        self.glues.insert(ty.clone(), id);
+        self.glue_queue.push(ty.clone());
+        Ok(id)
+    }
+
+    /// Compiles `ty`'s drop glue.
+    fn glue_body(&mut self, ty: &Ty) -> Result<(), String> {
+        let id = self.glues[ty];
+        let body = Body {
+            name: format!("drop of `{ty}`"),
+            src: Src::Prelude,
+            track_caller: false,
+            locals: vec![
+                LocalDecl {
+                    ty: Ty::Unit,
+                    name: None,
+                },
+                LocalDecl {
+                    ty: Ty::reference(true, Ty::Unit),
+                    name: None,
+                },
+            ],
+            arg_count: 1,
+            blocks: Vec::new(),
+            strs: Vec::new(),
+            cleanups: Vec::new(),
+            cleanup_locals: 0,
+        };
+        let params = [Ty::reference(true, Ty::Unit)];
+        let mut ctx = self.module.make_context();
+        ctx.func.signature = self.signature(&params, &Ty::Unit, false)?;
+        let mut fctx = FunctionBuilderContext::new();
+        let mut lw = Lower {
+            c: self,
+            body: &body,
+            targs: &[],
+            tys: vec![Ty::Unit, Ty::reference(true, Ty::Unit)],
+            file: 0,
+            tracked: true,
+            closure: false,
+            span: TextRange::default(),
+            b: FunctionBuilder::new(&mut ctx.func, &mut fctx),
+            locs: Vec::new(),
+            blocks: Vec::new(),
+            flags: HashMap::new(),
+        };
+        let entry = lw.b.create_block();
+        lw.b.append_block_params_for_function_params(entry);
+        lw.b.switch_to_block(entry);
+        let addr = lw.b.block_params(entry)[0];
+        lw.drop_own(addr, ty)?;
+        lw.return_status(0)?;
+        lw.b.seal_all_blocks();
+        let config = lw.c.module.target_config();
+        lw.b.finalize(config);
+        self.module
+            .define_function(id, &mut ctx)
+            .map_err(|e| format!("Cranelift: {e:?}"))?;
+        self.module.clear_context(&mut ctx);
+        Ok(())
+    }
+
+    /// `fn(out: *mut u8) -> i8`, in the platform's C convention: drops the entry's result, of
+    /// type `ret`, at `out`.
+    fn drop_result(&mut self, ret: &Ty) -> Result<FuncId, String> {
+        let ptr = self.module.target_config().pointer_type();
+        let mut sig = self.module.make_signature();
+        sig.params.push(AbiParam::new(ptr));
+        sig.returns.push(AbiParam::new(types::I8));
+        let id = self
+            .module
+            .declare_function("drop_result", Linkage::Export, &sig)
+            .map_err(|e| e.to_string())?;
+        let needs = Solver::new(self.items, &[]).needs_drop(ret);
+        let glue = if needs { Some(self.glue(ret)?) } else { None };
+        let mut ctx = self.module.make_context();
+        ctx.func.signature = sig;
+        let mut fctx = FunctionBuilderContext::new();
+        let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
+        let block = b.create_block();
+        b.append_block_params_for_function_params(block);
+        b.switch_to_block(block);
+        let out = b.block_params(block)[0];
+        let status = match glue {
+            Some(g) => {
+                let f = self.module.declare_func_in_func(g, b.func);
+                let call = b.ins().call(f, &[out]);
+                b.inst_results(call)[0]
+            }
+            None => b.ins().iconst(types::I8, 0),
+        };
+        b.ins().return_(&[status]);
+        b.seal_all_blocks();
+        b.finalize(self.module.target_config());
+        self.module
+            .define_function(id, &mut ctx)
+            .map_err(|e| format!("Cranelift: {e:?}"))?;
+        Ok(id)
     }
 
     /// `fn(out: *mut u8) -> i8`, in the platform's C convention: calls `target` and stores its
@@ -604,6 +792,32 @@ impl Compiler<'_> {
     }
 }
 
+/// What a call runs: a function, or one through a pointer (a vtable's), with its parameters;
+/// and its result type.
+enum Run {
+    Direct(FuncId, Ty),
+    Indirect(ir::Value, Vec<Ty>, Ty),
+}
+
+/// Each operand of `r`.
+fn rvalue_operands(r: &Rvalue, f: &mut impl FnMut(&Operand)) {
+    match r {
+        Rvalue::Use(a)
+        | Rvalue::Unary(_, a)
+        | Rvalue::NegOverflows(a)
+        | Rvalue::Unsize(a, _)
+        | Rvalue::Widen(a, _)
+        | Rvalue::Repeat(a, _)
+        | Rvalue::InBounds(a, _) => f(a),
+        Rvalue::Binary(_, a, b) | Rvalue::Overflows(_, a, b) | Rvalue::SpanOk(a, b, _) => {
+            f(a);
+            f(b);
+        }
+        Rvalue::Aggregate(_, xs) => xs.iter().for_each(f),
+        _ => {}
+    }
+}
+
 /// Where a local is.
 #[derive(Clone, Copy)]
 enum Loc {
@@ -626,6 +840,8 @@ struct PlaceRef {
     variant: Option<u32>,
     /// For an unsized place (`str`, `[T]`, `dyn Trait`): its length, or its vtable.
     meta: Option<ir::Value>,
+    /// For a `[dyn Trait]` place: its elements' vtable.
+    vtable: Option<ir::Value>,
 }
 
 /// A value, as an operand gives it.
@@ -650,10 +866,17 @@ struct Lower<'a, 'c, 'db> {
     file: u32,
     /// Whether it is `#[track_caller]`, the prelude's or derived code.
     tracked: bool,
+    /// Whether it is a closure's body, which takes its captures by pointer.
+    closure: bool,
+    /// Where the terminator being lowered is.
+    span: TextRange,
     b: FunctionBuilder<'c>,
     locs: Vec<Loc>,
     /// Each MIR block's Cranelift block (`None` for cleanup code, which only unwinding runs).
     blocks: Vec<Option<ir::Block>>,
+    /// The drop flags: for each local that may need dropping, and each part of one that is
+    /// moved out of, whether it holds a value.
+    flags: HashMap<Place, Variable>,
 }
 
 impl Lower<'_, '_, '_> {
@@ -704,6 +927,14 @@ impl Lower<'_, '_, '_> {
             let pass = pass_of(&layout);
             let arg = (1..=self.body.arg_count).contains(&i);
             let loc = match (&layout.shape, borrowed.contains(&(i as u32))) {
+                _ if self.closure && i == 1 => {
+                    k += 1;
+                    if layout.size == 0 {
+                        Loc::Nothing
+                    } else {
+                        Loc::Mem(params[k - 1])
+                    }
+                }
                 (Shape::Empty, _) => Loc::Nothing,
                 _ if layout.size == 0 => Loc::Nothing,
                 (Shape::Scalar(t), false) => {
@@ -717,8 +948,9 @@ impl Lower<'_, '_, '_> {
                     self.b.def_var(var, v);
                     Loc::Var(var)
                 }
-                _ if arg && pass == Pass::Indirect => {
-                    // The caller's copy is the parameter's own.
+                _ if arg && (pass == Pass::Indirect || (self.closure && i == 1)) => {
+                    // The caller's copy is the parameter's own (and a closure works on its
+                    // captures where they are).
                     k += 1;
                     Loc::Mem(params[k - 1])
                 }
@@ -758,9 +990,11 @@ impl Lower<'_, '_, '_> {
         if pass_of(&ret_layout) == Pass::Indirect {
             self.locs[0] = Loc::Mem(*params.last().expect("the result's place"));
         }
-        for bb in &self.body.blocks {
+        self.drop_flags();
+        let reachable = self.reachable()?;
+        for (i, bb) in self.body.blocks.iter().enumerate() {
             self.blocks
-                .push((!bb.cleanup).then(|| self.b.create_block()));
+                .push((!bb.cleanup && reachable[i]).then(|| self.b.create_block()));
         }
         let first = self.block(0)?;
         self.b.ins().jump(first, &[]);
@@ -776,6 +1010,58 @@ impl Lower<'_, '_, '_> {
         }
         self.b.seal_all_blocks();
         Ok(())
+    }
+
+    /// Which blocks control can reach: not cleanup code, and not the error edge of a call whose
+    /// error is `!`.
+    fn reachable(&mut self) -> Result<Vec<bool>, String> {
+        let mut seen = vec![false; self.body.blocks.len()];
+        let mut todo = vec![0usize];
+        while let Some(b) = todo.pop() {
+            if seen[b] {
+                continue;
+            }
+            seen[b] = true;
+            let t = &self.body.blocks[b].terminator;
+            let next = match t {
+                Terminator::Call {
+                    target,
+                    on_error: Some((p, _)),
+                    ..
+                } if self
+                    .c
+                    .concrete(&self.body.locals[p.local.index()].ty, self.targs)
+                    == Ty::Never =>
+                {
+                    vec![*target]
+                }
+                t => t.successors(),
+            };
+            todo.extend(next.into_iter().map(|b| b.index()));
+        }
+        Ok(seen)
+    }
+
+    /// The value of type `ty` at `at`, taken out: a scalar loaded, or a copy in a slot of its
+    /// own (the memory it was in is about to change).
+    fn take_at(&mut self, at: ir::Value, ty: &Ty) -> Result<Val, String> {
+        let r = PlaceRef {
+            var: None,
+            addr: Some(at),
+            ty: ty.clone(),
+            variant: None,
+            meta: None,
+            vtable: None,
+        };
+        Ok(match self.read(&r)? {
+            Val::Mem(a) => {
+                let l = self.layout(ty)?;
+                let copy = self.slot(&l);
+                self.copy(copy, a, l.size);
+                Val::Mem(copy)
+            }
+            v => v,
+        })
     }
 
     fn block(&self, b: usize) -> Result<ir::Block, String> {
@@ -804,6 +1090,7 @@ impl Lower<'_, '_, '_> {
             ty: self.tys[p.local.index()].clone(),
             variant: None,
             meta: None,
+            vtable: None,
         };
         match self.locs[p.local.index()] {
             Loc::Var(v) => r.var = Some(v),
@@ -816,19 +1103,23 @@ impl Lower<'_, '_, '_> {
                     let Ty::Ref(_, inner) = r.ty.clone() else {
                         return Err(format!("dereferencing a `{}`", r.ty));
                     };
-                    let (ptr, meta) = match self.read(&r)? {
-                        Val::Scalar(p) => (p, None),
-                        // A wide borrow: the address, then the length or vtable.
+                    let dyn_slice = matches!(&*inner, Ty::Slice(e) if matches!(**e, Ty::Dyn(..)));
+                    let (ptr, meta, vtable) = match self.read(&r)? {
+                        Val::Scalar(p) => (p, None, None),
+                        // A wide borrow: the address, then the length or vtable (a borrow of
+                        // a `[dyn Trait]` has both).
                         Val::Mem(a) => {
                             let flags = ir::MemFlagsData::trusted();
                             let p = self.b.ins().load(types::I64, flags, a, 0);
                             let m = self.b.ins().load(types::I64, flags, a, 8);
-                            (p, Some(m))
+                            let v = dyn_slice.then(|| self.b.ins().load(types::I64, flags, a, 16));
+                            (p, Some(m), v)
                         }
                         Val::Unit => return Err("a borrow of a value without bytes".to_string()),
                     };
                     r = PlaceRef {
                         meta,
+                        vtable,
                         var: None,
                         addr: Some(ptr),
                         ty: (*inner).clone(),
@@ -855,6 +1146,32 @@ impl Lower<'_, '_, '_> {
                         ty,
                         variant: None,
                         meta: None,
+                        vtable: None,
+                    };
+                }
+                Projection::Index(i) if r.vtable.is_some() => {
+                    // An element of a `[dyn Trait]`: its size is in the vtable.
+                    let vt = r.vtable.expect("a vtable");
+                    let Ty::Slice(elem) = r.ty.clone() else {
+                        return Err(format!("an element of `{}`", r.ty));
+                    };
+                    let base = self.addr_of(&r)?;
+                    let Val::Scalar(index) = self.read_local(*i)? else {
+                        return Err("an index without a value".to_string());
+                    };
+                    let size = self
+                        .b
+                        .ins()
+                        .load(types::I64, ir::MemFlagsData::trusted(), vt, 16);
+                    let off = self.b.ins().imul(index, size);
+                    let addr = self.b.ins().iadd(base, off);
+                    r = PlaceRef {
+                        var: None,
+                        addr: Some(addr),
+                        ty: (*elem).clone(),
+                        variant: None,
+                        meta: Some(vt),
+                        vtable: None,
                     };
                 }
                 Projection::Index(i) => {
@@ -871,6 +1188,7 @@ impl Lower<'_, '_, '_> {
                         ty: elem,
                         variant: None,
                         meta: None,
+                        vtable: None,
                     };
                 }
                 Projection::Subslice(from, to) => {
@@ -890,6 +1208,7 @@ impl Lower<'_, '_, '_> {
                         ty: Ty::Slice(Arc::new(elem)),
                         variant: None,
                         meta: Some(len),
+                        vtable: None,
                     };
                 }
             }
@@ -955,6 +1274,18 @@ impl Lower<'_, '_, '_> {
             base
         } else {
             self.b.ins().iadd_imm_s(base, i64::from(off))
+        }
+    }
+
+    /// The address of a place in memory, or, for a value without bytes, one that is never read.
+    fn addr_or_dangling(&mut self, r: &PlaceRef) -> Result<ir::Value, String> {
+        match (r.addr, r.var) {
+            (Some(a), _) => Ok(a),
+            (None, None) => {
+                let ptr = self.ptr();
+                Ok(self.b.ins().iconst(ptr, 8))
+            }
+            (None, Some(_)) => Err("dropping a value kept in a register".to_string()),
         }
     }
 
@@ -1043,7 +1374,11 @@ impl Lower<'_, '_, '_> {
         Ok(match o {
             Operand::Copy(p) | Operand::Move(p) => {
                 let r = self.place(p)?;
-                self.read(&r)?
+                let v = self.read(&r)?;
+                if let Operand::Move(p) = o {
+                    self.set_flag(p, false);
+                }
+                v
             }
             Operand::Const(c) => match *c {
                 Const::Int(v) => Val::Scalar(self.b.ins().iconst(types::I64, v)),
@@ -1190,6 +1525,12 @@ impl Lower<'_, '_, '_> {
     }
 
     fn assign(&mut self, place: &Place, r: &Rvalue) -> Result<(), String> {
+        self.assign_value(place, r)?;
+        self.set_init(place);
+        Ok(())
+    }
+
+    fn assign_value(&mut self, place: &Place, r: &Rvalue) -> Result<(), String> {
         let dest = self.place(place)?;
         match r {
             Rvalue::Use(o) => {
@@ -1239,6 +1580,7 @@ impl Lower<'_, '_, '_> {
                         ty: elem.clone(),
                         variant: None,
                         meta: None,
+                        vtable: None,
                     };
                     self.write(&at, v)?;
                 }
@@ -1273,6 +1615,35 @@ impl Lower<'_, '_, '_> {
                 };
                 let v = self.b.ins().iconst(types::I64, k);
                 self.write(&dest, Val::Scalar(v))
+            }
+            Rvalue::Unsize(o, from)
+                if matches!(self.c.concrete(from, self.targs),
+                    Ty::Adt(b, ..) if Some(b) == self.c.items.lang("Box")) =>
+            {
+                // `Box<T>` as `Box<dyn Trait>`: its `Buf` takes the vtable of `T`.
+                let from = self.c.concrete(from, self.targs);
+                let Ty::Adt(_, _, args) = &from else {
+                    unreachable!()
+                };
+                let inner = args.first().cloned().ok_or("a box without its type")?;
+                let Ty::Adt(_, _, to) = &dest.ty else {
+                    return Err(format!("a `{from}` as a `{}`", dest.ty));
+                };
+                let Some(Ty::Dyn(tr, _)) = to.first() else {
+                    return Err(format!("a `{from}` as a `{}`", dest.ty));
+                };
+                let tr = tr.clone();
+                let Val::Mem(src) = self.operand(o)? else {
+                    return Err("a box without its value".to_string());
+                };
+                let a = self.addr_of(&dest)?;
+                self.copy(a, src, 24);
+                let vt = self.c.vtable(&inner, &tr)?;
+                let gv = self.c.module.declare_data_in_func(vt, self.b.func);
+                let ptr = self.ptr();
+                let v = self.b.ins().symbol_value(ptr, gv);
+                self.b.ins().store(ir::MemFlagsData::trusted(), v, a, 24);
+                Ok(())
             }
             Rvalue::Unsize(o, from) => {
                 let from = self.c.concrete(from, self.targs);
@@ -1335,9 +1706,6 @@ impl Lower<'_, '_, '_> {
         kind: &AggregateKind,
         ops: &[Operand],
     ) -> Result<(), String> {
-        if matches!(kind, AggregateKind::Closure(_)) {
-            return Err("a closure".to_string());
-        }
         let l = self.layout(&dest.ty)?;
         if l.size == 0 {
             for o in ops {
@@ -1347,6 +1715,7 @@ impl Lower<'_, '_, '_> {
         }
         let base = self.addr_of(dest)?;
         let (fields, variant): (Vec<(u32, Ty)>, Option<u32>) = match (&l.shape, kind) {
+            // A tuple, a struct, or a closure's captures.
             (Shape::Fields(fs), _) => (fs.clone(), None),
             (Shape::Array { elem, stride, len }, AggregateKind::Array) => (
                 (0..*len).map(|k| (k * stride, elem.clone())).collect(),
@@ -1366,6 +1735,7 @@ impl Lower<'_, '_, '_> {
                 ty: ty.clone(),
                 variant: None,
                 meta: None,
+                vtable: None,
             };
             self.write(&at, v)?;
         }
@@ -1672,6 +2042,7 @@ impl Lower<'_, '_, '_> {
     // ----- terminators -----------------------------------------------------------------------
 
     fn terminator(&mut self, t: &Terminator, span: TextRange) -> Result<(), String> {
+        self.span = span;
         match t {
             Terminator::Goto(b) => {
                 let b = self.block(b.index())?;
@@ -1685,10 +2056,12 @@ impl Lower<'_, '_, '_> {
             Terminator::Return => self.ret()?,
             Terminator::Trap(class, _) => self.trap(*class, span)?,
             Terminator::Unreachable => self.return_status(1)?,
-            Terminator::Drop { place, target, .. } => {
-                // C1's values have no destructors (their layouts say so).
-                let r = self.place(place)?;
-                self.layout(&r.ty)?;
+            Terminator::Drop {
+                place,
+                target,
+                glue_only,
+            } => {
+                self.drop_place(place, *glue_only)?;
                 let b = self.block(target.index())?;
                 self.b.ins().jump(b, &[]);
             }
@@ -1700,7 +2073,14 @@ impl Lower<'_, '_, '_> {
                 on_error,
                 range,
                 ..
-            } => self.call(callee, args, dest, *target, on_error.is_some(), *range)?,
+            } => {
+                // An error edge whose error is `!` is never taken.
+                let can_fail = match on_error {
+                    Some((p, _)) => self.place(p)?.ty != Ty::Never,
+                    None => false,
+                };
+                self.call(callee, args, dest, *target, can_fail, *range)?;
+            }
             Terminator::Fail(_) => return Err("an error leaving a function".to_string()),
             Terminator::Resume => return Err("unwinding".to_string()),
         }
@@ -1735,31 +2115,38 @@ impl Lower<'_, '_, '_> {
 
     /// The arguments' values, as a function with these parameter types takes them.
     fn arguments(&mut self, args: &[Operand], params: &[Ty]) -> Result<Vec<ir::Value>, String> {
-        let flags = ir::MemFlagsData::trusted();
         let mut vals = Vec::new();
         for (a, pty) in args.iter().zip(params) {
-            let v = self.operand(a)?;
             let from = self.operand_ty(a)?;
+            let v = self.operand(a)?;
             let v = self.fit(v, &from, pty);
-            match (self.c.pass(pty)?, v) {
-                (Pass::Nothing, _) => {}
-                (Pass::Scalar(_), Val::Scalar(x)) => vals.push(x),
-                (Pass::Words(ts), Val::Mem(addr)) => {
-                    let mut at = 0;
-                    for t in ts {
-                        vals.push(self.b.ins().load(t, flags, addr, at));
-                        at += t.bytes() as i32;
-                    }
+            vals.extend(self.pass_value(v, pty)?);
+        }
+        Ok(vals)
+    }
+
+    /// The values that pass `v` as a parameter of type `pty`.
+    fn pass_value(&mut self, v: Val, pty: &Ty) -> Result<Vec<ir::Value>, String> {
+        let flags = ir::MemFlagsData::trusted();
+        let mut vals = Vec::new();
+        match (self.c.pass(pty)?, v) {
+            (Pass::Nothing, _) => {}
+            (Pass::Scalar(_), Val::Scalar(x)) => vals.push(x),
+            (Pass::Words(ts), Val::Mem(addr)) => {
+                let mut at = 0;
+                for t in ts {
+                    vals.push(self.b.ins().load(t, flags, addr, at));
+                    at += t.bytes() as i32;
                 }
-                (Pass::Indirect, Val::Mem(addr)) => {
-                    // The callee's own copy.
-                    let l = self.layout(pty)?;
-                    let copy = self.slot(&l);
-                    self.copy(copy, addr, l.size);
-                    vals.push(copy);
-                }
-                _ => return Err(format!("an argument of an unexpected kind, a `{pty}`")),
             }
+            (Pass::Indirect, Val::Mem(addr)) => {
+                // The callee's own copy.
+                let l = self.layout(pty)?;
+                let copy = self.slot(&l);
+                self.copy(copy, addr, l.size);
+                vals.push(copy);
+            }
+            _ => return Err(format!("an argument of an unexpected kind, a `{pty}`")),
         }
         Ok(vals)
     }
@@ -1782,20 +2169,20 @@ impl Lower<'_, '_, '_> {
             .map(|t| self.c.concrete(t, self.targs))
             .collect();
         let d = self.place(dest)?;
-        // What runs: a function instance, or a method through a vtable.
-        enum Run {
-            Direct(FuncId, Ty),
-            Indirect(ir::Value, Vec<Ty>, Ty),
-        }
-        let mut args = args.to_vec();
-        let (run, mut vals) = match callee {
+        // After the call, memory to free: a `Box<dyn FnOnce…>` given up.
+        let mut free_after = None;
+        let (run, vals) = match callee {
             Callee::Fn { func, .. } => {
                 if self.c.items.fns[*func as usize].intrinsic {
-                    return self.intrinsic(*func, &cargs, &args, &d, target, range);
+                    self.intrinsic(*func, &cargs, args, &d, range)?;
+                    self.set_init(dest);
+                    let b = self.block(target.index())?;
+                    self.b.ins().jump(b, &[]);
+                    return Ok(());
                 }
                 let (id, params, ret) = self.c.declare_fn(*func, &cargs)?;
-                let vals = self.arguments(&args, &params)?;
-                (Run::Direct(id, ret.clone()), vals)
+                let vals = self.arguments(args, &params)?;
+                (Run::Direct(id, ret), vals)
             }
             Callee::Trait { func, .. } => match &cargs[0] {
                 Ty::Dyn(tr, _) => {
@@ -1804,21 +2191,53 @@ impl Lower<'_, '_, '_> {
                         .iter()
                         .position(|(m, _)| m == func)
                         .ok_or("a method missing from its vtable")?;
+                    let self_ty = self.operand_ty(&args[0])?;
                     let Val::Mem(w) = self.operand(&args[0])? else {
                         return Err("a `dyn` call without a `dyn` borrow".to_string());
                     };
                     let flags = ir::MemFlagsData::trusted();
-                    let thin = self.b.ins().load(types::I64, flags, w, 0);
-                    let vt = self.b.ins().load(types::I64, flags, w, 8);
-                    let fp = self.b.ins().load(types::I64, flags, vt, 8 * (1 + k as i32));
+                    let (thin, vt) = if matches!(self_ty, Ty::Adt(..)) {
+                        // A `Box<dyn FnOnce…>`, given up: the value its `Buf` holds, and its
+                        // memory freed after.
+                        let p = self.b.ins().load(types::I64, flags, w, 0);
+                        let vt = self.b.ins().load(types::I64, flags, w, 24);
+                        free_after = Some((p, vt));
+                        (p, vt)
+                    } else {
+                        let thin = self.b.ins().load(types::I64, flags, w, 0);
+                        (thin, self.b.ins().load(types::I64, flags, w, 8))
+                    };
+                    let at = 8 * (VTABLE_HEADER + k) as i32;
+                    let fp = self.b.ins().load(types::I64, flags, vt, at);
                     let mut params = vec![Ty::reference(false, Ty::Unit)];
                     for a in &args[1..] {
                         params.push(self.operand_ty(a)?);
                     }
                     let mut vals = vec![thin];
                     vals.extend(self.arguments(&args[1..], &params[1..])?);
-                    args.clear();
                     (Run::Indirect(fp, params, d.ty.clone()), vals)
+                }
+                // A closure called: its body, with its captures (by pointer) and its arguments.
+                Ty::Closure(c) => {
+                    let (id, params, ret) = self.c.declare_closure(c)?;
+                    let captures = match self.operand(&args[0])? {
+                        // Through a borrow (`call`, `call_mut`): the closure itself.
+                        Val::Scalar(p) => p,
+                        // By value (`call_once`): its own copy, which it gives up.
+                        Val::Mem(a) => {
+                            let l = self.layout(&params[0])?;
+                            let copy = self.slot(&l);
+                            self.copy(copy, a, l.size);
+                            copy
+                        }
+                        Val::Unit => {
+                            let ptr = self.ptr();
+                            self.b.ins().iconst(ptr, 8)
+                        }
+                    };
+                    let mut vals = vec![captures];
+                    vals.extend(self.arguments(&args[1..], &params[1..])?);
+                    (Run::Direct(id, ret), vals)
                 }
                 Ty::Anon(_) => return Err("an anonymous impl's method".to_string()),
                 Ty::Errors(_) => return Err("a method of an error set".to_string()),
@@ -1844,29 +2263,61 @@ impl Lower<'_, '_, '_> {
                             ty: d.ty.clone(),
                             variant: None,
                             meta: None,
+                            vtable: None,
                         };
                         let v = self.read(&from)?;
                         self.write(&d, v)?;
+                        self.set_init(dest);
                         let b = self.block(target.index())?;
                         self.b.ins().jump(b, &[]);
                         return Ok(());
                     };
                     parent.extend(cargs[sig.generics.parent as usize..].iter().cloned());
                     if items.fns[f as usize].intrinsic {
-                        return self.intrinsic(f, &parent, &args, &d, target, range);
+                        self.intrinsic(f, &parent, args, &d, range)?;
+                        self.set_init(dest);
+                        let b = self.block(target.index())?;
+                        self.b.ins().jump(b, &[]);
+                        return Ok(());
                     }
                     let (id, params, ret) = self.c.declare_fn(f, &parent)?;
-                    let vals = self.arguments(&args, &params)?;
-                    (Run::Direct(id, ret.clone()), vals)
+                    let vals = self.arguments(args, &params)?;
+                    (Run::Direct(id, ret), vals)
                 }
             },
         };
+        self.emit_call(run, vals, Some(&d), range)?;
+        if let Some((p, vt)) = free_after {
+            self.free_dyn(p, vt, None);
+        }
+        self.set_init(dest);
+        let b = self.block(target.index())?;
+        self.b.ins().jump(b, &[]);
+        Ok(())
+    }
+
+    /// Calls `run` with `vals`, counting the frame and passing a trap on; its result goes to
+    /// `dest` (or nowhere). The code goes on after a call that returned.
+    fn emit_call(
+        &mut self,
+        run: Run,
+        mut vals: Vec<ir::Value>,
+        dest: Option<&PlaceRef>,
+        range: TextRange,
+    ) -> Result<(), String> {
         let ret = match &run {
             Run::Direct(_, r) | Run::Indirect(_, _, r) => r.clone(),
         };
         let pass = self.c.pass(&ret)?;
         if pass == Pass::Indirect {
-            vals.push(self.addr_of(&d)?);
+            let a = match dest {
+                Some(d) => self.addr_of(d)?,
+                None => {
+                    let l = self.layout(&ret)?;
+                    self.slot(&l)
+                }
+            };
+            vals.push(a);
         }
         let flags = ir::MemFlagsData::trusted();
         // Count the frame, so that recursion without end traps.
@@ -1885,12 +2336,12 @@ impl Lower<'_, '_, '_> {
         self.return_status(1)?;
         self.b.switch_to_block(call_block);
         let call = match run {
-            Run::Direct(id, ..) => {
+            Run::Direct(id, _) => {
                 let f = self.c.module.declare_func_in_func(id, self.b.func);
                 self.b.ins().call(f, &vals)
             }
             Run::Indirect(fp, params, ret) => {
-                let sig = self.c.signature(&params, &ret)?;
+                let sig = self.c.signature(&params, &ret, false)?;
                 let sig = self.b.import_signature(sig);
                 self.b.ins().call_indirect(sig, fp, &vals)
             }
@@ -1907,10 +2358,13 @@ impl Lower<'_, '_, '_> {
         self.b.switch_to_block(trapped);
         self.return_status(1)?;
         self.b.switch_to_block(ok);
+        let Some(d) = dest else {
+            return Ok(());
+        };
         match pass {
-            Pass::Scalar(_) => self.write(&d, Val::Scalar(results[1]))?,
+            Pass::Scalar(_) => self.write(d, Val::Scalar(results[1]))?,
             Pass::Words(ts) => {
-                let a = self.addr_of(&d)?;
+                let a = self.addr_of(d)?;
                 let mut at = 0;
                 for (k, t) in ts.iter().enumerate() {
                     self.b.ins().store(flags, results[1 + k], a, at);
@@ -1919,8 +2373,362 @@ impl Lower<'_, '_, '_> {
             }
             Pass::Nothing | Pass::Indirect => {}
         }
-        let b = self.block(target.index())?;
-        self.b.ins().jump(b, &[]);
+        Ok(())
+    }
+
+    // ----- drops -----------------------------------------------------------------------------
+
+    fn needs_drop(&self, ty: &Ty) -> bool {
+        Solver::new(self.c.items, &[]).needs_drop(ty)
+    }
+
+    /// The drop flags: one for each local whose type needs dropping, and one for each part of a
+    /// local that is moved out of. A local's starts set if it is an argument; a part's starts
+    /// set, as only its local's says whether there is anything there.
+    fn drop_flags(&mut self) {
+        let mut moved: Vec<Place> = Vec::new();
+        let mut note = |o: &Operand| {
+            if let Operand::Move(p) = o
+                && !p.is_indirect()
+                && !p.projection.is_empty()
+                && !moved.contains(p)
+            {
+                moved.push(p.clone());
+            }
+        };
+        for bb in &self.body.blocks {
+            for st in &bb.statements {
+                match st {
+                    Statement::Assign(_, r) => rvalue_operands(r, &mut note),
+                    Statement::Observe { value, .. } => note(value),
+                    Statement::Assert { cond, .. } => note(cond),
+                    _ => {}
+                }
+            }
+            match &bb.terminator {
+                Terminator::Call { args, .. } => args.iter().for_each(&mut note),
+                Terminator::SwitchBool { cond, .. } => note(cond),
+                _ => {}
+            }
+        }
+        for i in 0..self.tys.len() {
+            if self.needs_drop(&self.tys[i].clone()) {
+                let set = (1..=self.body.arg_count).contains(&i);
+                let v = self.b.declare_var(types::I8);
+                let x = self.b.ins().iconst(types::I8, i64::from(set));
+                self.b.def_var(v, x);
+                self.flags.insert(Place::local(Local(i as u32)), v);
+            }
+        }
+        for p in moved {
+            if !self.flags.contains_key(&Place::local(p.local)) {
+                continue;
+            }
+            let v = self.b.declare_var(types::I8);
+            let x = self.b.ins().iconst(types::I8, 1);
+            self.b.def_var(v, x);
+            self.flags.insert(p, v);
+        }
+    }
+
+    fn set_flag(&mut self, p: &Place, to: bool) {
+        if let Some(&v) = self.flags.get(p) {
+            let x = self.b.ins().iconst(types::I8, i64::from(to));
+            self.b.def_var(v, x);
+        }
+    }
+
+    /// After `place` is assigned: it, and each part of it, holds a value.
+    fn set_init(&mut self, place: &Place) {
+        if place.is_indirect() {
+            return;
+        }
+        let parts: Vec<Place> = self
+            .flags
+            .keys()
+            .filter(|p| p.local == place.local && p.projection.starts_with(&place.projection))
+            .cloned()
+            .collect();
+        for p in parts {
+            self.set_flag(&p, true);
+        }
+    }
+
+    /// A `Drop` of `place`: what of it is still there, by its flags; only its fields if
+    /// `glue_only`.
+    fn drop_place(&mut self, place: &Place, glue_only: bool) -> Result<(), String> {
+        let r = self.place(place)?;
+        if !self.needs_drop(&r.ty) {
+            return Ok(());
+        }
+        if place.is_indirect() {
+            let a = self.addr_or_dangling(&r)?;
+            return if glue_only {
+                self.glue_fields(a, &r.ty)
+            } else {
+                self.drop_value(a, &r.ty)
+            };
+        }
+        self.drop_path(place, glue_only)?;
+        let parts: Vec<Place> = self
+            .flags
+            .keys()
+            .filter(|p| p.local == place.local && p.projection.starts_with(&place.projection))
+            .cloned()
+            .collect();
+        for p in parts {
+            self.set_flag(&p, false);
+        }
+        Ok(())
+    }
+
+    fn drop_path(&mut self, place: &Place, glue_only: bool) -> Result<(), String> {
+        let r = self.place(place)?;
+        let ty = r.ty.clone();
+        if !self.needs_drop(&ty) {
+            return Ok(());
+        }
+        let join = self.b.create_block();
+        if let Some(&flag) = self.flags.get(place) {
+            let set = self.b.use_var(flag);
+            let yes = self.b.create_block();
+            self.b.ins().brif(set, yes, &[], join, &[]);
+            self.b.switch_to_block(yes);
+        }
+        let addr = self.addr_or_dangling(&r)?;
+        let parts: Vec<Place> = self
+            .flags
+            .keys()
+            .filter(|p| {
+                p.local == place.local
+                    && p.projection.len() > place.projection.len()
+                    && p.projection.starts_with(&place.projection)
+            })
+            .cloned()
+            .collect();
+        if parts.is_empty() {
+            if glue_only {
+                self.glue_fields(addr, &ty)?;
+            } else {
+                self.drop_value(addr, &ty)?;
+            }
+        } else {
+            // Parts of it are moved out of: each field by its own flags.
+            let l = self.layout(&ty)?;
+            match &l.shape {
+                Shape::Fields(fs) => {
+                    for i in (0..fs.len()).rev() {
+                        self.drop_path(&place.field(i as u32), false)?;
+                    }
+                }
+                Shape::Enum { variants, .. } => {
+                    let d = self.discriminant(&r)?;
+                    for (v, fs) in variants.iter().enumerate() {
+                        let down = place.downcast(v as u32);
+                        if !parts
+                            .iter()
+                            .any(|p| p.projection.starts_with(&down.projection))
+                        {
+                            continue;
+                        }
+                        let yes = self.b.create_block();
+                        let no = self.b.create_block();
+                        let is = self.b.ins().icmp_imm_s(IntCC::Equal, d, v as i64);
+                        self.b.ins().brif(is, yes, &[], no, &[]);
+                        self.b.switch_to_block(yes);
+                        for i in (0..fs.len()).rev() {
+                            self.drop_path(&down.field(i as u32), false)?;
+                        }
+                        self.b.ins().jump(join, &[]);
+                        self.b.switch_to_block(no);
+                    }
+                    // A variant none of whose parts is moved out of: all of it.
+                    if glue_only {
+                        self.glue_fields(addr, &ty)?;
+                    } else {
+                        self.drop_value(addr, &ty)?;
+                    }
+                }
+                _ => self.drop_value(addr, &ty)?,
+            }
+        }
+        self.b.ins().jump(join, &[]);
+        self.b.switch_to_block(join);
+        Ok(())
+    }
+
+    /// Drops the value of type `ty` at `addr`: calls its drop glue.
+    fn drop_value(&mut self, addr: ir::Value, ty: &Ty) -> Result<(), String> {
+        if !self.needs_drop(ty) {
+            return Ok(());
+        }
+        let f = self.c.glue(ty)?;
+        let span = self.span;
+        self.emit_call(Run::Direct(f, Ty::Unit), vec![addr], None, span)
+    }
+
+    /// A type's drop glue, at `addr`: its `Drop` impl if it has one (which then drops the
+    /// fields), or else its fields'.
+    fn drop_own(&mut self, addr: ir::Value, ty: &Ty) -> Result<(), String> {
+        if let Ty::Adt(a, ..) = ty
+            && self.c.items.has_drop_impl(*a)
+        {
+            let items = self.c.items;
+            let drop = items.lang_ref("Drop").ok_or("the prelude's `Drop`")?;
+            let decl = items.traits[drop.trait_ as usize].methods[0];
+            let (f, targs) = Solver::new(items, &[])
+                .impl_method(decl, ty, &drop)
+                .ok_or("a destructor")?;
+            if items.fns[f as usize].intrinsic {
+                return Err(format!("the built-in destructor of `{ty}`"));
+            }
+            let (id, params, ret) = self.c.declare_fn(f, &targs)?;
+            let at = PlaceRef {
+                var: None,
+                addr: Some(addr),
+                ty: ty.clone(),
+                variant: None,
+                meta: None,
+                vtable: None,
+            };
+            let v = self.read(&at)?;
+            let vals = self.pass_value(v, &params[0])?;
+            let span = self.span;
+            return self.emit_call(Run::Direct(id, ret), vals, None, span);
+        }
+        self.glue_fields(addr, ty)
+    }
+
+    /// Drops the fields of the value of type `ty` at `addr`: last to first (a variant's, for an
+    /// enum), an array's and a `Buf`'s elements first to last, and then a `Buf`'s memory.
+    fn glue_fields(&mut self, addr: ir::Value, ty: &Ty) -> Result<(), String> {
+        let l = self.layout(ty)?;
+        match &l.shape {
+            Shape::Fields(fs) => {
+                for (off, t) in fs.iter().rev() {
+                    let a = self.offset(addr, *off);
+                    self.drop_value(a, t)?;
+                }
+            }
+            Shape::Enum { variants, .. } => {
+                let at = PlaceRef {
+                    var: None,
+                    addr: Some(addr),
+                    ty: ty.clone(),
+                    variant: None,
+                    meta: None,
+                    vtable: None,
+                };
+                let d = self.discriminant(&at)?;
+                let join = self.b.create_block();
+                for (v, fs) in variants.iter().enumerate() {
+                    if !fs.iter().any(|(_, t)| self.needs_drop(t)) {
+                        continue;
+                    }
+                    let yes = self.b.create_block();
+                    let no = self.b.create_block();
+                    let is = self.b.ins().icmp_imm_s(IntCC::Equal, d, v as i64);
+                    self.b.ins().brif(is, yes, &[], no, &[]);
+                    self.b.switch_to_block(yes);
+                    for (off, t) in fs.iter().rev() {
+                        let a = self.offset(addr, *off);
+                        self.drop_value(a, t)?;
+                    }
+                    self.b.ins().jump(join, &[]);
+                    self.b.switch_to_block(no);
+                }
+                self.b.ins().jump(join, &[]);
+                self.b.switch_to_block(join);
+            }
+            Shape::Array { elem, stride, len } => {
+                let (elem, stride, len) = (elem.clone(), *stride, *len);
+                let n = self.b.ins().iconst(types::I64, i64::from(len));
+                self.each(addr, n, stride, &elem)?;
+            }
+            Shape::Buf(elem) => {
+                let elem = elem.clone();
+                let flags = ir::MemFlagsData::trusted();
+                let p = self.b.ins().load(types::I64, flags, addr, 0);
+                let n = self.b.ins().load(types::I64, flags, addr, 8);
+                let cap = self.b.ins().load(types::I64, flags, addr, 16);
+                if matches!(elem, Ty::Dyn(..)) {
+                    // A `Box<dyn Trait>`'s: its value is dropped by its vtable's glue.
+                    let vt = self.b.ins().load(types::I64, flags, addr, 24);
+                    let has = self.b.ins().icmp_imm_s(IntCC::NotEqual, n, 0);
+                    let yes = self.b.create_block();
+                    let join = self.b.create_block();
+                    self.b.ins().brif(has, yes, &[], join, &[]);
+                    self.b.switch_to_block(yes);
+                    let glue = self.b.ins().load(types::I64, flags, vt, 8);
+                    let params = vec![Ty::reference(true, Ty::Unit)];
+                    let span = self.span;
+                    self.emit_call(Run::Indirect(glue, params, Ty::Unit), vec![p], None, span)?;
+                    self.b.ins().jump(join, &[]);
+                    self.b.switch_to_block(join);
+                    self.free_dyn(p, vt, Some(cap));
+                } else {
+                    let e = self.layout(&elem)?;
+                    let stride = e.size.div_ceil(e.align) * e.align;
+                    self.each(p, n, stride, &elem)?;
+                    let bytes = self.b.ins().imul_imm_s(cap, i64::from(stride));
+                    let align = self.b.ins().iconst(types::I64, i64::from(e.align));
+                    let f = self
+                        .c
+                        .module
+                        .declare_func_in_func(self.c.rt.free, self.b.func);
+                    self.b.ins().call(f, &[p, bytes, align]);
+                }
+            }
+            Shape::Scalar(_) | Shape::Empty | Shape::Wide => {}
+        }
+        Ok(())
+    }
+
+    /// Frees the memory of a `Buf<dyn Trait>` (of `cap` values, or one) at `p`, by its vtable's
+    /// size and alignment.
+    fn free_dyn(&mut self, p: ir::Value, vt: ir::Value, cap: Option<ir::Value>) {
+        let flags = ir::MemFlagsData::trusted();
+        let size = self.b.ins().load(types::I64, flags, vt, 16);
+        let align = self.b.ins().load(types::I64, flags, vt, 24);
+        let bytes = match cap {
+            Some(c) => self.b.ins().imul(size, c),
+            None => size,
+        };
+        let f = self
+            .c
+            .module
+            .declare_func_in_func(self.c.rt.free, self.b.func);
+        self.b.ins().call(f, &[p, bytes, align]);
+    }
+
+    /// Drops each of the `n` values of type `elem` from `base`, `stride` apart, first to last.
+    fn each(
+        &mut self,
+        base: ir::Value,
+        n: ir::Value,
+        stride: u32,
+        elem: &Ty,
+    ) -> Result<(), String> {
+        if !self.needs_drop(elem) {
+            return Ok(());
+        }
+        let head = self.b.create_block();
+        let body = self.b.create_block();
+        let done = self.b.create_block();
+        self.b.append_block_param(head, types::I64);
+        let zero = self.b.ins().iconst(types::I64, 0);
+        self.b.ins().jump(head, &[ir::BlockArg::Value(zero)]);
+        self.b.switch_to_block(head);
+        let i = self.b.block_params(head)[0];
+        let more = self.b.ins().icmp(IntCC::SignedLessThan, i, n);
+        self.b.ins().brif(more, body, &[], done, &[]);
+        self.b.switch_to_block(body);
+        let off = self.b.ins().imul_imm_s(i, i64::from(stride));
+        let a = self.b.ins().iadd(base, off);
+        self.drop_value(a, elem)?;
+        let next = self.b.ins().iadd_imm_s(i, 1);
+        self.b.ins().jump(head, &[ir::BlockArg::Value(next)]);
+        self.b.switch_to_block(done);
         Ok(())
     }
 
@@ -1957,14 +2765,13 @@ impl Lower<'_, '_, '_> {
         Ok(())
     }
 
-    /// One of the prelude's built-in functions, inline.
+    /// One of the prelude's built-in functions, inline: its result written to `d`.
     fn intrinsic(
         &mut self,
         f: u32,
         targs: &[Ty],
         args: &[Operand],
         d: &PlaceRef,
-        target: moddil_mir::BlockId,
         range: TextRange,
     ) -> Result<(), String> {
         let items = self.c.items;
@@ -2165,6 +2972,7 @@ impl Lower<'_, '_, '_> {
                     ty: d.ty.clone(),
                     variant: None,
                     meta: None,
+                    vtable: None,
                 };
                 // The old value, out first, then the new one in.
                 let old = self.read(&at)?;
@@ -2181,11 +2989,230 @@ impl Lower<'_, '_, '_> {
                 self.write(&at, new)?;
                 old
             }
+            (Ty::Buf(_), _) => return self.buf(name, targs, args, d, range),
+            // The first `len` bytes, which are UTF-8, as text (`text.string.inline.1`).
+            (Ty::Str, "view") => {
+                let Val::Mem(w) = self.operand(&args[0])? else {
+                    return unsupported();
+                };
+                let p = self.b.ins().load(types::I64, flags, w, 0);
+                let n = self.value(&args[1])?;
+                Val::Mem(self.wide(p, n))
+            }
             _ => return unsupported(),
         };
-        self.write(d, out)?;
-        let b = self.block(target.index())?;
-        self.b.ins().jump(b, &[]);
-        Ok(())
+        self.write(d, out)
+    }
+
+    /// A `Buf`'s built-in function (`text.string.inline.1`'s storage): its address, length and
+    /// capacity, from a borrow of it.
+    fn buf(
+        &mut self,
+        name: &str,
+        targs: &[Ty],
+        args: &[Operand],
+        d: &PlaceRef,
+        range: TextRange,
+    ) -> Result<(), String> {
+        let flags = ir::MemFlagsData::trusted();
+        let elem = targs.first().cloned().ok_or("a `Buf` without its type")?;
+        if matches!(elem, Ty::Dyn(..)) && !matches!(name, "len" | "as_slice" | "as_mut_slice") {
+            return Err(format!("`Buf<{elem}>::{name}`"));
+        }
+        let (stride, align) = if let Ty::Dyn(..) = elem {
+            (0, 8)
+        } else {
+            let e = self.layout(&elem)?;
+            (e.size.div_ceil(e.align) * e.align, e.align)
+        };
+        let stride_v = |lw: &mut Self| lw.b.ins().iconst(types::I64, i64::from(stride));
+        let elem_at = |lw: &mut Self, p: ir::Value, i: ir::Value| {
+            let off = lw.b.ins().imul_imm_s(i, i64::from(stride));
+            lw.b.ins().iadd(p, off)
+        };
+        // The new `Buf` itself, for the two that make one.
+        if name == "with_capacity" || name == "from_array" {
+            let a = self.addr_of(d)?;
+            let (n, len, src) = if name == "with_capacity" {
+                let n = self.value(&args[0])?;
+                let zero = self.b.ins().iconst(types::I64, 0);
+                let neg = self.b.ins().icmp(IntCC::SignedLessThan, n, zero);
+                let n = self.b.ins().select(neg, zero, n);
+                (n, zero, None)
+            } else {
+                let Ty::Array(_, k) = self.operand_ty(&args[0])? else {
+                    return Err("`from_array` of a value that is not an array".to_string());
+                };
+                let Ty::Len(k) = *k else {
+                    return Err("an array of unknown length".to_string());
+                };
+                let n = self.b.ins().iconst(types::I64, k);
+                (n, n, Some(self.operand(&args[0])?))
+            };
+            let bytes = self.b.ins().imul_imm_s(n, i64::from(stride));
+            let al = self.b.ins().iconst(types::I64, i64::from(align));
+            let p = self.rt_call(self.c.rt.alloc, &[bytes, al]);
+            if let Some(Val::Mem(src)) = src {
+                let f = self
+                    .c
+                    .module
+                    .declare_func_in_func(self.c.rt.memmove, self.b.func);
+                self.b.ins().call(f, &[p, src, bytes]);
+            }
+            self.b.ins().store(flags, p, a, 0);
+            self.b.ins().store(flags, len, a, 8);
+            self.b.ins().store(flags, n, a, 16);
+            return Ok(());
+        }
+        // The others take the `Buf` by borrow.
+        let Val::Scalar(b) = self.operand(&args[0])? else {
+            return Err("a `Buf` not by borrow".to_string());
+        };
+        let p = self.b.ins().load(types::I64, flags, b, 0);
+        let n = self.b.ins().load(types::I64, flags, b, 8);
+        let cap = self.b.ins().load(types::I64, flags, b, 16);
+        let out = match name {
+            "len" => Val::Scalar(n),
+            "capacity" => Val::Scalar(cap),
+            "as_slice" | "as_mut_slice" => {
+                let w = self.wide(p, n);
+                if let Ty::Dyn(..) = elem {
+                    // A `[dyn Trait]`: its vtable too.
+                    let l = Layout {
+                        size: 24,
+                        align: 8,
+                        shape: Shape::Wide,
+                        niche: None,
+                    };
+                    let w3 = self.slot(&l);
+                    self.copy(w3, w, 16);
+                    let vt = self.b.ins().load(types::I64, flags, b, 24);
+                    self.b.ins().store(flags, vt, w3, 16);
+                    Val::Mem(w3)
+                } else {
+                    Val::Mem(w)
+                }
+            }
+            "set_capacity" => {
+                let c = self.value(&args[1])?;
+                let small = self.b.ins().icmp(IntCC::SignedLessThan, c, n);
+                let c = self.b.ins().select(small, n, c);
+                let s = stride_v(self);
+                let old = self.b.ins().imul(cap, s);
+                let new = self.b.ins().imul(c, s);
+                let al = self.b.ins().iconst(types::I64, i64::from(align));
+                let q = self.rt_call(self.c.rt.realloc, &[p, old, new, al]);
+                self.b.ins().store(flags, q, b, 0);
+                self.b.ins().store(flags, c, b, 16);
+                Val::Unit
+            }
+            "push" | "insert" => {
+                let room = self.b.ins().icmp(IntCC::SignedLessThan, n, cap);
+                self.check(room, TrapClass::CapacityExceeded, range)?;
+                let (i, x) = if name == "push" {
+                    (n, &args[1])
+                } else {
+                    let i = self.value(&args[1])?;
+                    let ok = self.b.ins().icmp(IntCC::UnsignedLessThanOrEqual, i, n);
+                    self.check(ok, TrapClass::IndexOutOfBounds, range)?;
+                    // Those from `i` on, one along.
+                    let from = elem_at(self, p, i);
+                    let to = self.b.ins().iadd_imm_s(from, i64::from(stride));
+                    let k = self.b.ins().isub(n, i);
+                    let bytes = self.b.ins().imul_imm_s(k, i64::from(stride));
+                    let f = self
+                        .c
+                        .module
+                        .declare_func_in_func(self.c.rt.memmove, self.b.func);
+                    self.b.ins().call(f, &[to, from, bytes]);
+                    (i, &args[2])
+                };
+                let at = elem_at(self, p, i);
+                let v = self.operand(x)?;
+                let place = PlaceRef {
+                    var: None,
+                    addr: Some(at),
+                    ty: elem.clone(),
+                    variant: None,
+                    meta: None,
+                    vtable: None,
+                };
+                self.write(&place, v)?;
+                let n1 = self.b.ins().iadd_imm_s(n, 1);
+                self.b.ins().store(flags, n1, b, 8);
+                Val::Unit
+            }
+            "pop" => {
+                // An `Option<T>`: `None`, or `Some` of the last element, moved out.
+                let l = self.layout(&d.ty)?;
+                let Shape::Enum { tag, variants } = &l.shape else {
+                    return Err(format!("`pop` into a `{}`", d.ty));
+                };
+                let (tag, payload) = (tag.clone(), variants[1][0].0);
+                let a = self.addr_of(d)?;
+                let empty = self.b.ins().icmp_imm_s(IntCC::Equal, n, 0);
+                let none = self.b.create_block();
+                let some = self.b.create_block();
+                let join = self.b.create_block();
+                self.b.ins().brif(empty, none, &[], some, &[]);
+                self.b.switch_to_block(none);
+                self.set_variant(a, &tag, 0);
+                self.b.ins().jump(join, &[]);
+                self.b.switch_to_block(some);
+                let last = self.b.ins().iadd_imm_s(n, -1);
+                let at = elem_at(self, p, last);
+                let to = self.offset(a, payload);
+                self.copy(to, at, stride);
+                self.set_variant(a, &tag, 1);
+                self.b.ins().store(flags, last, b, 8);
+                self.b.ins().jump(join, &[]);
+                self.b.switch_to_block(join);
+                return Ok(());
+            }
+            "remove" => {
+                let i = self.value(&args[1])?;
+                let ok = self.b.ins().icmp(IntCC::UnsignedLessThan, i, n);
+                self.check(ok, TrapClass::IndexOutOfBounds, range)?;
+                let at = elem_at(self, p, i);
+                let v = self.take_at(at, &elem)?;
+                self.write(d, v)?;
+                // Those after it, one back.
+                let from = self.b.ins().iadd_imm_s(at, i64::from(stride));
+                let k = self.b.ins().isub(n, i);
+                let k = self.b.ins().iadd_imm_s(k, -1);
+                let bytes = self.b.ins().imul_imm_s(k, i64::from(stride));
+                let f = self
+                    .c
+                    .module
+                    .declare_func_in_func(self.c.rt.memmove, self.b.func);
+                self.b.ins().call(f, &[at, from, bytes]);
+                let n1 = self.b.ins().iadd_imm_s(n, -1);
+                self.b.ins().store(flags, n1, b, 8);
+                return Ok(());
+            }
+            "swap" => {
+                let i = self.value(&args[1])?;
+                let j = self.value(&args[2])?;
+                let ok = self.b.ins().icmp(IntCC::UnsignedLessThan, i, n);
+                self.check(ok, TrapClass::IndexOutOfBounds, range)?;
+                let ok = self.b.ins().icmp(IntCC::UnsignedLessThan, j, n);
+                self.check(ok, TrapClass::IndexOutOfBounds, range)?;
+                let x = elem_at(self, p, i);
+                let y = elem_at(self, p, j);
+                let e = self.layout(&elem)?;
+                let tmp = self.slot(&e);
+                self.copy(tmp, x, stride);
+                let f = self
+                    .c
+                    .module
+                    .declare_func_in_func(self.c.rt.memmove, self.b.func);
+                let sz = stride_v(self);
+                self.b.ins().call(f, &[x, y, sz]);
+                self.copy(y, tmp, stride);
+                Val::Unit
+            }
+            _ => return Err(format!("`Buf::{name}`")),
+        };
+        self.write(d, out)
     }
 }

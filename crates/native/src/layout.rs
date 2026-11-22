@@ -10,6 +10,7 @@
 //!   U+10FFFF, a borrow's 0, an enum tag's unused values), so the other variants are stored as
 //!   those values and no tag is needed (`Option<&T>` is a pointer). Otherwise a tag, the smallest
 //!   integer that numbers the variants, comes first, then the largest payload.
+//! - **`Buf<T>`** is its memory's address, length and capacity; a closure is its captures.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -47,8 +48,11 @@ pub(crate) enum Shape {
     /// A scalar (a pointer included) of this Cranelift type.
     Scalar(ir::Type),
     /// A borrow of an unsized value: its address, then its length (`str`, `[T]`) or its
-    /// vtable (`dyn Trait`), two words.
+    /// vtable (`dyn Trait`), two words; a `&[dyn Trait]` has its length, then its vtable.
     Wide,
+    /// A `Buf<T>`: its memory's address, its length and its capacity, three words; a
+    /// `Buf<dyn Trait>` (a `Box<dyn Trait>`'s) has its vtable last, a fourth.
+    Buf(Ty),
     /// No bytes: `()`, `!`, a struct without fields.
     Empty,
     /// A tuple's or a struct's fields: each one's offset and type, by declared index.
@@ -106,8 +110,9 @@ impl<'a> Layouts<'a> {
             Ty::Unit | Ty::Never => Ok(empty()),
             Ty::Ref(_, inner) => {
                 if matches!(**inner, Ty::Str | Ty::Slice(_) | Ty::Dyn(..)) {
+                    let dyn_slice = matches!(&**inner, Ty::Slice(e) if matches!(**e, Ty::Dyn(..)));
                     return Ok(Layout {
-                        size: 16,
+                        size: if dyn_slice { 24 } else { 16 },
                         align: 8,
                         shape: Shape::Wide,
                         // The address is never null.
@@ -127,6 +132,24 @@ impl<'a> Layouts<'a> {
                 Some((0x11_0000, 0xFFFF_FFFF - 0x11_0000 + 1)),
             )),
             Ty::Tuple(ts) => self.fields(ts),
+            // A closure is its captures.
+            Ty::Closure(c) => self.fields(&c.captures),
+            Ty::Buf(elem) => Ok(Layout {
+                size: if matches!(**elem, Ty::Dyn(..)) {
+                    32
+                } else {
+                    24
+                },
+                align: 8,
+                shape: Shape::Buf((**elem).clone()),
+                // The address is never null.
+                niche: Some(Niche {
+                    offset: 0,
+                    ty: types::I64,
+                    first: 0,
+                    count: 1,
+                }),
+            }),
             Ty::Array(elem, n) => {
                 let Ty::Len(n) = **n else {
                     return Err(format!("an array of length `{n}`"));
@@ -150,9 +173,6 @@ impl<'a> Layouts<'a> {
                 if def.is_enum {
                     self.enumeration(ty, def.variants.len() as u32)
                 } else {
-                    if self.items.has_drop_impl(*a) {
-                        return Err(format!("`{}`, which has a destructor", def.name));
-                    }
                     let ts = self.items.field_types(ty, 0);
                     self.fields(&ts)
                 }

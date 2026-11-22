@@ -209,6 +209,13 @@ impl Implementation for Native {
                 Err(moddil_native::Native::Trap(_, file, range)) => {
                     outcome.traps.insert(line_of(project, file, range.start));
                 }
+                // A leak is a disagreement: no interpreter observes one.
+                Err(moddil_native::Native::Leak(n)) => {
+                    outcome.observed.push((
+                        line_of(project, 0, 0),
+                        format!("native code leaked {n} allocations"),
+                    ));
+                }
                 Err(moddil_native::Native::Unsupported(why)) => {
                     // `MODDIL_NATIVE_WHY=1` says what keeps each file from running natively.
                     if std::env::var_os("MODDIL_NATIVE_WHY").is_some() {

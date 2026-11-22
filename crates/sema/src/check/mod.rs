@@ -528,6 +528,10 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
     cx.finish();
     if let Some(h) = hidden {
         let t = finish::erase(&cx.solver.deep(&h));
+        // A closure it gives, as closure analysis completed it (with what it captures). What a
+        // returned closure borrows is the borrow checker's to report (E0802), so the check
+        // below looks at the type as inferred.
+        let done = completed_closures(&t, &cx.out.expr_types, cx.owner);
         let at = ret_range.unwrap_or_default();
         if t.has_infer() || t == Ty::Error {
             if cx.out.diagnostics.is_empty() {
@@ -543,9 +547,21 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
                 "an `impl Trait` result whose type holds a borrow or a closure",
             ));
         }
-        cx.out.hidden = Some(t);
+        cx.out.hidden = Some(done);
     }
     cx.out
+}
+
+/// `t` with each closure of `owner`'s body as the body's types record it: completed, with what
+/// it captures (the type a result was inferred with predates that).
+fn completed_closures(t: &Ty, expr_types: &[Ty], owner: Item) -> Ty {
+    match t {
+        Ty::Closure(c) if c.owner == owner => match expr_types.get(c.expr as usize) {
+            Some(done @ Ty::Closure(_)) => done.clone(),
+            _ => t.clone(),
+        },
+        t => t.map(&mut |x| completed_closures(x, expr_types, owner)),
+    }
 }
 
 /// The closure `e` gives as its value, through blocks, if it does.

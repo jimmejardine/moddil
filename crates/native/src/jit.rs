@@ -45,13 +45,15 @@ impl Compiled<'_> {
     /// and its result as Moddil source, or the trap.
     pub(crate) fn run(self) -> (Vec<Observed>, Result<String, Native>) {
         let ptr = self.module.get_finalized_function(self.entry) as usize;
+        let drop_ptr = self.module.get_finalized_function(self.drop_result) as usize;
         let (sites, items, ret) = (&self.sites, self.items, &self.ret);
         let dyn_types = &self.dyn_types;
-        let (status, text, observed, record) = std::thread::scope(|s| {
+        let (status, text, observed, record, leaked) = std::thread::scope(|s| {
             std::thread::Builder::new()
                 .stack_size(STACK)
                 .spawn_scoped(s, move || {
                     moddil_rt::take();
+                    let live = moddil_rt::live();
                     let mut seen = Seen {
                         sites,
                         show: Show {
@@ -77,13 +79,28 @@ impl Compiled<'_> {
                         // SAFETY: the run returned, so `out` holds a value of type `ret`.
                         unsafe { seen.show.render(ret, out.as_ptr().cast()) }
                     });
-                    (status, text, seen.observed, moddil_rt::take())
+                    // Once shown, the result is dropped; then a run that returned has freed
+                    // everything it allocated.
+                    let mut leaked = 0;
+                    let mut status = status;
+                    if status == 0 {
+                        // SAFETY: `drop_ptr` is the finished `drop_result`, of the same
+                        // signature as the entry, and `out` holds the result it drops.
+                        let drop: extern "C" fn(*mut u8) -> i8 =
+                            unsafe { std::mem::transmute::<usize, _>(drop_ptr) };
+                        status = drop(out.as_mut_ptr().cast());
+                        if status == 0 {
+                            leaked = moddil_rt::live() - live;
+                        }
+                    }
+                    (status, text, seen.observed, moddil_rt::take(), leaked)
                 })
                 .expect("a thread to run on")
                 .join()
                 .expect("native code does not panic")
         });
         let result = match text {
+            Some(_) if status == 0 && leaked != 0 => Err(Native::Leak(leaked)),
             Some(t) if status == 0 => Ok(t),
             _ => match record.trap {
                 Some(t) => Ok(self.reported(&t)).and_then(Err),
@@ -216,6 +233,32 @@ impl Show<'_> {
                     .collect();
                 format!("[{}]", xs.join(", "))
             }
+            Ty::Buf(elem) => {
+                let q = unsafe { bits_at(p, 8) } as usize as *const u8;
+                let n = unsafe { bits_at(p.add(8), 8) } as u32;
+                let stride = self
+                    .layouts
+                    .of(elem)
+                    .map_or(0, |l| l.size.div_ceil(l.align) * l.align);
+                let xs: Vec<String> = (0..n)
+                    .map(|k| unsafe { self.render(elem, q.add((k * stride) as usize)) })
+                    .collect();
+                format!("[{}]", xs.join(", "))
+            }
+            // A `String` is shown as its text, in quotes; a `Vec` as the literal that makes one.
+            Ty::Adt(a, ..)
+                if items.adts[*a as usize].src == moddil_sema::Src::Prelude
+                    && matches!(items.adts[*a as usize].name.as_str(), "String" | "Vec") =>
+            {
+                let Shape::Fields(fs) = &l.shape else {
+                    return format!("<{ty}>");
+                };
+                let (off, inner) = fs[0].clone();
+                if items.adts[*a as usize].name == "Vec" {
+                    return unsafe { self.render(&inner, field(off)) };
+                }
+                unsafe { self.string_text(&inner, field(off)) }
+            }
             Ty::Adt(a, ..) => {
                 let (variant, fields) = match &l.shape {
                     Shape::Fields(fs) => (0, fs.clone()),
@@ -248,6 +291,38 @@ impl Show<'_> {
             }
             t => format!("<{t}>"),
         }
+    }
+}
+
+impl Show<'_> {
+    /// A `String`'s text, in quotes, from its `StringRepr` (of type `repr`) at `p`: inline bytes
+    /// and their count, or a `Buf<u8>`.
+    ///
+    /// # Safety
+    ///
+    /// `p` points to a live `StringRepr`.
+    unsafe fn string_text(&mut self, repr: &Ty, p: *const u8) -> String {
+        let Ok(l) = self.layouts.of(repr) else {
+            return "<String>".to_string();
+        };
+        let Shape::Enum { tag, variants } = &l.shape else {
+            return "<String>".to_string();
+        };
+        let v = unsafe { variant_at(tag, variants.len() as u32, p) };
+        let fs = &variants[v as usize];
+        let (bytes, n) = if fs.len() == 2 {
+            // `Inline([u8; 23], u8)`.
+            let n = unsafe { bits_at(p.add(fs[1].0 as usize), 1) } as usize;
+            (unsafe { p.add(fs[0].0 as usize) }, n)
+        } else {
+            // `Heap(Buf<u8>)`.
+            let b = unsafe { p.add(fs[0].0 as usize) };
+            let q = unsafe { bits_at(b, 8) } as usize as *const u8;
+            (q, unsafe { bits_at(b.add(8), 8) } as usize)
+        };
+        // SAFETY: a `String` holds `n` bytes of UTF-8 there.
+        let text = unsafe { std::slice::from_raw_parts(bytes, n) };
+        format!("{:?}", String::from_utf8_lossy(text))
     }
 }
 

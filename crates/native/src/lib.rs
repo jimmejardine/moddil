@@ -20,6 +20,8 @@ pub enum Native {
     Unsupported(String),
     /// A check failed: its class, and where (the file, by index, and its source).
     Trap(TrapClass, u32, TextRange),
+    /// A run that returned left this many allocations unfreed: a bug in the backend's drops.
+    Leak(i64),
 }
 
 /// An observed `// =>` value: the file, the expression and its value as Moddil source.

@@ -673,13 +673,19 @@ impl<'a> Solver<'a> {
             | Ty::Char
             | Ty::Str
             | Ty::Len(_) => false,
-            Ty::Array(t, _) | Ty::Slice(t) | Ty::Buf(t) => self.needs_drop_inner(t, depth + 1),
+            Ty::Array(t, _) | Ty::Slice(t) => self.needs_drop_inner(t, depth + 1),
             Ty::Refined(..) => {
                 let base = self.tree.base(ty);
                 self.needs_drop_inner(&base, depth + 1)
             }
             // A `dyn` value is owned only by a `Box`, and may be of any type (`type.box.dyn.1`).
-            Ty::Param(..) | Ty::Opaque(_) | Ty::Assoc(_) | Ty::Infer(_) | Ty::Dyn(..) => true,
+            // A `Buf` owns its memory, which native code frees when it is dropped.
+            Ty::Param(..)
+            | Ty::Opaque(_)
+            | Ty::Assoc(_)
+            | Ty::Infer(_)
+            | Ty::Dyn(..)
+            | Ty::Buf(_) => true,
             Ty::Errors(ts) => ts.iter().any(|t| self.needs_drop_inner(t, depth + 1)),
             Ty::Closure(c) => c
                 .captures

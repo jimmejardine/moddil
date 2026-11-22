@@ -653,8 +653,39 @@ calls is a Rust crate, `moddil-rt`, for now.
     - no heap: `Buf`, so `Vec`, `String` and `Box`;
     - no closures, destructors, or errors through the status channel;
     - no number conversions (`checked_to` and the others), and no `const` items.
-- **Next, C3:** the heap (`Buf` in `moddil-rt`, so `Vec`, `String` and `Box`), then drops, then
-  closures, then errors through the status channel.
+- **Slice C3 (decided November 2026): the heap, drops and closures.**
+  - **The heap:** `moddil-rt` allocates over Rust's global allocator and counts the live
+    allocations.
+    - A `Buf<T>` is an address, a length and a capacity. Its built-ins are compiled inline, so
+      `Vec`, `String` and `Box`, written in Moddil over it, run natively.
+    - `Box<T>` as `Box<dyn Trait>` gives its `Buf` the vtable.
+  - **Drops:**
+    - each type that needs dropping has drop glue: its `Drop` impl, else its fields last to
+      first, a `Buf`'s elements first to last and then its memory;
+    - drop flags, per local and per part moved out of, keep a moved value from being dropped
+      where it was.
+    - The MIR now drops a `Buf` (so whatever owns one) even without a `Drop` impl inside, so
+      native code can free it; for the interpreters such a drop does nothing.
+  - **Closures:**
+    - a closure is its captures;
+    - `call`, `call_mut` and `call_once` run its body, which takes the captures by pointer, so a
+      closure called through a borrow changes in place;
+    - `&dyn Fn…`, `Box<dyn Fn…>` and `Box<dyn FnOnce…>` call through vtables, whose header gives
+      the type's drop glue, size and alignment;
+    - a call's error edge whose error is `!` is left out.
+  - **A fix in sema:** an `impl Fn…` result's hidden type is the closure as closure analysis
+    completes it, with its captures. Before, it had none.
+  - **Leak checks:** a native run that returns must end with nothing allocated, after its
+    result is dropped. The conformance runner reports a leak as a disagreement.
+  - **Checking:** 79 conformance files run natively (from 64), with no leaks.
+  - **Interim limits:**
+    - no errors through the status channel (`fail`, `?`, `try`);
+    - no number conversions, `text`, the log, or `const` items;
+    - no concurrency;
+    - no anonymous impls;
+    - converting a `dyn` borrow to a supertrait that is not its first.
+- **Next, C4:** errors through the status channel (`fail`, `?`, `try` and `catch`), then the
+  number conversions and `text`, then `const` items.
 
 ## Staging: distributed programs
 

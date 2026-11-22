@@ -229,6 +229,85 @@ pub extern "C" fn char_is(which: u32, c: u32) -> u8 {
     })
 }
 
+thread_local! {
+    /// How many allocations are live.
+    static LIVE: Cell<i64> = const { Cell::new(0) };
+}
+
+/// How many allocations made with [`alloc`] are not yet freed, on this thread.
+pub fn live() -> i64 {
+    LIVE.with(Cell::get)
+}
+
+fn layout(size: u64, align: u64) -> std::alloc::Layout {
+    std::alloc::Layout::from_size_align(size as usize, align.max(1) as usize)
+        .expect("a layout the backend computed")
+}
+
+/// `size` bytes aligned to `align`: a `Buf`'s memory. Nothing (a dangling, aligned address) for
+/// no bytes.
+pub extern "C" fn alloc(size: u64, align: u64) -> *mut u8 {
+    if size == 0 {
+        return std::ptr::without_provenance_mut(align.max(1) as usize);
+    }
+    LIVE.with(|l| l.set(l.get() + 1));
+    let l = layout(size, align);
+    #[allow(unsafe_code)]
+    // SAFETY: `l` has a size other than zero.
+    let p = unsafe { std::alloc::alloc(l) };
+    if p.is_null() {
+        std::alloc::handle_alloc_error(l);
+    }
+    p
+}
+
+/// Frees memory [`alloc`] gave, of `size` bytes aligned to `align`.
+///
+/// # Safety
+///
+/// `ptr` is what [`alloc`] (or [`realloc`]) gave for that size and alignment, not yet freed.
+#[allow(unsafe_code)]
+pub unsafe extern "C" fn free(ptr: *mut u8, size: u64, align: u64) {
+    if size == 0 {
+        return;
+    }
+    LIVE.with(|l| l.set(l.get() - 1));
+    // SAFETY: as the caller says.
+    unsafe {
+        std::alloc::dealloc(ptr, layout(size, align));
+    }
+}
+
+/// Moves memory [`alloc`] gave (`old` bytes) to memory of `new` bytes, keeping what fits.
+///
+/// # Safety
+///
+/// As [`free`]'s, for `ptr` of `old` bytes.
+#[allow(unsafe_code)]
+pub unsafe extern "C" fn realloc(ptr: *mut u8, old: u64, new: u64, align: u64) -> *mut u8 {
+    let q = alloc(new, align);
+    // SAFETY: `ptr` holds `old` bytes and `q` room for `new`; they do not overlap. Then `ptr`
+    // is freed as the caller says it may be.
+    unsafe {
+        std::ptr::copy_nonoverlapping(ptr, q, old.min(new) as usize);
+        free(ptr, old, align);
+    }
+    q
+}
+
+/// Copies `n` bytes from `src` to `dst`, which may overlap.
+///
+/// # Safety
+///
+/// `src` has `n` readable bytes and `dst` `n` writable ones.
+#[allow(unsafe_code)]
+pub unsafe extern "C" fn memmove(dst: *mut u8, src: *const u8, n: u64) {
+    // SAFETY: as the caller says.
+    unsafe {
+        std::ptr::copy(src, dst, n as usize);
+    }
+}
+
 /// Takes what this thread's runs have recorded since the last time, leaving it as a new run's.
 pub fn take() -> Record {
     RECORD.with(|r| std::mem::take(&mut *r.borrow_mut()))
@@ -283,6 +362,22 @@ mod tests {
         leave();
         assert_eq!(enter(0, 0), 0);
         assert_eq!(take().trap.map(|t| t.site), Some(9));
+    }
+
+    #[test]
+    fn allocations_are_counted() {
+        let before = live();
+        let p = alloc(16, 8);
+        #[allow(unsafe_code)]
+        // SAFETY: each pointer is freed once, with the size it was given for.
+        unsafe {
+            let q = realloc(p, 16, 32, 8);
+            assert_eq!(live(), before + 1);
+            free(q, 32, 8);
+            let z = alloc(0, 8);
+            free(z, 0, 8);
+        }
+        assert_eq!(live(), before);
     }
 
     #[test]

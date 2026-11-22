@@ -197,6 +197,10 @@ fn run_native(db: &Database, program: Program, files: &[(String, String)], name:
             eprintln!("moddil: not supported natively yet: {what}");
             ExitCode::FAILURE
         }
+        Err(moddil_native::Native::Leak(n)) => {
+            eprintln!("moddil: native code leaked {n} allocations (a bug in the backend)");
+            ExitCode::FAILURE
+        }
     }
 }
 
@@ -222,6 +226,10 @@ fn test_native(db: &Database, program: Program, files: &[(String, String)]) -> E
             Err(moddil_native::Native::Unsupported(what)) => {
                 unsupported += 1;
                 println!("test \"{}\" ... not supported natively yet: {what}", t.name);
+            }
+            Err(moddil_native::Native::Leak(n)) => {
+                failed += 1;
+                println!("test \"{}\" ... leaked {n} allocations natively", t.name);
             }
         }
     }

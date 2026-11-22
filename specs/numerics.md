@@ -192,6 +192,12 @@ let notional = (price * qty).rescale::<2>(Round::HalfEven);  // Fixed<2>[USD]
   borrow's null, an enum tag's unused values. So `Option<&T>` is a pointer and `Option<bool>` a
   byte. Other enums put a tag, the smallest integer that numbers the variants, before the
   largest variant's payload (decided November 2026, M1 slice C1).
+- **Borrows of unsized values** are two words: the address, then a `str`'s or slice's length, or
+  a `dyn` value's vtable. A `&[dyn Trait]` is three: the address, the length, the vtable
+  (decided November 2026, M1 slices C2 and C3).
+- **`Buf<T>`** is three words: its memory's address, its length and its capacity. A
+  `Buf<dyn Trait>`, a `Box<dyn Trait>`'s, has its vtable as a fourth. A closure is laid out as
+  the tuple of what it captures (decided November 2026, M1 slice C3).
 - **Packed structs and bitfields** with arbitrary-width integers
   ([`freestanding.md`: Hardware access](freestanding.md#hardware-access)).
 - **Endian types** `u16be`, `u32le` and so on, for wire formats and zero-copy views over network

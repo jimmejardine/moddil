@@ -25,6 +25,14 @@ fn trap(text: &str) -> TrapClass {
     }
 }
 
+/// The line (from 0) of `text` a trap is at.
+fn trap_line(text: &str) -> usize {
+    match run(text) {
+        Err(Native::Trap(_, _, range)) => text[..range.start as usize].matches('\n').count(),
+        other => panic!("expected a trap, got {other:?}"),
+    }
+}
+
 #[test]
 fn version_has_three_parts() {
     assert_eq!(VERSION.split('.').count(), 3);
@@ -113,7 +121,7 @@ fn loops() {
 #[test]
 fn what_is_not_compiled_yet_says_so() {
     assert!(matches!(
-        run("fn main() -> int { let v = Vec::from_array([1, 2]); v.len() }"),
+        run("fn main() -> Option<i8> { 300.checked_to::<i8>() }"),
         Err(Native::Unsupported(_))
     ));
 }
@@ -332,4 +340,110 @@ fn slices_and_text() {
 fn float_functions() {
     assert_eq!(value("fn main() -> f64 { 9.0.sqrt() }"), "3.0");
     assert_eq!(value("fn main() -> bool { (0.0 / 0.0).is_nan() }"), "true");
+}
+
+#[test]
+fn vectors_strings_and_boxes() {
+    assert_eq!(
+        value(
+            "fn main() -> Vec<int> { let mut v = Vec::new(); let mut i = 0; while i < 50 { v.push(i); i += 1; } v.pop(); v.remove(0); v.insert(0, 100); let mut w = Vec::new(); w.push(v.len()); w.push(v[0]); w }"
+        ),
+        "[49, 100]"
+    );
+    assert_eq!(
+        value(
+            r#"fn main() -> Vec<String> { let mut v = Vec::new(); v.push("a".to_string()); v.push(String::from_str("a string long enough for the heap")); v }"#
+        ),
+        r#"["a", "a string long enough for the heap"]"#
+    );
+    assert_eq!(
+        value("fn main() -> int { let b = Box::new(41); *b + 1 }"),
+        "42"
+    );
+    assert_eq!(
+        value("trait Shape { fn area(&self) -> int; }  struct Sq { s: int }  impl Shape for Sq { fn area(&self) -> int { self.s * self.s } }
+               fn main() -> int { let b: Box<dyn Shape> = Box::new(Sq { s: 3 }); let mut v = Vec::new(); v.push(b); v[0].area() }"),
+        "9"
+    );
+    assert_eq!(
+        trap("fn main() -> int { let mut v = Vec::from_array([1]); v.remove(1) }"),
+        TrapClass::IndexOutOfBounds
+    );
+}
+
+#[test]
+fn drops_run_in_order_and_once() {
+    // Each destructor traps when armed: which line traps says which value was dropped first.
+    let guards =
+        "struct A { armed: bool }  impl Drop for A { fn drop(self) { assert(!self.armed); } }
+        struct B { armed: bool }  impl Drop for B { fn drop(self) { assert(!self.armed); } }";
+    // The last declared first.
+    assert_eq!(
+        trap_line(&format!(
+            "{guards}
+fn main() {{ let a = A {{ armed: true }}; let b = B {{ armed: true }}; }}"
+        )),
+        1
+    );
+    // A moved value is dropped where it goes, once.
+    assert_eq!(
+        value(&format!("{guards}
+fn keep(a: A) -> A {{ a }}  fn main() -> int {{ let a = A {{ armed: false }}; let b = keep(a); let c = b; 3 }}")),
+        "3"
+    );
+    // A part moved out of is not dropped with the rest.
+    assert_eq!(
+        trap_line(&format!("{guards}
+struct P {{ a: A, b: B }}  fn main() {{ let p = P {{ a: A {{ armed: false }}, b: B {{ armed: true }} }}; let a = p.a; }}")),
+        1
+    );
+}
+
+#[test]
+fn closures_called_every_way() {
+    assert_eq!(
+        value(
+            "fn apply<F: Fn(int) -> int>(f: F, x: int) -> int { f(x) }  fn main() -> int { let k = 10; apply(|x| x + k, 5) }"
+        ),
+        "15"
+    );
+    assert_eq!(
+        value(
+            "fn main() -> int { let mut n = 0; let mut inc = |by: int| { n += by; }; inc(2); inc(3); n }"
+        ),
+        "5"
+    );
+    assert_eq!(
+        value(
+            "fn main() -> int { let v = Vec::from_array([1, 2, 3]); let f = || { let w = v; w.len() }; f() }"
+        ),
+        "3"
+    );
+    assert_eq!(
+        value(
+            "fn counter() -> impl FnMut() -> int { let mut n = 0; || { n += 1; n } }  fn main() -> int { let mut c = counter(); c(); c() }"
+        ),
+        "2"
+    );
+    assert_eq!(
+        value(
+            "fn main() -> int { let f: Box<dyn Fn(int) -> int> = Box::new(|x| x * 3); let g: Box<dyn FnOnce() -> int> = Box::new(|| 7); f(4) + g() }"
+        ),
+        "19"
+    );
+}
+
+#[test]
+fn everything_allocated_is_freed() {
+    // Values that own memory, moved about and dropped: a leak would be `Native::Leak`.
+    assert!(run("fn main() -> int {
+            let mut v = Vec::new();
+            let mut i = 0;
+            while i < 20 { v.push(String::from_str(\"a string long enough for the heap\")); i += 1; }
+            let w = v;
+            let b = Box::new(w);
+            let f = || { let x = b; x.len() };
+            f()
+        }")
+    .is_ok());
 }
