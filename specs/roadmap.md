@@ -199,7 +199,7 @@ something runs from the first slice.
     the fix, it saved only 14%, and then a broken prelude would show only in
     `the_prelude_and_its_derives_check_cleanly`, which does not borrow-check it. Revisit it
     only if the prelude's bodies become a large share of a check again.
-- **Sweep the conformance suite's shortcomings: a step for between slices.** A review of all 181
+- **Sweep the conformance suite's shortcomings: in progress in a session of its own (November 2026), so not a slice's step.** A review of all 181
   tests ([`conformance/REVIEW.md`](../conformance/REVIEW.md), November 2026) found:
   - tests that skip the rule they cite (`closures/fails-bound`'s `serve` never calls `f`);
   - results that cannot tell implementations apart (lengths and sums where the whole value
