@@ -151,8 +151,17 @@ impl<'a> Layouts<'a> {
                     niche: None,
                 })
             }
-            // A closure is its captures.
+            // A closure is its captures; an anonymous impl, its methods' closures.
             Ty::Closure(c) => self.fields(&c.captures),
+            Ty::Anon(a) => {
+                let ts: Vec<Ty> = a.methods.iter().map(|(_, t)| t.clone()).collect();
+                self.fields(&ts)
+            }
+            // A refined type is its base.
+            Ty::Refined(..) => {
+                let base = self.items.base(ty);
+                self.compute(&base)
+            }
             Ty::Buf(elem) => Ok(Layout {
                 size: if matches!(**elem, Ty::Dyn(..)) {
                     32

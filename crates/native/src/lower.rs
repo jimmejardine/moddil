@@ -70,6 +70,8 @@ pub(crate) struct Compiled<'db> {
     pub(crate) dyn_types: Vec<Ty>,
     /// The types of the errors the entry can fail with.
     pub(crate) errors: Vec<Ty>,
+    /// The program's files: each one's path and text.
+    pub(crate) files: Vec<(String, String)>,
 }
 
 /// The Cranelift type of a scalar `ty`: `None` for `()`, an error for a type that is not a
@@ -192,6 +194,54 @@ struct Rt {
     convert: FuncId,
     text: FuncId,
     log: FuncId,
+    trapped: FuncId,
+    task: HashMap<&'static str, FuncId>,
+}
+
+/// The runtime's task functions: each one's name, parameters and result.
+const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
+    ("scope_open", &['b'], Some('w')),
+    ("spawn", &['w', 'p'], Some('w')),
+    ("scope_run", &['w', 'p', 'p', 'p', 's', 'b'], Some('b')),
+    ("stop", &['w'], None),
+    ("join", &['w', 'p', 'p', 's', 'b'], Some('b')),
+    ("detach", &['w'], Some('b')),
+    ("yield_now", &['s', 'b'], Some('b')),
+    ("stop_requested", &['s', 'b'], Some('b')),
+    ("channel", &['w'], Some('w')),
+    ("clone_sender", &['w'], None),
+    ("drop_sender", &['w'], None),
+    ("drop_receiver", &['w', 'p'], Some('b')),
+    ("send", &['w', 'p', 'w', 'p', 's', 'b'], Some('b')),
+    ("recv", &['w', 'p', 's', 'b'], Some('b')),
+    ("select", &['w', 'p', 's', 'b'], Some('w')),
+    ("recv_now", &['w', 'p'], Some('b')),
+    ("send_now", &['w', 'p', 'w', 'p'], Some('b')),
+    ("join_now", &['w', 'p', 'p'], Some('b')),
+];
+
+/// The address of runtime task function `name`.
+fn task_fn(name: &str) -> *const u8 {
+    match name {
+        "scope_open" => moddil_rt::scope_open as *const u8,
+        "spawn" => moddil_rt::spawn as *const u8,
+        "scope_run" => moddil_rt::scope_run as *const u8,
+        "stop" => moddil_rt::stop as *const u8,
+        "join" => moddil_rt::join as *const u8,
+        "detach" => moddil_rt::detach as *const u8,
+        "yield_now" => moddil_rt::yield_now as *const u8,
+        "stop_requested" => moddil_rt::stop_requested as *const u8,
+        "channel" => moddil_rt::channel as *const u8,
+        "clone_sender" => moddil_rt::clone_sender as *const u8,
+        "drop_sender" => moddil_rt::drop_sender as *const u8,
+        "drop_receiver" => moddil_rt::drop_receiver as *const u8,
+        "send" => moddil_rt::send as *const u8,
+        "recv" => moddil_rt::recv as *const u8,
+        "select" => moddil_rt::select as *const u8,
+        "recv_now" => moddil_rt::recv_now as *const u8,
+        "send_now" => moddil_rt::send_now as *const u8,
+        _ => moddil_rt::join_now as *const u8,
+    }
 }
 
 /// A function instance: a function (or a closure's body) and its (concrete) type arguments.
@@ -220,6 +270,10 @@ struct Compiler<'db> {
     glue_queue: Vec<Ty>,
     /// Each `const` item's slot: a flag (whether it is computed yet), then its value.
     statics: HashMap<u32, DataId>,
+    /// Each task closure's trampoline, by its type.
+    tramps: HashMap<Ty, FuncId>,
+    /// Each type's drop glue in the platform's C convention, for the runtime.
+    c_drops: HashMap<Ty, FuncId>,
 }
 
 /// Compiles what `item` (a test, or a function without parameters) reaches.
@@ -269,6 +323,10 @@ pub(crate) fn compile<'db>(
     builder.symbol("moddil_host_convert", crate::host::convert as *const u8);
     builder.symbol("moddil_host_text", crate::host::text as *const u8);
     builder.symbol("moddil_host_log", crate::host::log as *const u8);
+    builder.symbol("moddil_host_trapped", crate::host::trapped as *const u8);
+    for (name, ..) in TASK_FNS {
+        builder.symbol(format!("moddil_rt_{name}"), task_fn(name));
+    }
     builder.symbol("moddil_rt_observe", moddil_rt::observe as *const u8);
     builder.symbol("moddil_rt_enter", moddil_rt::enter as *const u8);
     builder.symbol("moddil_rt_leave", moddil_rt::leave as *const u8);
@@ -289,8 +347,8 @@ pub(crate) fn compile<'db>(
             .map_err(|e| e.to_string())
     };
     let rt = Rt {
-        trap: import("moddil_rt_trap", &[types::I32], None)?,
-        trap_tracked: import("moddil_rt_trap_tracked", &[types::I32], None)?,
+        trap: import("moddil_rt_trap", &[types::I32], Some(types::I8))?,
+        trap_tracked: import("moddil_rt_trap_tracked", &[types::I32], Some(types::I8))?,
         float_fn: import(
             "moddil_rt_float_fn",
             &[types::I32, types::F64, types::F64],
@@ -350,6 +408,24 @@ pub(crate) fn compile<'db>(
             Some(ptr),
         )?,
         log: import("moddil_host_log", &[types::I32, ptr, types::I64], None)?,
+        trapped: import("moddil_host_trapped", &[types::I32, ptr], Some(ptr))?,
+        task: {
+            let mut m = HashMap::new();
+            for (name, params, ret) in TASK_FNS {
+                let ty = |c: char| match c {
+                    'b' => types::I8,
+                    's' => types::I32,
+                    'p' => ptr,
+                    _ => types::I64,
+                };
+                let ps: Vec<ir::Type> = params.iter().map(|c| ty(*c)).collect();
+                m.insert(
+                    *name,
+                    import(&format!("moddil_rt_{name}"), &ps, ret.map(ty))?,
+                );
+            }
+            m
+        },
         observe: import("moddil_rt_observe", &[types::I32, ptr], None)?,
         enter: import("moddil_rt_enter", &[types::I32, types::I8], Some(types::I8))?,
         leave: import("moddil_rt_leave", &[], None)?,
@@ -381,6 +457,8 @@ pub(crate) fn compile<'db>(
         glues: HashMap::new(),
         glue_queue: Vec::new(),
         statics: HashMap::new(),
+        tramps: HashMap::new(),
+        c_drops: HashMap::new(),
     };
     let (target, ret) = match item {
         Item::Test(_) => {
@@ -420,6 +498,11 @@ pub(crate) fn compile<'db>(
         items,
         dyn_types: c.dyn_types,
         errors,
+        files: program
+            .files(db)
+            .iter()
+            .map(|f| (f.source.path(db).to_string(), f.source.text(db).to_string()))
+            .collect(),
     })
 }
 
@@ -491,9 +574,11 @@ impl Compiler<'_> {
             .map_err(|e| format!("{name}: {e}"))
     }
 
-    /// `ty` with the type arguments `targs` for its parameters, its associated types resolved.
+    /// `ty` with the type arguments `targs` for its parameters, its associated types resolved,
+    /// and each refined type as its base (a refinement is checked, not represented).
     fn concrete(&self, ty: &Ty, targs: &[Ty]) -> Ty {
-        Solver::new(self.items, &[]).deep(&ty.subst(targs))
+        let t = Solver::new(self.items, &[]).deep(&ty.subst(targs));
+        base_of(self.items, &t)
     }
 
     /// Function `f` with type arguments `targs`: declared (and queued to be compiled) the first
@@ -622,6 +707,24 @@ impl Compiler<'_> {
                 desc.write_function_addr(at, fref);
                 continue;
             }
+            // An anonymous impl's: each method it defines, through a thunk, or the trait's
+            // default for it.
+            if let Ty::Anon(a) = ty {
+                let fid = match a.methods.iter().position(|(f, _)| f == m) {
+                    Some(j) => Some(self.anon_thunk(ty, j)?),
+                    None if self.items.fns[*m as usize].has_body => {
+                        let mut args = vec![ty.clone()];
+                        args.extend(t.args.iter().cloned());
+                        Some(self.declare_fn(*m, &args)?.0)
+                    }
+                    None => None,
+                };
+                if let Some(fid) = fid {
+                    let fref = self.module.declare_func_in_data(fid, &mut desc);
+                    desc.write_function_addr(at, fref);
+                }
+                continue;
+            }
             let sig = &self.items.fns[*m as usize];
             // Only a method that takes `self` by borrow, with no type parameters of its own, is
             // called through a `dyn` borrow.
@@ -692,6 +795,8 @@ impl Compiler<'_> {
             blocks: Vec::new(),
             flags: HashMap::new(),
             err_ptr: None,
+            point: (0, 0),
+            defs: HashMap::new(),
         };
         lw.function()?;
         let config = lw.c.module.target_config();
@@ -755,6 +860,8 @@ impl Compiler<'_> {
             blocks: Vec::new(),
             flags: HashMap::new(),
             err_ptr: None,
+            point: (0, 0),
+            defs: HashMap::new(),
         };
         let entry = lw.b.create_block();
         lw.b.append_block_params_for_function_params(entry);
@@ -771,6 +878,241 @@ impl Compiler<'_> {
             .map_err(|e| format!("Cranelift: {e:?}"))?;
         self.module.clear_context(&mut ctx);
         Ok(())
+    }
+
+    /// `fn(*mut T) -> i8` in the platform's C convention, for the runtime: `ty`'s drop glue.
+    fn c_drop(&mut self, ty: &Ty) -> Result<FuncId, String> {
+        if let Some(f) = self.c_drops.get(ty) {
+            return Ok(*f);
+        }
+        let ptr = self.module.target_config().pointer_type();
+        let mut sig = self.module.make_signature();
+        sig.params.push(AbiParam::new(ptr));
+        sig.returns.push(AbiParam::new(types::I8));
+        let id = self
+            .module
+            .declare_anonymous_function(&sig)
+            .map_err(|e| e.to_string())?;
+        self.c_drops.insert(ty.clone(), id);
+        let glue = self.glue(ty)?;
+        let mut ctx = self.module.make_context();
+        ctx.func.signature = sig;
+        let mut fctx = FunctionBuilderContext::new();
+        let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
+        let block = b.create_block();
+        b.append_block_params_for_function_params(block);
+        b.switch_to_block(block);
+        let at = b.block_params(block)[0];
+        let f = self.module.declare_func_in_func(glue, b.func);
+        let null = b.ins().iconst(ptr, 0);
+        let call = b.ins().call(f, &[at, null]);
+        let status = b.inst_results(call)[0];
+        b.ins().return_(&[status]);
+        b.seal_all_blocks();
+        b.finalize(self.module.target_config());
+        self.module
+            .define_function(id, &mut ctx)
+            .map_err(|e| format!("Cranelift: {e:?}"))?;
+        Ok(id)
+    }
+
+    /// A task's code, for closure type `c` ([`moddil_rt::TaskFn`]): its body, given the
+    /// captures and the argument (a scope's borrow, for a scope's body), its result written to
+    /// `out` and an error to `err`.
+    fn task_tramp(&mut self, c: &ClosureTy) -> Result<FuncId, String> {
+        let key = Ty::Closure(Arc::new(c.clone()));
+        if let Some(f) = self.tramps.get(&key) {
+            return Ok(*f);
+        }
+        let ptr = self.module.target_config().pointer_type();
+        let mut sig = self.module.make_signature();
+        for t in [ptr, types::I64, ptr, ptr] {
+            sig.params.push(AbiParam::new(t));
+        }
+        sig.returns.push(AbiParam::new(types::I8));
+        let id = self
+            .module
+            .declare_anonymous_function(&sig)
+            .map_err(|e| e.to_string())?;
+        self.tramps.insert(key, id);
+        let (body, params, ret) = self.declare_closure(c)?;
+        let arg_pass = self.pass(&params[1])?;
+        let pass = self.pass(&ret)?;
+        let mut ctx = self.module.make_context();
+        ctx.func.signature = sig;
+        let mut fctx = FunctionBuilderContext::new();
+        let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
+        let block = b.create_block();
+        b.append_block_params_for_function_params(block);
+        b.switch_to_block(block);
+        let ps = b.block_params(block).to_vec();
+        let (captures, arg, out, err) = (ps[0], ps[1], ps[2], ps[3]);
+        let mut vals = vec![captures];
+        match arg_pass {
+            Pass::Nothing => {}
+            Pass::Scalar(_) => vals.push(arg),
+            Pass::Words(ts) if ts == [types::I64] => vals.push(arg),
+            _ => return Err("a task's argument".to_string()),
+        }
+        if pass == Pass::Indirect {
+            vals.push(out);
+        }
+        vals.push(err);
+        let f = self.module.declare_func_in_func(body, b.func);
+        let call = b.ins().call(f, &vals);
+        let results = b.inst_results(call).to_vec();
+        let flags = ir::MemFlagsData::trusted();
+        match pass {
+            Pass::Scalar(_) => {
+                b.ins().store(flags, results[1], out, 0);
+            }
+            Pass::Words(ts) => {
+                let mut at = 0;
+                for (k, t) in ts.iter().enumerate() {
+                    b.ins().store(flags, results[1 + k], out, at);
+                    at += t.bytes() as i32;
+                }
+            }
+            Pass::Nothing | Pass::Indirect => {}
+        }
+        b.ins().return_(&[results[0]]);
+        b.seal_all_blocks();
+        b.finalize(self.module.target_config());
+        self.module
+            .define_function(id, &mut ctx)
+            .map_err(|e| format!("Cranelift: {e:?}"))?;
+        Ok(id)
+    }
+
+    /// A trait method's code for method `k` of anonymous impl type `anon`, as a vtable calls it:
+    /// given `self` and the method's other arguments, it calls the method's closure with its
+    /// captures (`self`'s field) and the arguments as a tuple.
+    fn anon_thunk(&mut self, anon: &Ty, k: usize) -> Result<FuncId, String> {
+        let Ty::Anon(a) = anon else {
+            return Err("an anonymous impl".to_string());
+        };
+        let Ty::Closure(c) = a.methods[k].1.clone() else {
+            return Err("an anonymous impl's method".to_string());
+        };
+        let (body, cparams, ret) = self.declare_closure(&c)?;
+        let elems: Vec<Ty> = match &cparams[1] {
+            Ty::Tuple(ts) => ts.to_vec(),
+            Ty::Unit => Vec::new(),
+            t => vec![t.clone()],
+        };
+        let mut params = vec![Ty::reference(false, anon.clone())];
+        params.extend(elems.iter().cloned());
+        let sig = self.signature(&params, &ret, false)?;
+        let id = self
+            .module
+            .declare_anonymous_function(&sig)
+            .map_err(|e| e.to_string())?;
+        let l = self.layouts.of(anon)?;
+        let Shape::Fields(fs) = &l.shape else {
+            return Err("an anonymous impl's methods".to_string());
+        };
+        let off = fs[k].0;
+        let tl = self.layouts.of(&cparams[1])?;
+        let toffs: Vec<u32> = match &tl.shape {
+            Shape::Fields(fs) => fs.iter().map(|(o, _)| *o).collect(),
+            _ => Vec::new(),
+        };
+        let tuple_pass = pass_of(&tl);
+        let ret_pass = self.pass(&ret)?;
+        let elem_passes: Vec<Pass> = elems
+            .iter()
+            .map(|t| self.pass(t))
+            .collect::<Result<_, _>>()?;
+        let elem_sizes: Vec<u32> = elems
+            .iter()
+            .map(|t| self.layouts.of(t).map(|l| l.size))
+            .collect::<Result<_, _>>()?;
+        let mut ctx = self.module.make_context();
+        ctx.func.signature = sig;
+        let mut fctx = FunctionBuilderContext::new();
+        let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
+        let block = b.create_block();
+        b.append_block_params_for_function_params(block);
+        b.switch_to_block(block);
+        let ps = b.block_params(block).to_vec();
+        let flags = ir::MemFlagsData::trusted();
+        let captures = b.ins().iadd_imm_s(ps[0], i64::from(off));
+        // The arguments, as the tuple the closure takes.
+        let slot = b.create_sized_stack_slot(ir::StackSlotData::new(
+            ir::StackSlotKind::ExplicitSlot,
+            tl.size.max(1),
+            4,
+        ));
+        let ptr = self.module.target_config().pointer_type();
+        let tuple = b.ins().stack_addr(ptr, slot, 0);
+        let mut i = 1;
+        for (e, (pass, size)) in elem_passes.iter().zip(&elem_sizes).enumerate() {
+            let at = toffs.get(e).copied().unwrap_or(0) as i32;
+            match pass {
+                Pass::Nothing => {}
+                Pass::Scalar(_) => {
+                    b.ins().store(flags, ps[i], tuple, at);
+                    i += 1;
+                }
+                Pass::Words(ts) => {
+                    let mut o = at;
+                    for t in ts {
+                        b.ins().store(flags, ps[i], tuple, o);
+                        o += t.bytes() as i32;
+                        i += 1;
+                    }
+                }
+                Pass::Indirect => {
+                    let src = ps[i];
+                    let mut o = 0;
+                    while o < *size as i32 {
+                        let v = b.ins().load(types::I8, flags, src, o);
+                        b.ins().store(flags, v, tuple, at + o);
+                        o += 1;
+                    }
+                    i += 1;
+                }
+            }
+        }
+        let mut vals = vec![captures];
+        match &tuple_pass {
+            Pass::Nothing => {}
+            Pass::Scalar(t) => vals.push(b.ins().load(*t, flags, tuple, 0)),
+            Pass::Words(ts) => {
+                let mut o = 0;
+                for t in ts {
+                    vals.push(b.ins().load(*t, flags, tuple, o));
+                    o += t.bytes() as i32;
+                }
+            }
+            Pass::Indirect => vals.push(tuple),
+        }
+        // The result's place (if the caller gives one), then the error's: as the caller gave.
+        if ret_pass == Pass::Indirect {
+            vals.push(ps[ps.len() - 2]);
+        }
+        vals.push(ps[ps.len() - 1]);
+        let f = self.module.declare_func_in_func(body, b.func);
+        let call = b.ins().call(f, &vals);
+        let results = b.inst_results(call).to_vec();
+        b.ins().return_(&results);
+        b.seal_all_blocks();
+        b.finalize(self.module.target_config());
+        self.module
+            .define_function(id, &mut ctx)
+            .map_err(|e| format!("Cranelift: {e:?}"))?;
+        Ok(id)
+    }
+
+    /// The prelude's struct or enum `name`, as a type without arguments.
+    fn prelude_ty(&self, name: &str) -> Result<Ty, String> {
+        let a = self
+            .items
+            .adts
+            .iter()
+            .position(|d| d.src == Src::Prelude && d.name == name)
+            .ok_or_else(|| format!("the prelude's `{name}`"))?;
+        Ok(Ty::Adt(a as u32, name.into(), Arc::from([])))
     }
 
     /// `fn(out: *mut u8) -> i8`, in the platform's C convention: drops the entry's result, of
@@ -865,6 +1207,54 @@ impl Compiler<'_> {
     }
 }
 
+/// `t` with each refined type as its base.
+fn base_of(items: &ItemTree, t: &Ty) -> Ty {
+    match t {
+        Ty::Refined(..) => base_of(items, &items.base(t)),
+        t => t.map(&mut |x| base_of(items, x)),
+    }
+}
+
+/// The scheduler's operation that built-in function `f` of the prelude is, if it is one (as
+/// the interpreter's `task_native`).
+fn task_op(items: &ItemTree, f: u32) -> Option<&'static str> {
+    let sig = &items.fns[f as usize];
+    let owner = match sig.container {
+        moddil_sema::Container::Impl(k) => match &items.impls[k as usize].self_ty {
+            Ty::Adt(a, ..) => items.adts[*a as usize].name.as_str(),
+            _ => return None,
+        },
+        _ => "",
+    };
+    if sig.src != Src::Prelude {
+        return None;
+    }
+    Some(match (owner, sig.name.as_str()) {
+        ("", "yield_now") => "yield_now",
+        ("", "stop_requested") => "stop_requested",
+        ("", "__scope_open") => "__scope_open",
+        ("", "__scope_run") => "__scope_run",
+        ("", "channel") => "channel",
+        ("", "__select") => "__select",
+        ("Scope", "spawn") => "spawn",
+        ("Scope", "stop") => "stop",
+        ("Task", "join") => "join",
+        ("Sender", "send") => "send",
+        ("Sender", "clone") => "clone",
+        ("Receiver", "recv") => "recv",
+        _ => return None,
+    })
+}
+
+/// The error a task operation's failure is, written into the buffer before its error edge
+/// takes it: the runtime's own (already there), `Closed`, or (if the flag holds) `Trapped`.
+#[derive(Clone, Copy)]
+enum Before {
+    Nothing,
+    Closed,
+    Trapped(ir::Value),
+}
+
 /// What a call runs: a function, or one through a pointer (a vtable's), with its parameters;
 /// and its result type.
 enum Run {
@@ -952,6 +1342,11 @@ struct Lower<'a, 'c, 'db> {
     flags: HashMap<Place, Variable>,
     /// Where an error this body raises goes.
     err_ptr: Option<ir::Value>,
+    /// The block and statement being lowered (the statement past the last: the terminator),
+    /// which says where unwinding from here goes.
+    point: (usize, usize),
+    /// Each local assigned once, and what it is assigned (to trace a `select`'s arms).
+    defs: HashMap<u32, Rvalue>,
 }
 
 impl Lower<'_, '_, '_> {
@@ -1066,11 +1461,22 @@ impl Lower<'_, '_, '_> {
             self.locs[0] = Loc::Mem(params[params.len() - 2]);
         }
         self.err_ptr = params.last().copied();
+        let mut counts: HashMap<u32, usize> = HashMap::new();
+        for bb in &self.body.blocks {
+            for st in &bb.statements {
+                if let Statement::Assign(p, r) = st
+                    && p.projection.is_empty()
+                {
+                    *counts.entry(p.local.0).or_default() += 1;
+                    self.defs.insert(p.local.0, r.clone());
+                }
+            }
+        }
+        self.defs.retain(|l, _| counts[l] == 1);
         self.drop_flags();
         let reachable = self.reachable()?;
-        for (i, bb) in self.body.blocks.iter().enumerate() {
-            self.blocks
-                .push((!bb.cleanup && reachable[i]).then(|| self.b.create_block()));
+        for r in reachable {
+            self.blocks.push(r.then(|| self.b.create_block()));
         }
         let first = self.block(0)?;
         self.b.ins().jump(first, &[]);
@@ -1079,9 +1485,11 @@ impl Lower<'_, '_, '_> {
                 continue;
             };
             self.b.switch_to_block(block);
-            for s in &bb.statements {
+            for (k, s) in bb.statements.iter().enumerate() {
+                self.point = (i, k);
                 self.statement(s)?;
             }
+            self.point = (i, bb.statements.len());
             self.terminator(&bb.terminator, bb.terminator_span)?;
         }
         self.b.seal_all_blocks();
@@ -1092,7 +1500,11 @@ impl Lower<'_, '_, '_> {
     /// error is `!`.
     fn reachable(&mut self) -> Result<Vec<bool>, String> {
         let mut seen = vec![false; self.body.blocks.len()];
-        let mut todo = vec![0usize];
+        // Cleanup code is reached by unwinding.
+        let mut todo: Vec<usize> = (0..self.body.blocks.len())
+            .filter(|&b| self.body.blocks[b].cleanup)
+            .collect();
+        todo.push(0);
         while let Some(b) = todo.pop() {
             if seen[b] {
                 continue;
@@ -1542,8 +1954,49 @@ impl Lower<'_, '_, '_> {
             self.c.rt.trap
         };
         let f = self.c.module.declare_func_in_func(rt, self.b.func);
-        self.b.ins().call(f, &[site]);
-        self.return_status(1)
+        let call = self.b.ins().call(f, &[site]);
+        let status = self.b.inst_results(call)[0];
+        self.not_returned(status)
+    }
+
+    /// Goes on after `status` if it is 0; otherwise passes it on, as [`Lower::not_returned`].
+    fn passed_on(&mut self, status: ir::Value) -> Result<(), String> {
+        let ok = self.b.create_block();
+        let not = self.b.create_block();
+        self.b.ins().brif(status, not, &[], ok, &[]);
+        self.b.switch_to_block(not);
+        self.not_returned(status)?;
+        self.b.switch_to_block(ok);
+        Ok(())
+    }
+
+    /// After a status other than 0 or 2: 3 unwinds from here, anything else (a trap) is passed
+    /// on.
+    fn not_returned(&mut self, status: ir::Value) -> Result<(), String> {
+        let unwind = self.b.create_block();
+        let trapped = self.b.create_block();
+        let is = self.b.ins().icmp_imm_s(IntCC::Equal, status, 3);
+        self.b.ins().brif(is, unwind, &[], trapped, &[]);
+        self.b.switch_to_block(trapped);
+        self.return_status(1)?;
+        self.b.switch_to_block(unwind);
+        self.unwind()
+    }
+
+    /// Unwinds from the point being lowered: its cleanup code, which ends by returning 3.
+    fn unwind(&mut self) -> Result<(), String> {
+        if self.body.cleanups.is_empty() {
+            return self.return_status(3);
+        }
+        let (b, k) = self.point;
+        let target = self.body.cleanup_at(b, k);
+        match self.blocks.get(target.index()).copied().flatten() {
+            Some(block) => {
+                self.b.ins().jump(block, &[]);
+                Ok(())
+            }
+            None => self.return_status(3),
+        }
     }
 
     /// Returns `status`, with a zero result (the caller does not read it).
@@ -1627,6 +2080,13 @@ impl Lower<'_, '_, '_> {
             Rvalue::Use(o) => {
                 let v = self.operand(o)?;
                 let from = self.operand_ty(o)?;
+                // An error moved between an error set and a set or type of its members (the
+                // MIR gives a `try` block's or a caller's view of the errors as it is).
+                if from != dest.ty
+                    && (matches!(from, Ty::Errors(_)) || matches!(dest.ty, Ty::Errors(_)))
+                {
+                    return self.convert_error(v, &from, &dest);
+                }
                 let v = self.fit(v, &from, &dest.ty);
                 self.write(&dest, v)
             }
@@ -1841,6 +2301,7 @@ impl Lower<'_, '_, '_> {
             _ => return Err(format!("building a `{}`", dest.ty)),
         };
         for ((off, ty), o) in fields.iter().zip(ops) {
+            let from = self.operand_ty(o)?;
             let v = self.operand(o)?;
             let addr = self.offset(base, *off);
             let at = PlaceRef {
@@ -1851,6 +2312,11 @@ impl Lower<'_, '_, '_> {
                 meta: None,
                 vtable: None,
             };
+            // An error given as a field of another view of the errors (`Err(e)`).
+            if from != *ty && (matches!(from, Ty::Errors(_)) || matches!(ty, Ty::Errors(_))) {
+                self.convert_error(v, &from, &at)?;
+                continue;
+            }
             self.write(&at, v)?;
         }
         if let (Some(v), Shape::Enum { tag, .. }) = (variant, &l.shape) {
@@ -2209,7 +2675,8 @@ impl Lower<'_, '_, '_> {
                 self.b.ins().call(f, &[site]);
                 self.return_status(2)?;
             }
-            Terminator::Resume => return Err("unwinding".to_string()),
+            // Unwinding goes on in the caller.
+            Terminator::Resume => self.return_status(3)?,
         }
         Ok(())
     }
@@ -2297,8 +2764,16 @@ impl Lower<'_, '_, '_> {
         let mut free_after = None;
         let (run, vals) = match callee {
             Callee::Fn { func, .. } => {
+                // A stub mod's function without a body (`mod.stub.1`).
+                let sig = &self.c.items.fns[*func as usize];
+                if !sig.intrinsic && !sig.has_body {
+                    self.trap(TrapClass::Unimplemented, range)?;
+                    let dead = self.b.create_block();
+                    self.b.switch_to_block(dead);
+                    return Ok(());
+                }
                 if self.c.items.fns[*func as usize].intrinsic {
-                    self.intrinsic(*func, &cargs, args, &d, range)?;
+                    self.intrinsic(*func, &cargs, args, &d, range, &catch)?;
                     self.set_init(dest);
                     let b = self.block(target.index())?;
                     self.b.ins().jump(b, &[]);
@@ -2363,8 +2838,52 @@ impl Lower<'_, '_, '_> {
                     vals.extend(self.arguments(&args[1..], &params[1..])?);
                     (Run::Direct(id, ret), vals)
                 }
-                Ty::Anon(_) => return Err("an anonymous impl's method".to_string()),
-                Ty::Errors(_) => return Err("a method of an error set".to_string()),
+                // An anonymous impl's method is a closure of its own: its captures are the
+                // impl's field, its arguments but `self` a tuple (`expr.anon-impl.1`). One it
+                // leaves out is the trait's default, for the impl's type.
+                Ty::Anon(a) => {
+                    let a = a.clone();
+                    match a.methods.iter().position(|(m, _)| m == func) {
+                        Some(k) => {
+                            let Ty::Closure(c) = a.methods[k].1.clone() else {
+                                return Err("an anonymous impl's method".to_string());
+                            };
+                            let l = self.layout(&cargs[0])?;
+                            let Shape::Fields(fs) = &l.shape else {
+                                return Err("an anonymous impl's methods".to_string());
+                            };
+                            let off = fs[k].0;
+                            let base = match self.operand(&args[0])? {
+                                Val::Scalar(p) | Val::Mem(p) => p,
+                                Val::Unit => {
+                                    let ptr = self.ptr();
+                                    self.b.ins().iconst(ptr, 8)
+                                }
+                            };
+                            let captures = self.offset(base, off);
+                            let (id, params, ret) = self.c.declare_closure(&c)?;
+                            let tuple = self.tuple_of(&args[1..], &params[1])?;
+                            let mut vals = vec![captures];
+                            vals.extend(self.pass_value(tuple, &params[1])?);
+                            (Run::Direct(id, ret), vals)
+                        }
+                        None => {
+                            let (id, params, ret) = self.c.declare_fn(*func, &cargs)?;
+                            let vals = self.arguments(args, &params)?;
+                            (Run::Direct(id, ret), vals)
+                        }
+                    }
+                }
+                // A method called on an error is the one of the error's own type: each member's,
+                // by its id (`expr.closure.fails.2`).
+                Ty::Errors(ms) => {
+                    let ms = ms.clone();
+                    self.error_set_call(*func, &cargs, &ms, args, &d, range, &catch)?;
+                    self.set_init(dest);
+                    let b = self.block(target.index())?;
+                    self.b.ins().jump(b, &[]);
+                    return Ok(());
+                }
                 self_ty => {
                     let items = self.c.items;
                     let sig = &items.fns[*func as usize];
@@ -2398,7 +2917,7 @@ impl Lower<'_, '_, '_> {
                     };
                     parent.extend(cargs[sig.generics.parent as usize..].iter().cloned());
                     if items.fns[f as usize].intrinsic {
-                        self.intrinsic(f, &parent, args, &d, range)?;
+                        self.intrinsic(f, &parent, args, &d, range, &catch)?;
                         self.set_init(dest);
                         let b = self.block(target.index())?;
                         self.b.ins().jump(b, &[]);
@@ -2493,7 +3012,7 @@ impl Lower<'_, '_, '_> {
         let too_deep = self.b.create_block();
         self.b.ins().brif(deep, too_deep, &[], call_block, &[]);
         self.b.switch_to_block(too_deep);
-        self.return_status(1)?;
+        self.not_returned(deep)?;
         self.b.switch_to_block(call_block);
         let call = match run {
             Run::Direct(id, _) => {
@@ -2529,7 +3048,7 @@ impl Lower<'_, '_, '_> {
             self.b.ins().jump(e, &[]);
             self.b.switch_to_block(trap);
         }
-        self.return_status(1)?;
+        self.not_returned(results[0])?;
         self.b.switch_to_block(ok);
         let Some(d) = dest else {
             return Ok(());
@@ -2563,10 +3082,16 @@ impl Lower<'_, '_, '_> {
     /// Writes the error `v` of type `ty` at `to`, tagged: a set as it is, a value after its
     /// type's id.
     fn write_error(&mut self, to: ir::Value, v: Val, ty: &Ty) -> Result<(), String> {
-        let l = self.layout(ty)?;
-        if let Ty::Errors(_) = ty {
+        if let Ty::Errors(ms) = ty {
+            // Only as much as the member it holds: the caller's buffer may be for fewer of
+            // them than this set has (its view of the errors).
             if let Val::Mem(a) = v {
-                self.copy(to, a, l.size);
+                let n = self.error_size(a, ms)?;
+                let f = self
+                    .c
+                    .module
+                    .declare_func_in_func(self.c.rt.memmove, self.b.func);
+                self.b.ins().call(f, &[to, a, n]);
             }
             return Ok(());
         }
@@ -2583,6 +3108,49 @@ impl Lower<'_, '_, '_> {
             vtable: None,
         };
         self.write(&place, v)
+    }
+
+    /// Error `v` of type `from` as `dest`'s type: through the tagged form, so a value of a set
+    /// becomes its member's, a member's becomes the set's, and a set's another's.
+    fn convert_error(&mut self, v: Val, from: &Ty, dest: &PlaceRef) -> Result<(), String> {
+        let room = self.error_room(from)?.max(self.error_room(&dest.ty)?);
+        let buf = self.slot(&Layout {
+            size: room,
+            align: 8,
+            shape: Shape::Wide,
+            niche: None,
+        });
+        self.write_error(buf, v, from)?;
+        let l = self.layout(&dest.ty)?;
+        let a = self.addr_or_dangling(dest)?;
+        if let Ty::Errors(_) = dest.ty {
+            self.copy(a, buf, l.size);
+            return Ok(());
+        }
+        let at = self.offset(buf, ERROR_VALUE);
+        let v = self.take_at(at, &dest.ty)?;
+        self.write(dest, v)
+    }
+
+    /// How many bytes the error in the set (of members `ms`) at `at` takes, tagged: its id and
+    /// the member its id names.
+    fn error_size(&mut self, at: ir::Value, ms: &[Ty]) -> Result<ir::Value, String> {
+        let id = self
+            .b
+            .ins()
+            .load(types::I64, ir::MemFlagsData::trusted(), at, 0);
+        let mut n = self.b.ins().iconst(types::I64, i64::from(ERROR_VALUE));
+        for m in ms {
+            let Some(a) = m.adt() else { continue };
+            let size = self.layout(m)?.size;
+            let is = self.b.ins().icmp_imm_s(IntCC::Equal, id, i64::from(a));
+            let k = self
+                .b
+                .ins()
+                .iconst(types::I64, i64::from(ERROR_VALUE + size));
+            n = self.b.ins().select(is, k, n);
+        }
+        Ok(n)
     }
 
     /// The tagged error at `from` into error place `p`: all of it for a set, its value for one
@@ -2739,6 +3307,755 @@ impl Lower<'_, '_, '_> {
         self.b.ins().jump(join, &[]);
         self.b.switch_to_block(join);
         Ok(value)
+    }
+
+    /// The arguments `args` as a tuple of type `ty`, in a new slot.
+    fn tuple_of(&mut self, args: &[Operand], ty: &Ty) -> Result<Val, String> {
+        let l = self.layout(ty)?;
+        if l.size == 0 {
+            for a in args {
+                self.operand(a)?;
+            }
+            return Ok(Val::Unit);
+        }
+        let Shape::Fields(fs) = l.shape.clone() else {
+            return Err(format!("arguments as a `{ty}`"));
+        };
+        let slot = self.slot(&l);
+        for ((off, t), a) in fs.iter().zip(args) {
+            let v = self.operand(a)?;
+            let at = self.offset(slot, *off);
+            let place = PlaceRef {
+                var: None,
+                addr: Some(at),
+                ty: t.clone(),
+                variant: None,
+                meta: None,
+                vtable: None,
+            };
+            self.write(&place, v)?;
+        }
+        Ok(Val::Mem(slot))
+    }
+
+    /// A call of trait method `func` on an error of set `ms`: the method of the member its id
+    /// names, given the member (or a borrow of it).
+    #[allow(clippy::too_many_arguments)]
+    fn error_set_call(
+        &mut self,
+        func: u32,
+        cargs: &[Ty],
+        ms: &[Ty],
+        args: &[Operand],
+        d: &PlaceRef,
+        range: TextRange,
+        catch: &Option<(Place, moddil_mir::BlockId)>,
+    ) -> Result<(), String> {
+        let items = self.c.items;
+        let t = items.trait_of(func).ok_or("a trait's method")?;
+        let n = items.traits[t as usize].generics.params.len();
+        let tr = TraitRef {
+            trait_: t,
+            name: items.traits[t as usize].name.as_str().into(),
+            args: cargs[1..n].to_vec().into(),
+        };
+        let sig = &items.fns[func as usize];
+        let recv_ty = self.operand_ty(&args[0])?;
+        let base = match self.operand(&args[0])? {
+            Val::Scalar(p) | Val::Mem(p) => p,
+            Val::Unit => return Err("an error without bytes".to_string()),
+        };
+        let id = self
+            .b
+            .ins()
+            .load(types::I64, ir::MemFlagsData::trusted(), base, 0);
+        let payload = self.offset(base, ERROR_VALUE);
+        let join = self.b.create_block();
+        for m in ms {
+            let Some(adt) = m.adt() else { continue };
+            let Some((f, mut parent)) = Solver::new(items, &[]).impl_method(func, m, &tr) else {
+                continue;
+            };
+            parent.extend(cargs[sig.generics.parent as usize..].iter().cloned());
+            let yes = self.b.create_block();
+            let no = self.b.create_block();
+            let is = self.b.ins().icmp_imm_s(IntCC::Equal, id, i64::from(adt));
+            self.b.ins().brif(is, yes, &[], no, &[]);
+            self.b.switch_to_block(yes);
+            let (fid, params, ret) = self.c.declare_fn(f, &parent)?;
+            let me = if matches!(recv_ty, Ty::Ref(..)) {
+                Val::Scalar(payload)
+            } else {
+                let at = PlaceRef {
+                    var: None,
+                    addr: Some(payload),
+                    ty: m.clone(),
+                    variant: None,
+                    meta: None,
+                    vtable: None,
+                };
+                self.read(&at)?
+            };
+            let mut vals = self.pass_value(me, &params[0])?;
+            vals.extend(self.arguments(&args[1..], &params[1..])?);
+            self.emit_call_catching(Run::Direct(fid, ret), vals, Some(d), range, catch.clone())?;
+            self.b.ins().jump(join, &[]);
+            self.b.switch_to_block(no);
+        }
+        // Its id names one of its members.
+        self.return_status(1)?;
+        self.b.switch_to_block(join);
+        Ok(())
+    }
+
+    // ----- tasks -----------------------------------------------------------------------------
+
+    /// Calls the runtime's task function `name` with `args`: its result, if it has one.
+    fn task_call(&mut self, name: &str, args: &[ir::Value]) -> Option<ir::Value> {
+        let f = self.c.rt.task[name];
+        let f = self.c.module.declare_func_in_func(f, self.b.func);
+        let call = self.b.ins().call(f, args);
+        self.b.inst_results(call).first().copied()
+    }
+
+    /// The site a suspending operation deadlocks at, and whether its code is tracked.
+    fn task_site(&mut self, range: TextRange) -> (ir::Value, ir::Value) {
+        let site = self.site(Site::Trap(TrapClass::Deadlock, self.file, range));
+        let tracked = self.b.ins().iconst(types::I8, i64::from(self.tracked));
+        (site, tracked)
+    }
+
+    /// The handle's number at a borrow of a scope, task, sender or receiver (of type `ty`),
+    /// through any borrows of it.
+    fn handle_id(&mut self, v: Val, ty: &Ty) -> Result<ir::Value, String> {
+        let flags = ir::MemFlagsData::trusted();
+        let (mut p, mut t) = match (v, ty) {
+            (Val::Scalar(p), Ty::Ref(_, inner)) => (p, (**inner).clone()),
+            (Val::Mem(a), _) => return Ok(self.b.ins().load(types::I64, flags, a, 0)),
+            _ => return Err(format!("a handle of type `{ty}`")),
+        };
+        while let Ty::Ref(_, inner) = t {
+            p = self.b.ins().load(types::I64, flags, p, 0);
+            t = (*inner).clone();
+        }
+        Ok(self.b.ins().load(types::I64, flags, p, 0))
+    }
+
+    /// A buffer for the error of a call with an error edge (`catch`), or null.
+    fn error_buffer(
+        &mut self,
+        catch: &Option<(Place, moddil_mir::BlockId)>,
+    ) -> Result<ir::Value, String> {
+        Ok(match catch {
+            Some((p, _)) => {
+                let ty = self.place(p)?.ty;
+                let size = self.error_room(&ty)?;
+                let l = Layout {
+                    size,
+                    align: 8,
+                    shape: Shape::Wide,
+                    niche: None,
+                };
+                self.slot(&l)
+            }
+            None => {
+                let ptr = self.ptr();
+                self.b.ins().iconst(ptr, 0)
+            }
+        })
+    }
+
+    /// Goes on after a task operation's `status`: 0 returned; 2 failed, its error in `buf` (or
+    /// to be written first, by `before`), to the error edge; 3 unwinds; anything else traps.
+    fn task_status(
+        &mut self,
+        status: ir::Value,
+        catch: &Option<(Place, moddil_mir::BlockId)>,
+        buf: ir::Value,
+        before: Before,
+    ) -> Result<(), String> {
+        let ok = self.b.create_block();
+        let not = self.b.create_block();
+        self.b.ins().brif(status, not, &[], ok, &[]);
+        self.b.switch_to_block(not);
+        if let Some((p, edge)) = catch {
+            let failed = self.b.create_block();
+            let other = self.b.create_block();
+            let is = self.b.ins().icmp_imm_s(IntCC::Equal, status, 2);
+            self.b.ins().brif(is, failed, &[], other, &[]);
+            self.b.switch_to_block(failed);
+            match before {
+                Before::Nothing => {}
+                Before::Closed => self.write_closed(buf)?,
+                Before::Trapped(built) => {
+                    let yes = self.b.create_block();
+                    let done = self.b.create_block();
+                    self.b.ins().brif(built, yes, &[], done, &[]);
+                    self.b.switch_to_block(yes);
+                    self.write_trapped(buf)?;
+                    self.b.ins().jump(done, &[]);
+                    self.b.switch_to_block(done);
+                }
+            }
+            self.read_error(buf, p)?;
+            self.set_init(p);
+            let e = self.block(edge.index())?;
+            self.b.ins().jump(e, &[]);
+            self.b.switch_to_block(other);
+        }
+        self.not_returned(status)?;
+        self.b.switch_to_block(ok);
+        Ok(())
+    }
+
+    /// A task's description for the runtime ([`moddil_rt::TaskSpec`]), in a slot: closure `f`
+    /// (of type `ty`), its captures copied to memory the task owns, with argument `arg`.
+    fn task_spec(&mut self, f: &Operand, arg: ir::Value) -> Result<ir::Value, String> {
+        let ty = self.operand_ty(f)?;
+        let Ty::Closure(c) = &ty else {
+            return Err(format!("a task of type `{ty}`"));
+        };
+        let c = c.clone();
+        let tramp = self.c.task_tramp(&c)?;
+        let (_, _, ret) = self.c.declare_closure(&c)?;
+        let l = self.layout(&ty)?;
+        let flags = ir::MemFlagsData::trusted();
+        let size = self.b.ins().iconst(types::I64, i64::from(l.size));
+        let align = self.b.ins().iconst(types::I64, i64::from(l.align.max(1)));
+        let captures = self.rt_call(self.c.rt.alloc, &[size, align]);
+        if let Val::Mem(a) = self.operand(f)? {
+            self.copy(captures, a, l.size);
+        }
+        let out = self.layout(&ret)?.size;
+        let err = if c.fails == Ty::Never {
+            0
+        } else {
+            let fails = self.c.concrete(&c.fails, &[]);
+            self.error_room(&fails)?
+        };
+        let ptr = self.ptr();
+        let code = {
+            let fref = self.c.module.declare_func_in_func(tramp, self.b.func);
+            self.b.ins().func_addr(ptr, fref)
+        };
+        let drop = if self.needs_drop(&ret) {
+            let d = self.c.c_drop(&ret)?;
+            let fref = self.c.module.declare_func_in_func(d, self.b.func);
+            self.b.ins().func_addr(ptr, fref)
+        } else {
+            self.b.ins().iconst(ptr, 0)
+        };
+        let spec = self.slot(&Layout {
+            size: 64,
+            align: 8,
+            shape: Shape::Wide,
+            niche: None,
+        });
+        let out = self.b.ins().iconst(types::I64, i64::from(out));
+        let err = self.b.ins().iconst(types::I64, i64::from(err));
+        for (k, v) in [code, captures, size, align, arg, out, err, drop]
+            .into_iter()
+            .enumerate()
+        {
+            self.b.ins().store(flags, v, spec, 8 * k as i32);
+        }
+        Ok(spec)
+    }
+
+    /// A C-ABI drop of `ty` for the runtime, or null if it needs no dropping.
+    fn drop_fn(&mut self, ty: &Ty) -> Result<ir::Value, String> {
+        let ptr = self.ptr();
+        if !self.needs_drop(ty) {
+            return Ok(self.b.ins().iconst(ptr, 0));
+        }
+        let d = self.c.c_drop(ty)?;
+        let fref = self.c.module.declare_func_in_func(d, self.b.func);
+        Ok(self.b.ins().func_addr(ptr, fref))
+    }
+
+    /// Writes the prelude's `Closed`, tagged, at `buf`.
+    fn write_closed(&mut self, buf: ir::Value) -> Result<(), String> {
+        let closed = self.c.prelude_ty("Closed")?;
+        self.write_error(buf, Val::Unit, &closed)
+    }
+
+    /// Writes, tagged at `buf`, the prelude's `Trapped` for the trap an isolated scope failed
+    /// with: its class and where it was, as `file:line:column`.
+    fn write_trapped(&mut self, buf: ir::Value) -> Result<(), String> {
+        let trapped = self.c.prelude_ty("Trapped")?;
+        let l = self.layout(&trapped)?;
+        let Shape::Fields(fs) = &l.shape else {
+            return Err("the prelude's `Trapped`".to_string());
+        };
+        let fs = fs.clone();
+        let items = self.c.items;
+        let from_str = items
+            .builtin_method(&items.string_ty(), "from_str")
+            .ok_or("the prelude's `String::from_str`")?;
+        let (id, params, ret) = self.c.declare_fn(from_str, &[])?;
+        let tag = self
+            .b
+            .ins()
+            .iconst(types::I64, i64::from(trapped.adt().unwrap_or(0)));
+        let flags = ir::MemFlagsData::trusted();
+        self.b.ins().store(flags, tag, buf, 0);
+        for (which, (off, ty)) in fs.iter().enumerate() {
+            let len = self.slot(&Layout {
+                size: 8,
+                align: 8,
+                shape: Shape::Scalar(types::I64),
+                niche: None,
+            });
+            let which = self.b.ins().iconst(types::I32, which as i64);
+            let p = self.rt_call(self.c.rt.trapped, &[which, len]);
+            let n = self.b.ins().load(types::I64, flags, len, 0);
+            let w = self.wide(p, n);
+            let at = self.offset(buf, ERROR_VALUE + off);
+            let dest = PlaceRef {
+                var: None,
+                addr: Some(at),
+                ty: ty.clone(),
+                variant: None,
+                meta: None,
+                vtable: None,
+            };
+            let vals = self.pass_value(Val::Mem(w), &params[0])?;
+            let span = self.span;
+            self.emit_call(Run::Direct(id, ret.clone()), vals, Some(&dest), span)?;
+        }
+        Ok(())
+    }
+
+    /// A destructor the scheduler runs: of a `Task` (given up without a `join`), a `Sender` or
+    /// a `Receiver`, at `addr`.
+    fn native_drop(&mut self, addr: ir::Value, ty: &Ty) -> Result<(), String> {
+        let Ty::Adt(a, _, args) = ty else {
+            return Err(format!("the built-in destructor of `{ty}`"));
+        };
+        let id = self
+            .b
+            .ins()
+            .load(types::I64, ir::MemFlagsData::trusted(), addr, 0);
+        match self.c.items.adts[*a as usize].name.as_str() {
+            "Task" => {
+                let st = self.task_call("detach", &[id]).expect("a status");
+                self.passed_on(st)?;
+            }
+            "Sender" => {
+                self.task_call("drop_sender", &[id]);
+            }
+            // What the channel holds is dropped (`task.channel.2`).
+            "Receiver" => {
+                let t = args.first().cloned().ok_or("a receiver without its type")?;
+                let d = self.drop_fn(&t)?;
+                let st = self.task_call("drop_receiver", &[id, d]).expect("a status");
+                self.passed_on(st)?;
+            }
+            _ => return Err(format!("the built-in destructor of `{ty}`")),
+        }
+        Ok(())
+    }
+
+    /// The scheduler's operation `op` (`task.scope.1`), its result written to `d`.
+    fn task(
+        &mut self,
+        op: &str,
+        targs: &[Ty],
+        args: &[Operand],
+        d: &PlaceRef,
+        range: TextRange,
+        catch: &Option<(Place, moddil_mir::BlockId)>,
+    ) -> Result<(), String> {
+        let flags = ir::MemFlagsData::trusted();
+        let ptr = self.ptr();
+        match op {
+            "__scope_open" => {
+                let isolated = self.value(&args[0])?;
+                let s = self.task_call("scope_open", &[isolated]).expect("a scope");
+                self.write(d, Val::Scalar(s))
+            }
+            "__scope_run" => {
+                let sty = self.operand_ty(&args[0])?;
+                let scope = self.operand(&args[0])?;
+                let Val::Scalar(sp) = scope else {
+                    return Err("a scope not by borrow".to_string());
+                };
+                let id = self.handle_id(scope, &sty)?;
+                let spec = self.task_spec(&args[1], sp)?;
+                let out = self.result_room(d)?;
+                let buf = self.error_buffer(catch)?;
+                let (site, tracked) = self.task_site(range);
+                let st = self
+                    .task_call("scope_run", &[id, spec, out, buf, site, tracked])
+                    .expect("a status");
+                // 4: an isolated scope that trapped fails with `Trapped`.
+                let trapped = self.b.create_block();
+                let other = self.b.create_block();
+                let is = self.b.ins().icmp_imm_s(IntCC::Equal, st, 4);
+                self.b.ins().brif(is, trapped, &[], other, &[]);
+                self.b.switch_to_block(trapped);
+                let two = self.b.ins().iconst(types::I8, 2);
+                let join = self.b.create_block();
+                self.b.append_block_param(join, types::I8);
+                self.b.ins().jump(join, &[ir::BlockArg::Value(two)]);
+                self.b.switch_to_block(other);
+                self.b.ins().jump(join, &[ir::BlockArg::Value(st)]);
+                self.b.switch_to_block(join);
+                let st2 = self.b.block_params(join)[0];
+                // Whether the error is to be built (it was a trap).
+                let built = self.b.ins().icmp_imm_s(IntCC::Equal, st, 4);
+                self.task_status(st2, catch, buf, Before::Trapped(built))?;
+                self.result_into(d, out)
+            }
+            "spawn" => {
+                let sty = self.operand_ty(&args[0])?;
+                let scope = self.operand(&args[0])?;
+                let id = self.handle_id(scope, &sty)?;
+                let zero = self.b.ins().iconst(types::I64, 0);
+                let spec = self.task_spec(&args[1], zero)?;
+                let t = self.task_call("spawn", &[id, spec]).expect("a task");
+                let a = self.addr_of(d)?;
+                self.b.ins().store(flags, t, a, 0);
+                Ok(())
+            }
+            "stop" => {
+                let sty = self.operand_ty(&args[0])?;
+                let scope = self.operand(&args[0])?;
+                let id = self.handle_id(scope, &sty)?;
+                self.task_call("stop", &[id]);
+                Ok(())
+            }
+            "join" => {
+                let tty = self.operand_ty(&args[0])?;
+                let task = self.operand(&args[0])?;
+                let id = self.handle_id(task, &tty)?;
+                let out = self.result_room(d)?;
+                let buf = self.error_buffer(catch)?;
+                let (site, tracked) = self.task_site(range);
+                let st = self
+                    .task_call("join", &[id, out, buf, site, tracked])
+                    .expect("a status");
+                self.task_status(st, catch, buf, Before::Nothing)?;
+                self.result_into(d, out)
+            }
+            "yield_now" | "stop_requested" => {
+                let (site, tracked) = self.task_site(range);
+                let st = self.task_call(op, &[site, tracked]).expect("a status");
+                let null = self.b.ins().iconst(ptr, 0);
+                self.task_status(st, catch, null, Before::Nothing)
+            }
+            "channel" => {
+                let n = self.value(&args[0])?;
+                let zero = self.b.ins().iconst(types::I64, 0);
+                let ok = self.b.ins().icmp(IntCC::SignedGreaterThanOrEqual, n, zero);
+                self.check(ok, TrapClass::CapacityExceeded, range)?;
+                let c = self.task_call("channel", &[n]).expect("a channel");
+                let a = self.addr_of(d)?;
+                let l = self.layout(&d.ty)?;
+                if let Shape::Fields(fs) = &l.shape {
+                    for (off, _) in fs.clone() {
+                        self.b.ins().store(flags, c, a, off as i32);
+                    }
+                }
+                Ok(())
+            }
+            "clone" => {
+                let sty = self.operand_ty(&args[0])?;
+                let sender = self.operand(&args[0])?;
+                let id = self.handle_id(sender, &sty)?;
+                self.task_call("clone_sender", &[id]);
+                let a = self.addr_of(d)?;
+                self.b.ins().store(flags, id, a, 0);
+                Ok(())
+            }
+            "send" => {
+                let sty = self.operand_ty(&args[0])?;
+                let sender = self.operand(&args[0])?;
+                let id = self.handle_id(sender, &sty)?;
+                let t = targs.first().cloned().ok_or("a sender without its type")?;
+                let l = self.layout(&t)?;
+                let v = self.operand(&args[1])?;
+                let tmp = self.slot(&l);
+                let at = PlaceRef {
+                    var: None,
+                    addr: Some(tmp),
+                    ty: t.clone(),
+                    variant: None,
+                    meta: None,
+                    vtable: None,
+                };
+                self.write(&at, v)?;
+                let n = self.b.ins().iconst(types::I64, i64::from(l.size));
+                let drop = self.drop_fn(&t)?;
+                let buf = self.error_buffer(catch)?;
+                let (site, tracked) = self.task_site(range);
+                let st = self
+                    .task_call("send", &[id, tmp, n, drop, site, tracked])
+                    .expect("a status");
+                self.task_status(st, catch, buf, Before::Closed)
+            }
+            "recv" => {
+                let rty = self.operand_ty(&args[0])?;
+                let receiver = self.operand(&args[0])?;
+                let id = self.handle_id(receiver, &rty)?;
+                let (site, tracked) = self.task_site(range);
+                self.receive(d, |lw, out| {
+                    lw.task_call("recv", &[id, out, site, tracked])
+                        .expect("a status")
+                })
+            }
+            _ => self.select(args, d, range),
+        }
+    }
+
+    /// Memory for a result of `d`'s type: `d`'s own, or a slot to copy from after.
+    fn result_room(&mut self, d: &PlaceRef) -> Result<ir::Value, String> {
+        if let Some(a) = d.addr {
+            return Ok(a);
+        }
+        let l = self.layout(&d.ty)?;
+        Ok(self.slot(&l))
+    }
+
+    /// The result at `out` into `d`, if `d` is not in memory there already.
+    fn result_into(&mut self, d: &PlaceRef, out: ir::Value) -> Result<(), String> {
+        if d.addr == Some(out) {
+            return Ok(());
+        }
+        let v = self.take_at(out, &d.ty)?;
+        self.write(d, v)
+    }
+
+    /// An `Option<T>` into `d` from a receive: `get` writes a value at its argument and gives
+    /// 0 (`Some`), 5 (`None`), 3 (unwind) or 1 (a trap).
+    fn receive(
+        &mut self,
+        d: &PlaceRef,
+        get: impl FnOnce(&mut Self, ir::Value) -> ir::Value,
+    ) -> Result<(), String> {
+        let l = self.layout(&d.ty)?;
+        let Shape::Enum { tag, variants } = &l.shape else {
+            return Err(format!("a receive into a `{}`", d.ty));
+        };
+        let (tag, payload) = (tag.clone(), variants[1][0].0);
+        let a = self.addr_of(d)?;
+        let out = self.offset(a, payload);
+        let st = get(self, out);
+        let some = self.b.create_block();
+        let not = self.b.create_block();
+        let none = self.b.create_block();
+        let other = self.b.create_block();
+        let join = self.b.create_block();
+        self.b.ins().brif(st, not, &[], some, &[]);
+        self.b.switch_to_block(some);
+        self.set_variant(a, &tag, 1);
+        self.b.ins().jump(join, &[]);
+        self.b.switch_to_block(not);
+        let is = self.b.ins().icmp_imm_s(IntCC::Equal, st, 5);
+        self.b.ins().brif(is, none, &[], other, &[]);
+        self.b.switch_to_block(none);
+        self.set_variant(a, &tag, 0);
+        self.b.ins().jump(join, &[]);
+        self.b.switch_to_block(other);
+        self.not_returned(st)?;
+        self.b.switch_to_block(join);
+        Ok(())
+    }
+
+    /// The local a temporary `l` borrows (`l = &x` or `&mut x`), if that is how it is defined.
+    fn borrowed_local(&self, o: &Operand) -> Option<Place> {
+        let (Operand::Move(p) | Operand::Copy(p)) = o else {
+            return None;
+        };
+        match self.defs.get(&p.local.0) {
+            Some(Rvalue::Ref(_, q)) => Some(q.clone()),
+            _ => None,
+        }
+    }
+
+    /// The operands an aggregate temporary is built from.
+    fn parts_of(&self, o: &Operand) -> Option<Vec<Operand>> {
+        let (Operand::Move(p) | Operand::Copy(p)) = o else {
+            return None;
+        };
+        match self.defs.get(&p.local.0) {
+            Some(Rvalue::Aggregate(_, ops)) => Some(ops.clone()),
+            _ => None,
+        }
+    }
+
+    /// `__select` (`task.select.1`): waits until an arm's operation is ready, does it (its
+    /// result, or its error and that it failed, through the arm's borrows), and gives the
+    /// arm's index.
+    fn select(&mut self, args: &[Operand], d: &PlaceRef, range: TextRange) -> Result<(), String> {
+        let flags = ir::MemFlagsData::trusted();
+        let arms = self
+            .parts_of(&args[0])
+            .ok_or("a `select` whose arms are not known")?;
+        struct Arm {
+            kind: i64,
+            handle: Operand,
+            payload: Option<Place>,
+            result: Place,
+            error: Place,
+            failed: Place,
+        }
+        let mut list = Vec::new();
+        for a in &arms {
+            let parts = self.parts_of(a).ok_or("a `select` arm that is not known")?;
+            let Operand::Const(Const::Int(kind)) = parts[0] else {
+                return Err("a `select` arm of an unknown kind".to_string());
+            };
+            let place = |lw: &Self, o: &Operand| {
+                lw.borrowed_local(o)
+                    .ok_or_else(|| "a `select` arm's place".to_string())
+            };
+            list.push(Arm {
+                kind,
+                handle: parts[1].clone(),
+                payload: self.borrowed_local(&parts[2]),
+                result: place(self, &parts[3])?,
+                error: place(self, &parts[4])?,
+                failed: place(self, &parts[5])?,
+            });
+        }
+        // An arm on a `#[selectable]` function waits for the runtimes (`task.select.3`).
+        if list.iter().any(|a| a.kind == 4) {
+            self.trap(TrapClass::Unimplemented, range)?;
+            // What follows is never reached.
+            let dead = self.b.create_block();
+            self.b.switch_to_block(dead);
+            return Ok(());
+        }
+        let n = list.len() as u32;
+        let ops = self.slot(&Layout {
+            size: 16 * n.max(1),
+            align: 8,
+            shape: Shape::Wide,
+            niche: None,
+        });
+        let mut ids = Vec::new();
+        for (k, a) in list.iter().enumerate() {
+            let kind = self.b.ins().iconst(types::I64, a.kind);
+            let id = if a.kind == 3 {
+                self.b.ins().iconst(types::I64, 0)
+            } else {
+                let ty = self.operand_ty(&a.handle)?;
+                let v = self.operand(&a.handle)?;
+                self.handle_id(v, &ty)?
+            };
+            self.b.ins().store(flags, kind, ops, 16 * k as i32);
+            self.b.ins().store(flags, id, ops, 16 * k as i32 + 8);
+            ids.push(id);
+        }
+        let count = self.b.ins().iconst(types::I64, i64::from(n));
+        let (site, tracked) = self.task_site(range);
+        let chosen = self
+            .task_call("select", &[count, ops, site, tracked])
+            .expect("an index");
+        // -1: a trap; -3: unwind.
+        let ok = self.b.create_block();
+        let bad = self.b.create_block();
+        let neg = self.b.ins().icmp_imm_s(IntCC::SignedLessThan, chosen, 0);
+        self.b.ins().brif(neg, bad, &[], ok, &[]);
+        self.b.switch_to_block(bad);
+        let st = self.b.ins().ineg(chosen);
+        let st = self.b.ins().ireduce(types::I8, st);
+        self.not_returned(st)?;
+        self.b.switch_to_block(ok);
+        let join = self.b.create_block();
+        for (k, a) in list.iter().enumerate() {
+            let yes = self.b.create_block();
+            let no = self.b.create_block();
+            let is = self.b.ins().icmp_imm_s(IntCC::Equal, chosen, k as i64);
+            self.b.ins().brif(is, yes, &[], no, &[]);
+            self.b.switch_to_block(yes);
+            let result = self.place(&a.result)?;
+            let id = ids[k];
+            let fail = |lw: &mut Self, buf: ir::Value, error: &Place, failed: &Place| {
+                lw.read_error(buf, error)?;
+                lw.set_init(error);
+                let t = lw.b.ins().iconst(types::I8, 1);
+                let f = lw.place(failed)?;
+                lw.write(&f, Val::Scalar(t))
+            };
+            match a.kind {
+                0 => {
+                    self.receive(&result, |lw, out| {
+                        lw.task_call("recv_now", &[id, out]).expect("a status")
+                    })?;
+                    self.set_init(&a.result);
+                }
+                1 => {
+                    // The value is sent, or dropped: either way it is gone from its place.
+                    let p = a.payload.clone().ok_or("a send arm's value")?;
+                    let pr = self.place(&p)?;
+                    let l = self.layout(&pr.ty)?;
+                    let at = self.addr_or_dangling(&pr)?;
+                    let size = self.b.ins().iconst(types::I64, i64::from(l.size));
+                    let drop = self.drop_fn(&pr.ty)?;
+                    let st = self
+                        .task_call("send_now", &[id, at, size, drop])
+                        .expect("a status");
+                    self.set_flag(&p, false);
+                    let closed = self.b.create_block();
+                    let sent = self.b.create_block();
+                    self.b.ins().brif(st, closed, &[], sent, &[]);
+                    self.b.switch_to_block(closed);
+                    let er = self.place(&a.error)?;
+                    let room = self.error_room(&er.ty)?;
+                    let buf = self.slot(&Layout {
+                        size: room,
+                        align: 8,
+                        shape: Shape::Wide,
+                        niche: None,
+                    });
+                    self.write_closed(buf)?;
+                    fail(self, buf, &a.error, &a.failed)?;
+                    self.b.ins().jump(sent, &[]);
+                    self.b.switch_to_block(sent);
+                }
+                2 => {
+                    let out = self.result_room(&result)?;
+                    let er = self.place(&a.error)?;
+                    let room = self.error_room(&er.ty)?;
+                    let buf = self.slot(&Layout {
+                        size: room,
+                        align: 8,
+                        shape: Shape::Wide,
+                        niche: None,
+                    });
+                    let st = self
+                        .task_call("join_now", &[id, out, buf])
+                        .expect("a status");
+                    let done = self.b.create_block();
+                    let not = self.b.create_block();
+                    let failed = self.b.create_block();
+                    let other = self.b.create_block();
+                    self.b.ins().brif(st, not, &[], done, &[]);
+                    self.b.switch_to_block(not);
+                    let is = self.b.ins().icmp_imm_s(IntCC::Equal, st, 2);
+                    self.b.ins().brif(is, failed, &[], other, &[]);
+                    self.b.switch_to_block(failed);
+                    fail(self, buf, &a.error, &a.failed)?;
+                    let after = self.b.create_block();
+                    self.b.ins().jump(after, &[]);
+                    self.b.switch_to_block(other);
+                    self.not_returned(st)?;
+                    self.b.switch_to_block(done);
+                    self.result_into(&result, out)?;
+                    self.set_init(&a.result);
+                    self.b.ins().jump(after, &[]);
+                    self.b.switch_to_block(after);
+                }
+                _ => {}
+            }
+            self.b.ins().jump(join, &[]);
+            self.b.switch_to_block(no);
+        }
+        self.b.ins().jump(join, &[]);
+        self.b.switch_to_block(join);
+        self.write(d, Val::Scalar(chosen))
     }
 
     // ----- drops -----------------------------------------------------------------------------
@@ -2945,7 +4262,7 @@ impl Lower<'_, '_, '_> {
                 .impl_method(decl, ty, &drop)
                 .ok_or("a destructor")?;
             if items.fns[f as usize].intrinsic {
-                return Err(format!("the built-in destructor of `{ty}`"));
+                return self.native_drop(addr, ty);
             }
             let (id, params, ret) = self.c.declare_fn(f, &targs)?;
             let at = PlaceRef {
@@ -3164,8 +4481,12 @@ impl Lower<'_, '_, '_> {
         args: &[Operand],
         d: &PlaceRef,
         range: TextRange,
+        catch: &Option<(Place, moddil_mir::BlockId)>,
     ) -> Result<(), String> {
         let items = self.c.items;
+        if let Some(op) = task_op(items, f) {
+            return self.task(op, targs, args, d, range, catch);
+        }
         let sig = &items.fns[f as usize];
         let self_ty = match sig.container {
             moddil_sema::Container::Impl(k) => items.impls[k as usize].self_ty.clone(),
@@ -3312,6 +4633,36 @@ impl Lower<'_, '_, '_> {
                 let c = self.value(&args[0])?;
                 let w = self.b.ins().iconst(types::I32, which);
                 Val::Scalar(self.rt_call(self.c.rt.char_is, &[w, c]))
+            }
+            // The `char` with this code, if there is one: an `Option<char>`, whose `None` is the
+            // first value past the last character (its niche).
+            (Ty::Char, "from_code") => {
+                let l = self.layout(&d.ty)?;
+                let Shape::Enum {
+                    tag: Tag::Niche { niche, .. },
+                    ..
+                } = &l.shape
+                else {
+                    return unsupported();
+                };
+                if niche.first != 0x11_0000 || niche.offset != 0 {
+                    return unsupported();
+                }
+                let c = self.value(&args[0])?;
+                let below = self.b.ins().icmp_imm_s(IntCC::UnsignedLessThan, c, 0xD800);
+                let past = self
+                    .b
+                    .ins()
+                    .icmp_imm_s(IntCC::UnsignedGreaterThanOrEqual, c, 0xE000);
+                let within = self
+                    .b
+                    .ins()
+                    .icmp_imm_s(IntCC::UnsignedLessThan, c, 0x11_0000);
+                let high = self.b.ins().band(past, within);
+                let ok = self.b.ins().bor(below, high);
+                let code = self.b.ins().ireduce(types::I32, c);
+                let none = self.b.ins().iconst(types::I32, 0x11_0000);
+                Val::Scalar(self.b.ins().select(ok, code, none))
             }
             (Ty::Char, "code") => {
                 let c = self.value(&args[0])?;
@@ -3473,10 +4824,57 @@ impl Lower<'_, '_, '_> {
                 let zero = self.b.ins().iconst(types::I64, 0);
                 Val::Mem(self.host_text(code, lo, hi, null, zero))
             }
-            (Ty::Str, "quoted_text") => {
+            (Ty::Str, "quoted_text" | "upper_text" | "lower_text" | "trim") => {
                 let (p, n) = self.text(&args[0])?;
                 let zero = self.b.ins().iconst(types::I64, 0);
-                Val::Mem(self.host_text(103, zero, zero, p, n))
+                let code = match name {
+                    "quoted_text" => 103,
+                    "upper_text" => 104,
+                    "lower_text" => 105,
+                    _ => 106,
+                };
+                Val::Mem(self.host_text(code, zero, zero, p, n))
+            }
+            // The two parts of an `&mut` slice borrow, disjoint (`expr.slice.1`).
+            (Ty::Slice(_), "split_at_mut_unchecked") => {
+                // The element's type as the call has it (the impl's is a parameter).
+                let Ty::Ref(_, slice) = self.operand_ty(&args[0])? else {
+                    return unsupported();
+                };
+                let Ty::Slice(elem) = &*slice else {
+                    return unsupported();
+                };
+                let (stride, _) = {
+                    let e = self.layout(elem)?;
+                    (e.size.div_ceil(e.align) * e.align, e.align)
+                };
+                let Val::Mem(w) = self.operand(&args[0])? else {
+                    return unsupported();
+                };
+                let p = self.b.ins().load(types::I64, flags, w, 0);
+                let at = self.value(&args[1])?;
+                let n = self.value(&args[2])?;
+                let zero = self.b.ins().iconst(types::I64, 0);
+                let lo = self.b.ins().icmp(IntCC::SignedGreaterThanOrEqual, at, zero);
+                let hi = self.b.ins().icmp(IntCC::SignedLessThanOrEqual, at, n);
+                let ok = self.b.ins().band(lo, hi);
+                self.check(ok, TrapClass::IndexOutOfBounds, range)?;
+                let a = self.addr_of(d)?;
+                let l = self.layout(&d.ty)?;
+                let Shape::Fields(fs) = &l.shape else {
+                    return unsupported();
+                };
+                let (oa, ob) = (fs[0].0, fs[1].0);
+                let off = self.b.ins().imul_imm_s(at, i64::from(stride));
+                let q = self.b.ins().iadd(p, off);
+                let rest = self.b.ins().isub(n, at);
+                let fa = self.offset(a, oa);
+                let fb = self.offset(a, ob);
+                self.b.ins().store(flags, p, fa, 0);
+                self.b.ins().store(flags, at, fa, 8);
+                self.b.ins().store(flags, q, fb, 0);
+                self.b.ins().store(flags, rest, fb, 8);
+                Val::Unit
             }
             // The ambient log (`obs.log.1`): the message's text to standard error, then the
             // message dropped.

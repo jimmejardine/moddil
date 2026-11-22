@@ -121,7 +121,10 @@ fn loops() {
 #[test]
 fn what_is_not_compiled_yet_says_so() {
     assert!(matches!(
-        run("fn main() { yield_now(); }"),
+        run("trait A { fn a(&self) -> int; }  trait B { fn b(&self) -> int; }  trait C: A + B {}
+             struct S;  impl A for S { fn a(&self) -> int { 1 } }  impl B for S { fn b(&self) -> int { 2 } }  impl C for S {}
+             fn second(x: &dyn B) -> int { x.b() }  fn via(c: &dyn C) -> int { second(c) }
+             fn main() -> int { via(&S) }"),
         Err(Native::Unsupported(_))
     ));
 }
@@ -548,5 +551,121 @@ fn const_items_and_the_log() {
     assert_eq!(
         value("fn main() -> int { let n = 6; log.info(fmt\"total {n}\"); n }"),
         "6"
+    );
+}
+
+#[test]
+fn tasks_run_in_turn_and_join() {
+    assert_eq!(
+        value(
+            "fn main() -> int { scope(|s| { let a = s.spawn(|| 20); let b = s.spawn(|| 22); a.join() + b.join() }) }"
+        ),
+        "42"
+    );
+    // Values go through a channel in order, and `None` once its senders are gone.
+    assert_eq!(
+        value(
+            "fn main() -> Vec<int> {
+            let (tx, rx) = channel::<int>(1);
+            let mut got = Vec::new();
+            scope(|s| {
+                s.spawn(|| { let tx = tx; tx.send(1)?! \"alive\"; tx.send(2)?! \"alive\"; });
+                loop { match rx.recv() { Some(v) => got.push(v), None => break } }
+            });
+            got
+        }"
+        ),
+        "[1, 2]"
+    );
+}
+
+#[test]
+fn select_stop_and_deadlock() {
+    assert_eq!(
+        value(
+            "fn main() -> Option<int> {
+            let (atx, arx) = channel::<int>(1);
+            let (btx, brx) = channel::<int>(1);
+            atx.send(1)?! \"alive\";
+            btx.send(2)?! \"alive\";
+            select { x = brx.recv() => x, y = arx.recv() => y }
+        }"
+        ),
+        "Some(2)"
+    );
+    assert_eq!(
+        trap("fn main() -> Option<int> { let (tx, rx) = channel::<int>(1); rx.recv() }"),
+        TrapClass::Deadlock
+    );
+}
+
+#[test]
+fn cancellation_unwinds_and_isolation_catches_traps() {
+    // A failing body cancels its task, whose cleanup runs.
+    assert_eq!(
+        value(
+            "struct Oops { n: int }
+            fn main() -> (int, bool) {
+                let mut cleaned = false;
+                let (tx, rx) = channel::<int>(1);
+                let r = try {
+                    scope(|s| {
+                        s.spawn(|| { defer { cleaned = true; } rx.recv(); });
+                        yield_now();
+                        fail(Oops { n: 3 });
+                        0
+                    })?
+                };
+                let n = match r { Ok(v) => v, Err(Oops { n }) => -n };
+                (n, cleaned)
+            }"
+        ),
+        "(-3, true)"
+    );
+    // A trap in an isolated scope fails it with `Trapped`.
+    assert_eq!(
+        value(
+            "fn main() -> String {
+            let r = try { scope(|s| { let v = Vec::from_array([1]); v[3] }, isolate: true)? };
+            match r { Ok(_) => String::new(), Err(t) => t.class }
+        }"
+        ),
+        "\"index out of bounds\""
+    );
+}
+
+#[test]
+fn anonymous_impls_error_set_methods_and_the_last_built_ins() {
+    assert_eq!(
+        value("trait Time { fn now(&self) -> int; fn later(&self, by: int) -> int { self.now() + by } }
+            fn through(t: &dyn Time) -> int { t.later(5) }
+            fn main() -> int { let k = 10; let fixed = impl Time { fn now(&self) -> int { k } }; through(&fixed) + fixed.now() }"),
+        "25"
+    );
+    assert_eq!(
+        value("struct Missing;  struct Bad;
+            trait Answer { fn answer(self) -> int; }
+            impl Answer for Missing { fn answer(self) -> int { 404 } }
+            impl Answer for Bad { fn answer(self) -> int { 400 } }
+            fn lookup(x: int) -> int with fail(Missing | Bad) { if x == 0 { fail(Bad) } x }
+            fn serve<F: Fn(int) -> int>(f: F, x: int) -> int where F::Fails: Answer { try { f(x)? } catch { e => e.answer() } }
+            fn main() -> int { serve(lookup, 0) }"),
+        "400"
+    );
+    assert_eq!(
+        value(
+            "type Port = int where self >= 1024;  fn next(p: Port) -> int { p + 1 }  fn main() -> int { next(2000) }"
+        ),
+        "2001"
+    );
+    assert_eq!(
+        value(
+            "fn main() -> (Option<char>, Option<char>) { (char::from_code(65), char::from_code(0xD800)) }"
+        ),
+        "(Some('A'), None)"
+    );
+    assert_eq!(
+        value(r#"fn main() -> String { String::from_str("  Hi  ".trim().upper_text()) }"#),
+        r#""HI""#
     );
 }

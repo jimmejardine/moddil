@@ -6,8 +6,6 @@
 
 #![allow(unsafe_code)]
 
-use std::cell::RefCell;
-
 use moddil_sema::Num;
 
 /// The number types by code: `int` is 0, these from 1.
@@ -65,16 +63,6 @@ pub(crate) extern "C" fn convert(
     }
 }
 
-thread_local! {
-    /// The texts made during a run: they live until it ends, as a `&str` that `text` gives may.
-    static TEXTS: RefCell<Vec<Box<str>>> = const { RefCell::new(Vec::new()) };
-}
-
-/// Forgets the texts of the runs before.
-pub(crate) fn clear_texts() {
-    TEXTS.with(|t| t.borrow_mut().clear());
-}
-
 /// What a text function gives: `text` of a number (by its code), of a `bool` (code 100) or of a
 /// `char` (code 101), in `lo`; or `quoted_text` of a `char` (code 102), or of the text at `p`
 /// (`n` bytes, code 103). Its address, and its length at `len`.
@@ -92,20 +80,57 @@ pub(crate) extern "C" fn text(
         100 => (lo & 1 == 1).to_string(),
         101 => char::from_u32(lo as u32).map_or_else(String::new, String::from),
         102 => char::from_u32(lo as u32).map_or_else(String::new, |c| format!("{c:?}")),
-        103 => {
+        103..=106 => {
             // SAFETY: the generated code passes a `&str`'s address and length.
             let t =
                 unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(p, n as usize)) };
-            format!("{t:?}")
+            match code {
+                103 => format!("{t:?}"),
+                104 => t.to_uppercase(),
+                105 => t.to_lowercase(),
+                _ => t.trim().to_string(),
+            }
         }
         k => num_of(k).map_or_else(String::new, |n| moddil_mir::num_text(n, bits)),
     };
-    let s: Box<str> = s.into();
-    let at = s.as_ptr();
+    keep(s, len)
+}
+
+/// Keeps `s` until the run ends: its address, and its length at `len`.
+fn keep(s: String, len: *mut u64) -> *const u8 {
     // SAFETY: the generated code passes a word to write the length to.
     unsafe { *len = s.len() as u64 };
-    TEXTS.with(|t| t.borrow_mut().push(s));
-    at
+    moddil_rt::keep_text(s.into())
+}
+
+/// What the host's functions need of a run: its sites, and its files' paths and text.
+pub(crate) struct HostData<'a> {
+    pub(crate) sites: &'a [crate::lower::Site],
+    pub(crate) files: &'a [(String, String)],
+}
+
+/// The text of the `Trapped` an isolated scope failed with: its class (`which` 0) or where it
+/// was, as `file:line:column` (1), the trap reported where the interpreters report it.
+pub(crate) extern "C" fn trapped(which: u32, len: *mut u64) -> *const u8 {
+    let host = moddil_rt::host() as *const HostData<'_>;
+    let t = moddil_rt::last_trapped();
+    // SAFETY: the run's host data lives while its code runs.
+    let text = match (unsafe { host.as_ref() }, t) {
+        (Some(h), Some(t)) => match crate::jit::reported(h.sites, &t) {
+            crate::Native::Trap(class, file, range) => {
+                if which == 0 {
+                    class.to_string()
+                } else {
+                    let (path, text) = &h.files[file as usize];
+                    let (line, col) = moddil_syntax::line_col(text, range.start);
+                    format!("{path}:{line}:{col}")
+                }
+            }
+            _ => String::new(),
+        },
+        _ => String::new(),
+    };
+    keep(text, len)
 }
 
 /// The log's levels, by number.

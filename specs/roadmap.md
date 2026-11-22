@@ -712,8 +712,37 @@ calls is a Rust crate, `moddil-rt`, for now.
     - no anonymous impls;
     - not `upper_text`, `lower_text`, `trim` or `split_at_mut_unchecked`;
     - converting a `dyn` borrow to a supertrait that is not its first.
-- **Next, C5:** concurrency (tasks, channels and scopes), then the rest of the prelude's
-  built-ins, then native code as the default for `moddil run` and `moddil test`.
+- **Slice C5 (decided November 2026): concurrency, and the last built-ins.**
+  - **Tasks are threads with a baton.** Each task is an OS thread, but only the one holding the
+    baton runs. The scheduler is `moddil-interp`'s, ported to `moddil-rt` with values as bytes,
+    so tasks run in the interpreters' order.
+    - What a run records (the trap, the live allocations, the observer, the texts) is shared by
+      its threads.
+    - A trap outside an isolated scope aborts the run. Every waiting task is woken to return,
+      running no more code, and the host joins their threads before it frees the code.
+  - **Unwinding is status 3.** Cleanup blocks are compiled. A cancelled task, or a trap in an
+    isolated scope, unwinds through them, so destructors and `defer` run.
+  - **The operations:**
+    - tasks and scopes: `spawn`, `__scope_run`, `join`, `stop`, `stop_requested` and `yield_now`;
+    - channels: `channel`, `send` (a rendezvous waits), `recv`, `Sender::clone`, and the drops
+      of `Sender`, `Receiver` and `Task`;
+    - `select`, which waits in the runtime and does the chosen arm's operation inline;
+    - `Trapped`, built from the trap's class and `file:line:column`.
+  - **The last built-ins:**
+    - text: `upper_text`, `lower_text` and `trim`;
+    - `split_at_mut_unchecked` and `char::from_code`;
+    - refined types, which are their base;
+    - anonymous impls (closures, with thunks for their vtables);
+    - methods called on an error set (by its id);
+    - a stub mod's functions, which trap as unimplemented.
+  - **Errors:** an error set's value is copied only as far as the member it holds, since a
+    caller's view of the errors can be a smaller set. And an error is converted when the MIR
+    moves it between a set and its members (`Err(e)` in a `try` block).
+  - **Checking:** all 119 conformance files the interpreters run also run natively (from 102),
+    with no disagreements and no leaks.
+  - **Interim limit:** converting a `dyn` borrow to a supertrait that is not its first.
+- **Next:** native code as the default for `moddil run` and `moddil test`, and ahead-of-time
+  builds.
 
 ## Staging: distributed programs
 

@@ -12,9 +12,19 @@
 //!   stack, and a trap in tracked code can be reported where untracked code called it.
 //! - Text and float functions the code needs and Cranelift has no instruction for.
 //!
-//! What they record is kept per thread until the host [`take`]s it.
+//! - Tasks, scopes and channels ([`run`]): each task is a thread, and one runs at a time.
+//!
+//! What they record is kept per run, shared by its threads, until the host [`take`]s it.
 
-use std::cell::{Cell, RefCell};
+mod run;
+mod sched;
+
+pub use run::{
+    TaskFn, TaskSpec, begin_run, channel, clone_sender, detach, drop_receiver, drop_sender,
+    end_run, host, join, join_now, keep_text, last_trapped, recv, recv_now, scope_open, scope_run,
+    select, send, send_now, set_host, spawn, stop, stop_requested, yield_now,
+};
+pub use sched::DropFn;
 
 /// How many calls deep a run may go, the frame it starts in included: as the MIR interpreter's
 /// limit (`moddil_interp::MAX_DEPTH`).
@@ -39,77 +49,57 @@ pub struct Record {
     pub trap: Option<Trapped>,
     /// The site of the last error raised (`fail`), which is where one that leaves the run was.
     pub failed: Option<u32>,
-    /// The call sites the run is in, innermost last.
-    stack: Vec<u32>,
 }
 
 /// What the host gives to see observed values: a function and the context it is called with,
 /// with each observation's site and the address of its value.
 pub type Observer = (fn(*mut (), u32, *const u8), *mut ());
 
-thread_local! {
-    static RECORD: RefCell<Record> = RefCell::new(Record::default());
-    static OBSERVER: Cell<Option<Observer>> = const { Cell::new(None) };
-}
-
-/// Installs (or, with `None`, removes) this thread's observer.
+/// Installs (or, with `None`, removes) the run's observer.
 pub fn set_observer(o: Option<Observer>) {
-    OBSERVER.with(|c| c.set(o));
+    run::with(|s| s.observer = o);
 }
 
-fn record_trap(site: u32, tracked: bool) {
-    RECORD.with(|r| {
-        let mut r = r.borrow_mut();
-        if r.trap.is_none() {
-            let stack = r.stack.clone();
-            r.trap = Some(Trapped {
-                site,
-                tracked,
-                stack,
-            });
-        }
-    });
-}
-
-/// Records that the check at `site` failed. The code that calls it returns a trapped status.
-pub extern "C" fn trap(site: u32) {
-    record_trap(site, false);
+/// Records that the check at `site` failed: the status the code returns, 1 (the run ends) or 3
+/// (an isolated scope takes the trap, and the task unwinds).
+pub extern "C" fn trap(site: u32) -> u8 {
+    run::record_trap(site, false)
 }
 
 /// As [`trap`], in tracked code: `#[track_caller]`, the prelude's or derived code.
-pub extern "C" fn trap_tracked(site: u32) {
-    record_trap(site, true);
+pub extern "C" fn trap_tracked(site: u32) -> u8 {
+    run::record_trap(site, true)
 }
 
 /// Records that the `fail` at `site` raised an error: the code then returns a failed status.
 pub extern "C" fn fail_at(site: u32) {
-    RECORD.with(|r| r.borrow_mut().failed = Some(site));
+    run::with(|s| s.failed = Some(site));
 }
 
 /// Hands the value at `addr` of the observed expression at `site` to the observer, if there is
 /// one.
 pub extern "C" fn observe(site: u32, addr: *const u8) {
-    if let Some((f, cx)) = OBSERVER.with(Cell::get) {
+    if let Some((f, cx)) = run::with(|s| s.observer) {
         f(cx, site, addr);
     }
 }
 
-/// Before the call at `site`: 0 if it may go a frame deeper, or 1, recording the stack
-/// overflow as a trap at `site`, if it may not. `tracked` says whether the calling code is.
+/// Before the call at `site`: 0 if it may go a frame deeper; if it may not, the status of the
+/// stack overflow recorded as a trap at `site` (1, or 3 in an isolated scope). `tracked` says
+/// whether the calling code is.
 pub extern "C" fn enter(site: u32, tracked: u8) -> u8 {
-    let full = RECORD.with(|r| r.borrow().stack.len() as u32 + 1 >= MAX_DEPTH);
+    let full = run::STACK.with(|r| r.borrow().len() as u32 + 1 >= MAX_DEPTH);
     if full {
-        record_trap(site, tracked != 0);
-        return 1;
+        return run::record_trap(site, tracked != 0);
     }
-    RECORD.with(|r| r.borrow_mut().stack.push(site));
+    run::STACK.with(|r| r.borrow_mut().push(site));
     0
 }
 
 /// After a call returns, however it returns.
 pub extern "C" fn leave() {
-    RECORD.with(|r| {
-        r.borrow_mut().stack.pop();
+    run::STACK.with(|r| {
+        r.borrow_mut().pop();
     });
 }
 
@@ -236,30 +226,20 @@ pub extern "C" fn char_is(which: u32, c: u32) -> u8 {
     })
 }
 
-thread_local! {
-    /// How many allocations are live.
-    static LIVE: Cell<i64> = const { Cell::new(0) };
-}
-
 /// How many allocations made with [`alloc`] are not yet freed, on this thread, not counting
 /// those of `const` items' values (which live as long as the program).
 pub fn live() -> i64 {
-    LIVE.with(Cell::get)
-}
-
-thread_local! {
-    static STATIC_FROM: Cell<i64> = const { Cell::new(0) };
+    run::with(|s| s.live)
 }
 
 /// Before a `const` item's value is computed.
 pub extern "C" fn static_begin() {
-    STATIC_FROM.with(|s| s.set(live()));
+    run::with(|s| s.static_from = s.live);
 }
 
 /// After it is computed: what it allocated lives as long as the program, so it is not counted.
 pub extern "C" fn static_end() {
-    let from = STATIC_FROM.with(Cell::get);
-    LIVE.with(|l| l.set(from));
+    run::with(|s| s.live = s.static_from);
 }
 
 fn layout(size: u64, align: u64) -> std::alloc::Layout {
@@ -273,7 +253,7 @@ pub extern "C" fn alloc(size: u64, align: u64) -> *mut u8 {
     if size == 0 {
         return std::ptr::without_provenance_mut(align.max(1) as usize);
     }
-    LIVE.with(|l| l.set(l.get() + 1));
+    run::with(|s| s.live += 1);
     let l = layout(size, align);
     #[allow(unsafe_code)]
     // SAFETY: `l` has a size other than zero.
@@ -294,7 +274,7 @@ pub unsafe extern "C" fn free(ptr: *mut u8, size: u64, align: u64) {
     if size == 0 {
         return;
     }
-    LIVE.with(|l| l.set(l.get() - 1));
+    run::with(|s| s.live -= 1);
     // SAFETY: as the caller says.
     unsafe {
         std::alloc::dealloc(ptr, layout(size, align));
@@ -333,7 +313,10 @@ pub unsafe extern "C" fn memmove(dst: *mut u8, src: *const u8, n: u64) {
 
 /// Takes what this thread's runs have recorded since the last time, leaving it as a new run's.
 pub fn take() -> Record {
-    RECORD.with(|r| std::mem::take(&mut *r.borrow_mut()))
+    run::with(|s| Record {
+        trap: s.trap.take(),
+        failed: s.failed.take(),
+    })
 }
 
 /// This crate's version.
@@ -341,6 +324,8 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use super::*;
 
     thread_local! {
@@ -385,6 +370,48 @@ mod tests {
         leave();
         assert_eq!(enter(0, 0), 0);
         assert_eq!(take().trap.map(|t| t.site), Some(9));
+    }
+
+    #[allow(unsafe_code)]
+    extern "C" fn sender(captures: *mut u8, _: u64, _: *mut u8, _: *mut u8) -> i8 {
+        // SAFETY: the captures are the channel's number.
+        let c = unsafe { *captures.cast::<u64>() };
+        let v = 41u64;
+        let status = send(c, (&raw const v).cast(), 8, None, 0, 0);
+        drop_sender(c);
+        status as i8
+    }
+
+    #[test]
+    #[allow(unsafe_code)]
+    fn tasks_take_turns() {
+        begin_run();
+        let s = scope_open(0);
+        let c = channel(0);
+        let captures = alloc(8, 8);
+        // SAFETY: room for the channel's number.
+        unsafe { *captures.cast::<u64>() = c };
+        let spec = TaskSpec {
+            code: sender,
+            captures,
+            size: 8,
+            align: 8,
+            arg: 0,
+            out: 0,
+            err: 0,
+            drop: None,
+        };
+        // SAFETY: `spec` is a task to start.
+        let t = unsafe { spawn(s, &raw const spec) };
+        let mut got = 0u64;
+        // The sender runs once this task waits; a rendezvous, so it waits for the value to go.
+        assert_eq!(recv(c, (&raw mut got).cast(), 0, 0), 0);
+        assert_eq!(got, 41);
+        assert_eq!(join(t, std::ptr::null_mut(), std::ptr::null_mut(), 0, 0), 0);
+        // Its sender is gone: `None`.
+        assert_eq!(recv(c, (&raw mut got).cast(), 0, 0), 5);
+        end_run();
+        assert_eq!(live(), 0);
     }
 
     #[test]

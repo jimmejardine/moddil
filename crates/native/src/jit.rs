@@ -5,6 +5,7 @@
 
 use moddil_mir::TrapClass;
 use moddil_sema::{ItemTree, Num, Shape as VariantShape, Ty};
+use moddil_syntax::TextRange;
 
 use crate::layout::{Layouts, Shape, Tag};
 use crate::lower::{Compiled, Site};
@@ -49,12 +50,18 @@ impl Compiled<'_> {
         let (sites, items, ret) = (&self.sites, self.items, &self.ret);
         let dyn_types = &self.dyn_types;
         let errors = &self.errors;
+        let host = crate::host::HostData {
+            sites: &self.sites,
+            files: &self.files,
+        };
+        let host = &host;
         let (status, text, observed, record, leaked) = std::thread::scope(|s| {
             std::thread::Builder::new()
                 .stack_size(STACK)
                 .spawn_scoped(s, move || {
-                    moddil_rt::take();
-                    crate::host::clear_texts();
+                    // A new run, its tasks' threads joining this one's.
+                    moddil_rt::begin_run();
+                    moddil_rt::set_host(std::ptr::from_ref(host) as usize);
                     let live = moddil_rt::live();
                     let mut seen = Seen {
                         sites,
@@ -83,6 +90,8 @@ impl Compiled<'_> {
                     let entry: extern "C" fn(*mut u8, *mut u8) -> i8 =
                         unsafe { std::mem::transmute::<usize, _>(ptr) };
                     let status = entry(out.as_mut_ptr().cast(), err.as_mut_ptr().cast());
+                    // Every task has ended, or (after a trap) is ending, running no more code.
+                    moddil_rt::end_run();
                     moddil_rt::set_observer(None);
                     let text = match status {
                         // SAFETY: the run returned, so `out` holds a value of type `ret`.
@@ -120,7 +129,7 @@ impl Compiled<'_> {
                 _ => Err(Native::Unsupported("an error without a site".to_string())),
             },
             _ => match record.trap {
-                Some(t) => Ok(self.reported(&t)).and_then(Err),
+                Some(t) => Err(reported(&self.sites, &t)),
                 None => Err(Native::Unsupported("a trap without a site".to_string())),
             },
         };
@@ -130,11 +139,15 @@ impl Compiled<'_> {
     }
 }
 
-impl Compiled<'_> {
-    /// A trap as the interpreters report it: where it happened, or, in tracked code, at the
-    /// innermost call untracked code made.
-    fn reported(&self, t: &moddil_rt::Trapped) -> Native {
-        let (class, file, range) = match &self.sites[t.site as usize] {
+/// A trap as the interpreters report it: where it happened, or, in tracked code, at the
+/// innermost call untracked code made. A deadlock no site says the place of is reported at the
+/// start of the first file.
+pub(crate) fn reported(sites: &[Site], t: &moddil_rt::Trapped) -> Native {
+    {
+        let Some(site) = sites.get(t.site as usize) else {
+            return Native::Trap(TrapClass::Deadlock, 0, TextRange::default());
+        };
+        let (class, file, range) = match site {
             Site::Trap(class, file, range) => (*class, *file, *range),
             Site::Call(file, range, _) => (TrapClass::StackOverflow, *file, *range),
             Site::Observe(..) | Site::Fail(..) => {
@@ -148,7 +161,7 @@ impl Compiled<'_> {
             .stack
             .iter()
             .rev()
-            .find_map(|s| match &self.sites[*s as usize] {
+            .find_map(|s| match &sites[*s as usize] {
                 Site::Call(file, range, false) => Some((*file, *range)),
                 _ => None,
             });
