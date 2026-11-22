@@ -125,7 +125,11 @@ impl Builder<'_> {
         } else {
             let mut ops = self.operands(args);
             let mut tys: Vec<Ty> = args.iter().map(|&a| self.ty(a)).collect();
-            for (p, t) in given.into_iter().zip(given_tys) {
+            // A closure returned as `impl Fn… with …` is revealed as its own type here, so what
+            // it is given is typed by the closure's body.
+            let mut given_tys = given_tys.into_iter();
+            for p in given {
+                let t = given_tys.next().unwrap_or(Ty::Error);
                 tys.push(Ty::reference(false, t));
                 ops.push(Operand::Copy(p));
             }

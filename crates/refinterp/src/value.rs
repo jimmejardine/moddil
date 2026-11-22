@@ -52,6 +52,9 @@ pub(crate) struct Closure {
     /// For the closure a wrapper is given (`attr.around.1`): the wrapped function's key, and
     /// the wrapper after which the closure runs the rest.
     pub(crate) wrapped: Option<(String, usize)>,
+    /// Whether it has left the function it was written in (it was returned): it then runs with
+    /// its caller's handlers, which meet the needs its type lists (`expr.closure.result.1`).
+    pub(crate) escaped: bool,
 }
 
 /// A node of the program's syntax, as values hold it: which tree (the prelude's, `core`'s or a

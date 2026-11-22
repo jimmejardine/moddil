@@ -16,6 +16,9 @@ pub(crate) enum CallPlan {
         item: Item,
         args: Vec<Value>,
         type_args: Vec<Ty>,
+        /// Where the closure is, if it is called through a borrow: its captures go back there
+        /// when the call returns, so what it owns keeps its changes.
+        back: Option<crate::value::Pointer>,
     },
     /// A function's body.
     Fn(Target, Vec<Value>),
@@ -41,6 +44,17 @@ pub(crate) fn plan(
                 Some(Value::Dyn(ptr, mutable, t)) => {
                     values[0] = Value::Ref(ptr, mutable);
                     args[0] = *t;
+                }
+                // A `Box<dyn FnOnce…>` called, which gives up its closure
+                // (`expr.closure.stored.1`).
+                Some(Value::Adt { fields, .. }) => {
+                    if let Some(Value::Buf(_, xs)) = fields.first()
+                        && let Some(Value::Owned(o)) = xs.first()
+                    {
+                        let (v, t) = (**o).clone();
+                        values[0] = v;
+                        args[0] = t;
+                    }
                 }
                 // A borrow of the value a `Box<dyn Trait>` owns (`type.box.dyn.1`).
                 Some(Value::Ref(mut ptr, mutable)) => {
@@ -100,10 +114,16 @@ pub(crate) fn plan(
         let Value::Closure(captures) = stack.deref(&values[0]) else {
             unreachable!("a closure's value")
         };
+        // Called through a borrow (`Fn`, `FnMut`): what it owns and changes is kept.
+        let back = match &values[0] {
+            Value::Ref(ptr, _) => Some(ptr.clone()),
+            _ => None,
+        };
         return CallPlan::Closure {
             item: Item::closure(c.owner, c.expr),
             args: vec![tuple(captures), values[1].clone()],
             type_args: c.args.to_vec(),
+            back,
         };
     }
     match dispatch.target(&callee, stack.type_args()) {

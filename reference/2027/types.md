@@ -64,9 +64,10 @@ its own type. `dyn` is written without a borrow only as a `Box`'s argument (E060
 a value of one type of its choice, its **hidden** type, which must meet the bounds (E0402), and a
 caller sees only the bounds: it can call the bounds' methods and pass the value where they are
 required, but not use what else the hidden type has (E0403). Each call of a generic function, for
-its type arguments, gives one opaque type. For now the result type is `impl Trait` itself, not a
-type containing one; a trait's methods cannot have one; and the hidden type cannot hold a borrow
-or a closure.
+its type arguments, gives one opaque type. For now the result type is `impl Trait` itself (or
+`(impl Fn() with E)`, parenthesised), not a type containing one; a trait's methods cannot have
+one; and the hidden type cannot hold a borrow, nor a closure but one the function returns as
+`impl Fn…` (**expr.closure.result.1**).
 
 **type.dyn.coerce.1** A `&T` can be used where a `&dyn Trait` is expected if `T` implements `Trait`
 (E0402), and so can a `&dyn Sub` of a subtrait `Sub` of `Trait`; likewise for `&mut`, which can also

@@ -1,0 +1,15 @@
+// covers: expr.closure.result.1
+
+struct Missing;
+fn lookup(x: int) -> int with fail(Missing) {
+    if x == 0 { fail(Missing) }
+    x
+}
+
+fn unlisted() -> impl Fn(int) -> int {             //~ E0502
+    |x| lookup(x)?
+}
+
+fn borrowed(v: &Vec<int>) -> impl Fn() -> int {
+    || v.len()                                      //~ E0802
+}

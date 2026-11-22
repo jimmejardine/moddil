@@ -25,6 +25,7 @@ impl Machine<'_> {
             file: self.memory.file(),
             module: self.memory.module(),
             wrapped: None,
+            escaped: false,
         }))
     }
 
@@ -58,6 +59,16 @@ impl Machine<'_> {
         Value::Anon(key, methods)
     }
 
+    /// The handlers closure `c` runs with: those where it was written, and, once it has left
+    /// the function it was written in, its caller's after them (`expr.closure.result.1`).
+    fn handlers_for(&self, c: &Closure) -> Vec<(String, Value)> {
+        let mut hs = c.handlers.clone();
+        if c.escaped {
+            hs.extend(self.handlers.iter().cloned());
+        }
+        hs
+    }
+
     /// Calls closure `c` with `args`: its parameters are matched against them, and its body runs
     /// with the variables and handlers of where it was written. A closure whose node is a
     /// method (of an anonymous impl) takes the method's parameters but `self`.
@@ -81,7 +92,8 @@ impl Machine<'_> {
                     self.memory.push(name.clone(), v);
                 }
             }
-            let saved = std::mem::replace(&mut self.handlers, c.handlers.clone());
+            let hs = self.handlers_for(c);
+            let saved = std::mem::replace(&mut self.handlers, hs);
             let saved_modes = std::mem::take(&mut self.try_modes);
             let result = self.wrapped_body(&f, *k, range);
             self.handlers = saved;
@@ -91,7 +103,8 @@ impl Machine<'_> {
         let node = self.node(&c.node);
         // A function used as a value (`expr.fn-value.1`): a call of it.
         if node.kind() == K::PATH_EXPR {
-            let saved = std::mem::replace(&mut self.handlers, c.handlers.clone());
+            let hs = self.handlers_for(c);
+            let saved = std::mem::replace(&mut self.handlers, hs);
             let saved_modes = std::mem::take(&mut self.try_modes);
             let result = self.call_fn_path(&node, args, range);
             self.handlers = saved;
@@ -123,7 +136,8 @@ impl Machine<'_> {
             debug_assert!(matched, "parameter patterns are irrefutable");
             self.bind(binds);
         }
-        let saved = std::mem::replace(&mut self.handlers, c.handlers.clone());
+        let hs = self.handlers_for(c);
+        let saved = std::mem::replace(&mut self.handlers, hs);
         let saved_modes = std::mem::take(&mut self.try_modes);
         let body = if method {
             node.child(K::BLOCK)

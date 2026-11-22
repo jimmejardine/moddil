@@ -473,7 +473,7 @@ something runs from the first slice.
     - A call whose errors are a type parameter's `Fails` passes them on unmarked, as a closure
       parameter's call does.
   - **Interim limits:**
-    - no `Box<dyn FnOnce>`, and no `impl Fn` result;
+    - no `Box<dyn FnOnce>`, and no `impl Fn` result (both done in S12b);
     - only `Box::new(|…| …)` written where the box is expected meets its needs at the call (a
       closure bound to a local first is checked as an ordinary one);
     - a `Box<dyn Fn>` is called through its box (`f(x)`, `(**f)(x)`), not as a `&dyn Fn`
@@ -485,6 +485,19 @@ something runs from the first slice.
       as the call's, so `?` on such a call whose errors turn out to be `!`, giving an `Option`,
       differs between the interpreters;
     - `escape` is not implemented, so its rule for stored closures waits.
+- **Slice S12b (decided November 2026): `impl Fn` results and `Box<dyn FnOnce>`.**
+  - **`impl Fn` results** (`expr.closure.result.1`):
+    - A closure a function returns as `impl Fn…` is a stored one. It owns its captures, and its
+      result type fixes its errors, control effects and the needs its caller meets:
+      `-> (impl Fn() with Clock)`, parenthesised as `syntax.md` says.
+    - The checker reads the result type as the `dyn Fn…` it describes (`FnSig::opaque_fn`), for
+      the closure's types and for each call of the result. The MIR sees the closure itself.
+  - **`Box<dyn FnOnce…>`:** a call moves the box, and the MIR interpreter takes the closure out
+    of it.
+  - **Captures:** a call of a closure parameter inside a closure is now a read, a write or a move
+    as its strongest bound says (`Fn`, `FnMut`, `FnOnce`), not always a write.
+  - **Interim limit:** only a closure written as the function's value, or after `return`, is
+    taken as the one returned (a closure bound to a local first is not).
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

@@ -273,9 +273,12 @@ impl<'a> Machine<'a> {
                 item,
                 args,
                 type_args,
+                back,
             } => {
                 let code = self.body(item);
-                self.stack.push(Frame::new(code, args, type_args, ret));
+                let mut frame = Frame::new(code, args, type_args, ret);
+                frame.write_back = back;
+                self.stack.push(frame);
                 return None;
             }
             CallPlan::Fn((f, type_args), values) => {

@@ -54,6 +54,12 @@ enum Use {
 pub(super) struct Hint(pub(super) Ty);
 
 impl Checker<'_> {
+    /// The stored closure type `o`'s function says its result is (`expr.closure.result.1`).
+    pub(super) fn opaque_fn(&self, o: &crate::ty::OpaqueTy) -> Option<Ty> {
+        let f = self.items.fns.get(o.func as usize)?;
+        f.opaque_fn.as_ref().map(|d| d.subst(&o.args))
+    }
+
     /// The closure traits, by index: `FnOnce`, `FnMut` and `Fn`.
     pub(super) fn closure_trait(&self, t: u32) -> Option<ClosureKind> {
         let lang = |n| self.items.lang(n);
@@ -139,7 +145,15 @@ impl Checker<'_> {
         ret: Option<&Ty>,
         body: ExprId,
     ) -> Ty {
-        let hint = self.hint.take().map(|h| h.0);
+        let mut hint = self.hint.take().map(|h| h.0);
+        // A closure the function returns as `impl Fn…` is a stored one (`expr.closure.result.1`).
+        let mut returned = false;
+        if let Some((_, d)) = self.opaque_hint.clone()
+            && self.result_closures.contains(&e)
+        {
+            hint = Some(d);
+            returned = true;
+        }
         let (hint_params, hint_ret) = match self.sig_hint.take() {
             Some(sig) => sig,
             None => self.closure_hint(hint.as_ref(), params.len()),
@@ -207,7 +221,7 @@ impl Checker<'_> {
         self.ret_range = saved_range;
         self.loops = saved_loops;
         self.closures.push(e);
-        Ty::Closure(Arc::new(ClosureTy {
+        let made = Ty::Closure(Arc::new(ClosureTy {
             owner: self.owner,
             expr: index(e) as u32,
             args: self.owner_args.clone().into(),
@@ -216,7 +230,11 @@ impl Checker<'_> {
             fails: Ty::errors(errors),
             kind: ClosureKind::Fn,
             captures: Arc::from([]),
-        }))
+        }));
+        if returned && let Some(d) = hint {
+            self.stored.push((made.clone(), d, self.range(e)));
+        }
+        made
     }
 
     /// `impl Trait { fn … }` (`expr.anon-impl.1`): each method is checked as a closure for the
@@ -271,42 +289,54 @@ impl Checker<'_> {
         {
             t = d;
         }
-        let (params, ret, fails, tuple) = match &t {
-            Ty::Dyn(tr, _) if self.closure_trait(tr.trait_).is_some() => {
+        // A closure a function returned as `impl Fn…` is called as the stored one its result
+        // type describes (`expr.closure.result.1`).
+        let described = match &t {
+            Ty::Opaque(o) => self
+                .opaque_fn(o)
+                .filter(|d| matches!(d, Ty::Dyn(tr, _) if self.closure_trait(tr.trait_).is_some())),
+            Ty::Dyn(..) => Some(t.clone()),
+            _ => None,
+        };
+        let (params, ret, fails, tuple) = match &described {
+            Some(d @ Ty::Dyn(tr, _)) if self.closure_trait(tr.trait_).is_some() => {
+                let d = d.clone();
                 let bound = tr.args.first().cloned().unwrap_or(Ty::Unit);
                 let params = match &bound {
                     Ty::Tuple(ts) => ts.to_vec(),
                     Ty::Unit => Vec::new(),
                     t => vec![t.clone()],
                 };
-                let ret = self.closure_assoc(&t, &bound, 0);
-                let fails = self.closure_assoc(&t, &bound, 1);
+                let ret = self.closure_assoc(&d, &bound, 0);
+                let fails = self.closure_assoc(&d, &bound, 1);
                 // Its type's needs and control effects are this call's.
-                self.record_needs(e, t.dyn_control(), t.dyn_needs(), range);
+                self.record_needs(e, d.dyn_control(), d.dyn_needs(), range);
                 (params, self.norm(&ret), self.norm(&fails), bound)
             }
-            Ty::Closure(c) => {
-                let tuple = Ty::tuple(c.params.to_vec());
-                (c.params.to_vec(), c.ret.clone(), c.fails.clone(), tuple)
-            }
-            Ty::Param(..) => {
-                let bound = self
-                    .solver
-                    .env
-                    .iter()
-                    .filter(|p| p.ty == t)
-                    .filter(|p| self.closure_trait(p.trait_ref.trait_).is_some())
-                    .map(|p| p.trait_ref.args.first().cloned().unwrap_or(Ty::Unit))
-                    .next()?;
-                let params = match &bound {
-                    Ty::Tuple(ts) => ts.to_vec(),
-                    _ => Vec::new(),
-                };
-                let ret = self.closure_assoc(&t, &bound, 0);
-                let fails = self.closure_assoc(&t, &bound, 1);
-                (params, ret, fails, bound)
-            }
-            _ => return None,
+            _ => match &t {
+                Ty::Closure(c) => {
+                    let tuple = Ty::tuple(c.params.to_vec());
+                    (c.params.to_vec(), c.ret.clone(), c.fails.clone(), tuple)
+                }
+                Ty::Param(..) => {
+                    let bound = self
+                        .solver
+                        .env
+                        .iter()
+                        .filter(|p| p.ty == t)
+                        .filter(|p| self.closure_trait(p.trait_ref.trait_).is_some())
+                        .map(|p| p.trait_ref.args.first().cloned().unwrap_or(Ty::Unit))
+                        .next()?;
+                    let params = match &bound {
+                        Ty::Tuple(ts) => ts.to_vec(),
+                        _ => Vec::new(),
+                    };
+                    let ret = self.closure_assoc(&t, &bound, 0);
+                    let fails = self.closure_assoc(&t, &bound, 1);
+                    (params, ret, fails, bound)
+                }
+                _ => return None,
+            },
         };
         if args.len() != params.len() {
             self.report(
@@ -605,6 +635,12 @@ impl Checker<'_> {
             let kind = match &t {
                 Ty::Closure(c) => c.kind,
                 Ty::Dyn(tr, _) => self.closure_trait(tr.trait_).unwrap_or(ClosureKind::FnOnce),
+                Ty::Opaque(o) => match self.opaque_fn(o) {
+                    Some(Ty::Dyn(tr, _)) => {
+                        self.closure_trait(tr.trait_).unwrap_or(ClosureKind::FnOnce)
+                    }
+                    _ => ClosureKind::FnOnce,
+                },
                 _ => self
                     .solver
                     .env
@@ -812,7 +848,23 @@ impl Walk<'_, '_> {
                         Some(ClosureKind::FnMut) => Use::Write,
                         _ => Use::Value,
                     },
-                    Ty::Param(..) => Use::Write,
+                    // A closure parameter, as the strongest of its bounds lets it be called.
+                    t @ Ty::Param(..) => {
+                        let t = t.clone();
+                        let kind = self
+                            .cx
+                            .solver
+                            .env
+                            .iter()
+                            .filter(|p| p.ty == t)
+                            .filter_map(|p| self.cx.closure_trait(p.trait_ref.trait_))
+                            .min();
+                        match kind {
+                            Some(ClosureKind::Fn) => Use::Read,
+                            Some(ClosureKind::FnOnce) => Use::Value,
+                            _ => Use::Write,
+                        }
+                    }
                     _ => Use::Read,
                 };
                 self.expr(callee, u);

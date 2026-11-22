@@ -18,7 +18,6 @@ trait Clock { fn now(&self) -> int; }
 fn now() -> int with clock: Clock { clock.now() }
 fn wait() with suspend {}
 
-fn once(f: Box<dyn FnOnce()>) {}                                 //~ E0605
 
 fn unlisted() -> int with Clock {
     let f: Box<dyn Fn() -> int> = Box::new(|| now());            //~ E0802

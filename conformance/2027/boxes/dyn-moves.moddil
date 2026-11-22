@@ -7,3 +7,9 @@ fn main() {
     g();
     owned.len();                                                 //~ E0303
 }
+
+fn once() {
+    let f: Box<dyn FnOnce() -> int> = Box::new(|| 1);
+    f();
+    f();                                                         //~ E0303
+}

@@ -54,6 +54,11 @@ impl Machine<'_> {
                 }
             }
         }
+        // A closure the block gives keeps what it captures of the block's variables
+        // (`expr.closure.result.1`).
+        if let Ok(v) = &mut result {
+            self.keep_captures(v, mark, false);
+        }
         self.exit(mark, result, range)
     }
 

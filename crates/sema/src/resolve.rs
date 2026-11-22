@@ -1090,12 +1090,15 @@ pub(crate) fn bounds(
                     .filter(|p| p.kind() == K::EFFECT_TYPE)
                     .and_then(|p| p.child(K::TYPE_EFFECTS))
             });
+            // A returned closure's needs are met where it is called (`expr.closure.result.1`).
+            let returned =
+                node.kind() == K::IMPL_TYPE && node.ancestors().any(|a| a.kind() == K::RET_TYPE);
             out.extend(closure_bound(
                 &path,
                 &sugar,
                 effects.as_ref(),
                 ty,
-                false,
+                returned,
                 b.text_range(),
                 scope,
                 diags,

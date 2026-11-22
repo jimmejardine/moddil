@@ -273,7 +273,21 @@ impl Collector<'_> {
             }
         }
         let mut opaque = Vec::new();
-        let (ret, ret_range) = match f.ret_type().and_then(|r| r.ty()) {
+        let mut opaque_fn = None;
+        // `-> (impl Fn() with E)`: the closure bound's effects are the parenthesised type's.
+        let mut written = f.ret_type().and_then(|r| r.ty());
+        while let Some(ast::Type::Paren(_) | ast::Type::Effect(_)) = &written {
+            let inner = written
+                .as_ref()
+                .and_then(|w| w.syntax().children().find_map(ast::Type::cast));
+            match inner {
+                Some(i @ (ast::Type::Impl(_) | ast::Type::Paren(_) | ast::Type::Effect(_))) => {
+                    written = Some(i);
+                }
+                _ => break,
+            }
+        }
+        let (ret, ret_range) = match written {
             // `-> impl Trait` (`type.impl.ret.1`): an opaque type, numbered once the function
             // has its index.
             Some(t @ ast::Type::Impl(_)) if !matches!(container, Container::Trait(_)) => {
@@ -283,6 +297,22 @@ impl Collector<'_> {
                     name: t.syntax().text().to_string().trim().into(),
                 }));
                 opaque = crate::resolve::bounds(t.syntax(), &ty, &scope, &mut ds);
+                // A closure it returns may be called after it has returned, so its type fixes
+                // its errors, as a stored closure's does (`expr.closure.result.1`).
+                let once = self.tree.lang("FnOnce");
+                if opaque.iter().any(|p| Some(p.trait_ref.trait_) == once) {
+                    for p in &mut opaque {
+                        if Some(p.trait_ref.trait_) == once && !p.assoc.iter().any(|(k, _)| *k == 1)
+                        {
+                            p.assoc.push((1, Ty::Never));
+                        }
+                    }
+                    opaque_fn = Some(crate::resolve::dyn_type(
+                        t.syntax(),
+                        &scope,
+                        &mut Vec::new(),
+                    ));
+                }
                 (ty, Some(t.syntax().text_range()))
             }
             Some(t) => (
@@ -344,6 +374,7 @@ impl Collector<'_> {
             control,
             defaults: Vec::new(),
             opaque,
+            opaque_fn,
             selectable,
             default_arg: false,
             intrinsic,
@@ -400,6 +431,7 @@ impl Collector<'_> {
             control: 0,
             defaults: Vec::new(),
             opaque: Vec::new(),
+            opaque_fn: None,
             selectable: false,
             default_arg: false,
             intrinsic: false,

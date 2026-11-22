@@ -399,6 +399,8 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         stored: Vec::new(),
         boxed_hint: None,
         stored_ctx: Vec::new(),
+        opaque_hint: None,
+        result_closures: HashSet::new(),
         kind_reqs: Vec::new(),
         assoc_eqs: Vec::new(),
         hint: None,
@@ -434,6 +436,9 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
                     cx.assoc_eqs.push((a, fixed.clone(), range));
                 }
                 cx.require(h.clone(), p.trait_ref.clone(), range);
+            }
+            if let Some(d) = items.fns[i as usize].opaque_fn.clone() {
+                cx.opaque_hint = Some((h.clone(), d));
             }
             cx.ret = h.clone();
             ret = h.clone();
@@ -477,6 +482,17 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
                 }
             }
         }
+        // The closures it gives as an `impl Fn…` result (`expr.closure.result.1`).
+        if cx.opaque_hint.is_some() {
+            let mut found = Vec::new();
+            result_closure(body, root, &mut found);
+            for (_, x) in body.exprs.iter() {
+                if let ExprKind::Return(Some(v)) = x.kind {
+                    result_closure(body, v, &mut found);
+                }
+            }
+            cx.result_closures.extend(found);
+        }
         let t = cx.infer(root);
         // A test's final value is observed, not returned, so it may have any type.
         if !is_test && !cx.unsize(root, &t, &ret) && !cx.coerce(&t, &ret) {
@@ -510,7 +526,7 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
                     "the type this function gives cannot be inferred: annotate it",
                 ));
             }
-        } else if items.is_view(&t) {
+        } else if items.is_view(&t) && !owns_all(items, &t) {
             cx.out.diagnostics.push(Diagnostic::unsupported(
                 at,
                 "an `impl Trait` result whose type holds a borrow or a closure",
@@ -519,6 +535,21 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         cx.out.hidden = Some(t);
     }
     cx.out
+}
+
+/// The closure `e` gives as its value, through blocks, if it does.
+fn result_closure(body: &Body, e: ExprId, out: &mut Vec<ExprId>) {
+    match &body.exprs[e].kind {
+        ExprKind::Closure { .. } => out.push(e),
+        ExprKind::Block { tail: Some(t), .. } => result_closure(body, *t, out),
+        _ => {}
+    }
+}
+
+/// Whether `t` is a closure that owns what it captures, as one returned as `impl Fn…` does
+/// (`expr.closure.result.1`).
+fn owns_all(items: &ItemTree, t: &Ty) -> bool {
+    matches!(t, Ty::Closure(c) if c.captures.iter().all(|x| !items.is_view(x)))
 }
 
 /// An enclosing loop while its body is checked.
@@ -578,6 +609,11 @@ struct Checker<'a> {
     /// The stored closures being checked, innermost last: each closure, the needs and control
     /// effects its type lists, and how many handlers are installed around it.
     stored_ctx: Vec<(ExprId, Vec<Ty>, crate::Control, usize)>,
+    /// For a function whose result is `impl Fn…`: the type its body gives, and the closure
+    /// type as a stored one's, which a closure written for it takes (`expr.closure.result.1`).
+    opaque_hint: Option<(Ty, Ty)>,
+    /// The closures the body gives as its value or returns, when that is an `impl Fn…`.
+    result_closures: HashSet<ExprId>,
     /// The closure traits bounds need (`F: Fn(…)`), checked once closures' kinds are known.
     kind_reqs: Vec<(Ty, u32, TextRange)>,
     /// Bounds' fixed associated types (`Output = R`) still to settle: the associated type, the

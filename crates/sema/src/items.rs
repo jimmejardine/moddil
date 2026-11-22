@@ -265,6 +265,9 @@ pub struct FnSig {
     /// For a result type `impl Trait` (`type.impl.ret.1`): its bounds, on the opaque type with
     /// the function's own type parameters as its arguments.
     pub opaque: Vec<Pred>,
+    /// For a result type `impl Fn(A) -> R with …` (`expr.closure.result.1`): the closure's type
+    /// as a stored one's, `dyn Fn(A) -> R with …`, which says what a call of it needs.
+    pub opaque_fn: Option<Ty>,
     /// Whether it is marked `#[selectable]`: a `select` arm may wait on it (`task.select.3`).
     pub selectable: bool,
     /// Whether it is such a hidden const, whose body is the default written at `node`.
@@ -346,6 +349,7 @@ impl FnSig {
             control: 0,
             defaults: Vec::new(),
             opaque: Vec::new(),
+            opaque_fn: None,
             selectable: false,
             default_arg: false,
             intrinsic: false,
@@ -667,17 +671,12 @@ impl ItemTree {
     /// method (its own or a supertrait's) that does not take `self` by borrow (by `&self` only,
     /// if `shared`), has type parameters of its own, or names `Self` other than as `self`.
     pub fn not_dyn(&self, t: u32, shared: bool) -> Option<String> {
-        // A stored closure's type fixes `FnOnce`'s associated types (`type.box.dyn.1`); one
-        // called at most once cannot be stored yet.
-        if Some(t) == self.lang("Fn") || Some(t) == self.lang("FnMut") {
+        // A stored closure's type fixes `FnOnce`'s associated types (`type.box.dyn.1`).
+        if ["Fn", "FnMut", "FnOnce"]
+            .iter()
+            .any(|n| self.lang(n) == Some(t))
+        {
             return None;
-        }
-        if Some(t) == self.lang("FnOnce") {
-            return Some(
-                "a stored closure is `Fn` or `FnMut` for now: one called at most once would be \
-                 moved out of its box"
-                    .to_string(),
-            );
         }
         for s in self.supertraits_of(t) {
             let def = &self.traits[s as usize];

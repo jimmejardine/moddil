@@ -411,6 +411,42 @@ impl Machine<'_> {
 
     /// Drops the variables from `mark` on, last first, and removes them; then the result
     /// stands, unless a destructor traps. Nothing is dropped after a trap.
+    /// Moves the variables of the innermost call from slot `mark` on that a closure in `v`
+    /// captures out to slots of their own, which outlive the call: a closure that leaves the
+    /// scope it was written in owns what it captures (`expr.closure.result.1`,
+    /// `expr.closure.stored.1`).
+    pub(super) fn keep_captures(&mut self, v: &mut Value, mark: usize, returned: bool) {
+        let frame = self.memory.depth() - 1;
+        let task = self.memory.task();
+        match v {
+            Value::Closure(c) => {
+                let leaving = |p: &Pointer| p.task == task && p.frame == frame && p.slot >= mark;
+                if !c.vars.iter().any(|(_, p)| leaving(p)) && (!returned || c.escaped) {
+                    return;
+                }
+                let mut owned = (**c).clone();
+                owned.escaped |= returned;
+                for (name, p) in &mut owned.vars {
+                    if leaving(p) && p.path.is_empty() {
+                        let x = self.memory.load(p);
+                        self.memory.store(p, Value::Moved);
+                        *p = self.memory.add_static(format!("{{captured {name}}}"), x);
+                    }
+                }
+                *c = std::sync::Arc::new(owned);
+            }
+            Value::Tuple(xs)
+            | Value::Array(xs)
+            | Value::Buf(_, xs)
+            | Value::Adt { fields: xs, .. } => {
+                for x in xs {
+                    self.keep_captures(x, mark, returned);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn exit<T>(&mut self, mark: usize, result: Eval<T>, range: TextRange) -> Eval<T> {
         if matches!(result, Err(Flow::Trap(..))) {
             self.memory.truncate(mark);

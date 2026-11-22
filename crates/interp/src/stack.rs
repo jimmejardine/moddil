@@ -35,6 +35,9 @@ pub(crate) struct Frame<'a> {
     /// While a `Drop` terminator runs: the destructors still to call, and where to go after.
     drops: Vec<DropCall>,
     after_drops: Option<usize>,
+    /// For a closure called through a borrow: where the closure is, to which its captures go
+    /// back when the call returns.
+    pub(crate) write_back: Option<Pointer>,
 }
 
 impl<'a> Frame<'a> {
@@ -53,6 +56,7 @@ impl<'a> Frame<'a> {
             ret,
             drops: Vec::new(),
             after_drops: None,
+            write_back: None,
         }
     }
 
@@ -156,7 +160,22 @@ impl<'a> Stack<'a> {
 
     /// Ends the top frame's call, giving where its result goes.
     pub(crate) fn pop(&mut self) -> Ret {
-        self.frames_mut().pop().expect("a frame").ret
+        let frame = self.frames_mut().pop().expect("a frame");
+        // A closure's captures, which it may have changed, go back to it.
+        if let Some(ptr) = frame.write_back {
+            let captures = match &frame.locals[1] {
+                Value::Unit => Some(Vec::new()),
+                Value::Tuple(xs) => Some(xs.clone()),
+                _ => None,
+            };
+            if let Some(xs) = captures
+                && !xs.iter().any(|x| matches!(x, Value::Empty))
+                && matches!(self.load(&ptr), Value::Closure(_))
+            {
+                self.store(&ptr, Value::Closure(xs));
+            }
+        }
+        frame.ret
     }
 
     fn top_index(&self) -> usize {

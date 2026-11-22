@@ -300,7 +300,12 @@ impl Memory {
     /// Stores `value` at `ptr`.
     pub(crate) fn store(&mut self, ptr: &Pointer, value: Value) {
         let mut s = self.lock();
-        let mut v = &mut s.frames[ptr.task][ptr.frame].vars[ptr.slot].1;
+        // A static slot: a const's, or what a closure that outlives its scope captured.
+        let mut v = if ptr.frame == STATIC {
+            &mut s.statics[ptr.slot].1
+        } else {
+            &mut s.frames[ptr.task][ptr.frame].vars[ptr.slot].1
+        };
         for &i in &ptr.path {
             v = match v {
                 Value::Tuple(xs)

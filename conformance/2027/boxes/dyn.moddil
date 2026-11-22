@@ -67,3 +67,38 @@ test "a stored closure is called through its box" {
     ;
     try { check(0)? } catch { Missing => -1 }        // => -1
 }
+
+struct Token { n: int }
+
+test "a stored closure called once gives up its box" {
+    let t = Token { n: 4 };
+    let f: Box<dyn FnOnce() -> int> = Box::new(|| {
+        let Token { n } = t;
+        n * 2
+    });
+    f()                                              // => 8
+    ;
+    let mut jobs: Vec<Box<dyn FnOnce() -> int>> = Vec::new();
+    jobs.push(Box::new(|| 1));
+    jobs.push(Box::new(|| 2));
+    let mut sum = 0;
+    while let Some(job) = jobs.pop() {
+        sum += job();
+    }
+    sum                                              // => 3
+}
+
+fn make_counter() -> Box<dyn FnMut() -> int> {
+    let mut n = 0;
+    Box::new(|| {
+        n += 1;
+        n
+    })
+}
+
+test "a stored closure keeps what it owns and changes" {
+    let mut c = make_counter();
+    c();
+    c();
+    c()                                              // => 3
+}
