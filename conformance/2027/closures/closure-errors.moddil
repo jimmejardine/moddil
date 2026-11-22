@@ -1,4 +1,4 @@
-// covers: expr.closure.capture.1, expr.closure.call.1, expr.closure.param.1
+// covers: expr.closure.1, expr.closure.capture.1, expr.closure.call.1, expr.closure.param.1, expr.anon-impl.1
 
 fn apply(f: impl Fn(int) -> int, x: int) -> int { f(x) }
 fn each(f: impl FnMut(int)) { f(1); }
@@ -35,5 +35,32 @@ fn extra() {
         fn a(&self) -> int { 1 }
         fn b(&self) -> int { 2 }
         fn c(&self) -> int { 3 }            //~ E0408
+    };
+}
+fn refutable() -> int {
+    apply(|1| 2, 1)                         //~ E0209
+}
+fn breaks_out() {
+    loop {
+        let f = || { break; };              //~ E0109
+        f();
+    }
+}
+fn continues_out() {
+    loop {
+        let f = || { continue; };           //~ E0109
+        f();
+    }
+}
+fn wrong_argument() -> int {
+    let f = |x: int| x;
+    f(true)                                 //~ E0201
+}
+struct Late;
+struct Other;
+trait Visit { fn visit(&self) with fail(Late); }
+fn fails_unlisted() {
+    let v = impl Visit {
+        fn visit(&self) with fail(Other) { fail(Other) } //~ E0502
     };
 }

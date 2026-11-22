@@ -1,6 +1,7 @@
-// covers: err.fail.1, err.set.1, err.question.1, err.catch.1, err.bang.1, err.entry.1, err.unused.1, stmt.defer.1
+// covers: err.fail.1, err.set.1, err.question.1, err.try.1, err.catch.1, err.bang.1, err.entry.1, err.unused.1, stmt.defer.1
 
 pub struct A { n: int }
+pub struct W<T> { x: T }
 pub enum B { X, Y(int) }
 struct G;
 impl Drop for G { fn drop(self) { fail(A { n: 0 }); } }        //~ E0501
@@ -23,3 +24,5 @@ fn dropped_let(r: Result<int, A>) { let _ = r; }               //~ E0503
 fn in_defer() -> int with fail(A) { defer { a()?; } 1 }        //~ E0501
 fn fail_int() -> int with fail(A) { fail(1) }                  //~ E0508
 fn discarded(r: Result<int, A>) { discard(r, "why"); }
+fn arm_type() -> int { try { a()? } catch { A(_) => true } }   //~ E0201
+fn two_instances() with fail(W<int> | W<bool>) {}               //~ E0508

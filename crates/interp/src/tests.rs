@@ -370,6 +370,26 @@ fn errors_return_through_their_edge() {
 }
 
 #[test]
+fn a_method_on_an_error_set_runs_the_error_s_own_impl() {
+    // `e` is `Missing | Bad`: the method is the one of the error's own type.
+    let t = "trait Answer { fn answer(self) -> int; }\n\
+             struct Missing;\n\
+             impl Answer for Missing { fn answer(self) -> int { 404 } }\n\
+             struct Bad;\n\
+             impl Answer for Bad { fn answer(self) -> int { 400 } }\n\
+             fn serve<F: Fn(int) -> int>(f: F, x: int) -> int where F::Fails: Answer {\n\
+                 try { f(x)? } catch { e => e.answer() }\n\
+             }\n\
+             fn lookup(x: int) -> int with fail(Missing | Bad) {\n\
+                 if x == 0 { fail(Missing) }\n\
+                 if x < 0 { fail(Bad) }\n\
+                 x\n\
+             }\n\
+             fn main() -> int { serve(lookup, 0) * 10000 + serve(lookup, -1) * 10 + serve(lookup, 3) }";
+    assert_eq!(value(t), Value::Int(4044003));
+}
+
+#[test]
 fn handlers_are_passed_and_called_through_dyn() {
     let t = "trait Time { fn now(&self) -> int; }\n\
              trait Steady: Time {}\n\

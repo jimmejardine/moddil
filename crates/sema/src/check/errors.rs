@@ -14,11 +14,14 @@ use super::Checker;
 /// Where an error raised here goes.
 pub(super) enum FailCx {
     /// Out of the function: its errors, whether it returns an `Option` (so `?` on `None` returns
-    /// `None`), and whether its errors are inferred (so any error can leave it).
+    /// `None`), whether its errors are inferred (so any error can leave it), and the closure
+    /// parameters whose errors a bound on `F::Fails` takes, which cannot leave it
+    /// (`expr.closure.fails.2`).
     Fn {
         allowed: Vec<Ty>,
         option: bool,
         infer: bool,
+        taken: Vec<Ty>,
     },
     /// Out of a test, which fails.
     Test,
@@ -53,6 +56,29 @@ impl Checker<'_> {
     pub(super) fn deliver(&mut self, members: &[Ty], range: TextRange) {
         if members.is_empty() {
             return;
+        }
+        // A closure parameter's errors that a bound takes are the function's to handle: they
+        // do not leave it (`expr.closure.fails.2`).
+        if let Some(FailCx::Fn { taken, .. }) = self.fail_cx.last() {
+            let is_taken = |m: &Ty| matches!(m, Ty::Assoc(a) if a.name.as_ref() == "Fails" && taken.contains(&a.self_ty));
+            if members.iter().any(is_taken) {
+                let held: Vec<String> = members
+                    .iter()
+                    .filter(|m| is_taken(m))
+                    .map(|m| format!("`{m}`"))
+                    .collect();
+                let rest: Vec<Ty> = members.iter().filter(|m| !is_taken(m)).cloned().collect();
+                self.report(
+                    Code::E0502,
+                    range,
+                    format!(
+                        "the errors {} are taken by a bound on them, so this function handles them: \
+                         catch them with `try … catch`",
+                        held.join(", ")
+                    ),
+                );
+                return self.deliver(&rest, range);
+            }
         }
         let show: Vec<String> = members.iter().map(|m| format!("`{m}`")).collect();
         let show = show.join(", ");

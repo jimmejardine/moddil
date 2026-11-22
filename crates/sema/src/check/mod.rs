@@ -331,6 +331,15 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
             allowed: fx.fns[i as usize].fails.members(),
             option: matches!(&ret, Ty::Adt(a, ..) if Some(*a) == items.lang("Option")),
             infer: inferred(items, i),
+            taken: items.fns[i as usize]
+                .generics
+                .preds
+                .iter()
+                .filter_map(|q| match &q.ty {
+                    Ty::Assoc(a) if a.name.as_ref() == "Fails" => Some(a.self_ty.clone()),
+                    _ => None,
+                })
+                .collect(),
         },
     };
     // How its needs are met (`eff.need.1`).

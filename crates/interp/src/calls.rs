@@ -45,6 +45,26 @@ pub(crate) fn plan(
         }
         c => c.clone(),
     };
+    // A method called on an error (`F::Fails: Answer`) is the one of the error's own type: an
+    // error set has no impl of its own, but each of its members has (`expr.closure.fails.2`).
+    let callee = match callee {
+        Callee::Trait { func, args } if matches!(concrete(dispatch, &args[0]), Ty::Errors(_)) => {
+            let Ty::Errors(members) = concrete(dispatch, &args[0]) else {
+                unreachable!()
+            };
+            let Value::Adt { adt, .. } = stack.deref(&values[0]) else {
+                unreachable!("an error is a struct or enum")
+            };
+            let mut args = args.clone();
+            args[0] = members
+                .iter()
+                .find(|m| m.adt() == Some(adt))
+                .cloned()
+                .expect("the error is one of its set");
+            Callee::Trait { func, args }
+        }
+        c => c,
+    };
     // An anonymous impl's method is a closure of its own: its value is the method's, the
     // arguments but `self` its arguments. One it leaves out is the trait's default.
     let mut closure_ty = None;
@@ -79,7 +99,21 @@ pub(crate) fn plan(
             CallPlan::Intrinsic(f, values, type_args)
         }
         Some(target) => CallPlan::Fn(target, values),
-        None => CallPlan::Copy(stack.deref(&values[0])),
+        // Only `Clone` is built in with a method; any other method found nowhere is a bug, not
+        // a copy to make quietly.
+        None => {
+            let items = dispatch.items();
+            let Callee::Trait { func, .. } = &callee else {
+                unreachable!("a function is always its own target")
+            };
+            assert_eq!(
+                items.trait_of(*func),
+                items.lang("Clone"),
+                "no impl runs `{}`",
+                items.fns[*func as usize].name
+            );
+            CallPlan::Copy(stack.deref(&values[0]))
+        }
     }
 }
 

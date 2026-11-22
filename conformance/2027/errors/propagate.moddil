@@ -27,6 +27,11 @@ fn reflect(r: Result<int, TooBig>) -> int with fail(TooBig) {
     r? * 2
 }
 
+// A note after `?` is for the error's trace: it changes neither the value nor the error.
+fn noted(n: int) -> int with fail(TooBig) {
+    check(n)? "checking the input" + 1
+}
+
 test "errors propagate with ?" {
     both(3)?                                // => 4
     ;
@@ -44,6 +49,10 @@ test "errors propagate with ?" {
     try { reflect(Ok(5))? }                 // => Ok(10)
     ;
     reify(1).is_ok()                        // => true
+    ;
+    try { noted(3)? }                       // => Ok(4)
+    ;
+    try { noted(30)? }                      // => Err(TooBig { n: 30 })
 }
 
 fn first(o: Option<int>) -> Option<int> {

@@ -19,6 +19,14 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
   on one interpreter is an implementation bug: fix it, or list it under
   [Implementation gaps](#implementation-gaps) for the slice that owns it.
 
+## Corrections found while sweeping
+
+- **Conformance doesn't test I0001.** "Not supported yet" belongs to an implementation, not to the
+  language, so the runner rejects it. The findings that asked for I0001 cases are dropped: the
+  `track_caller` arguments, the wrapper limits, and `Vec::new` and `Some` as values.
+- **E0309 for a closure in a field can't be written.** A closure's type can't be named, so a field
+  can hold one only through a type parameter, and that makes the struct a view, which is allowed.
+
 ## Kinds of finding
 
 | Kind | Meaning |
@@ -36,10 +44,8 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
 |---|---|---|---|---|---|---|
 | arithmetic | | | 1 | | | |
 | arrays | | | 2 | | | |
-| attributes | | | 1 | | | |
 | borrows | | 2 | 1 | | | |
 | calls | | | 1 | | | |
-| closures | 1 | 2 | 4 | 1 | 1 | 1 |
 | collections | 1 | | 4 | 1 | | |
 | comptime | | | 1 | | | |
 | concurrency | 2 | 2 | 4 | 1 | | |
@@ -47,7 +53,6 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
 | derive | | | 1 | | | |
 | effects | | | 2 | | | |
 | enums, structs | 1 | | | | | |
-| errors | | | 3 | 1 | | 1 |
 | generics | | | 2 | | | |
 | iteration | | 1 | | | | |
 | main | | 1 | | | | |
@@ -58,11 +63,11 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
 | refinements | 1 | | | 1 | | |
 | syntax, text | | | 3 | | | |
 | traits | | | 3 | | | |
-| wrappers | 1 | | | | 1 | |
+| wrappers | | | 1 | | 1 | |
 
-The directories not listed (assert, assignment, bitwise, blocks, comparison, if, items, literals,
-logic, loops, match, names, patterns, statements, tuples, types, views) have no finding worth a
-change.
+The directories not listed have no finding left: attributes, closures and errors are done, and
+assert, assignment, bitwise, blocks, comparison, if, items, literals, logic, loops, match, names,
+patterns, statements, tuples, types and views had none worth a change.
 
 ## Findings
 
@@ -91,13 +96,6 @@ change.
   [collections](#collections)). Move it here or cite the paragraph there. Add a running case of
   `replace(&mut a[0], x)`, which no test uses (see [prelude](#prelude)).
 
-### attributes
-
-- **missing:** `track-caller.moddil` covers `attr.track-caller.1`, which says the attribute takes
-  no arguments, and that other attributes on functions are not supported yet (I0001). No test
-  expects I0001 at all. Add `#[track_caller(x)]` and an unknown attribute to a new
-  `attributes/errors.moddil`.
-
 ### borrows
 
 - **weak:** `static.moddil` calls `drop(s)` and then uses `g`, as if to show that `g` outlives
@@ -120,58 +118,6 @@ change.
   - a default's type names no type parameter.
 
   Add them to `named_errors.moddil`.
-
-### closures
-
-- **claim, gap?:** In `fails-bound.moddil`, `serve` returns `1` and never calls `f`. Every result
-  is `1`, `x` is unused, and `lookup`'s failing paths never run.
-  - The comment "here, by its own `try`" describes code that isn't there.
-  - `Unhandled` is unused (dead), and no closure literal is passed.
-  - The paragraph's main rule, that a call of `f` in the body must handle the errors, isn't
-    tested. Replace the body and the test:
-
-    ```rust
-    fn serve<F: Fn(int) -> int>(f: F, x: int) -> int where F::Fails: Answer {
-        try { f(x)? } catch { e => e.answer() }
-    }
-
-    test "a bound on F::Fails takes the closure's errors" {
-        serve(lookup, 3)      // => 3
-        ;
-        serve(lookup, 0)      // => 404
-        ;
-        serve(lookup, -1)     // => 400
-        ;
-        serve(plain, 3)       // => 3
-        ;
-        serve(|x| x * 2, 4)   // => 8
-    }
-    ```
-
-    With this body the MIR interpreter gives `Missing` and `Bad` instead of 404 and 400 (see
-    [Implementation gaps](#implementation-gaps)).
-- **weak:** `fails-bound-errors.moddil` has the same placeholder `serve` body and the same
-  misleading comment. Use the body above.
-- **missing:** `expr.closure.fails.2` says a call of `f` in the body must handle its errors. Add a
-  `serve` that calls `f(x)` unmarked or with only `?` to `fails-bound-errors.moddil`; it is an
-  error.
-- **missing:** Several closure rules have no error case:
-  - `expr.closure.1`: a refutable closure parameter (E0209), and `break` or `continue` leaving a
-    closure;
-  - `expr.closure.capture.1`: a struct field holding a closure (E0309);
-  - `expr.closure.call.1`: a wrongly typed argument (E0201).
-
-  Add them to `closure-errors.moddil`.
-- **missing:** `expr.closure.fails.1` has no error file. A call passing a failing closure, left
-  unmarked, is E0501 (only tested for `spawn`, in `concurrency/diagnostics.moddil`). Add it.
-- **missing:** `fn-values.moddil` covers `expr.fn-value.1`, which says `Vec::new` and `Some` can't
-  be used as values yet. Add both to an error file.
-- **cite:** `closure-errors.moddil` tests E0407 and E0408 for `impl Two { … }`, which are
-  `expr.anon-impl.1`'s, but doesn't cite it. Add the citation, and an anonymous method that fails
-  with an error its trait's method doesn't list (E0502).
-- **weak:** `closures.moddil` cites `prelude.fn.1`, but never names `Output`, `Fails`, `call`,
-  `call_mut` or `call_once`. Add a bound that fixes `Output`
-  (`F: Fn(int) -> int`, then `F::Output` as a result type), or drop the citation.
 
 ### collections
 
@@ -284,21 +230,6 @@ change.
   `Size` where a `Point` is expected, to `structs/errors.moddil`, and drop or rename the running
   test.
 
-### errors
-
-- **gap?, missing:** `err.catch.1` says an arm `e` matches any error. No test catches a **generic
-  error set** with a binding arm. Only `refinements.moddil` catches `e`, of one concrete type.
-  The `fails-bound` finding is the test for it.
-- **missing:** `err.catch.1` says the arms have the block's type (E0201). Add
-  `try { a()? } catch { A(_) => true }` in an `int` function to `errors.moddil`.
-- **missing:** Three rules in `err.question.1` and `err.set.1` have no case:
-  - `x? "note"`, a note for the error's trace, which no test writes (`err.question.1`). Add a
-    running case where the note changes nothing.
-  - "At most one instance of a generic error" (E0508, `err.set.1`): add
-    `with fail(Wrap<int> | Wrap<bool>)`.
-- **cite:** `errors.moddil`'s `mixed` is `err.try.1`'s E0506, but the file doesn't cite `err.try.1`.
-  Cite it.
-
 ### generics
 
 - **missing:** `generic.1` says the parameters of one item have distinct names (E0104). Add
@@ -392,23 +323,20 @@ change.
 
 ### wrappers
 
-- **claim:** `errors.moddil` cites `attr.around.limits.1`, but has no case of it. Add a wrapped
-  method, a wrapped `const fn`, and a wrapped function with a pattern parameter (I0001 each).
-  `attr.around.body.1`'s "a wrapper adds no error or effect the function does not have"
-  (E0501, E0603) is tested only for errors on a `pub` function. Add an effect.
+- **missing:** `attr.around.body.1` says a wrapper adds no error or effect the function doesn't
+  have (E0501, E0603). This is tested only for errors on a `pub` function. Add an effect.
 - **dead:** `plain` in `errors.moddil` is never used.
 
 ## Implementation gaps
 
-1. **A trait's method called on an error set runs nothing (MIR interpreter).** Found with the
-   stronger `closures/fails-bound.moddil` above.
-   - In `try { f(x)? } catch { e => e.answer() }` with `F::Fails = Missing | Bad`, the MIR
-     interpreter gives the error itself (`Missing`) where the reference interpreter gives `404`.
-   - The cause is `Dispatch::target` (`crates/interp/src/dispatch.rs`): a trait method's target
-     is found from the types alone. The error set has no impl of its own, so `impl_method` finds
-     none, and `None` is taken as "the built-in `Clone`, which copies".
-   - To fix it, the call must choose the member of the set by the error's value. A failed lookup
-     shouldn't fall back to a copy.
+None open. Fixed in the sweep so far:
+
+1. **A trait's method called on an error set ran nothing (MIR interpreter).** `calls::plan` now
+   picks the error's own type from its value. A method with no impl is now a bug that panics,
+   not a silent copy.
+2. **A closure parameter's errors that a bound takes could leave the function (sema).** They now
+   become the function's inferred errors only if they don't leave. Letting them leave, with `?`
+   or unmarked, is E0502, which `expr.closure.fails.2` now says.
 
 ## Patterns across the suite
 

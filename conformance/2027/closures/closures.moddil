@@ -69,3 +69,10 @@ test "`?` on an `Option` in a closure that returns one" {
     ;
     first(None)                             // => None
 }
+
+// The closure traits' `Output` is the closure's result.
+fn result_of<F: Fn(int) -> int>(f: F) -> F::Output { f(1) }
+
+test "a closure's result is its `Output`" {
+    result_of(|x| x * 7)                    // => 7
+}

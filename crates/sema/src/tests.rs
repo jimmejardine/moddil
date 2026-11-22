@@ -573,6 +573,12 @@ fn errors_4() {
     ok2(
         "fn f() -> int with fail(A) { 1 }\nfn g() -> int { f()? }\npub fn h() -> int with fail(A) { g()? }",
     );
+    // A bound on a closure's errors takes them: they cannot leave the function.
+    err(
+        "trait A { fn a(self) -> int; }\n\
+         fn f<F: Fn(int) -> int>(g: F) -> int where F::Fails: A { g(1)? }",
+        &[("E0502", 2)],
+    );
 }
 
 #[test]

@@ -83,7 +83,7 @@ and a code never changes meaning.
 | E0414 | Methods added to a type not declared in the module | [item.impl.1](items/impls.md) |
 | E0415 | An impl's type parameter that neither its type nor its trait uses | [item.impl.coherence.1](items/impls.md) |
 | E0501 | An error with nowhere to go: an unmarked call that can fail, or an error where nothing can fail | [err.question.1](errors.md), [err.set.1](errors.md), [err.entry.1](errors.md), [stmt.defer.1](statements.md), [attr.around.body.1](attributes.md) |
-| E0502 | An error that the function's `with fail(…)` does not list | [err.set.1](errors.md) |
+| E0502 | An error that the function's `with fail(…)` does not list, or a closure parameter's errors that a bound takes leaving the function | [err.set.1](errors.md), [expr.closure.fails.2](expressions/closures.md) |
 | E0503 | A `Result` dropped unused | [err.unused.1](errors.md) |
 | E0504 | `?` or `?!` on something that cannot fail | [err.question.1](errors.md) |
 | E0505 | A `catch` arm for an error that cannot occur, or a `catch` with nothing to catch | [err.catch.1](errors.md) |

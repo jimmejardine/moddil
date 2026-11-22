@@ -15,8 +15,16 @@ fn serve<F: Fn(int) -> int>(f: F, x: int) -> int
 where
     F::Fails: Answer
 {
-    // The function handles them: here, by its own `try`.
-    1
+    try { f(x)? } catch { e => e.answer() }
+}
+
+// The bound takes `f`'s errors, so a call of `f` that lets them leave is an error, marked or not.
+fn passes_on<F: Fn(int) -> int>(f: F, x: int) -> int where F::Fails: Answer {
+    f(x)?                                   //~ E0502
+}
+
+fn unmarked<F: Fn(int) -> int>(f: F, x: int) -> int where F::Fails: Answer {
+    f(x)                                    //~ E0502
 }
 
 fn strict(x: int) -> int with fail(Unhandled) { fail(Unhandled) }
