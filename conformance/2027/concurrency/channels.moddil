@@ -22,9 +22,7 @@ test "values arrive in order, and `None` once every sender is gone" {
             }
         });
     });
-    got.len()                               // => 5
-    ;
-    got[4]                                  // => 4
+    got                                     // => [0, 1, 2, 3, 4]
 }
 
 test "a sender is cloned, and the channel closes when the last goes" {
@@ -47,6 +45,41 @@ test "a sender is cloned, and the channel closes when the last goes" {
         });
     });
     total                                   // => 3
+}
+
+// Each task logs what it reached: with a capacity of 0, the sender goes on only once its value is
+// received, so it logs 3 after the receiver's 2.
+test "a send of a rendezvous waits for the value to be received" {
+    let (tx, rx) = channel::<int>(0);
+    let (log, seen) = channel::<int>(3);
+    scope(|s| {
+        s.spawn(|| {
+            let tx = tx;
+            log.send(1)?!"alive";
+            tx.send(7)?!"alive";
+            log.send(3)?!"alive";
+        });
+        s.spawn(|| {
+            rx.recv();
+            log.send(2)?!"alive";
+        });
+    });
+    (seen.recv(), seen.recv(), seen.recv()) // => (Some(1), Some(2), Some(3))
+}
+
+test "a negative capacity traps" {
+    channel::<int>(-1);                     //~ trap
+}
+
+struct Armed;
+impl Drop for Armed { fn drop(self) { assert(false); } }
+
+test "values left in a channel are dropped, for now without their destructors" {
+    let (tx, rx) = channel::<Armed>(1);
+    tx.send(Armed)?!"alive";
+    drop(rx);
+    drop(tx);
+    0                                       // => 0
 }
 
 test "a send fails with `Closed` once the receiver is gone" {

@@ -41,3 +41,18 @@ test "the body's trap is the scope's too" {
         Err(Trapped { class, at }) => class.len(),
     }                                       // => 8
 }
+
+test "a trap in a scope inside that is not isolated fails the isolated one" {
+    let r = try {
+        scope(|s| {
+            s.spawn(|| scope(|t| {
+                t.spawn(|| overflow(2));
+            }));
+            0
+        }, isolate: true)?
+    };
+    match r {
+        Ok(_) => 0,
+        Err(Trapped { class, at }) => class.len(),
+    }                                       // => 8
+}

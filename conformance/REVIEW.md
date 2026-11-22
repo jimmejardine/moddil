@@ -43,7 +43,6 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
 | Directory | claim | weak | missing | cite | dead | gap? |
 |---|---|---|---|---|---|---|
 | comptime | | | 1 | | | |
-| concurrency | 2 | 2 | 4 | 1 | | |
 | contracts | | | 2 | 1 | | |
 | derive | | | 1 | | | |
 | effects | | | 2 | | | |
@@ -58,7 +57,7 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
 | traits | | | 3 | | | |
 | wrappers | | | 1 | | 1 | |
 
-The directories not listed have no finding left: arithmetic, arrays, attributes, borrows, calls, closures, collections, errors, iteration and prelude are done, and
+The directories not listed have no finding left: arithmetic, arrays, attributes, borrows, calls, closures, collections, concurrency, errors, iteration and prelude are done, and
 assert, assignment, bitwise, blocks, comparison, if, items, literals, logic, loops, match, names,
 patterns, statements, tuples, types and views had none worth a change.
 
@@ -68,53 +67,6 @@ patterns, statements, tuples, types and views had none worth a change.
 
 - **missing:** `comptime.block.1` says a `const { }` block names no local, type parameter or const
   parameter. No test checks this. Add `let n = 1; const { n + 1 }` to `errors.moddil`.
-
-### concurrency
-
-- **claim:** `stop.moddil` claims "a stop reaches the inner scope's tasks first", but observes
-  `order.len() + outer.len()`, which is `2` whatever the order. Push into one shared `Vec` and
-  observe it:
-
-  ```rust
-  let mut order: Vec<int> = [];
-  scope(|s| {
-      s.spawn(|| { stop_requested(); order.push(2); });
-      s.spawn(|| scope(|inner| {
-          inner.spawn(|| { stop_requested(); order.push(1); });
-      }));
-      s.stop();
-  });
-  order                                       // => [1, 2]
-  ```
-
-- **claim:** `cancel.moddil` cites `task.cancel.2`, but never tests it. That paragraph says:
-  - while a task unwinds, its cleanup isn't cancelled again;
-  - a trap while unwinding ends the program.
-
-  Add a cancelled task whose `defer` waits (`yield_now()`) and then records that it finished, and
-  a trap inside a `defer` while unwinding (`//~ trap`). `task.cancel.1` also says "a `join` of a
-  cancelled task unwinds the joining task", which isn't tested either.
-- **weak:** In `tasks.moddil`, the test "waiting at a join lets the other ready tasks run, in
-  order" observes `first.join() + second.join()`, which is `3` whatever the order. Record one
-  shared sequence (`log.push(…)`) and observe it, for example `[1, 3, 2]` for "first pushes,
-  yields, second runs, first resumes".
-- **weak:** `channels.moddil` observes `got.len()` and `got[4]`, but the claim is order. Observe
-  `got` (`// => [0, 1, 2, 3, 4]`). The rendezvous (`channel(0)`) is used but not shown to wait. Add
-  an order log, showing the sender resumes only after the receiver took the value.
-- **missing:** `task.channel.1` and `task.channel.2` have cases no test checks:
-  - a negative capacity traps;
-  - values left in a channel are dropped.
-- **missing:** `task.select.1` and `task.select.2` have four cases no test checks:
-  - a value a non-chosen `send` arm would have sent is dropped;
-  - a `send` in a `select` doesn't wait for its value to be received;
-  - an arm pattern that can fail (E0209);
-  - arm values of different types (E0201).
-- **missing:** `task.isolate.1` says a trap in a non-isolated scope inside an isolated one fails
-  the isolated one. Add it to `isolate.moddil`.
-- **missing:** `task.borrow.1` says changing what a task borrows is E0306. Only E0305 and E0308 are
-  tested. Add it to `borrows.moddil`.
-- **cite:** `select_errors.moddil`'s `#[selectable] fn no_wait` is `task.select.3`'s E0217, but
-  the file cites only `task.select.1`. Cite it.
 
 ### contracts
 
@@ -247,6 +199,15 @@ None open. Fixed in the sweep so far:
 3. **A borrow passed for a type parameter came back borrowing nothing (MIR ownership check).** `let r = id(&x); x = 2; *r` was accepted. The call took the argument as lending what it points to, judging by the parameter type after substitution, not as written. Now only a parameter declared a borrow does that. A result of a type parameter may also take `from` (sema), as `item.fn.ret-borrow.1` now says.
 4. **A closure's call could name its arguments (sema).** `f(x: 1)` is now E0215.
 5. **Two diagnostics had a run of spaces in the middle** (E0308 and E0314 in `crates/mir/src/ownership.rs`), from a line break inside the string.
+
+## Left open
+
+Cases the sweep did not add, each needing more setup than the rule it shows:
+
+- **`task.select.1`:** a `send` in a `select` doesn't wait for its value to be received. It needs a
+  rendezvous channel whose receiver isn't waiting yet, and a way to show the sender went on.
+- **`task.cancel.1`:** a `join` of a cancelled task unwinds the joining task. It needs a task
+  cancelled while another task, in a scope that isn't cancelled, holds its `Task`.
 
 ## Patterns across the suite
 

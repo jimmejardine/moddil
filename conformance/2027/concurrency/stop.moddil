@@ -1,20 +1,22 @@
 // covers: task.stop.1
 
+// Each task sends its number when the stop reaches it, so the channel holds the order. The first
+// task yields so that the second opens its scope before the first asks.
 test "a stop reaches the inner scope's tasks first" {
-    let mut order: Vec<int> = [];
-    let mut outer: Vec<int> = [];
+    let (tx, rx) = channel::<int>(2);
     scope(|s| {
         s.spawn(|| {
+            yield_now();
             stop_requested();
-            outer.push(2);
+            tx.send(2)?!"the receiver is alive";
         });
         s.spawn(|| scope(|inner| {
             inner.spawn(|| {
                 stop_requested();
-                order.push(1);
+                tx.send(1)?!"the receiver is alive";
             });
         }));
         s.stop();
     });
-    order.len() + outer.len()               // => 2
+    (rx.recv(), rx.recv())                  // => (Some(1), Some(2))
 }

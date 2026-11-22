@@ -16,3 +16,11 @@ fn body_local() {
         s.spawn(|| x + 1);                  //~ E0308
     });
 }
+
+fn changed_while_borrowed() {
+    let mut n = 1;
+    scope(|s| {
+        s.spawn(|| n + 1);
+        n = 2;                              //~ E0306
+    });
+}

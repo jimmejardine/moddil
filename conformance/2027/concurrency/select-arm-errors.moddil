@@ -1,0 +1,17 @@
+// covers: task.select.1, task.select.2
+
+fn refutable() -> int {
+    let (tx, rx) = channel::<int>(1);
+    select {
+        Some(x) = rx.recv() => x,           //~ E0209
+    }
+}
+
+fn arms_differ() -> int {
+    let (tx, rx) = channel::<int>(1);
+    let (utx, urx) = channel::<int>(1);
+    select {
+        x = rx.recv() => 1,
+        y = urx.recv() => true,             //~ E0201
+    }
+}

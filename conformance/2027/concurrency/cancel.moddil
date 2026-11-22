@@ -73,6 +73,44 @@ test "a task still held keeps its error for its join" {
     shown(r)                                // => -5
 }
 
+// A cancelled task's cleanup is not cancelled again: its `defer` waits, and then finishes.
+test "cleanup runs to its end, even when it waits" {
+    let mut cleaned = 0;
+    let (tx, rx) = channel::<int>(1);
+    let r = try {
+        scope(|s| {
+            s.spawn(|| {
+                defer {
+                    yield_now();
+                    cleaned = 2;
+                }
+                rx.recv();
+            });
+            yield_now();
+            risky(1)?
+        })?
+    };
+    shown(r)                                // => -1
+    ;
+    cleaned                                 // => 2
+}
+
+// Not even an isolated scope catches a trap while unwinding: it ends the program.
+test "a trap while unwinding ends the program" {
+    let r = try {
+        scope(|s| {
+            s.spawn(|| {
+                defer {
+                    assert(false);          //~ trap
+                }
+                yield_now();
+            });
+            yield_now();
+            risky(1)?
+        }, isolate: true)?
+    };
+}
+
 test "cancellation reaches the scopes inside" {
     let mut inner = false;
     let r = try {

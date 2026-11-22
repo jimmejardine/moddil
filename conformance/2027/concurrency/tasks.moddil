@@ -93,20 +93,20 @@ test "a task's effects are met where its closure is written" {
     r                                       // => 15
 }
 
+// Each task sends what it reached, so the channel holds the order they ran in.
 test "waiting at a join lets the other ready tasks run, in order" {
-    let mut a: Vec<int> = [];
-    let mut b: Vec<int> = [];
+    let (tx, rx) = channel::<int>(3);
     scope(|s| {
         let first = s.spawn(|| {
-            a.push(1);
+            tx.send(1)?!"the receiver is alive";
             yield_now();
-            a.push(2);
-            a.len()
+            tx.send(3)?!"the receiver is alive";
         });
         let second = s.spawn(|| {
-            b.push(1);
-            b.len()
+            tx.send(2)?!"the receiver is alive";
         });
-        first.join() + second.join()        // => 3
+        first.join();
+        second.join();
     });
+    (rx.recv(), rx.recv(), rx.recv())       // => (Some(1), Some(2), Some(3))
 }
