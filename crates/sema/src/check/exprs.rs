@@ -219,6 +219,10 @@ impl Checker<'_> {
                 let (scrutinee, arms) = (*scrutinee, arms.clone());
                 self.match_expr(e, scrutinee, &arms)
             }
+            ExprKind::Select(arms) => {
+                let arms = arms.clone();
+                self.select_expr(&arms)
+            }
             &ExprKind::Loop { body } => {
                 self.loops.push(LoopCx {
                     id: e,
@@ -705,5 +709,74 @@ impl Checker<'_> {
             self.deferred.push(Deferred::Match(e, st, arms.to_vec()));
         }
         result.map_or(Ty::Never, |(t, _)| t)
+    }
+}
+
+impl Checker<'_> {
+    /// `select { p = op => body, … }` (`task.select.1`): each operation is one a `select` can
+    /// wait on (E0217), each pattern matches every value of its result (E0209), and the arms'
+    /// values have one type.
+    fn select_expr(&mut self, arms: &[crate::hir::SelectArm]) -> Ty {
+        let mut result: Option<Ty> = None;
+        for arm in arms {
+            let t = self.infer(arm.op);
+            let call = match self.body.exprs[arm.op].kind {
+                ExprKind::Question(x) => x,
+                _ => arm.op,
+            };
+            if !self.selectable(call) {
+                self.report(
+                    Code::E0217,
+                    self.range(arm.op),
+                    "a `select` arm waits on `rx.recv()`, `tx.send(v)`, `t.join()` or \
+                     `stop_requested()`",
+                );
+            }
+            self.check_pat(arm.pat, &t, None);
+            self.deferred
+                .push(Deferred::Irrefutable(arm.pat, "a `select` arm"));
+            let b = self.infer(arm.body);
+            result = Some(match result {
+                None => b,
+                Some(prev) => match self.join(&prev, &b) {
+                    Some(j) => j,
+                    None => {
+                        let (sp, sb) = (self.show(&prev), self.show(&b));
+                        self.report(
+                            Code::E0201,
+                            self.range(arm.body),
+                            format!(
+                                "the arms of a `select` must have the same type: expected \
+                                 `{sp}`, found `{sb}`"
+                            ),
+                        );
+                        prev
+                    }
+                },
+            });
+        }
+        result.unwrap_or(Ty::Never)
+    }
+
+    /// Whether call `e` is of one of the operations a `select` can wait on.
+    fn selectable(&self, e: ExprId) -> bool {
+        let Some(callee) = self.out.calls.get(&e) else {
+            return false;
+        };
+        let sig = &self.items.fns[callee.func() as usize];
+        if sig.src != crate::items::Src::Prelude || !sig.intrinsic {
+            return false;
+        }
+        let owner = match sig.container {
+            crate::items::Container::Impl(k) => match &self.items.impls[k as usize].self_ty {
+                Ty::Adt(a, ..) => self.items.adts[*a as usize].name.as_str(),
+                _ => return false,
+            },
+            _ => "",
+        };
+        matches!(
+            (owner, sig.name.as_str()),
+            ("Receiver", "recv") | ("Sender", "send") | ("Task", "join") | ("", "stop_requested")
+        )
     }
 }

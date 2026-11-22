@@ -234,8 +234,15 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
             }
             // A const item's body is its initialiser.
             if sig.const_item {
-                let init = node_at(&root, K::CONST_ITEM, sig.node)
-                    .and_then(|n| n.children().find_map(ast::Expr::cast));
+                let init = if sig.default_arg {
+                    root.descendants()
+                        .into_iter()
+                        .find(|n| n.text_range() == sig.node && ast::Expr::can_cast(n.kind()))
+                        .and_then(ast::Expr::cast)
+                } else {
+                    node_at(&root, K::CONST_ITEM, sig.node)
+                        .and_then(|n| n.children().find_map(ast::Expr::cast))
+                };
                 if let Some(e) = init {
                     let id = cx.expr(&e);
                     cx.out.body.root = Some(id);

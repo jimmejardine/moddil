@@ -5,7 +5,7 @@ desugared and name-resolved, carrying inferred types, effects and error sets. Th
 `moddil explain` and MIR building all read it
 ([`specs/mir.md`: Pipeline](../../specs/mir.md#pipeline)). Ownership is checked later, on MIR.
 
-**Status:** slices S0 to S9a: functions and tests, `let`, `int`, `bool` and `()`, operators, `if`,
+**Status:** slices S0 to S9b: functions and tests, `let`, `int`, `bool` and `()`, operators, `if`,
 blocks, calls and `return` (S0); tuples, structs, enums, patterns, `match` with exhaustiveness
 checking, `if let`, `let … else`, loops and `assert` (S1); borrow types and their mutability
 rules, `*`, binding modes, `Copy` and `defer` (S2; moves and borrows are checked on MIR); type
@@ -27,9 +27,10 @@ const items, `const fn` and `const { }` with the rules of compile-time code, and
 `Default` derives (S8a); refinements (`type X = T where p`, with `X::new`, refined literals and
 patterns) and contracts (`requires`, `ensures`, `old`) (S8b); function wrappers (`#[around(w)]`,
 expanded to a call of `w` with `&INFO`, `f::Args` and the body as a closure) (S8c); the control
-effects `suspend` and `spawn`, and the prelude's `scope`, `spawn` and `join` (S9a), with the
+effects `suspend` and `spawn`, and the prelude's `scope`, `spawn` and `join` (S9a); named and default arguments, `select`, and
+the prelude's channels, `Trapped` and stop (S9b), with the
 diagnostics of
-[`reference/2027/diagnostics.md`](../../reference/2027/diagnostics.md). Valid Moddil beyond S9a is
+[`reference/2027/diagnostics.md`](../../reference/2027/diagnostics.md). Valid Moddil beyond S9b is
 reported as "not supported yet" (`I0001`). It starts as one crate and
 splits as it grows (names, types, effects).
 

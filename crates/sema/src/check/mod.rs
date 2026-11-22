@@ -39,6 +39,17 @@ pub(crate) use needs::show_effect;
 pub use needs::{Effects, Evidence, FnEffects, effects};
 use needs::{EvidenceMap, Mode, Need, inferred};
 
+/// What a call passes for one of its function's parameters, when its arguments are not simply
+/// the parameters in order (`expr.call.named.1`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArgSlot {
+    /// The argument written at this position among the call's arguments (the receiver not
+    /// counted).
+    Arg(usize),
+    /// The parameter's default: a call of this hidden const.
+    Default(u32),
+}
+
 /// The function a call, method call or operator runs.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Callee {
@@ -109,6 +120,7 @@ pub struct Inference {
     refined_literals: Vec<(ExprId, u32)>,
     adjusts: HashMap<ExprId, Adjust>,
     propagated: HashMap<ExprId, Propagated>,
+    arg_order: HashMap<ExprId, Vec<ArgSlot>>,
     try_errors: HashMap<ExprId, Ty>,
     evidence: EvidenceMap,
     dyn_coercions: HashMap<ExprId, Ty>,
@@ -194,6 +206,12 @@ impl Inference {
     /// For a hole of `fmt"…"`: the `Display::fmt` it calls.
     pub fn fmt_callee(&self, hole: ExprId) -> Option<&Callee> {
         self.fmt_calls.get(&hole)
+    }
+
+    /// For a call with named or left-out arguments: what it passes for each of its function's
+    /// parameters (the receiver not counted), in order.
+    pub fn arg_order(&self, e: ExprId) -> Option<&[ArgSlot]> {
+        self.arg_order.get(&e).map(Vec::as_slice)
     }
 
     /// For `e?` and `e ?! "…"`: what `e` is (a fallible call, a `Result` or an `Option`).

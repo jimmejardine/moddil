@@ -296,6 +296,8 @@ impl Collector<'_> {
             effects,
             track_caller,
             control,
+            defaults: Vec::new(),
+            default_arg: false,
             intrinsic,
             is_const,
             const_item: false,
@@ -348,6 +350,8 @@ impl Collector<'_> {
             effects: Vec::new(),
             track_caller: false,
             control: 0,
+            defaults: Vec::new(),
+            default_arg: false,
             intrinsic: false,
             is_const: true,
             const_item: true,
@@ -623,12 +627,6 @@ pub(super) fn param_sig(
         if c.kind() == K::OUTER_ATTR {
             diagnostics.push(Diagnostic::unsupported(c.text_range(), "an attribute"));
         }
-    }
-    if node.children().any(|c| ast::Expr::can_cast(c.kind())) {
-        diagnostics.push(Diagnostic::unsupported(
-            node.text_range(),
-            "a default argument",
-        ));
     }
     let (name, mutable, range, destructures) = match p.pat() {
         Some(pat) => match simple_binding(&pat, scope.tree, scope.module) {

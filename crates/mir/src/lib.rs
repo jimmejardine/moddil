@@ -78,6 +78,21 @@ pub struct Body {
     pub blocks: Vec<BasicBlock>,
     /// The text of its string literals ([`Const::Str`]).
     pub strs: Vec<String>,
+    /// For each scope node (what the scopes hold at a point: see [`BasicBlock::nodes`]): the
+    /// cleanup block that unwinding from there runs (`task.cancel.1`). Node 0 holds nothing.
+    pub cleanups: Vec<BlockId>,
+    /// How many of the last locals only cleanup code uses (not shown when printed).
+    pub cleanup_locals: usize,
+}
+
+impl Body {
+    /// The cleanup block that unwinding from statement `stmt` of `block` (its terminator, if
+    /// `stmt` is past the statements) runs.
+    pub fn cleanup_at(&self, block: usize, stmt: usize) -> BlockId {
+        let b = &self.blocks[block];
+        let node = b.nodes.get(stmt).copied().unwrap_or(b.terminator_node);
+        self.cleanups[node as usize]
+    }
 }
 
 /// A local's declaration.
@@ -100,6 +115,12 @@ pub struct BasicBlock {
     pub terminator: Terminator,
     /// The source the terminator comes from.
     pub terminator_span: TextRange,
+    /// For each statement: the scope node at it, which says what unwinding from it cleans up.
+    pub nodes: Vec<u32>,
+    /// The scope node at the terminator.
+    pub terminator_node: u32,
+    /// Whether it is cleanup code, run only while unwinding.
+    pub cleanup: bool,
 }
 
 /// A place: a local, or a part of one reached through projections (`_1.0`, `(_2 as Circle).0`).
@@ -428,6 +449,8 @@ pub enum Terminator {
     },
     /// Returns `_0`.
     Return,
+    /// The end of a cleanup chain: the frame's unwinding goes on in its caller.
+    Resume,
     /// Control never reaches here.
     Unreachable,
 }
@@ -446,6 +469,7 @@ impl Terminator {
             | Terminator::Drop { target: t, .. } => vec![*t],
             Terminator::SwitchBool { then, else_, .. } => vec![*then, *else_],
             Terminator::Return
+            | Terminator::Resume
             | Terminator::Unreachable
             | Terminator::Fail(_)
             | Terminator::Trap(..) => vec![],
@@ -470,6 +494,8 @@ pub enum TrapClass {
     CapacityExceeded,
     /// Compile-time evaluation that ran out of its steps.
     OutOfFuel,
+    /// Every task waits, and nothing can wake one (`task.sched.1`).
+    Deadlock,
     /// A `requires` that does not hold: the caller's bug, reported at the call.
     Precondition,
     /// An `ensures` that does not hold: the function's bug.
@@ -489,6 +515,7 @@ impl TrapClass {
             TrapClass::IndexOutOfBounds => "index out of bounds",
             TrapClass::CapacityExceeded => "capacity exceeded",
             TrapClass::OutOfFuel => "out of fuel",
+            TrapClass::Deadlock => "deadlock",
             TrapClass::Precondition => "precondition broken",
             TrapClass::Postcondition => "postcondition broken",
             TrapClass::Unexpected => "unexpected error",

@@ -19,6 +19,14 @@ impl Machine<'_> {
         let mark = self.memory.mark();
         self.defers.push(Vec::new());
         let mut result = self.block_inner(b);
+        // A trap in an isolated scope unwinds the task (`task.isolate.1`); once it unwinds,
+        // cancellation is not seen again.
+        if let Err(f @ Flow::Trap(..)) = result {
+            result = Err(self.isolate(f));
+        }
+        if matches!(result, Err(Flow::Unwind)) {
+            self.unwinding();
+        }
         let defers = self.defers.pop().expect("this block's defers");
         if !matches!(result, Err(Flow::Trap(..))) {
             for (d, at, err) in defers.iter().rev() {
@@ -28,7 +36,7 @@ impl Machine<'_> {
                     break;
                 }
                 if *err {
-                    if !matches!(result, Err(Flow::Fail(..))) {
+                    if !matches!(result, Err(Flow::Fail(..) | Flow::Unwind)) {
                         continue;
                     }
                     match self.block(d) {

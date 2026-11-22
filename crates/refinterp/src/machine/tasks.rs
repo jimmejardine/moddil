@@ -1,10 +1,12 @@
-//! Tasks (`task.scope.1`): `scope`, `spawn`, `join` and `yield_now`, independently of the MIR
-//! interpreter's scheduler.
+//! Tasks (`task.scope.1`): scopes, tasks, cancellation, isolation, channels and stop,
+//! independently of the MIR interpreter's scheduler.
 //!
 //! Each task runs on a thread of its own, with a machine of its own and its own parse of the
 //! program (a syntax node is not shared between threads), and the memory shared
 //! ([`crate::memory`]). One runs at a time: the running task hands the turn on, first in, first
-//! out, only where it suspends (`task.sched.1`), and waits for it to come back.
+//! out, only where it suspends (`task.sched.1`), and waits for it to come back. A cancelled task
+//! unwinds from its next suspension point, as an error would, running its `defer`s and drops
+//! (`task.cancel.1`).
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -14,33 +16,80 @@ use moddil_syntax::TextRange;
 use crate::memory::{Memory, Shared};
 use crate::program::Program;
 use crate::value::{Head, Value};
-use crate::{Eval, Flow, ModSpec, SourceSpec, Trap};
+use crate::{Eval, Flow, ModSpec, SourceSpec, Trap, TrapClass};
 
 use super::Machine;
 
-/// How a task ended: its value, or its error.
-type Outcome = Result<Value, Value>;
+/// How a task ended.
+#[derive(Clone)]
+enum Outcome {
+    Value(Value),
+    Error(Value),
+    Cancelled,
+}
+
+/// Why a scope failed.
+#[derive(Clone)]
+enum Failure {
+    Error(Value),
+    Trapped(Trap),
+}
 
 /// What a suspended task waits for.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone)]
 enum Wait {
     Join(usize),
     Scope(usize),
+    Send(usize),
+    Taken(usize, u64),
+    Recv(usize),
+    Stop,
+    Select(Vec<Op>),
 }
 
-#[derive(Default)]
+/// An operation a `select` arm waits on (`task.select.1`).
+#[derive(Clone)]
+pub(super) enum Op {
+    Recv(usize),
+    Send(usize),
+    Join(usize),
+    Stop,
+}
+
 struct TaskState {
+    scope: Option<usize>,
     outcome: Option<Outcome>,
     ended: Option<usize>,
-    joined: bool,
+    detached: bool,
+    cancelled: bool,
+    unwinding: bool,
     waiting: Option<Wait>,
 }
 
-/// The tasks and scopes of a test, which every task's thread shares.
+struct ScopeState {
+    owner: usize,
+    tasks: Vec<usize>,
+    isolated: bool,
+    failure: Option<Failure>,
+    stopped: bool,
+}
+
+struct Channel {
+    values: VecDeque<Value>,
+    capacity: usize,
+    senders: usize,
+    receiver: bool,
+    sent: u64,
+    received: u64,
+}
+
+/// The tasks, scopes and channels of a test, which every task's thread shares.
 pub(crate) struct Tasks {
     states: Vec<TaskState>,
-    scopes: Vec<Vec<usize>>,
+    scopes: Vec<ScopeState>,
+    channels: Vec<Channel>,
     ready: VecDeque<usize>,
+    blocked: Vec<usize>,
     ended: usize,
     /// The task whose turn it is.
     running: usize,
@@ -53,12 +102,28 @@ pub(crate) struct Tasks {
     panicked: bool,
 }
 
+impl TaskState {
+    fn new(scope: Option<usize>) -> Self {
+        TaskState {
+            scope,
+            outcome: None,
+            ended: None,
+            detached: false,
+            cancelled: false,
+            unwinding: false,
+            waiting: None,
+        }
+    }
+}
+
 impl Tasks {
     pub(crate) fn new() -> Self {
         Tasks {
-            states: vec![TaskState::default()],
+            states: vec![TaskState::new(None)],
             scopes: Vec::new(),
+            channels: Vec::new(),
             ready: VecDeque::new(),
+            blocked: Vec::new(),
             ended: 0,
             running: 0,
             trapped: None,
@@ -68,69 +133,230 @@ impl Tasks {
         }
     }
 
+    /// Records task `t`, just started in `scope`: ready after those already ready, unless it is
+    /// the scope's body, which runs at once. A task started in a cancelled scope is cancelled.
+    fn spawn(&mut self, t: usize, scope: usize, body: bool) {
+        let mut task = TaskState::new(Some(scope));
+        task.cancelled =
+            self.scopes[scope].failure.is_some() || self.states[self.scopes[scope].owner].cancelled;
+        self.states.push(task);
+        self.scopes[scope].tasks.push(t);
+        if !body {
+            self.ready.push_back(t);
+        }
+    }
+
+    /// Records how task `t` ended: a body's error, or that of a task given up, fails its scope.
     fn end(&mut self, t: usize, outcome: Outcome) {
+        let scope = self.states[t].scope;
+        let fails = match &outcome {
+            Outcome::Error(e) => {
+                let body = scope.is_some_and(|s| self.scopes[s].tasks.first() == Some(&t));
+                (body || self.states[t].detached).then(|| e.clone())
+            }
+            _ => None,
+        };
         let task = &mut self.states[t];
-        task.outcome = Some(outcome);
         task.ended = Some(self.ended);
         self.ended += 1;
-        for w in 0..self.states.len() {
-            let wake = match self.states[w].waiting {
-                Some(Wait::Join(j)) => j == t,
-                Some(Wait::Scope(s)) => self.scope_done(s),
-                None => false,
-            };
-            if wake {
-                self.states[w].waiting = None;
-                self.ready.push_back(w);
+        task.outcome = Some(if fails.is_some() {
+            Outcome::Cancelled
+        } else {
+            outcome
+        });
+        if let (Some(e), Some(s)) = (fails, scope) {
+            self.fail(s, Failure::Error(e));
+        }
+        self.wake();
+    }
+
+    /// Fails scope `s` with `f`, unless it has failed already, and cancels it.
+    fn fail(&mut self, s: usize, f: Failure) {
+        if self.scopes[s].failure.is_none() {
+            self.scopes[s].failure = Some(f);
+            self.cancel(s);
+        }
+    }
+
+    /// Cancels scope `s`: its tasks, and the scopes they have opened.
+    fn cancel(&mut self, s: usize) {
+        let tasks = self.scopes[s].tasks.clone();
+        for &t in &tasks {
+            if self.states[t].ended.is_none() {
+                self.states[t].cancelled = true;
+            }
+        }
+        for inner in 0..self.scopes.len() {
+            if tasks.contains(&self.scopes[inner].owner) && !self.scope_done(inner) {
+                self.cancel(inner);
+            }
+        }
+        self.wake();
+    }
+
+    /// The isolated scope a trap in task `t` ends, if any.
+    fn isolating(&self, t: usize) -> Option<usize> {
+        let mut scope = self.states[t].scope;
+        while let Some(s) = scope {
+            if self.scopes[s].isolated {
+                return Some(s);
+            }
+            scope = self.states[self.scopes[s].owner].scope;
+        }
+        None
+    }
+
+    fn cancelled(&self, t: usize) -> bool {
+        self.states[t].cancelled && !self.states[t].unwinding
+    }
+
+    /// Records that task `t`'s `Task` has been dropped: an error it ended with fails its scope.
+    fn detach(&mut self, t: usize) {
+        self.states[t].detached = true;
+        if let Some(Outcome::Error(e)) = &self.states[t].outcome {
+            let e = e.clone();
+            self.states[t].outcome = Some(Outcome::Cancelled);
+            if let Some(s) = self.states[t].scope {
+                self.fail(s, Failure::Error(e));
             }
         }
     }
 
     fn take(&mut self, t: usize) -> Option<Outcome> {
         let task = &mut self.states[t];
-        let outcome = task.outcome.take()?;
-        task.joined = true;
-        Some(outcome)
+        task.ended?;
+        Some(std::mem::replace(
+            task.outcome.as_mut()?,
+            Outcome::Cancelled,
+        ))
     }
 
     fn scope_done(&self, s: usize) -> bool {
         self.scopes[s]
+            .tasks
             .iter()
             .all(|&t| self.states[t].ended.is_some())
     }
 
-    /// The error of the first of the scope's tasks to fail, by when it ended, of those never
-    /// joined (`task.error.1`).
-    fn scope_error(&mut self, s: usize) -> Option<Value> {
-        let first = self.scopes[s]
-            .iter()
-            .copied()
-            .filter(|&t| {
-                let task = &self.states[t];
-                !task.joined && matches!(task.outcome, Some(Err(_)))
-            })
-            .min_by_key(|&t| self.states[t].ended)?;
-        match self.states[first].outcome.take() {
-            Some(Err(e)) => Some(e),
-            _ => None,
+    fn scope_result(&mut self, s: usize) -> Result<Value, Failure> {
+        if let Some(f) = self.scopes[s].failure.take() {
+            return Err(f);
+        }
+        let body = self.scopes[s].tasks[0];
+        match self.states[body].outcome.take() {
+            Some(Outcome::Value(v)) => Ok(v),
+            Some(Outcome::Error(e)) => Err(Failure::Error(e)),
+            _ => Ok(Value::Unit),
         }
     }
 
-    /// Gives the turn to the next ready task.
-    fn hand_on(&mut self) {
-        self.running = self
-            .ready
-            .pop_front()
-            .expect("a task is ready while the test has not ended");
+    /// Whether a stop has reached task `t` (`task.stop.1`).
+    fn stop_reached(&self, t: usize) -> bool {
+        let Some(own) = self.states[t].scope else {
+            return false;
+        };
+        let mut stopped = false;
+        let mut scope = Some(own);
+        while let Some(s) = scope {
+            stopped |= self.scopes[s].stopped;
+            scope = self.states[self.scopes[s].owner].scope;
+        }
+        let tasks = &self.scopes[own].tasks;
+        stopped
+            && (0..self.scopes.len())
+                .all(|s| !tasks.contains(&self.scopes[s].owner) || self.scope_done(s))
+    }
+
+    fn can_send(&self, c: usize) -> bool {
+        let ch = &self.channels[c];
+        !ch.receiver || ch.values.len() < ch.capacity.max(1)
+    }
+
+    fn taken(&self, c: usize, n: u64) -> bool {
+        let ch = &self.channels[c];
+        ch.received >= n || !ch.receiver
+    }
+
+    fn can_recv(&self, c: usize) -> bool {
+        let ch = &self.channels[c];
+        !ch.values.is_empty() || ch.senders == 0
+    }
+
+    fn push(&mut self, c: usize, v: Value) -> (u64, bool) {
+        let ch = &mut self.channels[c];
+        ch.values.push_back(v);
+        ch.sent += 1;
+        let r = (ch.sent, ch.capacity == 0);
+        self.wake();
+        r
+    }
+
+    fn pop(&mut self, c: usize) -> Option<Value> {
+        let ch = &mut self.channels[c];
+        let v = ch.values.pop_front()?;
+        ch.received += 1;
+        self.wake();
+        Some(v)
+    }
+
+    fn op_ready(&self, t: usize, op: &Op) -> bool {
+        match op {
+            Op::Recv(c) => self.can_recv(*c),
+            Op::Send(c) => self.can_send(*c),
+            Op::Join(j) => self.states[*j].ended.is_some(),
+            Op::Stop => self.stop_reached(t),
+        }
+    }
+
+    fn block(&mut self, t: usize, w: Wait) {
+        self.states[t].waiting = Some(w);
+        self.blocked.push(t);
+    }
+
+    /// Makes ready, in the order they began to wait, the suspended tasks whose wait is over, or
+    /// which are cancelled where cancellation is seen (anywhere but a scope's end).
+    fn wake(&mut self) {
+        let mut still = Vec::new();
+        for t in std::mem::take(&mut self.blocked) {
+            let done = match self.states[t].waiting.as_ref().expect("a waiting task") {
+                Wait::Scope(s) => self.scope_done(*s),
+                w => {
+                    self.cancelled(t)
+                        || match w {
+                            Wait::Join(j) => self.states[*j].ended.is_some(),
+                            Wait::Send(c) => self.can_send(*c),
+                            Wait::Taken(c, n) => self.taken(*c, *n),
+                            Wait::Recv(c) => self.can_recv(*c),
+                            Wait::Stop => self.stop_reached(t),
+                            Wait::Select(ops) => ops.iter().any(|o| self.op_ready(t, o)),
+                            Wait::Scope(_) => unreachable!("handled above"),
+                        }
+                }
+            };
+            if done {
+                self.states[t].waiting = None;
+                self.ready.push_back(t);
+            } else {
+                still.push(t);
+            }
+        }
+        self.blocked = still;
     }
 }
 
 /// The program's sources, which each task parses again.
 pub(crate) type Sources = Arc<(Vec<SourceSpec>, Vec<ModSpec>)>;
 
+/// How an operation went: done, with a result or an error; waiting; or to be unwound.
+enum Attempt {
+    Done(Result<Value, Value>),
+    Wait(Wait),
+    Unwind,
+}
+
 impl Machine<'_> {
-    /// The prelude's tasks and scopes: `name` (of a value of kind `head`) on `args`, if it is one
-    /// of them.
+    /// The scheduler's operations of the prelude: `name` (of a value of kind `head`) on `args`,
+    /// if it is one of them.
     pub(super) fn task_intrinsic(
         &mut self,
         name: &str,
@@ -138,57 +364,139 @@ impl Machine<'_> {
         args: &[Value],
         range: TextRange,
     ) -> Option<Eval> {
-        let id = |m: &Self, v: &Value| match m.target(v.clone()) {
-            Value::Int(i) => i as usize,
-            Value::Adt { fields, .. } => match fields[0] {
-                Value::Int(i) => i as usize,
-                _ => unreachable!("an id"),
+        // A destructor is called with no kind for `Self`: its value's is it.
+        let owner = match (head, name) {
+            (Head::Adt(k), _) => k.clone(),
+            (_, "drop") => match self.target(args[0].clone()) {
+                Value::Adt { ty, .. } => ty,
+                _ => String::new(),
             },
-            _ => unreachable!("a task or scope"),
+            _ => String::new(),
         };
-        Some(match (head, name) {
-            (Head::Unit, "__scope_open") => {
-                let s = self.with_tasks(|t| {
-                    t.scopes.push(Vec::new());
-                    t.scopes.len() - 1
+        let owner = owner.as_str();
+        let id = |m: &Self, v: &Value| id_of(&m.target(v.clone()));
+        Some(match (owner, name) {
+            ("", "__scope_open") => {
+                let me = self.memory.task();
+                let isolated = args[0] == Value::Bool(true);
+                let s = self.with_tasks(|ts| {
+                    ts.scopes.push(ScopeState {
+                        owner: me,
+                        tasks: Vec::new(),
+                        isolated,
+                        failure: None,
+                        stopped: false,
+                    });
+                    ts.scopes.len() - 1
                 });
                 Ok(Value::Int(s as i64))
             }
-            (Head::Adt(k), "spawn") if k == "Scope" => {
-                let scope = id(self, &args[0]);
-                Ok(self.spawn(scope, args[1].clone(), range))
-            }
-            (Head::Adt(k), "join") if k == "Task" => {
-                let t = id(self, &args[0]);
-                let outcome = match self.with_tasks(|ts| ts.take(t)) {
-                    Some(o) => o,
-                    None => {
-                        if let Err(f) =
-                            self.suspend(|ts, me| ts.states[me].waiting = Some(Wait::Join(t)))
-                        {
-                            return Some(Err(f));
-                        }
-                        self.with_tasks(|ts| ts.take(t)).expect("an ended task")
-                    }
-                };
-                outcome.map_err(|e| Flow::Fail(e, range))
-            }
-            (Head::Unit, "yield_now") => self
-                .suspend(|ts, me| ts.ready.push_back(me))
-                .map(|()| Value::Unit),
-            (Head::Unit, "__scope_wait" | "__scope_close") => {
+            ("", "__scope_run") => {
                 let s = id(self, &args[0]);
-                if !self.with_tasks(|ts| ts.scope_done(s))
-                    && let Err(f) =
-                        self.suspend(|ts, me| ts.states[me].waiting = Some(Wait::Scope(s)))
-                {
-                    return Some(Err(f));
-                }
-                match self.with_tasks(|ts| ts.scope_error(s)) {
-                    Some(e) if name == "__scope_close" => Err(Flow::Fail(e, range)),
-                    _ => Ok(Value::Unit),
-                }
+                self.scope_run(s, args[1].clone(), args[0].clone(), range)
             }
+            ("Scope", "spawn") => {
+                let s = id(self, &args[0]);
+                let t = self.start_task(s, args[1].clone(), None, range);
+                Ok(handle("Task", t))
+            }
+            ("Scope", "stop") => {
+                let s = id(self, &args[0]);
+                self.with_tasks(|ts| {
+                    ts.scopes[s].stopped = true;
+                    ts.wake();
+                });
+                Ok(Value::Unit)
+            }
+            ("", "channel") => {
+                let Value::Int(n) = args[0] else {
+                    unreachable!("an int")
+                };
+                if n < 0 {
+                    return Some(Err(crate::trap(TrapClass::CapacityExceeded, range)));
+                }
+                let c = self.with_tasks(|ts| {
+                    ts.channels.push(Channel {
+                        values: VecDeque::new(),
+                        capacity: n as usize,
+                        senders: 1,
+                        receiver: true,
+                        sent: 0,
+                        received: 0,
+                    });
+                    ts.channels.len() - 1
+                });
+                Ok(Value::Tuple(vec![
+                    handle("Sender", c),
+                    handle("Receiver", c),
+                ]))
+            }
+            ("Sender", "clone") => {
+                let c = id(self, &args[0]);
+                self.with_tasks(|ts| ts.channels[c].senders += 1);
+                Ok(handle("Sender", c))
+            }
+            ("Task", "drop") => {
+                let t = id(self, &args[0]);
+                self.with_tasks(|ts| ts.detach(t));
+                Ok(Value::Unit)
+            }
+            ("Sender", "drop") => {
+                let c = id(self, &args[0]);
+                self.with_tasks(|ts| {
+                    ts.channels[c].senders -= 1;
+                    ts.wake();
+                });
+                Ok(Value::Unit)
+            }
+            ("Receiver", "drop") => {
+                let c = id(self, &args[0]);
+                self.with_tasks(|ts| {
+                    ts.channels[c].receiver = false;
+                    ts.channels[c].values.clear();
+                    ts.wake();
+                });
+                Ok(Value::Unit)
+            }
+            ("", "yield_now") => {
+                let me = self.memory.task();
+                if self.with_tasks(|ts| ts.cancelled(me)) {
+                    return Some(Err(Flow::Unwind));
+                }
+                self.suspend(range, |ts, me| ts.ready.push_back(me))
+                    .and_then(|()| self.check_cancelled())
+                    .map(|()| Value::Unit)
+            }
+            ("Task", "join") => {
+                let t = id(self, &args[0]);
+                self.run_op(range, |ts, _| match ts.take(t) {
+                    Some(Outcome::Value(v)) => Attempt::Done(Ok(v)),
+                    Some(Outcome::Error(e)) => Attempt::Done(Err(e)),
+                    // A cancelled task's scope is cancelled, and so is the task joining it.
+                    Some(Outcome::Cancelled) => Attempt::Unwind,
+                    None => Attempt::Wait(Wait::Join(t)),
+                })
+            }
+            ("Sender", "send") => {
+                let c = id(self, &args[0]);
+                self.send(c, args[1].clone(), range)
+            }
+            ("Receiver", "recv") => {
+                let c = id(self, &args[0]);
+                self.run_op(range, |ts, _| {
+                    if !ts.can_recv(c) {
+                        return Attempt::Wait(Wait::Recv(c));
+                    }
+                    Attempt::Done(Ok(option(ts.pop(c))))
+                })
+            }
+            ("", "stop_requested") => self.run_op(range, |ts, me| {
+                if ts.stop_reached(me) {
+                    Attempt::Done(Ok(Value::Unit))
+                } else {
+                    Attempt::Wait(Wait::Stop)
+                }
+            }),
             _ => return None,
         })
     }
@@ -200,15 +508,138 @@ impl Machine<'_> {
         f(&mut s.tasks)
     }
 
-    /// Suspends the running task: `park` records why (or queues it again), the next ready task
-    /// gets the turn, and this one waits for it to come back. A trap in another task ends it.
-    fn suspend(&mut self, park: impl FnOnce(&mut Tasks, usize)) -> Eval<()> {
+    /// Unwinds if the running task has been cancelled (and is not unwinding already).
+    fn check_cancelled(&self) -> Eval<()> {
+        let me = self.memory.task();
+        if self.with_tasks(|ts| ts.cancelled(me)) {
+            Err(Flow::Unwind)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Runs an operation: `try_op` says whether it is done, or must wait (it is then tried
+    /// again once the task resumes), or the task, cancelled, unwinds.
+    fn run_op(
+        &mut self,
+        range: TextRange,
+        mut try_op: impl FnMut(&mut Tasks, usize) -> Attempt,
+    ) -> Eval {
+        let me = self.memory.task();
+        loop {
+            let attempt = self.with_tasks(|ts| {
+                if ts.cancelled(me) {
+                    Attempt::Unwind
+                } else {
+                    try_op(ts, me)
+                }
+            });
+            match attempt {
+                Attempt::Done(Ok(v)) => return Ok(v),
+                Attempt::Done(Err(e)) => return Err(Flow::Fail(e, range)),
+                Attempt::Unwind => return Err(Flow::Unwind),
+                Attempt::Wait(w) => self.suspend(range, |ts, me| ts.block(me, w))?,
+            }
+        }
+    }
+
+    /// `send`: room in the channel, then the value in it; on a rendezvous channel, until it is
+    /// received.
+    fn send(&mut self, c: usize, v: Value, range: TextRange) -> Eval {
+        let closed = || Value::Adt {
+            ty: "Closed".to_string(),
+            variant: "Closed".to_string(),
+            fields: Vec::new(),
+        };
+        let mut value = Some(v);
+        let mut sent = None;
+        self.run_op(range, |ts, _| {
+            if let Some(n) = sent {
+                if !ts.taken(c, n) {
+                    return Attempt::Wait(Wait::Taken(c, n));
+                }
+                return if ts.channels[c].receiver {
+                    Attempt::Done(Ok(Value::Unit))
+                } else {
+                    Attempt::Done(Err(closed()))
+                };
+            }
+            if !ts.channels[c].receiver {
+                return Attempt::Done(Err(closed()));
+            }
+            if !ts.can_send(c) {
+                return Attempt::Wait(Wait::Send(c));
+            }
+            match ts.push(c, value.take().expect("a value to send")) {
+                (n, true) => {
+                    sent = Some(n);
+                    Attempt::Wait(Wait::Taken(c, n))
+                }
+                _ => Attempt::Done(Ok(Value::Unit)),
+            }
+        })
+    }
+
+    /// A scope's run: its body as its first task, at once, then the scope's end, once every
+    /// task has ended: the body's value, or the scope's failure.
+    fn scope_run(&mut self, s: usize, body: Value, handle: Value, range: TextRange) -> Eval {
+        let me = self.memory.task();
+        let t = self.start_task(s, body, Some(handle), range);
+        let shared = self.memory.shared();
+        {
+            let (lock, turn) = &*shared;
+            let mut st = lock.lock().expect("the memory's lock");
+            st.tasks.block(me, Wait::Scope(s));
+            st.tasks.running = t;
+            turn.notify_all();
+            while st.tasks.running != me && st.tasks.trapped.is_none() && !st.tasks.panicked {
+                st = turn.wait(st).expect("the memory's lock");
+            }
+            assert!(!st.tasks.panicked, "a task's thread panicked");
+            if let Some((t, placed)) = st.tasks.trapped {
+                return Err(Flow::Trap(t, placed));
+            }
+        }
+        let result = self.with_tasks(|ts| ts.scope_result(s));
+        self.check_cancelled()?;
+        match result {
+            Ok(v) => Ok(v),
+            Err(Failure::Error(e)) => Err(Flow::Fail(e, range)),
+            Err(Failure::Trapped(t)) => Err(Flow::Fail(self.trapped(&t), range)),
+        }
+    }
+
+    /// The prelude's `Trapped` for trap `t`: its kind, and where it is as `line:column`.
+    fn trapped(&self, t: &Trap) -> Value {
+        let at = self
+            .program
+            .texts
+            .get(t.file as usize)
+            .map(|text| {
+                let (line, col) = moddil_syntax::line_col(text, t.range.start);
+                format!("{line}:{col}")
+            })
+            .unwrap_or_default();
+        Value::Adt {
+            ty: "Trapped".to_string(),
+            variant: "Trapped".to_string(),
+            fields: vec![Value::String(t.class.to_string()), Value::String(at)],
+        }
+    }
+
+    /// Suspends the running task at the operation at `range`: `park` records why (or queues it
+    /// again), the next ready task gets the turn, and this one waits for it to come back. A trap
+    /// in another task ends it; with no task ready, every task waits: the test is deadlocked.
+    fn suspend(&mut self, range: TextRange, park: impl FnOnce(&mut Tasks, usize)) -> Eval<()> {
         let shared = self.memory.shared();
         let me = self.memory.task();
         let (lock, turn) = &*shared;
         let mut s = lock.lock().expect("the memory's lock");
         park(&mut s.tasks, me);
-        s.tasks.hand_on();
+        let Some(next) = s.tasks.ready.pop_front() else {
+            return Err(crate::trap(TrapClass::Deadlock, range));
+        };
+        s.tasks.running = next;
         turn.notify_all();
         while s.tasks.running != me && s.tasks.trapped.is_none() && !s.tasks.panicked {
             s = turn.wait(s).expect("the memory's lock");
@@ -220,26 +651,65 @@ impl Machine<'_> {
         }
     }
 
-    /// Starts a task running closure `f` in `scope`, queued; its value (`task.spawn.1`).
-    fn spawn(&mut self, scope: usize, f: Value, range: TextRange) -> Value {
+    /// Starts a task running closure `f` in `scope` (the scope's body if it is given the
+    /// scope's `handle`), on a thread of its own; its index.
+    fn start_task(
+        &mut self,
+        scope: usize,
+        f: Value,
+        handle: Option<Value>,
+        range: TextRange,
+    ) -> usize {
         let t = self.memory.add_task();
-        self.with_tasks(|ts| {
-            ts.states.push(TaskState::default());
-            ts.scopes[scope].push(t);
-            ts.ready.push_back(t);
-        });
+        let body = handle.is_some();
+        self.with_tasks(|ts| ts.spawn(t, scope, body));
         let shared = self.memory.shared();
         let sources = self.program.sources();
+        let args: Vec<Value> = handle.into_iter().collect();
         let thread = std::thread::Builder::new()
             .stack_size(1 << 30)
-            .spawn(move || run_task(&shared, t, &sources, f, range))
+            .spawn(move || run_task(&shared, t, &sources, f, args, range))
             .expect("a thread for the task");
         self.with_tasks(|ts| ts.threads.push(thread));
-        Value::Adt {
-            ty: "Task".to_string(),
-            variant: "Task".to_string(),
-            fields: vec![Value::Int(t as i64)],
+        t
+    }
+
+    /// A trap leaving a block of the running task's code: in an isolated scope, and not while
+    /// unwinding, it fails the scope with `Trapped`, cancelling it, and the task unwinds
+    /// (`task.isolate.1`).
+    pub(super) fn isolate(&mut self, flow: Flow) -> Flow {
+        let Flow::Trap(mut t, placed) = flow else {
+            return flow;
+        };
+        if !self.memory.user() {
+            return Flow::Trap(t, placed);
         }
+        if !placed {
+            t.file = self.memory.file().unwrap_or(0);
+        }
+        let me = self.memory.task();
+        let isolated = self.with_tasks(|ts| {
+            if ts.states[me].unwinding {
+                return false;
+            }
+            let Some(s) = ts.isolating(me) else {
+                return false;
+            };
+            ts.fail(s, Failure::Trapped(t));
+            ts.states[me].unwinding = true;
+            true
+        });
+        if isolated {
+            Flow::Unwind
+        } else {
+            Flow::Trap(t, placed)
+        }
+    }
+
+    /// Records that the running task is unwinding, so its cleanup sees no cancellation.
+    pub(super) fn unwinding(&mut self) {
+        let me = self.memory.task();
+        self.with_tasks(|ts| ts.states[me].unwinding = true);
     }
 
     /// At the end of the test: what its other tasks observed, once their threads have ended.
@@ -257,9 +727,52 @@ impl Machine<'_> {
     }
 }
 
-/// Task `t`'s thread: once it has the turn, it runs closure `f`, records how it ended, and hands
-/// the turn on.
-fn run_task(shared: &Shared, t: usize, sources: &Sources, f: Value, range: TextRange) {
+/// A handle of the prelude's for index `i`: a `Task`, `Sender` or `Receiver`.
+fn handle(name: &str, i: usize) -> Value {
+    Value::Adt {
+        ty: name.to_string(),
+        variant: name.to_string(),
+        fields: vec![Value::Int(i as i64)],
+    }
+}
+
+fn option(v: Option<Value>) -> Value {
+    match v {
+        Some(v) => Value::Adt {
+            ty: "Option".to_string(),
+            variant: "Some".to_string(),
+            fields: vec![v],
+        },
+        None => Value::Adt {
+            ty: "Option".to_string(),
+            variant: "None".to_string(),
+            fields: Vec::new(),
+        },
+    }
+}
+
+/// The index a scope's, task's or channel's handle holds.
+fn id_of(v: &Value) -> usize {
+    match v {
+        Value::Int(i) => *i as usize,
+        Value::Adt { fields, .. } => match fields[0] {
+            Value::Int(i) => i as usize,
+            _ => unreachable!("an index"),
+        },
+        _ => unreachable!("a handle"),
+    }
+}
+
+/// Task `t`'s thread: once it has the turn, it runs closure `f` with `args`, records how it
+/// ended, and hands the turn on.
+fn run_task(
+    shared: &Shared,
+    t: usize,
+    sources: &Sources,
+    f: Value,
+    args: Vec<Value>,
+    range: TextRange,
+) {
     let program = Program::new(&sources.0, &sources.1);
     let (lock, turn) = &**shared;
     {
@@ -279,7 +792,7 @@ fn run_task(shared: &Shared, t: usize, sources: &Sources, f: Value, range: TextR
         // The task's first frame is where its closure was written.
         m.memory
             .push_frame(std::collections::HashMap::new(), c.file, c.module, false);
-        let result = m.call_closure(&c, Vec::new(), range);
+        let result = m.call_closure(&c, args, range);
         (result, std::mem::take(&mut m.observed))
     }));
     // A bug in the interpreter: the other tasks are woken, and find the lock poisoned.
@@ -294,8 +807,9 @@ fn run_task(shared: &Shared, t: usize, sources: &Sources, f: Value, range: TextR
     let mut s = lock.lock().expect("the memory's lock");
     s.tasks.observed.append(&mut observed);
     match result {
-        Ok(v) => s.tasks.end(t, Ok(v)),
-        Err(Flow::Fail(e, _)) => s.tasks.end(t, Err(e)),
+        Ok(v) => s.tasks.end(t, Outcome::Value(v)),
+        Err(Flow::Fail(e, _)) => s.tasks.end(t, Outcome::Error(e)),
+        Err(Flow::Unwind) => s.tasks.end(t, Outcome::Cancelled),
         Err(Flow::Trap(trap, placed)) => {
             s.tasks.trapped.get_or_insert((trap, placed));
             turn.notify_all();
@@ -303,6 +817,124 @@ fn run_task(shared: &Shared, t: usize, sources: &Sources, f: Value, range: TextR
         }
         Err(_) => unreachable!("a closure's body leaves only by its value, an error or a trap"),
     }
-    s.tasks.hand_on();
+    if let Some(next) = s.tasks.ready.pop_front() {
+        s.tasks.running = next;
+    } else {
+        let d = Trap {
+            class: TrapClass::Deadlock,
+            file: 0,
+            range,
+        };
+        s.tasks.trapped.get_or_insert((d, true));
+    }
     turn.notify_all();
+}
+
+impl Machine<'_> {
+    /// `select { p = op => body, … }` (`task.select.1`): each arm's operation's handle and
+    /// value to send are evaluated first, in order; then the first arm whose operation is ready
+    /// does it (or, with none ready, the task waits for one to be), its pattern binds the
+    /// result, and its body gives the value. An error of an operation marked with `?` passes
+    /// on.
+    pub(super) fn select_expr(&mut self, node: &moddil_syntax::SyntaxNode) -> Eval {
+        use moddil_syntax::SyntaxKind as K;
+        use moddil_syntax::ast::{self, AstNode};
+        let range = node.text_range();
+        let list = node.child(K::MATCH_ARM_LIST).expect("arms");
+        let mut ops = Vec::new();
+        let mut payloads: Vec<Option<Value>> = Vec::new();
+        let mut arms = Vec::new();
+        for arm in list.children().filter(|c| c.kind() == K::SELECT_ARM) {
+            let exprs: Vec<ast::Expr> = arm.children().filter_map(ast::Expr::cast).collect();
+            let pat = arm.children().find_map(ast::Pat::cast).expect("a pattern");
+            let op = exprs[0].clone();
+            let call = if op.syntax().kind() == K::PROPAGATE_EXPR {
+                op.sub_exprs()[0].clone()
+            } else {
+                op
+            };
+            let mut payload = None;
+            let op = if call.syntax().kind() == K::METHOD_CALL_EXPR {
+                let receiver = call.sub_exprs()[0].clone();
+                let name = ast::member_name(call.syntax())
+                    .expect("a method name")
+                    .text()
+                    .to_string();
+                let v = match self.place_of(&receiver)? {
+                    Some((p, _)) => self.memory.load(&p),
+                    None => self.eval(&receiver)?,
+                };
+                let h = id_of(&self.target(v));
+                match name.as_str() {
+                    "recv" => Op::Recv(h),
+                    "send" => {
+                        let arg = call
+                            .syntax()
+                            .child(K::ARG_LIST)
+                            .and_then(ast::ArgList::cast)
+                            .and_then(|l| l.args().next())
+                            .and_then(|a| a.expr())
+                            .expect("a value to send");
+                        payload = Some(self.eval(&arg)?);
+                        Op::Send(h)
+                    }
+                    _ => Op::Join(h),
+                }
+            } else {
+                Op::Stop
+            };
+            ops.push(op);
+            payloads.push(payload);
+            arms.push((pat, exprs[1].clone()));
+        }
+        let closed = Value::Adt {
+            ty: "Closed".to_string(),
+            variant: "Closed".to_string(),
+            fields: Vec::new(),
+        };
+        let chosen = self.run_op(range, |ts, me| {
+            let Some(i) = ops.iter().position(|o| ts.op_ready(me, o)) else {
+                return Attempt::Wait(Wait::Select(ops.clone()));
+            };
+            let outcome = match ops[i] {
+                Op::Recv(c) => Ok(option(ts.pop(c))),
+                Op::Send(c) => {
+                    let v = payloads[i].take().expect("a value to send");
+                    if ts.channels[c].receiver {
+                        ts.push(c, v);
+                        Ok(Value::Unit)
+                    } else {
+                        Err(closed.clone())
+                    }
+                }
+                Op::Join(t) => match ts.take(t) {
+                    Some(Outcome::Value(v)) => Ok(v),
+                    Some(Outcome::Error(e)) => Err(e),
+                    _ => return Attempt::Unwind,
+                },
+                Op::Stop => Ok(Value::Unit),
+            };
+            Attempt::Done(outcome.map(|v| Value::Tuple(vec![Value::Int(i as i64), v])))
+        });
+        // The values the arms that lost would have sent are dropped.
+        for v in payloads.into_iter().flatten() {
+            self.drop_value(v, true, range)?;
+        }
+        let Value::Tuple(mut parts) = chosen? else {
+            unreachable!("the chosen arm")
+        };
+        let v = parts.pop().expect("a result");
+        let Value::Int(i) = parts[0] else {
+            unreachable!("an index")
+        };
+        let (pat, body) = arms[i as usize].clone();
+        let mark = self.memory.mark();
+        let slot = self.memory.temp(v);
+        let mut binds = Vec::new();
+        let matched = self.matches(&pat, &super::patterns::Src::Place(slot, false), &mut binds);
+        debug_assert!(matched, "a `select` arm's pattern always matches");
+        self.bind(binds);
+        let result = self.eval(&body);
+        self.exit(mark, result, range)
+    }
 }

@@ -5,7 +5,7 @@ done only when it has paragraphs here, conformance tests in
 [`conformance/2027/`](../../conformance/README.md) and an implementation
 ([`specs/definition.md`: Written with the compiler](../../specs/definition.md#written-with-the-compiler)).
 
-**Status:** slices S0 to S9a: functions, tests, `let`, `int`, `bool` and `()`, arithmetic with
+**Status:** slices S0 to S9b: functions, tests, `let`, `int`, `bool` and `()`, arithmetic with
 traps, comparisons, logic, `if`, blocks and calls (S0); tuples, structs, enums, patterns, `match`,
 `if let`, `let … else`, loops and `assert` (S1); moves, `Copy`, borrows and `defer` (S2); generics,
 traits, impls, methods, operators through traits, derives, destructors and the prelude (S3);
@@ -17,7 +17,8 @@ dependencies (S6); closures, the closure traits, captures and anonymous impls, a
 (S7b); arrays, slices and const parameters, views, `for` and iterators, `Vec` over a built-in
 buffer, collection literals, hashing, and the `core` mod's maps and sets, and borrows of static
 data (S7c); const items, `const fn` and `const { }`, evaluated when compiling, and the `Debug` and
-`Default` derives (S8a); refinements and contracts (S8b); function wrappers, `#[around]` (S8c); tasks and scopes (S9a).
+`Default` derives (S8a); refinements and contracts (S8b); function wrappers, `#[around]` (S8c); tasks and scopes (S9a); named and default arguments, cancellation, isolation, channels and
+`select` (S9b).
 
 ## Paragraphs
 

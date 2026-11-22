@@ -39,6 +39,11 @@ pub(super) struct LoopCx {
 pub(super) struct Scopes {
     /// The open scopes, outermost (the body, holding the parameters) first.
     open: Vec<Vec<ScopeItem>>,
+    /// The node of each item of the open scopes, in the same order.
+    ids: Vec<Vec<u32>>,
+    /// Every node: an item, and the node before it, what was held when it was added. Node 0,
+    /// first, holds nothing (and is its own parent).
+    nodes: Vec<(Option<ScopeItem>, u32)>,
     /// The enclosing loops, innermost last.
     loops: Vec<LoopCx>,
 }
@@ -48,6 +53,8 @@ impl Scopes {
     pub(super) fn new() -> Scopes {
         Scopes {
             open: vec![Vec::new()],
+            ids: vec![Vec::new()],
+            nodes: vec![(None, 0)],
             loops: Vec::new(),
         }
     }
@@ -55,11 +62,27 @@ impl Scopes {
     /// Opens a scope inside the innermost one.
     pub(super) fn open(&mut self) {
         self.open.push(Vec::new());
+        self.ids.push(Vec::new());
     }
 
     /// Closes the innermost scope, whose leaving code has already been emitted.
     pub(super) fn close(&mut self) {
         self.open.pop();
+        self.ids.pop();
+    }
+
+    /// The node of what the open scopes hold now (`task.cancel.1`).
+    pub(super) fn node(&self) -> u32 {
+        self.ids
+            .iter()
+            .rev()
+            .find_map(|s| s.last().copied())
+            .unwrap_or(0)
+    }
+
+    /// Every node: its item, and the node before it.
+    pub(super) fn nodes(&self) -> Vec<(Option<ScopeItem>, u32)> {
+        self.nodes.clone()
     }
 
     /// How many scopes are open.
@@ -74,6 +97,12 @@ impl Scopes {
 
     /// Adds `item` to the innermost scope.
     pub(super) fn push(&mut self, item: ScopeItem) {
+        let parent = self.node();
+        self.nodes.push((Some(item), parent));
+        self.ids
+            .last_mut()
+            .expect("a scope")
+            .push(self.nodes.len() as u32 - 1);
         self.open.last_mut().expect("a scope").push(item);
     }
 
@@ -81,15 +110,31 @@ impl Scopes {
     /// returns them in the order to drop them: the newest first. At the end of a statement.
     pub(super) fn take_temps(&mut self, mark: usize) -> Vec<Local> {
         let scope = self.open.last_mut().expect("a scope");
+        let ids = self.ids.last_mut().expect("a scope");
+        let from = mark.min(scope.len());
         let mut temps = Vec::new();
         let mut kept = Vec::new();
-        for item in scope.drain(mark.min(scope.len())..) {
+        for (item, id) in scope.drain(from..).zip(ids.drain(from..)) {
             match item {
                 ScopeItem::Temp(t) => temps.push(t),
-                other => kept.push(other),
+                other => kept.push((other, id)),
             }
         }
-        scope.extend(kept);
+        // What is kept gets new nodes: the temporaries before it are gone.
+        for (item, _) in kept {
+            let parent = self
+                .ids
+                .iter()
+                .rev()
+                .find_map(|s| s.last().copied())
+                .unwrap_or(0);
+            self.nodes.push((Some(item), parent));
+            self.ids
+                .last_mut()
+                .expect("a scope")
+                .push(self.nodes.len() as u32 - 1);
+            self.open.last_mut().expect("a scope").push(item);
+        }
         temps.reverse();
         temps
     }

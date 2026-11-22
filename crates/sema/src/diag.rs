@@ -114,6 +114,12 @@ codes! {
     E0213 = "wrong number of fields",
     /// A range pattern that matches nothing, such as `5..=1`.
     E0214 = "empty range pattern",
+    /// A named argument with no parameter of its name, given twice, or before a positional one.
+    E0215 = "invalid named argument",
+    /// A default on a method of an impl of a trait, which inherits the trait's.
+    E0216 = "default on an impl's method",
+    /// A `select` arm that does not wait on an operation a `select` can wait on.
+    E0217 = "invalid `select` arm",
     /// An assignment to, or a `&mut` borrow of, a local not declared `mut`.
     E0301 = "mutation of an immutable local",
     /// An assignment through, or a `&mut` borrow through, a shared borrow.

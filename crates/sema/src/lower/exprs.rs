@@ -123,6 +123,7 @@ impl Lowerer<'_> {
                 self.alloc(ExprKind::Fail(x), range)
             }
             ast::Expr::Try(_) => self.try_expr(&node),
+            ast::Expr::Select(_) => self.select_expr(&node),
             ast::Expr::With(_) => self.with_expr(&node),
             ast::Expr::Closure(_) => self.closure_expr(&node),
             ast::Expr::Impl(_) => self.anon_impl(&node),
@@ -375,14 +376,16 @@ impl Lowerer<'_> {
         let mut args = Vec::new();
         if let Some(list) = node.child(K::ARG_LIST).and_then(ast::ArgList::cast) {
             for a in list.args() {
-                if let Some(label) = a.label() {
-                    self.error(Diagnostic::unsupported(
-                        label.text_range(),
-                        "a named argument",
-                    ));
-                }
                 let x = a.expr();
-                args.push(self.expr_or_missing(x, a.syntax().text_range()));
+                let id = self.expr_or_missing(x, a.syntax().text_range());
+                // A named argument (`expr.call.named.1`).
+                if let Some(label) = a.label() {
+                    self.out
+                        .body
+                        .labels
+                        .insert(id, (label.text().to_string(), label.text_range()));
+                }
+                args.push(id);
             }
         }
         args
@@ -469,6 +472,31 @@ impl Lowerer<'_> {
             arms.push(Arm { pat, guard, body });
         }
         self.alloc(ExprKind::Match { scrutinee, arms }, range)
+    }
+
+    /// `select { p = op => body, … }` (`task.select.1`): each arm's pattern binds names for its
+    /// body.
+    fn select_expr(&mut self, node: &SyntaxNode) -> ExprId {
+        let range = node.text_range();
+        let Some(list) = node.child(K::MATCH_ARM_LIST) else {
+            return self.missing(range);
+        };
+        let mut arms = Vec::new();
+        for arm in list.children().filter(|c| c.kind() == K::SELECT_ARM) {
+            let exprs: Vec<ast::Expr> = arm.children().filter_map(ast::Expr::cast).collect();
+            let op = self.expr_or_missing(exprs.first().cloned(), arm.text_range());
+            let mark = self.names.mark();
+            let mut binds = Binds::default();
+            let pat = match arm.children().find_map(ast::Pat::cast) {
+                Some(p) => self.pat(&p, &mut binds),
+                None => self.alloc_pat(PatKind::Missing, arm.text_range()),
+            };
+            self.bring_into_scope(binds);
+            let body = self.expr_or_missing(exprs.get(1).cloned(), arm.text_range());
+            self.names.restore(mark);
+            arms.push(crate::hir::SelectArm { pat, op, body });
+        }
+        self.alloc(ExprKind::Select(arms), range)
     }
 
     /// `loop { … }` or `while cond { … }`, maybe labelled.

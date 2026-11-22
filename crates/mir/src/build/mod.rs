@@ -25,6 +25,7 @@ mod exprs;
 mod patterns;
 mod places;
 mod scopes;
+mod select;
 
 use cfg::Cfg;
 use errors::{OnError, Target};
@@ -99,6 +100,8 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
             arg_count: hir.params.len() + needs.len(),
             blocks: Vec::new(),
             strs: Vec::new(),
+            cleanups: Vec::new(),
+            cleanup_locals: 0,
         }),
         scopes: Scopes::new(),
         locals: vec![None; hir.locals.len()],
@@ -160,6 +163,7 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
     b.ensures();
     b.leave_scopes(0);
     b.cfg.terminate(Terminator::Return);
+    b.cleanups();
     Some(b.cfg.finish())
 }
 
@@ -208,6 +212,8 @@ fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
             arg_count: 2,
             blocks: Vec::new(),
             strs: Vec::new(),
+            cleanups: Vec::new(),
+            cleanup_locals: 0,
         }),
         scopes: Scopes::new(),
         locals: vec![None; hir.locals.len()],
@@ -256,6 +262,7 @@ fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
     b.eval_into(Local::RETURN, *body);
     b.leave_scopes(0);
     b.cfg.terminate(Terminator::Return);
+    b.cleanups();
     b.cfg.finish()
 }
 
@@ -327,6 +334,7 @@ impl Builder<'_> {
         let t = self.cfg.new_local(ty, None);
         if drop {
             self.scopes.push(ScopeItem::Temp(t));
+            self.cfg.node = self.scopes.node();
         }
         t
     }
@@ -354,7 +362,9 @@ impl Builder<'_> {
     /// Drops the temporaries made since the innermost scope had `mark` items: at the end of a
     /// statement.
     fn drop_temps(&mut self, mark: usize) {
-        for t in self.scopes.take_temps(mark) {
+        let temps = self.scopes.take_temps(mark);
+        self.cfg.node = self.scopes.node();
+        for t in temps {
             let ty = self.cfg.local_ty(t);
             self.drop_place(Place::local(t), &ty, false);
         }
@@ -371,6 +381,7 @@ impl Builder<'_> {
             .new_local(ty, Some(self.hir.locals[l].name.clone()));
         self.locals[idx(l)] = Some(local);
         self.scopes.push(ScopeItem::Local(local));
+        self.cfg.node = self.scopes.node();
         local
     }
 
@@ -466,5 +477,43 @@ impl Builder<'_> {
             self.cfg
                 .assign(Local::RETURN, Rvalue::Use(Operand::Move(Place::local(r))));
         }
+    }
+}
+
+impl Builder<'_> {
+    /// The cleanup blocks (`task.cancel.1`): for each scope node, a block that undoes its item
+    /// (drops a local or temporary, runs a `defer` or `errdefer`) and goes on to its parent's;
+    /// node 0's resumes unwinding in the caller.
+    fn cleanups(&mut self) {
+        let nodes = self.scopes.nodes();
+        let locals = self.cfg.local_count();
+        self.cfg.cleanup = true;
+        let resume = self.cfg.new_block();
+        self.cfg.continue_in(resume);
+        self.cfg.terminate(Terminator::Resume);
+        let mut blocks = vec![resume; nodes.len()];
+        for (n, (item, parent)) in nodes.iter().enumerate().skip(1) {
+            let start = self.cfg.new_block();
+            self.cfg.continue_in(start);
+            self.cfg.node = 0;
+            match item.expect("an item") {
+                ScopeItem::Local(l) | ScopeItem::Temp(l) => {
+                    let ty = self.cfg.local_ty(l);
+                    let glue = self.glue_only == Some(l);
+                    self.drop_place(Place::local(l), &ty, glue);
+                }
+                ScopeItem::Defer(body) => {
+                    let t = self.temp(Ty::Unit);
+                    self.eval_into(t, body);
+                }
+                ScopeItem::ErrDefer(body) => self.run_errdefer(body),
+            }
+            // Parents come before their children, so the parent's block is known.
+            self.cfg
+                .terminate(Terminator::Goto(blocks[*parent as usize]));
+            blocks[n] = start;
+        }
+        self.cfg
+            .set_cleanups(blocks, self.cfg.local_count() - locals);
     }
 }

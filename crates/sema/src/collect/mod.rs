@@ -483,6 +483,7 @@ impl Collector<'_> {
                 self.tree.fns[first_free + k] = sig;
             }
         }
+        self.defaults(sources);
         for (file, module, node) in &nodes.tests {
             self.enter(Src::File(*file), *module);
             if let Some(t) = ast::TestItem::cast(node.clone()) {
@@ -802,6 +803,8 @@ impl Collector<'_> {
             effects: Vec::new(),
             track_caller: true,
             control: 0,
+            defaults: Vec::new(),
+            default_arg: false,
             intrinsic: false,
             is_const: !is_new,
             const_item: false,
@@ -825,5 +828,96 @@ impl Collector<'_> {
             holds,
             new: holds + 1,
         });
+    }
+}
+
+impl Collector<'_> {
+    /// The defaults of the functions' parameters (`expr.call.default.1`): each a hidden const
+    /// of the parameter's type, in the function's module, whose value is the default.
+    fn defaults(&mut self, sources: &[(Src, SyntaxNode)]) {
+        for f in 0..self.tree.fns.len() {
+            let sig = &self.tree.fns[f];
+            if sig.const_item || sig.default_arg {
+                continue;
+            }
+            let Some(node) = sources
+                .iter()
+                .find(|(s, _)| *s == sig.src)
+                .and_then(|(_, root)| node_at(root, K::FN_ITEM, sig.node))
+                .and_then(ast::FnItem::cast)
+            else {
+                continue;
+            };
+            let skip = usize::from(sig.self_kind.is_some());
+            let (src, module, container) = (sig.src, sig.module, sig.container);
+            let params: Vec<ast::Param> = node
+                .params()
+                .map(|l| l.params().collect())
+                .unwrap_or_default();
+            let mut defaults = vec![None; sig.params.len()];
+            for (k, p) in params.iter().enumerate() {
+                let Some(e) = p.syntax().children().find_map(ast::Expr::cast) else {
+                    continue;
+                };
+                let Some(param) = self.tree.fns[f].params.get(k + skip).cloned() else {
+                    continue;
+                };
+                let range = e.syntax().text_range();
+                let what = if matches!(container, Container::Impl(i)
+                    if self.tree.impls[i as usize].trait_ref.is_some())
+                {
+                    Some(Diagnostic::error(
+                        Code::E0216,
+                        range,
+                        "a default is written on the trait's method, which this one inherits",
+                    ))
+                } else if param.ty.has_param() {
+                    Some(Diagnostic::unsupported(
+                        range,
+                        "a default of a type that names a type parameter",
+                    ))
+                } else {
+                    None
+                };
+                if let Some(d) = what {
+                    let origin = self.reporter.origin(src, node.syntax().text_range());
+                    self.reporter.report(src, origin, vec![d]);
+                    continue;
+                }
+                let name = self.tree.fns[f].name.clone();
+                defaults[k + skip] = Some(self.tree.fns.len() as u32);
+                self.tree.fns.push(FnSig {
+                    name: format!("{name}::{}", param.name.clone().unwrap_or_default()),
+                    name_range: range,
+                    src,
+                    node: range,
+                    container: Container::Free,
+                    generics: Generics::default(),
+                    self_kind: None,
+                    params: Vec::new(),
+                    ret: param.ty.clone(),
+                    ret_range: None,
+                    ret_from: Vec::new(),
+                    has_body: true,
+                    origin: None,
+                    fails: Ty::Never,
+                    fails_range: None,
+                    effects: Vec::new(),
+                    track_caller: false,
+                    control: 0,
+                    defaults: Vec::new(),
+                    default_arg: true,
+                    intrinsic: false,
+                    is_const: true,
+                    const_item: true,
+                    refine: None,
+                    vis: Vis::Pub,
+                    module,
+                });
+            }
+            if defaults.iter().any(Option::is_some) {
+                self.tree.fns[f].defaults = defaults;
+            }
+        }
     }
 }

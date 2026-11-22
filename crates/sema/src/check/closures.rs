@@ -673,6 +673,12 @@ impl Walk<'_, '_> {
                     self.expr(t, u);
                 }
             }
+            ExprKind::Select(arms) => {
+                for a in arms {
+                    self.expr(a.op, Use::Value);
+                    self.expr(a.body, u);
+                }
+            }
             ExprKind::Match { scrutinee, arms } => {
                 self.expr(scrutinee, Use::Read);
                 for a in arms {

@@ -1,0 +1,56 @@
+// covers: expr.call.named.1, expr.call.default.1
+
+fn connect(host: int, port: int = 443, timeout: int = 10) -> int {
+    host * 10000 + port * 10 + timeout
+}
+
+fn label(name: String = fmt"anon") -> String {
+    name
+}
+
+struct Counter { k: int }
+
+impl Counter {
+    fn add(&self, a: int, b: int = 5) -> int {
+        self.k + a * 10 + b
+    }
+}
+
+trait Greet {
+    fn greet(&self, times: int = 2) -> int;
+}
+
+impl Greet for Counter {
+    fn greet(&self, times: int) -> int {
+        self.k * times
+    }
+}
+
+test "named arguments, in any order after the positional ones" {
+    connect(1, port: 8)                     // => 10090
+    ;
+    connect(1, timeout: 3, port: 2)         // => 10023
+    ;
+    connect(host: 2, port: 1, timeout: 0)   // => 20010
+}
+
+test "a left-out parameter gets its default" {
+    connect(1)                              // => 14440
+    ;
+    connect(1, timeout: 0)                  // => 14430
+    ;
+    label()                                 // => "anon"
+    ;
+    label(fmt"bob")                         // => "bob"
+}
+
+test "methods take them too, and an impl inherits its trait's defaults" {
+    let c = Counter { k: 100 };
+    c.add(1)                                // => 115
+    ;
+    c.add(b: 2, a: 3)                       // => 132
+    ;
+    c.greet()                               // => 200
+    ;
+    c.greet(times: 3)                       // => 300
+}

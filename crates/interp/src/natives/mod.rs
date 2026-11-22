@@ -25,7 +25,6 @@ struct Prelude {
     less: u32,
     equal: u32,
     greater: u32,
-    task: u32,
 }
 
 impl<'a> Natives<'a> {
@@ -55,7 +54,6 @@ impl<'a> Natives<'a> {
                 less: variant(ordering, "Less"),
                 equal: variant(ordering, "Equal"),
                 greater: variant(ordering, "Greater"),
-                task: adt("Task"),
             },
         }
     }
@@ -106,13 +104,44 @@ impl<'a> Natives<'a> {
         })
     }
 
-    /// A value of the prelude's `Task`, for task `t`.
-    pub(crate) fn task(&self, t: usize) -> Value {
+    /// A handle of the prelude's: a `Task`, `Sender` or `Receiver` for index `i`.
+    pub(crate) fn handle(&self, name: &str, i: usize) -> Value {
         Value::Adt {
-            adt: self.prelude.task,
+            adt: self.prelude_adt(name),
             variant: 0,
-            fields: vec![Value::Int(t as i64)],
+            fields: vec![Value::Int(i as i64)],
         }
+    }
+
+    /// A value of the prelude's struct `name`, which has no fields (`Closed`).
+    pub(crate) fn unit_struct(&self, name: &str) -> Value {
+        Value::Adt {
+            adt: self.prelude_adt(name),
+            variant: 0,
+            fields: Vec::new(),
+        }
+    }
+
+    /// The prelude's `Trapped { class, at }`.
+    pub(crate) fn trapped(&self, class: String, at: String) -> Value {
+        Value::Adt {
+            adt: self.prelude_adt("Trapped"),
+            variant: 0,
+            fields: vec![Value::String(class), Value::String(at)],
+        }
+    }
+
+    /// `Some(v)`, or `None`.
+    pub(crate) fn option_of(&self, v: Option<Value>) -> Value {
+        self.option(v)
+    }
+
+    fn prelude_adt(&self, name: &str) -> u32 {
+        self.items
+            .adts
+            .iter()
+            .position(|a| a.src == Src::Prelude && a.name == name)
+            .expect("a prelude type") as u32
     }
 
     /// A value of the prelude's `Option`.

@@ -54,6 +54,8 @@ pub enum TrapClass {
     Precondition,
     /// An `ensures` that does not hold (`contract.ensures.1`).
     Postcondition,
+    /// Every task waits, and nothing can wake one (`task.sched.1`).
+    Deadlock,
 }
 
 impl fmt::Display for TrapClass {
@@ -68,6 +70,7 @@ impl fmt::Display for TrapClass {
             TrapClass::CapacityExceeded => "capacity exceeded",
             TrapClass::Precondition => "precondition broken",
             TrapClass::Postcondition => "postcondition broken",
+            TrapClass::Deadlock => "deadlock",
         })
     }
 }
@@ -165,6 +168,9 @@ pub(crate) enum Flow {
     Fail(Value, TextRange),
     /// `?` on `None`: the function returns `None`, or the `try` block is `None`.
     Absent,
+    /// Unwinding a cancelled task, or one that trapped in an isolated scope: its `defer`s,
+    /// `errdefer`s and drops run, as for an error (`task.cancel.1`).
+    Unwind,
 }
 
 pub(crate) type Eval<T = Value> = Result<T, Flow>;

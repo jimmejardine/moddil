@@ -133,10 +133,14 @@ impl fmt::Debug for Body {
                 writeln!(f, "    // _{i}: {n}")?;
             }
         }
-        for i in self.arg_count + 1..self.locals.len() {
+        for i in self.arg_count + 1..self.locals.len() - self.cleanup_locals {
             writeln!(f, "    let _{i}: {:?};{}", self.locals[i].ty, name(i))?;
         }
+        // Cleanup blocks, which only unwinding reaches, are not shown.
         for (i, block) in self.blocks.iter().enumerate() {
+            if block.cleanup {
+                continue;
+            }
             writeln!(f)?;
             writeln!(f, "    bb{i}: {{")?;
             for s in &block.statements {
@@ -172,6 +176,7 @@ impl fmt::Debug for Body {
                 }
             }
             match &block.terminator {
+                Terminator::Resume => writeln!(f, "        resume;")?,
                 Terminator::Goto(t) => writeln!(f, "        goto -> {t:?};")?,
                 Terminator::SwitchBool { cond, then, else_ } => writeln!(
                     f,

@@ -270,5 +270,6 @@ impl Builder<'_> {
     /// Registers an `errdefer` block in the innermost scope.
     pub(super) fn errdefer(&mut self, body: ExprId) {
         self.scopes.push(ScopeItem::ErrDefer(body));
+        self.cfg.node = self.scopes.node();
     }
 }

@@ -177,7 +177,17 @@ impl Checker<'_> {
     /// errors it can fail with, recorded for the `?` or `?!` around it (E0501 if there is none).
     pub(super) fn fallible_call(&mut self, e: ExprId, func: u32, args: &[Ty], range: TextRange) {
         let fails = self.fx.fns[func as usize].fails.subst(args);
-        let fails = self.solver.deep(&fails);
+        let mut fails = self.solver.deep(&fails);
+        // Only an isolated scope's call can fail with `Trapped` (`task.isolate.1`).
+        if self.not_isolated(e, func) {
+            let trapped = self.items.lang("Trapped");
+            let kept: Vec<Ty> = fails
+                .members()
+                .into_iter()
+                .filter(|m| m.adt().is_none() || m.adt() != trapped)
+                .collect();
+            fails = Ty::errors(kept);
+        }
         if fails == Ty::Never {
             return;
         }
@@ -443,5 +453,29 @@ impl Checker<'_> {
     /// Whether `e` is `discard(…)`, whose value is `()`.
     pub(super) fn is_discard(&self, e: ExprId) -> bool {
         matches!(self.body.exprs[e].kind, ExprKind::Discard(_))
+    }
+}
+
+impl Checker<'_> {
+    /// Whether call `e` of `func` is of the prelude's `scope` with `isolate` left out or written
+    /// as `false`.
+    fn not_isolated(&self, e: ExprId, func: u32) -> bool {
+        let sig = &self.items.fns[func as usize];
+        if sig.src != crate::items::Src::Prelude
+            || sig.name != "scope"
+            || !matches!(sig.container, crate::items::Container::Free)
+        {
+            return false;
+        }
+        let ExprKind::Call { args, .. } = &self.body.exprs[e].kind else {
+            return false;
+        };
+        match self.out.arg_order.get(&e).and_then(|o| o.get(1)) {
+            Some(super::ArgSlot::Arg(i)) => matches!(
+                args.get(*i).map(|&a| &self.body.exprs[a].kind),
+                Some(ExprKind::Bool(false))
+            ),
+            _ => true,
+        }
     }
 }

@@ -40,6 +40,8 @@ pub struct Body {
     pub olds: Vec<(LocalId, ExprId)>,
     /// The local `result` names in its postconditions: the value returned.
     pub result: Option<LocalId>,
+    /// The arguments passed by name (`port: 8443`): each one's label, and where it is.
+    pub labels: std::collections::BTreeMap<ExprId, (String, TextRange)>,
 }
 
 /// A local variable.
@@ -243,6 +245,9 @@ pub enum ExprKind {
     /// `e?`: the error of a fallible call, or of an `Err`, goes to the enclosing `try` block or
     /// out of the function; `None` likewise. Otherwise it is the value.
     Question(ExprId),
+    /// `select { p = op => body, … }` (`task.select.1`): the arm of the first operation that
+    /// is ready.
+    Select(Vec<SelectArm>),
     /// In a wrapped function's body (`attr.around.1`), a wrapper's call: the errors it can fail
     /// with pass on, as through `?`, but its value is not taken apart.
     Pass(ExprId),
@@ -350,6 +355,18 @@ pub struct Arm {
     pub pat: PatId,
     /// The guard: `if cond`.
     pub guard: Option<ExprId>,
+    /// The arm's value.
+    pub body: ExprId,
+}
+
+/// An arm of a `select`: the pattern its operation's result is matched with, the operation
+/// (`rx.recv()`, `tx.send(v)`, `t.join()` or `stop_requested()`, maybe with `?`), and its value.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SelectArm {
+    /// The pattern.
+    pub pat: PatId,
+    /// The operation.
+    pub op: ExprId,
     /// The arm's value.
     pub body: ExprId,
 }

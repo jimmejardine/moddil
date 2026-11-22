@@ -309,6 +309,24 @@ something runs from the first slice.
   - entry points have `suspend` and `spawn` from the runtime; a trap in any task ends the run;
   - the reference interpreter runs each task on a thread of its own, parsing the program again,
     and hands the turn on at suspension points.
+- **S9b's scope and interim rules (decided November 2026):** one slice, with all of it. Named and
+  default arguments (`syntax.md`: Named and default arguments); unwinding through cleanup edges
+  in the MIR (each scope item's cleanup block, chained, ending in `Resume`), used by cancellation
+  and isolated traps; a scope's body runs as its first task; a failing body, or a task whose
+  `Task` has been dropped, fails its scope and cancels it, and a cancelled task unwinds at its
+  next suspension point; `scope(…, isolate: true)` turns a trap inside into `Trapped { class, at
+  }`; bounded channels (`recv` gives `None` once closed, `send` fails with `Closed`, capacity 0 a
+  rendezvous); `select` on `recv`, `send`, `join` and `stop_requested()`, the first ready arm in
+  written order; `s.stop()`, innermost scopes first. Until the features they wait for arrive:
+  - name-only `*` parameters wait; a default is compile-time code whose type names no type
+    parameter;
+  - only a literal `false` (or leaving `isolate` out) keeps `Trapped` out of a scope's errors;
+  - values left in a channel whose receiver is dropped, and values of a cancelled task's pending
+    operation, are dropped without their destructors; a `send` in `select` does not wait for a
+    rendezvous;
+  - shielded cleanup with deadlines, timers, `checkpoint()`, signals, grace periods, suppressed
+    errors, poisoning and `abandon` wait;
+  - `Trapped`'s `at` is `line:column`, without the file's name.
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

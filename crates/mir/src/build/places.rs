@@ -73,6 +73,9 @@ impl Builder<'_> {
             }
             // A `let` condition assigns its bindings, but they are new locals no operand reads.
             ExprKind::Let { init, .. } => self.assigns(*init),
+            ExprKind::Select(arms) => arms
+                .iter()
+                .any(|a| self.assigns(a.op) || self.assigns(a.body)),
             ExprKind::Match { scrutinee, arms } => {
                 self.assigns(*scrutinee)
                     || arms

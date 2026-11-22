@@ -164,6 +164,7 @@ impl Machine<'_> {
             ast::Expr::Unwrap(_) => self.question(node, e, true),
             ast::Expr::Fail(_) => self.fail(node, e),
             ast::Expr::Try(_) => self.try_expr(node),
+            ast::Expr::Select(_) => self.select_expr(node),
             ast::Expr::With(_) => self.with_expr(node),
             ast::Expr::Closure(_) => Ok(self.closure_value(node)),
             ast::Expr::Impl(_) => Ok(self.anon_value(node)),

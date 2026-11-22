@@ -620,6 +620,114 @@ impl Machine<'_> {
         }
     }
 
+    /// The declaration, in its trait, of the method `name` that impl `k` defines, if `k` is an
+    /// impl of a trait: where the method's defaults are written.
+    fn trait_method(&self, k: usize, name: &str) -> Option<FnDef> {
+        let t = self.program.impls[k].trait_.as_ref()?;
+        self.program.traits.get(t)?.methods.get(name).cloned()
+    }
+
+    /// The arguments of a call of `f` at `node`, in its parameters' order (`expr.call.named.1`):
+    /// `first` (a receiver), then the `written` ones, positional ones in order and named ones by
+    /// their names, and for each one left out its default (`expr.call.default.1`), its own or
+    /// `inherited`'s (the trait's method's), evaluated in its module.
+    fn arranged(
+        &mut self,
+        f: &FnDef,
+        inherited: Option<&FnDef>,
+        node: &SyntaxNode,
+        first: Vec<Value>,
+        written: Vec<Value>,
+    ) -> Eval<Vec<Value>> {
+        let params: Vec<ast::Param> = f
+            .node
+            .params()
+            .map(|l| l.params().collect())
+            .unwrap_or_default();
+        let labels: Vec<Option<String>> = node
+            .child(K::ARG_LIST)
+            .and_then(ast::ArgList::cast)
+            .map(|l| {
+                l.args()
+                    .filter(|a| a.expr().is_some())
+                    .map(|a| a.label().map(|t| t.text().to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut out = first;
+        // `Type::method(x, …)` passes `self` as its first argument.
+        let mut written = written;
+        let mut labels = labels;
+        if f.self_kind.is_some() && out.is_empty() && !written.is_empty() {
+            out.push(written.remove(0));
+            if !labels.is_empty() {
+                labels.remove(0);
+            }
+        }
+        if labels.iter().all(Option::is_none) && written.len() == params.len() {
+            out.extend(written);
+            return Ok(out);
+        }
+        let name = |p: &ast::Param| {
+            p.pat().map(|q| {
+                q.syntax()
+                    .text()
+                    .to_string()
+                    .trim_start_matches("mut ")
+                    .trim()
+                    .to_string()
+            })
+        };
+        let mut slots: Vec<Option<Value>> = vec![None; params.len()];
+        let mut next = 0;
+        for (v, label) in written.into_iter().zip(labels) {
+            let k = match label {
+                None => {
+                    next += 1;
+                    next - 1
+                }
+                Some(l) => params
+                    .iter()
+                    .position(|p| name(p).as_deref() == Some(l.as_str()))
+                    .expect("a checked named argument"),
+            };
+            slots[k] = Some(v);
+        }
+        for (k, slot) in slots.into_iter().enumerate() {
+            let v = match slot {
+                Some(v) => v,
+                None => {
+                    let own = params[k].syntax().children().find_map(ast::Expr::cast);
+                    let (e, from) = match own {
+                        Some(e) => (e, f),
+                        None => {
+                            let g = inherited.expect("a checked default");
+                            let p = g
+                                .node
+                                .params()
+                                .and_then(|l| l.params().nth(k))
+                                .expect("the trait's parameter");
+                            let e = p
+                                .syntax()
+                                .children()
+                                .find_map(ast::Expr::cast)
+                                .expect("a checked default");
+                            (e, g)
+                        }
+                    };
+                    let file = from.user.then_some(from.file);
+                    self.memory
+                        .push_frame(HashMap::new(), file, from.module as usize, false);
+                    let v = self.eval(&e);
+                    self.memory.pop_frame();
+                    v?
+                }
+            };
+            out.push(v);
+        }
+        Ok(out)
+    }
+
     /// A call of a function, a tuple struct or variant, a function of a type (`Type::f`,
     /// `T::f`), or a trait's method (`Trait::f`) (`expr.call.1`, `expr.struct.1`,
     /// `expr.path.assoc.1`).
@@ -684,6 +792,7 @@ impl Machine<'_> {
             let f = self.program.fns[k].clone();
             let types = self.turbofish(turbofish, &f.params);
             let values = self.eval_all(&args)?;
+            let values = self.arranged(&f, None, node, Vec::new(), values)?;
             return self.invoke(&f, values, types, range);
         }
         let (ty, name) = segments.split_at(segments.len() - 1);
@@ -754,6 +863,8 @@ impl Machine<'_> {
                         .child(K::PATH)
                         .and_then(|p| p.children().filter(|c| c.kind() == K::GENERIC_ARGS).last());
                     types.extend(self.turbofish(own, &f.params));
+                    let inherited = imp.and_then(|k| self.trait_method(k, name));
+                    let values = self.arranged(&f, inherited.as_ref(), node, Vec::new(), values)?;
                     return self.invoke(&f, values, types, range);
                 }
                 self.run_method(m, &head, values, range)
@@ -861,8 +972,18 @@ impl Machine<'_> {
             }
         }
         let (m, head, recv) = found.expect("a checked method call");
-        let mut values = vec![recv];
-        values.extend(self.eval_all(&args)?);
+        let written = self.eval_all(&args)?;
+        let values = match &m {
+            Method::Code(f, imp) => {
+                let inherited = imp.and_then(|k| self.trait_method(k, &name));
+                self.arranged(f, inherited.as_ref(), node, vec![recv], written)?
+            }
+            _ => {
+                let mut values = vec![recv];
+                values.extend(written);
+                values
+            }
+        };
         if let Method::Code(f, imp) = &m {
             let mut types = HashMap::new();
             types.insert("Self".to_string(), head.clone());

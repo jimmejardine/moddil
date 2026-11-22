@@ -257,6 +257,11 @@ pub struct FnSig {
     pub track_caller: bool,
     /// The control effects it lists (`with suspend, spawn`).
     pub control: Control,
+    /// For each parameter with a default (`port: u16 = 443`): the hidden const that is its
+    /// value (`expr.call.default.1`).
+    pub defaults: Vec<Option<u32>>,
+    /// Whether it is such a hidden const, whose body is the default written at `node`.
+    pub default_arg: bool,
     /// Whether it is the prelude's and built in (`#[intrinsic]`): it has no body, and the
     /// implementations run it themselves.
     pub intrinsic: bool,
@@ -332,6 +337,8 @@ impl FnSig {
             effects: Vec::new(),
             track_caller: false,
             control: 0,
+            defaults: Vec::new(),
+            default_arg: false,
             intrinsic: false,
             is_const: false,
             const_item: false,
@@ -589,6 +596,7 @@ const LANG: &[&str] = &[
     "Debug",
     "Default",
     "RefinementError",
+    "Trapped",
 ];
 
 impl ItemTree {
@@ -706,6 +714,25 @@ impl ItemTree {
             Ty::Refined(t, _) => self.types[*t as usize].ty.clone(),
             t => t.clone(),
         }
+    }
+
+    /// The default of function `f`'s parameter `k`, if it has one: its own, or, for a method of
+    /// an impl of a trait, the trait's method's (`expr.call.default.1`).
+    pub fn default_of(&self, f: u32, k: usize) -> Option<u32> {
+        let sig = &self.fns[f as usize];
+        if let Some(d) = sig.defaults.get(k).copied().flatten() {
+            return Some(d);
+        }
+        let Container::Impl(i) = sig.container else {
+            return None;
+        };
+        let t = self.impls[i as usize].trait_ref.as_ref()?.trait_;
+        let m = self.traits[t as usize]
+            .methods
+            .iter()
+            .copied()
+            .find(|&m| self.fns[m as usize].name == sig.name)?;
+        self.fns[m as usize].defaults.get(k).copied().flatten()
     }
 
     /// The prelude item the language refers to by `name` (`"Copy"`, `"Option"`): a trait's or

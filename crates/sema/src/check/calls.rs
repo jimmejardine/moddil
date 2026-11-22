@@ -209,8 +209,22 @@ impl Checker<'_> {
     }
 
     /// Checks the arguments of a call of `func` with parameter types `params`.
-    pub(super) fn args(&mut self, range: TextRange, func: u32, params: &[Ty], args: &[ExprId]) {
+    pub(super) fn args(
+        &mut self,
+        e: ExprId,
+        range: TextRange,
+        func: u32,
+        params: &[Ty],
+        args: &[ExprId],
+    ) {
         let sig = &self.items.fns[func as usize];
+        let offset = sig.params.len().saturating_sub(params.len());
+        let named = args.iter().any(|a| self.body.labels.contains_key(a));
+        let defaults = (offset..sig.params.len()).any(|k| self.items.default_of(func, k).is_some());
+        if named || defaults {
+            self.arranged_args(e, range, func, params, args, offset);
+            return;
+        }
         if args.len() != params.len() {
             let d = Diagnostic::error(
                 Code::E0202,
@@ -275,7 +289,7 @@ impl Checker<'_> {
         self.needs_of_call(e, func, target.args(), range);
         let targs = target.args().to_vec();
         self.out.calls.insert(e, target);
-        self.args(range, func, &params, args);
+        self.args(e, range, func, &params, args);
         self.settle_assoc_eqs();
         // After the arguments, since a closure argument's errors are the call's.
         self.fallible_call(e, func, &targs, range);
@@ -403,9 +417,128 @@ impl Checker<'_> {
         let targs = target.args().to_vec();
         self.out.calls.insert(e, target);
         let func = pick.func;
-        self.args(range, func, params.get(1..).unwrap_or(&[]), args);
+        self.args(e, range, func, params.get(1..).unwrap_or(&[]), args);
         self.settle_assoc_eqs();
         self.fallible_call(e, func, &targs, range);
         self.norm(&ret)
+    }
+}
+
+impl Checker<'_> {
+    /// The arguments of a call of `func` that names some, or leaves some out for their
+    /// defaults (`expr.call.named.1`, `expr.call.default.1`): positional ones first, then named
+    /// ones in any order, each matched with its parameter; `offset` parameters (a receiver) are
+    /// passed otherwise.
+    fn arranged_args(
+        &mut self,
+        e: ExprId,
+        range: TextRange,
+        func: u32,
+        params: &[Ty],
+        args: &[ExprId],
+        offset: usize,
+    ) {
+        let sig = &self.items.fns[func as usize];
+        let names: Vec<Option<String>> = sig.params[offset..]
+            .iter()
+            .map(|p| p.name.clone())
+            .collect();
+        let fname = sig.name.clone();
+        let mut slots: Vec<Option<usize>> = vec![None; params.len()];
+        let mut seen_named = false;
+        let mut next = 0;
+        let mut extra = Vec::new();
+        let mut misplaced = false;
+        for (i, &a) in args.iter().enumerate() {
+            match self.body.labels.get(&a).cloned() {
+                None => {
+                    if seen_named {
+                        misplaced = true;
+                        self.report(
+                            Code::E0215,
+                            self.range(a),
+                            "positional arguments come before named ones",
+                        );
+                        extra.push(a);
+                        continue;
+                    }
+                    if next < slots.len() {
+                        slots[next] = Some(i);
+                        next += 1;
+                    } else {
+                        extra.push(a);
+                    }
+                }
+                Some((name, at)) => {
+                    seen_named = true;
+                    match names
+                        .iter()
+                        .position(|n| n.as_deref() == Some(name.as_str()))
+                    {
+                        Some(k) if slots[k].is_none() => slots[k] = Some(i),
+                        Some(_) => {
+                            self.report(
+                                Code::E0215,
+                                at,
+                                format!("`{name}` is given more than once"),
+                            );
+                            extra.push(a);
+                        }
+                        None => {
+                            self.report(
+                                Code::E0215,
+                                at,
+                                format!("`{fname}` has no parameter called `{name}`"),
+                            );
+                            extra.push(a);
+                        }
+                    }
+                }
+            }
+        }
+        if !misplaced
+            && !extra.is_empty()
+            && extra.iter().all(|a| !self.body.labels.contains_key(a))
+        {
+            self.report(
+                Code::E0202,
+                range,
+                format!(
+                    "`{fname}` takes at most {} argument{}, but {} were given",
+                    params.len(),
+                    if params.len() == 1 { "" } else { "s" },
+                    args.len()
+                ),
+            );
+        }
+        let mut order = Vec::new();
+        let mut missing = Vec::new();
+        for (k, slot) in slots.iter().enumerate() {
+            match slot {
+                Some(i) => {
+                    self.check(args[*i], &params[k]);
+                    order.push(super::ArgSlot::Arg(*i));
+                }
+                None => match self.items.default_of(func, k + offset) {
+                    Some(d) => order.push(super::ArgSlot::Default(d)),
+                    None => {
+                        missing.push(names[k].clone().unwrap_or_else(|| format!("#{k}")));
+                        order.push(super::ArgSlot::Arg(usize::MAX));
+                    }
+                },
+            }
+        }
+        for a in extra {
+            self.infer(a);
+        }
+        if !missing.is_empty() && !misplaced {
+            let shown: Vec<String> = missing.iter().map(|m| format!("`{m}`")).collect();
+            self.report(
+                Code::E0202,
+                range,
+                format!("this call of `{fname}` does not pass {}", shown.join(", ")),
+            );
+        }
+        self.out.arg_order.insert(e, order);
     }
 }

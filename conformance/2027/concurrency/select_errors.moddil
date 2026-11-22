@@ -1,0 +1,11 @@
+// covers: task.select.1
+
+fn f() -> int {
+    1
+}
+
+fn bad() -> int {
+    select {
+        x = f() => x,                       //~ E0217
+    }
+}

@@ -16,6 +16,10 @@ pub(super) struct Cfg {
     body: Body,
     current: BlockId,
     span: TextRange,
+    /// The scope node statements and terminators are recorded with from now on.
+    pub(super) node: u32,
+    /// Whether the blocks made from now on are cleanup code.
+    pub(super) cleanup: bool,
 }
 
 impl Cfg {
@@ -25,6 +29,8 @@ impl Cfg {
             body,
             current: BlockId(0),
             span: TextRange::default(),
+            node: 0,
+            cleanup: false,
         };
         cfg.current = cfg.new_block();
         cfg
@@ -37,6 +43,9 @@ impl Cfg {
             spans: Vec::new(),
             terminator: Terminator::Unreachable,
             terminator_span: self.span,
+            nodes: Vec::new(),
+            terminator_node: 0,
+            cleanup: self.cleanup,
         });
         BlockId(self.body.blocks.len() as u32 - 1)
     }
@@ -56,6 +65,17 @@ impl Cfg {
         std::mem::replace(&mut self.span, span)
     }
 
+    /// Records the cleanup block of each scope node.
+    pub(super) fn set_cleanups(&mut self, cleanups: Vec<BlockId>, locals: usize) {
+        self.body.cleanups = cleanups;
+        self.body.cleanup_locals = locals;
+    }
+
+    /// How many locals there are.
+    pub(super) fn local_count(&self) -> usize {
+        self.body.locals.len()
+    }
+
     /// A new local of type `ty`, named for printing if `name` is given.
     pub(super) fn new_local(&mut self, ty: Ty, name: Option<String>) -> Local {
         self.body.locals.push(LocalDecl { ty, name });
@@ -71,6 +91,7 @@ impl Cfg {
         let block = &mut self.body.blocks[self.current.index()];
         block.statements.push(s);
         block.spans.push(self.span);
+        block.nodes.push(self.node);
     }
 
     pub(super) fn assign(&mut self, dest: impl Into<Place>, r: Rvalue) {
@@ -89,6 +110,7 @@ impl Cfg {
         let block = &mut self.body.blocks[self.current.index()];
         block.terminator = t;
         block.terminator_span = self.span;
+        block.terminator_node = self.node;
         self.current = next;
     }
 
@@ -120,7 +142,9 @@ impl Cfg {
     pub(super) fn finish(mut self) -> Body {
         let body = &mut self.body;
         let mut reachable = vec![false; body.blocks.len()];
+        // Cleanup blocks are reached by unwinding, not by edges.
         let mut work = vec![BlockId(0)];
+        work.extend(body.cleanups.iter().copied());
         while let Some(b) = work.pop() {
             if std::mem::replace(&mut reachable[b.index()], true) {
                 continue;
@@ -157,11 +181,15 @@ impl Cfg {
                     *else_ = renumber[else_.index()];
                 }
                 Terminator::Return
+                | Terminator::Resume
                 | Terminator::Unreachable
                 | Terminator::Fail(_)
                 | Terminator::Trap(..) => {}
             }
             body.blocks.push(block);
+        }
+        for c in &mut body.cleanups {
+            *c = renumber[c.index()];
         }
         self.body
     }

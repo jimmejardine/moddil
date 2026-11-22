@@ -1,0 +1,63 @@
+// covers: task.channel.1, task.channel.2, task.channel.3
+
+test "values arrive in order, and `None` once every sender is gone" {
+    let mut got: Vec<int> = [];
+    let (tx, rx) = channel::<int>(2);
+    scope(|s| {
+        // The sender is moved into its task, so the channel closes when the task ends.
+        s.spawn(|| {
+            let tx = tx;
+            let mut i = 0;
+            while i < 5 {
+                tx.send(i)?!"the receiver is alive";
+                i += 1;
+            }
+        });
+        s.spawn(|| {
+            loop {
+                match rx.recv() {
+                    Some(v) => got.push(v),
+                    None => break,
+                }
+            }
+        });
+    });
+    got.len()                               // => 5
+    ;
+    got[4]                                  // => 4
+}
+
+test "a sender is cloned, and the channel closes when the last goes" {
+    let mut total = 0;
+    let (tx, rx) = channel::<int>(0);
+    let tx2 = tx.clone();
+    scope(|s| {
+        s.spawn(|| {
+            let tx = tx;
+            tx.send(1)?!"alive";
+        });
+        s.spawn(|| {
+            let tx2 = tx2;
+            tx2.send(2)?!"alive";
+        });
+        s.spawn(|| {
+            while let Some(v) = rx.recv() {
+                total += v;
+            }
+        });
+    });
+    total                                   // => 3
+}
+
+test "a send fails with `Closed` once the receiver is gone" {
+    let (tx, rx) = channel::<int>(1);
+    drop(rx);
+    let r = try { tx.send(1)? };
+    r                                       // => Err(Closed)
+}
+
+test "a receive no send can meet deadlocks" {
+    let (tx, rx) = channel::<int>(1);
+    rx.recv();                              //~ trap
+    drop(tx);
+}

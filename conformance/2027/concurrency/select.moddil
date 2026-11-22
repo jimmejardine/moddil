@@ -1,0 +1,73 @@
+// covers: task.select.1, task.select.2, task.stop.1
+
+test "the first ready arm, in written order, runs" {
+    let (atx, arx) = channel::<int>(1);
+    let (btx, brx) = channel::<int>(1);
+    atx.send(1)?!"alive";
+    btx.send(2)?!"alive";
+    let got = select {
+        x = brx.recv() => x,
+        y = arx.recv() => y,
+    };
+    got                                     // => Some(2)
+}
+
+test "with none ready, it waits for one" {
+    let (tx, rx) = channel::<int>(1);
+    let mut got = 0;
+    scope(|s| {
+        s.spawn(|| {
+            let v = select {
+                v = rx.recv() => v,
+            };
+            got = v.unwrap_or(0);
+        });
+        s.spawn(|| {
+            let tx = tx;
+            yield_now();
+            tx.send(7)?!"alive";
+        });
+    });
+    got                                     // => 7
+}
+
+test "a loop serves until it is asked to stop" {
+    let (tx, rx) = channel::<int>(4);
+    let mut served = 0;
+    scope(|s| {
+        s.spawn(|| {
+            loop {
+                select {
+                    v = rx.recv() => {
+                        served += v.unwrap_or(0);
+                    },
+                    _ = stop_requested() => break,
+                }
+            }
+        });
+        tx.send(1)?!"alive";
+        tx.send(2)?!"alive";
+        yield_now();
+        s.stop();
+    });
+    served                                  // => 3
+}
+
+test "a send and a join can be arms, and an error passes on" {
+    let (tx, rx) = channel::<int>(1);
+    drop(rx);
+    let r = try {
+        select {
+            _ = tx.send(1)? => 1,
+        }
+    };
+    r                                       // => Err(Closed)
+    ;
+    let v = scope(|s| {
+        let t = s.spawn(|| 5);
+        select {
+            x = t.join() => x * 2,
+        }
+    });
+    v                                       // => 10
+}

@@ -1364,9 +1364,10 @@ struct ParamInfo {
     ty: String,
 }
 
-// Structured concurrency (`task.scope.1`): `scope` runs its body with a handle tasks are spawned
-// into, and ends once every one of them has. A task's errors go to its `join`, or, if it is never
-// joined, to the scope.
+// Structured concurrency (`task.scope.1`): `scope` runs its body as its first task, with a handle
+// further tasks are spawned into, and ends once every one of them has. A task's errors go to its
+// `join`; one that fails with its `Task` dropped, or a failing body, fails the scope, whose other
+// tasks are then cancelled (`task.cancel.1`).
 
 // A scope's handle. It holds what its tasks borrow, until the scope ends.
 view Scope {
@@ -1378,20 +1379,24 @@ view Task<F, T> {
     id: int,
 }
 
-fn scope<F: FnOnce(&mut Scope) -> R, R>(body: F) -> R with spawn {
-    let mut s = Scope { id: __scope_open() };
-    errdefer {
-        __scope_wait(s.id);
-    }
-    let r = body(&mut s);
-    __scope_close::<F, R>(s.id)?;
-    r
+// With `isolate: true`, a trap in the scope cancels it, and it fails with `Trapped`
+// (`task.isolate.1`); otherwise a trap ends the program. Only an isolated scope's call can fail
+// with `Trapped`.
+fn scope<F: FnOnce(&mut Scope) -> R, R>(body: F, isolate: bool = false) -> R
+    with spawn, fail(Trapped)
+{
+    let mut s = Scope { id: __scope_open(isolate) };
+    __scope_run::<F, R>(&mut s, body)?
 }
 
 impl Scope {
     // Starts a task running `f`, queued to run when the running task suspends.
     #[intrinsic]
     fn spawn<F: FnOnce() -> T, T>(&mut self, f: F) -> Task<F, T> from f with spawn;
+
+    // Asks the scope's tasks to stop, the scopes inside it first (`task.stop.1`).
+    #[intrinsic]
+    fn stop(&self);
 }
 
 impl<F: FnOnce() -> T, T> Task<F, T> {
@@ -1400,17 +1405,95 @@ impl<F: FnOnce() -> T, T> Task<F, T> {
     fn join(self) -> T with suspend, fail(F::Fails);
 }
 
+// A task given up without a `join`: an error it fails with fails its scope.
+impl<F, T> Drop for Task<F, T> {
+    #[intrinsic]
+    fn drop(self);
+}
+
 // Lets the other tasks that are ready run first.
 #[intrinsic]
 fn yield_now() with suspend;
 
+// Waits until the running task's scope, or one around it, has been asked to stop, once the
+// scopes inside its scope have ended (`task.stop.1`).
 #[intrinsic]
-fn __scope_open() -> int;
+fn stop_requested() with suspend;
 
-// Waits for the scope's tasks.
-#[intrinsic]
-fn __scope_wait(id: int) with spawn;
+// What an isolated scope fails with when a trap ends it: the trap's kind (`overflow`) and where
+// it was, as `line:column` in its file.
+#[derive(Debug, Clone, PartialEq)]
+struct Trapped {
+    class: String,
+    at: String,
+}
 
-// Waits for the scope's tasks, and fails with the first error of one never joined.
+impl Display for Trapped {
+    fn fmt(&self, out: &mut String) {
+        out.push_str(&self.class);
+        out.push_str(" at ");
+        out.push_str(&self.at);
+    }
+}
+
 #[intrinsic]
-fn __scope_close<F: FnOnce(&mut Scope) -> R, R>(id: int) with spawn;
+fn __scope_open(isolate: bool) -> int;
+
+// Waits until one of a `select`'s operations, described by `ops`, is ready, does it, and gives
+// its arm's index (`task.select.1`).
+#[intrinsic]
+fn __select<T>(ops: T) -> int with suspend;
+
+// Runs the body as the scope's first task, waits for every task of the scope, and gives the
+// body's value, or fails with the scope's failure.
+#[intrinsic]
+fn __scope_run<F: FnOnce(&mut Scope) -> R, R>(s: &mut Scope, body: F) -> R
+    with spawn, fail(Trapped);
+
+// Channels (`task.channel.1`): a bounded queue of values between tasks.
+
+// The error a `send` fails with once its channel's `Receiver` is gone.
+#[derive(Debug, Clone, PartialEq)]
+struct Closed;
+
+// The sending end of a channel; there may be several.
+struct Sender<T> {
+    id: int,
+}
+
+// The receiving end of a channel.
+struct Receiver<T> {
+    id: int,
+}
+
+// A channel holding up to `capacity` values; with capacity 0, a `send` waits until its value is
+// received.
+#[intrinsic]
+fn channel<T>(capacity: int) -> (Sender<T>, Receiver<T>);
+
+impl<T> Sender<T> {
+    // Puts `value` in the channel, waiting while it is full.
+    #[intrinsic]
+    fn send(&self, value: T) with suspend, fail(Closed);
+}
+
+impl<T> Receiver<T> {
+    // The next value, waiting while the channel is empty; `None` once every `Sender` is gone.
+    #[intrinsic]
+    fn recv(&self) -> Option<T> with suspend;
+}
+
+impl<T> Clone for Sender<T> {
+    #[intrinsic]
+    fn clone(&self) -> Sender<T>;
+}
+
+impl<T> Drop for Sender<T> {
+    #[intrinsic]
+    fn drop(self);
+}
+
+impl<T> Drop for Receiver<T> {
+    #[intrinsic]
+    fn drop(self);
+}

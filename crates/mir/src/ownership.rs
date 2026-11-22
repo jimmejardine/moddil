@@ -785,7 +785,10 @@ impl<'a> Checker<'a> {
                     self.returned(set, h);
                 }
             }
-            Terminator::Goto(_) | Terminator::Unreachable | Terminator::Trap(..) => {}
+            Terminator::Goto(_)
+            | Terminator::Resume
+            | Terminator::Unreachable
+            | Terminator::Trap(..) => {}
         }
     }
 
@@ -941,7 +944,10 @@ fn uses_defs(stmt: Option<&Statement>, term: Option<&Terminator>) -> (Vec<Local>
             Terminator::Return => uses.push(Local::RETURN),
             Terminator::Drop { place, .. } => uses.push(place.local),
             Terminator::Fail(e) => op(e, &mut uses),
-            Terminator::Goto(_) | Terminator::Unreachable | Terminator::Trap(..) => {}
+            Terminator::Goto(_)
+            | Terminator::Resume
+            | Terminator::Unreachable
+            | Terminator::Trap(..) => {}
         }
     }
     (uses, def)

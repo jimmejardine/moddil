@@ -39,8 +39,8 @@ mod validate;
 mod wrap;
 
 pub use check::{
-    Callee, Capture, CaptureMode, Effects, Evidence, FnEffects, Inference, Propagated, effects,
-    infer, tuple_positions,
+    ArgSlot, Callee, Capture, CaptureMode, Effects, Evidence, FnEffects, Inference, Propagated,
+    effects, infer, tuple_positions,
 };
 pub use collect::{item_tree, parse};
 pub use db::{Database, Db, FileId, Item, ModInfo, Owner, Program, ProgramFile, SourceFile};

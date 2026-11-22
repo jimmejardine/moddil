@@ -49,6 +49,9 @@ and a code never changes meaning.
 | E0212 | `break` with a value out of `while` | [expr.break.value.1](expressions/loops.md) |
 | E0213 | Wrong number of fields in a pattern | [pat.tuple.1](patterns.md), [pat.struct.tuple.1](patterns.md) |
 | E0214 | An empty range pattern | [pat.range.1](patterns.md) |
+| E0215 | A named argument with no parameter of its name, given twice, or before a positional one | [expr.call.named.1](expressions/calls.md) |
+| E0216 | A default on a method of an impl of a trait | [expr.call.default.1](expressions/calls.md) |
+| E0217 | A `select` arm whose operation is not one a `select` waits on | [task.select.1](concurrency.md) |
 | E0301 | Mutation of an immutable local (assigning, or borrowing with `&mut`) | [expr.assign.1](expressions/assignment.md), [borrow.mut.1](borrows.md) |
 | E0302 | Mutation through a shared borrow | [borrow.mut.1](borrows.md) |
 | E0303 | Use of a moved value | [own.move.1](ownership.md), [own.move.partial.1](ownership.md) |

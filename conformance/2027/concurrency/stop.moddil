@@ -1,0 +1,20 @@
+// covers: task.stop.1
+
+test "a stop reaches the inner scope's tasks first" {
+    let mut order: Vec<int> = [];
+    let mut outer: Vec<int> = [];
+    scope(|s| {
+        s.spawn(|| {
+            stop_requested();
+            outer.push(2);
+        });
+        s.spawn(|| scope(|inner| {
+            inner.spawn(|| {
+                stop_requested();
+                order.push(1);
+            });
+        }));
+        s.stop();
+    });
+    order.len() + outer.len()               // => 2
+}

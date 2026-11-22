@@ -213,6 +213,26 @@ impl<'a> Stack<'a> {
         &body.blocks[frame.block].terminator
     }
 
+    /// Whether the running task is running a destructor, where a trap always ends the run.
+    pub(crate) fn in_drop(&self) -> bool {
+        self.frames().iter().any(|f| matches!(f.ret, Ret::Drop))
+    }
+
+    /// Starts unwinding the top frame from where it is (`task.cancel.1`): at its terminator, or
+    /// at the statement it has just run; it goes on in the cleanup block for that point.
+    pub(crate) fn unwind_top(&mut self, at_terminator: bool) {
+        let frame = self.top_mut();
+        let stmt = if at_terminator {
+            frame.body.blocks[frame.block].statements.len()
+        } else {
+            frame.stmt.saturating_sub(1)
+        };
+        frame.block = frame.body.cleanup_at(frame.block, stmt).index();
+        frame.stmt = 0;
+        frame.drops.clear();
+        frame.after_drops = None;
+    }
+
     /// Continues the top frame at the start of `block`.
     pub(crate) fn goto(&mut self, block: usize) {
         let frame = self.top_mut();

@@ -208,6 +208,7 @@ impl Builder<'_> {
                 let depth = self.scopes.depth() - 1;
                 self.leave_scopes(depth);
                 self.scopes.close();
+                self.cfg.node = self.scopes.node();
             }
             ExprKind::If { cond, then, else_ } => {
                 let c = self.operand(cond, &[]);
@@ -249,6 +250,7 @@ impl Builder<'_> {
                     .assign(dest, Rvalue::Use(Operand::Const(Const::Bool(false))));
                 self.cfg.terminate_into(Terminator::Goto(join), join);
             }
+            ExprKind::Select(arms) => self.select(e, dest, &arms),
             ExprKind::Match { scrutinee, arms } => {
                 let place = self.scrutinee(scrutinee);
                 // While guards run, the matched value is borrowed, so a guard cannot change it.
@@ -323,6 +325,7 @@ impl Builder<'_> {
                 self.cfg.terminate_into(Terminator::Goto(header), leave);
                 self.leave_scopes(depth);
                 self.scopes.close();
+                self.cfg.node = self.scopes.node();
                 self.cfg.terminate_into(Terminator::Goto(exit), exit);
                 self.cfg
                     .assign(dest, Rvalue::Use(Operand::Const(Const::Unit)));
@@ -561,6 +564,34 @@ impl Builder<'_> {
     /// Calls what `e` (a call, method call or operator) runs, with `args`, into `dest`.
     pub(super) fn call(&mut self, e: ExprId, dest: Local, mut args: Vec<Operand>) {
         let callee = self.types.callee(e).expect("a checked call").clone();
+        // Named and left-out arguments (`expr.call.named.1`): the written ones, evaluated in
+        // the order written, are passed in the parameters' order, and a default fills each gap.
+        if let Some(order) = self.types.arg_order(e).map(<[_]>::to_vec) {
+            let written = match &self.hir.exprs[e].kind {
+                ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. } => args.len(),
+                _ => 0,
+            };
+            let offset = args.len().saturating_sub(written);
+            let mut taken: Vec<Option<Operand>> =
+                args.split_off(offset).into_iter().map(Some).collect();
+            let range = self.range(e);
+            for slot in order {
+                match slot {
+                    moddil_sema::ArgSlot::Arg(i) => {
+                        args.push(taken[i].take().expect("an argument passed once"));
+                    }
+                    moddil_sema::ArgSlot::Default(d) => {
+                        let t = self.temp(self.items.fns[d as usize].ret.clone());
+                        let callee = Callee::Fn {
+                            func: d,
+                            args: Vec::new(),
+                        };
+                        self.call_into(None, callee, Place::local(t), Vec::new(), range);
+                        args.push(Operand::Move(Place::local(t)));
+                    }
+                }
+            }
+        }
         // The handlers it needs, after its arguments.
         for ev in self.types.evidence(e) {
             let local = match *ev {
@@ -587,6 +618,7 @@ impl Builder<'_> {
                 t => {
                     let held = self.cfg.new_local(t.clone(), None);
                     self.scopes.push(ScopeItem::Local(held));
+                    self.cfg.node = self.scopes.node();
                     self.eval_into(held, h.value);
                     let r = self.temp(Ty::reference(false, t.clone()));
                     self.cfg.assign(r, Rvalue::Ref(false, Place::local(held)));
@@ -597,6 +629,7 @@ impl Builder<'_> {
                 .cfg
                 .new_local(Ty::reference(false, h.effect.clone()), None);
             self.scopes.push(ScopeItem::Local(installed));
+            self.cfg.node = self.scopes.node();
             let value = match &h.effect {
                 Ty::Dyn(_) => Rvalue::Unsize(borrow.0, borrow.1),
                 _ => Rvalue::Use(borrow.0),
@@ -608,6 +641,7 @@ impl Builder<'_> {
         let depth = self.scopes.depth() - 1;
         self.leave_scopes(depth);
         self.scopes.close();
+        self.cfg.node = self.scopes.node();
     }
 
     /// A call; if its function can fail, its error edge goes where the `?` or `?!` around
@@ -782,6 +816,7 @@ impl Builder<'_> {
             }
             Stmt::Defer(body) => {
                 self.scopes.push(ScopeItem::Defer(body));
+                self.cfg.node = self.scopes.node();
             }
             Stmt::ErrDefer(body) => self.errdefer(body),
             Stmt::Expr {

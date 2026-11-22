@@ -1,0 +1,43 @@
+// covers: task.isolate.1, task.isolate.2
+
+fn overflow(x: int) -> int {
+    x * 9223372036854775807
+}
+
+test "a trap in an isolated scope fails it with `Trapped`" {
+    let mut cleaned = false;
+    let r = try {
+        scope(|s| {
+            s.spawn(|| {
+                defer {
+                    cleaned = true;
+                }
+                yield_now();
+            });
+            s.spawn(|| overflow(2));
+            0
+        }, isolate: true)?
+    };
+    let shown = match r {
+        Ok(v) => fmt"{v}",
+        Err(t) => fmt"{t}",
+    };
+    shown                                   // => "overflow at 4:5"
+    ;
+    cleaned                                 // => true
+}
+
+test "a scope that is not isolated passes no `Trapped`" {
+    let r = scope(|s| s.spawn(|| 1).join(), isolate: false);
+    r                                       // => 1
+}
+
+test "the body's trap is the scope's too" {
+    let r = try {
+        scope(|s| overflow(3), isolate: true)?
+    };
+    match r {
+        Ok(_) => 0,
+        Err(Trapped { class, at }) => class.len(),
+    }                                       // => 8
+}

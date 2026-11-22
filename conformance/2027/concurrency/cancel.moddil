@@ -1,0 +1,96 @@
+// covers: task.cancel.1, task.cancel.2, task.error.1
+
+#[derive(Debug, Clone, PartialEq)]
+struct Oops { n: int }
+
+fn risky(x: int) -> int with fail(Oops) {
+    if x > 0 {
+        fail(Oops { n: x })
+    }
+    x
+}
+
+
+fn shown(r: Result<int, Oops>) -> int {
+    match r {
+        Ok(v) => v,
+        Err(Oops { n }) => -n,
+    }
+}
+
+test "a failing task given up cancels the others where they wait" {
+    let mut cleaned = false;
+    let mut reached = false;
+    let (tx, rx) = channel::<int>(1);
+    let r = try {
+        scope(|s| {
+            s.spawn(|| {
+                defer {
+                    cleaned = true;
+                }
+                rx.recv();                  // waits: nothing is ever sent
+                reached = true;
+            });
+            s.spawn(|| risky(4)?)?;
+            0
+        })?
+    };
+    shown(r)                                // => -4
+    ;
+    cleaned                                 // => true
+    ;
+    reached                                 // => false
+}
+
+test "a failing body cancels its tasks" {
+    let mut cleaned = 0;
+    let r = try {
+        scope(|s| {
+            s.spawn(|| {
+                defer {
+                    cleaned += 1;
+                }
+                yield_now();
+                cleaned += 10;
+            });
+            yield_now();
+            risky(2)?
+        })?
+    };
+    shown(r)                                // => -2
+    ;
+    cleaned                                 // => 1
+}
+
+test "a task still held keeps its error for its join" {
+    let r = try {
+        scope(|s| {
+            let t = s.spawn(|| risky(5)?)?;
+            yield_now();
+            shown(try { t.join()? })
+        })?
+    };
+    shown(r)                                // => -5
+}
+
+test "cancellation reaches the scopes inside" {
+    let mut inner = false;
+    let r = try {
+        scope(|s| {
+            s.spawn(|| scope(|t| {
+                t.spawn(|| {
+                    defer {
+                        inner = true;
+                    }
+                    yield_now();
+                    yield_now();
+                });
+            }));
+            yield_now();
+            risky(9)?
+        })?
+    };
+    shown(r)                                // => -9
+    ;
+    inner                                   // => true
+}

@@ -1,0 +1,24 @@
+// covers: expr.call.named.1, expr.call.default.1
+
+fn connect(host: int, port: int = 443) -> int {
+    host + port
+}
+
+trait T {
+    fn f(&self, x: int = 1) -> int;
+}
+
+struct S {}
+
+impl T for S {
+    fn f(&self, x: int = 2) -> int {        //~ E0216
+        x
+    }
+}
+
+fn calls() {
+    connect(1, size: 2);                    //~ E0215
+    connect(1, port: 2, port: 3);           //~ E0215
+    connect(port: 2, 1);                    //~ E0215
+    connect(port: 2);                       //~ E0202
+}
