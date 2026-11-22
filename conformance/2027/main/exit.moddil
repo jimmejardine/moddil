@@ -2,6 +2,8 @@
 
 test "a named exit code" {
     ExitCode::Usage.code()                  // => 64
+    ;
+    ExitCode::Ok.code()                     // => 0
 }
 
 test "a number with a name gets it" {

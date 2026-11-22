@@ -1,4 +1,4 @@
-// covers: expr.struct.1, expr.struct.tuple.1, expr.struct.form.1
+// covers: expr.struct.1, expr.struct.tuple.1, expr.struct.form.1, type.adt.1
 
 struct Point { x: int, y: int }
 struct Pair(int, bool);
@@ -14,3 +14,8 @@ fn no_braces() -> Point { Point }                      //~ E0111
 fn braces() -> Pair { Pair { x: 1 } }                  //~ E0111
 fn called() -> Marker { Marker() }                     //~ E0111
 fn enum_value() -> Shape { Shape }                     //~ E0111
+
+// Types are nominal: a struct with the same fields is another type.
+struct Size { x: int, y: int }
+fn takes(p: Point) -> int { p.x }
+fn nominal() -> int { takes(Size { x: 1, y: 2 }) }    //~ E0201

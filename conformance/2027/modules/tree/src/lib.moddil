@@ -17,4 +17,6 @@ test "modules name each other by path" {
     r.area()                                // => 12
     ;
     shapes::circle::one().r                // => 1
+    ;
+    shapes::single().r                      // => 1
 }

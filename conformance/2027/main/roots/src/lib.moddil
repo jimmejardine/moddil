@@ -6,6 +6,7 @@ fn main(args: Args, stdio: Stdio, net: NetRoot) -> ExitCode {
     ExitCode::Ok
 }
 
-test "main takes the root capabilities it uses" {
-    1                                       // => 1
-}
+// The capabilities are values like any other: `main` passes them on.
+fn serve(net: NetRoot) -> int { 0 }
+
+fn main_body(args: Args, stdio: Stdio, net: NetRoot) -> int { serve(net) }

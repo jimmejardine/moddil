@@ -1,0 +1,15 @@
+// covers: expr.op.trait.1
+
+struct Label { id: int }
+struct L { l: Label }
+
+impl Add for L {
+    type Output = L;
+    fn add(self, rhs: L) -> L { rhs }
+}
+
+// The operands are moved in.
+fn moved(a: L, b: L) -> L {
+    let c = a + b;
+    a                                       //~ E0303
+}

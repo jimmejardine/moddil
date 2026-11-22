@@ -32,7 +32,7 @@ test "positional fields and unit structs" {
     Marker                      // => Marker
 }
 
-test "structs with the same fields are different types" {
+test "a struct of the same fields as another is built and read on its own" {
     let s = Size { x: 1, y: 2 };
     s.x + origin().x            // => 1
 }

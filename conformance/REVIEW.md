@@ -25,6 +25,8 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
   language, so the runner rejects it. The findings that asked for I0001 cases are dropped: the
   `track_caller` arguments, the wrapper limits, and `Vec::new` and `Some` as values.
 - **A contract on a trait's method can't be tested here:** it is I0001 for now (`contract.1`).
+- **`let b = a;` with `a: &mut int` is a reborrow, not a move** (`borrow.reborrow.1`), so the
+  `own.copy.1` finding became "using `a` while `b` is live" (E0306).
 - **E0309 for a closure in a field can't be written.** A closure's type can't be named, so a field
   can hold one only through a type parameter, and that makes the struct a view, which is allowed.
 
@@ -43,71 +45,15 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
 
 | Directory | claim | weak | missing | cite | dead | gap? |
 |---|---|---|---|---|---|---|
-| enums, structs | 1 | | | | | |
-| main | | 1 | | | | |
-| modules | | | 3 | | | |
-| operators | | | 1 | | | |
-| ownership | | | 1 | 1 | | |
-| refinements | 1 | | | 1 | | |
 | syntax, text | | | 3 | | | |
 | traits | | | 3 | | | |
 | wrappers | | | 1 | | 1 | |
 
-The directories not listed have no finding left: arithmetic, arrays, attributes, borrows, calls, closures, collections, comptime, concurrency, contracts, derive, effects, errors, generics, iteration and prelude are done, and
+The directories not listed have no finding left: arithmetic, arrays, attributes, borrows, calls, closures, collections, comptime, concurrency, contracts, derive, effects, enums, errors, generics, iteration, main, modules, operators, ownership, prelude, refinements and structs are done, and
 assert, assignment, bitwise, blocks, comparison, if, items, literals, logic, loops, match, names,
 patterns, statements, tuples, types and views had none worth a change.
 
 ## Findings
-
-### enums, structs
-
-- **claim:** `structs/structs.moddil`'s test "structs with the same fields are different types"
-  observes `s.x + origin().x`, which can't show nominal typing. Add an E0201 case that passes a
-  `Size` where a `Point` is expected, to `structs/errors.moddil`, and drop or rename the running
-  test.
-
-### main
-
-- **weak:** `roots/src/lib.moddil`'s test observes `1 // => 1`, which tests nothing. The file's
-  real check is that its `main` is accepted. Drop the test, or call a function that takes one of
-  the capabilities. `exit.moddil` never observes `ExitCode::Ok.code()` (0, `main.exit.1`).
-
-### modules
-
-- **missing:** `mod.use.1` and `mod.path.1` have untested parts:
-  - `pub use` and `pub(mod) use` re-exports (`mod.use.1`): add one to `tree` and use the item
-    through the re-exporting module;
-  - `self::` as a path start (`mod.path.1`);
-  - a path segment that names no type (E0102) or no trait (E0401), also `mod.path.1`.
-- **missing:** `mod.tree.1` says a file whose name isn't a name can't be a module (E0704). Add a
-  `src/2d.moddil` to a manifest test.
-- **missing:** `mod.dep.1` says a mod sees only another mod's `pub` items. This is tested only
-  through `use dep::internal`. Add a path use (`dep::internal()`) in `visibility`.
-
-### operators
-
-- **missing:** `traits.moddil` covers `expr.op.trait.1`, but has impls only for `Add` and `Neg`.
-  `Sub`, `Mul`, `Div`, `Rem` and `Not` on a type of one's own are called nowhere. "The operands
-  are moved in" isn't shown either: use a non-`Copy` left operand again after `+`, as an E0303
-  case.
-
-### ownership
-
-- **missing:** `own.copy.1` and `own.copy.derive.1` have untested cases:
-  - `&mut T` isn't `Copy` (`own.copy.1`): add the E0303 case of using a `&mut` local after
-    `let b = a;` with `a: &mut int`;
-  - "a generic type declared `Copy` is `Copy` only for type arguments that keep it within 64
-    bytes" (`own.copy.derive.1`): add `Wrap<(int, int, int, int, int, int, int, int, int)>` moved
-    twice.
-- **cite:** `drop-errors.moddil`'s `#[derive(Copy, Clone)] struct Point` with a destructor is
-  `own.copy.derive.1`'s E0411, which the file doesn't cite. Cite it.
-
-### refinements
-
-- **claim:** `errors.moddil` cites `refine.new.2` (a base holding a borrow, E0309), but has no
-  such case. Add `type Ref = &int where true;`.
-- **cite:** `errors.moddil`'s `Bad` (E0402, the base isn't `Debug`) is `refine.new.1`'s, and
-  `Calls` (E1001) is `refine.1`'s. Neither paragraph is cited. Cite both.
 
 ### syntax, text
 

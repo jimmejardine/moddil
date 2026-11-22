@@ -1,4 +1,4 @@
-// covers: own.drop.destructor.1, own.drop.partial.1, own.drop.1
+// covers: own.drop.destructor.1, own.drop.partial.1, own.drop.1, own.copy.derive.1
 
 struct Guard { armed: bool }
 impl Drop for Guard { fn drop(self) { assert(!self.armed); } }

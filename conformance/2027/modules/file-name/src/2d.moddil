@@ -1,0 +1,1 @@
+pub(mod) fn b() -> int { 2 }                //~ E0704

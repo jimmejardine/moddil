@@ -7,6 +7,33 @@ impl Add for V {
     fn add(self, rhs: V) -> V { V { x: self.x + rhs.x, y: self.y + rhs.y } }
 }
 
+impl Sub for V {
+    type Output = V;
+    fn sub(self, rhs: V) -> V { V { x: self.x - rhs.x, y: self.y - rhs.y } }
+}
+
+impl Mul for V {
+    type Output = V;
+    fn mul(self, rhs: V) -> V { V { x: self.x * rhs.x, y: self.y * rhs.y } }
+}
+
+impl Div for V {
+    type Output = V;
+    fn div(self, rhs: V) -> V { V { x: self.x / rhs.x, y: self.y / rhs.y } }
+}
+
+impl Rem for V {
+    type Output = V;
+    fn rem(self, rhs: V) -> V { V { x: self.x % rhs.x, y: self.y % rhs.y } }
+}
+
+struct Flag { on: bool }
+
+impl Not for Flag {
+    type Output = Flag;
+    fn not(self) -> Flag { Flag { on: !self.on } }
+}
+
 impl Neg for V {
     type Output = V;
     fn neg(self) -> V { V { x: -self.x, y: -self.y } }
@@ -43,6 +70,16 @@ test "operators call their traits" {
     sum(V { x: 1, y: 1 }, V { x: 2, y: 2 }) // => V { x: 3, y: 3 }
     ;
     sum(2, 3)                               // => 5
+    ;
+    V { x: 9, y: 9 } - V { x: 2, y: 3 }     // => V { x: 7, y: 6 }
+    ;
+    V { x: 2, y: 3 } * V { x: 4, y: 5 }     // => V { x: 8, y: 15 }
+    ;
+    V { x: 9, y: 7 } / V { x: 2, y: 2 }     // => V { x: 4, y: 3 }
+    ;
+    V { x: 9, y: 7 } % V { x: 2, y: 4 }     // => V { x: 1, y: 3 }
+    ;
+    (!Flag { on: false }).on                // => true
 }
 
 test "comparisons through PartialOrd" {

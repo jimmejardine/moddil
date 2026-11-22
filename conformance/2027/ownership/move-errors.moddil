@@ -1,4 +1,4 @@
-// covers: own.move.1, own.move.partial.1, own.move.borrow.1
+// covers: own.move.1, own.move.partial.1, own.move.borrow.1, own.copy.1
 
 struct Label { id: int }
 struct Pair { a: Label, b: Label }
@@ -30,4 +30,11 @@ fn out_of_a_borrow(r: &Label) -> Label {
 
 fn field_out_of_a_borrow(r: &Pair) -> Label {
     r.a                         //~ E0304
+}
+
+// A `&mut` is not copied: passing it on lends it, and the first is unusable while the second is.
+fn mut_not_copy(a: &mut int) {
+    let b = a;
+    *a = 1;                     //~ E0306
+    *b = 2;
 }

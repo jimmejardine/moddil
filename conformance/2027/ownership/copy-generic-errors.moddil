@@ -14,3 +14,14 @@ fn not_copy() {
     let v = w;
     w;                                      //~ E0303
 }
+
+// A generic type declared `Copy` is not `Copy` for type arguments that make it larger than 64 bytes.
+fn too_big(w: Wrap<(int, int, int, int, int, int, int, int, int)>) {
+    let a = w;
+    let b = w;                              //~ E0303
+}
+
+fn fits(w: Wrap<(int, int)>) {
+    let a = w;
+    let b = w;
+}

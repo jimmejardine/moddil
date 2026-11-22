@@ -1,4 +1,4 @@
-// covers: mod.vis.1, mod.use.1, mod.expose.1, mod.names.1, mod.path.1
+// covers: mod.vis.1, mod.use.1, mod.expose.1, mod.names.1, mod.path.1, mod.dep.1
 
 use mod::inner::hidden;                       //~ E0701
 use mod::inner::missing;                      //~ E0702
@@ -26,3 +26,7 @@ pub struct Wraps { s: Shared }                  //~ E0703
 // Paths start at `mod`: `crate` is an ordinary name, and names nothing here.
 use crate::inner::Secret as Old;                //~ E0702
 fn rust_root() -> int { crate::exported() }     //~ E0101
+
+fn through_a_path() -> int { dep::internal() }  //~ E0701
+fn no_type(x: mod::nothing::T) {}             //~ E0102
+fn no_trait<T: mod::Missing>(x: T) {}         //~ E0401
