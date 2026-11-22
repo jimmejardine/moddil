@@ -5,16 +5,16 @@
 
 ## Summary
 
-| Rule | One line |
-|---|---|
-| **No macro language** | There are no token-level macros (`macro_rules!`, proc macros, a preprocessor). Metaprogramming is ordinary Moddil code that the compiler runs. |
-| **Comptime is pure** | Code run at compile time has an empty effect set: no `Net`, `Fs`, `Time` or `Rand`. It is deterministic, fuel-limited, sandboxed and cached. |
-| **Generics stay bounded** | Generic code is checked against trait bounds where it is defined. Comptime handles values and code generation, not untyped generics. |
-| **Static reflection** | `reflect(T)` describes a type's fields, variants, annotations and generic parameters, read-only. |
+| Rule                                        | One line                                                                                                                                                               |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **No macro language**                       | There are no token-level macros (`macro_rules!`, proc macros, a preprocessor). Metaprogramming is ordinary Moddil code that the compiler runs.                         |
+| **Comptime is pure**                        | Code run at compile time has an empty effect set: no `Net`, `Fs`, `Time` or `Rand`. It is deterministic, fuel-limited, sandboxed and cached.                           |
+| **Generics stay bounded**                   | Generic code is checked against trait bounds where it is defined. Comptime handles values and code generation, not untyped generics.                                   |
+| **Static reflection**                       | `reflect(T)` describes a type's fields, variants, annotations and generic parameters, read-only.                                                                       |
 | **Typed generation at the annotation site** | `#[derive(serde::Serialize)]` calls a comptime function that returns a *typed* trait impl. It is never a token stream and never appears anywhere the annotation isn't. |
-| **Typed function wrappers** | `#[around(trace::instrument)]` wraps a function in an ordinary generic function that sees its signature, never its body ([Function wrappers](#function-wrappers)). |
-| **Tagged string literals for DSLs** | `sql"…"`, `re"…"` and `fmt"…"` are parsed and checked at compile time and produce typed code. There is no new syntax. |
-| **Everything is visible** | Every expansion can be printed as canonical source and appears in semantic diffs. |
+| **Typed function wrappers**                 | `#[around(trace::instrument)]` wraps a function in an ordinary generic function that sees its signature, never its body ([Function wrappers](#function-wrappers)).     |
+| **Tagged string literals for DSLs**         | `sql"…"`, `re"…"` and `fmt"…"` are parsed and checked at compile time and produce typed code. There is no new syntax.                                                  |
+| **Everything is visible**                   | Every expansion can be printed as canonical source and appears in semantic diffs.                                                                                      |
 
 ## Background
 
