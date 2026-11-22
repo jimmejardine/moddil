@@ -16,6 +16,7 @@ impl fmt::Debug for Place {
                 Projection::Downcast(v) => format!("({s} as #{v})"),
                 Projection::Deref => format!("(*{s})"),
                 Projection::Index(i) => format!("{s}[{i:?}]"),
+                Projection::Subslice(a, b) => format!("{s}[{a:?}..{b:?}]"),
             };
         }
         f.write_str(&s)
@@ -49,6 +50,8 @@ impl fmt::Display for Rvalue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Rvalue::Use(a) => write!(f, "{a:?}"),
+            Rvalue::Len(p) => write!(f, "Len({p:?})"),
+            Rvalue::SpanOk(a, b, p) => write!(f, "SpanOk({a:?}, {b:?}, {p:?})"),
             Rvalue::Unsize(a, t) => write!(f, "Unsize({a:?}, {t:?})"),
             Rvalue::Widen(a, t) => write!(f, "Widen({a:?}, {t:?})"),
             Rvalue::Unary(UnOp::Neg, a) => write!(f, "Neg({a:?})"),

@@ -125,11 +125,13 @@ impl Builder<'_> {
             | ExprKind::Local(_)
             | ExprKind::Field { .. }
             | ExprKind::Index { .. }
+            | ExprKind::Slice { .. }
             | ExprKind::Deref(_) => {
                 let place = match self.hir.exprs[e].kind {
-                    ExprKind::Field { .. } | ExprKind::Index { .. } | ExprKind::Deref(_) => {
-                        Some(self.place(e))
-                    }
+                    ExprKind::Field { .. }
+                    | ExprKind::Index { .. }
+                    | ExprKind::Slice { .. }
+                    | ExprKind::Deref(_) => Some(self.place(e)),
                     _ => None,
                 };
                 let op = match place {
@@ -148,6 +150,13 @@ impl Builder<'_> {
             } if self.static_const(expr).is_some() => {
                 let f = self.static_const(expr).expect("a const");
                 self.cfg.assign(dest, Rvalue::StaticRef(f));
+            }
+            // `&s[a..b]` of text: the prelude's `between` (`text.pos.1`).
+            ExprKind::Ref { expr, .. }
+                if matches!(self.hir.exprs[expr].kind, ExprKind::Slice { .. })
+                    && self.ty(expr) == Ty::Str =>
+            {
+                self.text_slice(dest, expr);
             }
             ExprKind::Ref { mutable, expr } => {
                 let place = self.place(expr);
@@ -622,6 +631,92 @@ impl Builder<'_> {
             args.push(Operand::Copy(local));
         }
         self.call_into(Some(e), callee, Place::local(dest), args, self.range(e));
+    }
+
+    /// `&s[a..b]` of text, `s` a `str` or a `String` (through borrows): `s.between(a, b)`, with
+    /// `s.start()` or `s.end()` for an end not written (`text.pos.1`).
+    fn text_slice(&mut self, dest: Local, e: ExprId) {
+        let ExprKind::Slice {
+            base, start, end, ..
+        } = self.hir.exprs[e].kind.clone()
+        else {
+            unreachable!("a slice")
+        };
+        let range = self.range(e);
+        let method = |b: &Self, name: &str| {
+            b.items
+                .builtin_method(&Ty::Str, name)
+                .expect("the prelude's text positions")
+        };
+        // The text, as a `&str`.
+        let string = self.items.string_ty();
+        let mut bt = self.ty(base);
+        let mut p = self.place(base);
+        while let Ty::Ref(_, inner) = bt.clone() {
+            if *inner == Ty::Str {
+                break;
+            }
+            p = p.deref();
+            bt = (*inner).clone();
+        }
+        let text = self.temp(Ty::reference(false, Ty::Str));
+        if bt == string {
+            let func = self
+                .items
+                .builtin_method(&string, "as_str")
+                .expect("the prelude's `String::as_str`");
+            let b = self.temp(Ty::reference(false, string));
+            self.cfg.assign(b, Rvalue::Ref(false, p));
+            self.call_into(
+                None,
+                Callee::Fn {
+                    func,
+                    args: Vec::new(),
+                },
+                Place::local(text),
+                vec![Operand::Move(Place::local(b))],
+                range,
+            );
+        } else if bt == Ty::Str {
+            self.cfg.assign(text, Rvalue::Ref(false, p));
+        } else {
+            let op = self.use_place(p, &bt);
+            self.cfg.assign(text, Rvalue::Use(op));
+        }
+        let mut ends = Vec::new();
+        for (x, name) in [(start, "start"), (end, "end")] {
+            let t = self.temp(self.items.fns[method(self, name) as usize].ret.clone());
+            match x {
+                Some(x) => self.eval_into(t, x),
+                None => {
+                    let func = method(self, name);
+                    self.call_into(
+                        None,
+                        Callee::Fn {
+                            func,
+                            args: Vec::new(),
+                        },
+                        Place::local(t),
+                        vec![Operand::Copy(Place::local(text))],
+                        range,
+                    );
+                }
+            }
+            ends.push(Operand::Move(Place::local(t)));
+        }
+        let func = method(self, "between");
+        let mut args = vec![Operand::Copy(Place::local(text))];
+        args.extend(ends);
+        self.call_into(
+            None,
+            Callee::Fn {
+                func,
+                args: Vec::new(),
+            },
+            Place::local(dest),
+            args,
+            range,
+        );
     }
 
     /// `with E = value, … { body }`: each handler is evaluated, then the block runs with them

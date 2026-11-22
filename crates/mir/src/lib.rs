@@ -144,6 +144,9 @@ pub enum Projection {
     /// The element of an array or slice at the index in a local (an `int`, checked to be in
     /// bounds before).
     Index(Local),
+    /// The part of an array or slice from the index in the first local up to, not including,
+    /// the one in the second (checked before, `expr.slice.1`): a `[T]`.
+    Subslice(Local, Local),
 }
 
 impl Place {
@@ -152,6 +155,14 @@ impl Place {
     pub fn index(&self, i: Local) -> Place {
         let mut p = self.clone();
         p.projection.push(Projection::Index(i));
+        p
+    }
+
+    /// The part of this array or slice from the index in `from` up to the one in `to`.
+    #[must_use]
+    pub fn subslice(&self, from: Local, to: Local) -> Place {
+        let mut p = self.clone();
+        p.projection.push(Projection::Subslice(from, to));
         p
     }
 
@@ -305,6 +316,10 @@ pub enum Rvalue {
     Length(Ty),
     /// Whether the index is in bounds for the array or slice at the place.
     InBounds(Operand, Place),
+    /// The length of the array or slice at the place, as an `int`.
+    Len(Place),
+    /// Whether `from..to` is a part of the array or slice at the place: `0 <= from <= to <= len`.
+    SpanOk(Operand, Operand, Place),
     /// A borrow of the value of const item `n` (by its function's index): static data, which
     /// borrows nothing (`borrow.static.1`).
     StaticRef(u32),

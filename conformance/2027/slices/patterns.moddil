@@ -1,0 +1,57 @@
+// covers: pat.slice.1
+
+fn describe(xs: &[int]) -> int {
+    match xs {
+        [] => 0,
+        [x] => *x,
+        [first, .., last] => *first * 10 + *last,
+    }
+}
+
+fn total(xs: &[int]) -> int {
+    match xs {
+        [] => 0,
+        [x, rest @ ..] => *x + total(rest),
+    }
+}
+
+fn middle(xs: &[int]) -> int {
+    match xs {
+        [_, mid @ .., _] => mid.len(),
+        _ => -1,
+    }
+}
+
+test "slice patterns match by length and position" {
+    describe(&[])                               // => 0
+    ;
+    describe(&[7])                              // => 7
+    ;
+    describe(&[1, 2, 3])                        // => 13
+    ;
+    total(&[1, 2, 3, 4])                        // => 10
+    ;
+    middle(&[1, 2, 3, 4])                       // => 2
+    ;
+    middle(&[1])                                // => -1
+}
+
+test "an array matches a pattern of its length" {
+    let [a, b, c] = [1, 2, 3];
+    a + b + c                                   // => 6
+    ;
+    let pair = [4, 5];
+    let product = match pair {
+        [x, y] => x * y,
+    };
+    product                                     // => 20
+}
+
+test "a part borrowed with &mut through a pattern" {
+    let mut v = [1, 2, 3];
+    match &mut v[..] {
+        [first, ..] => *first = 10,
+        [] => {}
+    }
+    v                                           // => [10, 2, 3]
+}

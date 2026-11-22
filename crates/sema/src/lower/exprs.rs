@@ -170,6 +170,35 @@ impl Lowerer<'_> {
             ast::Expr::Index(_) => {
                 let parts: Vec<ast::Expr> = node.children().filter_map(ast::Expr::cast).collect();
                 match parts.as_slice() {
+                    // `xs[a..b]` and the other ranges (`expr.slice.1`).
+                    [b, r @ ast::Expr::Range(_)] => {
+                        let base = self.expr(b);
+                        let rn = r.syntax();
+                        let inclusive = rn.token(K::DOT_DOT_EQ).is_some();
+                        let op = rn
+                            .child_tokens()
+                            .find(|t| matches!(t.kind(), K::DOT_DOT | K::DOT_DOT_EQ))
+                            .map_or(rn.text_range().start, |t| t.text_range().start);
+                        let mut start = None;
+                        let mut end = None;
+                        for p in r.sub_exprs() {
+                            let x = self.expr(&p);
+                            if p.syntax().text_range().start < op {
+                                start = Some(x);
+                            } else {
+                                end = Some(x);
+                            }
+                        }
+                        self.alloc(
+                            ExprKind::Slice {
+                                base,
+                                start,
+                                end,
+                                inclusive,
+                            },
+                            range,
+                        )
+                    }
                     [b, i] => {
                         let base = self.expr(b);
                         let index = self.expr(i);

@@ -101,6 +101,18 @@ pub enum ExprKind {
         /// The index.
         index: ExprId,
     },
+    /// `base[start..end]`, `base[start..=end]`, `base[start..]`, `base[..end]` or `base[..]`
+    /// (`expr.slice.1`): part of an array, a slice or a `Vec` (or, by positions, of text).
+    Slice {
+        /// What is sliced.
+        base: ExprId,
+        /// Where the part starts, if written.
+        start: Option<ExprId>,
+        /// Where it ends, if written.
+        end: Option<ExprId>,
+        /// Whether `end` is in the part (`..=`).
+        inclusive: bool,
+    },
     /// A const parameter used as a value: its index in the item's generics.
     ConstParam(u32),
     /// `const { e }`: compile-time code (`comptime.block.1`), which names no local, type
@@ -472,6 +484,17 @@ pub enum PatKind {
         refinement: u32,
         /// The pattern for the refined value.
         pat: PatId,
+    },
+    /// `[a, b]`, `[a, .., z]` or `[a, rest @ ..]` (`pat.slice.1`): an array's or a slice's
+    /// elements.
+    Slice {
+        /// The element patterns, without the `..`.
+        pats: Vec<PatId>,
+        /// Where the `..` is among them, if anywhere.
+        rest: Option<usize>,
+        /// The binding of the elements `..` stands for (`rest @ ..`), a pattern matched against
+        /// that part.
+        rest_pat: Option<PatId>,
     },
     /// `a | b`.
     Or(Vec<PatId>),

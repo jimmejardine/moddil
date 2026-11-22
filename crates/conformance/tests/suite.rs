@@ -82,6 +82,7 @@ areas!(
     patterns,
     prelude,
     refinements,
+    slices,
     statements,
     structs,
     syntax,

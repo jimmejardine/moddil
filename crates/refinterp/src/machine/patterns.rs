@@ -43,13 +43,17 @@ impl Machine<'_> {
 
     /// Part `i` of the value a source holds.
     pub(super) fn part(&self, src: &Src, i: usize) -> Src {
+        // Element `i` of part of an array is one of the array (`expr.slice.1`).
         let sub = |p: &Pointer| {
             let mut q = p.clone();
-            q.path.push(i);
+            let start = q.span.take().map_or(0, |(s, _)| s);
+            q.path.push(start + i);
             q
         };
         match src {
-            Src::Val(Value::Tuple(xs) | Value::Adt { fields: xs, .. }) => Src::Val(xs[i].clone()),
+            Src::Val(Value::Tuple(xs) | Value::Adt { fields: xs, .. } | Value::Array(xs)) => {
+                Src::Val(xs[i].clone())
+            }
             Src::Val(_) => unreachable!("a checked pattern"),
             Src::Place(p, indirect) => Src::Place(sub(p), *indirect),
             Src::At(ptr, m) => Src::At(sub(ptr), *m),
@@ -199,6 +203,56 @@ impl Machine<'_> {
                     unreachable!("a checked tuple pattern")
                 };
                 self.positional(node, &self.enter(src), xs.len(), binds)
+            }
+            // `[a, .., z]`, `[x, rest @ ..]` (`pat.slice.1`).
+            ast::Pat::Slice(_) => {
+                let len = match self.value_of(src) {
+                    Value::Array(xs) | Value::Buf(_, xs) => xs.len(),
+                    _ => unreachable!("a checked slice pattern"),
+                };
+                let subs: Vec<ast::Pat> = node.children().filter_map(ast::Pat::cast).collect();
+                let is_rest = |s: &ast::Pat| {
+                    matches!(s, ast::Pat::Rest(_))
+                        || (matches!(s, ast::Pat::At(_))
+                            && s.syntax()
+                                .children()
+                                .find_map(ast::Pat::cast)
+                                .is_some_and(|i| matches!(i, ast::Pat::Rest(_))))
+                };
+                let rest = subs.iter().position(is_rest);
+                let n = subs.len() - usize::from(rest.is_some());
+                if (rest.is_none() && len != n) || len < n {
+                    return false;
+                }
+                let src = self.enter(src);
+                for (k, s) in subs.iter().enumerate() {
+                    match rest {
+                        Some(r) if k == r => {
+                            // `name @ ..`: a borrow of the elements it stands for.
+                            if let ast::Pat::At(_) = s
+                                && let Src::At(ptr, m) = &src
+                            {
+                                let name = segments(s.syntax()).pop().expect("a name");
+                                let mut part = ptr.clone();
+                                let start = part.span.map_or(0, |(st, _)| st);
+                                part.span = Some((start + r, len - n));
+                                binds.push((name, Value::Ref(part, *m), None));
+                            }
+                        }
+                        Some(r) if k > r => {
+                            let at = len - (subs.len() - k);
+                            if !self.matches(s, &self.part(&src, at), binds) {
+                                return false;
+                            }
+                        }
+                        _ => {
+                            if !self.matches(s, &self.part(&src, k), binds) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                true
             }
             ast::Pat::Or(_) => node.children().filter_map(ast::Pat::cast).any(|alt| {
                 let mut tried = Vec::new();

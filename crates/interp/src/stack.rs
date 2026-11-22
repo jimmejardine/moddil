@@ -139,6 +139,7 @@ impl<'a> Stack<'a> {
                     frame: STATIC,
                     local: f,
                     path: Vec::new(),
+                    span: None,
                 },
                 false,
             )
@@ -339,6 +340,7 @@ impl<'a> Stack<'a> {
             frame: self.top_index(),
             local: place.local.0,
             path: Vec::new(),
+            span: None,
         };
         for p in &place.projection {
             match p {
@@ -348,10 +350,22 @@ impl<'a> Stack<'a> {
                     Value::Ref(target, _) | Value::Dyn(target, _, _) => ptr = target,
                     other => unreachable!("dereferencing {other:?}"),
                 },
+                // An index into part of an array is one into the array.
                 Projection::Index(l) => match self.local(*l) {
-                    Value::Int(i) => ptr.path.push(*i as u32),
+                    Value::Int(i) => {
+                        let start = ptr.span.take().map_or(0, |(s, _)| s);
+                        ptr.path.push(start + *i as u32);
+                    }
                     other => unreachable!("an index: {other:?}"),
                 },
+                Projection::Subslice(a, b) => {
+                    let (a, b) = (
+                        self.local(*a).as_int() as u32,
+                        self.local(*b).as_int() as u32,
+                    );
+                    let start = ptr.span.map_or(0, |(s, _)| s);
+                    ptr.span = Some((start + a, b - a));
+                }
             }
         }
         ptr
@@ -373,6 +387,15 @@ impl<'a> Stack<'a> {
                 other => unreachable!("a field of {other:?}"),
             };
         }
+        // Part of an array (`expr.slice.1`).
+        if let Some((s, n)) = ptr.span {
+            return match v {
+                Value::Array(xs) | Value::Buf(_, xs) => {
+                    Value::Array(xs[s as usize..(s + n) as usize].to_vec())
+                }
+                other => unreachable!("part of {other:?}"),
+            };
+        }
         v.clone()
     }
 
@@ -387,6 +410,17 @@ impl<'a> Stack<'a> {
                 Value::Owned(o) => &mut o.0,
                 other => unreachable!("a field of {other:?}"),
             };
+        }
+        // Part of an array: its elements are replaced (`expr.slice.1`).
+        if let Some((s, n)) = ptr.span {
+            match (v, value) {
+                (Value::Array(xs) | Value::Buf(_, xs), Value::Array(ys)) => {
+                    let (s, n) = (s as usize, n as usize);
+                    xs.splice(s..s + n, ys);
+                }
+                (other, _) => unreachable!("part of {other:?}"),
+            }
+            return;
         }
         *v = value;
     }

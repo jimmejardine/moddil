@@ -104,6 +104,13 @@ impl Machine<'_> {
                 {
                     return Ok(Value::Ref(p, false));
                 }
+                // `&s[a..b]` of text: its `between` (`text.pos.1`).
+                if let ast::Expr::Index(_) = inner
+                    && let [base, r @ ast::Expr::Range(_)] = inner.sub_exprs().as_slice()
+                    && let Some(t) = self.text_part(base, r, node.text_range())?
+                {
+                    return Ok(t);
+                }
                 let p = self.place(inner)?;
                 Ok(Value::Ref(p, mutable))
             }
@@ -197,6 +204,56 @@ impl Machine<'_> {
     }
 
     /// `Point { x: 1, y }`: fields evaluated in the order written (`expr.struct.order.1`).
+    /// `&base[r]` if `base` is text, a `str` or a `String` (through borrows): the prelude's
+    /// `between`, with `start` or `end` for an end not written (`text.pos.1`).
+    fn text_part(
+        &mut self,
+        base: &ast::Expr,
+        r: &ast::Expr,
+        range: moddil_syntax::TextRange,
+    ) -> Eval<Option<Value>> {
+        let p = self.place(base)?;
+        let mut v = self.memory.load(&p);
+        while let Value::Ref(q, _) = v {
+            v = self.memory.load(&q);
+        }
+        let text = match v {
+            Value::Str(s) => Value::Str(s),
+            v @ Value::Adt { .. } if crate::value::string_text(&v).is_some() => {
+                Value::Str(crate::value::string_text(&v).expect("text").into())
+            }
+            _ => return Ok(None),
+        };
+        let call = |m: &mut Self, name: &str, args: Vec<Value>| -> Eval {
+            let method = m
+                .program
+                .methods(&Head::Str, name)
+                .into_iter()
+                .next()
+                .expect("the prelude's text positions");
+            m.run_method(method, &Head::Str, args, range)
+        };
+        let node = r.syntax();
+        let op = node
+            .child_tokens()
+            .find(|t| matches!(t.kind(), K::DOT_DOT | K::DOT_DOT_EQ))
+            .map_or(node.text_range().start, |t| t.text_range().start);
+        let mut ends = [None, None];
+        for part in r.sub_exprs() {
+            let x = self.eval(&part)?;
+            ends[usize::from(part.syntax().text_range().start >= op)] = Some(x);
+        }
+        let a = match ends[0].take() {
+            Some(a) => a,
+            None => call(self, "start", vec![text.clone()])?,
+        };
+        let b = match ends[1].take() {
+            Some(b) => b,
+            None => call(self, "end", vec![text.clone()])?,
+        };
+        Ok(Some(call(self, "between", vec![text, a, b])?))
+    }
+
     pub(super) fn struct_lit(&mut self, node: &SyntaxNode) -> Eval {
         let segments = segments(node);
         let (ty, info) = self.ctor(&segments).expect("a checked struct");

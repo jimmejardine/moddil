@@ -1,0 +1,9 @@
+// covers: text.pos.1
+
+// A position borrows its text, which cannot change while the position is live.
+fn main() {
+    let mut name = String::from_str("Ada Lovelace");
+    let at = name.find(' ') ?! "a space";
+    name.push_str("!");                         //~ E0305
+    at.offset();
+}

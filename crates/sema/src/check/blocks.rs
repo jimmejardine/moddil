@@ -24,7 +24,11 @@ impl Checker<'_> {
                             self.check(init, &ty);
                             ty
                         }
-                        None => self.infer(init),
+                        None => {
+                            let t = self.infer(init);
+                            self.unsized_value(init);
+                            t
+                        }
                     };
                     diverges |= self.norm(&t) == Ty::Never;
                     if matches!(self.body.pats[pat].kind, PatKind::Wild) {

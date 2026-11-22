@@ -87,6 +87,23 @@ impl Checker<'_> {
                 Ty::array(t, n)
             }
             &ExprKind::Index { base, index } => self.index(e, base, index),
+            &ExprKind::Slice {
+                base,
+                start,
+                end,
+                inclusive,
+            } => {
+                let t = self.slice(e, base, start, end);
+                // A position is between characters, so text is sliced up to one (`text.pos.1`).
+                if inclusive && t == Ty::Str {
+                    self.report(
+                        Code::E0201,
+                        range,
+                        "text is sliced up to a position, not through one: write `a..b`",
+                    );
+                }
+                t
+            }
             ExprKind::RepeatN(..) => {
                 self.report(
                     Code::E0201,
@@ -476,13 +493,36 @@ impl Checker<'_> {
                     );
                 }
             }
-            ExprKind::Field { base, .. } | ExprKind::Index { base, .. }
+            // Part of a `Vec` changed: through its `as_mut_slice` (`expr.slice.1`).
+            ExprKind::Slice { base, .. } if self.out.index_calls.contains_key(&e) => {
+                let bt = self.out.expr(base);
+                let bt = match self.norm(&bt) {
+                    Ty::Ref(_, t) => (*t).clone(),
+                    t => t,
+                };
+                if let Some((func, args)) = self.items.inherent_method(&bt, "as_mut_slice") {
+                    self.out.index_calls.insert(e, Callee::Fn { func, args });
+                }
+                if !self.out.field_derefs.contains(&e) {
+                    self.check_mutable(base, what);
+                } else if let Ty::Ref(false, _) = self.norm(&self.out.expr(base)) {
+                    self.report(
+                        Code::E0302,
+                        range,
+                        format!("this is behind a shared borrow (`&`), so it cannot be {what}"),
+                    );
+                }
+            }
+            ExprKind::Field { base, .. }
+            | ExprKind::Index { base, .. }
+            | ExprKind::Slice { base, .. }
                 if !self.out.field_derefs.contains(&e) =>
             {
                 self.check_mutable(base, what);
             }
             ExprKind::Field { base: x, .. }
             | ExprKind::Index { base: x, .. }
+            | ExprKind::Slice { base: x, .. }
             | ExprKind::Deref(x) => {
                 let t = self.out.expr(x);
                 if let Ty::Ref(false, _) = self.norm(&t) {
@@ -587,6 +627,79 @@ impl Checker<'_> {
         self.out.refined_literals.push((e, t));
         self.out.expr_types[index(e)] = target.clone();
         Some(target)
+    }
+
+    /// `base[a..b]` (`expr.slice.1`), looking through a borrow: a `[T]` place of an array, a
+    /// slice, or what a type's `as_slice` gives (a `Vec`'s), its ends `int`s; or, with `StrPos`
+    /// ends, the text between them (`text.pos.1`).
+    pub(super) fn slice(
+        &mut self,
+        e: ExprId,
+        base: ExprId,
+        start: Option<ExprId>,
+        end: Option<ExprId>,
+    ) -> Ty {
+        let t = self.infer(base);
+        let mut bt = self.norm(&t);
+        if let Ty::Ref(_, inner) = &bt {
+            self.out.field_derefs.insert(e);
+            bt = self.norm(inner);
+        }
+        let ends = |cx: &mut Self, t: &Ty| {
+            for x in [start, end].into_iter().flatten() {
+                cx.check(x, t);
+            }
+        };
+        let text = self.items.string_ty();
+        match &bt {
+            Ty::Error => Ty::Error,
+            Ty::Infer(_) => self.unknown(self.range(base), "to slice it"),
+            Ty::Array(t, _) | Ty::Slice(t) => {
+                ends(self, &Ty::Int);
+                Ty::Slice(t.clone())
+            }
+            Ty::Str => {
+                let pos = self.strpos_ty();
+                ends(self, &pos);
+                Ty::Str
+            }
+            t if *t == text => {
+                let pos = self.strpos_ty();
+                ends(self, &pos);
+                Ty::Str
+            }
+            t => match self.items.inherent_method(t, "as_slice") {
+                // Through its `as_slice`, or `as_mut_slice` where it is changed.
+                Some((func, args)) => {
+                    ends(self, &Ty::Int);
+                    let ret = self.items.fns[func as usize].ret.subst(&args);
+                    self.out.index_calls.insert(e, Callee::Fn { func, args });
+                    match ret {
+                        Ty::Ref(_, inner) => (*inner).clone(),
+                        _ => Ty::Error,
+                    }
+                }
+                None => {
+                    let t = self.show(t);
+                    self.report(
+                        Code::E0205,
+                        self.range(e),
+                        format!(
+                            "`{t}` cannot be sliced: only arrays, slices, a `Vec` and text can"
+                        ),
+                    );
+                    Ty::Error
+                }
+            },
+        }
+    }
+
+    /// The prelude's `StrPos`, a position in text (`text.pos.1`).
+    pub(super) fn strpos_ty(&self) -> Ty {
+        match self.items.lang("StrPos") {
+            Some(a) => Ty::Adt(a, "StrPos".into(), Vec::new().into()),
+            None => Ty::Error,
+        }
     }
 
     /// `base[index]` on an array or a slice (`expr.index.1`), looking through a borrow.

@@ -75,6 +75,9 @@ pub(crate) struct Pointer {
     pub(crate) frame: usize,
     pub(crate) slot: usize,
     pub(crate) path: Vec<usize>,
+    /// For a borrow of part of an array (`expr.slice.1`): where the part starts in the array at
+    /// `path`, and how long it is.
+    pub(crate) span: Option<(usize, usize)>,
 }
 
 /// The kind of a value, which decides which impl a method comes from.

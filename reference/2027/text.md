@@ -40,6 +40,27 @@ a `&mut String` likewise.
 (without the white space at its ends), and `to_uppercase` and `to_lowercase` (a new `String`, by
 Unicode's rules, the same on every machine). `String` has the same methods, on its text.
 
+**text.pos.1** Text is not indexed by integers: a position in it is a `StrPos`, the prelude's
+view of a byte offset that is a character boundary of the text it was found in, which it
+borrows, so the text cannot change while it is live (E0305). `s.start()` and `s.end()` are the ends,
+`p.offset()` the byte offset, and `p.after(part)` the position just past `part`, which traps if
+`part` is not at `p`. `&s[a..b]`, for a `str` or a `String` `s` and positions `a` and `b`, is the
+text between them (`&s[a..]`, `&s[..b]` and `&s[..]` too; an `int` end is an error, E0201, and so
+is `..=`); it traps if a position is not one of `s`'s, which for now is checked when it runs, or
+if `b` comes before `a`. An offset from outside the program becomes a position by
+`s.pos_at(offset)`, and text by `s.slice_bytes(i..j)`, which fail with the prelude's
+`NotABoundary { offset }` if an offset is not a boundary of `s` (or they are out of order).
+
+**text.find.1** `s.find(part)` and `s.rfind(part)`, for a pattern `part` (**text.pattern.1**), give
+the position where `part` first or last is, or `None`; `s.split_once(part)` the text before the
+first `part` and the text after it, or `None`. `String` has them too, its positions borrowing it.
+
+**text.utf8.1** `str::from_utf8(bytes)`, for a `&[u8]`, is the bytes as text, failing with
+`Utf8Error { valid_up_to }`, how many of the bytes from the start are UTF-8, if they are not all
+(each character in its shortest encoding, and no surrogate). `String::from_utf8(bytes)`, for a
+`Vec<u8>`, makes a `String` of them, failing with `FromUtf8Error { bytes, valid_up_to }`, which
+gives the bytes back.
+
 **text.pattern.1** `contains`, `starts_with` and `ends_with` take a **pattern**, a value of a type
 that implements the prelude's `Pattern`: a `&str` or `&String`, whose text is looked for, or a
 `char`. They are evaluated at compile time too, as in a refinement's predicate

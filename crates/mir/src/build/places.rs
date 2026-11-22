@@ -52,6 +52,13 @@ impl Builder<'_> {
             ExprKind::Tuple(xs) | ExprKind::Array(xs) => any(xs),
             ExprKind::RepeatN(x, n) => self.assigns(*x) || self.assigns(*n),
             ExprKind::Index { base, index } => self.assigns(*base) || self.assigns(*index),
+            ExprKind::Slice {
+                base, start, end, ..
+            } => {
+                self.assigns(*base)
+                    || start.is_some_and(|x| self.assigns(x))
+                    || end.is_some_and(|x| self.assigns(x))
+            }
             ExprKind::Fmt(pieces) => pieces
                 .iter()
                 .any(|p| matches!(p, FmtPiece::Hole(h) | FmtPiece::Debug(h) if self.assigns(*h))),
@@ -257,12 +264,98 @@ impl Builder<'_> {
                 });
                 p.index(i)
             }
+            ExprKind::Slice {
+                base,
+                start,
+                end,
+                inclusive,
+            } => self.slice_place(e, base, start, end, inclusive),
             _ => {
                 let t = self.temp(self.value_ty(e));
                 self.eval_into(t, e);
                 Place::local(t)
             }
         }
+    }
+
+    /// `base[start..end]` as a place (`expr.slice.1`): a part of an array, a slice, or what a
+    /// `Vec`'s `as_slice` (`as_mut_slice` where it is changed) gives, checked to be in bounds.
+    fn slice_place(
+        &mut self,
+        e: ExprId,
+        base: ExprId,
+        start: Option<ExprId>,
+        end: Option<ExprId>,
+        inclusive: bool,
+    ) -> Place {
+        let range = self.range(e);
+        let mut p = self.place(base);
+        if self.types.field_through_borrow(e) {
+            p = p.deref();
+        }
+        if let Some(callee) = self.types.index_callee(e).cloned() {
+            let mutable = self
+                .items
+                .fns
+                .get(callee.func() as usize)
+                .is_some_and(|f| f.name == "as_mut_slice");
+            let base_ty = match self.ty(base) {
+                Ty::Ref(_, t) => (*t).clone(),
+                t => t,
+            };
+            let b = self.temp(Ty::reference(mutable, base_ty));
+            self.cfg.assign(b, Rvalue::Ref(mutable, p));
+            let r = self.temp(Ty::reference(mutable, self.ty(e)));
+            self.call_into(
+                None,
+                callee,
+                Place::local(r),
+                vec![Operand::Move(Place::local(b))],
+                range,
+            );
+            p = Place::local(r).deref();
+        }
+        let from = self.temp(Ty::Int);
+        match start {
+            Some(x) => self.eval_into(from, x),
+            None => self
+                .cfg
+                .assign(from, Rvalue::Use(Operand::Const(Const::Int(0)))),
+        }
+        let to = self.temp(Ty::Int);
+        match end {
+            Some(x) if inclusive => {
+                let last = self.temp(Ty::Int);
+                self.eval_into(last, x);
+                self.cfg.assign(
+                    to,
+                    Rvalue::Binary(
+                        crate::BinOp::Add,
+                        Operand::Copy(Place::local(last)),
+                        Operand::Const(Const::Int(1)),
+                    ),
+                );
+            }
+            Some(x) => self.eval_into(to, x),
+            None => self.cfg.assign(to, Rvalue::Len(p.clone())),
+        }
+        let ok = self.temp(Ty::Bool);
+        self.cfg.assign(
+            ok,
+            Rvalue::SpanOk(
+                Operand::Copy(Place::local(from)),
+                Operand::Copy(Place::local(to)),
+                p.clone(),
+            ),
+        );
+        self.cfg.push(crate::Statement::Assert {
+            cond: Operand::Copy(Place::local(ok)),
+            expected: true,
+            trap: crate::TrapClass::IndexOutOfBounds,
+            range,
+            parts: Vec::new(),
+        });
+        p.subslice(from, to)
     }
 
     /// The operand that uses the value at `place` of type `ty`: a copy for `Copy` types, a fresh

@@ -21,6 +21,17 @@ counting from 0; indexing looks through a borrow, as a field does. It is a place
 assigned to and borrowed, if `a` can be changed ([Borrows](../borrows.md)). An index below 0 or
 not below the length traps (an index out of bounds, [Traps](../traps.md)).
 
+**expr.slice.1** `a[i..j]` is the part of an array, a slice or a `Vec` `a` from index `i` up to,
+not including, `j`, both `int`s (E0201): a slice place, `[T]`, which has no size of its own, so it
+is used behind a borrow, `&a[i..j]` or `&mut a[i..j]` (E0605). `a[i..=j]` includes `j`; `a[i..]`
+runs to the end, `a[..j]` from the start, and `a[..]` is all of it. A part borrowed with `&mut`
+changes `a`'s elements, and `a` must be one that can be changed, as for an element. Unless
+`0 <= i <= j <= len`, it traps (an index out of bounds). A `Vec` is sliced through its
+`as_slice`, or `as_mut_slice` where the part is changed; any other type is an error (E0205), but
+text, which is sliced by position (**text.pos.1**). On slices and arrays, `xs.split_at(i)` gives the
+parts before and from `i`, and `xs.split_at_mut(i)` the same, each borrowed with `&mut`, so the two
+can be changed at once.
+
 **expr.index.2** Indexing a type that is not an array or slice and does not implement `Index` is
 an error (E0205).
 

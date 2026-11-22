@@ -58,6 +58,9 @@ pub struct Pointer {
     pub(crate) frame: usize,
     pub(crate) local: u32,
     pub(crate) path: Vec<u32>,
+    /// For a borrow of part of an array or slice (`expr.slice.1`): where the part starts in
+    /// the array at `path`, and how long it is.
+    pub(crate) span: Option<(u32, u32)>,
 }
 
 impl Value {

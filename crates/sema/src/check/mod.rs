@@ -740,10 +740,24 @@ impl Checker<'_> {
             return t;
         }
         let t = self.infer(e);
+        self.unsized_value(e);
         if !self.unsize(e, &t, expected) && !self.coerce(&t, expected) {
             self.mismatch(e, expected, &t);
         }
         t
+    }
+
+    /// E0605 for a part of an array or text used as a value, not behind a borrow: it has no
+    /// size of its own (`expr.slice.1`).
+    pub(super) fn unsized_value(&mut self, e: ExprId) {
+        if matches!(self.body.exprs[e].kind, ExprKind::Slice { .. }) {
+            self.report(
+                Code::E0605,
+                self.range(e),
+                "a part of an array or of text has no size of its own, so it is used behind a \
+                 borrow: `&xs[a..b]`",
+            );
+        }
     }
 
     /// Marks the literals that `e`'s value may be (through blocks, `if` and `match`) as of

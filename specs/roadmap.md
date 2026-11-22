@@ -184,7 +184,7 @@ something runs from the first slice.
   buffer ([`text.md`: String types](text.md#string-types)), not as a wrap of `Vec`: done in S11,
   in the prelude (a core mod waits for packaging). Until
   the features they wait for arrive:
-  - no `StrPos` or slicing (views), no `chars()` (`Iterator`, S7c), and no `b"…"` or `b'c'`
+  - no `StrPos` or slicing (views; both since S13), no `chars()` (`Iterator`, S7c), and no `b"…"` or `b'c'`
     (`u8`, S10);
   - `Display` is `fn fmt(&self, out: &mut String)`, not a `Write` sink; `fmt` holes take no format
     specs (`{x:>8}`) and `Debug` waits for derives of it; tagged literals other than `fmt` wait
@@ -250,7 +250,7 @@ something runs from the first slice.
   - const parameters are `int`s; a length is a literal or a const parameter, with no arithmetic
     (comptime, S8); `[x; n]` as an array needs `Copy` elements, and an array is `Clone` only when
     it is `Copy`;
-  - no slice patterns, no slicing by a range (`xs[a..b]`), no `IterMut` and no iterator adaptors
+  - no slice patterns, no slicing by a range (`xs[a..b]`) (both since S13), no `IterMut` and no iterator adaptors
     (`map`, `filter`), which need closures stored in views; `Index` takes an `int`;
   - a borrow still cannot point to a borrow, so a map's keys cannot be borrows
     (`HashMap<&str, V>`): `PartialEq` and `Hash` for `&T` need it; use `String`;
@@ -418,7 +418,7 @@ something runs from the first slice.
   `Pattern`. Still native: case conversion, `trim`, the `char` classes, `quoted`, and each
   number's, `bool`'s and `char`'s text for `Display`. Until the features they wait for arrive:
   - the inline size is 23 on every target (11 on 32-bit targets comes with them);
-  - `String::from_utf8`, `StrPos`, slicing and `find` wait;
+  - `String::from_utf8`, `StrPos`, slicing and `find` wait (done in S13);
   - strings are slower in the interpreters, byte by byte in Moddil.
 - **The M0 debt sweep (decided November 2026): one pass over M0's interim limits before M1.**
   - **Paid:**
@@ -438,7 +438,7 @@ something runs from the first slice.
       through), which the grammar's `fn_sugar` does not have yet, and owned captures (all but
       `impl Fn` results done in S12);
     - slicing and text (`xs[a..b]`, slice patterns, `StrPos`, `find`, `from_utf8`): sub-slice
-      borrows need a new kind of pointer in both interpreters;
+      borrows need a new kind of pointer in both interpreters (done in S13);
     - the 8 open questions the tour exposed ([`tour.md`](tour.md#gaps-the-tour-exposed)), which
       are decisions;
     - a trailing comma in a `where` clause: a type can start with `{`, so the comma before a
@@ -498,6 +498,31 @@ something runs from the first slice.
     as its strongest bound says (`Fn`, `FnMut`, `FnOnce`), not always a write.
   - **Interim limit:** only a closure written as the function's value, or after `return`, is
     taken as the one returned (a closure bound to a local first is not).
+- **Slice S13 (decided November 2026): slicing and text.**
+  - **Range slicing** (`expr.slice.1`):
+    - `xs[a..b]`, with `..=`, `a..`, `..b` and `..`, lowers from the syntax to a HIR `Slice`, so
+      no generic `Range<T>` is needed.
+    - It works on arrays, slices and a `Vec` (through `as_slice` and `as_mut_slice`).
+    - The MIR has `Projection::Subslice`, checked by `Rvalue::SpanOk`.
+    - In both interpreters a `Pointer` carries a span over the array it points into.
+    - The prelude has `split_at` and `split_at_mut`, the second through a native that splits one
+      `&mut` borrow in two.
+  - **Slice patterns** (`pat.slice.1`):
+    - `[a, .., z]` and `[x, rest @ ..]`, with `rest` a sub-slice borrow.
+    - Exhaustiveness is by length: the lengths the rows name, and one longer than all.
+  - **Text positions** (`text.pos.1`, `text.find.1`):
+    - `StrPos` is a prelude view of `(text, offset)`.
+    - `find`, `rfind`, `split_once`, `start`, `end`, `after`, `offset`, `pos_at` and
+      `slice_bytes`, on `str` and `String`.
+    - `&s[a..b]` lowers to the prelude's `between`.
+  - **`from_utf8`** (`text.utf8.1`): on `str` and `String`, validating in Moddil.
+  - **Interim limits:**
+    - a position used on other text traps when it runs, rather than failing to compile as
+      `text.md` says, and it is compared by text, so a position of equal text passes;
+    - `#[derive]` does not apply to a `view` (`StrPos`'s `Clone` and `Copy` are written out);
+    - integer literals in a collection literal for `Vec<u8>` take `int`
+      (`let v: Vec<u8> = [1, 2]` is E0402), so build one from a typed array;
+    - no `char_indices`, `bytes`, `graphemes` or `RcStr` slices.
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

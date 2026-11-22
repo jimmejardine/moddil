@@ -1,0 +1,19 @@
+// covers: pat.slice.1
+
+fn uncovered(xs: &[int]) -> int {
+    match xs {                                  //~ E0208
+        [] => 0,
+        [x] => *x,
+    }
+}
+
+fn wrong_length() {
+    let [a, b] = [1, 2, 3];                     //~ E0213
+}
+
+fn unreachable(xs: &[int]) -> int {
+    match xs {
+        [..] => 0,
+        [x] => *x,                              //~ W0201
+    }
+}

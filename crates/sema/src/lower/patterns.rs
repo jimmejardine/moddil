@@ -60,6 +60,46 @@ impl Lowerer<'_> {
                 }
             }
             ast::Pat::Or(_) => self.or_pat(&node, b),
+            // `[a, .., z]`, `[first, rest @ ..]` (`pat.slice.1`).
+            ast::Pat::Slice(_) => {
+                let subs: Vec<ast::Pat> = node.children().filter_map(ast::Pat::cast).collect();
+                let mut pats = Vec::new();
+                let mut rest = None;
+                let mut rest_pat = None;
+                for s in &subs {
+                    let named_rest = matches!(s, ast::Pat::At(_))
+                        && s.syntax()
+                            .children()
+                            .find_map(ast::Pat::cast)
+                            .is_some_and(|i| matches!(i, ast::Pat::Rest(_)));
+                    if matches!(s, ast::Pat::Rest(_)) || named_rest {
+                        if rest.is_some() {
+                            self.report(
+                                Code::E0001,
+                                s.syntax().text_range(),
+                                "`..` may appear only once in a pattern",
+                            );
+                        }
+                        rest = Some(pats.len());
+                        if named_rest {
+                            let r = s.syntax().text_range();
+                            let local = match self.segments(s.syntax()).as_deref() {
+                                Some([name]) => Some(self.bind(name, false, r, b)),
+                                _ => None,
+                            };
+                            rest_pat = local
+                                .map(|local| self.alloc_pat(PatKind::Bind { local, sub: None }, r));
+                        }
+                    } else {
+                        pats.push(self.pat(s, b));
+                    }
+                }
+                PatKind::Slice {
+                    pats,
+                    rest,
+                    rest_pat,
+                }
+            }
             ast::Pat::Rest(_) => {
                 self.report(
                     Code::E0001,

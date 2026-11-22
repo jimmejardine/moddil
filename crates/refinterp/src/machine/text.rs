@@ -356,10 +356,29 @@ impl Machine<'_> {
                     .take(usize::try_from(len).unwrap_or(0))
                     .map(|b| match b {
                         Value::Num(_, b) => *b as u8,
+                        // A byte written as a literal the context did not type.
+                        Value::Int(b) => *b as u8,
                         other => unreachable!("a byte: {other:?}"),
                     })
                     .collect();
                 Value::Str(String::from_utf8(bytes).expect("UTF-8").into())
+            }
+            // The text between two byte offsets (`text.pos.1`).
+            (Head::Str, "bytes_between") => {
+                let t = text(self, 0);
+                let (Value::Int(a), Value::Int(b)) =
+                    (self.target(args[1].clone()), self.target(args[2].clone()))
+                else {
+                    unreachable!("`int`s")
+                };
+                match usize::try_from(a)
+                    .ok()
+                    .zip(usize::try_from(b).ok())
+                    .and_then(|(a, b)| t.get(a..b))
+                {
+                    Some(part) => Value::Str(part.into()),
+                    None => return Err(crate::trap(crate::TrapClass::IndexOutOfBounds, range)),
+                }
             }
             (Head::Str, "char_at_byte") => {
                 let Value::Int(at) = self.target(args[1].clone()) else {
@@ -402,6 +421,27 @@ impl Machine<'_> {
                     "wrapping_mul" => a.wrapping_mul(b),
                     _ => a.rotate_left(b.rem_euclid(64) as u32),
                 })
+            }
+            // The two parts of an `&mut` slice borrow (`expr.slice.1`).
+            (Head::Array | Head::Buf, "split_at_mut_unchecked") => {
+                let Value::Ref(p, _) = args[0].clone() else {
+                    unreachable!("a borrow")
+                };
+                let (Value::Int(at), Value::Int(n)) =
+                    (self.target(args[1].clone()), self.target(args[2].clone()))
+                else {
+                    unreachable!("`int`s")
+                };
+                if at < 0 || at > n {
+                    return Err(crate::trap(crate::TrapClass::IndexOutOfBounds, range));
+                }
+                let (at, n) = (at as usize, n as usize);
+                let start = p.span.map_or(0, |(s, _)| s);
+                let mut a = p.clone();
+                a.span = Some((start, at));
+                let mut b = p;
+                b.span = Some((start + at, n - at));
+                Value::Tuple(vec![Value::Ref(a, true), Value::Ref(b, true)])
             }
             (Head::Array | Head::Buf, "len") => match self.target(args[0].clone()) {
                 Value::Array(xs) | Value::Buf(_, xs) => Value::Int(xs.len() as i64),

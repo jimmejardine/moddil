@@ -111,6 +111,34 @@ impl<'a> Natives<'a> {
                 stack.store(&p, args[1].clone());
                 old
             }
+            // The text between two byte offsets (`text.pos.1`): they are boundaries, in order.
+            (Ty::Str, "bytes_between") => {
+                let Value::Str(s) = stack.deref(&args[0]) else {
+                    unreachable!("text")
+                };
+                let (a, b) = (args[1].as_int(), args[2].as_int());
+                return usize::try_from(a)
+                    .ok()
+                    .zip(usize::try_from(b).ok())
+                    .and_then(|(a, b)| s.get(a..b))
+                    .map(|t| Value::Str(t.into()))
+                    .ok_or(TrapClass::IndexOutOfBounds);
+            }
+            // The two parts of an `&mut` slice borrow, disjoint (`expr.slice.1`).
+            (Ty::Slice(_), "split_at_mut_unchecked") => {
+                let p = pointer(&args[0]);
+                let (at, n) = (args[1].as_int(), args[2].as_int());
+                if at < 0 || at > n {
+                    return Err(TrapClass::IndexOutOfBounds);
+                }
+                let (at, n) = (at as u32, n as u32);
+                let start = p.span.map_or(0, |(s, _)| s);
+                let mut a = p.clone();
+                a.span = Some((start, at));
+                let mut b = p;
+                b.span = Some((start + at, n - at));
+                Value::Tuple(vec![Value::Ref(a, true), Value::Ref(b, true)])
+            }
             (Ty::Unit, "swap") => {
                 let (a, b) = (pointer(&args[0]), pointer(&args[1]));
                 let (x, y) = (stack.load(&a), stack.load(&b));

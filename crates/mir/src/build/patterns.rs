@@ -149,6 +149,53 @@ impl Builder<'_> {
                     self.test_cmp(op, place, bound(hi), fail);
                 }
             }
+            // `[a, .., z]` (`pat.slice.1`): the length, then each element from the front or the
+            // back, then what `..` stands for, as a part.
+            PatKind::Slice {
+                pats,
+                rest,
+                rest_pat,
+            } => {
+                let len = self.temp(Ty::Int);
+                self.cfg.assign(len, Rvalue::Len(place.clone()));
+                let n = pats.len() as i64;
+                let op = if rest.is_some() { BinOp::Ge } else { BinOp::Eq };
+                self.test_cmp(op, &Place::local(len), Const::Int(n), fail);
+                let before = rest.unwrap_or(pats.len());
+                for (i, &s) in pats.iter().enumerate() {
+                    let at = self.temp(Ty::Int);
+                    if i < before {
+                        self.cfg
+                            .assign(at, Rvalue::Use(Operand::Const(Const::Int(i as i64))));
+                    } else {
+                        // Counted from the end.
+                        self.cfg.assign(
+                            at,
+                            Rvalue::Binary(
+                                BinOp::Sub,
+                                Operand::Copy(Place::local(len)),
+                                Operand::Const(Const::Int(n - i as i64)),
+                            ),
+                        );
+                    }
+                    self.test_pat(s, &place.index(at), fail);
+                }
+                if let Some(r) = rest_pat {
+                    let from = self.temp(Ty::Int);
+                    self.cfg
+                        .assign(from, Rvalue::Use(Operand::Const(Const::Int(before as i64))));
+                    let to = self.temp(Ty::Int);
+                    self.cfg.assign(
+                        to,
+                        Rvalue::Binary(
+                            BinOp::Sub,
+                            Operand::Copy(Place::local(len)),
+                            Operand::Const(Const::Int(n - before as i64)),
+                        ),
+                    );
+                    self.test_pat(r, &place.subslice(from, to), fail);
+                }
+            }
             PatKind::Tuple { pats, rest } => {
                 let arity = match self.types.pat(pat).strip_ref() {
                     Ty::Tuple(ts) => ts.len(),

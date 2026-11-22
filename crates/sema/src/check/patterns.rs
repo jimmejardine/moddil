@@ -14,7 +14,7 @@ impl Checker<'_> {
         match &self.body.pats[p].kind {
             PatKind::Missing => true,
             PatKind::Bind { sub, .. } => sub.is_some_and(|s| self.has_missing(s)),
-            PatKind::Tuple { pats, .. } | PatKind::Or(pats) => {
+            PatKind::Tuple { pats, .. } | PatKind::Slice { pats, .. } | PatKind::Or(pats) => {
                 pats.iter().any(|&s| self.has_missing(s))
             }
             PatKind::Adt { fields, .. } => fields.iter().any(|&(_, s)| self.has_missing(s)),
@@ -38,6 +38,7 @@ impl Checker<'_> {
                 | PatKind::Range { .. }
                 | PatKind::Unit
                 | PatKind::Tuple { .. }
+                | PatKind::Slice { .. }
                 | PatKind::Adt { .. }
         );
         // A string literal matches a `&str` itself.
@@ -200,6 +201,60 @@ impl Checker<'_> {
             PatKind::Unit => {
                 if !self.coerce(&Ty::Unit, expected) {
                     self.report(Code::E0201, range, wrong("`()`"));
+                }
+            }
+            // `[a, .., z]` (`pat.slice.1`): an array of a length the pattern fits, or a slice.
+            PatKind::Slice {
+                pats,
+                rest,
+                rest_pat,
+            } => {
+                let (pats, rest, rest_pat) = (pats.clone(), *rest, *rest_pat);
+                let (elem, len) = match expected {
+                    Ty::Array(t, n) => (
+                        (**t).clone(),
+                        match **n {
+                            Ty::Len(n) => Some(n as usize),
+                            _ => None,
+                        },
+                    ),
+                    Ty::Slice(t) => ((**t).clone(), None),
+                    Ty::Error => (Ty::Error, None),
+                    _ => {
+                        self.report(Code::E0201, range, wrong("an array or a slice"));
+                        (Ty::Error, None)
+                    }
+                };
+                if let Some(n) = len {
+                    let fits = match rest {
+                        Some(_) => pats.len() <= n,
+                        None => pats.len() == n,
+                    };
+                    if !fits {
+                        self.report(
+                            Code::E0213,
+                            range,
+                            format!(
+                                "`{shown}` has {n} elements, but this pattern has {}",
+                                pats.len()
+                            ),
+                        );
+                    }
+                }
+                for &s in &pats {
+                    self.check_pat(s, &elem, mode);
+                }
+                if let Some(r) = rest_pat {
+                    // The elements `..` stands for are a slice, so they are bound as a borrow.
+                    if mode.is_none() {
+                        self.report(
+                            Code::E0605,
+                            self.body.pats[r].range,
+                            "the elements `..` stands for have no size of their own, so they are \
+                             bound only when the array or slice is matched through a borrow",
+                        );
+                    }
+                    self.check_pat(r, &Ty::Slice(elem.into()), mode);
                 }
             }
             PatKind::Tuple { pats, rest } => {

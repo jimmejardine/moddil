@@ -29,6 +29,12 @@ enum Ctor {
     Str(String),
     /// Any string no literal among the rows is: strings are too many to list.
     OtherStr,
+    /// An array or slice of exactly this many elements, or (`true`) of at least this many: the
+    /// lengths are split at every length the rows name, so each is one or the other.
+    Len(usize, bool),
+    /// A slice pattern with `..`: so many elements before it and so many after (its fields, in
+    /// that order), of any length from their sum up.
+    Rest(usize, usize),
     /// Anything.
     Wild,
     /// Any of the alternatives (held in the pattern's fields).
@@ -73,6 +79,7 @@ impl Cx<'_> {
             (Ctor::Single, Ty::Tuple(ts)) => ts.to_vec(),
             (Ctor::Single, t @ Ty::Adt(..)) => self.items.field_types(t, 0),
             (Ctor::Variant(v), t @ Ty::Adt(..)) => self.items.field_types(t, *v),
+            (Ctor::Len(n, _), Ty::Array(t, _) | Ty::Slice(t)) => vec![(**t).clone(); *n],
             _ => Vec::new(),
         }
     }
@@ -131,6 +138,21 @@ impl Cx<'_> {
                 ty,
                 fields: Vec::new(),
             },
+            PatKind::Slice { pats, rest, .. } => {
+                // A pattern of the wrong length for its array is already an error (E0213).
+                if let Ty::Array(_, n) = ty.strip_ref()
+                    && let Ty::Len(n) = **n
+                    && (pats.len() > n as usize || (rest.is_none() && pats.len() != n as usize))
+                {
+                    return DPat::wild(ty);
+                }
+                let fields: Vec<DPat> = pats.iter().map(|&s| self.lower(s)).collect();
+                let ctor = match rest {
+                    Some(r) => Ctor::Rest(*r, pats.len() - r),
+                    None => Ctor::Len(pats.len(), false),
+                };
+                DPat { ctor, ty, fields }
+            }
             PatKind::Tuple { pats, rest } => {
                 let types = self.field_types(&Ctor::Single, &ty);
                 let mut fields: Vec<DPat> = types.iter().cloned().map(DPat::wild).collect();
@@ -205,11 +227,29 @@ impl Cx<'_> {
                 cs.push(Ctor::OtherStr);
                 cs
             }
+            // An array has its length; a slice any, split at the lengths the rows name, the
+            // longest standing for all longer.
+            Ty::Array(_, n) => match **n {
+                Ty::Len(n) => vec![Ctor::Len(n as usize, false)],
+                _ => vec![Ctor::Single],
+            },
+            Ty::Slice(_) => {
+                let longest = heads
+                    .iter()
+                    .map(|h| match h.ctor {
+                        Ctor::Len(n, _) => n,
+                        Ctor::Rest(a, b) => a + b,
+                        _ => 0,
+                    })
+                    .max()
+                    .unwrap_or(0);
+                let mut cs: Vec<Ctor> = (0..=longest).map(|n| Ctor::Len(n, false)).collect();
+                cs.push(Ctor::Len(longest + 1, true));
+                cs
+            }
             // A value of a type parameter can only be bound: one constructor covers it.
             Ty::Unit
             | Ty::Tuple(_)
-            | Ty::Array(..)
-            | Ty::Slice(_)
             | Ty::Buf(_)
             | Ty::Param(..)
             | Ty::Opaque(_)
@@ -260,6 +300,12 @@ impl Cx<'_> {
         let ctors = match &head.ctor {
             Ctor::Wild => {
                 let heads: Vec<&DPat> = rows.iter().map(|r| &r[0]).collect();
+                self.all_ctors(ty, &heads)?
+            }
+            // A slice pattern with `..` covers lengths split as `_`'s are.
+            Ctor::Rest(..) => {
+                let mut heads: Vec<&DPat> = rows.iter().map(|r| &r[0]).collect();
+                heads.push(head);
                 self.all_ctors(ty, &heads)?
             }
             Ctor::Int(lo, hi) => {
@@ -325,6 +371,15 @@ fn specialise(row: &[DPat], c: &Ctor, types: &[Ty]) -> Option<Vec<DPat>> {
     let head = &row[0];
     let mut out: Vec<DPat> = match (&head.ctor, c) {
         (Ctor::Wild, _) => types.iter().cloned().map(DPat::wild).collect(),
+        // A pattern with `..` matches each length from its count up: the elements before `..`,
+        // `_` for those it stands for, and those after.
+        (Ctor::Rest(a, b), Ctor::Len(n, _)) if a + b <= *n => {
+            let mut out: Vec<DPat> = head.fields[..*a].to_vec();
+            out.extend(types[*a..n - b].iter().cloned().map(DPat::wild));
+            out.extend_from_slice(&head.fields[*a..]);
+            out
+        }
+        (Ctor::Len(m, false), Ctor::Len(n, false)) if m == n => head.fields.clone(),
         // `c` is a piece that lies wholly inside or outside the head's range.
         (Ctor::Int(a, b), Ctor::Int(lo, hi)) if a <= lo && hi <= b => Vec::new(),
         (h, c) if h == c => head.fields.clone(),
@@ -370,6 +425,8 @@ impl Witness {
             (Ctor::Single, Ty::Tuple(_)) => format!("({})", fields.join(", ")),
             (Ctor::Single, Ty::Adt(a, ..)) => adt_witness(items, *a, 0, &fields),
             (Ctor::Variant(v), Ty::Adt(a, ..)) => adt_witness(items, *a, *v, &fields),
+            (Ctor::Len(_, false), _) => format!("[{}]", fields.join(", ")),
+            (Ctor::Len(_, true), _) => format!("[{}, ..]", fields.join(", ")),
             _ => "_".to_string(),
         }
     }

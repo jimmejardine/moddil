@@ -36,6 +36,13 @@ enum, whose fields `fᵢ` match `pᵢ`; `f` alone is `f: f`. It names every fiel
 by field, with `..` as in tuple patterns (E0213). `Path` alone matches a struct or variant with no
 fields. A pattern must use the form the struct or variant is declared with (E0111).
 
+**pat.slice.1** `[p₁, …, pₙ]` matches an array or a slice of `n` elements, each matched by its
+pattern, in order (E0213 for an array of another length); `[p₁, …, pₖ, .., q₁, …, qₘ]` one of at
+least `k + m`, the `pᵢ` from the start and the `qᵢ` from the end. `name @ ..` in place of `..`
+binds the elements it stands for, as a slice borrow, so it is allowed only when the array or slice
+is matched through a borrow (E0605). A `match` on a slice covers every length its arms do, a
+`..` pattern each length from its count up (E0208).
+
 **pat.or.1** `p₁ | … | pₙ` matches what any `pᵢ` matches, trying them in order, and binds what the
 first that matches binds. Every alternative binds the same names (E0105).
 

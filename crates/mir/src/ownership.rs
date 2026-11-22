@@ -161,7 +161,7 @@ impl PlaceKey {
                     Projection::Downcast(_) => (1, 0),
                     Projection::Deref => (2, 0),
                     // Which element is known only when it runs, so any two overlap.
-                    Projection::Index(_) => (3, 0),
+                    Projection::Index(_) | Projection::Subslice(..) => (3, 0),
                 })
                 .collect(),
         }
@@ -248,6 +248,7 @@ impl<'a> Checker<'a> {
             ty = match (proj, &ty) {
                 (Projection::Deref, Ty::Ref(_, t))
                 | (Projection::Index(_), Ty::Array(t, _) | Ty::Slice(t)) => (**t).clone(),
+                (Projection::Subslice(..), Ty::Array(t, _) | Ty::Slice(t)) => Ty::Slice(t.clone()),
                 (Projection::Downcast(v), t) => {
                     variant = *v;
                     t.clone()
@@ -312,6 +313,7 @@ impl<'a> Checker<'a> {
                     s = format!("*{s}");
                 }
                 Projection::Index(_) => s = format!("{s}[…]"),
+                Projection::Subslice(..) => s = format!("{s}[…..…]"),
             }
         }
         let _ = indirect;
@@ -558,6 +560,13 @@ impl<'a> Checker<'a> {
                         self.operand(at, span, o, h, m, check);
                     }
                     Rvalue::Length(_) | Rvalue::StaticRef(_) => {}
+                    Rvalue::SpanOk(a, b, p) => {
+                        self.operand(at, span, a, h, m, check);
+                        self.operand(at, span, b, h, m, check);
+                        if check {
+                            self.access((at, span), p, Access::Read, h, m, None);
+                        }
+                    }
                     Rvalue::InBounds(a, p) => {
                         self.operand(at, span, a, h, m, check);
                         if check {
@@ -578,7 +587,7 @@ impl<'a> Checker<'a> {
                             self.operand(at, span, o, h, m, check);
                         }
                     }
-                    Rvalue::Discriminant(p) | Rvalue::ErrorIs(p, _) => {
+                    Rvalue::Discriminant(p) | Rvalue::ErrorIs(p, _) | Rvalue::Len(p) => {
                         if check {
                             self.access((at, span), p, Access::Read, h, m, None);
                         }
@@ -881,9 +890,12 @@ fn rvalue_uses(r: &Rvalue, local: Local) -> bool {
         | Rvalue::Repeat(a, _) => uses(a),
         Rvalue::Length(_) | Rvalue::StaticRef(_) => false,
         Rvalue::InBounds(a, p) => uses(a) || p.local == local,
+        Rvalue::SpanOk(a, b, p) => uses(a) || uses(b) || p.local == local,
         Rvalue::Binary(_, a, b) | Rvalue::Overflows(_, a, b) => uses(a) || uses(b),
         Rvalue::Aggregate(_, ops) => ops.iter().any(uses),
-        Rvalue::Discriminant(p) | Rvalue::ErrorIs(p, _) | Rvalue::Ref(_, p) => p.local == local,
+        Rvalue::Discriminant(p) | Rvalue::ErrorIs(p, _) | Rvalue::Ref(_, p) | Rvalue::Len(p) => {
+            p.local == local
+        }
     }
 }
 
@@ -911,6 +923,12 @@ fn uses_defs(stmt: Option<&Statement>, term: Option<&Terminator>) -> (Vec<Local>
                     Rvalue::Length(_) | Rvalue::StaticRef(_) => {}
                     Rvalue::InBounds(a, p) => {
                         op(a, &mut uses);
+                        uses.push(p.local);
+                    }
+                    Rvalue::Len(p) => uses.push(p.local),
+                    Rvalue::SpanOk(a, b, p) => {
+                        op(a, &mut uses);
+                        op(b, &mut uses);
                         uses.push(p.local);
                     }
                     Rvalue::Binary(_, a, b) | Rvalue::Overflows(_, a, b) => {

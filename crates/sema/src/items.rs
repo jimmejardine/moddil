@@ -617,6 +617,7 @@ const LANG: &[&str] = &[
     "Deref",
     "DerefMut",
     "Box",
+    "StrPos",
     "FromArrayLiteral",
     "Debug",
     "Default",
@@ -829,6 +830,22 @@ impl ItemTree {
             .filter(|i| i.trait_ref.is_none() && i.src == Src::Prelude && i.self_ty == *ty)
             .flat_map(|i| i.methods.iter().copied())
             .find(|&m| self.fns[m as usize].name == name)
+    }
+
+    /// The prelude's inherent method `name` of the struct or enum `ty` is an instance of, with
+    /// the type arguments it is called with: `Vec::as_slice` for a `Vec<int>`.
+    pub fn inherent_method(&self, ty: &Ty, name: &str) -> Option<(u32, Vec<Ty>)> {
+        let Ty::Adt(a, _, args) = ty else {
+            return None;
+        };
+        self.impls
+            .iter()
+            .filter(|i| {
+                i.trait_ref.is_none() && i.src == Src::Prelude && i.self_ty.adt() == Some(*a)
+            })
+            .flat_map(|i| i.methods.iter().copied())
+            .find(|&m| self.fns[m as usize].name == name)
+            .map(|m| (m, args.to_vec()))
     }
 
     /// The prelude's free function `drop`.

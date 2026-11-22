@@ -124,6 +124,7 @@ impl Memory {
                 frame: STATIC,
                 slot,
                 path: Vec::new(),
+                span: None,
             })
     }
 
@@ -136,6 +137,7 @@ impl Memory {
             frame: STATIC,
             slot: s.statics.len() - 1,
             path: Vec::new(),
+            span: None,
         }
     }
 
@@ -245,6 +247,7 @@ impl Memory {
                 frame: fs.len() - 1,
                 slot,
                 path: Vec::new(),
+                span: None,
             }
         })
     }
@@ -294,6 +297,13 @@ impl Memory {
                 _ => unreachable!("a checked field"),
             };
         }
+        // Part of an array (`expr.slice.1`).
+        if let Some((start, n)) = ptr.span {
+            return match v {
+                Value::Array(xs) | Value::Buf(_, xs) => Value::Array(xs[start..start + n].to_vec()),
+                _ => unreachable!("a checked slice"),
+            };
+        }
         v.clone()
     }
 
@@ -314,6 +324,13 @@ impl Memory {
                 | Value::Adt { fields: xs, .. } => &mut xs[i],
                 _ => unreachable!("a checked field"),
             };
+        }
+        // Part of an array: its elements are replaced.
+        if let Some((start, n)) = ptr.span {
+            if let (Value::Array(xs) | Value::Buf(_, xs), Value::Array(ys)) = (v, value) {
+                xs.splice(start..start + n, ys);
+            }
+            return;
         }
         *v = value;
     }

@@ -202,8 +202,28 @@ impl Machine<'_> {
                     p = target;
                     indirect = true;
                 }
+                // `xs[a..b]` (`expr.slice.1`): part of the array, or of what a `Vec`'s
+                // `as_slice` gives.
+                if let ast::Expr::Range(_) = &parts[1] {
+                    return Ok(Some((
+                        self.slice_place(p, &parts[1], range_of(e))?,
+                        indirect,
+                    )));
+                }
                 let Value::Int(i) = self.eval(&parts[1])? else {
                     unreachable!("a checked index")
+                };
+                // An index into part of an array is one into the array.
+                let i = if let Some((start, n)) = p.span.take() {
+                    if i < 0 || i as usize >= n {
+                        return Err(crate::trap(
+                            crate::TrapClass::IndexOutOfBounds,
+                            e.syntax().text_range(),
+                        ));
+                    }
+                    i + start as i64
+                } else {
+                    i
                 };
                 let (Value::Array(xs) | Value::Buf(_, xs)) = self.memory.load(&p) else {
                     // Through `Index` (`expr.index.trait.1`): the element its borrow points to.
@@ -267,6 +287,52 @@ impl Machine<'_> {
             }
             _ => None,
         })
+    }
+
+    /// Part `range` (a range expression) of the array or slice at `p`, or of what the `Vec` at
+    /// `p` holds: checked to be in bounds (`expr.slice.1`).
+    fn slice_place(&mut self, mut p: Pointer, range: &ast::Expr, at: TextRange) -> Eval<Pointer> {
+        let v = self.memory.load(&p);
+        if let v @ Value::Adt { .. } = &v {
+            let head = v.head();
+            let m = self
+                .program
+                .methods(&head, "as_slice")
+                .into_iter()
+                .next()
+                .expect("a checked slice");
+            match self.run_method(m, &head, vec![Value::Ref(p.clone(), false)], at)? {
+                Value::Ref(q, _) => p = q,
+                _ => unreachable!("a slice borrow"),
+            }
+        }
+        let len = match self.memory.load(&p) {
+            Value::Array(xs) | Value::Buf(_, xs) => xs.len() as i64,
+            _ => unreachable!("a checked slice"),
+        };
+        let node = range.syntax();
+        let inclusive = node.token(K::DOT_DOT_EQ).is_some();
+        let op = node
+            .child_tokens()
+            .find(|t| matches!(t.kind(), K::DOT_DOT | K::DOT_DOT_EQ))
+            .map_or(node.text_range().start, |t| t.text_range().start);
+        let (mut a, mut b) = (0, len);
+        for part in range.sub_exprs() {
+            let Value::Int(x) = self.eval(&part)? else {
+                unreachable!("a checked end")
+            };
+            if part.syntax().text_range().start < op {
+                a = x;
+            } else {
+                b = if inclusive { x.wrapping_add(1) } else { x };
+            }
+        }
+        if !(0 <= a && a <= b && b <= len) {
+            return Err(crate::trap(crate::TrapClass::IndexOutOfBounds, at));
+        }
+        let start = p.span.map_or(0, |(s, _)| s);
+        p.span = Some((start + a as usize, (b - a) as usize));
+        Ok(p)
     }
 
     /// The closure at `p`, through borrows and boxes (`expr.closure.stored.1`), if there is one.
@@ -531,4 +597,9 @@ fn literal(node: &SyntaxNode, negate: bool) -> Value {
 /// (`expr.lit.int.1`).
 fn integer(text: &str) -> i128 {
     ast::int_value(text).expect("a checked literal")
+}
+
+/// Where expression `e` is.
+fn range_of(e: &ast::Expr) -> TextRange {
+    e.syntax().text_range()
 }

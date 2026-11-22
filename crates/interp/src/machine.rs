@@ -386,6 +386,21 @@ impl<'a> Machine<'a> {
                 Value::Array(vec![v; self.dispatch.length(n, self.stack.type_args())])
             }
             Rvalue::Length(n) => Value::Int(self.dispatch.length(n, self.stack.type_args()) as i64),
+            Rvalue::Len(p) => match self.stack.read(p) {
+                Value::Array(xs) | Value::Buf(_, xs) => Value::Int(xs.len() as i64),
+                other => unreachable!("the length of {other:?}"),
+            },
+            Rvalue::SpanOk(a, b, p) => {
+                let (a, b) = (
+                    self.stack.operand(a).as_int(),
+                    self.stack.operand(b).as_int(),
+                );
+                let n = match self.stack.read(p) {
+                    Value::Array(xs) | Value::Buf(_, xs) => xs.len() as i64,
+                    other => unreachable!("slicing {other:?}"),
+                };
+                Value::Bool(0 <= a && a <= b && b <= n)
+            }
             Rvalue::InBounds(i, p) => {
                 let i = self.stack.operand(i).as_int();
                 match self.stack.read(p) {
