@@ -579,6 +579,11 @@ fn errors_4() {
          fn f<F: Fn(int) -> int>(g: F) -> int where F::Fails: A { g(1)? }",
         &[("E0502", 2)],
     );
+    // A closure's call names no arguments.
+    err(
+        "fn f() -> int {\nlet g = |x: int| x;\ng(x: 1)\n}",
+        &[("E0215", 3)],
+    );
 }
 
 #[test]

@@ -282,7 +282,8 @@ impl<'a> Checker<'a> {
                     Code::E0314,
                     span,
                     format!(
-                        "{what} cannot be moved out: `{ty}` has a destructor, which needs all of                          the value (borrow it, or match it by reference)"
+                        "{what} cannot be moved out: `{ty}` has a destructor, which needs all of \
+                         the value (borrow it, or match it by reference)"
                     ),
                 ));
                 return;
@@ -657,7 +658,7 @@ impl<'a> Checker<'a> {
                             Code::E0308,
                             loan.span,
                             format!(
-                                "this borrows {what}, which is dropped while the borrow is still                                  used"
+                                "this borrows {what}, which is dropped while the borrow is still used"
                             ),
                         )
                         .with_label(span, "dropped here");
@@ -688,11 +689,13 @@ impl<'a> Checker<'a> {
                     // The signature's result holds no borrow, so any borrow in it comes from a
                     // type argument: from what the arguments are or point to, not from the
                     // borrows passed (`it.next()` gives what the iterator holds, not `&mut it`).
+                    // A parameter declared a borrow lends what it points to; one of a type
+                    // parameter is given the borrow itself, which the result may be (`id(&x)`).
                     for (i, f) in flows.iter().enumerate() {
                         let by_ref = sig
                             .params
                             .get(i)
-                            .is_some_and(|p| matches!(p.ty.subst(callee.args()), Ty::Ref(..)));
+                            .is_some_and(|p| matches!(p.ty, Ty::Ref(..)));
                         for &li in f {
                             let loan = &self.loans[li];
                             if by_ref && loan.param.is_none() && !loan.place.is_indirect() {

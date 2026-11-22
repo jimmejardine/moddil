@@ -42,10 +42,6 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
 
 | Directory | claim | weak | missing | cite | dead | gap? |
 |---|---|---|---|---|---|---|
-| arithmetic | | | 1 | | | |
-| arrays | | | 2 | | | |
-| borrows | | 2 | 1 | | | |
-| calls | | | 1 | | | |
 | collections | 1 | | 4 | 1 | | |
 | comptime | | | 1 | | | |
 | concurrency | 2 | 2 | 4 | 1 | | |
@@ -65,59 +61,11 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
 | traits | | | 3 | | | |
 | wrappers | | | 1 | | 1 | |
 
-The directories not listed have no finding left: attributes, closures and errors are done, and
+The directories not listed have no finding left: arithmetic, arrays, attributes, borrows, calls, closures and errors are done, and
 assert, assignment, bitwise, blocks, comparison, if, items, literals, logic, loops, match, names,
 patterns, statements, tuples, types and views had none worth a change.
 
 ## Findings
-
-### arithmetic
-
-- **missing:** `types.moddil` covers `expr.arith.types.1`, which says a compound assignment is
-  defined only for `int`s, and for `bool`s with `&=`, `|=` and `^=` (E0205). Neither case is
-  tested. Add `let mut b = true; b += 1;` (E0205) to the error file, and `b &= false` with its
-  value to `assignment/assignment.moddil`.
-
-### arrays
-
-- **missing:** `expr.array.repeat.1` has three rules no test checks:
-  - `x` is evaluated once;
-  - `x`'s type must be `Copy` (E0402);
-  - a length known only at run time is an error (E0201).
-
-  Add `[{ n += 1; n }; 3]` with `n` observed afterwards, plus the two errors to `errors.moddil`.
-  `expr.array.1`'s E0201 (elements of different types) and `expr.index.1`'s E0201 (a non-`int`
-  index) are only in `arrays/errors.moddil`'s `a[true]`. Add `[1, true]`.
-- **missing:** `move-out.moddil` covers `expr.index.move.1`, which also says:
-  - an element behind `Index` cannot be moved out (E0304);
-  - an element can be swapped out, replaced or cloned instead.
-
-  The E0304 case is in `collections/borrows.moddil` under another citation (see
-  [collections](#collections)). Move it here or cite the paragraph there. Add a running case of
-  `replace(&mut a[0], x)`, which no test uses (see [prelude](#prelude)).
-
-### borrows
-
-- **weak:** `static.moddil` calls `drop(s)` and then uses `g`, as if to show that `g` outlives
-  `s`. But `g` came from `greeting()`, which takes no parameter, so it never borrowed `s` and the
-  step shows nothing. Drop those lines, or keep the result of `name_or(false, s.as_str())` past
-  `drop(s)` as an error case: by its signature it borrows `s`, even when it returns the literal
-  (`item.fn.ret-borrow.1`).
-- **weak:** In `returning-errors.moddil`, `fn no_source() -> &int { 1 }` is a type mismatch
-  (E0201). It tests nothing about returning borrows. Replace it with
-  `fn no_source() -> &int { let x = 1; &x }` (E0308), or remove it, since
-  `static-errors.moddil` already has that case.
-- **missing:** `item.fn.ret-borrow.1` says a `from` parameter may be of a type parameter. Add a
-  passing case: `fn keep<T>(a: T, b: &int) -> &int from b { b }`.
-
-### calls
-
-- **missing:** `expr.call.named.1` and `expr.call.default.1` have three cases no test checks:
-  - a closure's call names no arguments;
-  - a default names no parameter;
-  - a default's type names no type parameter.
-
-  Add them to `named_errors.moddil`.
 
 ### collections
 
@@ -337,6 +285,9 @@ None open. Fixed in the sweep so far:
 2. **A closure parameter's errors that a bound takes could leave the function (sema).** They now
    become the function's inferred errors only if they don't leave. Letting them leave, with `?`
    or unmarked, is E0502, which `expr.closure.fails.2` now says.
+3. **A borrow passed for a type parameter came back borrowing nothing (MIR ownership check).** `let r = id(&x); x = 2; *r` was accepted. The call took the argument as lending what it points to, judging by the parameter type after substitution, not as written. Now only a parameter declared a borrow does that. A result of a type parameter may also take `from` (sema), as `item.fn.ret-borrow.1` now says.
+4. **A closure's call could name its arguments (sema).** `f(x: 1)` is now E0215.
+5. **Two diagnostics had a run of spaces in the middle** (E0308 and E0314 in `crates/mir/src/ownership.rs`), from a line break inside the string.
 
 ## Patterns across the suite
 

@@ -659,7 +659,8 @@ pub(super) fn ret_sources(
         .filter(|(_, p)| tree.is_view(&p.ty))
         .map(|(i, _)| i as u32)
         .collect();
-    let returns = tree.is_view(ret);
+    // A result of a type parameter may hold borrows too, for the arguments that do.
+    let returns = tree.is_view(ret) || ret.has_param();
     // With no borrowed parameter, what it returns borrows static data (`memory.md`: Borrows of
     // static data), which the ownership check sees to.
     let Some(clause) = node.child(K::FROM_CLAUSE) else {

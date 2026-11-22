@@ -6,3 +6,8 @@ fn f() {
     let c = -false;           //~ E0205
     let d = () * 2;           //~ E0205
 }
+
+fn compound() {
+    let mut b = true;
+    b += 1;                   //~ E0205
+}

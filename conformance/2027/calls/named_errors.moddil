@@ -22,3 +22,10 @@ fn calls() {
     connect(port: 2, 1);                    //~ E0215
     connect(port: 2);                       //~ E0202
 }
+
+fn closure() -> int {
+    let f = |x: int| x;
+    f(x: 1)                                 //~ E0215
+}
+
+fn names_a_parameter(a: int, b: int = a) -> int { b } //~ E0101

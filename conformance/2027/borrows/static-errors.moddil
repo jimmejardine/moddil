@@ -1,4 +1,4 @@
-// covers: borrow.static.1
+// covers: borrow.static.1, item.fn.ret-borrow.1
 
 fn local() -> &int {
     let x = 1;
@@ -7,4 +7,16 @@ fn local() -> &int {
 
 fn temporary() -> &int {
     &1                                      //~ E0308
+}
+
+fn name_or(found: bool, name: &str) -> &str {
+    if found { name } else { "anonymous" }
+}
+
+// A caller goes by the signature: the result borrows `s`, even when it is the literal.
+fn kept() -> int {
+    let s = String::new();
+    let n = name_or(false, s.as_str());
+    drop(s);                                //~ E0306
+    n.len()
 }

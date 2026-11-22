@@ -1,4 +1,4 @@
-// covers: expr.assign.1, expr.assign.compound.1
+// covers: expr.assign.1, expr.assign.compound.1, expr.arith.types.1
 
 test "assignment" {
     let mut x = 1;
@@ -20,6 +20,16 @@ test "assignment" {
     x &= 0b1101;
     x ^= 2;
     x                         // => 3
+}
+
+test "on bools, only &=, |= and ^=" {
+    let mut b = true;
+    b &= false;
+    b                         // => false
+    ;
+    b |= true;
+    b ^= true;
+    b                         // => false
 }
 
 test "compound assignment traps like its operator" {

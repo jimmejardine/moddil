@@ -269,6 +269,16 @@ impl Checker<'_> {
                 ),
             );
         }
+        // A closure's parameters have no names a call could give (`expr.call.named.1`).
+        for &a in args {
+            if self.body.labels.contains_key(&a) {
+                self.report(
+                    Code::E0215,
+                    self.range(a),
+                    "a closure's call names no arguments: pass them in order",
+                );
+            }
+        }
         for (i, &a) in args.iter().enumerate() {
             match params.get(i) {
                 Some(p) => {

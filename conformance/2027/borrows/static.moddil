@@ -15,6 +15,5 @@ test "static data borrows nothing" {
     let s = String::new();
     name_or(false, s.as_str())              // => "anonymous"
     ;
-    drop(s);
     g.len()                                 // => 2
 }

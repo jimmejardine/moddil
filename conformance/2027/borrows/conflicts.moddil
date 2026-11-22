@@ -1,4 +1,4 @@
-// covers: borrow.rules.1, borrow.scope.1, borrow.guard.1
+// covers: borrow.rules.1, borrow.scope.1, borrow.guard.1, generic.borrow.1
 
 struct Label { id: int }
 
@@ -53,4 +53,14 @@ fn guard(n: int) -> int {
         y if { x = 0; y > 0 } => y, //~ E0306
         _ => 0,
     }
+}
+
+fn id<T>(x: T) -> T { x }
+
+// A borrow passed for a type parameter can come back: the result keeps `x` borrowed.
+fn through_a_type_parameter() -> int {
+    let mut x = 1;
+    let r = id(&x);
+    x = 2;                      //~ E0306
+    *r
 }

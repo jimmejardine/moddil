@@ -1,4 +1,4 @@
-// covers: type.array.1, type.slice.1, expr.array.1, expr.array.repeat.1, expr.index.1, generic.const.1, type.slice.coerce.1
+// covers: expr.index.move.1, type.array.1, type.slice.1, expr.array.1, expr.array.repeat.1, expr.index.1, generic.const.1, type.slice.coerce.1
 
 fn sum(xs: &[int]) -> int {
     let mut i = 0;
@@ -62,6 +62,22 @@ test "comparing arrays" {
     a != [1, 2, 4]                          // => true
     ;
     a.as_slice() == [1, 2].as_slice()       // => false
+}
+
+test "the repeated value is evaluated once" {
+    let mut n = 0;
+    let a = [{ n += 1; n }; 3];
+    a                                       // => [1, 1, 1]
+    ;
+    n                                       // => 1
+}
+
+struct Name { n: int }
+
+test "an element that is not Copy is replaced, not moved out" {
+    let mut names = [Name { n: 1 }, Name { n: 2 }];
+    let old = replace(&mut names[0], Name { n: 3 });
+    old.n * 10 + names[0].n                 // => 13
 }
 
 test "an index past the end traps" {

@@ -230,6 +230,19 @@ fn borrows_3() {
 }
 
 #[test]
+fn borrows_through_type_parameters() {
+    // A borrow passed for a type parameter can be the result.
+    rejected(
+        "fn id<T>(x: T) -> T { x }\nfn f() -> int {\nlet mut x = 1;\nlet r = id(&x);\nx = 2;\n*r\n}",
+        &[("E0306", 5)],
+    );
+    // `from` names a parameter of a type parameter as the result's source.
+    accepted(
+        "fn pick<T>(a: T, b: &int) -> T from a { a }\nfn f() -> int {\nlet x = 1;\nlet mut y = 2;\nlet r = pick(&x, &y);\ny = 3;\n*r\n}",
+    );
+}
+
+#[test]
 fn matching_borrows() {
     accepted(
         "enum E { A(int), B }\nfn f(e: &mut E) { match e { E::A(n) => *n += 1, E::B => {} } }",
