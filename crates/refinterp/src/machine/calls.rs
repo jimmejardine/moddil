@@ -452,6 +452,8 @@ impl Machine<'_> {
         // The prelude's built-in methods have no body (`#[intrinsic]`).
         if f.node.body().is_none() {
             let head = types.get("Self").cloned().unwrap_or(Head::Unit);
+            // A conversion's target (`num.convert.1`).
+            self.convert_to = types.get("T").cloned();
             return self.intrinsic(f, &head, &args, range);
         }
         let params: Vec<ast::Param> = f
@@ -479,6 +481,7 @@ impl Machine<'_> {
         }
         for (p, v) in params.iter().zip(args) {
             let pat = p.pat().expect("a parameter pattern");
+            let v = crate::num::typed(v, p.ty().as_ref());
             let slot = self.memory.temp(v);
             let mut binds = Vec::new();
             let matched = self.matches(&pat, &Src::Place(slot, false), &mut binds);
@@ -831,7 +834,10 @@ impl Machine<'_> {
                     return self.call_trait(&k, name, values, range);
                 }
                 let head = match ty {
-                    [t] if t == "int" => Head::Int,
+                    [t] if t == "int" || t == "i64" => Head::Int,
+                    [t] if crate::num::Kind::named(t).is_some() => {
+                        Head::Num(crate::num::Kind::named(t).expect("a number type"))
+                    }
                     [t] if t == "bool" => Head::Bool,
                     [t] if t == "char" => Head::Char,
                     [t] if t == "str" => Head::Str,

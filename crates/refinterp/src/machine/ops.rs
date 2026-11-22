@@ -52,6 +52,9 @@ pub(super) fn compound(k: K) -> K {
         K::CARET_EQ => K::CARET,
         K::LT_LT_EQ => K::LT_LT,
         K::GT_GT_EQ => K::GT_GT,
+        K::PLUS_PERCENT_EQ => K::PLUS_PERCENT,
+        K::MINUS_PERCENT_EQ => K::MINUS_PERCENT,
+        K::STAR_PERCENT_EQ => K::STAR_PERCENT,
         _ => unreachable!("a compound assignment"),
     }
 }
@@ -72,6 +75,9 @@ pub(super) fn arith(op: K, a: Value, b: Value, range: TextRange) -> Eval {
                 K::SLASH => a.checked_div(b).ok_or_else(overflow)?,
                 // `int::MIN % -1` is 0: the exact answer fits.
                 K::PERCENT => a.wrapping_rem(b),
+                K::PLUS_PERCENT => a.wrapping_add(b),
+                K::MINUS_PERCENT => a.wrapping_sub(b),
+                K::STAR_PERCENT => a.wrapping_mul(b),
                 K::AMP => a & b,
                 K::PIPE => a | b,
                 K::CARET => a ^ b,

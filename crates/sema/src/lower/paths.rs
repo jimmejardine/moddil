@@ -216,7 +216,10 @@ impl Lowerer<'_> {
     fn non_item_type(&mut self, ty: &crate::resolve::Segment) -> Option<Option<Ty>> {
         let name = ty.name.as_str();
         Some(Some(match name {
-            "int" => Ty::Int,
+            "int" | "i64" => Ty::Int,
+            n if crate::ty::Num::from_name(n).is_some() => {
+                Ty::Num(crate::ty::Num::from_name(n).expect("a number type"))
+            }
             "bool" => Ty::Bool,
             "char" => Ty::Char,
             "str" => Ty::Str,

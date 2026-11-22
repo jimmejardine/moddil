@@ -40,6 +40,7 @@ pub(crate) fn check_impls(tree: &ItemTree) -> Vec<Found> {
                     && matches!(
                         imp.self_ty,
                         Ty::Int
+                            | Ty::Num(_)
                             | Ty::Char
                             | Ty::Str
                             | Ty::String

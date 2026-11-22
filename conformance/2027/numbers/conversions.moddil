@@ -1,0 +1,33 @@
+// covers: num.convert.1
+
+test "to: checked" {
+    let a: int = 250;
+    let b = a.to::<u8>() ?! "it fits";
+    b                                       // => 250
+    ;
+    let r = try { a.to::<i8>()? } catch { RangeError => 0 };
+    r                                       // => 0
+    ;
+    let f = a.to::<f32>() ?! "exact";
+    f                                       // => 250.0
+    ;
+    let h: f64 = 2.5;
+    let w = try { h.to::<int>()? } catch { RangeError => -1 };
+    w                                       // => -1
+    ;
+    let whole: f64 = 3.0;
+    whole.to::<int>() ?! "a whole number"   // => 3
+}
+
+test "truncate, wrap and saturate" {
+    let a: int = 300;
+    a.truncate::<u8>()                      // => 44
+    ;
+    let b: u8 = 255;
+    b.wrap::<i8>()                          // => -1
+    ;
+    a.saturate::<u8>()                      // => 255
+    ;
+    let c: int = -5;
+    c.saturate::<u16>()                     // => 0
+}

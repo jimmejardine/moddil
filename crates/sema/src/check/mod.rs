@@ -384,6 +384,7 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         refined_results: HashMap::new(),
         sig_hint: None,
         anon_fails: Vec::new(),
+        literals: Vec::new(),
         out: Inference {
             expr_types: vec![Ty::Error; body.exprs.len()],
             pat_types: vec![Ty::Error; body.pats.len()],
@@ -560,6 +561,9 @@ struct Checker<'a> {
     sig_hint: Option<(Vec<Ty>, Option<Ty>)>,
     /// Anonymous impls' methods, and the errors their trait's methods allow.
     anon_fails: Vec<(ExprId, Ty)>,
+    /// The integer literals, with their values, to check against the types they get
+    /// (`num.lit.1`).
+    literals: Vec<(ExprId, i128)>,
     out: Inference,
 }
 
@@ -720,6 +724,8 @@ impl Checker<'_> {
     /// Checks the bounds recorded, resolves every type (reporting those that could not be
     /// inferred), and runs the checks that need resolved types.
     fn finish(&mut self) {
+        // A literal nothing gives a type to is an `int` or an `f64` (`num.lit.1`).
+        self.solver.table.default_literals();
         self.settle_assoc_eqs();
         let (errors, pending) = std::mem::take(&mut self.obligations).solve(&mut self.solver);
         self.out.diagnostics.extend(errors);
@@ -727,6 +733,7 @@ impl Checker<'_> {
             self.out.diagnostics.push(d);
         }
         self.out.resolve_all(&mut self.solver);
+        self.check_literals();
         self.meet_needs();
         self.finish_closures();
         let deferred = std::mem::take(&mut self.deferred);
@@ -743,5 +750,75 @@ pub fn tuple_positions(n: usize, rest: Option<usize>, arity: usize) -> Vec<usize
         Some(at) => (0..n)
             .map(|i| if i < at { i } else { arity - (n - i) })
             .collect(),
+    }
+}
+
+impl Checker<'_> {
+    /// Each integer literal's value fits the type it got (E0204, `num.lit.1`).
+    fn check_literals(&mut self) {
+        for (e, v) in std::mem::take(&mut self.literals) {
+            let t = self.out.expr_types[index(e)].clone();
+            let t = self.items.base(&t);
+            let (lo, hi, name) = match &t {
+                Ty::Int => (
+                    i128::from(i64::MIN),
+                    i128::from(i64::MAX),
+                    "int".to_string(),
+                ),
+                Ty::Num(n) if !n.is_float() => {
+                    let (lo, hi) = n.int_range();
+                    (lo, hi, n.name().to_string())
+                }
+                _ => continue,
+            };
+            if v < lo || v > hi {
+                self.report(
+                    Code::E0204,
+                    self.range(e),
+                    format!("`{v}` does not fit in `{name}`, which holds {lo} to {hi}"),
+                );
+            }
+        }
+    }
+}
+
+/// Whether a value of number type `from` converts to number type `to` implicitly: `to` holds
+/// every value of `from` exactly (`num.widen.1`). `i32` to `int`, `u8` to `u32`, `u32` to
+/// `int`, `f32` to `f64`, and the integers of up to 32 bits (24 for `f32`) to the floats.
+pub(crate) fn widens(from: &Ty, to: &Ty) -> bool {
+    use crate::ty::Num;
+    let num = |t: &Ty| match t {
+        Ty::Int => Some(None),
+        Ty::Num(n) => Some(Some(*n)),
+        _ => None,
+    };
+    let (Some(a), Some(b)) = (num(from), num(to)) else {
+        return false;
+    };
+    if a == b {
+        return false;
+    }
+    // Whether it is signed, its width, and whether it is a float; `int` is an `i64`.
+    let shape = |n: Option<Num>| match n {
+        None => (true, 64u32, false),
+        Some(n) => (n.is_signed() || n.is_float(), n.bits(), n.is_float()),
+    };
+    let ((sa, wa, fa), (sb, wb, fb)) = (shape(a), shape(b));
+    match (fa, fb) {
+        // Float to float: `f32` to `f64`.
+        (true, true) => wa < wb,
+        (true, false) => false,
+        // Integer to float: exact if the mantissa holds every value (24 bits for `f32`, 53
+        // for `f64`, counting the sign).
+        (false, true) => {
+            let mantissa = if wb == 32 { 24 } else { 53 };
+            wa < mantissa
+        }
+        // Integer to integer: signed to wider signed, unsigned to wider unsigned, unsigned to
+        // strictly wider signed.
+        (false, false) => match (sa, sb) {
+            (true, false) => false,
+            _ => wa < wb,
+        },
     }
 }

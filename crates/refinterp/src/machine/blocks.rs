@@ -115,7 +115,14 @@ impl Machine<'_> {
     /// `let p = e;` and `let p = e else { … };` (`stmt.let.1`, `stmt.let.else.1`).
     pub(super) fn let_stmt(&mut self, l: &ast::LetStmt) -> Eval<()> {
         let init = l.init().expect("a checked `let` has a value");
-        let src = self.scrutinee(&init)?;
+        // A literal takes the number type written (`num.lit.1`).
+        let src = match l.ty() {
+            Some(t) if crate::num::Kind::named(t.syntax().text().to_string().trim()).is_some() => {
+                let v = self.eval(&init)?;
+                Src::Place(self.memory.temp(crate::num::typed(v, Some(&t))), false)
+            }
+            _ => self.scrutinee(&init)?,
+        };
         let pat = l.pat().expect("a checked `let` has a pattern");
         let mut binds = Vec::new();
         let matched = self.matches(&pat, &src, &mut binds);

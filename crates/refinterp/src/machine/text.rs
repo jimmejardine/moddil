@@ -233,6 +233,51 @@ impl Machine<'_> {
             v
         };
         Ok(match (head, name.as_str()) {
+            // The conversions (`num.convert.1`), to the type the call names.
+            (Head::Int | Head::Num(_), "checked_to" | "truncate" | "wrap" | "saturate") => {
+                let to = match self.convert_to.clone() {
+                    Some(Head::Num(k)) => Some(k),
+                    _ => None,
+                };
+                let x = self.target(args[0].clone());
+                let x = match head {
+                    Head::Num(k) => crate::num::as_kind(x, *k),
+                    _ => x,
+                };
+                let v = crate::num::convert(&name, &x, to);
+                if name == "checked_to" {
+                    match v {
+                        Some(v) => Value::Adt {
+                            ty: "Option".to_string(),
+                            variant: "Some".to_string(),
+                            fields: vec![v],
+                        },
+                        None => Value::Adt {
+                            ty: "Option".to_string(),
+                            variant: "None".to_string(),
+                            fields: Vec::new(),
+                        },
+                    }
+                } else {
+                    v.expect("an integer conversion gives a value")
+                }
+            }
+            // The float functions (`num.float.fn.1`).
+            (Head::Num(k), _) if k.is_float() && name != "fmt" => {
+                let x = self.target(args[0].clone());
+                let y = args.get(1).map(|a| self.target(a.clone()));
+                crate::num::float_fn(*k, &name, &x, y.as_ref()).expect("a float function")
+            }
+            (Head::Num(k), "fmt") => {
+                let s = match crate::num::as_kind(self.target(args[0].clone()), *k) {
+                    Value::Num(k, bits) => crate::num::text(k, bits),
+                    other => unreachable!("`Display` of {other:?}"),
+                };
+                change(self, 1, &mut |out| {
+                    out.push_str(&s);
+                    Value::Unit
+                })
+            }
             (Head::Int | Head::Bool | Head::Char, "fmt") => {
                 let s = match self.target(args[0].clone()) {
                     Value::Int(v) => v.to_string(),

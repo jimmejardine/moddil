@@ -7,6 +7,8 @@ use moddil_sema::{ItemTree, Shape, Src, Ty};
 pub enum Value {
     /// An `int`.
     Int(i64),
+    /// A sized integer or a float (`num.types.1`): its type and its bits.
+    Num(moddil_sema::Num, u128),
     /// A `bool`.
     Bool(bool),
     /// `()`.
@@ -71,6 +73,7 @@ impl Value {
     pub fn render(&self, items: &ItemTree) -> String {
         match self {
             Value::Int(v) => v.to_string(),
+            Value::Num(n, bits) => crate::num::text(*n, *bits),
             Value::Bool(v) => v.to_string(),
             Value::Unit => "()".to_string(),
             Value::Char(c) => format!("{c:?}"),

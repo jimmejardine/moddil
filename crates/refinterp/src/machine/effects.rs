@@ -100,6 +100,7 @@ impl Machine<'_> {
                         match self.memory.type_of(one).expect("known") {
                             Head::Adt(k) => k.clone(),
                             Head::Int => "int".to_string(),
+                            Head::Num(k) => format!("{k:?}").to_lowercase(),
                             Head::Bool => "bool".to_string(),
                             Head::Char => "char".to_string(),
                             Head::Str => "str".to_string(),

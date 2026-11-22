@@ -248,6 +248,7 @@ impl Checker<'_> {
     /// implements the trait (or of the context data's type), or a borrow of one.
     fn handler_fits(&mut self, h: &Handler, t: &Ty) {
         let range = self.range(h.value);
+        self.solver.table.default_literal(t);
         let t = self.norm(t);
         let inner = match &t {
             Ty::Ref(_, x) => self.norm(x),
@@ -362,6 +363,12 @@ impl Checker<'_> {
     /// of `e` (and the bound), and says whether it is one.
     pub(super) fn unsize(&mut self, e: ExprId, found: &Ty, expected: &Ty) -> bool {
         let (f, x) = (self.norm(found), self.norm(expected));
+        // A number where a wider number type that holds all its values is wanted
+        // (`num.widen.1`).
+        if crate::check::widens(&f, &x) {
+            self.out.dyn_coercions.insert(e, x.clone());
+            return true;
+        }
         let (Ty::Ref(m1, a), Ty::Ref(m2, b)) = (&f, &x) else {
             return false;
         };

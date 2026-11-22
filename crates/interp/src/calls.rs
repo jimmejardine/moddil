@@ -20,7 +20,7 @@ pub(crate) enum CallPlan {
     /// A function's body.
     Fn(Target, Vec<Value>),
     /// One of the prelude's built-in functions.
-    Intrinsic(u32, Vec<Value>),
+    Intrinsic(u32, Vec<Value>, Vec<Ty>),
     /// The built-in `Clone` of a borrow or tuple: this copy is the result.
     Copy(Value),
 }
@@ -75,8 +75,8 @@ pub(crate) fn plan(
         };
     }
     match dispatch.target(&callee, stack.type_args()) {
-        Some((f, _)) if dispatch.items().fns[f as usize].intrinsic => {
-            CallPlan::Intrinsic(f, values)
+        Some((f, type_args)) if dispatch.items().fns[f as usize].intrinsic => {
+            CallPlan::Intrinsic(f, values, type_args)
         }
         Some(target) => CallPlan::Fn(target, values),
         None => CallPlan::Copy(stack.deref(&values[0])),

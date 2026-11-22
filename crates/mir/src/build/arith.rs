@@ -5,7 +5,7 @@ use moddil_sema::hir::{BinaryOp, CompareOp, ExprId};
 use moddil_syntax::TextRange;
 
 use super::Builder;
-use crate::{BinOp, Const, Local, Operand, Place, Rvalue, Statement, Terminator, TrapClass};
+use crate::{BinOp, Local, Operand, Place, Rvalue, Statement, Terminator, TrapClass};
 
 impl Builder<'_> {
     /// Traps with `trap` if `flag` holds.
@@ -29,10 +29,11 @@ impl Builder<'_> {
         b: Operand,
         range: TextRange,
     ) {
+        let op_hir = op;
         let op = match op {
-            BinaryOp::Add => BinOp::Add,
-            BinaryOp::Sub => BinOp::Sub,
-            BinaryOp::Mul => BinOp::Mul,
+            BinaryOp::Add | BinaryOp::WrapAdd => BinOp::Add,
+            BinaryOp::Sub | BinaryOp::WrapSub => BinOp::Sub,
+            BinaryOp::Mul | BinaryOp::WrapMul => BinOp::Mul,
             BinaryOp::Div => BinOp::Div,
             BinaryOp::Rem => BinOp::Rem,
             BinaryOp::BitAnd => BinOp::BitAnd,
@@ -41,19 +42,36 @@ impl Builder<'_> {
             BinaryOp::Shl => BinOp::Shl,
             BinaryOp::Shr => BinOp::Shr,
         };
-        if *ty == Ty::Int {
+        let wraps = matches!(
+            op_hir,
+            BinaryOp::WrapAdd | BinaryOp::WrapSub | BinaryOp::WrapMul
+        );
+        // An integer of any width traps on overflow and on division by zero; a float does not
+        // (`num.ops.1`).
+        let int = match ty {
+            Ty::Int => true,
+            Ty::Num(n) => !n.is_float(),
+            _ => false,
+        };
+        if int {
             if matches!(op, BinOp::Div | BinOp::Rem) {
                 let t = self.temp(Ty::Bool);
                 self.cfg.assign(
                     t,
-                    Rvalue::Binary(BinOp::Eq, b.clone(), Operand::Const(Const::Int(0))),
+                    Rvalue::Binary(
+                        BinOp::Eq,
+                        b.clone(),
+                        Operand::Const(crate::int_const(ty, 0)),
+                    ),
                 );
                 self.check(t, TrapClass::DivisionByZero, range);
             }
-            if matches!(
-                op,
-                BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Shl | BinOp::Shr
-            ) {
+            if !wraps
+                && matches!(
+                    op,
+                    BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Shl | BinOp::Shr
+                )
+            {
                 let t = self.temp(Ty::Bool);
                 self.cfg
                     .assign(t, Rvalue::Overflows(op, a.clone(), b.clone()));

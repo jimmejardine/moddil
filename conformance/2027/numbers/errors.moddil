@@ -1,0 +1,28 @@
+// covers: num.lit.1, num.ops.1, num.widen.1
+
+fn literals() {
+    let a: u8 = 300;                        //~ E0204
+    let b: i8 = -129;                       //~ E0204
+    let c: u8 = -1;                         //~ E0204
+    let d: f32 = 1;
+}
+
+fn mixed(a: u8, b: u16) -> u16 {
+    a + b                                   //~ E0201
+}
+
+fn narrow(x: int) -> i32 {
+    x                                       //~ E0201
+}
+
+fn bits_on_floats(x: f64) -> f64 {
+    x & 1.0                                 //~ E0205
+}
+
+fn negative_unsigned(x: u8) -> u8 {
+    -x                                      //~ E0205
+}
+
+fn float_to_int(x: f64) -> int {
+    x                                       //~ E0201
+}

@@ -15,6 +15,7 @@ impl Builder<'_> {
             ExprKind::Assign { .. } => true,
             ExprKind::Missing
             | ExprKind::Int(_)
+            | ExprKind::Float(_)
             | ExprKind::Bool(_)
             | ExprKind::Unit
             | ExprKind::Char(_)
@@ -235,7 +236,14 @@ impl Builder<'_> {
             return Operand::Copy(Place::local(v));
         }
         match self.hir.exprs[e].kind {
-            ExprKind::Int(v) => return Operand::Const(Const::Int(v as i64)),
+            ExprKind::Int(v) => {
+                let t = self.items.base(&self.ty(e));
+                return Operand::Const(crate::int_const(&t, v));
+            }
+            ExprKind::Float(ref text) => {
+                let t = self.items.base(&self.ty(e));
+                return Operand::Const(crate::float_const(&t, text));
+            }
             ExprKind::Bool(v) => return Operand::Const(Const::Bool(v)),
             ExprKind::Unit => return Operand::Const(Const::Unit),
             ExprKind::Char(c) => return Operand::Const(Const::Char(c)),

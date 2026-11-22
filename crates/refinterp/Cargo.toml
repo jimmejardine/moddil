@@ -10,6 +10,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+libm.workspace = true
 moddil-syntax.workspace = true
 
 [dev-dependencies]

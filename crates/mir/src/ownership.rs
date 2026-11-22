@@ -552,7 +552,7 @@ impl<'a> Checker<'a> {
             Statement::Assign(dest, r) => {
                 let mut flowing = BTreeSet::new();
                 match r {
-                    Rvalue::Use(o) | Rvalue::Unsize(o, _) => {
+                    Rvalue::Use(o) | Rvalue::Unsize(o, _) | Rvalue::Widen(o, _) => {
                         flowing = self.flows(o, h);
                         self.operand(at, span, o, h, m, check);
                     }
@@ -872,6 +872,7 @@ fn rvalue_uses(r: &Rvalue, local: Local) -> bool {
     match r {
         Rvalue::Use(a)
         | Rvalue::Unsize(a, _)
+        | Rvalue::Widen(a, _)
         | Rvalue::Unary(_, a)
         | Rvalue::NegOverflows(a)
         | Rvalue::Repeat(a, _) => uses(a),
@@ -898,6 +899,7 @@ fn uses_defs(stmt: Option<&Statement>, term: Option<&Terminator>) -> (Vec<Local>
                 match r {
                     Rvalue::Use(a)
                     | Rvalue::Unsize(a, _)
+                    | Rvalue::Widen(a, _)
                     | Rvalue::Unary(_, a)
                     | Rvalue::NegOverflows(a)
                     | Rvalue::Repeat(a, _) => {

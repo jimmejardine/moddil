@@ -16,6 +16,7 @@ mod calls;
 mod dispatch;
 mod machine;
 mod natives;
+mod num;
 mod ops;
 mod sched;
 mod stack;

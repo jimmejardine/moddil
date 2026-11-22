@@ -52,8 +52,8 @@ pub use items::{
 };
 pub use lower::{Lowered, body};
 pub use modules::{Member, PathError};
-pub use traits::{Adjust, Answer, Pick, Solver, Source, Table, elaborate};
-pub use ty::{AnonTy, AssocTy, ClosureKind, ClosureTy, OpaqueTy, TraitRef, Ty};
+pub use traits::{Adjust, Answer, Lit, Pick, Solver, Source, Table, elaborate};
+pub use ty::{AnonTy, AssocTy, ClosureKind, ClosureTy, Num, OpaqueTy, TraitRef, Ty};
 
 use moddil_syntax::TextRange;
 

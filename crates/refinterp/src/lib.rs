@@ -20,6 +20,7 @@ use moddil_syntax::TextRange;
 
 mod machine;
 mod memory;
+mod num;
 mod program;
 mod value;
 

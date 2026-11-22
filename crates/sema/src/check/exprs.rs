@@ -44,16 +44,12 @@ impl Checker<'_> {
         let range = self.range(e);
         match &self.body.exprs[e].kind {
             ExprKind::Missing => Ty::Error,
+            // An exact number until its type is known (`num.lit.1`): checked against it then.
             &ExprKind::Int(v) => {
-                if i64::try_from(v).is_err() {
-                    self.report(
-                        Code::E0204,
-                        range,
-                        format!("`{v}` does not fit in `int` (a signed 64-bit integer)"),
-                    );
-                }
-                Ty::Int
+                self.literals.push((e, v));
+                self.solver.table.fresh_lit(crate::Lit::Int)
             }
+            ExprKind::Float(_) => self.solver.table.fresh_lit(crate::Lit::Float),
             ExprKind::Bool(_) => Ty::Bool,
             ExprKind::Unit => Ty::Unit,
             ExprKind::Char(_) => Ty::Char,
@@ -141,6 +137,7 @@ impl Checker<'_> {
             }
             &ExprKind::Deref(x) => {
                 let t = self.infer(x);
+                self.solver.table.default_literal(&t);
                 match self.norm(&t) {
                     Ty::Ref(_, t) => (*t).clone(),
                     Ty::Error => Ty::Error,
@@ -325,7 +322,10 @@ impl Checker<'_> {
                     Some(op) => {
                         let lt = self.norm(&lt);
                         match lt {
-                            Ty::Int | Ty::Bool | Ty::Error | Ty::Never => {
+                            Ty::Int | Ty::Num(_) | Ty::Bool | Ty::Error | Ty::Never => {
+                                self.binary(e, range, op, &lt, value);
+                            }
+                            Ty::Infer(_) if self.solver.table.lit_kind(&lt).is_some() => {
                                 self.binary(e, range, op, &lt, value);
                             }
                             _ => {
@@ -538,9 +538,16 @@ impl Checker<'_> {
             return None;
         };
         let literal = match &self.body.exprs[e].kind {
-            ExprKind::Int(_) | ExprKind::Bool(_) | ExprKind::Char(_) | ExprKind::Str(_) => true,
+            ExprKind::Int(_)
+            | ExprKind::Float(_)
+            | ExprKind::Bool(_)
+            | ExprKind::Char(_)
+            | ExprKind::Str(_) => true,
             ExprKind::Unary(crate::hir::UnaryOp::Neg, x) => {
-                matches!(self.body.exprs[*x].kind, ExprKind::Int(_))
+                matches!(
+                    self.body.exprs[*x].kind,
+                    ExprKind::Int(_) | ExprKind::Float(_)
+                )
             }
             _ => false,
         };
@@ -592,6 +599,7 @@ impl Checker<'_> {
         name_range: TextRange,
     ) -> Ty {
         let t = self.infer(base);
+        self.solver.table.default_literal(&t);
         let mut bt = self.norm(&t);
         // Field access looks through a borrow.
         if let Ty::Ref(_, inner) = &bt {

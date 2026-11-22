@@ -15,13 +15,72 @@ use crate::ty::{AssocTy, TraitRef};
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Table {
     vars: Vec<Option<Ty>>,
+    /// For each variable: whether it is a literal's (`num.lit.1`), which only a number type binds.
+    kinds: Vec<Lit>,
+}
+
+/// What a variable may stand for: anything, or the type of a number literal.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Lit {
+    /// Any type.
+    #[default]
+    Any,
+    /// An integer literal's: any number type; `int` if nothing says which.
+    Int,
+    /// A fractional literal's: a float type; `f64` if nothing says which.
+    Float,
 }
 
 impl Table {
     /// A new variable.
     pub fn fresh(&mut self) -> Ty {
         self.vars.push(None);
+        self.kinds.push(Lit::Any);
         Ty::Infer(self.vars.len() as u32 - 1)
+    }
+
+    /// A new variable for a number literal of kind `kind`.
+    pub fn fresh_lit(&mut self, kind: Lit) -> Ty {
+        let t = self.fresh();
+        *self.kinds.last_mut().expect("a variable") = kind;
+        t
+    }
+
+    /// What kind of literal unbound variable `t` is for, if it is one.
+    pub fn lit_kind(&self, t: &Ty) -> Option<Lit> {
+        match self.shallow(t) {
+            Ty::Infer(v) => match self.kinds.get(v as usize) {
+                Some(Lit::Any) | None => None,
+                Some(k) => Some(*k),
+            },
+            _ => None,
+        }
+    }
+
+    /// Gives each literal variable still unbound its default type: `int` or `f64`.
+    pub fn default_literals(&mut self) {
+        for v in 0..self.vars.len() {
+            if self.vars[v].is_none() {
+                match self.kinds[v] {
+                    Lit::Int => self.vars[v] = Some(Ty::Int),
+                    Lit::Float => self.vars[v] = Some(Ty::Num(crate::ty::Num::F64)),
+                    Lit::Any => {}
+                }
+            }
+        }
+    }
+
+    /// Gives literal variable `t`, if it is one, its default type now.
+    pub fn default_literal(&mut self, t: &Ty) {
+        if let Ty::Infer(v) = self.shallow(t) {
+            match self.kinds.get(v as usize) {
+                Some(Lit::Int) => self.vars[v as usize] = Some(Ty::Int),
+                Some(Lit::Float) => {
+                    self.vars[v as usize] = Some(Ty::Num(crate::ty::Num::F64));
+                }
+                _ => {}
+            }
+        }
     }
 
     /// `t`, with the variable at its top replaced by what it is bound to, repeatedly.
@@ -54,6 +113,21 @@ impl Table {
         }
         if self.occurs(v, &t) {
             return false;
+        }
+        // A literal's variable takes only a number type of its kind; bound to another variable,
+        // it passes its kind on (a fractional literal's being the narrower).
+        let kind = self.kinds[v as usize];
+        match (kind, &t) {
+            (Lit::Any, _) | (_, Ty::Error | Ty::Never) | (Lit::Int, Ty::Int | Ty::Num(_)) => {}
+            (_, Ty::Infer(w)) => {
+                let w = *w as usize;
+                self.kinds[w] = match (kind, self.kinds[w]) {
+                    (Lit::Float, _) | (_, Lit::Float) => Lit::Float,
+                    _ => Lit::Int,
+                };
+            }
+            (Lit::Float, Ty::Num(n)) if n.is_float() => {}
+            _ => return false,
         }
         self.vars[v as usize] = Some(t);
         true
@@ -577,6 +651,7 @@ impl<'a> Solver<'a> {
         }
         match ty {
             Ty::Int
+            | Ty::Num(_)
             | Ty::Bool
             | Ty::Unit
             | Ty::Never

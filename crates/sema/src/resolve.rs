@@ -479,9 +479,13 @@ pub(crate) fn path_type(
         [one] => {
             let name = one.name.as_str();
             match name {
-                "int" => {
+                "int" | "i64" => {
                     no_args(one, diags);
                     return Ty::Int;
+                }
+                n if crate::ty::Num::from_name(n).is_some() => {
+                    no_args(one, diags);
+                    return Ty::Num(crate::ty::Num::from_name(n).expect("a number type"));
                 }
                 "bool" => {
                     no_args(one, diags);

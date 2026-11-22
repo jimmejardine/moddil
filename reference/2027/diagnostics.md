@@ -38,7 +38,7 @@ and a code never changes meaning.
 | E0201 | Mismatched types | [type.match.1](types.md) and the rules that expect a type |
 | E0202 | Wrong number of arguments | [expr.call.1](expressions/calls.md), [expr.closure.call.1](expressions/closures.md) |
 | E0203 | Not a function | [expr.call.1](expressions/calls.md), [expr.closure.call.1](expressions/closures.md) |
-| E0204 | Literal out of range | [expr.lit.int.2](expressions/literals.md) |
+| E0204 | Literal out of range for its type | [expr.lit.int.2](expressions/literals.md), [num.lit.1](numbers.md) |
 | E0205 | Operator not defined for these types | [expr.arith.types.1](expressions/arithmetic.md), [expr.op.trait.1](expressions/arithmetic.md), [expr.cmp.order.1](expressions/comparison.md), [expr.cmp.trait.1](expressions/comparison.md), [generic.bound.1](generics.md), [expr.index.2](expressions/arrays.md), [expr.index.trait.1](expressions/arrays.md) |
 | E0206 | Invalid assignment target | [expr.assign.1](expressions/assignment.md) |
 | E0207 | Missing fields | [expr.struct.1](expressions/structs.md), [pat.struct.1](patterns.md) |

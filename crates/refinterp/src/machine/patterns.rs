@@ -85,7 +85,13 @@ impl Machine<'_> {
                 Value::Str(s) => {
                     super::text::text_of(self, &self.value_of(src)).as_deref() == Some(&*s)
                 }
-                lit => lit == self.value_of(src),
+                lit => {
+                    let v = self.value_of(src);
+                    match &v {
+                        Value::Num(k, _) => crate::num::as_kind(lit, *k) == v,
+                        _ => lit == v,
+                    }
+                }
             },
             ast::Pat::Range(_) => {
                 let bounds: Vec<Value> = node

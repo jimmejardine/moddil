@@ -8,7 +8,7 @@ step, and the same script runs locally, so the two cannot drift.
     python tools/ci.py --wsl           every step inside WSL (Linux), on this same checkout
     python tools/ci.py --all           here, then inside WSL
 
-Steps: fmt, clippy, deny, test, tour, links, grammars. Compatible with Python 3.8 (WSL's Ubuntu 20.04).
+Steps: fmt, clippy, deny, test, tour, examples, links, grammars. Compatible with Python 3.8 (WSL's Ubuntu 20.04).
 This script never installs anything; when a tool is missing it says how to install it.
 """
 
@@ -72,6 +72,22 @@ def step_tour():
     return stubs and tour
 
 
+def step_examples():
+    # The Mandelbulb's pure core (specs/examples/mandelbulb.md): it checks, its tests pass, and
+    # its CPU preview lights the same 302 pixels on every platform (floats are IEEE 754, their
+    # functions from libm).
+    cmd = ["cargo", "run", "-q", "-p", "moddil", "--"]
+    tests = run(*cmd, "test", "examples/mandelbulb")
+    print("$", " ".join(cmd + ["run", "examples/mandelbulb"]), flush=True)
+    out = subprocess.run(cmd + ["run", "examples/mandelbulb"], capture_output=True, text=True)
+    lit = out.stdout.strip()
+    preview = out.returncode == 0 and lit == "302"
+    if not preview:
+        print(f"the preview gave {lit!r} (exit {out.returncode}), not 302")
+        print(out.stderr)
+    return tests and preview
+
+
 def step_links():
     return run(sys.executable, "-X", "utf8", "tools/check_spec_links.py")
 
@@ -93,6 +109,7 @@ STEPS = {
     "deny": step_deny,
     "test": step_test,
     "tour": step_tour,
+    "examples": step_examples,
     "links": step_links,
     "grammars": step_grammars,
 }

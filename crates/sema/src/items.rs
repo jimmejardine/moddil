@@ -836,6 +836,10 @@ impl ItemTree {
                 None => (0, 1),
             },
             Ty::Int | Ty::Ref(..) => (8, 8),
+            Ty::Num(n) => {
+                let b = u64::from(n.bits() / 8);
+                (b, b)
+            }
             Ty::Bool => (1, 1),
             Ty::Char => (4, 4),
             // A `String` is 24 bytes, holding up to 23 inline (`text.md`); a `Buf` is a pointer,

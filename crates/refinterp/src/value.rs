@@ -4,6 +4,12 @@
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Value {
     Int(i64),
+    /// A sized integer or a float (`num.types.1`): its kind and its bits.
+    Num(crate::num::Kind, u128),
+    /// A fractional literal not yet of a type: its text (`num.lit.1`).
+    FloatLit(std::sync::Arc<str>),
+    /// An integer literal too large for an `int`, not yet of a type.
+    BigLit(i128),
     Bool(bool),
     Unit,
     Char(char),
@@ -73,6 +79,8 @@ pub(crate) struct Pointer {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Head {
     Int,
+    /// A sized integer or a float.
+    Num(crate::num::Kind),
     Bool,
     Char,
     Str,
@@ -95,6 +103,9 @@ impl Value {
     pub(crate) fn head(&self) -> Head {
         match self {
             Value::Int(_) => Head::Int,
+            Value::Num(k, _) => Head::Num(*k),
+            Value::FloatLit(_) => Head::Num(crate::num::Kind::F64),
+            Value::BigLit(_) => Head::Num(crate::num::Kind::I128),
             Value::Bool(_) => Head::Bool,
             Value::Char(_) => Head::Char,
             Value::Str(_) => Head::Str,

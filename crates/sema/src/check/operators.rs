@@ -74,6 +74,15 @@ impl Checker<'_> {
         match (op, &t) {
             (_, Ty::Error | Ty::Never) => Ty::Error,
             (UnaryOp::Neg | UnaryOp::Not, Ty::Int) => Ty::Int,
+            // Negation on a signed integer or a float, `!` on an integer (`num.ops.1`).
+            (UnaryOp::Neg, Ty::Num(n)) if n.is_signed() || n.is_float() => t.clone(),
+            (UnaryOp::Not, Ty::Num(n)) if !n.is_float() => t.clone(),
+            (UnaryOp::Neg, Ty::Infer(_)) if self.solver.table.lit_kind(&t).is_some() => t.clone(),
+            (UnaryOp::Not, Ty::Infer(_))
+                if self.solver.table.lit_kind(&t) == Some(crate::Lit::Int) =>
+            {
+                t.clone()
+            }
             (UnaryOp::Not, Ty::Bool) => Ty::Bool,
             (_, Ty::Infer(_)) => self.unknown(range, &format!("to apply `{sym}` to it")),
             (_, Ty::Ref(..)) => {
@@ -116,10 +125,25 @@ impl Checker<'_> {
             BinaryOp::Rem => Some(("Rem", "rem")),
             _ => None,
         };
+        let lit = self.solver.table.lit_kind(&lt).is_some();
         match &lt {
             Ty::Int => {
                 self.check(r, &Ty::Int);
                 Ty::Int
+            }
+            // On the sized integers and the floats, both operands have one type
+            // (`num.ops.1`); a float has no bitwise operators.
+            Ty::Num(n) if !n.is_float() || !(op.is_bitwise() || op.wraps()) => {
+                self.check(r, &lt);
+                lt.clone()
+            }
+            // A literal's type is decided by the other operand, or by default.
+            Ty::Infer(_) if lit => {
+                let rt = self.infer(r);
+                if !self.coerce(&rt, &lt) {
+                    self.mismatch(r, &lt, &rt);
+                }
+                lt.clone()
             }
             Ty::Bool if op.applies_to_bool() => {
                 self.check(r, &Ty::Bool);
@@ -205,7 +229,8 @@ impl Checker<'_> {
             };
             match &j {
                 // `&str`s compare their text, built in.
-                Ty::Error | Ty::Never | Ty::Int | Ty::Char | Ty::Str => {}
+                Ty::Error | Ty::Never | Ty::Int | Ty::Num(_) | Ty::Char | Ty::Str => {}
+                Ty::Infer(_) if self.solver.table.lit_kind(&j).is_some() => {}
                 Ty::Bool | Ty::Unit if !op.is_ordering() => {}
                 Ty::Infer(_) => {
                     self.unknown(range, &format!("to compare it with `{}`", op.symbol()));

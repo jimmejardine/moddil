@@ -56,6 +56,7 @@ insta = "1.49.0"            # snapshot tests
 unicode-ident = "1.0.27"     # UAX #31 identifier classes (the lexer)
 unicode-normalization = "0.1.26"  # NFC checks on identifiers (the lexer)
 cargo_metadata = "0.23.1"   # the refinterp independence check
+libm = "0.2.16"             # float functions with the same bits on every platform (both interpreters)
 
 [profile.dev]
 debug = "line-tables-only"

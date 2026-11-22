@@ -50,6 +50,8 @@ struct Machine<'p> {
     olds: Vec<HashMap<TextRange, Value>>,
     /// The nodes closure values have named so far, found once.
     nodes: HashMap<crate::value::NodeRef, SyntaxNode>,
+    /// For a conversion being run (`num.convert.1`): the type it converts to.
+    convert_to: Option<Head>,
 }
 
 impl Program {
@@ -99,6 +101,7 @@ impl<'p> Machine<'p> {
             pending_trap: None,
             olds: Vec::new(),
             nodes: HashMap::new(),
+            convert_to: None,
         }
     }
 }
@@ -407,7 +410,12 @@ fn literal(node: &SyntaxNode, negate: bool) -> Value {
         K::INTEGER => {
             let v = integer(tok.text());
             let v = if negate { -v } else { v };
-            Value::Int(i64::try_from(v).expect("a checked literal fits in `int`"))
+            i64::try_from(v).map_or(Value::BigLit(v), Value::Int)
+        }
+        // A fractional literal: exact until it meets its type (`num.lit.1`).
+        K::FLOAT => {
+            let t: String = tok.text().chars().filter(|&c| c != '_').collect();
+            Value::FloatLit(if negate { format!("-{t}") } else { t }.into())
         }
         K::CHAR => Value::Char(text::character(tok.text())),
         K::STRING | K::RAW_STRING | K::BLOCK_STRING => Value::Str(text::string(tok.text()).into()),

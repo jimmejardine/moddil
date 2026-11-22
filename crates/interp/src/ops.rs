@@ -7,6 +7,7 @@ use crate::value::Value;
 /// `op` applied to `v`. Negation wraps; the MIR checks for overflow first.
 pub(crate) fn unary(op: UnOp, v: Value) -> Value {
     match (op, v) {
+        (op, Value::Num(n, a)) => crate::num::unary(op, n, a),
         (UnOp::Neg, Value::Int(v)) => Value::Int(v.wrapping_neg()),
         (UnOp::Not, Value::Int(v)) => Value::Int(!v),
         (UnOp::Not, Value::Bool(v)) => Value::Bool(!v),
@@ -16,11 +17,17 @@ pub(crate) fn unary(op: UnOp, v: Value) -> Value {
 
 /// Whether negating `a` overflows.
 pub(crate) fn neg_overflows(a: &Value) -> bool {
-    a.as_int() == i64::MIN
+    match a {
+        Value::Num(n, a) => crate::num::neg_overflows(*n, *a),
+        a => a.as_int() == i64::MIN,
+    }
 }
 
 /// Whether `a op b` overflows, or shifts by an amount out of range.
 pub(crate) fn overflows(op: BinOp, a: &Value, b: &Value) -> bool {
+    if let (Value::Num(n, a), Value::Num(_, b)) = (a, b) {
+        return crate::num::overflows(op, *n, *a, *b);
+    }
     let (a, b) = (a.as_int(), b.as_int());
     match op {
         BinOp::Add => a.checked_add(b).is_none(),
@@ -37,6 +44,8 @@ pub(crate) fn overflows(op: BinOp, a: &Value, b: &Value) -> bool {
 pub(crate) fn binary(op: BinOp, a: Value, b: Value) -> Value {
     use Value::{Bool, Char, Int, Str};
     match (op, a, b) {
+        // Before `==`: a float's equality is IEEE's (NaN is unequal to itself, -0 equals 0).
+        (op, Value::Num(n, a), Value::Num(_, b)) => crate::num::binary(op, n, a, b),
         (BinOp::Eq, a, b) => Bool(a == b),
         (BinOp::Ne, a, b) => Bool(a != b),
         (BinOp::Lt, Char(a), Char(b)) => Bool(a < b),

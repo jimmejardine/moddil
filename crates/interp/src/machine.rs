@@ -288,11 +288,11 @@ impl<'a> Machine<'a> {
                 self.stack.push(Frame::new(code, values, type_args, ret));
                 return None;
             }
-            CallPlan::Intrinsic(f, values) => {
+            CallPlan::Intrinsic(f, values, type_args) => {
                 if let Some(name) = self.task_native(f) {
                     return self.task_call(name, &[], &values, ret, range);
                 }
-                match self.natives.call(f, &values, &mut self.stack) {
+                match self.natives.call(f, &values, &type_args, &mut self.stack) {
                     Ok(v) => v,
                     Err(class) => {
                         return Some(Stop::Trap(self.trap(class, Some(range), Vec::new())));
@@ -391,6 +391,11 @@ impl<'a> Machine<'a> {
                     }
                     other => unreachable!("indexing {other:?}"),
                 }
+            }
+            // A number as a wider type (`num.widen.1`): exact, so `checked_to` gives it.
+            Rvalue::Widen(a, to) => {
+                let v = self.stack.operand(a);
+                crate::num::convert("checked_to", &v, to).expect("a widening is exact")
             }
             // An array borrow is a slice borrow as it is.
             Rvalue::Unsize(a, from) if matches!(self.concrete(from), Ty::Array(..)) => {

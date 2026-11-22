@@ -295,6 +295,9 @@ pub enum Rvalue {
     /// `dyn` borrow of a trait it implements: `&clock` as `&dyn Time`. If the borrow is already
     /// a `dyn` borrow, of a subtrait, it stays as it is.
     Unsize(Operand, Ty),
+    /// A number as a wider number type, which holds every value of its own (`num.widen.1`):
+    /// the operand's value, as the given type.
+    Widen(Operand, Ty),
     /// `[x; n]`: an array of `n` copies of the operand, `n` a length type (in terms of the body's
     /// type parameters).
     Repeat(Operand, Ty),
@@ -343,6 +346,9 @@ pub enum Operand {
 pub enum Const {
     /// An `int`.
     Int(i64),
+    /// A sized integer or a float (`num.types.1`): its type, and its bits (two's complement for
+    /// a signed integer, IEEE 754 for a float), in the low bits.
+    Num(moddil_sema::Num, u128),
     /// A `bool`.
     Bool(bool),
     /// `()`.
@@ -538,3 +544,51 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(test)]
 mod tests;
+
+/// How a number constant of type `n` with bits `bits` is written.
+pub fn num_text(n: moddil_sema::Num, bits: u128) -> String {
+    use moddil_sema::Num;
+    match n {
+        Num::F32 => format!("{:?}", f32::from_bits(bits as u32)),
+        Num::F64 => format!("{:?}", f64::from_bits(bits as u64)),
+        n if n.is_signed() => {
+            let shift = 128 - n.bits();
+            format!("{}", ((bits as i128) << shift) >> shift)
+        }
+        _ => format!("{bits}"),
+    }
+}
+
+/// The constant of number type `t` (`int` or a [`Ty::Num`]) for the exact integer `v`, which the
+/// checker has made sure fits; a float gets the nearest value.
+pub fn int_const(t: &Ty, v: i128) -> Const {
+    use moddil_sema::Num;
+    match t {
+        Ty::Num(Num::F32) => Const::Num(Num::F32, u128::from((v as f32).to_bits())),
+        Ty::Num(Num::F64) => Const::Num(Num::F64, u128::from((v as f64).to_bits())),
+        Ty::Num(n) => {
+            let mask = if n.bits() == 128 {
+                u128::MAX
+            } else {
+                (1u128 << n.bits()) - 1
+            };
+            Const::Num(*n, (v as u128) & mask)
+        }
+        _ => Const::Int(v as i64),
+    }
+}
+
+/// The constant of float type `t` for the literal `text`, rounded to the nearest value.
+pub fn float_const(t: &Ty, text: &str) -> Const {
+    use moddil_sema::Num;
+    match t {
+        Ty::Num(Num::F32) => {
+            let v: f32 = text.parse().unwrap_or(f32::NAN);
+            Const::Num(Num::F32, u128::from(v.to_bits()))
+        }
+        _ => {
+            let v: f64 = text.parse().unwrap_or(f64::NAN);
+            Const::Num(Num::F64, u128::from(v.to_bits()))
+        }
+    }
+}

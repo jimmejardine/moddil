@@ -1,7 +1,7 @@
 # Types
 
 **type.int.1** `int` is a signed 64-bit two's-complement integer, from −2⁶³ to 2⁶³ − 1, on every
-target.
+target; `i64` names it too. The other integer types and the floats are in [Numbers](numbers.md).
 
 **type.bool.1** `bool` has two values, `true` and `false`.
 

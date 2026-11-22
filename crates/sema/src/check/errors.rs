@@ -211,6 +211,7 @@ impl Checker<'_> {
         let outer = self.marked.replace(x);
         let saved = self.call_fails.take();
         let t = self.infer(x);
+        self.solver.table.default_literal(&t);
         self.marked = outer;
         if let Some(fails) = std::mem::replace(&mut self.call_fails, saved) {
             self.out.propagated.insert(e, Propagated::Call);
@@ -286,6 +287,7 @@ impl Checker<'_> {
     pub(super) fn fail(&mut self, e: ExprId, x: ExprId) -> Ty {
         let range = self.range(e);
         let t = self.infer(x);
+        self.solver.table.default_literal(&t);
         let t = self.show(&t);
         let members = t.members();
         let mut ok = Vec::new();

@@ -18,18 +18,10 @@ moddil check examples/mandelbulb/web      # the kernel and the page's API
 
 ## Status
 
-Both mods parse. With the compiler at slice S6, `moddil check` stops at features that arrive in
-slice S10, numbers ([`specs/roadmap.md`](../../specs/roadmap.md#m0-the-v0-language-in-slices)), and,
-for `web/`, in M2:
+Since slice S10, numbers ([`specs/roadmap.md`](../../specs/roadmap.md#m0-the-v0-language-in-slices)),
+the pure core in `src/` checks, its tests pass, and the CPU preview runs (it lights 302 pixels,
+the same on every platform); `python tools/ci.py examples` checks all three. `web/` waits for M2:
 
 | Missing | Used for | Where it is specified |
 |---|---|---|
-| `f32` (and float literals and arithmetic) | Everything geometric | [`numerics.md`: Floats](../../specs/numerics.md#floats) |
-| Float methods: `sqrt`, `sin`, `cos`, `tan`, `acos`, `atan2`, `powf`, `ln`, `max`, `clamp` | The estimator, the camera | [`numerics.md`: Floats](../../specs/numerics.md#floats) |
-| `const` items | `MAX_PITCH`, `WIDTH`, `HEIGHT`, `BUDGET` | [`comptime.md`](../../specs/comptime.md) |
-| `int` to `f32`: `to::<f32>()` | Pixel coordinates | [`numerics.md`: Conversions](../../specs/numerics.md#conversions) |
 | `#[kernel]`, `#[export]`, `scope` and launches, the `Gpu` effect, the `gpu` mod | `web/` only | [`accelerators.md`](../../specs/accelerators.md), [`ui.md`](../../specs/ui.md), M2 |
-
-With `f32` replaced by `int`, the only remaining errors in `src/` are the float functions and the
-`const` items, so the rest (structs, operator traits, enums, `match`, loops, modules, `pub use`,
-`?!`, tests) already checks.

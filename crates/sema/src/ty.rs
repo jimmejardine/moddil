@@ -9,6 +9,9 @@ use std::sync::Arc;
 pub enum Ty {
     /// `int`: a signed 64-bit integer.
     Int,
+    /// A sized integer or a float (`num.types.1`): `i8`, …, `u128`, `f32`, `f64`. `int` is
+    /// [`Ty::Int`], also written `i64`.
+    Num(Num),
     /// `bool`.
     Bool,
     /// `char`: a Unicode scalar value.
@@ -104,6 +107,108 @@ pub struct AnonTy {
     pub trait_ref: TraitRef,
     /// Its methods: each the trait's method it defines, and the closure type of its body.
     pub methods: Arc<[(u32, Ty)]>,
+}
+
+/// The sized integer and float types (`num.types.1`). `int` (`i64`) is [`Ty::Int`].
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
+pub enum Num {
+    /// `i8`.
+    I8,
+    /// `i16`.
+    I16,
+    /// `i32`.
+    I32,
+    /// `i128`.
+    I128,
+    /// `u8`.
+    U8,
+    /// `u16`.
+    U16,
+    /// `u32`.
+    U32,
+    /// `u64`.
+    U64,
+    /// `u128`.
+    U128,
+    /// `f32`.
+    F32,
+    /// `f64`.
+    F64,
+}
+
+impl Num {
+    /// Every one, in order.
+    pub const ALL: [Num; 11] = [
+        Num::I8,
+        Num::I16,
+        Num::I32,
+        Num::I128,
+        Num::U8,
+        Num::U16,
+        Num::U32,
+        Num::U64,
+        Num::U128,
+        Num::F32,
+        Num::F64,
+    ];
+
+    /// How it is written.
+    pub fn name(self) -> &'static str {
+        match self {
+            Num::I8 => "i8",
+            Num::I16 => "i16",
+            Num::I32 => "i32",
+            Num::I128 => "i128",
+            Num::U8 => "u8",
+            Num::U16 => "u16",
+            Num::U32 => "u32",
+            Num::U64 => "u64",
+            Num::U128 => "u128",
+            Num::F32 => "f32",
+            Num::F64 => "f64",
+        }
+    }
+
+    /// The type a name stands for (`i64` is `int`, so not here).
+    pub fn from_name(name: &str) -> Option<Num> {
+        Num::ALL.into_iter().find(|n| n.name() == name)
+    }
+
+    /// Whether it is `f32` or `f64`.
+    pub fn is_float(self) -> bool {
+        matches!(self, Num::F32 | Num::F64)
+    }
+
+    /// Whether it is a signed integer.
+    pub fn is_signed(self) -> bool {
+        matches!(self, Num::I8 | Num::I16 | Num::I32 | Num::I128)
+    }
+
+    /// Its width in bits.
+    pub fn bits(self) -> u32 {
+        match self {
+            Num::I8 | Num::U8 => 8,
+            Num::I16 | Num::U16 => 16,
+            Num::I32 | Num::U32 | Num::F32 => 32,
+            Num::U64 | Num::F64 => 64,
+            Num::I128 | Num::U128 => 128,
+        }
+    }
+
+    /// The least and greatest values of an integer type, as far as an `i128` reaches.
+    pub fn int_range(self) -> (i128, i128) {
+        match self {
+            Num::I8 => (i8::MIN.into(), i8::MAX.into()),
+            Num::I16 => (i16::MIN.into(), i16::MAX.into()),
+            Num::I32 => (i32::MIN.into(), i32::MAX.into()),
+            Num::I128 => (i128::MIN, i128::MAX),
+            Num::U8 => (0, u8::MAX.into()),
+            Num::U16 => (0, u16::MAX.into()),
+            Num::U32 => (0, u32::MAX.into()),
+            Num::U64 => (0, u64::MAX.into()),
+            Num::U128 | Num::F32 | Num::F64 => (0, i128::MAX),
+        }
+    }
 }
 
 /// An opaque result type: the function whose result it is, the type arguments of its call
@@ -403,6 +508,7 @@ impl fmt::Debug for Ty {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Ty::Int => f.write_str("int"),
+            Ty::Num(n) => f.write_str(n.name()),
             Ty::Bool => f.write_str("bool"),
             Ty::Char => f.write_str("char"),
             Ty::Str => f.write_str("str"),

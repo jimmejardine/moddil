@@ -36,6 +36,7 @@ impl fmt::Debug for Const {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Const::Int(v) => write!(f, "const {v}"),
+            Const::Num(n, bits) => write!(f, "const {} {}", n.name(), crate::num_text(*n, *bits)),
             Const::Bool(v) => write!(f, "const {v}"),
             Const::Unit => write!(f, "const ()"),
             Const::Char(c) => write!(f, "const {c:?}"),
@@ -49,6 +50,7 @@ impl fmt::Display for Rvalue {
         match self {
             Rvalue::Use(a) => write!(f, "{a:?}"),
             Rvalue::Unsize(a, t) => write!(f, "Unsize({a:?}, {t:?})"),
+            Rvalue::Widen(a, t) => write!(f, "Widen({a:?}, {t:?})"),
             Rvalue::Unary(UnOp::Neg, a) => write!(f, "Neg({a:?})"),
             Rvalue::Unary(UnOp::Not, a) => write!(f, "Not({a:?})"),
             Rvalue::Binary(op, a, b) => write!(f, "{op:?}({a:?}, {b:?})"),

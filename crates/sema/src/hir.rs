@@ -73,6 +73,9 @@ pub enum ExprKind {
     Missing,
     /// An integer literal, with its exact value (a leading `-` folded in).
     Int(i128),
+    /// A fractional literal (`1.5`, `2e-3`), as written without `_`: an exact number until its
+    /// type, a float, is known (`num.lit.1`).
+    Float(String),
     /// `true` or `false`.
     Bool(bool),
     /// `()`.
@@ -520,9 +523,23 @@ pub enum BinaryOp {
     Shl,
     /// `>>`, arithmetic.
     Shr,
+    /// `+%`: addition that wraps around the integer's width (`num.wrap.1`).
+    WrapAdd,
+    /// `-%`.
+    WrapSub,
+    /// `*%`.
+    WrapMul,
 }
 
 impl BinaryOp {
+    /// Whether it is `&`, `|`, `^`, `<<` or `>>`.
+    pub fn is_bitwise(self) -> bool {
+        matches!(
+            self,
+            BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor | BinaryOp::Shl | BinaryOp::Shr
+        )
+    }
+
     /// The operator's symbol.
     pub fn symbol(self) -> &'static str {
         match self {
@@ -536,7 +553,18 @@ impl BinaryOp {
             BinaryOp::BitXor => "^",
             BinaryOp::Shl => "<<",
             BinaryOp::Shr => ">>",
+            BinaryOp::WrapAdd => "+%",
+            BinaryOp::WrapSub => "-%",
+            BinaryOp::WrapMul => "*%",
         }
+    }
+
+    /// Whether it wraps rather than trapping on overflow: `+%`, `-%`, `*%`.
+    pub fn wraps(self) -> bool {
+        matches!(
+            self,
+            BinaryOp::WrapAdd | BinaryOp::WrapSub | BinaryOp::WrapMul
+        )
     }
 
     /// Whether the operator also applies to `bool` (`&`, `|`, `^`).

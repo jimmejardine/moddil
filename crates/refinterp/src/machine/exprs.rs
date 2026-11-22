@@ -217,7 +217,7 @@ impl Machine<'_> {
                 .iter()
                 .position(|f| *f == name)
                 .expect("a checked field");
-            fields[i] = v;
+            fields[i] = crate::num::typed(v, info.types.get(i).and_then(Option::as_ref));
         }
         Ok(Value::Adt {
             ty,
@@ -514,7 +514,7 @@ impl Machine<'_> {
         let operand = &e.sub_exprs()[0];
         if op.kind() == K::MINUS
             && let ast::Expr::Literal(lit) = operand
-            && lit.token(K::INTEGER).is_some()
+            && (lit.token(K::INTEGER).is_some() || lit.token(K::FLOAT).is_some())
         {
             // `-9223372036854775808` is one literal (`expr.lit.int.1`).
             return Ok(literal(lit, true));
@@ -525,6 +525,9 @@ impl Machine<'_> {
             return Ok(self.target(v));
         }
         match (op.kind(), self.eval(operand)?) {
+            (k, v @ (Value::Num(..) | Value::FloatLit(_) | Value::BigLit(_))) => {
+                crate::num::unary(k == K::MINUS, v, range)
+            }
             (K::MINUS, Value::Int(v)) => v
                 .checked_neg()
                 .map(Value::Int)
@@ -561,6 +564,10 @@ impl Machine<'_> {
             k => {
                 let a = self.eval(&l)?;
                 let b = self.eval(&r)?;
+                // Numbers of a sized type, and the literals that meet them (`num.ops.1`).
+                if crate::num::is_num(&a, &b) {
+                    return crate::num::arith(op.text(), a, b, range);
+                }
                 if let (Value::Int(_) | Value::Bool(_), _) = (&a, &b) {
                     return arith(k, a, b, range);
                 }
@@ -604,6 +611,19 @@ impl Machine<'_> {
             let (a, b) = (self.memory.load(&prev), self.memory.load(&cur));
             let texts = (text::text_of(self, &a), text::text_of(self, &b));
             let holds = match (&a, &b) {
+                // Numbers by their type's order; a float is unordered with NaN.
+                _ if crate::num::is_num(&a, &b) => {
+                    use std::cmp::Ordering::{Equal, Greater, Less};
+                    let c = crate::num::compare(&a, &b);
+                    match *op {
+                        K::EQ_EQ => c == Some(Equal),
+                        K::BANG_EQ => c != Some(Equal),
+                        K::LT => c == Some(Less),
+                        K::LT_EQ => matches!(c, Some(Less | Equal)),
+                        K::GT => c == Some(Greater),
+                        _ => matches!(c, Some(Greater | Equal)),
+                    }
+                }
                 (Value::Int(_) | Value::Bool(_) | Value::Unit, _) => {
                     compare(*op).expect("a comparison")(&a, &b)
                 }
@@ -660,6 +680,11 @@ impl Machine<'_> {
             let v = self.eval(&value)?;
             let p = self.place(&target)?;
             let old = self.memory.load(&p);
+            // A literal stored where a number of a sized type was takes its type.
+            let v = match &old {
+                Value::Num(k, _) => crate::num::as_kind(v, *k),
+                _ => v,
+            };
             self.memory.store(&p, Value::Moved);
             self.drop_value(old, true, range)?;
             self.memory.store(&p, v);
@@ -667,7 +692,12 @@ impl Machine<'_> {
             let p = self.place(&target)?;
             let old = self.memory.load(&p);
             let v = self.eval(&value)?;
-            let new = arith(compound(op.kind()), old, v, range)?;
+            let new = if crate::num::is_num(&old, &v) {
+                let sym = op.text();
+                crate::num::arith(&sym[..sym.len() - 1], old, v, range)?
+            } else {
+                arith(compound(op.kind()), old, v, range)?
+            };
             self.memory.store(&p, new);
         }
         Ok(Value::Unit)

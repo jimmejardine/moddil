@@ -228,6 +228,11 @@ impl Lowerer<'_> {
                     self.missing(range)
                 }
             },
+            K::FLOAT => {
+                let text: String = tok.text().chars().filter(|&c| c != '_').collect();
+                let text = if negate { format!("-{text}") } else { text };
+                self.alloc(ExprKind::Float(text), range)
+            }
             K::CHAR => match super::text::char_value(tok.text()) {
                 Ok(c) => self.alloc(ExprKind::Char(c), range),
                 Err(why) => {
@@ -897,6 +902,9 @@ impl Lowerer<'_> {
             K::CARET_EQ => Some(BinaryOp::BitXor),
             K::LT_LT_EQ => Some(BinaryOp::Shl),
             K::GT_GT_EQ => Some(BinaryOp::Shr),
+            K::PLUS_PERCENT_EQ => Some(BinaryOp::WrapAdd),
+            K::MINUS_PERCENT_EQ => Some(BinaryOp::WrapSub),
+            K::STAR_PERCENT_EQ => Some(BinaryOp::WrapMul),
             _ => {
                 return self.unsupported(op_tok.text_range(), &format!("`{}`", op_tok.text()));
             }
@@ -1435,6 +1443,9 @@ pub(super) fn binary_op(tok: &SyntaxToken) -> Option<BinaryOp> {
         K::CARET => BinaryOp::BitXor,
         K::LT_LT => BinaryOp::Shl,
         K::GT_GT => BinaryOp::Shr,
+        K::PLUS_PERCENT => BinaryOp::WrapAdd,
+        K::MINUS_PERCENT => BinaryOp::WrapSub,
+        K::STAR_PERCENT => BinaryOp::WrapMul,
         _ => return None,
     })
 }

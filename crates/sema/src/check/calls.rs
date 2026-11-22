@@ -307,6 +307,8 @@ impl Checker<'_> {
     ) -> Ty {
         let range = self.range(e);
         let rt = self.infer(receiver);
+        // A literal whose type nothing else gives yet has its default here (`num.lit.1`).
+        self.solver.table.default_literal(&rt);
         let r = self.norm(&rt);
         match r {
             Ty::Error | Ty::Never => {

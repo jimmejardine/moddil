@@ -38,9 +38,10 @@ impl Natives<'_> {
             other => unreachable!("a `char`: {other:?}"),
         };
         match (self_ty, name) {
-            (Ty::Int | Ty::Bool | Ty::Char, "fmt") => {
+            (Ty::Int | Ty::Num(_) | Ty::Bool | Ty::Char, "fmt") => {
                 let s = match arg(stack, 0) {
                     Value::Int(v) => v.to_string(),
+                    Value::Num(n, bits) => crate::num::text(n, bits),
                     Value::Bool(v) => v.to_string(),
                     Value::Char(c) => c.to_string(),
                     other => unreachable!("`Display` of {other:?}"),

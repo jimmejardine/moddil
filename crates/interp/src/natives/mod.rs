@@ -63,6 +63,7 @@ impl<'a> Natives<'a> {
         &self,
         f: u32,
         args: &[Value],
+        type_args: &[Ty],
         stack: &mut Stack<'_>,
     ) -> Result<Value, TrapClass> {
         let sig = &self.items.fns[f as usize];
@@ -73,6 +74,25 @@ impl<'a> Natives<'a> {
         let name = sig.name.as_str();
         Ok(match (&self_ty, name) {
             (Ty::Buf(_), _) => return self.buf(name, args, stack),
+            // The conversions (`num.convert.1`): to the type the call names, its last type
+            // argument.
+            (Ty::Int | Ty::Num(_), "checked_to" | "truncate" | "wrap" | "saturate") => {
+                let to = type_args.last().expect("the type converted to");
+                let v = crate::num::convert(name, &stack.deref(&args[0]), to);
+                if name == "checked_to" {
+                    self.option(v)
+                } else {
+                    v.expect("an integer conversion always gives a value")
+                }
+            }
+            // The float functions (`num.float.fn.1`).
+            (Ty::Num(n), _) if n.is_float() && name != "fmt" => {
+                let x = |i: usize| match args.get(i).map(|a| stack.deref(a)) {
+                    Some(Value::Num(_, bits)) => crate::num::float(*n, bits),
+                    _ => 0.0,
+                };
+                crate::num::float_fn(*n, name, x(0), x(1)).expect("a float function")
+            }
             (Ty::Unit, "replace") => {
                 let p = pointer(&args[0]);
                 let old = stack.load(&p);

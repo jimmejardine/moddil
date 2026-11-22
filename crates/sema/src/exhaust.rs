@@ -183,6 +183,14 @@ impl Cx<'_> {
             Ty::Bool => vec![Ctor::Bool(false), Ctor::Bool(true)],
             Ty::Refined(..) => return self.all_ctors(&self.items.base(ty.strip_ref()), heads),
             Ty::Int => split_ints(heads, INT_MIN, INT_MAX),
+            Ty::Num(n) if !n.is_float() => {
+                // The analysis counts to one past the greatest value, so an `i128`'s or a
+                // `u128`'s top value is left out of it.
+                let (lo, hi) = n.int_range();
+                split_ints(heads, lo, hi.min(i128::MAX - 1))
+            }
+            // A float is matched by bindings and `_` only.
+            Ty::Num(_) => vec![Ctor::Single],
             Ty::Char => split_ints(heads, 0, CHAR_MAX),
             // The literals the rows name, and the strings they do not.
             Ty::Str | Ty::String => {

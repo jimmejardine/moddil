@@ -372,6 +372,7 @@ impl<'a> Stack<'a> {
         match o {
             Operand::Copy(p) | Operand::Move(p) => self.read(p),
             Operand::Const(Const::Int(v)) => Value::Int(*v),
+            Operand::Const(Const::Num(n, bits)) => Value::Num(*n, *bits),
             Operand::Const(Const::Bool(v)) => Value::Bool(*v),
             Operand::Const(Const::Unit) => Value::Unit,
             Operand::Const(Const::Char(c)) => Value::Char(*c),

@@ -27,6 +27,11 @@ impl Builder<'_> {
                 Ty::Ref(_, inner) => (*inner).clone(),
                 t => t,
             };
+            // A number widened (`num.widen.1`).
+            if matches!(target, Ty::Int | Ty::Num(_)) {
+                self.cfg.assign(dest, Rvalue::Widen(op, target));
+                return;
+            }
             debug_assert!(matches!(target, Ty::Ref(..)));
             self.cfg.assign(dest, Rvalue::Unsize(op, from));
             return;
@@ -55,7 +60,10 @@ impl Builder<'_> {
     /// that is not a literal, through operators, calls, fields, tuples and struct expressions.
     pub(super) fn assert_parts(&self, e: ExprId, out: &mut Vec<ExprId>) {
         let kind = &self.hir.exprs[e].kind;
-        if !matches!(kind, ExprKind::Int(_) | ExprKind::Bool(_) | ExprKind::Unit) {
+        if !matches!(
+            kind,
+            ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::Unit
+        ) {
             out.push(e);
         }
         let children: Vec<ExprId> = match kind {
@@ -95,6 +103,7 @@ impl Builder<'_> {
                 unreachable!("MIR is only built for bodies without errors")
             }
             ExprKind::Int(_)
+            | ExprKind::Float(_)
             | ExprKind::Bool(_)
             | ExprKind::Unit
             | ExprKind::Char(_)
@@ -436,7 +445,8 @@ impl Builder<'_> {
             }
             ExprKind::Unary(op, x) => {
                 let a = self.operand(x, &[]);
-                if op == UnaryOp::Neg {
+                let float = matches!(self.ty(e), Ty::Num(n) if n.is_float());
+                if op == UnaryOp::Neg && !float {
                     let t = self.temp(Ty::Bool);
                     self.cfg.assign(t, Rvalue::NegOverflows(a.clone()));
                     self.check(t, TrapClass::Overflow, range);

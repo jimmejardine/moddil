@@ -82,6 +82,7 @@ something runs from the first slice.
 | **S8** | Refinements (`where`), runtime `requires`, derives (a minimal comptime); `#[around]` wrappers ([`comptime.md`: Function wrappers](comptime.md#function-wrappers)) | The tour's `Code` and `Target` types and its derives |
 | **S9** | `scope`, `spawn` and `suspend` under a deterministic interpreter scheduler | The tour's `serve`; **the tour parses and checks**, M0's exit gate |
 | **S10** | Numbers: the sized integers, `f32` and `f64`, literals typed by context, the explicit conversions (`to::<T>()` and the others), wrapping operators, `const` items, and the float methods ([`numerics.md`](numerics.md)) | The [Mandelbulb](examples/mandelbulb.md) core checks, and its tests and CPU preview run; its GPU path follows in M2 |
+| **S11** | `String` rewritten in a core mod over `Buf<u8>`, in the decided small-string form (inline `[u8; 23]` or a heap buffer), with `str` a view of UTF-8 bytes ([`text.md`: String types](text.md#string-types)) | `u8` exists from S10; the built-in `String` is the last core type the interpreters implement natively |
 
 - **S1 is monomorphic (decided):** structs and enums take no type parameters until generics arrive
   in S3, so `Option` comes with them. S1 has no ownership checking yet and copies aggregates; its
@@ -198,6 +199,18 @@ something runs from the first slice.
     the fix, it saved only 14%, and then a broken prelude would show only in
     `the_prelude_and_its_derives_check_cleanly`, which does not borrow-check it. Revisit it
     only if the prelude's bodies become a large share of a check again.
+- **Sweep the conformance suite's shortcomings: a step for between slices.** A review of all 181
+  tests ([`conformance/REVIEW.md`](../conformance/REVIEW.md), November 2026) found:
+  - tests that skip the rule they cite (`closures/fails-bound`'s `serve` never calls `f`);
+  - results that cannot tell implementations apart (lengths and sums where the whole value
+    shows order);
+  - cases and error codes their paragraphs state but no test checks (`Buf` is used by none);
+  - wrong citations.
+
+  The stronger `fails-bound` test shows a MIR interpreter bug: a trait's method called on an
+  error set runs nothing (`Dispatch::target`).
+  - Improve the tests in one pass, and fix what the stronger tests reveal.
+  - Done when `REVIEW.md` is deleted.
 - **Borrows of static data borrow nothing (decided, [`memory.md`: Borrows of static data](memory.md#borrows-of-static-data)):
   done in S7c (November 2026).** A string literal (and, once S10 brings `const`, a
   `const`'s value) is static data:
@@ -360,6 +373,25 @@ something runs from the first slice.
     doc tests;
   - doc comments are not read: `moddil doc` and doc links wait;
   - a `where` clause before a function's body cannot end with a comma.
+- **S10's scope and interim rules (decided November 2026):** one slice. The integer types `i8` to
+  `i128` and `u8` to `u128` (`i64` is `int`), and `f32` and `f64`; literals exact until their
+  type is known, `int` and `f64` by default, checked against their type (E0204); the operators at
+  each type's width, trapping as `int`'s do, and IEEE 754 on the floats; the wrapping operators
+  `+%`, `-%`, `*%`; implicit widening where every value fits; `to`, `checked_to`, `truncate`,
+  `wrap` and `saturate`; the float methods, through the `libm` crate in both interpreters, so
+  every platform gives the same bits. The [Mandelbulb](examples/mandelbulb.md) core checks, its
+  tests pass, and its CPU preview runs, all in CI (`python tools/ci.py examples`). The rewrite of
+  `String` over `Buf<u8>` became slice S11. Until the features they wait for arrive:
+  - `f16`, `bf16`, arbitrary widths (`u3`), `usize`/`isize`, `Wrapping<T>`, decimals, big numbers
+    and `f.round::<I>(mode)` wait; the sized integers have no `Hash` yet;
+  - a literal gets a type, rather than constant arithmetic on literals being exact
+    (`0.1 * 3.0` as an `f32` multiplies two `f32`s);
+  - the float functions other than `sqrt` are `libm`'s, not yet correctly rounded;
+  - the reference interpreter gives a literal its type when it meets one at run time (a typed
+    `let`, parameter, field or result, or another number in an operator), so it differs from the
+    compiler where an unannotated variable takes its type from a later use, and where literals
+    meet only each other; the conformance tests avoid both;
+  - exhaustiveness on `i128` and `u128` leaves out their greatest value.
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

@@ -75,6 +75,7 @@ areas!(
     r#match,
     modules,
     names,
+    numbers,
     operators,
     ownership,
     patterns,
