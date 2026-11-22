@@ -1,0 +1,9 @@
+//! JSON.
+
+use mod::serde::{DecodeError, Deserialize, Serialize};
+
+/// Decodes `text` as a `T`, validating it.
+pub fn decode<T: Deserialize>(text: &str) -> T with fail(DecodeError);
+
+/// Encodes `value`.
+pub fn encode<T: Serialize>(value: &T) -> String;

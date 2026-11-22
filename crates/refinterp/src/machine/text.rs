@@ -207,6 +207,11 @@ impl Machine<'_> {
             return r;
         }
         let text = |m: &Self, i: usize| text_of(m, &args[i]).expect("text");
+        // A `Pattern` (`text.pattern.1`): text, or a character.
+        let pattern = |m: &Self, i: usize| match m.target(args[i].clone()) {
+            Value::Char(c) => c.to_string(),
+            _ => text_of(m, &args[i]).expect("a pattern"),
+        };
         let ch = |m: &Self, i: usize| match m.target(args[i].clone()) {
             Value::Char(c) => c,
             other => unreachable!("a `char`: {other:?}"),
@@ -313,9 +318,9 @@ impl Machine<'_> {
                 other => unreachable!("a slice: {other:?}"),
             },
             (Head::Buf, _) => return self.buf_intrinsic(&name, args, range),
-            (Head::Str, "starts_with") => Value::Bool(text(self, 0).starts_with(&text(self, 1))),
-            (Head::Str, "ends_with") => Value::Bool(text(self, 0).ends_with(&text(self, 1))),
-            (Head::Str, "contains") => Value::Bool(text(self, 0).contains(&text(self, 1))),
+            (Head::Str, "starts_with") => Value::Bool(text(self, 0).starts_with(&pattern(self, 1))),
+            (Head::Str, "ends_with") => Value::Bool(text(self, 0).ends_with(&pattern(self, 1))),
+            (Head::Str, "contains") => Value::Bool(text(self, 0).contains(&pattern(self, 1))),
             (Head::Str, "trim") => Value::Str(text(self, 0).trim().into()),
             (Head::Str, "to_uppercase") => Value::String(text(self, 0).to_uppercase()),
             (Head::Str, "to_lowercase") => Value::String(text(self, 0).to_lowercase()),

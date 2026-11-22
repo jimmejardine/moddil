@@ -258,6 +258,7 @@ impl Collector<'_> {
                 name: m.name.clone(),
                 root,
                 deps: m.deps.iter().cloned().collect(),
+                stub: m.stub,
             });
         }
         for (f, file) in files.iter().enumerate() {
@@ -301,6 +302,7 @@ impl Collector<'_> {
             name: "core".to_string(),
             root,
             deps: std::collections::BTreeMap::new(),
+            stub: false,
         });
         self.core_module = collections;
     }
@@ -423,6 +425,7 @@ impl Collector<'_> {
                              `src/a/b.moddil` is the module `a::b`",
                         )],
                     ),
+                    K::INNER_ATTR if crate::is_doc(&node) => {}
                     K::INNER_ATTR => self.reporter.report(
                         *src,
                         None,
@@ -473,6 +476,15 @@ impl Collector<'_> {
         }
         for (src, module, node) in &nodes.impls {
             self.enter(*src, *module);
+            // A derive of a trait that is neither derivable nor a stub mod's was reported at
+            // its attribute (`mod.stub.1`).
+            if *src == Src::Derived
+                && let Some(tr) = derived_trait(node)
+                && !derive::DERIVABLE.contains(&tr.as_str())
+                && !self.stub_trait(&tr)
+            {
+                continue;
+            }
             self.impl_item(*src, node);
         }
         for (k, (src, module, node)) in nodes.fns.iter().enumerate() {
@@ -663,7 +675,7 @@ impl Collector<'_> {
         let mut ds = Vec::new();
         for c in node.children() {
             let what = match c.kind() {
-                K::OUTER_ATTR if attrs_handled => continue,
+                K::OUTER_ATTR if attrs_handled || crate::is_doc(&c) => continue,
                 K::OUTER_ATTR => "an attribute",
                 // A function's effects are read with its signature, its contracts with its body.
                 K::EFFECT_CLAUSE | K::CONTRACT if node.kind() == K::FN_ITEM => continue,
@@ -847,6 +859,21 @@ impl Collector<'_> {
 impl Collector<'_> {
     /// The defaults of the functions' parameters (`expr.call.default.1`): each a hidden const
     /// of the parameter's type, in the function's module, whose value is the default.
+    /// Whether `name`, named in the current module, is a trait of a stub mod, whose derive
+    /// declares an impl of it (`mod.stub.1`).
+    pub(super) fn stub_trait(&self, name: &str) -> bool {
+        match self.tree.path(self.module, &[name], false) {
+            Ok((Def::Trait(t), 1)) => {
+                let m = self.tree.traits[t as usize].module;
+                self.tree
+                    .mods
+                    .get(self.tree.mod_of(m) as usize)
+                    .is_some_and(|d| d.stub)
+            }
+            _ => false,
+        }
+    }
+
     /// Each opaque result type (`type.impl.ret.1`) names its function.
     fn number_opaques(&mut self) {
         let number = |t: &Ty, f: u32| match t {
@@ -955,4 +982,10 @@ impl Collector<'_> {
             }
         }
     }
+}
+
+/// The trait a derived impl, `impl Trait for T { … }`, is of.
+fn derived_trait(node: &SyntaxNode) -> Option<String> {
+    let t = node.children().find_map(ast::Type::cast)?;
+    Some(t.syntax().text().to_string().trim().to_string())
 }

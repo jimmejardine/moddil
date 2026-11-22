@@ -456,11 +456,17 @@ impl Lowerer<'_> {
         let Some(list) = node.child(K::MATCH_ARM_LIST) else {
             return self.missing(range);
         };
-        if let Some(attr) = list.child(K::INNER_ATTR) {
+        if let Some(attr) = list
+            .children()
+            .find(|c| c.kind() == K::INNER_ATTR && !crate::is_doc(c))
+        {
             self.error(Diagnostic::unsupported(attr.text_range(), "an attribute"));
         }
         for arm in list.children().filter(|c| c.kind() == K::MATCH_ARM) {
-            if let Some(attr) = arm.child(K::OUTER_ATTR) {
+            if let Some(attr) = arm
+                .children()
+                .find(|c| c.kind() == K::OUTER_ATTR && !crate::is_doc(c))
+            {
                 self.error(Diagnostic::unsupported(attr.text_range(), "an attribute"));
             }
             let mark = self.names.mark();

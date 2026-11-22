@@ -204,7 +204,12 @@ use `?`. None of that applies here.
 
 ## Open questions
 
-None at present.
+- **Handlers for tasks spawned inside a `with`.** A task spawned inside `with E = h { … }`
+  may outlive the block, and so `h`; for now its scope's tasks use handlers installed around the
+  scope ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 4).
+- **Marking a spawn of a closure that can fail.** The closure marks its failing calls, and the
+  `spawn` call is marked too: `c.spawn(|| serve(conn)?)?` ([`tour.md`:
+  Gaps](tour.md#gaps-the-tour-exposed), 5). Whether one mark can say both is open.
 
 ## Background
 

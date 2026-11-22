@@ -66,6 +66,7 @@ impl Collector<'_> {
             bare_variants: bare,
             vis,
             module: self.module,
+            root: false,
         });
     }
 
@@ -98,7 +99,7 @@ impl Collector<'_> {
                         .and_then(|a| a.child(K::PATH))
                         .and_then(ast::Path::cast)
                         .is_some_and(|p| p.segments() == ["default"]);
-                    if c.kind() == K::OUTER_ATTR && !is_default {
+                    if c.kind() == K::OUTER_ATTR && !is_default && !crate::is_doc(&c) {
                         ds.push(Diagnostic::unsupported(c.text_range(), "an attribute"));
                     }
                 }
@@ -123,21 +124,34 @@ impl Collector<'_> {
             }
             variants
         };
-        // Attributes: only derives.
+        // Attributes: derives, and `#[root_capability]` on a stub mod's struct
+        // (`main.root.1`).
         let mut copy = false;
-        for attr in node.children().filter(|c| c.kind() == K::OUTER_ATTR) {
-            let is_derive = attr
+        let stub = src.is_file()
+            && self
+                .tree
+                .mods
+                .get(self.tree.mod_of(self.module) as usize)
+                .is_some_and(|m| m.stub);
+        for attr in node
+            .children()
+            .filter(|c| c.kind() == K::OUTER_ATTR && !crate::is_doc(c))
+        {
+            let path = attr
                 .child(K::ATTR)
                 .and_then(|a| a.child(K::PATH))
                 .and_then(ast::Path::cast)
-                .is_some_and(|p| p.segments() == ["derive"]);
-            if !is_derive {
+                .map(|p| p.segments())
+                .unwrap_or_default();
+            if path == ["root_capability"] && stub && node.kind() == K::STRUCT_ITEM {
+                self.tree.adts[i].root = true;
+            } else if path != ["derive"] {
                 ds.push(Diagnostic::unsupported(attr.text_range(), "this attribute"));
             }
         }
         for (range, names) in derive::derive_attrs(node) {
             for n in &names {
-                if !DERIVABLE.contains(&n.as_str()) {
+                if !DERIVABLE.contains(&n.as_str()) && !self.stub_trait(n) {
                     ds.push(Diagnostic::unsupported(range, &format!("deriving `{n}`")));
                 }
             }
@@ -202,7 +216,7 @@ pub(super) fn variant_def(
                 continue;
             }
             for c in m.children() {
-                if c.kind() == K::OUTER_ATTR {
+                if c.kind() == K::OUTER_ATTR && !crate::is_doc(&c) {
                     diagnostics.push(Diagnostic::unsupported(c.text_range(), "an attribute"));
                 }
             }
@@ -241,7 +255,7 @@ pub(super) fn variant_def(
             .enumerate()
         {
             for c in f.children() {
-                if c.kind() == K::OUTER_ATTR {
+                if c.kind() == K::OUTER_ATTR && !crate::is_doc(&c) {
                     diagnostics.push(Diagnostic::unsupported(c.text_range(), "an attribute"));
                 }
             }

@@ -97,7 +97,7 @@ and a code never changes meaning.
 | E0605 | A `dyn` type not behind a borrow, of more than one trait, or of a trait that cannot be used as `dyn` | [type.dyn.1](types.md) |
 | E0606 | An effect listed twice, or given two handlers by one `with` | [eff.1](effects.md), [eff.with.1](effects.md), [eff.control.1](effects.md) |
 | E0607 | Effects inferred without end | [eff.infer.1](effects.md) |
-| E0608 | A parameter of `main` that is not a root capability, or one taken twice | [main.root.1](items/functions.md) |
+| E0608 | A parameter of `main` that is not a root capability (a struct marked `#[root_capability]`), or one taken twice | [main.root.1](items/functions.md) |
 | E0801 | A closure whose kind is weaker than a bound needs | [expr.closure.param.1](expressions/closures.md) |
 | E0701 | A path or import naming an item its module cannot see | [mod.vis.1](modules.md), [mod.use.1](modules.md) |
 | E0702 | A `use` that names nothing, a glob import, or a declared module | [mod.use.1](modules.md), [mod.tree.1](modules.md) |

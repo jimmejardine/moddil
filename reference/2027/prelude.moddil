@@ -29,6 +29,14 @@ impl<T> Option<T> {
             None => fallback,
         }
     }
+
+    // `Some(f(x))` for `Some(x)`, and `None` for `None`.
+    fn map<B, F: FnOnce(T) -> B>(self, f: F) -> Option<B> {
+        match self {
+            Some(x) => Some(f(x)),
+            None => None,
+        }
+    }
 }
 
 // Results: a value or an error (`errors.md`).
@@ -453,11 +461,11 @@ impl str {
     }
 
     #[intrinsic]
-    fn starts_with(&self, prefix: &str) -> bool;
+    fn starts_with<P: Pattern>(&self, prefix: P) -> bool;
     #[intrinsic]
-    fn ends_with(&self, suffix: &str) -> bool;
+    fn ends_with<P: Pattern>(&self, suffix: P) -> bool;
     #[intrinsic]
-    fn contains(&self, part: &str) -> bool;
+    fn contains<P: Pattern>(&self, part: P) -> bool;
     // Without the white space at its ends.
     #[intrinsic]
     fn trim(&self) -> &str;
@@ -508,15 +516,15 @@ impl String {
         self.len() == 0
     }
 
-    fn starts_with(&self, prefix: &str) -> bool {
+    fn starts_with<P: Pattern>(&self, prefix: P) -> bool {
         self.as_str().starts_with(prefix)
     }
 
-    fn ends_with(&self, suffix: &str) -> bool {
+    fn ends_with<P: Pattern>(&self, suffix: P) -> bool {
         self.as_str().ends_with(suffix)
     }
 
-    fn contains(&self, part: &str) -> bool {
+    fn contains<P: Pattern>(&self, part: P) -> bool {
         self.as_str().contains(part)
     }
 
@@ -543,6 +551,14 @@ impl FromIterator<char> for String {
         s
     }
 }
+
+// What `contains`, `starts_with` and `ends_with` look for (`text.pattern.1`): a string or a
+// character.
+trait Pattern {}
+
+impl Pattern for &str {}
+impl Pattern for &String {}
+impl Pattern for char {}
 
 impl Clone for String {
     #[intrinsic]
@@ -620,16 +636,6 @@ impl<T: PartialEq, const N: int> PartialEq for [T; N] {
 }
 
 impl<T: Eq, const N: int> Eq for [T; N] {}
-
-// The root capabilities (`main.root.1`): `main` takes the ones the program uses, and the
-// runtime makes them. Their operations come with the runtimes.
-struct Args { root: int }
-struct Env { root: int }
-struct Stdio { root: int }
-struct FsRoot { root: int }
-struct NetRoot { root: int }
-struct Clock { root: int }
-struct Entropy { root: int }
 
 // What `main` can give back (`main.exit.1`): each `sysexits.h` code by name, or another.
 #[derive(Debug, Clone, PartialEq)]

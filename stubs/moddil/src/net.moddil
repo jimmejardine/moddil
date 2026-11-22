@@ -1,0 +1,45 @@
+//! The network.
+
+/// Network access, as an effect.
+pub trait Net {
+    /// The address `host` names.
+    fn resolve(&self, host: &str) -> String;
+}
+
+/// Why a network operation failed.
+pub struct NetError { reason: String }
+
+impl Display for NetError {
+    fn fmt(&self, out: &mut String);
+}
+
+/// A URL.
+pub struct Url { text: String }
+
+impl Url {
+    pub const fn scheme(&self) -> &str;
+}
+
+impl Clone for Url {
+    fn clone(&self) -> Url;
+}
+
+impl Debug for Url {
+    fn fmt(&self, out: &mut String);
+}
+
+impl PartialEq for Url {
+    fn eq(&self, other: &Url) -> bool;
+}
+
+/// A socket listening for connections.
+pub struct Listener { handle: int }
+
+impl Listener {
+    /// The next connection.
+    #[selectable]
+    pub fn accept(&self) -> Conn with suspend;
+}
+
+/// A connection.
+pub struct Conn { handle: int }

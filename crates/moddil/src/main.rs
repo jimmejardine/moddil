@@ -101,6 +101,7 @@ fn program(db: &Database, project: &moddil_project::Project) -> Program {
         .map(|m| ModInfo {
             name: m.name.clone(),
             deps: m.deps.clone(),
+            stub: m.stub,
         })
         .collect();
     Program::new(db, files, mods)
@@ -112,8 +113,8 @@ fn run(db: &Database, program: Program, files: &[(String, String)], name: &str) 
         eprintln!("moddil: {name} has no `fn main()`");
         return ExitCode::FAILURE;
     };
-    // The root capabilities `main` takes (`main.root.1`): checked, so each is one of the
-    // prelude's.
+    // The root capabilities `main` takes (`main.root.1`): checked, so each is a struct marked
+    // `#[root_capability]`, made here with its fields (its handle) zero.
     let roots: Vec<Value> = items.fns[main as usize]
         .params
         .iter()
@@ -121,7 +122,11 @@ fn run(db: &Database, program: Program, files: &[(String, String)], name: &str) 
             moddil_sema::Ty::Adt(adt, ..) => Value::Adt {
                 adt,
                 variant: 0,
-                fields: vec![Value::Int(0)],
+                fields: items.adts[adt as usize].variants[0]
+                    .fields
+                    .iter()
+                    .map(|_| Value::Int(0))
+                    .collect(),
             },
             _ => unreachable!("a checked `main` takes root capabilities"),
         })

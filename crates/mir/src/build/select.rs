@@ -74,6 +74,11 @@ impl Builder<'_> {
             let result = self.temp(result_ty.clone());
             let error = self.temp(error_ty.clone());
             let failed = self.temp(Ty::Bool);
+            // Fresh each time the `select` runs: in a loop, the last time's result was moved
+            // out by its arm's pattern.
+            for l in [result, error] {
+                self.cfg.push(crate::Statement::StorageDead(l));
+            }
             self.cfg
                 .assign(failed, Rvalue::Use(Operand::Const(Const::Bool(false))));
             let mut parts = vec![Operand::Const(Const::Int(kind)), handle, payload];

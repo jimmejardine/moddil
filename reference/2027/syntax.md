@@ -9,3 +9,7 @@ NFC; bidirectional control characters are rejected outside escapes in literals (
 
 **syntax.comment.1** Comments (`// …` to the end of the line, and `/* … */`, which nest) and
 whitespace separate tokens and have no other meaning.
+
+**item.doc.1** A **doc comment** documents an item: `/// …` the item that follows, and `//! …`
+the module or block it is in. Doc comments go where attributes do. For now the compiler reads
+nothing in them: they mean nothing to the program, and `moddil doc` and doc tests come later.

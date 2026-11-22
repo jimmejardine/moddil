@@ -1,0 +1,19 @@
+//! # A tour of Moddil
+//!
+//! `shorty` is a link shortener with two endpoints:
+//!
+//! - `POST /links` with `{"url": "https://…"}` stores the link and answers `201 {"code": "…"}`;
+//! - `GET /{code}` answers with a redirect, or `404`.
+//!
+//! It is small, but it touches most of the language: validated types, typed errors that must be
+//! handled, a user-defined effect with two handlers, root capabilities, structured concurrency
+//! with isolation, graceful shutdown, and tests that run against a simulated network.
+//!
+//! Read the modules in order: [`types`], [`links`], [`routes`], [`serve`], then `main`
+//! (`src/main.moddil`). Until M2 the standard mods it uses are signature-only stubs
+//! (`stubs/moddil`), so the tour is checked but its tests do not run yet
+//! (`specs/tour.md`: From markdown to source).
+
+pub use mod::types::{Code, Target, LinkError};
+pub use mod::links::{Links, MemoryLinks};
+pub use mod::routes::app;

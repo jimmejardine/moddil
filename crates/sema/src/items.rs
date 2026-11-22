@@ -144,6 +144,8 @@ pub struct ModDef {
     pub root: u32,
     /// The mods it depends on, by the name it calls them.
     pub deps: std::collections::BTreeMap<String, u32>,
+    /// Whether it is a stub, whose functions may be signatures only (`mod.stub.1`).
+    pub stub: bool,
 }
 
 /// A type parameter.
@@ -397,6 +399,8 @@ pub struct AdtDef {
     pub vis: Vis,
     /// The module it is declared in.
     pub module: u32,
+    /// Whether it is a root capability, marked `#[root_capability]` (`main.root.1`).
+    pub root: bool,
 }
 
 /// A `type` item (`refine.1`): `type X = T;`, an alias, or `type X = T where p;`, a refinement.
@@ -606,18 +610,6 @@ const LANG: &[&str] = &[
     "Default",
     "RefinementError",
     "Trapped",
-    "Args",
-    "Env",
-    "Stdio",
-    "FsRoot",
-    "NetRoot",
-    "Clock",
-    "Entropy",
-];
-
-/// The prelude's root capabilities (`main.root.1`), which only `main` takes.
-pub const ROOT_CAPABILITIES: &[&str] = &[
-    "Args", "Env", "Stdio", "FsRoot", "NetRoot", "Clock", "Entropy",
 ];
 
 impl ItemTree {

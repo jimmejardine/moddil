@@ -238,7 +238,9 @@ shapes = { path = "../shapes" }    # a local mod, by the name the code uses for 
 
 ## Open questions
 
-None at present.
+- **`self` in an import list.** `use moddil::net::http::{self, Request}` imports the module
+  and some of its items in the tour as first written; nothing specifies `self` there yet
+  ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 6).
 
 ## Prior art
 

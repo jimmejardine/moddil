@@ -1,0 +1,20 @@
+//! Turning values into text and back (`data.md`: Parse, don't validate).
+
+/// A type that can be written out; derived.
+pub trait Serialize {}
+
+/// A type that can be decoded, and validated as it is; derived.
+pub trait Deserialize {}
+
+impl Serialize for String {}
+impl Deserialize for String {}
+impl Serialize for int {}
+impl Deserialize for int {}
+impl Deserialize for mod::net::Url {}
+
+/// Why decoding failed.
+pub struct DecodeError { reason: String }
+
+impl Display for DecodeError {
+    fn fmt(&self, out: &mut String);
+}

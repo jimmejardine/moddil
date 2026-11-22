@@ -55,6 +55,7 @@ pub(crate) fn path_segments(path: &SyntaxNode) -> Option<Vec<Segment>> {
 }
 
 /// What the names in a type refer to.
+#[derive(Clone)]
 pub(crate) struct Scope<'a> {
     pub tree: &'a ItemTree,
     /// The type parameters in scope.
@@ -795,12 +796,19 @@ pub(crate) fn preds_of(
         out.extend(bounds(node, &ty, scope, ds));
     }
     if let Some(w) = item.child(K::WHERE_CLAUSE) {
+        // The `where` clause sees the parameters' own bounds: `F::Fails` through `F: Fn(…)`.
+        let mut seen = scope.preds.to_vec();
+        seen.extend(out.iter().cloned());
+        let inner = Scope {
+            preds: &seen,
+            ..scope.clone()
+        };
         for p in w.children().filter(|c| c.kind() == K::WHERE_PRED) {
             let Some(t) = p.children().find_map(ast::Type::cast) else {
                 continue;
             };
-            let ty = resolve_type(&t, scope, ds);
-            out.extend(bounds(&p, &ty, scope, ds));
+            let ty = resolve_type(&t, &inner, ds);
+            out.extend(bounds(&p, &ty, &inner, ds));
         }
     }
     out

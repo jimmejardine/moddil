@@ -1,0 +1,20 @@
+// covers: mod.stub.1, item.doc.1
+
+//! A program that checks against a stub mod.
+
+use lib::{Encode, Table};
+
+/// Documented, and derived from the stub's trait.
+#[derive(Encode)]
+struct Record { id: int }
+
+fn encoded<T: Encode>(x: T) -> int { 1 }
+
+test "a derive of a stub mod's trait declares the impl" {
+    encoded(Record { id: 3 })               // => 1
+}
+
+test "calling a stub's function traps" {
+    let t = Table::new();                   //~ trap
+    t.find(1)
+}

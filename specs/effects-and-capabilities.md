@@ -537,7 +537,10 @@ No mainstream language has made a typed effect system popular. The measures:
 
 ## Open questions
 
-None at present.
+- **Installing a handler without giving it up.** `with Net = net { … }` moves `net`,
+  so the block cannot also call `net.listen(port)` ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed),
+  3). Whether a handler can be installed from a borrow (`with Net = &net`), and for how long the
+  borrow lasts, is open.
 
 ## Prior art
 

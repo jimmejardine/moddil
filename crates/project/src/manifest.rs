@@ -17,15 +17,16 @@
 //! ```
 //!
 //! The subset: `#` comments, `[table]` and `[[array]]` headers, and `key = value` lines whose
-//! value is a string in double quotes or an inline table of strings on one line. Anything else is
-//! a problem at its line.
+//! value is a string in double quotes, `true` or `false`, or an inline table of strings on one
+//! line. Anything else is a problem at its line.
 
 use std::ops::Range;
 
-/// A value: a string, or an inline table of strings.
+/// A value: a string, a boolean, or an inline table of strings.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Value {
     Str(String),
+    Bool(bool),
     Table(Vec<(String, String)>),
 }
 
@@ -151,6 +152,11 @@ fn parse_value(v: &str) -> Result<Value, String> {
             pairs.push((k, parse_string(v.trim())?));
         }
         return Ok(Value::Table(pairs));
+    }
+    match v {
+        "true" => return Ok(Value::Bool(true)),
+        "false" => return Ok(Value::Bool(false)),
+        _ => {}
     }
     parse_string(v).map(Value::Str)
 }

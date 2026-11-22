@@ -192,7 +192,10 @@ Decided while building the grammar inventory
 
 ## Open questions
 
-None at present.
+- **Keywords as names of parameters and arguments.** `default` is a keyword, so a
+  parameter cannot be called `default`, and a call cannot pass `default: 8080`
+  ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 1). Whether a keyword may name a parameter,
+  and so an argument, where nothing else can follow, is open.
 
 
 ## Prior art

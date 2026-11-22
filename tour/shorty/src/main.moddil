@@ -1,0 +1,36 @@
+//! ## 5. `main`: the only source of authority
+//!
+//! - `main` lists **exactly the root capabilities it uses**: arguments, the terminal, the
+//!   network and OS randomness. It gets no file system, so no code in the program can open a
+//!   file, and the runtime drops that OS privilege before `main` runs
+//!   (`lifecycle.md`: `main` declares its root capabilities).
+//! - `with … { }` installs handlers for everything inside, however deep
+//!   (`determinism.md`: Handlers are scoped, not global).
+//! - `Port` is a validated port number (`correctness.md`: Validated newtypes); a bad value is a
+//!   typed error, turned into exit code 64 (`lifecycle.md`: Conventional exits). Nothing is
+//!   printed except through `Stdio`.
+
+use moddil::io::{Stderr, eprintln};
+use moddil::net::Net;
+use moddil::rand::Rand;
+use moddil::root::{Args, Entropy, NetRoot, Port, Stdio};
+use moddil::runtime;
+use moddil::runtime::{Duration, Signal};
+
+use mod::{Links, MemoryLinks};
+use mod::serve::serve;
+
+fn main(args: Args, stdio: Stdio, net: NetRoot, entropy: Entropy) -> ExitCode {
+    with Stderr = stdio.err {
+        let port = try { args.value::<Port>("port", fallback: 8080)? } catch {
+            e => { eprintln(fmt"bad --port: {e}"); return ExitCode::Usage }
+        };
+        let listener = try { net.listen(port)? } catch {
+            e => { eprintln(fmt"cannot listen on {port}: {e}"); return ExitCode::Unavailable }
+        };
+        with Net = net, Rand = entropy, Links = MemoryLinks::new() {
+            runtime::serve_until_stopped(|| serve(&listener), signals: [Signal::Int, Signal::Term], grace: Duration::seconds(10));
+        }
+    }
+    ExitCode::Ok
+}

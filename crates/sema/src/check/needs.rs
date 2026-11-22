@@ -103,12 +103,21 @@ pub(crate) fn show_effect(t: &Ty) -> String {
 }
 
 /// `f`'s errors as written, and those of its closure parameters (`F: FnOnce(…)`), which are
-/// its too (`expr.closure.fails.1`).
+/// its too (`expr.closure.fails.1`), but those a bound on `F::Fails` takes
+/// (`expr.closure.fails.2`).
 fn with_closure_fails(items: &ItemTree, f: &crate::FnSig) -> Ty {
     let mut members = f.fails.members();
     let once = items.lang("FnOnce");
+    let taken = |ty: &Ty| {
+        f.generics.preds.iter().any(
+            |q| matches!(&q.ty, Ty::Assoc(a) if a.name.as_ref() == "Fails" && a.self_ty == *ty),
+        )
+    };
     for p in &f.generics.preds {
-        if Some(p.trait_ref.trait_) == once && f.generics.parent as usize <= param_index(&p.ty) {
+        if Some(p.trait_ref.trait_) == once
+            && f.generics.parent as usize <= param_index(&p.ty)
+            && !taken(&p.ty)
+        {
             members.push(Ty::Assoc(std::sync::Arc::new(crate::ty::AssocTy {
                 self_ty: p.ty.clone(),
                 trait_ref: p.trait_ref.clone(),

@@ -22,8 +22,9 @@ A **module** is a file of a mod.
 
 **mod.1** A program is a mod and the mods it depends on. A mod is a directory with a manifest,
 `moddil.toml`, a subset of TOML (`#` comments, `[table]` and `[[table]]` headers, and lines
-`key = "string"` or `key = { key = "string", … }`): `[mod]` gives its `name` and, optionally, its
-`edition`, which is `"2027"`; `[lib] root` names its library's root file (by default
+`key = "string"`, `key = true` (or `false`) or `key = { key = "string", … }`): `[mod]` gives its
+`name` and, optionally, its `edition`, which is `"2027"`, and whether it is a stub
+(**mod.stub.1**); `[lib] root` names its library's root file (by default
 `src/lib.moddil`, if there is one); each `[[exe]]` names an executable's `main` file; and
 `[dependencies]` names the mods it depends on, each by the name it calls it and its directory:
 `geo = { path = "geo" }`. A manifest that is not like this, or names a file or directory that is
@@ -71,6 +72,14 @@ cycle are an error (E0705). A mod sees only another mod's `pub` items.
 **mod.infer.1** Effects and errors are written out at a mod's boundary: a `pub` function writes
 its own ([Effects](effects.md)); a private or `pub(mod)` function's are inferred, across the
 modules of its mod.
+
+**mod.stub.1** A **stub** mod (`stub = true` in `[mod]`) holds signatures standing in for mods
+not written yet, as `stubs/moddil` does for the standard mods until M2. Its functions may have no
+body (elsewhere that is not supported yet), and calling one traps (`not implemented yet`). A
+`#[derive(T)]` of one of its traits `T` declares an empty impl (`impl T for X {}`), so its traits
+are written with no methods a derive would have to define; any other derive not in
+**attr.derive.1** is not supported yet. Only a stub mod's structs may be marked
+`#[root_capability]` (**main.root.1**).
 
 **mod.entry.1** The entry points of the mod being built are the `fn main` of its root module and
 of each executable's main module, and its tests ([Errors](errors.md), [Effects](effects.md)); a

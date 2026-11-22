@@ -1,0 +1,3 @@
+//! The signatures of the standard mods the tour uses, until they are written at M2
+//! (`roadmap.md`: M0). A function here has no body: a program checks against it, and calling
+//! one traps (`not implemented yet`).

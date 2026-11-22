@@ -279,6 +279,11 @@ impl<'a> Machine<'a> {
                 return None;
             }
             CallPlan::Fn((f, type_args), values) => {
+                // A stub mod's function without a body (`mod.stub.1`).
+                if !self.dispatch.items().fns[f as usize].has_body {
+                    let t = self.trap(TrapClass::Unimplemented, Some(range), Vec::new());
+                    return Some(Stop::Trap(t));
+                }
                 let code = self.body(Item::Fn(f));
                 self.stack.push(Frame::new(code, values, type_args, ret));
                 return None;

@@ -1,0 +1,18 @@
+//! Running a server (`lifecycle.md`: Two levels: stop, then cancel).
+
+/// A stop signal.
+pub enum Signal {
+    Int,
+    Term,
+}
+
+/// A length of time.
+pub struct Duration { nanos: int }
+
+impl Duration {
+    pub fn seconds(n: int) -> Duration;
+}
+
+/// Runs `run` until one of `signals` arrives, then asks it to stop, and cancels it if it has
+/// not stopped after `grace`.
+pub fn serve_until_stopped<F: FnOnce()>(run: F, signals: Vec<Signal>, grace: Duration) with suspend, spawn;

@@ -3,7 +3,7 @@
 
 use moddil_syntax::TextRange;
 
-use crate::items::{ItemTree, Src};
+use crate::items::ItemTree;
 use crate::{Code, Diagnostic, Ty};
 
 use super::Found;
@@ -30,12 +30,7 @@ pub(crate) fn entry_points(tree: &ItemTree) -> Vec<Found> {
         let mut seen: Vec<(u32, TextRange)> = Vec::new();
         for p in &f.params {
             let root = match &p.ty {
-                Ty::Adt(a, ..) => {
-                    let def = &tree.adts[*a as usize];
-                    (def.src == Src::Prelude
-                        && crate::items::ROOT_CAPABILITIES.contains(&def.name.as_str()))
-                    .then_some(*a)
-                }
+                Ty::Adt(a, ..) => tree.adts[*a as usize].root.then_some(*a),
                 Ty::Error => continue,
                 _ => None,
             };
@@ -47,8 +42,8 @@ pub(crate) fn entry_points(tree: &ItemTree) -> Vec<Found> {
                         Code::E0608,
                         p.range,
                         format!(
-                            "`main` takes only root capabilities (`Args`, `Env`, `Stdio`, \
-                             `FsRoot`, `NetRoot`, `Clock`, `Entropy`), not `{}`",
+                            "`main` takes only root capabilities (such as `Args` and `Stdio`), \
+                             not `{}`",
                             p.ty
                         ),
                     ),

@@ -1,0 +1,16 @@
+//! The terminal.
+
+/// Writing to standard error, as an effect.
+pub trait Stderr {
+    fn write(&self, text: &str);
+}
+
+/// The process's standard error, as `Stdio` hands it out.
+pub struct StdErr { handle: int }
+
+impl Stderr for StdErr {
+    fn write(&self, text: &str);
+}
+
+/// Writes `text` and a line break to standard error.
+pub fn eprintln(text: String) with Stderr;

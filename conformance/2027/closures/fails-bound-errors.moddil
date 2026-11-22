@@ -1,0 +1,26 @@
+// covers: expr.closure.fails.2
+
+trait Answer { fn answer(self) -> int; }
+
+struct Missing;
+impl Answer for Missing { fn answer(self) -> int { 404 } }
+
+struct Bad;
+impl Answer for Bad { fn answer(self) -> int { 400 } }
+
+struct Unhandled;
+
+/// Runs `f`, turning each error it can fail with into an answer: none passes on.
+fn serve<F: Fn(int) -> int>(f: F, x: int) -> int
+where
+    F::Fails: Answer
+{
+    // The function handles them: here, by its own `try`.
+    1
+}
+
+fn strict(x: int) -> int with fail(Unhandled) { fail(Unhandled) }
+
+fn wrong() -> int {
+    serve(strict, 1)                        //~ E0402
+}

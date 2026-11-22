@@ -59,6 +59,9 @@ pub struct Mod {
     pub deps: Vec<(String, u32)>,
     /// Its manifest, if it has one (a single file has none).
     pub manifest: Option<PathBuf>,
+    /// Whether its manifest says `stub = true`: its functions may be signatures only
+    /// (`mod.stub.1`).
+    pub stub: bool,
 }
 
 /// A problem reading a project: a manifest that is wrong, or a file that cannot be read.
@@ -115,6 +118,7 @@ pub fn load(path: &Path) -> Result<Project, Vec<Problem>> {
                 name: String::new(),
                 deps: Vec::new(),
                 manifest: None,
+                stub: false,
             }],
         }),
         Err(e) => Err(vec![Problem {
@@ -224,14 +228,16 @@ impl Loader {
             name: String::new(),
             deps: Vec::new(),
             manifest: Some(manifest.clone()),
+            stub: false,
         });
         let m = Manifest {
             path: &manifest,
             text: &text,
             tables: &tables,
         };
-        let name = self.mod_section(&m);
+        let (name, stub) = self.mod_section(&m);
         self.project.mods[index as usize].name = name;
+        self.project.mods[index as usize].stub = stub;
         let (src_dir, root) = self.lib_root(&m, dir);
         let exes = self.exes(&m, dir);
         self.module_tree(dir, &src_dir, root.as_deref(), &exes, index);
@@ -242,7 +248,7 @@ impl Loader {
                     Value::Table(kv) => {
                         kv.iter().find(|(k, _)| k == "path").map(|(_, v)| v.clone())
                     }
-                    Value::Str(_) => None,
+                    Value::Str(_) | Value::Bool(_) => None,
                 };
                 let Some(path) = path else {
                     self.problem(
@@ -277,8 +283,8 @@ impl Loader {
         Some(index)
     }
 
-    /// `[mod]`: the mod's name, and its edition, which must be 2027.
-    fn mod_section(&mut self, m: &Manifest) -> String {
+    /// `[mod]`: the mod's name, its edition, which must be 2027, and whether it is a stub.
+    fn mod_section(&mut self, m: &Manifest) -> (String, bool) {
         for t in m.tables {
             if !matches!(t.name.as_str(), "" | "mod" | "lib" | "exe" | "dependencies") {
                 self.problem(
@@ -298,12 +304,14 @@ impl Loader {
                 0..0,
                 "a manifest has a `[mod]` table".to_string(),
             );
-            return String::new();
+            return (String::new(), false);
         };
         let mut name = String::new();
+        let mut stub = false;
         for p in &t.pairs {
             match (p.key.as_str(), &p.value) {
                 ("name", Value::Str(s)) => name = s.clone(),
+                ("stub", Value::Bool(b)) => stub = *b,
                 ("edition", Value::Str(s)) if s == EDITION => {}
                 ("edition", _) => self.problem(
                     "E0704",
@@ -330,7 +338,7 @@ impl Loader {
                 "a mod has a `name`".to_string(),
             );
         }
-        name
+        (name, stub)
     }
 
     /// `[lib] root`: the source directory and the root module's file, if there is a library.

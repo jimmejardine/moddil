@@ -17,6 +17,15 @@ impl Natives<'_> {
     ) -> Value {
         // An argument as a value: a borrow is read, a `&str` is its text.
         let arg = |stack: &Stack<'_>, i: usize| stack.deref(&args[i]);
+        // A `Pattern` (`text.pattern.1`): text, or a character.
+        let pattern = |stack: &Stack<'_>, i: usize| -> String {
+            match arg(stack, i) {
+                Value::Str(s) => s.to_string(),
+                Value::String(s) => s,
+                Value::Char(c) => c.to_string(),
+                other => unreachable!("a pattern: {other:?}"),
+            }
+        };
         let text = |stack: &Stack<'_>, i: usize| -> String {
             match arg(stack, i) {
                 Value::Str(s) => s.to_string(),
@@ -70,9 +79,9 @@ impl Natives<'_> {
                 Value::Array(xs) | Value::Buf(_, xs) => Value::Int(xs.len() as i64),
                 other => unreachable!("a slice: {other:?}"),
             },
-            (Ty::Str, "starts_with") => Value::Bool(text(stack, 0).starts_with(&text(stack, 1))),
-            (Ty::Str, "ends_with") => Value::Bool(text(stack, 0).ends_with(&text(stack, 1))),
-            (Ty::Str, "contains") => Value::Bool(text(stack, 0).contains(&text(stack, 1))),
+            (Ty::Str, "starts_with") => Value::Bool(text(stack, 0).starts_with(&pattern(stack, 1))),
+            (Ty::Str, "ends_with") => Value::Bool(text(stack, 0).ends_with(&pattern(stack, 1))),
+            (Ty::Str, "contains") => Value::Bool(text(stack, 0).contains(&pattern(stack, 1))),
             (Ty::Str, "trim") => Value::Str(text(stack, 0).trim().into()),
             (Ty::Str, "to_uppercase") => Value::String(text(stack, 0).to_uppercase()),
             (Ty::Str, "to_lowercase") => Value::String(text(stack, 0).to_lowercase()),

@@ -48,7 +48,7 @@ pub use diag::{CODES, Code, Diagnostic, Severity};
 pub use items::{
     AdtDef, Container, Control, Def, EffectSig, Entry, FieldDef, FnSig, GenericParam, Generics,
     ImplDef, Import, ItemTree, ModDef, ModuleDef, PRELUDE_MOD, PRELUDE_MODULE, ParamSig, Pred,
-    ROOT_CAPABILITIES, SPAWN, SUSPEND, SelfKind, Shape, Src, TestSig, TraitDef, VariantDef, Vis,
+    SPAWN, SUSPEND, SelfKind, Shape, Src, TestSig, TraitDef, VariantDef, Vis,
 };
 pub use lower::{Lowered, body};
 pub use modules::{Member, PathError};
@@ -135,6 +135,17 @@ pub fn in_file<'a>(
             .collect(),
         _ => Vec::new(),
     }
+}
+
+/// Whether attribute node `attr` (an `OUTER_ATTR` or `INNER_ATTR`) is a doc comment, `///` or
+/// `//!` (`item.doc.1`): documentation, which the compiler does not read yet.
+pub(crate) fn is_doc(attr: &moddil_syntax::SyntaxNode) -> bool {
+    attr.child_tokens().any(|t| {
+        matches!(
+            t.kind(),
+            moddil_syntax::SyntaxKind::DOC_OUTER | moddil_syntax::SyntaxKind::DOC_INNER
+        )
+    })
 }
 
 /// `t` with each opaque result type (`type.impl.ret.1`) replaced by the type its function's

@@ -54,7 +54,10 @@ impl Collector<'_> {
         let mut intrinsic = false;
         let mut selectable = false;
         let mut selectable_at = None;
-        for attr in node.children().filter(|c| c.kind() == K::OUTER_ATTR) {
+        for attr in node
+            .children()
+            .filter(|c| c.kind() == K::OUTER_ATTR && !crate::is_doc(c))
+        {
             let path = attr
                 .child(K::ATTR)
                 .and_then(|a| a.child(K::PATH))
@@ -123,7 +126,14 @@ impl Collector<'_> {
             |n| (n.text(), n.syntax().text_range()),
         );
         let has_body = f.body().is_some();
-        if !has_body && !intrinsic && !matches!(container, Container::Trait(_)) {
+        // A stub mod's functions may be signatures only (`mod.stub.1`).
+        let stub = src.is_file()
+            && self
+                .tree
+                .mods
+                .get(self.tree.mod_of(self.module) as usize)
+                .is_some_and(|m| m.stub);
+        if !has_body && !intrinsic && !stub && !matches!(container, Container::Trait(_)) {
             ds.push(Diagnostic::unsupported(
                 name_range,
                 "a function without a body",
@@ -701,7 +711,7 @@ pub(super) fn param_sig(
 ) -> ParamSig {
     let node = p.syntax();
     for c in node.children() {
-        if c.kind() == K::OUTER_ATTR {
+        if c.kind() == K::OUTER_ATTR && !crate::is_doc(&c) {
             diagnostics.push(Diagnostic::unsupported(c.text_range(), "an attribute"));
         }
     }

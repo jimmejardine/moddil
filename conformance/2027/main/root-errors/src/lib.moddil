@@ -1,7 +1,12 @@
 // covers: main.root.1
 
+use moddil::root::Args;
+
+struct Forged { handle: int }
+
 fn main(
     args: Args,
     port: int,                              //~ E0608
     again: Args,                            //~ E0608
+    fake: Forged,                           //~ E0608
 ) {}

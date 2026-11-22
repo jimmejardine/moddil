@@ -1,0 +1,51 @@
+//! Deterministic simulation (`determinism.md`: The `Sim` API).
+
+use mod::net::{Listener, Net, NetError};
+use mod::rand::Seeded;
+use mod::root::Port;
+
+/// A simulated world: virtual time, seeded randomness and a simulated network.
+pub struct Sim { net: SimNet }
+
+/// A simulated machine.
+pub struct Node { id: int }
+
+impl Node {
+    pub fn addr(&self) -> String;
+}
+
+/// The simulated network.
+pub struct SimNet { handle: int }
+
+/// A node's view of the simulated network.
+pub struct Endpoint { node: int }
+
+impl Sim {
+    pub fn new(seed: int) -> Sim;
+    pub fn node(&self) -> Node;
+    pub fn rng(&self, node: &Node) -> Seeded;
+    /// Asks every scope to stop.
+    pub fn stop_all(&self);
+}
+
+impl SimNet {
+    pub fn endpoint(&self, node: &Node) -> Endpoint;
+}
+
+impl Endpoint {
+    pub fn listen(&self, port: Port) -> Listener with fail(NetError);
+}
+
+impl Net for Endpoint {
+    fn resolve(&self, host: &str) -> String;
+}
+
+/// A network that loses `percent` of the messages `outer` carries.
+pub struct Lossy { percent: int }
+
+impl Net for Lossy {
+    fn resolve(&self, host: &str) -> String;
+}
+
+/// `outer`, losing `percent` of its messages.
+pub fn drop_messages<N: Net>(percent: int, outer: N) -> Lossy;

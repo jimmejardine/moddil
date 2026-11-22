@@ -102,6 +102,7 @@ pub fn program(db: &Database, project: &Project) -> Program {
         .map(|m| ModInfo {
             name: m.name.clone(),
             deps: m.deps.clone(),
+            stub: m.stub,
         })
         .collect();
     Program::new(db, files, mods)
@@ -671,6 +672,7 @@ mod tests {
                 name: String::new(),
                 deps: Vec::new(),
                 manifest: None,
+                stub: false,
             }],
         };
         compare(

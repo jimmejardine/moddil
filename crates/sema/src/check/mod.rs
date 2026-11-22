@@ -612,10 +612,19 @@ impl Checker<'_> {
         match (&f, &e) {
             (Ty::Never | Ty::Error, _) | (_, Ty::Error) => true,
             (Ty::Ref(true, a), Ty::Ref(false, b)) => self.solver.unify(a, b),
-            // A refined value where its base is wanted (`refine.base.1`).
+            // A refined value where its base is wanted (`refine.base.1`), and a borrow of one
+            // where a borrow of its base is.
             (Ty::Refined(..), _) if !self.solver.can_unify(&f, &e) => {
                 let base = self.items.base(&f);
                 self.solver.unify(&base, &e)
+            }
+            (Ty::Ref(m, a), Ty::Ref(n, b))
+                if (m == n || *m)
+                    && matches!(self.norm(a), Ty::Refined(..))
+                    && !self.solver.can_unify(a, b) =>
+            {
+                let base = self.items.base(&self.norm(a));
+                self.solver.unify(&base, b)
             }
             _ => self.solver.unify(&f, &e),
         }

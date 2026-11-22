@@ -150,6 +150,10 @@ fn the_prelude_and_its_derives_check_cleanly() {
 #[test]
 fn beyond_s0_is_not_supported_yet() {
     err("fn f() -> (impl Clone, int) { (1, 2) }", &[("I0001", 1)]);
+    // A function without a body, outside a stub mod (`mod.stub.1`).
+    err("fn f() -> int;", &[("I0001", 1)]);
+    // `#[root_capability]` outside a stub mod.
+    err("#[root_capability] struct S { h: int }", &[("I0001", 1)]);
     err("trait T { const N: int = 1; }", &[("I0001", 1)]);
     err("fn f() { let s = b\"x\"; }", &[("I0001", 1)]);
     err("fn f() { let [a, b] = [1, 2]; }", &[("I0001", 1)]);
@@ -631,6 +635,7 @@ fn program_codes(
         .map(|(n, deps)| ModInfo {
             name: (*n).to_string(),
             deps: deps.iter().map(|(d, i)| ((*d).to_string(), *i)).collect(),
+            stub: false,
         })
         .collect();
     let program = Program::new(&db, pfiles, pmods);

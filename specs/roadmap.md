@@ -345,6 +345,21 @@ something runs from the first slice.
   - the root capabilities have no operations, and nothing stops a program making one, until
     fields can be private; `main` may still return any type, which is printed;
   - a `select` arm on a `#[selectable]` function traps when it runs (`not implemented yet`).
+- **S9d's scope and interim rules (decided November 2026): M0's gate is met.** The tour is the
+  `tour/shorty/` mod, and `python tools/ci.py tour` checks it, against `stubs/moddil/`, a **stub
+  mod** (`stub = true`) holding the signatures of the standard mods it uses until M2. Built for
+  it: stub mods, whose functions may have no body (calling one traps) and whose traits' derives
+  declare empty impls; the root capabilities moved from the prelude to the stubs, marked
+  `#[root_capability]`; doc comments (`///`, `//!`), which the compiler skips; a `Pattern` for
+  `contains`, `starts_with` and `ends_with` (`&str` or `char`); a bound on `F::Fails` taking a
+  closure parameter's errors, which an error set meets when each member does; a borrow of a
+  refined value as a borrow of its base; `Option::map`; `true` and `false` in a manifest. The
+  gaps the tour exposed are in [`tour.md`](tour.md#gaps-the-tour-exposed), each an open question
+  in its area. Until the features they wait for arrive:
+  - the tour's tests trap, and its doc example does not run, until the standard mods (M2) and
+    doc tests;
+  - doc comments are not read: `moddil doc` and doc links wait;
+  - a `where` clause before a function's body cannot end with a comma.
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

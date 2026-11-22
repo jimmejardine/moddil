@@ -1,0 +1,4 @@
+[mod]
+name = "lib"
+edition = "2027"
+stub = true

@@ -236,7 +236,18 @@ pub(crate) fn expand<'t>(
         for (range, names) in &attrs {
             for d in names {
                 // `Copy` without `Clone` is reported where the item is collected.
-                if !DERIVABLE.contains(&d.as_str()) || (d == "Copy" && !has_clone) {
+                if d == "Copy" && !has_clone {
+                    continue;
+                }
+                // Another trait: a stub mod's, whose derive declares the impl (`mod.stub.1`);
+                // an impl of any other is dropped where impls are collected.
+                if !DERIVABLE.contains(&d.as_str()) {
+                    let start = out.text.len() as u32;
+                    out.text
+                        .push_str(&format!("impl {d} for {name}{} {{ }}", args_of(&params)));
+                    let end = out.text.len() as u32;
+                    out.text.push('\n');
+                    out.origins.push((TextRange::new(start, end), src, *range));
                     continue;
                 }
                 let header = header(d, &name, &params);
@@ -290,6 +301,15 @@ pub(crate) fn struct_impl(
 }
 
 /// `impl<T: Trait> Trait for Name<T>`.
+/// `<A, B>` for type parameters `params`, or nothing.
+fn args_of(params: &[String]) -> String {
+    if params.is_empty() {
+        String::new()
+    } else {
+        format!("<{}>", params.join(", "))
+    }
+}
+
 fn header(tr: &str, name: &str, params: &[String]) -> String {
     if params.is_empty() {
         return format!("impl {tr} for {name}");

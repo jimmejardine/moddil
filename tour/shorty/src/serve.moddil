@@ -1,0 +1,66 @@
+//! ## 4. Serving, isolated per connection
+//!
+//! - `http::serve(listener, app())` packages this loop; it is written out here to show `scope`
+//!   and isolation (`stdlib.md`: HTTP).
+//! - `scope` is the only way to start tasks, and it waits for all of them, so a connection
+//!   cannot outlive the server (`concurrency.md`: Tasks and borrowing).
+//! - Spawned tasks **inherit their scope's handlers**, so every connection sees the same `Links`.
+//! - **Isolation:** a trap in one connection (an overflow, a failed contract) unwinds only that
+//!   connection's scope, which then fails with `Trapped`
+//!   (`lifecycle.md`: Traps: the process by default, isolated scopes on request).
+//! - If one task in a scope fails, it cancels its siblings and its error propagates; here each
+//!   scope has a single task (`error-handling.md`: Tasks and concurrency, D15).
+//! - `stop_requested()` is the graceful half of shutdown; cancellation only follows if the grace
+//!   period runs out (`lifecycle.md`: Two levels: stop, then cancel).
+
+use moddil::net::{Conn, Listener, Net};
+use moddil::net::http;
+use moddil::net::http::Status;
+use moddil::sim::{Sim, drop_messages};
+use moddil::rand::Rand;
+
+use mod::links::{Links, MemoryLinks};
+use mod::routes::app;
+
+/// Accepts connections until asked to stop.
+pub fn serve(listener: &Listener) with Links, Rand, Net, suspend, spawn {
+    scope(|s| {
+        loop {
+            select {
+                conn = listener.accept() => { s.spawn(|| handle(conn)); }
+                _ = stop_requested()     => break,      // stop accepting; open connections finish
+            }
+        }
+    })
+}
+
+/// Serves one connection; a bug here cannot take down the server.
+fn handle(conn: Conn) with Links, Rand, Net, suspend, spawn {
+    try {
+        scope(|c| { c.spawn(|| http::serve_connection(conn, &app())?)?; }, isolate: true)?
+    } catch {
+        Trapped(t) => log.error(fmt"request trapped: {t}"),
+        e          => log.warn(fmt"connection ended: {e}"),
+    }
+}
+
+// The last test runs a server and a client in one process on a simulated network that drops 10%
+// of messages. Time is virtual and the run is seeded, so a failure replays exactly.
+
+test "serves over a lossy network" for serve {
+    let sim = Sim::new(seed: 42);
+    let (server, client) = (sim.node(), sim.node());
+    let net = sim.net.endpoint(&server);
+    let listener = net.listen(80)?;
+    with Net = net, Rand = sim.rng(&server), Links = MemoryLinks::new() {
+        scope(|s| {
+            s.spawn(|| serve(&listener));
+            with Net = drop_messages(percent: 10, outer: sim.net.endpoint(&client)) {
+                let r = http::post(fmt"http://{server.addr()}/links",
+                                   body: r#"{"url": "https://moddil.com"}"#, retries: 3)?;
+                assert(r.status() == Status::Created);
+            }
+            sim.stop_all();                             // serve sees stop_requested() and returns
+        })?;
+    }
+}

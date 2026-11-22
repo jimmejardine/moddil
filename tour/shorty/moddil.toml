@@ -1,0 +1,10 @@
+[mod]
+name = "shorty"
+edition = "2027"
+
+[[exe]]
+name = "shorty"
+main = "src/main.moddil"
+
+[dependencies]
+moddil = { path = "../../stubs/moddil" }

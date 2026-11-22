@@ -31,7 +31,7 @@ decided direction; none of it is a formal specification yet. Implemented so far:
   [`reference/grammar/moddil.ebnf`](reference/grammar/moddil.ebnf), checked LL(3). GBNF, Lark and
   tree-sitter grammars are generated from it.
 - **A lexer and parser** for the whole grammar.
-- **Slices S0 to S9c, end to end**: functions, `let`, `int` and `bool`, arithmetic with overflow
+- **Slices S0 to S9d, end to end**: functions, `let`, `int` and `bool`, arithmetic with overflow
   traps, `if`, blocks and calls (S0); tuples, structs, enums, exhaustive `match`, `if let`,
   `let … else`, loops and `assert` (S1); moves, `Copy`, borrows checked on MIR, and `defer` (S2);
   generics, traits, methods, operators through traits, derives, destructors and a prelude
@@ -47,13 +47,14 @@ decided direction; none of it is a formal specification yet. Implemented so far:
   (S9a); named and default arguments, and cancellation with unwinding, isolated scopes, channels,
   `select` and stop (S9b); functions as values, `impl Trait` results, `map`, `filter` and
   `collect`, `test … for`, the ambient `log`, `main`'s root capabilities and `ExitCode`, and
-  `#[selectable]` (S9c).
+  `#[selectable]` (S9c); stub mods, doc comments, `Pattern` and bounds on a closure's errors, and
+  **the tour, [`tour/shorty`](tour/shorty/README.md), checked in CI**: M0's gate (S9d).
   They go through names and types, the MIR and the MIR interpreter, and run on the independent
   reference interpreter too. Both are checked by the
   [conformance suite](conformance/README.md), whose tests cite the
   [2027 reference](reference/README.md).
 
-Code in the specs follows [`syntax.md`](specs/syntax.md) and the grammar, but beyond S9c none of it
+Code in the specs follows [`syntax.md`](specs/syntax.md) and the grammar, but beyond S9d none of it
 runs yet; the [M0 slices](specs/roadmap.md#m0-the-v0-language-in-slices) add the rest.
 
 ## Start here

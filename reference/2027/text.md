@@ -33,6 +33,11 @@ a `&mut String` likewise.
 (without the white space at its ends), and `to_uppercase` and `to_lowercase` (a new `String`, by
 Unicode's rules, the same on every machine). `String` has the same methods, on its text.
 
+**text.pattern.1** `contains`, `starts_with` and `ends_with` take a **pattern**, a value of a type
+that implements the prelude's `Pattern`: a `&str` or `&String`, whose text is looked for, or a
+`char`. They are evaluated at compile time too, as in a refinement's predicate
+(`self.chars().all(|c| ALPHABET.contains(c))`).
+
 **text.cmp.1** `==`, `!=`, `<`, `<=`, `>` and `>=` on two `&str`s compare their text, byte by byte,
 which orders by code point. Two `String`s compare the same way, through `PartialEq` and `Ord`
 ([Comparisons](expressions/comparison.md)). No normalisation or case folding is implied.

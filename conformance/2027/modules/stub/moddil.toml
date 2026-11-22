@@ -1,0 +1,6 @@
+[mod]
+name = "app"
+edition = "2027"
+
+[dependencies]
+lib = { path = "lib" }

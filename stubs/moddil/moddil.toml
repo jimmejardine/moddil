@@ -1,0 +1,6 @@
+# The standard mods' signatures, until M2 (`mod.stub.1`): a function here may have no body, and
+# calling one traps.
+[mod]
+name = "moddil"
+edition = "2027"
+stub = true

@@ -1,0 +1,10 @@
+//! Sync cells: the only state tasks share and change (`concurrency.md`: Shared mutable state).
+
+/// A value behind a lock.
+pub struct Mutex<T> { value: T }
+
+impl<T> Mutex<T> {
+    pub fn new(value: T) -> Mutex<T>;
+    /// The value, held until the borrow ends.
+    pub fn lock(&self) -> &mut T;
+}

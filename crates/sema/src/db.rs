@@ -53,6 +53,8 @@ pub struct ModInfo {
     pub name: String,
     /// The mods it depends on: the name it calls each by, and the mod's index.
     pub deps: Vec<(String, u32)>,
+    /// Whether it is a stub (`mod.stub.1`).
+    pub stub: bool,
 }
 
 impl Program {
@@ -70,6 +72,7 @@ impl Program {
             vec![ModInfo {
                 name: String::new(),
                 deps: Vec::new(),
+                stub: false,
             }],
         )
     }

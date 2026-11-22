@@ -54,6 +54,12 @@ parameter that is not marked passes them on, as `?` would, so they are its calle
 call that passes a closure that can fail is marked like any call that can fail (E0501),
 `apply(|x| check(x)?, 1)?`.
 
+**expr.closure.fails.2** A bound on a closure parameter's errors, `where F::Fails: Trait`,
+says the function takes them: they do not pass on to its callers, and a call passing a closure
+that can fail is not marked for them. The function deals with them itself (a router answering
+each with a response), so a call of `f` in its body must handle them. An error set meets the
+bound when each of its members does, and a closure that cannot fail meets it too.
+
 **expr.closure.effects.1** A closure's effects are met where it is written ([Effects](../effects.md)):
 by the `with`s around it there, and the enclosing function's own effects, not by those of the
 function that calls it.

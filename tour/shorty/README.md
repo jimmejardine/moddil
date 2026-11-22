@@ -3,9 +3,13 @@
 A link shortener, and the tour of Moddil written as real source
 ([`specs/tour.md`: From markdown to source](../../specs/tour.md#from-markdown-to-source)).
 
-**Status:** placeholder until M0; the program is still in [`specs/tour.md`](../../specs/tour.md).
+**Status:** slice S9d: it parses and passes the type, effect and ownership checks, in CI
+(`python tools/ci.py tour`, or `moddil check tour/shorty`), against the signature-only standard
+mods in [`stubs/moddil/`](../../stubs/moddil/README.md). Its tests trap until those are written,
+at M2. Where the code had to differ from the tour as first written, the gaps table in
+[`specs/tour.md`](../../specs/tour.md#gaps-the-tour-exposed) says why.
 
-## Planned layout
+## Layout
 
 | Module | Tour section |
 |---|---|
@@ -17,6 +21,7 @@ A link shortener, and the tour of Moddil written as real source
 
 - Each module's `//!` overview carries the tour's explanations and spec links; the mod overview gives
   the reading order.
-- The tests are attached `test` blocks, and `// =>` examples in doc comments run as tests.
+- The tests are attached `test` blocks (`for app`, `for serve`); the `// =>` example in a doc
+  comment is to run as a test once doc tests do.
 - `moddil doc` renders the mod as the tour.
 - Until M2, its library dependencies (HTTP, serde, `Url`) are signature-only stubs.

@@ -575,5 +575,7 @@ What replaces it:
 
 ## Open questions
 
-None at present.
+- **A type's function and a method of the same name.** `Response::status(s)` (a
+  function) and `r.status()` (a method) cannot both exist ([`tour.md`:
+  Gaps](tour.md#gaps-the-tour-exposed), 2). Whether they may, told apart by `self`, is open.
 

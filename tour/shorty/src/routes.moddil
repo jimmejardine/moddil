@@ -1,0 +1,87 @@
+//! ## 3. Request handling, with every error handled
+//!
+//! - **Errors are an effect.** `fail(LinkError | DecodeError)` is part of `create`'s signature
+//!   and `?` propagates. The router accepts `create` only because both errors implement
+//!   `IntoResponse`, so every error becomes a response and nothing is left for the caller
+//!   (`stdlib.md`: HTTP; `error-handling.md`: Entry points must handle everything (R3)).
+//! - **Paths are checked at compile time** and `{code}` is converted to a `Code` before
+//!   `follow` runs, so `follow` never sees a malformed code.
+//! - **Every effect is listed on its own** (`links, rand, suspend`); there is no umbrella I/O
+//!   effect (`effects-and-capabilities.md`: The effect catalogue). Private functions could leave
+//!   their effects to inference; they are written out here for the reader.
+//! - `fmt"…"` is checked at compile time (`text.md`: Formatting).
+
+use moddil::net::http::{Handler, IntoResponse, Request, Response, Router, Status};
+use moddil::rand;
+use moddil::rand::Rand;
+use moddil::serde::{json, DecodeError};
+
+use mod::links::{Links, MemoryLinks};
+use mod::types::{ALPHABET, Code, Created, LinkError, NewLink};
+
+/// Makes a random code.
+///
+/// # Example
+/// with Rand = rand::seeded(7) { make_code().len() }   // => 6
+fn make_code() -> Code with rand: Rand {
+    let s: String = (0..6).map(|_| rand.pick(ALPHABET)).collect();
+    Code::new(s) ?! "built from ALPHABET"
+}
+
+/// `POST /links`
+fn create(req: &Request) -> Response with links: Links, Rand, suspend, fail(LinkError | DecodeError) {
+    let new: NewLink = json::decode(req.body())?;      // untrusted bytes in, validated value out
+    let code = make_code();
+    links.put(code.clone(), new.url)?;
+    log.info(fmt"created {code}");                     // log is ambient and write-only
+    Response::json(Status::Created, &Created { code })
+}
+
+/// `GET /{code}`: a malformed code never gets here; the router answers 404.
+fn follow(code: Code) -> Response with links: Links, suspend {
+    match links.get(&code) {
+        Some(t) => Response::redirect(Status::PermanentRedirect, &t),
+        None    => Response::empty(Status::NotFound),
+    }
+}
+
+/// How each error becomes a response.
+impl IntoResponse for DecodeError {
+    fn into_response(self) -> Response { Response::text(Status::BadRequest, fmt"bad request: {self}") }
+}
+impl IntoResponse for LinkError {
+    fn into_response(self) -> Response {
+        match self { LinkError::Taken(_) => Response::empty(Status::Conflict) }
+    }
+}
+
+/// The routes.
+pub fn app() -> impl Handler with Links, Rand, suspend {
+    Router::new()
+        .post("/links", create)
+        .get("/{code}", follow)
+}
+
+// ## 6. Tests
+//
+// - **Tests name their subject** (`for app`), so tooling knows which tests cover what changed
+//   (`testing.md`: Attached tests).
+// - **No mocks:** the tests install different handlers for the same effects. The production code
+//   is unchanged (`determinism.md`: Deterministic simulation testing).
+
+test "a created link redirects" for app {
+    with Links = MemoryLinks::new(), Rand = rand::seeded(1) {
+        let created = app().handle(&Request::post("/links", body: r#"{"url": "https://moddil.com"}"#));
+        assert(created.status() == Status::Created);
+        let code: Created = json::decode(created.body())?;
+        let followed = app().handle(&Request::get(fmt"/{code.code}"));
+        assert(followed.status() == Status::PermanentRedirect);
+    }
+}
+
+test "plain http is rejected" for app {
+    with Links = MemoryLinks::new(), Rand = rand::seeded(1) {
+        let r = app().handle(&Request::post("/links", body: r#"{"url": "http://moddil.com"}"#));
+        assert(r.status() == Status::BadRequest);
+    }
+}

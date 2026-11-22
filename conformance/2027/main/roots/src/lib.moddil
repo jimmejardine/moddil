@@ -1,5 +1,7 @@
 // covers: main.root.1
 
+use moddil::root::{Args, NetRoot, Stdio};
+
 fn main(args: Args, stdio: Stdio, net: NetRoot) -> ExitCode {
     ExitCode::Ok
 }

@@ -16,9 +16,8 @@ It also holds `Index`, `IndexMut` and `FromArrayLiteral`, the iteration traits `
 (**expr.fmt.debug.1**, **attr.derive.default.1**), with `Default` for `int` (0), `bool`
 (`false`), `String`, `()`, `Vec` and `Option` (`None`); `RefinementError`
 ([Refinements](refinements.md)); `FnInfo` and `ParamInfo` ([Attributes](attributes.md)); `scope`, `Scope`, `Task`, `yield_now`, `stop_requested`, `Trapped`, `channel`, `Sender`,
-`Receiver` and `Closed` ([Concurrency](concurrency.md)); the root capabilities `Args`, `Env`,
-`Stdio`, `FsRoot`, `NetRoot`, `Clock` and `Entropy`, and `ExitCode` (**main.root.1**,
-**main.exit.1**); `Log` and `log` (**obs.log.1**); `FromIterator` and `Iterator`'s `map`,
+`Receiver` and `Closed` ([Concurrency](concurrency.md)); `ExitCode` (**main.exit.1**); `Log` and
+`log` (**obs.log.1**); `Pattern` (**text.pattern.1**); `Option::map`; `FromIterator` and `Iterator`'s `map`,
 `filter` and `collect` (**iter.adapt.1**, **iter.collect.1**); and `Iterator`'s `all` and `any`,
 which say whether a closure holds for every item, or some. `replace(&mut x, v)` puts `v` in
 `x` and gives back what was there; `swap(&mut a, &mut b)` exchanges two values. The built-in

@@ -1,0 +1,21 @@
+//! A stub mod: signatures only.
+
+/// Something to look up.
+pub struct Table { handle: int }
+
+impl Table {
+    pub fn new() -> Table;
+    pub fn find(&self, key: int) -> int;
+}
+
+/// Free functions may have no body too.
+pub fn version() -> int;
+
+/// A trait whose derive declares an impl.
+pub trait Encode {}
+
+impl Encode for int {}
+
+/// A root capability.
+#[root_capability]
+pub struct Console { handle: int }

@@ -28,9 +28,10 @@ long as the result is used ([Borrows](../borrows.md)).
 
 **main.root.1** `main`, the program's entry point (a free function of the root module), takes as
 its parameters the **root capabilities** the program uses, each at most once, and nothing else
-(E0608): `Args` and `Env` (the command line and the environment), `Stdio`, `FsRoot`, `NetRoot`,
-`Clock` and `Entropy`, prelude types that only the runtime makes. Their operations come with the
-runtimes; for now a program can only take them.
+(E0608): structs marked `#[root_capability]`, which only a stub (later, a standard) mod may
+declare (**mod.stub.1**), and only the runtime makes. The standard mods' are `Args` and `Env` (the
+command line and the environment), `Stdio`, `FsRoot`, `NetRoot`, `Clock` and `Entropy`, in
+`moddil::root`. For now nothing stops a program building one, until fields can be private.
 
 **main.exit.1** `main` returns `()`, or an `ExitCode`, which the process exits with: `ExitCode::Ok`
 (0) or one of the `sysexits.h` codes by name (`Usage` 64 to `Config` 78), or

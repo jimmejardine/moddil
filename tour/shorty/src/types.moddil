@@ -1,0 +1,29 @@
+//! ## 1. Types that validate themselves
+//!
+//! - `Code` and `Target` are **validated newtypes**: once you hold one, its condition holds and
+//!   is never checked again (`correctness.md`: Validated newtypes).
+//! - Deriving `Deserialize` for `NewLink` means **decoding is validation**: bytes become a
+//!   `NewLink` whose `url` is already an HTTPS `Target`, or decoding fails with a typed
+//!   `DecodeError` (`data.md`: Parse, don't validate).
+//! - `len()` is an `int` (`numerics.md`: Integer types), and derives are explicit
+//!   (`values.md`: Explicit derives).
+
+use moddil::net::Url;
+use moddil::serde::{Deserialize, Serialize};
+
+pub const ALPHABET: &str = "abcdefghjkmnpqrstuvwxyz23456789";
+
+/// A short code: six characters from `ALPHABET`.
+pub type Code = String where self.len() == 6 && self.chars().all(|c| ALPHABET.contains(c));
+
+/// A link target: only HTTPS URLs are accepted.
+pub type Target = Url where self.scheme() == "https";
+
+#[derive(Deserialize)]
+pub struct NewLink { url: Target }
+
+#[derive(Serialize, Deserialize)]
+pub struct Created { code: Code }
+
+#[derive(Debug)]
+pub enum LinkError { Taken(Code) }

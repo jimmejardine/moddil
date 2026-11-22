@@ -8,7 +8,7 @@ step, and the same script runs locally, so the two cannot drift.
     python tools/ci.py --wsl           every step inside WSL (Linux), on this same checkout
     python tools/ci.py --all           here, then inside WSL
 
-Steps: fmt, clippy, deny, test, links, grammars. Compatible with Python 3.8 (WSL's Ubuntu 20.04).
+Steps: fmt, clippy, deny, test, tour, links, grammars. Compatible with Python 3.8 (WSL's Ubuntu 20.04).
 This script never installs anything; when a tool is missing it says how to install it.
 """
 
@@ -63,6 +63,15 @@ def step_test():
     return run("cargo", "test", "--workspace", "--doc") and ok
 
 
+def step_tour():
+    # M0's gate (specs/roadmap.md): the tour, tour/shorty, parses and passes the type, effect and
+    # ownership checks, against the signature-only standard mods in stubs/moddil. Its tests run
+    # from M2.
+    stubs = run("cargo", "run", "-q", "-p", "moddil", "--", "check", "stubs/moddil")
+    tour = run("cargo", "run", "-q", "-p", "moddil", "--", "check", "tour/shorty")
+    return stubs and tour
+
+
 def step_links():
     return run(sys.executable, "-X", "utf8", "tools/check_spec_links.py")
 
@@ -83,6 +92,7 @@ STEPS = {
     "clippy": step_clippy,
     "deny": step_deny,
     "test": step_test,
+    "tour": step_tour,
     "links": step_links,
     "grammars": step_grammars,
 }

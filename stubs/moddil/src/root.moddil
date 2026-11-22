@@ -1,0 +1,62 @@
+//! The root capabilities (`main.root.1`): `main` takes the ones a program uses, and only the
+//! runtime makes them.
+
+use mod::io::StdErr;
+use mod::net::{Listener, Net, NetError};
+use mod::rand::Rand;
+
+/// A command-line argument that is missing or does not parse.
+pub struct ArgError { name: String }
+
+impl Display for ArgError {
+    fn fmt(&self, out: &mut String);
+}
+
+/// The command line.
+#[root_capability]
+pub struct Args { handle: int }
+
+impl Args {
+    /// The value of `--name`, parsed as a `T`, or `fallback` if it is not given.
+    pub fn value<T>(&self, name: &str, fallback: T) -> T with fail(ArgError);
+}
+
+/// The environment's variables.
+#[root_capability]
+pub struct Env { handle: int }
+
+/// Standard input, output and error.
+#[root_capability]
+pub struct Stdio { err: StdErr }
+
+/// The file system.
+#[root_capability]
+pub struct FsRoot { handle: int }
+
+/// The network.
+#[root_capability]
+pub struct NetRoot { handle: int }
+
+impl NetRoot {
+    /// Listens for connections on `port`.
+    pub fn listen(&self, port: Port) -> Listener with fail(NetError);
+}
+
+impl Net for NetRoot {
+    fn resolve(&self, host: &str) -> String;
+}
+
+/// Real time.
+#[root_capability]
+pub struct Clock { handle: int }
+
+/// The operating system's randomness.
+#[root_capability]
+pub struct Entropy { handle: int }
+
+impl Rand for Entropy {
+    fn pick(&self, choices: &str) -> char;
+}
+
+/// A TCP or UDP port.
+pub type Port = int where 1 <= self && self <= 65535;

@@ -511,4 +511,7 @@ http::serve(listener, app)?;
   - whether it is a standard mod or a community one;
   - how it respects field visibility;
   - whether an editor may mutate fields through it, or only read them.
+- **A sync cell's guard.** `Mutex::lock` should give a guard that unlocks when it is dropped
+  and reaches the value through `Deref`, which the language does not have yet; the tour's stub
+  gives a `&mut T` from `&self` instead ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 7).
 

@@ -395,7 +395,10 @@ impl Lowerer<'_> {
 
     fn block(&mut self, block: &ast::Block) -> ExprId {
         let node = block.syntax();
-        if let Some(attr) = node.child(K::INNER_ATTR) {
+        if let Some(attr) = node
+            .children()
+            .find(|c| c.kind() == K::INNER_ATTR && !crate::is_doc(c))
+        {
             self.error(Diagnostic::unsupported(attr.text_range(), "an attribute"));
         }
         let mark = self.names.mark();
@@ -408,7 +411,11 @@ impl Lowerer<'_> {
                     }
                 }
                 ast::Stmt::Expr(e) => {
-                    if let Some(attr) = e.syntax().child(K::OUTER_ATTR) {
+                    if let Some(attr) = e
+                        .syntax()
+                        .children()
+                        .find(|c| c.kind() == K::OUTER_ATTR && !crate::is_doc(c))
+                    {
                         self.error(Diagnostic::unsupported(attr.text_range(), "an attribute"));
                     }
                     let semi = e.syntax().token(K::SEMI).is_some();
@@ -472,7 +479,10 @@ impl Lowerer<'_> {
 
     fn let_stmt(&mut self, l: &ast::LetStmt) -> Option<Stmt> {
         let node = l.syntax();
-        if let Some(attr) = node.child(K::OUTER_ATTR) {
+        if let Some(attr) = node
+            .children()
+            .find(|c| c.kind() == K::OUTER_ATTR && !crate::is_doc(c))
+        {
             self.error(Diagnostic::unsupported(attr.text_range(), "an attribute"));
         }
         let ty = l.ty().map(|t| {

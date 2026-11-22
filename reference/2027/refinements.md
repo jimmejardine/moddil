@@ -9,7 +9,8 @@ a validated newtype ([`specs/correctness.md`: Validated newtypes](../../specs/co
 ([Compile-time evaluation](comptime.md)): pure, calling only `const fn`s and the prelude's
 functions (E1001).
 
-**refine.base.1** An `X` is used as its base: it converts to `T` where a `T` is expected, the base's
+**refine.base.1** An `X` is used as its base: it converts to `T` where a `T` is expected (and a
+`&X` to a `&T`), the base's
 methods and operators apply to it and give values of the base (`p + 1` is an `int`), and it has
 every trait its base has. A refined type has no impls of its own, for now (E0414). An `X` is not
 made from a `T` by conversion (E0201): only as the rules below say.

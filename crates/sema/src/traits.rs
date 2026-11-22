@@ -423,6 +423,27 @@ impl<'a> Solver<'a> {
                 _ => {}
             }
         }
+        // An error set meets a bound when each of its members does (`expr.closure.fails.2`);
+        // `!`, which has no values, meets every bound.
+        match &ty {
+            Ty::Never => return Answer::Yes(Source::Builtin),
+            Ty::Errors(ms) => {
+                let mut maybe = false;
+                for m in ms.iter() {
+                    match self.implements(m, trait_ref) {
+                        Answer::Yes(_) => {}
+                        Answer::No => return Answer::No,
+                        Answer::Maybe => maybe = true,
+                    }
+                }
+                return if maybe {
+                    Answer::Maybe
+                } else {
+                    Answer::Yes(Source::Builtin)
+                };
+            }
+            _ => {}
+        }
         // An opaque type's bounds (`type.impl.ret.1`).
         for p in self.opaque_preds(&ty) {
             if p.trait_ref.trait_ == tr {

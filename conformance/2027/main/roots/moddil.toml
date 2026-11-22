@@ -1,0 +1,6 @@
+[mod]
+name = "roots"
+edition = "2027"
+
+[dependencies]
+moddil = { path = "../../../../stubs/moddil" }

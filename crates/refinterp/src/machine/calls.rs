@@ -445,6 +445,10 @@ impl Machine<'_> {
         if self.memory.depth() >= MAX_DEPTH {
             return Err(trap(TrapClass::StackOverflow, range));
         }
+        // A stub mod's function without a body (`mod.stub.1`).
+        if f.node.body().is_none() && f.user {
+            return Err(trap(TrapClass::Unimplemented, range));
+        }
         // The prelude's built-in methods have no body (`#[intrinsic]`).
         if f.node.body().is_none() {
             let head = types.get("Self").cloned().unwrap_or(Head::Unit);
