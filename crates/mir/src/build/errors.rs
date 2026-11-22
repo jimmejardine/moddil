@@ -233,14 +233,19 @@ impl Builder<'_> {
                 PatKind::OfType { adt, .. } | PatKind::Adt { adt, .. } => Some(*adt),
                 _ => None,
             };
+            // The arm matches the member it tests for, as that member (`(err as Missing)`).
+            let mut matched = place.clone();
             if let Some(adt) = tested
-                && matches!(set, Ty::Errors(_))
+                && let Ty::Errors(members) = &set
             {
                 let is = self.temp(Ty::Bool);
                 self.cfg.assign(is, Rvalue::ErrorIs(place.clone(), adt));
                 self.cfg.branch(Operand::Copy(Place::local(is)), next);
+                if let Some(k) = members.iter().position(|m| m.adt() == Some(adt)) {
+                    matched = place.downcast(k as u32);
+                }
             }
-            let moved = self.match_pat(arm.pat, &place, next);
+            let moved = self.match_pat(arm.pat, &matched, next);
             if let Some(g) = arm.guard {
                 let c = self.operand(g, &[]);
                 self.guard_branch(c, &moved, next);

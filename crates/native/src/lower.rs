@@ -51,6 +51,8 @@ pub(crate) enum Site {
     Call(u32, TextRange, bool),
     /// A `// =>` observation: the file, the expression, and its type.
     Observe(u32, TextRange, Ty),
+    /// A `fail`: the file and where (the error of a run is reported at the last one).
+    Fail(u32, TextRange),
 }
 
 /// A program compiled for one entry point, ready to run.
@@ -66,6 +68,8 @@ pub(crate) struct Compiled<'db> {
     pub(crate) items: &'db ItemTree,
     /// The types `dyn` borrows point to, by the number their vtables start with.
     pub(crate) dyn_types: Vec<Ty>,
+    /// The types of the errors the entry can fail with.
+    pub(crate) errors: Vec<Ty>,
 }
 
 /// The Cranelift type of a scalar `ty`: `None` for `()`, an error for a type that is not a
@@ -157,6 +161,9 @@ pub(crate) fn pass_of(l: &Layout) -> Pass {
     }
 }
 
+/// Where an error's value is in the error channel and in an error set: after its id, a word.
+pub(crate) const ERROR_VALUE: u32 = 8;
+
 /// How many words a vtable starts with before its methods.
 pub(crate) const VTABLE_HEADER: usize = 4;
 
@@ -179,6 +186,12 @@ struct Rt {
     free: FuncId,
     realloc: FuncId,
     memmove: FuncId,
+    fail_at: FuncId,
+    static_begin: FuncId,
+    static_end: FuncId,
+    convert: FuncId,
+    text: FuncId,
+    log: FuncId,
 }
 
 /// A function instance: a function (or a closure's body) and its (concrete) type arguments.
@@ -205,6 +218,8 @@ struct Compiler<'db> {
     glues: HashMap<Ty, FuncId>,
     /// The drop glue declared and not yet compiled.
     glue_queue: Vec<Ty>,
+    /// Each `const` item's slot: a flag (whether it is computed yet), then its value.
+    statics: HashMap<u32, DataId>,
 }
 
 /// Compiles what `item` (a test, or a function without parameters) reaches.
@@ -245,6 +260,15 @@ pub(crate) fn compile<'db>(
     builder.symbol("moddil_rt_free", moddil_rt::free as *const u8);
     builder.symbol("moddil_rt_realloc", moddil_rt::realloc as *const u8);
     builder.symbol("moddil_rt_memmove", moddil_rt::memmove as *const u8);
+    builder.symbol("moddil_rt_fail_at", moddil_rt::fail_at as *const u8);
+    builder.symbol(
+        "moddil_rt_static_begin",
+        moddil_rt::static_begin as *const u8,
+    );
+    builder.symbol("moddil_rt_static_end", moddil_rt::static_end as *const u8);
+    builder.symbol("moddil_host_convert", crate::host::convert as *const u8);
+    builder.symbol("moddil_host_text", crate::host::text as *const u8);
+    builder.symbol("moddil_host_log", crate::host::log as *const u8);
     builder.symbol("moddil_rt_observe", moddil_rt::observe as *const u8);
     builder.symbol("moddil_rt_enter", moddil_rt::enter as *const u8);
     builder.symbol("moddil_rt_leave", moddil_rt::leave as *const u8);
@@ -305,6 +329,27 @@ pub(crate) fn compile<'db>(
             Some(ptr),
         )?,
         memmove: import("moddil_rt_memmove", &[ptr, ptr, types::I64], None)?,
+        fail_at: import("moddil_rt_fail_at", &[types::I32], None)?,
+        static_begin: import("moddil_rt_static_begin", &[], None)?,
+        static_end: import("moddil_rt_static_end", &[], None)?,
+        convert: import(
+            "moddil_host_convert",
+            &[
+                types::I32,
+                types::I32,
+                types::I64,
+                types::I64,
+                types::I32,
+                ptr,
+            ],
+            Some(types::I8),
+        )?,
+        text: import(
+            "moddil_host_text",
+            &[types::I32, types::I64, types::I64, ptr, types::I64, ptr],
+            Some(ptr),
+        )?,
+        log: import("moddil_host_log", &[types::I32, ptr, types::I64], None)?,
         observe: import("moddil_rt_observe", &[types::I32, ptr], None)?,
         enter: import("moddil_rt_enter", &[types::I32, types::I8], Some(types::I8))?,
         leave: import("moddil_rt_leave", &[], None)?,
@@ -335,6 +380,7 @@ pub(crate) fn compile<'db>(
         dyn_types: Vec::new(),
         glues: HashMap::new(),
         glue_queue: Vec::new(),
+        statics: HashMap::new(),
     };
     let (target, ret) = match item {
         Item::Test(_) => {
@@ -352,6 +398,7 @@ pub(crate) fn compile<'db>(
         Item::Closure(..) => return Err("a closure as an entry point".to_string()),
     };
     let drop_result = c.drop_result(&ret)?;
+    let errors = c.errors_of(item)?;
     loop {
         if let Some(inst) = c.queue.pop() {
             let (id, params, ret) = c.fns[&inst].clone();
@@ -372,6 +419,7 @@ pub(crate) fn compile<'db>(
         sites: c.sites,
         items,
         dyn_types: c.dyn_types,
+        errors,
     })
 }
 
@@ -405,10 +453,29 @@ impl Compiler<'_> {
             Pass::Nothing => {}
             Pass::Scalar(t) => sig.returns.push(AbiParam::new(t)),
             Pass::Words(ts) => sig.returns.extend(ts.into_iter().map(AbiParam::new)),
-            // Where the caller wants the result, last.
+            // Where the caller wants the result.
             Pass::Indirect => sig.params.push(AbiParam::new(ptr)),
         }
+        // Where an error goes, last (null for a call that cannot fail).
+        sig.params.push(AbiParam::new(ptr));
         Ok(sig)
+    }
+
+    /// The types of the errors `item`'s body raises with `fail`.
+    fn errors_of(&self, item: Item) -> Result<Vec<Ty>, String> {
+        let body = self.mir(item)?;
+        let mut out = Vec::new();
+        for bb in &body.blocks {
+            if let Terminator::Fail(Operand::Move(p) | Operand::Copy(p)) = &bb.terminator
+                && p.projection.is_empty()
+            {
+                match self.concrete(&body.locals[p.local.index()].ty, &[]) {
+                    Ty::Errors(ms) => out.extend(ms.iter().cloned()),
+                    t => out.push(t),
+                }
+            }
+        }
+        Ok(out)
     }
 
     fn declare_item(
@@ -624,6 +691,7 @@ impl Compiler<'_> {
             locs: Vec::new(),
             blocks: Vec::new(),
             flags: HashMap::new(),
+            err_ptr: None,
         };
         lw.function()?;
         let config = lw.c.module.target_config();
@@ -686,11 +754,13 @@ impl Compiler<'_> {
             locs: Vec::new(),
             blocks: Vec::new(),
             flags: HashMap::new(),
+            err_ptr: None,
         };
         let entry = lw.b.create_block();
         lw.b.append_block_params_for_function_params(entry);
         lw.b.switch_to_block(entry);
         let addr = lw.b.block_params(entry)[0];
+        lw.err_ptr = Some(lw.b.block_params(entry)[1]);
         lw.drop_own(addr, ty)?;
         lw.return_status(0)?;
         lw.b.seal_all_blocks();
@@ -727,7 +797,8 @@ impl Compiler<'_> {
         let status = match glue {
             Some(g) => {
                 let f = self.module.declare_func_in_func(g, b.func);
-                let call = b.ins().call(f, &[out]);
+                let null = b.ins().iconst(ptr, 0);
+                let call = b.ins().call(f, &[out, null]);
                 b.inst_results(call)[0]
             }
             None => b.ins().iconst(types::I8, 0),
@@ -741,11 +812,12 @@ impl Compiler<'_> {
         Ok(id)
     }
 
-    /// `fn(out: *mut u8) -> i8`, in the platform's C convention: calls `target` and stores its
-    /// result's bytes at `out`.
+    /// `fn(out: *mut u8, err: *mut u8) -> i8`, in the platform's C convention: calls `target`,
+    /// storing its result's bytes at `out`, or its error at `err`.
     fn trampoline(&mut self, target: FuncId, ret: &Ty) -> Result<FuncId, String> {
         let ptr = self.module.target_config().pointer_type();
         let mut sig = self.module.make_signature();
+        sig.params.push(AbiParam::new(ptr));
         sig.params.push(AbiParam::new(ptr));
         sig.returns.push(AbiParam::new(types::I8));
         let id = self
@@ -761,11 +833,12 @@ impl Compiler<'_> {
         b.append_block_params_for_function_params(block);
         b.switch_to_block(block);
         let out = b.block_params(block)[0];
+        let err = b.block_params(block)[1];
         let f = self.module.declare_func_in_func(target, b.func);
         let call = if pass == Pass::Indirect {
-            b.ins().call(f, &[out])
+            b.ins().call(f, &[out, err])
         } else {
-            b.ins().call(f, &[])
+            b.ins().call(f, &[err])
         };
         let results = b.inst_results(call).to_vec();
         let flags = ir::MemFlagsData::trusted();
@@ -877,6 +950,8 @@ struct Lower<'a, 'c, 'db> {
     /// The drop flags: for each local that may need dropping, and each part of one that is
     /// moved out of, whether it holds a value.
     flags: HashMap<Place, Variable>,
+    /// Where an error this body raises goes.
+    err_ptr: Option<ir::Value>,
 }
 
 impl Lower<'_, '_, '_> {
@@ -988,8 +1063,9 @@ impl Lower<'_, '_, '_> {
         // A result returned indirectly is written where the caller says, the last parameter.
         let ret_layout = self.c.layouts.of(&self.tys[0])?;
         if pass_of(&ret_layout) == Pass::Indirect {
-            self.locs[0] = Loc::Mem(*params.last().expect("the result's place"));
+            self.locs[0] = Loc::Mem(params[params.len() - 2]);
         }
+        self.err_ptr = params.last().copied();
         self.drop_flags();
         let reachable = self.reachable()?;
         for (i, bb) in self.body.blocks.iter().enumerate() {
@@ -1124,6 +1200,21 @@ impl Lower<'_, '_, '_> {
                         addr: Some(ptr),
                         ty: (*inner).clone(),
                         variant: None,
+                    };
+                }
+                // A member of an error set: the value after its id.
+                Projection::Downcast(v) if matches!(r.ty, Ty::Errors(_)) => {
+                    let Ty::Errors(ms) = r.ty.clone() else {
+                        unreachable!()
+                    };
+                    let base = self.addr_of(&r)?;
+                    r = PlaceRef {
+                        var: None,
+                        addr: Some(self.offset(base, ERROR_VALUE)),
+                        ty: ms[*v as usize].clone(),
+                        variant: None,
+                        meta: None,
+                        vtable: None,
                     };
                 }
                 Projection::Downcast(v) => r.variant = Some(*v),
@@ -1558,6 +1649,29 @@ impl Lower<'_, '_, '_> {
                 let from = Ty::reference(false, target.ty.clone());
                 let v = self.fit(Val::Scalar(a), &from, &dest.ty);
                 self.write(&dest, v)
+            }
+            // Whether the error is of struct or enum `n`: its id, or its type.
+            Rvalue::ErrorIs(p, n) => {
+                let target = self.place(p)?;
+                let v = match &target.ty {
+                    Ty::Errors(_) => {
+                        let a = self.addr_of(&target)?;
+                        let id = self
+                            .b
+                            .ins()
+                            .load(types::I64, ir::MemFlagsData::trusted(), a, 0);
+                        self.b.ins().icmp_imm_s(IntCC::Equal, id, i64::from(*n))
+                    }
+                    t => {
+                        let is = t.adt() == Some(*n);
+                        self.b.ins().iconst(types::I8, i64::from(is))
+                    }
+                };
+                self.write(&dest, Val::Scalar(v))
+            }
+            Rvalue::StaticRef(f) => {
+                let a = self.static_ref(*f)?;
+                self.write(&dest, Val::Scalar(a))
             }
             Rvalue::Discriminant(p) => {
                 let target = self.place(p)?;
@@ -2075,13 +2189,26 @@ impl Lower<'_, '_, '_> {
                 ..
             } => {
                 // An error edge whose error is `!` is never taken.
-                let can_fail = match on_error {
-                    Some((p, _)) => self.place(p)?.ty != Ty::Never,
-                    None => false,
+                let catch = match on_error {
+                    Some((p, b)) if self.place(p)?.ty != Ty::Never => Some((p.clone(), *b)),
+                    _ => None,
                 };
-                self.call(callee, args, dest, *target, can_fail, *range)?;
+                self.call(callee, args, dest, *target, catch, *range)?;
             }
-            Terminator::Fail(_) => return Err("an error leaving a function".to_string()),
+            Terminator::Fail(e) => {
+                // The error, tagged, where the caller said; the site; the failed status.
+                let ty = self.operand_ty(e)?;
+                let v = self.operand(e)?;
+                let to = self.err_ptr.ok_or("an error with nowhere to go")?;
+                self.write_error(to, v, &ty)?;
+                let site = self.site(Site::Fail(self.file, span));
+                let f = self
+                    .c
+                    .module
+                    .declare_func_in_func(self.c.rt.fail_at, self.b.func);
+                self.b.ins().call(f, &[site]);
+                self.return_status(2)?;
+            }
             Terminator::Resume => return Err("unwinding".to_string()),
         }
         Ok(())
@@ -2157,12 +2284,9 @@ impl Lower<'_, '_, '_> {
         args: &[Operand],
         dest: &Place,
         target: moddil_mir::BlockId,
-        can_fail: bool,
+        catch: Option<(Place, moddil_mir::BlockId)>,
         range: TextRange,
     ) -> Result<(), String> {
-        if can_fail {
-            return Err("a call that can fail".to_string());
-        }
         let cargs: Vec<Ty> = callee
             .args()
             .iter()
@@ -2286,7 +2410,7 @@ impl Lower<'_, '_, '_> {
                 }
             },
         };
-        self.emit_call(run, vals, Some(&d), range)?;
+        self.emit_call_catching(run, vals, Some(&d), range, catch)?;
         if let Some((p, vt)) = free_after {
             self.free_dyn(p, vt, None);
         }
@@ -2296,14 +2420,27 @@ impl Lower<'_, '_, '_> {
         Ok(())
     }
 
-    /// Calls `run` with `vals`, counting the frame and passing a trap on; its result goes to
-    /// `dest` (or nowhere). The code goes on after a call that returned.
+    /// Calls `run` with `vals`, which cannot fail, counting the frame and passing a trap on; its
+    /// result goes to `dest` (or nowhere). The code goes on after a call that returned.
     fn emit_call(
+        &mut self,
+        run: Run,
+        vals: Vec<ir::Value>,
+        dest: Option<&PlaceRef>,
+        range: TextRange,
+    ) -> Result<(), String> {
+        self.emit_call_catching(run, vals, dest, range, None)
+    }
+
+    /// As [`Lower::emit_call`], for a call whose error (if `catch` says where) goes to an error
+    /// place and on to a block.
+    fn emit_call_catching(
         &mut self,
         run: Run,
         mut vals: Vec<ir::Value>,
         dest: Option<&PlaceRef>,
         range: TextRange,
+        catch: Option<(Place, moddil_mir::BlockId)>,
     ) -> Result<(), String> {
         let ret = match &run {
             Run::Direct(_, r) | Run::Indirect(_, _, r) => r.clone(),
@@ -2319,6 +2456,29 @@ impl Lower<'_, '_, '_> {
             };
             vals.push(a);
         }
+        // Where its error goes: a buffer with room for any it can fail with, or nowhere.
+        let buffer = match &catch {
+            Some((p, _)) => {
+                let ty = self.place(p)?.ty;
+                let size = self.error_room(&ty)?;
+                let l = Layout {
+                    size,
+                    align: 8,
+                    shape: Shape::Wide,
+                    niche: None,
+                };
+                Some(self.slot(&l))
+            }
+            None => None,
+        };
+        let err = match buffer {
+            Some(b) => b,
+            None => {
+                let ptr = self.ptr();
+                self.b.ins().iconst(ptr, 0)
+            }
+        };
+        vals.push(err);
         let flags = ir::MemFlagsData::trusted();
         // Count the frame, so that recursion without end traps.
         let site = self.site(Site::Call(self.file, range, self.tracked));
@@ -2356,6 +2516,19 @@ impl Lower<'_, '_, '_> {
         let trapped = self.b.create_block();
         self.b.ins().brif(results[0], trapped, &[], ok, &[]);
         self.b.switch_to_block(trapped);
+        if let (Some((p, edge)), Some(buf)) = (catch, buffer) {
+            // Status 2: the error, into its place, then the error edge; else a trap.
+            let failed = self.b.create_block();
+            let trap = self.b.create_block();
+            let is = self.b.ins().icmp_imm_s(IntCC::Equal, results[0], 2);
+            self.b.ins().brif(is, failed, &[], trap, &[]);
+            self.b.switch_to_block(failed);
+            self.read_error(buf, &p)?;
+            self.set_init(&p);
+            let e = self.block(edge.index())?;
+            self.b.ins().jump(e, &[]);
+            self.b.switch_to_block(trap);
+        }
         self.return_status(1)?;
         self.b.switch_to_block(ok);
         let Some(d) = dest else {
@@ -2374,6 +2547,198 @@ impl Lower<'_, '_, '_> {
             Pass::Nothing | Pass::Indirect => {}
         }
         Ok(())
+    }
+
+    // ----- errors ----------------------------------------------------------------------------
+
+    /// How many bytes an error of type `ty` (a set, or one type) takes in the error channel.
+    fn error_room(&mut self, ty: &Ty) -> Result<u32, String> {
+        let l = self.layout(ty)?;
+        Ok(match ty {
+            Ty::Errors(_) => l.size,
+            _ => ERROR_VALUE + l.size,
+        })
+    }
+
+    /// Writes the error `v` of type `ty` at `to`, tagged: a set as it is, a value after its
+    /// type's id.
+    fn write_error(&mut self, to: ir::Value, v: Val, ty: &Ty) -> Result<(), String> {
+        let l = self.layout(ty)?;
+        if let Ty::Errors(_) = ty {
+            if let Val::Mem(a) = v {
+                self.copy(to, a, l.size);
+            }
+            return Ok(());
+        }
+        let id = ty.adt().ok_or_else(|| format!("an error of type `{ty}`"))?;
+        let tag = self.b.ins().iconst(types::I64, i64::from(id));
+        self.b.ins().store(ir::MemFlagsData::trusted(), tag, to, 0);
+        let at = self.offset(to, ERROR_VALUE);
+        let place = PlaceRef {
+            var: None,
+            addr: Some(at),
+            ty: ty.clone(),
+            variant: None,
+            meta: None,
+            vtable: None,
+        };
+        self.write(&place, v)
+    }
+
+    /// The tagged error at `from` into error place `p`: all of it for a set, its value for one
+    /// type.
+    fn read_error(&mut self, from: ir::Value, p: &Place) -> Result<(), String> {
+        let r = self.place(p)?;
+        let l = self.layout(&r.ty)?;
+        let a = self.addr_or_dangling(&r)?;
+        if let Ty::Errors(_) = r.ty {
+            self.copy(a, from, l.size);
+            return Ok(());
+        }
+        let at = self.offset(from, ERROR_VALUE);
+        if r.var.is_some() {
+            let v = self.take_at(at, &r.ty)?;
+            return self.write(&r, v);
+        }
+        self.copy(a, at, l.size);
+        Ok(())
+    }
+
+    /// Splits scalar `v` of number type `ty` (`int` or a `Num`) into two words of bits.
+    fn number_words(&mut self, v: ir::Value, ty: &Ty) -> (ir::Value, ir::Value) {
+        let flags = ir::MemFlagsData::new();
+        let zero = self.b.ins().iconst(types::I64, 0);
+        match self.b.func.dfg.value_type(v) {
+            types::I128 => {
+                let (lo, hi) = self.b.ins().isplit(v);
+                (lo, hi)
+            }
+            types::I64 => (v, zero),
+            types::F64 => (self.b.ins().bitcast(types::I64, flags, v), zero),
+            types::F32 => {
+                let i = self.b.ins().bitcast(types::I32, flags, v);
+                (self.b.ins().uextend(types::I64, i), zero)
+            }
+            _ => {
+                let _ = ty;
+                (self.b.ins().uextend(types::I64, v), zero)
+            }
+        }
+    }
+
+    /// The scalar of number type `ty` with the bits in words `lo` and `hi`.
+    fn number_of_words(
+        &mut self,
+        lo: ir::Value,
+        hi: ir::Value,
+        ty: &Ty,
+    ) -> Result<ir::Value, String> {
+        let t = clif_type(ty)?.ok_or("a number")?;
+        let flags = ir::MemFlagsData::new();
+        Ok(match t {
+            types::I128 => self.b.ins().iconcat(lo, hi),
+            types::I64 => lo,
+            types::F64 => self.b.ins().bitcast(types::F64, flags, lo),
+            types::F32 => {
+                let i = self.b.ins().ireduce(types::I32, lo);
+                self.b.ins().bitcast(types::F32, flags, i)
+            }
+            t => self.b.ins().ireduce(t, lo),
+        })
+    }
+
+    /// The code `host` knows a number type by.
+    fn num_code(ty: &Ty) -> Option<u32> {
+        match ty {
+            Ty::Int => Some(crate::host::num_code(None)),
+            Ty::Num(n) => Some(crate::host::num_code(Some(*n))),
+            _ => None,
+        }
+    }
+
+    /// A `&str` (in a new slot) of the text the host's `text` gives for `code`.
+    fn host_text(
+        &mut self,
+        code: u32,
+        lo: ir::Value,
+        hi: ir::Value,
+        p: ir::Value,
+        n: ir::Value,
+    ) -> ir::Value {
+        let l = Layout {
+            size: 8,
+            align: 8,
+            shape: Shape::Scalar(types::I64),
+            niche: None,
+        };
+        let len = self.slot(&l);
+        let code = self.b.ins().iconst(types::I32, i64::from(code));
+        let at = self.rt_call(self.c.rt.text, &[code, lo, hi, p, n, len]);
+        let n = self
+            .b
+            .ins()
+            .load(types::I64, ir::MemFlagsData::trusted(), len, 0);
+        self.wide(at, n)
+    }
+
+    /// The address of `const` item `f`'s value, computed the first time it is asked for.
+    fn static_ref(&mut self, f: u32) -> Result<ir::Value, String> {
+        let (id, _, ret) = self.c.declare_fn(f, &[])?;
+        let l = self.layout(&ret)?;
+        let data = match self.c.statics.get(&f) {
+            Some(d) => *d,
+            None => {
+                let d = self
+                    .c
+                    .module
+                    .declare_anonymous_data(true, false)
+                    .map_err(|e| e.to_string())?;
+                let mut desc = DataDescription::new();
+                desc.define_zeroinit((16 + l.size) as usize);
+                desc.set_align(16);
+                self.c
+                    .module
+                    .define_data(d, &desc)
+                    .map_err(|e| e.to_string())?;
+                self.c.statics.insert(f, d);
+                d
+            }
+        };
+        let gv = self.c.module.declare_data_in_func(data, self.b.func);
+        let ptr = self.ptr();
+        let base = self.b.ins().symbol_value(ptr, gv);
+        let value = self.offset(base, 16);
+        let flags = ir::MemFlagsData::trusted();
+        let done = self.b.ins().load(types::I8, flags, base, 0);
+        let compute = self.b.create_block();
+        let join = self.b.create_block();
+        self.b.ins().brif(done, join, &[], compute, &[]);
+        self.b.switch_to_block(compute);
+        let begin = self
+            .c
+            .module
+            .declare_func_in_func(self.c.rt.static_begin, self.b.func);
+        self.b.ins().call(begin, &[]);
+        let at = PlaceRef {
+            var: None,
+            addr: Some(value),
+            ty: ret.clone(),
+            variant: None,
+            meta: None,
+            vtable: None,
+        };
+        let span = self.span;
+        self.emit_call(Run::Direct(id, ret), Vec::new(), Some(&at), span)?;
+        let end = self
+            .c
+            .module
+            .declare_func_in_func(self.c.rt.static_end, self.b.func);
+        self.b.ins().call(end, &[]);
+        let one = self.b.ins().iconst(types::I8, 1);
+        self.b.ins().store(flags, one, base, 0);
+        self.b.ins().jump(join, &[]);
+        self.b.switch_to_block(join);
+        Ok(value)
     }
 
     // ----- drops -----------------------------------------------------------------------------
@@ -2679,6 +3044,32 @@ impl Lower<'_, '_, '_> {
                     self.b.ins().call(f, &[p, bytes, align]);
                 }
             }
+            // An error set: the member it holds, by its id.
+            Shape::Errors(ms) => {
+                let ms = ms.clone();
+                let id = self
+                    .b
+                    .ins()
+                    .load(types::I64, ir::MemFlagsData::trusted(), addr, 0);
+                let join = self.b.create_block();
+                for m in &ms {
+                    let Some(n) = m.adt() else { continue };
+                    if !self.needs_drop(m) {
+                        continue;
+                    }
+                    let yes = self.b.create_block();
+                    let no = self.b.create_block();
+                    let is = self.b.ins().icmp_imm_s(IntCC::Equal, id, i64::from(n));
+                    self.b.ins().brif(is, yes, &[], no, &[]);
+                    self.b.switch_to_block(yes);
+                    let at = self.offset(addr, ERROR_VALUE);
+                    self.drop_value(at, m)?;
+                    self.b.ins().jump(join, &[]);
+                    self.b.switch_to_block(no);
+                }
+                self.b.ins().jump(join, &[]);
+                self.b.switch_to_block(join);
+            }
             Shape::Scalar(_) | Shape::Empty | Shape::Wide => {}
         }
         Ok(())
@@ -2871,7 +3262,12 @@ impl Lower<'_, '_, '_> {
                 }
             }
             // The float functions (`num.float.fn.1`).
-            (Ty::Num(n @ (Num::F32 | Num::F64)), _) => {
+            (Ty::Num(n @ (Num::F32 | Num::F64)), _)
+                if !matches!(
+                    name,
+                    "checked_to" | "truncate" | "wrap" | "saturate" | "text"
+                ) =>
+            {
                 let x = self.value(&args[0])?;
                 match name {
                     "is_nan" => Val::Scalar(self.b.ins().fcmp(FloatCC::Unordered, x, x)),
@@ -2990,6 +3386,138 @@ impl Lower<'_, '_, '_> {
                 old
             }
             (Ty::Buf(_), _) => return self.buf(name, targs, args, d, range),
+            // The conversions (`num.convert.1`), by `moddil_mir::convert` in the host.
+            (Ty::Int | Ty::Num(_), "checked_to" | "truncate" | "wrap" | "saturate") => {
+                let from = self.operand_ty(&args[0])?;
+                let to = targs.last().cloned().ok_or("the type converted to")?;
+                let (Some(fc), Some(tc)) = (Self::num_code(&from), Self::num_code(&to)) else {
+                    return unsupported();
+                };
+                let x = self.value(&args[0])?;
+                let (lo, hi) = self.number_words(x, &from);
+                let how = crate::host::CONVERSIONS.iter().position(|h| *h == name);
+                let how = self.b.ins().iconst(types::I32, how.unwrap_or(0) as i64);
+                let fc = self.b.ins().iconst(types::I32, i64::from(fc));
+                let tc = self.b.ins().iconst(types::I32, i64::from(tc));
+                let l = Layout {
+                    size: 16,
+                    align: 8,
+                    shape: Shape::Wide,
+                    niche: None,
+                };
+                let out = self.slot(&l);
+                let ok = self.rt_call(self.c.rt.convert, &[how, fc, lo, hi, tc, out]);
+                let lo = self.b.ins().load(types::I64, flags, out, 0);
+                let hi = self.b.ins().load(types::I64, flags, out, 8);
+                let v = self.number_of_words(lo, hi, &to)?;
+                if name != "checked_to" {
+                    Val::Scalar(v)
+                } else {
+                    // An `Option`: `Some` of it, or `None`.
+                    let l = self.layout(&d.ty)?;
+                    let Shape::Enum { tag, variants } = &l.shape else {
+                        return unsupported();
+                    };
+                    let (tag, payload) = (tag.clone(), variants[1][0].0);
+                    let a = self.addr_of(d)?;
+                    let some = self.b.create_block();
+                    let none = self.b.create_block();
+                    let join = self.b.create_block();
+                    self.b.ins().brif(ok, some, &[], none, &[]);
+                    self.b.switch_to_block(none);
+                    self.set_variant(a, &tag, 0);
+                    self.b.ins().jump(join, &[]);
+                    self.b.switch_to_block(some);
+                    let at = self.offset(a, payload);
+                    self.b.ins().store(flags, v, at, 0);
+                    self.set_variant(a, &tag, 1);
+                    self.b.ins().jump(join, &[]);
+                    self.b.switch_to_block(join);
+                    Val::Unit
+                }
+            }
+            // What `Display` writes (`text.display.1`), and the quoted text, made in the host.
+            (Ty::Int | Ty::Num(_) | Ty::Bool | Ty::Char, "text") | (Ty::Char, "quoted_text") => {
+                let ty = self.operand_ty(&args[0])?;
+                let inner = match &ty {
+                    Ty::Ref(_, t) => (**t).clone(),
+                    t => t.clone(),
+                };
+                let x = match self.operand(&args[0])? {
+                    Val::Scalar(p) if matches!(ty, Ty::Ref(..)) => {
+                        let at = PlaceRef {
+                            var: None,
+                            addr: Some(p),
+                            ty: inner.clone(),
+                            variant: None,
+                            meta: None,
+                            vtable: None,
+                        };
+                        match self.read(&at)? {
+                            Val::Scalar(v) => v,
+                            _ => return unsupported(),
+                        }
+                    }
+                    Val::Scalar(v) => v,
+                    _ => return unsupported(),
+                };
+                let code = match (&inner, name) {
+                    (Ty::Char, "quoted_text") => 102,
+                    (Ty::Bool, _) => 100,
+                    (Ty::Char, _) => 101,
+                    (t, _) => Self::num_code(t).ok_or("text of something not a number")?,
+                };
+                let (lo, hi) = self.number_words(x, &inner);
+                let ptr = self.ptr();
+                let null = self.b.ins().iconst(ptr, 0);
+                let zero = self.b.ins().iconst(types::I64, 0);
+                Val::Mem(self.host_text(code, lo, hi, null, zero))
+            }
+            (Ty::Str, "quoted_text") => {
+                let (p, n) = self.text(&args[0])?;
+                let zero = self.b.ins().iconst(types::I64, 0);
+                Val::Mem(self.host_text(103, zero, zero, p, n))
+            }
+            // The ambient log (`obs.log.1`): the message's text to standard error, then the
+            // message dropped.
+            (Ty::Adt(a, ..), "debug" | "info" | "warn" | "error")
+                if items.adts[*a as usize].name == "Log" =>
+            {
+                let msg_ty = self.operand_ty(&args[1])?;
+                let Val::Mem(msg) = self.operand(&args[1])? else {
+                    return unsupported();
+                };
+                let as_str = items
+                    .builtin_method(&items.string_ty(), "as_str")
+                    .ok_or("the prelude's `String::as_str`")?;
+                let (id, params, ret) = self.c.declare_fn(as_str, &[])?;
+                let l = self.layout(&ret)?;
+                let w = self.slot(&l);
+                let at = PlaceRef {
+                    var: None,
+                    addr: Some(w),
+                    ty: ret.clone(),
+                    variant: None,
+                    meta: None,
+                    vtable: None,
+                };
+                let vals = self.pass_value(Val::Scalar(msg), &params[0])?;
+                self.emit_call(Run::Direct(id, ret), vals, Some(&at), range)?;
+                let p = self.b.ins().load(types::I64, flags, w, 0);
+                let n = self.b.ins().load(types::I64, flags, w, 8);
+                let level = crate::host::LEVELS
+                    .iter()
+                    .position(|l| *l == name)
+                    .unwrap_or(0);
+                let level = self.b.ins().iconst(types::I32, level as i64);
+                let f = self
+                    .c
+                    .module
+                    .declare_func_in_func(self.c.rt.log, self.b.func);
+                self.b.ins().call(f, &[level, p, n]);
+                self.drop_value(msg, &msg_ty)?;
+                Val::Unit
+            }
             // The first `len` bytes, which are UTF-8, as text (`text.string.inline.1`).
             (Ty::Str, "view") => {
                 let Val::Mem(w) = self.operand(&args[0])? else {

@@ -48,11 +48,13 @@ impl Compiled<'_> {
         let drop_ptr = self.module.get_finalized_function(self.drop_result) as usize;
         let (sites, items, ret) = (&self.sites, self.items, &self.ret);
         let dyn_types = &self.dyn_types;
+        let errors = &self.errors;
         let (status, text, observed, record, leaked) = std::thread::scope(|s| {
             std::thread::Builder::new()
                 .stack_size(STACK)
                 .spawn_scoped(s, move || {
                     moddil_rt::take();
+                    crate::host::clear_texts();
                     let live = moddil_rt::live();
                     let mut seen = Seen {
                         sites,
@@ -67,18 +69,28 @@ impl Compiled<'_> {
                     // Room for any result, aligned for any field.
                     let size = seen.show.layouts.of(ret).map_or(16, |l| l.size.max(16)) as usize;
                     let mut out = vec![0u128; size.div_ceil(16)];
+                    // And for any error, after its id.
+                    let room = errors
+                        .iter()
+                        .map(|t| seen.show.layouts.of(t).map_or(0, |l| l.size))
+                        .max()
+                        .unwrap_or(0) as usize;
+                    let mut err = vec![0u128; (8 + room).div_ceil(16).max(1)];
                     // SAFETY: `ptr` is the finished entry trampoline, whose signature is
-                    // `fn(*mut u8) -> i8` in the platform's C calling convention; the module
-                    // that owns its memory lives until this scope ends; `out` has room for the
-                    // result.
-                    let entry: extern "C" fn(*mut u8) -> i8 =
+                    // `fn(*mut u8, *mut u8) -> i8` in the platform's C calling convention; the
+                    // module that owns its memory lives until this scope ends; `out` has room
+                    // for the result and `err` for an error.
+                    let entry: extern "C" fn(*mut u8, *mut u8) -> i8 =
                         unsafe { std::mem::transmute::<usize, _>(ptr) };
-                    let status = entry(out.as_mut_ptr().cast());
+                    let status = entry(out.as_mut_ptr().cast(), err.as_mut_ptr().cast());
                     moddil_rt::set_observer(None);
-                    let text = (status == 0).then(|| {
+                    let text = match status {
                         // SAFETY: the run returned, so `out` holds a value of type `ret`.
-                        unsafe { seen.show.render(ret, out.as_ptr().cast()) }
-                    });
+                        0 => Some(unsafe { seen.show.render(ret, out.as_ptr().cast()) }),
+                        // SAFETY: the run failed, so `err` holds an error of those types.
+                        2 => Some(unsafe { seen.show.error(errors, err.as_ptr().cast()) }),
+                        _ => None,
+                    };
                     // Once shown, the result is dropped; then a run that returned has freed
                     // everything it allocated.
                     let mut leaked = 0;
@@ -102,6 +114,11 @@ impl Compiled<'_> {
         let result = match text {
             Some(_) if status == 0 && leaked != 0 => Err(Native::Leak(leaked)),
             Some(t) if status == 0 => Ok(t),
+            // The error left the run: where the last `fail` was.
+            Some(t) if status == 2 => match record.failed.map(|s| &self.sites[s as usize]) {
+                Some(Site::Fail(file, range)) => Err(Native::Failed(*file, *range, t)),
+                _ => Err(Native::Unsupported("an error without a site".to_string())),
+            },
             _ => match record.trap {
                 Some(t) => Ok(self.reported(&t)).and_then(Err),
                 None => Err(Native::Unsupported("a trap without a site".to_string())),
@@ -120,7 +137,7 @@ impl Compiled<'_> {
         let (class, file, range) = match &self.sites[t.site as usize] {
             Site::Trap(class, file, range) => (*class, *file, *range),
             Site::Call(file, range, _) => (TrapClass::StackOverflow, *file, *range),
-            Site::Observe(..) => {
+            Site::Observe(..) | Site::Fail(..) => {
                 return Native::Unsupported("a trap at an observation".to_string());
             }
         };
@@ -233,6 +250,8 @@ impl Show<'_> {
                     .collect();
                 format!("[{}]", xs.join(", "))
             }
+            // An error set: the member its id says.
+            Ty::Errors(ms) => unsafe { self.error(ms, p) },
             Ty::Buf(elem) => {
                 let q = unsafe { bits_at(p, 8) } as usize as *const u8;
                 let n = unsafe { bits_at(p.add(8), 8) } as u32;
@@ -295,6 +314,19 @@ impl Show<'_> {
 }
 
 impl Show<'_> {
+    /// The error at `p`, tagged: its value, as the member of `errors` its id says.
+    ///
+    /// # Safety
+    ///
+    /// `p` points to a live error of one of `errors`, after its id.
+    unsafe fn error(&mut self, errors: &[Ty], p: *const u8) -> String {
+        let id = unsafe { bits_at(p, 8) } as u32;
+        match errors.iter().find(|t| t.adt() == Some(id)).cloned() {
+            Some(t) => unsafe { self.render(&t, p.add(crate::lower::ERROR_VALUE as usize)) },
+            None => "<an error>".to_string(),
+        }
+    }
+
     /// A `String`'s text, in quotes, from its `StringRepr` (of type `repr`) at `p`: inline bytes
     /// and their count, or a `Buf<u8>`.
     ///

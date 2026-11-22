@@ -326,3 +326,28 @@ fn comparing_slices_passes_the_borrows_as_they_are() {
     assert!(mir.contains("let _4: &[int];"), "{mir}");
     assert!(!mir.contains("&&[int]"), "{mir}");
 }
+
+#[test]
+fn a_returned_closure_is_given_its_handlers_typed() {
+    let mir = dump(
+        "trait Clock { fn now(&self) -> int; }
+        struct Fixed { at: int }
+        impl Clock for Fixed { fn now(&self) -> int { self.at } }
+        fn fixed(at: int) -> Fixed { Fixed { at } }
+        fn now() -> int with clock: Clock { clock.now() }
+        fn stamped() -> (impl Fn(int) -> int with Clock) { |x| x + now() }
+        test \"a\" { let s = stamped(); with Clock = fixed(100) { s(1) } }",
+    );
+    assert!(mir.contains("(int, &dyn Clock)"), "{mir}");
+    assert!(!mir.contains("{error}"), "{mir}");
+}
+
+#[test]
+fn a_caught_error_is_matched_as_its_member() {
+    let mir = dump(
+        "struct Missing { k: int }  struct Other;
+        fn f(x: int) -> int with fail(Missing | Other) { if x == 0 { fail(Missing { k: 3 }) } x }
+        fn main() -> int { try { f(0)? } catch { Missing { k } => k, Other => 9 } }",
+    );
+    assert!(mir.contains("as #0).0"), "{mir}");
+}

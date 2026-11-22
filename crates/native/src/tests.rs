@@ -121,7 +121,7 @@ fn loops() {
 #[test]
 fn what_is_not_compiled_yet_says_so() {
     assert!(matches!(
-        run("fn main() -> Option<i8> { 300.checked_to::<i8>() }"),
+        run("fn main() { yield_now(); }"),
         Err(Native::Unsupported(_))
     ));
 }
@@ -446,4 +446,107 @@ fn everything_allocated_is_freed() {
             f()
         }")
     .is_ok());
+}
+
+/// Runs `text`'s one test natively: what it observed, and how it ended.
+fn run_one_test(text: &str) -> (Vec<String>, Result<(), Native>) {
+    let db = Database::default();
+    let file = Program::single(&db, "t.moddil".to_string(), text.to_string());
+    let diagnostics = moddil_mir::diagnostics(&db, file);
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    let (observed, result) = run_test(&db, file, 0);
+    (observed.into_iter().map(|(_, _, v)| v).collect(), result)
+}
+
+const ERRORS: &str = "struct Missing { k: int }  struct Other;
+    fn f(x: int) -> int with fail(Missing | Other) {
+        if x == 0 { fail(Missing { k: 3 }) }
+        if x == 1 { fail(Other) }
+        x
+    }
+    fn g(x: int) -> int with fail(Missing | Other) { f(x)? + 1 }
+    fn only(x: int) -> int with fail(Missing) { if x == 0 { fail(Missing { k: 8 }) } x }
+    fn wider(x: int) -> int with fail(Missing | Other) { only(x)? }\n";
+
+#[test]
+fn errors_propagate_and_are_caught() {
+    let catch = |call: &str| {
+        value(&format!(
+            "{ERRORS} fn main() -> int {{ try {{ {call}? }} catch {{ Missing {{ k }} => k, Other => 9 }} }}"
+        ))
+    };
+    assert_eq!(catch("g(0)"), "3");
+    assert_eq!(catch("g(1)"), "9");
+    assert_eq!(catch("g(5)"), "6");
+    // An error of a smaller set goes into a larger one as it is.
+    assert_eq!(catch("wider(0)"), "8");
+    // Through a closure.
+    assert_eq!(
+        value(&format!(
+            "{ERRORS} fn main() -> int {{ let h = |x: int| f(x)?; try {{ h(1)? }} catch {{ Missing {{ k }} => k, Other => 9 }} }}"
+        )),
+        "9"
+    );
+}
+
+#[test]
+fn an_error_leaving_a_test_is_reported_where_it_is_raised() {
+    let (_, result) = run_one_test(&format!("{ERRORS}test \"t\" {{ g(1)?; }}"));
+    let Err(Native::Failed(_, range, error)) = result else {
+        panic!("expected an error, got {result:?}");
+    };
+    assert_eq!(error, "Other");
+    let text = format!("{ERRORS}test \"t\" {{ g(1)?; }}");
+    assert_eq!(&text[range.start as usize..range.end as usize], "g(1)");
+}
+
+#[test]
+fn an_error_said_not_to_happen_traps() {
+    let (observed, result) = run_one_test(&format!(
+        "{ERRORS}test \"t\" {{ f(3) ?! \"3 is fine\" // => 3\n; f(0) ?! \"oops\"; }}"
+    ));
+    assert_eq!(observed, vec!["3"]);
+    assert!(matches!(result, Err(Native::Trap(..))), "{result:?}");
+}
+
+#[test]
+fn conversions_and_text() {
+    assert_eq!(
+        value("fn main() -> Option<i8> { 300.checked_to::<i8>() }"),
+        "None"
+    );
+    assert_eq!(value("fn main() -> i8 { 300.truncate::<i8>() }"), "44");
+    assert_eq!(value("fn main() -> u8 { (-5).saturate::<u8>() }"), "0");
+    assert_eq!(
+        value(
+            "fn main() -> (Option<int>, Option<int>) { (7.5.checked_to::<int>(), 7.0.checked_to::<int>()) }"
+        ),
+        "(None, Some(7))"
+    );
+    assert_eq!(
+        value("fn main() -> int { let x: f64 = 3.25; x.text().len() }"),
+        "4"
+    );
+    assert_eq!(
+        value("fn main() -> String { String::from_str((-17).text()) }"),
+        "\"-17\""
+    );
+    assert_eq!(
+        value(r#"fn main() -> String { String::from_str("a\"b".quoted_text()) }"#),
+        r#""\"a\\\"b\"""#
+    );
+}
+
+#[test]
+fn const_items_and_the_log() {
+    assert_eq!(
+        value(
+            "const fn square(x: int) -> int { x * x }  const LIMIT: int = square(12);  fn main() -> int { LIMIT + LIMIT }"
+        ),
+        "288"
+    );
+    assert_eq!(
+        value("fn main() -> int { let n = 6; log.info(fmt\"total {n}\"); n }"),
+        "6"
+    );
 }

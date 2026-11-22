@@ -201,6 +201,11 @@ fn run_native(db: &Database, program: Program, files: &[(String, String)], name:
             eprintln!("moddil: native code leaked {n} allocations (a bug in the backend)");
             ExitCode::FAILURE
         }
+        Err(moddil_native::Native::Failed(file, range, error)) => {
+            let (name, text) = &files[file as usize];
+            report_native_error(name, text, range, &error);
+            ExitCode::FAILURE
+        }
     }
 }
 
@@ -230,6 +235,12 @@ fn test_native(db: &Database, program: Program, files: &[(String, String)]) -> E
             Err(moddil_native::Native::Leak(n)) => {
                 failed += 1;
                 println!("test \"{}\" ... leaked {n} allocations natively", t.name);
+            }
+            Err(moddil_native::Native::Failed(file, range, error)) => {
+                failed += 1;
+                println!("test \"{}\" ... failed", t.name);
+                let (name, text) = &files[file as usize];
+                report_native_error(name, text, range, &error);
             }
         }
     }
@@ -327,6 +338,16 @@ fn report(name: &str, text: &str, d: &Diagnostic) {
 }
 
 /// An error that escaped a test: where it left the test, and the error.
+/// An error that left a natively run test or `main`, as [`report_error`] reports one.
+fn report_native_error(name: &str, text: &str, range: TextRange, error: &str) {
+    let span = (name, range.to_range());
+    let report = Report::build(ReportKind::Error, span.clone())
+        .with_config(config())
+        .with_message(format!("error: {error}"))
+        .with_label(Label::new(span).with_message("the error leaves the test here"));
+    let _ = report.finish().eprint((name, Source::from(text)));
+}
+
 fn report_error(name: &str, text: &str, items: &ItemTree, range: TextRange, error: &Value) {
     let span = (name, range.to_range());
     let report = Report::build(ReportKind::Error, span.clone())

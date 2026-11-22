@@ -209,6 +209,9 @@ impl Implementation for Native {
                 Err(moddil_native::Native::Trap(_, file, range)) => {
                     outcome.traps.insert(line_of(project, file, range.start));
                 }
+                Err(moddil_native::Native::Failed(file, range, _)) => {
+                    outcome.errors.insert(line_of(project, file, range.start));
+                }
                 // A leak is a disagreement: no interpreter observes one.
                 Err(moddil_native::Native::Leak(n)) => {
                     outcome.observed.push((

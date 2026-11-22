@@ -274,104 +274,24 @@ pub(crate) fn float_fn(n: Num, name: &str, x: f64, y: f64) -> Option<Value> {
     })
 }
 
-/// The number `v` is, exactly: an integer, or a float (a NaN or an infinity has none).
-enum Exact {
-    Int(i128),
-    /// A `u128` past `i128::MAX`.
-    Big(u128),
-    Float(f64),
-}
-
-fn exact(v: &Value) -> Exact {
-    match v {
-        Value::Int(i) => Exact::Int(i128::from(*i)),
-        Value::Num(n, bits) if n.is_float() => Exact::Float(float(*n, *bits)),
-        Value::Num(Num::U128, bits) if *bits > i128::MAX as u128 => Exact::Big(*bits),
-        Value::Num(n, bits) => Exact::Int(signed(*n, *bits)),
-        other => unreachable!("a number: {other:?}"),
-    }
-}
-
-/// The value of type `to` (`int` or a number type) for integer `v`, if it holds it exactly.
-fn int_to(v: i128, to: &moddil_sema::Ty) -> Option<Value> {
-    match to {
-        moddil_sema::Ty::Int => i64::try_from(v).ok().map(Value::Int),
-        moddil_sema::Ty::Num(n) if n.is_float() => {
-            let f = v as f64;
-            // Exact if it converts back to the same integer.
-            let back = if *n == Num::F32 {
-                f64::from(f as f32)
-            } else {
-                f
-            };
-            (back.is_finite() && back as i128 == v && back == v as f64).then(|| from_float(*n, f))
-        }
-        moddil_sema::Ty::Num(n) => {
-            let (lo, hi) = n.int_range();
-            (v >= lo && v <= hi).then(|| int(*n, v))
-        }
-        _ => None,
-    }
-}
-
 /// `x.checked_to::<T>()` (as `Some` or `None`), `truncate`, `wrap` and `saturate`
-/// (`num.convert.1`), from the number `x` to type `to`.
+/// (`num.convert.1`), from the number `x` to type `to`: [`moddil_mir::convert`], which native
+/// code uses too.
 pub(crate) fn convert(how: &str, x: &Value, to: &moddil_sema::Ty) -> Option<Value> {
     use moddil_sema::Ty;
-    let bits_of: u128 = match x {
-        Value::Int(i) => *i as u128,
-        Value::Num(_, b) => *b,
-        _ => 0,
+    let (from, bits) = match x {
+        Value::Int(i) => (None, *i as u64 as u128),
+        Value::Num(n, b) => (Some(*n), *b),
+        _ => return None,
     };
     let to_num = match to {
         Ty::Int => None,
         Ty::Num(n) => Some(*n),
         _ => return None,
     };
-    match how {
-        "checked_to" => match exact(x) {
-            Exact::Int(v) => int_to(v, to),
-            Exact::Big(v) => match to_num {
-                Some(Num::U128) => Some(Value::Num(Num::U128, v)),
-                Some(n) if n.is_float() => {
-                    let f = v as f64;
-                    (f as u128 == v).then(|| from_float(n, f))
-                }
-                _ => None,
-            },
-            Exact::Float(f) => match to_num {
-                Some(n) if n.is_float() => {
-                    let back = if n == Num::F32 {
-                        f64::from(f as f32)
-                    } else {
-                        f
-                    };
-                    (back == f || f.is_nan()).then(|| from_float(n, f))
-                }
-                _ => {
-                    (f.is_finite() && f.fract() == 0.0).then_some(())?;
-                    int_to(f as i128, to).filter(|_| (f as i128) as f64 == f)
-                }
-            },
-        },
-        // The low bits, or the bits read again: both keep the bits the target's width holds.
-        "truncate" | "wrap" => Some(match to_num {
-            None => Value::Int(bits_of as i64),
-            Some(n) => Value::Num(n, bits_of & mask(n)),
-        }),
-        _ => {
-            let v = match exact(x) {
-                Exact::Int(v) => v,
-                Exact::Big(_) => i128::MAX,
-                Exact::Float(_) => return None,
-            };
-            Some(match to_num {
-                None => Value::Int(v.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64),
-                Some(n) => {
-                    let (lo, hi) = n.int_range();
-                    int(n, v.clamp(lo, hi))
-                }
-            })
-        }
-    }
+    let out = moddil_mir::convert(how, from, bits, to_num)?;
+    Some(match to_num {
+        None => Value::Int(out as u64 as i64),
+        Some(n) => Value::Num(n, out),
+    })
 }

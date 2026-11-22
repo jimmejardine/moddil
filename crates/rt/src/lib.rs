@@ -37,6 +37,8 @@ pub struct Trapped {
 pub struct Record {
     /// The trap, if one happened.
     pub trap: Option<Trapped>,
+    /// The site of the last error raised (`fail`), which is where one that leaves the run was.
+    pub failed: Option<u32>,
     /// The call sites the run is in, innermost last.
     stack: Vec<u32>,
 }
@@ -77,6 +79,11 @@ pub extern "C" fn trap(site: u32) {
 /// As [`trap`], in tracked code: `#[track_caller]`, the prelude's or derived code.
 pub extern "C" fn trap_tracked(site: u32) {
     record_trap(site, true);
+}
+
+/// Records that the `fail` at `site` raised an error: the code then returns a failed status.
+pub extern "C" fn fail_at(site: u32) {
+    RECORD.with(|r| r.borrow_mut().failed = Some(site));
 }
 
 /// Hands the value at `addr` of the observed expression at `site` to the observer, if there is
@@ -234,9 +241,25 @@ thread_local! {
     static LIVE: Cell<i64> = const { Cell::new(0) };
 }
 
-/// How many allocations made with [`alloc`] are not yet freed, on this thread.
+/// How many allocations made with [`alloc`] are not yet freed, on this thread, not counting
+/// those of `const` items' values (which live as long as the program).
 pub fn live() -> i64 {
     LIVE.with(Cell::get)
+}
+
+thread_local! {
+    static STATIC_FROM: Cell<i64> = const { Cell::new(0) };
+}
+
+/// Before a `const` item's value is computed.
+pub extern "C" fn static_begin() {
+    STATIC_FROM.with(|s| s.set(live()));
+}
+
+/// After it is computed: what it allocated lives as long as the program, so it is not counted.
+pub extern "C" fn static_end() {
+    let from = STATIC_FROM.with(Cell::get);
+    LIVE.with(|l| l.set(from));
 }
 
 fn layout(size: u64, align: u64) -> std::alloc::Layout {

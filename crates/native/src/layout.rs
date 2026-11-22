@@ -53,6 +53,8 @@ pub(crate) enum Shape {
     /// A `Buf<T>`: its memory's address, its length and its capacity, three words; a
     /// `Buf<dyn Trait>` (a `Box<dyn Trait>`'s) has its vtable last, a fourth.
     Buf(Ty),
+    /// An error set: the member's id (its struct's or enum's index), a word, then its value.
+    Errors(Vec<Ty>),
     /// No bytes: `()`, `!`, a struct without fields.
     Empty,
     /// A tuple's or a struct's fields: each one's offset and type, by declared index.
@@ -132,6 +134,23 @@ impl<'a> Layouts<'a> {
                 Some((0x11_0000, 0xFFFF_FFFF - 0x11_0000 + 1)),
             )),
             Ty::Tuple(ts) => self.fields(ts),
+            // An error set: its member's id, a word, then the member (`A | B`).
+            Ty::Errors(ms) => {
+                let mut size = 0;
+                for m in ms.iter() {
+                    let l = self.of(m)?;
+                    if l.align > 8 {
+                        return Err(format!("an error of type `{m}`, aligned to {}", l.align));
+                    }
+                    size = size.max(l.size);
+                }
+                Ok(Layout {
+                    size: 8 + align_up(size, 8),
+                    align: 8,
+                    shape: Shape::Errors(ms.to_vec()),
+                    niche: None,
+                })
+            }
             // A closure is its captures.
             Ty::Closure(c) => self.fields(&c.captures),
             Ty::Buf(elem) => Ok(Layout {

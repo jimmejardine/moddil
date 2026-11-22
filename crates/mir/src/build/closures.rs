@@ -10,7 +10,7 @@ use moddil_sema::hir::{ExprId, ExprKind};
 use moddil_sema::{Callee, Capture, CaptureMode, Evidence, SelfKind, Ty};
 
 use super::Builder;
-use crate::{AggregateKind, Const, Local, Operand, Place, Rvalue};
+use crate::{AggregateKind, Const, Local, Operand, Place, Projection, Rvalue};
 
 impl Builder<'_> {
     /// The place a local is: its own, or, in a closure's body, where its capture is.
@@ -129,8 +129,13 @@ impl Builder<'_> {
             // it is given is typed by the closure's body.
             let mut given_tys = given_tys.into_iter();
             for p in given {
-                let t = given_tys.next().unwrap_or(Ty::Error);
-                tys.push(Ty::reference(false, t));
+                // Typed by the callee's needs, or else (a closure revealed as its own type,
+                // which lists none) by the handler's place: a borrow of the handler already.
+                let t = match given_tys.next() {
+                    Some(t) => Ty::reference(false, t),
+                    None => self.place_ty(&p),
+                };
+                tys.push(t);
                 ops.push(Operand::Copy(p));
             }
             let t = self.temp(Ty::tuple(tys));
@@ -139,5 +144,18 @@ impl Builder<'_> {
             Operand::Move(Place::local(t))
         };
         self.call(e, dest, vec![recv, tuple]);
+    }
+
+    /// The type of place `p`: its local's, through tuple fields and borrows.
+    fn place_ty(&self, p: &Place) -> Ty {
+        let mut t = self.cfg.local_ty(p.local);
+        for proj in &p.projection {
+            t = match (proj, &t) {
+                (Projection::Field(i), Ty::Tuple(ts)) => ts[*i as usize].clone(),
+                (Projection::Deref, Ty::Ref(_, inner)) => (**inner).clone(),
+                _ => return Ty::Error,
+            };
+        }
+        t
     }
 }

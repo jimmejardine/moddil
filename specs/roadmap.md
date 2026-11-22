@@ -684,8 +684,36 @@ calls is a Rust crate, `moddil-rt`, for now.
     - no concurrency;
     - no anonymous impls;
     - converting a `dyn` borrow to a supertrait that is not its first.
-- **Next, C4:** errors through the status channel (`fail`, `?`, `try` and `catch`), then the
-  number conversions and `text`, then `const` items.
+- **Slice C4 (decided November 2026): errors, conversions, text, `const` items and the log.**
+  - **The error ABI:** every function takes an error pointer last (null where a call cannot
+    fail). Status 2 means failed: the error is at the pointer.
+    - The error channel always holds a tagged error: the error type's id (its struct's or
+      enum's index in the program) in a word, then the value. So a smaller error set passes
+      into a larger one by copying.
+    - An error set (`A | B`) is laid out the same way. `ErrorIs` compares the id.
+    - `fail` records its site in `moddil-rt`. An error that leaves a test is reported there, as
+      the interpreters report it.
+  - **A MIR fix:** a `catch` arm matches the caught error as its member, `(err as Member)`. Before,
+    a field read in the arm did not say which member it was of; the interpreters ignore the
+    projection.
+  - **A second MIR fix:** a stored closure revealed as its own type (an `impl Fn… with …`
+    result) was given its handlers in a tuple typed `&{error}`; now each is typed by the
+    handler's place.
+  - **Conversions:** `checked_to`, `truncate`, `wrap` and `saturate` moved from the interpreter
+    to `moddil_mir::convert`, on bits. Native code calls the same function through the host.
+  - **Text:** `text` and `quoted_text` are made in the host and live until the run ends, as the
+    `&str` they give may.
+  - **`const` items:** each has a slot. Its value is computed the first time it is used, and
+    what that allocates is left out of the leak check.
+  - **The log:** written to standard error as the interpreters write it.
+  - **Checking:** 102 conformance files run natively (from 79).
+  - **Interim limits:**
+    - no concurrency (`spawn`, channels, scopes);
+    - no anonymous impls;
+    - not `upper_text`, `lower_text`, `trim` or `split_at_mut_unchecked`;
+    - converting a `dyn` borrow to a supertrait that is not its first.
+- **Next, C5:** concurrency (tasks, channels and scopes), then the rest of the prelude's
+  built-ins, then native code as the default for `moddil run` and `moddil test`.
 
 ## Staging: distributed programs
 

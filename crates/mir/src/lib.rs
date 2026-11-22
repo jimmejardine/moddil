@@ -16,6 +16,7 @@ use moddil_sema::{Callee, Src, Ty};
 use moddil_syntax::TextRange;
 
 mod build;
+mod convert;
 mod ownership;
 mod pretty;
 
@@ -559,6 +560,8 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(test)]
 mod tests;
+
+pub use convert::convert;
 
 /// How a number constant of type `n` with bits `bits` is written.
 pub fn num_text(n: moddil_sema::Num, bits: u128) -> String {

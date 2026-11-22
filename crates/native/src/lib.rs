@@ -5,6 +5,7 @@
 //! outside the subset compiled so far gives [`Native::Unsupported`], so a caller can say so or
 //! fall back to an interpreter.
 
+mod host;
 mod jit;
 mod layout;
 mod lower;
@@ -22,6 +23,9 @@ pub enum Native {
     Trap(TrapClass, u32, TextRange),
     /// A run that returned left this many allocations unfreed: a bug in the backend's drops.
     Leak(i64),
+    /// An error left the run: where it was raised (the file and its source), and the error as
+    /// Moddil source.
+    Failed(u32, TextRange, String),
 }
 
 /// An observed `// =>` value: the file, the expression and its value as Moddil source.
