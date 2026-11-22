@@ -759,11 +759,23 @@ calls is a Rust crate, `moddil-rt`, for now.
     - `moddil-rt-main`, a new static library, gives the process its `main`: it exits with
       `main`'s `ExitCode`, or prints a trap's class and place and exits 70 (`lifecycle.md`).
     - Linking uses MSVC's `link.exe` on Windows and `cc` elsewhere.
-  - **Interim limits:**
-    - a built program's `main` takes no root capabilities, and gives `()` or `ExitCode`;
-    - `moddil run` still exits 101 on a trap, where a built program exits 70.
-- **Next:** release builds (`lld` or `mold`, optimisation and debug info), and root
-  capabilities for `main`.
+  - **Interim limit:** a built program's `main` gives `()` or `ExitCode`.
+- **Slice C7 (decided November 2026): the native backend finished, on Windows and Linux.**
+  - **Root capabilities:** `main` may take its root capabilities (`main.root.1`), natively and
+    in a built program, each made with its handle zero, as the interpreter makes them.
+  - **Exit codes:**
+    - `moddil run` exits 70 on a trap, as a built program does (`lifecycle.md`); it was 101;
+    - a native `main`'s `ExitCode` is `moddil run`'s exit code, as with `--interp`.
+  - **Linux:** the CI's steps pass in WSL (Ubuntu 20.04), the conformance suite natively
+    included, and `moddil build` links with `cc` into an ELF executable. One fix:
+    `moddil-rt-main` is empty when built for tests, since `cargo test --all-targets` builds it
+    and its `main` would clash with the test harness's.
+  - **Not verified:** macOS (no Mac to run it on). The WSL run's `grammars` step fails because
+    WSL resolves `tree-sitter` to the Windows binary; that is an environment problem, not the
+    code's.
+- **Next:** the WASM emitter (M1's other half): MIR to core WebAssembly modules, run in Node,
+  then the JSPI lowering for suspension. Release builds (`lld` or `mold`, optimisation and
+  debug info) after.
 
 ## Staging: distributed programs
 

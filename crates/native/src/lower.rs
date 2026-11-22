@@ -476,18 +476,23 @@ fn build<M: Module>(
         tramps: HashMap::new(),
         c_drops: HashMap::new(),
     };
-    let (target, ret) = match item {
+    let (target, params, ret) = match item {
         Item::Test(_) => {
             let id = c.declare_item("test", &[], &Ty::Unit, false)?;
             c.body_of(item, &[], id, &[], &Ty::Unit)?;
-            (id, Ty::Unit)
+            (id, Vec::new(), Ty::Unit)
         }
         Item::Fn(f) => {
             let (id, params, ret) = c.declare_fn(f, &[])?;
-            if !params.is_empty() {
+            // `main`'s root capabilities (`main.root.1`): each a struct of a stub mod, made with
+            // its handle zero, as the interpreters make it.
+            let roots = params
+                .iter()
+                .all(|p| matches!(p, Ty::Adt(a, ..) if c.items.adts[*a as usize].root));
+            if !roots {
                 return Err("an entry point with parameters".to_string());
             }
-            (id, ret)
+            (id, params, ret)
         }
         Item::Closure(..) => return Err("a closure as an entry point".to_string()),
     };
@@ -503,7 +508,7 @@ fn build<M: Module>(
             break;
         }
     }
-    let entry = c.trampoline(target, &ret)?;
+    let entry = c.trampoline(target, &params, &ret)?;
     Ok(Built {
         c,
         entry,
@@ -1286,7 +1291,7 @@ impl<M: Module> Compiler<'_, M> {
 
     /// `fn(out: *mut u8, err: *mut u8) -> i8`, in the platform's C convention: calls `target`,
     /// storing its result's bytes at `out`, or its error at `err`.
-    fn trampoline(&mut self, target: FuncId, ret: &Ty) -> Result<FuncId, String> {
+    fn trampoline(&mut self, target: FuncId, params: &[Ty], ret: &Ty) -> Result<FuncId, String> {
         let ptr = self.module.target_config().pointer_type();
         let mut sig = self.module.make_signature();
         sig.params.push(AbiParam::new(ptr));
@@ -1307,11 +1312,43 @@ impl<M: Module> Compiler<'_, M> {
         let out = b.block_params(block)[0];
         let err = b.block_params(block)[1];
         let f = self.module.declare_func_in_func(target, b.func);
-        let call = if pass == Pass::Indirect {
-            b.ins().call(f, &[out, err])
-        } else {
-            b.ins().call(f, &[err])
-        };
+        // Each parameter (a root capability) zero.
+        let mut vals = Vec::new();
+        for p in params {
+            let ts = match self.pass(p)? {
+                Pass::Nothing => Vec::new(),
+                Pass::Scalar(t) => vec![t],
+                Pass::Words(ts) => ts,
+                Pass::Indirect => {
+                    let l = self.layouts.of(p)?;
+                    let slot = b.create_sized_stack_slot(ir::StackSlotData::new(
+                        ir::StackSlotKind::ExplicitSlot,
+                        l.size.max(1),
+                        3,
+                    ));
+                    let a = b.ins().stack_addr(ptr, slot, 0);
+                    let zero = b.ins().iconst(types::I8, 0);
+                    for k in 0..l.size {
+                        b.ins()
+                            .store(ir::MemFlagsData::trusted(), zero, a, k as i32);
+                    }
+                    vals.push(a);
+                    continue;
+                }
+            };
+            for t in ts {
+                vals.push(match t {
+                    types::F32 => b.ins().f32const(0.0),
+                    types::F64 => b.ins().f64const(0.0),
+                    t => b.ins().iconst(t, 0),
+                });
+            }
+        }
+        if pass == Pass::Indirect {
+            vals.push(out);
+        }
+        vals.push(err);
+        let call = b.ins().call(f, &vals);
         let results = b.inst_results(call).to_vec();
         let flags = ir::MemFlagsData::trusted();
         match pass {

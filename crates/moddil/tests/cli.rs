@@ -53,13 +53,13 @@ fn reports_errors_with_codes() {
 }
 
 #[test]
-fn a_trap_exits_with_101() {
+fn a_trap_exits_with_70() {
     let path = file(
         "trap.moddil",
         "fn main() -> int { let max = 9223372036854775807; max + 1 }\n",
     );
     let out = moddil(&["run"], &path);
-    assert_eq!(out.status.code(), Some(101));
+    assert_eq!(out.status.code(), Some(70));
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("trap: overflow"), "{stderr}");
 }
@@ -137,4 +137,45 @@ fn a_built_program_reports_a_trap_and_exits_with_70() {
         assert!(stderr.contains("trap: index out of bounds"), "{stderr}");
         assert!(stderr.contains("boom.moddil:1:"), "{stderr}");
     }
+}
+
+#[test]
+fn run_exits_with_mains_exit_code() {
+    let path = file(
+        "code.moddil",
+        "fn main() -> ExitCode { ExitCode::new(42) }\n",
+    );
+    assert_eq!(moddil(&["run"], &path).status.code(), Some(42));
+    assert_eq!(moddil(&["run", "--interp"], &path).status.code(), Some(42));
+}
+
+#[test]
+fn a_main_with_root_capabilities_runs_and_builds() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../conformance/2027/main/roots");
+    let out = moddil(&["run"], &dir);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let exe = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("cli")
+        .join("roots")
+        .with_extension(std::env::consts::EXE_EXTENSION);
+    let built = Command::new(env!("CARGO_BIN_EXE_moddil"))
+        .arg("build")
+        .arg(&dir)
+        .arg("-o")
+        .arg(&exe)
+        .output()
+        .expect("moddil runs");
+    let stderr = String::from_utf8_lossy(&built.stderr);
+    if stderr.contains("the runtime library") || stderr.contains("link.exe") {
+        return;
+    }
+    assert!(built.status.success(), "{stderr}");
+    assert_eq!(
+        Command::new(&exe).status().expect("it runs").code(),
+        Some(0)
+    );
 }

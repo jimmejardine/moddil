@@ -43,7 +43,7 @@ pub fn run_test(db: &dyn Db, program: Program, index: u32) -> (Vec<Observed>, Re
     match lower::compile(db, program, Item::Test(index)) {
         Err(why) => (Vec::new(), Err(Native::Unsupported(why))),
         Ok(compiled) => {
-            let (observed, result) = compiled.run();
+            let (observed, result, _) = compiled.run();
             (observed, result.map(|_| ()))
         }
     }
@@ -56,8 +56,22 @@ pub fn run_test(db: &dyn Db, program: Program, index: u32) -> (Vec<Observed>, Re
 /// [`Native::Unsupported`] if it reaches code not compiled natively yet, and [`Native::Trap`]
 /// if it traps.
 pub fn run_main(db: &dyn Db, program: Program, index: u32) -> Result<String, Native> {
+    run_main_exit(db, program, index).map(|(shown, _)| shown)
+}
+
+/// As [`run_main`], with the process's exit code if `main` gives an `ExitCode` (`main.exit.1`).
+///
+/// # Errors
+///
+/// As [`run_main`].
+pub fn run_main_exit(
+    db: &dyn Db,
+    program: Program,
+    index: u32,
+) -> Result<(String, Option<u8>), Native> {
     let compiled = lower::compile(db, program, Item::Fn(index)).map_err(Native::Unsupported)?;
-    compiled.run().1
+    let (_, result, exit) = compiled.run();
+    result.map(|shown| (shown, exit))
 }
 
 /// Compiles `main` (function `index` of `program`) ahead of time: an object file to link with

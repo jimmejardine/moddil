@@ -59,8 +59,8 @@ enum Command {
     NativeTest { file: PathBuf, index: u32 },
 }
 
-/// The exit code for a trap, as for a Rust panic.
-const TRAPPED: u8 = 101;
+/// The exit code for a trap: 70 (`EX_SOFTWARE`), as a built program's (`lifecycle.md`).
+const TRAPPED: u8 = 70;
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
@@ -199,9 +199,11 @@ fn run_native(db: &Database, program: Program, files: &[(String, String)], name:
         eprintln!("moddil: {name} has no `fn main()`");
         return ExitCode::FAILURE;
     };
-    match moddil_native::run_main(db, program, main) {
-        Ok(v) if v == "()" => ExitCode::SUCCESS,
-        Ok(v) => {
+    match moddil_native::run_main_exit(db, program, main) {
+        // An `ExitCode` (`main.exit.1`): the number it stands for.
+        Ok((_, Some(code))) => ExitCode::from(code),
+        Ok((v, None)) if v == "()" => ExitCode::SUCCESS,
+        Ok((v, None)) => {
             println!("{v}");
             ExitCode::SUCCESS
         }

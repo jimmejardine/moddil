@@ -59,7 +59,8 @@ fn observe(cx: *mut (), site: u32, addr: *const u8) {
 impl Compiled<'_> {
     /// Runs the entry point, on a thread of its own with a large stack: the values it observed,
     /// and its result as Moddil source, or the trap.
-    pub(crate) fn run(self) -> (Vec<Observed>, Result<String, Native>) {
+    /// With it, if the result is an `ExitCode`, the process's exit code for it (`main.exit.1`).
+    pub(crate) fn run(self) -> (Vec<Observed>, Result<String, Native>, Option<u8>) {
         let ptr = self.module.get_finalized_function(self.entry) as usize;
         let drop_ptr = self.module.get_finalized_function(self.drop_result) as usize;
         let (sites, items, ret) = (&self.sites, self.items, &self.ret);
@@ -70,7 +71,7 @@ impl Compiled<'_> {
             files: &self.files,
         };
         let host = &host;
-        let (status, text, observed, record, leaked, parts) = std::thread::scope(|s| {
+        let (status, text, observed, record, leaked, parts, exit) = std::thread::scope(|s| {
             std::thread::Builder::new()
                 .stack_size(STACK)
                 .spawn_scoped(s, move || {
@@ -117,6 +118,10 @@ impl Compiled<'_> {
                         2 => Some(unsafe { seen.show.error(errors, err.as_ptr().cast()) }),
                         _ => None,
                     };
+                    // SAFETY: as for the text, when the run returned.
+                    let exit = (status == 0)
+                        .then(|| unsafe { seen.show.exit_code(ret, out.as_ptr().cast()) })
+                        .flatten();
                     // Once shown, the result is dropped; then a run that returned has freed
                     // everything it allocated.
                     let mut leaked = 0;
@@ -138,6 +143,7 @@ impl Compiled<'_> {
                         moddil_rt::take(),
                         leaked,
                         seen.parts,
+                        exit,
                     )
                 })
                 .expect("a thread to run on")
@@ -167,7 +173,7 @@ impl Compiled<'_> {
         };
         // SAFETY: nothing runs the module's code after this.
         unsafe { self.module.free_memory() };
-        (observed, result)
+        (observed, result, exit)
     }
 }
 
@@ -352,6 +358,34 @@ impl Show<'_> {
 }
 
 impl Show<'_> {
+    /// The exit code for the result of type `ty` at `p`, if it is the prelude's `ExitCode`: its
+    /// `sysexits.h` number, or `Other(n)`'s `n`, as the interpreter's `moddil run` gives it.
+    ///
+    /// # Safety
+    ///
+    /// `p` points to a live value of type `ty`.
+    unsafe fn exit_code(&mut self, ty: &Ty, p: *const u8) -> Option<u8> {
+        let Ty::Adt(a, ..) = ty else { return None };
+        let def = &self.items.adts[*a as usize];
+        if def.src != moddil_sema::Src::Prelude || def.name != "ExitCode" {
+            return None;
+        }
+        let l = self.layouts.of(ty).ok()?;
+        let Shape::Enum { tag, variants } = &l.shape else {
+            return None;
+        };
+        const CODES: [u8; 16] = [
+            0, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78,
+        ];
+        let v = unsafe { variant_at(tag, variants.len() as u32, p) };
+        if let Some(c) = CODES.get(v as usize) {
+            return Some(*c);
+        }
+        let at = variants[v as usize].first()?.0;
+        let n = unsafe { bits_at(p.add(at as usize), 8) } as u64 as i64;
+        Some(n.clamp(0, 255) as u8)
+    }
+
     /// The error at `p`, tagged: its value, as the member of `errors` its id says.
     ///
     /// # Safety

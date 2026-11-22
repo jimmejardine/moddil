@@ -4,6 +4,9 @@
 //! `moddil_entry`, `moddil_drop_result` and `moddil_exit_code`, and the tables a trap is reported
 //! from; this library defines `main`, which runs the program and exits as `lifecycle.md` says.
 
+// Built for tests (`cargo test --all-targets`), it would bring a second `main` and symbols only a
+// program's object defines: so it is empty then.
+#![cfg(not(test))]
 #![allow(unsafe_code)]
 
 unsafe extern "C" {
