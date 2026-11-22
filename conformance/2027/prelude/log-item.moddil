@@ -1,0 +1,8 @@
+// covers: obs.log.1
+
+// An item called `log` shadows the prelude's log in its module.
+fn log(n: int) -> int { n * 2 }
+
+test "an item called log comes first" {
+    log(3)                                  // => 6
+}

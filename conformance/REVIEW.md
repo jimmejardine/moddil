@@ -42,7 +42,6 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
 
 | Directory | claim | weak | missing | cite | dead | gap? |
 |---|---|---|---|---|---|---|
-| collections | 1 | | 4 | 1 | | |
 | comptime | | | 1 | | | |
 | concurrency | 2 | 2 | 4 | 1 | | |
 | contracts | | | 2 | 1 | | |
@@ -50,48 +49,20 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
 | effects | | | 2 | | | |
 | enums, structs | 1 | | | | | |
 | generics | | | 2 | | | |
-| iteration | | 1 | | | | |
 | main | | 1 | | | | |
 | modules | | | 3 | | | |
 | operators | | | 1 | | | |
 | ownership | | | 1 | 1 | | |
-| prelude | | | 2 | | | |
 | refinements | 1 | | | 1 | | |
 | syntax, text | | | 3 | | | |
 | traits | | | 3 | | | |
 | wrappers | | | 1 | | 1 | |
 
-The directories not listed have no finding left: arithmetic, arrays, attributes, borrows, calls, closures and errors are done, and
+The directories not listed have no finding left: arithmetic, arrays, attributes, borrows, calls, closures, collections, errors, iteration and prelude are done, and
 assert, assignment, bitwise, blocks, comparison, if, items, literals, logic, loops, match, names,
 patterns, statements, tuples, types and views had none worth a change.
 
 ## Findings
-
-### collections
-
-- **claim:** `vec.moddil` cites `coll.buf.1`, but no test in the suite uses `Buf`. Add a
-  `collections/buf.moddil` that covers:
-  - `with_capacity`, `from_array`, `set_capacity`, `push`, `pop`, `insert`, `remove`, `swap` and
-    `as_slice`;
-  - the traps: pushing into a full buffer, and an index out of bounds;
-  - its elements dropped first to last, with a destructor that records the order.
-- **missing:** `coll.vec.1` lists methods no test calls: `with_capacity`, `truncate`, `reserve`,
-  `last` and `as_mut_slice`. The growth rule ("at least twice as much") is checked only as
-  `capacity() >= 10`. Add a case that pushes into a full `Vec` and checks `capacity()` against the
-  old capacity times two.
-- **missing:** `expr.index.trait.1` says changing an element through a type without `IndexMut` is
-  an error (E0205). Add a type with only `Index`, and assign through it.
-- **missing:** `maps.moddil` leaves parts of four paragraphs untested:
-  - `coll.set.1`: `remove`, `is_empty` and `iter`;
-  - `coll.map.1`: `iter`, which is called nowhere;
-  - `coll.map.2`: the `Set` trait;
-  - `coll.hash.1`: a hand-written `impl Hash` with a `Hasher`, and the `Hash` impls of `bool`,
-    `char`, `Option` and pairs.
-- **missing:** `coll.hash.derive.1` says a derive hashes the variant's index, then each field.
-  Nothing checks the value. Compare the hashes of `Point { x: 1, y: 2 }` and `Point { x: 2, y: 1 }`,
-  which must differ, and of `Key::A(0)` and `Key::B`.
-- **cite:** `borrows.moddil`'s `moved_out` tests `expr.index.move.1` (E0304 through `Index`), but
-  the file cites only `coll.vec.borrow.1`. Cite it.
 
 ### comptime
 
@@ -186,11 +157,6 @@ patterns, statements, tuples, types and views had none worth a change.
   `let v: Vec<_> = [1, 2];`, and `generic.bound.1`'s "a bound also gives the trait's
   supertraits" (call a supertrait's method on `T: Sub`).
 
-### iteration
-
-- **weak:** `adapters.moddil` observes `v.len()` and one element. Observe the whole `Vec`
-  (`// => [0, 1, 4, 9]`, `// => [0, 3, 6, 9]`) so that order and every item are checked.
-
 ### main
 
 - **weak:** `roots/src/lib.moddil`'s test observes `1 // => 1`, which tests nothing. The file's
@@ -226,13 +192,6 @@ patterns, statements, tuples, types and views had none worth a change.
     twice.
 - **cite:** `drop-errors.moddil`'s `#[derive(Copy, Clone)] struct Point` with a destructor is
   `own.copy.derive.1`'s E0411, which the file doesn't cite. Cite it.
-
-### prelude
-
-- **missing:** `prelude.1` names the functions `replace` and `swap`. No test calls either: the
-  `swap(` matches are methods and a function of a test's own. Add both to `prelude.moddil`.
-- **missing:** `obs.log.1` lists `log.warn` and `log.error`, and "an item called `log` shadows
-  it". Only `debug`, `info` and a local are tested.
 
 ### refinements
 

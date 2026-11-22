@@ -1,4 +1,4 @@
-// covers: coll.vec.borrow.1
+// covers: coll.vec.borrow.1, expr.index.move.1
 
 fn hold(v: &mut Vec<int>) {
     let first = &v[0];

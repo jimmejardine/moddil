@@ -1,4 +1,4 @@
-// covers: coll.vec.1, coll.vec.2, coll.vec.index.1, coll.buf.1, expr.array.from.1, expr.index.trait.1
+// covers: coll.vec.1, coll.vec.2, coll.vec.index.1, expr.array.from.1, expr.index.trait.1
 
 struct Noisy { id: int }
 
@@ -52,6 +52,32 @@ test "it grows" {
     v.capacity() >= 10                      // => true
     ;
     sum(v.as_slice())                       // => 90
+}
+
+test "capacity, truncating and the ends" {
+    let mut v: Vec<int> = Vec::with_capacity(2);
+    (v.len(), v.capacity())                 // => (0, 2)
+    ;
+    v.push(1);
+    v.push(2);
+    v.push(3);
+    // A full `Vec` gets at least twice the room.
+    v.capacity() >= 4                       // => true
+    ;
+    v.reserve(10);
+    v.capacity() >= 13                      // => true
+    ;
+    v.last()                                // => Some(&3)
+    ;
+    let s = v.as_mut_slice();
+    s[2] = 30;
+    v.truncate(5);
+    v                                       // => [1, 2, 30]
+    ;
+    v.truncate(1);
+    v                                       // => [1]
+    ;
+    (v.first(), v.last())                   // => (Some(&1), Some(&1))
 }
 
 test "indexing" {

@@ -1,6 +1,6 @@
 // covers: coll.map.1, coll.map.2, coll.set.1, coll.hash.1, coll.hash.2, coll.hash.derive.1, coll.core.1
 
-use core::collections::{HashMap, HashSet, Map, hash_of};
+use core::collections::{HashMap, HashSet, Map, Set, hash_of};
 
 #[derive(PartialEq, Eq, Hash)]
 enum Key { A(int), B }
@@ -18,6 +18,18 @@ fn total(m: &HashMap<int, int>) -> int {
 
 fn size<M: Map<int, int>>(m: &M) -> int {
     m.len()
+}
+
+fn has<S: Set<int>>(s: &S, x: int) -> bool {
+    s.contains(&x)
+}
+
+// A hash of one's own: what it writes to the hasher is what it hashes.
+struct Even { n: int }
+impl Hash for Even {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.n % 2);
+    }
 }
 
 test "inserting and finding" {
@@ -121,4 +133,51 @@ test "the hash is the same on every run" {
         order = order * 10 + *x;
     }
     order                                   // => 4213
+}
+
+test "sets remove and iterate" {
+    let mut s: HashSet<int> = [1, 2, 3];
+    s.remove(&2)                            // => true
+    ;
+    s.remove(&2)                            // => false
+    ;
+    has(&s, 3)                              // => true
+    ;
+    let mut t = 0;
+    for x in s.iter() {
+        t += *x;
+    }
+    t                                       // => 4
+    ;
+    s.remove(&1);
+    s.remove(&3);
+    s.is_empty()                            // => true
+}
+
+test "a map's entries by iter" {
+    let m: HashMap<int, int> = [(1, 10), (2, 20)];
+    let mut t = 0;
+    for (k, v) in m.iter() {
+        t += *k + *v;
+    }
+    t                                       // => 33
+}
+
+test "what hashes, and how" {
+    hash_of(&Even { n: 2 }) == hash_of(&Even { n: 4 }) // => true
+    ;
+    hash_of(&Even { n: 2 }) == hash_of(&0)  // => true
+    ;
+    hash_of(&true) == hash_of(&false)       // => false
+    ;
+    hash_of(&'a') == hash_of(&'b')          // => false
+    ;
+    hash_of(&Some(1)) == hash_of(&None::<int>) // => false
+    ;
+    hash_of(&(1, 2)) == hash_of(&(2, 1))    // => false
+    ;
+    // A derive hashes the variant's index, then each field in order.
+    hash_of(&Point { x: 1, y: 2 }) == hash_of(&Point { x: 2, y: 1 }) // => false
+    ;
+    hash_of(&Key::A(0)) == hash_of(&Key::B) // => false
 }

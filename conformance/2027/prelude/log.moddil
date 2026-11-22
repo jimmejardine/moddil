@@ -7,6 +7,12 @@ fn total(xs: &Vec<int>) -> int {           // no effect to list for the log
         log.debug(fmt"added {x}");
     }
     log.info(fmt"total {n}");
+    if n > 100 {
+        log.warn(fmt"large");
+    }
+    if n < 0 {
+        log.error(fmt"negative");
+    }
     n
 }
 

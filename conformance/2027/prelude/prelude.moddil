@@ -29,3 +29,13 @@ test "Clone and Copy" {
     ;
     ().clone()                              // => ()
 }
+
+test "replace and swap" {
+    let mut a = Label { id: 1 };
+    let mut b = Label { id: 2 };
+    swap(&mut a, &mut b);
+    (a.id, b.id)                            // => (2, 1)
+    ;
+    let old = replace(&mut a, Label { id: 3 });
+    (old.id, a.id)                          // => (2, 3)
+}

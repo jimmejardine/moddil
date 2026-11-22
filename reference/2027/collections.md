@@ -35,7 +35,7 @@ gives its characters in order.
 
 **coll.buf.1** `Buf<T>` is built-in storage with a fixed capacity, of which a prefix holds
 elements: `Buf::with_capacity(n)` is empty, `Buf::from_array(a)` holds an array's elements, and
-`len`, `capacity`, `set_capacity` (no less than its length), `push`, `pop`, `insert`, `remove`,
+`len`, `capacity`, `set_capacity` (to its length if given less), `push`, `pop`, `insert`, `remove`,
 `swap`, `as_slice` and `as_mut_slice` are its methods. Pushing or inserting into a full buffer
 traps (capacity exceeded), as do `insert`, `remove` and `swap` at an index out of bounds
 ([Traps](traps.md)). Its elements are dropped with it, first to last.

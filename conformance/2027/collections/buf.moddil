@@ -1,0 +1,70 @@
+// covers: coll.buf.1
+
+test "a fixed capacity, a prefix of which holds elements" {
+    let mut b: Buf<int> = Buf::with_capacity(3);
+    (b.len(), b.capacity())                 // => (0, 3)
+    ;
+    b.push(1);
+    b.push(3);
+    b.insert(1, 2);
+    b.as_slice() == [1, 2, 3].as_slice()    // => true
+    ;
+    b.swap(0, 2);
+    b.remove(1)                             // => 2
+    ;
+    b.pop()                                 // => Some(1)
+    ;
+    b.pop()                                 // => Some(3)
+    ;
+    b.pop()                                 // => None
+}
+
+test "from an array, and a new capacity" {
+    let mut b = Buf::from_array([4, 5]);
+    (b.len(), b.capacity())                 // => (2, 2)
+    ;
+    b.set_capacity(4);
+    b.push(6);
+    let s = b.as_mut_slice();
+    s[0] = 40;
+    b.as_slice()[0] + b.as_slice()[2]       // => 46
+    ;
+    b.capacity()                            // => 4
+    ;
+    // Never below its length.
+    b.set_capacity(1);
+    b.capacity()                            // => 3
+}
+
+test "pushing into a full buffer traps" {
+    let mut b: Buf<int> = Buf::with_capacity(1);
+    b.push(1);
+    b.push(2);                              //~ trap
+}
+
+test "inserting into a full buffer traps" {
+    let mut b = Buf::from_array([1]);
+    b.insert(0, 2);                         //~ trap
+}
+
+test "removing out of bounds traps" {
+    let mut b = Buf::from_array([1]);
+    b.remove(1);                            //~ trap
+}
+
+test "swapping out of bounds traps" {
+    let mut b = Buf::from_array([1, 2]);
+    b.swap(0, 2);                           //~ trap
+}
+
+// Each element records its id in `order` when it is dropped.
+struct Noted { id: int }
+impl Drop for Noted {
+    fn drop(self) {
+        assert(self.id != 1);               //~ trap
+    }
+}
+
+test "its elements are dropped with it, first to last" {
+    let b = Buf::from_array([Noted { id: 1 }, Noted { id: 2 }]);
+}

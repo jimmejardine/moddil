@@ -2760,7 +2760,7 @@ impl<T> Buf<T> {
     fn len(&self) -> int;
     #[intrinsic]
     fn capacity(&self) -> int;
-    // Changes its capacity, to no less than its length.
+    // Changes its capacity: to its length if given less.
     #[intrinsic]
     fn set_capacity(&mut self, capacity: int);
     // Adds `x` at the end; traps if it is full.
