@@ -598,9 +598,33 @@ calls is a Rust crate, `moddil-rt`, for now.
     natively (22 files at C0).
   - **The toolchain:** Cranelift 0.138, with Rust moved to the latest stable, 1.100.0, for it
     (November 2026).
-- **Next, C1:** values on the stack (tuples, structs, enums and arrays, with layouts and field
-  places), then borrows, then errors through the status channel, then the prelude's generic
-  code (monomorphised), and drops.
+- **Slice C1 (decided November 2026): values on the stack, and borrows.**
+  - **Values:** tuples, structs, enums and arrays live in stack slots. Places are addresses:
+    fields, variants, elements (bounds-checked) and dereferences. `match` on enums reads the
+    discriminant.
+  - **Borrows:** `&` and `&mut` of those places are pointers. A scalar something borrows lives
+    in memory; others stay in registers.
+  - **Layout:**
+    - fields go largest alignment first, so there is as little padding as can be;
+    - an enum uses a niche when it can: `Option<bool>` and `Option<Option<bool>>` are one byte,
+      and `Option<&T>` and `Option<char>` need no tag;
+    - otherwise a tag comes first, then the largest payload.
+  - **The ABI:** internal functions use Cranelift's `tail` convention, so a status and up to two
+    words come back in registers. An aggregate of up to 16 bytes, splitting into at most two
+    pieces, crosses a call in registers; larger ones pass as a pointer to the caller's copy and
+    return through a pointer the caller gives. `i128` and `u128` return in registers too now.
+  - **Observing values:** a `// =>` value's address goes to `moddil-rt`, which hands it to a
+    renderer the host installs for the run; it reads the bytes while they are alive and writes
+    them as the interpreters do.
+  - **Checking:** 45 conformance files run natively (from 22).
+  - **Interim limits:**
+    - no slices, `str` or `dyn`, which need wide pointers;
+    - no closures, generics or trait methods;
+    - no destructors;
+    - no errors through the status channel;
+    - `#[repr(C)]` is not honoured yet.
+- **Next, C2:** wide pointers (slices and `str`), then errors through the status channel, then
+  generics (monomorphised, the prelude's included), then drops.
 
 ## Staging: distributed programs
 

@@ -6,10 +6,11 @@
 //! fall back to an interpreter.
 
 mod jit;
+mod layout;
 mod lower;
 
 use moddil_mir::TrapClass;
-use moddil_sema::{Db, Item, Program, Ty};
+use moddil_sema::{Db, Item, Program};
 use moddil_syntax::TextRange;
 
 /// Why a run did not give a result.
@@ -50,11 +51,6 @@ pub fn run_test(db: &dyn Db, program: Program, index: u32) -> (Vec<Observed>, Re
 pub fn run_main(db: &dyn Db, program: Program, index: u32) -> Result<String, Native> {
     let compiled = lower::compile(db, program, Item::Fn(index)).map_err(Native::Unsupported)?;
     compiled.run().1
-}
-
-/// Whether a type is one C0 compiles: a scalar, or `()`.
-pub fn is_scalar(ty: &Ty) -> bool {
-    lower::clif_type(ty).is_ok()
 }
 
 /// This crate's version.

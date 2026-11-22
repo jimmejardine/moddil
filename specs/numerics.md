@@ -185,7 +185,13 @@ let notional = (price * qty).rescale::<2>(Round::HalfEven);  // Fixed<2>[USD]
 ### Data layout
 
 - **Field order**: the compiler may reorder fields to reduce padding, unless the type is
-  `#[repr(C)]`.
+  `#[repr(C)]`. The native backend puts them largest alignment first, ties in the order declared
+  (decided November 2026, M1 slice C1).
+- **Niches**: an enum with one variant that holds data, the others none, stores the others in
+  that data's invalid values when it has some: a `bool`'s 2 to 255, a `char` past U+10FFFF, a
+  borrow's null, an enum tag's unused values. So `Option<&T>` is a pointer and `Option<bool>` a
+  byte. Other enums put a tag, the smallest integer that numbers the variants, before the
+  largest variant's payload (decided November 2026, M1 slice C1).
 - **Packed structs and bitfields** with arbitrary-width integers
   ([`freestanding.md`: Hardware access](freestanding.md#hardware-access)).
 - **Endian types** `u16be`, `u32le` and so on, for wire formats and zero-copy views over network
