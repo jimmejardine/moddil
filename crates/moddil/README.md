@@ -3,18 +3,27 @@
 The **`moddil` command**: one tool for building, testing, formatting and everything else
 ([`specs/toolchain.md`](../../specs/toolchain.md)).
 
-**Status:** slices S0 to S11. At M0 it checks programs (a file, or a mod's directory with a
-`moddil.toml`, read with [`moddil-project`](../project/README.md)) and runs them and their tests on
-the MIR interpreter, and a failed `assert` shows the value of each part of its condition;
-the full command set (`build`, `fmt`, `diff`, `audit`, `bind`, …) arrives over the milestones.
+**Status:** M1. It checks programs (a file, or a mod's directory with a `moddil.toml`, read with
+[`moddil-project`](../project/README.md)), runs them and their tests compiled to native code
+([`moddil-native`](../native/README.md)), and builds them into executables. A failed `assert`
+shows the value of each part of its condition. The rest of the command set (`fmt`, `diff`,
+`audit`, `bind`, …) arrives over the milestones.
 
 ```
-moddil check file.moddil    # report errors (exit 1 if any)
-moddil run file.moddil      # run `fn main()` and print its result (exit 101 on a trap)
-moddil test file.moddil     # run the file's `test` items
-moddil run --native f.moddil   # compile `main` with Cranelift and run it (M1, slice C0)
-moddil test --native f.moddil  # the same for each test
+moddil check file.moddil           # report errors (exit 1 if any)
+moddil run file.moddil             # run `fn main()` natively and print its result (101 on a trap)
+moddil test file.moddil            # run the file's `test` items natively
+moddil run --interp file.moddil    # the same on the MIR interpreter (and `test --interp`)
+moddil build file.moddil [-o out]  # an executable: `main`'s exit code, 70 on a trap
 ```
+
+- **Native by default.** What native code does not compile yet runs on the MIR interpreter
+  instead, after a note saying what. Each native test runs in a process of its own, so a
+  crash in compiled code fails that test, reported as a bug in the backend.
+- **`build`** links the program's object with the runtime library `moddil-rt-main`
+  ([`link.rs`](src/link.rs)): with MSVC's `link.exe` on Windows, the system's `cc` elsewhere. The
+  library is found beside the `moddil` executable (`cargo build -p moddil-rt-main` puts it
+  there), or where `MODDIL_RT_LIB` says.
 
 Diagnostics are rendered in the rustc style with `ariadne`; `--format json` comes later.
 

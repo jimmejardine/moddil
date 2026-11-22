@@ -110,7 +110,7 @@ problem, which is exactly the supply-chain concern of [Package management and su
 - **Traps in JIT code return, they do not unwind (decided November 2026, M1 slice C0).** Code
   compiled into the compiler's process returns a status beside each result: a failed check
   records its site with the runtime and returns "trapped", and each caller passes that on, so a
-  trap in a test or a `moddil run --native` leaves the compiler running. A process built to run
+  trap in a test or a `moddil run` leaves the compiler running. A process built to run
   on its own ends on a trap outside an isolated scope, as
   [`mir.md`: Ownership and resources](mir.md#ownership-and-resources) says.
   - **The statuses:** 0 returned, 1 trapped, 2 failed (the error written where the caller's
@@ -119,6 +119,16 @@ problem, which is exactly the supply-chain concern of [Package management and su
   - **Unwinding:** a cancelled task, or one that traps in an isolated scope, unwinds with status
     3. Each frame runs the MIR's cleanup code for the point it is at, then returns 3 to its
     caller, so destructors run as the interpreters run them.
+- **`moddil build` (decided November 2026, M1).** The same lowering writes an object file with
+  `cranelift-object`.
+  - **Linking:** the object is linked with `moddil-rt-main`, the runtime as a static library,
+    which gives the process its `main`. The linker is MSVC's `link.exe` on Windows and the
+    system's `cc` elsewhere; `lld` and `mold`, as above, come with release builds.
+  - **The object's exports:** the program's entry, its exit code for `main`'s result
+    (`lifecycle.md`), and the tables a trap is reported from (each site's class and its file,
+    line and column), since a built program has no compiler to ask.
+  - **What native code calls** is exported by name (`moddil_rt_*`) from `moddil-rt`, so the JIT
+    binds and the linker resolves the same symbols.
 - **Check-only mode:** type, effect and ownership checking without code generation, powering the
   language server and agents ([LLMs as first-class programmers](agent-interface.md)).
 - **Test impact analysis:** the query graph knows which tests depend on a change, so only those run.

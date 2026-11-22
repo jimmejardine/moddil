@@ -62,6 +62,8 @@ cranelift-frontend = "0.138.0"
 cranelift-module = "0.138.0"
 cranelift-jit = "0.138.0"
 cranelift-native = "0.138.0"
+cranelift-object = "0.138.0"
+cc = "1.2.30"             # finding the linker for `moddil build` (MSVC on Windows)
 
 [profile.dev]
 debug = "line-tables-only"

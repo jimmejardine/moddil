@@ -2,7 +2,10 @@
 
 The native backend of M1 ([`specs/roadmap.md`: M1](../../specs/roadmap.md)): each function's MIR
 is lowered to Cranelift IR and compiled by `cranelift-jit` into executable memory in the
-compiler's own process, so `moddil run --native` and `moddil test --native` need no linker.
+compiler's own process, so `moddil run` and `moddil test` need no linker; or, for `moddil build`,
+by `cranelift-object` into an object file, linked with
+[`moddil-rt-main`](../rt-main/README.md). The lowering is generic over Cranelift's `Module`,
+so both are the same code.
 
 - **What it compiles** grows in slices: C0 covers scalars (`int`, `bool`, `char`, the sized
   integers and the floats), arithmetic with its checks, control flow and direct calls of

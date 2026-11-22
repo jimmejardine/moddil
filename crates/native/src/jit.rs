@@ -19,6 +19,8 @@ struct Seen<'a> {
     sites: &'a [Site],
     show: Show<'a>,
     observed: Vec<Observed>,
+    /// The parts of the last `assert` that failed, each with its value if it was evaluated.
+    parts: Vec<(TextRange, Option<String>)>,
 }
 
 /// What showing a value needs: the items, the layouts, and the types `dyn` borrows point to.
@@ -33,11 +35,24 @@ fn observe(cx: *mut (), site: u32, addr: *const u8) {
     // SAFETY: `cx` is the `Seen` the run installed, on the running thread, alive until the run
     // ends and the observer is removed.
     let seen = unsafe { &mut *cx.cast::<Seen<'_>>() };
-    if let Some(Site::Observe(file, range, ty)) = seen.sites.get(site as usize) {
-        let ty = ty.clone();
-        // SAFETY: the generated code passes the address of a live value of type `ty`.
-        let text = unsafe { seen.show.render(&ty, addr) };
-        seen.observed.push((*file, *range, text));
+    match seen.sites.get(site as usize) {
+        Some(Site::Observe(file, range, ty)) => {
+            let ty = ty.clone();
+            // SAFETY: the generated code passes the address of a live value of type `ty`.
+            let text = unsafe { seen.show.render(&ty, addr) };
+            seen.observed.push((*file, *range, text));
+        }
+        Some(Site::Part(range, ty, first)) => {
+            if *first {
+                seen.parts.clear();
+            }
+            let text = ty.clone().map(|ty| {
+                // SAFETY: as above, for an evaluated part.
+                unsafe { seen.show.render(&ty, addr) }
+            });
+            seen.parts.push((*range, text));
+        }
+        _ => {}
     }
 }
 
@@ -55,13 +70,14 @@ impl Compiled<'_> {
             files: &self.files,
         };
         let host = &host;
-        let (status, text, observed, record, leaked) = std::thread::scope(|s| {
+        let (status, text, observed, record, leaked, parts) = std::thread::scope(|s| {
             std::thread::Builder::new()
                 .stack_size(STACK)
                 .spawn_scoped(s, move || {
                     // A new run, its tasks' threads joining this one's.
                     moddil_rt::begin_run();
                     moddil_rt::set_host(std::ptr::from_ref(host) as usize);
+                    moddil_rt::set_trap_text(crate::host::trap_text);
                     let live = moddil_rt::live();
                     let mut seen = Seen {
                         sites,
@@ -71,6 +87,7 @@ impl Compiled<'_> {
                             dyn_types,
                         },
                         observed: Vec::new(),
+                        parts: Vec::new(),
                     };
                     moddil_rt::set_observer(Some((observe, (&raw mut seen).cast())));
                     // Room for any result, aligned for any field.
@@ -114,7 +131,14 @@ impl Compiled<'_> {
                             leaked = moddil_rt::live() - live;
                         }
                     }
-                    (status, text, seen.observed, moddil_rt::take(), leaked)
+                    (
+                        status,
+                        text,
+                        seen.observed,
+                        moddil_rt::take(),
+                        leaked,
+                        seen.parts,
+                    )
                 })
                 .expect("a thread to run on")
                 .join()
@@ -129,7 +153,15 @@ impl Compiled<'_> {
                 _ => Err(Native::Unsupported("an error without a site".to_string())),
             },
             _ => match record.trap {
-                Some(t) => Err(reported(&self.sites, &t)),
+                // A failed `assert`'s parts, if it is reported where it is (not in its caller).
+                Some(t) => Err(match reported(&self.sites, &t) {
+                    Native::Trap(class, file, range, _)
+                        if t.reported_at(|_| false) == t.site && !t.tracked =>
+                    {
+                        Native::Trap(class, file, range, parts)
+                    }
+                    other => other,
+                }),
                 None => Err(Native::Unsupported("a trap without a site".to_string())),
             },
         };
@@ -145,28 +177,21 @@ impl Compiled<'_> {
 pub(crate) fn reported(sites: &[Site], t: &moddil_rt::Trapped) -> Native {
     {
         let Some(site) = sites.get(t.site as usize) else {
-            return Native::Trap(TrapClass::Deadlock, 0, TextRange::default());
+            return Native::Trap(TrapClass::Deadlock, 0, TextRange::default(), Vec::new());
         };
         let (class, file, range) = match site {
             Site::Trap(class, file, range) => (*class, *file, *range),
             Site::Call(file, range, _) => (TrapClass::StackOverflow, *file, *range),
-            Site::Observe(..) | Site::Fail(..) => {
+            Site::Observe(..) | Site::Fail(..) | Site::Part(..) => {
                 return Native::Unsupported("a trap at an observation".to_string());
             }
         };
-        if !t.tracked {
-            return Native::Trap(class, file, range);
-        }
-        let at = t
-            .stack
-            .iter()
-            .rev()
-            .find_map(|s| match &sites[*s as usize] {
-                Site::Call(file, range, false) => Some((*file, *range)),
-                _ => None,
-            });
-        let (file, range) = at.unwrap_or((file, range));
-        Native::Trap(class, file, range)
+        let at = t.reported_at(|s| matches!(sites.get(s as usize), Some(Site::Call(_, _, false))));
+        let (file, range) = match sites.get(at as usize) {
+            Some(Site::Call(file, range, false)) if at != t.site => (*file, *range),
+            _ => (file, range),
+        };
+        Native::Trap(class, file, range, Vec::new())
     }
 }
 

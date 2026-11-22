@@ -206,7 +206,7 @@ impl Implementation for Native {
             );
             match result {
                 Ok(()) => {}
-                Err(moddil_native::Native::Trap(_, file, range)) => {
+                Err(moddil_native::Native::Trap(_, file, range, _)) => {
                     outcome.traps.insert(line_of(project, file, range.start));
                 }
                 Err(moddil_native::Native::Failed(file, range, _)) => {

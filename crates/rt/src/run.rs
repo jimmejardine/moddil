@@ -32,6 +32,8 @@ pub(crate) struct State {
     pub(crate) host: usize,
     /// The trap of the last isolated scope that failed with one.
     pub(crate) last_trapped: Option<Trapped>,
+    /// What gives a `Trapped`'s text.
+    pub(crate) trap_text: Option<crate::host::TrapText>,
     sched: Scheduler,
     /// The running task.
     current: usize,
@@ -67,6 +69,7 @@ fn new_ctx() -> Arc<Ctx> {
             texts: Vec::new(),
             host: 0,
             last_trapped: None,
+            trap_text: None,
             sched: Scheduler::new(),
             current: 0,
             aborted: false,
@@ -125,6 +128,11 @@ pub fn keep_text(t: Box<str>) -> *const u8 {
     let at = t.as_ptr();
     with(|s| s.texts.push(t));
     at
+}
+
+/// Installs what gives a `Trapped`'s text, for the run.
+pub fn set_trap_text(f: crate::host::TrapText) {
+    with(|s| s.trap_text = Some(f));
 }
 
 /// The trap of the last isolated scope that failed with one, as [`Trapped`].
@@ -362,6 +370,8 @@ fn spec_of(spec: &TaskSpec) -> Start {
 }
 
 /// `__scope_open`: a scope for the running task's `scope` call.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_scope_open")]
 pub extern "C" fn scope_open(isolated: u8) -> u64 {
     let me = me();
     with(|s| s.sched.open_scope(me, isolated != 0) as u64)
@@ -372,6 +382,8 @@ pub extern "C" fn scope_open(isolated: u8) -> u64 {
 /// # Safety
 ///
 /// `spec` points to a task to start.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_spawn")]
 pub unsafe extern "C" fn spawn(scope: u64, spec: *const TaskSpec) -> u64 {
     // SAFETY: as the caller says.
     let spec = unsafe { &*spec };
@@ -392,6 +404,8 @@ pub unsafe extern "C" fn spawn(scope: u64, spec: *const TaskSpec) -> u64 {
 /// # Safety
 ///
 /// `spec` points to a task to start; `out` and `err` have room for its result and error.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_scope_run")]
 pub unsafe extern "C" fn scope_run(
     scope: u64,
     spec: *const TaskSpec,
@@ -460,11 +474,15 @@ pub unsafe extern "C" fn scope_run(
 }
 
 /// `Scope::stop`.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_stop")]
 pub extern "C" fn stop(scope: u64) {
     with(|s| s.sched.stop(scope as usize));
 }
 
 /// `Task::join`: its value at `out` (0), its error at `err` (2), or 3 to unwind.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_join")]
 pub extern "C" fn join(t: u64, out: *mut u8, err: *mut u8, site: u32, tracked: u8) -> u8 {
     waiting(site, tracked != 0, |s, me| {
         if s.sched.cancelled(me) {
@@ -493,12 +511,16 @@ pub extern "C" fn join(t: u64, out: *mut u8, err: *mut u8, site: u32, tracked: u
 }
 
 /// A `Task` dropped without a `join`: 0, or the status of a trap dropping its value.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_detach")]
 pub extern "C" fn detach(t: u64) -> u8 {
     let dropped = with(|s| s.sched.detach(t as usize));
     drop_all(dropped.into_iter().collect())
 }
 
 /// `yield_now`.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_yield_now")]
 pub extern "C" fn yield_now(site: u32, tracked: u8) -> u8 {
     let mut yielded = false;
     waiting(site, tracked != 0, |s, me| {
@@ -516,6 +538,8 @@ pub extern "C" fn yield_now(site: u32, tracked: u8) -> u8 {
 }
 
 /// `stop_requested`.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_stop_requested")]
 pub extern "C" fn stop_requested(site: u32, tracked: u8) -> u8 {
     waiting(site, tracked != 0, |s, me| {
         if s.sched.cancelled(me) {
@@ -531,22 +555,29 @@ pub extern "C" fn stop_requested(site: u32, tracked: u8) -> u8 {
 }
 
 /// `channel`: a channel holding up to `capacity` values.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_channel")]
 pub extern "C" fn channel(capacity: u64) -> u64 {
     with(|s| s.sched.channel(capacity as usize) as u64)
 }
 
 /// `Sender::clone`.
+#[unsafe(export_name = "moddil_rt_clone_sender")]
 pub extern "C" fn clone_sender(c: u64) {
     with(|s| s.sched.clone_sender(c as usize));
 }
 
 /// A `Sender` dropped.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_drop_sender")]
 pub extern "C" fn drop_sender(c: u64) {
     with(|s| s.sched.drop_sender(c as usize));
 }
 
 /// The receiver of channel `c` is gone: what it holds is dropped with `drop`. 0, or the status
 /// of a destructor's trap.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_drop_receiver")]
 pub extern "C" fn drop_receiver(c: u64, drop: Option<DropFn>) -> u8 {
     let left = with(|s| s.sched.drop_receiver(c as usize));
     match drop {
@@ -557,6 +588,8 @@ pub extern "C" fn drop_receiver(c: u64, drop: Option<DropFn>) -> u8 {
 
 /// `Sender::send` of the `n` bytes at `v`: 0, or 2 if the receiver is gone (the value then
 /// dropped with `drop`), or 3 to unwind.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_send")]
 pub extern "C" fn send(
     c: u64,
     v: *const u8,
@@ -609,6 +642,8 @@ pub extern "C" fn send(
 
 /// `Receiver::recv`: 0 and the value at `out`, 5 for `None` (no senders left), or 3 to
 /// unwind.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_recv")]
 pub extern "C" fn recv(c: u64, out: *mut u8, site: u32, tracked: u8) -> u8 {
     let c = c as usize;
     waiting(site, tracked != 0, |s, me| {
@@ -636,6 +671,8 @@ pub extern "C" fn recv(c: u64, out: *mut u8, site: u32, tracked: u8) -> u8 {
 /// # Safety
 ///
 /// `ops` points to `n` pairs of words.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_select")]
 pub unsafe extern "C" fn select(n: u64, ops: *const u64, site: u32, tracked: u8) -> i64 {
     // SAFETY: as the caller says.
     let raw = unsafe { std::slice::from_raw_parts(ops, 2 * n as usize) };
@@ -673,6 +710,8 @@ pub unsafe extern "C" fn select(n: u64, ops: *const u64, site: u32, tracked: u8)
 }
 
 /// A `select` arm's receive, which is ready: as [`recv`].
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_recv_now")]
 pub extern "C" fn recv_now(c: u64, out: *mut u8) -> u8 {
     with(|s| match s.sched.pop(c as usize) {
         Some(v) => {
@@ -684,6 +723,8 @@ pub extern "C" fn recv_now(c: u64, out: *mut u8) -> u8 {
 }
 
 /// A `select` arm's send, which is ready: 0, or 2 if the receiver is gone (the value dropped).
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_send_now")]
 pub extern "C" fn send_now(c: u64, v: *const u8, n: u64, drop: Option<DropFn>) -> u8 {
     let value = bytes(v, n);
     let closed = with(|s| {
@@ -705,6 +746,8 @@ pub extern "C" fn send_now(c: u64, v: *const u8, n: u64, drop: Option<DropFn>) -
 }
 
 /// A `select` arm's join, which is ready: as [`join`].
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_join_now")]
 pub extern "C" fn join_now(t: u64, out: *mut u8, err: *mut u8) -> u8 {
     let me = me();
     with(|s| match s.sched.take(t as usize) {

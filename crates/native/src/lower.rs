@@ -53,6 +53,9 @@ pub(crate) enum Site {
     Observe(u32, TextRange, Ty),
     /// A `fail`: the file and where (the error of a run is reported at the last one).
     Fail(u32, TextRange),
+    /// A part of a failed `assert`'s condition: where it is, its type if it was evaluated, and
+    /// whether it is the first part.
+    Part(TextRange, Option<Ty>, bool),
 }
 
 /// A program compiled for one entry point, ready to run.
@@ -220,39 +223,15 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
     ("join_now", &['w', 'p', 'p'], Some('b')),
 ];
 
-/// The address of runtime task function `name`.
-fn task_fn(name: &str) -> *const u8 {
-    match name {
-        "scope_open" => moddil_rt::scope_open as *const u8,
-        "spawn" => moddil_rt::spawn as *const u8,
-        "scope_run" => moddil_rt::scope_run as *const u8,
-        "stop" => moddil_rt::stop as *const u8,
-        "join" => moddil_rt::join as *const u8,
-        "detach" => moddil_rt::detach as *const u8,
-        "yield_now" => moddil_rt::yield_now as *const u8,
-        "stop_requested" => moddil_rt::stop_requested as *const u8,
-        "channel" => moddil_rt::channel as *const u8,
-        "clone_sender" => moddil_rt::clone_sender as *const u8,
-        "drop_sender" => moddil_rt::drop_sender as *const u8,
-        "drop_receiver" => moddil_rt::drop_receiver as *const u8,
-        "send" => moddil_rt::send as *const u8,
-        "recv" => moddil_rt::recv as *const u8,
-        "select" => moddil_rt::select as *const u8,
-        "recv_now" => moddil_rt::recv_now as *const u8,
-        "send_now" => moddil_rt::send_now as *const u8,
-        _ => moddil_rt::join_now as *const u8,
-    }
-}
-
 /// A function instance: a function (or a closure's body) and its (concrete) type arguments.
 type Instance = (Item, Vec<Ty>);
 
-struct Compiler<'db> {
+struct Compiler<'db, M: Module> {
     db: &'db dyn Db,
     program: Program,
     items: &'db ItemTree,
     layouts: Layouts<'db>,
-    module: JITModule,
+    module: M,
     rt: Rt,
     /// Each instance declared: its id, and its parameters' and result's types.
     fns: HashMap<Instance, (FuncId, Vec<Ty>, Ty)>,
@@ -276,63 +255,100 @@ struct Compiler<'db> {
     c_drops: HashMap<Ty, FuncId>,
 }
 
-/// Compiles what `item` (a test, or a function without parameters) reaches.
-pub(crate) fn compile<'db>(
-    db: &'db dyn Db,
-    program: Program,
-    item: Item,
-) -> Result<Compiled<'db>, String> {
+/// The host's target, with the flags the code needs: `pic` for an object to link.
+fn isa(pic: bool) -> Result<cranelift_codegen::isa::OwnedTargetIsa, String> {
     let mut flags = settings::builder();
     flags.set("opt_level", "speed").map_err(|e| e.to_string())?;
     // `i128` and `u128` are passed and returned as two registers.
     flags
         .set("enable_llvm_abi_extensions", "true")
         .map_err(|e| e.to_string())?;
-    let isa = cranelift_native::builder()
+    if pic {
+        flags.set("is_pic", "true").map_err(|e| e.to_string())?;
+    }
+    cranelift_native::builder()
         .map_err(|e| e.to_string())?
         .finish(settings::Flags::new(flags))
-        .map_err(|e| e.to_string())?;
-    let mut builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
-    builder.symbol("moddil_rt_trap", moddil_rt::trap as *const u8);
-    builder.symbol(
-        "moddil_rt_trap_tracked",
-        moddil_rt::trap_tracked as *const u8,
-    );
-    builder.symbol("moddil_rt_float_fn", moddil_rt::float_fn as *const u8);
-    builder.symbol(
-        "moddil_rt_float_fn_f32",
-        moddil_rt::float_fn_f32 as *const u8,
-    );
-    builder.symbol(
-        "moddil_rt_char_at_byte",
-        moddil_rt::char_at_byte as *const u8,
-    );
-    builder.symbol("moddil_rt_is_between", moddil_rt::is_between as *const u8);
-    builder.symbol("moddil_rt_str_cmp", moddil_rt::str_cmp as *const u8);
-    builder.symbol("moddil_rt_char_is", moddil_rt::char_is as *const u8);
-    builder.symbol("moddil_rt_alloc", moddil_rt::alloc as *const u8);
-    builder.symbol("moddil_rt_free", moddil_rt::free as *const u8);
-    builder.symbol("moddil_rt_realloc", moddil_rt::realloc as *const u8);
-    builder.symbol("moddil_rt_memmove", moddil_rt::memmove as *const u8);
-    builder.symbol("moddil_rt_fail_at", moddil_rt::fail_at as *const u8);
-    builder.symbol(
-        "moddil_rt_static_begin",
-        moddil_rt::static_begin as *const u8,
-    );
-    builder.symbol("moddil_rt_static_end", moddil_rt::static_end as *const u8);
-    builder.symbol("moddil_host_convert", crate::host::convert as *const u8);
-    builder.symbol("moddil_host_text", crate::host::text as *const u8);
-    builder.symbol("moddil_host_log", crate::host::log as *const u8);
-    builder.symbol("moddil_host_trapped", crate::host::trapped as *const u8);
-    for (name, ..) in TASK_FNS {
-        builder.symbol(format!("moddil_rt_{name}"), task_fn(name));
+        .map_err(|e| e.to_string())
+}
+
+/// Compiles what `item` (a test, or a function without parameters) reaches, to run in process.
+pub(crate) fn compile<'db>(
+    db: &'db dyn Db,
+    program: Program,
+    item: Item,
+) -> Result<Compiled<'db>, String> {
+    let mut builder = JITBuilder::with_isa(isa(false)?, cranelift_module::default_libcall_names());
+    // The runtime's functions, by the names the code calls them by.
+    for (name, at) in moddil_rt::symbols() {
+        builder.symbol(name, at);
     }
-    builder.symbol("moddil_rt_observe", moddil_rt::observe as *const u8);
-    builder.symbol("moddil_rt_enter", moddil_rt::enter as *const u8);
-    builder.symbol("moddil_rt_leave", moddil_rt::leave as *const u8);
-    builder.symbol("moddil_rt_fmod", moddil_rt::fmod as *const u8);
-    builder.symbol("moddil_rt_fmodf", moddil_rt::fmodf as *const u8);
-    let mut module = JITModule::new(builder);
+    let b = build(db, program, item, JITModule::new(builder))?;
+    let mut module = b.c.module;
+    module.finalize_definitions().map_err(|e| e.to_string())?;
+    Ok(Compiled {
+        module,
+        entry: b.entry,
+        drop_result: b.drop_result,
+        ret: b.ret,
+        sites: b.c.sites,
+        items: b.c.items,
+        dyn_types: b.c.dyn_types,
+        errors: b.errors,
+        files: files_of(db, program),
+    })
+}
+
+/// Compiles `main` (function `item`) into an object file to link with `moddil-rt-main`. It
+/// exports `moddil_entry` and `moddil_drop_result` (as the JIT's), `moddil_exit_code` (the
+/// process's exit code for `main`'s result), and the tables a trap is reported from:
+/// `moddil_site_count`, `moddil_sites` (eight words a site: its kind, whether it is tracked, its
+/// class's and its file's text in `moddil_strings`, and its line and column).
+pub(crate) fn compile_object(db: &dyn Db, program: Program, item: Item) -> Result<Vec<u8>, String> {
+    let builder = cranelift_object::ObjectBuilder::new(
+        isa(true)?,
+        "moddil",
+        cranelift_module::default_libcall_names(),
+    )
+    .map_err(|e| e.to_string())?;
+    let b = build(
+        db,
+        program,
+        item,
+        cranelift_object::ObjectModule::new(builder),
+    )?;
+    let mut c = b.c;
+    c.exit_code(&b.ret)?;
+    c.site_tables(&files_of(db, program))?;
+    let product = c.module.finish();
+    product.emit().map_err(|e| e.to_string())
+}
+
+/// The program's files: each one's path and text.
+fn files_of(db: &dyn Db, program: Program) -> Vec<(String, String)> {
+    program
+        .files(db)
+        .iter()
+        .map(|f| (f.source.path(db).to_string(), f.source.text(db).to_string()))
+        .collect()
+}
+
+/// What [`build`] gives: the compiler, with its module holding the code, and the entry.
+struct Built<'db, M: Module> {
+    c: Compiler<'db, M>,
+    entry: FuncId,
+    drop_result: FuncId,
+    ret: Ty,
+    errors: Vec<Ty>,
+}
+
+/// Compiles what `item` reaches into `module`.
+fn build<M: Module>(
+    db: &dyn Db,
+    program: Program,
+    item: Item,
+    mut module: M,
+) -> Result<Built<'_, M>, String> {
     let ptr = module.target_config().pointer_type();
     let mut import = |name: &str, params: &[ir::Type], ret: Option<ir::Type>| {
         let mut sig = module.make_signature();
@@ -391,7 +407,7 @@ pub(crate) fn compile<'db>(
         static_begin: import("moddil_rt_static_begin", &[], None)?,
         static_end: import("moddil_rt_static_end", &[], None)?,
         convert: import(
-            "moddil_host_convert",
+            "moddil_rt_convert",
             &[
                 types::I32,
                 types::I32,
@@ -403,12 +419,12 @@ pub(crate) fn compile<'db>(
             Some(types::I8),
         )?,
         text: import(
-            "moddil_host_text",
+            "moddil_rt_text",
             &[types::I32, types::I64, types::I64, ptr, types::I64, ptr],
             Some(ptr),
         )?,
-        log: import("moddil_host_log", &[types::I32, ptr, types::I64], None)?,
-        trapped: import("moddil_host_trapped", &[types::I32, ptr], Some(ptr))?,
+        log: import("moddil_rt_log", &[types::I32, ptr, types::I64], None)?,
+        trapped: import("moddil_rt_trapped", &[types::I32, ptr], Some(ptr))?,
         task: {
             let mut m = HashMap::new();
             for (name, params, ret) in TASK_FNS {
@@ -488,25 +504,16 @@ pub(crate) fn compile<'db>(
         }
     }
     let entry = c.trampoline(target, &ret)?;
-    c.module.finalize_definitions().map_err(|e| e.to_string())?;
-    Ok(Compiled {
-        module: c.module,
+    Ok(Built {
+        c,
         entry,
         drop_result,
         ret,
-        sites: c.sites,
-        items,
-        dyn_types: c.dyn_types,
         errors,
-        files: program
-            .files(db)
-            .iter()
-            .map(|f| (f.source.path(db).to_string(), f.source.text(db).to_string()))
-            .collect(),
     })
 }
 
-impl Compiler<'_> {
+impl<M: Module> Compiler<'_, M> {
     fn pass(&mut self, ty: &Ty) -> Result<Pass, String> {
         let l = self.layouts.of(ty)?;
         Ok(pass_of(&l))
@@ -1104,6 +1111,129 @@ impl Compiler<'_> {
         Ok(id)
     }
 
+    /// `moddil_exit_code(out) -> i32`, for a built program: `main`'s result at `out` as the
+    /// process's exit code (`main.exit.1`): 0 for `()`, an `ExitCode`'s `sysexits.h` number, or
+    /// `Other(n)`'s `n`.
+    fn exit_code(&mut self, ret: &Ty) -> Result<(), String> {
+        let exit = self.prelude_ty("ExitCode")?;
+        if *ret != Ty::Unit && ret.adt() != exit.adt() {
+            return Err(format!(
+                "a built program's `main` gives `()` or `ExitCode`, not `{ret}`"
+            ));
+        }
+        let ptr = self.module.target_config().pointer_type();
+        let mut sig = self.module.make_signature();
+        sig.params.push(AbiParam::new(ptr));
+        sig.returns.push(AbiParam::new(types::I32));
+        let id = self
+            .module
+            .declare_function("moddil_exit_code", Linkage::Export, &sig)
+            .map_err(|e| e.to_string())?;
+        let l = self.layouts.of(&exit)?;
+        let mut ctx = self.module.make_context();
+        ctx.func.signature = sig;
+        let mut fctx = FunctionBuilderContext::new();
+        let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
+        let block = b.create_block();
+        b.append_block_params_for_function_params(block);
+        b.switch_to_block(block);
+        let out = b.block_params(block)[0];
+        let code = if *ret == Ty::Unit {
+            b.ins().iconst(types::I32, 0)
+        } else {
+            let Shape::Enum {
+                tag: Tag::Direct { offset, ty },
+                variants,
+            } = &l.shape
+            else {
+                return Err("the prelude's `ExitCode`".to_string());
+            };
+            let flags = ir::MemFlagsData::trusted();
+            let t = b.ins().load(*ty, flags, out, *offset as i32);
+            let d = if *ty == types::I32 {
+                t
+            } else {
+                b.ins().uextend(types::I32, t)
+            };
+            // `Ok` 0, then `Usage` 64 to `Config` 78; `Other(n)` its `n`.
+            const CODES: [i64; 16] = [
+                0, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78,
+            ];
+            let other = variants.len() - 1;
+            let at = variants[other].first().map_or(0, |f| f.0);
+            let n = b.ins().load(types::I64, flags, out, at as i32);
+            let mut code = b.ins().ireduce(types::I32, n);
+            for (k, c) in CODES.iter().enumerate() {
+                let is = b.ins().icmp_imm_s(IntCC::Equal, d, k as i64);
+                let v = b.ins().iconst(types::I32, *c);
+                code = b.ins().select(is, v, code);
+            }
+            code
+        };
+        b.ins().return_(&[code]);
+        b.seal_all_blocks();
+        b.finalize(self.module.target_config());
+        self.module
+            .define_function(id, &mut ctx)
+            .map_err(|e| format!("Cranelift: {e:?}"))?;
+        Ok(())
+    }
+
+    /// The tables a built program reports a trap from (see [`compile_object`]).
+    fn site_tables(&mut self, files: &[(String, String)]) -> Result<(), String> {
+        let mut strings: Vec<u8> = Vec::new();
+        let mut intern = |s: &str| -> (u32, u32) {
+            let at = strings.len() as u32;
+            strings.extend_from_slice(s.as_bytes());
+            (at, s.len() as u32)
+        };
+        let mut table: Vec<u8> = Vec::new();
+        for site in &self.sites {
+            let (kind, tracked, class, file, range) = match site {
+                Site::Trap(class, file, range) => (0u32, false, class.to_string(), *file, *range),
+                Site::Call(file, range, tracked) => (
+                    1,
+                    *tracked,
+                    TrapClass::StackOverflow.to_string(),
+                    *file,
+                    *range,
+                ),
+                Site::Observe(file, range, _) => (2, false, String::new(), *file, *range),
+                Site::Part(range, ..) => (2, false, String::new(), 0, *range),
+                Site::Fail(file, range) => (3, false, String::new(), *file, *range),
+            };
+            let (path, text) = files
+                .get(file as usize)
+                .map_or(("", ""), |(p, t)| (p.as_str(), t.as_str()));
+            let (line, col) = moddil_syntax::line_col(text, range.start);
+            let (co, cl) = intern(&class);
+            let (po, pl) = intern(path);
+            for w in [kind, u32::from(tracked), co, cl, po, pl, line, col] {
+                table.extend_from_slice(&w.to_le_bytes());
+            }
+        }
+        let count = (self.sites.len() as u64).to_le_bytes().to_vec();
+        for (name, bytes) in [
+            ("moddil_site_count", count),
+            ("moddil_sites", table),
+            ("moddil_strings", strings),
+        ] {
+            let id = self
+                .module
+                .declare_data(name, Linkage::Export, false, false)
+                .map_err(|e| e.to_string())?;
+            let mut desc = DataDescription::new();
+            let mut bytes = bytes;
+            bytes.push(0);
+            desc.define(bytes.into_boxed_slice());
+            desc.set_align(8);
+            self.module
+                .define_data(id, &desc)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
     /// The prelude's struct or enum `name`, as a type without arguments.
     fn prelude_ty(&self, name: &str) -> Result<Ty, String> {
         let a = self
@@ -1124,7 +1254,7 @@ impl Compiler<'_> {
         sig.returns.push(AbiParam::new(types::I8));
         let id = self
             .module
-            .declare_function("drop_result", Linkage::Export, &sig)
+            .declare_function("moddil_drop_result", Linkage::Export, &sig)
             .map_err(|e| e.to_string())?;
         let needs = Solver::new(self.items, &[]).needs_drop(ret);
         let glue = if needs { Some(self.glue(ret)?) } else { None };
@@ -1164,7 +1294,7 @@ impl Compiler<'_> {
         sig.returns.push(AbiParam::new(types::I8));
         let id = self
             .module
-            .declare_function("entry", Linkage::Export, &sig)
+            .declare_function("moddil_entry", Linkage::Export, &sig)
             .map_err(|e| e.to_string())?;
         let pass = self.pass(ret)?;
         let mut ctx = self.module.make_context();
@@ -1319,8 +1449,8 @@ enum Val {
 }
 
 /// One body being lowered.
-struct Lower<'a, 'c, 'db> {
-    c: &'a mut Compiler<'db>,
+struct Lower<'a, 'c, 'db, M: Module> {
+    c: &'a mut Compiler<'db, M>,
     body: &'a Body,
     /// Its type arguments.
     targs: &'a [Ty],
@@ -1349,7 +1479,7 @@ struct Lower<'a, 'c, 'db> {
     defs: HashMap<u32, Rvalue>,
 }
 
-impl Lower<'_, '_, '_> {
+impl<M: Module> Lower<'_, '_, '_, M> {
     fn ptr(&self) -> ir::Type {
         self.c.module.target_config().pointer_type()
     }
@@ -2027,7 +2157,7 @@ impl Lower<'_, '_, '_> {
                 expected,
                 trap,
                 range,
-                ..
+                parts,
             } => {
                 let c = self.value(cond)?;
                 let ok = self.b.create_block();
@@ -2038,34 +2168,71 @@ impl Lower<'_, '_, '_> {
                     self.b.ins().brif(c, fail, &[], ok, &[]);
                 }
                 self.b.switch_to_block(fail);
+                // Each part of the condition, with its value if it was evaluated, for the
+                // report.
+                for (k, p) in parts.iter().enumerate() {
+                    let ty = self.tys[p.value.index()].clone();
+                    let Val::Scalar(evaluated) = self.read_local(p.evaluated)? else {
+                        continue;
+                    };
+                    let yes = self.b.create_block();
+                    let no = self.b.create_block();
+                    let next = self.b.create_block();
+                    self.b.ins().brif(evaluated, yes, &[], no, &[]);
+                    self.b.switch_to_block(yes);
+                    let v = self.read_local(p.value)?;
+                    let addr = self.spilled(v, &ty)?;
+                    let site = self.site(Site::Part(p.range, Some(ty), k == 0));
+                    self.observe_call(site, addr);
+                    self.b.ins().jump(next, &[]);
+                    self.b.switch_to_block(no);
+                    let ptr = self.ptr();
+                    let null = self.b.ins().iconst(ptr, 0);
+                    let site = self.site(Site::Part(p.range, None, k == 0));
+                    self.observe_call(site, null);
+                    self.b.ins().jump(next, &[]);
+                    self.b.switch_to_block(next);
+                }
                 self.trap(*trap, *range)?;
                 self.b.switch_to_block(ok);
             }
             Statement::Read(_) | Statement::StorageDead(_) => {}
             Statement::Observe { range, value } => {
                 let ty = self.operand_ty(value)?;
-                let addr = match self.operand(value)? {
-                    Val::Mem(a) => a,
-                    Val::Scalar(v) => {
-                        let l = self.layout(&ty)?;
-                        let a = self.slot(&l);
-                        self.b.ins().store(ir::MemFlagsData::trusted(), v, a, 0);
-                        a
-                    }
-                    Val::Unit => {
-                        let ptr = self.ptr();
-                        self.b.ins().iconst(ptr, 0)
-                    }
-                };
+                let v = self.operand(value)?;
+                let addr = self.spilled(v, &ty)?;
                 let site = self.site(Site::Observe(self.file, *range, ty));
-                let f = self
-                    .c
-                    .module
-                    .declare_func_in_func(self.c.rt.observe, self.b.func);
-                self.b.ins().call(f, &[site, addr]);
+                self.observe_call(site, addr);
             }
         }
         Ok(())
+    }
+
+    /// The address of value `v` of type `ty`: its memory, a slot it is stored in, or null for
+    /// one without bytes.
+    fn spilled(&mut self, v: Val, ty: &Ty) -> Result<ir::Value, String> {
+        Ok(match v {
+            Val::Mem(a) => a,
+            Val::Scalar(x) => {
+                let l = self.layout(ty)?;
+                let a = self.slot(&l);
+                self.b.ins().store(ir::MemFlagsData::trusted(), x, a, 0);
+                a
+            }
+            Val::Unit => {
+                let ptr = self.ptr();
+                self.b.ins().iconst(ptr, 0)
+            }
+        })
+    }
+
+    /// Hands the value at `addr` to the run's observer, for `site`.
+    fn observe_call(&mut self, site: ir::Value, addr: ir::Value) {
+        let f = self
+            .c
+            .module
+            .declare_func_in_func(self.c.rt.observe, self.b.func);
+        self.b.ins().call(f, &[site, addr]);
     }
 
     fn assign(&mut self, place: &Place, r: &Rvalue) -> Result<(), String> {
@@ -3218,8 +3385,8 @@ impl Lower<'_, '_, '_> {
     /// The code `host` knows a number type by.
     fn num_code(ty: &Ty) -> Option<u32> {
         match ty {
-            Ty::Int => Some(crate::host::num_code(None)),
-            Ty::Num(n) => Some(crate::host::num_code(Some(*n))),
+            Ty::Int => Some(moddil_mir::num_code(None)),
+            Ty::Num(n) => Some(moddil_mir::num_code(Some(*n))),
             _ => None,
         }
     }
@@ -4746,7 +4913,7 @@ impl Lower<'_, '_, '_> {
                 };
                 let x = self.value(&args[0])?;
                 let (lo, hi) = self.number_words(x, &from);
-                let how = crate::host::CONVERSIONS.iter().position(|h| *h == name);
+                let how = moddil_rt::num::CONVERSIONS.iter().position(|h| *h == name);
                 let how = self.b.ins().iconst(types::I32, how.unwrap_or(0) as i64);
                 let fc = self.b.ins().iconst(types::I32, i64::from(fc));
                 let tc = self.b.ins().iconst(types::I32, i64::from(tc));
@@ -4903,7 +5070,7 @@ impl Lower<'_, '_, '_> {
                 self.emit_call(Run::Direct(id, ret), vals, Some(&at), range)?;
                 let p = self.b.ins().load(types::I64, flags, w, 0);
                 let n = self.b.ins().load(types::I64, flags, w, 8);
-                let level = crate::host::LEVELS
+                let level = moddil_rt::host::LEVELS
                     .iter()
                     .position(|l| *l == name)
                     .unwrap_or(0);

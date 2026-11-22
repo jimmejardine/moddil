@@ -28,7 +28,7 @@ fn trap(text: &str) -> TrapClass {
 /// The line (from 0) of `text` a trap is at.
 fn trap_line(text: &str) -> usize {
     match run(text) {
-        Err(Native::Trap(_, _, range)) => text[..range.start as usize].matches('\n').count(),
+        Err(Native::Trap(_, _, range, _)) => text[..range.start as usize].matches('\n').count(),
         other => panic!("expected a trap, got {other:?}"),
     }
 }

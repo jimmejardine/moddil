@@ -1,0 +1,22 @@
+[package]
+name = "moddil-rt-main"
+description = "A built Moddil program's `main`: the static library `moddil build` links with"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+# Linked into a built program only: the program's object gives the symbols it calls.
+crate-type = ["staticlib"]
+test = false
+doctest = false
+
+[dependencies]
+moddil-rt.workspace = true
+
+[lints]
+workspace = true

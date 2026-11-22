@@ -16,13 +16,15 @@
 //!
 //! What they record is kept per run, shared by its threads, until the host [`take`]s it.
 
+pub mod host;
+pub mod num;
 mod run;
 mod sched;
 
 pub use run::{
     TaskFn, TaskSpec, begin_run, channel, clone_sender, detach, drop_receiver, drop_sender,
     end_run, host, join, join_now, keep_text, last_trapped, recv, recv_now, scope_open, scope_run,
-    select, send, send_now, set_host, spawn, stop, stop_requested, yield_now,
+    select, send, send_now, set_host, set_trap_text, spawn, stop, stop_requested, yield_now,
 };
 pub use sched::DropFn;
 
@@ -40,6 +42,23 @@ pub struct Trapped {
     pub tracked: bool,
     /// The call sites on the stack, innermost last.
     pub stack: Vec<u32>,
+}
+
+impl Trapped {
+    /// The site to report the trap at, as the interpreters do: its own, or, in tracked code
+    /// (`#[track_caller]`, the prelude's or derived code), the innermost call untracked code
+    /// made, where `untracked_call` says which sites those are.
+    pub fn reported_at(&self, untracked_call: impl Fn(u32) -> bool) -> u32 {
+        if !self.tracked {
+            return self.site;
+        }
+        self.stack
+            .iter()
+            .rev()
+            .copied()
+            .find(|&s| untracked_call(s))
+            .unwrap_or(self.site)
+    }
 }
 
 /// What a run recorded: the trap, if one happened.
@@ -62,22 +81,30 @@ pub fn set_observer(o: Option<Observer>) {
 
 /// Records that the check at `site` failed: the status the code returns, 1 (the run ends) or 3
 /// (an isolated scope takes the trap, and the task unwinds).
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_trap")]
 pub extern "C" fn trap(site: u32) -> u8 {
     run::record_trap(site, false)
 }
 
 /// As [`trap`], in tracked code: `#[track_caller]`, the prelude's or derived code.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_trap_tracked")]
 pub extern "C" fn trap_tracked(site: u32) -> u8 {
     run::record_trap(site, true)
 }
 
 /// Records that the `fail` at `site` raised an error: the code then returns a failed status.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_fail_at")]
 pub extern "C" fn fail_at(site: u32) {
     run::with(|s| s.failed = Some(site));
 }
 
 /// Hands the value at `addr` of the observed expression at `site` to the observer, if there is
 /// one.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_observe")]
 pub extern "C" fn observe(site: u32, addr: *const u8) {
     if let Some((f, cx)) = run::with(|s| s.observer) {
         f(cx, site, addr);
@@ -87,6 +114,8 @@ pub extern "C" fn observe(site: u32, addr: *const u8) {
 /// Before the call at `site`: 0 if it may go a frame deeper; if it may not, the status of the
 /// stack overflow recorded as a trap at `site` (1, or 3 in an isolated scope). `tracked` says
 /// whether the calling code is.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_enter")]
 pub extern "C" fn enter(site: u32, tracked: u8) -> u8 {
     let full = run::STACK.with(|r| r.borrow().len() as u32 + 1 >= MAX_DEPTH);
     if full {
@@ -97,6 +126,8 @@ pub extern "C" fn enter(site: u32, tracked: u8) -> u8 {
 }
 
 /// After a call returns, however it returns.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_leave")]
 pub extern "C" fn leave() {
     run::STACK.with(|r| {
         r.borrow_mut().pop();
@@ -104,16 +135,22 @@ pub extern "C" fn leave() {
 }
 
 /// `a % b` on `f64`s, as IEEE 754 and the interpreters compute it.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_fmod")]
 pub extern "C" fn fmod(a: f64, b: f64) -> f64 {
     libm::fmod(a, b)
 }
 
 /// `a % b` on `f32`s.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_fmodf")]
 pub extern "C" fn fmodf(a: f32, b: f32) -> f32 {
     libm::fmodf(a, b)
 }
 
 /// The float functions, by number ([`FLOAT_FNS`]), on `f64`s.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_float_fn")]
 pub extern "C" fn float_fn(which: u32, x: f64, y: f64) -> f64 {
     match FLOAT_FNS.get(which as usize).copied().unwrap_or("") {
         "sqrt" => libm::sqrt(x),
@@ -140,6 +177,8 @@ pub extern "C" fn float_fn(which: u32, x: f64, y: f64) -> f64 {
 }
 
 /// The same on `f32`s, by `libm`'s `f32` functions, as the interpreters compute them.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_float_fn_f32")]
 pub extern "C" fn float_fn_f32(which: u32, x: f32, y: f32) -> f32 {
     match FLOAT_FNS.get(which as usize).copied().unwrap_or("") {
         "sqrt" => libm::sqrtf(x),
@@ -184,6 +223,8 @@ fn text<'a>(ptr: *const u8, len: u64) -> &'a str {
 }
 
 /// The character that starts at byte `at` of the text, or `0x11_0000` if none does.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_char_at_byte")]
 pub extern "C" fn char_at_byte(ptr: *const u8, len: u64, at: i64) -> u32 {
     let s = text(ptr, len);
     usize::try_from(at)
@@ -194,6 +235,8 @@ pub extern "C" fn char_at_byte(ptr: *const u8, len: u64, at: i64) -> u32 {
 }
 
 /// Whether bytes `a` to `b` of the text are text: in range, in order, on character boundaries.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_is_between")]
 pub extern "C" fn is_between(ptr: *const u8, len: u64, a: i64, b: i64) -> u8 {
     let s = text(ptr, len);
     let ok = usize::try_from(a)
@@ -204,6 +247,8 @@ pub extern "C" fn is_between(ptr: *const u8, len: u64, a: i64, b: i64) -> u8 {
 }
 
 /// How two texts compare, byte by byte: -1, 0 or 1.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_str_cmp")]
 pub extern "C" fn str_cmp(p: *const u8, n: u64, q: *const u8, m: u64) -> i8 {
     match text(p, n).cmp(text(q, m)) {
         std::cmp::Ordering::Less => -1,
@@ -213,6 +258,8 @@ pub extern "C" fn str_cmp(p: *const u8, n: u64, q: *const u8, m: u64) -> i8 {
 }
 
 /// A `char`'s class, by number: alphabetic, numeric, white space, upper and lower case.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_char_is")]
 pub extern "C" fn char_is(which: u32, c: u32) -> u8 {
     let Some(c) = char::from_u32(c) else {
         return 0;
@@ -233,11 +280,15 @@ pub fn live() -> i64 {
 }
 
 /// Before a `const` item's value is computed.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_static_begin")]
 pub extern "C" fn static_begin() {
     run::with(|s| s.static_from = s.live);
 }
 
 /// After it is computed: what it allocated lives as long as the program, so it is not counted.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_static_end")]
 pub extern "C" fn static_end() {
     run::with(|s| s.live = s.static_from);
 }
@@ -249,6 +300,8 @@ fn layout(size: u64, align: u64) -> std::alloc::Layout {
 
 /// `size` bytes aligned to `align`: a `Buf`'s memory. Nothing (a dangling, aligned address) for
 /// no bytes.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_alloc")]
 pub extern "C" fn alloc(size: u64, align: u64) -> *mut u8 {
     if size == 0 {
         return std::ptr::without_provenance_mut(align.max(1) as usize);
@@ -270,6 +323,7 @@ pub extern "C" fn alloc(size: u64, align: u64) -> *mut u8 {
 ///
 /// `ptr` is what [`alloc`] (or [`realloc`]) gave for that size and alignment, not yet freed.
 #[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_free")]
 pub unsafe extern "C" fn free(ptr: *mut u8, size: u64, align: u64) {
     if size == 0 {
         return;
@@ -287,6 +341,7 @@ pub unsafe extern "C" fn free(ptr: *mut u8, size: u64, align: u64) {
 ///
 /// As [`free`]'s, for `ptr` of `old` bytes.
 #[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_realloc")]
 pub unsafe extern "C" fn realloc(ptr: *mut u8, old: u64, new: u64, align: u64) -> *mut u8 {
     let q = alloc(new, align);
     // SAFETY: `ptr` holds `old` bytes and `q` room for `new`; they do not overlap. Then `ptr`
@@ -304,11 +359,61 @@ pub unsafe extern "C" fn realloc(ptr: *mut u8, old: u64, new: u64, align: u64) -
 ///
 /// `src` has `n` readable bytes and `dst` `n` writable ones.
 #[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_memmove")]
 pub unsafe extern "C" fn memmove(dst: *mut u8, src: *const u8, n: u64) {
     // SAFETY: as the caller says.
     unsafe {
         std::ptr::copy(src, dst, n as usize);
     }
+}
+
+/// Every function native code calls, by the name it is exported as: what a JIT binds, and what
+/// a built program links against.
+pub fn symbols() -> Vec<(&'static str, *const u8)> {
+    vec![
+        ("moddil_rt_trap", trap as *const u8),
+        ("moddil_rt_trap_tracked", trap_tracked as *const u8),
+        ("moddil_rt_fail_at", fail_at as *const u8),
+        ("moddil_rt_observe", observe as *const u8),
+        ("moddil_rt_enter", enter as *const u8),
+        ("moddil_rt_leave", leave as *const u8),
+        ("moddil_rt_fmod", fmod as *const u8),
+        ("moddil_rt_fmodf", fmodf as *const u8),
+        ("moddil_rt_float_fn", float_fn as *const u8),
+        ("moddil_rt_float_fn_f32", float_fn_f32 as *const u8),
+        ("moddil_rt_char_at_byte", char_at_byte as *const u8),
+        ("moddil_rt_is_between", is_between as *const u8),
+        ("moddil_rt_str_cmp", str_cmp as *const u8),
+        ("moddil_rt_char_is", char_is as *const u8),
+        ("moddil_rt_alloc", alloc as *const u8),
+        ("moddil_rt_free", free as *const u8),
+        ("moddil_rt_realloc", realloc as *const u8),
+        ("moddil_rt_memmove", memmove as *const u8),
+        ("moddil_rt_static_begin", static_begin as *const u8),
+        ("moddil_rt_static_end", static_end as *const u8),
+        ("moddil_rt_convert", host::convert as *const u8),
+        ("moddil_rt_text", host::text as *const u8),
+        ("moddil_rt_log", host::log as *const u8),
+        ("moddil_rt_trapped", host::trapped as *const u8),
+        ("moddil_rt_scope_open", scope_open as *const u8),
+        ("moddil_rt_spawn", spawn as *const u8),
+        ("moddil_rt_scope_run", scope_run as *const u8),
+        ("moddil_rt_stop", stop as *const u8),
+        ("moddil_rt_join", join as *const u8),
+        ("moddil_rt_detach", detach as *const u8),
+        ("moddil_rt_yield_now", yield_now as *const u8),
+        ("moddil_rt_stop_requested", stop_requested as *const u8),
+        ("moddil_rt_channel", channel as *const u8),
+        ("moddil_rt_clone_sender", clone_sender as *const u8),
+        ("moddil_rt_drop_sender", drop_sender as *const u8),
+        ("moddil_rt_drop_receiver", drop_receiver as *const u8),
+        ("moddil_rt_send", send as *const u8),
+        ("moddil_rt_recv", recv as *const u8),
+        ("moddil_rt_select", select as *const u8),
+        ("moddil_rt_recv_now", recv_now as *const u8),
+        ("moddil_rt_send_now", send_now as *const u8),
+        ("moddil_rt_join_now", join_now as *const u8),
+    ]
 }
 
 /// Takes what this thread's runs have recorded since the last time, leaving it as a new run's.

@@ -561,21 +561,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg(test)]
 mod tests;
 
-pub use convert::convert;
-
-/// How a number constant of type `n` with bits `bits` is written.
-pub fn num_text(n: moddil_sema::Num, bits: u128) -> String {
-    use moddil_sema::Num;
-    match n {
-        Num::F32 => format!("{:?}", f32::from_bits(bits as u32)),
-        Num::F64 => format!("{:?}", f64::from_bits(bits as u64)),
-        n if n.is_signed() => {
-            let shift = 128 - n.bits();
-            format!("{}", ((bits as i128) << shift) >> shift)
-        }
-        _ => format!("{bits}"),
-    }
-}
+pub use convert::{convert, num_code, num_text};
 
 /// The constant of number type `t` (`int` or a [`Ty::Num`]) for the exact integer `v`, which the
 /// checker has made sure fits; a float gets the nearest value.

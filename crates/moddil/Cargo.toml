@@ -22,6 +22,7 @@ moddil-sema.workspace = true
 moddil-syntax.workspace = true
 ariadne.workspace = true
 clap.workspace = true
+cc.workspace = true
 
 
 [lints]

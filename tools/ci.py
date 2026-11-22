@@ -54,6 +54,10 @@ def step_deny():
 
 
 def step_test():
+    # The runtime library `moddil build` links with, which nothing else builds (its tests are
+    # the CLI's).
+    if not run("cargo", "build", "-q", "-p", "moddil-rt-main"):
+        return False
     if has_cargo_tool("nextest"):
         ok = run("cargo", "nextest", "run", "--workspace")
     else:

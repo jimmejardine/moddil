@@ -19,8 +19,9 @@ use moddil_syntax::TextRange;
 pub enum Native {
     /// Something the program reaches is not compiled natively yet: what.
     Unsupported(String),
-    /// A check failed: its class, and where (the file, by index, and its source).
-    Trap(TrapClass, u32, TextRange),
+    /// A check failed: its class, where (the file, by index, and its source), and, for a failed
+    /// `assert`, each part of its condition with its value if it was evaluated.
+    Trap(TrapClass, u32, TextRange, Vec<(TextRange, Option<String>)>),
     /// A run that returned left this many allocations unfreed: a bug in the backend's drops.
     Leak(i64),
     /// An error left the run: where it was raised (the file and its source), and the error as
@@ -57,6 +58,17 @@ pub fn run_test(db: &dyn Db, program: Program, index: u32) -> (Vec<Observed>, Re
 pub fn run_main(db: &dyn Db, program: Program, index: u32) -> Result<String, Native> {
     let compiled = lower::compile(db, program, Item::Fn(index)).map_err(Native::Unsupported)?;
     compiled.run().1
+}
+
+/// Compiles `main` (function `index` of `program`) ahead of time: an object file to link with
+/// the `moddil-rt-main` static library into an executable.
+///
+/// # Errors
+///
+/// [`Native::Unsupported`] if it reaches code not compiled natively yet, or if `main` takes root
+/// capabilities or gives something other than `()` or `ExitCode`.
+pub fn build_object(db: &dyn Db, program: Program, index: u32) -> Result<Vec<u8>, Native> {
+    lower::compile_object(db, program, Item::Fn(index)).map_err(Native::Unsupported)
 }
 
 /// This crate's version.

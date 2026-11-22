@@ -741,8 +741,29 @@ calls is a Rust crate, `moddil-rt`, for now.
   - **Checking:** all 119 conformance files the interpreters run also run natively (from 102),
     with no disagreements and no leaks.
   - **Interim limit:** converting a `dyn` borrow to a supertrait that is not its first.
-- **Next:** native code as the default for `moddil run` and `moddil test`, and ahead-of-time
-  builds.
+- **Slice C6 (decided November 2026): native by default, and `moddil build`.**
+  - **Native by default:** `moddil run` and `moddil test` compile natively, and `--interp` uses
+    the MIR interpreter.
+    - Code native compilation does not support runs on the interpreter instead, after a note.
+    - Each native test runs in a process of its own, so a crash fails that test.
+    - A failed `assert` natively shows its parts' values, as the interpreter's does.
+  - **The runtime owns what the host did:**
+    - the number conversions and number text (`moddil_mir` calls them, so there is one source
+      of truth);
+    - `text` and the log;
+    - where a tracked trap is reported.
+    - Everything native code calls is exported by name (`moddil_rt_*`).
+  - **`moddil build`:** the lowering is generic over Cranelift's `Module`, so the same code
+    writes an object file.
+    - The object exports the entry, `main`'s exit code, and the tables a trap is reported from.
+    - `moddil-rt-main`, a new static library, gives the process its `main`: it exits with
+      `main`'s `ExitCode`, or prints a trap's class and place and exits 70 (`lifecycle.md`).
+    - Linking uses MSVC's `link.exe` on Windows and `cc` elsewhere.
+  - **Interim limits:**
+    - a built program's `main` takes no root capabilities, and gives `()` or `ExitCode`;
+    - `moddil run` still exits 101 on a trap, where a built program exits 70.
+- **Next:** release builds (`lld` or `mold`, optimisation and debug info), and root
+  capabilities for `main`.
 
 ## Staging: distributed programs
 

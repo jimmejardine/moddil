@@ -1,8 +1,10 @@
-//! The `moddil` command. At M0 it checks files and runs them and their tests on the MIR
-//! interpreter. See `crates/moddil/README.md`.
+//! The `moddil` command: it checks programs, runs them and their tests (compiled to native code,
+//! or on the MIR interpreter), and builds them into executables. See `crates/moddil/README.md`.
+
+mod link;
 
 use std::io::IsTerminal;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use ariadne::{Config, IndexType, Label, Report, ReportKind, Source};
@@ -28,23 +30,33 @@ enum Command {
         /// A file, or a mod's directory (with a `moddil.toml`).
         file: PathBuf,
     },
-    /// Runs a program's `fn main()` and prints its result.
+    /// Runs a program's `fn main()`, compiled to native code, and prints its result.
     Run {
         /// A file, or a mod's directory (with a `moddil.toml`).
         file: PathBuf,
-        /// Compile it to native code and run that (M1: scalars and calls so far), rather than
-        /// interpret it.
+        /// Run it on the MIR interpreter instead.
         #[arg(long)]
-        native: bool,
+        interp: bool,
     },
-    /// Runs a program's tests (a mod's, not its dependencies').
+    /// Runs a program's tests (a mod's, not its dependencies'), compiled to native code.
     Test {
         /// A file, or a mod's directory (with a `moddil.toml`).
         file: PathBuf,
-        /// Compile each test to native code and run that, rather than interpret it.
+        /// Run them on the MIR interpreter instead.
         #[arg(long)]
-        native: bool,
+        interp: bool,
     },
+    /// Compiles a program's `fn main()` ahead of time into an executable.
+    Build {
+        /// A file, or a mod's directory (with a `moddil.toml`).
+        file: PathBuf,
+        /// The executable to write (by default, the file's name, here).
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    /// Runs test `index` natively, for `moddil test`, which runs each in a process of its own.
+    #[command(name = "__native-test", hide = true)]
+    NativeTest { file: PathBuf, index: u32 },
 }
 
 /// The exit code for a trap, as for a Rust panic.
@@ -53,7 +65,11 @@ const TRAPPED: u8 = 101;
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let path = match &cli.command {
-        Command::Check { file } | Command::Run { file, .. } | Command::Test { file, .. } => file,
+        Command::Check { file }
+        | Command::Run { file, .. }
+        | Command::Test { file, .. }
+        | Command::Build { file, .. }
+        | Command::NativeTest { file, .. } => file,
     };
     let project = match moddil_project::load(path) {
         Ok(p) => p,
@@ -83,14 +99,14 @@ fn main() -> ExitCode {
         eprintln!("moddil: {n} error{}", if n == 1 { "" } else { "s" });
         return ExitCode::FAILURE;
     }
-    match cli.command {
+    let name = path.display().to_string();
+    match &cli.command {
         Command::Check { .. } => ExitCode::SUCCESS,
-        Command::Run { native: true, .. } => {
-            run_native(&db, program, &files, &path.display().to_string())
-        }
-        Command::Run { .. } => run(&db, program, &files, &path.display().to_string()),
-        Command::Test { native: true, .. } => test_native(&db, program, &files),
-        Command::Test { .. } => test(&db, program, &files),
+        Command::Run { interp: true, .. } => run(&db, program, &files, &name),
+        Command::Run { .. } => run_native(&db, program, &files, &name),
+        Command::Test { interp, .. } => test(&db, program, &files, *interp, path),
+        Command::Build { output, .. } => build(&db, program, path, output.as_deref()),
+        Command::NativeTest { index, .. } => native_test(&db, program, &files, *index),
     }
 }
 
@@ -175,7 +191,8 @@ fn run(db: &Database, program: Program, files: &[(String, String)], name: &str) 
     }
 }
 
-/// `moddil run --native`: `main` compiled by the native backend and run.
+/// `moddil run`: `main` compiled to native code and run; on the MIR interpreter instead, with a
+/// note, if it reaches something not compiled natively yet.
 fn run_native(db: &Database, program: Program, files: &[(String, String)], name: &str) -> ExitCode {
     let items = moddil_sema::item_tree(db, program);
     let Some(main) = items.main_fn() else {
@@ -188,14 +205,14 @@ fn run_native(db: &Database, program: Program, files: &[(String, String)], name:
             println!("{v}");
             ExitCode::SUCCESS
         }
-        Err(moddil_native::Native::Trap(class, file, range)) => {
+        Err(moddil_native::Native::Trap(class, file, range, parts)) => {
             let (name, text) = &files[file as usize];
-            report_native_trap(name, text, class, range);
+            report_native_trap(name, text, class, range, &parts);
             ExitCode::from(TRAPPED)
         }
         Err(moddil_native::Native::Unsupported(what)) => {
-            eprintln!("moddil: not supported natively yet: {what}");
-            ExitCode::FAILURE
+            eprintln!("moddil: running on the interpreter: {what} is not compiled natively yet");
+            run(db, program, files, name)
         }
         Err(moddil_native::Native::Leak(n)) => {
             eprintln!("moddil: native code leaked {n} allocations (a bug in the backend)");
@@ -209,60 +226,161 @@ fn run_native(db: &Database, program: Program, files: &[(String, String)], name:
     }
 }
 
-/// `moddil test --native`: each test compiled by the native backend and run.
-fn test_native(db: &Database, program: Program, files: &[(String, String)]) -> ExitCode {
-    let items = moddil_sema::item_tree(db, program);
-    let mut failed = 0;
-    let mut run = 0;
-    let mut unsupported = 0;
-    for (i, t) in items.tests.iter().enumerate() {
-        if items.mod_of(t.module) != 0 {
-            continue;
+/// `moddil __native-test`: test `index` run natively, in a process of `moddil test`'s. Its first
+/// line of output says how it went (`ok`, `trapped`, `failed`, `leaked`, or `unsupported` and
+/// why); reports go to standard error.
+fn native_test(
+    db: &Database,
+    program: Program,
+    files: &[(String, String)],
+    index: u32,
+) -> ExitCode {
+    match moddil_native::run_test(db, program, index).1 {
+        Ok(()) => println!("ok"),
+        Err(moddil_native::Native::Trap(class, file, range, parts)) => {
+            println!("trapped");
+            let (name, text) = &files[file as usize];
+            report_native_trap(name, text, class, range, &parts);
         }
-        run += 1;
-        match moddil_native::run_test(db, program, i as u32).1 {
-            Ok(()) => println!("test \"{}\" ... ok", t.name),
-            Err(moddil_native::Native::Trap(class, file, range)) => {
-                failed += 1;
-                println!("test \"{}\" ... trapped", t.name);
-                let (name, text) = &files[file as usize];
-                report_native_trap(name, text, class, range);
-            }
-            Err(moddil_native::Native::Unsupported(what)) => {
-                unsupported += 1;
-                println!("test \"{}\" ... not supported natively yet: {what}", t.name);
-            }
-            Err(moddil_native::Native::Leak(n)) => {
-                failed += 1;
-                println!("test \"{}\" ... leaked {n} allocations natively", t.name);
-            }
-            Err(moddil_native::Native::Failed(file, range, error)) => {
-                failed += 1;
-                println!("test \"{}\" ... failed", t.name);
-                let (name, text) = &files[file as usize];
-                report_native_error(name, text, range, &error);
-            }
+        Err(moddil_native::Native::Unsupported(what)) => println!("unsupported {what}"),
+        Err(moddil_native::Native::Leak(n)) => {
+            println!("leaked");
+            eprintln!("moddil: native code leaked {n} allocations (a bug in the backend)");
+        }
+        Err(moddil_native::Native::Failed(file, range, error)) => {
+            println!("failed");
+            let (name, text) = &files[file as usize];
+            report_native_error(name, text, range, &error);
         }
     }
-    let passed = run - failed - unsupported;
-    println!("{passed} passed, {failed} failed, {unsupported} not supported natively yet");
-    if failed == 0 && unsupported == 0 {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
+    ExitCode::SUCCESS
+}
+
+/// How one native test, run in a process of its own, went.
+enum Outcome {
+    Passed,
+    Failed,
+    /// It reaches something not compiled natively yet: what.
+    Unsupported(String),
+}
+
+/// Runs test `index` natively in a child process (so that a crash in compiled code fails it,
+/// not the run), printing its line and reports as `moddil test` does.
+fn native_child(path: &Path, index: u32, name: &str) -> Outcome {
+    let out = std::env::current_exe().and_then(|exe| {
+        std::process::Command::new(exe)
+            .arg("__native-test")
+            .arg(path)
+            .arg(index.to_string())
+            .output()
+    });
+    let Ok(out) = out else {
+        println!("test \"{name}\" ... could not start a process to run it in");
+        return Outcome::Failed;
+    };
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let status = stdout.lines().next().unwrap_or("");
+    let outcome = match status.split_once(' ').map_or(status, |(s, _)| s) {
+        "ok" => {
+            println!("test \"{name}\" ... ok");
+            return Outcome::Passed;
+        }
+        "unsupported" => {
+            return Outcome::Unsupported(status["unsupported ".len()..].to_string());
+        }
+        "trapped" | "failed" | "leaked" => {
+            println!("test \"{name}\" ... {status}");
+            Outcome::Failed
+        }
+        _ => {
+            println!("test \"{name}\" ... crashed (a bug in the native backend)");
+            Outcome::Failed
+        }
+    };
+    eprint!("{}", String::from_utf8_lossy(&out.stderr));
+    outcome
+}
+
+/// `moddil build`: `main` compiled ahead of time, linked into an executable.
+fn build(db: &Database, program: Program, path: &Path, output: Option<&Path>) -> ExitCode {
+    let name = path.display();
+    let items = moddil_sema::item_tree(db, program);
+    let Some(main) = items.main_fn() else {
+        eprintln!("moddil: {name} has no `fn main()`");
+        return ExitCode::FAILURE;
+    };
+    let object = match moddil_native::build_object(db, program, main) {
+        Ok(o) => o,
+        Err(moddil_native::Native::Unsupported(what)) => {
+            eprintln!("moddil: {name} cannot be built yet: {what}");
+            return ExitCode::FAILURE;
+        }
+        Err(_) => return ExitCode::FAILURE,
+    };
+    let out = output.map_or_else(
+        || {
+            let stem = path
+                .file_stem()
+                .map_or_else(|| "main".into(), |s| s.to_os_string());
+            PathBuf::from(stem).with_extension(std::env::consts::EXE_EXTENSION)
+        },
+        Path::to_path_buf,
+    );
+    match link::link(&object, &out) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(why) => {
+            eprintln!("moddil: linking {}: {why}", out.display());
+            ExitCode::FAILURE
+        }
     }
 }
 
-fn report_native_trap(name: &str, text: &str, class: moddil_mir::TrapClass, range: TextRange) {
+fn report_native_trap(
+    name: &str,
+    text: &str,
+    class: moddil_mir::TrapClass,
+    range: TextRange,
+    parts: &[(TextRange, Option<String>)],
+) {
     let span = (name, range.to_range());
-    let report = Report::build(ReportKind::Error, span.clone())
+    let mut report = Report::build(ReportKind::Error, span.clone())
         .with_config(config())
-        .with_message(format!("trap: {}", class.name()))
+        .with_message(format!("trap: {class}"))
         .with_label(Label::new(span).with_message("here"));
+    // A failed `assert` shows the value of each part of its condition.
+    if !parts.is_empty() {
+        report = report.with_note(parts_note(text, parts));
+    }
     let _ = report.finish().eprint((name, Source::from(text)));
 }
 
-fn test(db: &Database, program: Program, files: &[(String, String)]) -> ExitCode {
+/// Each part of a failed `assert`'s condition, its source and its value, a line each.
+fn parts_note(text: &str, parts: &[(TextRange, Option<String>)]) -> String {
+    let width = parts
+        .iter()
+        .map(|(r, _)| text[r.to_range()].len())
+        .max()
+        .unwrap_or(0);
+    parts
+        .iter()
+        .map(|(r, v)| {
+            let shown = v.as_deref().unwrap_or("not evaluated");
+            format!("{:width$} = {shown}", &text[r.to_range()])
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// `moddil test`: each test of the mod being built, compiled to native code (each in a process
+/// of its own) or, with `--interp`, on the MIR interpreter. A test native code does not compile
+/// yet runs on the interpreter, with a note.
+fn test(
+    db: &Database,
+    program: Program,
+    files: &[(String, String)],
+    interp: bool,
+    path: &Path,
+) -> ExitCode {
     let items = moddil_sema::item_tree(db, program);
     let mut failed = 0;
     let mut run = 0;
@@ -272,20 +390,24 @@ fn test(db: &Database, program: Program, files: &[(String, String)]) -> ExitCode
             continue;
         }
         run += 1;
-        match moddil_interp::run_test(db, program, i as u32, &mut |_, _, _| {}) {
-            Ok(()) => println!("test \"{}\" ... ok", t.name),
-            Err(Stop::Trap(trap)) => {
-                failed += 1;
-                println!("test \"{}\" ... trapped", t.name);
-                let (name, text) = &files[trap.file as usize];
-                report_trap(name, text, items, &trap);
+        let passed = if interp {
+            interp_test(db, program, files, i as u32)
+        } else {
+            match native_child(path, i as u32, &t.name) {
+                Outcome::Passed => true,
+                Outcome::Failed => false,
+                Outcome::Unsupported(what) => {
+                    eprintln!(
+                        "moddil: test \"{}\" runs on the interpreter: {what} is not compiled \
+                         natively yet",
+                        t.name
+                    );
+                    interp_test(db, program, files, i as u32)
+                }
             }
-            Err(Stop::Failed { file, range, error }) => {
-                failed += 1;
-                println!("test \"{}\" ... failed", t.name);
-                let (name, text) = &files[file as usize];
-                report_error(name, text, items, range, &error);
-            }
+        };
+        if !passed {
+            failed += 1;
         }
     }
     let passed = run - failed;
@@ -294,6 +416,30 @@ fn test(db: &Database, program: Program, files: &[(String, String)]) -> ExitCode
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// Test `index` on the MIR interpreter, printed as `moddil test` prints it: whether it passed.
+fn interp_test(db: &Database, program: Program, files: &[(String, String)], index: u32) -> bool {
+    let items = moddil_sema::item_tree(db, program);
+    let t = &items.tests[index as usize];
+    match moddil_interp::run_test(db, program, index, &mut |_, _, _| {}) {
+        Ok(()) => {
+            println!("test \"{}\" ... ok", t.name);
+            true
+        }
+        Err(Stop::Trap(trap)) => {
+            println!("test \"{}\" ... trapped", t.name);
+            let (name, text) = &files[trap.file as usize];
+            report_trap(name, text, items, &trap);
+            false
+        }
+        Err(Stop::Failed { file, range, error }) => {
+            println!("test \"{}\" ... failed", t.name);
+            let (name, text) = &files[file as usize];
+            report_error(name, text, items, range, &error);
+            false
+        }
     }
 }
 
