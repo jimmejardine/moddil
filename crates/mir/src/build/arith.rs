@@ -133,15 +133,18 @@ impl Builder<'_> {
             let cur = self.place(x);
             let cur_ty = self.ty(x);
             // A slice borrow is passed as it is; other operands are borrowed.
-            let borrow = |b: &mut Self, place: Place, ty: &Ty| {
-                let t = b.temp(Ty::reference(false, ty.clone()));
-                match ty {
-                    Ty::Ref(_, inner) if matches!(**inner, Ty::Slice(_)) => {
-                        b.cfg.assign(t, Rvalue::Use(Operand::Copy(place)));
-                    }
-                    _ => b.cfg.assign(t, Rvalue::Ref(false, place)),
+            let borrow = |b: &mut Self, place: Place, ty: &Ty| match ty {
+                // Of its own type, as it is: the method takes `&[T]`, `Self` being `[T]`.
+                Ty::Ref(_, inner) if matches!(**inner, Ty::Slice(_)) => {
+                    let t = b.temp(ty.clone());
+                    b.cfg.assign(t, Rvalue::Use(Operand::Copy(place)));
+                    t
                 }
-                t
+                _ => {
+                    let t = b.temp(Ty::reference(false, ty.clone()));
+                    b.cfg.assign(t, Rvalue::Ref(false, place));
+                    t
+                }
             };
             let a = borrow(self, prev, &prev_ty);
             let b = borrow(self, cur.clone(), &cur_ty);

@@ -924,48 +924,7 @@ impl Lower<'_, '_, '_> {
 
     /// `v`, of type `from`, as a `to`: a borrow of an array where a borrow of a slice is wanted
     /// becomes one, with the array's length (the interpreters treat the two alike).
-    ///
-    /// A borrow of a borrow where the borrow is wanted is the borrow it points to, as the
-    /// interpreters look through it.
-    ///
-    /// And a borrow where a borrow of it is wanted (the MIR leaves out an automatic `&` at
-    /// times) is borrowed: put in a slot of its own, whose address is the value.
     fn fit(&mut self, v: Val, from: &Ty, to: &Ty) -> Val {
-        if let (Ty::Ref(..), Ty::Ref(_, want)) = (from, to)
-            && **want == *from
-            && !matches!(v, Val::Unit)
-        {
-            let l = Layout {
-                size: 16,
-                align: 8,
-                shape: Shape::Wide,
-                niche: None,
-            };
-            let a = self.slot(&l);
-            match v {
-                Val::Scalar(x) => {
-                    self.b.ins().store(ir::MemFlagsData::trusted(), x, a, 0);
-                }
-                Val::Mem(src) => self.copy(a, src, 16),
-                Val::Unit => {}
-            }
-            return Val::Scalar(a);
-        }
-        if let (Val::Scalar(p), Ty::Ref(_, a)) = (v, from)
-            && let Ty::Ref(_, inner) = &**a
-            && let Ty::Ref(_, want) = to
-            && inner == want
-        {
-            return if matches!(**inner, Ty::Str | Ty::Slice(_) | Ty::Dyn(..)) {
-                Val::Mem(p)
-            } else {
-                Val::Scalar(
-                    self.b
-                        .ins()
-                        .load(types::I64, ir::MemFlagsData::trusted(), p, 0),
-                )
-            };
-        }
         if let (Val::Scalar(p), Ty::Ref(_, a), Ty::Ref(_, b)) = (v, from, to)
             && let (Ty::Array(_, n), Ty::Slice(_)) = (&**a, &**b)
             && let Ty::Len(k) = **n

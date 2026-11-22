@@ -309,6 +309,11 @@ fn slices_and_text() {
                fn main() -> int { let a = [1, 2, 3, 4]; sum(&a) + sum(&a[1..3]) }"),
         "15"
     );
+    assert_eq!(
+        value("fn eq(x: &[int], y: &[int]) -> bool { x == y }
+               fn main() -> (bool, bool) { let a = [1, 2, 3]; let b = [1, 2]; (eq(&a, &b), eq(&a[0..2], &b)) }"),
+        "(false, true)"
+    );
     assert_eq!(value(r#"fn main() -> int { "naïve".len() }"#), "6");
     assert_eq!(value(r#"fn main() -> &str { "hi" }"#), "\"hi\"");
     assert_eq!(

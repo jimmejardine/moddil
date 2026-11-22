@@ -318,3 +318,11 @@ fn closures() {
          fn g() -> int { let mut n = 0; each(|x| n += x); n }"
     ));
 }
+
+#[test]
+fn comparing_slices_passes_the_borrows_as_they_are() {
+    let mir = dump("fn f(x: &[int], y: &[int]) -> bool { x == y }");
+    assert!(mir.contains("let _3: &[int];"), "{mir}");
+    assert!(mir.contains("let _4: &[int];"), "{mir}");
+    assert!(!mir.contains("&&[int]"), "{mir}");
+}
