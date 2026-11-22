@@ -92,11 +92,21 @@ pub(crate) fn source(db: &dyn Db, program: Program, src: Src) -> (SyntaxNode, &s
     }
 }
 
-/// The node of `kind` at `range` in the tree under `root`.
+/// The node of `kind` at `range` in the tree under `root`. It goes down only through the nodes
+/// that contain `range`, so it costs the depth of the tree, not its size: it runs for every
+/// function of the program, the prelude's included.
 pub(crate) fn node_at(root: &SyntaxNode, kind: K, range: TextRange) -> Option<SyntaxNode> {
-    root.descendants()
-        .into_iter()
-        .find(|n| n.kind() == kind && n.text_range() == range)
+    let mut node = root.clone();
+    loop {
+        if node.kind() == kind && node.text_range() == range {
+            return Some(node);
+        }
+        let next = node.children().into_iter().find(|c| {
+            let r = c.text_range();
+            r.start <= range.start && range.end <= r.end
+        })?;
+        node = next;
+    }
 }
 
 fn name_of(node: &SyntaxNode) -> (String, TextRange) {

@@ -188,16 +188,16 @@ something runs from the first slice.
     specs (`{x:>8}`) and `Debug` waits for derives of it; tagged literals other than `fmt` wait
     for comptime;
   - `#[intrinsic]` is the prelude's alone (and the built-in `core` mod's).
-- **Check the prelude once, not for every program: a step for the next slice.** Every
-  program's checks and MIR include the prelude's bodies, so each `Database` checks the whole
-  prelude again: about 0.4 s per program even at opt-level 1, and most of the test suite's time.
-  Nothing in a program can change the prelude, so:
-  - check and lower the prelude's bodies in queries keyed on the prelude alone (an input of its
-    own), which every program's database shares, or else leave them out of a program's
-    diagnostics and lower them on first call;
-  - the prelude's own test (`the_prelude_and_its_derives_check_cleanly`) keeps checking it whole;
-  - done when a program's check no longer grows with the prelude: time
-    `moddil-sema tests::borrows_and_copy` before and after.
+- **The cost of the prelude in every program: done (November 2026), no redesign needed.**
+  - **What was slow.** Most of the test suite's time went into collecting the item tree,
+    about 0.85 s per program. Re-checking the prelude's bodies was not the cause. `node_at`
+    searched the whole syntax tree once per function. Now it goes down only through the nodes
+    that contain the range. Collecting takes 28 ms, and the full `cargo nextest run` takes 11 s
+    instead of 66 s.
+  - **Not done: leaving the prelude's bodies out of each program's checks.** Measured before
+    the fix, it saved only 14%, and then a broken prelude would show only in
+    `the_prelude_and_its_derives_check_cleanly`, which does not borrow-check it. Revisit it
+    only if the prelude's bodies become a large share of a check again.
 - **Borrows of static data borrow nothing (decided, [`memory.md`: Borrows of static data](memory.md#borrows-of-static-data)):
   done in S7c (November 2026).** A string literal (and, once S10 brings `const`, a
   `const`'s value) is static data:
