@@ -17,7 +17,7 @@ python tools/ci.py             # every CI step on this machine: fmt, clippy, den
 python tools/ci.py --wsl       # the same steps in WSL (Linux); --all runs both
 ```
 
-- **Toolchain:** pinned to Rust 1.95.0 in [`rust-toolchain.toml`](../rust-toolchain.toml); rustup
+- **Toolchain:** pinned to Rust 1.100.0 in [`rust-toolchain.toml`](../rust-toolchain.toml); rustup
   installs it on first use.
 - **Dependencies** are declared once, in the root [`Cargo.toml`](../Cargo.toml) under
   `[workspace.dependencies]`; a crate takes one with `name.workspace = true` when a slice needs it.
@@ -38,6 +38,8 @@ python tools/ci.py --wsl       # the same steps in WSL (Linux); --all runs both
 | [`interp/`](interp/README.md) | `moddil-interp` | The MIR interpreter |
 | [`refinterp/`](refinterp/README.md) | `moddil-refinterp` | The reference interpreter |
 | [`conformance/`](conformance/README.md) | `moddil-conformance` | The conformance runner |
+| [`native/`](native/README.md) | `moddil-native` | The native backend: MIR to Cranelift, run by its JIT (M1) |
+| [`rt/`](rt/README.md) | `moddil-rt` | The runtime native code calls: traps, observations, frame counting |
 | [`project/`](project/README.md) | `moddil-project` | Reads a program from disk: the manifest, the module tree, dependencies by path |
 | [`moddil/`](moddil/README.md) | `moddil` | The `moddil` command |
 

@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-TOOLCHAIN = "1.95.0"  # keep in step with rust-toolchain.toml
+TOOLCHAIN = "1.100.0"  # keep in step with rust-toolchain.toml
 WSL_DISTRO = os.environ.get("MODDIL_WSL_DISTRO", "Ubuntu-20.04")
 IN_CI = os.environ.get("CI") == "true"
 

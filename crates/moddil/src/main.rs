@@ -32,11 +32,18 @@ enum Command {
     Run {
         /// A file, or a mod's directory (with a `moddil.toml`).
         file: PathBuf,
+        /// Compile it to native code and run that (M1: scalars and calls so far), rather than
+        /// interpret it.
+        #[arg(long)]
+        native: bool,
     },
     /// Runs a program's tests (a mod's, not its dependencies').
     Test {
         /// A file, or a mod's directory (with a `moddil.toml`).
         file: PathBuf,
+        /// Compile each test to native code and run that, rather than interpret it.
+        #[arg(long)]
+        native: bool,
     },
 }
 
@@ -46,7 +53,7 @@ const TRAPPED: u8 = 101;
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let path = match &cli.command {
-        Command::Check { file } | Command::Run { file } | Command::Test { file } => file,
+        Command::Check { file } | Command::Run { file, .. } | Command::Test { file, .. } => file,
     };
     let project = match moddil_project::load(path) {
         Ok(p) => p,
@@ -78,7 +85,11 @@ fn main() -> ExitCode {
     }
     match cli.command {
         Command::Check { .. } => ExitCode::SUCCESS,
+        Command::Run { native: true, .. } => {
+            run_native(&db, program, &files, &path.display().to_string())
+        }
         Command::Run { .. } => run(&db, program, &files, &path.display().to_string()),
+        Command::Test { native: true, .. } => test_native(&db, program, &files),
         Command::Test { .. } => test(&db, program, &files),
     }
 }
@@ -162,6 +173,74 @@ fn run(db: &Database, program: Program, files: &[(String, String)], name: &str) 
         // `main` cannot fail (R3), so no error can escape it.
         Err(Stop::Failed { .. }) => unreachable!("a checked `main` cannot fail"),
     }
+}
+
+/// `moddil run --native`: `main` compiled by the native backend and run.
+fn run_native(db: &Database, program: Program, files: &[(String, String)], name: &str) -> ExitCode {
+    let items = moddil_sema::item_tree(db, program);
+    let Some(main) = items.main_fn() else {
+        eprintln!("moddil: {name} has no `fn main()`");
+        return ExitCode::FAILURE;
+    };
+    match moddil_native::run_main(db, program, main) {
+        Ok(v) if v == "()" => ExitCode::SUCCESS,
+        Ok(v) => {
+            println!("{v}");
+            ExitCode::SUCCESS
+        }
+        Err(moddil_native::Native::Trap(class, file, range)) => {
+            let (name, text) = &files[file as usize];
+            report_native_trap(name, text, class, range);
+            ExitCode::from(TRAPPED)
+        }
+        Err(moddil_native::Native::Unsupported(what)) => {
+            eprintln!("moddil: not supported natively yet: {what}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `moddil test --native`: each test compiled by the native backend and run.
+fn test_native(db: &Database, program: Program, files: &[(String, String)]) -> ExitCode {
+    let items = moddil_sema::item_tree(db, program);
+    let mut failed = 0;
+    let mut run = 0;
+    let mut unsupported = 0;
+    for (i, t) in items.tests.iter().enumerate() {
+        if items.mod_of(t.module) != 0 {
+            continue;
+        }
+        run += 1;
+        match moddil_native::run_test(db, program, i as u32).1 {
+            Ok(()) => println!("test \"{}\" ... ok", t.name),
+            Err(moddil_native::Native::Trap(class, file, range)) => {
+                failed += 1;
+                println!("test \"{}\" ... trapped", t.name);
+                let (name, text) = &files[file as usize];
+                report_native_trap(name, text, class, range);
+            }
+            Err(moddil_native::Native::Unsupported(what)) => {
+                unsupported += 1;
+                println!("test \"{}\" ... not supported natively yet: {what}", t.name);
+            }
+        }
+    }
+    let passed = run - failed - unsupported;
+    println!("{passed} passed, {failed} failed, {unsupported} not supported natively yet");
+    if failed == 0 && unsupported == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+fn report_native_trap(name: &str, text: &str, class: moddil_mir::TrapClass, range: TextRange) {
+    let span = (name, range.to_range());
+    let report = Report::build(ReportKind::Error, span.clone())
+        .with_config(config())
+        .with_message(format!("trap: {}", class.name()))
+        .with_label(Label::new(span).with_message("here"));
+    let _ = report.finish().eprint((name, Source::from(text)));
 }
 
 fn test(db: &Database, program: Program, files: &[(String, String)]) -> ExitCode {

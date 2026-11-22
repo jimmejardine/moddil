@@ -12,6 +12,8 @@ the full command set (`build`, `fmt`, `diff`, `audit`, `bind`, …) arrives over
 moddil check file.moddil    # report errors (exit 1 if any)
 moddil run file.moddil      # run `fn main()` and print its result (exit 101 on a trap)
 moddil test file.moddil     # run the file's `test` items
+moddil run --native f.moddil   # compile `main` with Cranelift and run it (M1, slice C0)
+moddil test --native f.moddil  # the same for each test
 ```
 
 Diagnostics are rendered in the rustc style with `ariadne`; `--format json` comes later.

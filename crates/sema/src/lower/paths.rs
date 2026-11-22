@@ -235,10 +235,10 @@ impl Lowerer<'_> {
                     return Some(None);
                 }
             },
-            _ => match self.types.params.iter().rposition(|p| p.name == name) {
-                Some(i) => Ty::Param(i as u32, name.into()),
-                None => return None,
-            },
+            _ => {
+                let i = self.types.params.iter().rposition(|p| p.name == name)?;
+                Ty::Param(i as u32, name.into())
+            }
         }))
     }
 

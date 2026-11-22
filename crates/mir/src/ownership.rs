@@ -1011,8 +1011,7 @@ fn liveness(body: &Body) -> Vec<Vec<HashSet<Local>>> {
         }
     }
     let mut out = Vec::with_capacity(n);
-    for b in 0..n {
-        let block = &body.blocks[b];
+    for block in body.blocks.iter().take(n) {
         let mut points = vec![HashSet::new(); block.statements.len() + 1];
         let mut live: HashSet<Local> = block
             .terminator

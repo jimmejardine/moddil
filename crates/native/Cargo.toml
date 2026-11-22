@@ -1,0 +1,27 @@
+[package]
+name = "moddil-native"
+description = "The native backend: MIR to Cranelift, run in process by its JIT"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+moddil-mir.workspace = true
+moddil-sema.workspace = true
+moddil-syntax.workspace = true
+moddil-rt.workspace = true
+cranelift-codegen.workspace = true
+cranelift-frontend.workspace = true
+cranelift-module.workspace = true
+cranelift-jit.workspace = true
+cranelift-native.workspace = true
+
+[dev-dependencies]
+moddil-project.workspace = true
+
+[lints]
+workspace = true

@@ -12,6 +12,7 @@ publish.workspace = true
 [dependencies]
 moddil-refinterp.workspace = true
 moddil-interp.workspace = true
+moddil-native.workspace = true
 moddil-mir.workspace = true
 moddil-project.workspace = true
 moddil-sema.workspace = true

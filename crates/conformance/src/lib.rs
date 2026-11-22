@@ -71,6 +71,11 @@ pub trait Implementation {
     fn name(&self) -> &str;
     /// Checks the program and, if it has no errors, runs all its tests.
     fn run(&self, program: &Loaded) -> Outcome;
+    /// As [`Implementation::run`], or `None` if it cannot run this program yet (the native
+    /// backend, for code it does not compile yet): the file is then skipped for it.
+    fn run_if(&self, program: &Loaded) -> Option<Outcome> {
+        Some(self.run(program))
+    }
     /// Whether it checks programs. One that does not (the reference interpreter) only runs tests
     /// that expect no diagnostics.
     fn checks(&self) -> bool {
@@ -167,6 +172,51 @@ impl Implementation for MirInterpreter {
             }
         }
         outcome
+    }
+}
+
+/// The native backend (M1): the front end, then each test compiled by Cranelift and run in
+/// process. A file whose tests reach code it does not compile yet is skipped.
+pub struct Native;
+
+impl Implementation for Native {
+    fn name(&self) -> &str {
+        "native"
+    }
+
+    fn run(&self, loaded: &Loaded) -> Outcome {
+        self.run_if(loaded).unwrap_or_default()
+    }
+
+    fn run_if(&self, loaded: &Loaded) -> Option<Outcome> {
+        let project = loaded.as_ref().ok()?;
+        let db = Database::default();
+        let program = program(&db, project);
+        if moddil_interp::has_errors(&db, program) {
+            return None;
+        }
+        let items = moddil_sema::item_tree(&db, program);
+        let mut outcome = Outcome::default();
+        for i in 0..items.tests.len() as u32 {
+            let (observed, result) = moddil_native::run_test(&db, program, i);
+            outcome.observed.extend(
+                observed
+                    .into_iter()
+                    .map(|(file, range, value)| (line_of(project, file, range.end), value)),
+            );
+            match result {
+                Ok(()) => {}
+                Err(moddil_native::Native::Trap(_, file, range)) => {
+                    outcome.traps.insert(line_of(project, file, range.start));
+                }
+                Err(moddil_native::Native::Unsupported(_)) => return None,
+            }
+        }
+        Some(outcome)
+    }
+
+    fn checks(&self) -> bool {
+        false
     }
 }
 
@@ -402,6 +452,8 @@ pub struct Report {
     pub unknown: Vec<String>,
     /// Paragraph IDs in the reference.
     pub paragraphs: usize,
+    /// For each implementation that skips files it cannot run yet: how many it ran.
+    pub ran: BTreeMap<String, usize>,
 }
 
 impl Report {
@@ -616,7 +668,10 @@ fn run_tests(
             if !imp.checks() && !expected.diagnostics.is_empty() {
                 continue;
             }
-            let outcome = imp.run(&loaded);
+            let Some(outcome) = imp.run_if(&loaded) else {
+                continue;
+            };
+            *report.ran.entry(imp.name().to_string()).or_default() += 1;
             for p in compare(&expected, &outcome) {
                 report.failures.push(format!("{rel} ({}): {p}", imp.name()));
             }

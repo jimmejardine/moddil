@@ -8,7 +8,7 @@ resolver = "3"
 [workspace.package]
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.95.0"
+rust-version = "1.100.0"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/jimmejardine/moddil"
 publish = false
@@ -43,12 +43,12 @@ moddil-sema = { path = "crates/sema", version = "0.0.0" }
 moddil-mir = { path = "crates/mir", version = "0.0.0" }
 moddil-interp = { path = "crates/interp", version = "0.0.0" }
 moddil-refinterp = { path = "crates/refinterp", version = "0.0.0" }
-moddil-conformance = { path = "crates/conformance", version = "0.0.0" }
 moddil-project = { path = "crates/project", version = "0.0.0" }
+moddil-rt = { path = "crates/rt", version = "0.0.0" }
+moddil-native = { path = "crates/native", version = "0.0.0" }
 
 # External crates (versions checked on crates.io, November 2026).
 salsa = "0.28.5"            # query-based incremental compilation
-logos = "0.16.1"            # lexer generator
 ariadne = "0.6.0"           # diagnostics rendering
 la-arena = "0.3.1"          # index-based arenas for AST, HIR and MIR nodes
 clap = { version = "4.6.9", features = ["derive"] }
@@ -57,6 +57,11 @@ unicode-ident = "1.0.27"     # UAX #31 identifier classes (the lexer)
 unicode-normalization = "0.1.26"  # NFC checks on identifiers (the lexer)
 cargo_metadata = "0.23.1"   # the refinterp independence check
 libm = "0.2.16"             # float functions with the same bits on every platform (both interpreters)
+cranelift-codegen = "0.138.0"   # native code generation (M1, `moddil-native`)
+cranelift-frontend = "0.138.0"
+cranelift-module = "0.138.0"
+cranelift-jit = "0.138.0"
+cranelift-native = "0.138.0"
 
 [profile.dev]
 debug = "line-tables-only"

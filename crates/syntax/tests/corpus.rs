@@ -99,7 +99,7 @@ fn the_parser_agrees_with_the_grammar_on_random_edits(shard: u64) {
     // 1000 in all by default; CI's grammars step runs many more in release (`MODDIL_EDITS`, the
     // total over the shards), and `MODDIL_SEED` explores other edits.
     let var = |name: &str| std::env::var(name).ok().and_then(|n| n.parse::<u64>().ok());
-    let total = var("MODDIL_EDITS").map_or(1000, |n| n);
+    let total = var("MODDIL_EDITS").unwrap_or(1000);
     let count = usize::try_from(total.div_ceil(EDIT_SHARDS)).expect("a count");
     let seed = var("MODDIL_SEED").unwrap_or(0x0005_EED0_F6A3_3A12)
         ^ shard.wrapping_mul(0x9E37_79B9_7F4A_7C15);

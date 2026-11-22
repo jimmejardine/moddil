@@ -107,6 +107,12 @@ problem, which is exactly the supply-chain concern of [Package management and su
 - **No link step in dev builds:** functions are reached through an indirection table and compiled by
   Cranelift in process, which also enables **live update** ([Live update (debug builds)](build-times.md#live-update-debug-builds)). Release builds link normally with
   `lld` or `mold`, with split debug info.
+- **Traps in JIT code return, they do not unwind (decided November 2026, M1 slice C0).** Code
+  compiled into the compiler's process returns a status beside each result: a failed check
+  records its site with the runtime and returns "trapped", and each caller passes that on, so a
+  trap in a test or a `moddil run --native` leaves the compiler running. A process built to run
+  on its own ends on a trap outside an isolated scope, as
+  [`mir.md`: Ownership and resources](mir.md#ownership-and-resources) says.
 - **Check-only mode:** type, effect and ownership checking without code generation, powering the
   language server and agents ([LLMs as first-class programmers](agent-interface.md)).
 - **Test impact analysis:** the query graph knows which tests depend on a change, so only those run.
@@ -189,7 +195,7 @@ moddil/
 - **Crates** are published as `moddil-<name>`. They start coarse and split as they grow (`sema` into
   names, types and effects), following the many-small-crates rule in
   [Stage 0 language: Rust](#stage-0-language-rust).
-- **The Rust toolchain is pinned** in `rust-toolchain.toml` (1.95.0, also the workspace's
+- **The Rust toolchain is pinned** in `rust-toolchain.toml` (1.100.0, also the workspace's
   `rust-version`), and every dependency is declared once in the root `Cargo.toml`. CI is defined
   once, in `tools/ci.py`: GitHub Actions runs it on Linux, Windows and macOS, and it runs locally
   on Windows and in WSL. `cargo-deny` checks licences, advisories and sources.

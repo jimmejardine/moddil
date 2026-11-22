@@ -133,13 +133,20 @@ impl fmt::Debug for Body {
             args.join(", "),
             self.locals[0].ty
         )?;
-        for i in 1..=self.arg_count {
-            if let Some(n) = &self.locals[i].name {
+        for (i, local) in self.locals.iter().enumerate().skip(1).take(self.arg_count) {
+            if let Some(n) = &local.name {
                 writeln!(f, "    // _{i}: {n}")?;
             }
         }
-        for i in self.arg_count + 1..self.locals.len() - self.cleanup_locals {
-            writeln!(f, "    let _{i}: {:?};{}", self.locals[i].ty, name(i))?;
+        let shown = self.locals.len() - self.cleanup_locals;
+        for (i, local) in self
+            .locals
+            .iter()
+            .enumerate()
+            .take(shown)
+            .skip(self.arg_count + 1)
+        {
+            writeln!(f, "    let _{i}: {:?};{}", local.ty, name(i))?;
         }
         // Cleanup blocks, which only unwinding reaches, are not shown.
         for (i, block) in self.blocks.iter().enumerate() {

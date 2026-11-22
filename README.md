@@ -8,7 +8,7 @@
 [![Windows](https://github.com/jimmejardine/moddil/actions/workflows/test-windows.yml/badge.svg?branch=main)](https://github.com/jimmejardine/moddil/actions/workflows/test-windows.yml)
 [![macOS](https://github.com/jimmejardine/moddil/actions/workflows/test-macos.yml/badge.svg?branch=main)](https://github.com/jimmejardine/moddil/actions/workflows/test-macos.yml)
 [![Licence: MIT OR Apache-2.0](https://img.shields.io/badge/licence-MIT%20OR%20Apache--2.0-blue)](#licence)
-[![Rust 1.95.0](https://img.shields.io/badge/rust-1.95.0-orange)](rust-toolchain.toml)
+[![Rust 1.100.0](https://img.shields.io/badge/rust-1.100.0-orange)](rust-toolchain.toml)
 
 **Moddil: the programming language with armour, not baggage.**
 

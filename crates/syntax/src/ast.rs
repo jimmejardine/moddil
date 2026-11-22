@@ -51,32 +51,58 @@ fn children<'a, N: AstNode + 'a>(parent: &'a SyntaxNode) -> impl Iterator<Item =
     parent.children().filter_map(N::cast)
 }
 
-node!(/// A whole file.
-    SourceFile = SOURCE_FILE);
-node!(/// A function.
-    FnItem = FN_ITEM);
-node!(/// A defining name.
-    Name = NAME);
-node!(/// `( … )` after a function's name.
-    ParamList = PARAM_LIST);
-node!(/// A parameter.
-    Param = PARAM);
-node!(/// `-> T`.
-    RetType = RET_TYPE);
-node!(/// `{ … }`.
-    Block = BLOCK);
-node!(/// `let p: T = e;`.
-    LetStmt = LET_STMT);
-node!(/// An expression followed by `;` (or a block-like expression with attributes).
-    ExprStmt = EXPR_STMT);
-node!(/// A path: `a::b::c`.
-    Path = PATH);
-node!(/// `test "name" { … }`.
-    TestItem = TEST_ITEM);
-node!(/// `( … )` after a callee.
-    ArgList = ARG_LIST);
-node!(/// One argument of a call, maybe labelled: `limit: 32`.
-    Arg = ARG);
+node!(
+    /// A whole file.
+    SourceFile = SOURCE_FILE
+);
+node!(
+    /// A function.
+    FnItem = FN_ITEM
+);
+node!(
+    /// A defining name.
+    Name = NAME
+);
+node!(
+    /// `( … )` after a function's name.
+    ParamList = PARAM_LIST
+);
+node!(
+    /// A parameter.
+    Param = PARAM
+);
+node!(
+    /// `-> T`.
+    RetType = RET_TYPE
+);
+node!(
+    /// `{ … }`.
+    Block = BLOCK
+);
+node!(
+    /// `let p: T = e;`.
+    LetStmt = LET_STMT
+);
+node!(
+    /// An expression followed by `;` (or a block-like expression with attributes).
+    ExprStmt = EXPR_STMT
+);
+node!(
+    /// A path: `a::b::c`.
+    Path = PATH
+);
+node!(
+    /// `test "name" { … }`.
+    TestItem = TEST_ITEM
+);
+node!(
+    /// `( … )` after a callee.
+    ArgList = ARG_LIST
+);
+node!(
+    /// One argument of a call, maybe labelled: `limit: 32`.
+    Arg = ARG
+);
 
 impl SourceFile {
     /// The functions at the top level.

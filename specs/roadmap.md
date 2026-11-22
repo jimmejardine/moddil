@@ -571,6 +571,37 @@ something runs from the first slice.
   early; **work on the Lean core model** starts after S5, once ownership, traits, errors and effects
   have settled ([`definition.md`: Three artefacts, one meaning](definition.md#three-artefacts-one-meaning)).
 
+## M1: native code in slices
+
+M1 grows the native backend as M0 grew the front end: vertical slices C0, C1, …, each compiling
+more of the MIR with Cranelift, run in process by `cranelift-jit` (writing executables comes
+later), and each checked by the conformance suite, which runs every file the backend can compile
+and needs its results to equal the interpreters' (decided November 2026). The runtime native code
+calls is a Rust crate, `moddil-rt`, for now.
+
+- **Slice C0 (decided November 2026): scalars and calls.**
+  - **Values:** `int`, `bool`, `char`, the sized integers and the floats.
+  - **Operations:** every operator, with the MIR's overflow, division and shift checks.
+  - **Control flow and calls:** blocks, branches and loops, and direct calls of non-generic
+    functions, compiled lazily from what a test or `main` reaches.
+  - **The ABI:** a status return. Every function returns a status beside its result; a failed
+    check calls `moddil-rt` to record its site and returns "trapped", which callers pass on. So a
+    trap in a test leaves the compiler's process alone. A 128-bit result comes back through a
+    pointer the caller gives.
+  - **Recursion:** calls are counted (`moddil-rt`'s `enter` and `leave`), so recursion without
+    end traps at the interpreters' depth, 10,000 frames, rather than overflowing the native
+    stack. Runs have a 512 MiB stack.
+  - **The command:** `moddil run --native` and `moddil test --native`, which report what they
+    do not compile yet. The interpreter stays the default.
+  - **Checking:** a third conformance runner, `Native`, which skips files that reach anything
+    else. `cargo test -p moddil-conformance -- --nocapture` prints how many files each area ran
+    natively (22 files at C0).
+  - **The toolchain:** Cranelift 0.138, with Rust moved to the latest stable, 1.100.0, for it
+    (November 2026).
+- **Next, C1:** values on the stack (tuples, structs, enums and arrays, with layouts and field
+  places), then borrows, then errors through the status channel, then the prelude's generic
+  code (monomorphised), and drops.
+
 ## Staging: distributed programs
 
 | Stage | Delivers |
