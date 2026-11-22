@@ -1,0 +1,15 @@
+// covers: text.lit.block.1
+
+test "a raw block has no escapes" {
+    let text = r"""
+        a\tb
+        """;
+    text                                    // => "a\\tb\n"
+}
+
+test "\s keeps a space at the end of a line" {
+    let text = """
+        end\s
+        """;
+    text                                    // => "end \n"
+}

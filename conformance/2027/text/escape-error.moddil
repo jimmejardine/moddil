@@ -1,0 +1,5 @@
+// covers: text.lit.escape.1
+
+fn f() -> int {
+    "\q".len()                              //~ E0001
+}

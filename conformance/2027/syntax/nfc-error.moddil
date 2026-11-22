@@ -1,0 +1,7 @@
+// covers: syntax.text.1
+// An identifier must be in NFC: this one is `e` followed by a combining accent.
+
+fn f() -> int {
+    let café = 1;                       //~ E0001
+    1
+}

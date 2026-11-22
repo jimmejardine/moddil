@@ -33,6 +33,27 @@ pub(crate) fn string_value(tok: &str) -> Result<String, String> {
     unescape(inner)
 }
 
+/// For a block literal token with a wrongly indented line, the byte range of its closing quotes,
+/// whose indentation the lines are measured against: the error is reported there.
+fn block_error_at(tok: &str) -> Option<(usize, usize)> {
+    let start = tok.find("\"\"\"")? + 3;
+    let end = tok.rfind("\"\"\"")?;
+    let body = tok.get(start..end)?;
+    let indent = &body[body.rfind('\n')? + 1..];
+    // The first piece is the rest of the opening line, and the last the closing one's indentation.
+    let mut pieces = body.split_inclusive('\n');
+    let mut at = start + pieces.next()?.len();
+    for line in pieces {
+        let text = line.trim_end_matches(['\n', '\r']);
+        let blank = text.chars().all(|c| c == ' ' || c == '\t');
+        if !blank && !text.starts_with(indent) && at + line.len() < end {
+            return Some((end, end + 3));
+        }
+        at += line.len();
+    }
+    None
+}
+
 /// The value of a `char` literal token.
 pub(crate) fn char_value(tok: &str) -> Result<char, String> {
     let inner = tok
@@ -159,7 +180,11 @@ impl Lowerer<'_> {
         match string_value(tok.text()) {
             Ok(s) => self.alloc(ExprKind::Str(s), range),
             Err(why) => {
-                self.report(Code::E0902, range, why);
+                let at = match block_error_at(tok.text()) {
+                    Some((a, b)) => TextRange::new(range.start + a as u32, range.start + b as u32),
+                    None => range,
+                };
+                self.report(Code::E0902, at, why);
                 self.missing(range)
             }
         }

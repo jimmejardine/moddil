@@ -589,6 +589,11 @@ fn errors_4() {
         "pub trait S<T> { fn n(&self) -> int; }\nstruct W<T> { x: T }\nfn need<T>() -> int with s: S<T> { s.n() }\nfn grow<T>() -> int { need::<T>() + grow::<W<T>>() }\nfn calm() -> int { 1 }",
         &[("E0607", 4)],
     );
+    // A block's wrongly indented line is reported at its closing quotes.
+    err(
+        "fn f() -> int {\nlet t = \"\"\"\n    in\n  out\n    \"\"\";\n1\n}",
+        &[("E0902", 5)],
+    );
 }
 
 #[test]

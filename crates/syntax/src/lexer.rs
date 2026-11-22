@@ -407,17 +407,34 @@ impl Lexer<'_> {
         let start = self.pos;
         self.pos += 1;
         let ok = match self.bump() {
-            Some('n' | 'r' | 't' | '0' | '\\' | '"' | '\'' | 's') => true,
-            Some('x') => (0..2).all(|_| {
-                let hex = self.peek().is_some_and(|c| c.is_ascii_hexdigit());
+            // The escapes of one character, and a line continuation (`\` before a line break,
+            // which is left out with the white space after it).
+            Some('n' | 'r' | 't' | '0' | '\\' | '"' | '\'' | 's' | '\n') => true,
+            Some('\r') => self.eat('\n'),
+            // An ASCII character: up to `\x7F`.
+            Some('x') => (0..2).all(|k| {
+                let hex = self
+                    .peek()
+                    .is_some_and(|c| c.is_ascii_hexdigit() && (k == 1 || c <= '7'));
                 if hex {
                     self.pos += 1;
                 }
                 hex
             }),
+            // Up to six hexadecimal digits, with `_` between them.
             Some('u') if self.eat('{') => {
-                let n = self.eat_while(|c| c.is_ascii_hexdigit());
-                self.eat('}') && n > 0
+                let digits = self
+                    .rest()
+                    .find('}')
+                    .map(|i| &self.rest()[..i])
+                    .unwrap_or("");
+                let hex = digits.chars().filter(char::is_ascii_hexdigit).count();
+                let ok = (1..=6).contains(&hex)
+                    && digits.chars().all(|c| c.is_ascii_hexdigit() || c == '_')
+                    && !digits.starts_with('_')
+                    && !digits.ends_with('_');
+                self.eat_while(|c| c.is_ascii_hexdigit() || c == '_');
+                self.eat('}') && ok
             }
             _ => false,
         };
@@ -449,11 +466,13 @@ impl Lexer<'_> {
         let mut chars = rest.char_indices().skip(1);
         let (_, c) = chars.next()?;
         if c == '\\' {
-            // An escape, then a closing quote.
-            let close = rest[2..].find('\'')?;
-            let body = &rest[1..2 + close];
-            let ok = body.len() >= 2 && !body.contains('\n');
-            return ok.then_some(2 + close + 1);
+            // An escape, then a closing quote; the escaped character is not one (`'\''`).
+            let (i, e) = chars.next()?;
+            let after = i + e.len_utf8();
+            let close = rest[after..].find('\'')?;
+            let body = &rest[1..after + close];
+            let ok = !body.contains('\n');
+            return ok.then_some(after + close + 1);
         }
         if c == '\'' || c == '\n' {
             return None;
@@ -598,6 +617,8 @@ mod tests {
         assert_eq!(one("'a'"), SyntaxKind::CHAR);
         assert_eq!(one("'\\n'"), SyntaxKind::CHAR);
         assert_eq!(one("'\\u{1F600}'"), SyntaxKind::CHAR);
+        assert_eq!(one("'\\''"), SyntaxKind::CHAR);
+        assert_eq!(one("'\\\\'"), SyntaxKind::CHAR);
         assert_eq!(one("b'x'"), SyntaxKind::BYTE);
     }
 

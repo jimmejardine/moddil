@@ -1,4 +1,4 @@
-// covers: attr.around.1, attr.around.args.1, attr.around.info.1, attr.around.order.1, attr.around.body.1, attr.around.contracts.1
+// covers: attr.around.1, attr.around.args.1, attr.around.info.1, attr.around.order.1, attr.around.body.1, attr.around.contracts.1, attr.around.limits.1
 
 #[derive(Debug, Clone, PartialEq)]
 enum Denied { No }

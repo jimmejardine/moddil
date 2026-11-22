@@ -58,7 +58,8 @@ closing quotes are on a line of their own, and their indentation is taken off ev
 of only white space is an empty line, white space at the end of a line is left out (`\s` keeps a
 space), and each line ends with a line break, `\n` whatever the source file uses. A line indented
 less than the closing quotes, or indentation that mixes tabs and spaces with the closing line's,
-is a syntax error (E0001). A raw block (`r"""`) takes off indentation but has no escapes.
+is an invalid literal (E0902), reported at the closing quotes. A raw block (`r"""`) takes off
+indentation but has no escapes.
 
 ## Formatting
 

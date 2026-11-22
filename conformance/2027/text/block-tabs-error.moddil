@@ -1,0 +1,8 @@
+// covers: text.lit.block.1
+
+fn f() -> int {
+    let text = """
+	        tabbed
+        """;                                //~ E0902
+    1
+}

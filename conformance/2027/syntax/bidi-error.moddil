@@ -1,0 +1,7 @@
+// covers: syntax.text.1
+// A bidirectional control character is rejected outside an escape, even in a literal.
+
+fn f() -> int {
+    let s = "‮reversed";                    //~ E0001
+    1
+}

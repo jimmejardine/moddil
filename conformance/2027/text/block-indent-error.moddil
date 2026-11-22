@@ -1,0 +1,9 @@
+// covers: text.lit.block.1
+
+fn f() -> int {
+    let text = """
+        in
+      out
+        """;                                //~ E0902
+    1
+}

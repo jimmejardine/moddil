@@ -24,6 +24,8 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
 - **Conformance doesn't test I0001.** "Not supported yet" belongs to an implementation, not to the
   language, so the runner rejects it. The findings that asked for I0001 cases are dropped: the
   `track_caller` arguments, the wrapper limits, and `Vec::new` and `Some` as values.
+- **`type.impl.ret.1`'s limits can't be tested here** (a trait's method with an `impl Trait`
+  result, a result type containing one): they are I0001 for now.
 - **A contract on a trait's method can't be tested here:** it is I0001 for now (`contract.1`).
 - **`let b = a;` with `a: &mut int` is a reborrow, not a move** (`borrow.reborrow.1`), so the
   `own.copy.1` finding became "using `a` while `b` is live" (E0306).
@@ -45,49 +47,12 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
 
 | Directory | claim | weak | missing | cite | dead | gap? |
 |---|---|---|---|---|---|---|
-| syntax, text | | | 3 | | | |
-| traits | | | 3 | | | |
-| wrappers | | | 1 | | 1 | |
 
-The directories not listed have no finding left: arithmetic, arrays, attributes, borrows, calls, closures, collections, comptime, concurrency, contracts, derive, effects, enums, errors, generics, iteration, main, modules, operators, ownership, prelude, refinements and structs are done, and
+The directories not listed have no finding left: arithmetic, arrays, attributes, borrows, calls, closures, collections, comptime, concurrency, contracts, derive, effects, enums, errors, generics, iteration, main, modules, operators, ownership, prelude, refinements, structs, syntax, text, traits and wrappers are done, and
 assert, assignment, bitwise, blocks, comparison, if, items, literals, logic, loops, match, names,
 patterns, statements, tuples, types and views had none worth a change.
 
 ## Findings
-
-### syntax, text
-
-- **missing:** `syntax.text.1` says a source file is UTF-8, and gives two errors (E0001) that no
-  test expects:
-  - an identifier not in NFC;
-  - a bidirectional control character outside a literal.
-
-  Add them to `syntax/grammar-error.moddil` or a new error file.
-- **missing:** `text.lit.escape.1` lists escapes no test writes: `\r`, `\0`, `\\`, `\'`, `\s`,
-  `\xHH`, the line continuation (`\` at the end of a line), and `\u{…}` with `_`. An unknown escape
-  (E0001) isn't tested either.
-- **missing:** `text.lit.block.1` has untested parts:
-  - a raw block (`r"""`);
-  - `\s` keeping a trailing space;
-  - a line indented less than the closing quotes (E0001);
-  - mixed tabs and spaces (E0001).
-
-### traits
-
-- **missing:** `item.trait.super.1` says implementing a subtrait for a type that doesn't
-  implement its supertrait is E0402. No test checks this. Add `impl Named for Circle` with no
-  `impl Shape for Circle` to `impl-errors.moddil`.
-- **missing:** `item.trait.1` and `item.impl.1` say a method declared twice in a trait, or two
-  inherent functions of the same name, is E0103. Add both.
-- **missing:** `type.impl.ret.1`'s limits have no case: a trait's method with an `impl Trait`
-  result, a result type containing one (`Option<impl Shape>`), and a hidden type holding a
-  borrow.
-
-### wrappers
-
-- **missing:** `attr.around.body.1` says a wrapper adds no error or effect the function doesn't
-  have (E0501, E0603). This is tested only for errors on a `pub` function. Add an effect.
-- **dead:** `plain` in `errors.moddil` is never used.
 
 ## Implementation gaps
 
@@ -104,6 +69,8 @@ None open. Fixed in the sweep so far:
 5. **Two diagnostics had a run of spaces in the middle** (E0308 and E0314 in `crates/mir/src/ownership.rs`), from a line break inside the string.
 6. **E0607 was reported on every inferred function in the file (sema),** whenever one function's effects grew without end. Now it names only the functions whose effects still grow.
 7. **Three files expected diagnostics and values together** (`effects/dyn`, `effects/inference`, `items/test-for`), so their 22 `// =>` lines never ran. Their diagnostics are now in files of their own, and the runner fails such a file.
+8. **The lexer rejected escapes the reference allows:** `'\''` (it took the escaped quote for the closing one), `_` between the digits of `\u{…}`, and `\` at the end of a line. It also accepted `\x` above `\x7F`.
+9. **A block literal's indentation errors were E0902, at the opening quotes,** while the reference said E0001. Nothing could expect them there, since nothing may follow the opening `"""`. They are now reported at the closing quotes, and the reference says E0902, an invalid literal, as the implementation and the diagnostics table do.
 
 ## Left open
 
