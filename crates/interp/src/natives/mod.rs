@@ -100,6 +100,17 @@ impl<'a> Natives<'a> {
                     .as_int()
                     .rotate_left(args[1].as_int().rem_euclid(64) as u32),
             ),
+            // The ambient log (`obs.log.1`).
+            (Ty::Adt(a, ..), "debug" | "info" | "warn" | "error")
+                if self.items.adts[*a as usize].name == "Log" =>
+            {
+                let msg = match &args[1] {
+                    Value::String(s) => s.clone(),
+                    other => format!("{other:?}"),
+                };
+                eprintln!("[{name}] {msg}");
+                Value::Unit
+            }
             _ => self.text(&self_ty, name, args, stack),
         })
     }

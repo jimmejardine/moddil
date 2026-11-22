@@ -9,5 +9,5 @@ cannot happen, which reports its reason ([Errors](errors.md)). A trap is not an 
 a value the program handles. Besides those, indexing out of bounds
 ([Arrays and indexing](expressions/arrays.md)), filling a `Buf` past its capacity
 ([Collections](collections.md)), a broken precondition or postcondition
-([Contracts](contracts.md)), and a deadlock, every task waiting ([Concurrency](concurrency.md)),
-trap.
+([Contracts](contracts.md)), a deadlock, every task waiting ([Concurrency](concurrency.md)), and
+what waits for the runtimes, a `select` on a `#[selectable]` function (**task.select.3**), trap.

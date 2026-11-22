@@ -11,6 +11,16 @@ built in.
 `fn next(&mut self) -> Option<Self::Item>`: each call gives the next item, or `None` when there
 are no more. `it.count()` uses an iterator up and gives how many items it had.
 
+**iter.adapt.1** `it.map(f)` gives the items passed through closure `f`, in order, and
+`it.filter(f)` the items for which `f` (given a borrow of each) holds. For now both run `f` over
+every item when they are called, and give an iterator over the results (so `f`'s errors are
+theirs, and they do not end on an iterator without end): adapters that run as their items are
+asked for wait for closures kept in fields.
+
+**iter.collect.1** `it.collect()` gathers the items left into a collection of the type the context
+names (`let v: Vec<int> = it.collect();`), one that implements `FromIterator<Item>`: `Vec<T>` from
+`T`s, and `String` from `char`s.
+
 **iter.into.1** `IntoIterator`, with `type Item`, `type IntoIter` and
 `fn into_iter(self) -> Self::IntoIter`, is what `for` iterates over
 ([Loops](expressions/loops.md)). Every iterator implements it, as itself; so do `&[T]` and

@@ -1,0 +1,9 @@
+// covers: main.root.1
+
+fn main(args: Args, stdio: Stdio, net: NetRoot) -> ExitCode {
+    ExitCode::Ok
+}
+
+test "main takes the root capabilities it uses" {
+    1                                       // => 1
+}

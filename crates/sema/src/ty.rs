@@ -50,6 +50,10 @@ pub enum Ty {
     /// An anonymous impl's own type (`impl Time { … }` as an expression): it implements the trait,
     /// each method a closure.
     Anon(Arc<AnonTy>),
+    /// `impl Trait` as a function's result type (`type.impl.ret.1`): known to the function's
+    /// callers only through its bounds; the function's body fixes which type it is (its hidden
+    /// type).
+    Opaque(Arc<OpaqueTy>),
     /// A type parameter of the item being checked, by its index in the item's generics (for a
     /// trait's items, `Self` is parameter 0), with its name.
     Param(u32, Arc<str>),
@@ -100,6 +104,18 @@ pub struct AnonTy {
     pub trait_ref: TraitRef,
     /// Its methods: each the trait's method it defines, and the closure type of its body.
     pub methods: Arc<[(u32, Ty)]>,
+}
+
+/// An opaque result type: the function whose result it is, the type arguments of its call
+/// (for its type parameters), and how it is written (`impl Handler`).
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct OpaqueTy {
+    /// The function.
+    pub func: u32,
+    /// The type arguments for the function's type parameters.
+    pub args: Arc<[Ty]>,
+    /// How it is written.
+    pub name: Arc<str>,
 }
 
 /// Which closure traits a closure implements: every one does `FnOnce`.
@@ -228,6 +244,7 @@ impl Ty {
                     || c.captures.iter().any(|t| t.any(f))
             }
             Ty::Assoc(a) => a.self_ty.any(f) || a.trait_ref.args.iter().any(|t| t.any(f)),
+            Ty::Opaque(o) => o.args.iter().any(|t| t.any(f)),
             _ => false,
         }
     }
@@ -245,6 +262,11 @@ impl Ty {
             Ty::Buf(t) => Ty::Buf(Arc::new(f(t))),
             Ty::Dyn(tr) => Ty::Dyn(tr.map(f)),
             Ty::Closure(c) => Ty::Closure(Arc::new(c.map(f))),
+            Ty::Opaque(o) => Ty::Opaque(Arc::new(OpaqueTy {
+                func: o.func,
+                args: o.args.iter().map(&mut *f).collect(),
+                name: o.name.clone(),
+            })),
             Ty::Anon(a) => Ty::Anon(Arc::new(AnonTy {
                 owner: a.owner,
                 expr: a.expr,
@@ -414,6 +436,7 @@ impl fmt::Debug for Ty {
             }
             Ty::Dyn(tr) => write!(f, "dyn {tr:?}"),
             Ty::Anon(a) => write!(f, "{{impl {:?}}}", a.trait_ref),
+            Ty::Opaque(o) => f.write_str(&o.name),
             Ty::Closure(c) => {
                 f.write_str("{closure(")?;
                 list(f, &c.params)?;

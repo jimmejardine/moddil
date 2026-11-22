@@ -1,0 +1,43 @@
+// covers: type.impl.ret.1
+
+trait Shape { fn area(&self) -> int; }
+struct Square { side: int }
+impl Shape for Square { fn area(&self) -> int { self.side * self.side } }
+
+fn unit_square() -> impl Shape { Square { side: 3 } }
+
+test "a caller uses the result through its bounds" {
+    let s = unit_square();
+    s.area()                                // => 9
+}
+
+fn twice<S: Shape>(s: S) -> int { s.area() * 2 }
+
+test "the result meets its bounds where they are required" {
+    twice(unit_square())                    // => 18
+}
+
+#[derive(Clone)]
+struct Boxed<T> { value: T }
+trait Get { type Out; fn get(&self) -> Self::Out; }
+impl<T: Clone> Get for Boxed<T> {
+    type Out = T;
+    fn get(&self) -> T { self.value.clone() }
+}
+
+fn wrap<T: Clone>(x: T) -> impl Get<Out = T> { Boxed { value: x } }
+
+test "a generic function's result, with an associated type fixed" {
+    let w = wrap(41);
+    w.get() + 1                             // => 42
+}
+
+struct Loud { n: int }
+impl Drop for Loud { fn drop(self) { assert(self.n == 0); } }   //~ trap
+impl Shape for Loud { fn area(&self) -> int { self.n } }
+fn loud() -> impl Shape { Loud { n: 7 } }
+
+test "the hidden type's destructor runs" {
+    let l = loud();
+    let _a = l.area();
+}

@@ -533,6 +533,17 @@ impl String {
     }
 }
 
+impl FromIterator<char> for String {
+    fn from_iter<I: Iterator<Item = char>>(iter: I) -> String {
+        let mut s = String::new();
+        let mut it = iter;
+        while let Some(c) = it.next() {
+            s.push(c);
+        }
+        s
+    }
+}
+
 impl Clone for String {
     #[intrinsic]
     fn clone(&self) -> String;
@@ -610,6 +621,103 @@ impl<T: PartialEq, const N: int> PartialEq for [T; N] {
 
 impl<T: Eq, const N: int> Eq for [T; N] {}
 
+// The root capabilities (`main.root.1`): `main` takes the ones the program uses, and the
+// runtime makes them. Their operations come with the runtimes.
+struct Args { root: int }
+struct Env { root: int }
+struct Stdio { root: int }
+struct FsRoot { root: int }
+struct NetRoot { root: int }
+struct Clock { root: int }
+struct Entropy { root: int }
+
+// What `main` can give back (`main.exit.1`): each `sysexits.h` code by name, or another.
+#[derive(Debug, Clone, PartialEq)]
+enum ExitCode {
+    Ok,
+    Usage,
+    DataErr,
+    NoInput,
+    NoUser,
+    NoHost,
+    Unavailable,
+    Software,
+    OsErr,
+    OsFile,
+    CantCreate,
+    IoErr,
+    TempFail,
+    Protocol,
+    NoPerm,
+    Config,
+    Other(int),
+}
+
+impl ExitCode {
+    // The exit code `n`, by its name if it has one.
+    fn new(n: int) -> ExitCode {
+        match n {
+            0 => ExitCode::Ok,
+            64 => ExitCode::Usage,
+            65 => ExitCode::DataErr,
+            66 => ExitCode::NoInput,
+            67 => ExitCode::NoUser,
+            68 => ExitCode::NoHost,
+            69 => ExitCode::Unavailable,
+            70 => ExitCode::Software,
+            71 => ExitCode::OsErr,
+            72 => ExitCode::OsFile,
+            73 => ExitCode::CantCreate,
+            74 => ExitCode::IoErr,
+            75 => ExitCode::TempFail,
+            76 => ExitCode::Protocol,
+            77 => ExitCode::NoPerm,
+            78 => ExitCode::Config,
+            n => ExitCode::Other(n),
+        }
+    }
+
+    // The number the process exits with.
+    fn code(&self) -> int {
+        match self {
+            ExitCode::Ok => 0,
+            ExitCode::Usage => 64,
+            ExitCode::DataErr => 65,
+            ExitCode::NoInput => 66,
+            ExitCode::NoUser => 67,
+            ExitCode::NoHost => 68,
+            ExitCode::Unavailable => 69,
+            ExitCode::Software => 70,
+            ExitCode::OsErr => 71,
+            ExitCode::OsFile => 72,
+            ExitCode::CantCreate => 73,
+            ExitCode::IoErr => 74,
+            ExitCode::TempFail => 75,
+            ExitCode::Protocol => 76,
+            ExitCode::NoPerm => 77,
+            ExitCode::Config => 78,
+            ExitCode::Other(n) => *n,
+        }
+    }
+}
+
+// The ambient log (`obs.log.1`): write-only, so it needs no effect. For now the interpreters
+// print its events to standard error, with their level.
+struct Log;
+
+impl Log {
+    #[intrinsic]
+    fn debug(&self, msg: String);
+    #[intrinsic]
+    fn info(&self, msg: String);
+    #[intrinsic]
+    fn warn(&self, msg: String);
+    #[intrinsic]
+    fn error(&self, msg: String);
+}
+
+const log: Log = Log;
+
 // Iteration (`expr.for.1`): `for p in e` calls `IntoIterator::into_iter(e)`, then `next` until
 // it gives `None`.
 
@@ -648,6 +756,40 @@ trait Iterator {
         }
         n
     }
+
+    // The items, each passed through `f`, in order (`iter.adapt.1`). For now `f` runs over every
+    // item when `map` is called, so its errors are `map`'s.
+    fn map<B, F: FnMut(Self::Item) -> B>(self, f: F) -> IntoIter<B> {
+        let mut out = Vec::new();
+        let mut it = self;
+        while let Some(x) = it.next() {
+            out.push(f(x));
+        }
+        out.into_iter()
+    }
+
+    // The items `f` holds for, in order; as `map`, it runs over every item when called.
+    fn filter<F: FnMut(&Self::Item) -> bool>(self, f: F) -> IntoIter<Self::Item> {
+        let mut out = Vec::new();
+        let mut it = self;
+        while let Some(x) = it.next() {
+            if f(&x) {
+                out.push(x);
+            }
+        }
+        out.into_iter()
+    }
+
+    // The items left, gathered into a collection of the type the context names
+    // (`iter.collect.1`).
+    fn collect<C: FromIterator<Self::Item>>(self) -> C {
+        C::from_iter(self)
+    }
+}
+
+// A collection that can be made from the items of an iterator (`iter.collect.1`).
+trait FromIterator<A> {
+    fn from_iter<I: Iterator<Item = A>>(iter: I) -> Self;
 }
 
 trait IntoIterator {
@@ -986,6 +1128,17 @@ impl<T> FromArrayLiteral<T> for Vec<T> {
                 v.push(x.clone());
                 i += 1;
             }
+            v.push(x);
+        }
+        v
+    }
+}
+
+impl<T> FromIterator<T> for Vec<T> {
+    fn from_iter<I: Iterator<Item = T>>(iter: I) -> Vec<T> {
+        let mut v = Vec::new();
+        let mut it = iter;
+        while let Some(x) = it.next() {
             v.push(x);
         }
         v

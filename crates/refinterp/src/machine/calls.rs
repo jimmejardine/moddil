@@ -872,6 +872,43 @@ impl Machine<'_> {
         }
     }
 
+    /// Whether `segments` name a function, or a trait's method (`Trait::method`).
+    pub(super) fn fn_path(&self, segments: &[String]) -> bool {
+        match self.resolve(segments) {
+            Some((Def::Item(k), n)) if n == segments.len() => self.program.fns.contains_key(&k),
+            Some((Def::Item(k), n)) if n + 1 == segments.len() => {
+                self.program.traits.contains_key(&k)
+            }
+            _ => false,
+        }
+    }
+
+    /// A call of the function or trait method path `node` names, with `values`
+    /// (`expr.fn-value.1`).
+    pub(super) fn call_fn_path(
+        &mut self,
+        node: &SyntaxNode,
+        values: Vec<Value>,
+        range: TextRange,
+    ) -> Eval {
+        let segments = segments(node);
+        match self.resolve(&segments) {
+            Some((Def::Item(k), n)) if n == segments.len() => {
+                let f = self.program.fns[&k].clone();
+                let turbofish = node
+                    .child(K::PATH)
+                    .and_then(|p| p.children().find(|c| c.kind() == K::GENERIC_ARGS));
+                let types = self.turbofish(turbofish, &f.params);
+                self.invoke(&f, values, types, range)
+            }
+            Some((Def::Item(k), _)) => {
+                let name = segments.last().expect("a method's name").clone();
+                self.call_trait(&k, &name, values, range)
+            }
+            _ => unreachable!("a checked function path"),
+        }
+    }
+
     /// `receiver.name(args)`: the method is looked for on the receiver's value, then on a
     /// borrow of it, then on a `&mut` borrow of it, and then the same for what it points to if
     /// it is a borrow (`expr.method.1`).
@@ -993,6 +1030,17 @@ impl Machine<'_> {
                 self.infer_types(&i.self_ty, &sv, &i.params, &mut types);
             }
             types.extend(self.turbofish(node.child(K::GENERIC_ARGS), &f.params));
+            // A type parameter only the result names (`collect`'s `C`): the type the context
+            // names (`iter.collect.1`).
+            if let Some(ret) = f.node.ret_type().and_then(|r| r.ty()) {
+                let ret = ret.syntax().text().to_string();
+                if f.params.contains(&ret)
+                    && !types.contains_key(&ret)
+                    && let Some(head) = self.context_head(node)
+                {
+                    types.insert(ret, head);
+                }
+            }
             let f = f.clone();
             return self.invoke(&f, values, types, range);
         }

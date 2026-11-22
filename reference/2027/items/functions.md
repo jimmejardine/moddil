@@ -26,6 +26,17 @@ may hold borrows (E0310); without it, from any borrowed parameter. A function wi
 error (E0308). A caller treats the result as borrowing what it passed for those parameters, for as
 long as the result is used ([Borrows](../borrows.md)).
 
+**main.root.1** `main`, the program's entry point (a free function of the root module), takes as
+its parameters the **root capabilities** the program uses, each at most once, and nothing else
+(E0608): `Args` and `Env` (the command line and the environment), `Stdio`, `FsRoot`, `NetRoot`,
+`Clock` and `Entropy`, prelude types that only the runtime makes. Their operations come with the
+runtimes; for now a program can only take them.
+
+**main.exit.1** `main` returns `()`, or an `ExitCode`, which the process exits with: `ExitCode::Ok`
+(0) or one of the `sysexits.h` codes by name (`Usage` 64 to `Config` 78), or
+`ExitCode::new(n)` for another number, which is the named code if `n` has one; `code()` gives the
+number. For now `main` may also return another type, whose value is printed.
+
 **item.fn.body.1** Calling the function runs its body ([Calls](../expressions/calls.md)). The
 body's value is the result unless `return` ends it sooner; its type must fit the result type
 (E0201).

@@ -112,12 +112,39 @@ fn run(db: &Database, program: Program, files: &[(String, String)], name: &str) 
         eprintln!("moddil: {name} has no `fn main()`");
         return ExitCode::FAILURE;
     };
-    if !items.fns[main as usize].params.is_empty() {
-        eprintln!("moddil: `main` must not take parameters");
-        return ExitCode::FAILURE;
-    }
-    match moddil_interp::call_fn(db, program, main, &[], &mut |_, _, _| {}) {
+    // The root capabilities `main` takes (`main.root.1`): checked, so each is one of the
+    // prelude's.
+    let roots: Vec<Value> = items.fns[main as usize]
+        .params
+        .iter()
+        .map(|p| match p.ty {
+            moddil_sema::Ty::Adt(adt, ..) => Value::Adt {
+                adt,
+                variant: 0,
+                fields: vec![Value::Int(0)],
+            },
+            _ => unreachable!("a checked `main` takes root capabilities"),
+        })
+        .collect();
+    match moddil_interp::call_fn(db, program, main, &roots, &mut |_, _, _| {}) {
         Ok(Value::Unit) => ExitCode::SUCCESS,
+        // An `ExitCode` (`main.exit.1`): the number it stands for.
+        Ok(Value::Adt {
+            adt,
+            variant,
+            fields,
+        }) if items.adts[adt as usize].src == moddil_sema::Src::Prelude
+            && items.adts[adt as usize].name == "ExitCode" =>
+        {
+            const CODES: [u8; 16] = [
+                0, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78,
+            ];
+            match (CODES.get(variant as usize), fields.first()) {
+                (Some(&c), _) => ExitCode::from(c),
+                (None, Some(Value::Int(n))) => ExitCode::from((*n).clamp(0, 255) as u8),
+                _ => ExitCode::FAILURE,
+            }
+        }
         Ok(v) => {
             println!("{}", v.render(items));
             ExitCode::SUCCESS

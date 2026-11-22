@@ -149,7 +149,7 @@ fn the_prelude_and_its_derives_check_cleanly() {
 
 #[test]
 fn beyond_s0_is_not_supported_yet() {
-    err("fn f() -> impl Clone { 1 }", &[("I0001", 1)]);
+    err("fn f() -> (impl Clone, int) { (1, 2) }", &[("I0001", 1)]);
     err("trait T { const N: int = 1; }", &[("I0001", 1)]);
     err("fn f() { let s = b\"x\"; }", &[("I0001", 1)]);
     err("fn f() { let [a, b] = [1, 2]; }", &[("I0001", 1)]);

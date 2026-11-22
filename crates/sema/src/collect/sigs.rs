@@ -52,6 +52,8 @@ impl Collector<'_> {
         let mut track_caller = false;
         let mut around = Vec::new();
         let mut intrinsic = false;
+        let mut selectable = false;
+        let mut selectable_at = None;
         for attr in node.children().filter(|c| c.kind() == K::OUTER_ATTR) {
             let path = attr
                 .child(K::ATTR)
@@ -62,6 +64,9 @@ impl Collector<'_> {
             let input = attr.child(K::ATTR).and_then(|a| a.child(K::ATTR_INPUT));
             if path == ["track_caller"] && input.is_none() {
                 track_caller = true;
+            } else if path == ["selectable"] && input.is_none() {
+                selectable = true;
+                selectable_at = Some(attr.text_range());
             } else if path == ["around"] && src.is_file() {
                 if input.is_none() {
                     ds.push(Diagnostic::error(
@@ -248,7 +253,19 @@ impl Collector<'_> {
                 }
             }
         }
+        let mut opaque = Vec::new();
         let (ret, ret_range) = match f.ret_type().and_then(|r| r.ty()) {
+            // `-> impl Trait` (`type.impl.ret.1`): an opaque type, numbered once the function
+            // has its index.
+            Some(t @ ast::Type::Impl(_)) if !matches!(container, Container::Trait(_)) => {
+                let ty = Ty::Opaque(std::sync::Arc::new(crate::ty::OpaqueTy {
+                    func: u32::MAX,
+                    args: generics.identity().into(),
+                    name: t.syntax().text().to_string().trim().into(),
+                }));
+                opaque = crate::resolve::bounds(t.syntax(), &ty, &scope, &mut ds);
+                (ty, Some(t.syntax().text_range()))
+            }
             Some(t) => (
                 resolve_type(&t, &scope, &mut ds),
                 Some(t.syntax().text_range()),
@@ -260,6 +277,16 @@ impl Collector<'_> {
             Some(c) => effect_clause(&c, &scope, &mut ds),
             None => (Ty::Never, None, Vec::new(), 0),
         };
+        // A `select` waits on what may suspend (`task.select.3`).
+        if let Some(at) = selectable_at
+            && control & crate::items::SUSPEND == 0
+        {
+            ds.push(Diagnostic::error(
+                Code::E0217,
+                at,
+                "a `#[selectable]` function is one that waits: it needs `suspend`",
+            ));
+        }
         for e in &effects {
             if let Some(n) = &e.name {
                 if let Some(first) = names.get(n) {
@@ -297,6 +324,8 @@ impl Collector<'_> {
             track_caller,
             control,
             defaults: Vec::new(),
+            opaque,
+            selectable,
             default_arg: false,
             intrinsic,
             is_const,
@@ -351,6 +380,8 @@ impl Collector<'_> {
             track_caller: false,
             control: 0,
             defaults: Vec::new(),
+            opaque: Vec::new(),
+            selectable: false,
             default_arg: false,
             intrinsic: false,
             is_const: true,
@@ -361,6 +392,31 @@ impl Collector<'_> {
                 _ => crate::items::Vis::Pub,
             },
             module: self.module,
+        }
+    }
+
+    /// The function a test's subject `path` names: a free function, a function of a type's
+    /// inherent impl, or a trait's method.
+    fn test_subject(&self, path: &SyntaxNode) -> Option<u32> {
+        let segs = crate::resolve::path_segments(path)?;
+        let names: Vec<&str> = segs.iter().map(|s| s.name.as_str()).collect();
+        let (def, n) = self.tree.path(self.module, &names, false).ok()?;
+        let last = *names.last()?;
+        let named = |f: &u32| self.tree.fns[*f as usize].name == last;
+        match def {
+            crate::items::Def::Fn(f) if n == names.len() => Some(f),
+            crate::items::Def::Adt(a) if n + 1 == names.len() => self
+                .tree
+                .impls
+                .iter()
+                .filter(|i| i.trait_ref.is_none() && i.self_ty.adt() == Some(a))
+                .find_map(|i| i.methods.iter().copied().find(named)),
+            crate::items::Def::Trait(t) if n + 1 == names.len() => self.tree.traits[t as usize]
+                .methods
+                .iter()
+                .copied()
+                .find(named),
+            _ => None,
         }
     }
 
@@ -375,19 +431,38 @@ impl Collector<'_> {
                 vec![Diagnostic::unsupported(node.text_range(), "a generic test")],
             );
         }
-        if node
-            .child_tokens()
-            .any(|t| matches!(t.kind(), K::FOR_KW | K::WITH_KW))
-        {
-            self.reporter.report(
-                src,
-                None,
-                vec![Diagnostic::unsupported(
-                    node.text_range(),
-                    "a test with `for` or `with`",
-                )],
-            );
+        for (kind, what) in [
+            (K::TEST_INSTANCES, "a test run for listed types"),
+            (K::TEST_CAPABILITIES, "a test's capabilities"),
+        ] {
+            if let Some(c) = node.child(kind) {
+                self.reporter.report(
+                    src,
+                    None,
+                    vec![Diagnostic::unsupported(c.text_range(), what)],
+                );
+            }
         }
+        // `for subject` (`test.for.1`): a function, a type's function, or a trait's method.
+        let subject = match node.child(K::PATH) {
+            Some(p) => {
+                let found = self.test_subject(&p);
+                if found.is_none() {
+                    let path = p.text().to_string();
+                    self.reporter.report(
+                        src,
+                        None,
+                        vec![Diagnostic::error(
+                            Code::E0101,
+                            p.text_range(),
+                            format!("there is no function called `{path}` for the test to be for"),
+                        )],
+                    );
+                }
+                found
+            }
+            None => None,
+        };
         let sig = match t.name_token() {
             Some(tok) => {
                 let text = tok.text();
@@ -402,6 +477,7 @@ impl Collector<'_> {
                     file,
                     node: node.text_range(),
                     module: self.module,
+                    subject,
                 }
             }
             None => TestSig {
@@ -410,6 +486,7 @@ impl Collector<'_> {
                 file,
                 node: node.text_range(),
                 module: self.module,
+                subject,
             },
         };
         // Tests are named once per module.

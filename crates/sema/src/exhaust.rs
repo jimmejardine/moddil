@@ -204,6 +204,7 @@ impl Cx<'_> {
             | Ty::Slice(_)
             | Ty::Buf(_)
             | Ty::Param(..)
+            | Ty::Opaque(_)
             | Ty::Assoc(_)
             | Ty::Dyn(_)
             | Ty::Closure(_)

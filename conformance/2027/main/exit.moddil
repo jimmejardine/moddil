@@ -1,0 +1,13 @@
+// covers: main.exit.1
+
+test "a named exit code" {
+    ExitCode::Usage.code()                  // => 64
+}
+
+test "a number with a name gets it" {
+    ExitCode::new(78) == ExitCode::Config   // => true
+}
+
+test "any other number" {
+    ExitCode::new(3).code()                 // => 3
+}

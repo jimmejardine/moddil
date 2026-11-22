@@ -56,6 +56,9 @@ pub enum TrapClass {
     Postcondition,
     /// Every task waits, and nothing can wake one (`task.sched.1`).
     Deadlock,
+    /// What waits for a runtime: a `select` on an operation other than the prelude's
+    /// (`task.select.3`).
+    Unimplemented,
 }
 
 impl fmt::Display for TrapClass {
@@ -66,6 +69,7 @@ impl fmt::Display for TrapClass {
             TrapClass::StackOverflow => "stack overflow",
             TrapClass::Assertion => "assertion failed",
             TrapClass::Unexpected => "unexpected error",
+            TrapClass::Unimplemented => "not implemented yet",
             TrapClass::IndexOutOfBounds => "index out of bounds",
             TrapClass::CapacityExceeded => "capacity exceeded",
             TrapClass::Precondition => "precondition broken",

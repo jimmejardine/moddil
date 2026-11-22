@@ -42,7 +42,9 @@ impl Builder<'_> {
                 ("Receiver", "recv") => 0,
                 ("Sender", "send") => 1,
                 ("Task", "join") => 2,
-                _ => 3,
+                ("", "stop_requested") if sig.src == Src::Prelude => 3,
+                // A `#[selectable]` function: waits for the runtimes (`task.select.3`).
+                _ => 4,
             };
             // The handle, borrowed (it is taken only by the arm that runs), and what to send.
             let (handle, handle_ty) = match self.hir.exprs[call].kind.clone() {

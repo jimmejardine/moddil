@@ -864,7 +864,14 @@ impl Machine<'_> {
                     Some((p, _)) => self.memory.load(&p),
                     None => self.eval(&receiver)?,
                 };
-                let h = id_of(&self.target(v));
+                let v = self.target(v);
+                let prelude = matches!(&v, Value::Adt { ty, .. }
+                    if ["Receiver", "Sender", "Task"].contains(&ty.as_str()));
+                if !prelude {
+                    // A `#[selectable]` function: waits for the runtimes (`task.select.3`).
+                    return Err(crate::trap(TrapClass::Unimplemented, range));
+                }
+                let h = id_of(&v);
                 match name.as_str() {
                     "recv" => Op::Recv(h),
                     "send" => {
@@ -880,8 +887,15 @@ impl Machine<'_> {
                     }
                     _ => Op::Join(h),
                 }
-            } else {
+            } else if crate::machine::segments(
+                call.sub_exprs()
+                    .first()
+                    .map_or(call.syntax(), |c| c.syntax()),
+            ) == ["stop_requested"]
+            {
                 Op::Stop
+            } else {
+                return Err(crate::trap(TrapClass::Unimplemented, range));
             };
             ops.push(op);
             payloads.push(payload);

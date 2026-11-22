@@ -48,12 +48,12 @@ pub use diag::{CODES, Code, Diagnostic, Severity};
 pub use items::{
     AdtDef, Container, Control, Def, EffectSig, Entry, FieldDef, FnSig, GenericParam, Generics,
     ImplDef, Import, ItemTree, ModDef, ModuleDef, PRELUDE_MOD, PRELUDE_MODULE, ParamSig, Pred,
-    SPAWN, SUSPEND, SelfKind, Shape, Src, TestSig, TraitDef, VariantDef, Vis,
+    ROOT_CAPABILITIES, SPAWN, SUSPEND, SelfKind, Shape, Src, TestSig, TraitDef, VariantDef, Vis,
 };
 pub use lower::{Lowered, body};
 pub use modules::{Member, PathError};
 pub use traits::{Adjust, Answer, Pick, Solver, Source, Table, elaborate};
-pub use ty::{AnonTy, AssocTy, ClosureKind, ClosureTy, TraitRef, Ty};
+pub use ty::{AnonTy, AssocTy, ClosureKind, ClosureTy, OpaqueTy, TraitRef, Ty};
 
 use moddil_syntax::TextRange;
 
@@ -134,6 +134,20 @@ pub fn in_file<'a>(
             })
             .collect(),
         _ => Vec::new(),
+    }
+}
+
+/// `t` with each opaque result type (`type.impl.ret.1`) replaced by the type its function's
+/// body gives, for the MIR, which works with the types themselves.
+pub fn reveal(db: &dyn Db, program: Program, t: &Ty) -> Ty {
+    match t {
+        Ty::Opaque(o) => {
+            let owner = Owner::new(db, program, Item::Fn(o.func));
+            let hidden = infer(db, owner).hidden().cloned().unwrap_or(Ty::Error);
+            let args: Vec<Ty> = o.args.iter().map(|a| reveal(db, program, a)).collect();
+            reveal(db, program, &hidden.subst(&args))
+        }
+        t => t.map(&mut |x| reveal(db, program, x)),
     }
 }
 

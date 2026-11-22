@@ -205,6 +205,14 @@ impl<'a> Solver<'a> {
                 return self.norm(&t);
             }
         }
+        // An opaque type's bound that fixes it: `impl Iterator<Item = int>`.
+        for p in self.opaque_preds(&self_ty) {
+            if p.trait_ref.trait_ == trait_ref.trait_
+                && let Some((_, t)) = p.assoc.iter().find(|(k, _)| *k == a.index)
+            {
+                return self.norm(t);
+            }
+        }
         match self.implements(&self_ty, &trait_ref) {
             Answer::Yes(Source::Impl(i, args)) => {
                 match self.tree.impls[i as usize].assoc.get(a.index as usize) {
@@ -238,6 +246,14 @@ impl<'a> Solver<'a> {
             (Ty::Array(x, n), Ty::Array(y, k)) => self.unify(x, y) && self.unify(n, k),
             (Ty::Slice(x), Ty::Slice(y)) | (Ty::Buf(x), Ty::Buf(y)) => self.unify(x, y),
             (Ty::Anon(x), Ty::Anon(y)) => x.owner == y.owner && x.expr == y.expr,
+            (Ty::Opaque(x), Ty::Opaque(y)) => {
+                x.func == y.func
+                    && x.args.len() == y.args.len()
+                    && x.args
+                        .iter()
+                        .zip(y.args.iter())
+                        .all(|(a, b)| self.unify(a, b))
+            }
             (Ty::Closure(x), Ty::Closure(y)) => {
                 x.owner == y.owner
                     && x.expr == y.expr
@@ -407,6 +423,21 @@ impl<'a> Solver<'a> {
                 _ => {}
             }
         }
+        // An opaque type's bounds (`type.impl.ret.1`).
+        for p in self.opaque_preds(&ty) {
+            if p.trait_ref.trait_ == tr {
+                let saved = self.table.clone();
+                if p.trait_ref
+                    .args
+                    .iter()
+                    .zip(trait_ref.args.iter())
+                    .all(|(x, y)| self.unify(x, y))
+                {
+                    return Answer::Yes(Source::Builtin);
+                }
+                self.table = saved;
+            }
+        }
         // A bound in scope.
         for i in 0..self.env.len() {
             let p = self.env[i].clone();
@@ -446,8 +477,8 @@ impl<'a> Solver<'a> {
             let mut this_maybe = false;
             if ok {
                 for p in imp.generics.preds.clone() {
-                    let pty = p.ty.subst(&args);
-                    let ptr = p.trait_ref.subst(&args);
+                    let pty = self.deep(&p.ty.subst(&args));
+                    let ptr = p.trait_ref.subst(&args).map(&mut |t| self.deep(t));
                     match self.implements(&pty, &ptr) {
                         Answer::Yes(_) => {}
                         Answer::No => {
@@ -455,6 +486,26 @@ impl<'a> Solver<'a> {
                             break;
                         }
                         Answer::Maybe => this_maybe = true,
+                    }
+                    // What the bound fixes binds the impl's parameters: `F: FnMut(A) -> B`
+                    // makes `B` the closure's result.
+                    for (k, fixed) in &p.assoc {
+                        let name = self.tree.traits[ptr.trait_ as usize].assoc[*k as usize]
+                            .0
+                            .clone();
+                        let a = Ty::Assoc(Arc::new(AssocTy {
+                            self_ty: pty.clone(),
+                            trait_ref: ptr.clone(),
+                            index: *k,
+                            name: name.as_str().into(),
+                        }));
+                        let got = self.norm(&a);
+                        if !matches!(got, Ty::Assoc(_)) && !self.unify(&got, &fixed.subst(&args)) {
+                            ok = false;
+                        }
+                    }
+                    if !ok {
+                        break;
                     }
                 }
             }
@@ -520,7 +571,7 @@ impl<'a> Solver<'a> {
                 let base = self.tree.base(ty);
                 self.needs_drop_inner(&base, depth + 1)
             }
-            Ty::Param(..) | Ty::Assoc(_) | Ty::Infer(_) => true,
+            Ty::Param(..) | Ty::Opaque(_) | Ty::Assoc(_) | Ty::Infer(_) => true,
             Ty::Errors(ts) => ts.iter().any(|t| self.needs_drop_inner(t, depth + 1)),
             Ty::Closure(c) => c
                 .captures
@@ -545,6 +596,30 @@ impl<'a> Solver<'a> {
                 fields.iter().any(|t| self.needs_drop_inner(t, depth + 1))
             }
         }
+    }
+
+    /// The bounds of opaque type `t`, with those they imply, for its type arguments; none if `t`
+    /// is not one.
+    fn opaque_preds(&self, t: &Ty) -> Vec<Pred> {
+        let Ty::Opaque(o) = t else {
+            return Vec::new();
+        };
+        let Some(sig) = self.tree.fns.get(o.func as usize) else {
+            return Vec::new();
+        };
+        elaborate(self.tree, &sig.opaque)
+            .into_iter()
+            .map(|p| Pred {
+                ty: t.clone(),
+                trait_ref: p.trait_ref.subst(&o.args),
+                assoc: p
+                    .assoc
+                    .iter()
+                    .map(|(k, x)| (*k, x.subst(&o.args)))
+                    .collect(),
+                range: p.range,
+            })
+            .collect()
     }
 
     /// The method called `name` for a receiver of type `receiver`, trying the receiver itself,

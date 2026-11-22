@@ -1,0 +1,28 @@
+// covers: test.for.1
+
+fn fee(amount: int) -> int { amount / 25 }
+
+test "fees" for fee {
+    fee(250)                                // => 10
+}
+
+struct Account { balance: int }
+impl Account {
+    fn withdraw(&mut self, n: int) { self.balance -= n; }
+}
+
+test "withdrawing" for Account::withdraw {
+    let mut a = Account { balance: 10 };
+    a.withdraw(3);
+    a.balance                               // => 7
+}
+
+trait Shout { fn shout(&self) -> int; }
+impl Shout for int { fn shout(&self) -> int { *self * 10 } }
+
+test "a trait's method" for Shout::shout {
+    4.shout()                               // => 40
+}
+
+test "nothing" for missing {                //~ E0101
+}

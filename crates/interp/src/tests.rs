@@ -2,7 +2,7 @@ use moddil_sema::{Database, Program};
 
 use super::*;
 
-/// Calls `main` in `text` with `args`.
+/// Calls `main` in `text` with `args` (or `f`, given arguments).
 fn eval(text: &str, args: &[Value]) -> Result<Value, Trap> {
     match run_main(text, args) {
         Ok(v) => Ok(v),
@@ -11,13 +11,22 @@ fn eval(text: &str, args: &[Value]) -> Result<Value, Trap> {
     }
 }
 
-/// Calls `main` in `text` with `args`, which may stop with an error.
+/// Calls `main` in `text` with `args` (or `f`, given arguments), which may stop with an error.
+/// `main` takes only root capabilities (`main.root.1`), so a function with other parameters is
+/// `f`.
 fn run_main(text: &str, args: &[Value]) -> Result<Value, Stop> {
     let db = Database::default();
     let file = Program::single(&db, "t.moddil".to_string(), text.to_string());
     let diagnostics = moddil_mir::diagnostics(&db, file);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
-    let main = moddil_sema::item_tree(&db, file).main_fn().expect("a main");
+    let items = moddil_sema::item_tree(&db, file);
+    let main = items
+        .fns
+        .iter()
+        .position(|g| !args.is_empty() && g.name == "f" && g.src.is_file())
+        .map(|i| i as u32)
+        .or_else(|| items.main_fn())
+        .expect("a main");
     call_fn(&db, file, main, args, &mut |_, _, _| {})
 }
 
@@ -95,9 +104,9 @@ fn traps() {
 
 #[test]
 fn control_flow_and_calls() {
-    let fib = "fn main(n: int) -> int { if n < 2 { n } else { main(n - 1) + main(n - 2) } }";
+    let fib = "fn f(n: int) -> int { if n < 2 { n } else { f(n - 1) + f(n - 2) } }";
     assert_eq!(eval(fib, &[Value::Int(20)]), Ok(Value::Int(6765)));
-    let fact = "fn main(n: int) -> int { if n == 0 { return 1; } n * main(n - 1) }";
+    let fact = "fn f(n: int) -> int { if n == 0 { return 1; } n * f(n - 1) }";
     assert_eq!(
         eval(fact, &[Value::Int(20)]),
         Ok(Value::Int(2_432_902_008_176_640_000))

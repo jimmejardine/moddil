@@ -240,6 +240,11 @@ impl Machine<'_> {
                     Value::Unit
                 })
             }
+            // The ambient log (`obs.log.1`).
+            (Head::Adt(k), "debug" | "info" | "warn" | "error") if k == "Log" => {
+                eprintln!("[{name}] {}", text(self, 1));
+                Value::Unit
+            }
             (Head::Char, "code") => Value::Int(i64::from(u32::from(ch(self, 0)))),
             (Head::Char, "from_code") => {
                 let Value::Int(n) = self.target(args[0].clone()) else {

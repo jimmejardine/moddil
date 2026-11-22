@@ -1,0 +1,26 @@
+// covers: task.select.3
+
+struct Conn { id: int }
+struct Listener { next: int }
+
+impl Listener {
+    #[selectable]
+    fn accept(&self) -> Conn with suspend {
+        yield_now();
+        Conn { id: self.next }
+    }
+}
+
+test "a selectable function called as any other" {
+    let l = Listener { next: 3 };
+    l.accept().id                           // => 3
+}
+
+test "a select on it waits for the runtimes" {
+    let l = Listener { next: 3 };
+    let n = select {                        //~ trap
+        c = l.accept() => c.id,
+        _ = stop_requested() => 0,
+    };
+    n
+}

@@ -1,0 +1,51 @@
+// covers: expr.fn-value.1
+
+fn inc(x: int) -> int { x + 1 }
+fn mul(x: int, y: int) -> int { x * y }
+fn apply<F: Fn(int) -> int>(f: F, x: int) -> int { f(x) }
+fn first<T: Clone>(xs: &Vec<T>) -> T { xs[0].clone() }
+fn on_vec<F: Fn(&Vec<int>) -> int>(f: F, xs: &Vec<int>) -> int { f(xs) }
+
+test "a function passed as a value" {
+    apply(inc, 41)                          // => 42
+}
+
+test "a function kept in a variable" {
+    let f = mul;
+    f(6, 7)                                 // => 42
+}
+
+test "a generic function's types are inferred where it is named" {
+    let xs: Vec<int> = [5, 6];
+    on_vec(first, &xs)                      // => 5
+}
+
+struct Small;
+fn check(x: int) -> int with fail(Small) {
+    if x < 10 { fail(Small) }
+    x
+}
+
+test "a function that can fail, passed as a value" {
+    let f = check;
+    let r = try { f(3)? } catch { Small => 0 };
+    r                                       // => 0
+}
+
+trait Shout { fn shout(&self) -> int; }
+impl Shout for int { fn shout(&self) -> int { *self * 10 } }
+
+test "a trait's method as a value" {
+    let f = Shout::shout;
+    f(&4)                                   // => 40
+}
+
+pub trait Base { fn base(&self) -> int; }
+fn based(x: int) -> int with b: Base { b.base() + x }
+fn run<F: Fn(int) -> int>(f: F) -> int { f(1) }
+
+test "a function's effects are met where it is named" {
+    with Base = impl Base { fn base(&self) -> int { 100 } } {
+        run(based)                          // => 101
+    }
+}

@@ -88,6 +88,11 @@ value to be received.
 
 **task.select.2** The arms' values have one type (E0201), as a `match`'s do.
 
+**task.select.3** `#[selectable]` on a function that needs `suspend` (E0217 otherwise) makes a call
+of it an operation a `select` arm may wait on, as a library's `listener.accept()` is. It is called
+as any other function. For now a `select` with such an arm traps (`not implemented yet`) when it
+runs: waiting on it comes with the runtimes.
+
 **task.stop.1** `s.stop()` asks scope `s` to stop. `stop_requested()`, which needs `suspend`,
 waits until a stop reaches the running task: it is in `s` or in a scope inside it, and every scope
 the tasks of its own scope have opened has ended, so the innermost scopes stop first. A stop

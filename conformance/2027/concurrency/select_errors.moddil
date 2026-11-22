@@ -9,3 +9,6 @@ fn bad() -> int {
         x = f() => x,                       //~ E0217
     }
 }
+
+#[selectable]                               //~ E0217
+fn no_wait() -> int { 1 }

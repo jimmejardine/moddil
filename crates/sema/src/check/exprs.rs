@@ -728,8 +728,8 @@ impl Checker<'_> {
                 self.report(
                     Code::E0217,
                     self.range(arm.op),
-                    "a `select` arm waits on `rx.recv()`, `tx.send(v)`, `t.join()` or \
-                     `stop_requested()`",
+                    "a `select` arm waits on `rx.recv()`, `tx.send(v)`, `t.join()`, \
+                     `stop_requested()` or a `#[selectable]` function",
                 );
             }
             self.check_pat(arm.pat, &t, None);
@@ -764,6 +764,9 @@ impl Checker<'_> {
             return false;
         };
         let sig = &self.items.fns[callee.func() as usize];
+        if sig.selectable {
+            return true;
+        }
         if sig.src != crate::items::Src::Prelude || !sig.intrinsic {
             return false;
         }

@@ -39,6 +39,10 @@ impl Machine<'_> {
                     return Ok(self.memory.load(&p));
                 }
                 let segments = segments(node);
+                // A function used as a value (`expr.fn-value.1`): a closure calling it.
+                if self.fn_path(&segments) {
+                    return Ok(self.closure_value(node));
+                }
                 let (ty, info) = self.ctor(&segments).expect("a checked path");
                 Ok(Value::Adt {
                     ty,

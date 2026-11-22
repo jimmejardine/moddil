@@ -43,7 +43,8 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
     }
     let items = moddil_sema::item_tree(db, file);
     let hir = &moddil_sema::body(db, owner).body;
-    let types = moddil_sema::infer(db, owner);
+    let types = revealed(db, file, moddil_sema::infer(db, owner));
+    let types = &*types;
     let fx = moddil_sema::effects(db, file);
     // The function's effects, which its callers pass as hidden parameters after the others.
     let needs: Vec<Ty> = match owner.item(db) {
@@ -55,7 +56,7 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
             let sig = &items.fns[i as usize];
             (
                 fn_name(items, i),
-                sig.ret.clone(),
+                moddil_sema::reveal(db, file, &sig.ret),
                 sig.src,
                 sig.generics.preds.as_slice(),
             )
@@ -167,6 +168,21 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
     Some(b.cfg.finish())
 }
 
+/// `types` with the opaque result types (`type.impl.ret.1`) replaced by their functions'
+/// hidden types, if the program has any.
+fn revealed<'a>(
+    db: &dyn Db,
+    program: moddil_sema::Program,
+    types: &'a Inference,
+) -> std::borrow::Cow<'a, Inference> {
+    let items = moddil_sema::item_tree(db, program);
+    if items.fns.iter().any(|f| matches!(f.ret, Ty::Opaque(_))) {
+        std::borrow::Cow::Owned(types.map_types(&mut |t| moddil_sema::reveal(db, program, t)))
+    } else {
+        std::borrow::Cow::Borrowed(types)
+    }
+}
+
 /// The MIR of the closure at expression `expr` of `owner`'s function's or test's body: its
 /// captures and its arguments are its two parameters, both tuples.
 fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
@@ -174,7 +190,8 @@ fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
     let base = Owner::new(db, program, owner.item(db).owner());
     let items = moddil_sema::item_tree(db, program);
     let hir = &moddil_sema::body(db, base).body;
-    let types = moddil_sema::infer(db, base);
+    let types = revealed(db, program, moddil_sema::infer(db, base));
+    let types = &*types;
     let fx = moddil_sema::effects(db, program);
     let e = ExprId::from_raw(la_arena::RawIdx::from_u32(expr));
     let Ty::Closure(c) = types.expr(e) else {

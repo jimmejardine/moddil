@@ -494,6 +494,7 @@ impl Collector<'_> {
             }
         }
         self.defaults(sources);
+        self.number_opaques();
         for (file, module, node) in &nodes.tests {
             self.enter(Src::File(*file), *module);
             if let Some(t) = ast::TestItem::cast(node.clone()) {
@@ -814,6 +815,8 @@ impl Collector<'_> {
             track_caller: true,
             control: 0,
             defaults: Vec::new(),
+            opaque: Vec::new(),
+            selectable: false,
             default_arg: false,
             intrinsic: false,
             is_const: !is_new,
@@ -844,6 +847,26 @@ impl Collector<'_> {
 impl Collector<'_> {
     /// The defaults of the functions' parameters (`expr.call.default.1`): each a hidden const
     /// of the parameter's type, in the function's module, whose value is the default.
+    /// Each opaque result type (`type.impl.ret.1`) names its function.
+    fn number_opaques(&mut self) {
+        let number = |t: &Ty, f: u32| match t {
+            Ty::Opaque(o) => Ty::Opaque(std::sync::Arc::new(crate::ty::OpaqueTy {
+                func: f,
+                ..(**o).clone()
+            })),
+            t => t.clone(),
+        };
+        for (f, sig) in self.tree.fns.iter_mut().enumerate() {
+            if !matches!(sig.ret, Ty::Opaque(_)) {
+                continue;
+            }
+            sig.ret = number(&sig.ret, f as u32);
+            for p in &mut sig.opaque {
+                p.ty = number(&p.ty, f as u32);
+            }
+        }
+    }
+
     fn defaults(&mut self, sources: &[(Src, SyntaxNode)]) {
         for f in 0..self.tree.fns.len() {
             let sig = &self.tree.fns[f];
@@ -916,6 +939,8 @@ impl Collector<'_> {
                     track_caller: false,
                     control: 0,
                     defaults: Vec::new(),
+                    opaque: Vec::new(),
+                    selectable: false,
                     default_arg: true,
                     intrinsic: false,
                     is_const: true,

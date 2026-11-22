@@ -3,7 +3,7 @@
 Moddil's **mid-level IR**, built from the typed HIR, and the passes over it
 ([`specs/mir.md`](../../specs/mir.md)).
 
-**Status:** slices S0 to S9b: the `mir(owner)` query builds a body from the typed HIR, for files
+**Status:** slices S0 to S9c: the `mir(owner)` query builds a body from the typed HIR, for files
 without errors (a string literal is a constant whose text the body holds, and `fmt"…"` a run of
 `String` and `Display` calls; an element is a place with an `Index` projection, checked to be in
 bounds first, and a collection literal a call of `FromArrayLiteral`), once for a generic function: calls name their callee and its type arguments, and a
@@ -15,7 +15,8 @@ their scope. A function's effects are hidden parameters after the others, each a
 its handler (evidence passing); a call passes its callee's from the caller's own or from a `with`
 around it, which holds its handler for the block; `Unsize` makes a borrow a `dyn` borrow. A
 closure is a value built from its captures, and has a body of its own whose two parameters are its
-captures and its arguments, as tuples; calls of closures go through the closure traits' methods. Places are a local with field, downcast and deref projections; operands copy or
+captures and its arguments, as tuples; calls of closures go through the closure traits' methods. An
+opaque `impl Trait` result is replaced by its function's hidden type wherever it appears. Places are a local with field, downcast and deref projections; operands copy or
 move; aggregates build tuples, structs and variants; patterns become tests on places and
 discriminants, tried arm by arm; loops are back edges; `defer` blocks are emitted on every exit of
 their scope, and locals end with `StorageDead`. The `borrowck(owner)` query checks ownership on

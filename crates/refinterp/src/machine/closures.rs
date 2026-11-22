@@ -89,6 +89,15 @@ impl Machine<'_> {
             return self.end_closure(c, result, caller_file, range);
         }
         let node = self.node(&c.node);
+        // A function used as a value (`expr.fn-value.1`): a call of it.
+        if node.kind() == K::PATH_EXPR {
+            let saved = std::mem::replace(&mut self.handlers, c.handlers.clone());
+            let saved_modes = std::mem::take(&mut self.try_modes);
+            let result = self.call_fn_path(&node, args, range);
+            self.handlers = saved;
+            self.try_modes = saved_modes;
+            return self.end_closure(c, result, caller_file, range);
+        }
         let method = node.kind() == K::FN_ITEM;
         let params: Vec<SyntaxNode> = if method {
             node.child(K::PARAM_LIST)

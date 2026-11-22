@@ -155,7 +155,7 @@ impl Lowerer<'_> {
         let e = crate::wrap::input(self.text, attr);
         match e.as_ref().map(|e| e.syntax().kind()) {
             Some(K::PATH_EXPR) => {
-                let callee = self.expr(e.as_ref()?);
+                let callee = self.callee_path(e.as_ref()?);
                 Some(Wrapper {
                     range,
                     callee,
@@ -169,7 +169,7 @@ impl Lowerer<'_> {
                     self.not_a_wrapper(range);
                     return None;
                 }
-                let callee = self.expr(&callee);
+                let callee = self.callee_path(&callee);
                 let args = self
                     .args(&node)
                     .into_iter()

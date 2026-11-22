@@ -133,6 +133,9 @@ pub struct Inference {
     escaping_control: crate::Control,
     captures: HashMap<ExprId, Vec<Capture>>,
     passes_on: HashSet<ExprId>,
+    /// For a function whose result type is `impl Trait`: the type its body gives
+    /// (`type.impl.ret.1`).
+    hidden: Option<Ty>,
     /// Type errors, and exhaustiveness errors and warnings.
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -240,6 +243,39 @@ impl Inference {
     /// would.
     pub fn passes_on(&self, e: ExprId) -> bool {
         self.passes_on.contains(&e)
+    }
+
+    /// For a function whose result type is `impl Trait`: the type its body gives.
+    pub fn hidden(&self) -> Option<&Ty> {
+        self.hidden.as_ref()
+    }
+
+    /// The inference with `f` applied to every type it records, as the MIR is built with the
+    /// opaque types revealed (`type.impl.ret.1`).
+    #[must_use]
+    pub fn map_types(&self, f: &mut impl FnMut(&Ty) -> Ty) -> Inference {
+        let mut out = self.clone();
+        for t in out
+            .expr_types
+            .iter_mut()
+            .chain(out.pat_types.iter_mut())
+            .chain(out.local_types.iter_mut())
+            .chain(out.try_errors.values_mut())
+            .chain(out.dyn_coercions.values_mut())
+        {
+            *t = f(t);
+        }
+        for c in out
+            .calls
+            .values_mut()
+            .chain(out.compare_calls.values_mut())
+            .chain(out.fmt_calls.values_mut())
+            .chain(out.index_calls.values_mut())
+            .chain(out.literal_calls.values_mut())
+        {
+            *c = c.map(f);
+        }
+        out
     }
 
     /// For a closure expression: what it captures, in the order of its type's captures.
@@ -355,6 +391,34 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
             ..Inference::default()
         },
     };
+    // A result type `impl Trait` (`type.impl.ret.1`): the body gives a type of its own choice
+    // that meets the bounds.
+    let mut ret = ret;
+    let hidden = match (owner.item(db), &ret) {
+        (Item::Fn(i), Ty::Opaque(o)) if o.func == i => {
+            let h = cx.fresh();
+            let range = ret_range.unwrap_or_default();
+            for p in items.fns[i as usize].opaque.clone() {
+                for (k, fixed) in &p.assoc {
+                    let name = items.traits[p.trait_ref.trait_ as usize].assoc[*k as usize]
+                        .0
+                        .clone();
+                    let a = Ty::Assoc(std::sync::Arc::new(crate::ty::AssocTy {
+                        self_ty: h.clone(),
+                        trait_ref: p.trait_ref.clone(),
+                        index: *k,
+                        name: name.as_str().into(),
+                    }));
+                    cx.assoc_eqs.push((a, fixed.clone(), range));
+                }
+                cx.require(h.clone(), p.trait_ref.clone(), range);
+            }
+            cx.ret = h.clone();
+            ret = h.clone();
+            Some(h)
+        }
+        _ => None,
+    };
     if let Item::Fn(i) = owner.item(db) {
         for (&local, p) in body.params.iter().zip(&items.fns[i as usize].params) {
             cx.out.local_types[index(local)] = p.ty.clone();
@@ -413,6 +477,25 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         }
     }
     cx.finish();
+    if let Some(h) = hidden {
+        let t = finish::erase(&cx.solver.deep(&h));
+        let at = ret_range.unwrap_or_default();
+        if t.has_infer() || t == Ty::Error {
+            if cx.out.diagnostics.is_empty() {
+                cx.out.diagnostics.push(Diagnostic::error(
+                    Code::E0405,
+                    at,
+                    "the type this function gives cannot be inferred: annotate it",
+                ));
+            }
+        } else if items.is_view(&t) {
+            cx.out.diagnostics.push(Diagnostic::unsupported(
+                at,
+                "an `impl Trait` result whose type holds a borrow or a closure",
+            ));
+        }
+        cx.out.hidden = Some(t);
+    }
     cx.out
 }
 

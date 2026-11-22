@@ -51,7 +51,7 @@ and a code never changes meaning.
 | E0214 | An empty range pattern | [pat.range.1](patterns.md) |
 | E0215 | A named argument with no parameter of its name, given twice, or before a positional one | [expr.call.named.1](expressions/calls.md) |
 | E0216 | A default on a method of an impl of a trait | [expr.call.default.1](expressions/calls.md) |
-| E0217 | A `select` arm whose operation is not one a `select` waits on | [task.select.1](concurrency.md) |
+| E0217 | A `select` arm whose operation is not one a `select` waits on, or `#[selectable]` on a function that does not suspend | [task.select.1](concurrency.md), [task.select.3](concurrency.md) |
 | E0301 | Mutation of an immutable local (assigning, or borrowing with `&mut`) | [expr.assign.1](expressions/assignment.md), [borrow.mut.1](borrows.md) |
 | E0302 | Mutation through a shared borrow | [borrow.mut.1](borrows.md) |
 | E0303 | Use of a moved value | [own.move.1](ownership.md), [own.move.partial.1](ownership.md) |
@@ -97,6 +97,7 @@ and a code never changes meaning.
 | E0605 | A `dyn` type not behind a borrow, of more than one trait, or of a trait that cannot be used as `dyn` | [type.dyn.1](types.md) |
 | E0606 | An effect listed twice, or given two handlers by one `with` | [eff.1](effects.md), [eff.with.1](effects.md), [eff.control.1](effects.md) |
 | E0607 | Effects inferred without end | [eff.infer.1](effects.md) |
+| E0608 | A parameter of `main` that is not a root capability, or one taken twice | [main.root.1](items/functions.md) |
 | E0801 | A closure whose kind is weaker than a bound needs | [expr.closure.param.1](expressions/closures.md) |
 | E0701 | A path or import naming an item its module cannot see | [mod.vis.1](modules.md), [mod.use.1](modules.md) |
 | E0702 | A `use` that names nothing, a glob import, or a declared module | [mod.use.1](modules.md), [mod.tree.1](modules.md) |

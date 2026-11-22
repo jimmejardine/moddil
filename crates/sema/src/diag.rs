@@ -220,6 +220,8 @@ codes! {
     E0606 = "effect listed twice",
     /// Effects inferred without end (a generic function calling itself with ever larger types).
     E0607 = "effects do not settle",
+    /// A parameter of `main` that is not a root capability, or a root capability taken twice.
+    E0608 = "invalid parameter of `main`",
     /// A closure whose kind is weaker than a bound needs: it changes or moves what it captures,
     /// where `Fn` or `FnMut` is needed.
     E0801 = "closure of the wrong kind",

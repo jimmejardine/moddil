@@ -1,0 +1,7 @@
+// covers: main.root.1
+
+fn main(
+    args: Args,
+    port: int,                              //~ E0608
+    again: Args,                            //~ E0608
+) {}

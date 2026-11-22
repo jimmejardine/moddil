@@ -44,6 +44,15 @@ no associated types, and each of its methods, its supertraits' included, takes `
 the trait, or of a supertrait, called on a `dyn` borrow runs the method of the type of the value it
 points to.
 
+**type.impl.ret.1** `-> impl Trait` (or `impl A + B`, with associated types fixed as in a bound:
+`impl Get<Out = T>`) as a function's result type is an **opaque** type: the function's body gives
+a value of one type of its choice, its **hidden** type, which must meet the bounds (E0402), and a
+caller sees only the bounds: it can call the bounds' methods and pass the value where they are
+required, but not use what else the hidden type has (E0403). Each call of a generic function, for
+its type arguments, gives one opaque type. For now the result type is `impl Trait` itself, not a
+type containing one; a trait's methods cannot have one; and the hidden type cannot hold a borrow
+or a closure.
+
 **type.dyn.coerce.1** A `&T` can be used where a `&dyn Trait` is expected if `T` implements `Trait`
 (E0402), and so can a `&dyn Sub` of a subtrait `Sub` of `Trait`; likewise for `&mut`, which can also
 be used where the shared form is expected.

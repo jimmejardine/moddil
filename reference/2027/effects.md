@@ -63,6 +63,12 @@ without end (a generic function calling itself with ever larger type arguments) 
 and the control effects (E0604), so it uses none it does not meet itself (E0603): a handler gets
 what else it needs when it is built. A destructor, as a trait's method, uses no effects.
 
+**obs.log.1** `log` is the prelude's write-only log: `log.debug(msg)`, `log.info(msg)`,
+`log.warn(msg)` and `log.error(msg)`, each with a `String` (as `fmt"…"` gives), need no effect and
+change nothing the program computes. For now the interpreters print each event to standard
+error with its level; handlers that send events elsewhere come with the runtimes. A local or
+item called `log` shadows it.
+
 **eff.entry.1** An entry point (`main`, a test) has no effects: each need of its calls is met by a
 `with` inside it (E0602). It has the control effects, from the runtime.
 

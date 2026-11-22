@@ -292,11 +292,12 @@ something runs from the first slice.
     a borrowed parameter;
   - a wrapper's errors are reported where `?` would report them: E0501 on a `pub` function that
     does not list them.
-- **S9 is built in three parts (decided November 2026)**, each committed on its own: **S9a**
+- **S9 is built in four parts (decided November 2026)**, each committed on its own: **S9a**
   `scope`, `spawn`, `join`, the control effects `suspend` and `spawn`, and a deterministic
   scheduler; **S9b** cancellation and the unwinding it needs (with `isolate: true` and `Trapped`,
-  which need it too), `select`, channels and `stop_requested`; **S9c** the tour as
-  `tour/shorty/`, checked in CI, with what it still needs, decided then.
+  which need it too), `select`, channels and `stop_requested`; **S9c** the language features the
+  tour still needs; **S9d** the tour as `tour/shorty/`, with its libraries as signature-only stub
+  mods, checked in CI.
 - **S9a's scope and interim rules (decided November 2026):** the prelude's `scope(|s| …)`,
   `s.spawn(f)` and `t.join()`, and `yield_now()`; one task runs at a time, switching only where
   it suspends, first in, first out; a task's error goes to its `join`, or, if it is never joined,
@@ -327,6 +328,23 @@ something runs from the first slice.
   - shielded cleanup with deadlines, timers, `checkpoint()`, signals, grace periods, suppressed
     errors, poisoning and `abandon` wait;
   - `Trapped`'s `at` is `line:column`, without the file's name.
+- **S9c's scope and interim rules (decided November 2026):** what checking the tour found missing.
+  A function named as a value is a closure calling it; `-> impl Trait` is an opaque type whose
+  hidden type the function's body fixes, revealed when the MIR is built; `map`, `filter` and
+  `collect` (with `FromIterator`); `test "…" for subject`; the ambient `log`; `main` taking the
+  root capabilities and returning `ExitCode`; `#[selectable]` on a function a `select` may wait
+  on. Until the features they wait for arrive:
+  - a type's function (`Vec::new`) and a variant cannot be used as values;
+  - an `impl Trait` result is the whole result type, not in a trait's method, and its hidden type
+    holds no borrow or closure; functions that return one cannot call each other recursively;
+  - `map` and `filter` run their closure over every item when called (lazy adapters wait for
+    closures in fields, which need `I::Item` in an impl's `where` clause, `F::Output` through
+    `FnMut`, and a stored closure's errors);
+  - a test cannot be run for listed types or declare capabilities;
+  - `log` prints to standard error, with no handlers;
+  - the root capabilities have no operations, and nothing stops a program making one, until
+    fields can be private; `main` may still return any type, which is printed;
+  - a `select` arm on a `#[selectable]` function traps when it runs (`not implemented yet`).
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

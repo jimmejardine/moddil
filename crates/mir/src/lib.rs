@@ -502,6 +502,9 @@ pub enum TrapClass {
     Postcondition,
     /// An error that `?!` said cannot happen.
     Unexpected,
+    /// What waits for a runtime: a `select` on an operation other than the prelude's
+    /// (`task.select.3`).
+    Unimplemented,
 }
 
 impl TrapClass {
@@ -519,6 +522,7 @@ impl TrapClass {
             TrapClass::Precondition => "precondition broken",
             TrapClass::Postcondition => "postcondition broken",
             TrapClass::Unexpected => "unexpected error",
+            TrapClass::Unimplemented => "not implemented yet",
         }
     }
 }

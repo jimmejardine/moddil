@@ -71,6 +71,7 @@ areas!(
     literals,
     logic,
     loops,
+    main,
     r#match,
     modules,
     names,

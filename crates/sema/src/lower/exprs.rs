@@ -33,6 +33,14 @@ impl Lowerer<'_> {
                     );
                     self.missing(range)
                 }
+                Some(Resolved::Fn(func, args)) if !self.items.fns[func as usize].const_item => {
+                    let callee = self.alloc(ExprKind::Fn { func, args }, range);
+                    self.fn_value(callee, func, range)
+                }
+                Some(r @ Resolved::TraitFn(_, func, ..)) => {
+                    let callee = self.resolved(r, range);
+                    self.fn_value(callee, func, range)
+                }
                 Some(r) => self.resolved(r, range),
                 None => self.missing(range),
             },
@@ -893,7 +901,7 @@ impl Lowerer<'_> {
             return self.missing(range);
         };
         let target_range = target.syntax().text_range();
-        let target = self.expr(&target);
+        let mut target = self.expr(&target);
         // The place must be a local or a dereferenced borrow, or fields or elements of one.
         // Whether it may be changed needs types, so the checker decides that.
         let mut root = target;
@@ -904,6 +912,14 @@ impl Lowerer<'_> {
         }
         match self.out.body.exprs[root].kind {
             ExprKind::Local(_) | ExprKind::Deref(_) | ExprKind::Missing => {}
+            _ if self.is_fn_value(root) => {
+                self.report(
+                    Code::E0206,
+                    target_range,
+                    "a function cannot be assigned to",
+                );
+                target = self.missing(target_range);
+            }
             ExprKind::Fn { .. } | ExprKind::AssocFn { .. } | ExprKind::TraitFn { .. } => {
                 self.report(
                     Code::E0206,
@@ -1042,6 +1058,63 @@ impl Lowerer<'_> {
             .collect();
         let body = node.children().filter_map(ast::Expr::cast).last();
         self.closure_of(node, &params, body)
+    }
+
+    /// The path `e`, lowered as a call's callee: a function named, not a closure calling it.
+    pub(super) fn callee_path(&mut self, e: &ast::Expr) -> ExprId {
+        let range = e.syntax().text_range();
+        match self.resolve(e.syntax()) {
+            Some(r) => self.resolved(r, range),
+            None => self.missing(range),
+        }
+    }
+
+    /// Whether closure expression `e` is a function used as a value (`expr.fn-value.1`).
+    fn is_fn_value(&self, e: ExprId) -> bool {
+        let ExprKind::Closure { body, .. } = self.out.body.exprs[e].kind else {
+            return false;
+        };
+        let ExprKind::Pass(call) = self.out.body.exprs[body].kind else {
+            return false;
+        };
+        matches!(
+            self.out.body.exprs[call].kind,
+            ExprKind::Call { callee, .. }
+                if matches!(self.out.body.exprs[callee].kind, ExprKind::Fn { .. } | ExprKind::TraitFn { .. })
+                    && self.out.body.exprs[callee].range == self.out.body.exprs[e].range
+        )
+    }
+
+    /// Function `func`, named by `callee`, used as a value (`expr.fn-value.1`): a closure taking
+    /// its arguments and calling it, so it implements the closure traits with the function's
+    /// signature, and the needs of its effects are met where it is named.
+    fn fn_value(&mut self, callee: ExprId, func: u32, range: TextRange) -> ExprId {
+        let id = self.alloc(ExprKind::Missing, range);
+        let parent = self.closure.replace(id);
+        let mut params = Vec::new();
+        let mut args = Vec::new();
+        for (i, _) in self.items.fns[func as usize].params.iter().enumerate() {
+            let local = self.out.body.locals.alloc(crate::hir::Local {
+                name: format!("{{arg{i}}}"),
+                mutable: false,
+                range,
+                closure: Some(id),
+            });
+            let pat = self.alloc_pat(PatKind::Bind { local, sub: None }, range);
+            params.push((pat, None));
+            args.push(self.alloc(ExprKind::Local(local), range));
+        }
+        let call = self.alloc(ExprKind::Call { callee, args }, range);
+        // Its errors pass on, as the function's do.
+        let body = self.alloc(ExprKind::Pass(call), range);
+        self.closure = parent;
+        self.out.body.exprs[id].kind = ExprKind::Closure {
+            params,
+            ret: None,
+            body,
+            parent,
+        };
+        id
     }
 
     /// A closure from its parts: the node (for its range and result type), its parameters (each

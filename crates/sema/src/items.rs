@@ -260,6 +260,11 @@ pub struct FnSig {
     /// For each parameter with a default (`port: u16 = 443`): the hidden const that is its
     /// value (`expr.call.default.1`).
     pub defaults: Vec<Option<u32>>,
+    /// For a result type `impl Trait` (`type.impl.ret.1`): its bounds, on the opaque type with
+    /// the function's own type parameters as its arguments.
+    pub opaque: Vec<Pred>,
+    /// Whether it is marked `#[selectable]`: a `select` arm may wait on it (`task.select.3`).
+    pub selectable: bool,
     /// Whether it is such a hidden const, whose body is the default written at `node`.
     pub default_arg: bool,
     /// Whether it is the prelude's and built in (`#[intrinsic]`): it has no body, and the
@@ -338,6 +343,8 @@ impl FnSig {
             track_caller: false,
             control: 0,
             defaults: Vec::new(),
+            opaque: Vec::new(),
+            selectable: false,
             default_arg: false,
             intrinsic: false,
             is_const: false,
@@ -518,6 +525,8 @@ pub struct TestSig {
     pub node: TextRange,
     /// The module it is in.
     pub module: u32,
+    /// The function it is for, if it names one (`test.for.1`).
+    pub subject: Option<u32>,
 }
 
 impl VariantDef {
@@ -597,6 +606,18 @@ const LANG: &[&str] = &[
     "Default",
     "RefinementError",
     "Trapped",
+    "Args",
+    "Env",
+    "Stdio",
+    "FsRoot",
+    "NetRoot",
+    "Clock",
+    "Entropy",
+];
+
+/// The prelude's root capabilities (`main.root.1`), which only `main` takes.
+pub const ROOT_CAPABILITIES: &[&str] = &[
+    "Args", "Env", "Stdio", "FsRoot", "NetRoot", "Clock", "Entropy",
 ];
 
 impl ItemTree {
@@ -842,6 +863,7 @@ impl ItemTree {
             | Ty::Never
             | Ty::Error
             | Ty::Param(..)
+            | Ty::Opaque(_)
             | Ty::Assoc(_)
             | Ty::Infer(_)
             | Ty::Dyn(_)

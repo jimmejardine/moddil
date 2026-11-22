@@ -167,7 +167,20 @@ impl Machine<'_> {
             "send" => Pending::Send(id_of(&self.stack.deref(&values[0])), values[1].clone()),
             "recv" => Pending::Recv(id_of(&self.stack.deref(&values[0]))),
             "stop_requested" => Pending::Stop,
-            _ => self.select_pending(values),
+            _ => {
+                // An arm on a `#[selectable]` function waits for the runtimes (`task.select.3`).
+                let Value::Tuple(arms) = &values[0] else {
+                    unreachable!("a `select`'s arms")
+                };
+                if arms
+                    .iter()
+                    .any(|a| matches!(a, Value::Tuple(p) if p[0].as_int() == 4))
+                {
+                    let t = self.trap(TrapClass::Unimplemented, Some(range), Vec::new());
+                    return Some(Stop::Trap(t));
+                }
+                self.select_pending(values)
+            }
         };
         self.attempt(pending, ret)
     }

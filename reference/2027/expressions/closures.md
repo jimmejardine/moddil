@@ -58,6 +58,14 @@ call that passes a closure that can fail is marked like any call that can fail (
 by the `with`s around it there, and the enclosing function's own effects, not by those of the
 function that calls it.
 
+**expr.fn-value.1** A function named as a value, not called (`apply(inc, 41)`, `let f = mul;`,
+`Shout::shout`), is a closure that takes the function's arguments and calls it: it implements the
+closure traits with the function's parameters and result, fails with its errors
+(**expr.closure.fails.1**), and the needs of its effects are met where it is named
+(**expr.closure.effects.1**). A generic function's type arguments are inferred where it is named,
+from what the closure is used as. For now a type's function (`Vec::new`) and a variant
+(`Some`) cannot be used as values.
+
 **expr.anon-impl.1** `impl Trait { fn … }` as an expression is a value of a type of its own that
 implements the trait, each method a closure over the enclosing body's locals (**expr.closure.capture.1**).
 Its methods take `&self` (and cannot name `self` yet); it defines each of the trait's methods that
