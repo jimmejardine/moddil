@@ -1,4 +1,4 @@
-// covers: generic.1, generic.infer.1, prelude.option.1
+// covers: generic.1, generic.infer.1, generic.bound.1, prelude.option.1
 
 struct Pair<A, B> { first: A, second: B }
 
@@ -56,4 +56,25 @@ test "Option" {
     b.unwrap_or(9)                          // => 9
     ;
     match a { Some(n) => n + 1, None => 0 } // => 3
+}
+
+test "`_` in an annotation is a type to infer" {
+    let v: Vec<_> = [1, 2];
+    v                                       // => [1, 2]
+    ;
+    let o: Option<_> = Some(true);
+    o                                       // => Some(true)
+}
+
+trait Base { fn base(&self) -> int; }
+trait Sub: Base { fn sub(&self) -> int; }
+struct Both;
+impl Base for Both { fn base(&self) -> int { 1 } }
+impl Sub for Both { fn sub(&self) -> int { 2 } }
+
+// A bound gives its trait's supertraits too.
+fn sum<T: Sub>(x: &T) -> int { x.base() + x.sub() }
+
+test "a bound gives the supertraits" {
+    sum(&Both)                              // => 3
 }

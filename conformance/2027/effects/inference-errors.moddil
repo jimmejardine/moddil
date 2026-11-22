@@ -1,0 +1,29 @@
+// covers: eff.infer.1, err.set.1
+
+pub trait Log {
+    fn line(&self, n: int) -> int;
+}
+
+fn emit(n: int) -> int with log: Log { log.line(n) }
+
+pub struct TooBig { n: int }
+pub struct Negative;
+
+fn check(n: int) -> int {
+    if n > 9 { fail(TooBig { n }); }
+    if n < 0 { fail(Negative); }
+    n
+}
+
+fn unmarked() -> int { check(1) }                               //~ E0501
+pub fn exposed() -> int { emit(1) }                             //~ E0603
+pub fn exposed_error() -> int with fail(TooBig) { check(1)? }  //~ E0502
+pub fn listed() -> int with Log, fail(TooBig | Negative) { emit(check(1)?) }
+
+// A generic function that needs `Store<T>` and calls itself with `Wrap<T>` needs more at each step.
+pub trait Store<T> { fn count(&self) -> int; }
+struct Wrap<T> { x: T }
+fn need<T>() -> int with s: Store<T> { s.count() }
+fn grow<T>() -> int {                       //~ E0607
+    need::<T>() + grow::<Wrap<T>>()
+}

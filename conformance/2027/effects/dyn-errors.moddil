@@ -1,0 +1,30 @@
+// covers: type.dyn.1, type.dyn.coerce.1
+
+trait Shape {
+    fn area(&self) -> int;
+}
+struct Clock { t: int }
+
+fn area_of(s: &dyn Shape) -> int { s.area() }
+
+trait Make {
+    fn make() -> int;
+}
+trait Same {
+    fn same(&self, other: &Self) -> bool;
+}
+trait Pick {
+    fn pick<T>(&self, x: T) -> T;
+}
+trait Sized {
+    type Out;
+    fn get(&self) -> int;
+}
+
+fn no_self(m: &dyn Make) {}                                     //~ E0605
+fn names_self(s: &dyn Same) {}                                  //~ E0605
+fn generic_method(p: &dyn Pick) {}                              //~ E0605
+fn assoc(s: &dyn Sized) {}                                      //~ E0605
+fn unsized(s: dyn Shape) {}                                     //~ E0605
+fn not_shape(c: &Clock) -> int { area_of(c) }                   //~ E0402
+fn not_a_trait(c: &dyn Clock) {}                                //~ E0401

@@ -584,6 +584,11 @@ fn errors_4() {
         "fn f() -> int {\nlet g = |x: int| x;\ng(x: 1)\n}",
         &[("E0215", 3)],
     );
+    // Effects that grow without end are E0607, at the function that grows them only.
+    err(
+        "pub trait S<T> { fn n(&self) -> int; }\nstruct W<T> { x: T }\nfn need<T>() -> int with s: S<T> { s.n() }\nfn grow<T>() -> int { need::<T>() + grow::<W<T>>() }\nfn calm() -> int { 1 }",
+        &[("E0607", 4)],
+    );
 }
 
 #[test]

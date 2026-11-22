@@ -55,3 +55,14 @@ test "generic derives and hand-written fields" {
     ;
     None < Some(0)                          // => true
 }
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Level { Low, High(bool) }
+
+test "Ord for an enum, and bools ordered false first" {
+    Level::Low.cmp(&Level::High(false))     // => Ordering::Less
+    ;
+    Level::High(true).cmp(&Level::High(false)) // => Ordering::Greater
+    ;
+    Level::High(false) < Level::High(true)  // => true
+}

@@ -163,6 +163,7 @@ pub fn effects(db: &dyn Db, program: Program) -> Effects {
     if open.is_empty() {
         return fx;
     }
+    let mut changed: Vec<u32> = Vec::new();
     for _ in 0..ROUNDS {
         let mut next = fx.fns.clone();
         for &i in &open {
@@ -180,9 +181,15 @@ pub fn effects(db: &dyn Db, program: Program) -> Effects {
         if next == fx.fns {
             return fx;
         }
+        changed = open
+            .iter()
+            .copied()
+            .filter(|&i| next[i as usize] != fx.fns[i as usize])
+            .collect();
         fx.fns = next;
     }
-    for &i in &open {
+    // Only the functions whose effects still grow: those whose needs settled are not at fault.
+    for &i in &changed {
         let f = &items.fns[i as usize];
         fx.diagnostics.push(Diagnostic::error(
             Code::E0607,

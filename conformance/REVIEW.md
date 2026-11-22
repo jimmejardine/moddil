@@ -24,6 +24,7 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
 - **Conformance doesn't test I0001.** "Not supported yet" belongs to an implementation, not to the
   language, so the runner rejects it. The findings that asked for I0001 cases are dropped: the
   `track_caller` arguments, the wrapper limits, and `Vec::new` and `Some` as values.
+- **A contract on a trait's method can't be tested here:** it is I0001 for now (`contract.1`).
 - **E0309 for a closure in a field can't be written.** A closure's type can't be named, so a field
   can hold one only through a type parameter, and that makes the struct a view, which is allowed.
 
@@ -42,12 +43,7 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
 
 | Directory | claim | weak | missing | cite | dead | gap? |
 |---|---|---|---|---|---|---|
-| comptime | | | 1 | | | |
-| contracts | | | 2 | 1 | | |
-| derive | | | 1 | | | |
-| effects | | | 2 | | | |
 | enums, structs | 1 | | | | | |
-| generics | | | 2 | | | |
 | main | | 1 | | | | |
 | modules | | | 3 | | | |
 | operators | | | 1 | | | |
@@ -57,42 +53,11 @@ The review began with [`closures/fails-bound.moddil`](2027/closures/fails-bound.
 | traits | | | 3 | | | |
 | wrappers | | | 1 | | 1 | |
 
-The directories not listed have no finding left: arithmetic, arrays, attributes, borrows, calls, closures, collections, concurrency, errors, iteration and prelude are done, and
+The directories not listed have no finding left: arithmetic, arrays, attributes, borrows, calls, closures, collections, comptime, concurrency, contracts, derive, effects, errors, generics, iteration and prelude are done, and
 assert, assignment, bitwise, blocks, comparison, if, items, literals, logic, loops, match, names,
 patterns, statements, tuples, types and views had none worth a change.
 
 ## Findings
-
-### comptime
-
-- **missing:** `comptime.block.1` says a `const { }` block names no local, type parameter or const
-  parameter. No test checks this. Add `let n = 1; const { n + 1 }` to `errors.moddil`.
-
-### contracts
-
-- **missing:** `contract.ensures.1` has two cases no test checks:
-  - a postcondition is checked when leaving by `?` on `None`;
-  - leaving with an error checks none.
-
-  Add a function with a false `ensures` that fails, observed through `try` without a trap.
-- **missing:** `contract.1` says a trait's method has no contracts. `contract.2` says a contract
-  assigns nothing (E1102). Add both to `errors.moddil`; only calls are tested now.
-- **cite:** `errors.moddil`'s `not_bool` is `contract.1`'s E0201, but the file cites only
-  `contract.2` and `contract.old.1`. Cite it.
-
-### derive
-
-- **missing:** `derives.moddil` doesn't test `Ord` for an enum (only `PartialOrd`), or a `bool`
-  field in a derived ordering (`false` before `true`, `prelude.ordering.1`).
-
-### effects
-
-- **missing:** `eff.infer.1` says effects that grow without end are E0607, which no test expects.
-  Add a private generic function that needs `Store<T>` (through a call) and calls itself with
-  `Wrap<T>`, so its needs grow at each step.
-- **missing:** `eff.control.1` says a control effect is listed once (E0606) and without a name
-  (E0601). Only other effects are tested for these codes. Add `with suspend, suspend` and
-  `with s: suspend`.
 
 ### enums, structs
 
@@ -100,14 +65,6 @@ patterns, statements, tuples, types and views had none worth a change.
   observes `s.x + origin().x`, which can't show nominal typing. Add an E0201 case that passes a
   `Size` where a `Point` is expected, to `structs/errors.moddil`, and drop or rename the running
   test.
-
-### generics
-
-- **missing:** `generic.1` says the parameters of one item have distinct names (E0104). Add
-  `fn f<T, T>()` to `errors.moddil`.
-- **missing:** `generic.infer.1` says `_` stands for a type to infer in an annotation. Add
-  `let v: Vec<_> = [1, 2];`, and `generic.bound.1`'s "a bound also gives the trait's
-  supertraits" (call a supertrait's method on `T: Sub`).
 
 ### main
 
@@ -199,6 +156,8 @@ None open. Fixed in the sweep so far:
 3. **A borrow passed for a type parameter came back borrowing nothing (MIR ownership check).** `let r = id(&x); x = 2; *r` was accepted. The call took the argument as lending what it points to, judging by the parameter type after substitution, not as written. Now only a parameter declared a borrow does that. A result of a type parameter may also take `from` (sema), as `item.fn.ret-borrow.1` now says.
 4. **A closure's call could name its arguments (sema).** `f(x: 1)` is now E0215.
 5. **Two diagnostics had a run of spaces in the middle** (E0308 and E0314 in `crates/mir/src/ownership.rs`), from a line break inside the string.
+6. **E0607 was reported on every inferred function in the file (sema),** whenever one function's effects grew without end. Now it names only the functions whose effects still grow.
+7. **Three files expected diagnostics and values together** (`effects/dyn`, `effects/inference`, `items/test-for`), so their 22 `// =>` lines never ran. Their diagnostics are now in files of their own, and the runner fails such a file.
 
 ## Left open
 

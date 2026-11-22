@@ -1,4 +1,4 @@
-// covers: contract.2, contract.old.1
+// covers: contract.1, contract.2, contract.old.1
 
 struct Oops {}
 trait Time { fn now(&self) -> int; }
@@ -33,4 +33,10 @@ fn old_of_text(s: &mut String)
     ensures s.len() > old(s.clone()).len()  //~ E1103
 {
     s.push('x');
+}
+
+fn assigns(mut x: int) -> int
+    requires ({ x = 2; true })              //~ E1102
+{
+    x
 }

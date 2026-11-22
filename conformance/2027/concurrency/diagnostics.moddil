@@ -6,6 +6,10 @@ fn risky() -> int with fail(Oops) {
     fail(Oops {})
 }
 
+fn twice() with suspend, suspend {}         //~ E0606
+
+fn named() with s: suspend {}               //~ E0601
+
 pub fn no_spawn() -> int {
     scope(|s| s.spawn(|| 1).join())         //~ E0603 E0603 E0603
 }

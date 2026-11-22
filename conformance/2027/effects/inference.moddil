@@ -84,8 +84,3 @@ test "errors and effects are inferred together" {
         try { fill(9)? }                    // => Err(Full)
     }
 }
-
-fn unmarked() -> int { check(1) }                               //~ E0501
-pub fn exposed() -> int { emit(1) }                             //~ E0603
-pub fn exposed_error() -> int with fail(TooBig) { check(1)? }  //~ E0502
-pub fn listed() -> int with Log, fail(TooBig | Negative) { emit(check(1)?) }

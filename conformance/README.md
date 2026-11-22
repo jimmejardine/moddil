@@ -68,7 +68,9 @@ fn f() -> int {
   Traps must happen exactly on the `//~ trap` lines, and errors leave tests exactly on the
   `//~ error` lines; a test stops at its trap or error.
 - **A file with expected diagnostics is only checked, not run**, and must report exactly the
-  diagnostics marked. Error tests therefore live in their own files.
+  diagnostics marked. Error tests therefore live in their own files: the runner fails a file that
+  expects diagnostics and also `// =>`, `//~ trap` or `//~ error` lines, which would never be
+  checked.
 - **Coverage:** the runner fails if a reference paragraph is cited by no test, or a test cites a
   paragraph that does not exist.
 - Determinism makes expected outputs exact, including for concurrent tests under the simulation

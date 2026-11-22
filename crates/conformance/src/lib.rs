@@ -319,6 +319,18 @@ fn is_code(w: &str) -> bool {
 /// Why an outcome does not meet its expectations; empty if it does.
 pub fn compare(expected: &Expectations, outcome: &Outcome) -> Vec<String> {
     let mut problems = Vec::new();
+    // A file that expects diagnostics is only checked, so what it says of running would never
+    // be checked.
+    let runs =
+        !expected.values.is_empty() || !expected.traps.is_empty() || !expected.errors.is_empty();
+    if !expected.diagnostics.is_empty() && runs {
+        problems.push(
+            "this file expects diagnostics, so it is only checked, never run: its `// =>`, \
+             `//~ trap` and `//~ error` lines would never be checked; move them to a file of \
+             their own"
+                .to_string(),
+        );
+    }
     for (line, code) in outcome.diagnostics.difference(&expected.diagnostics) {
         let line = show(line);
         problems.push(format!("{line}: unexpected diagnostic {code}"));
@@ -645,6 +657,15 @@ mod tests {
         assert!(e.traps.contains(&(String::new(), 7)));
         assert!(expectations("//~ E99\n").is_err());
         assert!(expectations("// =>\n").is_err());
+    }
+
+    #[test]
+    fn a_checked_file_expects_nothing_of_running() {
+        let e = expectations("test \"t\" {\n    1 // => 1\n}\nfn f() { x } //~ E0101\n")
+            .expect("valid");
+        assert_eq!(compare(&e, &Outcome::default()).len(), 2);
+        let e = expectations("fn f() { x } //~ E0101\n").expect("valid");
+        assert_eq!(compare(&e, &Outcome::default()).len(), 1);
     }
 
     #[test]

@@ -1,4 +1,4 @@
-// covers: comptime.const-fn.2, comptime.static.1
+// covers: comptime.const-fn.2, comptime.static.1, comptime.block.1
 
 trait Time { fn now(&self) -> int; }
 
@@ -15,3 +15,9 @@ fn uses_block() -> int {
 }
 
 const LOCAL: &int = &1;                     //~ E1003
+
+// A `const { }` block names no local of the body it is in.
+fn names_a_local() -> int {
+    let n = 1;
+    const { n + 1 }                         //~ E0101
+}

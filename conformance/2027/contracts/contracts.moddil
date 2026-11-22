@@ -1,4 +1,4 @@
-// covers: contract.1, contract.requires.1, contract.ensures.1, contract.old.1
+// covers: contract.1, contract.requires.1, contract.ensures.1, contract.old.1, err.question.1
 
 struct Account { balance: int }
 
@@ -35,6 +35,36 @@ fn broken(x: int) -> int
     ensures result > x                      //~ trap
 {
     x
+}
+
+struct Oops;
+
+// Leaving with an error checks no postcondition.
+fn refuses(x: int) -> int with fail(Oops)
+    ensures result > 100
+{
+    if x < 0 {
+        fail(Oops)
+    }
+    x
+}
+
+// Leaving by `?` on `None` is a return: its postcondition is checked.
+fn none_early(o: Option<int>) -> Option<int>
+    ensures result.is_some()                //~ trap
+{
+    let n = o?;
+    Some(n)
+}
+
+test "leaving with an error checks no postcondition" {
+    try { refuses(-1)? }                    // => Err(Oops)
+}
+
+test "leaving by `?` on `None` checks the postconditions" {
+    none_early(Some(1))                     // => Some(1)
+    ;
+    none_early(None);
 }
 
 test "contracts that hold" {

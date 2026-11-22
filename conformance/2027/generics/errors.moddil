@@ -12,3 +12,4 @@ fn unknown() { let x = None; }                      //~ E0405
 fn unbounded<T>(a: T, b: T) -> bool { a == b }      //~ E0205
 fn no_method<T>(x: T) -> T { x.clone() }            //~ E0403
 fn not_clone() { keep(Label { id: 1 }); }           //~ E0402
+fn twice<T, T>() {}                                 //~ E0104

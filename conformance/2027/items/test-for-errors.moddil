@@ -1,0 +1,4 @@
+// covers: test.for.1
+
+test "nothing" for missing {                //~ E0101
+}

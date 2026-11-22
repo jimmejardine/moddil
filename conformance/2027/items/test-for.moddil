@@ -23,6 +23,3 @@ impl Shout for int { fn shout(&self) -> int { *self * 10 } }
 test "a trait's method" for Shout::shout {
     4.shout()                               // => 40
 }
-
-test "nothing" for missing {                //~ E0101
-}
