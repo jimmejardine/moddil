@@ -12,5 +12,5 @@ test "values of any type" {
 test "a test passes unless it traps" {}
 
 test "this one fails" {
-    9223372036854775807 + 1;  //~ trap
+    let max = 9223372036854775807; max + 1; //~ trap
 }

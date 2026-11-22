@@ -1,0 +1,32 @@
+// covers: mod.vis.2
+
+use mod::shapes::{Point, Shared};
+
+fn reads(p: Point) -> int {
+    p.x + p.y()
+}
+
+fn private_field(p: Point) -> int {
+    p.y                                     //~ E0701
+}
+
+fn private_literal() -> Point {
+    Point { x: 1, y: 2 }                    //~ E0701
+}
+
+fn private_pattern(p: Point) -> int {
+    let Point { x, y } = p;                 //~ E0701
+    x + y
+}
+
+fn private_method(p: &Point) -> int {
+    p.secret()                              //~ E0701
+}
+
+fn private_function() -> int {
+    Point::hidden()                         //~ E0701
+}
+
+fn shared_in_the_mod(s: Shared) -> int {
+    s.n
+}

@@ -20,10 +20,10 @@ pub type Code = String where self.len() == 6 && self.chars().all(|c| ALPHABET.co
 pub type Target = Url where self.scheme() == "https";
 
 #[derive(Deserialize)]
-pub struct NewLink { url: Target }
+pub struct NewLink { pub url: Target }
 
 #[derive(Serialize, Deserialize)]
-pub struct Created { code: Code }
+pub struct Created { pub code: Code }
 
 #[derive(Debug)]
 pub enum LinkError { Taken(Code) }

@@ -1,4 +1,4 @@
-// covers: main.root.1
+// covers: main.root.1, mod.vis.2
 
 use moddil::root::Args;
 
@@ -10,3 +10,8 @@ fn main(
     again: Args,                            //~ E0608
     fake: Forged,                           //~ E0608
 ) {}
+
+// A root capability's fields are private to its module, so a program cannot make one.
+fn forged() -> Args {
+    Args { handle: 0 }                      //~ E0701
+}

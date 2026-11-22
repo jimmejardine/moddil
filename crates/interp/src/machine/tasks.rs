@@ -81,7 +81,7 @@ impl Machine<'_> {
 
     /// A destructor the scheduler runs: of a `Task` (given up without a `join`), a `Sender` or
     /// a `Receiver`.
-    pub(super) fn native_drop(&mut self, f: u32, v: &Value) {
+    pub(super) fn native_drop(&mut self, f: u32, type_args: &[Ty], v: &Value) {
         let items = self.dispatch.items();
         let sig = &items.fns[f as usize];
         let Container::Impl(k) = sig.container else {
@@ -94,7 +94,18 @@ impl Machine<'_> {
         match items.adts[*a as usize].name.as_str() {
             "Task" => self.sched.detach(id),
             "Sender" => self.sched.drop_sender(id),
-            "Receiver" => self.sched.drop_receiver(id),
+            // What the channel holds is dropped, its destructors first (`task.channel.2`).
+            "Receiver" => {
+                let left = self.sched.drop_receiver(id);
+                if let Some(t) = type_args.first() {
+                    let t = self.concrete(t);
+                    let calls: Vec<_> = left
+                        .into_iter()
+                        .flat_map(|x| self.dispatch.drop_glue(x, &t, true))
+                        .collect();
+                    self.stack.drops_first(calls);
+                }
+            }
             _ => {}
         }
     }
@@ -358,12 +369,12 @@ impl Machine<'_> {
         }
     }
 
-    /// The prelude's `Trapped` for trap `t`: its kind, and where it is as `line:column`.
+    /// The prelude's `Trapped` for trap `t`: its kind, and where it is as `file:line:column`.
     fn trapped(&self, t: &Trap) -> Value {
         let files = self.program.files(self.db);
         let at = files.get(t.file as usize).map_or_else(String::new, |f| {
             let (line, col) = moddil_syntax::line_col(f.source.text(self.db), t.range.start);
-            format!("{line}:{col}")
+            format!("{}:{line}:{col}", f.source.path(self.db))
         });
         self.natives.trapped(&t.class.to_string(), &at)
     }

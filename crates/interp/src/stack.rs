@@ -248,6 +248,12 @@ impl<'a> Stack<'a> {
         frame.after_drops = Some(after);
     }
 
+    /// Runs `calls` before the rest of the running `Drop` terminator's destructors.
+    pub(crate) fn drops_first(&mut self, calls: Vec<DropCall>) {
+        let frame = self.top_mut();
+        frame.drops.splice(0..0, calls);
+    }
+
     /// The next destructor of a running `Drop` terminator, if one is running.
     pub(crate) fn pending_drop(&mut self) -> PendingDrop {
         let frame = self.top_mut();

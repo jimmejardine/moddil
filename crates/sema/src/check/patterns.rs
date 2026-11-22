@@ -269,8 +269,13 @@ impl Checker<'_> {
                     }
                 };
                 let types = self.items.field_types(&ty, variant);
+                let is_struct = !self.items.adts[adt as usize].is_enum;
                 for (i, s) in fields {
                     let t = types[i as usize].clone();
+                    if is_struct {
+                        let at = self.body.pats[s].range;
+                        self.field_visible(adt, i, at);
+                    }
                     self.check_pat(s, &t, mode);
                 }
             }

@@ -141,6 +141,7 @@ impl Checker<'_> {
                 let sig = &items.fns[f as usize];
                 let own = sig.generics.params.len() - sig.generics.parent as usize;
                 args.extend(self.own_args(given, own, range, name));
+                self.method_visible(f, range);
                 return Some(Callee::Fn { func: f, args });
             }
             self.solver.table = saved;
@@ -386,6 +387,7 @@ impl Checker<'_> {
             },
         };
         self.not_drop(pick.func, name_range);
+        self.method_visible(pick.func, name_range);
         let (params, ret) = self.instantiate_sig(pick.func, target.args(), range);
         // The receiver, adjusted to the method's `self`.
         let base = match (&r, pick.adjust.deref) {

@@ -468,6 +468,8 @@ pub struct FieldDef {
     pub range: TextRange,
     /// Its type, in terms of the struct's or enum's type parameters.
     pub ty: Ty,
+    /// Who can name it (`mod.vis.2`): a struct's fields are its module's unless marked.
+    pub vis: Vis,
 }
 
 /// A trait.
@@ -783,6 +785,16 @@ impl ItemTree {
             Ty::Adt(a, ..) => self.adts.get(*a as usize).is_some_and(|d| d.is_view),
             _ => false,
         })
+    }
+
+    /// Whether something with visibility `vis`, declared in module `at`, can be named in module
+    /// `from` (`mod.vis.1`).
+    pub fn can_see(&self, vis: Vis, at: u32, from: u32) -> bool {
+        match vis {
+            Vis::Pub => true,
+            Vis::Mod => self.mod_of(at) == self.mod_of(from),
+            Vis::Private => at == from,
+        }
     }
 
     /// The prelude's `String` (`text.string.1`), written in Moddil.

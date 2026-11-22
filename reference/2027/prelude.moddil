@@ -1671,6 +1671,17 @@ impl Number for f64 {}
 // What a number converts to (`num.convert.1`): `int`, the sized integers and the floats.
 trait Number: Copy {}
 
+// How a float rounds to an integer (`num.round.1`): to the nearest, ties to the even one or
+// away from zero; or down, up, or toward zero.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Round {
+    NearestEven,
+    NearestAway,
+    Down,
+    Up,
+    TowardZero,
+}
+
 impl Number for int {}
 
 // A conversion that does not fit (`num.convert.1`).
@@ -2072,6 +2083,32 @@ impl f32 {
         self - self.trunc()
     }
 
+    // The whole number `mode` rounds `self` to, as a `T`; NaN, an infinity, or a value
+    // outside `T`'s range fails with `RangeError` (`num.round.1`).
+    fn round<T: Number>(self, mode: Round) -> T with fail(RangeError) {
+        let t = self.trunc();
+        let f = self - t;
+        let away = if self < 0.0 { t - 1.0 } else { t + 1.0 };
+        let r = match mode {
+            Round::Down => self.floor(),
+            Round::Up => self.ceil(),
+            Round::TowardZero => t,
+            Round::NearestAway => if f.abs() >= 0.5 { away } else { t },
+            Round::NearestEven => {
+                if f.abs() > 0.5 {
+                    away
+                } else if f.abs() < 0.5 {
+                    t
+                } else if (t / 2.0).fract() == 0.0 {
+                    t
+                } else {
+                    away
+                }
+            }
+        };
+        r.to::<T>()?
+    }
+
     // `self`, or `lo` if it is below, or `hi` if it is above.
     fn clamp(self, lo: f32, hi: f32) -> f32 {
         if self < lo {
@@ -2143,6 +2180,32 @@ impl f64 {
     // The part after the point: `self - self.trunc()`.
     fn fract(self) -> f64 {
         self - self.trunc()
+    }
+
+    // The whole number `mode` rounds `self` to, as a `T`; NaN, an infinity, or a value
+    // outside `T`'s range fails with `RangeError` (`num.round.1`).
+    fn round<T: Number>(self, mode: Round) -> T with fail(RangeError) {
+        let t = self.trunc();
+        let f = self - t;
+        let away = if self < 0.0 { t - 1.0 } else { t + 1.0 };
+        let r = match mode {
+            Round::Down => self.floor(),
+            Round::Up => self.ceil(),
+            Round::TowardZero => t,
+            Round::NearestAway => if f.abs() >= 0.5 { away } else { t },
+            Round::NearestEven => {
+                if f.abs() > 0.5 {
+                    away
+                } else if f.abs() < 0.5 {
+                    t
+                } else if (t / 2.0).fract() == 0.0 {
+                    t
+                } else {
+                    away
+                }
+            }
+        };
+        r.to::<T>()?
     }
 
     // `self`, or `lo` if it is below, or `hi` if it is above.
@@ -3342,6 +3405,63 @@ trait Hash {
 impl Hash for int {
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_int(*self);
+    }
+}
+
+// The sized integers hash their value (`coll.hash.1`): the 128-bit ones as two `int`s.
+impl Hash for i8 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.wrap::<int>());
+    }
+}
+
+impl Hash for i16 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.wrap::<int>());
+    }
+}
+
+impl Hash for i32 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.wrap::<int>());
+    }
+}
+
+impl Hash for u8 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.wrap::<int>());
+    }
+}
+
+impl Hash for u16 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.wrap::<int>());
+    }
+}
+
+impl Hash for u32 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.wrap::<int>());
+    }
+}
+
+impl Hash for u64 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.wrap::<int>());
+    }
+}
+
+impl Hash for i128 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.truncate::<int>());
+        state.write_int((*self >> 64).truncate::<int>());
+    }
+}
+
+impl Hash for u128 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.truncate::<int>());
+        state.write_int((*self >> 64).truncate::<int>());
     }
 }
 

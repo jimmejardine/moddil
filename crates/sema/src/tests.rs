@@ -676,7 +676,8 @@ fn program_codes(
 #[test]
 fn modules() {
     let root = "use mod::a::Point;\npub(mod) fn f() -> int { a::norm(Point { x: 1 }) + b::g() }\n";
-    let a = "pub(mod) struct Point { x: int }\npub(mod) fn norm(p: Point) -> int { p.x }\n";
+    let a =
+        "pub(mod) struct Point { pub(mod) x: int }\npub(mod) fn norm(p: Point) -> int { p.x }\n";
     let b = "pub(mod) fn g() -> int { mod::f() }\n";
     let one: &[(&str, &[(&str, u32)])] = &[("m", &[])];
     assert_eq!(

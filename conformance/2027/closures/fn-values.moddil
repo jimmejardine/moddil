@@ -49,3 +49,28 @@ test "a function's effects are met where it is named" {
         run(based)                          // => 101
     }
 }
+
+struct Meters(int);
+
+struct Point { x: int }
+impl Point {
+    fn at(x: int) -> Point { Point { x: x } }
+    fn x(&self) -> int { self.x }
+}
+
+fn make<F: Fn(int) -> Point>(f: F) -> Point { f(7) }
+
+test "a type's function as a value" {
+    make(Point::at).x                       // => 7
+    ;
+    let get = Point::x;
+    get(&Point::at(3))                      // => 3
+    ;
+    let v: Vec<int> = (0..3).map(Meters).map(|m| m.0 * 2).collect();
+    v                                       // => [0, 2, 4]
+}
+
+test "a variant as a value" {
+    let xs: Vec<Option<int>> = (1..3).map(Some).collect();
+    xs                                      // => [Some(1), Some(2)]
+}

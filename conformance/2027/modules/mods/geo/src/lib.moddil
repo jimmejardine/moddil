@@ -1,4 +1,4 @@
-pub struct Point { x: int, y: int }
+pub struct Point { pub x: int, pub y: int }
 
 pub fn origin() -> Point { Point { x: 0, y: 0 } }
 

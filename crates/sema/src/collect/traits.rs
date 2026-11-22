@@ -248,14 +248,45 @@ impl Collector<'_> {
         };
         let mut ds = Vec::new();
         let preds = preds_of(node, &bounded, &scope, &mut ds);
-        // Every parameter must be fixed by the self type or the trait's arguments.
+        // Every parameter must be fixed by the self type or the trait's arguments, or by what a
+        // bound on such a parameter fixes (`F: FnMut(A) -> B` fixes `B` by `F`).
+        let mut fixed: Vec<bool> = params
+            .iter()
+            .enumerate()
+            .map(|(k, p)| {
+                let me = Ty::Param(k as u32, p.name.as_str().into());
+                self_ty.any(&|t| *t == me)
+                    || trait_ref
+                        .as_ref()
+                        .is_some_and(|t| t.args.iter().any(|a| a.any(&|x| *x == me)))
+            })
+            .collect();
+        loop {
+            let mut more = false;
+            for p in &preds {
+                let by_fixed = match &p.ty {
+                    Ty::Param(k, _) => fixed.get(*k as usize).copied().unwrap_or(true),
+                    _ => true,
+                };
+                if !by_fixed {
+                    continue;
+                }
+                for (_, t) in &p.assoc {
+                    for (k, f) in fixed.iter_mut().enumerate() {
+                        let me = Ty::Param(k as u32, params[k].name.as_str().into());
+                        if !*f && t.any(&|x| *x == me) {
+                            *f = true;
+                            more = true;
+                        }
+                    }
+                }
+            }
+            if !more {
+                break;
+            }
+        }
         for (k, p) in params.iter().enumerate() {
-            let me = Ty::Param(k as u32, p.name.as_str().into());
-            let used = self_ty.any(&|t| *t == me)
-                || trait_ref
-                    .as_ref()
-                    .is_some_and(|t| t.args.iter().any(|a| a.any(&|x| *x == me)));
-            if !used {
+            if !fixed[k] {
                 ds.push(Diagnostic::error(
                     Code::E0415,
                     p.range,

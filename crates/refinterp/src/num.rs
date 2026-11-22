@@ -509,3 +509,101 @@ pub(crate) fn convert(how: &str, x: &Value, to: Option<Kind>) -> Option<Value> {
         }
     }
 }
+
+/// A literal's exact value, for folding: an integer, or `mantissa × 10^exponent`.
+#[derive(Clone, Copy)]
+enum Folded {
+    Int(i128),
+    Dec(i128, i32),
+}
+
+/// The exact value of `e` if it is a literal, a parenthesised one, or arithmetic on literals
+/// that folds (`num.lit.1`).
+fn fold_of(e: &moddil_syntax::ast::Expr) -> Option<Folded> {
+    use moddil_syntax::SyntaxKind as K;
+    use moddil_syntax::ast::{self, AstNode};
+    match e {
+        ast::Expr::Literal(_) => {
+            let tok = e.syntax().child_tokens().find(|t| !t.kind().is_trivia())?;
+            match tok.kind() {
+                K::INTEGER => Some(Folded::Int(ast::int_value(tok.text())?)),
+                K::FLOAT => {
+                    let t: String = tok.text().chars().filter(|&c| c != '_').collect();
+                    let (digits, exp) = match t.find(['e', 'E']) {
+                        Some(i) => (t[..i].to_string(), t[i + 1..].parse::<i32>().ok()?),
+                        None => (t.clone(), 0),
+                    };
+                    let (int, frac) = digits.split_once('.').unwrap_or((&digits, ""));
+                    let m: i128 = format!("{int}{frac}").parse().ok()?;
+                    Some(Folded::Dec(m, exp - i32::try_from(frac.len()).ok()?))
+                }
+                _ => None,
+            }
+        }
+        ast::Expr::Paren(_) => fold_of(e.sub_exprs().first()?),
+        ast::Expr::Prefix(_) => {
+            let neg = e.syntax().child_tokens().any(|t| t.kind() == K::MINUS);
+            let inner = e.sub_exprs();
+            match (neg, inner.first()) {
+                (true, Some(x @ ast::Expr::Literal(_))) => match fold_of(x)? {
+                    Folded::Int(v) => Some(Folded::Int(v.checked_neg()?)),
+                    Folded::Dec(m, k) => Some(Folded::Dec(m.checked_neg()?, k)),
+                },
+                _ => None,
+            }
+        }
+        ast::Expr::Bin(_) => {
+            let op = e.syntax().child_tokens().find(|t| !t.kind().is_trivia())?;
+            let (l, r) = e.operands();
+            let (a, b) = (fold_of(&l?)?, fold_of(&r?)?);
+            match (a, b) {
+                (Folded::Int(x), Folded::Int(y)) => Some(Folded::Int(match op.kind() {
+                    K::PLUS => x.checked_add(y)?,
+                    K::MINUS => x.checked_sub(y)?,
+                    K::STAR => x.checked_mul(y)?,
+                    K::SLASH => x.checked_div(y)?,
+                    K::PERCENT => x.checked_rem(y)?,
+                    K::AMP => x & y,
+                    K::PIPE => x | y,
+                    K::CARET => x ^ y,
+                    // A shift is checked against its type's width: left to the type.
+                    _ => return None,
+                })),
+                (a, b) => {
+                    let parts = |f: Folded| match f {
+                        Folded::Int(v) => (v, 0),
+                        Folded::Dec(m, k) => (m, k),
+                    };
+                    let ((m1, e1), (m2, e2)) = (parts(a), parts(b));
+                    match op.kind() {
+                        K::PLUS | K::MINUS => {
+                            let k = e1.min(e2);
+                            let up = |m: i128, by: i32| {
+                                m.checked_mul(10i128.checked_pow(by.unsigned_abs())?)
+                            };
+                            let (x, y) = (up(m1, e1 - k)?, up(m2, e2 - k)?);
+                            let m = if op.kind() == K::PLUS {
+                                x.checked_add(y)?
+                            } else {
+                                x.checked_sub(y)?
+                            };
+                            Some(Folded::Dec(m, k))
+                        }
+                        K::STAR => Some(Folded::Dec(m1.checked_mul(m2)?, e1.checked_add(e2)?)),
+                        _ => None,
+                    }
+                }
+            }
+        }
+        _ => None,
+    }
+}
+
+/// The value of binary expression `e` if it is arithmetic on literals that folds: an exact
+/// literal not yet of a type.
+pub(crate) fn folded(e: &moddil_syntax::ast::Expr) -> Option<Value> {
+    match fold_of(e)? {
+        Folded::Int(v) => Some(i64::try_from(v).map_or(Value::BigLit(v), Value::Int)),
+        Folded::Dec(m, k) => Some(Value::FloatLit(format!("{m}e{k}").into())),
+    }
+}

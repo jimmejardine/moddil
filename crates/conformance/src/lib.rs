@@ -187,6 +187,7 @@ impl Implementation for ReferenceInterpreter {
             .files
             .iter()
             .map(|f| moddil_refinterp::SourceSpec {
+                path: f.display.clone(),
                 text: f.text.clone(),
                 mod_: f.mod_,
                 module: f.module.clone(),
@@ -713,9 +714,12 @@ mod tests {
             outcome("test \"t\" {\n    return;\n    1 // => 1\n}"),
             vec!["line 3: expected 1, but the line never ran"]
         );
-        assert!(outcome("test \"t\" {\n    9223372036854775807 + 1; //~ trap\n}").is_empty());
+        assert!(
+            outcome("test \"t\" {\n    { let max = 9223372036854775807; max + 1 }; //~ trap\n}")
+                .is_empty()
+        );
         assert_eq!(
-            outcome("test \"t\" {\n    9223372036854775807 + 1;\n}"),
+            outcome("test \"t\" {\n    { let max = 9223372036854775807; max + 1 };\n}"),
             vec!["line 2: unexpected trap"]
         );
         assert!(outcome("fn f() -> int { true } //~ E0201\n").is_empty());

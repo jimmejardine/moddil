@@ -65,15 +65,15 @@ fn arithmetic() {
 #[test]
 fn traps() {
     assert_eq!(
-        trap("fn main() -> int { 9223372036854775807 + 1 }"),
+        trap("fn main() -> int { { let max = 9223372036854775807; max + 1 } }"),
         TrapClass::Overflow
     );
     assert_eq!(
-        trap("fn main() -> int { -9223372036854775807 - 2 }"),
+        trap("fn main() -> int { let a = -9223372036854775807; a - 2 }"),
         TrapClass::Overflow
     );
     assert_eq!(
-        trap("fn main() -> int { 4611686018427387904 * 2 }"),
+        trap("fn main() -> int { let a = 4611686018427387904; a * 2 }"),
         TrapClass::Overflow
     );
     assert_eq!(
@@ -81,7 +81,7 @@ fn traps() {
         TrapClass::Overflow
     );
     assert_eq!(
-        trap("fn main() -> int { (-9223372036854775807 - 1) / -1 }"),
+        trap("fn main() -> int { let a = -9223372036854775807 - 1; a / -1 }"),
         TrapClass::Overflow
     );
     assert_eq!(
@@ -92,9 +92,15 @@ fn traps() {
         trap("fn main() -> int { 1 % 0 }"),
         TrapClass::DivisionByZero
     );
-    assert_eq!(trap("fn main() -> int { 1 << 64 }"), TrapClass::Overflow);
+    assert_eq!(
+        trap("fn main() -> int { let a = 1; a << 64 }"),
+        TrapClass::Overflow
+    );
     assert_eq!(trap("fn main() -> int { 1 << -1 }"), TrapClass::Overflow);
-    assert_eq!(trap("fn main() -> int { 3 << 62 }"), TrapClass::Overflow);
+    assert_eq!(
+        trap("fn main() -> int { let a = 3; a << 62 }"),
+        TrapClass::Overflow
+    );
     assert_eq!(trap("fn main() -> int { 1 >> 64 }"), TrapClass::Overflow);
     assert_eq!(
         trap("fn main() -> int { f(0) } fn f(x: int) -> int { f(x + 1) }"),

@@ -57,7 +57,7 @@ wait as they would. A trap while unwinding, or in a destructor, ends the program
 **task.isolate.1** `scope(body, isolate: true)` is **isolated**: a trap in one of its tasks, or in
 the tasks of the scopes inside it that are not isolated themselves, does not end the program but
 fails the scope, cancelling it, with the prelude's `Trapped { class, at }`: the trap's kind
-(`overflow`) and its `line:column`. The task that trapped unwinds from where it trapped
+(`overflow`) and its `file:line:column`, the file as messages show it. The task that trapped unwinds from where it trapped
 (**task.cancel.1**). Only an isolated scope's call can fail with `Trapped`: one whose `isolate` is
 left out or written `false` cannot.
 
@@ -71,8 +71,7 @@ gives the next value, in the order sent, waiting while there is none. Both need 
 
 **task.channel.2** A `Sender` can be cloned. Once every `Sender` of a channel is dropped, `recv`
 gives `None` when the channel is empty; once its `Receiver` is dropped, `send` fails with the
-prelude's `Closed`, and the values left in the channel are dropped, for now without running their
-destructors.
+prelude's `Closed`, and the values left in the channel are dropped, their destructors run.
 
 **task.channel.3** The ends of a channel are values like any other: a task borrows them, or has
 them moved into its closure (`let tx = tx;`), so that the channel closes when the task ends.

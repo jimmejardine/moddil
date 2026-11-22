@@ -174,6 +174,8 @@ pub(crate) const PRELUDE_MODULE: usize = 0;
 pub(crate) struct Program {
     /// The files' texts.
     pub(crate) texts: Vec<String>,
+    /// The files' paths, as messages show them.
+    pub(crate) paths: Vec<String>,
     pub(crate) fns: HashMap<String, FnDef>,
     pub(crate) adts: HashMap<String, AdtInfo>,
     pub(crate) traits: HashMap<String, TraitInfo>,
@@ -208,6 +210,7 @@ impl Program {
     pub(crate) fn new(files: &[crate::SourceSpec], mods: &[crate::ModSpec]) -> Program {
         let mut p = Program {
             texts: files.iter().map(|f| f.text.clone()).collect(),
+            paths: files.iter().map(|f| f.path.clone()).collect(),
             fns: HashMap::new(),
             consts: HashMap::new(),
             types: HashMap::new(),

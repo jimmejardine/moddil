@@ -111,6 +111,8 @@ pub struct TestRun {
 /// A source file of a program: its text, and the module it is (`modules.md`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceSpec {
+    /// The file's path, as messages show it.
+    pub path: String,
     /// The text.
     pub text: String,
     /// The mod it belongs to, by index.
@@ -135,6 +137,7 @@ pub struct ModSpec {
 /// interpreter does not repeat.
 pub fn run_tests(text: &str) -> Option<Vec<TestRun>> {
     let file = SourceSpec {
+        path: String::new(),
         text: text.to_string(),
         mod_: 0,
         module: Vec::new(),

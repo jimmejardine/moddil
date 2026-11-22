@@ -27,7 +27,7 @@ pub struct Env { handle: int }
 
 /// Standard input, output and error.
 #[root_capability]
-pub struct Stdio { err: StdErr }
+pub struct Stdio { pub err: StdErr }
 
 /// The file system.
 #[root_capability]

@@ -16,6 +16,7 @@ use crate::resolve::{Scope, generic_args, resolve_type};
 use crate::{Code, Db, Diagnostic, Item, ItemTree, Owner, Ty};
 
 mod exprs;
+mod fold;
 mod names;
 mod paths;
 mod patterns;

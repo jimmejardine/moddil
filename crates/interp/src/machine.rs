@@ -94,7 +94,7 @@ impl<'a> Machine<'a> {
             PendingDrop::Finished => return None,
             PendingDrop::Call((f, type_args, v)) => {
                 if self.dispatch.items().fns[f as usize].intrinsic {
-                    self.native_drop(f, &v);
+                    self.native_drop(f, &type_args, &v);
                     return None;
                 }
                 if self.stack.depth() >= MAX_DEPTH {

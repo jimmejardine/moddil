@@ -1,6 +1,6 @@
 ---
 source: crates/mir/src/tests.rs
-expression: "dump(\"fn f(a: int, b: int) -> int { -(a + b) * 2 / b % 3 << 1 >> a & 1 | 2 ^ 3 }\")"
+expression: "dump(\"fn f(a: int, b: int) -> int { -(a + b) * 2 / b % 3 << 1 >> a & 1 | 2 ^ a }\")"
 ---
 fn f(_1: int, _2: int) -> int {
     // _1: a
@@ -48,7 +48,7 @@ fn f(_1: int, _2: int) -> int {
         assert(!_18, overflow) @ 30..60;
         _4 = Shr(_5, _1);
         _3 = BitAnd(_4, const 1);
-        _19 = BitXor(const 2, const 3);
+        _19 = BitXor(const 2, _1);
         _0 = BitOr(_3, _19);
         StorageDead(_2);
         StorageDead(_1);

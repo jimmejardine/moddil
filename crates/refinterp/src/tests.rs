@@ -49,7 +49,7 @@ fn scalars_and_calls() {
 #[test]
 fn traps() {
     let text = "fn down(n: int) -> int { down(n + 1) }\n\
-                test \"a\" { 9223372036854775807 + 1; }\n\
+                test \"a\" { { let max = 9223372036854775807; max + 1 }; }\n\
                 test \"b\" { 1 / 0; }\n\
                 test \"c\" { 1 << 64; }\n\
                 test \"d\" { down(0); }\n\
@@ -178,6 +178,7 @@ fn effects() {
 #[test]
 fn modules_and_mods() {
     let file = |text: &str, mod_: u32, module: &[&str]| SourceSpec {
+        path: String::new(),
         text: text.to_string(),
         mod_,
         module: module.iter().map(|s| (*s).to_string()).collect(),

@@ -1,4 +1,4 @@
-// covers: num.convert.1
+// covers: num.convert.1, num.round.1
 
 test "to: checked" {
     let a: int = 250;
@@ -30,4 +30,35 @@ test "truncate, wrap and saturate" {
     ;
     let c: int = -5;
     c.saturate::<u16>()                     // => 0
+}
+
+test "round, by its mode" {
+    let a: f64 = 2.5;
+    a.round::<int>(Round::NearestEven) ?! "fits"   // => 2
+    ;
+    a.round::<int>(Round::NearestAway) ?! "fits"   // => 3
+    ;
+    let b: f64 = -2.5;
+    b.round::<int>(Round::NearestEven) ?! "fits"   // => -2
+    ;
+    b.round::<int>(Round::NearestAway) ?! "fits"   // => -3
+    ;
+    let c: f32 = 1.7;
+    c.round::<u8>(Round::Down) ?! "fits"           // => 1
+    ;
+    c.round::<u8>(Round::Up) ?! "fits"             // => 2
+    ;
+    let d: f64 = -1.7;
+    d.round::<i8>(Round::TowardZero) ?! "fits"     // => -1
+}
+
+test "round fails out of range, and on NaN" {
+    let big: f64 = 300.0;
+    let r = try { big.round::<u8>(Round::Down)? } catch { RangeError => 0 };
+    r                                              // => 0
+    ;
+    let z: f64 = 0.0;
+    let n = z / z;
+    let s = try { n.round::<int>(Round::Down)? } catch { RangeError => -1 };
+    s                                              // => -1
 }

@@ -72,14 +72,12 @@ test "a negative capacity traps" {
 }
 
 struct Armed;
-impl Drop for Armed { fn drop(self) { assert(false); } }
+impl Drop for Armed { fn drop(self) { assert(false); } }   //~ trap
 
-test "values left in a channel are dropped, for now without their destructors" {
+test "values left in a channel are dropped, with their destructors" {
     let (tx, rx) = channel::<Armed>(1);
     tx.send(Armed)?!"alive";
     drop(rx);
-    drop(tx);
-    0                                       // => 0
 }
 
 test "a send fails with `Closed` once the receiver is gone" {

@@ -19,7 +19,10 @@ its name says on every target. The float types are `f32` and `f64`, IEEE 754's b
 binary64. Each is `Copy`, and has `Clone`, `PartialEq`, `PartialOrd`, `Display`, `Debug` and
 `Default` (zero); the integers are also `Eq` and `Ord`, the floats not, as NaN is unordered.
 
-**num.lit.1** A literal is an exact number until it gets a type: from what it is used as (an
+**num.lit.1** A literal, and an operator whose operands are all literals (or such operations,
+in parentheses), is an exact number until it gets a type, so `200 + 100` is `300` and `0.1 * 3.0`
+is `0.3` exactly; a shift, a quotient of fractional literals, and anything that would overflow
+`i128`, are left to the type. It gets its type from what it is used as (an
 annotation, a parameter, a field, an operand of another number), or else `int` for an integer
 literal and `f64` for a fractional one (`1.5`, `2e-3`). An integer literal may be of any number
 type, a fractional one of a float type; there are no suffixes. An integer literal must fit its type
@@ -47,7 +50,13 @@ failing with the prelude's `RangeError` if `x` is not one exactly (an integer ou
 a float that is not a whole number in it, or a value a float `T` cannot hold exactly);
 `x.checked_to::<T>()` gives it as an `Option`. On the integers, `x.truncate::<T>()` keeps `x`'s low
 bits, `x.wrap::<T>()` reads them as two's complement, and `x.saturate::<T>()` is the nearest value
-of `T`. Rounding a float to an integer with a chosen mode waits.
+of `T`.
+
+**num.round.1** `f.round::<T>(mode)`, on a float, is the whole number `mode` rounds `f` to, as a
+`T` (as `to` gives it, so it fails with `RangeError` if it is not one): `Round::NearestEven` and
+`Round::NearestAway` round to the nearest, a tie to the even one or away from zero; `Round::Down`
+and `Round::Up` round toward −∞ and +∞; and `Round::TowardZero` drops the fraction. NaN and the
+infinities fail.
 
 **num.float.1** A float's value is written as the shortest decimal that reads back to it: `0.3`,
 `0.30000000000000004`, `1.0`, `inf`, `NaN`.

@@ -894,12 +894,48 @@ impl Machine<'_> {
 
     /// Whether `segments` name a function, or a trait's method (`Trait::method`).
     pub(super) fn fn_path(&self, segments: &[String]) -> bool {
+        // A tuple struct or variant (`Some`), as a value.
+        if let Some((_, info)) = self.ctor(segments) {
+            return info.shape == crate::program::Shape::Tuple;
+        }
         match self.resolve(segments) {
             Some((Def::Item(k), n)) if n == segments.len() => self.program.fns.contains_key(&k),
-            Some((Def::Item(k), n)) if n + 1 == segments.len() => {
-                self.program.traits.contains_key(&k)
+            Some((Def::Item(k), n))
+                if n + 1 == segments.len() && self.program.traits.contains_key(&k) =>
+            {
+                true
+            }
+            // A type's function (`Vec::new`).
+            _ if segments.len() >= 2 => {
+                let (ty, name) = segments.split_at(segments.len() - 1);
+                let head = self.type_head(ty);
+                self.program
+                    .methods(&head, &name[0])
+                    .iter()
+                    .any(|m| matches!(m, Method::Code(..)))
             }
             _ => false,
+        }
+    }
+
+    /// The kind of value the type path `ty` names (`int`, `Vec`, a type parameter).
+    fn type_head(&self, ty: &[String]) -> Head {
+        match ty {
+            [t] if t == "int" || t == "i64" => Head::Int,
+            [t] if crate::num::Kind::named(t).is_some() => {
+                Head::Num(crate::num::Kind::named(t).expect("a number type"))
+            }
+            [t] if t == "bool" => Head::Bool,
+            [t] if t == "char" => Head::Char,
+            [t] if t == "str" => Head::Str,
+            [t] if t == "Buf" => Head::Buf,
+            [t] if self.memory.type_of(t).is_some() => {
+                self.memory.type_of(t).expect("known").clone()
+            }
+            path => match self.resolve(path) {
+                Some((Def::Item(k), _)) => Head::Adt(k),
+                _ => Head::Adt(path.join("::")),
+            },
         }
     }
 
@@ -912,6 +948,21 @@ impl Machine<'_> {
         range: TextRange,
     ) -> Eval {
         let segments = segments(node);
+        // A tuple struct or variant: built from the values.
+        if let Some((ty, info)) = self.ctor(&segments) {
+            let variant = info.name.clone();
+            let types = info.types.clone();
+            let fields = values
+                .into_iter()
+                .enumerate()
+                .map(|(i, v)| self.typed(v, types.get(i).and_then(Option::as_ref)))
+                .collect();
+            return Ok(Value::Adt {
+                ty,
+                variant,
+                fields,
+            });
+        }
         match self.resolve(&segments) {
             Some((Def::Item(k), n)) if n == segments.len() => {
                 let f = self.program.fns[&k].clone();
@@ -921,11 +972,24 @@ impl Machine<'_> {
                 let types = self.turbofish(turbofish, &f.params);
                 self.invoke(&f, values, types, range)
             }
-            Some((Def::Item(k), _)) => {
+            Some((Def::Item(k), n))
+                if n + 1 == segments.len() && self.program.traits.contains_key(&k) =>
+            {
                 let name = segments.last().expect("a method's name").clone();
                 self.call_trait(&k, &name, values, range)
             }
-            _ => unreachable!("a checked function path"),
+            // A type's function.
+            _ => {
+                let (ty, name) = segments.split_at(segments.len() - 1);
+                let head = self.type_head(ty);
+                let m = self
+                    .program
+                    .methods(&head, &name[0])
+                    .into_iter()
+                    .find(|m| matches!(m, Method::Code(..)))
+                    .expect("a checked function of a type");
+                self.run_method(m, &head, values, range)
+            }
         }
     }
 

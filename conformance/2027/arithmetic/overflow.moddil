@@ -18,7 +18,7 @@ test "subtraction" {
 }
 
 test "multiplication" {
-    4611686018427387904 * 2;  //~ trap
+    let x = 4611686018427387904; x * 2; //~ trap
 }
 
 test "negation" {

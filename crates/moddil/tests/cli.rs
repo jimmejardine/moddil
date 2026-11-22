@@ -56,7 +56,7 @@ fn reports_errors_with_codes() {
 fn a_trap_exits_with_101() {
     let path = file(
         "trap.moddil",
-        "fn main() -> int { 9223372036854775807 + 1 }\n",
+        "fn main() -> int { let max = 9223372036854775807; max + 1 }\n",
     );
     let out = moddil(&["run"], &path);
     assert_eq!(out.status.code(), Some(101));

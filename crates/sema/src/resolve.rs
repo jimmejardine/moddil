@@ -790,10 +790,19 @@ pub(crate) fn preds_of(
     scope: &Scope,
     ds: &mut Vec<Diagnostic>,
 ) -> Vec<Pred> {
-    let mut out = Vec::new();
+    let mut out: Vec<Pred> = Vec::new();
     for (i, node) in bounded {
         let ty = Ty::Param(*i as u32, scope.params[*i].name.as_str().into());
-        out.extend(bounds(node, &ty, scope, ds));
+        // Each parameter's bounds see those of the parameters before it:
+        // `impl<I: Iterator, F: FnMut(I::Item) -> B>`.
+        let mut seen = scope.preds.to_vec();
+        seen.extend(out.iter().cloned());
+        let inner = Scope {
+            preds: &seen,
+            ..scope.clone()
+        };
+        let found = bounds(node, &ty, &inner, ds);
+        out.extend(found);
     }
     if let Some(w) = item.child(K::WHERE_CLAUSE) {
         // The `where` clause sees the parameters' own bounds: `F::Fails` through `F: Fn(…)`.

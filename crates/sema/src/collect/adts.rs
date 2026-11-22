@@ -192,6 +192,14 @@ impl Collector<'_> {
             }
         }
         self.reporter.report(src, None, ds);
+        // The prelude's, `core`'s and derived types' fields are everyone's; so are an enum's
+        // variants' fields, which are reached by matching (`mod.vis.2`).
+        let mut variants = variants;
+        if !src.is_file() || node.kind() == K::ENUM_ITEM {
+            for f in variants.iter_mut().flat_map(|v| v.fields.iter_mut()) {
+                f.vis = Vis::Pub;
+            }
+        }
         let def = &mut self.tree.adts[i];
         def.variants = variants;
         def.copy = copy;
@@ -245,6 +253,7 @@ pub(super) fn variant_def(
                 name: fname,
                 range,
                 ty,
+                vis: vis_of(&m),
             });
         }
         Shape::Named
@@ -267,6 +276,7 @@ pub(super) fn variant_def(
                 name: i.to_string(),
                 range: f.text_range(),
                 ty,
+                vis: vis_of(&f),
             });
         }
         Shape::Tuple

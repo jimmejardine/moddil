@@ -41,6 +41,24 @@ impl Lowerer<'_> {
                     let callee = self.resolved(r, range);
                     self.fn_value(callee, func, range)
                 }
+                // A type's function as a value (`Vec::new`, `Point::y`): its arity is the
+                // function's (`expr.fn-value.1`).
+                Some(Resolved::AssocFn(ty, name, at, args))
+                    if self.inherent_fn(&ty, &name).is_some() =>
+                {
+                    let func = self.inherent_fn(&ty, &name).expect("found");
+                    let callee = self.resolved(Resolved::AssocFn(ty, name, at, args), range);
+                    self.fn_value(callee, func, range)
+                }
+                // A tuple variant or struct as a value (`Some`): a closure building it.
+                Some(Resolved::Ctor(adt, variant, ty_args))
+                    if self.items.variant(adt, variant).shape == Shape::Tuple =>
+                {
+                    let n = self.items.variant(adt, variant).fields.len();
+                    self.value_closure(range, n, |this, args| {
+                        this.ctor_call(range, adt, variant, ty_args, args)
+                    })
+                }
                 Some(r) => self.resolved(r, range),
                 None => self.missing(range),
             },
@@ -855,6 +873,14 @@ impl Lowerer<'_> {
             return self.unsupported(op.text_range(), &format!("`{}`", op.text()));
         };
         let (l, r) = self.operands(e, range);
+        // Literals, folded exactly (`num.lit.1`).
+        if let (Some(a), Some(b)) = (
+            super::fold::Exact::of(&self.out.body.exprs[l].kind),
+            super::fold::Exact::of(&self.out.body.exprs[r].kind),
+        ) && let Some(v) = super::fold::fold(op, a, b)
+        {
+            return self.alloc(v.literal(), range);
+        }
         self.alloc(ExprKind::Binary(op, l, r), range)
     }
 
@@ -1094,7 +1120,10 @@ impl Lowerer<'_> {
         matches!(
             self.out.body.exprs[call].kind,
             ExprKind::Call { callee, .. }
-                if matches!(self.out.body.exprs[callee].kind, ExprKind::Fn { .. } | ExprKind::TraitFn { .. })
+                if matches!(
+                    self.out.body.exprs[callee].kind,
+                    ExprKind::Fn { .. } | ExprKind::TraitFn { .. } | ExprKind::AssocFn { .. }
+                )
                     && self.out.body.exprs[callee].range == self.out.body.exprs[e].range
         )
     }
@@ -1103,11 +1132,41 @@ impl Lowerer<'_> {
     /// its arguments and calling it, so it implements the closure traits with the function's
     /// signature, and the needs of its effects are met where it is named.
     fn fn_value(&mut self, callee: ExprId, func: u32, range: TextRange) -> ExprId {
+        let n = self.items.fns[func as usize].params.len();
+        self.value_closure(range, n, |this, args| {
+            let call = this.alloc(ExprKind::Call { callee, args }, range);
+            // Its errors pass on, as the function's do.
+            this.alloc(ExprKind::Pass(call), range)
+        })
+    }
+
+    /// The function of an inherent impl of `ty` called `name`, if there is one: what
+    /// `Type::name` names as a value.
+    fn inherent_fn(&self, ty: &Ty, name: &str) -> Option<u32> {
+        let same = |t: &Ty| match (t, ty) {
+            (Ty::Adt(a, ..), Ty::Adt(b, ..)) => a == b,
+            (t, u) => t == u,
+        };
+        self.items
+            .impls
+            .iter()
+            .filter(|i| i.trait_ref.is_none() && same(&i.self_ty))
+            .flat_map(|i| i.methods.iter().copied())
+            .find(|&f| self.items.fns[f as usize].name == name)
+    }
+
+    /// A closure of `n` parameters whose body `body` makes from them.
+    fn value_closure(
+        &mut self,
+        range: TextRange,
+        n: usize,
+        body: impl FnOnce(&mut Self, Vec<ExprId>) -> ExprId,
+    ) -> ExprId {
         let id = self.alloc(ExprKind::Missing, range);
         let parent = self.closure.replace(id);
         let mut params = Vec::new();
         let mut args = Vec::new();
-        for (i, _) in self.items.fns[func as usize].params.iter().enumerate() {
+        for i in 0..n {
             let local = self.out.body.locals.alloc(crate::hir::Local {
                 name: format!("{{arg{i}}}"),
                 mutable: false,
@@ -1118,9 +1177,7 @@ impl Lowerer<'_> {
             params.push((pat, None));
             args.push(self.alloc(ExprKind::Local(local), range));
         }
-        let call = self.alloc(ExprKind::Call { callee, args }, range);
-        // Its errors pass on, as the function's do.
-        let body = self.alloc(ExprKind::Pass(call), range);
+        let body = body(self, args);
         self.closure = parent;
         self.out.body.exprs[id].kind = ExprKind::Closure {
             params,

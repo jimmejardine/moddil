@@ -306,12 +306,14 @@ impl Scheduler {
         self.wake();
     }
 
-    /// The receiver is gone: what the channel holds is dropped, for now without destructors.
-    pub(crate) fn drop_receiver(&mut self, c: usize) {
+    /// The receiver is gone: what the channel holds is given back, for its destructors to run
+    /// (`task.channel.2`).
+    pub(crate) fn drop_receiver(&mut self, c: usize) -> Vec<Value> {
         let ch = &mut self.channels[c];
         ch.receiver = false;
-        ch.values.clear();
+        let left: Vec<Value> = ch.values.drain(..).collect();
         self.wake();
+        left
     }
 
     pub(crate) fn receiver_alive(&self, c: usize) -> bool {

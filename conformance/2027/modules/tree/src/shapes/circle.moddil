@@ -1,4 +1,4 @@
-pub(mod) struct Circle { r: int }
+pub(mod) struct Circle { pub(mod) r: int }
 
 impl Circle {
     pub(mod) fn area(&self) -> int { 3 * self.r * self.r }

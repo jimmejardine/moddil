@@ -449,13 +449,20 @@ impl Machine<'_> {
                 });
                 Ok(Value::Unit)
             }
+            // What the channel holds is dropped, with its destructors (`task.channel.2`).
             ("Receiver", "drop") => {
                 let c = id(self, &args[0]);
-                self.with_tasks(|ts| {
+                let left: Vec<Value> = self.with_tasks(|ts| {
                     ts.channels[c].receiver = false;
-                    ts.channels[c].values.clear();
+                    let left = ts.channels[c].values.drain(..).collect();
                     ts.wake();
+                    left
                 });
+                for v in left {
+                    if let Err(flow) = self.drop_value(v, true, range) {
+                        return Some(Err(flow));
+                    }
+                }
                 Ok(Value::Unit)
             }
             ("", "yield_now") => {
@@ -609,15 +616,17 @@ impl Machine<'_> {
         }
     }
 
-    /// The prelude's `Trapped` for trap `t`: its kind, and where it is as `line:column`.
+    /// The prelude's `Trapped` for trap `t`: its kind, and where it is as `file:line:column`.
     fn trapped(&self, t: &Trap) -> Value {
+        let file = t.file as usize;
         let at = self
             .program
             .texts
-            .get(t.file as usize)
+            .get(file)
             .map(|text| {
                 let (line, col) = moddil_syntax::line_col(text, t.range.start);
-                format!("{line}:{col}")
+                let path = self.program.paths.get(file).map_or("", String::as_str);
+                format!("{path}:{line}:{col}")
             })
             .unwrap_or_default();
         Value::Adt {

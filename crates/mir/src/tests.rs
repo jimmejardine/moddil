@@ -51,7 +51,7 @@ fn no_mir_for_files_with_errors() {
 #[test]
 fn arithmetic_is_checked() {
     insta::assert_snapshot!(dump(
-        "fn f(a: int, b: int) -> int { -(a + b) * 2 / b % 3 << 1 >> a & 1 | 2 ^ 3 }"
+        "fn f(a: int, b: int) -> int { -(a + b) * 2 / b % 3 << 1 >> a & 1 | 2 ^ a }"
     ));
 }
 

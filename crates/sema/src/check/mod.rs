@@ -706,6 +706,54 @@ impl Checker<'_> {
         t
     }
 
+    /// The module the body being checked is in.
+    fn here(&self) -> u32 {
+        match self.owner.owner() {
+            Item::Fn(i) => self.items.fns[i as usize].module,
+            Item::Test(i) => self.items.tests[i as usize].module,
+            Item::Closure(..) => crate::items::PRELUDE_MODULE,
+        }
+    }
+
+    /// Whether field `i` of struct `adt` can be named here; E0701 at `range` if not
+    /// (`mod.vis.2`).
+    fn field_visible(&mut self, adt: u32, i: u32, range: TextRange) -> bool {
+        let def = &self.items.adts[adt as usize];
+        let Some(f) = def.variants.first().and_then(|v| v.fields.get(i as usize)) else {
+            return true;
+        };
+        if self.items.can_see(f.vis, def.module, self.here()) {
+            return true;
+        }
+        let (name, ty) = (f.name.clone(), def.name.clone());
+        self.report(
+            Code::E0701,
+            range,
+            format!(
+                "the field `{name}` of `{ty}` is private to its module: mark it `pub` to share it"
+            ),
+        );
+        false
+    }
+
+    /// Whether function `f` of an inherent impl can be called here; E0701 at `range` if not
+    /// (`mod.vis.2`).
+    fn method_visible(&mut self, f: u32, range: TextRange) -> bool {
+        let sig = &self.items.fns[f as usize];
+        let inherent = matches!(sig.container, crate::items::Container::Impl(k)
+            if self.items.impls[k as usize].trait_ref.is_none());
+        if !inherent || !sig.src.is_file() || self.items.can_see(sig.vis, sig.module, self.here()) {
+            return true;
+        }
+        let name = sig.name.clone();
+        self.report(
+            Code::E0701,
+            range,
+            format!("`{name}` is private to its module: mark it `pub` to share it"),
+        );
+        false
+    }
+
     /// Reports E0405 for an expression whose type must be known here but is not.
     fn unknown(&mut self, range: TextRange, what: &str) -> Ty {
         self.report(

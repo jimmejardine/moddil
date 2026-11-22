@@ -151,7 +151,7 @@ something runs from the first slice.
     and its edition is 2027;
   - an executable's main file is a module of its mod's tree, and executables have no dependencies
     of their own;
-  - visibility does not yet limit methods or fields;
+  - visibility does not yet limit methods or fields (done in the M0 debt sweep, `mod.vis.2`);
   - a mod cannot declare a prelude, so there are no glob imports at all, and `mod name;` with a
     generating attribute waits for comptime;
   - `moddil test` runs the tests of the mod being built, and the conformance runner those of every
@@ -350,19 +350,21 @@ something runs from the first slice.
   - name-only `*` parameters wait; a default is compile-time code whose type names no type
     parameter;
   - only a literal `false` (or leaving `isolate` out) keeps `Trapped` out of a scope's errors;
-  - values left in a channel whose receiver is dropped, and values of a cancelled task's pending
-    operation, are dropped without their destructors; a `send` in `select` does not wait for a
-    rendezvous;
+  - a cancelled task's pending operation's value is dropped without its destructors (values
+    left in a channel run theirs since the M0 debt sweep); a `send` in `select` does not wait for
+    a rendezvous;
   - shielded cleanup with deadlines, timers, `checkpoint()`, signals, grace periods, suppressed
     errors, poisoning and `abandon` wait;
-  - `Trapped`'s `at` is `line:column`, without the file's name.
+  - `Trapped`'s `at` is `line:column`, without the file's name (`file:line:column` since the
+    M0 debt sweep).
 - **S9c's scope and interim rules (decided November 2026):** what checking the tour found missing.
   A function named as a value is a closure calling it; `-> impl Trait` is an opaque type whose
   hidden type the function's body fixes, revealed when the MIR is built; `map`, `filter` and
   `collect` (with `FromIterator`); `test "…" for subject`; the ambient `log`; `main` taking the
   root capabilities and returning `ExitCode`; `#[selectable]` on a function a `select` may wait
   on. Until the features they wait for arrive:
-  - a type's function (`Vec::new`) and a variant cannot be used as values;
+  - a type's function (`Vec::new`) and a variant cannot be used as values (done in the M0 debt
+    sweep);
   - an `impl Trait` result is the whole result type, not in a trait's method, and its hidden type
     holds no borrow or closure; functions that return one cannot call each other recursively;
   - `map` and `filter` run their closure over every item when called (lazy adapters wait for
@@ -370,8 +372,8 @@ something runs from the first slice.
     `FnMut`, and a stored closure's errors);
   - a test cannot be run for listed types or declare capabilities;
   - `log` prints to standard error, with no handlers;
-  - the root capabilities have no operations, and nothing stops a program making one, until
-    fields can be private; `main` may still return any type, which is printed;
+  - the root capabilities have no operations (a program can no longer make one since the M0
+    debt sweep made fields private); `main` may still return any type, which is printed;
   - a `select` arm on a `#[selectable]` function traps when it runs (`not implemented yet`).
 - **S9d's scope and interim rules (decided November 2026): M0's gate is met.** The tour is the
   `tour/shorty/` mod, and `python tools/ci.py tour` checks it, against `stubs/moddil/`, a **stub
@@ -398,9 +400,9 @@ something runs from the first slice.
   tests pass, and its CPU preview runs, all in CI (`python tools/ci.py examples`). The rewrite of
   `String` over `Buf<u8>` became slice S11. Until the features they wait for arrive:
   - `f16`, `bf16`, arbitrary widths (`u3`), `usize`/`isize`, `Wrapping<T>`, decimals, big numbers
-    and `f.round::<I>(mode)` wait; the sized integers have no `Hash` yet;
-  - a literal gets a type, rather than constant arithmetic on literals being exact
-    (`0.1 * 3.0` as an `f32` multiplies two `f32`s);
+    wait (`round::<I>(mode)` and the sized integers' `Hash` came with the M0 debt sweep);
+  - a literal gets a type, rather than constant arithmetic on literals being exact (exact since
+    the M0 debt sweep, but for a quotient of fractional literals);
   - the float functions other than `sqrt` are `libm`'s, not yet correctly rounded;
   - the reference interpreter gives a literal its type when it meets one at run time (a typed
     `let`, parameter, field or result, or another number in an operator), so it differs from the
@@ -419,6 +421,30 @@ something runs from the first slice.
   - the inline size is 23 on every target (11 on 32-bit targets comes with them);
   - `String::from_utf8`, `StrPos`, slicing and `find` wait;
   - strings are slower in the interpreters, byte by byte in Moddil.
+- **The M0 debt sweep (decided November 2026): one pass over M0's interim limits before M1.**
+  - **Paid:**
+    - `Hash` for the sized integers, and `f.round::<I>(mode)` with `Round` (`num.round.1`);
+    - exact arithmetic on literals: an operator on literals folds exactly before the result gets
+      a type, so `200 + 100` as a `u8` is E0204 and `0.1 * 3.0` as an `f32` is `0.3`
+      (`num.lit.1`);
+    - `Trapped.at` is `file:line:column`, and values left in a channel run their destructors;
+    - fields and the functions of inherent impls have visibility, private to their module unless
+      marked (`mod.vis.2`), so root capabilities cannot be made outside `moddil::root`;
+    - a type's function and a tuple variant are values (`Vec::new`, `Point::y`, `Some`);
+    - an impl's bounds see the bounds of the parameters before them (`F: FnMut(I::Item) -> B`),
+      and a parameter fixed by a bound on a fixed one is not E0415.
+  - **Deferred, each for its own step:**
+    - lazy adapters, `Box<T>`, `Box<dyn Fn …>` and `impl Fn` results: a closure kept beyond the
+      call needs its bound to name its effects (`Fn(A) -> R with E`, `closures.md`: Effects flow
+      through), which the grammar's `fn_sugar` does not have yet, and owned captures;
+    - slicing and text (`xs[a..b]`, slice patterns, `StrPos`, `find`, `from_utf8`): sub-slice
+      borrows need a new kind of pointer in both interpreters;
+    - the 8 open questions the tour exposed ([`tour.md`](tour.md#gaps-the-tour-exposed)), which
+      are decisions;
+    - a trailing comma in a `where` clause: a type can start with `{`, so the comma before a
+      body is ambiguous to tree-sitter;
+    - suppressed errors (they need error return traces), and the destructors of a cancelled
+      task's pending `send`.
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

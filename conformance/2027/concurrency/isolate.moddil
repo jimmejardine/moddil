@@ -22,7 +22,7 @@ test "a trap in an isolated scope fails it with `Trapped`" {
         Ok(v) => fmt"{v}",
         Err(t) => fmt"{t}",
     };
-    shown                                   // => "overflow at 4:5"
+    shown                                   // => "overflow at conformance/2027/concurrency/isolate.moddil:4:5"
     ;
     cleaned                                 // => true
 }

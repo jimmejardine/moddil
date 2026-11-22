@@ -59,7 +59,14 @@ re-exports it. There are no glob imports: `use x::*` is an error (E0702).
 
 **mod.vis.1** An item is visible to its own module only; `pub(mod)`, to every module of its mod;
 `pub`, to every mod. A path or import that names an item its module cannot see is an error
-(E0701). The methods of impls and the fields of structs are not yet limited by visibility.
+(E0701).
+
+**mod.vis.2** A struct's fields, and the functions of an inherent impl, have visibilities too, as
+items do: private to their module unless marked `pub(mod)` or `pub`. Reading or writing a field,
+naming it in a struct expression or a pattern, or calling such a function from where it is not
+visible is an error (E0701); so a struct with a private field can only be built in its module. A
+trait's methods are as visible as the trait, and an enum's variants' fields as the enum. The
+prelude's and `core`'s fields and functions are everyone's.
 
 **mod.expose.1** An item may not name in its signature something less visible than itself (E0703):
 a `pub` function's parameter, result, error and effect types and the traits of its bounds must be

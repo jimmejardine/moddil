@@ -547,6 +547,10 @@ impl Machine<'_> {
             .child_tokens()
             .find(|t| !t.kind().is_trivia())
             .expect("an operator");
+        // Arithmetic on literals is exact (`num.lit.1`): folded before it meets a type.
+        if let Some(v) = crate::num::folded(e) {
+            return Ok(v);
+        }
         let (l, r) = e.operands();
         let (l, r) = (l.expect("operands"), r.expect("operands"));
         match op.kind() {

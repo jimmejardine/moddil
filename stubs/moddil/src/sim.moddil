@@ -5,7 +5,7 @@ use mod::rand::Seeded;
 use mod::root::Port;
 
 /// A simulated world: virtual time, seeded randomness and a simulated network.
-pub struct Sim { net: SimNet }
+pub struct Sim { pub net: SimNet }
 
 /// A simulated machine.
 pub struct Node { id: int }

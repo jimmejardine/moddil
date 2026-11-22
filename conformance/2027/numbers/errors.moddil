@@ -26,3 +26,7 @@ fn negative_unsigned(x: u8) -> u8 {
 fn float_to_int(x: f64) -> int {
     x                                       //~ E0201
 }
+
+fn folded() -> u8 {
+    200 + 100                               //~ E0204
+}

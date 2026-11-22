@@ -169,6 +169,9 @@ impl Checker<'_> {
                 for (i, value) in fields {
                     let t = types[i as usize].clone();
                     self.check(value, &t);
+                    if !self.items.adts[adt as usize].is_enum {
+                        self.field_visible(adt, i, self.range(value));
+                    }
                 }
                 ty
             }
@@ -623,6 +626,9 @@ impl Checker<'_> {
         };
         match found {
             Some((i, t)) => {
+                if let Ty::Adt(a, ..) = &bt {
+                    self.field_visible(*a, i, name_range);
+                }
                 self.out.field_indices.insert(e, i);
                 t
             }

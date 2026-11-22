@@ -11,7 +11,7 @@ test "shifts" {
 }
 
 test "too far" {
-    1 << 64;                  //~ trap
+    let one = 1; one << 64;   //~ trap
 }
 
 test "negative amount" {
@@ -19,5 +19,5 @@ test "negative amount" {
 }
 
 test "bits lost" {
-    3 << 62;                  //~ trap
+    let three = 3; three << 62; //~ trap
 }
