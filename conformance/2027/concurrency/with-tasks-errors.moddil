@@ -1,0 +1,15 @@
+// covers: task.with.1
+
+trait Clock { fn now(&self) -> int; }
+struct Fixed { at: int }
+impl Clock for Fixed { fn now(&self) -> int { self.at } }
+fn fixed(at: int) -> Fixed { Fixed { at } }
+fn now() -> int with clock: Clock { clock.now() }
+
+fn main() {
+    scope(|s| {
+        with Clock = fixed(7) {
+            s.spawn(|| now());                      //~ E0610
+        }
+    });
+}

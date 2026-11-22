@@ -78,6 +78,17 @@ Rules:
   ([`lifecycle.md`: Cancellation and shutdown](lifecycle.md#cancellation-and-shutdown)). There is no
   async drop ([`stdlib.md`: I/O](stdlib.md#io)).
 
+- **A task does not outlive the handlers it uses (decided November 2026).** A task that uses a
+  handler a `with` installs must be spawned into a scope opened inside that `with`, so the scope,
+  and the task, ends before the handler does; spawning it into a scope opened outside the `with`
+  is a compile error (E0610). Handlers installed around the scope reach its tasks as they reach
+  any code ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 4).
+- **Spawning a closure that can fail is marked twice, and that is the rule (decided November
+  2026).** `c.spawn(|| serve(conn)?)?`: the closure raises its own errors with `?`, and the
+  `spawn` call, which passes a closure that can fail, is marked, as `xs.visit(|x| f(x)?)?` is
+  ([`closures.md`: Effects flow through](closures.md#effects-flow-through)). Every way an error
+  leaves stays visible ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 5).
+
 ## Shared mutable state
 
 All shared mutation goes through sync cells ([`memory.md`: rc contents are immutable](memory.md#rc-contents-are-immutable)):
@@ -110,6 +121,11 @@ so a retried body can do no I/O, `spawn` or `suspend`, and immutable `Rc` conten
 cheap. It stays out of the standard mods: logging every read and write allocates (so it is
 unusable under `#[no_alloc]`), contention causes retry storms, and it is unavailable in
 freestanding builds and on GPUs. Community mods may provide it.
+
+- **A lock gives a guard (decided November 2026).** `Mutex::lock(&self)` gives a `Guard<T>`, a
+  view of the mutex that unlocks it when dropped. It reaches the value through `Deref` and
+  `DerefMut`, so the value's methods are called on the guard (`map.lock().get(k)`), and a guard
+  cannot outlive the mutex it locks ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 7).
 
 ## Patterns the model makes easy
 
@@ -204,12 +220,7 @@ use `?`. None of that applies here.
 
 ## Open questions
 
-- **Handlers for tasks spawned inside a `with`.** A task spawned inside `with E = h { … }`
-  may outlive the block, and so `h`; for now its scope's tasks use handlers installed around the
-  scope ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 4).
-- **Marking a spawn of a closure that can fail.** The closure marks its failing calls, and the
-  `spawn` call is marked too: `c.spawn(|| serve(conn)?)?` ([`tour.md`:
-  Gaps](tour.md#gaps-the-tour-exposed), 5). Whether one mark can say both is open.
+None at present: the last were decided in November 2026 ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed)).
 
 ## Background
 

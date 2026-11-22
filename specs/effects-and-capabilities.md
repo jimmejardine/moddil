@@ -188,6 +188,11 @@ assert(calls == 3);
   method, a closure with a matching signature coerces to an anonymous impl of it, at a `with`
   install or an explicit `dyn Trait` site only: `with Time = || t0 { … }`.
 
+- **A handler can be installed from a borrow (decided November 2026).** `with Net = &net { … }`
+  installs a borrow of `net` for the block, which lasts as long as the block does, so the block
+  can use `net` too (`net.listen(port)`), as the borrow rules allow; `with Net = net` gives the
+  value up to the block, which drops it at the end ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 3).
+
 ### Effects inside handlers
 
 **Decided: control effects follow the caller; everything else a handler needs is captured when the
@@ -537,10 +542,7 @@ No mainstream language has made a typed effect system popular. The measures:
 
 ## Open questions
 
-- **Installing a handler without giving it up.** `with Net = net { … }` moves `net`,
-  so the block cannot also call `net.listen(port)` ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed),
-  3). Whether a handler can be installed from a borrow (`with Net = &net`), and for how long the
-  borrow lasts, is open.
+None at present: the last were decided in November 2026 ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed)).
 
 ## Prior art
 

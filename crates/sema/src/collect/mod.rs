@@ -707,7 +707,46 @@ fn use_tree(
         }
     }
     if let Some(list) = tree.child(K::USE_LIST) {
+        let mut selfs = 0;
         for sub in list.children().filter(|c| c.kind() == K::USE_TREE) {
+            // `self` in a group imports the module the path names (`mod.use.self.1`):
+            // `use a::b::{self, C}`, `{self as h}`.
+            let segs: Vec<moddil_syntax::SyntaxToken> = sub
+                .child(K::PATH)
+                .into_iter()
+                .flat_map(|p| {
+                    p.children()
+                        .filter(|c| c.kind() == K::PATH_SEGMENT)
+                        .collect::<Vec<_>>()
+                })
+                .filter_map(|seg| seg.child_tokens().find(|t| !t.kind().is_trivia()))
+                .collect();
+            if let [only] = segs.as_slice()
+                && only.text() == "self"
+                && sub.child(K::USE_LIST).is_none()
+                && let Some((last, last_range)) = path.last().cloned()
+            {
+                selfs += 1;
+                if selfs > 1 {
+                    ds.push(Diagnostic::error(
+                        Code::E0702,
+                        only.text_range(),
+                        "`self` is named once in an import group",
+                    ));
+                    continue;
+                }
+                let (name, range) = match sub.child(K::NAME).and_then(ast::Name::cast) {
+                    Some(n) => (n.text(), n.syntax().text_range()),
+                    None => (last, last_range),
+                };
+                out.push(Import {
+                    name,
+                    path: path.clone(),
+                    vis,
+                    range,
+                });
+                continue;
+            }
             use_tree(&sub, &path, vis, out, ds);
         }
         return;

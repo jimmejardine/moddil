@@ -52,10 +52,16 @@ names nothing is an error (E0101 for a value, E0102 for a type, E0401 for a trai
 name each other's items in cycles.
 
 **mod.use.1** `use path;` imports what the path names (an item, a module, or a variant) under its
-last segment's name, and `use path as name;` under `name`; `use a::{b, c as d};` imports several.
+last segment's name, and `use path as name;` under `name`; `use a::{b, c as d};` imports several,
+and `self` among them (`use a::{self, b}`, `{self as h}`) the module `a` itself (**mod.use.self.1**).
 The path must name something the module can see (E0702 if it names nothing, E0701 if it is not
 visible). An import is private to its module unless it is `pub use` or `pub(mod) use`, which
 re-exports it. There are no glob imports: `use x::*` is an error (E0702).
+
+**mod.use.self.1** `self` in an import group stands for the path before the group: `use a::b::{self,
+C};` imports the module `a::b` as `b` and its item `C`; `self as h` imports it as `h`. It is
+named at most once in a group (E0702), and `self` alone, outside a group, names nothing to import
+(E0702).
 
 **mod.vis.1** An item is visible to its own module only; `pub(mod)`, to every module of its mod;
 `pub`, to every mod. A path or import that names an item its module cannot see is an error

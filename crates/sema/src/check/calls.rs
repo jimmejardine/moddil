@@ -128,10 +128,15 @@ impl Checker<'_> {
             if imp.trait_ref.is_some() {
                 continue;
             }
+            // The function without `self`, rather than a method of the same name
+            // (`item.impl.same-name.1`).
+            let named = |f: &&u32| items.fns[**f as usize].name == name;
             let Some(&f) = imp
                 .methods
                 .iter()
-                .find(|&&f| items.fns[f as usize].name == name)
+                .filter(named)
+                .find(|&&f| items.fns[f as usize].self_kind.is_none())
+                .or_else(|| imp.methods.iter().find(named))
             else {
                 continue;
             };
@@ -326,7 +331,22 @@ impl Checker<'_> {
             }
             _ => {}
         }
-        let pick = match self.solver.lookup_method(&r, name) {
+        // A method of what the receiver dereferences to, through `Deref`, if it has none of its
+        // own (`expr.method.deref.1`): a `Box`'s value, a lock's guard's.
+        let mut lookup = self.solver.lookup_method(&r, name);
+        let mut through = None;
+        if matches!(lookup, Ok(None))
+            && let Some((base, target)) = self.deref_target(&r)
+            && let Ok(Some(p)) = self.solver.lookup_method(&target, name)
+        {
+            lookup = Ok(Some(p));
+            through = Some((base, target));
+        }
+        let r = match &through {
+            Some((_, target)) => target.clone(),
+            None => r,
+        };
+        let pick = match lookup {
             Ok(Some(p)) => p,
             Ok(None) if self.show(&r).has_infer() => {
                 for &a in args {
@@ -401,7 +421,43 @@ impl Checker<'_> {
         if let Some(p0) = params.first() {
             self.solver.unify(&adjusted, p0);
         }
-        if pick.adjust.autoref == Some(true) {
+        if let Some((base, _)) = through {
+            let mutable = pick.adjust.autoref == Some(true);
+            let (tr, method) = if mutable {
+                ("DerefMut", "deref_mut")
+            } else {
+                ("Deref", "deref")
+            };
+            if let Some((trait_ref, func)) = self.op_trait(tr, method) {
+                if mutable && self.solver.implements(&base, &trait_ref) == Answer::No {
+                    let s = self.show(&base);
+                    self.report(
+                        Code::E0205,
+                        self.range(receiver),
+                        format!(
+                            "`{name}` takes `&mut self`, and `{s}` does not implement `DerefMut`"
+                        ),
+                    );
+                }
+                self.require(base.clone(), trait_ref, range);
+                self.out.method_derefs.insert(
+                    e,
+                    Callee::Trait {
+                        func,
+                        args: vec![base],
+                    },
+                );
+            }
+            if mutable && let Ty::Ref(false, _) = self.norm(&self.out.expr(receiver)) {
+                self.report(
+                    Code::E0302,
+                    self.range(receiver),
+                    format!("`{name}` takes `&mut self`, but this is behind a shared borrow (`&`)"),
+                );
+            } else if mutable && !matches!(self.norm(&self.out.expr(receiver)), Ty::Ref(..)) {
+                self.check_mutable(receiver, "borrowed as `&mut`");
+            }
+        } else if pick.adjust.autoref == Some(true) {
             if pick.adjust.deref {
                 if let Ty::Ref(false, _) = r {
                     self.report(
@@ -417,6 +473,16 @@ impl Checker<'_> {
             }
         }
         self.out.adjusts.insert(e, pick.adjust);
+        // A task's closure, whose handlers are checked against its scope (`task.with.1`).
+        if self.items.fns[pick.func as usize].name == "spawn"
+            && let crate::items::Container::Impl(k) = self.items.fns[pick.func as usize].container
+            && let Some(a) = self.items.impls[k as usize].self_ty.adt()
+            && self.items.adts[a as usize].name == "Scope"
+            && self.items.adts[a as usize].src == crate::items::Src::Prelude
+            && let Some(&f) = args.first()
+        {
+            self.spawns.push((e, receiver, f));
+        }
         self.needs_of_call(e, pick.func, target.args(), range);
         let targs = target.args().to_vec();
         self.out.calls.insert(e, target);
@@ -429,6 +495,29 @@ impl Checker<'_> {
 }
 
 impl Checker<'_> {
+    /// For a receiver of type `r` (or a borrow of one) that implements `Deref`: that type, and
+    /// what it dereferences to.
+    fn deref_target(&mut self, r: &Ty) -> Option<(Ty, Ty)> {
+        let base = self.norm(r.strip_ref());
+        if !matches!(base, Ty::Adt(..)) {
+            return None;
+        }
+        let (trait_ref, _) = self.op_trait("Deref", "deref")?;
+        if self.solver.implements(&base, &trait_ref) == Answer::No {
+            return None;
+        }
+        let def = &self.items.traits[trait_ref.trait_ as usize];
+        let i = def.assoc.iter().position(|(n, _)| n == "Output")?;
+        let out = Ty::Assoc(std::sync::Arc::new(crate::ty::AssocTy {
+            self_ty: base.clone(),
+            trait_ref,
+            index: i as u32,
+            name: "Output".into(),
+        }));
+        let target = self.norm(&out);
+        Some((base, target))
+    }
+
     /// The arguments of a call of `func` that names some, or leaves some out for their
     /// defaults (`expr.call.named.1`, `expr.call.default.1`): positional ones first, then named
     /// ones in any order, each matched with its parameter; `offset` parameters (a receiver) are

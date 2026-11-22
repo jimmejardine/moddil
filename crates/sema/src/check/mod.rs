@@ -116,6 +116,9 @@ pub struct Inference {
     compare_calls: HashMap<(ExprId, usize), Callee>,
     fmt_calls: HashMap<ExprId, Callee>,
     index_calls: HashMap<ExprId, Callee>,
+    /// For a method call through `Deref` (`expr.method.deref.1`): the `deref` or `deref_mut`
+    /// that gives its receiver.
+    method_derefs: HashMap<ExprId, Callee>,
     literal_calls: HashMap<ExprId, Callee>,
     refined_literals: Vec<(ExprId, u32)>,
     adjusts: HashMap<ExprId, Adjust>,
@@ -242,6 +245,12 @@ impl Inference {
         self.dyn_coercions.get(&e)
     }
 
+    /// For a method call whose receiver is reached through `Deref` (`expr.method.deref.1`):
+    /// the `deref` (or `deref_mut`) that gives it.
+    pub fn method_deref(&self, e: ExprId) -> Option<&Callee> {
+        self.method_derefs.get(&e)
+    }
+
     /// For a stored closure whose type lists needs (`dyn Fn() with Time`): those needs, which
     /// each call of it passes after its arguments.
     pub fn call_needs(&self, e: ExprId) -> &[Ty] {
@@ -280,6 +289,7 @@ impl Inference {
             .chain(out.compare_calls.values_mut())
             .chain(out.fmt_calls.values_mut())
             .chain(out.index_calls.values_mut())
+            .chain(out.method_derefs.values_mut())
             .chain(out.literal_calls.values_mut())
         {
             *c = c.map(f);
@@ -400,6 +410,7 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         boxed_hint: None,
         stored_ctx: Vec::new(),
         opaque_hint: None,
+        spawns: Vec::new(),
         result_closures: HashSet::new(),
         kind_reqs: Vec::new(),
         assoc_eqs: Vec::new(),
@@ -612,6 +623,9 @@ struct Checker<'a> {
     /// For a function whose result is `impl Fn…`: the type its body gives, and the closure
     /// type as a stored one's, which a closure written for it takes (`expr.closure.result.1`).
     opaque_hint: Option<(Ty, Ty)>,
+    /// Each `s.spawn(f)` of a scope: the call, the scope, and the task's closure, checked once
+    /// the closures' captures are known (`task.with.1`).
+    spawns: Vec<(ExprId, ExprId, ExprId)>,
     /// The closures the body gives as its value or returns, when that is an `impl Fn…`.
     result_closures: HashSet<ExprId>,
     /// The closure traits bounds need (`F: Fn(…)`), checked once closures' kinds are known.

@@ -1,0 +1,10 @@
+// covers: item.impl.same-name.1
+
+struct Response { code: int }
+
+impl Response {
+    fn status(&self) -> int { self.code }
+    fn status(&mut self) -> int { self.code }        //~ E0103
+    fn new(code: int) -> Response { Response { code } }
+    fn new() -> Response { Response { code: 0 } }    //~ E0103
+}

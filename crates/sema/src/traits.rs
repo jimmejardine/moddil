@@ -793,10 +793,14 @@ impl<'a> Solver<'a> {
             if imp.trait_ref.is_some() {
                 continue;
             }
+            // A method, rather than a function of the same name (`item.impl.same-name.1`).
+            let named = |f: &&u32| self.tree.fns[**f as usize].name == name;
             let Some(&f) = imp
                 .methods
                 .iter()
-                .find(|&&f| self.tree.fns[f as usize].name == name)
+                .filter(named)
+                .find(|&&f| self.tree.fns[f as usize].self_kind.is_some())
+                .or_else(|| imp.methods.iter().find(named))
             else {
                 continue;
             };

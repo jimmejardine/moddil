@@ -119,6 +119,10 @@ use moddil::units::si::prelude::*                     // allowed: a declared pre
   imported with `*`. This keeps unit packs and similar vocabularies convenient
   ([`units.md`: Imports](units.md#imports)) while ordinary code stays local.
 
+- **`self` in an import group (decided November 2026).** `use moddil::net::http::{self, Request}`
+  imports the module the path names and some of its items; `{self as h}` renames it. `self` is
+  named at most once in a group, and only in one ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 6).
+
 ### Conditional code is comptime `if`
 
 ```rust
@@ -238,9 +242,7 @@ shapes = { path = "../shapes" }    # a local mod, by the name the code uses for 
 
 ## Open questions
 
-- **`self` in an import list.** `use moddil::net::http::{self, Request}` imports the module
-  and some of its items in the tour as first written; nothing specifies `self` there yet
-  ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 6).
+None at present: the last were decided in November 2026 ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed)).
 
 ## Prior art
 

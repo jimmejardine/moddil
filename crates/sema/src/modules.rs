@@ -63,6 +63,11 @@ impl ItemTree {
                 Member::Hidden(e.def)
             };
         }
+        // A module inside it, before its imports: `use mod::shapes::{self, …}` in the root
+        // names the module it declares, not the import being resolved.
+        if let Some(&c) = module.children.get(name) {
+            return Member::Found(Def::Module(c));
+        }
         if let Some(i) = module.imports.iter().find(|i| i.name == name) {
             let Some(def) = self.import_target(m, i, depth) else {
                 return Member::Missing;
@@ -72,9 +77,6 @@ impl ItemTree {
             } else {
                 Member::Hidden(def)
             };
-        }
-        if let Some(&c) = module.children.get(name) {
-            return Member::Found(Def::Module(c));
         }
         Member::Missing
     }

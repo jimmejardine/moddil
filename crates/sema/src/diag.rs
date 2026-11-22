@@ -225,6 +225,9 @@ codes! {
     /// A handler's effect in the bound of a closure parameter, whose needs are met where the
     /// closure is written.
     E0609 = "need in a closure bound",
+    /// A task spawned into a scope opened outside a `with` whose handler it uses, so that it
+    /// could outlive the handler.
+    E0610 = "task outliving its handler",
     /// A closure whose kind is weaker than a bound needs: it changes or moves what it captures,
     /// where `Fn` or `FnMut` is needed.
     E0801 = "closure of the wrong kind",

@@ -1176,12 +1176,19 @@ impl Lowerer<'_> {
             (Ty::Adt(a, ..), Ty::Adt(b, ..)) => a == b,
             (t, u) => t == u,
         };
-        self.items
+        let fns: Vec<u32> = self
+            .items
             .impls
             .iter()
             .filter(|i| i.trait_ref.is_none() && same(&i.self_ty))
             .flat_map(|i| i.methods.iter().copied())
-            .find(|&f| self.items.fns[f as usize].name == name)
+            .filter(|&f| self.items.fns[f as usize].name == name)
+            .collect();
+        // The function without `self` first (`item.impl.same-name.1`).
+        fns.iter()
+            .copied()
+            .find(|&f| self.items.fns[f as usize].self_kind.is_none())
+            .or_else(|| fns.first().copied())
     }
 
     /// A closure of `n` parameters whose body `body` makes from them.

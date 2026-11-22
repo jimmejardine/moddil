@@ -1,0 +1,17 @@
+// covers: task.with.1
+
+trait Clock { fn now(&self) -> int; }
+struct Fixed { at: int }
+impl Clock for Fixed { fn now(&self) -> int { self.at } }
+fn fixed(at: int) -> Fixed { Fixed { at } }
+fn now() -> int with clock: Clock { clock.now() }
+
+test "a task uses the handlers of a with around its scope" {
+    let mut seen = 0;
+    with Clock = fixed(7) {
+        scope(|s| {
+            s.spawn(|| { seen = now(); });
+        });
+    }
+    seen                                            // => 7
+}

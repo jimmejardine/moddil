@@ -40,12 +40,12 @@ impl Net for Endpoint {
     fn resolve(&self, host: &str) -> String;
 }
 
-/// A network that loses `percent` of the messages `outer` carries.
-pub struct Lossy { percent: int }
+/// A network that loses a `rate` (from 0 to 1) of the messages `outer` carries.
+pub struct Lossy { rate: f64 }
 
 impl Net for Lossy {
     fn resolve(&self, host: &str) -> String;
 }
 
-/// `outer`, losing `percent` of its messages.
-pub fn drop_messages<N: Net>(percent: int, outer: N) -> Lossy;
+/// `outer`, losing a `rate` of its messages.
+pub fn drop_messages<N: Net>(rate: f64, outer: N) -> Lossy;

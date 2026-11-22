@@ -561,6 +561,57 @@ impl Builder<'_> {
                 self.cfg
                     .assign(dest, Rvalue::Aggregate(AggregateKind::Tuple, ops));
             }
+            // Through `Deref` (`expr.method.deref.1`): the receiver is what `deref` (or
+            // `deref_mut`) gives.
+            ExprKind::MethodCall { receiver, args, .. } if self.types.method_deref(e).is_some() => {
+                let adjust = self.types.adjust(e);
+                let callee = self.types.method_deref(e).expect("checked").clone();
+                let mutable = self
+                    .items
+                    .fns
+                    .get(callee.func() as usize)
+                    .is_some_and(|f| f.name == "deref_mut");
+                let mut place = self.place(receiver);
+                let mut base = self.ty(receiver);
+                while let Ty::Ref(_, inner) = base.clone() {
+                    place = place.deref();
+                    base = (*inner).clone();
+                }
+                let target = match self.types.callee(e) {
+                    Some(c) => {
+                        let f = &self.items.fns[c.func() as usize];
+                        match f.params.first().map(|p| p.ty.subst(c.args())) {
+                            Some(Ty::Ref(_, t)) => (*t).clone(),
+                            Some(t) => t,
+                            None => base.clone(),
+                        }
+                    }
+                    None => base.clone(),
+                };
+                let b = self.temp(Ty::reference(mutable, base));
+                self.cfg.assign(b, Rvalue::Ref(mutable, place));
+                let r = self.temp(Ty::reference(mutable, target.clone()));
+                let range = self.range(e);
+                self.call_into(
+                    None,
+                    callee,
+                    Place::local(r),
+                    vec![Operand::Move(Place::local(b))],
+                    range,
+                );
+                let inner = Place::local(r).deref();
+                let recv = match adjust.autoref {
+                    Some(m) => {
+                        let t = self.temp(Ty::reference(m, target));
+                        self.cfg.assign(t, Rvalue::Ref(m, inner));
+                        Operand::Move(Place::local(t))
+                    }
+                    None => self.use_place(inner, &target),
+                };
+                let mut ops = vec![recv];
+                ops.extend(self.operands(&args));
+                self.call(e, dest, ops);
+            }
             ExprKind::MethodCall { receiver, args, .. } => {
                 let adjust = self.types.adjust(e);
                 let recv = match adjust.autoref {

@@ -130,6 +130,12 @@ As in Rust, with the omissions that follow from other decisions:
   perform fewer than the trait declares, never more. Other dependencies of an implementation are
   captured when the value is built ([`effects-and-capabilities.md`: Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)).
 
+- **A type's function and a method may share a name (decided November 2026).** An inherent
+  impl may define one function without `self` and one method of the same name, told apart by
+  `self`: `Type::f(…)` (and `Type::f` as a value) names the function, `x.f()` the method. So
+  `Response::status(s)` makes a response and `r.status()` reads one. Two of one kind are still
+  an error ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 2).
+
 ## Coherence: one impl per trait and type
 
 **Decision: in any program there is at most one implementation of a trait for a type.** Which impl
@@ -575,7 +581,5 @@ What replaces it:
 
 ## Open questions
 
-- **A type's function and a method of the same name.** `Response::status(s)` (a
-  function) and `r.status()` (a method) cannot both exist ([`tour.md`:
-  Gaps](tour.md#gaps-the-tour-exposed), 2). Whether they may, told apart by `self`, is open.
+None at present: the last were decided in November 2026 ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed)).
 

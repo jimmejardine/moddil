@@ -83,16 +83,22 @@ Resolved since the tour was written:
   ([Errors inside tests](testing.md#errors-inside-tests));
 - typed argument access and the named `sysexits.h` exit codes ([`lifecycle.md`: Typed, layered configuration](lifecycle.md#typed-layered-configuration), [Conventional exits](lifecycle.md#conventional-exits)).
 
-Open, found when the tour became source (slice S9d). The tour's code works around each one as
-the table says.
+Found when the tour became source (slice S9d), and decided in November 2026; the tour's code
+now uses each answer:
 
-| # | Gap | Open question in |
-|---|---|---|
-| 1 | `default` is a keyword, so it cannot name a parameter or an argument: `args.value::<Port>("port", default: 8080)` is written with `fallback:` | [`syntax.md`](syntax.md#open-questions) |
-| 2 | A type's function and its method cannot share a name: `Response::status(s)` and `r.status()`; the function is `Response::empty(s)` | [`types.md`](types.md#open-questions) |
-| 3 | Installing a handler moves its value, so `main` cannot install `net` (`with Net = net`) and call `net.listen(port)` inside; it listens first | [`effects-and-capabilities.md`](effects-and-capabilities.md#open-questions) |
-| 4 | A task spawned inside a `with` outlives the handlers the `with` installs, so a scope's tasks use handlers installed around the scope; the simulated-network test installs the server's handlers around it | [`concurrency.md`](concurrency.md#open-questions) |
-| 5 | Spawning a closure that can fail is marked twice, in the closure and at `spawn`: `c.spawn(\|\| http::serve_connection(conn, &app())?)?` | [`concurrency.md`](concurrency.md#open-questions) |
-| 6 | `use a::{self, b}` is not specified; the tour writes two `use` lines | [`modules.md`](modules.md#open-questions) |
-| 7 | A sync cell's `lock()` gives a `&mut T` from `&self`, standing in for a guard, which needs `Deref` | [`stdlib.md`](stdlib.md#open-questions) |
-| 8 | There are no floats before M0 ends, so the lossy network drops `percent: 10` of messages, not `rate: 0.1` | [`roadmap.md`](roadmap.md) (floats come after M0) |
+1. `default` stays a keyword, so a parameter is never called `default`: the API says
+   `fallback:` ([`syntax.md`: Named and default arguments](syntax.md#named-and-default-arguments)).
+2. A type's function and its method may share a name, told apart by `self`:
+   `Response::status(s)` and `r.status()` ([`types.md`: Traits](types.md#traits)).
+3. A handler can be installed from a borrow, `with Net = &net { net.listen(port)? … }`
+   ([`effects-and-capabilities.md`: Defining handlers](effects-and-capabilities.md#defining-handlers)).
+4. A task that uses a handler a `with` installs is spawned into a scope opened inside that `with`
+   (E0610 otherwise), as the simulated-network test does
+   ([`concurrency.md`: Tasks and borrowing](concurrency.md#tasks-and-borrowing)).
+5. Spawning a closure that can fail is marked twice, as passing any failing closure is
+   ([`concurrency.md`: Tasks and borrowing](concurrency.md#tasks-and-borrowing)).
+6. `use a::{self, b}` imports the module and its item
+   ([`modules.md`: Imports](modules.md#imports)).
+7. `Mutex::lock()` gives a `Guard<T>` that reaches the value through `Deref`
+   ([`concurrency.md`: Shared mutable state](concurrency.md#shared-mutable-state)).
+8. The lossy network takes `rate: 0.1`, a float.

@@ -227,6 +227,7 @@ impl Inference {
             .index_calls
             .values_mut()
             .chain(self.literal_calls.values_mut())
+            .chain(self.method_derefs.values_mut())
         {
             *c = c.map(&mut |t| erase(&solver.deep(t)));
         }

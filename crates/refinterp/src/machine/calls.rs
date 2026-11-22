@@ -884,7 +884,7 @@ impl Machine<'_> {
                 };
                 let m = self
                     .program
-                    .methods(&head, name)
+                    .type_fns(&head, name)
                     .into_iter()
                     .next()
                     .expect("a checked function of a type");
@@ -1005,7 +1005,7 @@ impl Machine<'_> {
                 let head = self.type_head(ty);
                 let m = self
                     .program
-                    .methods(&head, &name[0])
+                    .type_fns(&head, &name[0])
                     .into_iter()
                     .find(|m| matches!(m, Method::Code(..)))
                     .expect("a checked function of a type");
@@ -1071,50 +1071,75 @@ impl Machine<'_> {
             at = next;
         }
         let mut found = None;
-        'search: for (p, v, ind) in &steps {
-            let head = v.head();
-            // By value: `self` of the receiver's kind, or `&self` / `&mut self` of what a borrow
-            // points to.
-            let mut by_value = Vec::new();
-            for m in self.program.methods(&head, &name) {
-                if m.self_kind() == Some(SelfKind::Value) {
-                    by_value.push((m, head.clone()));
+        let mut from = 0;
+        loop {
+            'search: for (p, v, ind) in &steps[from..] {
+                let head = v.head();
+                // By value: `self` of the receiver's kind, or `&self` / `&mut self` of what a borrow
+                // points to.
+                let mut by_value = Vec::new();
+                for m in self.program.methods(&head, &name) {
+                    if m.self_kind() == Some(SelfKind::Value) {
+                        by_value.push((m, head.clone()));
+                    }
                 }
-            }
-            if let Value::Ref(q, mutable) = v {
-                let inner = self.memory.load(q).head();
-                for m in self.program.methods(&inner, &name) {
-                    match m.self_kind() {
-                        Some(SelfKind::Ref) => by_value.push((m, inner.clone())),
-                        Some(SelfKind::RefMut) if *mutable => by_value.push((m, inner.clone())),
-                        _ => {}
+                if let Value::Ref(q, mutable) = v {
+                    let inner = self.memory.load(q).head();
+                    for m in self.program.methods(&inner, &name) {
+                        match m.self_kind() {
+                            Some(SelfKind::Ref) => by_value.push((m, inner.clone())),
+                            Some(SelfKind::RefMut) if *mutable => by_value.push((m, inner.clone())),
+                            _ => {}
+                        }
+                    }
+                }
+                if let Some((m, h)) = by_value.into_iter().next() {
+                    let recv = if matches!(m.self_kind(), Some(SelfKind::Value)) {
+                        self.take(p, *ind)
+                    } else {
+                        v.clone()
+                    };
+                    found = Some((m, h, recv));
+                    break 'search;
+                }
+                for (kind, mutable) in [(SelfKind::Ref, false), (SelfKind::RefMut, true)] {
+                    if let Some(m) = self
+                        .program
+                        .methods(&head, &name)
+                        .into_iter()
+                        .find(|m| m.self_kind() == Some(kind))
+                    {
+                        // A `&str` is its text already: it is passed as it is, not borrowed again.
+                        let recv = match v {
+                            Value::Str(_) if !mutable => v.clone(),
+                            _ => Value::Ref(p.clone(), mutable),
+                        };
+                        found = Some((m, head.clone(), recv));
+                        break 'search;
                     }
                 }
             }
-            if let Some((m, h)) = by_value.into_iter().next() {
-                let recv = if matches!(m.self_kind(), Some(SelfKind::Value)) {
-                    self.take(p, *ind)
-                } else {
-                    v.clone()
-                };
-                found = Some((m, h, recv));
-                break 'search;
+            // None: what the receiver dereferences to, through `Deref` (`expr.method.deref.1`).
+            if found.is_some() {
+                break;
             }
-            for (kind, mutable) in [(SelfKind::Ref, false), (SelfKind::RefMut, true)] {
-                if let Some(m) = self
-                    .program
-                    .methods(&head, &name)
-                    .into_iter()
-                    .find(|m| m.self_kind() == Some(kind))
-                {
-                    // A `&str` is its text already: it is passed as it is, not borrowed again.
-                    let recv = match v {
-                        Value::Str(_) if !mutable => v.clone(),
-                        _ => Value::Ref(p.clone(), mutable),
-                    };
-                    found = Some((m, head.clone(), recv));
-                    break 'search;
-                }
+            from = steps.len();
+            let (p, v, _) = steps.last().cloned().expect("a receiver");
+            let Value::Adt { .. } = &v else { break };
+            let head = v.head();
+            let Some(m) = self.program.trait_method("Deref", &head, "deref") else {
+                break;
+            };
+            let Value::Ref(q, _) = self.run_method(m, &head, vec![Value::Ref(p, false)], range)?
+            else {
+                break;
+            };
+            let mut at = self.memory.load(&q);
+            steps.push((q, at.clone(), true));
+            while let Value::Ref(q, _) = &at {
+                let next = self.memory.load(q);
+                steps.push((q.clone(), next.clone(), true));
+                at = next;
             }
         }
         let (m, head, recv) = found.unwrap_or_else(|| {

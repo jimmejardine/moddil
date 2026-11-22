@@ -424,7 +424,9 @@ impl Collector<'_> {
             params,
             preds,
         };
-        let mut names: HashMap<String, TextRange> = HashMap::new();
+        // A function and a method may share a name, told apart by `self`
+        // (`item.impl.same-name.1`): two of one kind may not.
+        let mut names: HashMap<(String, bool), TextRange> = HashMap::new();
         for m in members {
             let Some(f) = ast::FnItem::cast(m) else {
                 continue;
@@ -438,7 +440,8 @@ impl Collector<'_> {
                 None,
                 trait_ref.clone().map(|t| (t, assoc.clone())),
             );
-            if let Some(first) = names.get(&sig.name) {
+            let key = (sig.name.clone(), sig.self_kind.is_some());
+            if let Some(first) = names.get(&key) {
                 let d = Diagnostic::error(
                     Code::E0103,
                     sig.name_range,
@@ -447,7 +450,7 @@ impl Collector<'_> {
                 .with_label(*first, "first defined here");
                 self.reporter.report(src, origin, vec![d]);
             } else {
-                names.insert(sig.name.clone(), sig.name_range);
+                names.insert(key, sig.name_range);
             }
             self.tree.impls[index as usize]
                 .methods

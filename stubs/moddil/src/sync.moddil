@@ -5,6 +5,23 @@ pub struct Mutex<T> { value: T }
 
 impl<T> Mutex<T> {
     pub fn new(value: T) -> Mutex<T>;
-    /// The value, held until the borrow ends.
-    pub fn lock(&self) -> &mut T;
+    /// The value, held until the guard is dropped; the guard reaches it through `Deref` and
+    /// `DerefMut`, so its methods are called on the guard (`expr.method.deref.1`).
+    pub fn lock(&self) -> Guard<T>;
+}
+
+/// A held lock: dropping it unlocks it.
+pub view Guard<T> { mutex: &Mutex<T> }
+
+impl<T> Deref for Guard<T> {
+    type Output = T;
+    fn deref(&self) -> &T;
+}
+
+impl<T> DerefMut for Guard<T> {
+    fn deref_mut(&mut self) -> &mut T;
+}
+
+impl<T> Drop for Guard<T> {
+    fn drop(self);
 }

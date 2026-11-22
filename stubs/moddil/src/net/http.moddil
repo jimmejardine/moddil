@@ -27,7 +27,8 @@ impl Request {
 pub struct Response { handle: int }
 
 impl Response {
-    pub fn empty(status: Status) -> Response;
+    /// A response with `status` and no body; `r.status()` reads it (`item.impl.same-name.1`).
+    pub fn status(status: Status) -> Response;
     pub fn text(status: Status, body: String) -> Response;
     pub fn json<T: Serialize>(status: Status, value: &T) -> Response;
     pub fn redirect(status: Status, to: &Url) -> Response;

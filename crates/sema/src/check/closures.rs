@@ -491,12 +491,55 @@ impl Checker<'_> {
         }
     }
 
+    /// A task may not outlive the handlers it uses (`task.with.1`): one spawned into a scope
+    /// whose closure is outside a `with` that installs a handler the task uses is E0610.
+    fn check_spawns(&mut self) {
+        for (_, scope, task) in std::mem::take(&mut self.spawns) {
+            let ExprKind::Local(l) = self.body.exprs[scope].kind else {
+                continue;
+            };
+            let Some(opened) = self.body.locals[l].closure else {
+                continue;
+            };
+            let at = self.body.exprs[opened].range;
+            let installs: Vec<ExprId> = self
+                .out
+                .captures
+                .get(&task)
+                .into_iter()
+                .flatten()
+                .filter_map(|c| match c {
+                    Capture::Evidence(Evidence::Install(w, _)) => Some(*w),
+                    _ => None,
+                })
+                .collect();
+            for w in installs {
+                let around = self.body.exprs[w].range;
+                if !(around.start <= at.start && at.end <= around.end) {
+                    self.report(
+                        Code::E0610,
+                        self.range(task),
+                        "this task uses a handler a `with` around it installs, but its scope was \
+                         opened outside that `with`, so the task could outlive the handler: open \
+                         the scope inside the `with`",
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
     /// Finds what each closure captures and so its kind, completes the closures' types, chooses
     /// the method each closure call runs, and checks the kinds the bounds need.
     pub(super) fn finish_closures(&mut self) {
         if self.closures.is_empty() && self.closure_calls.is_empty() && self.kind_reqs.is_empty() {
             return;
         }
+        self.finish_closures_inner();
+        self.check_spawns();
+    }
+
+    fn finish_closures_inner(&mut self) {
         let parents: HashMap<ExprId, Option<ExprId>> = self
             .body
             .exprs

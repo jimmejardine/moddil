@@ -41,7 +41,7 @@ fn create(req: &Request) -> Response with links: Links, Rand, suspend, fail(Link
 fn follow(code: Code) -> Response with links: Links, suspend {
     match links.get(&code) {
         Some(t) => Response::redirect(Status::PermanentRedirect, &t),
-        None    => Response::empty(Status::NotFound),
+        None    => Response::status(Status::NotFound),
     }
 }
 
@@ -51,7 +51,7 @@ impl IntoResponse for DecodeError {
 }
 impl IntoResponse for LinkError {
     fn into_response(self) -> Response {
-        match self { LinkError::Taken(_) => Response::empty(Status::Conflict) }
+        match self { LinkError::Taken(_) => Response::status(Status::Conflict) }
     }
 }
 

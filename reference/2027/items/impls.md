@@ -14,7 +14,12 @@ impl Shape for Square {
 **item.impl.1** `impl Type { … }` adds functions to a struct or enum declared in the same module
 (E0414 for other types): **methods**, whose first parameter is `self`, `&self` or `&mut self`
 (taking the value, a shared borrow or an exclusive borrow of it), and functions without `self`. In
-the impl, `Self` is `Type`. A type's inherent functions have distinct names (E0103).
+the impl, `Self` is `Type`. A type's inherent functions have distinct names (E0103), but for
+**item.impl.same-name.1**.
+
+**item.impl.same-name.1** A type's inherent impls may define one function without `self` and one
+method of the same name (two of either kind are E0103): `Type::name(…)`, and `Type::name` as a
+value, name the function; `e.name(…)` the method ([Methods](../expressions/methods.md)).
 
 **item.impl.trait.1** `impl Trait for Type { … }` implements a trait for a type: it defines each of
 the trait's methods without a default, may define the others, and defines each associated type

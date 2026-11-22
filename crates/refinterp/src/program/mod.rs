@@ -579,18 +579,29 @@ impl Program {
                 let destructor = trait_path.as_deref().is_some_and(
                     |p| matches!(self.resolve(module, p), Some((Def::Item(k), _)) if k == "Drop"),
                 );
-                let methods = item
-                    .child(K::IMPL_BODY)
-                    .map(|b| {
-                        b.children()
-                            .filter_map(ast::FnItem::cast)
-                            .map(|f| {
-                                let name = f.name().expect("a name").text();
-                                (name, fn_def(&f, user, destructor, site))
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default();
+                // A function without `self` that shares a method's name is kept under
+                // `"name fn"`, which no name can be (`item.impl.same-name.1`).
+                let mut methods: HashMap<String, FnDef> = HashMap::new();
+                for f in item.child(K::IMPL_BODY).into_iter().flat_map(|b| {
+                    b.children()
+                        .filter_map(ast::FnItem::cast)
+                        .collect::<Vec<_>>()
+                }) {
+                    let name = f.name().expect("a name").text();
+                    let def = fn_def(&f, user, destructor, site);
+                    let key = match methods.get(&name) {
+                        Some(other) if other.self_kind.is_some() && def.self_kind.is_none() => {
+                            format!("{name} fn")
+                        }
+                        Some(other) if other.self_kind.is_none() && def.self_kind.is_some() => {
+                            let moved = methods.remove(&name).expect("there");
+                            methods.insert(format!("{name} fn"), moved);
+                            name
+                        }
+                        _ => name,
+                    };
+                    methods.insert(key, def);
+                }
                 self.impls.push(ImplInfo {
                     trait_: None,
                     head: Head::Unit,
@@ -880,7 +891,20 @@ pub(crate) fn type_path(node: &SyntaxNode) -> Vec<String> {
 fn use_tree(tree: &SyntaxNode, prefix: &[String], out: &mut Vec<(String, Vec<String>)>) {
     let mut path = prefix.to_vec();
     if let Some(p) = tree.child(K::PATH) {
-        path.extend(type_path(&p));
+        let segs = type_path(&p);
+        // `self` in a group names the module the path does (`mod.use.self.1`).
+        if segs == ["self"] && !prefix.is_empty() {
+            let name = tree
+                .child(K::NAME)
+                .and_then(ast::Name::cast)
+                .map(|n| n.text())
+                .or_else(|| prefix.last().cloned());
+            if let Some(name) = name {
+                out.push((name, prefix.to_vec()));
+            }
+            return;
+        }
+        path.extend(segs);
     }
     if let Some(list) = tree.child(K::USE_LIST) {
         for sub in list.children().filter(|c| c.kind() == K::USE_TREE) {

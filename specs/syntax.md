@@ -139,6 +139,13 @@ As in Rust, unless a delta says otherwise:
   generic bound or the concrete type therefore uses the same defaults. Changing a trait's default is
   a semver-visible change.
 
+- **Keywords do not name parameters or arguments (decided November 2026).** `default` stays a
+  keyword (it marks a specialising impl member), so a parameter, and so an argument, is never
+  called `default`; an API names its fallback otherwise (`args.value::<Port>("port",
+  fallback: 8080)`). A keyword that could name a parameter would need a second, inner name to be
+  used in the body, which is more syntax than the rare collision is worth
+  ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 1).
+
 ## Grammar rules
 
 Decided while building the grammar inventory
@@ -192,11 +199,7 @@ Decided while building the grammar inventory
 
 ## Open questions
 
-- **Keywords as names of parameters and arguments.** `default` is a keyword, so a
-  parameter cannot be called `default`, and a call cannot pass `default: 8080`
-  ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 1). Whether a keyword may name a parameter,
-  and so an argument, where nothing else can follow, is open.
-
+None at present: the last were decided in November 2026 ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed)).
 
 ## Prior art
 

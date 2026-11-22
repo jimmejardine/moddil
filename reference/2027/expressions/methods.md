@@ -14,6 +14,12 @@ comes before a trait's method. A type with no such method is an error (E0403). B
 `&mut` needs a place that can be changed (E0301, E0302) ([Borrows](../borrows.md)). Then the call
 is checked as a call of the method ([Calls](calls.md)).
 
+**expr.method.deref.1** If no step finds the method and the receiver's type (or what a borrow
+receiver points to) implements the prelude's `Deref`, it is looked for again on what that
+dereferences to, as `(*e).name(…)` would: a `Box`'s value, a lock's guard's
+([Types](../types.md)). A method taking `&mut self` is then called through `DerefMut`, which the
+type must implement (E0205), on a receiver that can be changed (E0301, E0302).
+
 **expr.method.ambiguous.1** If the methods of more than one trait are found at the same step, the
 call is ambiguous (E0410), and is written through a trait instead: `A::hello(&c)`.
 

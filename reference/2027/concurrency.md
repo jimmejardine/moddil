@@ -108,3 +108,8 @@ tasks do (E0308).
 function that may suspend its task needs `suspend`, and one that starts tasks needs `spawn`. A
 task's other effects are met where its closure is written, so tasks use the handlers installed
 around their scope ([Closures](expressions/closures.md)).
+
+**task.with.1** A task may not outlive a handler it uses: a task whose closure uses a handler a
+`with` installs must be spawned into a scope opened inside that `with`, which ends, and so ends
+its tasks, before the handler does. Spawning it into a scope opened outside the `with` is an
+error (E0610).

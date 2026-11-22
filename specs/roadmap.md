@@ -440,7 +440,7 @@ something runs from the first slice.
     - slicing and text (`xs[a..b]`, slice patterns, `StrPos`, `find`, `from_utf8`): sub-slice
       borrows need a new kind of pointer in both interpreters (done in S13);
     - the 8 open questions the tour exposed ([`tour.md`](tour.md#gaps-the-tour-exposed)), which
-      are decisions;
+      are decisions (decided after S13);
     - a trailing comma in a `where` clause: a type can start with `{`, so the comma before a
       body is ambiguous to tree-sitter;
     - suppressed errors (they need error return traces), and the destructors of a cancelled
@@ -478,7 +478,8 @@ something runs from the first slice.
       closure bound to a local first is checked as an ordinary one);
     - a `Box<dyn Fn>` is called through its box (`f(x)`, `(**f)(x)`), not as a `&dyn Fn`
       parameter;
-    - field access and method calls do not look through a `Box` (`(*b).x`);
+    - field access and method calls do not look through a `Box` (`(*b).x`; method calls do
+      since the tour's questions were decided, field access still does not);
     - a `for` loop over an iterator that can fail with known errors is E0501 (use
       `while let Some(x) = it.next()? { … }`), since how `for` marks one is not decided;
     - the reference interpreter takes `?` on a call of a function whose signature lists `fail`
@@ -523,6 +524,22 @@ something runs from the first slice.
     - integer literals in a collection literal for `Vec<u8>` take `int`
       (`let v: Vec<u8> = [1, 2]` is E0402), so build one from a typed array;
     - no `char_indices`, `bytes`, `graphemes` or `RcStr` slices.
+- **The tour's 8 questions (decided November 2026), the last of M0's deferrals.**
+  - **Closed without code:**
+    - `default` stays reserved (#1);
+    - both marks on a failing spawn (#5);
+    - a handler installed from a borrow (#3), which existed and which the tour now uses;
+    - floats for the lossy network's `rate` (#8).
+  - **Built:**
+    - a type's function and method sharing a name, told apart by `self`
+      (`item.impl.same-name.1`);
+    - E0610, for a task spawned into a scope opened outside a `with` whose handler it uses
+      (`task.with.1`);
+    - `self` in an import group (`mod.use.self.1`). A module's child module is now found
+      before its imports, so `use mod::m::{self}` in the root resolves;
+    - method calls through `Deref` (`expr.method.deref.1`), so `Mutex::lock()` gives a
+      `Guard<T>` in the stubs.
+  - **Interim limit:** field access does not look through `Deref`.
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`

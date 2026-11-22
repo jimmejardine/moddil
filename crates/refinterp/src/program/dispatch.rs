@@ -38,6 +38,14 @@ impl Program {
         self.methods_of(head, name)
     }
 
+    /// The functions called `name` that a type `head` has, as `Type::name` names them: one
+    /// without `self` first, if a method shares its name (`item.impl.same-name.1`).
+    pub(crate) fn type_fns(&self, head: &Head, name: &str) -> Vec<Method> {
+        let mut out = self.methods_of(head, &format!("{name} fn"));
+        out.extend(self.methods(head, name));
+        out
+    }
+
     fn methods_of(&self, head: &Head, name: &str) -> Vec<Method> {
         let mut out = Vec::new();
         for (k, i) in self.impls.iter().enumerate() {
