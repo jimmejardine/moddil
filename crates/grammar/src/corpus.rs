@@ -27,6 +27,13 @@ pub(crate) struct Corpus {
 
 /// Generates the corpus. Deterministic: the same grammar always gives the same corpus.
 pub(crate) fn generate(rec: &mut Recogniser<'_>) -> Corpus {
+    let mut corpus = valid(rec);
+    corpus.invalid = near_misses(rec, &corpus.valid);
+    corpus
+}
+
+/// The corpus's valid sentences, without its near-misses.
+pub(crate) fn valid(rec: &mut Recogniser<'_>) -> Corpus {
     let bnf = rec.bnf();
     let (minlen, minprod) = shortest(bnf);
     let parents = contexts(bnf, &minlen);
@@ -62,11 +69,10 @@ pub(crate) fn generate(rec: &mut Recogniser<'_>) -> Corpus {
             }
         }
     }
-    let invalid = near_misses(rec, &valid);
     Corpus {
         covered: covered.len(),
         valid,
-        invalid,
+        invalid: Vec::new(),
         productions,
         uncovered,
     }

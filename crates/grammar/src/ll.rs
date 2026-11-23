@@ -33,6 +33,7 @@ pub(crate) struct Config {
     pub(crate) stack: Vec<Pos>,
 }
 
+#[derive(Clone)]
 pub(crate) struct Analyzer<'b> {
     pub(crate) bnf: &'b Bnf,
     /// For each nonterminal, the positions just after each place it is used.

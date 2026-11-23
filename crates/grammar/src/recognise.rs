@@ -10,6 +10,7 @@ use std::collections::{HashMap, HashSet};
 use crate::expand::{Bnf, Sym};
 use crate::ll::{Analyzer, Config, EOF, Pos};
 
+#[derive(Clone)]
 pub(crate) struct Recogniser<'b> {
     a: Analyzer<'b>,
     k: usize,

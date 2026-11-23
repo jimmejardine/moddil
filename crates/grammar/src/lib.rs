@@ -147,9 +147,12 @@ pub struct Generated {
     pub uncovered: Vec<String>,
 }
 
-/// `count` random token edits of the valid corpus, rendered as source text, each with whether
-/// the grammar accepts it (by the LL(3) recogniser). Deterministic for a given `seed`. Used to test
-/// that the hand-written parser accepts exactly what the grammar accepts.
+/// For each of `seeds`, `count` random token edits of the valid corpus, rendered as source text,
+/// each with whether the grammar accepts it (by the LL(3) recogniser). Deterministic for a given
+/// seed. Used to test that the hand-written parser accepts exactly what the grammar accepts.
+///
+/// The valid corpus is built once (most of the cost: it warms the recogniser), then each seed's
+/// edits are made and judged on a thread of its own, with a copy of the warmed recogniser.
 ///
 /// # Errors
 ///
@@ -157,17 +160,31 @@ pub struct Generated {
 pub fn edited_cases(
     source: &str,
     count: usize,
-    seed: u64,
-) -> Result<Vec<(String, bool)>, Vec<GrammarError>> {
+    seeds: &[u64],
+) -> Result<Vec<Vec<(String, bool)>>, Vec<GrammarError>> {
     let grammar = parse::parse(source)?;
     let bnf = expand::expand(&grammar)?;
     let mut rec = recognise::Recogniser::new(&bnf, DEFAULT_K);
-    let corpus = corpus::generate(&mut rec);
-    let edits = corpus::edits(&mut rec, &corpus.valid, count, seed);
-    Ok(edits
-        .into_iter()
-        .map(|(tokens, ok)| (corpus::render(&bnf, &tokens), ok))
-        .collect())
+    let corpus = corpus::valid(&mut rec);
+    Ok(std::thread::scope(|s| {
+        let running: Vec<_> = seeds
+            .iter()
+            .map(|&seed| {
+                let mut rec = rec.clone();
+                let (bnf, valid) = (&bnf, &corpus.valid);
+                s.spawn(move || {
+                    corpus::edits(&mut rec, valid, count, seed)
+                        .into_iter()
+                        .map(|(tokens, ok)| (corpus::render(bnf, &tokens), ok))
+                        .collect()
+                })
+            })
+            .collect();
+        running
+            .into_iter()
+            .map(|h| h.join().expect("an edits thread"))
+            .collect()
+    }))
 }
 
 /// Generates the parser corpus and the derived grammars from `source`.

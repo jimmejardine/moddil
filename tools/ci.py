@@ -103,7 +103,7 @@ def step_grammars():
     current = run("cargo", "run", "--release", "-q", "-p", "moddil-grammar", "--", "generate", "--check")
     tools = run(sys.executable, "-X", "utf8", "tools/check_grammars.py")
     parser = run("cargo", "test", "--release", "-q", "-p", "moddil-syntax", "--test", "corpus",
-                 "the_parser_agrees", env={"MODDIL_EDITS": "10000"})
+                 "random_edits", env={"MODDIL_EDITS": "10000"})
     return current and tools and parser
 
 

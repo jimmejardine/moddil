@@ -66,7 +66,7 @@ pub struct Outcome {
 pub type Loaded = Result<Project, Vec<moddil_project::Problem>>;
 
 /// An implementation of Moddil the suite can run.
-pub trait Implementation {
+pub trait Implementation: Sync {
     /// Its name, for reports.
     fn name(&self) -> &str;
     /// Checks the program and, if it has no errors, runs all its tests.
@@ -696,6 +696,77 @@ pub fn areas(repo: &Path, edition: &str) -> Vec<String> {
     areas
 }
 
+/// What running one test found, to merge into the [`Report`].
+#[derive(Default)]
+struct TestResult {
+    failures: Vec<String>,
+    covers: Vec<String>,
+    /// The test's path, if it is disputed (and so not run).
+    disputed: Option<String>,
+    /// Whether it counts as a file run.
+    counted: bool,
+    /// The implementations that ran it.
+    ran: Vec<String>,
+}
+
+/// Reads test `t`'s expectations and runs it on each implementation, each on a thread of its own.
+fn run_test(repo: &Path, t: &Path, implementations: &[&dyn Implementation]) -> TestResult {
+    let mut r = TestResult::default();
+    let rel = t
+        .strip_prefix(repo)
+        .unwrap_or(t)
+        .to_string_lossy()
+        .replace('\\', "/");
+    let loaded = if t.is_file() {
+        // A single file is named by its path from the repository, as the suite shows it.
+        moddil_project::load(t).map(|mut p| {
+            p.files[0].display = rel.clone();
+            p
+        })
+    } else {
+        moddil_project::load(t)
+    };
+    let expected = match test_expectations(t, &loaded) {
+        Ok(e) => e,
+        Err(e) => {
+            r.failures.push(format!("{rel}: {e}"));
+            return r;
+        }
+    };
+    if expected.covers.is_empty() {
+        r.failures.push(format!("{rel}: no `// covers:` line"));
+    }
+    r.covers.clone_from(&expected.covers);
+    if expected.disputed {
+        r.disputed = Some(rel);
+        return r;
+    }
+    r.counted = true;
+    let outcomes: Vec<Option<Outcome>> = std::thread::scope(|s| {
+        let running: Vec<_> = implementations
+            .iter()
+            .map(|imp| {
+                let skip = !imp.checks() && !expected.diagnostics.is_empty();
+                (!skip).then(|| s.spawn(|| imp.run_if(&loaded)))
+            })
+            .collect();
+        running
+            .into_iter()
+            .map(|h| h.and_then(|h| h.join().expect("an implementation's thread")))
+            .collect()
+    });
+    for (imp, outcome) in implementations.iter().zip(outcomes) {
+        let Some(outcome) = outcome else {
+            continue;
+        };
+        r.ran.push(imp.name().to_string());
+        for p in compare(&expected, &outcome) {
+            r.failures.push(format!("{rel} ({}): {p}", imp.name()));
+        }
+    }
+    r
+}
+
 fn run_tests(
     repo: &Path,
     edition: &str,
@@ -713,49 +784,30 @@ fn run_tests(
         paragraphs: ids.len(),
         ..Report::default()
     };
+    // Every test, and every implementation's run of it, on a thread of its own: they share
+    // nothing, and an area then takes as long as its slowest run, not the sum of them all. The
+    // results are merged in the tests' order, so the report is the same as run one by one.
+    let results: Vec<TestResult> = std::thread::scope(|s| {
+        let running: Vec<_> = tests
+            .iter()
+            .map(|t| s.spawn(|| run_test(repo, t, implementations)))
+            .collect();
+        running
+            .into_iter()
+            .map(|h| h.join().expect("a conformance test's thread"))
+            .collect()
+    });
     let mut cited = BTreeSet::new();
-    for t in tests {
-        let rel = t
-            .strip_prefix(repo)
-            .unwrap_or(&t)
-            .to_string_lossy()
-            .replace('\\', "/");
-        let loaded = if t.is_file() {
-            // A single file is named by its path from the repository, as the suite shows it.
-            moddil_project::load(&t).map(|mut p| {
-                p.files[0].display = rel.clone();
-                p
-            })
-        } else {
-            moddil_project::load(&t)
-        };
-        let expected = match test_expectations(&t, &loaded) {
-            Ok(e) => e,
-            Err(e) => {
-                report.failures.push(format!("{rel}: {e}"));
-                continue;
-            }
-        };
-        if expected.covers.is_empty() {
-            report.failures.push(format!("{rel}: no `// covers:` line"));
+    for r in results {
+        report.failures.extend(r.failures);
+        cited.extend(r.covers);
+        match r.disputed {
+            Some(rel) => report.disputed.push(rel),
+            None if r.counted => report.files += 1,
+            None => {}
         }
-        cited.extend(expected.covers.iter().cloned());
-        if expected.disputed {
-            report.disputed.push(rel);
-            continue;
-        }
-        report.files += 1;
-        for imp in implementations {
-            if !imp.checks() && !expected.diagnostics.is_empty() {
-                continue;
-            }
-            let Some(outcome) = imp.run_if(&loaded) else {
-                continue;
-            };
-            *report.ran.entry(imp.name().to_string()).or_default() += 1;
-            for p in compare(&expected, &outcome) {
-                report.failures.push(format!("{rel} ({}): {p}", imp.name()));
-            }
+        for name in r.ran {
+            *report.ran.entry(name).or_default() += 1;
         }
     }
     report.uncovered = ids.difference(&cited).cloned().collect();

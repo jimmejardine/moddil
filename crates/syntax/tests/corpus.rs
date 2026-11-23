@@ -89,21 +89,24 @@ fn invalid_cases_report_errors() {
     );
 }
 
-/// The random edits are split into this many tests, so the test runner checks them in parallel.
-/// Each pays the grammar's set-up once, so more shards stop paying off quickly.
-const EDIT_SHARDS: u64 = 4;
+/// The edits are made in this many parts, each from its own seed, on threads of their own.
+const EDIT_PARTS: u64 = 8;
 
-/// One shard of the differential test: its share of the edits, from its own seed.
-fn the_parser_agrees_with_the_grammar_on_random_edits(shard: u64) {
+/// The differential test: the parser and the grammar agree on random edits of the valid corpus.
+#[test]
+fn random_edits() {
     let source = std::fs::read_to_string(grammar_dir().join("moddil.ebnf")).expect("the grammar");
     // 1000 in all by default; CI's grammars step runs many more in release (`MODDIL_EDITS`, the
-    // total over the shards), and `MODDIL_SEED` explores other edits.
+    // total over the parts), and `MODDIL_SEED` explores other edits.
     let var = |name: &str| std::env::var(name).ok().and_then(|n| n.parse::<u64>().ok());
     let total = var("MODDIL_EDITS").unwrap_or(1000);
-    let count = usize::try_from(total.div_ceil(EDIT_SHARDS)).expect("a count");
-    let seed = var("MODDIL_SEED").unwrap_or(0x0005_EED0_F6A3_3A12)
-        ^ shard.wrapping_mul(0x9E37_79B9_7F4A_7C15);
-    let cases = moddil_grammar::edited_cases(&source, count, seed).expect("the grammar is valid");
+    let count = usize::try_from(total.div_ceil(EDIT_PARTS)).expect("a count");
+    let seed = var("MODDIL_SEED").unwrap_or(0x0005_EED0_F6A3_3A12);
+    let seeds: Vec<u64> = (0..EDIT_PARTS)
+        .map(|part| seed ^ part.wrapping_mul(0x9E37_79B9_7F4A_7C15))
+        .collect();
+    let parts = moddil_grammar::edited_cases(&source, count, &seeds).expect("the grammar is valid");
+    let cases: Vec<&(String, bool)> = parts.iter().flatten().collect();
     let mut disagreements = Vec::new();
     let accepted = cases.iter().filter(|c| c.1).count();
     // Both verdicts must be well represented, or the test proves little.
@@ -112,7 +115,7 @@ fn the_parser_agrees_with_the_grammar_on_random_edits(shard: u64) {
         "{accepted} of {} edits are valid",
         cases.len()
     );
-    for (text, grammar_accepts) in &cases {
+    for (text, grammar_accepts) in cases.iter().copied() {
         let parse = lossless(text);
         let parser_accepts = parse.errors().is_empty();
         if parser_accepts != *grammar_accepts {
@@ -134,29 +137,6 @@ fn the_parser_agrees_with_the_grammar_on_random_edits(shard: u64) {
         show(&disagreements, cases.len(), "edits get a different verdict")
     );
 }
-
-macro_rules! edit_shards {
-    ($($name:ident = $shard:literal),* $(,)?) => {
-        $(
-            #[test]
-            fn $name() {
-                the_parser_agrees_with_the_grammar_on_random_edits($shard);
-            }
-        )*
-        #[test]
-        fn every_edit_shard_has_a_test() {
-            assert_eq!(u64::try_from([$($shard),*].len()).ok(), Some(EDIT_SHARDS));
-        }
-    };
-}
-
-edit_shards!(
-    random_edits_0 = 0,
-    random_edits_1 = 1,
-    random_edits_2 = 2,
-    random_edits_3 = 3
-);
-
 #[test]
 fn every_prefix_of_the_samples_parses_losslessly() {
     for case in cases("samples.moddil") {
