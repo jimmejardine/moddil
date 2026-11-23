@@ -60,7 +60,6 @@ impl Machine<'_> {
             types: self.memory.types(),
             file: self.memory.file(),
             module: self.memory.module(),
-            escaped: false,
             wrapped: Some((w.key.clone(), k + 1)),
         })));
         let types = self.turbofish(None, &wrapper.params);

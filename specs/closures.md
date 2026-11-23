@@ -165,6 +165,9 @@ fn on_message(&mut self, h: Handler) { self.handlers.push(h) }
   - A closure that uses a handler captures a shared borrow of it, so it is a
     [view](memory.md#view-types), and so is a `Box<dyn Fn …>` holding it. That borrow is tracked
     like any other a value holds.
+    - Not built yet for a `Box<dyn Fn …>`: how its type-erased borrows are tracked is open
+      ([`roadmap.md`](roadmap.md), the step "Handlers captured where written"). Until then, a box
+      that would hold a handler is refused (E0802).
   - An owned stored closure, one kept past its `with`, cannot use handlers. Its type lists only
     `suspend`, `spawn` and `fail`.
   - To keep such a closure longer, move the `with` further out, or pass the dependency as an

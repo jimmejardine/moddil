@@ -25,7 +25,6 @@ impl Machine<'_> {
             file: self.memory.file(),
             module: self.memory.module(),
             wrapped: None,
-            escaped: false,
         }))
     }
 

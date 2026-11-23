@@ -385,8 +385,6 @@ impl Machine<'_> {
     }
 
     /// The closure at `p`, through borrows and boxes (`expr.closure.stored.1`), if there is one.
-    /// One kept in a box runs with its caller's handlers too, which meet the needs its type
-    /// lists.
     pub(super) fn closure_at(
         &mut self,
         mut p: Pointer,
@@ -522,17 +520,16 @@ impl Machine<'_> {
     /// captures out to slots of their own, which outlive the call: a closure that leaves the
     /// scope it was written in owns what it captures (`expr.closure.result.1`,
     /// `expr.closure.stored.1`).
-    pub(super) fn keep_captures(&mut self, v: &mut Value, mark: usize, returned: bool) {
+    pub(super) fn keep_captures(&mut self, v: &mut Value, mark: usize) {
         let frame = self.memory.depth() - 1;
         let task = self.memory.task();
         match v {
             Value::Closure(c) => {
                 let leaving = |p: &Pointer| p.task == task && p.frame == frame && p.slot >= mark;
-                if !c.vars.iter().any(|(_, p)| leaving(p)) && (!returned || c.escaped) {
+                if !c.vars.iter().any(|(_, p)| leaving(p)) {
                     return;
                 }
                 let mut owned = (**c).clone();
-                owned.escaped |= returned;
                 for (name, p) in &mut owned.vars {
                     if leaving(p) && p.path.is_empty() {
                         let x = self.memory.load(p);
@@ -547,7 +544,7 @@ impl Machine<'_> {
             | Value::Buf(_, xs)
             | Value::Adt { fields: xs, .. } => {
                 for x in xs {
-                    self.keep_captures(x, mark, returned);
+                    self.keep_captures(x, mark);
                 }
             }
             _ => {}

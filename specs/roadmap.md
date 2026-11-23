@@ -957,6 +957,11 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
     - the rest runs where the `select` is, so it uses no handler.
   - **Checked:** conformance for each, agreeing on all four implementations.
 - **Next, M2c:**
+  - first, **a bound that lists `suspend` (or `spawn`) takes the closure's suspension** (decided
+    November 2026), as `expr.closure.fails.2` takes its errors. The closure is called by code that
+    suspends, so the function that calls the parameter needs `suspend`, not the one that names
+    the closure. Today bounds accept `with suspend` but do not record it, so naming a suspending
+    function as a value charges the namer. With this, the tour's `app()` is `with Links, Rand`;
   - the standard mods the tour reaches, each a mod of its own under `mods/`: `collections`,
     `sync` (`Mutex` over `UnsafeCell` and atomics), `rand`, `serde`, `net` with `http`, and `sim`;
   - the tour's three tests, the simulated lossy network included, on every implementation.

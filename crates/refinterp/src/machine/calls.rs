@@ -652,7 +652,7 @@ impl Machine<'_> {
         } else {
             let mut result = result;
             if let Ok(v) = &mut result {
-                self.keep_captures(v, 0, true);
+                self.keep_captures(v, 0);
             }
             while let Some((name, v)) = self.memory.pop() {
                 let own = !(f.destructor && name == "self");

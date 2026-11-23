@@ -85,8 +85,9 @@ with the errors it lists, or not at all if it lists none (E0502), and suspend or
 lists `suspend` or `spawn` (E0603). It may run after the function it is written in has returned, so
 it owns what it captures: each local it uses is moved in (copied, if it is `Copy`), and one that
 holds a borrow is an error (E0802). Its handler needs are met where it is written
-(**expr.closure.effects.1**), and a handler is borrowed, so one it uses from around it is an error
-(E0802), and its type lists none (E0609); a handler it installs inside itself is its own.
+(**expr.closure.effects.1**), and its type lists no handler (E0609). A handler is borrowed, so,
+for now, one it uses from around it is an error (E0802): a box that holds a handler's borrow is
+not supported yet. A handler it installs inside itself is its own.
 `f(a₁, …, aₙ)`, for `f` such a box, calls the closure through it: the call can fail with its
 errors; one of a `Box<dyn FnOnce…>` gives up the box, which is moved.
 
