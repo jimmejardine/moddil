@@ -47,6 +47,8 @@ fn trapped(t: &moddil_rt::Trapped, which: u32) -> String {
 #[unsafe(no_mangle)]
 pub extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
     moddil_rt::begin_run();
+    // The OS, with the program's arguments after its name (`os.1`).
+    moddil_rt::set_os(std::env::args().skip(1).collect());
     moddil_rt::set_trap_text(trapped);
     // Room for `main`'s result, `()` or an `ExitCode`, and for an error (`main` cannot fail).
     let mut out = [0u128; 16];

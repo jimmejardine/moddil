@@ -1,0 +1,259 @@
+//! `Deque`, a double-ended queue, and `RingBuffer`, a queue of fixed capacity that drops its
+//! oldest value to make room.
+
+/// A queue that grows, with pushes and pops at both ends. It is a ring over a buffer of slots:
+/// `head` is the slot of the front, and the values follow it, wrapping round.
+pub struct Deque<T> {
+    slots: Vec<Option<T>>,
+    head: int,
+    len: int,
+}
+
+impl<T> Deque<T> {
+    pub fn new() -> Deque<T> {
+        Deque { slots: Vec::new(), head: 0, len: 0 }
+    }
+
+    pub fn len(&self) -> int {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// The slot of the `i`th value.
+    fn slot(&self, i: int) -> int {
+        (self.head + i) % self.slots.len()
+    }
+
+    /// Makes room for one more value, doubling the slots when they are all full.
+    fn grow(&mut self) {
+        let cap = self.slots.len();
+        if self.len < cap {
+            return;
+        }
+        let new_cap = if cap == 0 { 4 } else { cap * 2 };
+        let mut fresh: Vec<Option<T>> = Vec::with_capacity(new_cap);
+        let mut i = 0;
+        while i < self.len {
+            let at = self.slot(i);
+            fresh.push(replace(&mut self.slots[at], None));
+            i += 1;
+        }
+        while fresh.len() < new_cap {
+            fresh.push(None);
+        }
+        self.slots = fresh;
+        self.head = 0;
+    }
+
+    pub fn push_back(&mut self, x: T) {
+        self.grow();
+        let at = self.slot(self.len);
+        self.slots[at] = Some(x);
+        self.len += 1;
+    }
+
+    pub fn push_front(&mut self, x: T) {
+        self.grow();
+        let cap = self.slots.len();
+        self.head = (self.head + cap - 1) % cap;
+        let at = self.head;
+        self.slots[at] = Some(x);
+        self.len += 1;
+    }
+
+    pub fn pop_front(&mut self) -> Option<T> {
+        if self.len == 0 {
+            return None;
+        }
+        let at = self.head;
+        let x = replace(&mut self.slots[at], None);
+        self.head = (self.head + 1) % self.slots.len();
+        self.len -= 1;
+        x
+    }
+
+    pub fn pop_back(&mut self) -> Option<T> {
+        if self.len == 0 {
+            return None;
+        }
+        let at = self.slot(self.len - 1);
+        self.len -= 1;
+        replace(&mut self.slots[at], None)
+    }
+
+    /// The `i`th value from the front, if there is one.
+    pub fn get(&self, i: int) -> Option<&T> {
+        if i < 0 || i >= self.len {
+            return None;
+        }
+        match &self.slots[self.slot(i)] {
+            Some(x) => Some(x),
+            None => None,
+        }
+    }
+
+    pub fn get_mut(&mut self, i: int) -> Option<&mut T> {
+        if i < 0 || i >= self.len {
+            return None;
+        }
+        let at = self.slot(i);
+        match &mut self.slots[at] {
+            Some(x) => Some(x),
+            None => None,
+        }
+    }
+
+    pub fn front(&self) -> Option<&T> {
+        self.get(0)
+    }
+
+    pub fn back(&self) -> Option<&T> {
+        self.get(self.len - 1)
+    }
+
+    pub fn clear(&mut self) {
+        while self.len > 0 {
+            self.pop_back();
+        }
+        self.head = 0;
+    }
+
+    /// The values, borrowed, front to back.
+    pub fn iter(&self) -> DequeIter<T> {
+        DequeIter { deque: self, at: 0 }
+    }
+}
+
+/// A deque's values, borrowed, front to back.
+pub view DequeIter<T> {
+    deque: &Deque<T>,
+    at: int,
+}
+
+impl<T> Iterator for DequeIter<T> {
+    type Item = &T;
+    fn next(&mut self) -> Option<&T> {
+        let x = self.deque.get(self.at);
+        self.at += 1;
+        x
+    }
+}
+
+impl<T> Index for Deque<T> {
+    type Output = T;
+    /// The `i`th value from the front; traps if there is none.
+    fn index(&self, i: int) -> &T {
+        self.get(i) ?! "a deque is indexed within its length"
+    }
+}
+
+impl<T> FromArrayLiteral<T> for Deque<T> {
+    fn from_array<const N: int>(items: [T; N]) -> Deque<T> {
+        let mut d = Deque::new();
+        for x in items {
+            d.push_back(x);
+        }
+        d
+    }
+
+    fn from_repeat(x: T, n: int) -> Deque<T> where T: Clone {
+        let mut d = Deque::new();
+        let mut i = 0;
+        while i < n {
+            d.push_back(x.clone());
+            i += 1;
+        }
+        d
+    }
+}
+
+impl<T> Default for Deque<T> {
+    fn default() -> Deque<T> {
+        Deque::new()
+    }
+}
+
+impl<T: Debug> Debug for Deque<T> {
+    fn fmt(&self, out: &mut String) {
+        out.push('[');
+        let mut first = true;
+        for x in self.iter() {
+            if !first {
+                out.push_str(", ");
+            }
+            first = false;
+            Debug::fmt(x, out);
+        }
+        out.push(']');
+    }
+}
+
+/// A queue of at most `capacity` values: a push when it is full drops the oldest, so it keeps the
+/// latest ones, as a log or a window of samples does.
+pub struct RingBuffer<T> {
+    values: Deque<T>,
+    capacity: int,
+}
+
+impl<T> RingBuffer<T> {
+    /// An empty buffer for `capacity` values; traps unless `capacity` is positive.
+    pub fn new(capacity: int) -> RingBuffer<T> {
+        assert(capacity > 0);
+        RingBuffer { values: Deque::new(), capacity }
+    }
+
+    pub fn len(&self) -> int {
+        self.values.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    pub fn capacity(&self) -> int {
+        self.capacity
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.values.len() == self.capacity
+    }
+
+    /// Adds `x` as the newest value, giving back the oldest if it had to go.
+    pub fn push(&mut self, x: T) -> Option<T> {
+        let dropped = if self.is_full() { self.values.pop_front() } else { None };
+        self.values.push_back(x);
+        dropped
+    }
+
+    /// Takes out the oldest value.
+    pub fn pop(&mut self) -> Option<T> {
+        self.values.pop_front()
+    }
+
+    /// The `i`th value, oldest first.
+    pub fn get(&self, i: int) -> Option<&T> {
+        self.values.get(i)
+    }
+
+    pub fn oldest(&self) -> Option<&T> {
+        self.values.front()
+    }
+
+    pub fn newest(&self) -> Option<&T> {
+        self.values.back()
+    }
+
+    /// The values, borrowed, oldest first.
+    pub fn iter(&self) -> DequeIter<T> {
+        self.values.iter()
+    }
+}
+
+impl<T: Debug> Debug for RingBuffer<T> {
+    fn fmt(&self, out: &mut String) {
+        Debug::fmt(&self.values, out);
+    }
+}

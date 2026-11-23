@@ -55,6 +55,25 @@ impl Machine<'_> {
         if !sig.intrinsic {
             return None;
         }
+        // The `core` mod's `os` module (`os.1`).
+        if items.modules[sig.module as usize].path == ["os"] {
+            return Some(match sig.name.as_str() {
+                "arg_count" => "os_arg_count",
+                "arg_len" => "os_arg_len",
+                "arg_copy" => "os_arg_copy",
+                "write_stderr" => "os_write_stderr",
+                "random" => "os_random",
+                "listen" => "os_listen",
+                "incoming" => "os_incoming",
+                "connect" => "os_connect",
+                "arrivals" => "os_arrivals",
+                "take" => "os_take",
+                "send" => "os_send",
+                "close" => "os_close",
+                "signals" => "os_signals",
+                _ => return None,
+            });
+        }
         let owner = match sig.container {
             Container::Impl(k) => match &items.impls[k as usize].self_ty {
                 Ty::Adt(a, ..) => items.adts[*a as usize].name.as_str(),
@@ -161,6 +180,10 @@ impl Machine<'_> {
                 ]);
                 return self.deliver(ret, Ok(pair));
             }
+            name if name.starts_with("os_") => {
+                let v = self.os_call(name, values);
+                return self.deliver(ret, Ok(v));
+            }
             "timer" => {
                 let c = self.sched.timer(values[0].as_int());
                 let rx = self.natives.handle("Receiver", c);
@@ -200,6 +223,136 @@ impl Machine<'_> {
             }
         };
         self.attempt(pending, ret)
+    }
+
+    /// A call of the `core` mod's `os` module, `name` (`os.1`): through the run's OS, which only
+    /// a run of `main` has; under a test there is none.
+    fn os_call(&mut self, name: &str, values: &[Value]) -> Value {
+        use crate::sched::OsSource;
+        let int = |v: &Value| v.as_int();
+        let id = |v: &Value| usize::try_from(v.as_int()).unwrap_or(usize::MAX);
+        let byte = |b: u8| Value::Num(moddil_sema::Num::U8, u128::from(b));
+        let bytes = |v: &Value| -> Vec<u8> {
+            match v {
+                Value::Array(xs) | Value::Buf(_, xs) => xs
+                    .iter()
+                    .map(|x| match x {
+                        Value::Num(_, b) => *b as u8,
+                        _ => 0,
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            }
+        };
+        match name {
+            "os_arg_count" => {
+                let n = self.sched.os().map_or(0, |os| os.args().len());
+                Value::Int(n as i64)
+            }
+            "os_arg_len" => {
+                let i = id(&values[0]);
+                let n = self
+                    .sched
+                    .os()
+                    .and_then(|os| os.args().get(i).map(String::len))
+                    .unwrap_or(0);
+                Value::Int(n as i64)
+            }
+            "os_arg_copy" => {
+                let i = id(&values[0]);
+                let arg = self
+                    .sched
+                    .os()
+                    .and_then(|os| os.args().get(i).cloned())
+                    .unwrap_or_default();
+                if let Value::Ref(p, _) = &values[1] {
+                    self.store_bytes(p, arg.bytes().map(byte).collect());
+                }
+                Value::Unit
+            }
+            "os_write_stderr" => {
+                if let Value::Str(s) = self.stack.deref(&values[0]) {
+                    moddil_os::write_stderr(&s);
+                }
+                Value::Unit
+            }
+            // Under a test, a number from a fixed sequence, so a run replays.
+            "os_random" => match self.sched.os() {
+                Some(_) => Value::Int(moddil_os::random().max(1)),
+                None => Value::Int(4),
+            },
+            "os_listen" => {
+                let port = u16::try_from(int(&values[0])).unwrap_or(0);
+                let h = self
+                    .sched
+                    .os()
+                    .and_then(|os| os.listen(port).ok())
+                    .map_or(-1, |h| h as i64);
+                Value::Int(h)
+            }
+            "os_connect" => {
+                let host = match self.stack.deref(&values[0]) {
+                    Value::Str(s) => s.to_string(),
+                    _ => String::new(),
+                };
+                let port = u16::try_from(int(&values[1])).unwrap_or(0);
+                let h = self
+                    .sched
+                    .os()
+                    .and_then(|os| os.connect(&host, port).ok())
+                    .map_or(-1, |h| h as i64);
+                Value::Int(h)
+            }
+            "os_incoming" | "os_arrivals" | "os_signals" => {
+                let kind = match name {
+                    "os_incoming" => OsSource::Incoming,
+                    "os_arrivals" => OsSource::Arrivals,
+                    _ => OsSource::Signals,
+                };
+                let which = values.first().map_or(0, id);
+                let c = self.sched.os_channel(kind, which);
+                self.natives.handle("Receiver", c)
+            }
+            "os_take" => {
+                let conn = id(&values[0]);
+                let Value::Ref(p, _) = &values[1] else {
+                    return Value::Int(0);
+                };
+                let mut buf = bytes(&self.stack.load(p));
+                let n = self.sched.os().map_or(0, |os| os.take(conn, &mut buf));
+                self.store_bytes(p, buf.into_iter().map(byte).collect());
+                Value::Int(n as i64)
+            }
+            "os_send" => {
+                let conn = id(&values[0]);
+                let data = match &values[1] {
+                    Value::Ref(p, _) => bytes(&self.stack.load(p)),
+                    _ => Vec::new(),
+                };
+                let ok = self
+                    .sched
+                    .os()
+                    .is_some_and(|os| os.write(conn, &data).is_ok());
+                Value::Bool(ok)
+            }
+            "os_close" => {
+                let h = id(&values[0]);
+                if let Some(os) = self.sched.os() {
+                    os.close(h);
+                }
+                Value::Unit
+            }
+            _ => unreachable!("an `os` function: {name}"),
+        }
+    }
+
+    /// Stores `bytes` where the slice `p` points: as the buffer or array that is there.
+    fn store_bytes(&mut self, p: &Pointer, bytes: Vec<Value>) {
+        let v = match self.stack.load(p) {
+            Value::Buf(cap, _) => Value::Buf(cap, bytes),
+            _ => Value::Array(bytes),
+        };
+        self.stack.store(p, v);
     }
 
     /// A task running closure `f` (of type `ty`) with `args`, in a stack of its own.

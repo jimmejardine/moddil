@@ -42,6 +42,7 @@ python tools/ci.py --wsl       # the same steps in WSL (Linux); --all runs both
 | [`wasm/`](wasm/README.md) | `moddil-wasm` | The WASM backend: the native lowering's Cranelift IR translated to core WebAssembly modules, run in Node (M1) |
 | [`rt/`](rt/README.md) | `moddil-rt` | The runtime native code calls: traps, the heap, tasks, numbers and text |
 | [`rt-main/`](rt-main/README.md) | `moddil-rt-main` | A built program's `main`: the static library `moddil build` links with |
+| [`os/`](os/src/lib.rs) | `moddil-os` | The host's side of `core::os` for the runtimes written in Rust (the MIR interpreter, and moddil-rt natively): sockets, arguments, standard error, randomness and signals |
 | [`rt-wasm/`](rt-wasm/README.md) | `moddil-rt-wasm` | `moddil-rt` built for wasm32: the runtime a WASM module shares its memory with |
 | [`project/`](project/README.md) | `moddil-project` | Reads a program from disk: the manifest, the module tree, dependencies by path |
 | [`moddil/`](moddil/README.md) | `moddil` | The `moddil` command |

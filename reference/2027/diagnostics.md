@@ -54,6 +54,7 @@ and a code never changes meaning.
 | E0217 | A `select` arm whose operation is not one a `select` waits on, `#[selectable]` on a function that does not suspend, or one that does not receive first or whose rest uses a handler | [task.select.1](concurrency.md), [task.select.3](concurrency.md), [task.select.4](concurrency.md) |
 | E0218 | A raw pointer dereferenced outside an `unsafe` block | [type.ptr.1](unsafe.md) |
 | E0219 | An `unsafe` block in a mod without the `unsafe` capability, or with no reason given | [expr.unsafe.1](unsafe.md), [mod.caps.1](unsafe.md) |
+| E0220 | `core::os` named in a mod without the `os` capability | [os.cap.1](os.md) |
 | E0301 | Mutation of an immutable local (assigning, or borrowing with `&mut`) | [expr.assign.1](expressions/assignment.md), [borrow.mut.1](borrows.md) |
 | E0302 | Mutation through a shared borrow | [borrow.mut.1](borrows.md) |
 | E0303 | Use of a moved value | [own.move.1](ownership.md), [own.move.partial.1](ownership.md) |

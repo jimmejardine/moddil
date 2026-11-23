@@ -552,6 +552,142 @@ pub extern "C" fn timer(nanos: i64) -> u64 {
     with(|s| s.sched.timer(nanos) as u64)
 }
 
+/// For a run of `main`: the OS, with the program's arguments `args` (`os.1`).
+pub fn set_os(args: Vec<String>) {
+    with(|s| s.sched.os = Some((crate::os::Os::new(args), crate::os::Start::now())));
+}
+
+/// `core::os::arg_count`.
+#[unsafe(export_name = "moddil_rt_os_arg_count")]
+pub extern "C" fn os_arg_count() -> u64 {
+    with(|s| s.sched.os().map_or(0, |os| os.arg_count()) as u64)
+}
+
+/// `core::os::arg_len`.
+#[unsafe(export_name = "moddil_rt_os_arg_len")]
+pub extern "C" fn os_arg_len(i: u64) -> u64 {
+    with(|s| s.sched.os().map_or(0, |os| os.arg(i as usize).len()) as u64)
+}
+
+/// `core::os::arg_copy`: argument `i` into the `n` bytes at `out`.
+///
+/// # Safety
+///
+/// `out` points to `n` writable bytes.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_os_arg_copy")]
+pub unsafe extern "C" fn os_arg_copy(i: u64, out: *mut u8, n: u64) {
+    let arg = with(|s| {
+        s.sched
+            .os()
+            .map(|os| os.arg(i as usize))
+            .unwrap_or_default()
+    });
+    let k = arg.len().min(n as usize);
+    // SAFETY: the caller gives `n` bytes at `out`.
+    unsafe { std::ptr::copy_nonoverlapping(arg.as_ptr(), out, k) };
+}
+
+/// `core::os::write_stderr`: the `n` bytes of text at `p`.
+///
+/// # Safety
+///
+/// `p` points to `n` bytes of UTF-8.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_os_write_stderr")]
+pub unsafe extern "C" fn os_write_stderr(p: *const u8, n: u64) {
+    // SAFETY: the caller gives `n` bytes of text at `p`.
+    let text = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(p, n as usize)) };
+    crate::os::write_stderr(text);
+}
+
+/// `core::os::random`: under a test, a fixed number, so a run replays.
+#[unsafe(export_name = "moddil_rt_os_random")]
+pub extern "C" fn os_random() -> u64 {
+    let real = with(|s| s.sched.os().is_some());
+    if real {
+        crate::os::random().max(1) as u64
+    } else {
+        4
+    }
+}
+
+/// `core::os::listen`: a listener's handle, or -1.
+#[unsafe(export_name = "moddil_rt_os_listen")]
+pub extern "C" fn os_listen(port: u64) -> u64 {
+    let port = u16::try_from(port).unwrap_or(0);
+    with(|s| s.sched.os().map_or(-1, |os| os.listen(port))) as u64
+}
+
+/// `core::os::connect`: to `port` at the host named by the `n` bytes at `p`; a connection's
+/// handle, or -1.
+///
+/// # Safety
+///
+/// `p` points to `n` bytes of UTF-8.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_os_connect")]
+pub unsafe extern "C" fn os_connect(p: *const u8, n: u64, port: u64) -> u64 {
+    // SAFETY: the caller gives `n` bytes of text at `p`.
+    let host = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(p, n as usize)) }
+        .to_string();
+    let port = u16::try_from(port).unwrap_or(0);
+    with(|s| s.sched.os().map_or(-1, |os| os.connect(&host, port))) as u64
+}
+
+/// `core::os::incoming`, `arrivals` and `signals` (kinds 0, 1 and 2): the channel the OS feeds
+/// for `id`.
+#[unsafe(export_name = "moddil_rt_os_channel")]
+pub extern "C" fn os_channel(kind: u64, id: u64) -> u64 {
+    use crate::sched::OsSource;
+    let kind = match kind {
+        0 => OsSource::Incoming,
+        1 => OsSource::Arrivals,
+        _ => OsSource::Signals,
+    };
+    with(|s| s.sched.os_channel(kind, id as usize) as u64)
+}
+
+/// `core::os::take`: connection `conn`'s bytes into the `n` at `out`; how many.
+///
+/// # Safety
+///
+/// `out` points to `n` writable bytes.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_os_take")]
+pub unsafe extern "C" fn os_take(conn: u64, out: *mut u8, n: u64) -> u64 {
+    // SAFETY: the caller gives `n` bytes at `out`.
+    let buf = unsafe { std::slice::from_raw_parts_mut(out, n as usize) };
+    with(|s| s.sched.os().map_or(0, |os| os.take(conn as usize, buf))) as u64
+}
+
+/// `core::os::send`: the `n` bytes at `p` on connection `conn`; 1 if they went.
+///
+/// # Safety
+///
+/// `p` points to `n` bytes.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_os_send")]
+pub unsafe extern "C" fn os_send(conn: u64, p: *const u8, n: u64) -> u8 {
+    // SAFETY: the caller gives `n` bytes at `p`.
+    let bytes = unsafe { std::slice::from_raw_parts(p, n as usize) }.to_vec();
+    u8::from(with(|s| {
+        s.sched
+            .os()
+            .is_some_and(|os| os.write(conn as usize, &bytes))
+    }))
+}
+
+/// `core::os::close`.
+#[unsafe(export_name = "moddil_rt_os_close")]
+pub extern "C" fn os_close(id: u64) {
+    with(|s| {
+        if let Some(os) = s.sched.os() {
+            os.close(id as usize);
+        }
+    });
+}
+
 /// `Sender::clone`.
 #[unsafe(export_name = "moddil_rt_clone_sender")]
 pub extern "C" fn clone_sender(c: u64) {

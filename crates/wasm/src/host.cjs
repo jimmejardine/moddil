@@ -2,6 +2,8 @@
 // it), in a worker thread whose stack is deep enough for the calls a run may make, as the Rust
 // side says. It reads a command a line from standard input and answers a JSON object a line:
 //   run k          entry k's trampoline: {"s": status}, or {"crash": why}
+//   main k args    entry k, `main`, with the OS and the program's arguments (a JSON array):
+//                  {"s": status}; while it runs, `signal n` lines are signals for it (`os.1`)
 //   drop k         entry k's drop of its result: {"s": status}, or {"crash": why}
 //   live           how many allocations are not freed: {"n": n}
 //   record         what the run recorded: {"w": "word,word,..."}
@@ -17,7 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
-const { Worker, isMainThread, workerData } = require('worker_threads');
+const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 
 if (isMainThread) {
   // A task's stack (JSPI's, each promising call's) as deep as a run's calls may go: fixed at
@@ -39,8 +41,12 @@ if (isMainThread) {
     process.exit(1);
   });
   w.on('exit', (code) => process.exit(code));
+  w.on('message', (m) => process.exit(m.exit ?? 0));
 } else {
   const say = (o) => fs.writeSync(1, JSON.stringify(o) + '\n');
+  // The main thread ends the process: a read of standard input this thread has pending would
+  // keep it from ending.
+  const quit = () => parentPort.postMessage({ exit: 0 });
 
   // Standard input, a line at a time.
   let pending = '';
@@ -66,12 +72,56 @@ if (isMainThread) {
     }
   };
 
+  // Once a run of `main` has begun, standard input is read without blocking, so the run's
+  // sockets go on: its lines queue here, and `signal n` lines go to the run.
+  let lines = null;
+  let waiting = null;
+  // The instantiated program, once it is.
+  let p = null;
+  const readAsync = () => {
+    lines = [];
+    let partial = pending;
+    pending = '';
+    const more = () =>
+      fs.read(0, buf, 0, buf.length, null, (e, n) => {
+        if (e || n === 0) {
+          lines.push('quit');
+        } else {
+          partial += buf.toString('utf8', 0, n);
+          let nl;
+          while ((nl = partial.indexOf('\n')) >= 0) {
+            lines.push(partial.slice(0, nl).trim());
+            partial = partial.slice(nl + 1);
+          }
+          more();
+        }
+        for (;;) {
+          const i = lines.findIndex((l) => l.startsWith('signal '));
+          if (i < 0) break;
+          const [, n] = lines.splice(i, 1)[0].split(' ');
+          if (p) p.signal(Number(n));
+        }
+        if (waiting && lines.length > 0) {
+          const w = waiting;
+          waiting = null;
+          w(lines.shift());
+        }
+      });
+    more();
+  };
+  const nextLine = async () => {
+    if (!lines) return line();
+    if (lines.length > 0) return lines.shift();
+    return new Promise((r) => {
+      waiting = r;
+    });
+  };
+
   (async () => {
     const [rtPath, shimPath, modPath, ...nums] = workerData;
     const [pages, table, out, err, record, words, dataFrom, dataTo, siteCount, sites, strings, tasks] =
       nums.map(Number);
     const core = await import(pathToFileURL(path.join(__dirname, 'core.mjs')).href);
-    let p = null;
     const hex = (a, n) => Buffer.from(p.bytes(Number(a), Number(n))).toString('hex');
     // Answers reads while an observation waits, until `go`.
     const observe = (site, addr) => {
@@ -79,7 +129,10 @@ if (isMainThread) {
       for (;;) {
         const [cmd, a, b] = line().split(' ');
         if (cmd === 'go') return;
-        if (cmd === 'quit') process.exit(0);
+        if (cmd === 'quit') {
+          quit();
+          return;
+        }
         if (cmd === 'read') say({ hex: hex(a, b) });
         else say({ fatal: 'an unknown command while observing: ' + cmd });
       }
@@ -113,14 +166,25 @@ if (isMainThread) {
     }
     say({ ready: 1, jspi: core.jspi ? 1 : 0 });
     for (;;) {
-      const [cmd, a, b] = line().split(' ');
-      if (cmd === 'quit') process.exit(0);
+      const l = await nextLine();
+      const [cmd, a, b] = l.split(' ');
+      if (cmd === 'quit') return quit();
       if (cmd === 'read') {
         say({ hex: hex(a, b) });
       } else if (cmd === 'live') {
         say({ n: p.live() });
       } else if (cmd === 'record') {
         say({ w: p.record().join(',') });
+      } else if (cmd === 'main') {
+        const args = JSON.parse(l.split(' ').slice(2).join(' ') || '[]');
+        if (!lines) readAsync();
+        try {
+          say({ s: await p.runMain(Number(a), args) });
+        } catch (e) {
+          say({ crash: String(e) });
+        }
+      } else if (cmd === 'signal') {
+        p.signal(Number(a));
       } else if (cmd === 'run' || cmd === 'drop') {
         try {
           const s = cmd === 'run' ? await p.run(Number(a)) : await p.drop(Number(a));

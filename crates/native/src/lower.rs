@@ -213,6 +213,17 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
     ("stop_requested", &['s', 'b'], Some('b')),
     ("channel", &['w'], Some('w')),
     ("timer", &['w'], Some('w')),
+    ("os_arg_count", &[], Some('w')),
+    ("os_arg_len", &['w'], Some('w')),
+    ("os_arg_copy", &['w', 'p', 'w'], None),
+    ("os_write_stderr", &['p', 'w'], None),
+    ("os_random", &[], Some('w')),
+    ("os_listen", &['w'], Some('w')),
+    ("os_connect", &['p', 'w', 'w'], Some('w')),
+    ("os_channel", &['w', 'w'], Some('w')),
+    ("os_take", &['w', 'p', 'w'], Some('w')),
+    ("os_send", &['w', 'p', 'w'], Some('b')),
+    ("os_close", &['w'], None),
     ("clone_sender", &['w'], None),
     ("drop_sender", &['w'], None),
     ("drop_receiver", &['w', 'p'], Some('b')),
@@ -1485,6 +1496,25 @@ fn task_op(items: &ItemTree, f: u32) -> Option<&'static str> {
     };
     if sig.src != Src::Prelude {
         return None;
+    }
+    // The `core` mod's `os` module (`os.1`).
+    if items.modules[sig.module as usize].path == ["os"] {
+        return Some(match sig.name.as_str() {
+            "arg_count" => "os_arg_count",
+            "arg_len" => "os_arg_len",
+            "arg_copy" => "os_arg_copy",
+            "write_stderr" => "os_write_stderr",
+            "random" => "os_random",
+            "listen" => "os_listen",
+            "incoming" => "os_incoming",
+            "connect" => "os_connect",
+            "arrivals" => "os_arrivals",
+            "take" => "os_take",
+            "send" => "os_send",
+            "close" => "os_close",
+            "signals" => "os_signals",
+            _ => return None,
+        });
     }
     Some(match (owner, sig.name.as_str()) {
         ("", "yield_now") => "yield_now",
@@ -3980,6 +4010,9 @@ impl<M: Module> Lower<'_, '_, '_, M> {
     ) -> Result<(), String> {
         let flags = ir::MemFlagsData::trusted();
         let ptr = self.ptr();
+        if op.starts_with("os_") {
+            return self.os(op, args, d);
+        }
         match op {
             "__scope_open" => {
                 let isolated = self.value(&args[0])?;
@@ -4773,6 +4806,78 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         let p = self.b.ins().load(types::I64, flags, w, 0);
         let n = self.b.ins().load(types::I64, flags, w, 8);
         Ok((p, n))
+    }
+
+    /// A call of the `core` mod's `os` module, `op`, into `d` (`os.1`): the runtime's function
+    /// of the same name, with each `&str` and `&[u8]` as its address and length.
+    fn os(&mut self, op: &str, args: &[Operand], d: &PlaceRef) -> Result<(), String> {
+        let flags = ir::MemFlagsData::trusted();
+        // A channel the OS feeds: its id is the `Receiver`'s.
+        let channel = |this: &mut Self, kind: i64, id: ir::Value| -> Result<(), String> {
+            let k = this.b.ins().iconst(types::I64, kind);
+            let c = this.task_call("os_channel", &[k, id]).expect("a channel");
+            let a = this.addr_of(d)?;
+            this.b.ins().store(flags, c, a, 0);
+            Ok(())
+        };
+        match op {
+            "os_arg_count" | "os_random" => {
+                let r = self.task_call(op, &[]).expect("a number");
+                self.write(d, Val::Scalar(r))
+            }
+            "os_arg_len" | "os_listen" => {
+                let x = self.value(&args[0])?;
+                let r = self.task_call(op, &[x]).expect("a number");
+                self.write(d, Val::Scalar(r))
+            }
+            "os_arg_copy" => {
+                let i = self.value(&args[0])?;
+                let (p, n) = self.text(&args[1])?;
+                self.task_call(op, &[i, p, n]);
+                Ok(())
+            }
+            "os_write_stderr" => {
+                let (p, n) = self.text(&args[0])?;
+                self.task_call(op, &[p, n]);
+                Ok(())
+            }
+            "os_connect" => {
+                let (p, n) = self.text(&args[0])?;
+                let port = self.value(&args[1])?;
+                let r = self.task_call(op, &[p, n, port]).expect("a handle");
+                self.write(d, Val::Scalar(r))
+            }
+            "os_take" => {
+                let conn = self.value(&args[0])?;
+                let (p, n) = self.text(&args[1])?;
+                let r = self.task_call(op, &[conn, p, n]).expect("a count");
+                self.write(d, Val::Scalar(r))
+            }
+            "os_send" => {
+                let conn = self.value(&args[0])?;
+                let (p, n) = self.text(&args[1])?;
+                let r = self.task_call(op, &[conn, p, n]).expect("a flag");
+                self.write(d, Val::Scalar(r))
+            }
+            "os_close" => {
+                let x = self.value(&args[0])?;
+                self.task_call(op, &[x]);
+                Ok(())
+            }
+            "os_incoming" => {
+                let x = self.value(&args[0])?;
+                channel(self, 0, x)
+            }
+            "os_arrivals" => {
+                let x = self.value(&args[0])?;
+                channel(self, 1, x)
+            }
+            "os_signals" => {
+                let zero = self.b.ins().iconst(types::I64, 0);
+                channel(self, 2, zero)
+            }
+            _ => Err(format!("the `os` function `{op}`")),
+        }
     }
 
     /// Calls the runtime's `f` with `args`: its one result.

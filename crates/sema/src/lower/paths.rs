@@ -274,7 +274,40 @@ impl Lowerer<'_> {
     }
 
     /// The expression for a resolved path.
+    /// A function of the `core` mod's `os` module is named only in a mod whose manifest lists
+    /// the `os` capability (`os.cap.1`).
+    fn check_os(&mut self, func: u32, range: TextRange) {
+        let m = &self.items.modules[self.items.fns[func as usize].module as usize];
+        let in_os = m.path == ["os"]
+            && self
+                .items
+                .mods
+                .get(m.mod_ as usize)
+                .is_some_and(|d| d.name == "core");
+        if !in_os {
+            return;
+        }
+        let here = &self.items.modules[self.types.module as usize];
+        let allowed = self
+            .items
+            .mods
+            .get(here.mod_ as usize)
+            .is_none_or(|d| d.os_ok);
+        if !allowed {
+            self.report(
+                Code::E0220,
+                range,
+                "`core::os` is named only in a mod whose manifest lists the capability: \
+                 `capabilities = [\"os\"]` under `[mod]`; an application reaches the OS \
+                 through the root capabilities `main` takes",
+            );
+        }
+    }
+
     pub(super) fn resolved(&mut self, r: Resolved, range: TextRange) -> ExprId {
+        if let Resolved::Fn(func, _) = &r {
+            self.check_os(*func, range);
+        }
         match r {
             Resolved::Local(l) => self.alloc(ExprKind::Local(l), range),
             // A const item's value: a call of it.

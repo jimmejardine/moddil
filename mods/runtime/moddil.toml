@@ -1,0 +1,8 @@
+[mod]
+name = "moddil.com/runtime"
+edition = "2027"
+capabilities = ["os"]
+
+[dependencies]
+net = { path = "../net" }
+rand = { path = "../rand" }

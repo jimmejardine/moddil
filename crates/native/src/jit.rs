@@ -80,7 +80,11 @@ impl Compiled<'_> {
     /// Runs the entry point, on a thread of its own with a large stack: the values it observed,
     /// and its result as Moddil source, or the trap.
     /// With it, if the result is an `ExitCode`, the process's exit code for it (`main.exit.1`).
-    pub(crate) fn run(self) -> (Vec<Observed>, Result<String, Native>, Option<u8>) {
+    /// For a run of `main`, `os` holds the program's arguments: the run has the OS (`os.1`).
+    pub(crate) fn run(
+        self,
+        os: Option<Vec<String>>,
+    ) -> (Vec<Observed>, Result<String, Native>, Option<u8>) {
         let ptr = self.module.get_finalized_function(self.entry) as usize;
         let drop_ptr = self.module.get_finalized_function(self.drop_result) as usize;
         let (sites, items, ret) = (&self.sites, self.items, &self.ret);
@@ -97,6 +101,9 @@ impl Compiled<'_> {
                 .spawn_scoped(s, move || {
                     // A new run, its tasks' threads joining this one's.
                     moddil_rt::begin_run();
+                    if let Some(args) = os {
+                        moddil_rt::set_os(args);
+                    }
                     moddil_rt::set_host(std::ptr::from_ref(host) as usize);
                     moddil_rt::set_trap_text(crate::host::trap_text);
                     let live = moddil_rt::live();

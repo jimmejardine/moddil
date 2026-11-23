@@ -76,6 +76,12 @@ pub extern "C" fn begin() {
     moddil_rt::set_trap_text(trapped);
 }
 
+/// A run of `main`: it has the OS, the host's (`os.1`).
+#[unsafe(export_name = "moddil_wasm_os")]
+pub extern "C" fn os() {
+    moddil_rt::set_os(Vec::new());
+}
+
 /// Task `t`'s call: the host starts it the first time the task gets the turn, as a promising
 /// call ([`moddil_rt::task`]).
 #[cfg(target_arch = "wasm32")]

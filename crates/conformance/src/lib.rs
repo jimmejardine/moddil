@@ -109,6 +109,7 @@ pub fn program(db: &Database, project: &Project) -> Program {
             deps: m.deps.clone(),
             stub: m.stub,
             unsafe_ok: m.unsafe_ok,
+            os_ok: m.os_ok,
         })
         .collect();
     Program::new(db, files, mods)
@@ -885,6 +886,7 @@ mod tests {
                 manifest: None,
                 stub: false,
                 unsafe_ok: false,
+                os_ok: false,
             }],
         };
         compare(

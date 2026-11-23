@@ -7,7 +7,14 @@ A link shortener, and the tour of Moddil written as real source
 (`python tools/ci.py tour`, or `moddil check tour/shorty`), and its three tests pass natively, on
 the MIR interpreter and as WASM (`moddil test tour/shorty`), over the standard mods written in
 Moddil ([`mods/`](../../mods/README.md)), named through [`stubs/moddil/`](../../stubs/moddil/README.md).
-`main` checks but does not run: the root capabilities are still signatures. Where the code had to differ from the tour as first written, the gaps table in
+Since M2d it runs: `moddil run tour/shorty -- --port 8080` serves HTTP/1.1 on the local machine
+(natively, with `--interp`, or `--wasm` under Node), and a `stop` line on standard input, or
+Ctrl-C, stops it gracefully:
+
+```
+curl -i -X POST --data '{"url": "https://moddil.com"}' http://127.0.0.1:8080/links
+curl -i http://127.0.0.1:8080/<code>
+``` Where the code had to differ from the tour as first written, the gaps table in
 [`specs/tour.md`](../../specs/tour.md#gaps-the-tour-exposed) says why.
 
 ## Layout

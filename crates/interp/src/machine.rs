@@ -48,6 +48,7 @@ pub(crate) fn run(
     args: &[Value],
     observer: Observer<'_>,
     fuel: Option<u64>,
+    os: Option<Vec<String>>,
 ) -> Result<Value, Stop> {
     let items = moddil_sema::item_tree(db, program);
     let first = Frame::new(
@@ -63,7 +64,10 @@ pub(crate) fn run(
         dispatch: Dispatch::new(items),
         natives: Natives::new(items),
         fuel,
-        sched: Scheduler::new(),
+        sched: match os {
+            Some(args) => Scheduler::new().with_os(args),
+            None => Scheduler::new(),
+        },
         pending: std::collections::HashMap::new(),
     };
     loop {
@@ -327,6 +331,7 @@ impl<'a> Machine<'a> {
                     Item::Fn(*f),
                     &[],
                     &mut |_, _, _| {},
+                    None,
                     None,
                 )
                 .unwrap_or_else(|_| unreachable!("a const evaluated when compiling"));

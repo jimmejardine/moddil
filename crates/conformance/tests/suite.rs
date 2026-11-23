@@ -82,6 +82,7 @@ areas!(
     names,
     numbers,
     operators,
+    os,
     ownership,
     patterns,
     prelude,

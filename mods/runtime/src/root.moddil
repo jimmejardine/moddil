@@ -1,0 +1,188 @@
+//! The root capabilities (`main.root.1`): `main` takes the ones a program uses, and only the
+//! runtime makes them. Each reaches the OS through the `core` mod's `os` module, which only this
+//! mod and those like it may name (`os.cap.1`).
+
+use core::os;
+use mod::io::StdErr;
+use net::{Conn, Listener, Net, NetError};
+use rand::Rand;
+
+/// A TCP or UDP port.
+pub use net::Port;
+
+/// A command-line argument that does not parse, or is out of range.
+#[derive(Debug)]
+pub struct ArgError {
+    name: String,
+    why: String,
+}
+
+impl Display for ArgError {
+    fn fmt(&self, out: &mut String) {
+        out.push_str(fmt"--{self.name}: {self.why}".as_str());
+    }
+}
+
+/// The command line.
+#[root_capability]
+pub struct Args {
+    handle: int,
+}
+
+impl Args {
+    /// The arguments, after the program's name.
+    pub fn all(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut i = 0;
+        while i < os::arg_count() {
+            let n = os::arg_len(i);
+            let mut buf: Vec<u8> = Vec::with_capacity(n);
+            let mut k = 0;
+            while k < n {
+                buf.push(0);
+                k += 1;
+            }
+            os::arg_copy(i, buf.as_mut_slice());
+            if let Ok(s) = try { String::from_utf8(buf)? } {
+                out.push(s);
+            }
+            i += 1;
+        }
+        out
+    }
+
+    /// The text after `--name` (as the next argument, or after `=`), if it is given.
+    pub fn text(&self, name: &str) -> Option<String> {
+        let flag = fmt"--{name}";
+        let all = self.all();
+        let mut i = 0;
+        while i < all.len() {
+            let a: &str = &all[i];
+            if a == flag.as_str() {
+                if i + 1 < all.len() {
+                    return Some(all[i + 1].clone());
+                }
+                return None;
+            }
+            if let Some((f, v)) = a.split_once("=") {
+                if f == flag.as_str() {
+                    return Some(v.to_string());
+                }
+            }
+            i += 1;
+        }
+        None
+    }
+
+    /// The value of `--name`, a whole number made a `T` through its refinement, or `fallback` if
+    /// it is not given.
+    pub fn value<T: Refined<Base = int>>(&self, name: &str, fallback: T) -> T with fail(ArgError) {
+        let text = match self.text(name) {
+            Some(t) => t,
+            None => return fallback,
+        };
+        let n = match number(&text) {
+            Some(n) => n,
+            None => fail(ArgError { name: name.to_string(), why: fmt"`{text}` is not a number" }),
+        };
+        try { T::refine(n)? } catch {
+            e => fail(ArgError { name: name.to_string(), why: fmt"{n} breaks `{e.clause}`" }),
+        }
+    }
+}
+
+/// The whole number `text` is, if it is one.
+fn number(text: &str) -> Option<int> {
+    let (neg, digits) = match text.split_once("-") {
+        Some(("", rest)) => (true, rest),
+        _ => (false, text),
+    };
+    if digits.len() == 0 {
+        return None;
+    }
+    let mut n = 0;
+    for c in digits.chars() {
+        let d = match c {
+            '0' => 0, '1' => 1, '2' => 2, '3' => 3, '4' => 4,
+            '5' => 5, '6' => 6, '7' => 7, '8' => 8, '9' => 9,
+            _ => return None,
+        };
+        n = n * 10 + d;
+    }
+    Some(if neg { -n } else { n })
+}
+
+/// The environment's variables.
+#[root_capability]
+pub struct Env {
+    handle: int,
+}
+
+/// Standard input, output and error.
+#[root_capability]
+pub struct Stdio {
+    pub err: StdErr,
+}
+
+/// The file system.
+#[root_capability]
+pub struct FsRoot {
+    handle: int,
+}
+
+/// The network.
+#[root_capability]
+pub struct NetRoot {
+    handle: int,
+}
+
+impl NetRoot {
+    /// Listens for connections on `port` of the local machine.
+    pub fn listen(&self, port: Port) -> Listener with fail(NetError) {
+        Listener::os(port)?
+    }
+}
+
+impl Net for NetRoot {
+    fn resolve(&self, host: &str) -> String {
+        host.to_string()
+    }
+
+    fn connect(&self, addr: &str, port: int) -> Conn with suspend, fail(NetError) {
+        let id = os::connect(addr, port);
+        if id < 0 {
+            fail(NetError::new("the connection cannot be made"))
+        }
+        Conn::os(id)
+    }
+}
+
+/// Real time.
+#[root_capability]
+pub struct Clock {
+    handle: int,
+}
+
+/// The operating system's randomness.
+#[root_capability]
+pub struct Entropy {
+    handle: int,
+}
+
+impl Rand for Entropy {
+    fn pick(&self, choices: &str) -> char {
+        let n = choices.chars().count();
+        let mut i = self.below(n);
+        for c in choices.chars() {
+            if i == 0 {
+                return c;
+            }
+            i -= 1;
+        }
+        ' '
+    }
+
+    fn below(&self, n: int) -> int {
+        os::random() % n
+    }
+}

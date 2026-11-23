@@ -3,7 +3,7 @@
 The **standard mods**, written in Moddil: `core-*`, `collections`, `text`, `net`, `serde` and the
 rest of the catalogue ([`specs/stdlib.md`](../specs/stdlib.md)).
 
-**Status:** M2 slice M2c: the mods the tour reaches, each with its tests in its own `tests/`
+**Status:** M2 slices M2c and M2d: the mods the tour reaches, each with its tests in its own `tests/`
 project (so a mod that depends on one does not run them), run natively, on the MIR interpreter
 and as WASM by `crates/moddil/tests/cli.rs`. A program names them as `moddil::<mod>` through the
 umbrella stub mod [`stubs/moddil`](../stubs/moddil/README.md), which re-exports them.
@@ -14,8 +14,9 @@ umbrella stub mod [`stubs/moddil`](../stubs/moddil/README.md), which re-exports 
 | [`sync`](sync/src/lib.moddil) | `Mutex` (with a `Guard` view, and `with`), over `UnsafeCell` and atomics | `unsafe` |
 | [`rand`](rand/src/lib.moddil) | the `Rand` effect, and `Seeded` (`seeded`) | `unsafe` |
 | [`serde`](serde/src/lib.moddil) | `Serialize` and `Deserialize` with their derives (impl templates), `DecodeError`, JSON | |
-| [`net`](net/src/lib.moddil) | the `Net` effect, `Port`, `Url`, `Conn`, `Listener` (a selectable `accept`); [`http`](net/src/http.moddil): `Router`, `Request`, `Response`, `serve_connection`, `post` with retries | |
+| [`net`](net/src/lib.moddil) | the `Net` effect, `Port`, `Url`, `Conn` (bytes, over a simulated link or an OS connection), `Listener` (a selectable `accept`); [`http`](net/src/http.moddil): HTTP/1.1, `Router`, `Request`, `Response`, `serve_connection`, `post` with retries | `os` |
 | [`sim`](sim/src/lib.moddil) | `Sim`, nodes, seeded randomness, a simulated network, `drop_messages` | `unsafe` |
+| [`runtime`](runtime/src/lib.moddil) | the root capabilities (`root`: `Args`, `Stdio`, `NetRoot`, `Entropy`, …), the terminal (`io`), `serve_until_stopped` and `Signal` | `os` |
 
 `Vec`, `String` and the hash maps are in the prelude and the `core` mod
 ([`reference/2027/`](../reference/2027/README.md)).

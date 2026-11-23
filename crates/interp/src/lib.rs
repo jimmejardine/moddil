@@ -86,7 +86,31 @@ pub fn call_fn(
     args: &[Value],
     observer: Observer<'_>,
 ) -> Result<Value, Stop> {
-    machine::run(db, program, Item::Fn(index), args, observer, None)
+    machine::run(db, program, Item::Fn(index), args, observer, None, None)
+}
+
+/// Runs `main`, function `index` of `program`, with its root capabilities `args`, as a program
+/// runs (`os.1`): with the OS, given the program's arguments `argv`, and the wall clock's time.
+///
+/// # Errors
+///
+/// The trap, if it traps.
+pub fn run_main(
+    db: &dyn Db,
+    program: Program,
+    index: u32,
+    args: &[Value],
+    argv: Vec<String>,
+) -> Result<Value, Stop> {
+    machine::run(
+        db,
+        program,
+        Item::Fn(index),
+        args,
+        &mut |_, _, _| {},
+        None,
+        Some(argv),
+    )
 }
 
 /// The steps compile-time evaluation may take (`comptime.md`: Evaluation model).
@@ -106,6 +130,7 @@ pub fn eval_const(db: &dyn Db, program: Program, index: u32) -> Result<Value, St
         &[],
         &mut |_, _, _| {},
         Some(FUEL),
+        None,
     )
 }
 
@@ -160,6 +185,7 @@ pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
                 &[v],
                 &mut |_, _, _| {},
                 Some(FUEL),
+                None,
             ) {
                 Ok(Value::Tuple(xs)) if xs.first() == Some(&Value::Bool(true)) => continue,
                 Ok(_) => Diagnostic::error(
@@ -221,7 +247,7 @@ pub fn run_test(
     index: u32,
     observer: Observer<'_>,
 ) -> Result<(), Stop> {
-    machine::run(db, program, Item::Test(index), &[], observer, None).map(|_| ())
+    machine::run(db, program, Item::Test(index), &[], observer, None, None).map(|_| ())
 }
 
 /// This crate's version.

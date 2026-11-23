@@ -57,6 +57,8 @@ pub struct ModInfo {
     pub stub: bool,
     /// Whether it may use `unsafe` blocks: its manifest declares the capability (`mod.caps.1`).
     pub unsafe_ok: bool,
+    /// Whether it may name `core::os`: its manifest declares the `os` capability (`os.cap.1`).
+    pub os_ok: bool,
 }
 
 impl Program {
@@ -76,6 +78,7 @@ impl Program {
                 deps: Vec::new(),
                 stub: false,
                 unsafe_ok: false,
+                os_ok: false,
             }],
         )
     }

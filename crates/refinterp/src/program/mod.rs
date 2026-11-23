@@ -189,6 +189,8 @@ pub(crate) struct Program {
     pub(crate) tests: Vec<TestDef>,
     pub(crate) modules: Vec<Module>,
     mods: Vec<ModEntry>,
+    /// The `core` mod's `os` module (`os.1`).
+    pub(crate) core_os: usize,
     /// The const items, by key: their initialiser and the module whose names it uses.
     pub(crate) consts: HashMap<String, (ast::Expr, usize)>,
     /// The `type` items, by key (`refine.1`).
@@ -228,6 +230,7 @@ impl Program {
             mods: Vec::new(),
             file_paths: files.iter().map(|f| f.module.clone()).collect(),
             roots: Vec::new(),
+            core_os: usize::MAX,
             sources: std::sync::Arc::new((files.to_vec(), mods.to_vec())),
         };
         for (i, m) in mods.iter().enumerate() {
@@ -280,6 +283,9 @@ impl Program {
             });
             p.modules[core_root].children.insert(name.to_string(), m);
             core_modules.push(m);
+            if name == "os" {
+                p.core_os = m;
+            }
         }
         for m in &mut p.mods {
             m.deps.entry("core".to_string()).or_insert(core);

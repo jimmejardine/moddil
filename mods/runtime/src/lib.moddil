@@ -1,0 +1,57 @@
+//! The runtime (`stdlib.md`: `moddil/runtime`): the root capabilities `main` takes (`root`), the
+//! terminal (`io`), and running a server until it is asked to stop (`lifecycle.md`: Two levels:
+//! stop, then cancel).
+
+use core::os;
+
+/// A stop signal.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Signal {
+    /// An interrupt: Ctrl-C, or a `stop` line on standard input.
+    Int,
+    /// A request to end.
+    Term,
+}
+
+impl Signal {
+    fn number(&self) -> int {
+        match self {
+            Signal::Int => 1,
+            Signal::Term => 2,
+        }
+    }
+}
+
+/// A length of time: the prelude's (`task.timer.1`).
+pub use Duration;
+
+/// Why a run was cancelled: it did not stop within its grace period.
+struct GraceOver;
+
+/// Runs `run` until one of `signals` arrives, then asks it to stop, and cancels it if it has not
+/// stopped after `grace`. Returns once it has stopped, or ended by itself.
+pub fn serve_until_stopped<F: FnOnce() with (suspend, spawn)>(run: F, signals: Vec<Signal>, grace: Duration) with suspend, spawn {
+    let wanted: Vec<int> = signals.iter().map(|s| s.number()).collect();
+    let arrived = os::signals();
+    let ended = try {
+        scope(|s| {
+            let t = s.spawn(run);
+            loop {
+                select {
+                    _ = t.join() => return,
+                    n = arrived.recv() => match n {
+                        Some(n) if wanted.contains(&n) => break,
+                        Some(_) => {}
+                        None => return,
+                    },
+                }
+            }
+            s.stop();
+            select {
+                _ = t.join() => {}
+                _ = timer(grace).recv() => fail(GraceOver),
+            }
+        })?
+    };
+    discard(ended, "a run that has not stopped within its grace period is cancelled");
+}

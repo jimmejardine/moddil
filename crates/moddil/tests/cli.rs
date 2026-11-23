@@ -281,3 +281,118 @@ fn the_standard_mods_pass_their_tests_everywhere() {
 fn the_tour_passes_its_tests_everywhere() {
     passes_everywhere("tour/shorty", 3);
 }
+
+/// Sends `request` to `port` on this machine, and gives the whole response.
+fn exchange(port: u16, request: &str) -> String {
+    use std::io::{Read, Write};
+    let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).expect("the server answers");
+    s.set_read_timeout(Some(std::time::Duration::from_secs(30)))
+        .expect("a timeout");
+    s.write_all(request.as_bytes()).expect("the request goes");
+    let mut out = String::new();
+    s.read_to_string(&mut out).expect("a response");
+    out
+}
+
+/// A port nothing listens on, for now.
+fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr())
+        .expect("a free port")
+        .port()
+}
+
+/// The tour serves HTTP for real (`os.1`, M2d's gate): it runs, creates a link, follows it,
+/// and stops at a `stop` line on standard input, exiting with 0.
+fn the_tour_serves(how: &[&str]) {
+    use std::io::Write;
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tour/shorty");
+    let port = free_port();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_moddil"))
+        .arg("run")
+        .args(how)
+        .arg(&dir)
+        .args(["--", "--port", &port.to_string()])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("moddil runs");
+    // Ready once it accepts a connection.
+    let start = std::time::Instant::now();
+    while std::net::TcpStream::connect(("127.0.0.1", port)).is_err() {
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(120),
+            "{how:?}: the server did not start"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let body = r#"{"url": "https://moddil.com"}"#;
+    let created = exchange(
+        port,
+        &format!(
+            "POST /links HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        ),
+    );
+    assert!(created.starts_with("HTTP/1.1 201"), "{how:?}: {created}");
+    let code = created
+        .split("\"code\":\"")
+        .nth(1)
+        .and_then(|r| r.split('"').next())
+        .expect("a code");
+    let followed = exchange(
+        port,
+        &format!("GET /{code} HTTP/1.1\r\nHost: localhost\r\n\r\n"),
+    );
+    assert!(followed.starts_with("HTTP/1.1 308"), "{how:?}: {followed}");
+    assert!(
+        followed.contains("Location: https://moddil.com"),
+        "{how:?}: {followed}"
+    );
+    let plain = r#"{"url": "http://moddil.com"}"#;
+    let refused = exchange(
+        port,
+        &format!(
+            "POST /links HTTP/1.1\r\nContent-Length: {}\r\n\r\n{plain}",
+            plain.len()
+        ),
+    );
+    assert!(refused.starts_with("HTTP/1.1 400"), "{how:?}: {refused}");
+    let mut stdin = child.stdin.take().expect("a pipe");
+    writeln!(stdin, "stop").expect("the stop goes");
+    let out = child.wait_with_output().expect("it stops");
+    assert!(
+        out.status.success(),
+        "{how:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        !String::from_utf8_lossy(&out.stderr).contains("on the interpreter"),
+        "{how:?}: it fell back to the interpreter"
+    );
+}
+
+#[test]
+fn the_tour_serves_natively() {
+    the_tour_serves(&[]);
+}
+
+#[test]
+fn the_tour_serves_on_the_interpreter() {
+    the_tour_serves(&["--interp"]);
+}
+
+#[test]
+fn the_tour_serves_as_wasm() {
+    let jspi = Command::new(std::env::var("MODDIL_NODE").unwrap_or_else(|_| "node".to_string()))
+        .args([
+            "-e",
+            "process.exit(typeof WebAssembly.Suspending === 'function' ? 0 : 1)",
+        ])
+        .status()
+        .is_ok_and(|s| s.success());
+    if jspi {
+        the_tour_serves(&["--wasm"]);
+    }
+}

@@ -124,6 +124,9 @@ codes! {
     E0218 = "dereference of a raw pointer outside `unsafe`",
     /// An `unsafe` block in a mod whose manifest does not declare the `unsafe` capability.
     E0219 = "`unsafe` without the capability",
+    /// A function of `core::os` named in a mod whose manifest does not declare the `os`
+    /// capability.
+    E0220 = "`core::os` without the capability",
     /// An assignment to, or a `&mut` borrow of, a local not declared `mut`.
     E0301 = "mutation of an immutable local",
     /// An assignment through, or a `&mut` borrow through, a shared borrow.

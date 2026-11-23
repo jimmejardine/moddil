@@ -1,0 +1,15 @@
+[package]
+name = "moddil-os"
+description = "The host's side of the core mod's os module: sockets, arguments, standard error, randomness and signals, for the runtimes written in Rust."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+ctrlc.workspace = true
+
+[lints]
+workspace = true

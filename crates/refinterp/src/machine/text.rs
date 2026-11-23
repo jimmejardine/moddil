@@ -239,6 +239,10 @@ impl Machine<'_> {
         range: moddil_syntax::TextRange,
     ) -> Eval {
         let name = f.node.name().map(|n| n.text()).unwrap_or_default();
+        // The `core` mod's `os` module (`os.1`): a test has no OS.
+        if f.module as usize == self.program.core_os {
+            return Ok(self.no_os(&name, args));
+        }
         if let Some(r) = self.task_intrinsic(&name, head, args, range) {
             return r;
         }

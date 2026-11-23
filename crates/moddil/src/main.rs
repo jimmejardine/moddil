@@ -40,6 +40,9 @@ enum Command {
         /// Compile it to WebAssembly instead, and run that in Node (M1, slice W0).
         #[arg(long, conflicts_with = "interp")]
         wasm: bool,
+        /// The program's own arguments, after `--` (`Args`, `os.1`).
+        #[arg(last = true)]
+        args: Vec<String>,
     },
     /// Runs a program's tests (a mod's, not its dependencies'), compiled to native code.
     Test {
@@ -117,10 +120,14 @@ fn main() -> ExitCode {
     let name = path.display().to_string();
     match &cli.command {
         Command::Check { .. } => ExitCode::SUCCESS,
-        Command::Run { interp: true, .. } => run(&db, program, &files, &name),
-        Command::Run { wasm: true, .. } => run_wasm(&db, program, &files, &name),
+        Command::Run {
+            interp: true, args, ..
+        } => run(&db, program, &files, &name, args.clone()),
+        Command::Run {
+            wasm: true, args, ..
+        } => run_wasm(&db, program, &files, &name, args),
         Command::Test { wasm: true, .. } => test_wasm(&db, program, &files),
-        Command::Run { .. } => run_native(&db, program, &files, &name),
+        Command::Run { args, .. } => run_native(&db, program, &files, &name, args.clone()),
         Command::Test { interp, .. } => test(&db, program, &files, *interp, path),
         Command::Build {
             output, wasm: true, ..
@@ -152,12 +159,19 @@ fn program(db: &Database, project: &moddil_project::Project) -> Program {
             deps: m.deps.clone(),
             stub: m.stub,
             unsafe_ok: m.unsafe_ok,
+            os_ok: m.os_ok,
         })
         .collect();
     Program::new(db, files, mods)
 }
 
-fn run(db: &Database, program: Program, files: &[(String, String)], name: &str) -> ExitCode {
+fn run(
+    db: &Database,
+    program: Program,
+    files: &[(String, String)],
+    name: &str,
+    argv: Vec<String>,
+) -> ExitCode {
     let items = moddil_sema::item_tree(db, program);
     let Some(main) = items.main_fn() else {
         eprintln!("moddil: {name} has no `fn main()`");
@@ -181,7 +195,7 @@ fn run(db: &Database, program: Program, files: &[(String, String)], name: &str) 
             _ => unreachable!("a checked `main` takes root capabilities"),
         })
         .collect();
-    match moddil_interp::call_fn(db, program, main, &roots, &mut |_, _, _| {}) {
+    match moddil_interp::run_main(db, program, main, &roots, argv) {
         Ok(Value::Unit) => ExitCode::SUCCESS,
         // An `ExitCode` (`main.exit.1`): the number it stands for.
         Ok(Value::Adt {
@@ -216,13 +230,19 @@ fn run(db: &Database, program: Program, files: &[(String, String)], name: &str) 
 
 /// `moddil run`: `main` compiled to native code and run; on the MIR interpreter instead, with a
 /// note, if it reaches something not compiled natively yet.
-fn run_native(db: &Database, program: Program, files: &[(String, String)], name: &str) -> ExitCode {
+fn run_native(
+    db: &Database,
+    program: Program,
+    files: &[(String, String)],
+    name: &str,
+    argv: Vec<String>,
+) -> ExitCode {
     let items = moddil_sema::item_tree(db, program);
     let Some(main) = items.main_fn() else {
         eprintln!("moddil: {name} has no `fn main()`");
         return ExitCode::FAILURE;
     };
-    match moddil_native::run_main_exit(db, program, main) {
+    match moddil_native::run_main_exit(db, program, main, argv.clone()) {
         // An `ExitCode` (`main.exit.1`): the number it stands for.
         Ok((_, Some(code))) => ExitCode::from(code),
         Ok((v, None)) if v == "()" => ExitCode::SUCCESS,
@@ -237,7 +257,7 @@ fn run_native(db: &Database, program: Program, files: &[(String, String)], name:
         }
         Err(moddil_native::Native::Unsupported(what)) => {
             eprintln!("moddil: running on the interpreter: {what} is not compiled natively yet");
-            run(db, program, files, name)
+            run(db, program, files, name, argv)
         }
         Err(moddil_native::Native::Leak(n)) => {
             eprintln!("moddil: native code leaked {n} allocations (a bug in the backend)");
@@ -252,13 +272,19 @@ fn run_native(db: &Database, program: Program, files: &[(String, String)], name:
 }
 
 /// `moddil run --wasm`: `main` compiled to WebAssembly and run in Node.
-fn run_wasm(db: &Database, program: Program, files: &[(String, String)], name: &str) -> ExitCode {
+fn run_wasm(
+    db: &Database,
+    program: Program,
+    files: &[(String, String)],
+    name: &str,
+    argv: &[String],
+) -> ExitCode {
     let items = moddil_sema::item_tree(db, program);
     let Some(main) = items.main_fn() else {
         eprintln!("moddil: {name} has no `fn main()`");
         return ExitCode::FAILURE;
     };
-    match moddil_wasm::run_main(db, program, main) {
+    match moddil_wasm::run_main(db, program, main, argv) {
         // An `ExitCode` (`main.exit.1`): the number it stands for.
         Ok((_, Some(code))) => ExitCode::from(code),
         Ok((v, None)) if v == "()" => ExitCode::SUCCESS,

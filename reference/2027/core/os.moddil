@@ -1,0 +1,62 @@
+// The `core` mod's `os` module (`os.1`): what the operating system gives a run. Only a mod whose
+// manifest lists the `os` capability may name it (`os.cap.1`); the standard runtime mod builds the
+// root capabilities over it, so an application reaches the OS only through what `main` is given.
+//
+// What the OS brings arrives on channels, so `select` waits on it: a listener's connections, a
+// connection's bytes, signals. Handles are numbers; bytes are copied into the program's buffers.
+// Under `moddil test` there is no OS: `listen` and `connect` fail, `args` is empty, and no signal
+// comes.
+
+// How many arguments the program was given (after its name).
+#[intrinsic]
+pub fn arg_count() -> int;
+
+// The length in bytes of argument `i`.
+#[intrinsic]
+pub fn arg_len(i: int) -> int;
+
+// Copies argument `i` into `out`, which is as long as it.
+#[intrinsic]
+pub fn arg_copy(i: int, out: &mut [u8]);
+
+// Writes `text` to standard error.
+#[intrinsic]
+pub fn write_stderr(text: &str);
+
+// A random number, from the OS's sources: not 0 or less.
+#[intrinsic]
+pub fn random() -> int;
+
+// Listens on `port` of the local machine: its handle, or -1 if it cannot.
+#[intrinsic]
+pub fn listen(port: int) -> int;
+
+// The connections listener `listener` accepts, as their handles.
+#[intrinsic]
+pub fn incoming(listener: int) -> Receiver<int>;
+
+// A connection to `port` at `host`: its handle, or -1 if it cannot be made.
+#[intrinsic]
+pub fn connect(host: &str, port: int) -> int;
+
+// How many bytes connection `conn` receives, as they arrive; once it ends, the channel has no
+// sender.
+#[intrinsic]
+pub fn arrivals(conn: int) -> Receiver<int>;
+
+// Copies into `out` the bytes connection `conn` has received, as many as fit: how many.
+#[intrinsic]
+pub fn take(conn: int, out: &mut [u8]) -> int;
+
+// Sends `bytes` on connection `conn`: whether it could.
+#[intrinsic]
+pub fn send(conn: int, bytes: &[u8]) -> bool;
+
+// Closes listener or connection `id`.
+#[intrinsic]
+pub fn close(id: int);
+
+// The signals the run is sent: 1 for an interrupt (Ctrl-C, or a `stop` line on standard input),
+// 2 for a request to end.
+#[intrinsic]
+pub fn signals() -> Receiver<int>;

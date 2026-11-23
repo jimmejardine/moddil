@@ -53,8 +53,9 @@ impl Sim {
 
 /// The simulated network: who listens where.
 pub struct SimNet {
-    /// Each listener: its address, its port, and where its connections go.
-    listening: UnsafeCell<Vec<(String, int, Sender<Conn>)>>,
+    /// Each listener: its address, its port, and where its connections' numbers and the
+    /// connections themselves go.
+    listening: UnsafeCell<Vec<(String, int, Sender<int>, Sender<Conn>)>>,
     seed: int,
 }
 
@@ -75,17 +76,18 @@ impl Endpoint {
     /// Listens for connections on `port`.
     pub fn listen(&self, port: Port) -> Listener with fail(NetError) {
         let port: int = port;
-        let (tx, rx) = channel(16);
+        let (ids, id_rx) = channel(16);
+        let (conns, conn_rx) = channel(16);
         let all = self.net.listening.get();
         unsafe("one task runs at a time, and nothing else borrows the listeners") {
-            for (a, p, _) in &*all {
+            for (a, p, _, _) in &*all {
                 if *a == self.addr && *p == port {
                     fail(NetError::new("the port is taken"))
                 }
             }
-            (*all).push((self.addr.clone(), port, tx));
+            (*all).push((self.addr.clone(), port, ids, conns));
         }
-        Listener::new(rx)
+        Listener::simulated(id_rx, conn_rx)
     }
 }
 
@@ -99,16 +101,20 @@ impl Net for Endpoint {
         let (mine, theirs) = Conn::pair();
         let to = unsafe("one task runs at a time, and nothing else borrows the listeners") {
             let mut found = None;
-            for (a, p, tx) in &*all {
+            for (a, p, ids, conns) in &*all {
                 if a.as_str() == addr && *p == port {
-                    found = Some(tx.clone());
+                    found = Some((ids.clone(), conns.clone()));
                 }
             }
             found
         };
         match to {
-            Some(tx) => {
-                try { tx.send(theirs)? } catch {
+            // The connection first, so it is there when its number is received.
+            Some((ids, conns)) => {
+                try {
+                    conns.send(theirs)?;
+                    ids.send(0)?
+                } catch {
                     Closed => fail(NetError::new("the listener is gone")),
                 }
                 mine
@@ -131,7 +137,7 @@ impl<N: Net> Net for Lossy<N> {
     }
 
     fn connect(&self, addr: &str, port: int) -> Conn with suspend, fail(NetError) {
-        let conn = self.outer.connect(addr, port)?;
+        let mut conn = self.outer.connect(addr, port)?;
         let p = self.made.get();
         let n = unsafe("one task runs at a time, and nothing else borrows the count") {
             *p += 1;
@@ -140,7 +146,8 @@ impl<N: Net> Net for Lossy<N> {
         // Each connection loses its own seeded share, so a run replays exactly.
         let rng = seeded(n * 7919 + self.per_mille);
         let per_mille = self.per_mille;
-        conn.lossy(Box::new(|| rng.below(1000) >= per_mille))
+        conn.lose(Box::new(|| rng.below(1000) >= per_mille));
+        conn
     }
 }
 

@@ -46,7 +46,7 @@ pub fn run_test(db: &dyn Db, program: Program, index: u32) -> (Vec<Observed>, Re
     match lower::compile(db, program, Item::Test(index)) {
         Err(why) => (Vec::new(), Err(Native::Unsupported(why))),
         Ok(compiled) => {
-            let (observed, result, _) = compiled.run();
+            let (observed, result, _) = compiled.run(None);
             (observed, result.map(|_| ()))
         }
     }
@@ -59,10 +59,11 @@ pub fn run_test(db: &dyn Db, program: Program, index: u32) -> (Vec<Observed>, Re
 /// [`Native::Unsupported`] if it reaches code not compiled natively yet, and [`Native::Trap`]
 /// if it traps.
 pub fn run_main(db: &dyn Db, program: Program, index: u32) -> Result<String, Native> {
-    run_main_exit(db, program, index).map(|(shown, _)| shown)
+    run_main_exit(db, program, index, Vec::new()).map(|(shown, _)| shown)
 }
 
-/// As [`run_main`], with the process's exit code if `main` gives an `ExitCode` (`main.exit.1`).
+/// As [`run_main`], with the program's arguments `args` and the OS (`os.1`), and with the
+/// process's exit code if `main` gives an `ExitCode` (`main.exit.1`).
 ///
 /// # Errors
 ///
@@ -71,9 +72,10 @@ pub fn run_main_exit(
     db: &dyn Db,
     program: Program,
     index: u32,
+    args: Vec<String>,
 ) -> Result<(String, Option<u8>), Native> {
     let compiled = lower::compile(db, program, Item::Fn(index)).map_err(Native::Unsupported)?;
-    let (_, result, exit) = compiled.run();
+    let (_, result, exit) = compiled.run(Some(args));
     result.map(|shown| (shown, exit))
 }
 

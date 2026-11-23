@@ -1,11 +1,8 @@
-# The umbrella for the standard mods: it re-exports those written in Moddil (`mods/`), so a program
-# names them as `moddil::net` and so on, and holds the signatures still to be written: the root
-# capabilities, `io` and `runtime` (`mod.stub.1`). A function here may have no body, and calling
-# one traps.
+# The umbrella for the standard mods: it re-exports them (`mods/`), all written in Moddil now, so a
+# program names them as `moddil::net`, `moddil::root` and so on.
 [mod]
 name = "moddil"
 edition = "2027"
-stub = true
 
 [dependencies]
 collections = { path = "../../mods/collections" }
@@ -14,3 +11,4 @@ rand = { path = "../../mods/rand" }
 serde = { path = "../../mods/serde" }
 net = { path = "../../mods/net" }
 sim = { path = "../../mods/sim" }
+runtime = { path = "../../mods/runtime" }

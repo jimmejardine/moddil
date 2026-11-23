@@ -48,7 +48,7 @@ Each page lists its diagnostics by code; the codes are in [Diagnostics](diagnost
 - [Ownership](ownership.md), [Borrows](borrows.md), [Views](views.md)
 - [Iteration and collections](collections.md) ([core source](core/collections.moddil))
 - [Errors](errors.md), [Effects](effects.md), [Contracts](contracts.md),
-  [Concurrency](concurrency.md), [Unsafe code](unsafe.md)
+  [Concurrency](concurrency.md), [Unsafe code](unsafe.md), [The operating system](os.md)
 - Expressions: [Evaluation](expressions/evaluation.md), [Literals](expressions/literals.md),
   [Arithmetic](expressions/arithmetic.md), [Bitwise operators](expressions/bitwise.md),
   [Comparisons](expressions/comparison.md), [Logic](expressions/logic.md),

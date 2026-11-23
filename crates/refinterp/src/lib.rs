@@ -32,7 +32,7 @@ pub(crate) const PRELUDE: &str = include_str!("../../../reference/2027/prelude.m
 
 /// The built-in `core` mod's modules, which every mod depends on as `core`: each one's name and
 /// source.
-pub(crate) const CORE_MODULES: [(&str, &str); 4] = [
+pub(crate) const CORE_MODULES: [(&str, &str); 5] = [
     (
         "collections",
         include_str!("../../../reference/2027/core/collections.moddil"),
@@ -49,6 +49,7 @@ pub(crate) const CORE_MODULES: [(&str, &str); 4] = [
         "atomic",
         include_str!("../../../reference/2027/core/atomic.moddil"),
     ),
+    ("os", include_str!("../../../reference/2027/core/os.moddil")),
 ];
 
 /// Why a program traps.

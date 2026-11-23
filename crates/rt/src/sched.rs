@@ -8,7 +8,7 @@
 //! becomes ready too, to unwind. Keeping the interpreter's order makes a native run's order the
 //! interpreters'.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 use crate::Trapped;
 use crate::baton::DropFn;
@@ -109,6 +109,25 @@ pub(crate) struct Scheduler {
     now: i64,
     /// The timers not yet fired: when each fires, in the order made, and its channel.
     timers: Vec<(i64, usize)>,
+    /// For a run of `main`: the OS, whose events feed channels, and when the run began (its
+    /// time is then the wall clock's) (`os.1`).
+    pub(crate) os: Option<(crate::os::Os, crate::os::Start)>,
+    /// The channels the OS's events go to: each listener's connections, each connection's
+    /// arrivals, and the signals.
+    incoming: HashMap<usize, usize>,
+    arrivals: HashMap<usize, usize>,
+    signals: Option<usize>,
+}
+
+/// What an OS channel brings (`os.1`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum OsSource {
+    /// A listener's connections.
+    Incoming,
+    /// A connection's arrivals.
+    Arrivals,
+    /// The signals.
+    Signals,
 }
 
 impl Scheduler {
@@ -122,14 +141,105 @@ impl Scheduler {
             ended: 0,
             now: 0,
             timers: Vec::new(),
+            os: None,
+            incoming: HashMap::new(),
+            arrivals: HashMap::new(),
+            signals: None,
         }
     }
 
     /// A timer's channel, whose one value arrives `nanos` from now (`task.timer.1`).
     pub(crate) fn timer(&mut self, nanos: i64) -> usize {
         let c = self.channel(1);
-        self.timers.push((self.now.saturating_add(nanos.max(0)), c));
+        self.timers
+            .push((self.clock().saturating_add(nanos.max(0)), c));
         c
+    }
+
+    /// The OS of a run of `main`, if this is one.
+    pub(crate) fn os(&mut self) -> Option<&mut crate::os::Os> {
+        self.os.as_mut().map(|(os, _)| os)
+    }
+
+    /// A channel the OS feeds: its events for `id` (a listener's connections, a connection's
+    /// arrivals) or the signals. Outside a run of `main` nothing feeds it, so it has no sender,
+    /// but for the signals, which never come.
+    pub(crate) fn os_channel(&mut self, kind: OsSource, id: usize) -> usize {
+        let c = self.channel(1024);
+        match (kind, self.os.as_mut()) {
+            (OsSource::Incoming, Some((os, _))) => {
+                os.watch(id);
+                self.incoming.insert(id, c);
+            }
+            (OsSource::Arrivals, Some((os, _))) => {
+                os.watch(id);
+                self.arrivals.insert(id, c);
+            }
+            (OsSource::Signals, Some((os, _))) => {
+                os.watch_signals();
+                self.signals = Some(c);
+            }
+            (OsSource::Signals, None) => {}
+            (_, None) => self.channels[c].senders = 0,
+        }
+        c
+    }
+
+    /// The time since the run began: the wall clock's for a run of `main`, else virtual.
+    fn clock(&self) -> i64 {
+        match &self.os {
+            Some((_, start)) => start.elapsed(),
+            None => self.now,
+        }
+    }
+
+    /// Puts what the OS brought into the channels waiting for it; an `int` is its 8 bytes.
+    fn deliver_os(&mut self, events: Vec<crate::os::Event>) {
+        use crate::os::Event;
+        for e in events {
+            match e {
+                Event::Accepted(l, conn) => {
+                    if let Some(&c) = self.incoming.get(&l) {
+                        self.push(c, (conn as i64).to_le_bytes().to_vec());
+                    }
+                }
+                Event::Data(conn, n) => {
+                    if let Some(&c) = self.arrivals.get(&conn) {
+                        self.push(c, (n as i64).to_le_bytes().to_vec());
+                    }
+                }
+                Event::Ended(conn) => {
+                    if let Some(c) = self.arrivals.remove(&conn) {
+                        self.drop_sender(c);
+                    }
+                }
+                Event::Signal(s) => {
+                    if let Some(c) = self.signals {
+                        self.push(c, s.to_le_bytes().to_vec());
+                    }
+                }
+            }
+        }
+    }
+
+    /// Fires timer `i`.
+    fn fire(&mut self, i: usize) {
+        let (at, c) = self.timers.remove(i);
+        self.now = at;
+        if self.channels[c].receiver {
+            // `()` has no bytes.
+            self.push(c, Vec::new());
+        }
+        self.drop_sender(c);
+    }
+
+    /// The earliest timer: its index and when it fires.
+    fn earliest(&self) -> Option<(usize, i64)> {
+        self.timers
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, (at, _))| *at)
+            .map(|(i, (at, _))| (i, *at))
     }
 
     pub(crate) fn open_scope(&mut self, owner: usize, isolated: bool) -> usize {
@@ -414,20 +524,32 @@ impl Scheduler {
     /// The next task to run, if any is ready. With none, time moves to the earliest timer,
     /// which fires (`task.timer.1`), until a task is ready or no timer is left.
     pub(crate) fn next(&mut self) -> Option<usize> {
-        while self.ready.is_empty() && !self.timers.is_empty() {
-            let (i, _) = self
-                .timers
-                .iter()
-                .enumerate()
-                .min_by_key(|(_, (at, _))| *at)
-                .expect("a timer");
-            let (at, c) = self.timers.remove(i);
-            self.now = at;
-            if self.channels[c].receiver {
-                // `()` has no bytes.
-                self.push(c, Vec::new());
+        if self.os.is_some() {
+            // A run of `main`: the OS's events and the wall clock's timers, waiting for either.
+            while self.ready.is_empty() {
+                let now = self.clock();
+                if let Some((i, at)) = self.earliest()
+                    && at <= now
+                {
+                    self.fire(i);
+                    continue;
+                }
+                let until = self.earliest().map(|(_, at)| at);
+                let (os, _) = self.os.as_mut().expect("the OS");
+                if until.is_none() && !os.waiting() {
+                    break;
+                }
+                let wait =
+                    until.map(|at| std::time::Duration::from_nanos((at - now).max(0) as u64));
+                let events = os.poll(wait);
+                self.deliver_os(events);
             }
-            self.drop_sender(c);
+        } else {
+            while self.ready.is_empty()
+                && let Some((i, _)) = self.earliest()
+            {
+                self.fire(i);
+            }
         }
         self.ready.pop_front()
     }

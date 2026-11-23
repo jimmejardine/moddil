@@ -124,15 +124,15 @@ impl Collector<'_> {
             }
             variants
         };
-        // Attributes: derives, and `#[root_capability]` on a stub mod's struct
-        // (`main.root.1`).
+        // Attributes: derives, and `#[root_capability]` on the struct of a stub mod or of one
+        // with the `os` capability (`main.root.1`).
         let mut copy = false;
         let stub = src.is_file()
             && self
                 .tree
                 .mods
                 .get(self.tree.mod_of(self.module) as usize)
-                .is_some_and(|m| m.stub);
+                .is_some_and(|m| m.stub || m.os_ok);
         for attr in node
             .children()
             .filter(|c| c.kind() == K::OUTER_ATTR && !crate::is_doc(c))

@@ -1,0 +1,119 @@
+//! `BinaryHeap`, a priority queue.
+
+/// A priority queue: `pop` gives the greatest value first. It is a max-heap in a `Vec`: each
+/// value is at least as great as its children, at `2i + 1` and `2i + 2`.
+pub struct BinaryHeap<T> {
+    values: Vec<T>,
+}
+
+impl<T: Ord> BinaryHeap<T> {
+    pub fn new() -> BinaryHeap<T> {
+        BinaryHeap { values: Vec::new() }
+    }
+
+    pub fn len(&self) -> int {
+        self.values.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    /// The greatest value, if there is one.
+    pub fn peek(&self) -> Option<&T> {
+        self.values.first()
+    }
+
+    pub fn push(&mut self, x: T) {
+        self.values.push(x);
+        let mut i = self.values.len() - 1;
+        while i > 0 {
+            let parent = (i - 1) / 2;
+            if self.greater(i, parent) {
+                self.values.swap(i, parent);
+                i = parent;
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// Takes out the greatest value.
+    pub fn pop(&mut self) -> Option<T> {
+        let n = self.values.len();
+        if n == 0 {
+            return None;
+        }
+        self.values.swap(0, n - 1);
+        let top = self.values.pop();
+        self.sift_down(0, n - 1);
+        top
+    }
+
+    /// The values, least first.
+    pub fn into_sorted_vec(self) -> Vec<T> {
+        let mut heap = self;
+        let mut end = heap.values.len();
+        while end > 1 {
+            end -= 1;
+            heap.values.swap(0, end);
+            heap.sift_down(0, end);
+        }
+        heap.values
+    }
+
+    /// Whether the value at `i` is greater than the one at `j`.
+    fn greater(&self, i: int, j: int) -> bool {
+        match self.values[i].cmp(&self.values[j]) {
+            Ordering::Greater => true,
+            _ => false,
+        }
+    }
+
+    /// Moves the value at `i` down until the heap's first `len` values are a heap again.
+    fn sift_down(&mut self, i: int, len: int) {
+        let mut at = i;
+        loop {
+            let left = 2 * at + 1;
+            let right = left + 1;
+            let mut largest = at;
+            if left < len && self.greater(left, largest) {
+                largest = left;
+            }
+            if right < len && self.greater(right, largest) {
+                largest = right;
+            }
+            if largest == at {
+                break;
+            }
+            self.values.swap(at, largest);
+            at = largest;
+        }
+    }
+}
+
+impl<T: Ord> FromArrayLiteral<T> for BinaryHeap<T> {
+    fn from_array<const N: int>(items: [T; N]) -> BinaryHeap<T> {
+        let mut h = BinaryHeap::new();
+        for x in items {
+            h.push(x);
+        }
+        h
+    }
+
+    fn from_repeat(x: T, n: int) -> BinaryHeap<T> where T: Clone {
+        let mut h = BinaryHeap::new();
+        let mut i = 0;
+        while i < n {
+            h.push(x.clone());
+            i += 1;
+        }
+        h
+    }
+}
+
+impl<T: Ord> Default for BinaryHeap<T> {
+    fn default() -> BinaryHeap<T> {
+        BinaryHeap::new()
+    }
+}

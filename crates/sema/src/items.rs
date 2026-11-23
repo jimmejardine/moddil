@@ -148,6 +148,8 @@ pub struct ModDef {
     pub stub: bool,
     /// Whether it may use `unsafe` blocks (`mod.caps.1`).
     pub unsafe_ok: bool,
+    /// Whether it may name the `core` mod's `os` module (`os.cap.1`).
+    pub os_ok: bool,
 }
 
 /// A type parameter.

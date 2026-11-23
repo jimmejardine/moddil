@@ -1,6 +1,7 @@
 [mod]
 name = "moddil.com/net"
 edition = "2027"
+capabilities = ["os"]
 
 [dependencies]
 serde = { path = "../serde" }

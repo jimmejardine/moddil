@@ -891,6 +891,40 @@ fn run_task(
 }
 
 impl Machine<'_> {
+    /// A function of the `core` mod's `os` module, `name`, under a test, which has no OS
+    /// (`os.1`): no arguments; a fixed random number; listening and connecting fail; the
+    /// channels of connections and arrivals have no sender, and no signal comes.
+    pub(super) fn no_os(&mut self, name: &str, args: &[Value]) -> Value {
+        match name {
+            "arg_count" | "arg_len" | "take" => Value::Int(0),
+            "random" => Value::Int(4),
+            "listen" | "connect" => Value::Int(-1),
+            "send" => Value::Bool(false),
+            "write_stderr" => {
+                if let Some(t) = super::text::text_of(self, &args[0]) {
+                    eprint!("{t}");
+                }
+                Value::Unit
+            }
+            "incoming" | "arrivals" | "signals" => {
+                let senders = usize::from(name == "signals");
+                let c = self.with_tasks(|ts| {
+                    ts.channels.push(Channel {
+                        values: VecDeque::new(),
+                        capacity: 1,
+                        senders,
+                        receiver: true,
+                        sent: 0,
+                        received: 0,
+                    });
+                    ts.channels.len() - 1
+                });
+                handle("Receiver", c)
+            }
+            _ => Value::Unit,
+        }
+    }
+
     /// Selectable function `f`'s receive, by range, and the channel it receives from, read
     /// from its arguments `values`: its body starts with `place.recv()`, `place` a parameter
     /// or a field of one (`task.select.4`).

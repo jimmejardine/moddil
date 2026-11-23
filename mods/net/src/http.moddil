@@ -1,11 +1,12 @@
-//! HTTP (`stdlib.md`: HTTP), over `Conn`'s messages: a request is `METHOD PATH`, a line, then
-//! its body; a response is its status code, a line, then its body.
+//! HTTP/1.1 (`stdlib.md`: HTTP), over a `Conn`: a request line or status line, headers, and a
+//! body as long as `Content-Length` says. One request per connection: no keep-alive or chunking
+//! yet.
 //!
 //! A `Router` holds its routes' handlers as they were named, with the handlers they captured
 //! there (`type.impl.ret.2`), so its users see only `handle`'s `suspend`. Each route's errors
 //! become responses, so none passes on (`expr.closure.fails.2`).
 
-use mod::{Conn, Net, Url};
+use mod::{Conn, Net, Url, bytes_of};
 use serde::Serialize;
 use serde::json;
 
@@ -29,6 +30,17 @@ impl Status {
             Status::BadRequest => 400,
             Status::NotFound => 404,
             Status::Conflict => 409,
+        }
+    }
+
+    fn reason(&self) -> &str {
+        match self {
+            Status::Ok => "OK",
+            Status::Created => "Created",
+            Status::PermanentRedirect => "Permanent Redirect",
+            Status::BadRequest => "Bad Request",
+            Status::NotFound => "Not Found",
+            Status::Conflict => "Conflict",
         }
     }
 
@@ -69,17 +81,18 @@ impl Request {
         &self.body
     }
 
-    fn to_text(&self) -> String {
-        fmt"{self.method} {self.path}\n{self.body}"
+    fn to_text(&self, host: &str) -> String {
+        fmt"{self.method} {self.path} HTTP/1.1\r\nHost: {host}\r\nContent-Length: {self.body.len()}\r\nConnection: close\r\n\r\n{self.body}"
     }
 
-    fn parse(text: &str) -> Option<Request> {
-        let (head, body) = text.split_once("\n")?;
-        let (method, path) = head.split_once(" ")?;
+    fn parse(m: &Message) -> Option<Request> {
+        let mut parts = m.start.split_once(" ")?;
+        let method = parts.0;
+        let (path, _) = parts.1.split_once(" ")?;
         Some(Request {
             method: method.to_string(),
             path: path.to_string(),
-            body: body.to_string(),
+            body: m.body.clone(),
         })
     }
 }
@@ -88,25 +101,39 @@ impl Request {
 pub struct Response {
     status: Status,
     body: String,
+    /// Where a redirect goes.
+    location: Option<String>,
 }
 
 impl Response {
     /// A response with `status` and no body; `r.status()` reads it (`item.impl.same-name.1`).
     pub fn status(status: Status) -> Response {
-        Response { status, body: String::new() }
+        Response { status, body: String::new(), location: None }
     }
 
     pub fn text(status: Status, body: String) -> Response {
-        Response { status, body }
+        Response { status, body, location: None }
     }
 
     pub fn json<T: Serialize>(status: Status, value: &T) -> Response {
-        Response { status, body: json::encode(value) }
+        Response { status, body: json::encode(value), location: None }
     }
 
-    /// A redirect to `to`, which is the body.
+    /// A redirect to `to`: its `Location`, and its body.
     pub fn redirect(status: Status, to: &Url) -> Response {
-        Response { status, body: to.as_str().to_string() }
+        Response {
+            status,
+            body: to.as_str().to_string(),
+            location: Some(to.as_str().to_string()),
+        }
+    }
+
+    /// Where a redirect goes.
+    pub fn location(&self) -> Option<&str> {
+        match &self.location {
+            Some(l) => Some(l.as_str()),
+            None => None,
+        }
     }
 
     pub fn status(&self) -> Status {
@@ -118,12 +145,26 @@ impl Response {
     }
 
     fn to_text(&self) -> String {
-        fmt"{self.status.code()}\n{self.body}"
+        let mut out = fmt"HTTP/1.1 {self.status.code()} {self.status.reason()}\r\nContent-Length: {self.body.len()}\r\nConnection: close\r\n";
+        if let Some(l) = &self.location {
+            out.push_str(fmt"Location: {l}\r\n".as_str());
+        }
+        out.push_str("\r\n");
+        out.push_str(&self.body);
+        out
     }
 
-    fn parse(text: &str) -> Option<Response> {
-        let (code, body) = text.split_once("\n")?;
-        Some(Response { status: Status::from_code(code)?, body: body.to_string() })
+    fn parse(m: &Message) -> Option<Response> {
+        let (_, rest) = m.start.split_once(" ")?;
+        let code = match rest.split_once(" ") {
+            Some((code, _)) => code,
+            None => rest,
+        };
+        Some(Response {
+            status: Status::from_code(code)?,
+            body: m.body.clone(),
+            location: m.header("location"),
+        })
     }
 }
 
@@ -288,47 +329,158 @@ impl Display for HttpError {
     }
 }
 
+/// A message as read: its start line, headers, and body.
+struct Message {
+    start: String,
+    headers: Vec<(String, String)>,
+    body: String,
+}
+
+impl Message {
+    /// Header `name`'s value (names compared without case).
+    fn header(&self, name: &str) -> Option<String> {
+        for (k, v) in &self.headers {
+            if k.to_lowercase() == name.to_lowercase() {
+                return Some(v.clone());
+            }
+        }
+        None
+    }
+}
+
+/// Where the head ends in `bytes` (after its blank line), if it has.
+fn head_end(bytes: &Vec<u8>) -> Option<int> {
+    let mut i = 3;
+    while i < bytes.len() {
+        if bytes[i - 3] == 13 && bytes[i - 2] == 10 && bytes[i - 1] == 13 && bytes[i] == 10 {
+            return Some(i + 1);
+        }
+        i += 1;
+    }
+    None
+}
+
+/// The text of `bytes` from `a` up to `b`.
+fn text_of(bytes: &Vec<u8>, a: int, b: int) -> Option<String> {
+    let mut part: Vec<u8> = Vec::with_capacity(b - a);
+    let mut i = a;
+    while i < b {
+        part.push(bytes[i]);
+        i += 1;
+    }
+    try { Some(String::from_utf8(part)?) } catch {
+        _ => None,
+    }
+}
+
+/// Reads one message from `conn`: its head, then as many bytes of body as `Content-Length` says.
+/// `None` if it ends first, does not parse, or, with `patience`, takes longer between reads.
+fn read_message(conn: &Conn, patience: Option<Duration>) -> Option<Message> with suspend {
+    let mut got: Vec<u8> = Vec::new();
+    loop {
+        if let Some(end) = head_end(&got) {
+            let head = text_of(&got, 0, end - 4)?;
+            let (start, rest) = match head.split_once("\r\n") {
+                Some((s, r)) => (s.to_string(), r.to_string()),
+                None => (head.clone(), String::new()),
+            };
+            let mut headers = Vec::new();
+            let mut lines: &str = &rest;
+            while lines.len() > 0 {
+                let (line, after) = match lines.split_once("\r\n") {
+                    Some((l, a)) => (l, a),
+                    None => (lines, ""),
+                };
+                if let Some((k, v)) = line.split_once(":") {
+                    headers.push((k.trim().to_string(), v.trim().to_string()));
+                }
+                lines = after;
+            }
+            let m = Message { start, headers, body: String::new() };
+            let want = match m.header("content-length") {
+                Some(n) => number(&n)?,
+                None => 0,
+            };
+            if got.len() - end >= want {
+                let body = text_of(&got, end, end + want)?;
+                return Some(Message { start: m.start, headers: m.headers, body });
+            }
+        }
+        let more = match patience {
+            Some(d) => conn.read_within(d)?,
+            None => conn.read()?,
+        };
+        for b in more {
+            got.push(b);
+        }
+    }
+}
+
+/// The non-negative number `text` is, if it is one.
+fn number(text: &str) -> Option<int> {
+    let mut n = 0;
+    if text.len() == 0 {
+        return None;
+    }
+    for c in text.chars() {
+        let d = match c {
+            '0' => 0, '1' => 1, '2' => 2, '3' => 3, '4' => 4,
+            '5' => 5, '6' => 6, '7' => 7, '8' => 8, '9' => 9,
+            _ => return None,
+        };
+        n = n * 10 + d;
+    }
+    Some(n)
+}
+
 /// Serves one connection with `app`: one request, then its response.
 pub fn serve_connection<H: Handler>(conn: Conn, app: &H) with suspend, fail(HttpError) {
-    let text = match conn.recv() {
-        Some(t) => t,
+    let m = match read_message(&conn, None) {
+        Some(m) => m,
         None => fail(HttpError::new("the connection closed before a request")),
     };
-    let req = match Request::parse(&text) {
+    let req = match Request::parse(&m) {
         Some(r) => r,
         None => fail(HttpError::new("a request that does not parse")),
     };
     let resp = app.handle(&req);
-    try { conn.send(resp.to_text())? } catch {
+    try { conn.write_text(&resp.to_text())? } catch {
         e => fail(HttpError::new(e.reason())),
     }
 }
 
-/// How long `post` waits for an answer before it tries again.
+/// How long `post` waits for an answer before it tries again, in milliseconds.
 const PATIENCE: int = 1000;
 
-/// Sends a `POST` of `body` to `url` (`http://host/path`), trying again up to `retries` times
-/// when no answer comes.
+/// Sends a `POST` of `body` to `url` (`http://host[:port]/path`), trying again up to `retries`
+/// times when no answer comes.
 pub fn post(url: String, body: &str, retries: int) -> Response with net: Net, suspend, fail(HttpError) {
     let rest = match url.split_once("http://") {
         Some((_, rest)) => rest,
         None => fail(HttpError::new("only http:// URLs are supported")),
     };
-    let (host, path) = match rest.find("/") {
+    let (authority, path) = match rest.find("/") {
         Some(at) => (rest.between(rest.start(), at), rest.between(at, rest.end())),
         None => (rest, "/"),
     };
-    let request = Request::post(path, body).to_text();
+    let (host, port) = match authority.split_once(":") {
+        Some((h, p)) => match number(p) {
+            Some(p) => (h, p),
+            None => fail(HttpError::new("a port that is not a number")),
+        },
+        None => (authority, 80),
+    };
+    let request = Request::post(path, body).to_text(authority);
     let mut tries = 0;
     loop {
-        let conn = try { net.connect(host, 80)? } catch {
+        let conn = try { net.connect(host, port)? } catch {
             e => fail(HttpError::new(e.reason())),
         };
-        try { conn.send(request.clone())? } catch {
+        try { conn.write_text(&request)? } catch {
             e => fail(HttpError::new(e.reason())),
         };
-        if let Some(text) = conn.recv_within(Duration::millis(PATIENCE)) {
-            return match Response::parse(&text) {
+        if let Some(m) = read_message(&conn, Some(Duration::millis(PATIENCE))) {
+            return match Response::parse(&m) {
                 Some(r) => r,
                 None => fail(HttpError::new("a response that does not parse")),
             };

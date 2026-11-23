@@ -1,6 +1,6 @@
-//! The standard mods, under one name: those written in Moddil, re-exported, and the signatures
-//! of those still to be written (`root`, `io`, `runtime`), whose functions have no body, so a
-//! program checks against them and calling one traps (`not implemented yet`).
+//! The standard mods, under one name: each written in Moddil (`mods/`), re-exported. The root
+//! capabilities are `moddil::root`, the terminal `moddil::io`, and running a server
+//! `moddil::runtime`.
 
 pub use collections;
 pub use sync;
@@ -8,3 +8,6 @@ pub use rand;
 pub use serde;
 pub use net;
 pub use sim;
+pub use runtime;
+pub use runtime::root;
+pub use runtime::io;

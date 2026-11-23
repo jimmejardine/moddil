@@ -38,10 +38,11 @@ pub(crate) const PRELUDE: &str = concat!(
     include_str!("../../../../reference/2027/core/ptr.moddil"),
     include_str!("../../../../reference/2027/core/cell.moddil"),
     include_str!("../../../../reference/2027/core/atomic.moddil"),
+    include_str!("../../../../reference/2027/core/os.moddil"),
 );
 
 /// The `core` mod's modules, in [`PRELUDE`]'s order: each one's name and source.
-pub(crate) const CORE_MODULES: [(&str, &str); 4] = [
+pub(crate) const CORE_MODULES: [(&str, &str); 5] = [
     (
         "collections",
         include_str!("../../../../reference/2027/core/collections.moddil"),
@@ -57,6 +58,10 @@ pub(crate) const CORE_MODULES: [(&str, &str); 4] = [
     (
         "atomic",
         include_str!("../../../../reference/2027/core/atomic.moddil"),
+    ),
+    (
+        "os",
+        include_str!("../../../../reference/2027/core/os.moddil"),
     ),
 ];
 
@@ -299,6 +304,7 @@ impl Collector<'_> {
                 deps: m.deps.iter().cloned().collect(),
                 stub: m.stub,
                 unsafe_ok: m.unsafe_ok,
+                os_ok: m.os_ok,
             });
         }
         for (f, file) in files.iter().enumerate() {
@@ -347,6 +353,7 @@ impl Collector<'_> {
             deps: std::collections::BTreeMap::new(),
             stub: false,
             unsafe_ok: true,
+            os_ok: true,
         });
     }
 

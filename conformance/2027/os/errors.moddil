@@ -1,0 +1,5 @@
+// covers: os.cap.1
+
+fn r() -> int {
+    core::os::random()                      //~ E0220
+}

@@ -44,11 +44,11 @@ Done in slice S9d (November 2026).
   ([`testing.md`: Examples are tests](testing.md#examples-are-tests)).
 - **`moddil doc` renders the mod as the tour** (once `moddil doc` exists), and this page shrinks
   to a pointer plus the gaps table.
-- **Its libraries are the standard mods, written in Moddil** (since M2 slice M2c), under
-  [`mods/`](../mods/README.md): `collections`, `sync`, `rand`, `serde`, `net` (with `http`) and
-  `sim`. It names them through [`stubs/moddil/`](../stubs/moddil/README.md), which re-exports
-  them and still holds the signatures not written yet (the root capabilities, `io` and
-  `runtime`), so `main` checks but does not run.
+- **Its libraries are the standard mods, written in Moddil** (since M2 slices M2c and M2d), under
+  [`mods/`](../mods/README.md): `collections`, `sync`, `rand`, `serde`, `net` (with `http`),
+  `sim` and `runtime` (the root capabilities). It names them through
+  [`stubs/moddil/`](../stubs/moddil/README.md), which re-exports them. `moddil run tour/shorty`
+  serves real HTTP/1.1, natively, on the MIR interpreter and as WebAssembly under Node.
 - **Gates, run in CI from then on** ([`roadmap.md`: Milestones](roadmap.md#milestones)):
   - **M0:** the tour parses and passes the type, effect and ownership checks;
   - **M2:** its tests pass, including the simulated-network test under `moddil/runtime-sim`.

@@ -985,6 +985,36 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
   - **A fix found on the way:** native code kept refinements only as their bases in type
     arguments, so `T::refine` could not find its refinement; type arguments now keep them, and
     layouts use the base.
+- **Slice M2d (decided November 2026): `moddil/runtime`, and the tour runs for real.**
+  `moddil run tour/shorty -- --port 8080` serves HTTP/1.1 natively, on the MIR interpreter and as
+  WebAssembly under Node; a `stop` line on standard input, or Ctrl-C, stops it gracefully.
+  - **`core::os`** (`os.1`):
+    - intrinsics for arguments, standard error, randomness, TCP on the local machine and signals;
+    - what the OS brings arrives on channels, so `select` waits on it;
+    - handles are numbers, and bytes are copied into the program's buffers.
+  - **Who may name it** (`os.cap.1`): only a mod whose manifest lists the `os` capability
+    (E0220), and only such a mod declares root capabilities.
+  - **Under `moddil test` there is no OS** (`os.test.1`), and time stays virtual.
+  - **A run of `main` has the OS**, and wall-clock time: an idle scheduler waits for the OS
+    until its next timer.
+    - The MIR interpreter and moddil-rt use the new `moddil-os` crate (`std::net`, polled; the
+      `ctrlc` crate for signals).
+    - WebAssembly calls the host's functions: Node's `net` module, with the wait suspending
+      through JSPI.
+    - The reference interpreter answers as a test does.
+  - **`mods/runtime`**, in Moddil over `core::os`:
+    - the root capabilities, the terminal, and `serve_until_stopped`, which stops its run at a
+      signal and cancels it after the grace period;
+    - the stub mod is now only an umbrella of re-exports.
+  - **`net`:**
+    - `Conn` carries bytes, over a simulated link or an OS connection;
+    - `http` speaks HTTP/1.1 (`Content-Length`, no chunking or keep-alive);
+    - the simulator carries bytes too.
+  - **Checked:**
+    - conformance for `core::os`;
+    - every mod's and the tour's tests, everywhere;
+    - a CLI test per runner that serves the tour, creates and follows a link over real TCP,
+      and stops it, checking the exit code.
 - **Next:** the rest of M2: the LSP prototype and the first GPU path, and the standard mods the
   tour does not reach.
 

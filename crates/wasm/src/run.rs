@@ -148,7 +148,9 @@ pub fn host_available() -> bool {
 /// A host running a module, and the directory its files are in.
 struct Host {
     child: Child,
-    stdin: ChildStdin,
+    /// Shared, so a run of `main` can be sent signals while it goes on; taken (closed) when the
+    /// host ends, so its pending read of it ends.
+    stdin: std::sync::Arc<std::sync::Mutex<Option<ChildStdin>>>,
     stdout: BufReader<ChildStdout>,
     dir: PathBuf,
 }
@@ -214,7 +216,7 @@ impl Host {
         );
         let mut h = Host {
             child,
-            stdin,
+            stdin: std::sync::Arc::new(std::sync::Mutex::new(Some(stdin))),
             stdout,
             dir,
         };
@@ -232,8 +234,15 @@ impl Host {
     }
 
     fn send(&mut self, cmd: &str) -> Result<(), Wasm> {
-        writeln!(self.stdin, "{cmd}")
-            .and_then(|()| self.stdin.flush())
+        let mut stdin = self
+            .stdin
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(stdin) = stdin.as_mut() else {
+            return Err(Wasm::Crash("the host has ended".to_string()));
+        };
+        writeln!(stdin, "{cmd}")
+            .and_then(|()| stdin.flush())
             .map_err(|e| Wasm::Crash(format!("the host stopped: {e}")))
     }
 
@@ -268,6 +277,13 @@ impl Host {
 impl Drop for Host {
     fn drop(&mut self) {
         let _ = self.send("quit");
+        // Closed, so a read of it the host has pending ends.
+        drop(
+            self.stdin
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take(),
+        );
         let _ = self.child.wait();
         let _ = std::fs::remove_dir_all(&self.dir);
     }
@@ -323,6 +339,11 @@ type Ran = (Vec<Observed>, Result<(String, Option<u8>), Wasm>);
 
 /// Runs entry `k` of `c` in `host`, as the JIT runs one.
 fn run_entry(c: &Compiled<'_>, host: &mut Host, k: usize) -> Ran {
+    run_command(c, host, k, &format!("run {k}"))
+}
+
+/// Runs entry `k` with host command `cmd`: as [`run_entry`].
+fn run_command(c: &Compiled<'_>, host: &mut Host, k: usize, cmd: &str) -> Ran {
     let mut show = Show {
         items: c.items,
         layouts: Layouts::new(c.items),
@@ -332,7 +353,7 @@ fn run_entry(c: &Compiled<'_>, host: &mut Host, k: usize) -> Ran {
     let mut parts: Vec<(TextRange, Option<String>)> = Vec::new();
     let entry = &c.entries[k];
     let status = match (|| -> Result<i64, Wasm> {
-        host.send(&format!("run {k}"))?;
+        host.send(cmd)?;
         loop {
             let l = host.line()?;
             if let Some(site) = l.get("o") {
@@ -484,8 +505,34 @@ pub fn run_tests(db: &dyn Db, program: Program, tests: &[u32]) -> Result<TestRun
 /// # Errors
 ///
 /// As [`run_tests`], and [`Wasm::Trap`] if it traps or [`Wasm::Failed`] if an error leaves it.
-pub fn run_main(db: &dyn Db, program: Program, index: u32) -> Result<(String, Option<u8>), Wasm> {
+pub fn run_main(
+    db: &dyn Db,
+    program: Program,
+    index: u32,
+    args: &[String],
+) -> Result<(String, Option<u8>), Wasm> {
     let c = compile(db, program, &[Item::Fn(index)]).map_err(Wasm::Unsupported)?;
     let mut host = Host::start(&c)?;
-    run_entry(&c, &mut host, 0).1
+    // A `stop` line on this process's standard input is an interrupt for the run (`os.1`).
+    let stdin = std::sync::Arc::clone(&host.stdin);
+    std::thread::spawn(move || {
+        let mut line = String::new();
+        while std::io::stdin().read_line(&mut line).is_ok_and(|n| n > 0) {
+            if line.trim() == "stop" {
+                let mut s = stdin
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let Some(s) = s.as_mut() else { break };
+                if writeln!(s, "signal 1").and_then(|()| s.flush()).is_err() {
+                    break;
+                }
+            }
+            line.clear();
+        }
+    });
+    let json: Vec<String> = args
+        .iter()
+        .map(|a| format!("\"{}\"", a.replace('\\', "\\\\").replace('"', "\\\"")))
+        .collect();
+    run_command(&c, &mut host, 0, &format!("main 0 [{}]", json.join(","))).1
 }

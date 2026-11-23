@@ -1,7 +1,8 @@
-//! The network (`stdlib.md`: Networking): the `Net` effect, connections that carry text, and
-//! URLs. `http` is written over it. A network is a handler for `Net`: the runtime's, or a
-//! simulated one (`moddil.com/sim`).
+//! The network (`stdlib.md`: Networking): the `Net` effect, connections that carry bytes, and
+//! URLs. `http` is written over it. A network is a handler for `Net`: the OS's, through the root
+//! capability `NetRoot` (`moddil.com/runtime`), or a simulated one (`moddil.com/sim`).
 
+use core::os;
 use serde::json::{Decoder, Encoder};
 use serde::{DecodeError, Deserialize, Serialize};
 
@@ -83,71 +84,185 @@ impl Deserialize for Url {
     }
 }
 
-/// A connection: messages of text each way.
+/// What a connection runs over: two channels of a simulated network, or an OS connection, whose
+/// arrivals say how many bytes it has received (`core::os`).
+pub enum Link {
+    Sim { out: Sender<Vec<u8>>, incoming: Receiver<Vec<u8>> },
+    Os { id: int, arrivals: Receiver<int> },
+}
+
+/// A connection: bytes each way.
 pub struct Conn {
-    out: Sender<String>,
-    incoming: Receiver<String>,
-    /// For a connection that loses messages: whether to send the next one.
+    link: Link,
+    /// For a connection that loses what it sends: whether to send the next write.
     keep: Option<Box<dyn Fn() -> bool>>,
 }
 
 impl Conn {
-    /// Two ends of a new connection, each sending what the other receives.
+    /// Two ends of a new simulated connection, each receiving what the other writes.
     pub fn pair() -> (Conn, Conn) {
-        let (a_out, b_in) = channel(16);
-        let (b_out, a_in) = channel(16);
+        let (a_out, b_in) = channel(64);
+        let (b_out, a_in) = channel(64);
         (
-            Conn { out: a_out, incoming: a_in, keep: None },
-            Conn { out: b_out, incoming: b_in, keep: None },
+            Conn { link: Link::Sim { out: a_out, incoming: a_in }, keep: None },
+            Conn { link: Link::Sim { out: b_out, incoming: b_in }, keep: None },
         )
     }
 
-    /// The same connection, sending only the messages `keep` says to; the rest are lost.
-    pub fn lossy(self, keep: Box<dyn Fn() -> bool>) -> Conn {
-        Conn { out: self.out, incoming: self.incoming, keep: Some(keep) }
+    /// The OS's connection `id`.
+    pub fn os(id: int) -> Conn {
+        Conn { link: Link::Os { id, arrivals: os::arrivals(id) }, keep: None }
     }
 
-    /// Sends `text`, unless the connection loses it.
-    pub fn send(&self, text: String) with suspend, fail(NetError) {
+    /// From now on, sends only the writes `keep` says to; the rest are lost.
+    pub fn lose(&mut self, keep: Box<dyn Fn() -> bool>) {
+        self.keep = Some(keep);
+    }
+
+    /// Sends `bytes`, unless the connection loses them.
+    pub fn write(&self, bytes: &[u8]) with suspend, fail(NetError) {
         let lost = match &self.keep {
             Some(keep) => !(**keep)(),
             None => false,
         };
-        if !lost {
-            try { self.out.send(text)? } catch {
-                Closed => fail(NetError::new("the connection is closed")),
+        if lost {
+            return;
+        }
+        match &self.link {
+            Link::Sim { out, .. } => {
+                try { out.send(copy_of(bytes))? } catch {
+                    Closed => fail(NetError::new("the connection is closed")),
+                }
+            }
+            Link::Os { id, .. } => {
+                if !os::send(*id, bytes) {
+                    fail(NetError::new("the connection is closed"))
+                }
             }
         }
     }
 
-    /// The next message, or `None` once the other end is gone.
-    pub fn recv(&self) -> Option<String> with suspend {
-        self.incoming.recv()
+    /// Sends `text`'s bytes.
+    pub fn write_text(&self, text: &str) with suspend, fail(NetError) {
+        self.write(bytes_of(text).as_slice())?
     }
 
-    /// The next message, or `None` if none comes within `d`.
-    pub fn recv_within(&self, d: Duration) -> Option<String> with suspend {
-        select {
-            m = self.incoming.recv() => m,
-            _ = timer(d).recv() => None,
+    /// The next bytes received, or `None` once the other end is gone.
+    pub fn read(&self) -> Option<Vec<u8>> with suspend {
+        match &self.link {
+            Link::Sim { incoming, .. } => incoming.recv(),
+            Link::Os { id, arrivals } => match arrivals.recv() {
+                Some(n) => Some(taken(*id, n)),
+                None => None,
+            },
+        }
+    }
+
+    /// The next bytes received, or `None` if none come within `d` or the other end is gone.
+    pub fn read_within(&self, d: Duration) -> Option<Vec<u8>> with suspend {
+        match &self.link {
+            Link::Sim { incoming, .. } => select {
+                m = incoming.recv() => m,
+                _ = timer(d).recv() => None,
+            },
+            Link::Os { id, arrivals } => select {
+                n = arrivals.recv() => match n {
+                    Some(n) => Some(taken(*id, n)),
+                    None => None,
+                },
+                _ = timer(d).recv() => None,
+            },
         }
     }
 }
 
-/// A socket listening for connections.
+impl Drop for Conn {
+    fn drop(self) {
+        if let Link::Os { id, .. } = &self.link {
+            os::close(*id);
+        }
+    }
+}
+
+/// The `n` bytes OS connection `id` has received.
+fn taken(id: int, n: int) -> Vec<u8> {
+    let mut buf: Vec<u8> = Vec::with_capacity(n);
+    let mut i = 0;
+    while i < n {
+        buf.push(0);
+        i += 1;
+    }
+    let got = os::take(id, buf.as_mut_slice());
+    let mut out: Vec<u8> = Vec::with_capacity(got);
+    let mut i = 0;
+    while i < got {
+        out.push(buf[i]);
+        i += 1;
+    }
+    out
+}
+
+/// A copy of `bytes`.
+fn copy_of(bytes: &[u8]) -> Vec<u8> {
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    for b in bytes {
+        out.push(*b);
+    }
+    out
+}
+
+/// The bytes of `text`.
+pub fn bytes_of(text: &str) -> Vec<u8> {
+    let mut out: Vec<u8> = Vec::with_capacity(text.len());
+    let mut i = 0;
+    while i < text.len() {
+        out.push(text.byte_at(i));
+        i += 1;
+    }
+    out
+}
+
+/// A socket listening for connections: their numbers arrive on `incoming`, and a simulated
+/// listener's connections themselves on `conns`, beside them.
 pub struct Listener {
-    incoming: Receiver<Conn>,
+    incoming: Receiver<int>,
+    conns: Option<Receiver<Conn>>,
+    id: int,
 }
 
 impl Listener {
-    /// A listener for the connections `incoming` brings.
-    pub fn new(incoming: Receiver<Conn>) -> Listener {
-        Listener { incoming }
+    /// A simulated listener: each connection's number on `incoming`, and the connection on
+    /// `conns`.
+    pub fn simulated(incoming: Receiver<int>, conns: Receiver<Conn>) -> Listener {
+        Listener { incoming, conns: Some(conns), id: -1 }
+    }
+
+    /// Listens on `port` of the local machine, through the OS.
+    pub fn os(port: Port) -> Listener with fail(NetError) {
+        let id = os::listen(port);
+        if id < 0 {
+            fail(NetError::new("the port cannot be listened on"))
+        }
+        Listener { incoming: os::incoming(id), conns: None, id }
     }
 
     /// The next connection.
     #[selectable]
     pub fn accept(&self) -> Conn with suspend {
-        self.incoming.recv() ?! "a network keeps its listeners' channels open"
+        match self.incoming.recv() {
+            Some(id) => match &self.conns {
+                Some(conns) => conns.recv() ?! "a simulated connection comes with its number",
+                None => Conn::os(id),
+            },
+            None => Conn::pair().0,
+        }
+    }
+}
+
+impl Drop for Listener {
+    fn drop(self) {
+        if self.id >= 0 {
+            os::close(self.id);
+        }
     }
 }

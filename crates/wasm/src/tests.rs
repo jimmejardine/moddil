@@ -24,7 +24,7 @@ fn run(text: &str) -> Option<Result<String, Wasm>> {
         eprintln!("skipped: no Node to run WASM in");
         return None;
     }
-    Some(run_main(&db, file, main).map(|(shown, _)| shown))
+    Some(run_main(&db, file, main, &[]).map(|(shown, _)| shown))
 }
 
 fn check(text: &str, want: &str) {
