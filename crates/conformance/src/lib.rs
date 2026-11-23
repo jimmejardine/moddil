@@ -237,6 +237,67 @@ impl Implementation for Native {
     }
 }
 
+/// The WASM backend (M1): the front end, then a file's tests compiled into one WebAssembly
+/// module and run in Node. A file whose tests reach code it does not compile yet is skipped, and
+/// so is every file where there is no Node.
+pub struct Wasm;
+
+impl Implementation for Wasm {
+    fn name(&self) -> &str {
+        "wasm"
+    }
+
+    fn run(&self, loaded: &Loaded) -> Outcome {
+        self.run_if(loaded).unwrap_or_default()
+    }
+
+    fn run_if(&self, loaded: &Loaded) -> Option<Outcome> {
+        let project = loaded.as_ref().ok()?;
+        let db = Database::default();
+        let program = program(&db, project);
+        if moddil_interp::has_errors(&db, program) {
+            return None;
+        }
+        let items = moddil_sema::item_tree(&db, program);
+        let tests: Vec<u32> = (0..items.tests.len() as u32).collect();
+        let runs = match moddil_wasm::run_tests(&db, program, &tests) {
+            Ok(r) => r,
+            Err(why) => {
+                // `MODDIL_WASM_WHY=1` says what keeps each file from running as WASM.
+                if std::env::var_os("MODDIL_WASM_WHY").is_some() {
+                    let name = project.files.first().map_or("", |f| f.display.as_str());
+                    eprintln!("wasm skips {name}: {why:?}");
+                }
+                return None;
+            }
+        };
+        let mut outcome = Outcome::default();
+        for (observed, result) in runs {
+            outcome.observed.extend(
+                observed
+                    .into_iter()
+                    .map(|(file, range, value)| (line_of(project, file, range.end), value)),
+            );
+            match result {
+                Ok(()) => {}
+                Err(moddil_wasm::Wasm::Trap(_, file, range)) => {
+                    outcome.traps.insert(line_of(project, file, range.start));
+                }
+                // A crash is a disagreement: no interpreter has one.
+                Err(e) => outcome.observed.push((
+                    line_of(project, 0, 0),
+                    format!("the WASM run stopped: {e:?}"),
+                )),
+            }
+        }
+        Some(outcome)
+    }
+
+    fn checks(&self) -> bool {
+        false
+    }
+}
+
 /// The reference interpreter. It runs checked programs and does not check them itself.
 pub struct ReferenceInterpreter;
 

@@ -45,6 +45,7 @@ moddil-interp = { path = "crates/interp", version = "0.0.0" }
 moddil-refinterp = { path = "crates/refinterp", version = "0.0.0" }
 moddil-project = { path = "crates/project", version = "0.0.0" }
 moddil-rt = { path = "crates/rt", version = "0.0.0" }
+moddil-wasm = { path = "crates/wasm", version = "0.0.0" }
 moddil-native = { path = "crates/native", version = "0.0.0" }
 
 # External crates (versions checked on crates.io, November 2026).
@@ -64,6 +65,8 @@ cranelift-jit = "0.138.0"
 cranelift-native = "0.138.0"
 cranelift-object = "0.138.0"
 cc = "1.2.30"             # finding the linker for `moddil build` (MSVC on Windows)
+wasm-encoder = "0.230.0"   # the WASM emitter (M1, `moddil-wasm`)
+wasmparser = "0.230.0"     # validating emitted modules in tests
 
 [profile.dev]
 debug = "line-tables-only"

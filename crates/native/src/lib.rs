@@ -7,8 +7,9 @@
 
 mod host;
 mod jit;
-mod layout;
+pub mod layout;
 mod lower;
+pub mod show;
 
 use moddil_mir::TrapClass;
 use moddil_sema::{Db, Item, Program};

@@ -39,6 +39,7 @@ python tools/ci.py --wsl       # the same steps in WSL (Linux); --all runs both
 | [`refinterp/`](refinterp/README.md) | `moddil-refinterp` | The reference interpreter |
 | [`conformance/`](conformance/README.md) | `moddil-conformance` | The conformance runner |
 | [`native/`](native/README.md) | `moddil-native` | The native backend: MIR to Cranelift, run by its JIT (M1) |
+| [`wasm/`](wasm/README.md) | `moddil-wasm` | The WASM backend: MIR to core WebAssembly modules, run in Node (M1) |
 | [`rt/`](rt/README.md) | `moddil-rt` | The runtime native code calls: traps, the heap, tasks, numbers and text |
 | [`rt-main/`](rt-main/README.md) | `moddil-rt-main` | A built program's `main`: the static library `moddil build` links with |
 | [`project/`](project/README.md) | `moddil-project` | Reads a program from disk: the manifest, the module tree, dependencies by path |

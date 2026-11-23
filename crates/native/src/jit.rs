@@ -4,11 +4,12 @@
 #![allow(unsafe_code)]
 
 use moddil_mir::TrapClass;
-use moddil_sema::{ItemTree, Num, Shape as VariantShape, Ty};
+
 use moddil_syntax::TextRange;
 
-use crate::layout::{Layouts, Shape, Tag};
+use crate::layout::Layouts;
 use crate::lower::{Compiled, Site};
+use crate::show::{Memory, Show};
 use crate::{Native, Observed};
 
 /// How much stack a run has: deep enough for the frames `moddil-rt` lets a run have.
@@ -23,11 +24,30 @@ struct Seen<'a> {
     parts: Vec<(TextRange, Option<String>)>,
 }
 
-/// What showing a value needs: the items, the layouts, and the types `dyn` borrows point to.
-struct Show<'a> {
-    items: &'a ItemTree,
-    layouts: Layouts<'a>,
-    dyn_types: &'a [Ty],
+/// The process's own memory, read while the values the code shows are alive.
+struct RawMemory;
+
+impl Memory for RawMemory {
+    fn bits(&self, addr: u64, n: u32) -> u128 {
+        let mut bytes = [0u8; 16];
+        // SAFETY: the renderer reads only inside live values the code hands it.
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                addr as usize as *const u8,
+                bytes.as_mut_ptr(),
+                n as usize,
+            );
+        }
+        u128::from_le_bytes(bytes)
+    }
+
+    fn bytes(&self, addr: u64, n: usize) -> Vec<u8> {
+        if n == 0 {
+            return Vec::new();
+        }
+        // SAFETY: as above.
+        unsafe { std::slice::from_raw_parts(addr as usize as *const u8, n).to_vec() }
+    }
 }
 
 /// `moddil-rt`'s observer: renders the value at `addr` for `site`.
@@ -39,7 +59,7 @@ fn observe(cx: *mut (), site: u32, addr: *const u8) {
         Some(Site::Observe(file, range, ty)) => {
             let ty = ty.clone();
             // SAFETY: the generated code passes the address of a live value of type `ty`.
-            let text = unsafe { seen.show.render(&ty, addr) };
+            let text = seen.show.render(&RawMemory, &ty, addr as u64);
             seen.observed.push((*file, *range, text));
         }
         Some(Site::Part(range, ty, first)) => {
@@ -48,7 +68,7 @@ fn observe(cx: *mut (), site: u32, addr: *const u8) {
             }
             let text = ty.clone().map(|ty| {
                 // SAFETY: as above, for an evaluated part.
-                unsafe { seen.show.render(&ty, addr) }
+                seen.show.render(&RawMemory, &ty, addr as u64)
             });
             seen.parts.push((*range, text));
         }
@@ -86,6 +106,7 @@ impl Compiled<'_> {
                             items,
                             layouts: Layouts::new(items),
                             dyn_types,
+                            ptr_bytes: 8,
                         },
                         observed: Vec::new(),
                         parts: Vec::new(),
@@ -113,14 +134,14 @@ impl Compiled<'_> {
                     moddil_rt::set_observer(None);
                     let text = match status {
                         // SAFETY: the run returned, so `out` holds a value of type `ret`.
-                        0 => Some(unsafe { seen.show.render(ret, out.as_ptr().cast()) }),
+                        0 => Some(seen.show.render(&RawMemory, ret, out.as_ptr() as u64)),
                         // SAFETY: the run failed, so `err` holds an error of those types.
-                        2 => Some(unsafe { seen.show.error(errors, err.as_ptr().cast()) }),
+                        2 => Some(seen.show.error(&RawMemory, errors, err.as_ptr() as u64)),
                         _ => None,
                     };
                     // SAFETY: as for the text, when the run returned.
                     let exit = (status == 0)
-                        .then(|| unsafe { seen.show.exit_code(ret, out.as_ptr().cast()) })
+                        .then(|| seen.show.exit_code(&RawMemory, ret, out.as_ptr() as u64))
                         .flatten();
                     // Once shown, the result is dropped; then a run that returned has freed
                     // everything it allocated.
@@ -199,263 +220,4 @@ pub(crate) fn reported(sites: &[Site], t: &moddil_rt::Trapped) -> Native {
         };
         Native::Trap(class, file, range, Vec::new())
     }
-}
-
-/// The bits of the `n` bytes at `p`, little-endian.
-///
-/// # Safety
-///
-/// `p` points to `n` (at most 16) readable bytes.
-unsafe fn bits_at(p: *const u8, n: u32) -> u128 {
-    let mut bytes = [0u8; 16];
-    // SAFETY: as the caller says.
-    unsafe { std::ptr::copy_nonoverlapping(p, bytes.as_mut_ptr(), n as usize) };
-    u128::from_le_bytes(bytes)
-}
-
-impl Show<'_> {
-    /// The value of type `ty` at `p`, as the interpreters write it.
-    ///
-    /// # Safety
-    ///
-    /// `p` points to a live value of type `ty`, whose borrows point to live values.
-    unsafe fn render(&mut self, ty: &Ty, p: *const u8) -> String {
-        let items = self.items;
-        let Ok(l) = self.layouts.of(ty) else {
-            return format!("<{ty}>");
-        };
-        // SAFETY (for every read below): `p` is a live value of `ty`, laid out as `l`.
-        let field = |off: u32| unsafe { p.add(off as usize) };
-        match ty {
-            Ty::Unit | Ty::Never => "()".to_string(),
-            Ty::Int => (unsafe { bits_at(p, 8) } as u64 as i64).to_string(),
-            Ty::Bool => (unsafe { bits_at(p, 1) } & 1 == 1).to_string(),
-            Ty::Char => char::from_u32(unsafe { bits_at(p, 4) } as u32)
-                .map_or_else(|| "?".to_string(), |c| format!("{c:?}")),
-            Ty::Num(n) => moddil_mir::num_text(*n, unsafe { bits_at(p, num_bytes(*n)) }),
-            Ty::Ref(m, inner) => {
-                let q = unsafe { bits_at(p, 8) } as usize as *const u8;
-                let shown = match &**inner {
-                    // Text is shown as itself, in quotes, as the interpreters show it.
-                    Ty::Str => {
-                        let n = unsafe { bits_at(p.add(8), 8) } as usize;
-                        // SAFETY: a `&str` is the address and length of live UTF-8.
-                        let bytes = unsafe { std::slice::from_raw_parts(q, n) };
-                        return format!("{:?}", String::from_utf8_lossy(bytes));
-                    }
-                    Ty::Slice(elem) => {
-                        let n = unsafe { bits_at(p.add(8), 8) } as u32;
-                        let stride = self
-                            .layouts
-                            .of(elem)
-                            .map_or(0, |l| l.size.div_ceil(l.align) * l.align);
-                        let xs: Vec<String> = (0..n)
-                            .map(|k| unsafe { self.render(elem, q.add((k * stride) as usize)) })
-                            .collect();
-                        format!("[{}]", xs.join(", "))
-                    }
-                    Ty::Dyn(..) => {
-                        // The vtable starts with the number of the type it is for.
-                        let vt = unsafe { bits_at(p.add(8), 8) } as usize as *const u8;
-                        let k = unsafe { bits_at(vt, 8) } as usize;
-                        match self.dyn_types.get(k).cloned() {
-                            Some(t) => unsafe { self.render(&t, q) },
-                            None => "…".to_string(),
-                        }
-                    }
-                    inner => unsafe { self.render(inner, q) },
-                };
-                if *m {
-                    format!("&mut {shown}")
-                } else {
-                    format!("&{shown}")
-                }
-            }
-            Ty::Tuple(_) => {
-                let Shape::Fields(fs) = &l.shape else {
-                    return format!("<{ty}>");
-                };
-                let xs: Vec<String> = fs
-                    .iter()
-                    .map(|(off, t)| unsafe { self.render(t, field(*off)) })
-                    .collect();
-                if xs.len() == 1 {
-                    format!("({},)", xs[0])
-                } else {
-                    format!("({})", xs.join(", "))
-                }
-            }
-            Ty::Array(..) => {
-                let Shape::Array { elem, stride, len } = &l.shape else {
-                    return format!("<{ty}>");
-                };
-                let xs: Vec<String> = (0..*len)
-                    .map(|k| unsafe { self.render(elem, field(k * stride)) })
-                    .collect();
-                format!("[{}]", xs.join(", "))
-            }
-            // An error set: the member its id says.
-            Ty::Errors(ms) => unsafe { self.error(ms, p) },
-            Ty::Buf(elem) => {
-                let q = unsafe { bits_at(p, 8) } as usize as *const u8;
-                let n = unsafe { bits_at(p.add(8), 8) } as u32;
-                let stride = self
-                    .layouts
-                    .of(elem)
-                    .map_or(0, |l| l.size.div_ceil(l.align) * l.align);
-                let xs: Vec<String> = (0..n)
-                    .map(|k| unsafe { self.render(elem, q.add((k * stride) as usize)) })
-                    .collect();
-                format!("[{}]", xs.join(", "))
-            }
-            // A `String` is shown as its text, in quotes; a `Vec` as the literal that makes one.
-            Ty::Adt(a, ..)
-                if items.adts[*a as usize].src == moddil_sema::Src::Prelude
-                    && matches!(items.adts[*a as usize].name.as_str(), "String" | "Vec") =>
-            {
-                let Shape::Fields(fs) = &l.shape else {
-                    return format!("<{ty}>");
-                };
-                let (off, inner) = fs[0].clone();
-                if items.adts[*a as usize].name == "Vec" {
-                    return unsafe { self.render(&inner, field(off)) };
-                }
-                unsafe { self.string_text(&inner, field(off)) }
-            }
-            Ty::Adt(a, ..) => {
-                let (variant, fields) = match &l.shape {
-                    Shape::Fields(fs) => (0, fs.clone()),
-                    Shape::Enum { tag, variants } => {
-                        let v = unsafe { variant_at(tag, variants.len() as u32, p) };
-                        (v, variants[v as usize].clone())
-                    }
-                    Shape::Empty => (0, Vec::new()),
-                    _ => return format!("<{ty}>"),
-                };
-                let def = items.variant(*a, variant);
-                let path = items.adts[*a as usize].path(variant);
-                let xs: Vec<String> = fields
-                    .iter()
-                    .map(|(off, t)| unsafe { self.render(t, field(*off)) })
-                    .collect();
-                match def.shape {
-                    VariantShape::Unit => path,
-                    VariantShape::Tuple => format!("{path}({})", xs.join(", ")),
-                    VariantShape::Named => {
-                        let named: Vec<String> = def
-                            .fields
-                            .iter()
-                            .zip(&xs)
-                            .map(|(f, x)| format!("{}: {x}", f.name))
-                            .collect();
-                        format!("{path} {{ {} }}", named.join(", "))
-                    }
-                }
-            }
-            t => format!("<{t}>"),
-        }
-    }
-}
-
-impl Show<'_> {
-    /// The exit code for the result of type `ty` at `p`, if it is the prelude's `ExitCode`: its
-    /// `sysexits.h` number, or `Other(n)`'s `n`, as the interpreter's `moddil run` gives it.
-    ///
-    /// # Safety
-    ///
-    /// `p` points to a live value of type `ty`.
-    unsafe fn exit_code(&mut self, ty: &Ty, p: *const u8) -> Option<u8> {
-        let Ty::Adt(a, ..) = ty else { return None };
-        let def = &self.items.adts[*a as usize];
-        if def.src != moddil_sema::Src::Prelude || def.name != "ExitCode" {
-            return None;
-        }
-        let l = self.layouts.of(ty).ok()?;
-        let Shape::Enum { tag, variants } = &l.shape else {
-            return None;
-        };
-        const CODES: [u8; 16] = [
-            0, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78,
-        ];
-        let v = unsafe { variant_at(tag, variants.len() as u32, p) };
-        if let Some(c) = CODES.get(v as usize) {
-            return Some(*c);
-        }
-        let at = variants[v as usize].first()?.0;
-        let n = unsafe { bits_at(p.add(at as usize), 8) } as u64 as i64;
-        Some(n.clamp(0, 255) as u8)
-    }
-
-    /// The error at `p`, tagged: its value, as the member of `errors` its id says.
-    ///
-    /// # Safety
-    ///
-    /// `p` points to a live error of one of `errors`, after its id.
-    unsafe fn error(&mut self, errors: &[Ty], p: *const u8) -> String {
-        let id = unsafe { bits_at(p, 8) } as u32;
-        match errors.iter().find(|t| t.adt() == Some(id)).cloned() {
-            Some(t) => unsafe { self.render(&t, p.add(crate::lower::ERROR_VALUE as usize)) },
-            None => "<an error>".to_string(),
-        }
-    }
-
-    /// A `String`'s text, in quotes, from its `StringRepr` (of type `repr`) at `p`: inline bytes
-    /// and their count, or a `Buf<u8>`.
-    ///
-    /// # Safety
-    ///
-    /// `p` points to a live `StringRepr`.
-    unsafe fn string_text(&mut self, repr: &Ty, p: *const u8) -> String {
-        let Ok(l) = self.layouts.of(repr) else {
-            return "<String>".to_string();
-        };
-        let Shape::Enum { tag, variants } = &l.shape else {
-            return "<String>".to_string();
-        };
-        let v = unsafe { variant_at(tag, variants.len() as u32, p) };
-        let fs = &variants[v as usize];
-        let (bytes, n) = if fs.len() == 2 {
-            // `Inline([u8; 23], u8)`.
-            let n = unsafe { bits_at(p.add(fs[1].0 as usize), 1) } as usize;
-            (unsafe { p.add(fs[0].0 as usize) }, n)
-        } else {
-            // `Heap(Buf<u8>)`.
-            let b = unsafe { p.add(fs[0].0 as usize) };
-            let q = unsafe { bits_at(b, 8) } as usize as *const u8;
-            (q, unsafe { bits_at(b.add(8), 8) } as usize)
-        };
-        // SAFETY: a `String` holds `n` bytes of UTF-8 there.
-        let text = unsafe { std::slice::from_raw_parts(bytes, n) };
-        format!("{:?}", String::from_utf8_lossy(text))
-    }
-}
-
-/// Which of `n` variants the enum at `p` holds, by its tag.
-///
-/// # Safety
-///
-/// `p` points to a live enum laid out with `tag`.
-unsafe fn variant_at(tag: &Tag, n: u32, p: *const u8) -> u32 {
-    match tag {
-        Tag::None => 0,
-        Tag::Direct { offset, ty } => {
-            // SAFETY: the tag is inside the value.
-            (unsafe { bits_at(p.add(*offset as usize), ty.bytes()) }) as u32
-        }
-        Tag::Niche { dataful, niche } => {
-            // SAFETY: the niche field is inside the value.
-            let raw = unsafe { bits_at(p.add(niche.offset as usize), niche.ty.bytes()) };
-            let rel = raw.wrapping_sub(niche.first);
-            if rel < u128::from(n - 1) {
-                let rel = rel as u32;
-                if rel >= *dataful { rel + 1 } else { rel }
-            } else {
-                *dataful
-            }
-        }
-    }
-}
-
-fn num_bytes(n: Num) -> u32 {
-    n.bits() / 8
 }

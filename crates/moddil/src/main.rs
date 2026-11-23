@@ -37,6 +37,9 @@ enum Command {
         /// Run it on the MIR interpreter instead.
         #[arg(long)]
         interp: bool,
+        /// Compile it to WebAssembly instead, and run that in Node (M1, slice W0).
+        #[arg(long, conflicts_with = "interp")]
+        wasm: bool,
     },
     /// Runs a program's tests (a mod's, not its dependencies'), compiled to native code.
     Test {
@@ -45,6 +48,9 @@ enum Command {
         /// Run them on the MIR interpreter instead.
         #[arg(long)]
         interp: bool,
+        /// Compile them to WebAssembly instead, and run them in Node (M1, slice W0).
+        #[arg(long, conflicts_with = "interp")]
+        wasm: bool,
     },
     /// Compiles a program's `fn main()` ahead of time into an executable.
     Build {
@@ -103,6 +109,8 @@ fn main() -> ExitCode {
     match &cli.command {
         Command::Check { .. } => ExitCode::SUCCESS,
         Command::Run { interp: true, .. } => run(&db, program, &files, &name),
+        Command::Run { wasm: true, .. } => run_wasm(&db, program, &files, &name),
+        Command::Test { wasm: true, .. } => test_wasm(&db, program, &files),
         Command::Run { .. } => run_native(&db, program, &files, &name),
         Command::Test { interp, .. } => test(&db, program, &files, *interp, path),
         Command::Build { output, .. } => build(&db, program, path, output.as_deref()),
@@ -225,6 +233,79 @@ fn run_native(db: &Database, program: Program, files: &[(String, String)], name:
             report_native_error(name, text, range, &error);
             ExitCode::FAILURE
         }
+    }
+}
+
+/// `moddil run --wasm`: `main` compiled to WebAssembly and run in Node.
+fn run_wasm(db: &Database, program: Program, files: &[(String, String)], name: &str) -> ExitCode {
+    let items = moddil_sema::item_tree(db, program);
+    let Some(main) = items.main_fn() else {
+        eprintln!("moddil: {name} has no `fn main()`");
+        return ExitCode::FAILURE;
+    };
+    match moddil_wasm::run_main(db, program, main) {
+        Ok(v) if v == "()" => ExitCode::SUCCESS,
+        Ok(v) => {
+            println!("{v}");
+            ExitCode::SUCCESS
+        }
+        Err(moddil_wasm::Wasm::Trap(class, file, range)) => {
+            let (name, text) = &files[file as usize];
+            report_native_trap(name, text, class, range, &[]);
+            ExitCode::from(TRAPPED)
+        }
+        Err(e) => {
+            eprintln!("moddil: {}", wasm_problem(&e));
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// What stopped a WASM run, for a person.
+fn wasm_problem(e: &moddil_wasm::Wasm) -> String {
+    match e {
+        moddil_wasm::Wasm::Unsupported(what) => format!("not compiled to WASM yet: {what}"),
+        moddil_wasm::Wasm::NoHost(why) => format!("no Node to run WASM in: {why}"),
+        moddil_wasm::Wasm::Crash(how) => format!("the WASM run stopped (a backend bug): {how}"),
+        moddil_wasm::Wasm::Trap(..) => "a trap".to_string(),
+    }
+}
+
+/// `moddil test --wasm`: the mod's tests compiled into one WebAssembly module, run in Node.
+fn test_wasm(db: &Database, program: Program, files: &[(String, String)]) -> ExitCode {
+    let items = moddil_sema::item_tree(db, program);
+    let tests: Vec<u32> = (0..items.tests.len() as u32)
+        .filter(|&i| items.mod_of(items.tests[i as usize].module) == 0)
+        .collect();
+    let runs = match moddil_wasm::run_tests(db, program, &tests) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("moddil: {}", wasm_problem(&e));
+            return ExitCode::FAILURE;
+        }
+    };
+    let mut failed = 0;
+    for (&i, (_, result)) in tests.iter().zip(&runs) {
+        let name = &items.tests[i as usize].name;
+        match result {
+            Ok(()) => println!("test \"{name}\" ... ok"),
+            Err(moddil_wasm::Wasm::Trap(class, file, range)) => {
+                failed += 1;
+                println!("test \"{name}\" ... trapped");
+                let (fname, text) = &files[*file as usize];
+                report_native_trap(fname, text, *class, *range, &[]);
+            }
+            Err(e) => {
+                failed += 1;
+                println!("test \"{name}\" ... {}", wasm_problem(e));
+            }
+        }
+    }
+    println!("{} passed, {failed} failed", tests.len() - failed);
+    if failed == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 

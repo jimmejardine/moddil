@@ -77,6 +77,20 @@ fn a_failed_assert_shows_its_parts() {
 }
 
 #[test]
+fn runs_as_wasm_when_asked() {
+    let out = moddil(&["run", "--wasm"], &file("fib-wasm.moddil", PROGRAM));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    if stderr.contains("no Node") {
+        return;
+    }
+    assert!(out.status.success(), "{stderr}");
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "6765");
+    let out = moddil(&["test", "--wasm"], &file("fib-wasm-test.moddil", PROGRAM));
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("test \"fib\" ... ok"));
+}
+
+#[test]
 fn runs_on_the_interpreter_when_asked() {
     let out = moddil(&["run", "--interp"], &file("fib-interp.moddil", PROGRAM));
     assert!(out.status.success());

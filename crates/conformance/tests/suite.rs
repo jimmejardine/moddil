@@ -8,7 +8,7 @@
 use std::path::{Path, PathBuf};
 
 use moddil_conformance::{
-    EDITION, Implementation, MirInterpreter, Native, ReferenceInterpreter, areas, coverage,
+    EDITION, Implementation, MirInterpreter, Native, ReferenceInterpreter, Wasm, areas, coverage,
     run_area,
 };
 
@@ -17,14 +17,15 @@ fn repo() -> PathBuf {
 }
 
 fn run(area: &str) {
-    let implementations: [&dyn Implementation; 3] =
-        [&MirInterpreter, &ReferenceInterpreter, &Native];
+    let implementations: [&dyn Implementation; 4] =
+        [&MirInterpreter, &ReferenceInterpreter, &Native, &Wasm];
     let report = run_area(&repo(), EDITION, area, &implementations);
     println!(
-        "{area}: {} files, {} disputed, {} run natively",
+        "{area}: {} files, {} disputed, {} run natively, {} as WASM",
         report.files,
         report.disputed.len(),
-        report.ran.get("native").copied().unwrap_or(0)
+        report.ran.get("native").copied().unwrap_or(0),
+        report.ran.get("wasm").copied().unwrap_or(0)
     );
     assert!(report.files > 0, "no conformance tests in {area}");
     assert!(

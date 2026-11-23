@@ -773,9 +773,34 @@ calls is a Rust crate, `moddil-rt`, for now.
   - **Not verified:** macOS (no Mac to run it on). The WSL run's `grammars` step fails because
     WSL resolves `tree-sitter` to the Windows binary; that is an environment problem, not the
     code's.
-- **Next:** the WASM emitter (M1's other half): MIR to core WebAssembly modules, run in Node,
-  then the JSPI lowering for suspension. Release builds (`lld` or `mold`, optimisation and
-  debug info) after.
+- **Slice W0 (decided November 2026): the WASM emitter, scalars, calls and linear memory.** M1's
+  other half begins: our own emitter, on `wasm-encoder` (`compiler.md`), in a new crate,
+  `moddil-wasm`.
+  - **What it compiles:** C0's and C1's ground. Scalars with every operator and check, control
+    flow, direct calls, and tuples, structs, enums (with niches) and arrays in linear memory,
+    with borrows of them.
+  - **Control flow:** structured from the dominator tree, after Ramsey's "Beyond Relooper": a
+    `loop` for each loop header and a `block` for each merge node. MIR built from structured
+    source is reducible; anything else is refused.
+  - **Values:**
+    - `int`, `i64`, `u64` and `f64` are `i64` and `f64`; the narrower integers, `bool` and
+      `char` are `i32`, kept sign- or zero-extended;
+    - borrows are `i32` addresses into linear memory;
+    - aggregates, and scalars something borrows, live in frames on a shadow stack.
+    - `i128` and `u128` are not compiled yet.
+  - **The ABI:** the status return, with multi-value results. Aggregates pass by the address
+    of a caller's copy, and come back through an out-pointer. Calls are counted against the
+    interpreters' depth, and the overflow checks are written out.
+  - **Shared with the native backend:** its layouts (now given a pointer type, so 32-bit
+    pointers lay out right) and its value renderer (now reading through a memory abstraction).
+  - **Running:** a small JavaScript host runs a module's entries in Node, and snapshots the
+    shadow stack at each `// =>` for the renderer. `moddil run --wasm` and `moddil test --wasm`
+    use it.
+  - **Checking:** a fourth conformance runner, `Wasm`. 45 files run as WASM, as many as C1 ran
+    natively, all agreeing with the interpreters. Tests validate each module with `wasmparser`.
+- **Next, W1:** wide pointers, generics and trait methods, then the heap, mirroring C2 and C3;
+  the JSPI lowering for suspension once tasks are reached. Release builds (`lld` or `mold`,
+  optimisation and debug info) after.
 
 ## Staging: distributed programs
 

@@ -23,28 +23,42 @@ use crate::lower::clif_type;
 /// Where a value's invalid values are: a scalar at `offset` of type `ty`, whose values from
 /// `first` (for `count` values) are never a valid value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Niche {
-    pub(crate) offset: u32,
-    pub(crate) ty: ir::Type,
-    pub(crate) first: u128,
-    pub(crate) count: u128,
+pub struct Niche {
+    /// Where the scalar is.
+    pub offset: u32,
+    /// Its type.
+    pub ty: ir::Type,
+    /// The first invalid value.
+    pub first: u128,
+    /// How many there are.
+    pub count: u128,
 }
 
 /// How an enum tells its variants apart.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Tag {
+pub enum Tag {
     /// One variant, or none: nothing to tell apart.
     None,
     /// An integer of type `ty` at `offset`, the variant's index.
-    Direct { offset: u32, ty: ir::Type },
+    Direct {
+        /// Where the tag is.
+        offset: u32,
+        /// Its type.
+        ty: ir::Type,
+    },
     /// Variant `dataful` holds a payload; each other one is stored as a value of the payload's
     /// niche: the `k`th other variant (in order) as `niche.first + k`.
-    Niche { dataful: u32, niche: Niche },
+    Niche {
+        /// The variant with a payload.
+        dataful: u32,
+        /// Where the others are stored.
+        niche: Niche,
+    },
 }
 
 /// The shape of a layout.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Shape {
+pub enum Shape {
     /// A scalar (a pointer included) of this Cranelift type.
     Scalar(ir::Type),
     /// A borrow of an unsized value: its address, then its length (`str`, `[T]`) or its
@@ -60,45 +74,73 @@ pub(crate) enum Shape {
     /// A tuple's or a struct's fields: each one's offset and type, by declared index.
     Fields(Vec<(u32, Ty)>),
     /// An array: its element, the stride and how many.
-    Array { elem: Ty, stride: u32, len: u32 },
+    Array {
+        /// The element type.
+        elem: Ty,
+        /// Bytes from one element to the next.
+        stride: u32,
+        /// How many elements.
+        len: u32,
+    },
     /// An enum: how its variants are told apart, and each variant's fields (offset and type, by
     /// declared index).
     Enum {
+        /// How its variants are told apart.
         tag: Tag,
+        /// Each variant's fields: offset and type, by declared index.
         variants: Vec<Vec<(u32, Ty)>>,
     },
 }
 
 /// A type's layout.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Layout {
-    pub(crate) size: u32,
-    pub(crate) align: u32,
-    pub(crate) shape: Shape,
+pub struct Layout {
+    /// Its size in bytes.
+    pub size: u32,
+    /// Its alignment.
+    pub align: u32,
+    /// How it is made up.
+    pub shape: Shape,
     /// Its invalid values, if it has any to spare.
-    pub(crate) niche: Option<Niche>,
+    pub niche: Option<Niche>,
 }
 
 fn align_up(n: u32, a: u32) -> u32 {
     n.div_ceil(a) * a
 }
 
-/// Every type's layout, computed once.
-pub(crate) struct Layouts<'a> {
+/// Every type's layout, computed once, for a target whose pointers are of type `ptr`.
+pub struct Layouts<'a> {
     items: &'a ItemTree,
     cache: HashMap<Ty, Arc<Layout>>,
+    /// A thin borrow's type: `i64` natively, `i32` on wasm32.
+    ptr: ir::Type,
 }
 
 impl<'a> Layouts<'a> {
-    pub(crate) fn new(items: &'a ItemTree) -> Self {
+    /// The layouts native code uses: 64-bit pointers.
+    pub fn new(items: &'a ItemTree) -> Self {
+        Self::with_pointer(items, types::I64)
+    }
+
+    /// The layouts for a target whose pointers are of type `ptr` (`i32` for wasm32). A target
+    /// with other than 64-bit pointers has only thin borrows, for now: no wide borrows, `Buf`s,
+    /// error sets or anonymous impls.
+    pub fn with_pointer(items: &'a ItemTree, ptr: ir::Type) -> Self {
         Layouts {
             items,
             cache: HashMap::new(),
+            ptr,
         }
     }
 
-    /// `ty`'s layout, or what about it is not compiled natively yet.
-    pub(crate) fn of(&mut self, ty: &Ty) -> Result<Arc<Layout>, String> {
+    /// Whether this target's layouts are the native ones (64-bit pointers).
+    fn native(&self) -> bool {
+        self.ptr == types::I64
+    }
+
+    /// `ty`'s layout, or what about it is not compiled for this target yet.
+    pub fn of(&mut self, ty: &Ty) -> Result<Arc<Layout>, String> {
         if let Some(l) = self.cache.get(ty) {
             return Ok(l.clone());
         }
@@ -112,6 +154,11 @@ impl<'a> Layouts<'a> {
             Ty::Unit | Ty::Never => Ok(empty()),
             Ty::Ref(_, inner) => {
                 if matches!(**inner, Ty::Str | Ty::Slice(_) | Ty::Dyn(..)) {
+                    if !self.native() {
+                        return Err(format!(
+                            "a borrow of `{inner}`, which needs its length or type"
+                        ));
+                    }
                     let dyn_slice = matches!(&**inner, Ty::Slice(e) if matches!(**e, Ty::Dyn(..)));
                     return Ok(Layout {
                         size: if dyn_slice { 24 } else { 16 },
@@ -126,7 +173,10 @@ impl<'a> Layouts<'a> {
                         }),
                     });
                 }
-                Ok(scalar(types::I64, Some((0, 1))))
+                Ok(scalar(self.ptr, Some((0, 1))))
+            }
+            Ty::Buf(_) | Ty::Errors(_) | Ty::Anon(_) if !self.native() => {
+                Err(format!("a value of type `{ty}`"))
             }
             Ty::Bool => Ok(scalar(types::I8, Some((2, 254)))),
             Ty::Char => Ok(scalar(

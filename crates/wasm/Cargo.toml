@@ -1,0 +1,24 @@
+[package]
+name = "moddil-wasm"
+description = "The WASM backend: MIR to core WebAssembly modules, run in Node"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+moddil-mir.workspace = true
+moddil-native.workspace = true
+moddil-sema.workspace = true
+moddil-syntax.workspace = true
+cranelift-codegen.workspace = true
+wasm-encoder.workspace = true
+
+[dev-dependencies]
+wasmparser.workspace = true
+
+[lints]
+workspace = true
