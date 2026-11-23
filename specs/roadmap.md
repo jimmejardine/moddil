@@ -853,8 +853,35 @@ calls is a Rust crate, `moddil-rt`, for now.
   - **A `Trapped`'s text** comes from the program's site tables, which `backend::lower` now
     writes as `moddil build` does. The code that reads them moved into `moddil-rt` (`sites.rs`)
     and is shared with `moddil-rt-main`.
-- **Next:** release builds (`lld` or `mold`, optimisation and debug info), and the browser
-  host.
+- **Slice W3 (decided November 2026): WASM for browsers, and native release builds.** M1's
+  last piece: WASM runs in browsers as well as in Node.
+  - **One shared core** (`moddil-wasm`'s `core.mjs`, an ES module for any JS engine) instantiates
+    the program, the runtime and the shim, and runs entries and tasks: the JSPI scheduler and the
+    stack swapping. The test host and the generated glue both use it, so the conformance suite
+    checks the code a browser runs.
+  - **`moddil build --wasm`** writes four files side by side:
+    - `name.mjs`, the glue: the core, the program's layout and `run()`;
+    - `name.wasm`, the program;
+    - `moddil-rt.wasm`, the runtime;
+    - `name.html`, a page that runs it.
+  - **The glue in Node:** `node name.mjs` runs `main` and exits with its exit code (70 after a
+    trap). The log and a trap go to the console, as a native build's go to standard error.
+  - **The glue in a browser:** it fetches the two modules beside it. JSPI's stacks there stay at
+    their fixed size, about 1 MB, so very deep recursion overflows sooner than in Node.
+  - **Checked in a browser:** a CLI test serves the built files from a local HTTP server and
+    runs the page in headless Chrome, where one is found.
+  - **`moddil build --release`:**
+    - links with the `rust-lld` the Rust toolchain ships (or `mold` where it is installed);
+    - writes DWARF line tables (`moddil-native`'s `dwarf.rs`): the lowering gives each
+      statement's code a source location, and each compiled function's code runs are kept;
+    - on Linux, splits the tables into `name.debug`, which the executable names, with
+      `rust-objcopy`;
+    - on macOS, leaves them for `dsymutil`.
+  - **Windows has no debug info yet** (it needs PDB). Code generation was already at
+    Cranelift's `speed` level, so release builds change the linker and add line tables.
+  - **Checked on Linux (WSL):** gdb maps a release build's addresses back to Moddil lines.
+- **Next:** M2 (the first standard mods in Moddil, `moddil/runtime` and `moddil/runtime-sim`,
+  the LSP prototype, and the first GPU path).
 
 ## Staging: distributed programs
 

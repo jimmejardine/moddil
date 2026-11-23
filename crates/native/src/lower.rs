@@ -253,6 +253,13 @@ pub(crate) struct Compiler<'db, M: Module> {
     tramps: HashMap<Ty, FuncId>,
     /// Each type's drop glue in the platform's C convention, for the runtime.
     c_drops: HashMap<Ty, FuncId>,
+    /// The places code comes from: a file and an offset in it, numbered by the source location
+    /// (less one) the lowering gives that code.
+    places: Vec<(u32, u32)>,
+    /// Each place's number.
+    place_ids: HashMap<(u32, u32), u32>,
+    /// For a release build, each compiled function's lines (`None` when not kept).
+    pub(crate) lines: Option<Vec<crate::dwarf::FnLines>>,
 }
 
 /// The host's target, with the flags the code needs: `pic` for an object to link.
@@ -283,7 +290,7 @@ pub(crate) fn compile<'db>(
     for (name, at) in moddil_rt::symbols() {
         builder.symbol(name, at);
     }
-    let mut b = build(db, program, &[item], JITModule::new(builder))?;
+    let mut b = build(db, program, &[item], JITModule::new(builder), false)?;
     let mut module = b.c.module;
     module.finalize_definitions().map_err(|e| e.to_string())?;
     let e = b.entries.remove(0);
@@ -304,8 +311,14 @@ pub(crate) fn compile<'db>(
 /// exports `moddil_entry` and `moddil_drop_result` (as the JIT's), `moddil_exit_code` (the
 /// process's exit code for `main`'s result), and the tables a trap is reported from:
 /// `moddil_site_count`, `moddil_sites` (eight words a site: its kind, whether it is tracked, its
-/// class's and its file's text in `moddil_strings`, and its line and column).
-pub(crate) fn compile_object(db: &dyn Db, program: Program, item: Item) -> Result<Vec<u8>, String> {
+/// class's and its file's text in `moddil_strings`, and its line and column). With `lines`, its
+/// functions' line tables too ([`crate::dwarf`]).
+pub(crate) fn compile_object(
+    db: &dyn Db,
+    program: Program,
+    item: Item,
+    lines: bool,
+) -> Result<Vec<u8>, String> {
     let builder = cranelift_object::ObjectBuilder::new(
         isa(true)?,
         "moddil",
@@ -317,11 +330,23 @@ pub(crate) fn compile_object(db: &dyn Db, program: Program, item: Item) -> Resul
         program,
         &[item],
         cranelift_object::ObjectModule::new(builder),
+        lines,
     )?;
     let mut c = b.c;
+    let files = files_of(db, program);
     c.exit_code(&b.entries[0].ret)?;
-    c.site_tables(&files_of(db, program))?;
-    let product = c.module.finish();
+    c.site_tables(&files)?;
+    let fns = c.lines.take().unwrap_or_default();
+    let places = std::mem::take(&mut c.places);
+    let mut product = c.module.finish();
+    let symbols = product.functions.clone();
+    crate::dwarf::write(
+        &mut product.object,
+        &fns,
+        |f| symbols[f].expect("a function compiled").0,
+        &places,
+        &files,
+    )?;
     product.emit().map_err(|e| e.to_string())
 }
 
@@ -372,6 +397,7 @@ pub(crate) fn build<'db, M: Module>(
     program: Program,
     entries: &[Item],
     mut module: M,
+    lines: bool,
 ) -> Result<Built<'db, M>, String> {
     let ptr = module.target_config().pointer_type();
     let mut import = |name: &str, params: &[ir::Type], ret: Option<ir::Type>| {
@@ -499,6 +525,9 @@ pub(crate) fn build<'db, M: Module>(
         statics: HashMap::new(),
         tramps: HashMap::new(),
         c_drops: HashMap::new(),
+        places: Vec::new(),
+        place_ids: HashMap::new(),
+        lines: lines.then(Vec::new),
     };
     let mut pending = Vec::new();
     for (k, &item) in entries.iter().enumerate() {
@@ -847,8 +876,40 @@ impl<M: Module> Compiler<'_, M> {
         self.module
             .define_function(id, &mut ctx)
             .map_err(|e| format!("Cranelift: {e:?}"))?;
+        if let (Some(lines), Some(code)) = (&mut self.lines, ctx.compiled_code()) {
+            let base = ctx.func.params.base_srcloc();
+            let runs = code
+                .buffer
+                .get_srclocs_sorted()
+                .iter()
+                .map(|r| {
+                    let loc = if r.loc.is_rel() {
+                        r.loc.relocate(base)
+                    } else {
+                        r.loc.as_abs()
+                    };
+                    (r.start, (!loc.is_default()).then(|| loc.bits() - 1))
+                })
+                .collect();
+            lines.push(crate::dwarf::FnLines {
+                id,
+                name: body.name.clone(),
+                size: code.buffer.data().len() as u32,
+                runs,
+            });
+        }
         self.module.clear_context(&mut ctx);
         Ok(())
+    }
+
+    /// The source location of the code from offset `offset` of file `file`.
+    fn srcloc(&mut self, file: u32, offset: u32) -> ir::SourceLoc {
+        let n = self.places.len() as u32;
+        let id = *self.place_ids.entry((file, offset)).or_insert(n);
+        if id == n {
+            self.places.push((file, offset));
+        }
+        ir::SourceLoc::new(id + 1)
     }
 
     /// `ty`'s drop glue, `fn(*mut T) -> i8`: declared (and queued) the first time it is needed.
@@ -1150,7 +1211,7 @@ impl<M: Module> Compiler<'_, M> {
     /// `moddil_exit_code(out) -> i32`, for a built program: `main`'s result at `out` as the
     /// process's exit code (`main.exit.1`): 0 for `()`, an `ExitCode`'s `sysexits.h` number, or
     /// `Other(n)`'s `n`.
-    fn exit_code(&mut self, ret: &Ty) -> Result<(), String> {
+    pub(crate) fn exit_code(&mut self, ret: &Ty) -> Result<(), String> {
         let exit = self.prelude_ty("ExitCode")?;
         if *ret != Ty::Unit && ret.adt() != exit.adt() {
             return Err(format!(
@@ -1691,9 +1752,15 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             self.b.switch_to_block(block);
             for (k, s) in bb.statements.iter().enumerate() {
                 self.point = (i, k);
+                if let Some(span) = bb.spans.get(k) {
+                    let loc = self.c.srcloc(self.file, span.start);
+                    self.b.set_srcloc(loc);
+                }
                 self.statement(s)?;
             }
             self.point = (i, bb.statements.len());
+            let loc = self.c.srcloc(self.file, bb.terminator_span.start);
+            self.b.set_srcloc(loc);
             self.terminator(&bb.terminator, bb.terminator_span)?;
         }
         self.b.seal_all_blocks();

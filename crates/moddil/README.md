@@ -15,6 +15,9 @@ moddil run file.moddil             # run `fn main()` natively and print its resu
 moddil test file.moddil            # run the file's `test` items natively
 moddil run --interp file.moddil    # the same on the MIR interpreter (and `test --interp`)
 moddil build file.moddil [-o out]  # an executable: `main`'s exit code, 70 on a trap
+moddil build --release file.moddil # linked with lld (or mold), with line tables
+moddil build --wasm file.moddil    # name.mjs, name.wasm, moddil-rt.wasm, name.html
+moddil run --wasm file.moddil      # `main` as WebAssembly, in Node (and `test --wasm`)
 ```
 
 - **Native by default.** What native code does not compile yet runs on the MIR interpreter
@@ -24,6 +27,13 @@ moddil build file.moddil [-o out]  # an executable: `main`'s exit code, 70 on a 
   ([`link.rs`](src/link.rs)): with MSVC's `link.exe` on Windows, the system's `cc` elsewhere. The
   library is found beside the `moddil` executable (`cargo build -p moddil-rt-main` puts it
   there), or where `MODDIL_RT_LIB` says.
+- **`build --release`** links with the Rust toolchain's `rust-lld`, found with
+  `rustc --print sysroot` (or with `mold`, where it is installed). It writes DWARF line tables,
+  split into `name.debug` on Linux; on Windows there are none yet.
+- **`build --wasm`** writes the files that run the program in a browser or in Node
+  ([`moddil-wasm`](../wasm/README.md)): `node name.mjs`, or serve the directory over HTTP and
+  open `name.html`. The tests run the page in headless Chrome, found as `MODDIL_CHROME`, on the
+  path or in its usual place.
 
 Diagnostics are rendered in the rustc style with `ariadne`; `--format json` comes later.
 

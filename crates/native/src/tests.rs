@@ -669,3 +669,42 @@ fn anonymous_impls_error_set_methods_and_the_last_built_ins() {
         r#""HI""#
     );
 }
+
+/// A release build's object has line tables: `main`'s code maps back to its lines (ELF only; a
+/// Mach-O's are read through `dsymutil`, and a COFF has none yet).
+#[cfg(target_os = "linux")]
+#[test]
+fn a_release_object_has_line_tables() {
+    use object::{Object, ObjectSection};
+    let text = "fn twice(n: int) -> int {\n    n * 2\n}\nfn main() {\n    let x = twice(21);\n}\n";
+    let db = Database::default();
+    let file = Program::single(&db, "lines.moddil".to_string(), text.to_string());
+    let items = moddil_sema::item_tree(&db, file);
+    let main = items.main_fn().expect("a main");
+    let bytes = build_release_object(&db, file, main).expect("an object");
+    let obj = object::File::parse(&*bytes).expect("an object to read");
+    let load = |id: gimli::SectionId| -> Result<std::borrow::Cow<'_, [u8]>, gimli::Error> {
+        Ok(obj
+            .section_by_name(id.name())
+            .and_then(|s| s.uncompressed_data().ok())
+            .unwrap_or_default())
+    };
+    let dwarf = gimli::DwarfSections::load(load).expect("its DWARF");
+    let dwarf = dwarf.borrow(|s| gimli::EndianSlice::new(s, gimli::RunTimeEndian::Little));
+    let mut lines = std::collections::BTreeSet::new();
+    let mut units = dwarf.units();
+    while let Some(header) = units.next().expect("a unit") {
+        let unit = dwarf.unit(header).expect("a unit");
+        let Some(program) = unit.line_program.clone() else {
+            continue;
+        };
+        let mut rows = program.rows();
+        while let Some((_, row)) = rows.next_row().expect("a row") {
+            if let Some(l) = row.line() {
+                lines.insert(l.get());
+            }
+        }
+    }
+    // `twice`'s body (line 2) and `main`'s (line 5).
+    assert!(lines.contains(&2) && lines.contains(&5), "{lines:?}");
+}

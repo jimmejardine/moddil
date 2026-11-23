@@ -44,6 +44,31 @@ pub unsafe extern "C" fn sites(count: *const u64, sites: *const u32, strings: *c
     });
 }
 
+/// Takes the trap the run recorded, and writes its class and where it is reported
+/// (`file:line:column`), a line apart, at `out` (as much as `cap` bytes): how many bytes that
+/// is. For a built program, which has no compiler to ask.
+///
+/// # Safety
+///
+/// `out` has room for `cap` bytes.
+#[unsafe(export_name = "moddil_wasm_trap_text")]
+pub unsafe extern "C" fn trap_text(out: *mut u8, cap: u32) -> u32 {
+    let text = match (moddil_rt::take().trap, TABLES.with(Cell::get)) {
+        (Some(t), Some(tables)) => {
+            let (class, at) = tables.trap_text(&t);
+            format!(
+                "{class}
+{at}"
+            )
+        }
+        _ => String::new(),
+    };
+    let n = text.len().min(cap as usize);
+    // SAFETY: as the caller says.
+    unsafe { std::ptr::copy_nonoverlapping(text.as_ptr(), out, n) };
+    n as u32
+}
+
 /// Starts a new run: what the last one recorded is forgotten.
 #[unsafe(export_name = "moddil_wasm_begin")]
 pub extern "C" fn begin() {

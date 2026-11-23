@@ -40,9 +40,37 @@ pub fn lower<'db, M: Module>(
     items: &[Item],
     module: M,
 ) -> Result<Lowered<'db, M>, String> {
-    let mut b = crate::lower::build(db, program, items, module)?;
+    lower_with(db, program, items, module, false)
+}
+
+/// As [`lower`], for a built program's `main` (function `main`): with `moddil_exit_code` too,
+/// `fn(out: *const u8) -> i32`, the process's exit code for `main`'s result (`main.exit.1`).
+///
+/// # Errors
+///
+/// As [`lower`], and if `main` gives something other than `()` or `ExitCode`.
+pub fn lower_main<M: Module>(
+    db: &dyn Db,
+    program: Program,
+    main: u32,
+    module: M,
+) -> Result<Lowered<'_, M>, String> {
+    lower_with(db, program, &[Item::Fn(main)], module, true)
+}
+
+fn lower_with<'db, M: Module>(
+    db: &'db dyn Db,
+    program: Program,
+    items: &[Item],
+    module: M,
+    exit: bool,
+) -> Result<Lowered<'db, M>, String> {
+    let mut b = crate::lower::build(db, program, items, module, false)?;
     let files = crate::lower::files_of(db, program);
     b.c.site_tables(&files)?;
+    if exit {
+        b.c.exit_code(&b.entries[0].ret)?;
+    }
     Ok(Lowered {
         module: b.c.module,
         entries: b.entries,

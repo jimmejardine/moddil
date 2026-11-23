@@ -758,11 +758,13 @@ dependencies = [
  "cranelift-module",
  "cranelift-native",
  "cranelift-object",
+ "gimli",
  "moddil-mir",
  "moddil-project",
  "moddil-rt",
  "moddil-sema",
  "moddil-syntax",
+ "object",
 ]
 
 [[package]]

@@ -5,8 +5,8 @@ The WASM backend of M1 ([`specs/roadmap.md`: M1](../../specs/roadmap.md)). The n
 which translates each function to core WebAssembly with our own emitter, on `wasm-encoder`
 ([`specs/compiler.md`](../../specs/compiler.md)). The module runs in Node.
 
-**Status:** slice W2: everything the native backend compiles, tasks included, with JSPI
-(Node 26).
+**Status:** slice W3: everything the native backend compiles, tasks included, with JSPI
+(Node 26 and current browsers); `moddil build --wasm` writes a program as files for the web.
 
 - **One lowering for both backends:** [`module.rs`](src/module.rs) implements
   `cranelift_module::Module`, so the lowering builds into it as it builds into the JIT, and
@@ -34,6 +34,14 @@ which translates each function to core WebAssembly with our own emitter, on `was
   - its data objects at fixed addresses;
   - a 16 MiB shadow stack.
   - The heap grows above all that.
+- **The core** ([`core.mjs`](src/core.mjs)), an ES module for any JS engine:
+  - it instantiates the shim, the runtime and the program, and runs entries and tasks;
+  - the test host and the generated glue both use it.
+- **Built for the web** ([`package.rs`](src/package.rs)): `moddil build --wasm` writes
+  `name.mjs`, `name.wasm`, `moddil-rt.wasm` and `name.html`.
+  - `name.mjs` is the glue: the core, the layout, the shim, and `run()`.
+  - `run()` fetches the modules beside it in a browser and reads them in Node, then runs `main`
+    and gives its exit code.
 - **Running:** [`host.cjs`](src/host.cjs) runs the module in a worker thread with a deep stack,
   as [`run.rs`](src/run.rs) says over a pipe.
   - Before each entry, the data is restored as it was, so one entry's `const` items aren't

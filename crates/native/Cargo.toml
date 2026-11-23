@@ -20,6 +20,8 @@ cranelift-module.workspace = true
 cranelift-jit.workspace = true
 cranelift-native.workspace = true
 cranelift-object.workspace = true
+gimli.workspace = true
+object.workspace = true
 
 [dev-dependencies]
 moddil-project.workspace = true

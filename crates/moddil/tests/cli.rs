@@ -193,3 +193,39 @@ fn a_main_with_root_capabilities_runs_and_builds() {
         Some(0)
     );
 }
+
+#[test]
+fn a_release_build_runs_and_splits_its_line_tables() {
+    let path = file(
+        "release.moddil",
+        "fn fib(n: int) -> int { if n < 2 { n } else { fib(n - 1) + fib(n - 2) } }
+        fn main() -> ExitCode { if fib(20) == 6765 { ExitCode::Config } else { ExitCode::Ok } }\n",
+    );
+    let exe = path.with_extension(std::env::consts::EXE_EXTENSION);
+    let out = Command::new(env!("CARGO_BIN_EXE_moddil"))
+        .args(["build", "--release"])
+        .arg(&path)
+        .arg("-o")
+        .arg(&exe)
+        .output()
+        .expect("moddil runs");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    if stderr.contains("the runtime library")
+        || stderr.contains("link.exe")
+        || stderr.contains("rust-lld")
+    {
+        eprintln!("skipped: {stderr}");
+        return;
+    }
+    assert!(out.status.success(), "{stderr}");
+    assert_eq!(
+        Command::new(&exe).status().expect("it runs").code(),
+        Some(78)
+    );
+    if cfg!(target_os = "linux") {
+        assert!(
+            exe.with_extension("debug").exists(),
+            "the line tables split off"
+        );
+    }
+}

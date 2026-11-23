@@ -56,9 +56,18 @@ enum Command {
     Build {
         /// A file, or a mod's directory (with a `moddil.toml`).
         file: PathBuf,
-        /// The executable to write (by default, the file's name, here).
+        /// The executable to write (by default, the file's name, here); with `--wasm`, the
+        /// glue (`name.mjs`), the other files beside it.
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// Build for the web instead: core WebAssembly modules and the JS glue that runs them,
+        /// in a browser or in Node (`name.mjs`, `name.wasm`, `moddil-rt.wasm`, `name.html`).
+        #[arg(long)]
+        wasm: bool,
+        /// A release build: linked with `rust-lld` (or `mold`), with line tables split off
+        /// into a debug file where the platform has one.
+        #[arg(long, conflicts_with = "wasm")]
+        release: bool,
     },
     /// Runs test `index` natively, for `moddil test`, which runs each in a process of its own.
     #[command(name = "__native-test", hide = true)]
@@ -113,7 +122,12 @@ fn main() -> ExitCode {
         Command::Test { wasm: true, .. } => test_wasm(&db, program, &files),
         Command::Run { .. } => run_native(&db, program, &files, &name),
         Command::Test { interp, .. } => test(&db, program, &files, *interp, path),
-        Command::Build { output, .. } => build(&db, program, path, output.as_deref()),
+        Command::Build {
+            output, wasm: true, ..
+        } => build_wasm(&db, program, path, output.as_deref()),
+        Command::Build {
+            output, release, ..
+        } => build(&db, program, path, output.as_deref(), *release),
         Command::NativeTest { index, .. } => native_test(&db, program, &files, *index),
     }
 }
@@ -401,15 +415,71 @@ fn native_child(path: &Path, index: u32, name: &str) -> Outcome {
     outcome
 }
 
-/// `moddil build`: `main` compiled ahead of time, linked into an executable.
-fn build(db: &Database, program: Program, path: &Path, output: Option<&Path>) -> ExitCode {
+/// `moddil build --wasm`: `main` compiled to WebAssembly, written as the files that run it in a
+/// browser or in Node.
+fn build_wasm(db: &Database, program: Program, path: &Path, output: Option<&Path>) -> ExitCode {
     let name = path.display();
     let items = moddil_sema::item_tree(db, program);
     let Some(main) = items.main_fn() else {
         eprintln!("moddil: {name} has no `fn main()`");
         return ExitCode::FAILURE;
     };
-    let object = match moddil_native::build_object(db, program, main) {
+    let glue = output.map_or_else(
+        || {
+            let stem = path
+                .file_stem()
+                .map_or_else(|| "main".into(), |s| s.to_os_string());
+            PathBuf::from(stem).with_extension("mjs")
+        },
+        Path::to_path_buf,
+    );
+    let stem = glue
+        .file_stem()
+        .map_or_else(|| "main".to_string(), |s| s.to_string_lossy().into_owned());
+    let dir = glue.parent().unwrap_or(Path::new("")).to_path_buf();
+    let p = match moddil_wasm::package(db, program, main, &stem) {
+        Ok(p) => p,
+        Err(what) => {
+            eprintln!("moddil: {name} cannot be built for WASM yet: {what}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let files: [(&str, &[u8]); 4] = [
+        (&p.glue.0, p.glue.1.as_bytes()),
+        (&p.program.0, &p.program.1),
+        (&p.runtime.0, p.runtime.1),
+        (&p.html.0, p.html.1.as_bytes()),
+    ];
+    for (file, bytes) in files {
+        let at = dir.join(file);
+        if let Err(e) = std::fs::write(&at, bytes) {
+            eprintln!("moddil: writing {}: {e}", at.display());
+            return ExitCode::FAILURE;
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+/// `moddil build`: `main` compiled ahead of time, linked into an executable.
+fn build(
+    db: &Database,
+    program: Program,
+    path: &Path,
+    output: Option<&Path>,
+    release: bool,
+) -> ExitCode {
+    let name = path.display();
+    let items = moddil_sema::item_tree(db, program);
+    let Some(main) = items.main_fn() else {
+        eprintln!("moddil: {name} has no `fn main()`");
+        return ExitCode::FAILURE;
+    };
+    let built = if release {
+        moddil_native::build_release_object(db, program, main)
+    } else {
+        moddil_native::build_object(db, program, main)
+    };
+    let object = match built {
         Ok(o) => o,
         Err(moddil_native::Native::Unsupported(what)) => {
             eprintln!("moddil: {name} cannot be built yet: {what}");
@@ -426,7 +496,7 @@ fn build(db: &Database, program: Program, path: &Path, output: Option<&Path>) ->
         },
         Path::to_path_buf,
     );
-    match link::link(&object, &out) {
+    match link::link(&object, &out, release) {
         Ok(()) => ExitCode::SUCCESS,
         Err(why) => {
             eprintln!("moddil: linking {}: {why}", out.display());

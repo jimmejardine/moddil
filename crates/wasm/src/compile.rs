@@ -35,7 +35,32 @@ pub fn compile<'db>(
     program: Program,
     entries: &[Item],
 ) -> Result<Compiled<'db>, String> {
-    let lowered = moddil_native::backend::lower(db, program, entries, WasmModule::new()?)?;
+    finish(moddil_native::backend::lower(
+        db,
+        program,
+        entries,
+        WasmModule::new()?,
+    )?)
+}
+
+/// Compiles a built program's `main` (function `main` of `program`): its module exports
+/// `moddil_exit_code` too, as a native build's object does.
+///
+/// # Errors
+///
+/// As [`compile`], and if `main` gives something other than `()` or `ExitCode`.
+pub fn compile_main(db: &dyn Db, program: Program, main: u32) -> Result<Compiled<'_>, String> {
+    finish(moddil_native::backend::lower_main(
+        db,
+        program,
+        main,
+        WasmModule::new()?,
+    )?)
+}
+
+fn finish(
+    lowered: moddil_native::backend::Lowered<'_, WasmModule>,
+) -> Result<Compiled<'_>, String> {
     // Room for any entry's result and any error, after its id.
     let mut layouts = Layouts::new(lowered.items);
     let mut out = 0;

@@ -6,6 +6,7 @@
 //! fall back to an interpreter.
 
 pub mod backend;
+mod dwarf;
 mod host;
 mod jit;
 pub mod layout;
@@ -84,7 +85,17 @@ pub fn run_main_exit(
 /// [`Native::Unsupported`] if it reaches code not compiled natively yet, or if `main` takes root
 /// capabilities or gives something other than `()` or `ExitCode`.
 pub fn build_object(db: &dyn Db, program: Program, index: u32) -> Result<Vec<u8>, Native> {
-    lower::compile_object(db, program, Item::Fn(index)).map_err(Native::Unsupported)
+    lower::compile_object(db, program, Item::Fn(index), false).map_err(Native::Unsupported)
+}
+
+/// As [`build_object`], for a release build: with the functions' line tables (DWARF), in an
+/// ELF or Mach-O object (a COFF one has none yet: debuggers there read PDB).
+///
+/// # Errors
+///
+/// As [`build_object`].
+pub fn build_release_object(db: &dyn Db, program: Program, index: u32) -> Result<Vec<u8>, Native> {
+    lower::compile_object(db, program, Item::Fn(index), true).map_err(Native::Unsupported)
 }
 
 /// This crate's version.

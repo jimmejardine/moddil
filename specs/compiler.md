@@ -123,7 +123,14 @@ problem, which is exactly the supply-chain concern of [Package management and su
   `cranelift-object`.
   - **Linking:** the object is linked with `moddil-rt-main`, the runtime as a static library,
     which gives the process its `main`. The linker is MSVC's `link.exe` on Windows and the
-    system's `cc` elsewhere; `lld` and `mold`, as above, come with release builds.
+    system's `cc` elsewhere.
+  - **Release builds (decided November 2026, M1 slice W3):** `moddil build --release` links
+    with `lld`, the toolchain's `rust-lld` (or `mold` where it is installed). It writes DWARF
+    line tables, from the source location the lowering gives each statement's code: split into
+    `name.debug` on Linux, left for `dsymutil` on macOS, and none yet on Windows (PDB).
+  - **`moddil build --wasm` (decided November 2026, M1 slice W3):** core modules plus generated
+    JS glue, as below. The glue is an ES module that runs `main` in a browser or in Node, and it
+    shares its core with the test host.
   - **The object's exports:** the program's entry, its exit code for `main`'s result
     (`lifecycle.md`), and the tables a trap is reported from (each site's class and its file,
     line and column), since a built program has no compiler to ask.

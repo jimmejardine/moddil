@@ -173,6 +173,7 @@ impl Host {
         std::fs::write(&shim, crate::module::shim()).map_err(io)?;
         std::fs::write(&module, &c.bytes).map_err(io)?;
         std::fs::write(&host, include_str!("host.cjs")).map_err(io)?;
+        std::fs::write(dir.join("core.mjs"), include_str!("core.mjs")).map_err(io)?;
         let l = c.layout;
         let mut child = Command::new(node())
             .arg(&host)

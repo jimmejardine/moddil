@@ -8,10 +8,12 @@ mod cfg;
 mod clif;
 mod compile;
 pub mod module;
+mod package;
 mod run;
 mod runtime;
 
-pub use compile::{Compiled, compile};
+pub use compile::{Compiled, compile, compile_main};
+pub use package::{Package, RUNTIME_FILE, package};
 pub use run::{Observed, TestRuns, Wasm, host_available, run_main, run_tests};
 
 /// This crate's version.
