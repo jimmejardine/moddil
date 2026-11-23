@@ -1,0 +1,18 @@
+// zlib from Moddil: compresses a text, uncompresses it, and logs the sizes and the checksum.
+
+use mod::{compress, crc32, uncompress};
+
+fn main() {
+    let text = "Moddil calls zlib, which is written in C, through `extern \"C\"`. \
+                Moddil calls zlib, which is written in C, through `extern \"C\"`.";
+    let mut data = Vec::new();
+    let mut i = 0;
+    while i < text.len() {
+        data.push(text.byte_at(i));
+        i += 1;
+    }
+    let packed = try { compress(data.as_slice(), 9)? } catch { _ => Vec::new() };
+    let back = try { uncompress(packed.as_slice(), data.len())? } catch { _ => Vec::new() };
+    log.info(fmt"{data.len()} bytes compress to {packed.len()}, and come back {back == data}");
+    log.info(fmt"crc32 {crc32(data.as_slice())}");
+}

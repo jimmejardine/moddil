@@ -52,10 +52,11 @@ and a code never changes meaning.
 | E0215 | A named argument with no parameter of its name, given twice, or before a positional one | [expr.call.named.1](expressions/calls.md) |
 | E0216 | A default on a method of an impl of a trait | [expr.call.default.1](expressions/calls.md) |
 | E0217 | A `select` arm whose operation is not one a `select` waits on, `#[selectable]` on a function that does not suspend, or one that does not receive first or whose rest uses a handler | [task.select.1](concurrency.md), [task.select.3](concurrency.md), [task.select.4](concurrency.md) |
-| E0218 | A raw pointer dereferenced outside an `unsafe` block | [type.ptr.1](unsafe.md) |
+| E0218 | A raw pointer dereferenced, or a C function called, outside an `unsafe` block | [type.ptr.1](unsafe.md) |
 | E0219 | An `unsafe` block in a mod without the `unsafe` capability, or with no reason given | [expr.unsafe.1](unsafe.md), [mod.caps.1](unsafe.md) |
 | E0220 | `core::os` or `core::gpu` named in a mod without the `os` capability | [os.cap.1](os.md), [gpu.cap.1](gpu.md) |
 | E0221 | A `#[kernel]` that is not `fn k(params: &P, out: &mut Tile)`, or that needs handlers, can fail, suspends or spawns | [gpu.kernel.1](gpu.md) |
+| E0222 | A C or `#[export]` function with a type C does not have, or with effects, errors or suspension; an `extern` block that is not `extern "C"`; a C function with a body | [ffi.types.1](interop.md), [ffi.extern.1](interop.md), [ffi.export.1](interop.md) |
 | E0301 | Mutation of an immutable local (assigning, or borrowing with `&mut`) | [expr.assign.1](expressions/assignment.md), [borrow.mut.1](borrows.md) |
 | E0302 | Mutation through a shared borrow | [borrow.mut.1](borrows.md) |
 | E0303 | Use of a moved value | [own.move.1](ownership.md), [own.move.partial.1](ownership.md) |

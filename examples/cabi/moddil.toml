@@ -1,0 +1,6 @@
+# A Moddil library called from C (`reference/2027/interop.md`): `moddil build --lib` makes a
+# shared library of its `#[export]` functions and a header, `cabi.h`, which `c/main.c` uses.
+[mod]
+name = "cabi"
+edition = "2027"
+capabilities = ["unsafe"]

@@ -50,6 +50,7 @@ moddil-native = { path = "crates/native", version = "0.0.0" }
 moddil-os = { path = "crates/os", version = "0.0.0" }
 moddil-gpu = { path = "crates/gpu", version = "0.0.0" }
 moddil-lsp = { path = "crates/lsp", version = "0.0.0" }
+moddil-ffi = { path = "crates/ffi", version = "0.0.0" }
 
 # External crates (versions checked on crates.io, November 2026).
 salsa = "0.28.5"            # query-based incremental compilation
@@ -67,6 +68,7 @@ lsp-server = "0.10.0"       # the language server's JSON-RPC loop (`moddil-lsp`)
 lsp-types = "0.97.0"        # its messages
 serde_json = "1.0.154"      # their bodies
 serde = "1.0.229"           # decoding them
+libloading = "0.9.1"        # loading C libraries for the JIT and the MIR interpreter (`moddil-ffi`)
 cranelift-codegen = "0.138.0"   # native code generation (M1, `moddil-native`)
 cranelift-frontend = "0.138.0"
 cranelift-module = "0.138.0"

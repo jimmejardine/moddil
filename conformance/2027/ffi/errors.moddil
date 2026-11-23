@@ -1,0 +1,10 @@
+// covers: ffi.extern.1, ffi.native.1
+
+// A single file has no capabilities, so it declares no C functions.
+extern "C" {
+    fn abs(x: i32) -> i32;                  //~ E0219
+}
+
+// Only C's ABI is declared.
+extern "Rust" {                             //~ E0222
+}

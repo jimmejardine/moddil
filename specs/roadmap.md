@@ -1197,7 +1197,58 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
     - `[0; n]` for a `Vec<u32>` types its element as `int` (E0402, as noted under the standard
       mods), so `Image::new` repeats a typed zero;
     - `int` has no `max`.
-- **Next:** M3; and the standard mods the tour does not reach, as they are needed.
+- **Next:** M3 ([M3: interop, Python and Hashiverse, in slices](#m3-interop-python-and-hashiverse-in-slices)).
+
+## M3: interop, Python and Hashiverse, in slices
+
+M3 brings the Hashiverse native client, an LLVM release backend, and Python bindings shown off
+by Talk. Both the client and the bindings rest on the C ABI, so it comes first. Slices are named
+M3a, M3b, …
+
+- **Slice M3a (decided November 2026): C ABI interop, both directions.** The user's choices:
+  hand-written `extern` blocks (libclang header import later), zlib as the proof (smaller than
+  SQLite, the first idea) vendored in the repository, and C calls on the MIR interpreter as well
+  as natively.
+  - **Calling C** (`ffi.extern.1`, `ffi.types.1`):
+    - `extern "C" { fn f(…) -> T; }`, with C's types only (E0222);
+    - declared only with the `unsafe` capability (E0219), and called only in `unsafe` (E0218).
+  - **`#[repr(C)]`** (`ffi.repr.1`): native layouts keep its fields in order.
+  - **`[c]` in a manifest** (`ffi.c.1`): sources, include directories, definitions and system
+    libraries, compiled by the system's C compiler (the `cc` crate) into a static and a shared
+    library, cached by a hash of what went into them (the new `moddil-ffi` crate).
+  - **Native code:** a C function is an imported symbol in the C convention, with 8- and 16-bit
+    integers widened to 32 as C's callers do. The JIT finds it in the loaded libraries or the C
+    runtime; `moddil build` links the static library.
+  - **The MIR interpreter** calls C through a Cranelift trampoline per signature. Its memory is
+    its own, so pointer arguments are marshalled into C's layout (with the rest of the array they
+    point into) and back; pointers C gives are kept as addresses (`ffi.native.1`).
+  - **WASM** refuses programs that call C. The reference interpreter skips conformance files
+    marked `// native`.
+  - **Exports** (`ffi.export.1`):
+    - `#[export] pub fn` gets a C-ABI wrapper under its own name, which starts the runtime once
+      and ends the process (exit 70) on a trap;
+    - `moddil build --lib` writes a shared library and a generated header.
+  - **`examples/zlib`:** a typed API over a small C shim with fixed-width types (zlib's `uLong`
+    is 32 bits on Windows and 64 elsewhere, and `z_stream` holds them): compression in one go,
+    checksums, and a streaming `Deflater` whose state is behind an opaque pointer, with its
+    statistics in a `#[repr(C)]` struct filled through a pointer.
+  - **`examples/cabi`:** a library C calls through its header, checked by a C program in CI.
+  - **Checked:**
+    - conformance (errors, C runtime calls, `#[repr(C)]` offsets through `memcpy`);
+    - the zlib example natively, on the MIR interpreter and as an executable; WASM refused;
+    - the export round trip through the system's C compiler;
+    - `moddil-ffi`'s trampolines over the C runtime.
+  - **Interim limits:**
+    - structs cross C only behind pointers, not as values;
+    - no variadic functions, and no callbacks into Moddil;
+    - no reading through a C pointer on the interpreter;
+    - no pointer arithmetic or null pointers in `core::ptr` yet, so C strings and arrays from C
+      cannot be walked in Moddil (the zlib shim takes buffers instead), and the `mods/ffi`
+      helpers the plan named were not needed yet;
+    - an exported function's trap ends the process;
+    - `moddil build --lib` makes a shared library only, not a static one.
+- **Next:** Python bindings on the exports (`#[export(python)]`, `moddil build --wheel`), or the
+  Hashiverse client's first pieces through the C ABI.
 
 ## Staging: distributed programs
 

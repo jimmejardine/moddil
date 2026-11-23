@@ -48,6 +48,8 @@ pub enum Value {
     Borrowed(Box<Value>, bool),
     /// Nothing: a place not assigned yet, or moved out of.
     Empty,
+    /// A pointer C gave (`ffi.extern.1`): its address, kept as it is and passed back to C.
+    Foreign(u64),
 }
 
 /// Where a borrow points: a local of a frame of a task, and a path of field indices into it.
@@ -80,6 +82,8 @@ impl Value {
             Value::Num(n, bits) => crate::num::text(*n, *bits),
             Value::Bool(v) => v.to_string(),
             Value::Unit => "()".to_string(),
+            // A C pointer: its address, which differs from run to run.
+            Value::Foreign(a) => format!("{a:#x}"),
             Value::Char(c) => format!("{c:?}"),
             Value::Str(s) => format!("{:?}", &**s),
             Value::Array(xs) | Value::Buf(_, xs) => {

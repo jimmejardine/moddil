@@ -42,6 +42,7 @@ python tools/ci.py --wsl       # the same steps in WSL (Linux); --all runs both
 | [`wasm/`](wasm/README.md) | `moddil-wasm` | The WASM backend: the native lowering's Cranelift IR translated to core WebAssembly modules, run in Node (M1) |
 | [`rt/`](rt/README.md) | `moddil-rt` | The runtime native code calls: traps, the heap, tasks, numbers and text |
 | [`rt-main/`](rt-main/README.md) | `moddil-rt-main` | A built program's `main`: the static library `moddil build` links with |
+| [`ffi/`](ffi/src/lib.rs) | `moddil-ffi` | C interop for the runtimes: a mod's `[c]` code compiled, C libraries loaded, and calls into C from the MIR interpreter (M3a) |
 | [`gpu/`](gpu/src/lib.rs) | `moddil-gpu` | Kernels (`#[kernel]`) to WGSL: their MIR built as naga IR, with structured control flow and a thread per pixel, validated by naga, and written out (M2e, M2g) |
 | [`lsp/`](lsp/src/lib.rs) | `moddil-lsp` | The language server (`moddil lsp`): diagnostics, hover, go to definition, inlay hints and completion over the compiler's salsa queries (M2f) |
 | [`os/`](os/src/lib.rs) | `moddil-os` | The host's side of `core::os` for the runtimes written in Rust (the MIR interpreter, and moddil-rt natively): sockets, arguments, standard error, randomness and signals |

@@ -1,0 +1,53 @@
+// covers: ffi.extern.1, ffi.types.1, ffi.repr.1, ffi.export.1, ffi.c.1
+// native
+
+extern "C" {
+    fn abs(x: i32) -> i32;
+    fn llabs(x: int) -> int;
+    fn fabs(x: f64) -> f64;
+    fn strlen(s: *const u8) -> u64;
+    fn memcpy(dst: *mut u8, src: *const Pair, n: u64) -> *mut u8;
+}
+
+/// C's layout: `a` at 0, then seven bytes of padding, then `b` at 8.
+#[repr(C)]
+pub struct Pair {
+    pub a: u8,
+    pub b: u64,
+}
+
+#[export]
+pub fn twice(x: int) -> int {
+    2 * x
+}
+
+test "the C runtime's functions" {
+    let text: [u8; 4] = [67, 65, 66, 0];
+    unsafe("the C runtime's functions, with a NUL-terminated string") {
+        abs(-7)                             // => 7
+        ;
+        llabs(-40000000000)                 // => 40000000000
+        ;
+        fabs(-2.5)                          // => 2.5
+        ;
+        strlen(&text[0])                    // => 3
+        ;
+    }
+}
+
+test "a #[repr(C)] struct is laid out as C lays it out" {
+    let p = Pair { a: 1, b: 258 };
+    let mut bytes: [u8; 16] = [0; 16];
+    unsafe("memcpy copies the 16 bytes of the pair into the 16 of the array") {
+        memcpy(&mut bytes[0], &p, 16);
+    }
+    bytes[0]                                // => 1
+    ;
+    bytes[8]                                // => 2
+    ;
+    bytes[9]                                // => 1
+}
+
+test "an export is a function as any other in Moddil" {
+    twice(21)                               // => 42
+}

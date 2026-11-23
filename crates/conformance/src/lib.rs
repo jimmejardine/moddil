@@ -12,6 +12,7 @@
 //! | `//~ trap` | A trap on this line |
 //! | `//~ error` | An error leaves a test on this line, failing it |
 //! | `// disputed` | The test does not count until the reference is clarified |
+//! | `// native` | It calls C: only native code and the MIR interpreter run it |
 //!
 //! In a manifest, `#~ E0705` expects a diagnostic on its line. A test with expected diagnostics
 //! is only checked; otherwise every `test` item of every mod in it runs, every `// =>` line must
@@ -47,6 +48,9 @@ pub struct Expectations {
     pub errors: BTreeSet<Line>,
     /// Marked `// disputed`.
     pub disputed: bool,
+    /// Marked `// native`: it calls C (`ffi.extern.1`), which runs only in native code and on
+    /// the MIR interpreter, so WASM and the reference interpreter skip it.
+    pub native: bool,
 }
 
 /// What an implementation did with a test, by line.
@@ -395,6 +399,8 @@ pub fn read_expectations(file: &str, text: &str, e: &mut Expectations) -> Result
             );
         } else if comment.trim_end() == "// disputed" || comment.starts_with("// disputed:") {
             e.disputed = true;
+        } else if comment.trim_end() == "// native" {
+            e.native = true;
         }
     }
     Ok(())
@@ -748,7 +754,8 @@ fn run_test(repo: &Path, t: &Path, implementations: &[&dyn Implementation]) -> T
         let running: Vec<_> = implementations
             .iter()
             .map(|imp| {
-                let skip = !imp.checks() && !expected.diagnostics.is_empty();
+                let skip = (!imp.checks() && !expected.diagnostics.is_empty())
+                    || (expected.native && matches!(imp.name(), "wasm" | "reference interpreter"));
                 (!skip).then(|| s.spawn(|| imp.run_if(&loaded)))
             })
             .collect();
@@ -887,6 +894,7 @@ mod tests {
                 stub: false,
                 unsafe_ok: false,
                 os_ok: false,
+                c: None,
             }],
         };
         compare(

@@ -67,6 +67,7 @@ impl Collector<'_> {
             vis,
             module: self.module,
             root: false,
+            repr_c: false,
         });
     }
 
@@ -143,8 +144,18 @@ impl Collector<'_> {
                 .and_then(ast::Path::cast)
                 .map(|p| p.segments())
                 .unwrap_or_default();
+            let input = attr
+                .child(K::ATTR)
+                .and_then(|a| a.child(K::ATTR_INPUT))
+                .map(|t| t.text().replace(char::is_whitespace, ""));
             if path == ["root_capability"] && stub && node.kind() == K::STRUCT_ITEM {
                 self.tree.adts[i].root = true;
+            } else if path == ["repr"]
+                && input.as_deref() == Some("(C)")
+                && node.kind() == K::STRUCT_ITEM
+            {
+                // C's layout (`ffi.repr.1`).
+                self.tree.adts[i].repr_c = true;
             } else if path != ["derive"] {
                 ds.push(Diagnostic::unsupported(attr.text_range(), "this attribute"));
             }

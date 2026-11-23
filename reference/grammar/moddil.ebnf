@@ -140,7 +140,7 @@ item           ::= outer_attr* note* vis? item_kind
 note           ::= 'note' ( STRING | BLOCK_STRING )                  # a maintainer note on the item
 vis            ::= 'pub' ( '(' 'mod' ')' )?
 item_kind      ::= fn_item | struct_item | view_item | enum_item | trait_item | impl_item
-                 | type_item | const_item | use_item | mod_item
+                 | type_item | const_item | use_item | mod_item | extern_block
                  | test_item | property_item | bench_item | group_item | unit_item | dimension_item
 
 # ─── Functions ────────────────────────────────────────────────────────────────
@@ -202,6 +202,8 @@ use_list       ::= ( use_tree ( ',' use_tree )* ','? )?
 use_path       ::= use_segment ( '::' use_segment )*                  # LL(2): '::' then a name, '*' or '{'
 use_segment    ::= IDENT | 'self' | 'super' | 'mod'
 mod_item       ::= 'mod' IDENT ';'          # only with a generating attribute: #[c_import(…)] mod sqlite3;
+extern_block   ::= 'extern' STRING '{' extern_member* '}'      # extern "C" { fn strlen(s: *const u8) -> u64; }
+extern_member  ::= outer_attr* note* vis? fn_item               # a C function: a signature, no body
 
 # ─── Tests, documentation groups ─────────────────────────────────────────────
 test_item      ::= 'test' STRING ( 'for' test_subject ( 'with' IDENT 'in' '[' type ( ',' type )* ','? ']' )? )?

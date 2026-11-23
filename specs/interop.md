@@ -163,6 +163,19 @@ let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → 
   instantiations) may exist as an optional tool (standard or community). It is tooling, not part of
   the language or compiler.
 
+## As built (M3a)
+
+The first slice of the C ABI ([`roadmap.md`](roadmap.md), slice M3a; reference `interop.md`):
+- **Imports:** hand-written `extern "C" { … }` blocks, with C's scalar types and raw pointers,
+  in mods with the `unsafe` capability, called in `unsafe` blocks. Header import through
+  libclang (`#[c_import]`) and annotation overlays come later.
+- **C sources** are a mod's `[c]` table, compiled by the system's C compiler (MSVC, or `cc`),
+  not yet by a fetched clang component; zlib is vendored in `examples/zlib`.
+- **`#[repr(C)]` structs** cross behind pointers only. No variadic calls or callbacks yet.
+- **Exports:** `#[export]` functions, a generated header, and `moddil build --lib` for a shared
+  library. The generated Rust crate comes later.
+- **Runners:** native code and the MIR interpreter (marshalling pointer arguments); not WASM.
+
 ## Fit check against the reference examples
 
 | Example | Uses |

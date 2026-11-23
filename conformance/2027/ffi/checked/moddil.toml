@@ -1,0 +1,4 @@
+[mod]
+name = "checked"
+edition = "2027"
+capabilities = ["unsafe"]

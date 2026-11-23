@@ -746,6 +746,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 
 [[package]]
+name = "libloading"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1832accd5a4ca2795ace4d05d15c4039be15b62d3b950eff99746a990e3cc10"
+dependencies = [
+ "cfg-if",
+ "windows-link",
+]
+
+[[package]]
 name = "libm"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -835,6 +845,7 @@ dependencies = [
  "ariadne",
  "cc",
  "clap",
+ "moddil-ffi",
  "moddil-gpu",
  "moddil-interp",
  "moddil-lsp",
@@ -862,6 +873,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "moddil-ffi"
+version = "0.0.0"
+dependencies = [
+ "cc",
+ "cranelift-codegen",
+ "cranelift-frontend",
+ "cranelift-jit",
+ "cranelift-module",
+ "cranelift-native",
+ "libloading",
+]
+
+[[package]]
 name = "moddil-gpu"
 version = "0.0.0"
 dependencies = [
@@ -879,6 +903,7 @@ name = "moddil-interp"
 version = "0.0.0"
 dependencies = [
  "libm",
+ "moddil-ffi",
  "moddil-mir",
  "moddil-os",
  "moddil-sema",
@@ -923,6 +948,7 @@ dependencies = [
  "cranelift-native",
  "cranelift-object",
  "gimli",
+ "moddil-ffi",
  "moddil-gpu",
  "moddil-mir",
  "moddil-project",

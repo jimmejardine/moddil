@@ -15,6 +15,7 @@ moddil-sema.workspace = true
 moddil-syntax.workspace = true
 moddil-rt.workspace = true
 moddil-gpu.workspace = true
+moddil-ffi.workspace = true
 cranelift-codegen.workspace = true
 cranelift-frontend.workspace = true
 cranelift-module.workspace = true

@@ -1,0 +1,21 @@
+[package]
+name = "moddil-ffi"
+description = "C interop for Moddil's runtimes: a mod's C sources built, C libraries loaded, and calls into C from the MIR interpreter."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+libloading.workspace = true
+cc.workspace = true
+cranelift-codegen.workspace = true
+cranelift-frontend.workspace = true
+cranelift-jit.workspace = true
+cranelift-module.workspace = true
+cranelift-native.workspace = true
+
+[lints]
+workspace = true

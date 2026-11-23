@@ -1,0 +1,239 @@
+//! zlib from Moddil (`reference/2027/interop.md`). The C library is compiled with the mod (its
+//! manifest's `[c]` table) and reached through `extern "C"` bindings to a small C shim with
+//! fixed-width types (`c/moddil_shim.c`: zlib's `uLong` is 32 bits on Windows and 64 elsewhere).
+//! Over them, a typed API: compression in one go, checksums, and a streaming `Deflater` that
+//! frees its C state when it is dropped.
+
+/// zlib's state for streaming compression: only ever behind a pointer C gave.
+pub struct ZStream {}
+
+/// What a deflater has done, as C fills it in.
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct Stats {
+    /// The bytes it has taken in.
+    pub total_in: u64,
+    /// The bytes it has given out.
+    pub total_out: u64,
+    /// The Adler-32 checksum of what it has taken in.
+    pub adler: u32,
+}
+
+extern "C" {
+    fn moddil_zlib_bound(len: u64) -> u64;
+    fn moddil_zlib_compress(dst: *mut u8, dst_len: *mut u64, src: *const u8, src_len: u64, level: i32) -> i32;
+    fn moddil_zlib_uncompress(dst: *mut u8, dst_len: *mut u64, src: *const u8, src_len: u64) -> i32;
+    fn moddil_zlib_crc32(crc: u32, buf: *const u8, len: u64) -> u32;
+    fn moddil_zlib_adler32(adler: u32, buf: *const u8, len: u64) -> u32;
+    fn moddil_zlib_deflater_new(level: i32, status: *mut i32) -> *mut ZStream;
+    fn moddil_zlib_deflate(s: *mut ZStream, input: *const u8, in_len: u64, out: *mut u8, out_cap: u64, out_len: *mut u64, finish: i32) -> i32;
+    fn moddil_zlib_deflater_stats(s: *mut ZStream, stats: *mut Stats);
+    fn moddil_zlib_deflater_end(s: *mut ZStream);
+}
+
+/// A zlib error: its code (`Z_DATA_ERROR` is -3, `Z_BUF_ERROR` -5, and so on).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ZlibError {
+    pub code: int,
+}
+
+fn error(code: i32) -> ZlibError {
+    ZlibError { code: code.to::<int>() ?! "an `i32` is an `int`" }
+}
+
+fn len(n: int) -> u64 {
+    n.to::<u64>() ?! "a length is not negative"
+}
+
+fn count(n: u64) -> int {
+    n.to::<int>() ?! "a buffer's length is an `int`"
+}
+
+/// `n` zero bytes.
+fn zeros(n: int) -> Vec<u8> {
+    let zero: u8 = 0;
+    let v: Vec<u8> = [zero; n];
+    v
+}
+
+/// The most bytes compressing `n` bytes can give.
+pub fn bound(n: int) -> int {
+    count(unsafe("zlib's compressBound reads nothing") { moddil_zlib_bound(len(n)) })
+}
+
+/// `data`, compressed at `level` (0 to 9; 6 is zlib's default).
+pub fn compress(data: &[u8], level: i32) -> Vec<u8> with fail(ZlibError) {
+    // C reads no byte of an empty input, but its pointer must still point somewhere.
+    let spare = zeros(1);
+    let input = if data.is_empty() { spare.as_slice() } else { data };
+    let mut out = zeros(bound(data.len()));
+    let mut n = len(out.len());
+    let code = unsafe("the buffers are as long as the lengths say, and live across the call") {
+        moddil_zlib_compress(&mut out[0], &mut n, &input[0], len(data.len()), level)
+    };
+    if code != 0 {
+        fail(error(code));
+    }
+    out.truncate(count(n));
+    out
+}
+
+/// `data` uncompressed, which is `size` bytes long (as `compress` was given).
+pub fn uncompress(data: &[u8], size: int) -> Vec<u8> with fail(ZlibError) {
+    let spare = zeros(1);
+    let input = if data.is_empty() { spare.as_slice() } else { data };
+    let mut out = zeros(if size > 0 { size } else { 1 });
+    let mut n = len(size);
+    let code = unsafe("the buffers are as long as the lengths say, and live across the call") {
+        moddil_zlib_uncompress(&mut out[0], &mut n, &input[0], len(data.len()))
+    };
+    if code != 0 {
+        fail(error(code));
+    }
+    out.truncate(count(n));
+    out
+}
+
+/// The CRC-32 of `data` (as `gzip` and PNG use it).
+pub fn crc32(data: &[u8]) -> u32 {
+    if data.is_empty() {
+        return 0;
+    }
+    unsafe("the buffer is as long as the length says") {
+        moddil_zlib_crc32(0, &data[0], len(data.len()))
+    }
+}
+
+/// The Adler-32 of `data` (as the zlib format uses it).
+pub fn adler32(data: &[u8]) -> u32 {
+    if data.is_empty() {
+        return 1;
+    }
+    unsafe("the buffer is as long as the length says") {
+        moddil_zlib_adler32(1, &data[0], len(data.len()))
+    }
+}
+
+/// Compression a piece at a time: what `write` and `finish` give, joined, is the zlib stream
+/// of everything written. Its C state is freed when it is dropped.
+pub struct Deflater {
+    stream: *mut ZStream,
+}
+
+impl Deflater {
+    /// A deflater compressing at `level`.
+    pub fn new(level: i32) -> Deflater with fail(ZlibError) {
+        let mut status: i32 = 0;
+        let stream = unsafe("zlib's deflateInit, its state kept behind the pointer") {
+            moddil_zlib_deflater_new(level, &mut status)
+        };
+        if status != 0 {
+            fail(error(status));
+        }
+        Deflater { stream }
+    }
+
+    /// Compresses `data`: the bytes of the stream it gives so far (perhaps none).
+    pub fn write(&mut self, data: &[u8]) -> Vec<u8> with fail(ZlibError) {
+        self.step(data, 0)?
+    }
+
+    /// Ends the stream: its last bytes.
+    pub fn finish(&mut self) -> Vec<u8> with fail(ZlibError) {
+        let nothing: Vec<u8> = Vec::new();
+        self.step(nothing.as_slice(), 1)?
+    }
+
+    fn step(&mut self, data: &[u8], finish: i32) -> Vec<u8> with fail(ZlibError) {
+        let spare = zeros(1);
+        let input = if data.is_empty() { spare.as_slice() } else { data };
+        let mut out = zeros(bound(data.len()) + 64);
+        let cap = len(out.len());
+        let mut n: u64 = 0;
+        let code = unsafe("the buffers are as long as the lengths say, and live across the call") {
+            moddil_zlib_deflate(self.stream, &input[0], len(data.len()), &mut out[0], cap, &mut n, finish)
+        };
+        if code < 0 {
+            fail(error(code));
+        }
+        out.truncate(count(n));
+        out
+    }
+
+    /// What it has done so far.
+    pub fn stats(&self) -> Stats {
+        let mut s = Stats { total_in: 0, total_out: 0, adler: 0 };
+        unsafe("C fills in a `#[repr(C)]` struct, laid out as its own") {
+            moddil_zlib_deflater_stats(self.stream, &mut s);
+        }
+        s
+    }
+}
+
+impl Drop for Deflater {
+    fn drop(self) {
+        unsafe("zlib's deflateEnd, then the state is freed; nothing uses the pointer after") {
+            moddil_zlib_deflater_end(self.stream);
+        }
+    }
+}
+
+/// `s`'s bytes.
+fn bytes(s: &str) -> Vec<u8> {
+    let mut v = Vec::new();
+    let mut i = 0;
+    while i < s.len() {
+        v.push(s.byte_at(i));
+        i += 1;
+    }
+    v
+}
+
+test "a text compresses and comes back" {
+    let text = bytes("the quick brown fox jumps over the lazy dog, the quick brown fox again");
+    let packed = try { compress(text.as_slice(), 9)? } catch { _ => Vec::new() };
+    assert(packed.len() > 0 && packed.len() < text.len());
+    let back = try { uncompress(packed.as_slice(), text.len())? } catch { _ => Vec::new() };
+    assert(back == text);
+}
+
+test "the checksums are the known ones" {
+    let text = bytes("The quick brown fox jumps over the lazy dog");
+    assert(crc32(text.as_slice()) == 1095738169);
+    assert(adler32(text.as_slice()) == 1541148634);
+    assert(crc32(Vec::new().as_slice()) == 0);
+}
+
+test "corrupt data is an error" {
+    let junk = bytes("this is not a zlib stream");
+    let code = try { uncompress(junk.as_slice(), 100)?; 0 } catch { e => e.code };
+    assert(code == -3);
+}
+
+test "a stream in pieces uncompresses to the whole" {
+    let a = bytes("streaming, ");
+    let b = bytes("a piece at a time");
+    let mut whole = a.clone();
+    for x in b.iter() {
+        whole.push(*x);
+    }
+    let packed = try {
+        let mut d = Deflater::new(6)?;
+        let mut out = d.write(a.as_slice())?;
+        let more = d.write(b.as_slice())?;
+        for x in more.iter() {
+            out.push(*x);
+        }
+        let last = d.finish()?;
+        for x in last.iter() {
+            out.push(*x);
+        }
+        let s = d.stats();
+        assert(s.total_in == 28 && s.total_out == len(out.len()) && s.adler == adler32(whole.as_slice()));
+        out
+    } catch {
+        _ => Vec::new()
+    };
+    let back = try { uncompress(packed.as_slice(), whole.len())? } catch { _ => Vec::new() };
+    assert(back == whole);
+}

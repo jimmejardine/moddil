@@ -17,6 +17,7 @@ moddil run --interp file.moddil    # the same on the MIR interpreter (and `test 
 moddil build file.moddil [-o out]  # an executable: `main`'s exit code, 70 on a trap
 moddil build --release file.moddil # linked with lld (or mold), with line tables
 moddil build --wasm file.moddil    # name.mjs, name.wasm, moddil-rt.wasm, name.html
+moddil build --lib dir             # a mod's `#[export]` functions: a shared library and name.h
 moddil lsp                         # the language server, on standard input and output
 moddil run --wasm file.moddil      # `main` as WebAssembly, in Node (and `test --wasm`)
 ```

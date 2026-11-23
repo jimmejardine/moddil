@@ -130,6 +130,9 @@ codes! {
     /// A `#[kernel]` that is not a free function taking `&P` and `&mut Tile`, or that needs
     /// handlers, can fail, suspends or spawns.
     E0221 = "invalid kernel",
+    /// A C function or an `#[export]` with a type C does not have, or with effects, errors or
+    /// suspension; an `extern` block that is not `extern "C"`; a C function with a body.
+    E0222 = "invalid C function or export",
     /// An assignment to, or a `&mut` borrow of, a local not declared `mut`.
     E0301 = "mutation of an immutable local",
     /// An assignment through, or a `&mut` borrow through, a shared borrow.

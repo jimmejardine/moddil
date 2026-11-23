@@ -71,6 +71,43 @@ macro_rules! projects {
     };
 }
 
+/// Projects that call C (`ffi.extern.1`): natively and on the MIR interpreter, and refused as
+/// WASM, which C does not run in yet.
+macro_rules! c_projects {
+    ($($name:ident => $dir:literal),* $(,)?) => {
+        const C_PROJECTS: &[&str] = &[$($dir),*];
+        $(
+            mod $name {
+                #[test]
+                fn native() {
+                    super::passes($dir, None);
+                }
+
+                #[test]
+                fn interp() {
+                    super::passes($dir, Some("--interp"));
+                }
+
+                #[test]
+                fn wasm_is_refused() {
+                    let out = std::process::Command::new(env!("CARGO_BIN_EXE_moddil"))
+                        .args(["test", "--wasm"])
+                        .arg(super::repo().join($dir))
+                        .output()
+                        .expect("moddil runs");
+                    let stderr = String::from_utf8_lossy(&out.stderr);
+                    assert!(!out.status.success(), "{stderr}");
+                    assert!(stderr.contains("runs only in native code"), "{stderr}");
+                }
+            }
+        )*
+    };
+}
+
+c_projects! {
+    zlib => "examples/zlib",
+}
+
 projects! {
     collections => "mods/collections/tests",
     crypto => "mods/crypto/tests",
@@ -84,6 +121,7 @@ projects! {
     sim => "mods/sim/tests",
     sync => "mods/sync/tests",
     time => "mods/time/tests",
+    cabi => "examples/cabi",
     mandelbulb => "examples/mandelbulb",
     mandelbulb_web => "examples/mandelbulb/web",
     tour => "tour/shorty",
@@ -135,7 +173,11 @@ fn found_projects() -> Vec<String> {
 #[test]
 fn every_project_has_a_test() {
     let found = found_projects();
-    let listed: Vec<String> = PROJECTS.iter().map(|p| p.to_string()).collect();
+    let listed: Vec<String> = PROJECTS
+        .iter()
+        .chain(C_PROJECTS)
+        .map(|p| p.to_string())
+        .collect();
     let missing: Vec<&String> = found.iter().filter(|p| !listed.contains(p)).collect();
     let gone: Vec<&String> = listed.iter().filter(|p| !found.contains(p)).collect();
     assert!(

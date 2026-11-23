@@ -69,6 +69,7 @@ areas!(
     effects,
     enums,
     errors,
+    ffi,
     generics,
     gpu,
     r#if,

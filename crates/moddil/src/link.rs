@@ -40,7 +40,12 @@ fn library() -> Result<PathBuf, String> {
 }
 
 /// Links `object` (the object file's bytes) with the runtime into executable `out`.
-pub(crate) fn link(object: &[u8], out: &Path, release: bool) -> Result<(), String> {
+pub(crate) fn link(
+    object: &[u8],
+    out: &Path,
+    release: bool,
+    c: &[moddil_ffi::Built],
+) -> Result<(), String> {
     let lib = library()?;
     let obj = out.with_extension(if cfg!(windows) { "obj" } else { "o" });
     std::fs::write(&obj, object).map_err(|e| format!("writing {}: {e}", obj.display()))?;
@@ -49,6 +54,20 @@ pub(crate) fn link(object: &[u8], out: &Path, release: bool) -> Result<(), Strin
     } else {
         linker(&obj, &lib, out)
     };
+    // The mods' C code (`ffi.c.1`): its static libraries, and the system libraries it needs.
+    let cmd = cmd.map(|mut cmd| {
+        for b in c {
+            cmd.arg(&b.static_lib);
+            for l in &b.libs {
+                cmd.arg(if cfg!(windows) {
+                    format!("{l}.lib")
+                } else {
+                    format!("-l{l}")
+                });
+            }
+        }
+        cmd
+    });
     let status = cmd.and_then(|mut c| c.status().map_err(|e| format!("running the linker: {e}")));
     let linked = match status {
         Ok(s) if s.success() => Ok(()),
@@ -62,6 +81,97 @@ pub(crate) fn link(object: &[u8], out: &Path, release: bool) -> Result<(), Strin
     };
     let _ = std::fs::remove_file(&obj);
     linked.and(split)
+}
+
+/// Links `object` (a library's, `moddil build --lib`) with the runtime and the mods' C code
+/// into a shared library in `dir`, exporting `symbols`: `name.dll` (and its import library,
+/// `name.lib`) on Windows, `libname.dylib` on macOS, `libname.so` elsewhere. Its path.
+pub(crate) fn link_library(
+    object: &[u8],
+    dir: &Path,
+    name: &str,
+    symbols: &[String],
+    c: &[moddil_ffi::Built],
+) -> Result<PathBuf, String> {
+    let lib = library()?;
+    let obj = dir.join(format!(
+        "{name}.{}",
+        if cfg!(windows) { "obj" } else { "o" }
+    ));
+    std::fs::write(&obj, object).map_err(|e| format!("writing {}: {e}", obj.display()))?;
+    let mut cmd;
+    let out;
+    if cfg!(windows) {
+        out = dir.join(format!("{name}.dll"));
+        let target = format!("{}-pc-windows-msvc", std::env::consts::ARCH);
+        let tool = cc::windows_registry::find_tool(&target, "link.exe")
+            .ok_or("MSVC's link.exe (install Visual Studio's C++ build tools)")?;
+        cmd = tool.to_command();
+        cmd.arg("/NOLOGO")
+            .arg("/DLL")
+            .arg(format!("/OUT:{}", out.display()))
+            .arg(format!(
+                "/IMPLIB:{}",
+                dir.join(format!("{name}.lib")).display()
+            ))
+            .arg(&obj)
+            .arg(&lib);
+        for s in symbols {
+            cmd.arg(format!("/EXPORT:{s}"));
+        }
+        for l in WINDOWS_LIBS {
+            cmd.arg(l);
+        }
+    } else {
+        let mac = cfg!(target_os = "macos");
+        out = dir.join(if mac {
+            format!("lib{name}.dylib")
+        } else {
+            format!("lib{name}.so")
+        });
+        cmd = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
+        cmd.arg(if mac { "-dynamiclib" } else { "-shared" })
+            .arg(&obj)
+            .arg(&lib)
+            .arg("-o")
+            .arg(&out);
+        if mac {
+            cmd.args(["-lSystem", "-lobjc", "-lc", "-lm"]);
+        } else {
+            cmd.args([
+                "-lgcc_s",
+                "-lutil",
+                "-lrt",
+                "-lpthread",
+                "-lm",
+                "-ldl",
+                "-lc",
+            ]);
+        }
+    }
+    for b in c {
+        cmd.arg(&b.static_lib);
+        for l in &b.libs {
+            cmd.arg(if cfg!(windows) {
+                format!("{l}.lib")
+            } else {
+                format!("-l{l}")
+            });
+        }
+    }
+    let o = cmd
+        .output()
+        .map_err(|e| format!("running the linker: {e}"))?;
+    let _ = std::fs::remove_file(&obj);
+    if !o.status.success() {
+        return Err(format!(
+            "the linker failed ({}):\n{}{}",
+            o.status,
+            String::from_utf8_lossy(&o.stdout),
+            String::from_utf8_lossy(&o.stderr)
+        ));
+    }
+    Ok(out)
 }
 
 /// Where the Rust toolchain's own tools are (`rust-lld`, `rust-objcopy`, the `gcc-ld` wrappers):

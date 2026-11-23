@@ -68,6 +68,22 @@ pub struct Mod {
     /// Whether its manifest declares the `os` capability, so its code may name `core::os`
     /// (`os.cap.1`).
     pub os_ok: bool,
+    /// Its C code, from its manifest's `[c]` table (`ffi.c.1`), with paths resolved.
+    pub c: Option<CTable>,
+}
+
+/// A mod's `[c]` table: the C sources compiled with it, the directories their headers are in,
+/// the preprocessor definitions (`NAME` or `NAME=value`) and the system libraries it links.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CTable {
+    /// The sources, each a file (`dir/*.c` names every `.c` file in `dir`).
+    pub sources: Vec<PathBuf>,
+    /// The include directories.
+    pub include: Vec<PathBuf>,
+    /// The definitions, as written.
+    pub defines: Vec<String>,
+    /// The system libraries, by name.
+    pub libs: Vec<String>,
 }
 
 /// A problem reading a project: a manifest that is wrong, or a file that cannot be read.
@@ -127,6 +143,7 @@ pub fn load(path: &Path) -> Result<Project, Vec<Problem>> {
                 stub: false,
                 unsafe_ok: false,
                 os_ok: false,
+                c: None,
             }],
         }),
         Err(e) => Err(vec![Problem {
@@ -239,6 +256,7 @@ impl Loader {
             stub: false,
             unsafe_ok: false,
             os_ok: false,
+            c: None,
         });
         let m = Manifest {
             path: &manifest,
@@ -250,6 +268,7 @@ impl Loader {
         self.project.mods[index as usize].stub = stub;
         self.project.mods[index as usize].unsafe_ok = unsafe_ok;
         self.project.mods[index as usize].os_ok = os_ok;
+        self.project.mods[index as usize].c = self.c_table(&m, dir);
         let (src_dir, root) = self.lib_root(&m, dir);
         let exes = self.exes(&m, dir);
         self.module_tree(dir, &src_dir, root.as_deref(), &exes, index);
@@ -299,7 +318,10 @@ impl Loader {
     /// whether its capabilities include `unsafe`.
     fn mod_section(&mut self, m: &Manifest) -> (String, bool, bool, bool) {
         for t in m.tables {
-            if !matches!(t.name.as_str(), "" | "mod" | "lib" | "exe" | "dependencies") {
+            if !matches!(
+                t.name.as_str(),
+                "" | "mod" | "lib" | "exe" | "dependencies" | "c"
+            ) {
                 self.problem(
                     "E0704",
                     m.path,
@@ -359,6 +381,77 @@ impl Loader {
             );
         }
         (name, stub, unsafe_ok, os_ok)
+    }
+
+    /// `[c]`: the mod's C code (`ffi.c.1`), its paths relative to the manifest's directory.
+    fn c_table(&mut self, m: &Manifest, dir: &Path) -> Option<CTable> {
+        let t = m.table("c")?;
+        let mut c = CTable::default();
+        for p in &t.pairs {
+            let Value::Array(items) = &p.value else {
+                self.problem(
+                    "E0704",
+                    m.path,
+                    m.text,
+                    p.range.clone(),
+                    format!("`[c]` `{}` is a list of strings", p.key),
+                );
+                continue;
+            };
+            match p.key.as_str() {
+                "sources" => {
+                    for s in items {
+                        match s.strip_suffix("/*.c") {
+                            Some(d) => {
+                                let mut found: Vec<PathBuf> = fs::read_dir(dir.join(d))
+                                    .into_iter()
+                                    .flatten()
+                                    .filter_map(|e| e.ok().map(|e| e.path()))
+                                    .filter(|f| f.extension().is_some_and(|x| x == "c"))
+                                    .collect();
+                                found.sort();
+                                if found.is_empty() {
+                                    self.problem(
+                                        "E0704",
+                                        m.path,
+                                        m.text,
+                                        p.range.clone(),
+                                        format!("there is no `.c` file in `{d}`"),
+                                    );
+                                }
+                                c.sources.extend(found);
+                            }
+                            None => {
+                                let f = dir.join(s);
+                                if !f.is_file() {
+                                    self.problem(
+                                        "E0704",
+                                        m.path,
+                                        m.text,
+                                        p.range.clone(),
+                                        format!("there is no file `{s}`"),
+                                    );
+                                }
+                                c.sources.push(f);
+                            }
+                        }
+                    }
+                }
+                "include" => c.include.extend(items.iter().map(|s| dir.join(s))),
+                "defines" => c.defines.extend(items.iter().cloned()),
+                "libs" => c.libs.extend(items.iter().cloned()),
+                k => self.problem(
+                    "E0704",
+                    m.path,
+                    m.text,
+                    p.range.clone(),
+                    format!(
+                        "`[c]` has no `{k}`: it has `sources`, `include`, `defines` and `libs`"
+                    ),
+                ),
+            }
+        }
+        Some(c)
     }
 
     /// `[lib] root`: the source directory and the root module's file, if there is a library.

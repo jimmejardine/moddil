@@ -162,6 +162,7 @@ const ITEM_START: TokenSet = TokenSet::new(&[
     T![group],
     T![unit],
     T![dimension],
+    T![extern],
 ]);
 
 /// `item ::= outer_attr* note* vis? item_kind`
@@ -204,6 +205,7 @@ fn item_kind(p: &mut Parser, m: Marker) -> CompletedMarker {
         T![group] => group_item(p, m),
         T![unit] => unit_item(p, m),
         T![dimension] => dimension_item(p, m),
+        T![extern] => extern_block(p, m),
         _ => unreachable!("item_kind is called at an item start"),
     }
 }
@@ -821,6 +823,31 @@ fn use_list(p: &mut Parser) {
     );
     p.expect(T!["}"]);
     m.complete(p, K::USE_LIST);
+}
+
+/// `extern_block ::= 'extern' STRING '{' extern_member* '}'`, with
+/// `extern_member ::= outer_attr* note* vis? fn_item`: C functions, as signatures.
+fn extern_block(p: &mut Parser, m: Marker) -> CompletedMarker {
+    p.bump(T![extern]);
+    p.expect(K::STRING);
+    if p.expect(T!["{"]) {
+        while !p.at_eof() && !p.at(T!["}"]) {
+            let f = p.start();
+            outer_attrs(p);
+            notes(p);
+            vis(p);
+            if p.at(T![fn]) || p.at(T![unsafe]) || p.at(T![const]) || p.at(T![gen]) {
+                fn_item(p, f);
+            } else {
+                let found = p.current().describe();
+                p.error(format!("expected a C function's signature, found {found}"));
+                p.bump_any();
+                f.complete(p, K::ERROR);
+            }
+        }
+        p.expect(T!["}"]);
+    }
+    m.complete(p, K::EXTERN_BLOCK)
 }
 
 /// `mod_item ::= 'mod' IDENT ';'`

@@ -295,6 +295,15 @@ impl Checker<'_> {
         self.out.expr_types[index(callee)] = Ty::Unit;
         let func = target.func();
         self.not_drop(func, range);
+        // A C function is called only in an `unsafe` block (`ffi.extern.1`).
+        if self.items.fns[func as usize].foreign && !self.body.in_unsafe.contains(&e) {
+            self.report(
+                Code::E0218,
+                range,
+                "a C function is called only in an `unsafe(\"why\") { … }` block: nothing checks \
+                 what it does",
+            );
+        }
         let (params, ret) = self.instantiate_sig(func, target.args(), range);
         self.needs_of_call(e, func, target.args(), range);
         let targs = target.args().to_vec();

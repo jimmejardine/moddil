@@ -20,6 +20,7 @@ moddil-native.workspace = true
 moddil-wasm.workspace = true
 moddil-gpu.workspace = true
 moddil-lsp.workspace = true
+moddil-ffi.workspace = true
 moddil-project.workspace = true
 moddil-sema.workspace = true
 moddil-syntax.workspace = true

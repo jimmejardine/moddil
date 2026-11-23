@@ -56,6 +56,9 @@ impl Collector<'_> {
         let mut selectable_at = None;
         let mut kernel = false;
         let mut kernel_at = None;
+        let mut export = false;
+        let mut export_at = None;
+        let foreign = self.extern_fns.contains(&(src, node.text_range()));
         for attr in node
             .children()
             .filter(|c| c.kind() == K::OUTER_ATTR && !crate::is_doc(c))
@@ -75,6 +78,9 @@ impl Collector<'_> {
             } else if path == ["kernel"] && input.is_none() {
                 kernel = true;
                 kernel_at = Some(attr.text_range());
+            } else if path == ["export"] && input.is_none() && src.is_file() {
+                export = true;
+                export_at = Some(attr.text_range());
             } else if path == ["around"] && src.is_file() {
                 if input.is_none() {
                     ds.push(Diagnostic::error(
@@ -138,7 +144,8 @@ impl Collector<'_> {
                 .mods
                 .get(self.tree.mod_of(self.module) as usize)
                 .is_some_and(|m| m.stub);
-        if !has_body && !intrinsic && !stub && !matches!(container, Container::Trait(_)) {
+        if !has_body && !intrinsic && !stub && !foreign && !matches!(container, Container::Trait(_))
+        {
             ds.push(Diagnostic::unsupported(
                 name_range,
                 "a function without a body",
@@ -356,6 +363,74 @@ impl Collector<'_> {
                 ));
             }
         }
+        // C functions and exports: C's types only, and nothing C cannot do (`ffi.types.1`).
+        if foreign || export {
+            let what = if foreign {
+                "a C function"
+            } else {
+                "an `#[export]` function"
+            };
+            let at = export_at.unwrap_or(name_range);
+            for p in &params {
+                if !self.tree.is_c_type(&p.ty) {
+                    ds.push(Diagnostic::error(
+                        Code::E0222,
+                        p.range,
+                        format!(
+                            "{what}'s parameters have C's types: sized numbers, `int`, `bool`, raw \
+                             pointers and `#[repr(C)]` structs behind them, not `{}`",
+                            p.ty
+                        ),
+                    ));
+                }
+            }
+            if ret != Ty::Unit && !self.tree.is_c_type(&ret) {
+                ds.push(Diagnostic::error(
+                    Code::E0222,
+                    ret_range.unwrap_or(name_range),
+                    format!("{what} gives a C type or nothing, not `{ret}`"),
+                ));
+            }
+            if !effects.is_empty() || control != 0 || fails != Ty::Never {
+                ds.push(Diagnostic::error(
+                    Code::E0222,
+                    at,
+                    format!("{what} needs no handlers, cannot fail, and does not suspend or spawn"),
+                ));
+            }
+            if foreign {
+                if has_body {
+                    ds.push(Diagnostic::error(
+                        Code::E0222,
+                        name_range,
+                        "a C function in an `extern \"C\"` block is a signature: `fn f(…) -> T;`",
+                    ));
+                }
+                let unsafe_ok = self
+                    .tree
+                    .mods
+                    .get(self.tree.mod_of(self.module) as usize)
+                    .is_none_or(|m| m.unsafe_ok);
+                if !unsafe_ok {
+                    ds.push(Diagnostic::error(
+                        Code::E0219,
+                        name_range,
+                        "C functions are declared only in a mod whose manifest lists the `unsafe` \
+                         capability: `capabilities = [\"unsafe\"]` under `[mod]`",
+                    ));
+                }
+            }
+            if export
+                && (!matches!(container, Container::Free)
+                    || !params.iter().all(|p| p.name.is_some()))
+            {
+                ds.push(Diagnostic::error(
+                    Code::E0222,
+                    at,
+                    "an `#[export]` function is a free function with named parameters",
+                ));
+            }
+        }
         // A `select` waits on what may suspend (`task.select.3`).
         if let Some(at) = selectable_at
             && control & crate::items::SUSPEND == 0
@@ -407,6 +482,8 @@ impl Collector<'_> {
             opaque_fn,
             selectable,
             kernel,
+            foreign,
+            export,
             default_arg: false,
             intrinsic,
             is_const,
@@ -467,6 +544,8 @@ impl Collector<'_> {
             opaque_fn: None,
             selectable: false,
             kernel: false,
+            foreign: false,
+            export: false,
             default_arg: false,
             intrinsic: false,
             is_const: true,

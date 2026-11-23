@@ -276,6 +276,8 @@ pub(crate) struct Compiler<'db, M: Module> {
     tramps: HashMap<Ty, FuncId>,
     /// Each type's drop glue in the platform's C convention, for the runtime.
     c_drops: HashMap<Ty, FuncId>,
+    /// Each C function called (`ffi.extern.1`), imported by its symbol.
+    foreigns: HashMap<u32, FuncId>,
     /// The places code comes from: a file and an offset in it, numbered by the source location
     /// (less one) the lowering gives that code.
     places: Vec<(u32, u32)>,
@@ -313,6 +315,8 @@ pub(crate) fn compile<'db>(
     for (name, at) in moddil_rt::symbols() {
         builder.symbol(name, at);
     }
+    // C functions (`ffi.extern.1`): in the C libraries loaded for the run, then the C runtime.
+    builder.symbol_lookup_fn(Box::new(moddil_ffi::lookup));
     let mut b = build(db, program, &[item], JITModule::new(builder), false)?;
     let mut module = b.c.module;
     module.finalize_definitions().map_err(|e| e.to_string())?;
@@ -371,6 +375,156 @@ pub(crate) fn compile_object(
         &files,
     )?;
     product.emit().map_err(|e| e.to_string())
+}
+
+/// Compiles the `#[export]` functions `exports` (`ffi.export.1`) into an object: each one's code,
+/// and a wrapper under its own name in the platform's C convention, which starts the runtime
+/// (once), calls it, and ends the process if it traps. With the tables traps are reported from.
+pub(crate) fn compile_library(
+    db: &dyn Db,
+    program: Program,
+    exports: &[u32],
+) -> Result<Vec<u8>, String> {
+    let builder = cranelift_object::ObjectBuilder::new(
+        isa(true)?,
+        "moddil",
+        cranelift_module::default_libcall_names(),
+    )
+    .map_err(|e| e.to_string())?;
+    let b = build(
+        db,
+        program,
+        &[],
+        cranelift_object::ObjectModule::new(builder),
+        false,
+    )?;
+    let mut c = b.c;
+    let mut targets = Vec::new();
+    for &f in exports {
+        let (id, params, ret) = c.declare_fn(f, &[])?;
+        targets.push((f, id, params, ret));
+    }
+    loop {
+        if let Some(inst) = c.queue.pop() {
+            let (id, params, ret) = c.fns[&inst].clone();
+            c.body_of(inst.0, &inst.1, id, &params, &ret)?;
+        } else if let Some(ty) = c.glue_queue.pop() {
+            c.glue_body(&ty)?;
+        } else {
+            break;
+        }
+    }
+    for (f, id, params, ret) in targets {
+        c.export_wrapper(f, id, &params, &ret)?;
+    }
+    let files = files_of(db, program);
+    c.site_tables(&files)?;
+    c.module.finish().emit().map_err(|e| e.to_string())
+}
+
+/// `ty` as C writes it, in a header.
+fn c_type_name(items: &ItemTree, ty: &Ty) -> String {
+    match ty {
+        Ty::Unit => "void".to_string(),
+        Ty::Bool => "bool".to_string(),
+        Ty::Int => "int64_t".to_string(),
+        Ty::Num(n) => match n {
+            Num::I8 => "int8_t",
+            Num::U8 => "uint8_t",
+            Num::I16 => "int16_t",
+            Num::U16 => "uint16_t",
+            Num::I32 => "int32_t",
+            Num::U32 => "uint32_t",
+            Num::U64 => "uint64_t",
+            Num::F32 => "float",
+            Num::F64 => "double",
+            Num::I128 | Num::U128 => "__int128",
+        }
+        .to_string(),
+        Ty::Ptr(m, inner) => {
+            let t = c_type_name(items, inner);
+            if *m {
+                format!("{t} *")
+            } else {
+                format!("const {t} *")
+            }
+        }
+        Ty::Adt(a, ..) => items.adts[*a as usize].name.clone(),
+        t => format!("/* {t} */ void"),
+    }
+}
+
+/// The structs `ty` names, behind its pointers: each once, in `out`.
+fn structs_in(ty: &Ty, out: &mut Vec<u32>) {
+    match ty {
+        Ty::Ptr(_, inner) => structs_in(inner, out),
+        Ty::Adt(a, ..) if !out.contains(a) => out.push(*a),
+        _ => {}
+    }
+}
+
+/// As [`crate::header`].
+pub(crate) fn header(db: &dyn Db, program: Program, exports: &[u32], name: &str) -> String {
+    let items = moddil_sema::item_tree(db, program);
+    let guard: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    // A type and a name: `int64_t n`, `const Point *p`.
+    let decl = |t: &Ty, n: &str| {
+        let t = c_type_name(items, t);
+        if t.ends_with('*') {
+            format!("{t}{n}")
+        } else {
+            format!("{t} {n}")
+        }
+    };
+    let mut out = format!(
+        "/* {name}.h: the C ABI of the Moddil mod `{name}`, written by `moddil build --lib`. */\n\
+         #ifndef {guard}_H\n#define {guard}_H\n\n#include <stdbool.h>\n#include <stdint.h>\n\n"
+    );
+    let mut structs = Vec::new();
+    for &f in exports {
+        let sig = &items.fns[f as usize];
+        for p in &sig.params {
+            structs_in(&p.ty, &mut structs);
+        }
+        structs_in(&sig.ret, &mut structs);
+    }
+    for a in &structs {
+        let adt = &items.adts[*a as usize];
+        if adt.repr_c {
+            out.push_str(&format!("typedef struct {} {{\n", adt.name));
+            for f in &adt.variants[0].fields {
+                out.push_str(&format!("    {};\n", decl(&f.ty, &f.name)));
+            }
+            out.push_str(&format!("}} {};\n\n", adt.name));
+        } else {
+            out.push_str(&format!("typedef struct {0} {0};\n\n", adt.name));
+        }
+    }
+    for &f in exports {
+        let sig = &items.fns[f as usize];
+        let params: Vec<String> = sig
+            .params
+            .iter()
+            .map(|p| decl(&p.ty, p.name.as_deref().unwrap_or("_")))
+            .collect();
+        let params = if params.is_empty() {
+            "void".to_string()
+        } else {
+            params.join(", ")
+        };
+        out.push_str(&format!("{}({params});\n", decl(&sig.ret, &sig.name)));
+    }
+    out.push_str(&format!("\n#endif /* {guard}_H */\n"));
+    out
 }
 
 /// The program's files: each one's path and text.
@@ -558,6 +712,7 @@ pub(crate) fn build<'db, M: Module>(
         statics: HashMap::new(),
         tramps: HashMap::new(),
         c_drops: HashMap::new(),
+        foreigns: HashMap::new(),
         places: Vec::new(),
         place_ids: HashMap::new(),
         lines: lines.then(Vec::new),
@@ -693,6 +848,38 @@ impl<M: Module> Compiler<'_, M> {
             return Err(format!("the built-in function `{}`", sig.name));
         }
         self.declare_inst(Item::Fn(f), targs)
+    }
+
+    /// C function `f` (`ffi.extern.1`), imported by its symbol with the platform's C signature
+    /// (8- and 16-bit integers as 32), the first time it is called.
+    fn foreign_fn(&mut self, f: u32) -> Result<FuncId, String> {
+        if let Some(&id) = self.foreigns.get(&f) {
+            return Ok(id);
+        }
+        let sig = &self.items.fns[f as usize];
+        let c = |t: &Ty| -> Result<Option<ir::Type>, String> {
+            Ok(clif_type(t)?.map(|t| {
+                if t == types::I8 || t == types::I16 {
+                    types::I32
+                } else {
+                    t
+                }
+            }))
+        };
+        let mut s = self.module.make_signature();
+        for p in &sig.params {
+            let t = c(&p.ty)?.ok_or("a C function's parameter of type `()`")?;
+            s.params.push(AbiParam::new(t));
+        }
+        if let Some(t) = c(&sig.ret)? {
+            s.returns.push(AbiParam::new(t));
+        }
+        let id = self
+            .module
+            .declare_function(&sig.name, Linkage::Import, &s)
+            .map_err(|e| format!("Cranelift: {e:?}"))?;
+        self.foreigns.insert(f, id);
+        Ok(id)
     }
 
     /// The body of closure type `c`, declared (and queued) the first time it is called.
@@ -1405,6 +1592,107 @@ impl<M: Module> Compiler<'_, M> {
             None => b.ins().iconst(types::I8, 0),
         };
         b.ins().return_(&[status]);
+        b.seal_all_blocks();
+        b.finalize(self.module.target_config());
+        self.module
+            .define_function(id, &mut ctx)
+            .map_err(|e| format!("Cranelift: {e:?}"))?;
+        Ok(id)
+    }
+
+    /// `#[export]` function `f`'s wrapper (`ffi.export.1`): under its own name, with C's types
+    /// (8- and 16-bit integers as 32, as C passes them) in the platform's C convention. It starts
+    /// the runtime, calls `target`, and ends the process if that traps.
+    fn export_wrapper(
+        &mut self,
+        f: u32,
+        target: FuncId,
+        params: &[Ty],
+        ret: &Ty,
+    ) -> Result<FuncId, String> {
+        let wide = |t: ir::Type| {
+            if t == types::I8 || t == types::I16 {
+                types::I32
+            } else {
+                t
+            }
+        };
+        let name = self.items.fns[f as usize].name.clone();
+        let mut sig = self.module.make_signature();
+        for p in params {
+            let t = clif_type(p)?.ok_or("an `#[export]` parameter of type `()`")?;
+            sig.params.push(AbiParam::new(wide(t)));
+        }
+        let ret_t = clif_type(ret)?;
+        if let Some(t) = ret_t {
+            sig.returns.push(AbiParam::new(wide(t)));
+        }
+        let id = self
+            .module
+            .declare_function(&name, Linkage::Export, &sig)
+            .map_err(|e| format!("Cranelift: {e:?}"))?;
+        let import = |m: &mut M, n: &str| -> Result<FuncId, String> {
+            let s = m.make_signature();
+            m.declare_function(n, Linkage::Import, &s)
+                .map_err(|e| e.to_string())
+        };
+        let begin = import(&mut self.module, "moddil_rt_export_begin")?;
+        let trapped = import(&mut self.module, "moddil_rt_export_trapped")?;
+        let ptr = self.module.target_config().pointer_type();
+        let mut ctx = self.module.make_context();
+        ctx.func.signature = sig;
+        let mut fctx = FunctionBuilderContext::new();
+        let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
+        let block = b.create_block();
+        b.append_block_params_for_function_params(block);
+        b.switch_to_block(block);
+        let args = b.block_params(block).to_vec();
+        let begin = self.module.declare_func_in_func(begin, b.func);
+        b.ins().call(begin, &[]);
+        let mut vals = Vec::new();
+        for (a, p) in args.iter().zip(params) {
+            let t = clif_type(p)?.expect("checked above");
+            vals.push(if wide(t) == t {
+                *a
+            } else {
+                b.ins().ireduce(t, *a)
+            });
+        }
+        // Room for an error, which an export cannot give.
+        let slot = b.create_sized_stack_slot(ir::StackSlotData::new(
+            ir::StackSlotKind::ExplicitSlot,
+            64,
+            3,
+        ));
+        let err = b.ins().stack_addr(ptr, slot, 0);
+        vals.push(err);
+        let target = self.module.declare_func_in_func(target, b.func);
+        let call = b.ins().call(target, &vals);
+        let results = b.inst_results(call).to_vec();
+        let ok = b.create_block();
+        let bad = b.create_block();
+        b.ins().brif(results[0], bad, &[], ok, &[]);
+        b.switch_to_block(bad);
+        let trapped = self.module.declare_func_in_func(trapped, b.func);
+        b.ins().call(trapped, &[]);
+        b.ins().trap(ir::TrapCode::unwrap_user(1));
+        b.switch_to_block(ok);
+        match ret_t {
+            Some(t) if wide(t) != t => {
+                let v = if signed(ret) {
+                    b.ins().sextend(wide(t), results[1])
+                } else {
+                    b.ins().uextend(wide(t), results[1])
+                };
+                b.ins().return_(&[v]);
+            }
+            Some(_) => {
+                b.ins().return_(&[results[1]]);
+            }
+            None => {
+                b.ins().return_(&[]);
+            }
+        }
         b.seal_all_blocks();
         b.finalize(self.module.target_config());
         self.module
@@ -3157,6 +3445,14 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         let mut free_after = None;
         let (run, vals) = match callee {
             Callee::Fn { func, .. } => {
+                // A C function (`ffi.extern.1`): a direct call in the platform's C convention.
+                if self.c.items.fns[*func as usize].foreign {
+                    self.foreign(*func, args, &d)?;
+                    self.set_init(dest);
+                    let b = self.block(target.index())?;
+                    self.b.ins().jump(b, &[]);
+                    return Ok(());
+                }
                 // A stub mod's function without a body (`mod.stub.1`).
                 let sig = &self.c.items.fns[*func as usize];
                 if !sig.intrinsic && !sig.has_body {
@@ -3287,6 +3583,47 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                     let b = self.block(target.index())?;
                     self.b.ins().jump(b, &[]);
                     return Ok(());
+                }
+                // A borrow compares as what it points to (`trait.borrow.eq.1`): the method of the
+                // type it borrows, each argument (a borrow of a borrow) read once.
+                Ty::Ref(_, inner)
+                    if ["PartialEq", "Eq", "PartialOrd", "Ord"].iter().any(|n| {
+                        let items = self.c.items;
+                        items.lang(n).is_some() && items.lang(n) == items.trait_of(*func)
+                    }) =>
+                {
+                    let items = self.c.items;
+                    let sig = &items.fns[*func as usize];
+                    let t = items.trait_of(*func).ok_or("a trait's method")?;
+                    let n = items.traits[t as usize].generics.params.len();
+                    let tr = TraitRef {
+                        trait_: t,
+                        name: items.traits[t as usize].name.as_str().into(),
+                        args: cargs[1..n].to_vec().into(),
+                    };
+                    let inner = (**inner).clone();
+                    let (f, mut parent) = Solver::new(items, &[])
+                        .impl_method(*func, &inner, &tr)
+                        .ok_or("a comparison of what a borrow points to")?;
+                    parent.extend(cargs[sig.generics.parent as usize..].iter().cloned());
+                    // Each argument, `&&T`, read once: a `&T`.
+                    let args: Vec<Operand> = args
+                        .iter()
+                        .map(|a| match a {
+                            Operand::Copy(p) | Operand::Move(p) => Operand::Copy(p.clone().deref()),
+                            c => c.clone(),
+                        })
+                        .collect();
+                    if items.fns[f as usize].intrinsic {
+                        self.intrinsic(f, &parent, &args, &d, range, &catch)?;
+                        self.set_init(dest);
+                        let b = self.block(target.index())?;
+                        self.b.ins().jump(b, &[]);
+                        return Ok(());
+                    }
+                    let (id, params, ret) = self.c.declare_fn(f, &parent)?;
+                    let vals = self.arguments(&args, &params)?;
+                    (Run::Direct(id, ret), vals)
                 }
                 self_ty => {
                     let items = self.c.items;
@@ -4868,6 +5205,37 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         let p = self.b.ins().load(types::I64, flags, w, 0);
         let n = self.b.ins().load(types::I64, flags, w, 8);
         Ok((p, n))
+    }
+
+    /// A call of C function `f` (`ffi.extern.1`) with `args`, its result into `d`. An 8- or
+    /// 16-bit integer crosses widened to 32 bits, as C's callers pass them.
+    fn foreign(&mut self, f: u32, args: &[Operand], d: &PlaceRef) -> Result<(), String> {
+        let id = self.c.foreign_fn(f)?;
+        let sig = &self.c.items.fns[f as usize];
+        let (params, ret): (Vec<Ty>, Ty) = (
+            sig.params.iter().map(|p| p.ty.clone()).collect(),
+            sig.ret.clone(),
+        );
+        let mut vals = Vec::new();
+        for (a, ty) in args.iter().zip(&params) {
+            let v = self.value(a)?;
+            let small = matches!(clif_type(ty)?, Some(t) if t == types::I8 || t == types::I16);
+            vals.push(match (small, signed(ty)) {
+                (true, true) => self.b.ins().sextend(types::I32, v),
+                (true, false) => self.b.ins().uextend(types::I32, v),
+                (false, _) => v,
+            });
+        }
+        let fref = self.c.module.declare_func_in_func(id, self.b.func);
+        let call = self.b.ins().call(fref, &vals);
+        if let Some(&r) = self.b.inst_results(call).first() {
+            let r = match clif_type(&ret)? {
+                Some(t) if t == types::I8 || t == types::I16 => self.b.ins().ireduce(t, r),
+                _ => r,
+            };
+            self.write(d, Val::Scalar(r))?;
+        }
+        Ok(())
     }
 
     /// A call of the `core` mod's `gpu` module, `name`, into `d` (`gpu.1`): a kernel's WGSL

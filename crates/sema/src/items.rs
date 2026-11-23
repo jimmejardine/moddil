@@ -279,6 +279,11 @@ pub struct FnSig {
     pub selectable: bool,
     /// Whether it is marked `#[kernel]`: a GPU kernel, one instance per tile (`gpu.kernel.1`).
     pub kernel: bool,
+    /// Whether it is a C function, declared in an `extern "C"` block (`ffi.extern.1`): its name
+    /// is its symbol, and it has no body.
+    pub foreign: bool,
+    /// Whether it is marked `#[export]`: callable from C under its own name (`ffi.export.1`).
+    pub export: bool,
     /// Whether it is such a hidden const, whose body is the default written at `node`.
     pub default_arg: bool,
     /// Whether it is the prelude's and built in (`#[intrinsic]`): it has no body, and the
@@ -381,6 +386,8 @@ impl FnSig {
             opaque_fn: None,
             selectable: false,
             kernel: false,
+            foreign: false,
+            export: false,
             default_arg: false,
             intrinsic: false,
             is_const: false,
@@ -437,6 +444,8 @@ pub struct AdtDef {
     pub module: u32,
     /// Whether it is a root capability, marked `#[root_capability]` (`main.root.1`).
     pub root: bool,
+    /// Whether it is marked `#[repr(C)]`: laid out as C lays out its struct (`ffi.repr.1`).
+    pub repr_c: bool,
 }
 
 /// A `type` item (`refine.1`): `type X = T;`, an alias, or `type X = T where p;`, a refinement.
@@ -892,6 +901,18 @@ impl ItemTree {
                 f.name == "drop" && f.src == Src::Prelude && f.container == Container::Free
             })
             .map(|i| i as u32)
+    }
+
+    /// Whether `ty` is one of C's types, as C functions and `#[export]` functions take and give
+    /// them (`ffi.types.1`): a sized number but the 128-bit ones, `int` (C's `int64_t`), `bool`,
+    /// or a raw pointer (to anything, a `#[repr(C)]` struct included). Structs cross by pointer.
+    pub fn is_c_type(&self, ty: &Ty) -> bool {
+        match ty {
+            Ty::Int | Ty::Bool | Ty::Ptr(..) => true,
+            Ty::Num(n) => !matches!(n, crate::Num::I128 | crate::Num::U128),
+            Ty::Refined(..) => self.is_c_type(&self.base(ty)),
+            _ => false,
+        }
     }
 
     /// Whether values of `ty` are copied rather than moved, with no bounds in scope.

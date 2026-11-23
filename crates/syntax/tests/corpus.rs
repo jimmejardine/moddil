@@ -58,7 +58,7 @@ fn valid_cases_parse_without_errors() {
         .into_iter()
         .chain(cases("samples.moddil"))
         .collect();
-    assert_eq!(cases.len(), 781);
+    assert_eq!(cases.len(), 786);
     let mut failures = Vec::new();
     for (i, case) in cases.iter().enumerate() {
         if let Some(e) = lossless(case).errors().first() {

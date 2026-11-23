@@ -71,6 +71,11 @@ enum Command {
         /// into a debug file where the platform has one.
         #[arg(long, conflicts_with = "wasm")]
         release: bool,
+        /// Build the mod's `#[export]` functions as a C library instead (`ffi.export.1`): a
+        /// shared library and its header, `name.h`, in the directory `-o` names (by default,
+        /// here).
+        #[arg(long, conflicts_with_all = ["wasm", "release"])]
+        lib: bool,
     },
     /// Runs the language server on standard input and output (LSP): diagnostics, hover, go to
     /// definition, inlay hints and completion, for an editor.
@@ -131,6 +136,41 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
     let name = path.display().to_string();
+    if matches!(cli.command, Command::Check { .. }) {
+        return ExitCode::SUCCESS;
+    }
+    // C functions (`ffi.native.1`) run only in native code and on the MIR interpreter.
+    let items = moddil_sema::item_tree(&db, program);
+    let wasm = matches!(
+        cli.command,
+        Command::Run { wasm: true, .. }
+            | Command::Test { wasm: true, .. }
+            | Command::Build { wasm: true, .. }
+    );
+    if wasm && let Some(f) = items.fns.iter().find(|f| f.foreign) {
+        eprintln!(
+            "moddil: {name} calls C (`{}`), which runs only in native code and on the MIR \
+             interpreter, not as WebAssembly yet",
+            f.name
+        );
+        return ExitCode::FAILURE;
+    }
+    // The mods' C code (`ffi.c.1`), built and loaded for the JIT and the interpreter.
+    let c = match c_code(&project, items) {
+        Ok(c) => c,
+        Err(why) => {
+            eprintln!("moddil: building the C code: {why}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if !matches!(cli.command, Command::Build { .. }) {
+        for b in &c {
+            if let Err(why) = moddil_ffi::load(&b.shared_lib) {
+                eprintln!("moddil: {why}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
     match &cli.command {
         Command::Check { .. } => ExitCode::SUCCESS,
         Command::Run {
@@ -146,11 +186,50 @@ fn main() -> ExitCode {
             output, wasm: true, ..
         } => build_wasm(&db, program, path, output.as_deref()),
         Command::Build {
+            output, lib: true, ..
+        } => build_lib(&db, program, &project, output.as_deref(), &c),
+        Command::Build {
             output, release, ..
-        } => build(&db, program, path, output.as_deref(), *release),
+        } => build(&db, program, path, output.as_deref(), *release, &c),
         Command::NativeTest { index, .. } => native_test(&db, program, &files, *index),
         Command::Lsp => unreachable!("handled above"),
     }
+}
+
+/// Each mod's C code (its manifest's `[c]` table, `ffi.c.1`), compiled into a cache in the
+/// system's temporary directory. A mod's shared library exports the C functions its own
+/// `extern "C"` blocks declare.
+fn c_code(
+    project: &moddil_project::Project,
+    items: &ItemTree,
+) -> Result<Vec<moddil_ffi::Built>, String> {
+    let mut out = Vec::new();
+    for (i, m) in project.mods.iter().enumerate() {
+        let Some(c) = &m.c else { continue };
+        let exports: Vec<String> = items
+            .fns
+            .iter()
+            .filter(|f| f.foreign && items.mod_of(f.module) == i as u32)
+            .map(|f| f.name.clone())
+            .collect();
+        let spec = moddil_ffi::CSpec {
+            sources: c.sources.clone(),
+            include: c.include.clone(),
+            defines: c
+                .defines
+                .iter()
+                .map(|d| match d.split_once('=') {
+                    Some((k, v)) => (k.to_string(), Some(v.to_string())),
+                    None => (d.clone(), None),
+                })
+                .collect(),
+            libs: c.libs.clone(),
+        };
+        let name = if m.name.is_empty() { "c" } else { &m.name };
+        let dir = std::env::temp_dir().join("moddil-c");
+        out.push(moddil_ffi::build(&spec, name, &dir, &exports)?);
+    }
+    Ok(out)
 }
 
 /// The program `project` describes, as the compiler's input.
@@ -528,6 +607,7 @@ fn build(
     path: &Path,
     output: Option<&Path>,
     release: bool,
+    c: &[moddil_ffi::Built],
 ) -> ExitCode {
     let name = path.display();
     let items = moddil_sema::item_tree(db, program);
@@ -557,10 +637,70 @@ fn build(
         },
         Path::to_path_buf,
     );
-    match link::link(&object, &out, release) {
+    match link::link(&object, &out, release, c) {
         Ok(()) => ExitCode::SUCCESS,
         Err(why) => {
             eprintln!("moddil: linking {}: {why}", out.display());
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `moddil build --lib` (`ffi.export.1`): the root mod's `#[export]` functions, as a shared
+/// library linked with the runtime, and their header, in `dir`.
+fn build_lib(
+    db: &Database,
+    program: Program,
+    project: &moddil_project::Project,
+    dir: Option<&Path>,
+    c: &[moddil_ffi::Built],
+) -> ExitCode {
+    let items = moddil_sema::item_tree(db, program);
+    let exports: Vec<u32> = (0..items.fns.len() as u32)
+        .filter(|&f| {
+            let sig = &items.fns[f as usize];
+            sig.export && items.mod_of(sig.module) == 0
+        })
+        .collect();
+    let name = project
+        .mods
+        .first()
+        .map_or("lib", |m| m.name.as_str())
+        .to_string();
+    if exports.is_empty() {
+        eprintln!("moddil: `{name}` has no `#[export]` function to build a library of");
+        return ExitCode::FAILURE;
+    }
+    let object = match moddil_native::build_library(db, program, &exports) {
+        Ok(o) => o,
+        Err(moddil_native::Native::Unsupported(what)) => {
+            eprintln!("moddil: `{name}` cannot be built yet: {what}");
+            return ExitCode::FAILURE;
+        }
+        Err(_) => return ExitCode::FAILURE,
+    };
+    let dir = dir.map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        eprintln!("moddil: creating {}: {e}", dir.display());
+        return ExitCode::FAILURE;
+    }
+    let symbols: Vec<String> = exports
+        .iter()
+        .map(|&f| items.fns[f as usize].name.clone())
+        .collect();
+    let header = moddil_native::header(db, program, &exports, &name);
+    let h = dir.join(format!("{name}.h"));
+    if let Err(e) = std::fs::write(&h, header) {
+        eprintln!("moddil: writing {}: {e}", h.display());
+        return ExitCode::FAILURE;
+    }
+    match link::link_library(&object, &dir, &name, &symbols, c) {
+        Ok(lib) => {
+            eprintln!("moddil: wrote {} and {}", lib.display(), h.display());
+            ExitCode::SUCCESS
+        }
+        Err(why) => {
+            eprintln!("moddil: linking `{name}`: {why}");
             ExitCode::FAILURE
         }
     }

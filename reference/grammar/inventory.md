@@ -51,6 +51,7 @@ The base rule: **Rust's syntax unless a delta says otherwise**
 | Type aliases, refinements | `type Port = u16 where self >= 1024`, `where self in 1..` | [correctness](../../specs/correctness.md#validated-newtypes-lightweight-refinements) | ✅ |
 | Imports | `use a::b::{c, d};`, `pub use x as Y;`, `use …::prelude::*;`, `{self, …}` | [modules](../../specs/modules.md#imports) | ✅ |
 | Generated modules | `#[c_import(header = "…")] mod sqlite3;` (only with a generating attribute) | [modules](../../specs/modules.md#mods-and-modules) | ✅ C2 |
+| C functions | `extern "C" { pub fn strlen(s: *const u8) -> u64; }` (hand-written bindings; header import later) | [interop](../../specs/interop.md#as-built-m3a) | ✅ M3a |
 | Units and dimensions | `dimension Length`, `unit m: Length`, `unit km = 1000 * m`, `unit degC = K + 273.15` | [units](../../specs/units.md#declaring-units) | ✅ C4 |
 | Attributes | `#[derive(…)]`, `#[repr(C)]`, `#[kernel]`, `#[interrupt(TIMER0, priority = 2)]`, `#[no_alloc, no_lock]`, `#[budget(…)]` | [syntax](../../specs/syntax.md#mapping) | ✅ |
 | Tests | `test "name" for subject { … }`, `for <Money as Display>`, `for sort::<T> with T in [int, f64]` | [testing](../../specs/testing.md#attached-tests) | ✅ |

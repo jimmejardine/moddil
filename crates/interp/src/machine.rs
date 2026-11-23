@@ -31,6 +31,7 @@ struct Machine<'a> {
     pending: std::collections::HashMap<usize, (tasks::Pending, Ret)>,
 }
 
+mod ffi;
 mod tasks;
 
 /// The MIR of a function, test or closure of a checked program.
@@ -284,6 +285,17 @@ impl<'a> Machine<'a> {
                 frame.write_back = back;
                 self.stack.push(frame);
                 return None;
+            }
+            CallPlan::Fn((f, _), values) if self.dispatch.items().fns[f as usize].foreign => {
+                // A C function (`ffi.extern.1`).
+                match self.c_call(f, &values) {
+                    Ok(v) => v,
+                    Err(why) => {
+                        eprintln!("moddil: calling C: {why}");
+                        let t = self.trap(TrapClass::Unimplemented, Some(range), Vec::new());
+                        return Some(Stop::Trap(t));
+                    }
+                }
             }
             CallPlan::Fn((f, type_args), values) => {
                 // A stub mod's function without a body (`mod.stub.1`).

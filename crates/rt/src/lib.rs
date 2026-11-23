@@ -33,8 +33,9 @@ pub use run::{
     send_now, set_host, set_os, set_trap_text, spawn, stop, stop_requested, timer, yield_now,
 };
 pub use run::{
-    gpu_dispatch, gpu_frame, gpu_show, os_arg_copy, os_arg_count, os_arg_len, os_channel, os_close,
-    os_connect, os_listen, os_random, os_send, os_take, os_write_stderr,
+    export_begin, export_trapped, gpu_dispatch, gpu_frame, gpu_show, os_arg_copy, os_arg_count,
+    os_arg_len, os_channel, os_close, os_connect, os_listen, os_random, os_send, os_take,
+    os_write_stderr,
 };
 
 /// How many calls deep a run may go, the frame it starts in included: as the MIR interpreter's

@@ -234,7 +234,8 @@ impl<'a> Layouts<'a> {
                     self.enumeration(ty, def.variants.len() as u32)
                 } else {
                     let ts = self.items.field_types(ty, 0);
-                    self.fields(&ts)
+                    let c = def.repr_c;
+                    self.fields_in(&ts, c)
                 }
             }
             t => match clif_type(t)? {
@@ -246,12 +247,20 @@ impl<'a> Layouts<'a> {
 
     /// The fields `ts` of a tuple or struct, reordered by alignment.
     fn fields(&mut self, ts: &[Ty]) -> Result<Layout, String> {
+        self.fields_in(ts, false)
+    }
+
+    /// As [`Layouts::fields`]; `in_order` keeps the fields in the order written, as C does for a
+    /// `#[repr(C)]` struct (`ffi.repr.1`), each at the next offset its alignment allows.
+    fn fields_in(&mut self, ts: &[Ty], in_order: bool) -> Result<Layout, String> {
         let layouts = ts
             .iter()
             .map(|t| self.of(t))
             .collect::<Result<Vec<_>, _>>()?;
         let mut order: Vec<usize> = (0..ts.len()).collect();
-        order.sort_by_key(|&i| std::cmp::Reverse(layouts[i].align));
+        if !in_order {
+            order.sort_by_key(|&i| std::cmp::Reverse(layouts[i].align));
+        }
         let mut offsets = vec![0u32; ts.len()];
         let mut at = 0;
         let mut align = 1;

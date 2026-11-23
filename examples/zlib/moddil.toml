@@ -1,0 +1,13 @@
+# zlib from Moddil (`reference/2027/interop.md`): the C library, vendored in `c/` (zlib 1.3.1,
+# under its own licence, `c/LICENSE`), compiled with the mod by the system's C compiler.
+[mod]
+name = "zlib"
+edition = "2027"
+capabilities = ["unsafe"]
+
+[[exe]]
+main = "src/main.moddil"
+
+[c]
+sources = ["c/*.c"]
+include = ["c"]

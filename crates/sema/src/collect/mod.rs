@@ -224,6 +224,7 @@ pub fn item_tree(db: &dyn Db, program: Program) -> ItemTree {
         derivers: HashMap::new(),
         template: None,
         derive_by_names: HashMap::new(),
+        extern_fns: std::collections::HashSet::new(),
     };
     c.modules(program.files(db), program.mods(db));
     c.run(&sources);
@@ -268,6 +269,8 @@ struct Collector<'a> {
     /// Each trait's `#[derive_by(f)]`, by the trait's index: the name it gives, before it is
     /// resolved.
     derive_by_names: HashMap<u32, (String, TextRange)>,
+    /// The functions declared in `extern "C"` blocks (`ffi.extern.1`), by source and node.
+    extern_fns: std::collections::HashSet<(Src, TextRange)>,
 }
 
 impl Collector<'_> {
@@ -473,6 +476,27 @@ impl Collector<'_> {
                     K::TRAIT_ITEM => nodes.traits.push((*src, module, node)),
                     K::IMPL_ITEM => nodes.impls.push((*src, module, node)),
                     K::FN_ITEM | K::CONST_ITEM => nodes.fns.push((*src, module, node)),
+                    // C functions (`ffi.extern.1`): free functions without bodies, by symbol.
+                    K::EXTERN_BLOCK => {
+                        let abi = node
+                            .token(K::STRING)
+                            .map(|t| t.text().trim_matches('"').to_string());
+                        if abi.as_deref() != Some("C") {
+                            self.reporter.report(
+                                *src,
+                                None,
+                                vec![Diagnostic::error(
+                                    Code::E0222,
+                                    keyword_range(&node),
+                                    "an `extern` block declares C functions: `extern \"C\" { … }`",
+                                )],
+                            );
+                        }
+                        for f in node.children().filter(|c| c.kind() == K::FN_ITEM) {
+                            self.extern_fns.insert((*src, f.text_range()));
+                            nodes.fns.push((*src, module, f));
+                        }
+                    }
                     K::TYPE_ITEM => nodes.types.push((*src, module, node)),
                     K::TEST_ITEM if src.is_file() => {
                         nodes.tests.push((src.file().unwrap_or(0), module, node));
@@ -946,6 +970,8 @@ impl Collector<'_> {
             opaque_fn: None,
             selectable: false,
             kernel: false,
+            foreign: false,
+            export: false,
             default_arg: false,
             intrinsic: false,
             is_const: !is_new,
@@ -1089,6 +1115,8 @@ impl Collector<'_> {
                     opaque_fn: None,
                     selectable: false,
                     kernel: false,
+                    foreign: false,
+                    export: false,
                     default_arg: true,
                     intrinsic: false,
                     is_const: true,

@@ -100,6 +100,24 @@ pub fn build_release_object(db: &dyn Db, program: Program, index: u32) -> Result
     lower::compile_object(db, program, Item::Fn(index), true).map_err(Native::Unsupported)
 }
 
+/// Compiles the `#[export]` functions `exports` of `program` (`ffi.export.1`) into an object
+/// file, each also under its own name with the platform's C convention, to link with the
+/// runtime into a shared library.
+///
+/// # Errors
+///
+/// What the functions reach that is not compiled to native code yet.
+pub fn build_library(db: &dyn Db, program: Program, exports: &[u32]) -> Result<Vec<u8>, Native> {
+    lower::compile_library(db, program, exports).map_err(Native::Unsupported)
+}
+
+/// The C header for the `#[export]` functions `exports` of `program` (`ffi.export.1`): their
+/// prototypes, and the structs their signatures name (each `#[repr(C)]` one in full, the others
+/// as incomplete types), as `name.h` gives them.
+pub fn header(db: &dyn Db, program: Program, exports: &[u32], name: &str) -> String {
+    lower::header(db, program, exports, name)
+}
+
 /// This crate's version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

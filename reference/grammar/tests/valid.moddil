@@ -35,6 +35,8 @@ const x : ! = escape ;
 // ---
 use x ;
 // ---
+extern "s" { }
+// ---
 test "s" { }
 // ---
 property "s" for x ( ) { }
@@ -128,6 +130,8 @@ const x : ! = || escape ;
 const x : ! = .. ;
 // ---
 use { } ;
+// ---
+extern "s" { fn x ( ) ; }
 // ---
 test "s" for x { }
 // ---
@@ -387,6 +391,13 @@ use x :: * ;
 use x :: { } ;
 // ---
 use x as x ;
+// ---
+extern "s" { /// doc
+fn x ( ) ; }
+// ---
+extern "s" { note "s" fn x ( ) ; }
+// ---
+extern "s" { pub fn x ( ) ; }
 // ---
 unit x : < ! as Self > :: x ;
 // ---

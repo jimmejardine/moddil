@@ -377,7 +377,11 @@ impl Lowerer<'_> {
     }
 
     fn alloc(&mut self, kind: ExprKind, range: TextRange) -> ExprId {
-        self.out.body.exprs.alloc(Expr { kind, range })
+        let e = self.out.body.exprs.alloc(Expr { kind, range });
+        if self.unsafe_depth > 0 {
+            self.out.body.in_unsafe.insert(e);
+        }
+        e
     }
 
     fn alloc_pat(&mut self, kind: PatKind, range: TextRange) -> PatId {

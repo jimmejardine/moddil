@@ -60,6 +60,7 @@ fn f() -> int {
 | `//~ trap` | A trap on this line: the line of the operation that fails, which may be inside a function the test calls |
 | `//~ error` | An error leaves a test on this line (the `?`, `fail` or `try` in the test's body it leaves through), failing the test |
 | `// disputed` | The test does not count until the reference is clarified |
+| `// native` | The file calls C (`ffi.native.1`): only native code and the MIR interpreter run it; WASM and the reference interpreter skip it |
 
 - **Values are observed in `test` items.** A file has only items at the top level, so the runner
   runs every `test` in the file, and every `// =>` line must run and produce exactly its value.

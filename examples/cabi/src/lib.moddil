@@ -1,0 +1,59 @@
+//! A Moddil library called from C (`ffi.export.1`). Each `#[export]` function is a C function
+//! under its own name, with C's types; `Point` is laid out as C lays out its struct
+//! (`#[repr(C)]`), so C passes one by pointer. `moddil build --lib` writes the library and its
+//! header, `cabi.h`; `c/main.c` calls them.
+
+/// A point in the plane, laid out as C's `Point`.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Point {
+    pub x: f64,
+    pub y: f64,
+}
+
+/// The greatest common divisor of `a` and `b`.
+#[export]
+pub fn moddil_gcd(a: int, b: int) -> int {
+    let mut x = if a < 0 { -a } else { a };
+    let mut y = if b < 0 { -b } else { b };
+    while y != 0 {
+        let r = x % y;
+        x = y;
+        y = r;
+    }
+    x
+}
+
+/// Whether `n` is even: an 8-bit integer in, a `bool` out.
+#[export]
+pub fn moddil_is_even(n: u8) -> bool {
+    n % 2 == 0
+}
+
+/// How far apart the points at `a` and `b` are.
+#[export]
+pub fn moddil_distance(a: *const Point, b: *const Point) -> f64 {
+    let (p, q) = unsafe("C passes two points it holds") { (*a, *b) };
+    let dx = p.x - q.x;
+    let dy = p.y - q.y;
+    (dx * dx + dy * dy).sqrt()
+}
+
+/// Scales the point at `p` by `k`, in place.
+#[export]
+pub fn moddil_scale(p: *mut Point, k: f64) {
+    unsafe("C passes a point it owns, and nothing else uses it meanwhile") {
+        (*p).x = (*p).x * k;
+        (*p).y = (*p).y * k;
+    }
+}
+
+test "the exports, called from Moddil" {
+    assert(moddil_gcd(84, -36) == 12);
+    assert(moddil_is_even(4) && !moddil_is_even(7));
+    let a = Point { x: 0.0, y: 0.0 };
+    let mut b = Point { x: 3.0, y: 4.0 };
+    assert(moddil_distance(&a, &b) == 5.0);
+    moddil_scale(&mut b, 2.0);
+    assert(b == Point { x: 6.0, y: 8.0 });
+}

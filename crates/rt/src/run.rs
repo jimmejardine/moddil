@@ -671,6 +671,22 @@ pub unsafe extern "C" fn gpu_show(p: *const u32, n: u64, width: u64, height: u64
     crate::os::gpu_show(pixels, width as i64, height as i64);
 }
 
+/// Starts the runtime for a Moddil function called from C (`ffi.export.1`): once, on the first
+/// call into the library.
+#[unsafe(export_name = "moddil_rt_export_begin")]
+pub extern "C" fn export_begin() {
+    static BEGUN: std::sync::Once = std::sync::Once::new();
+    BEGUN.call_once(begin_run);
+}
+
+/// A trap in a Moddil function called from C (`ffi.export.1`): C has no way to be told, so the
+/// process ends, as a built program's does (`EX_SOFTWARE`).
+#[unsafe(export_name = "moddil_rt_export_trapped")]
+pub extern "C" fn export_trapped() {
+    eprintln!("moddil: a trap in a Moddil function called from C; the process ends");
+    std::process::exit(70);
+}
+
 /// `core::gpu::frame` (`gpu.1`): the next frame's 8 words into `out`. Outside a run of `main`
 /// (a test) there is no window, so the frame asks to stop.
 ///
