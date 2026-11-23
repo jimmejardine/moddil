@@ -10,6 +10,9 @@ pub(crate) enum Value {
     FloatLit(std::sync::Arc<str>),
     /// An integer literal too large for an `int`, not yet of a type.
     BigLit(i128),
+    /// An integer literal past `i128::MAX`, not yet of a type: only a `u128` (or a float) holds
+    /// it, so the checker let it through only for one.
+    HugeLit(u128),
     Bool(bool),
     Unit,
     Char(char),
@@ -107,6 +110,7 @@ impl Value {
             Value::Num(k, _) => Head::Num(*k),
             Value::FloatLit(_) => Head::Num(crate::num::Kind::F64),
             Value::BigLit(_) => Head::Num(crate::num::Kind::I128),
+            Value::HugeLit(_) => Head::Num(crate::num::Kind::U128),
             Value::Bool(_) => Head::Bool,
             Value::Char(_) => Head::Char,
             Value::Str(_) => Head::Str,

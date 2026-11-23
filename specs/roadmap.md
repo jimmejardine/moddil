@@ -1041,8 +1041,14 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
       overflow-checked `*`, so native code fell back to the interpreter. It now calls the runtime
       for them (`moddil_rt_i128_lo` and `_hi`; WASM shares them), and `Fixed` works in `i128`
       (`conformance/2027/numbers/wide.moddil`).
-    - **Literals:** one past `i128`'s range is refused even for a `u128` (E0204), so `u128`'s
-      greatest value is written as arithmetic.
+    - **Fixed since:** an integer literal past `i128`'s range was refused even for a `u128`
+      (E0204), and so was `i128`'s least value (its magnitude was parsed first). A literal's
+      value is now a sign and a `u128` magnitude until it has a type (`ast::IntValue`), and the
+      reference interpreter keeps one past `i128` as a literal only a `u128` or a float takes.
+    - **Reference interpreter:** arithmetic on literals that does not fold in `i128`
+      (`i128::MAX + 1`, `u128::MAX - 1`, all literals) panics it. The checker leaves such
+      arithmetic to the type, but the reference interpreter has no types for it. The other
+      three implementations do it at the type.
     - **Types:** `Fixed<{S + T}>` (const arithmetic in a type) is not supported yet, nor are the
       exact literals of `numerics.md` (`let p: Fixed<2> = 0.10`).
     - **Prelude:** `Option<&T>` has no `PartialEq`. `[1, 2]` for a `Vec<u8>` types its elements

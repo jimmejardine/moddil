@@ -567,20 +567,20 @@ pub use convert::{convert, num_code, num_text};
 
 /// The constant of number type `t` (`int` or a [`Ty::Num`]) for the exact integer `v`, which the
 /// checker has made sure fits; a float gets the nearest value.
-pub fn int_const(t: &Ty, v: i128) -> Const {
+pub fn int_const(t: &Ty, v: moddil_syntax::ast::IntValue) -> Const {
     use moddil_sema::Num;
     match t {
-        Ty::Num(Num::F32) => Const::Num(Num::F32, u128::from((v as f32).to_bits())),
-        Ty::Num(Num::F64) => Const::Num(Num::F64, u128::from((v as f64).to_bits())),
+        Ty::Num(Num::F32) => Const::Num(Num::F32, u128::from((v.as_f64() as f32).to_bits())),
+        Ty::Num(Num::F64) => Const::Num(Num::F64, u128::from(v.as_f64().to_bits())),
         Ty::Num(n) => {
             let mask = if n.bits() == 128 {
                 u128::MAX
             } else {
                 (1u128 << n.bits()) - 1
             };
-            Const::Num(*n, (v as u128) & mask)
+            Const::Num(*n, v.bits() & mask)
         }
-        _ => Const::Int(v as i64),
+        _ => Const::Int(v.bits() as i64),
     }
 }
 

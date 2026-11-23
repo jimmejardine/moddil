@@ -683,7 +683,7 @@ impl Machine<'_> {
             return Ok(self.memory.load(&p));
         }
         match (op.kind(), self.eval(operand)?) {
-            (k, v @ (Value::Num(..) | Value::FloatLit(_) | Value::BigLit(_))) => {
+            (k, v @ (Value::Num(..) | Value::FloatLit(_) | Value::BigLit(_) | Value::HugeLit(_))) => {
                 crate::num::unary(k == K::MINUS, v, range)
             }
             (K::MINUS, Value::Int(v)) => v

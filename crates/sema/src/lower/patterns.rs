@@ -226,8 +226,11 @@ impl Lowerer<'_> {
         match tok.kind() {
             K::TRUE_KW => PatKind::Bool(true),
             K::FALSE_KW => PatKind::Bool(false),
-            K::INTEGER => match ast::int_value(tok.text()) {
-                Some(v) => PatKind::Int(if negate { -v } else { v }),
+            // Patterns are `int`s, but `i128`'s least value is still written as a literal.
+            K::INTEGER => match ast::IntValue::parse(tok.text())
+                .and_then(|v| if negate { v.negated() } else { v }.to_i128())
+            {
+                Some(v) => PatKind::Int(v),
                 None => {
                     self.report(
                         Code::E0204,

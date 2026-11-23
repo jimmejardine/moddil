@@ -22,7 +22,8 @@ impl Exact {
     /// The value of literal `kind`, if it is a number literal.
     pub(super) fn of(kind: &ExprKind) -> Option<Exact> {
         match kind {
-            ExprKind::Int(v) => Some(Exact::Int(*v)),
+            // Folded in `i128`: a literal past it is left to its type.
+            ExprKind::Int(v) => Some(Exact::Int(v.to_i128()?)),
             ExprKind::Float(text) => decimal(text),
             _ => None,
         }
@@ -31,7 +32,7 @@ impl Exact {
     /// The literal it is: an integer, or a fractional literal written exactly.
     pub(super) fn literal(self) -> ExprKind {
         match self {
-            Exact::Int(v) => ExprKind::Int(v),
+            Exact::Int(v) => ExprKind::Int(v.into()),
             Exact::Decimal(m, e) => ExprKind::Float(format!("{m}e{e}")),
         }
     }

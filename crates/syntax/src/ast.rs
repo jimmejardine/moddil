@@ -200,14 +200,91 @@ pub fn member_name(node: &SyntaxNode) -> Option<SyntaxToken> {
 /// The value of an integer literal's text: decimal, `0x`, `0o` or `0b`, with `_` separators
 /// ignored. `None` if it has no digits or does not fit in an `i128`.
 pub fn int_value(text: &str) -> Option<i128> {
-    let digits: String = text.chars().filter(|&c| c != '_').collect();
-    let (radix, digits) = match digits.get(..2) {
-        Some("0x") => (16, &digits[2..]),
-        Some("0o") => (8, &digits[2..]),
-        Some("0b") => (2, &digits[2..]),
-        _ => (10, digits.as_str()),
-    };
-    i128::from_str_radix(digits, radix).ok()
+    IntValue::parse(text)?.to_i128()
+}
+
+/// An integer literal's exact value: a sign and a magnitude up to `u128::MAX`, so a literal can
+/// be any value of any integer type, `u128`'s greatest and `i128`'s least among them
+/// (`num.lit.1`), before its type is known.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct IntValue {
+    neg: bool,
+    mag: u128,
+}
+
+impl IntValue {
+    /// The value of a literal's text (as [`int_value`] reads it), not negative; `None` if it has
+    /// no digits or is past `u128::MAX`.
+    pub fn parse(text: &str) -> Option<IntValue> {
+        let digits: String = text.chars().filter(|&c| c != '_').collect();
+        let (radix, digits) = match digits.get(..2) {
+            Some("0x") => (16, &digits[2..]),
+            Some("0o") => (8, &digits[2..]),
+            Some("0b") => (2, &digits[2..]),
+            _ => (10, digits.as_str()),
+        };
+        let mag = u128::from_str_radix(digits, radix).ok()?;
+        Some(IntValue { neg: false, mag })
+    }
+
+    /// Its negation (zero stays zero).
+    pub fn negated(self) -> IntValue {
+        IntValue {
+            neg: !self.neg && self.mag != 0,
+            mag: self.mag,
+        }
+    }
+
+    /// The value as an `i128`, if it is one.
+    pub fn to_i128(self) -> Option<i128> {
+        if self.neg {
+            0i128.checked_sub_unsigned(self.mag)
+        } else {
+            i128::try_from(self.mag).ok()
+        }
+    }
+
+    /// Its low 128 bits, two's complement: what it is as a value of a type it fits.
+    pub fn bits(self) -> u128 {
+        if self.neg {
+            self.mag.wrapping_neg()
+        } else {
+            self.mag
+        }
+    }
+
+    /// The nearest `f64` (its magnitude rounded once).
+    pub fn as_f64(self) -> f64 {
+        let m = self.mag as f64;
+        if self.neg { -m } else { m }
+    }
+
+    /// Whether it is from `lo` to `hi`, inclusive.
+    pub fn fits(self, lo: i128, hi: u128) -> bool {
+        if self.neg {
+            lo < 0 && self.mag <= lo.unsigned_abs()
+        } else {
+            self.mag <= hi && (lo <= 0 || self.mag >= lo.unsigned_abs())
+        }
+    }
+}
+
+impl From<i128> for IntValue {
+    fn from(v: i128) -> IntValue {
+        IntValue {
+            neg: v < 0,
+            mag: v.unsigned_abs(),
+        }
+    }
+}
+
+impl std::fmt::Display for IntValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.neg {
+            write!(f, "-")?;
+        }
+        write!(f, "{}", self.mag)
+    }
 }
 
 impl ParamList {

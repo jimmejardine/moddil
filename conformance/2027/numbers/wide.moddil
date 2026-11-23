@@ -1,4 +1,4 @@
-// covers: num.types.1, num.ops.1
+// covers: num.types.1, num.lit.1, num.ops.1
 // `i128` and `u128` division, remainder and multiplication, and their traps: native code does
 // the division and the overflow check in the runtime, as Cranelift cannot compile them.
 
@@ -12,9 +12,22 @@ test "i128 division and remainder round toward zero" {
     a * -1 / b                              // => 9000000000000000000
 }
 
+test "the widest types' ends are written as literals" {
+    let max: u128 = 340282366920938463463374607431768211455;
+    max                                     // => 340282366920938463463374607431768211455
+    ;
+    let hex: u128 = 0xffff_ffff_ffff_ffff_ffff_ffff_ffff_ffff;
+    max == hex                              // => true
+    ;
+    let min: i128 = -170141183460469231731687303715884105728;
+    min                                     // => -170141183460469231731687303715884105728
+    ;
+    let f: f64 = 340282366920938463463374607431768211455;
+    f > 3.0e38                              // => true
+}
+
 test "u128 division and remainder" {
-    let half: u128 = 170141183460469231731687303715884105727;
-    let max = half * 2 + 1;
+    let max: u128 = 340282366920938463463374607431768211455;
     max / 3                                 // => 113427455640312821154458202477256070485
     ;
     max % 7                                 // => 3
@@ -35,8 +48,8 @@ test "an i128 product that does not fit traps" {
 }
 
 test "a u128 product that does not fit traps" {
-    let a: u128 = 170141183460469231731687303715884105727;
-    let b: u128 = 3;
+    let a: u128 = 340282366920938463463374607431768211455;
+    let b: u128 = 2;
     a * b;                                  //~ trap
 }
 
@@ -47,7 +60,7 @@ test "dividing by zero traps" {
 }
 
 test "the least i128 over -1 traps" {
-    let a: i128 = -170141183460469231731687303715884105727 - 1;
+    let a: i128 = -170141183460469231731687303715884105728;
     let b: i128 = -1;
     a / b;                                  //~ trap
 }

@@ -616,9 +616,13 @@ fn literal(node: &SyntaxNode, negate: bool) -> Value {
         K::TRUE_KW => Value::Bool(true),
         K::FALSE_KW => Value::Bool(false),
         K::INTEGER => {
-            let v = integer(tok.text());
-            let v = if negate { -v } else { v };
-            i64::try_from(v).map_or(Value::BigLit(v), Value::Int)
+            // Decimal, or `0x`, `0o`, `0b`, with `_` separators (`expr.lit.int.1`).
+            let v = ast::IntValue::parse(tok.text()).expect("a checked literal");
+            let v = if negate { v.negated() } else { v };
+            match v.to_i128() {
+                Some(v) => i64::try_from(v).map_or(Value::BigLit(v), Value::Int),
+                None => Value::HugeLit(v.bits()),
+            }
         }
         // A fractional literal: exact until it meets its type (`num.lit.1`).
         K::FLOAT => {
@@ -629,12 +633,6 @@ fn literal(node: &SyntaxNode, negate: bool) -> Value {
         K::STRING | K::RAW_STRING | K::BLOCK_STRING => Value::Str(text::string(tok.text()).into()),
         _ => unreachable!("a literal checked to be supported"),
     }
-}
-
-/// The value of an integer literal: decimal, or `0x`, `0o`, `0b`, with `_` separators
-/// (`expr.lit.int.1`).
-fn integer(text: &str) -> i128 {
-    ast::int_value(text).expect("a checked literal")
 }
 
 /// Where expression `e` is.

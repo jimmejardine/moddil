@@ -868,7 +868,7 @@ impl Program {
         match v {
             Value::Int(i) => i.to_string(),
             Value::Num(k, bits) => crate::num::text(*k, *bits),
-            v @ (Value::FloatLit(_) | Value::BigLit(_)) => {
+            v @ (Value::FloatLit(_) | Value::BigLit(_) | Value::HugeLit(_)) => {
                 self.render_with(&crate::num::settle(v.clone()), part)
             }
             Value::Bool(b) => b.to_string(),

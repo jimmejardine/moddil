@@ -720,7 +720,7 @@ struct Checker<'a> {
     anon_fails: Vec<(ExprId, Ty)>,
     /// The integer literals, with their values, to check against the types they get
     /// (`num.lit.1`).
-    literals: Vec<(ExprId, i128)>,
+    literals: Vec<(ExprId, moddil_syntax::ast::IntValue)>,
     out: Inference,
 }
 
@@ -1015,16 +1015,17 @@ impl Checker<'_> {
             let (lo, hi, name) = match &t {
                 Ty::Int => (
                     i128::from(i64::MIN),
-                    i128::from(i64::MAX),
+                    i64::MAX as u128,
                     "int".to_string(),
                 ),
+                Ty::Num(crate::ty::Num::U128) => (0, u128::MAX, "u128".to_string()),
                 Ty::Num(n) if !n.is_float() => {
                     let (lo, hi) = n.int_range();
-                    (lo, hi, n.name().to_string())
+                    (lo, hi as u128, n.name().to_string())
                 }
                 _ => continue,
             };
-            if v < lo || v > hi {
+            if !v.fits(lo, hi) {
                 self.report(
                     Code::E0204,
                     self.range(e),

@@ -287,8 +287,8 @@ impl Lowerer<'_> {
         match tok.kind() {
             K::TRUE_KW => self.alloc(ExprKind::Bool(true), range),
             K::FALSE_KW => self.alloc(ExprKind::Bool(false), range),
-            K::INTEGER => match ast::int_value(tok.text()) {
-                Some(v) => self.alloc(ExprKind::Int(if negate { -v } else { v }), range),
+            K::INTEGER => match ast::IntValue::parse(tok.text()) {
+                Some(v) => self.alloc(ExprKind::Int(if negate { v.negated() } else { v }), range),
                 None => {
                     self.report(
                         Code::E0204,

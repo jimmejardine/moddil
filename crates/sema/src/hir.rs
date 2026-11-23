@@ -89,7 +89,7 @@ pub enum ExprKind {
     /// Something already reported as an error.
     Missing,
     /// An integer literal, with its exact value (a leading `-` folded in).
-    Int(i128),
+    Int(moddil_syntax::ast::IntValue),
     /// A fractional literal (`1.5`, `2e-3`), as written without `_`: an exact number until its
     /// type, a float, is known (`num.lit.1`).
     Float(String),

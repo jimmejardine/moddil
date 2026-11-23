@@ -213,7 +213,7 @@ pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
 fn literal_value(body: &moddil_sema::hir::Body, e: moddil_sema::hir::ExprId) -> Option<Value> {
     use moddil_sema::hir::{ExprKind, UnaryOp};
     Some(match &body.exprs[e].kind {
-        ExprKind::Int(v) => Value::Int(i64::try_from(*v).ok()?),
+        ExprKind::Int(v) => Value::Int(i64::try_from(v.to_i128()?).ok()?),
         ExprKind::Bool(b) => Value::Bool(*b),
         ExprKind::Char(c) => Value::Char(*c),
         ExprKind::Str(s) => Value::Str(s.as_str().into()),

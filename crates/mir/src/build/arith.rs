@@ -61,7 +61,7 @@ impl Builder<'_> {
                     Rvalue::Binary(
                         BinOp::Eq,
                         b.clone(),
-                        Operand::Const(crate::int_const(ty, 0)),
+                        Operand::Const(crate::int_const(ty, 0.into())),
                     ),
                 );
                 self.check(t, TrapClass::DivisionByZero, range);

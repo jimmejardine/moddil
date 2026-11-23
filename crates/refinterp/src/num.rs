@@ -154,9 +154,9 @@ pub(crate) fn parse_float(k: Kind, text: &str) -> Value {
 pub(crate) fn as_kind(v: Value, k: Kind) -> Value {
     match v {
         Value::BigLit(i) if k.is_float() => float_value(k, i as f64),
-        Value::BigLit(i) => int_value(k, i)
-            .or_else(|| (k == Kind::U128).then_some(Value::Num(k, i as u128)))
-            .unwrap_or(Value::BigLit(i)),
+        Value::BigLit(i) => int_value(k, i).unwrap_or(Value::BigLit(i)),
+        Value::HugeLit(u) if k.is_float() => float_value(k, u as f64),
+        Value::HugeLit(u) if k == Kind::U128 => Value::Num(k, u),
         Value::Int(i) if k.is_float() => float_value(k, i as f64),
         Value::Int(i) => int_value(k, i128::from(i)).unwrap_or(Value::Int(i)),
         Value::FloatLit(t) => parse_float(k, &t),
@@ -169,6 +169,7 @@ pub(crate) fn settle(v: Value) -> Value {
     match v {
         Value::FloatLit(t) => parse_float(Kind::F64, &t),
         Value::BigLit(i) => int_value(Kind::I128, i).expect("an `i128`"),
+        Value::HugeLit(u) => Value::Num(Kind::U128, u),
         v => v,
     }
 }
@@ -224,7 +225,12 @@ fn agree(a: Value, b: Value) -> (Value, Value) {
 
 /// Whether `a op b` involves a sized integer or a float.
 pub(crate) fn is_num(a: &Value, b: &Value) -> bool {
-    let num = |v: &Value| matches!(v, Value::Num(..) | Value::FloatLit(_) | Value::BigLit(_));
+    let num = |v: &Value| {
+        matches!(
+            v,
+            Value::Num(..) | Value::FloatLit(_) | Value::BigLit(_) | Value::HugeLit(_)
+        )
+    };
     num(a) || num(b)
 }
 

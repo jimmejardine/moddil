@@ -527,8 +527,6 @@ pub(crate) fn build<'db, M: Module>(
             &[types::F32, types::F32],
             Some(types::F32),
         )?,
-    };
-    let items = moddil_sema::item_tree(db, program);
         i128_lo: import(
             "moddil_rt_i128_lo",
             &[types::I32, types::I64, types::I64, types::I64, types::I64],
@@ -539,6 +537,8 @@ pub(crate) fn build<'db, M: Module>(
             &[types::I32, types::I64, types::I64, types::I64, types::I64],
             Some(types::I64),
         )?,
+    };
+    let items = moddil_sema::item_tree(db, program);
     let mut c = Compiler {
         db,
         program,
@@ -2850,8 +2850,6 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             });
         }
         let s = signed(ty);
-        let cmp = |s: bool, a: IntCC, b: IntCC| if s { a } else { b };
-        Ok(match op {
         if matches!(op, BinOp::Div | BinOp::Rem) && clif_type(ty)? == Some(types::I128) {
             let code = match (op, s) {
                 (BinOp::Div, true) => 0,
@@ -2862,6 +2860,8 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             return Ok(self.i128_op(code, x, y, true));
         }
         let ins = self.b.ins();
+        let cmp = |s: bool, a: IntCC, b: IntCC| if s { a } else { b };
+        Ok(match op {
             BinOp::Add => ins.iadd(x, y),
             BinOp::Sub => ins.isub(x, y),
             BinOp::Mul => ins.imul(x, y),
@@ -2904,8 +2904,6 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         })
     }
 
-    /// Whether `x op y` overflows, or shifts by an amount out of range (as the interpreters'
-    /// `overflows`).
     /// The runtime's `i128` operation `code` on `x` and `y` (`moddil_rt::num::wide`): its
     /// result as an `i128` if `both`, or just its low word.
     fn i128_op(&mut self, code: i64, x: ir::Value, y: ir::Value, both: bool) -> ir::Value {
@@ -2925,6 +2923,8 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         self.b.ins().iconcat(lo, hi)
     }
 
+    /// Whether `x op y` overflows, or shifts by an amount out of range (as the interpreters'
+    /// `overflows`).
     fn overflows(
         &mut self,
         op: BinOp,
@@ -2936,12 +2936,12 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             return Ok(self.b.ins().iconst(types::I8, 0));
         }
         let s = signed(ty);
-        Ok(match op {
-            BinOp::Add if s => self.b.ins().sadd_overflow(x, y).1,
         if op == BinOp::Mul && clif_type(ty)? == Some(types::I128) {
             let flag = self.i128_op(if s { 4 } else { 5 }, x, y, false);
-            return Ok(self.b.ins().icmp_imm(IntCC::NotEqual, flag, 0));
+            return Ok(self.b.ins().icmp_imm_u(IntCC::NotEqual, flag, 0));
         }
+        Ok(match op {
+            BinOp::Add if s => self.b.ins().sadd_overflow(x, y).1,
             BinOp::Add => self.b.ins().uadd_overflow(x, y).1,
             BinOp::Sub if s => self.b.ins().ssub_overflow(x, y).1,
             BinOp::Sub => self.b.ins().usub_overflow(x, y).1,
