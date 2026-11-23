@@ -1017,7 +1017,7 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
       and stops it, checking the exit code.
 - **Standard mods beyond the tour (November 2026), written alongside M2d.** These are pure
   Moddil, with no compiler changes. Each has its own tests, run natively, on the MIR interpreter
-  and as WASM by `crates/moddil/tests/cli.rs`, and is re-exported by the umbrella stub.
+  and as WASM by `crates/moddil/tests/projects.rs`, and is re-exported by the umbrella stub.
   - **`collections`:** `Set`, `Deque`, `RingBuffer`, `BinaryHeap`, and the sorted `TreeMap` and
     `TreeSet`.
     - The tree is an AA tree whose nodes live in a `Vec`.

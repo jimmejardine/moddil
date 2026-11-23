@@ -5,7 +5,7 @@ rest of the catalogue ([`specs/stdlib.md`](../specs/stdlib.md)).
 
 **Status:** M2 slices M2c to M2e: the mods the tour and Mandelbulb flight reach, each with its tests in its own `tests/`
 project (so a mod that depends on one does not run them), run natively, on the MIR interpreter
-and as WASM by `crates/moddil/tests/cli.rs`. A program names them as `moddil::<mod>` through the
+and as WASM by `crates/moddil/tests/projects.rs`, one test for each project and runtime. A program names them as `moddil::<mod>` through the
 umbrella stub mod [`stubs/moddil`](../stubs/moddil/README.md), which re-exports them.
 
 | Mod | What it has | Capabilities |
