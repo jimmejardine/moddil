@@ -25,8 +25,7 @@ fn pattern(n: int) -> Vec<u8> {
     v
 }
 
-/// Checks that `digest` is `want` in hex. (Not `assert(is(digest, want))`: an `assert` whose
-/// condition moves a value crashes native code for now.)
+/// Checks that `digest` is `want` in hex; a failure shows both.
 fn check(digest: Vec<u8>, want: &str) {
     let h = hex(digest.as_slice());
     let h: &str = &h;

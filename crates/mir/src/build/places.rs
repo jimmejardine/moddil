@@ -5,7 +5,7 @@ use moddil_sema::Ty;
 use moddil_sema::hir::{ExprId, ExprKind, FmtPiece, Stmt};
 
 use super::Builder;
-use crate::{Const, Operand, Place, Rvalue};
+use crate::{Const, Local, Operand, Place, Rvalue};
 
 impl Builder<'_> {
     /// Whether evaluating `e` may assign to a local.
@@ -360,6 +360,16 @@ impl Builder<'_> {
 
     /// The operand that uses the value at `place` of type `ty`: a copy for `Copy` types, a fresh
     /// reborrow for `&mut` borrows (so using one does not use it up), and otherwise a move.
+    /// The value of the `assert` part `e`, held in `v`, as an operand, noting it as moved if
+    /// it is moved away.
+    pub(super) fn use_part(&mut self, e: ExprId, v: Local, ty: &Ty) -> Operand {
+        let op = self.use_place(Place::local(v), ty);
+        if matches!(&op, Operand::Move(p) if *p == Place::local(v)) {
+            self.moved_parts.insert(e);
+        }
+        op
+    }
+
     pub(super) fn use_place(&mut self, place: Place, ty: &Ty) -> Operand {
         match &self.solver.norm(ty) {
             Ty::Ref(true, inner) => {
@@ -387,7 +397,10 @@ impl Builder<'_> {
         }
         if let Some(&(v, _)) = self.recording.get(&e) {
             self.eval_into(v, e);
-            return Operand::Copy(Place::local(v));
+            // Used as any value is: moved if it is not `Copy`, so `assert(f(v))` with `f` taking
+            // `v` gives it away, and the part's local is not dropped again after.
+            let ty = self.ty(e);
+            return self.use_part(e, v, &ty);
         }
         match self.hir.exprs[e].kind {
             ExprKind::Int(v) => {

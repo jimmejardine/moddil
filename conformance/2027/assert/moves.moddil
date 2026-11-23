@@ -1,0 +1,32 @@
+// covers: expr.assert.1
+// A part of the condition that is moved away (to a function taking it by value) is given away
+// once: it is not dropped again after the `assert`, holding or failing.
+
+fn has(v: Vec<int>, n: int) -> bool { v.len() == n }
+
+struct Pair { a: Vec<int> }
+
+impl Sub for Pair {
+    type Output = Pair;
+    fn sub(self, rhs: Pair) -> Pair { Pair { a: rhs.a } }
+}
+
+impl Pair {
+    fn size(&self) -> int { self.a.len() }
+}
+
+test "a value moved into a call in an assert" {
+    let v: Vec<int> = [1, 2, 3];
+    assert(has(v, 3));
+}
+
+test "values moved into an operator in an assert" {
+    let p = Pair { a: [1] };
+    let q = Pair { a: [1, 2] };
+    assert((p - q).size() == 2);
+}
+
+test "a failing assert that moved a value traps" {
+    let v: Vec<int> = [1, 2, 3];
+    assert(has(v, 4));                  //~ trap
+}

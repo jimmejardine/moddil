@@ -88,6 +88,19 @@ fn tests_observe_values() {
     ));
 }
 
+/// A part of an `assert` moved to a call is moved, not copied, so it is not dropped twice, and a
+/// failure does not show it.
+#[test]
+fn an_assert_part_moved_away_is_not_shown() {
+    insta::assert_snapshot!(dump(
+        "fn is(d: Vec<int>) -> bool { true }
+         test \"t\" {
+    let v: Vec<int> = Vec::new();
+    assert(is(v));
+}"
+    ));
+}
+
 #[test]
 fn aggregates_and_fields() {
     insta::assert_snapshot!(dump(

@@ -7,7 +7,7 @@
 //! The lowering itself is split by topic: [`places`] (places and operands), [`exprs`]
 //! (expressions and statements), [`patterns`] and [`arith`] (operators and comparisons).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use moddil_sema::hir::{self, ExprId};
 use moddil_sema::{Container, Db, Inference, Item, ItemTree, Owner, Solver, Src, Ty};
@@ -107,6 +107,7 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
         scopes: Scopes::new(),
         locals: vec![None; hir.locals.len()],
         recording: HashMap::new(),
+        moved_parts: HashSet::new(),
         compare_expr: ExprId::from_raw(la_arena::RawIdx::from_u32(0)),
         targets: vec![Target::Out],
         on_error: HashMap::new(),
@@ -236,6 +237,7 @@ fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
         scopes: Scopes::new(),
         locals: vec![None; hir.locals.len()],
         recording: HashMap::new(),
+        moved_parts: HashSet::new(),
         compare_expr: ExprId::from_raw(la_arena::RawIdx::from_u32(0)),
         targets: vec![Target::Out],
         on_error: HashMap::new(),
@@ -304,6 +306,9 @@ struct Builder<'a> {
     /// While an `assert`'s condition is built: for each of its parts, the locals holding its
     /// value and whether it was evaluated.
     recording: HashMap<ExprId, (Local, Local)>,
+    /// The parts of the `assert` being built whose values were moved away (to a call that takes
+    /// them, say), so a failure cannot show them: their locals are empty then.
+    moved_parts: HashSet<ExprId>,
     /// The comparison chain being built.
     compare_expr: ExprId,
     /// Where an error raised now goes, innermost last.

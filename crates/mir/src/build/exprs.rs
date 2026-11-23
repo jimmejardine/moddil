@@ -62,7 +62,7 @@ impl Builder<'_> {
                 .assign(flag, Rvalue::Use(Operand::Const(Const::Bool(true))));
             if dest != v {
                 let ty = self.ty(e);
-                let op = self.use_place(Place::local(v), &ty);
+                let op = self.use_part(e, v, &ty);
                 self.cfg.assign(dest, Rvalue::Use(op));
             }
             return;
@@ -447,6 +447,15 @@ impl Builder<'_> {
                 for x in &exprs {
                     self.recording.remove(x);
                 }
+                // A part moved away has no value left to show (and reading it would read what
+                // its new owner may have freed).
+                let mut kept = Vec::with_capacity(parts.len());
+                for (x, part) in exprs.iter().zip(parts) {
+                    if !self.moved_parts.remove(x) {
+                        kept.push(part);
+                    }
+                }
+                let parts = kept;
                 self.cfg.push(Statement::Assert {
                     cond: c,
                     expected: true,

@@ -1033,8 +1033,10 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
     `Debug` and `Default` are written by hand (`mods/decimal/src/fixed.moddil`), because
     `#[derive]` does not take a type with const parameters (E0404). Derive them once it does.
   - **Gaps found on the way** (worked around in the mods; for the compiler):
-    - **Native and WASM:** `assert(f(v))`, where `f` takes `v` by value, crashes native code and
-      leaks on WASM, which can break the next test there. The interpreter is right.
+    - **Fixed since:** `assert(f(v))`, where `f` took `v` by value, crashed native code and
+      leaked on WASM. The MIR copied the part instead of moving it, so it was dropped twice. It
+      now moves it, and a failure no longer shows a part that was moved away
+      (`conformance/2027/assert/moves.moddil`).
     - **Native:** Cranelift cannot yet compile `i128`'s `%` or its overflow-checked `*`, so such
       code falls back to the interpreter. `Fixed` uses `BigInt` instead.
     - **Types:** `Fixed<{S + T}>` (const arithmetic in a type) is not supported yet, nor are the
