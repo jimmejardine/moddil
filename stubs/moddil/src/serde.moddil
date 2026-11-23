@@ -1,20 +1,119 @@
 //! Turning values into text and back (`data.md`: Parse, don't validate).
+//!
+//! `Serialize` and `Deserialize` are derived by derive functions written here, in Moddil
+//! (`comptime.md`: Generation): each is a template, an impl for the type `t`, whose
+//! `inline for f in fields(t)` is written once for each of the struct's fields. Decoding is
+//! validation: a refined field's value is made with its refinement's `new`, and a value that
+//! breaks the refinement is a `DecodeError`, like any other bad input.
+
+use mod::serde::json::{Decoder, Encoder};
 
 /// A type that can be written out; derived.
-pub trait Serialize {}
+#[derive_by(serialize)]
+pub trait Serialize {
+    /// Writes this value to `out`.
+    fn serialize(&self, out: &mut Encoder);
+}
+
+/// `Serialize`'s derive: a struct as an object of its fields, by name, in declared order.
+pub const fn serialize(t: type) -> Impl<Serialize> {
+    impl Serialize for t {
+        fn serialize(&self, out: &mut Encoder) {
+            out.begin_object();
+            inline for f in fields(t) {
+                out.key(f.name);
+                self.[f].serialize(out);
+            }
+            out.end_object();
+        }
+    }
+}
 
 /// A type that can be decoded, and validated as it is; derived.
-pub trait Deserialize {}
+#[derive_by(deserialize)]
+pub trait Deserialize {
+    /// The value `d` holds, or why it is not one.
+    fn deserialize(d: Decoder) -> Self with fail(DecodeError);
+}
 
-impl Serialize for String {}
-impl Deserialize for String {}
-impl Serialize for int {}
-impl Deserialize for int {}
-impl Deserialize for mod::net::Url {}
+/// `Deserialize`'s derive: a struct from an object with a member for each field, by name. A
+/// refined field's value is made with its refinement's `new`: one that breaks it is refused.
+pub const fn deserialize(t: type) -> Impl<Deserialize> {
+    impl Deserialize for t {
+        fn deserialize(d: Decoder) -> Self with fail(DecodeError) {
+            t {
+                inline for f in fields(t) {
+                    [f]: if const f.is_refined() {
+                        let value = d.field(f.name)?;
+                        try { f.new(value)? } catch { e => fail(DecodeError::refused(f.name, e)) }
+                    } else {
+                        d.field(f.name)?
+                    },
+                }
+            }
+        }
+    }
+}
+
+impl Serialize for String {
+    fn serialize(&self, out: &mut Encoder) {
+        out.text(self);
+    }
+}
+
+impl Deserialize for String {
+    fn deserialize(d: Decoder) -> String with fail(DecodeError) {
+        d.text()?
+    }
+}
+
+impl Serialize for int {
+    fn serialize(&self, out: &mut Encoder) {
+        out.number(*self);
+    }
+}
+
+impl Deserialize for int {
+    fn deserialize(d: Decoder) -> int with fail(DecodeError) {
+        d.number()?
+    }
+}
+
+impl Serialize for bool {
+    fn serialize(&self, out: &mut Encoder) {
+        out.boolean(*self);
+    }
+}
+
+impl Deserialize for bool {
+    fn deserialize(d: Decoder) -> bool with fail(DecodeError) {
+        d.boolean()?
+    }
+}
 
 /// Why decoding failed.
+#[derive(Debug)]
 pub struct DecodeError { reason: String }
 
+impl DecodeError {
+    /// An error saying `reason`.
+    pub fn new(reason: String) -> DecodeError {
+        DecodeError { reason }
+    }
+
+    /// Field `field`'s value, which breaks its refinement.
+    pub fn refused(field: &str, e: RefinementError) -> DecodeError {
+        DecodeError { reason: fmt"`{field}`: {e.value} is not a {e.ty} ({e.clause})" }
+    }
+
+    /// Why.
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+}
+
 impl Display for DecodeError {
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut String) {
+        out.push_str(&self.reason);
+    }
 }

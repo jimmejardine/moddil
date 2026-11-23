@@ -243,6 +243,11 @@ codes! {
     E1004 = "compile-time evaluation failed",
     /// An `#[around(…)]` that names no function, nor calls one.
     E1005 = "invalid wrapper",
+    /// A derive function not written as one (`const fn f(t: type) -> Impl<Tr>`, its body one
+    /// `impl Tr for t { … }`), a `#[derive_by]` naming none, or a derive function called.
+    E1006 = "invalid derive function",
+    /// A template's `inline for`, `if const` or reflected field used where it cannot be.
+    E1007 = "invalid template",
     /// A literal that its refined type's predicate does not hold for.
     E1101 = "literal outside its refinement",
     /// A contract that is not pure: it has an effect, an error or an assignment.

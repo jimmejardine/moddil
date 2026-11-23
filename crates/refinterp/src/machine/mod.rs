@@ -55,6 +55,9 @@ struct Machine<'p> {
     olds: Vec<HashMap<TextRange, Value>>,
     /// The nodes closure values have named so far, found once.
     nodes: HashMap<crate::value::NodeRef, SyntaxNode>,
+    /// The fields `inline for` names (`comptime.template.inline.1`), innermost last: each
+    /// name, the struct's key and the field's index.
+    reflected: Vec<(String, String, usize)>,
     /// For a conversion being run (`num.convert.1`): the type it converts to.
     convert_to: Option<Head>,
 }
@@ -108,6 +111,7 @@ impl<'p> Machine<'p> {
             pending_trap: None,
             olds: Vec::new(),
             nodes: HashMap::new(),
+            reflected: Vec::new(),
             convert_to: None,
         }
     }
@@ -144,6 +148,39 @@ impl Machine<'_> {
     }
 
     /// The position of field `name` in `v` (a tuple index, or a struct's or variant's field).
+    /// The field a reflected name `node` (a path of one name) stands for: the struct's key and
+    /// the field's index.
+    fn reflected(&self, node: &SyntaxNode) -> Option<(String, usize)> {
+        if node.kind() != K::PATH_EXPR {
+            return None;
+        }
+        let segs = segments(node);
+        let [name] = segs.as_slice() else {
+            return None;
+        };
+        self.reflected
+            .iter()
+            .rev()
+            .find(|(n, ..)| n == name)
+            .map(|(_, k, i)| (k.clone(), *i))
+    }
+
+    /// The refinement field `i` of struct `key` is of, by its key, if it is one.
+    fn field_refinement(&self, key: &str, i: usize) -> Option<String> {
+        let adt = &self.program.adts[key];
+        let ty = adt.variants[0].types.get(i).cloned().flatten()?;
+        let path = crate::program::type_path(ty.syntax());
+        match self.program.resolve(adt.module, &path) {
+            Some((crate::program::Def::Item(k), n))
+                if n == path.len()
+                    && self.program.types.get(&k).is_some_and(|t| t.pred.is_some()) =>
+            {
+                Some(k)
+            }
+            _ => None,
+        }
+    }
+
     fn field_index(&self, v: &Value, name: &str) -> usize {
         match v {
             Value::Tuple(_) => name.parse().expect("a tuple index"),
@@ -170,7 +207,12 @@ impl Machine<'_> {
                 }
             }
             ast::Expr::Paren(_) => self.place_of(&e.sub_exprs()[0])?,
-            ast::Expr::Field(_) => {
+            // `f.name` of a reflected field is a value, not a place.
+            ast::Expr::Field(_) if self.reflected(e.sub_exprs()[0].syntax()).is_some() => {
+                let v = self.eval(e)?;
+                Some((self.memory.temp(v), false))
+            }
+            ast::Expr::Field(_) | ast::Expr::ReflectedField(_) => {
                 let base = &e.sub_exprs()[0];
                 let (mut p, mut indirect) = match self.place_of(base)? {
                     Some(p) => p,
@@ -185,7 +227,15 @@ impl Machine<'_> {
                     p = target;
                     indirect = true;
                 }
-                let i = self.field_index(&self.memory.load(&p), &member_name(e.syntax()));
+                let i = match e {
+                    // `x.[f]`: the field `f` names (`comptime.template.field.1`).
+                    ast::Expr::ReflectedField(_) => {
+                        self.reflected(e.sub_exprs()[1].syntax())
+                            .expect("a checked reflected field")
+                            .1
+                    }
+                    _ => self.field_index(&self.memory.load(&p), &member_name(e.syntax())),
+                };
                 p.path.push(i);
                 Some((p, indirect))
             }

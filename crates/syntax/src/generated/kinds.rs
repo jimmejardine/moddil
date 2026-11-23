@@ -206,87 +206,89 @@ impl SyntaxKind {
     pub const IMPL_KW: SyntaxKind = SyntaxKind(100);
     /// 'in'
     pub const IN_KW: SyntaxKind = SyntaxKind(101);
+    /// 'inline'
+    pub const INLINE_KW: SyntaxKind = SyntaxKind(102);
     /// 'invariant'
-    pub const INVARIANT_KW: SyntaxKind = SyntaxKind(102);
+    pub const INVARIANT_KW: SyntaxKind = SyntaxKind(103);
     /// 'let'
-    pub const LET_KW: SyntaxKind = SyntaxKind(103);
+    pub const LET_KW: SyntaxKind = SyntaxKind(104);
     /// 'linear'
-    pub const LINEAR_KW: SyntaxKind = SyntaxKind(104);
+    pub const LINEAR_KW: SyntaxKind = SyntaxKind(105);
     /// 'loop'
-    pub const LOOP_KW: SyntaxKind = SyntaxKind(105);
+    pub const LOOP_KW: SyntaxKind = SyntaxKind(106);
     /// 'match'
-    pub const MATCH_KW: SyntaxKind = SyntaxKind(106);
+    pub const MATCH_KW: SyntaxKind = SyntaxKind(107);
     /// 'mod'
-    pub const MOD_KW: SyntaxKind = SyntaxKind(107);
+    pub const MOD_KW: SyntaxKind = SyntaxKind(108);
     /// 'mut'
-    pub const MUT_KW: SyntaxKind = SyntaxKind(108);
+    pub const MUT_KW: SyntaxKind = SyntaxKind(109);
     /// 'nondet'
-    pub const NONDET_KW: SyntaxKind = SyntaxKind(109);
+    pub const NONDET_KW: SyntaxKind = SyntaxKind(110);
     /// 'note'
-    pub const NOTE_KW: SyntaxKind = SyntaxKind(110);
+    pub const NOTE_KW: SyntaxKind = SyntaxKind(111);
     /// 'property'
-    pub const PROPERTY_KW: SyntaxKind = SyntaxKind(111);
+    pub const PROPERTY_KW: SyntaxKind = SyntaxKind(112);
     /// 'pub'
-    pub const PUB_KW: SyntaxKind = SyntaxKind(112);
+    pub const PUB_KW: SyntaxKind = SyntaxKind(113);
     /// 'ref'
-    pub const REF_KW: SyntaxKind = SyntaxKind(113);
+    pub const REF_KW: SyntaxKind = SyntaxKind(114);
     /// 'requires'
-    pub const REQUIRES_KW: SyntaxKind = SyntaxKind(114);
+    pub const REQUIRES_KW: SyntaxKind = SyntaxKind(115);
     /// 'resume'
-    pub const RESUME_KW: SyntaxKind = SyntaxKind(115);
+    pub const RESUME_KW: SyntaxKind = SyntaxKind(116);
     /// 'return'
-    pub const RETURN_KW: SyntaxKind = SyntaxKind(116);
+    pub const RETURN_KW: SyntaxKind = SyntaxKind(117);
     /// 'select'
-    pub const SELECT_KW: SyntaxKind = SyntaxKind(117);
+    pub const SELECT_KW: SyntaxKind = SyntaxKind(118);
     /// 'self'
-    pub const SELF_KW: SyntaxKind = SyntaxKind(118);
+    pub const SELF_KW: SyntaxKind = SyntaxKind(119);
     /// 'Self'
-    pub const SELF_TYPE_KW: SyntaxKind = SyntaxKind(119);
+    pub const SELF_TYPE_KW: SyntaxKind = SyntaxKind(120);
     /// 'spawn'
-    pub const SPAWN_KW: SyntaxKind = SyntaxKind(120);
+    pub const SPAWN_KW: SyntaxKind = SyntaxKind(121);
     /// 'static'
-    pub const STATIC_KW: SyntaxKind = SyntaxKind(121);
+    pub const STATIC_KW: SyntaxKind = SyntaxKind(122);
     /// 'struct'
-    pub const STRUCT_KW: SyntaxKind = SyntaxKind(122);
+    pub const STRUCT_KW: SyntaxKind = SyntaxKind(123);
     /// 'super'
-    pub const SUPER_KW: SyntaxKind = SyntaxKind(123);
+    pub const SUPER_KW: SyntaxKind = SyntaxKind(124);
     /// 'suspend'
-    pub const SUSPEND_KW: SyntaxKind = SyntaxKind(124);
+    pub const SUSPEND_KW: SyntaxKind = SyntaxKind(125);
     /// 'test'
-    pub const TEST_KW: SyntaxKind = SyntaxKind(125);
+    pub const TEST_KW: SyntaxKind = SyntaxKind(126);
     /// 'trait'
-    pub const TRAIT_KW: SyntaxKind = SyntaxKind(126);
+    pub const TRAIT_KW: SyntaxKind = SyntaxKind(127);
     /// 'true'
-    pub const TRUE_KW: SyntaxKind = SyntaxKind(127);
+    pub const TRUE_KW: SyntaxKind = SyntaxKind(128);
     /// 'try'
-    pub const TRY_KW: SyntaxKind = SyntaxKind(128);
+    pub const TRY_KW: SyntaxKind = SyntaxKind(129);
     /// 'type'
-    pub const TYPE_KW: SyntaxKind = SyntaxKind(129);
+    pub const TYPE_KW: SyntaxKind = SyntaxKind(130);
     /// 'unit'
-    pub const UNIT_KW: SyntaxKind = SyntaxKind(130);
+    pub const UNIT_KW: SyntaxKind = SyntaxKind(131);
     /// 'unsafe'
-    pub const UNSAFE_KW: SyntaxKind = SyntaxKind(131);
+    pub const UNSAFE_KW: SyntaxKind = SyntaxKind(132);
     /// 'use'
-    pub const USE_KW: SyntaxKind = SyntaxKind(132);
+    pub const USE_KW: SyntaxKind = SyntaxKind(133);
     /// 'view'
-    pub const VIEW_KW: SyntaxKind = SyntaxKind(133);
+    pub const VIEW_KW: SyntaxKind = SyntaxKind(134);
     /// 'where'
-    pub const WHERE_KW: SyntaxKind = SyntaxKind(134);
+    pub const WHERE_KW: SyntaxKind = SyntaxKind(135);
     /// 'while'
-    pub const WHILE_KW: SyntaxKind = SyntaxKind(135);
+    pub const WHILE_KW: SyntaxKind = SyntaxKind(136);
     /// 'with'
-    pub const WITH_KW: SyntaxKind = SyntaxKind(136);
+    pub const WITH_KW: SyntaxKind = SyntaxKind(137);
     /// 'yield'
-    pub const YIELD_KW: SyntaxKind = SyntaxKind(137);
+    pub const YIELD_KW: SyntaxKind = SyntaxKind(138);
     /// '_'
-    pub const UNDERSCORE: SyntaxKind = SyntaxKind(138);
+    pub const UNDERSCORE: SyntaxKind = SyntaxKind(139);
 }
 
 /// The number of token kinds; node kinds follow.
-pub(crate) const TOKEN_COUNT: u16 = 139;
+pub(crate) const TOKEN_COUNT: u16 = 140;
 
 /// Each token kind's name, as in the grammar.
-pub(crate) const TOKEN_NAMES: [&str; 139] = [
+pub(crate) const TOKEN_NAMES: [&str; 140] = [
     "EOF",
     "ERROR",
     "WHITESPACE",
@@ -389,6 +391,7 @@ pub(crate) const TOKEN_NAMES: [&str; 139] = [
     "IF_KW",
     "IMPL_KW",
     "IN_KW",
+    "INLINE_KW",
     "INVARIANT_KW",
     "LET_KW",
     "LINEAR_KW",
@@ -429,7 +432,7 @@ pub(crate) const TOKEN_NAMES: [&str; 139] = [
 ];
 
 /// Each token kind's fixed text (punctuation, keywords, `_`), or "".
-pub(crate) const TOKEN_TEXT: [&str; 139] = [
+pub(crate) const TOKEN_TEXT: [&str; 140] = [
     "",
     "",
     "",
@@ -532,6 +535,7 @@ pub(crate) const TOKEN_TEXT: [&str; 139] = [
     "if",
     "impl",
     "in",
+    "inline",
     "invariant",
     "let",
     "linear",
@@ -600,6 +604,7 @@ pub(crate) const KEYWORDS: &[(&str, SyntaxKind)] = &[
     ("if", SyntaxKind::IF_KW),
     ("impl", SyntaxKind::IMPL_KW),
     ("in", SyntaxKind::IN_KW),
+    ("inline", SyntaxKind::INLINE_KW),
     ("invariant", SyntaxKind::INVARIANT_KW),
     ("let", SyntaxKind::LET_KW),
     ("linear", SyntaxKind::LINEAR_KW),
@@ -790,6 +795,7 @@ macro_rules! T {
     [if] => { $crate::SyntaxKind::IF_KW };
     [impl] => { $crate::SyntaxKind::IMPL_KW };
     [in] => { $crate::SyntaxKind::IN_KW };
+    [inline] => { $crate::SyntaxKind::INLINE_KW };
     [invariant] => { $crate::SyntaxKind::INVARIANT_KW };
     [let] => { $crate::SyntaxKind::LET_KW };
     [linear] => { $crate::SyntaxKind::LINEAR_KW };

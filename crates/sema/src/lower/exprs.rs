@@ -16,6 +16,17 @@ impl Lowerer<'_> {
         let range = node.text_range();
         match e {
             ast::Expr::Literal(_) => self.literal(&node, false),
+            ast::Expr::InlineFor(_) => self.inline_for(&node),
+            ast::Expr::ReflectedField(_) => self.reflected_field(&node),
+            ast::Expr::Path(_) if self.reflected(&node).is_some() => {
+                self.report(
+                    Code::E1007,
+                    range,
+                    "a reflected field is used as `f.name`, `x.[f]`, `[f]: e`, `f.is_refined()` or \
+                     `f.new(e)`, not as a value",
+                );
+                self.missing(range)
+            }
             ast::Expr::Path(_) if self.const_param(&node).is_some() => {
                 let i = self.const_param(&node).expect("a const parameter");
                 self.alloc(ExprKind::ConstParam(i), range)
@@ -30,6 +41,14 @@ impl Lowerer<'_> {
                         Code::E0101,
                         at,
                         format!("`{ty}` has no variant called `{name}`"),
+                    );
+                    self.missing(range)
+                }
+                Some(Resolved::Fn(func, _)) if self.items.fns[func as usize].deriver.is_some() => {
+                    self.report(
+                        Code::E1006,
+                        range,
+                        "a derive function is not called: `#[derive]` instantiates its template",
                     );
                     self.missing(range)
                 }
@@ -297,7 +316,19 @@ impl Lowerer<'_> {
     pub(super) fn struct_lit(&mut self, node: &SyntaxNode) -> ExprId {
         let range = node.text_range();
         let mut ty_args = Vec::new();
-        let target = match self.resolve(node) {
+        // In a template, its parameter names the struct (`t { … }`).
+        let names_template = self.template.is_some_and(|t| {
+            node.child(K::PATH)
+                .and_then(ast::Path::cast)
+                .is_some_and(|p| p.segments() == [t.var.clone()])
+        });
+        let resolved = if names_template {
+            None
+        } else {
+            self.resolve(node)
+        };
+        let target = match resolved {
+            _ if names_template => self.template.map(|t| (t.adt, 0)),
             Some(Resolved::Ctor(adt, variant, args)) => {
                 let def = self.items.variant(adt, variant);
                 ty_args = args;
@@ -323,30 +354,7 @@ impl Lowerer<'_> {
         };
         let mut fields: Vec<(u32, ExprId)> = Vec::new();
         let mut given: Vec<(u32, TextRange)> = Vec::new();
-        for init in node.children().filter(|c| c.kind() == K::FIELD_INIT) {
-            let init_range = init.text_range();
-            if init.token(K::DOT_DOT).is_some() {
-                self.error(Diagnostic::unsupported(init_range, "struct update syntax"));
-                continue;
-            }
-            let Some(name_tok) = ast::member_name(&init) else {
-                continue;
-            };
-            let name = name_tok.text().to_string();
-            let value = match init.children().find_map(ast::Expr::cast) {
-                Some(v) => self.expr(&v),
-                None => match self.lookup(&name) {
-                    Some(l) => self.alloc(ExprKind::Local(l), name_tok.text_range()),
-                    None => {
-                        self.report(
-                            Code::E0101,
-                            name_tok.text_range(),
-                            format!("there is nothing called `{name}` here"),
-                        );
-                        self.missing(init_range)
-                    }
-                },
-            };
+        for (name, name_range, value) in self.struct_inits(node) {
             let Some((adt, variant)) = target else {
                 continue;
             };
@@ -356,13 +364,13 @@ impl Lowerer<'_> {
                     if let Some(&(_, first)) = given.iter().find(|(g, _)| *g == i) {
                         let d = Diagnostic::error(
                             Code::E0108,
-                            name_tok.text_range(),
+                            name_range,
                             format!("the field `{name}` is given twice"),
                         )
                         .with_label(first, "first given here");
                         self.error(d);
                     } else {
-                        given.push((i, name_tok.text_range()));
+                        given.push((i, name_range));
                         fields.push((i, value));
                     }
                 }
@@ -370,7 +378,7 @@ impl Lowerer<'_> {
                     let path = self.items.adts[adt as usize].path(variant);
                     self.report(
                         Code::E0107,
-                        name_tok.text_range(),
+                        name_range,
                         format!("`{path}` has no field called `{name}`"),
                     );
                 }
@@ -406,6 +414,20 @@ impl Lowerer<'_> {
     /// `receiver.name::<T>(args)`.
     pub(super) fn method_call(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {
         let range = node.text_range();
+        // A reflected field's `is_refined()` and `new(e)`, in a template.
+        if let Some(k) = e
+            .sub_exprs()
+            .first()
+            .and_then(|r| self.reflected(r.syntax()))
+        {
+            let method = ast::member_name(node).map(|t| t.text().to_string());
+            let args: Vec<ast::Expr> = node
+                .child(K::ARG_LIST)
+                .and_then(ast::ArgList::cast)
+                .map(|l| l.args().filter_map(|a| a.expr()).collect())
+                .unwrap_or_default();
+            return self.reflected_call(k, &method.unwrap_or_default(), &args, range);
+        }
         let receiver = e.sub_exprs().into_iter().next();
         let receiver = self.expr_or_missing(receiver, range);
         let generic_args = node.child(K::GENERIC_ARGS).map(|a| {
@@ -454,6 +476,14 @@ impl Lowerer<'_> {
     /// `base.name` or `base.0`.
     pub(super) fn field(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {
         let range = node.text_range();
+        if let Some(k) = e
+            .sub_exprs()
+            .first()
+            .and_then(|b| self.reflected(b.syntax()))
+        {
+            let member = ast::member_name(node).map(|t| t.text().to_string());
+            return self.reflected_member(k, &member.unwrap_or_default(), range);
+        }
         let base = e.sub_exprs().into_iter().next();
         let base = self.expr_or_missing(base, range);
         match ast::member_name(node) {
@@ -472,7 +502,7 @@ impl Lowerer<'_> {
     pub(super) fn if_expr(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {
         let range = node.text_range();
         if node.token(K::CONST_KW).is_some() {
-            return self.unsupported(range, "`if const`");
+            return self.if_const(node, e);
         }
         let mut subs = e.sub_exprs().into_iter();
         // Names bound by `let` conditions are in scope in the condition after them and in the
@@ -1076,6 +1106,16 @@ impl Lowerer<'_> {
                 return self.alloc(ExprKind::Assert(args[0]), range);
             }
             let resolved = self.resolve(c.syntax());
+            if let Some(Resolved::Fn(func, _)) = &resolved
+                && self.items.fns[*func as usize].deriver.is_some()
+            {
+                self.report(
+                    Code::E1006,
+                    range,
+                    "a derive function is not called: `#[derive]` instantiates its template",
+                );
+                return self.missing(range);
+            }
             let args = self.args(node);
             let callee = match resolved {
                 // A tuple struct or variant applied to its fields.

@@ -786,7 +786,7 @@ SOURCE_FILE
           ATTR
             PATH
               PATH_SEGMENT
-                IDENT "inline"
+                INLINE_KW "inline"
           R_BRACK "]"
         LET_KW "let"
         PATH_PAT

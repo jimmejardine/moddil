@@ -79,6 +79,9 @@ pub(crate) struct FnDef {
     pub(crate) tracked: bool,
     /// Its wrappers, if it has any (`attr.around.1`).
     pub(crate) wrapping: Option<std::sync::Arc<Wrapping>>,
+    /// For a method of a derive's template (`comptime.template.1`): the template's parameter,
+    /// and the key of the struct it is instantiated for.
+    pub(crate) template: Option<(String, String)>,
 }
 
 /// What a wrapped function's expansion needs (`attr.around.1`).
@@ -111,6 +114,9 @@ pub(crate) struct ImplInfo {
 
 pub(crate) struct TraitInfo {
     pub(crate) methods: HashMap<String, FnDef>,
+    /// The derive function `#[derive_by(f)]` names (`attr.derive-by.1`), and the module to find
+    /// it in.
+    pub(crate) derive_by: Option<(String, usize)>,
 }
 
 /// Where a method comes from.
@@ -311,7 +317,80 @@ impl Program {
             p.impls[i].head = head;
             p.impls[i].trait_ = trait_;
         }
+        p.template_impls();
         p
+    }
+
+    /// The impls derives with templates make (`comptime.template.1`): for each struct deriving
+    /// a trait whose `#[derive_by(f)]` names a derive function, `f`'s template's methods, run
+    /// where `f` is written, with its parameter naming the struct.
+    fn template_impls(&mut self) {
+        let mut made = Vec::new();
+        for (key, adt) in &self.adts {
+            for d in &adt.derives {
+                let Some((Def::Item(tr), 1)) = self.resolve(adt.module, std::slice::from_ref(d))
+                else {
+                    continue;
+                };
+                let Some((f, module)) = self.traits.get(&tr).and_then(|t| t.derive_by.clone())
+                else {
+                    continue;
+                };
+                let Some((Def::Item(fk), 1)) = self.resolve(module, &[f]) else {
+                    continue;
+                };
+                let Some(def) = self.fns.get(&fk) else {
+                    continue;
+                };
+                let var = def
+                    .node
+                    .params()
+                    .and_then(|l| l.params().next())
+                    .and_then(|p| p.pat())
+                    .map(|p| p.syntax().text().trim().to_string())
+                    .unwrap_or_default();
+                let Some(template) = def
+                    .node
+                    .body()
+                    .into_iter()
+                    .flat_map(|b| b.syntax().descendants())
+                    .find(|n| n.kind() == K::IMPL_ITEM)
+                else {
+                    continue;
+                };
+                let self_ty = template
+                    .children()
+                    .filter_map(ast::Type::cast)
+                    .nth(1)
+                    .expect("a template's self type");
+                let mut methods = HashMap::new();
+                for m in template.child(K::IMPL_BODY).into_iter().flat_map(|b| {
+                    b.children()
+                        .filter_map(ast::FnItem::cast)
+                        .collect::<Vec<_>>()
+                }) {
+                    let name = m.name().expect("a name").text();
+                    let mut fd = fn_def(&m, def.user, false, (def.file, def.module));
+                    fd.template = Some((var.clone(), key.clone()));
+                    let name = if fd.self_kind.is_none() && methods.contains_key(&name) {
+                        format!("{name} fn")
+                    } else {
+                        name
+                    };
+                    methods.insert(name, fd);
+                }
+                made.push(ImplInfo {
+                    trait_: Some(tr),
+                    head: Head::Adt(key.clone()),
+                    module: def.module,
+                    trait_path: None,
+                    self_ty,
+                    params: Vec::new(),
+                    methods,
+                });
+            }
+        }
+        self.impls.extend(made);
     }
 
     /// The program's sources.
@@ -568,7 +647,16 @@ impl Program {
                 let name = name_of(&item);
                 let key = Program::key(module, &name);
                 self.declare(module, &name, Def::Item(key.clone()));
-                self.traits.insert(key, TraitInfo { methods });
+                let derive_by = item
+                    .children()
+                    .filter(|c| c.kind() == K::OUTER_ATTR)
+                    .find_map(|a| {
+                        let t = a.text().to_string().replace(' ', "");
+                        t.strip_prefix("#[derive_by(")
+                            .and_then(|r| r.strip_suffix(")]"))
+                            .map(|f| (f.to_string(), module))
+                    });
+                self.traits.insert(key, TraitInfo { methods, derive_by });
             }
             K::IMPL_ITEM => {
                 let types: Vec<ast::Type> = item.children().filter_map(ast::Type::cast).collect();
@@ -864,6 +952,7 @@ pub(crate) fn fn_def(f: &ast::FnItem, user: bool, destructor: bool, site: (u32, 
         self_kind,
         destructor,
         wrapping: None,
+        template: None,
     }
 }
 

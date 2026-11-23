@@ -20,6 +20,7 @@ mod fold;
 mod names;
 mod paths;
 mod patterns;
+mod templates;
 pub(crate) mod text;
 mod wrappers;
 
@@ -61,6 +62,8 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
             prelude_first: src == Src::Derived,
             ..Scope::new(items)
         },
+        template: None,
+        reflected: Vec::new(),
     };
     let block = match owner.item(db) {
         Item::Fn(i) => {
@@ -68,6 +71,8 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
             let node = node_at(&root, K::FN_ITEM, sig.node).and_then(ast::FnItem::cast);
             cx.types.params = &sig.generics.params;
             cx.types.preds = &sig.generics.preds;
+            cx.template = sig.template.as_ref();
+            cx.types.template = sig.template.as_ref().map(|t| (t.var.as_str(), &t.ty));
             match sig.container {
                 Container::Impl(k) => {
                     let imp = &items.impls[k as usize];
@@ -327,6 +332,10 @@ struct Lowerer<'a> {
     olds: Option<Vec<(LocalId, ExprId)>>,
     /// What the names in types refer to; types left out are inferred.
     types: Scope<'a>,
+    /// In a method instantiated from a derive's template: what the template's parameter is.
+    template: Option<&'a crate::items::Template>,
+    /// The reflected fields `inline for` names in scope, innermost last: each name and field.
+    reflected: Vec<(String, u32)>,
 }
 
 impl Lowerer<'_> {

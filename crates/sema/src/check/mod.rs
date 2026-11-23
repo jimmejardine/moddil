@@ -844,6 +844,16 @@ impl Checker<'_> {
         if self.items.can_see(f.vis, def.module, self.here()) {
             return true;
         }
+        // A derive's template reads the fields of the struct it is instantiated for: the
+        // derive is the opt-in (`comptime.template.1`).
+        if let Item::Fn(i) = self.owner.owner()
+            && self.items.fns[i as usize]
+                .template
+                .as_ref()
+                .is_some_and(|t| t.adt == adt)
+        {
+            return true;
+        }
         let (name, ty) = (f.name.clone(), def.name.clone());
         self.report(
             Code::E0701,

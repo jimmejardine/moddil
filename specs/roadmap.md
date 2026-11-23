@@ -883,6 +883,47 @@ calls is a Rust crate, `moddil-rt`, for now.
 - **Next:** M2 (the first standard mods in Moddil, `moddil/runtime` and `moddil/runtime-sim`,
   the LSP prototype, and the first GPU path).
 
+## M2: standard mods in Moddil, in slices
+
+M2 grows the standard mods the tour's tests reach, written in Moddil, until those tests pass under
+`moddil/runtime-sim`; then the LSP prototype and the first GPU path. Slices are named M2a, M2b, …
+
+- **Slice M2a (decided November 2026): derives written in Moddil, reflection and impl
+  templates.** The tour derives `Serialize` and `Deserialize`, which `comptime.md` says are
+  compile-time functions published by the serde mod, returning typed impls. The compiler
+  could not do that yet, so it comes first.
+  - **Impl templates:**
+    - a derive function is `const fn f(t: type) -> Impl<Tr>`, its body one `impl Tr for t { … }`;
+    - a trait names it with `#[derive_by(f)]`, and each `#[derive(Tr)]` instantiates it;
+    - instantiation resolves names where the template is written, with `t` and `Self` the
+      struct, and checks the result like hand-written code;
+    - it may read the struct's private fields.
+  - **Reflection:** `inline for f in fields(t)` (Zig's spelling, by the user's choice; `inline`
+    is a new keyword), and `f.name`, `x.[f]`, `[f]: e`, `f.is_refined()`, `f.new(e)`. `if const`
+    chooses by reflection. Structs only: enums and generic structs wait for the construction API.
+  - **The compiler:**
+    - the template's methods are collected in its own scope, and expanded as they are lowered,
+      so MIR, both interpreters' views and both backends see ordinary code;
+    - the reference interpreter implements templates independently, running the template's
+      syntax over the struct's fields.
+  - **serde in Moddil:**
+    - `Serialize` and `Deserialize` with their templates, and JSON (an encoder, and a decoder
+      over a parsed value tree);
+    - a refined field is decoded with its refinement's `new`, and a value that breaks it is a
+      `DecodeError`;
+    - it lives in the stub mod, `stubs/moddil`, beside the signatures still to be written. The
+      tour checks against it.
+  - **Two fixes found on the way:**
+    - a type holding itself through a `Vec` is no longer refused as infinitely large: the check
+      follows fields, as the rule says, not type arguments;
+    - the shared value renderer shows a refined value as its base.
+  - **Checked:**
+    - conformance files for templates (fields, private fields across modules, `if const`, a
+      refined field, and every error), agreeing on all four implementations;
+    - serde's tests (`stubs/tests/serde`) pass natively, on the MIR interpreter and as WASM.
+- **Next, M2b:** the other standard mods the tour reaches (`Map`, `Mutex`, `Rand`, the HTTP router
+  and requests), written in Moddil, and the layout of `mods/`.
+
 ## Staging: distributed programs
 
 | Stage | Delivers |

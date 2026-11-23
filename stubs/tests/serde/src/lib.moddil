@@ -1,0 +1,49 @@
+// serde's own tests: JSON, and `Serialize` and `Deserialize` derived with their templates.
+// They are a project of their own so that the programs using the stub mod do not run them.
+
+use moddil::serde::{Deserialize, Serialize, json};
+
+test "values are encoded and decoded" {
+    let text = json::encode(&String::from_str("a \"q\""));
+    let written: &str = &text;
+    assert(written == r#""a \"q\"""#);
+    let n: int = json::decode(" -42 ")?;
+    assert(n == -42);
+    let s: String = json::decode("\"x\ny\"")?;
+    let read: &str = &s;
+    assert(read == "x
+y");
+    let b: bool = json::decode("true")?;
+    assert(b);
+}
+
+test "bad input is a typed error" {
+    let r = try { let n: int = json::decode("[1")?; n };
+    assert(r.is_err());
+    let r = try { let n: int = json::decode("\"text\"")?; n };
+    assert(r.is_err());
+}
+
+/// Up to three characters.
+type Short = String where self.len() <= 3;
+
+#[derive(Serialize, Deserialize)]
+struct Pair { name: Short, n: int, ok: bool }
+
+test "a derived struct round trips, its fields by name" {
+    let p: Pair = json::decode(r#"{"n": 7, "ok": true, "name": "abc"}"#)?;
+    assert(p.n == 7 && p.ok);
+    let text = json::encode(&p);
+    let written: &str = &text;
+    assert(written == r#"{"name":"abc","n":7,"ok":true}"#);
+}
+
+test "a refined field that breaks its refinement is refused" {
+    let r = try { let p: Pair = json::decode(r#"{"name": "abcd", "n": 1, "ok": false}"#)?; p.n };
+    match r {
+        Ok(_) => assert(false),
+        Err(e) => assert(e.reason().contains("name")),
+    }
+    let r = try { let p: Pair = json::decode(r#"{"name": "abc", "ok": false}"#)?; p.n };
+    assert(r.is_err());
+}

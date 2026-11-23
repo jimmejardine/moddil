@@ -1,9 +1,323 @@
-//! JSON.
+//! JSON: an encoder that writes it, and a decoder that reads a value parsed from it.
+//!
+//! Numbers are integers, for now.
 
 use mod::serde::{DecodeError, Deserialize, Serialize};
 
 /// Decodes `text` as a `T`, validating it.
-pub fn decode<T: Deserialize>(text: &str) -> T with fail(DecodeError);
+pub fn decode<T: Deserialize>(text: &str) -> T with fail(DecodeError) {
+    let mut p = Parser { text: String::from_str(text), at: 0 };
+    let value = p.value()?;
+    p.space();
+    if p.at < p.text.len() {
+        fail(p.error("text after the value"));
+    }
+    T::deserialize(Decoder { value })?
+}
 
 /// Encodes `value`.
-pub fn encode<T: Serialize>(value: &T) -> String;
+pub fn encode<T: Serialize>(value: &T) -> String {
+    let mut out = Encoder { text: String::new(), fresh: true };
+    value.serialize(&mut out);
+    out.text
+}
+
+/// A JSON value, parsed.
+#[derive(Clone, Debug)]
+pub enum Json {
+    Null,
+    Bool(bool),
+    Number(int),
+    Text(String),
+    List(Vec<Json>),
+    Object(Vec<Member>),
+}
+
+/// A member of an object: its name and its value.
+#[derive(Clone, Debug)]
+pub struct Member { name: String, value: Json }
+
+/// Writes JSON text.
+pub struct Encoder { text: String, fresh: bool }
+
+impl Encoder {
+    /// Starts an object.
+    pub fn begin_object(&mut self) {
+        self.text.push_str("{");
+        self.fresh = true;
+    }
+
+    /// The name of the object's next member, whose value is written next.
+    pub fn key(&mut self, name: &str) {
+        if !self.fresh {
+            self.text.push_str(",");
+        }
+        self.fresh = false;
+        self.quote(name);
+        self.text.push_str(":");
+    }
+
+    /// Ends the object.
+    pub fn end_object(&mut self) {
+        self.text.push_str("}");
+        self.fresh = false;
+    }
+
+    /// A string.
+    pub fn text(&mut self, s: &str) {
+        self.quote(s);
+    }
+
+    /// A number.
+    pub fn number(&mut self, n: int) {
+        self.text.push_str(n.text());
+    }
+
+    /// `true` or `false`.
+    pub fn boolean(&mut self, b: bool) {
+        self.text.push_str(if b { "true" } else { "false" });
+    }
+
+    fn quote(&mut self, s: &str) {
+        self.text.push_str("\"");
+        for c in s.chars() {
+            if c == '"' {
+                self.text.push_str("\\\"");
+            } else if c == '\\' {
+                self.text.push_str("\\\\");
+            } else if c == '\n' {
+                self.text.push_str("\\n");
+            } else if c == '\t' {
+                self.text.push_str("\\t");
+            } else {
+                self.text.push(c);
+            }
+        }
+        self.text.push_str("\"");
+    }
+}
+
+/// Reads a JSON value: the value a type decodes itself from.
+pub struct Decoder { value: Json }
+
+impl Decoder {
+    /// The member `name` of the object, decoded as a `T`.
+    pub fn field<T: Deserialize>(&self, name: &str) -> T with fail(DecodeError) {
+        let Json::Object(members) = &self.value else {
+            fail(DecodeError::new(fmt"expected an object with `{name}`"));
+        };
+        let mut i = 0;
+        while i < members.len() {
+            let here: &str = &members[i].name;
+            if here == name {
+                return T::deserialize(Decoder { value: members[i].value.clone() })?;
+            }
+            i += 1;
+        }
+        fail(DecodeError::new(fmt"no field `{name}`"))
+    }
+
+    /// The string the value is.
+    pub fn text(&self) -> String with fail(DecodeError) {
+        match &self.value {
+            Json::Text(s) => s.clone(),
+            _ => fail(DecodeError::new(String::from_str("expected a string"))),
+        }
+    }
+
+    /// The number the value is.
+    pub fn number(&self) -> int with fail(DecodeError) {
+        match &self.value {
+            Json::Number(n) => *n,
+            _ => fail(DecodeError::new(String::from_str("expected a number"))),
+        }
+    }
+
+    /// The `true` or `false` the value is.
+    pub fn boolean(&self) -> bool with fail(DecodeError) {
+        match &self.value {
+            Json::Bool(b) => *b,
+            _ => fail(DecodeError::new(String::from_str("expected `true` or `false`"))),
+        }
+    }
+}
+
+/// Parses JSON text: `at` is the next byte's offset.
+struct Parser { text: String, at: int }
+
+impl Parser {
+    fn error(&self, what: &str) -> DecodeError {
+        DecodeError::new(fmt"{what} at byte {self.at}")
+    }
+
+    /// The next byte, if there is one.
+    fn peek(&self) -> Option<u8> {
+        let text: &str = &self.text;
+        if self.at < text.len() {
+            Some(text.byte_at(self.at))
+        } else {
+            None
+        }
+    }
+
+    /// Skips white space.
+    fn space(&mut self) {
+        loop {
+            match self.peek() {
+                Some(b) if b == 32 || b == 9 || b == 10 || b == 13 => self.at += 1,
+                _ => break,
+            }
+        }
+    }
+
+    /// Takes `b` if it is next.
+    fn eat(&mut self, b: u8) -> bool {
+        self.space();
+        if self.peek() == Some(b) {
+            self.at += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Takes the word `w`, which is next.
+    fn word(&mut self, w: &str) -> bool {
+        let text: &str = &self.text;
+        if self.at + w.len() > text.len() {
+            return false;
+        }
+        let mut i = 0;
+        while i < w.len() {
+            if text.byte_at(self.at + i) != w.byte_at(i) {
+                return false;
+            }
+            i += 1;
+        }
+        self.at += w.len();
+        true
+    }
+
+    fn value(&mut self) -> Json with fail(DecodeError) {
+        self.space();
+        match self.peek() {
+            None => fail(self.error("expected a value")),
+            Some(b) if b == 123 => self.object()?,
+            Some(b) if b == 91 => self.list()?,
+            Some(b) if b == 34 => Json::Text(self.string()?),
+            Some(b) if b == 45 || (b >= 48 && b <= 57) => Json::Number(self.number()?),
+            Some(_) if self.word("true") => Json::Bool(true),
+            Some(_) if self.word("false") => Json::Bool(false),
+            Some(_) if self.word("null") => Json::Null,
+            Some(_) => fail(self.error("expected a value")),
+        }
+    }
+
+    fn object(&mut self) -> Json with fail(DecodeError) {
+        self.at += 1;
+        let mut members = Vec::new();
+        if self.eat(125) {
+            return Json::Object(members);
+        }
+        loop {
+            self.space();
+            if self.peek() != Some(34) {
+                fail(self.error("expected a member's name"));
+            }
+            let name = self.string()?;
+            if !self.eat(58) {
+                fail(self.error("expected `:`"));
+            }
+            let value = self.value()?;
+            members.push(Member { name, value });
+            if self.eat(44) {
+                continue;
+            }
+            if self.eat(125) {
+                return Json::Object(members);
+            }
+            fail(self.error("expected `,` or `}`"));
+        }
+    }
+
+    fn list(&mut self) -> Json with fail(DecodeError) {
+        self.at += 1;
+        let mut items = Vec::new();
+        if self.eat(93) {
+            return Json::List(items);
+        }
+        loop {
+            items.push(self.value()?);
+            if self.eat(44) {
+                continue;
+            }
+            if self.eat(93) {
+                return Json::List(items);
+            }
+            fail(self.error("expected `,` or `]`"));
+        }
+    }
+
+    /// A string, its escapes undone; `at` is its opening quote.
+    fn string(&mut self) -> String with fail(DecodeError) {
+        self.at += 1;
+        let mut bytes: Vec<u8> = Vec::new();
+        loop {
+            let Some(b) = self.peek() else {
+                fail(self.error("a string without its closing quote"));
+            };
+            self.at += 1;
+            if b == 34 {
+                break;
+            }
+            if b == 92 {
+                let Some(e) = self.peek() else {
+                    fail(self.error("an escape at the end"));
+                };
+                self.at += 1;
+                let c: u8 = if e == 110 {
+                    10
+                } else if e == 116 {
+                    9
+                } else if e == 114 {
+                    13
+                } else if e == 34 || e == 92 || e == 47 {
+                    e
+                } else {
+                    fail(self.error("an escape not supported"));
+                };
+                bytes.push(c);
+            } else {
+                bytes.push(b);
+            }
+        }
+        let at = self.at;
+        try { String::from_utf8(bytes)? } catch {
+            _ => fail(DecodeError::new(fmt"a string that is not UTF-8 before byte {at}")),
+        }
+    }
+
+    fn number(&mut self) -> int with fail(DecodeError) {
+        let negative = self.peek() == Some(45);
+        if negative {
+            self.at += 1;
+        }
+        let mut n = 0;
+        let mut digits = 0;
+        loop {
+            match self.peek() {
+                Some(b) if b >= 48 && b <= 57 => {
+                    let digit: int = b - 48;
+                    n = n * 10 + digit;
+                    digits += 1;
+                    self.at += 1;
+                }
+                _ => break,
+            }
+        }
+        if digits == 0 {
+            fail(self.error("expected a digit"));
+        }
+        if negative { -n } else { n }
+    }
+}

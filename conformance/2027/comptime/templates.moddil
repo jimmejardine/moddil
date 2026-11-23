@@ -1,0 +1,76 @@
+// covers: comptime.derive.1, comptime.template.1, comptime.template.inline.1, comptime.template.field.1, comptime.template.if.1, attr.derive-by.1
+
+/// Lists a value's fields, by name.
+#[derive_by(listing)]
+trait Listing {
+    fn listing(&self) -> String;
+    fn names() -> String;
+}
+
+const fn listing(t: type) -> Impl<Listing> {
+    impl Listing for t {
+        fn listing(&self) -> String {
+            let mut out = String::new();
+            inline for f in fields(t) {
+                out.push_str(f.name);
+                out.push_str("=");
+                out.push_str(self.[f].text());
+                if const f.is_refined() {
+                    out.push_str("!");
+                }
+                out.push_str(";");
+            }
+            out
+        }
+        fn names() -> String {
+            let mut out = String::new();
+            inline for f in fields(t) {
+                if const f.name != "secret" {
+                    out.push_str(f.name);
+                    out.push_str(" ");
+                }
+            }
+            out
+        }
+    }
+}
+
+/// Makes a value with each field from the one before.
+#[derive_by(counting)]
+trait Counting {
+    fn counting(start: int) -> Self;
+}
+
+const fn counting(t: type) -> Impl<Counting> {
+    impl Counting for t {
+        fn counting(start: int) -> Self {
+            let mut n = start;
+            t {
+                inline for f in fields(t) {
+                    [f]: if const f.is_refined() { f.new({ n += 1; n }) ?! "small" } else { n += 1; n },
+                }
+            }
+        }
+    }
+}
+
+type Small = int where self < 100;
+
+#[derive(Listing, Counting, Debug)]
+struct Point { x: int, y: Small, secret: int }
+
+#[derive(Listing)]
+struct Empty {}
+
+test "a template's impl is written once for each field" {
+    let p = Point { x: 1, y: Small::new(2) ?! "small", secret: 3 };
+    p.listing()                             // => "x=1;y=2!;secret=3;"
+    ;
+    Point::names()                          // => "x y "
+    ;
+    Empty {}.listing()                      // => ""
+}
+
+test "a struct literal takes a field for each" {
+    Point::counting(10)                     // => Point { x: 11, y: 12, secret: 13 }
+}

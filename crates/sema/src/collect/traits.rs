@@ -65,6 +65,9 @@ impl Collector<'_> {
         };
         let index = self.tree.traits.len() as u32;
         self.declare(src, &name, Def::Trait(index), vis, name_range);
+        if let Some(d) = super::templates::derive_by_attr(node) {
+            self.derive_by_names.insert(index, d);
+        }
         self.tree.traits.push(TraitDef {
             name,
             name_range,
@@ -80,11 +83,13 @@ impl Collector<'_> {
             methods: Vec::new(),
             vis,
             module: self.module,
+            derive_by: None,
         });
     }
 
     pub(super) fn trait_header(&mut self, i: usize, src: Src, node: &SyntaxNode) {
-        self.unsupported_parts(src, node, false);
+        self.unsupported_parts(src, node, true);
+        self.derive_by(i, src, node);
         let def = &self.tree.traits[i];
         let params = def.generics.params.clone();
         let bounded: Vec<(usize, SyntaxNode)> = node
@@ -403,6 +408,15 @@ impl Collector<'_> {
             }
         }
         self.reporter.report(src, origin, ds);
+        // A derive of a trait whose derive function is a template (`comptime.derive.1`): its
+        // methods are the template's.
+        let template = (src == Src::Derived)
+            .then(|| {
+                trait_ref
+                    .as_ref()
+                    .and_then(|t| self.tree.traits[t.trait_ as usize].derive_by)
+            })
+            .flatten();
         self.tree.impls.push(ImplDef {
             src,
             range,
@@ -424,6 +438,18 @@ impl Collector<'_> {
             params,
             preds,
         };
+        if let Some(f) = template {
+            self.template_methods(
+                f,
+                index,
+                &self_ty,
+                &generics,
+                trait_ref.as_ref(),
+                &assoc,
+                origin,
+            );
+            return;
+        }
         // A function and a method may share a name, told apart by `self`
         // (`item.impl.same-name.1`): two of one kind may not.
         let mut names: HashMap<(String, bool), TextRange> = HashMap::new();

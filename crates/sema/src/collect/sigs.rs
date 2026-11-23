@@ -386,6 +386,8 @@ impl Collector<'_> {
                 _ => crate::items::Vis::Pub,
             },
             module: self.module,
+            deriver: None,
+            template: self.template.clone(),
         }
     }
 
@@ -443,6 +445,8 @@ impl Collector<'_> {
                 _ => crate::items::Vis::Pub,
             },
             module: self.module,
+            deriver: None,
+            template: None,
         }
     }
 

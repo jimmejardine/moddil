@@ -5,6 +5,8 @@
 //! tree is built, the checks in [`crate::validate`] run on it, and the [`report::Reporter`]
 //! decides which problems the user sees.
 
+use std::collections::HashMap;
+
 use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{Parse, SyntaxKind as K, SyntaxNode, TextRange};
 
@@ -21,6 +23,7 @@ use crate::{Code, Db, Diagnostic, SourceFile, Ty};
 mod adts;
 mod report;
 mod sigs;
+mod templates;
 
 pub(crate) use sigs::error_type;
 mod traits;
@@ -185,6 +188,9 @@ pub fn item_tree(db: &dyn Db, program: Program) -> ItemTree {
         prelude_first: false,
         file_modules: Vec::new(),
         core_module: PRELUDE_MODULE,
+        derivers: HashMap::new(),
+        template: None,
+        derive_by_names: HashMap::new(),
     };
     c.modules(program.files(db), program.mods(db));
     c.run(&sources);
@@ -220,6 +226,14 @@ struct Collector<'a> {
     file_modules: Vec<u32>,
     /// The built-in `core` mod's `collections` module.
     core_module: u32,
+    /// Each derive function (`comptime.derive.1`), by index among the functions: its source,
+    /// its module and its node.
+    derivers: HashMap<u32, (Src, u32, SyntaxNode)>,
+    /// While a template's methods are collected: what its parameter is.
+    template: Option<crate::items::Template>,
+    /// Each trait's `#[derive_by(f)]`, by the trait's index: the name it gives, before it is
+    /// resolved.
+    derive_by_names: HashMap<u32, (String, TextRange)>,
 }
 
 impl Collector<'_> {
@@ -228,6 +242,7 @@ impl Collector<'_> {
         Scope {
             module: self.module,
             prelude_first: self.prelude_first,
+            template: self.template.as_ref().map(|t| (t.var.as_str(), &t.ty)),
             ..Scope::new(&self.tree)
         }
     }
@@ -458,6 +473,12 @@ impl Collector<'_> {
             self.type_skeleton(*src, node);
         }
         let first_free = self.free_fns(&nodes.fns);
+        for (k, (src, module, node)) in nodes.fns.iter().enumerate() {
+            if templates::is_deriver(node) {
+                self.derivers
+                    .insert((first_free + k) as u32, (*src, *module, node.clone()));
+            }
+        }
         for (k, (src, module, node)) in nodes.types.iter().enumerate() {
             self.enter(*src, *module);
             self.type_item(k, *src, node);
@@ -482,6 +503,7 @@ impl Collector<'_> {
                 && let Some(tr) = derived_trait(node)
                 && !derive::DERIVABLE.contains(&tr.as_str())
                 && !self.stub_trait(&tr)
+                && self.derive_fn(&tr).is_none()
             {
                 continue;
             }
@@ -491,6 +513,9 @@ impl Collector<'_> {
             self.enter(*src, *module);
             if node.kind() == K::CONST_ITEM {
                 let sig = self.const_sig(node, *src);
+                self.tree.fns[first_free + k] = sig;
+            } else if self.derivers.contains_key(&((first_free + k) as u32)) {
+                let sig = self.deriver_sig(node, *src);
                 self.tree.fns[first_free + k] = sig;
             } else if let Some(f) = ast::FnItem::cast(node.clone()) {
                 let sig = self.fn_sig(
@@ -876,6 +901,8 @@ impl Collector<'_> {
             refine: Some((k as u32, is_new)),
             vis: def.vis,
             module: def.module,
+            deriver: None,
+            template: None,
         };
         let holds = self.tree.fns.len() as u32;
         // `holds` gives the value back, so a base that is not `Copy` is not used up.
@@ -1016,6 +1043,8 @@ impl Collector<'_> {
                     refine: None,
                     vis: Vis::Pub,
                     module,
+                    deriver: None,
+                    template: None,
                 });
             }
             if defaults.iter().any(Option::is_some) {

@@ -10,42 +10,43 @@ use crate::{Code, Diagnostic, Ty};
 /// Reports every struct or enum that contains itself without indirection (E0211), and makes
 /// the fields of each an error so that later passes need not care.
 pub(crate) fn recursive_types(tree: &mut ItemTree) -> Vec<Found> {
-    // A `Box` keeps its value on the heap: the indirection (`type.box.1`).
-    let boxed = tree.lang("Box");
-    fn contains(t: &Ty, boxed: Option<u32>, out: &mut Vec<u32>) {
+    // A type holds what its fields hold by value: through other structs, enums, tuples and
+    // arrays, with their type arguments in place. A `Box` or a `Vec` keeps its values on the
+    // heap (its fields hold a `Buf`), which is the indirection (`type.box.1`).
+    fn reaches(
+        tree: &ItemTree,
+        t: &Ty,
+        target: u32,
+        seen: &mut std::collections::HashSet<Ty>,
+    ) -> bool {
         match t {
-            Ty::Adt(i, ..) if Some(*i) == boxed => {}
-            Ty::Adt(i, _, args) => {
-                out.push(*i);
-                args.iter().for_each(|t| contains(t, boxed, out));
+            Ty::Adt(i, ..) if *i == target => true,
+            Ty::Adt(i, ..) => {
+                if !seen.insert(t.clone()) {
+                    return false;
+                }
+                let n = tree.adts[*i as usize].variants.len() as u32;
+                (0..n).any(|v| {
+                    tree.field_types(t, v)
+                        .iter()
+                        .any(|f| reaches(tree, f, target, seen))
+                })
             }
-            Ty::Tuple(ts) => ts.iter().for_each(|t| contains(t, boxed, out)),
-            _ => {}
+            Ty::Tuple(ts) => ts.iter().any(|x| reaches(tree, x, target, seen)),
+            Ty::Array(e, _) => reaches(tree, e, target, seen),
+            _ => false,
         }
     }
-    let edges: Vec<Vec<u32>> = tree
-        .adts
-        .iter()
-        .map(|a| {
-            let mut out = Vec::new();
-            for f in a.variants.iter().flat_map(|v| &v.fields) {
-                contains(&f.ty, boxed, &mut out);
-            }
-            out
-        })
-        .collect();
     let mut cyclic = Vec::new();
     for start in 0..tree.adts.len() {
-        let mut seen = vec![false; tree.adts.len()];
-        let mut work: Vec<u32> = edges[start].clone();
-        while let Some(n) = work.pop() {
-            if n as usize == start {
-                cyclic.push(start);
-                break;
-            }
-            if !std::mem::replace(&mut seen[n as usize], true) {
-                work.extend(&edges[n as usize]);
-            }
+        let mut seen = std::collections::HashSet::new();
+        let found = tree.adts[start]
+            .variants
+            .iter()
+            .flat_map(|v| &v.fields)
+            .any(|f| reaches(tree, &f.ty, start as u32, &mut seen));
+        if found {
+            cyclic.push(start);
         }
     }
     let mut found = Vec::new();
@@ -168,6 +169,11 @@ pub(crate) fn derived_fields(tree: &ItemTree) -> Vec<Diagnostic> {
         let def = &tree.adts[a as usize];
         let name = tr.name.as_ref();
         if matches!(name, "Copy" | "Eq") || (name == "Clone" && def.copy) {
+            continue;
+        }
+        // A derive with a template asks of the fields only what the template's code does,
+        // and that is checked where it is (`comptime.template.1`).
+        if tree.traits[tr.trait_ as usize].derive_by.is_some() {
             continue;
         }
         let mut solver = Solver::new(tree, &imp.generics.preds);

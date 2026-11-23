@@ -117,7 +117,7 @@ attr_path_2_rep: (attr_path_1_grp attr_path_2_rep)?
 token_tree: "(" token_tree_1_rep ")" | "[" token_tree_2_rep "]" | "{" token_tree_3_rep "}" | any_token
 attr_input_1_rep: (token_tree attr_input_1_rep)?
 literal: number literal_1_opt_opt | STRING | RAW_STRING | BYTE_STRING | BLOCK_STRING | TAGGED_STRING | CHAR | BYTE | "true" | "false"
-keyword: "always" | "as" | "bench" | "break" | "catch" | "const" | "continue" | "default" | "defer" | "dimension" | "dyn" | "else" | "ensures" | "enum" | "errdefer" | "escape" | "extern" | "fail" | "false" | "fn" | "for" | "from" | "gen" | "group" | "if" | "impl" | "in" | "invariant" | "let" | "linear" | "loop" | "match" | "mod" | "mut" | "nondet" | "note" | "property" | "pub" | "ref" | "requires" | "resume" | "return" | "select" | "self" | "Self" | "spawn" | "static" | "struct" | "super" | "suspend" | "test" | "trait" | "true" | "try" | "type" | "unit" | "unsafe" | "use" | "view" | "where" | "while" | "with" | "yield"
+keyword: "always" | "as" | "bench" | "break" | "catch" | "const" | "continue" | "default" | "defer" | "dimension" | "dyn" | "else" | "ensures" | "enum" | "errdefer" | "escape" | "extern" | "fail" | "false" | "fn" | "for" | "from" | "gen" | "group" | "if" | "impl" | "in" | "inline" | "invariant" | "let" | "linear" | "loop" | "match" | "mod" | "mut" | "nondet" | "note" | "property" | "pub" | "ref" | "requires" | "resume" | "return" | "select" | "self" | "Self" | "spawn" | "static" | "struct" | "super" | "suspend" | "test" | "trait" | "true" | "try" | "type" | "unit" | "unsafe" | "use" | "view" | "where" | "while" | "with" | "yield"
 generic_param: generic_param_1_rep generic_param_2_grp
 generic_params_1_grp: "," generic_param
 generic_params_2_rep: (generic_params_1_grp generic_params_2_rep)?
@@ -215,7 +215,7 @@ param_entry_1_rep: (outer_attr param_entry_1_rep)?
 param_entry_2_grp: self_param | "*" | param
 self_param: "&" self_param_1_opt "self" | self_param_2_opt "self" self_param_4_opt
 param: pattern_no_alt param_2_opt param_4_opt
-type_core: path_type | "&" type_core_1_opt type_nb | "*" type_core_2_grp type_nb | "[" type type_core_4_opt "]" | "(" paren_type_rest | "{" member_name ":" type type_core_6_rep type_core_7_opt "}" | "fn" "(" type_core_8_opt ")" type_core_10_opt | "!" | "_"
+type_core: path_type | "&" type_core_1_opt type_nb | "*" type_core_2_grp type_nb | "[" type type_core_4_opt "]" | "(" paren_type_rest | "{" member_name ":" type type_core_6_rep type_core_7_opt "}" | "fn" "(" type_core_8_opt ")" type_core_10_opt | "!" | "_" | "type"
 from_clause_1_grp: "," IDENT
 from_clause_2_rep: (from_clause_1_grp from_clause_2_rep)?
 sig_effect: sig_effect_2_opt effect_atom
@@ -411,7 +411,7 @@ let_stmt_5_opt: (let_stmt_4_grp)?
 let_stmt_6_opt: (let_stmt_3_grp)?
 defer_stmt_1_grp: "defer" | "errdefer"
 defer_stmt_2_grp: block | expr_stmt ";"
-block_like_keyword: if_expr | match_expr | loop_expr | while_expr | for_expr | labelled | try_expr | with_expr | select_expr | unsafe_block | "gen" block
+block_like_keyword: if_expr | match_expr | loop_expr | while_expr | for_expr | labelled | try_expr | with_expr | select_expr | unsafe_block | inline_for | "gen" block
 range_stmt: or_stmt range_stmt_3_opt | range_op range_stmt_4_opt
 assign_stmt_1_grp: assign_op expr
 assign_stmt_2_opt: (assign_stmt_1_grp)?
@@ -471,6 +471,7 @@ try_expr: "try" block try_expr_2_opt
 with_expr: "with" handler with_expr_2_rep block
 select_expr: "select" "{" select_arms "}"
 unsafe_block: "unsafe" "(" STRING ")" block
+inline_for: "inline" "for" pattern "in" expr_ns block
 or_stmt: and_stmt or_stmt_2_rep
 range_stmt_1_grp: range_op range_stmt_2_opt
 range_stmt_2_opt: (or)?
@@ -671,7 +672,7 @@ multiplicative_stmt_1_grp: multiplicative_stmt_2_grp unary
 multiplicative_stmt_2_grp: "*" | "/" | "%" | "*%" | "@"
 multiplicative_stmt_3_rep: (multiplicative_stmt_1_grp multiplicative_stmt_3_rep)?
 primary: literal | expr_path primary_1_opt | "(" primary_10_opt ")" | "[" primary_16_opt "]" | "{" member_name ":" expr primary_18_rep primary_19_opt "}" | block | "const" block | block_like_keyword | "impl" type impl_body | "fail" "(" expr ")"
-postfix_op: "?" postfix_op_1_opt | "?!" STRING | call_args | "." member_name postfix_op_3_opt postfix_op_4_opt_opt | "." INTEGER | "[" index_arg postfix_op_6_rep postfix_op_7_opt "]"
+postfix_op: "?" postfix_op_1_opt | "?!" STRING | call_args | "." member_name postfix_op_3_opt postfix_op_4_opt_opt | "." INTEGER | "." "[" expr "]" | "[" index_arg postfix_op_6_rep postfix_op_7_opt "]"
 postfix_1_rep: (postfix_op postfix_1_rep)?
 unary_ns: unary_ns_1_grp unary_ns | "\\" type_path unary_ns_3_grp unary_ns_4_rep | postfix_ns
 multiplicative_ns_1_grp: multiplicative_ns_2_grp unary_ns
@@ -760,7 +761,7 @@ primary_stmt_17_grp: "," member_name ":" expr
 primary_stmt_18_rep: (primary_stmt_17_grp primary_stmt_18_rep)?
 primary_stmt_19_opt: (",")?
 struct_fields_1_grp: field_init struct_fields_3_rep struct_fields_4_opt
-field_init: member_name field_init_2_opt | ".." expr
+field_init: member_name field_init_2_opt | ".." expr | "[" expr "]" ":" expr | "inline" "for" pattern "in" expr_ns "{" struct_fields "}"
 struct_fields_2_grp: "," field_init
 struct_fields_3_rep: (struct_fields_2_grp struct_fields_3_rep)?
 struct_fields_4_opt: (",")?
@@ -817,7 +818,7 @@ LINE_COMMENT: /(?:\/\/(?:[^\/!\n](?:[^\n])*)?|\/\/\/\/(?:[^\n])*)/
 BLOCK_COMMENT: /\/\*(?:[^*\/]|\*(?!\/)|\/(?!\*)|\/\*(?:[^*]|\*(?!\/))*\*\/)*\*\//
 DOC_OUTER: /\/\/\/(?:[^\/\n](?:[^\n])*)?/
 DOC_INNER: /\/\/!(?:[^\n])*/
-IDENT: /(?!(?:dimension|invariant|continue|errdefer|property|requires|default|ensures|suspend|always|escape|extern|linear|nondet|resume|return|select|static|struct|unsafe|bench|break|catch|const|defer|false|group|match|spawn|super|trait|where|while|yield|else|enum|fail|from|impl|loop|note|self|Self|test|true|type|unit|view|with|dyn|for|gen|let|mod|mut|pub|ref|try|use|as|fn|if|in)\b)(?:(?:[^\W\d](?:\w)*|_(?:\w)+))/
+IDENT: /(?!(?:dimension|invariant|continue|errdefer|property|requires|default|ensures|suspend|always|escape|extern|inline|linear|nondet|resume|return|select|static|struct|unsafe|bench|break|catch|const|defer|false|group|match|spawn|super|trait|where|while|yield|else|enum|fail|from|impl|loop|note|self|Self|test|true|type|unit|view|with|dyn|for|gen|let|mod|mut|pub|ref|try|use|as|fn|if|in)\b)(?:(?:[^\W\d](?:\w)*|_(?:\w)+))/
 IDENT_TEXT: /(?:[^\W\d](?:\w)*|_(?:\w)+)/
 LABEL: /'(?:(?:[^\W\d](?:\w)*|_(?:\w)+))/
 INTEGER: /(?:(?:[0-9](?:[0-9_])*)|0x(?:[0-9a-fA-F_])+|0o(?:[0-7_])+|0b(?:[01_])+)/

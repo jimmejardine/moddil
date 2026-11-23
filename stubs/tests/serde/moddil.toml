@@ -1,0 +1,6 @@
+[mod]
+name = "serde_tests"
+edition = "2027"
+
+[dependencies]
+moddil = { path = "../../moddil" }

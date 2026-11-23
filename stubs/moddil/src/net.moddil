@@ -17,7 +17,28 @@ impl Display for NetError {
 pub struct Url { text: String }
 
 impl Url {
-    pub const fn scheme(&self) -> &str;
+    /// Its scheme: what comes before `:` (`https`).
+    pub const fn scheme(&self) -> &str {
+        let text: &str = &self.text;
+        match text.split_once(":") {
+            Some((scheme, _)) => scheme,
+            None => "",
+        }
+    }
+}
+
+/// A URL is written as its text.
+impl mod::serde::Serialize for Url {
+    fn serialize(&self, out: &mut mod::serde::json::Encoder) {
+        out.text(&self.text);
+    }
+}
+
+/// A URL is read from its text.
+impl mod::serde::Deserialize for Url {
+    fn deserialize(d: mod::serde::json::Decoder) -> Url with fail(mod::serde::DecodeError) {
+        Url { text: d.text()? }
+    }
 }
 
 impl Clone for Url {

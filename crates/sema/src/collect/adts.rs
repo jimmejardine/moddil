@@ -151,7 +151,10 @@ impl Collector<'_> {
         }
         for (range, names) in derive::derive_attrs(node) {
             for n in &names {
-                if !DERIVABLE.contains(&n.as_str()) && !self.stub_trait(n) {
+                if !DERIVABLE.contains(&n.as_str())
+                    && !self.stub_trait(n)
+                    && self.derive_fn(n).is_none()
+                {
                     ds.push(Diagnostic::unsupported(range, &format!("deriving `{n}`")));
                 }
             }

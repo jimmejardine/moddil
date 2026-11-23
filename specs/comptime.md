@@ -113,7 +113,10 @@ fn pow<const N: u32>(x: f64) -> f64 { … }                  // specialised per 
 ```
 
 Compile-time evaluation uses Rust's spelling ([`syntax.md`](syntax.md)): `const` generic
-parameters, `const fn`, and `const { … }` blocks. "Comptime" remains the name of the concept.
+parameters, `const fn`, `const { … }` blocks and `if const`. "Comptime" remains the name of the
+concept. The one exception is unrolling over reflected fields, which uses Zig's spelling,
+`inline for f in fields(t) { … }` (decided November 2026, M2 slice M2a), since Rust has no
+equivalent and `const for` would read as a loop run at compile time.
 
 Comptime values cover sizes, constants, lookup tables, format strings and specialisation. A comptime
 value can be anything with a defined compile-time representation. Borrows of compile-time data
@@ -167,6 +170,17 @@ struct Order {
   against the trait like hand-written code. The API is a full typed syntax tree, able to build any
   item a person could write. It is versioned per edition: older derives keep working through
   adapters, and migrations update them ([`evolution.md`](evolution.md)).
+- **Built first: impl templates (decided November 2026, M2 slice M2a).** Before the full
+  construction API, a derive function's body is a template: `const fn f(t: type) -> Impl<Tr> {
+  impl Tr for t { … } }`.
+  - A trait names its derive with `#[derive_by(f)]`.
+  - Instantiation: names resolve where the template is written, `t` and `Self` are the struct,
+    and the result is checked like hand-written code.
+  - In the template, `inline for f in fields(t) { … }` unrolls over the struct's fields, and
+    `f.name`, `x.[f]`, `[f]: e`, `f.is_refined()` and `f.new(e)` reflect each one.
+  - `if const` chooses by reflection, and only the branch chosen is compiled.
+  - The construction API comes later and builds on this, for enums, generic types and impls
+    that templates cannot express ([`reference/2027/comptime.md`](../reference/2027/comptime.md)).
 - **Derives can depend on each other.** Derives are compiler queries: a derive may ask whether
   `T: Eq` holds, which runs that derive first, and a cycle is a compile error that shows it. A derive
   sees which traits are implemented, never another derive's generated body.

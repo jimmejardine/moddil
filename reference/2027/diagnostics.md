@@ -115,6 +115,8 @@ and a code never changes meaning.
 | E1003 | A const whose type holds a borrow that is not of text | [comptime.static.1](comptime.md) |
 | E1004 | Evaluating a const when compiling traps or runs out of steps | [comptime.eval.1](comptime.md) |
 | E1005 | `#[around]` without a wrapper, or with one that is not a function's path or a call of one | [attr.around.1](attributes.md) |
+| E1006 | A derive function not written as `const fn f(t: type) -> Impl<Tr>` with one `impl Tr for t` as its body, a `#[derive_by]` naming none, a derive function called, or `type` elsewhere | [comptime.derive.1](comptime.md) |
+| E1007 | A template's `inline for`, reflected field or `if const` written where, or as, it cannot be | [comptime.template.field.1](comptime.md) |
 | E1101 | A literal its refined type's predicate does not hold for | [refine.lit.1](refinements.md) |
 | E1102 | A contract that is not pure | [contract.2](contracts.md) |
 | E1103 | `old(e)` of a value that is not `Copy`, or with other than one value | [contract.old.1](contracts.md) |

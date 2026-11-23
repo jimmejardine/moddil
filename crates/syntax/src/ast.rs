@@ -389,6 +389,8 @@ family!(/// An expression.
         MethodCall = METHOD_CALL_EXPR,
         Field = FIELD_EXPR,
         Index = INDEX_EXPR,
+        InlineFor = INLINE_FOR,
+        ReflectedField = REFLECTED_FIELD_EXPR,
     }
 );
 
@@ -429,6 +431,7 @@ family!(/// A type.
         Impl = IMPL_TYPE,
         Dyn = DYN_TYPE,
         Effect = EFFECT_TYPE,
+        TypeType = TYPE_TYPE,
     }
 );
 

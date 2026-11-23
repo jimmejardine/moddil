@@ -45,7 +45,8 @@ fn at_block_like(p: &mut Parser) -> bool {
         | K::LABEL
         | T![try]
         | T![with]
-        | T![select] => true,
+        | T![select]
+        | T![inline] => true,
         _ => false,
     }
 }
@@ -192,6 +193,7 @@ const BLOCK_LIKE_KEYWORDS: TokenSet = TokenSet::new(&[
     T![select],
     T![unsafe],
     T![gen],
+    T![inline],
 ]);
 
 /// Whether an expression (`expr`) can start here under flags `r`.
@@ -521,6 +523,15 @@ fn postfix(p: &mut Parser, r: R) -> Option<CompletedMarker> {
                 call_args(p);
                 m.complete(p, K::CALL_EXPR)
             }
+            T!["."] if p.nth_at(1, T!["["]) => {
+                // '.' '[' expr ']': a reflected field
+                let m = lhs.precede(p);
+                p.bump(T!["."]);
+                p.bump(T!["["]);
+                expr(p);
+                p.expect(T!["]"]);
+                m.complete(p, K::REFLECTED_FIELD_EXPR)
+            }
             T!["."] => {
                 let m = lhs.precede(p);
                 p.bump(T!["."]);
@@ -764,20 +775,42 @@ fn primary(p: &mut Parser, r: R) -> Option<CompletedMarker> {
     }
 }
 
-/// `struct_tail ::= '{' struct_fields '}'` with
-/// `field_init ::= member_name ( ':' expr )? | '..' expr`
+/// `struct_tail ::= '{' struct_fields '}'`
 fn struct_tail(p: &mut Parser) {
     p.bump(T!["{"]);
+    struct_fields(p);
+    p.expect(T!["}"]);
+}
+
+/// `struct_fields ::= ( field_init ( ',' field_init )* ','? )?` with
+/// `field_init ::= member_name ( ':' expr )? | '..' expr | '[' expr ']' ':' expr
+///               | 'inline' 'for' pattern 'in' expr+ns '{' struct_fields '}'`
+fn struct_fields(p: &mut Parser) {
     comma_list(
         p,
         T!["}"],
         "a field",
-        |p| p.at(T![".."]) || at_member_name(p),
+        |p| p.at(T![".."]) || p.at(T!["["]) || p.at(T![inline]) || at_member_name(p),
         |p| {
             let f = p.start();
             if p.eat(T![".."]) {
                 expr(p);
                 f.complete(p, K::SPREAD);
+            } else if p.eat(T!["["]) {
+                expr(p);
+                p.expect(T!["]"]);
+                p.expect(T![":"]);
+                expr(p);
+                f.complete(p, K::REFLECTED_FIELD_INIT);
+            } else if p.eat(T![inline]) {
+                p.expect(T![for]);
+                pattern(p);
+                p.expect(T![in]);
+                expr_r(p, R::NS);
+                p.expect(T!["{"]);
+                struct_fields(p);
+                p.expect(T!["}"]);
+                f.complete(p, K::INLINE_FOR_FIELDS);
             } else {
                 member_name(p);
                 if p.eat(T![":"]) {
@@ -787,7 +820,6 @@ fn struct_tail(p: &mut Parser) {
             }
         },
     );
-    p.expect(T!["}"]);
 }
 
 // ─── Block-like expressions ─────────────────────────────────────────────────
@@ -826,6 +858,17 @@ fn block_like_keyword(p: &mut Parser) -> CompletedMarker {
             expr_r(p, R::NS);
             block(p);
             m.complete(p, K::FOR_EXPR)
+        }
+        T![inline] => {
+            // inline_for ::= 'inline' 'for' pattern 'in' expr+ns block
+            let m = p.start();
+            p.bump(T![inline]);
+            p.expect(T![for]);
+            pattern(p);
+            p.expect(T![in]);
+            expr_r(p, R::NS);
+            block(p);
+            m.complete(p, K::INLINE_FOR)
         }
         K::LABEL => {
             // labelled ::= LABEL ':' ( loop_expr | while_expr | for_expr | block )

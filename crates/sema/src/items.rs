@@ -286,8 +286,28 @@ pub struct FnSig {
     pub const_item: bool,
     /// Who can name it.
     pub vis: Vis,
-    /// The module it is declared in (for a derived method, its type's).
+    /// The module it is declared in (for a derived method, its type's; for a template's
+    /// method, the template's).
     pub module: u32,
+    /// For a derive function (`const fn f(t: type) -> Impl<Tr>`, `comptime.derive.1`): the name
+    /// of its parameter, the type it is instantiated for. It is a template, never called, and
+    /// its body is not lowered: each `#[derive(Tr)]` instantiates it.
+    pub deriver: Option<String>,
+    /// For a method instantiated from a derive function's template (`comptime.template.1`):
+    /// what the template's parameter is here.
+    pub template: Option<Template>,
+}
+
+/// A derive function's template, instantiated for one struct: its parameter's name, and the
+/// struct (as a type, and by its index among the structs and enums).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Template {
+    /// The parameter's name (`t`), which names the struct in the template.
+    pub var: String,
+    /// The struct.
+    pub ty: Ty,
+    /// Its index among the structs and enums.
+    pub adt: u32,
 }
 
 /// The built-in control effects a function lists or needs (`eff.control.1`), as bits:
@@ -358,6 +378,8 @@ impl FnSig {
             refine: None,
             vis,
             module,
+            deriver: None,
+            template: None,
         }
     }
 }
@@ -500,6 +522,9 @@ pub struct TraitDef {
     pub vis: Vis,
     /// The module it is declared in.
     pub module: u32,
+    /// The derive function `#[derive_by(f)]` names (`attr.derive-by.1`), by index among the
+    /// functions: `#[derive(Tr)]` instantiates its template.
+    pub derive_by: Option<u32>,
 }
 
 /// An impl: inherent (`impl Point { … }`) or of a trait (`impl Clone for Point { … }`).

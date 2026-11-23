@@ -24,6 +24,7 @@ const TYPE_START: TokenSet = TokenSet::new(&[
     T![fn],
     T!["!"],
     T![_],
+    T![type],
 ]);
 
 pub(super) fn at_type(p: &mut Parser) -> bool {
@@ -188,6 +189,11 @@ fn type_core(p: &mut Parser) -> Option<crate::parser::CompletedMarker> {
         T![_] => {
             p.bump(T![_]);
             K::INFER_TYPE
+        }
+        T![type] => {
+            // 'type': the type of types (a derive's parameter)
+            p.bump(T![type]);
+            K::TYPE_TYPE
         }
         found => {
             m.abandon(p);

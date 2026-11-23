@@ -89,6 +89,20 @@ impl Machine<'_> {
                 let (p, indirect) = self.place_of(e)?.expect("an element is a place");
                 Ok(self.take(&p, indirect))
             }
+            // `f.name`: a reflected field's name (`comptime.template.field.1`).
+            ast::Expr::Field(_) if self.reflected(e.sub_exprs()[0].syntax()).is_some() => {
+                let (key, i) = self
+                    .reflected(e.sub_exprs()[0].syntax())
+                    .expect("a reflected field");
+                Ok(Value::Str(
+                    self.program.adts[&key].variants[0].fields[i].clone().into(),
+                ))
+            }
+            ast::Expr::InlineFor(_) => self.inline_for(node),
+            ast::Expr::ReflectedField(_) => {
+                let (p, indirect) = self.place_of(e)?.expect("a field is a place");
+                Ok(self.take(&p, indirect))
+            }
             ast::Expr::Field(_) => {
                 // Field access looks through a borrow (`expr.field.1`).
                 let (p, indirect) = self.place_of(e)?.expect("a field is a place");
@@ -197,6 +211,11 @@ impl Machine<'_> {
             .iter()
             .map(|s| match (s.as_str(), &self_ty) {
                 ("Self", Some(t)) => t.clone(),
+                // A template's parameter names its struct (`comptime.template.1`).
+                (n, _) if segments.len() == 1 => match self.memory.type_of(n) {
+                    Some(Head::Adt(t)) => t,
+                    _ => s.clone(),
+                },
                 _ => s.clone(),
             })
             .collect();
@@ -259,28 +278,105 @@ impl Machine<'_> {
         let (ty, info) = self.ctor(&segments).expect("a checked struct");
         let info = info.clone();
         let mut fields = vec![Value::Unit; info.fields.len()];
-        for init in node.children().filter(|c| c.kind() == K::FIELD_INIT) {
-            let name = member_name(&init);
-            let v = match init.children().find_map(ast::Expr::cast) {
-                Some(x) => self.eval(&x)?,
-                None => {
-                    let s = self.memory.slot(&name).expect("a checked shorthand");
-                    let p = self.memory.here(s);
-                    self.take(&p, false)
-                }
-            };
-            let i = info
-                .fields
-                .iter()
-                .position(|f| *f == name)
-                .expect("a checked field");
-            fields[i] = self.typed(v, info.types.get(i).and_then(Option::as_ref));
-        }
+        self.struct_fields(node, &info, &mut fields)?;
         Ok(Value::Adt {
             ty,
             variant: info.name,
             fields,
         })
+    }
+
+    /// A struct literal's fields, into `fields`: `name: e` and `name`, and in a template
+    /// `[f]: e` and `inline for f in fields(t) { … }` (`comptime.template.inline.1`).
+    fn struct_fields(
+        &mut self,
+        node: &SyntaxNode,
+        info: &VariantInfo,
+        fields: &mut [Value],
+    ) -> Eval<()> {
+        for init in node.children() {
+            match init.kind() {
+                K::FIELD_INIT => {
+                    let name = member_name(&init);
+                    let v = match init.children().find_map(ast::Expr::cast) {
+                        Some(x) => self.eval(&x)?,
+                        None => {
+                            let s = self.memory.slot(&name).expect("a checked shorthand");
+                            let p = self.memory.here(s);
+                            self.take(&p, false)
+                        }
+                    };
+                    let i = info
+                        .fields
+                        .iter()
+                        .position(|f| *f == name)
+                        .expect("a checked field");
+                    fields[i] = self.typed(v, info.types.get(i).and_then(Option::as_ref));
+                }
+                K::REFLECTED_FIELD_INIT => {
+                    let exprs: Vec<ast::Expr> =
+                        init.children().filter_map(ast::Expr::cast).collect();
+                    let (_, i) = self
+                        .reflected(exprs[0].syntax())
+                        .expect("a checked reflected field");
+                    let v = self.eval(&exprs[1])?;
+                    fields[i] = self.typed(v, info.types.get(i).and_then(Option::as_ref));
+                }
+                K::INLINE_FOR_FIELDS => {
+                    let (name, key, n) = self.inline_head(&init);
+                    for i in 0..n {
+                        self.reflected.push((name.clone(), key.clone(), i));
+                        let r = self.struct_fields(&init, info, fields);
+                        self.reflected.pop();
+                        r?;
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// `inline for f in fields(t)`'s head: the name it binds, the struct `t` names (by key) and
+    /// how many fields it has.
+    fn inline_head(&self, node: &SyntaxNode) -> (String, String, usize) {
+        let name = node
+            .children()
+            .find_map(ast::Pat::cast)
+            .map(|p| p.syntax().text().trim().to_string())
+            .expect("a checked `inline for`");
+        let call = node
+            .children()
+            .find_map(ast::Expr::cast)
+            .expect("a checked `inline for`");
+        let arg = call.syntax().text();
+        let var = arg
+            .trim()
+            .trim_start_matches("fields(")
+            .trim_end_matches(')')
+            .trim()
+            .to_string();
+        let Some(Head::Adt(key)) = self.memory.type_of(&var) else {
+            unreachable!("a checked template")
+        };
+        let n = self.program.adts[&key].variants[0].fields.len();
+        (name, key, n)
+    }
+
+    /// `inline for f in fields(t) { … }`: its block once for each of the struct's fields.
+    fn inline_for(&mut self, node: &SyntaxNode) -> Eval {
+        let (name, key, n) = self.inline_head(node);
+        let block = node
+            .child(K::BLOCK)
+            .and_then(ast::Block::cast)
+            .expect("a block");
+        for i in 0..n {
+            self.reflected.push((name.clone(), key.clone(), i));
+            let r = self.block(&block);
+            self.reflected.pop();
+            r?;
+        }
+        Ok(Value::Unit)
     }
 
     pub(super) fn if_expr(&mut self, e: &ast::Expr) -> Eval {

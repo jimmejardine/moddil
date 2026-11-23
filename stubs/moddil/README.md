@@ -19,7 +19,7 @@ takes. Each item is written just far enough for [the tour](../../tour/shorty/REA
 | `sync` | `Mutex` |
 | `rand` | `Rand` and `seeded` |
 | `net`, `net::http` | `Net`, `Url`, `Listener`, `Conn`; the router, requests and responses |
-| `serde`, `serde::json` | `Serialize`, `Deserialize`, `DecodeError`, `json::decode` |
+| `serde`, `serde::json` | Written in Moddil (M2a): `Serialize` and `Deserialize` with their derives (impl templates), `DecodeError`, and JSON's `encode` and `decode`; its tests are in [`../tests/serde`](../tests/serde) |
 | `runtime` | `serve_until_stopped`, `Signal`, `Duration` |
 | `sim` | `Sim` and `drop_messages` |
 

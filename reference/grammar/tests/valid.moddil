@@ -233,6 +233,8 @@ fn impl ( ) ;
 // ---
 fn in ( ) ;
 // ---
+fn inline ( ) ;
+// ---
 fn invariant ( ) ;
 // ---
 fn let ( ) ;
@@ -457,6 +459,8 @@ impl { x : ! } { }
 impl fn ( ) { }
 // ---
 impl _ { }
+// ---
+impl type { }
 // ---
 fn x ( ) from x , x ;
 // ---
@@ -958,6 +962,8 @@ test "s" { select { } }
 // ---
 test "s" { unsafe ( "s" ) { } }
 // ---
+test "s" { inline for _ in escape { } }
+// ---
 test "s" { "s" }
 // ---
 test "s" { .. = escape }
@@ -1336,6 +1342,8 @@ const x : ! = "s" . x ;
 // ---
 const x : ! = "s" . 1 ;
 // ---
+const x : ! = "s" . [ escape ] ;
+// ---
 const x : ! = "s" [ escape ] ;
 // ---
 fn x ( ) requires - "s" ;
@@ -1481,6 +1489,10 @@ test "s" { { x : escape , } }
 const x : ! = x { x } ;
 // ---
 const x : ! = x { .. escape } ;
+// ---
+const x : ! = x { [ escape ] : escape } ;
+// ---
+const x : ! = x { inline for _ in escape { } } ;
 // ---
 const x : ! = x { x , x } ;
 // ---

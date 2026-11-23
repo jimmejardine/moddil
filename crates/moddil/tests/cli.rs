@@ -229,3 +229,28 @@ fn a_release_build_runs_and_splits_its_line_tables() {
         );
     }
 }
+
+#[test]
+fn serde_written_in_moddil_passes_its_tests_everywhere() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../stubs/tests/serde");
+    let wasm = Command::new(std::env::var("MODDIL_NODE").unwrap_or_else(|_| "node".to_string()))
+        .args([
+            "-e",
+            "process.exit(typeof WebAssembly.Suspending === 'function' ? 0 : 1)",
+        ])
+        .status()
+        .is_ok_and(|s| s.success());
+    for how in [&["test"][..], &["test", "--interp"], &["test", "--wasm"]] {
+        if how.contains(&"--wasm") && !wasm {
+            continue;
+        }
+        let out = moddil(how, &dir);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            out.status.success(),
+            "{how:?}: {stdout}{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(stdout.contains("4 passed, 0 failed"), "{how:?}: {stdout}");
+    }
+}

@@ -31,6 +31,12 @@ the derived impl of a generic type bounds each type parameter by the trait
 `Eq` comes with `PartialEq` and `Ord` with `PartialOrd` and `Eq`. `Copy` is described in
 [Ownership](ownership.md).
 
+**attr.derive-by.1** `#[derive_by(f)]` before a trait names its derive function `f`, declared in
+the same module ([Compile-time evaluation](comptime.md)), E1006 otherwise. `#[derive(Tr)]` on a
+struct, for such a trait `Tr`, instantiates `f`'s template for the struct (**comptime.template.1**),
+whichever mod the struct is in: the impl asks of the fields only what the template's code does,
+so the rule above, that every field implement the trait, does not apply to it.
+
 **attr.track-caller.1** `#[track_caller]` before a function makes a trap in it be reported where it
 was called ([Traps](traps.md)), and through a tracked caller, where that one was called, up to the
 first function that is not tracked. The prelude's functions that can trap are tracked, and so is

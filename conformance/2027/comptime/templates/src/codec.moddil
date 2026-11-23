@@ -1,0 +1,25 @@
+// A derive written in another module: its names are this module's, and it reads the fields of
+// the struct it is derived for even where they are private.
+
+/// Writes a value's fields, by a format only this module knows.
+#[derive_by(encode)]
+pub trait Encode {
+    fn encode(&self) -> String;
+}
+
+/// This module's own way of writing a field.
+fn field(name: &str, value: String) -> String {
+    fmt"<{name}:{value}>"
+}
+
+pub const fn encode(t: type) -> Impl<Encode> {
+    impl Encode for t {
+        fn encode(&self) -> String {
+            let mut out = String::new();
+            inline for f in fields(t) {
+                out.push_str(&field(f.name, String::from_str(self.[f].text())));
+            }
+            out
+        }
+    }
+}

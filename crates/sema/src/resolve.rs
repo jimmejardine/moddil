@@ -77,6 +77,9 @@ pub(crate) struct Scope<'a> {
     pub module: u32,
     /// Whether the prelude's names come before the module's (in derived code).
     pub prelude_first: bool,
+    /// In a template's method (`comptime.template.1`): the template's parameter's name, and the
+    /// type it names.
+    pub template: Option<(&'a str, &'a Ty)>,
 }
 
 impl<'a> Scope<'a> {
@@ -92,6 +95,7 @@ impl<'a> Scope<'a> {
             holes: false,
             module: crate::items::PRELUDE_MODULE,
             prelude_first: false,
+            template: None,
         }
     }
 
@@ -198,6 +202,14 @@ pub(crate) fn resolve_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnos
             None => Ty::Error,
         },
         ast::Type::Never(_) => Ty::Never,
+        ast::Type::TypeType(_) => {
+            diags.push(Diagnostic::error(
+                Code::E1006,
+                range,
+                "`type` is the type of a derive function's parameter only                  (`const fn f(t: type) -> Impl<Tr>`)",
+            ));
+            Ty::Error
+        }
         // `impl Fn() with E` and `dyn Fn() with E`: the effects are its closure bound's
         // (`expr.closure.effects.2`), which `bounds` reads.
         ast::Type::Effect(_)
@@ -545,6 +557,10 @@ pub(crate) fn path_type(
         }
     };
     match segs {
+        [one] if scope.template.is_some_and(|(v, _)| v == one.name) => {
+            no_args(one, diags);
+            scope.template.map(|(_, t)| t.clone()).unwrap_or(Ty::Error)
+        }
         [one] => {
             let name = one.name.as_str();
             match name {

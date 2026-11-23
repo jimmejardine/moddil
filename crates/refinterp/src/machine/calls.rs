@@ -490,6 +490,10 @@ impl Machine<'_> {
                 self.infer_types(&t, v, &f.params, &mut types);
             }
         }
+        // A template's method: its parameter names the struct (`comptime.template.1`).
+        if let Some((var, key)) = &f.template {
+            types.insert(var.clone(), Head::Adt(key.clone()));
+        }
         let caller_user = self.memory.user();
         let caller_tracked = self.memory.tracked();
         let caller_file = self.memory.file().unwrap_or(0);
@@ -1034,6 +1038,18 @@ impl Machine<'_> {
             .and_then(ast::ArgList::cast)
             .map(|l| l.args().filter_map(|a| a.expr()).collect())
             .unwrap_or_default();
+        // A reflected field's `is_refined()` and `new(e)` (`comptime.template.field.1`).
+        if let Some((key, i)) = self.reflected(receiver.syntax()) {
+            let refined = self.field_refinement(&key, i);
+            return match name.as_str() {
+                "is_refined" => Ok(Value::Bool(refined.is_some())),
+                _ => {
+                    let v = self.eval(&args[0])?;
+                    let k = refined.expect("a checked refinement");
+                    self.refine(&k, v, range)
+                }
+            };
+        }
         let (place, indirect) = match self.place_of(receiver)? {
             Some(p) => p,
             None => {

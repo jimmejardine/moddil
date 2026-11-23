@@ -43,6 +43,11 @@ impl Show<'_> {
         let at = |off: u32| p + u64::from(off);
         match ty {
             Ty::Unit | Ty::Never => "()".to_string(),
+            // A refined value is shown as its base's (`refine.base.1`).
+            Ty::Refined(..) => {
+                let base = items.base(ty);
+                self.render(mem, &base, p)
+            }
             Ty::Int => (mem.bits(p, 8) as u64 as i64).to_string(),
             Ty::Bool => (mem.bits(p, 1) & 1 == 1).to_string(),
             Ty::Char => char::from_u32(mem.bits(p, 4) as u32)
