@@ -1,0 +1,39 @@
+// covers: item.impl.coherence.1
+// An impl applies only where its bounds hold: a borrowed collection gets its own
+// `IntoIterator` beside the prelude's for every `Iterator`.
+
+struct Bag { items: Vec<int> }
+
+view BagIter {
+    bag: &Bag,
+    at: int,
+}
+
+impl Iterator for BagIter {
+    type Item = int;
+    fn next(&mut self) -> Option<int> {
+        let x = self.bag.items.get(self.at);
+        self.at += 1;
+        match x {
+            Some(v) => Some(*v),
+            None => None,
+        }
+    }
+}
+
+impl IntoIterator for &Bag {
+    type Item = int;
+    type IntoIter = BagIter;
+    fn into_iter(self) -> BagIter {
+        BagIter { bag: self, at: 0 }
+    }
+}
+
+test "a for loop over a borrowed bag" {
+    let b = Bag { items: [3, 4, 5] };
+    let mut total = 0;
+    for x in &b {
+        total += x;
+    }
+    total                                   // => 12
+}

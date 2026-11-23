@@ -211,8 +211,7 @@ impl Timestamp {
         let offset = if at + 1 == s.len() && (s.byte_at(at) == 90 || s.byte_at(at) == 122) {
             0
         } else if at + 6 == s.len() && s.byte_at(at + 3) == 58 {
-            let c: int = s.byte_at(at);
-            let sign = match c {
+            let sign = match s.byte_at(at) {
                 43 => 1,
                 45 => -1,
                 _ => return None,

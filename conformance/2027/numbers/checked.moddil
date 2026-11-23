@@ -1,0 +1,74 @@
+// covers: num.checked.1
+// `checked_add`, `checked_sub` and `checked_mul`: the result, or `None` where the operator
+// would trap on overflow.
+
+test "unsigned" {
+    let a: u8 = 250;
+    a.checked_add(5)                        // => Some(255)
+    ;
+    a.checked_add(6)                        // => None
+    ;
+    let b: u8 = 3;
+    b.checked_sub(4)                        // => None
+    ;
+    let c: u8 = 16;
+    c.checked_mul(16)                       // => None
+    ;
+    let d: u8 = 15;
+    d.checked_mul(17)                       // => Some(255)
+    ;
+    let e: u128 = 18446744073709551616;
+    e.checked_mul(18446744073709551615)     // => Some(340282366920938463444927863358058659840)
+    ;
+    e.checked_mul(18446744073709551616)     // => None
+    ;
+    let max: u128 = 340282366920938463463374607431768211455;
+    max.checked_add(1)                      // => None
+}
+
+test "signed, at both ends" {
+    let a: i8 = 127;
+    a.checked_add(1)                        // => None
+    ;
+    let b: i8 = -128;
+    b.checked_sub(1)                        // => None
+    ;
+    b.checked_mul(-1)                       // => None
+    ;
+    let m: i8 = -1;
+    m.checked_mul(-128)                     // => None
+    ;
+    m.checked_mul(127)                      // => Some(-127)
+    ;
+    let c: i8 = -64;
+    c.checked_mul(2)                        // => Some(-128)
+    ;
+    let d: i8 = 64;
+    d.checked_mul(2)                        // => None
+    ;
+    let z: i8 = 0;
+    z.checked_mul(-128)                     // => Some(0)
+    ;
+    let x: i8 = -100;
+    x.checked_add(-28)                      // => Some(-128)
+    ;
+    x.checked_sub(28)                       // => Some(-128)
+}
+
+test "int and i128" {
+    let big = 3037000499;
+    big.checked_mul(3037000499)             // => Some(9223372030926249001)
+    ;
+    let over = 3037000500;
+    over.checked_mul(3037000500)            // => None
+    ;
+    let max = 9223372036854775807;
+    max.checked_add(1)                      // => None
+    ;
+    max.checked_sub(-1)                     // => None
+    ;
+    let w: i128 = 170141183460469231731687303715884105727;
+    w.checked_mul(2)                        // => None
+    ;
+    w.checked_add(-1)                       // => Some(170141183460469231731687303715884105726)
+}

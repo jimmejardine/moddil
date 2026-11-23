@@ -65,6 +65,24 @@ const CHAR_MAX: i128 = 0x10_FFFF;
 const INT_MIN: i128 = i64::MIN as i128;
 const INT_MAX: i128 = i64::MAX as i128;
 
+/// The greatest value of integer type `ty` the analysis counts (`int`'s for any other type).
+fn int_top(ty: &Ty) -> i128 {
+    match ty {
+        // The analysis counts to one past the greatest value, so an `i128`'s or a `u128`'s top
+        // value is left out of it.
+        Ty::Num(n) if !n.is_float() => n.int_range().1.min(i128::MAX - 1),
+        _ => INT_MAX,
+    }
+}
+
+/// The least value of integer type `ty` (`int`'s for any other type).
+fn int_bottom(ty: &Ty) -> i128 {
+    match ty {
+        Ty::Num(n) if !n.is_float() => n.int_range().0,
+        _ => INT_MIN,
+    }
+}
+
 struct Cx<'a> {
     items: &'a ItemTree,
     body: &'a Body,
@@ -92,11 +110,15 @@ impl Cx<'_> {
             | &PatKind::Refined { pat: s, .. }
             | &PatKind::Ref { pat: s, .. }
             | &PatKind::OfType { pat: s, .. } => self.lower(s),
-            &PatKind::Int(v) => DPat {
-                ctor: Ctor::Int(v, v),
-                ty,
-                fields: Vec::new(),
-            },
+            &PatKind::Int(v) => {
+                // `i128::MAX` is past the counted range: it stands for its top.
+                let v = v.min(int_top(&self.items.base(ty.strip_ref())).max(INT_MAX));
+                DPat {
+                    ctor: Ctor::Int(v, v),
+                    ty,
+                    fields: Vec::new(),
+                }
+            }
             &PatKind::Bool(b) => DPat {
                 ctor: Ctor::Bool(b),
                 ty,
@@ -121,12 +143,14 @@ impl Cx<'_> {
                 inclusive,
                 chars,
             } => {
+                let top = int_top(&self.items.base(ty.strip_ref())).max(INT_MAX);
                 let hi = match hi {
                     None if chars => CHAR_MAX,
-                    None => INT_MAX,
-                    Some(h) if inclusive => h,
-                    Some(h) => h - 1,
+                    None => int_top(&self.items.base(ty.strip_ref())),
+                    Some(h) if inclusive => h.min(top),
+                    Some(h) => (h - 1).min(top),
                 };
+                let lo = lo.min(top);
                 DPat {
                     ctor: Ctor::Int(lo, hi),
                     ty,
@@ -208,8 +232,7 @@ impl Cx<'_> {
             Ty::Num(n) if !n.is_float() => {
                 // The analysis counts to one past the greatest value, so an `i128`'s or a
                 // `u128`'s top value is left out of it.
-                let (lo, hi) = n.int_range();
-                split_ints(heads, lo, hi.min(i128::MAX - 1))
+                split_ints(heads, int_bottom(ty.strip_ref()), int_top(ty.strip_ref()))
             }
             // A float is matched by bindings and `_` only.
             Ty::Num(_) => vec![Ctor::Single],
@@ -353,13 +376,16 @@ fn split_ints(heads: &[&DPat], lo: i128, hi: i128) -> Vec<Ctor> {
     if lo > hi {
         return Vec::new();
     }
-    let mut cuts: Vec<i128> = vec![lo, hi + 1];
+    // One past `hi`, saturating: `i128`'s greatest value is left out of the analysis, as is a
+    // `u128`'s past it.
+    let end = hi.saturating_add(1);
+    let mut cuts: Vec<i128> = vec![lo, end];
     for h in heads {
         if let Ctor::Int(a, b) = h.ctor
             && a <= b
         {
-            cuts.push(a.clamp(lo, hi + 1));
-            cuts.push((b + 1).clamp(lo, hi + 1));
+            cuts.push(a.clamp(lo, end));
+            cuts.push(b.saturating_add(1).clamp(lo, end));
         }
     }
     cuts.sort_unstable();
@@ -417,9 +443,9 @@ impl Witness {
                     format!("{}..={}", c(lo), c(hi))
                 }
             }
-            (Ctor::Int(INT_MIN, INT_MAX), _) => "_".to_string(),
+            (Ctor::Int(lo, hi), t) if (*lo, *hi) == (int_bottom(t), int_top(t)) => "_".to_string(),
             (Ctor::Int(lo, hi), _) if lo == hi => lo.to_string(),
-            (Ctor::Int(lo, hi), _) if *hi == INT_MAX => format!("{lo}.."),
+            (Ctor::Int(lo, hi), t) if *hi == int_top(t) => format!("{lo}.."),
             (Ctor::Int(lo, hi), _) => format!("{lo}..={hi}"),
             (Ctor::Single, Ty::Unit) => "()".to_string(),
             (Ctor::Single, Ty::Tuple(_)) if fields.len() == 1 => format!("({},)", fields[0]),

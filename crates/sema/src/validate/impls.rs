@@ -214,6 +214,25 @@ pub(crate) fn overlap(tree: &ItemTree) -> Vec<Found> {
                     .zip(y.subst(&xb).args.iter())
                     .all(|(p, q)| s.unify(p, q));
             }
+            // Bounds rule a type out: `impl<I: Iterator> IntoIterator for I` does not apply to
+            // `&Deque<T>`, which no impl makes an `Iterator`. A bound that may hold keeps the
+            // overlap.
+            if overlaps {
+                let bounds = a
+                    .generics
+                    .preds
+                    .iter()
+                    .map(|p| (p, &xa))
+                    .chain(b.generics.preds.iter().map(|p| (p, &xb)));
+                for (p, args) in bounds {
+                    let ty = s.deep(&p.ty.subst(args));
+                    let tr = p.trait_ref.subst(args).map(&mut |t| s.deep(t));
+                    if let Answer::No = s.implements(&ty, &tr) {
+                        overlaps = false;
+                        break;
+                    }
+                }
+            }
             if !overlaps {
                 continue;
             }

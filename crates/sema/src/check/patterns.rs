@@ -9,6 +9,25 @@ use super::finish::Deferred;
 use super::{Checker, index, tuple_positions};
 
 impl Checker<'_> {
+    /// The range and name of the integer type an integer pattern is matched against: the
+    /// expected type if it is an integer type (or a refinement of one), else `int`, which the
+    /// pattern then makes it. `None` if it is some other type.
+    fn int_pattern_type(&mut self, expected: &Ty) -> Option<(i128, i128, String)> {
+        let t = self.norm(expected);
+        match self.items.base(&t) {
+            Ty::Num(n) if !n.is_float() => {
+                let (lo, hi) = n.int_range();
+                Some((lo, hi, n.name().to_string()))
+            }
+            _ if self.coerce(&Ty::Int, expected) => Some((
+                i128::from(i64::MIN),
+                i128::from(i64::MAX),
+                "int".to_string(),
+            )),
+            _ => None,
+        }
+    }
+
     /// Whether `p` contains a pattern already reported as an error while lowering.
     pub(super) fn has_missing(&self, p: PatId) -> bool {
         match &self.body.pats[p].kind {
@@ -125,14 +144,17 @@ impl Checker<'_> {
                     self.deferred.push(Deferred::CopyOut(local, at));
                 }
             }
+            // An integer literal matches a value of any integer type it fits (`pat.lit.1`).
             &PatKind::Int(v) => {
-                if !self.coerce(&Ty::Int, expected) {
-                    self.report(Code::E0201, range, wrong("an `int`"));
-                } else if i64::try_from(v).is_err() {
+                let Some((lo, hi, name)) = self.int_pattern_type(expected) else {
+                    self.report(Code::E0201, range, wrong("an integer"));
+                    return;
+                };
+                if v < lo || v > hi {
                     self.report(
                         Code::E0204,
                         range,
-                        format!("`{v}` does not fit in `int` (a signed 64-bit integer)"),
+                        format!("`{v}` does not fit in `{name}`, which holds {lo} to {hi}"),
                     );
                 }
             }
@@ -174,16 +196,16 @@ impl Checker<'_> {
             &PatKind::Range {
                 lo, hi, inclusive, ..
             } => {
-                if !self.coerce(&Ty::Int, expected) {
-                    self.report(Code::E0201, range, wrong("an `int`"));
+                let Some((min, max, name)) = self.int_pattern_type(expected) else {
+                    self.report(Code::E0201, range, wrong("an integer"));
                     return;
-                }
+                };
                 for v in [Some(lo), hi].into_iter().flatten() {
-                    if i64::try_from(v).is_err() {
+                    if v < min || v > max {
                         self.report(
                             Code::E0204,
                             range,
-                            format!("`{v}` does not fit in `int` (a signed 64-bit integer)"),
+                            format!("`{v}` does not fit in `{name}`, which holds {min} to {max}"),
                         );
                         return;
                     }

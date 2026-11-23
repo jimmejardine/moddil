@@ -102,6 +102,22 @@ fn mask(k: Kind) -> u128 {
     }
 }
 
+/// An integer value (an `int`, a sized integer or a literal), as a key that orders as the
+/// integers do: `u128`'s upper half after every other value.
+pub(crate) fn int_key(v: &Value) -> (u8, i128) {
+    match v {
+        Value::Int(x) => (0, i128::from(*x)),
+        Value::BigLit(x) => (0, *x),
+        Value::HugeLit(u) => (1, (*u - (1u128 << 127)) as i128),
+        Value::Num(k, bits) => match exact(*k, *bits) {
+            Exact::Int(x) => (0, x),
+            Exact::Huge(u) => (1, (u - (1u128 << 127)) as i128),
+            Exact::Float(_) => unreachable!("an integer"),
+        },
+        _ => unreachable!("an integer"),
+    }
+}
+
 /// The number a value of kind `k` with bits `bits` is.
 fn exact(k: Kind, bits: u128) -> Exact {
     match k {

@@ -103,11 +103,10 @@ impl Machine<'_> {
                     .filter(|c| c.kind() == K::LITERAL_PAT)
                     .map(|b| literal_pat(&b))
                     .collect();
-                // A `char` is compared by its code point.
+                // A `char` is compared by its code point, an integer of any type by its value.
                 let num = |v: &Value| match v {
-                    Value::Int(x) => *x,
-                    Value::Char(c) => i64::from(u32::from(*c)),
-                    _ => unreachable!("a checked range pattern"),
+                    Value::Char(c) => (0, i128::from(u32::from(*c))),
+                    v => crate::num::int_key(v),
                 };
                 let x = num(&self.value_of(src));
                 let lo = num(bounds.first().expect("a lower bound"));

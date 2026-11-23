@@ -8,22 +8,10 @@ use mod::round::{div_round_i128, pow10_i128};
 /// does; where a result has more digits than its scale, the rounding is always stated.
 /// The scale is part of the type, so adding `Fixed<2>` to `Fixed<4>` does not compile: one is
 /// rescaled first.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Fixed<const S: int> {
     units: int,
 }
-
-// TODO: derive these once `#[derive]` takes a type with const parameters (it fails with E0404
-// on `Fixed<const S: int>` today): `Clone`, `Copy`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`,
-// `Hash`, `Debug` and `Default` below are written by hand only for that. They work on all three
-// backends as they are. Tracked in `specs/roadmap.md` (M2, "Standard mods beyond the tour").
-
-impl<const S: int> Clone for Fixed<S> {
-    fn clone(&self) -> Fixed<S> {
-        Fixed { units: self.units }
-    }
-}
-
-impl<const S: int> Copy for Fixed<S> {}
 
 impl<const S: int> Fixed<S> {
     /// The value `units` × 10^-S.
@@ -184,32 +172,6 @@ impl<const S: int> Neg for Fixed<S> {
     }
 }
 
-impl<const S: int> PartialEq for Fixed<S> {
-    fn eq(&self, other: &Fixed<S>) -> bool {
-        self.units == other.units
-    }
-}
-
-impl<const S: int> Eq for Fixed<S> {}
-
-impl<const S: int> PartialOrd for Fixed<S> {
-    fn partial_cmp(&self, other: &Fixed<S>) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<const S: int> Ord for Fixed<S> {
-    fn cmp(&self, other: &Fixed<S>) -> Ordering {
-        self.units.cmp(&other.units)
-    }
-}
-
-impl<const S: int> Hash for Fixed<S> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write_int(self.units);
-    }
-}
-
 /// With exactly `S` digits after the point: `-1.50` for `Fixed<2>`.
 impl<const S: int> Display for Fixed<S> {
     fn fmt(&self, out: &mut String) {
@@ -237,14 +199,10 @@ impl<const S: int> Display for Fixed<S> {
     }
 }
 
+/// As `Display` writes it, not as a struct: `1.50`.
 impl<const S: int> Debug for Fixed<S> {
     fn fmt(&self, out: &mut String) {
         Display::fmt(self, out);
     }
 }
 
-impl<const S: int> Default for Fixed<S> {
-    fn default() -> Fixed<S> {
-        Fixed { units: 0 }
-    }
-}

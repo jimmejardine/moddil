@@ -58,7 +58,7 @@ test "a deque pushes and pops at both ends, growing as it must" {
     assert(d.pop_back() == Some(9));
     assert(val(d.front()) == -8 && val(d.back()) == 8);
     let mut sum = 0;
-    for x in d.iter() {
+    for x in &d {
         sum += *x;
     }
     assert(sum == 0);
@@ -153,7 +153,7 @@ test "a tree map stays sorted and balanced through many removals" {
     assert(m.remove(&3) == None);
     let mut prev = -1;
     let mut n = 0;
-    for (k, v) in m.iter() {
+    for (k, v) in &m {
         assert(*k > prev && *k % 3 != 0 && *v == *k * *k);
         prev = *k;
         n += 1;

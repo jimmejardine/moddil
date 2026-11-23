@@ -205,15 +205,22 @@ pub(crate) fn expand<'t>(
             continue;
         }
         let name = name_of(&node);
-        let params: Vec<String> = node
+        // Its generic parameters, in order: each a type parameter, or a const parameter with
+        // its declaration (`const S: int`), which the impl declares as it is, with no bound.
+        let generics: Vec<(String, Option<String>)> = node
             .child(K::GENERIC_PARAMS)
             .map(|g| {
                 g.children()
-                    .filter(|c| c.kind() == K::TYPE_PARAM)
-                    .map(|p| name_of(&p))
+                    .filter(|c| matches!(c.kind(), K::TYPE_PARAM | K::CONST_PARAM))
+                    .map(|p| {
+                        let decl = (p.kind() == K::CONST_PARAM)
+                            .then(|| p.text().to_string().trim().to_string());
+                        (name_of(&p), decl)
+                    })
                     .collect()
             })
             .unwrap_or_default();
+        let type_params = generics.iter().any(|(_, decl)| decl.is_none());
         let variants: Vec<Variant> = if node.kind() == K::STRUCT_ITEM {
             vec![variant(&node, name.clone())]
         } else {
@@ -243,17 +250,22 @@ pub(crate) fn expand<'t>(
                 // an impl of any other is dropped where impls are collected.
                 if !DERIVABLE.contains(&d.as_str()) {
                     let start = out.text.len() as u32;
-                    out.text
-                        .push_str(&format!("impl {d} for {name}{} {{ }}", args_of(&params)));
+                    out.text.push_str(&format!(
+                        "impl{} {d} for {name}{} {{ }}",
+                        consts_of(&generics),
+                        args_of(&generics)
+                    ));
                     let end = out.text.len() as u32;
                     out.text.push('\n');
                     out.origins.push((TextRange::new(start, end), src, *range));
                     continue;
                 }
-                let header = header(d, &name, &params);
+                let header = header(d, &name, &generics);
                 let body = match d.as_str() {
                     "Copy" | "Eq" => String::new(),
-                    "Clone" if copy && params.is_empty() => {
+                    // A const parameter does not stop `*self`: only a type parameter, which
+                    // might not be `Copy`, does.
+                    "Clone" if copy && !type_params => {
                         "fn clone(&self) -> Self { *self }".to_string()
                     }
                     "Clone" => clone(&variants),
@@ -297,28 +309,46 @@ pub(crate) fn struct_impl(
         "Clone" => clone(&v),
         _ => partial_eq(&v),
     };
-    format!("{} {{ {body} }}", header(tr, name, params))
+    let generics: Vec<(String, Option<String>)> =
+        params.iter().map(|p| (p.clone(), None)).collect();
+    format!("{} {{ {body} }}", header(tr, name, &generics))
 }
 
-/// `impl<T: Trait> Trait for Name<T>`.
-/// `<A, B>` for type parameters `params`, or nothing.
-fn args_of(params: &[String]) -> String {
-    if params.is_empty() {
+/// `<A, S>` for generic parameters `generics` (type parameters, and const parameters with their
+/// declarations), or nothing.
+fn args_of(generics: &[(String, Option<String>)]) -> String {
+    if generics.is_empty() {
         String::new()
     } else {
-        format!("<{}>", params.join(", "))
+        let names: Vec<&str> = generics.iter().map(|(n, _)| n.as_str()).collect();
+        format!("<{}>", names.join(", "))
     }
 }
 
-fn header(tr: &str, name: &str, params: &[String]) -> String {
-    if params.is_empty() {
+/// `<const S: int>` for the const parameters among `generics`, or nothing: an impl of a trait
+/// whose derive gives no bounds.
+fn consts_of(generics: &[(String, Option<String>)]) -> String {
+    let decls: Vec<&str> = generics.iter().filter_map(|(_, d)| d.as_deref()).collect();
+    if decls.is_empty() {
+        String::new()
+    } else {
+        format!("<{}>", decls.join(", "))
+    }
+}
+
+/// `impl<T: Trait, const S: int> Trait for Name<T, S>`.
+fn header(tr: &str, name: &str, generics: &[(String, Option<String>)]) -> String {
+    if generics.is_empty() {
         return format!("impl {tr} for {name}");
     }
-    let bounded: Vec<String> = params.iter().map(|p| format!("{p}: {tr}")).collect();
+    let decls: Vec<String> = generics
+        .iter()
+        .map(|(n, decl)| decl.clone().unwrap_or_else(|| format!("{n}: {tr}")))
+        .collect();
     format!(
-        "impl<{}> {tr} for {name}<{}>",
-        bounded.join(", "),
-        params.join(", ")
+        "impl<{}> {tr} for {name}{}",
+        decls.join(", "),
+        args_of(generics)
     )
 }
 

@@ -17,6 +17,10 @@ its fields. The traits that can be derived are `Copy`, `Clone`, `PartialEq`, `Eq
 - `fmt` (of `Debug`) writes the value as Moddil source writes it (**attr.derive.debug.1**), and
   `default` makes one of its fields' defaults (**attr.derive.default.1**).
 
+For a generic type, the impl has the type's parameters: each type parameter bounded by the
+trait (`impl<T: Clone> Clone for Pair<T>`), and each const parameter as it is declared
+(`impl<const S: int> Clone for Fixed<S>`).
+
 **attr.derive.debug.1** A derived `Debug` writes `Point { x: 1, y: 2 }` for a struct with named
 fields, `Pair(3, true)` for one with positional fields, and `Mode::On(4)` or `Mode::Off` for an
 enum's variant, each field by its own `Debug`.

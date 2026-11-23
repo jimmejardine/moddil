@@ -29,5 +29,8 @@ same parameter and result types (E0409).
 
 **item.impl.coherence.1** A program has at most one impl of a trait for a type (E0406): two impls
 of a trait may not apply to the same type, for any type arguments. This includes the prelude's
-impls ([Prelude](../prelude.md)). Each type parameter of an impl is used by the type or by the
+impls ([Prelude](../prelude.md)). An impl applies only where its bounds hold, so one whose bound no
+impl meets for a type does not apply to it: `impl IntoIterator for &Bag` stands beside the
+prelude's `impl<I: Iterator> IntoIterator for I`, as no impl makes `&Bag` an `Iterator`. Each type
+parameter of an impl is used by the type or by the
 trait's type arguments (E0415), so that the impl's type arguments are known wherever it applies.

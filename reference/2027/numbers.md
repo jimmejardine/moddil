@@ -39,6 +39,10 @@ false for NaN and true for `-0.0 == 0.0`, and a float has no bitwise operators (
 **num.wrap.1** `a +% b`, `a -% b` and `a *% b` (and `+%=`, `-%=`, `*%=`) on integers wrap around
 the type's width instead of trapping: the result is the exact one modulo 2ⁿ, as the type holds it.
 
+**num.checked.1** On every integer type, `a.checked_add(b)`, `a.checked_sub(b)` and
+`a.checked_mul(b)` are `Some` of the result, or `None` where the operator would trap on
+overflow.
+
 **num.widen.1** A number converts implicitly where a number of another type is expected only if
 that type holds every value of its own exactly: a signed integer to a wider signed one, an unsigned
 integer to a wider unsigned or a strictly wider signed one, `f32` to `f64`, and an integer to a

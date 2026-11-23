@@ -1037,9 +1037,9 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
     for a Pike VM and matched leftmost-first, with groups, named groups, `find_all` and
     `replace_all`. Backreferences and lookaround are refused, naming `moddil/regex-backtrack`.
     `re"…"` compiled at compile time, with typed captures, is still to come.
-  - **TODO:** `Fixed<S>`'s `Clone`, `Copy`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash`,
-    `Debug` and `Default` are written by hand (`mods/decimal/src/fixed.moddil`), because
-    `#[derive]` does not take a type with const parameters (E0404). Derive them once it does.
+  - **Done since:** `#[derive]` takes a type with const parameters (`attr.derive.1`), so
+    `Fixed<S>` derives its structural impls. Its `Debug` stays hand-written, to write the decimal
+    (`1.50`).
   - **Gaps found on the way** (worked around in the mods; for the compiler):
     - **Fixed since:** `assert(f(v))`, where `f` took `v` by value, crashed native code and
       leaked on WASM. The MIR copied the part instead of moving it, so it was dropped twice. It
@@ -1058,13 +1058,22 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
       which has no types for it. It now does it at the type written for it, in a `let` or a
       struct field, as the others do. Passed straight as an argument or given as a result, it
       still panics it: the type is the callee's, known only after the argument is evaluated.
+    - **Fixed since:** the reference interpreter made an array literal a `Vec` for a `let`, a
+      parameter or a result, but not for a struct field, so a derived `clone` of one panicked.
     - **Types:** `Fixed<{S + T}>` (const arithmetic in a type) is not supported yet, nor are the
       exact literals of `numerics.md` (`let p: Fixed<2> = 0.10`).
-    - **Prelude:** `Option<&T>` has no `PartialEq`. `[1, 2]` for a `Vec<u8>` types its elements
-      as `int`, not `u8` (E0402). `int` has no `checked_add`.
-    - **Coherence:** `impl IntoIterator for &Deque<T>` outside `core` conflicts with the blanket
-      `impl<I: Iterator> IntoIterator for I` (E0406), so these collections have `iter()` but no
-      `for x in &d`.
+    - **Open (a design question):** `Option<&T>` has no `PartialEq`. A `PartialEq for &T`
+      would take `other: &Self`, a borrow of a borrow, which the language does not have; so
+      comparing values that hold borrows needs its own rule.
+    - **Prelude:** `[1, 2]` for a `Vec<u8>` types its elements as `int`, not `u8` (E0402).
+    - **Fixed since:** the integers have `checked_add`, `checked_sub` and `checked_mul`
+      (`num.checked.1`).
+    - **Fixed since:** integer patterns matched only `int`. A literal or range now matches any
+      integer type it fits (`pat.lit.1`), and exhaustiveness counts that type's range.
+    - **Fixed since:** `impl IntoIterator for &Deque<T>` outside `core` conflicted with the
+      blanket `impl<I: Iterator> IntoIterator for I` (E0406). Coherence now takes bounds into
+      account (`item.impl.coherence.1`): an impl does not apply where a bound of it definitely
+      fails, so the collections have `for x in &d`.
     - **Borrows:** `self.f(self.x)` with `&mut self` is refused, as there are no two-phase
       borrows. `let x;` without an initialiser is not supported yet.
 - **Slice M2e (decided November 2026): the first GPU path, Mandelbulb flight in a browser.**

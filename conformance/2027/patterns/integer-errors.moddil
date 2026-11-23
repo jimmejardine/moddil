@@ -1,0 +1,7 @@
+// covers: pat.lit.1, expr.match.exhaustive.1
+
+fn too_big(b: u8) -> int { match b { 300 => 0, _ => 1 } }                 //~ E0204
+fn too_low(b: u8) -> int { match b { -1 => 0, _ => 1 } }                  //~ E0204
+fn range_past(b: i8) -> int { match b { 0..=200 => 0, _ => 1 } }          //~ E0204
+fn not_an_integer(c: char) -> int { match c { 3 => 0, _ => 1 } }          //~ E0201
+fn not_covered(b: u8) -> int { match b { 0..=254 => 0 } }                 //~ E0208

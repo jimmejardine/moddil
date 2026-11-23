@@ -14,6 +14,10 @@ the value, or does not.
 **pat.1** `_` matches any value and binds nothing. A literal (`3`, `-1`, `true`) matches the value
 equal to it. `()` matches `()`.
 
+**pat.lit.1** An integer literal, or a range's bound, is a value of the integer type matched
+against, which it must fit (E0204): `0..=127` matches a `u8` as well as an `int`, and a `u8` has
+no value `300`. Against no integer type it is an error (E0201).
+
 **pat.bind.1** A name `x` matches any value and binds `x` to it; `mut x` binds a mutable local.
 `x @ p` matches what `p` matches and binds `x` to the whole value. A name that is a unit struct
 (`Marker`) is that struct's pattern, not a binding.

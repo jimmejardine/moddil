@@ -142,6 +142,14 @@ impl<T> Iterator for DequeIter<T> {
     }
 }
 
+impl<T> IntoIterator for &Deque<T> {
+    type Item = &T;
+    type IntoIter = DequeIter<T>;
+    fn into_iter(self) -> DequeIter<T> {
+        self.iter()
+    }
+}
+
 impl<T> Index for Deque<T> {
     type Output = T;
     /// The `i`th value from the front; traps if there is none.

@@ -367,6 +367,14 @@ impl<K: Ord, V> Iterator for TreeIter<K, V> {
     }
 }
 
+impl<K: Ord, V> IntoIterator for &TreeMap<K, V> {
+    type Item = (&K, &V);
+    type IntoIter = TreeIter<K, V>;
+    fn into_iter(self) -> TreeIter<K, V> {
+        self.iter()
+    }
+}
+
 impl<K: Ord, V> core::collections::Map<K, V> for TreeMap<K, V> {
     fn len(&self) -> int {
         self.nodes.len()
@@ -498,6 +506,14 @@ impl<T: Ord> Iterator for TreeSetIter<T> {
             Some((x, _)) => Some(x),
             None => None,
         }
+    }
+}
+
+impl<T: Ord> IntoIterator for &TreeSet<T> {
+    type Item = &T;
+    type IntoIter = TreeSetIter<T>;
+    fn into_iter(self) -> TreeSetIter<T> {
+        self.iter()
     }
 }
 

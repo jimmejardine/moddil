@@ -1,6 +1,8 @@
 //! Method dispatch: whether a kind of value implements a trait, and which method a call on it
 //! runs: an impl's, a trait's default, a derived one, or the built-in copy.
 
+use moddil_syntax::ast::{self, AstNode};
+
 use super::{Method, Program};
 use crate::value::Head;
 
@@ -104,6 +106,23 @@ impl Program {
                 .or_else(|| self.trait_method_of(tr, &Head::Array, name));
         }
         self.trait_method_of(tr, head, name)
+    }
+
+    /// Trait `tr`'s method `name` for a borrow of a value of kind `target`: from the impl for
+    /// `&X` whose `X` is of that kind (`impl IntoIterator for &Bag`), as every borrow has one
+    /// kind, [`Head::Ref`].
+    pub(crate) fn ref_trait_method(&self, tr: &str, target: &Head, name: &str) -> Option<Method> {
+        for (k, i) in self.impls.iter().enumerate() {
+            if i.trait_.as_deref() == Some(tr)
+                && i.head == Head::Ref
+                && let Some(inner) = i.self_ty.syntax().children().find_map(ast::Type::cast)
+                && self.head_in(i.module as usize, &inner) == *target
+                && let Some(f) = i.methods.get(name)
+            {
+                return Some(Method::Code(f.clone(), Some(k)));
+            }
+        }
+        None
     }
 
     fn trait_method_of(&self, tr: &str, head: &Head, name: &str) -> Option<Method> {

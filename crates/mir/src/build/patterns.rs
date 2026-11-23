@@ -123,7 +123,12 @@ impl Builder<'_> {
                 }
             }
             PatKind::Ref { pat: inner, .. } => self.test_pat(inner, &place.deref(), fail),
-            PatKind::Int(v) => self.test_cmp(BinOp::Eq, place, Const::Int(v as i64), fail),
+            // At the scrutinee's integer type (`pat.lit.1`).
+            PatKind::Int(v) => {
+                let t = self.items.base(self.types.pat(pat).strip_ref());
+                let c = crate::int_const(&t, v.into());
+                self.test_cmp(BinOp::Eq, place, c, fail);
+            }
             PatKind::Bool(v) => self.test_cmp(BinOp::Eq, place, Const::Bool(v), fail),
             PatKind::Char(c) => self.test_cmp(BinOp::Eq, place, Const::Char(c), fail),
             PatKind::Str(ref s) => {
@@ -136,11 +141,12 @@ impl Builder<'_> {
                 inclusive,
                 chars,
             } => {
+                let t = self.items.base(self.types.pat(pat).strip_ref());
                 let bound = |v: i128| {
                     if chars {
                         Const::Char(char::from_u32(v as u32).expect("a checked `char`"))
                     } else {
-                        Const::Int(v as i64)
+                        crate::int_const(&t, v.into())
                     }
                 };
                 self.test_cmp(BinOp::Ge, place, bound(lo), fail);

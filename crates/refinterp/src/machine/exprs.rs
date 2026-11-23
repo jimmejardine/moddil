@@ -543,9 +543,20 @@ impl Machine<'_> {
         let it = if self.program.implements(&head, "Iterator") {
             v
         } else {
-            let m = self
-                .program
-                .trait_method("IntoIterator", &head, "into_iter")
+            // A borrow's impl is the one for a borrow of what it points to.
+            let by_target = match &v {
+                Value::Ref(..) => {
+                    let target = self.target(v.clone()).head();
+                    self.program
+                        .ref_trait_method("IntoIterator", &target, "into_iter")
+                }
+                _ => None,
+            };
+            let m = by_target
+                .or_else(|| {
+                    self.program
+                        .trait_method("IntoIterator", &head, "into_iter")
+                })
                 .expect("a checked `for`");
             self.run_method(m, &head, vec![v], range)?
         };
@@ -603,7 +614,8 @@ impl Machine<'_> {
     }
 
     /// The kind of value the type written where `node` is used names, if one is: a `let`'s
-    /// type, a called function's parameter, or the result of the function it is the value of.
+    /// type, a struct field's, a called function's parameter, or the result of the function it
+    /// is the value of.
     pub(super) fn context_head(&self, node: &SyntaxNode) -> Option<Head> {
         let parent = node.parent()?;
         // `?` and `?!` give the call's value: the context of what they are part of.
@@ -615,6 +627,18 @@ impl Machine<'_> {
                 parent.children().find_map(ast::Type::cast)?,
                 self.memory.module(),
             ),
+            // A struct literal's field: its type as the struct declares it, in its module.
+            K::FIELD_INIT => {
+                let name = member_name(&parent);
+                let lit = parent
+                    .ancestors()
+                    .skip(1)
+                    .find(|a| ast::Expr::cast(a.clone()).is_some())?;
+                let (adt, info) = self.ctor(&segments(&lit))?;
+                let i = info.fields.iter().position(|f| *f == name)?;
+                let ty = info.types.get(i)?.clone()?;
+                (ty, self.program.adts.get(&adt)?.module)
+            }
             K::ARG => {
                 let list = parent.parent()?;
                 let call = list.parent()?;
