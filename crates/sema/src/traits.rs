@@ -490,6 +490,19 @@ impl<'a> Solver<'a> {
                 self.table = saved;
             }
         }
+        // A borrow compares as what it points to (`trait.borrow.eq.1`): `Some(&1) == Some(&1)`.
+        // Comparing two borrows themselves is refused where it is written (`*a == *b`).
+        if ["PartialEq", "Eq", "PartialOrd", "Ord"]
+            .iter()
+            .any(|n| self.is_lang(tr, n))
+            && let Ty::Ref(_, inner) = &ty
+        {
+            let inner = (**inner).clone();
+            return match self.implements(&inner, trait_ref) {
+                Answer::Yes(_) => Answer::Yes(Source::Builtin),
+                a => a,
+            };
+        }
         if self.is_lang(tr, "Copy") || self.is_lang(tr, "Clone") {
             match &ty {
                 Ty::Ref(false, _) | Ty::Ptr(..) => return Answer::Yes(Source::Builtin),

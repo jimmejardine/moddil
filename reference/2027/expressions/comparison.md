@@ -13,6 +13,11 @@ type `bool`.
 two borrows is not defined (E0205): compare what they point to, with `*`. Tuples do not implement
 `PartialEq` or `PartialOrd` in this edition (E0205).
 
+**trait.borrow.eq.1** A shared or `&mut` borrow `&T` implements `PartialEq`, `Eq`, `PartialOrd` and
+`Ord` where `T` does, built in: inside another value, a borrow compares as what it points to, so
+`v.first() == Some(&1)` holds for a `v` starting with `1`. (Its methods would take a borrow of a
+borrow, which no code can write; the comparison of two borrows themselves stays refused, above.)
+
 **expr.cmp.chain.1** A chain `a < b <= c` means `a < b && b <= c`, with `b` evaluated once.
 Operands are evaluated left to right, and evaluation stops at the first comparison that is false.
 

@@ -114,3 +114,14 @@ fn narrow(x: i128) -> i128 { x }
 test "literal arithmetic past i128 overflows an i128 argument" {
     narrow(170141183460469231731687303715884105727 + 1);   //~ trap
 }
+
+struct Holder;
+
+impl Holder {
+    fn keep(&self, x: u128) -> u128 { x }
+}
+
+test "literal arithmetic past i128 as a method's argument" {
+    let h = Holder;
+    h.keep(340282366920938463463374607431768211455 - 3)   // => 340282366920938463463374607431768211452
+}

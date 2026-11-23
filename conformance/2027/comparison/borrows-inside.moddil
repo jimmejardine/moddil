@@ -1,0 +1,19 @@
+// covers: trait.borrow.eq.1
+// Values holding borrows compare by what the borrows point to.
+
+test "an Option of a borrow" {
+    let v: Vec<int> = [1, 2, 3];
+    v.first() == Some(&1)                   // => true
+    ;
+    v.last() == Some(&2)                    // => false
+    ;
+    v.get(9) == None                        // => true
+    ;
+    v.first() < v.last()                    // => true
+}
+
+test "an Option of text" {
+    let s = "abc";
+    let o: Option<&str> = Some(s);
+    o == Some("abc")                        // => true
+}

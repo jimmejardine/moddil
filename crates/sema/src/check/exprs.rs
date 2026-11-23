@@ -573,6 +573,9 @@ impl Checker<'_> {
             ..tr
         };
         let range = self.range(e);
+        // The element type the expected type's impl gives, if one impl applies: so `[1, 2]` as a
+        // `Vec<u8>` is of `u8`s, not of `int`s first.
+        let _ = self.solver.implements(&target, &tr);
         match self.body.exprs[e].kind.clone() {
             ExprKind::Array(xs) => {
                 for &x in &xs {

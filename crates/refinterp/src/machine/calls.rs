@@ -204,6 +204,18 @@ impl Machine<'_> {
         range: TextRange,
     ) -> Eval {
         let head = self.target(args[0].clone()).head();
+        // A borrow compares as what it points to (`trait.borrow.eq.1`): each argument, a borrow
+        // of a borrow, read once.
+        if head == Head::Ref && matches!(tr, "PartialEq" | "Eq" | "PartialOrd" | "Ord") {
+            let args = args
+                .into_iter()
+                .map(|a| match a {
+                    Value::Ref(p, _) => self.memory.load(&p),
+                    v => v,
+                })
+                .collect();
+            return self.call_trait(tr, name, args, range);
+        }
         let m = self
             .program
             .trait_method(tr, &head, name)
@@ -1198,7 +1210,28 @@ impl Machine<'_> {
                 self.target(value.clone())
             )
         });
-        let written = self.eval_all(&args)?;
+        // Each argument where its parameter's type is written (`num.lit.1`), when none is
+        // named: positional arguments are the parameters in order.
+        let labelled = node
+            .child(K::ARG_LIST)
+            .and_then(ast::ArgList::cast)
+            .is_some_and(|l| l.args().any(|a| a.label().is_some()));
+        let written = match &m {
+            Method::Code(f, _) if !labelled => {
+                let params: Vec<ast::Param> = f
+                    .node
+                    .params()
+                    .map(|l| l.params().collect())
+                    .unwrap_or_default();
+                let mut out = Vec::new();
+                for (i, a) in args.iter().enumerate() {
+                    let ty = params.get(i).and_then(ast::Param::ty);
+                    out.push(self.eval_as(a, ty.as_ref())?);
+                }
+                out
+            }
+            _ => self.eval_all(&args)?,
+        };
         let values = match &m {
             Method::Code(f, imp) => {
                 let inherited = imp.and_then(|k| self.trait_method(k, &name));

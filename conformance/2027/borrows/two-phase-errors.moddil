@@ -1,0 +1,14 @@
+// covers: expr.method.twophase.1
+
+struct Counter { n: int }
+
+impl Counter {
+    fn absorb(&mut self, other: &Counter) {
+        self.n += other.n;
+    }
+}
+
+fn kept_borrow() {
+    let mut c = Counter { n: 1 };
+    c.absorb(&c);                           //~ E0305
+}

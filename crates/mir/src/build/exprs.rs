@@ -662,6 +662,17 @@ impl Builder<'_> {
                             t => t,
                         };
                         let t = self.temp(Ty::reference(m, inner));
+                        if m {
+                            // Two-phase (`expr.method.twophase.1`): the receiver's place first,
+                            // its `&mut` borrow once the arguments are evaluated, so they may
+                            // read it (`v.push(v.len())`).
+                            let rest = self.operands(&args);
+                            self.cfg.assign(t, Rvalue::Ref(m, place));
+                            let mut ops = vec![Operand::Move(Place::local(t))];
+                            ops.extend(rest);
+                            self.call(e, dest, ops);
+                            return;
+                        }
                         self.cfg.assign(t, Rvalue::Ref(m, place));
                         Operand::Move(Place::local(t))
                     }

@@ -91,6 +91,30 @@ pub(crate) fn plan(
         }
         c => c,
     };
+    // A borrow compares as what it points to (`trait.borrow.eq.1`): the method of the type it
+    // borrows, each argument (a borrow of a borrow) read once.
+    let callee = match callee {
+        Callee::Trait { func, args }
+            if matches!(concrete(dispatch, &args[0]), Ty::Ref(..)) && {
+                let items = dispatch.items();
+                let t = items.trait_of(func);
+                ["PartialEq", "Eq", "PartialOrd", "Ord"]
+                    .iter()
+                    .any(|n| t.is_some() && items.lang(n) == t)
+            } =>
+        {
+            let Ty::Ref(_, inner) = concrete(dispatch, &args[0]) else {
+                unreachable!()
+            };
+            for v in &mut values {
+                *v = stack.deref(v);
+            }
+            let mut args = args.clone();
+            args[0] = (*inner).clone();
+            Callee::Trait { func, args }
+        }
+        c => c,
+    };
     // An anonymous impl's method is a closure of its own: its value is the method's, the
     // arguments but `self` its arguments. One it leaves out is the trait's default.
     let mut closure_ty = None;

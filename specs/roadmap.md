@@ -1060,16 +1060,17 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
       (`i128::MAX + 1`, `u128::MAX - 1`, all literals) panicked the reference interpreter,
       which has no types for it. It now does it at the type written where it is used, as the
       others do: a `let`'s, a struct field's, a function's or constructor's parameter's, a
-      function's result. A method's argument is the one place it still panics: the method's
-      parameters are known only from the receiver's value.
+      function's result, and (since) a method's parameter.
     - **Fixed since:** the reference interpreter made an array literal a `Vec` for a `let`, a
       parameter or a result, but not for a struct field, so a derived `clone` of one panicked.
     - **Types:** `Fixed<{S + T}>` (const arithmetic in a type) is not supported yet, nor are the
       exact literals of `numerics.md` (`let p: Fixed<2> = 0.10`).
-    - **Open (a design question):** `Option<&T>` has no `PartialEq`. A `PartialEq for &T`
-      would take `other: &Self`, a borrow of a borrow, which the language does not have; so
-      comparing values that hold borrows needs its own rule.
-    - **Prelude:** `[1, 2]` for a `Vec<u8>` types its elements as `int`, not `u8` (E0402).
+    - **Fixed since (decided November 2026):** `Option<&T>` had no `PartialEq`, as an impl for
+      `&T` would take a borrow of a borrow. A borrow now implements the comparison traits built in
+      where what it points to does (`trait.borrow.eq.1`), so `v.first() == Some(&1)` holds; each
+      implementation calls the pointee's method.
+    - **Fixed since:** `[1, 2]` for a `Vec<u8>` typed its elements as `int` (E0402). The element
+      type now comes from the expected collection's `FromArrayLiteral` impl first.
     - **Fixed since:** the integers have `checked_add`, `checked_sub` and `checked_mul`
       (`num.checked.1`).
     - **Fixed since:** integer patterns matched only `int`. A literal or range now matches any
@@ -1078,8 +1079,10 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
       blanket `impl<I: Iterator> IntoIterator for I` (E0406). Coherence now takes bounds into
       account (`item.impl.coherence.1`): an impl does not apply where a bound of it definitely
       fails, so the collections have `for x in &d`.
-    - **Borrows:** `self.f(self.x)` with `&mut self` is refused, as there are no two-phase
-      borrows. `let x;` without an initialiser is not supported yet.
+    - **Fixed since:** `self.f(self.x)` with `&mut self` was refused. A receiver borrowed with
+      `&mut` is now borrowed once the arguments are evaluated (`expr.method.twophase.1`), so they
+      may read it.
+    - **Borrows:** `let x;` without an initialiser is not supported yet.
 - **Slice M2e (decided November 2026): the first GPU path, Mandelbulb flight in a browser.**
   `moddil build --wasm examples/mandelbulb/web` writes a page that flies through the fractal: the
   kernel is Moddil, lowered to WGSL, and runs on WebGPU.

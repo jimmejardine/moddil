@@ -14,6 +14,11 @@ comes before a trait's method. A type with no such method is an error (E0403). B
 `&mut` needs a place that can be changed (E0301, E0302) ([Borrows](../borrows.md)). Then the call
 is checked as a call of the method ([Calls](calls.md)).
 
+**expr.method.twophase.1** A receiver borrowed with `&mut` is borrowed once the arguments are
+evaluated: its place is found first, in the order written, and the arguments may then read it,
+as in `v.push(v.len())` or `self.add(self.step)`. A borrow an argument keeps until the call, as in
+`c.absorb(&c)`, still conflicts with it (E0305).
+
 **expr.method.deref.1** If no step finds the method and the receiver's type (or what a borrow
 receiver points to) implements the prelude's `Deref`, it is looked for again on what that
 dereferences to, as `(*e).name(…)` would: a `Box`'s value, a lock's guard's
