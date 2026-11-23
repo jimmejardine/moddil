@@ -618,8 +618,12 @@ impl Machine<'_> {
     /// is the value of.
     pub(super) fn context_head(&self, node: &SyntaxNode) -> Option<Head> {
         let parent = node.parent()?;
-        // `?` and `?!` give the call's value: the context of what they are part of.
-        if matches!(parent.kind(), K::PROPAGATE_EXPR | K::UNWRAP_EXPR) {
+        // `?` and `?!` give the call's value, and parentheses theirs: the context of what they
+        // are part of.
+        if matches!(
+            parent.kind(),
+            K::PROPAGATE_EXPR | K::UNWRAP_EXPR | K::PAREN_EXPR
+        ) {
             return self.context_head(&parent);
         }
         let (ty, module) = match parent.kind() {
@@ -650,14 +654,22 @@ impl Machine<'_> {
                     .filter(|c| c.kind() == K::ARG)
                     .position(|c| c == parent)?;
                 let callee = call.children().find_map(ast::Expr::cast)?;
-                let Some((crate::program::Def::Item(k), _)) =
-                    self.resolve(&segments(callee.syntax()))
-                else {
+                let segs = segments(callee.syntax());
+                let Some((crate::program::Def::Item(k), _)) = self.resolve(&segs) else {
                     return None;
                 };
-                let f = self.program.fns.get(&k)?;
-                let p = f.node.params()?.params().nth(at)?;
-                (p.ty()?, f.module as usize)
+                match self.program.fns.get(&k) {
+                    Some(f) => {
+                        let p = f.node.params()?.params().nth(at)?;
+                        (p.ty()?, f.module as usize)
+                    }
+                    // A tuple struct's or variant's constructor: its field's type.
+                    None => {
+                        let (adt, info) = self.ctor(&segs)?;
+                        let ty = info.types.get(at)?.clone()?;
+                        (ty, self.program.adts.get(&adt)?.module)
+                    }
+                }
             }
             _ => {
                 // The value of a function's body, or what it returns.
@@ -780,6 +792,13 @@ impl Machine<'_> {
         // Arithmetic on literals is exact (`num.lit.1`): folded before it meets a type.
         if let Some(v) = crate::num::folded(e) {
             return Ok(v);
+        }
+        // Past `i128` it is left to the type: the one written where it is used (a parameter,
+        // a function's result), so its literals take that type first.
+        if literal_tree(e)
+            && let Some(Head::Num(k)) = self.context_head(node)
+        {
+            return self.at_kind(e, k);
         }
         let (l, r) = e.operands();
         let (l, r) = (l.expect("operands"), r.expect("operands"));

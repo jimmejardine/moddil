@@ -1058,9 +1058,10 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
       reference interpreter keeps one past `i128` as a literal only a `u128` or a float takes.
     - **Fixed since, mostly:** arithmetic on literals that does not fold in `i128`
       (`i128::MAX + 1`, `u128::MAX - 1`, all literals) panicked the reference interpreter,
-      which has no types for it. It now does it at the type written for it, in a `let` or a
-      struct field, as the others do. Passed straight as an argument or given as a result, it
-      still panics it: the type is the callee's, known only after the argument is evaluated.
+      which has no types for it. It now does it at the type written where it is used, as the
+      others do: a `let`'s, a struct field's, a function's or constructor's parameter's, a
+      function's result. A method's argument is the one place it still panics: the method's
+      parameters are known only from the receiver's value.
     - **Fixed since:** the reference interpreter made an array literal a `Vec` for a `let`, a
       parameter or a result, but not for a struct field, so a derived `clone` of one panicked.
     - **Types:** `Fixed<{S + T}>` (const arithmetic in a type) is not supported yet, nor are the
