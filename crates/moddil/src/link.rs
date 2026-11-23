@@ -212,7 +212,10 @@ fn linker(obj: &Path, lib: &Path, out: &Path) -> Result<Command, String> {
     let mut cmd = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
     cmd.arg(obj).arg(lib).arg("-o").arg(out);
     if cfg!(target_os = "macos") {
-        cmd.args(["-lSystem", "-lc", "-lm"]);
+        // `-lobjc`: the runtime's signal handling (`ctrlc`, through `dispatch2` and `objc2`)
+        // uses Apple's Objective-C runtime; libdispatch is part of libSystem. These are the
+        // libraries `rustc --print native-static-libs` lists for `moddil-rt-main` there.
+        cmd.args(["-lSystem", "-lobjc", "-lc", "-lm"]);
     } else {
         cmd.args([
             "-lgcc_s",

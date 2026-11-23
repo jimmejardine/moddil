@@ -264,6 +264,8 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
     } catch {
       screen.device = null;
     }
+    // For a test (and anyone curious): no WebGPU here, so the CPU simulator draws.
+    if (!screen.device && page) document.body.dataset.gpu = 'none';
     return screen.device;
   };
   // Buffer `name`, at least `bytes` long, with `usage`: kept, and made again (bigger) only when
