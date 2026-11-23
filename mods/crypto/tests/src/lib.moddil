@@ -1,0 +1,95 @@
+// The hashes against published test vectors: FIPS 180-4's examples for SHA-2, and the BLAKE3
+// reference's inputs of `i % 251` at lengths around its block, chunk and tree boundaries.
+
+use crypto::{Blake3, Sha256, blake3, hex, sha256, sha512};
+
+/// The bytes of `s`.
+fn bytes(s: &str) -> Vec<u8> {
+    let mut v: Vec<u8> = Vec::new();
+    let mut i = 0;
+    while i < s.len() {
+        v.push(s.byte_at(i));
+        i += 1;
+    }
+    v
+}
+
+/// `n` bytes, the `i`th `i % 251`.
+fn pattern(n: int) -> Vec<u8> {
+    let mut v: Vec<u8> = Vec::with_capacity(n);
+    let mut i = 0;
+    while i < n {
+        v.push((i % 251).truncate::<u8>());
+        i += 1;
+    }
+    v
+}
+
+/// Checks that `digest` is `want` in hex. (Not `assert(is(digest, want))`: an `assert` whose
+/// condition moves a value crashes native code for now.)
+fn check(digest: Vec<u8>, want: &str) {
+    let h = hex(digest.as_slice());
+    let h: &str = &h;
+    assert(h == want);
+}
+
+const TWO_BLOCKS: &str = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+const FOUR_BLOCKS: &str = "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu";
+
+test "hex writes two digits a byte" {
+    let mut v: Vec<u8> = Vec::new();
+    for b in [0, 9, 10, 255, 16] {
+        v.push(b.truncate::<u8>());
+    }
+    check(v, "00090aff10");
+}
+
+test "SHA-256 matches FIPS 180-4" {
+    check(sha256(bytes("").as_slice()), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    check(sha256(bytes("abc").as_slice()), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    check(sha256(bytes(TWO_BLOCKS).as_slice()), "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
+    check(sha256(bytes(FOUR_BLOCKS).as_slice()), "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1");
+}
+
+test "SHA-256 fed in parts is SHA-256 of the whole" {
+    let data = pattern(1000);
+    let mut h = Sha256::new();
+    h.update(&data.as_slice()[..1]);
+    h.update(&data.as_slice()[1..300]);
+    h.update(&data.as_slice()[300..]);
+    check(h.finalize(), "4e4c294b331f7a2099a379bec34b9f9fc03dc46ab465d998f4d683da53487e6d");
+}
+
+test "SHA-512 matches FIPS 180-4" {
+    check(sha512(bytes("").as_slice()), "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e");
+    check(sha512(bytes("abc").as_slice()), "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f");
+    check(sha512(bytes(FOUR_BLOCKS).as_slice()), "8e959b75dae313da8cf4f72814fc143f8f7779c6eb9f7fa17299aeadb6889018501d289e4900f7e4331b99dec4b5433ac7d329eeb6dd26545e96e55b874be909");
+    check(sha512(pattern(1000).as_slice()), "5096498d96f50f9a137c4db5b8b0cd38383ad55350fb5a98805fedc31fa1262f1f0cf4d6f12d7ecd8dedd933a4c9126344fe22e937a8ad35fdeae1e876ae698b");
+}
+
+test "BLAKE3 within one chunk" {
+    check(blake3(pattern(0).as_slice()), "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262");
+    check(blake3(pattern(1).as_slice()), "2d3adedff11b61f14c886e35afa036736dcd87a74d27b5c1510225d0f592e213");
+    check(blake3(pattern(64).as_slice()), "4eed7141ea4a5cd4b788606bd23f46e212af9cacebacdc7d1f4c6dc7f2511b98");
+    check(blake3(pattern(65).as_slice()), "de1e5fa0be70df6d2be8fffd0e99ceaa8eb6e8c93a63f2d8d1c30ecb6b263dee");
+    check(blake3(pattern(1023).as_slice()), "10108970eeda3eb932baac1428c7a2163b0e924c9a9e25b35bba72b28f70bd11");
+    check(blake3(pattern(1024).as_slice()), "42214739f095a406f3fc83deb889744ac00df831c10daa55189b5d121c855af7");
+}
+
+test "BLAKE3 across chunks and up the tree" {
+    check(blake3(pattern(1025).as_slice()), "d00278ae47eb27b34faecf67b4fe263f82d5412916c1ffd97c8cb7fb814b8444");
+    check(blake3(pattern(2048).as_slice()), "e776b6028c7cd22a4d0ba182a8bf62205d2ef576467e838ed6f2529b85fba24a");
+    check(blake3(pattern(2049).as_slice()), "5f4d72f40d7a5f82b15ca2b2e44b1de3c2ef86c426c95c1af0b6879522563030");
+    check(blake3(pattern(3073).as_slice()), "7124b49501012f81cc7f11ca069ec9226cecb8a2c850cfe644e327d22d3e1cd3");
+    check(blake3(pattern(4096).as_slice()), "015094013f57a5277b59d8475c0501042c0b642e531b0a1c8f58d2163229e969");
+    check(blake3(pattern(5121).as_slice()), "628bd2cb2004694adaab7bbd778a25df25c47b9d4155a55f8fbd79f2fe154cff");
+}
+
+test "BLAKE3 fed in parts is BLAKE3 of the whole" {
+    let data = pattern(4097);
+    let mut h = Blake3::new();
+    h.update(&data.as_slice()[..1000]);
+    h.update(&data.as_slice()[1000..1024]);
+    h.update(&data.as_slice()[1024..]);
+    check(h.finalize(), "9b4052b38f1c5fc8b1f9ff7ac7b27cd242487b3d890d15c96a1c25b8aa0fb995");
+}

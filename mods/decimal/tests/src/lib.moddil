@@ -1,0 +1,96 @@
+// `Fixed<S>` and `BigDecimal`: money sums, each rounding mode, division to a scale, rescaling.
+
+use decimal::{BigDecimal, Fixed};
+
+fn price(s: &str) -> Fixed<2> {
+    Fixed::parse(s) ?! "the test's prices parse"
+}
+
+fn dec(s: &str) -> BigDecimal {
+    BigDecimal::parse(s) ?! "the test's decimals parse"
+}
+
+/// Checks that `x` is written `want`.
+fn check<T: Display>(x: &T, want: &str) {
+    let s = x.to_string();
+    let s: &str = &s;
+    assert(s == want);
+}
+
+test "fixed sums are exact" {
+    let mut total: Fixed<2> = Fixed::zero();
+    let mut i = 0;
+    while i < 10 {
+        total = total + price("0.10");
+        i += 1;
+    }
+    assert(total == Fixed::from_int(1));
+    check(&total, "1.00");
+    check(&(price("1.05") - price("2.10")), "-1.05");
+    check(&price("-0.07"), "-0.07");
+    check(&price("12"), "12.00");
+}
+
+test "fixed parsing never rounds" {
+    assert(Fixed::<2>::parse("1.234").is_none());
+    assert(Fixed::<2>::parse("1.2.3").is_none());
+    assert(Fixed::<2>::parse("").is_none());
+    assert(Fixed::<2>::parse("abc").is_none());
+    check(&price("1.5"), "1.50");
+    assert(price("1.5").units() == 150);
+}
+
+test "each rounding mode, at a tie and past it" {
+    let t: Fixed<3> = Fixed::parse("2.345") ?! "t";
+    let n: Fixed<3> = Fixed::parse("-2.345") ?! "n";
+    check(&t.rescale::<2>(Round::NearestEven), "2.34");
+    check(&t.rescale::<2>(Round::NearestAway), "2.35");
+    check(&t.rescale::<2>(Round::Down), "2.34");
+    check(&t.rescale::<2>(Round::Up), "2.35");
+    check(&t.rescale::<2>(Round::TowardZero), "2.34");
+    check(&n.rescale::<2>(Round::NearestEven), "-2.34");
+    check(&n.rescale::<2>(Round::NearestAway), "-2.35");
+    check(&n.rescale::<2>(Round::Down), "-2.35");
+    check(&n.rescale::<2>(Round::Up), "-2.34");
+    check(&n.rescale::<2>(Round::TowardZero), "-2.34");
+    let past: Fixed<3> = Fixed::parse("2.346") ?! "past";
+    check(&past.rescale::<2>(Round::NearestEven), "2.35");
+    let even: Fixed<3> = Fixed::parse("2.355") ?! "even";
+    check(&even.rescale::<2>(Round::NearestEven), "2.36");
+}
+
+test "fixed products and quotients name their scale" {
+    let px: Fixed<4> = Fixed::parse("101.2550") ?! "px";
+    let qty: Fixed<0> = Fixed::from_int(300);
+    let notional: Fixed<2> = px.mul(qty, Round::NearestEven);
+    check(&notional, "30376.50");
+    let exact: Fixed<4> = px.mul(qty, Round::NearestEven);
+    check(&exact, "30376.5000");
+    let third: Fixed<4> = price("1.00").div(price("3.00"), Round::NearestEven);
+    check(&third, "0.3333");
+    let up: Fixed<4> = price("2.00").div(price("3.00"), Round::Up);
+    check(&up, "0.6667");
+    check(&price("1.25").times(3), "3.75");
+}
+
+test "big decimals add at the wider scale and multiply exactly" {
+    check(&(dec("1.5") + dec("0.25")), "1.75");
+    check(&(dec("1.50") - dec("3")), "-1.50");
+    check(&(dec("0.1") * dec("0.2")), "0.02");
+    check(&dec("-0.050"), "-0.050");
+    let big = dec("123456789012345678901234567890.123456789");
+    check(&(big.clone() * dec("1000")), "123456789012345678901234567890123.456789000");
+    assert(dec("1.5") == dec("1.500"));
+    assert(dec("-2") < dec("-1.99"));
+}
+
+test "big decimals divide to a scale" {
+    check(&dec("1").div(&dec("3"), 10, Round::NearestEven), "0.3333333333");
+    check(&dec("2").div(&dec("3"), 0, Round::NearestEven), "1");
+    check(&dec("-1").div(&dec("8"), 2, Round::NearestEven), "-0.12");
+    check(&dec("-1").div(&dec("8"), 2, Round::NearestAway), "-0.13");
+    check(&dec("10").div(&dec("0.4"), 1, Round::TowardZero), "25.0");
+    check(&dec("2.345").rescale(2, Round::Up), "2.35");
+    check(&dec("2.3").rescale(4, Round::Up), "2.3000");
+    check(&dec("120.500").normalized(), "120.5");
+}

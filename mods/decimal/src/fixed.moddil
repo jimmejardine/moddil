@@ -1,0 +1,252 @@
+//! `Fixed<S>`: a decimal with `S` digits after the point, as an `int` of units of 10^-S.
+
+use num::BigInt;
+use mod::round::div_round_big;
+
+/// A decimal with `S` digits after the point, `S` at least 0: an `int` counting units of
+/// 10^-S, so `Fixed<2>` counts cents. Its arithmetic is exact and traps on overflow, as `int`'s
+/// does; where a result has more digits than its scale, the rounding is always stated.
+/// The scale is part of the type, so adding `Fixed<2>` to `Fixed<4>` does not compile: one is
+/// rescaled first.
+pub struct Fixed<const S: int> {
+    units: int,
+}
+
+// TODO: derive these once `#[derive]` takes a type with const parameters (it fails with E0404
+// on `Fixed<const S: int>` today): `Clone`, `Copy`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`,
+// `Hash`, `Debug` and `Default` below are written by hand only for that. They work on all three
+// backends as they are. Tracked in `specs/roadmap.md` (M2, "Standard mods beyond the tour").
+
+impl<const S: int> Clone for Fixed<S> {
+    fn clone(&self) -> Fixed<S> {
+        Fixed { units: self.units }
+    }
+}
+
+impl<const S: int> Copy for Fixed<S> {}
+
+impl<const S: int> Fixed<S> {
+    /// The value `units` × 10^-S.
+    pub fn from_units(units: int) -> Fixed<S> {
+        Fixed { units }
+    }
+
+    pub fn from_int(n: int) -> Fixed<S> {
+        Fixed { units: n * pow10(S) }
+    }
+
+    pub fn zero() -> Fixed<S> {
+        Fixed { units: 0 }
+    }
+
+    /// The value in units of 10^-S.
+    pub fn units(&self) -> int {
+        self.units
+    }
+
+    pub fn scale(&self) -> int {
+        S
+    }
+
+    pub fn is_negative(&self) -> bool {
+        self.units < 0
+    }
+
+    pub fn abs(self) -> Fixed<S> {
+        Fixed { units: if self.units < 0 { -self.units } else { self.units } }
+    }
+
+    /// A decimal written with an optional `-`, digits, and optionally a point and up to `S`
+    /// digits after it; `None` for anything else, a value with more digits than the scale holds
+    /// among them, since parsing never rounds.
+    pub fn parse(s: &str) -> Option<Fixed<S>> {
+        let neg = s.len() > 0 && s.byte_at(0) == 45;
+        let mut i = if neg { 1 } else { 0 };
+        let mut units = 0;
+        let mut digits = 0;
+        let mut after: int = -1;
+        while i < s.len() {
+            let c: int = s.byte_at(i);
+            if c == 46 && after < 0 {
+                after = 0;
+            } else if c >= 48 && c <= 57 {
+                if after >= 0 {
+                    if after == S {
+                        return None;
+                    }
+                    after += 1;
+                }
+                // Past what an `int` holds is not a `Fixed`.
+                if units > (9223372036854775807 - (c - 48)) / 10 {
+                    return None;
+                }
+                units = units * 10 + (c - 48);
+                digits += 1;
+            } else {
+                return None;
+            }
+            i += 1;
+        }
+        if digits == 0 {
+            return None;
+        }
+        let have = if after < 0 { 0 } else { after };
+        let scaled = BigInt::from_int(units).times(&pow10_big(S - have));
+        match (if neg { scaled.negated() } else { scaled }).to_int() {
+            Some(u) => Some(Fixed { units: u }),
+            None => None,
+        }
+    }
+
+    /// The value at scale `R`, rounded by `mode` if `R` is less than `S`.
+    pub fn rescale<const R: int>(self, mode: Round) -> Fixed<R> {
+        let u = BigInt::from_int(self.units);
+        let units = if R >= S {
+            u.times(&pow10_big(R - S))
+        } else {
+            div_round_big(&u, &pow10_big(S - R), mode)
+        };
+        Fixed { units: narrow(&units) }
+    }
+
+    /// The product at scale `R`: exact at scale `S + T`, then rounded by `mode` if `R` is less.
+    pub fn mul<const T: int, const R: int>(self, other: Fixed<T>, mode: Round) -> Fixed<R> {
+        let exact = BigInt::from_int(self.units).times(&BigInt::from_int(other.units()));
+        let units = if R >= S + T {
+            exact.times(&pow10_big(R - S - T))
+        } else {
+            div_round_big(&exact, &pow10_big(S + T - R), mode)
+        };
+        Fixed { units: narrow(&units) }
+    }
+
+    /// The quotient at scale `R`, rounded by `mode`; traps if `other` is zero.
+    pub fn div<const T: int, const R: int>(self, other: Fixed<T>, mode: Round) -> Fixed<R> {
+        assert(other.units() != 0);
+        let a = BigInt::from_int(self.units);
+        let b = BigInt::from_int(other.units());
+        // (a / 10^S) / (b / 10^T) in units of 10^-R is a × 10^(R - S + T) / b.
+        let e = R - S + T;
+        let units = if e >= 0 {
+            div_round_big(&a.times(&pow10_big(e)), &b, mode)
+        } else {
+            div_round_big(&a, &b.times(&pow10_big(-e)), mode)
+        };
+        Fixed { units: narrow(&units) }
+    }
+
+    /// The product with a whole number, exact.
+    pub fn times(self, n: int) -> Fixed<S> {
+        Fixed { units: self.units * n }
+    }
+}
+
+/// 10^e, for `e` from 0 to 18.
+fn pow10(e: int) -> int {
+    assert(e >= 0);
+    let mut p = 1;
+    let mut i = 0;
+    while i < e {
+        p = p * 10;
+        i += 1;
+    }
+    p
+}
+
+/// 10^e, for `e` at least 0.
+fn pow10_big(e: int) -> BigInt {
+    BigInt::from_int(10).pow(e)
+}
+
+/// A result's units as an `int`; traps, as `int` arithmetic would, if they are not one. (The
+/// exact product or quotient is worked out in a `BigInt`, since it can pass what an `int` holds
+/// before it is rounded back; `i128` would do, but native code cannot divide one yet.)
+fn narrow(x: &BigInt) -> int {
+    x.to_int() ?! "a Fixed's units fit an int"
+}
+
+impl<const S: int> Add for Fixed<S> {
+    type Output = Fixed<S>;
+    fn add(self, rhs: Fixed<S>) -> Fixed<S> {
+        Fixed { units: self.units + rhs.units }
+    }
+}
+
+impl<const S: int> Sub for Fixed<S> {
+    type Output = Fixed<S>;
+    fn sub(self, rhs: Fixed<S>) -> Fixed<S> {
+        Fixed { units: self.units - rhs.units }
+    }
+}
+
+impl<const S: int> Neg for Fixed<S> {
+    type Output = Fixed<S>;
+    fn neg(self) -> Fixed<S> {
+        Fixed { units: -self.units }
+    }
+}
+
+impl<const S: int> PartialEq for Fixed<S> {
+    fn eq(&self, other: &Fixed<S>) -> bool {
+        self.units == other.units
+    }
+}
+
+impl<const S: int> Eq for Fixed<S> {}
+
+impl<const S: int> PartialOrd for Fixed<S> {
+    fn partial_cmp(&self, other: &Fixed<S>) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<const S: int> Ord for Fixed<S> {
+    fn cmp(&self, other: &Fixed<S>) -> Ordering {
+        self.units.cmp(&other.units)
+    }
+}
+
+impl<const S: int> Hash for Fixed<S> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.units);
+    }
+}
+
+/// With exactly `S` digits after the point: `-1.50` for `Fixed<2>`.
+impl<const S: int> Display for Fixed<S> {
+    fn fmt(&self, out: &mut String) {
+        let digits = BigInt::from_int(self.units).abs().to_string();
+        let digits: &str = &digits;
+        if self.units < 0 {
+            out.push('-');
+        }
+        let n = digits.len();
+        if n <= S {
+            out.push('0');
+        } else {
+            out.push_str(digits.bytes_between(0, n - S));
+        }
+        if S > 0 {
+            out.push('.');
+            let digits = if n <= S { digits } else { digits.bytes_between(n - S, n) };
+            let mut pad = S - digits.len();
+            while pad > 0 {
+                out.push('0');
+                pad -= 1;
+            }
+            out.push_str(digits);
+        }
+    }
+}
+
+impl<const S: int> Debug for Fixed<S> {
+    fn fmt(&self, out: &mut String) {
+        Display::fmt(self, out);
+    }
+}
+
+impl<const S: int> Default for Fixed<S> {
+    fn default() -> Fixed<S> {
+        Fixed { units: 0 }
+    }
+}

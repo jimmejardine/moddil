@@ -1,0 +1,329 @@
+//! Numbers beyond the prelude's (`stdlib.md`: Initial standard-mod catalogue): `BigInt`, an
+//! integer of any size, and `Rational`, an exact fraction.
+
+pub use mod::rational::Rational;
+
+use mod::mag;
+
+/// An integer of any size: a sign and a magnitude, the magnitude's 32-bit limbs least
+/// significant first, with no zero limbs at the top. Zero has no limbs and is not negative.
+#[derive(Clone, PartialEq, Eq)]
+pub struct BigInt {
+    neg: bool,
+    mag: Vec<u32>,
+}
+
+impl BigInt {
+    pub fn zero() -> BigInt {
+        BigInt { neg: false, mag: Vec::new() }
+    }
+
+    pub fn one() -> BigInt {
+        BigInt::from_int(1)
+    }
+
+    pub fn from_int(n: int) -> BigInt {
+        // The magnitude as a `u64`: `-n` overflows for the least `int`, so it is built from
+        // `-(n + 1)`.
+        let m: u64 = if n < 0 { (-(n + 1)).wrap::<u64>() + 1 } else { n.wrap::<u64>() };
+        let mut mag: Vec<u32> = Vec::new();
+        if m != 0 {
+            mag.push(m.truncate::<u32>());
+            let high = (m >> 32).truncate::<u32>();
+            if high != 0 {
+                mag.push(high);
+            }
+        }
+        BigInt { neg: n < 0, mag }
+    }
+
+    fn make(neg: bool, mag: Vec<u32>) -> BigInt {
+        let mut mag = mag;
+        mag::trim(&mut mag);
+        BigInt { neg: neg && !mag.is_empty(), mag }
+    }
+
+    /// The value as an `int`, if it is one.
+    pub fn to_int(&self) -> Option<int> {
+        if self.mag.len() > 2 {
+            return None;
+        }
+        let mut m: u64 = 0;
+        let mut i = self.mag.len();
+        while i > 0 {
+            i -= 1;
+            let limb: u64 = self.mag[i];
+            m = (m << 32) | limb;
+        }
+        if self.neg {
+            // Down to the least `int`, whose magnitude is one more than the greatest.
+            if m > 9223372036854775808 {
+                return None;
+            }
+            Some(-((m - 1).wrap::<int>()) - 1)
+        } else {
+            m.checked_to::<int>()
+        }
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.mag.is_empty()
+    }
+
+    pub fn is_negative(&self) -> bool {
+        self.neg
+    }
+
+    /// -1, 0 or 1, as the value is negative, zero or positive.
+    pub fn signum(&self) -> int {
+        if self.neg { -1 } else if self.mag.is_empty() { 0 } else { 1 }
+    }
+
+    pub fn abs(&self) -> BigInt {
+        BigInt { neg: false, mag: self.mag.clone() }
+    }
+
+    pub fn is_even(&self) -> bool {
+        self.mag.is_empty() || self.mag[0] & 1 == 0
+    }
+
+    /// The value parsed from decimal digits, with a leading `-` if it is negative; `None` if
+    /// `s` is not one.
+    pub fn parse(s: &str) -> Option<BigInt> {
+        BigInt::parse_radix(s, 10)
+    }
+
+    /// As `parse`, in base `radix`, 2 to 36, with digits past 9 written `a` to `z` (or `A` to
+    /// `Z`).
+    pub fn parse_radix(s: &str, radix: int) -> Option<BigInt> {
+        assert(radix >= 2 && radix <= 36);
+        let neg = s.len() > 0 && s.byte_at(0) == 45;
+        let start = if neg { 1 } else { 0 };
+        if s.len() == start {
+            return None;
+        }
+        let mut mag: Vec<u32> = Vec::new();
+        let r = radix.wrap::<u32>();
+        let mut i = start;
+        while i < s.len() {
+            let c: int = s.byte_at(i);
+            let d = if c >= 48 && c <= 57 {
+                c - 48
+            } else if c >= 97 && c <= 122 {
+                c - 87
+            } else if c >= 65 && c <= 90 {
+                c - 55
+            } else {
+                return None;
+            };
+            if d >= radix {
+                return None;
+            }
+            mag::mul_small_add(&mut mag, r, d.wrap::<u32>());
+            i += 1;
+        }
+        Some(BigInt::make(neg, mag))
+    }
+
+    /// The value in base `radix`, 2 to 36, digits past 9 lowercase.
+    pub fn to_string_radix(&self, radix: int) -> String {
+        assert(radix >= 2 && radix <= 36);
+        if self.mag.is_empty() {
+            return "0".to_string();
+        }
+        let mut digits: Vec<char> = Vec::new();
+        let mut m = self.mag.clone();
+        let r = radix.wrap::<u32>();
+        while !m.is_empty() {
+            let d: int = mag::div_small(&mut m, r);
+            let code = if d < 10 { 48 + d } else { 87 + d };
+            digits.push(char::from_code(code) ?! "a digit is a character");
+        }
+        let mut out = String::new();
+        if self.neg {
+            out.push('-');
+        }
+        while let Some(c) = digits.pop() {
+            out.push(c);
+        }
+        out
+    }
+
+    /// The sum, without consuming either side.
+    pub fn plus(&self, other: &BigInt) -> BigInt {
+        if self.neg == other.neg {
+            return BigInt::make(self.neg, mag::add(self.mag.as_slice(), other.mag.as_slice()));
+        }
+        match mag::cmp(self.mag.as_slice(), other.mag.as_slice()) {
+            Ordering::Less => {
+                BigInt::make(other.neg, mag::sub(other.mag.as_slice(), self.mag.as_slice()))
+            }
+            _ => BigInt::make(self.neg, mag::sub(self.mag.as_slice(), other.mag.as_slice())),
+        }
+    }
+
+    pub fn negated(&self) -> BigInt {
+        BigInt::make(!self.neg, self.mag.clone())
+    }
+
+    pub fn minus(&self, other: &BigInt) -> BigInt {
+        self.plus(&other.negated())
+    }
+
+    pub fn times(&self, other: &BigInt) -> BigInt {
+        BigInt::make(self.neg != other.neg, mag::mul(self.mag.as_slice(), other.mag.as_slice()))
+    }
+
+    /// The quotient rounded toward zero, and the remainder, which has the dividend's sign (as
+    /// `int`'s `/` and `%`); traps if `other` is zero.
+    pub fn div_rem(&self, other: &BigInt) -> (BigInt, BigInt) {
+        assert(!other.is_zero());
+        let (q, r) = mag::div_rem(self.mag.as_slice(), other.mag.as_slice());
+        (BigInt::make(self.neg != other.neg, q), BigInt::make(self.neg, r))
+    }
+
+    /// The value to the power `e`, which is not negative.
+    pub fn pow(&self, e: int) -> BigInt {
+        assert(e >= 0);
+        let mut result = BigInt::one();
+        let mut base = self.clone();
+        let mut e = e;
+        while e > 0 {
+            if e % 2 == 1 {
+                result = result.times(&base);
+            }
+            e = e / 2;
+            if e > 0 {
+                base = base.times(&base);
+            }
+        }
+        result
+    }
+
+    /// The greatest common divisor, never negative; `gcd(0, 0)` is 0.
+    pub fn gcd(&self, other: &BigInt) -> BigInt {
+        let mut a = self.abs();
+        let mut b = other.abs();
+        while !b.is_zero() {
+            let (_, r) = a.div_rem(&b);
+            a = b;
+            b = r;
+        }
+        a
+    }
+}
+
+impl Add for BigInt {
+    type Output = BigInt;
+    fn add(self, rhs: BigInt) -> BigInt {
+        self.plus(&rhs)
+    }
+}
+
+impl Sub for BigInt {
+    type Output = BigInt;
+    fn sub(self, rhs: BigInt) -> BigInt {
+        self.minus(&rhs)
+    }
+}
+
+impl Mul for BigInt {
+    type Output = BigInt;
+    fn mul(self, rhs: BigInt) -> BigInt {
+        self.times(&rhs)
+    }
+}
+
+impl Div for BigInt {
+    type Output = BigInt;
+    /// Rounded toward zero; traps on division by zero.
+    fn div(self, rhs: BigInt) -> BigInt {
+        let (q, _) = self.div_rem(&rhs);
+        q
+    }
+}
+
+impl Rem for BigInt {
+    type Output = BigInt;
+    fn rem(self, rhs: BigInt) -> BigInt {
+        let (_, r) = self.div_rem(&rhs);
+        r
+    }
+}
+
+impl Neg for BigInt {
+    type Output = BigInt;
+    fn neg(self) -> BigInt {
+        self.negated()
+    }
+}
+
+impl PartialOrd for BigInt {
+    fn partial_cmp(&self, other: &BigInt) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for BigInt {
+    fn cmp(&self, other: &BigInt) -> Ordering {
+        match (self.neg, other.neg) {
+            (false, true) => Ordering::Greater,
+            (true, false) => Ordering::Less,
+            (false, false) => mag::cmp(self.mag.as_slice(), other.mag.as_slice()),
+            (true, true) => mag::cmp(other.mag.as_slice(), self.mag.as_slice()),
+        }
+    }
+}
+
+impl Hash for BigInt {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(if self.neg { 1 } else { 0 });
+        for limb in self.mag.as_slice() {
+            let l: int = *limb;
+            state.write_int(l);
+        }
+    }
+}
+
+/// In decimal.
+impl Display for BigInt {
+    fn fmt(&self, out: &mut String) {
+        if self.mag.is_empty() {
+            out.push('0');
+            return;
+        }
+        if self.neg {
+            out.push('-');
+        }
+        // Nine decimal digits at a time, least significant first.
+        let mut chunks: Vec<int> = Vec::new();
+        let mut m = self.mag.clone();
+        while !m.is_empty() {
+            chunks.push(mag::div_small(&mut m, 1000000000));
+        }
+        let mut i = chunks.len() - 1;
+        out.push_str(chunks[i].text());
+        while i > 0 {
+            i -= 1;
+            let c = chunks[i];
+            let mut pad = 100000000;
+            while pad > 1 && c < pad {
+                out.push('0');
+                pad = pad / 10;
+            }
+            out.push_str(c.text());
+        }
+    }
+}
+
+impl Debug for BigInt {
+    fn fmt(&self, out: &mut String) {
+        Display::fmt(self, out);
+    }
+}
+
+impl Default for BigInt {
+    fn default() -> BigInt {
+        BigInt::zero()
+    }
+}

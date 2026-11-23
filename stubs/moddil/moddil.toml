@@ -12,3 +12,6 @@ serde = { path = "../../mods/serde" }
 net = { path = "../../mods/net" }
 sim = { path = "../../mods/sim" }
 runtime = { path = "../../mods/runtime" }
+crypto = { path = "../../mods/crypto" }
+num = { path = "../../mods/num" }
+decimal = { path = "../../mods/decimal" }

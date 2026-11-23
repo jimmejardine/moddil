@@ -9,5 +9,8 @@ pub use serde;
 pub use net;
 pub use sim;
 pub use runtime;
+pub use crypto;
+pub use num;
+pub use decimal;
 pub use runtime::root;
 pub use runtime::io;

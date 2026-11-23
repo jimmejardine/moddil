@@ -1,0 +1,6 @@
+[mod]
+name = "crypto_tests"
+edition = "2027"
+
+[dependencies]
+crypto = { path = ".." }

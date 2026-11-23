@@ -1,0 +1,282 @@
+//! Magnitudes: unsigned integers as 32-bit limbs, least significant first. The functions take
+//! limbs with no zero limbs at the top and give them so, except where they say.
+
+/// 2^32, the base of the limbs.
+const BASE: u64 = 4294967296;
+
+/// Drops zero limbs from the top.
+pub fn trim(m: &mut Vec<u32>) {
+    while let Some(top) = m.last() {
+        if *top != 0 {
+            break;
+        }
+        m.pop();
+    }
+}
+
+pub fn cmp(a: &[u32], b: &[u32]) -> Ordering {
+    if a.len() != b.len() {
+        return if a.len() < b.len() { Ordering::Less } else { Ordering::Greater };
+    }
+    let mut i = a.len();
+    while i > 0 {
+        i -= 1;
+        if a[i] != b[i] {
+            return if a[i] < b[i] { Ordering::Less } else { Ordering::Greater };
+        }
+    }
+    Ordering::Equal
+}
+
+pub fn add(a: &[u32], b: &[u32]) -> Vec<u32> {
+    let n = if a.len() > b.len() { a.len() } else { b.len() };
+    let mut out: Vec<u32> = Vec::with_capacity(n + 1);
+    let mut carry: u64 = 0;
+    let mut i = 0;
+    while i < n {
+        let x: u64 = if i < a.len() { a[i] } else { 0 };
+        let y: u64 = if i < b.len() { b[i] } else { 0 };
+        let t = x + y + carry;
+        out.push(t.truncate::<u32>());
+        carry = t >> 32;
+        i += 1;
+    }
+    if carry != 0 {
+        out.push(carry.truncate::<u32>());
+    }
+    out
+}
+
+/// `a - b`, for `a` at least `b`; the result may have zero limbs at the top.
+pub fn sub(a: &[u32], b: &[u32]) -> Vec<u32> {
+    let mut out: Vec<u32> = Vec::with_capacity(a.len());
+    let mut borrow: u64 = 0;
+    let mut i = 0;
+    while i < a.len() {
+        let x: u64 = a[i];
+        let y: u64 = if i < b.len() { b[i] } else { 0 };
+        let take = y + borrow;
+        if x >= take {
+            out.push((x - take).truncate::<u32>());
+            borrow = 0;
+        } else {
+            out.push((x + BASE - take).truncate::<u32>());
+            borrow = 1;
+        }
+        i += 1;
+    }
+    out
+}
+
+/// Schoolbook multiplication; the result may have a zero limb at the top.
+pub fn mul(a: &[u32], b: &[u32]) -> Vec<u32> {
+    if a.is_empty() || b.is_empty() {
+        return Vec::new();
+    }
+    let mut out: Vec<u32> = Vec::with_capacity(a.len() + b.len());
+    while out.len() < a.len() + b.len() {
+        out.push(0);
+    }
+    let mut i = 0;
+    while i < a.len() {
+        let x: u64 = a[i];
+        let mut carry: u64 = 0;
+        let mut j = 0;
+        while j < b.len() {
+            let y: u64 = b[j];
+            let acc: u64 = out[i + j];
+            // At most (2^32 - 1)^2 + 2 (2^32 - 1) = 2^64 - 1: it fits.
+            let t = x * y + acc + carry;
+            out[i + j] = t.truncate::<u32>();
+            carry = t >> 32;
+            j += 1;
+        }
+        out[i + b.len()] = carry.truncate::<u32>();
+        i += 1;
+    }
+    out
+}
+
+/// `m = m * k + a`, in place.
+pub fn mul_small_add(m: &mut Vec<u32>, k: u32, a: u32) {
+    let k: u64 = k;
+    let mut carry: u64 = a;
+    let mut i = 0;
+    while i < m.len() {
+        let x: u64 = m[i];
+        let t = x * k + carry;
+        m[i] = t.truncate::<u32>();
+        carry = t >> 32;
+        i += 1;
+    }
+    if carry != 0 {
+        m.push(carry.truncate::<u32>());
+    }
+}
+
+/// Divides `m` by `d` (not zero) in place, giving the remainder.
+pub fn div_small(m: &mut Vec<u32>, d: u32) -> u32 {
+    let d: u64 = d;
+    let mut rem: u64 = 0;
+    let mut i = m.len();
+    while i > 0 {
+        i -= 1;
+        let limb: u64 = m[i];
+        let cur = (rem << 32) | limb;
+        m[i] = (cur / d).truncate::<u32>();
+        rem = cur % d;
+    }
+    trim(m);
+    rem.truncate::<u32>()
+}
+
+/// The quotient and the remainder of `u / v`, for `v` not zero: Knuth's algorithm D (The Art of
+/// Computer Programming, vol. 2, 4.3.1).
+pub fn div_rem(u: &[u32], v: &[u32]) -> (Vec<u32>, Vec<u32>) {
+    match cmp(u, v) {
+        Ordering::Less => {
+            let mut r: Vec<u32> = Vec::new();
+            for x in u {
+                r.push(*x);
+            }
+            return (Vec::new(), r);
+        }
+        _ => {}
+    }
+    if v.len() == 1 {
+        let mut q: Vec<u32> = Vec::new();
+        for x in u {
+            q.push(*x);
+        }
+        let r = div_small(&mut q, v[0]);
+        let mut rem: Vec<u32> = Vec::new();
+        if r != 0 {
+            rem.push(r);
+        }
+        return (q, rem);
+    }
+    let n = v.len();
+    let m = u.len() - n;
+    // Normalise: shift both left until the divisor's top limb has its top bit set, so each
+    // estimate of a quotient limb is at most two too great.
+    let s = leading_zeros(v[n - 1]);
+    let vn = shift_left(v, s, n);
+    let mut un = shift_left(u, s, u.len() + 1);
+    let mut q: Vec<u32> = Vec::with_capacity(m + 1);
+    while q.len() < m + 1 {
+        q.push(0);
+    }
+    let top: u64 = vn[n - 1];
+    let next: u64 = vn[n - 2];
+    let mut j = m + 1;
+    while j > 0 {
+        j -= 1;
+        let hi: u64 = un[j + n];
+        let lo: u64 = un[j + n - 1];
+        let num = (hi << 32) | lo;
+        let mut qhat = num / top;
+        let mut rhat = num % top;
+        loop {
+            if qhat < BASE {
+                let below: u64 = un[j + n - 2];
+                if qhat * next <= ((rhat << 32) | below) {
+                    break;
+                }
+            }
+            qhat -= 1;
+            rhat += top;
+            if rhat >= BASE {
+                break;
+            }
+        }
+        // un[j ..= j + n] -= qhat * vn.
+        let mut carry: u64 = 0;
+        let mut borrow: u64 = 0;
+        let mut i = 0;
+        while i < n {
+            let y: u64 = vn[i];
+            let p = qhat * y + carry;
+            carry = p >> 32;
+            let take = (p & (BASE - 1)) + borrow;
+            let x: u64 = un[i + j];
+            if x >= take {
+                un[i + j] = (x - take).truncate::<u32>();
+                borrow = 0;
+            } else {
+                un[i + j] = (x + BASE - take).truncate::<u32>();
+                borrow = 1;
+            }
+            i += 1;
+        }
+        let take = carry + borrow;
+        let x: u64 = un[j + n];
+        if x >= take {
+            un[j + n] = (x - take).truncate::<u32>();
+            borrow = 0;
+        } else {
+            un[j + n] = (x + BASE - take).truncate::<u32>();
+            borrow = 1;
+        }
+        if borrow != 0 {
+            // The estimate was one too great: add the divisor back.
+            qhat -= 1;
+            let mut c: u64 = 0;
+            i = 0;
+            while i < n {
+                let x: u64 = un[i + j];
+                let y: u64 = vn[i];
+                let t = x + y + c;
+                un[i + j] = t.truncate::<u32>();
+                c = t >> 32;
+                i += 1;
+            }
+            let x: u64 = un[j + n];
+            un[j + n] = (x + c).truncate::<u32>();
+        }
+        q[j] = qhat.truncate::<u32>();
+    }
+    trim(&mut q);
+    let mut r = shift_right(&un.as_slice()[..n], s);
+    trim(&mut r);
+    (q, r)
+}
+
+/// How many zero bits are above the top set bit of `x`, which is not zero.
+fn leading_zeros(x: u32) -> u64 {
+    let mut s: u64 = 0;
+    let x: u64 = x;
+    while (x << s) & 2147483648 == 0 {
+        s += 1;
+    }
+    s
+}
+
+/// `a` shifted left by `s` bits, `s < 32`, as `len` limbs (enough to hold it).
+fn shift_left(a: &[u32], s: u64, len: int) -> Vec<u32> {
+    let mut out: Vec<u32> = Vec::with_capacity(len);
+    let mut carry: u64 = 0;
+    let mut i = 0;
+    while i < len {
+        let x: u64 = if i < a.len() { a[i] } else { 0 };
+        let t = (x << s) | carry;
+        out.push(t.truncate::<u32>());
+        carry = t >> 32;
+        i += 1;
+    }
+    out
+}
+
+/// `a` shifted right by `s` bits, `s < 32`.
+fn shift_right(a: &[u32], s: u64) -> Vec<u32> {
+    let mut out: Vec<u32> = Vec::with_capacity(a.len());
+    let mut i = 0;
+    while i < a.len() {
+        let x: u64 = a[i];
+        let above: u64 = if i + 1 < a.len() { a[i + 1] } else { 0 };
+        // The low bits of the limb above come down into this one's top.
+        let t = (x >> s) | ((above << 32) >> s);
+        out.push(t.truncate::<u32>());
+        i += 1;
+    }
+    out
+}

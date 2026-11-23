@@ -1,0 +1,249 @@
+//! `BigDecimal`: a decimal of any size and any number of digits after the point.
+
+use num::BigInt;
+use mod::round::div_round_big;
+
+/// A decimal of any size: `unscaled` × 10^-`scale`, `scale` at least 0. Sums, differences and
+/// products are exact; a quotient is rounded to the scale asked for, by the rounding asked for.
+/// Equal values are `==` whatever their scales: 1.5 is 1.50.
+#[derive(Clone)]
+pub struct BigDecimal {
+    unscaled: BigInt,
+    scale: int,
+}
+
+/// 10^e, for `e` at least 0.
+fn pow10(e: int) -> BigInt {
+    BigInt::from_int(10).pow(e)
+}
+
+impl BigDecimal {
+    pub fn zero() -> BigDecimal {
+        BigDecimal { unscaled: BigInt::zero(), scale: 0 }
+    }
+
+    /// `unscaled` × 10^-`scale`; traps if `scale` is negative.
+    pub fn new(unscaled: BigInt, scale: int) -> BigDecimal {
+        assert(scale >= 0);
+        BigDecimal { unscaled, scale }
+    }
+
+    pub fn from_int(n: int) -> BigDecimal {
+        BigDecimal { unscaled: BigInt::from_int(n), scale: 0 }
+    }
+
+    /// A decimal written with an optional `-`, digits, and optionally a point and digits after
+    /// it, kept at the scale written (`1.50` has scale 2); `None` for anything else.
+    pub fn parse(s: &str) -> Option<BigDecimal> {
+        let neg = s.len() > 0 && s.byte_at(0) == 45;
+        let mut i = if neg { 1 } else { 0 };
+        let mut unscaled = BigInt::zero();
+        let ten = BigInt::from_int(10);
+        let mut scale: int = -1;
+        let mut count = 0;
+        while i < s.len() {
+            let c: int = s.byte_at(i);
+            if c == 46 && scale < 0 {
+                scale = 0;
+            } else if c >= 48 && c <= 57 {
+                unscaled = unscaled.times(&ten).plus(&BigInt::from_int(c - 48));
+                if scale >= 0 {
+                    scale += 1;
+                }
+                count += 1;
+            } else {
+                return None;
+            }
+            i += 1;
+        }
+        if count == 0 {
+            return None;
+        }
+        let unscaled = if neg { unscaled.negated() } else { unscaled };
+        Some(BigDecimal { unscaled, scale: if scale < 0 { 0 } else { scale } })
+    }
+
+    pub fn unscaled(&self) -> &BigInt {
+        &self.unscaled
+    }
+
+    pub fn scale(&self) -> int {
+        self.scale
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.unscaled.is_zero()
+    }
+
+    pub fn is_negative(&self) -> bool {
+        self.unscaled.is_negative()
+    }
+
+    /// The unscaled value at scale `scale`, which is at least this one's.
+    fn widened(&self, scale: int) -> BigInt {
+        self.unscaled.times(&pow10(scale - self.scale))
+    }
+
+    pub fn plus(&self, other: &BigDecimal) -> BigDecimal {
+        let s = if self.scale > other.scale { self.scale } else { other.scale };
+        BigDecimal { unscaled: self.widened(s).plus(&other.widened(s)), scale: s }
+    }
+
+    pub fn minus(&self, other: &BigDecimal) -> BigDecimal {
+        let s = if self.scale > other.scale { self.scale } else { other.scale };
+        BigDecimal { unscaled: self.widened(s).minus(&other.widened(s)), scale: s }
+    }
+
+    /// The exact product, at the sum of the scales.
+    pub fn times(&self, other: &BigDecimal) -> BigDecimal {
+        BigDecimal {
+            unscaled: self.unscaled.times(&other.unscaled),
+            scale: self.scale + other.scale,
+        }
+    }
+
+    pub fn negated(&self) -> BigDecimal {
+        BigDecimal { unscaled: self.unscaled.negated(), scale: self.scale }
+    }
+
+    /// The quotient at scale `scale`, rounded by `mode`; traps if `other` is zero.
+    pub fn div(&self, other: &BigDecimal, scale: int, mode: Round) -> BigDecimal {
+        assert(scale >= 0 && !other.is_zero());
+        // (a / 10^sa) / (b / 10^sb) in units of 10^-scale is a × 10^(scale - sa + sb) / b.
+        let e = scale - self.scale + other.scale;
+        let unscaled = if e >= 0 {
+            div_round_big(&self.unscaled.times(&pow10(e)), &other.unscaled, mode)
+        } else {
+            div_round_big(&self.unscaled, &other.unscaled.times(&pow10(-e)), mode)
+        };
+        BigDecimal { unscaled, scale }
+    }
+
+    /// The value at scale `scale`, rounded by `mode` if that is less than its own.
+    pub fn rescale(&self, scale: int, mode: Round) -> BigDecimal {
+        assert(scale >= 0);
+        if scale >= self.scale {
+            return BigDecimal { unscaled: self.widened(scale), scale };
+        }
+        let unscaled = div_round_big(&self.unscaled, &pow10(self.scale - scale), mode);
+        BigDecimal { unscaled, scale }
+    }
+
+    /// The same value at the least scale that holds it: no zeros at the end of its fraction.
+    pub fn normalized(&self) -> BigDecimal {
+        let ten = BigInt::from_int(10);
+        let mut u = self.unscaled.clone();
+        let mut s = self.scale;
+        while s > 0 {
+            let (q, r) = u.div_rem(&ten);
+            if !r.is_zero() {
+                break;
+            }
+            u = q;
+            s -= 1;
+        }
+        BigDecimal { unscaled: u, scale: s }
+    }
+}
+
+impl Add for BigDecimal {
+    type Output = BigDecimal;
+    fn add(self, rhs: BigDecimal) -> BigDecimal {
+        self.plus(&rhs)
+    }
+}
+
+impl Sub for BigDecimal {
+    type Output = BigDecimal;
+    fn sub(self, rhs: BigDecimal) -> BigDecimal {
+        self.minus(&rhs)
+    }
+}
+
+impl Mul for BigDecimal {
+    type Output = BigDecimal;
+    fn mul(self, rhs: BigDecimal) -> BigDecimal {
+        self.times(&rhs)
+    }
+}
+
+impl Neg for BigDecimal {
+    type Output = BigDecimal;
+    fn neg(self) -> BigDecimal {
+        self.negated()
+    }
+}
+
+impl PartialEq for BigDecimal {
+    fn eq(&self, other: &BigDecimal) -> bool {
+        match self.cmp(other) {
+            Ordering::Equal => true,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for BigDecimal {}
+
+impl PartialOrd for BigDecimal {
+    fn partial_cmp(&self, other: &BigDecimal) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for BigDecimal {
+    fn cmp(&self, other: &BigDecimal) -> Ordering {
+        let s = if self.scale > other.scale { self.scale } else { other.scale };
+        self.widened(s).cmp(&other.widened(s))
+    }
+}
+
+/// By value, so equal values at different scales hash alike.
+impl Hash for BigDecimal {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let n = self.normalized();
+        n.unscaled.hash(state);
+        state.write_int(n.scale);
+    }
+}
+
+/// At its scale: `-0.050` for unscaled -50 at scale 3.
+impl Display for BigDecimal {
+    fn fmt(&self, out: &mut String) {
+        let digits = self.unscaled.abs().to_string();
+        if self.unscaled.is_negative() {
+            out.push('-');
+        }
+        if self.scale == 0 {
+            out.push_str(&digits);
+            return;
+        }
+        let n = digits.len();
+        if n <= self.scale {
+            out.push_str("0.");
+            let mut pad = self.scale - n;
+            while pad > 0 {
+                out.push('0');
+                pad -= 1;
+            }
+            out.push_str(&digits);
+        } else {
+            let d: &str = &digits;
+            out.push_str(d.bytes_between(0, n - self.scale));
+            out.push('.');
+            out.push_str(d.bytes_between(n - self.scale, n));
+        }
+    }
+}
+
+impl Debug for BigDecimal {
+    fn fmt(&self, out: &mut String) {
+        Display::fmt(self, out);
+    }
+}
+
+impl Default for BigDecimal {
+    fn default() -> BigDecimal {
+        BigDecimal::zero()
+    }
+}

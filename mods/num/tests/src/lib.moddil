@@ -1,0 +1,147 @@
+// `BigInt` and `Rational`: values checked against Python's integers, and division checked by
+// its own identity over many dividends and divisors shaped to make Knuth's estimates go wrong.
+
+use num::{BigInt, Rational};
+
+fn big(s: &str) -> BigInt {
+    BigInt::parse(s) ?! "the test's numbers parse"
+}
+
+/// Checks that `x` is written `want`.
+fn check(x: &BigInt, want: &str) {
+    let s = x.to_string();
+    let s: &str = &s;
+    assert(s == want);
+}
+
+fn check_q(x: &Rational, want: &str) {
+    let s = x.to_string();
+    let s: &str = &s;
+    assert(s == want);
+}
+
+test "small values round trip through int" {
+    for n in [0, 1, -1, 4294967295, 4294967296, -4294967296, 9223372036854775807, -9223372036854775807 - 1] {
+        let b = BigInt::from_int(n);
+        assert(b.to_int() == Some(n));
+        check(&b, n.to_string().as_str());
+    }
+    assert(big("18446744073709551615").to_int() == None);
+    assert(big("-9223372036854775809").to_int() == None);
+}
+
+test "sums and differences carry across limbs" {
+    let max64 = big("18446744073709551615");
+    check(&(max64.clone() + BigInt::one()), "18446744073709551616");
+    check(&(BigInt::zero() - max64.clone() - BigInt::from_int(6)), "-18446744073709551621");
+    check(&(big("-5") + big("3")), "-2");
+    let zero = big("5") - big("5");
+    check(&zero, "0");
+    assert(!zero.is_negative());
+}
+
+test "factorials and powers" {
+    let mut f = BigInt::one();
+    let mut i = 1;
+    while i <= 30 {
+        f = f * BigInt::from_int(i);
+        i += 1;
+    }
+    check(&f, "265252859812191058636308480000000");
+    check(&BigInt::from_int(2).pow(100), "1267650600228229401496703205376");
+    check(&BigInt::from_int(-3).pow(3), "-27");
+}
+
+test "division matches Python" {
+    let a = BigInt::from_int(3).pow(200);
+    let b = BigInt::from_int(7).pow(90);
+    let (q, r) = a.div_rem(&b);
+    check(&q, "23196760719186782608");
+    check(&r, "1070899271811779049303735016967845875860090566313191361787373240478139758609");
+}
+
+test "division adds back when the quotient's estimate is one too great" {
+    // Hacker's Delight's case for its `divmnu64` (0x800000000000fffe00000000 / 0x800000000000ffff).
+    let (q, r) = big("39614081257132450263158751232").div_rem(&big("9223372036854841343"));
+    check(&q, "4294967295");
+    check(&r, "9223372032559874047");
+}
+
+test "division rounds toward zero, the remainder taking the dividend's sign" {
+    let (q, r) = big("-7").div_rem(&big("2"));
+    check(&q, "-3");
+    check(&r, "-1");
+    let (q, r) = big("7").div_rem(&big("-2"));
+    check(&q, "-3");
+    check(&r, "1");
+    check(&(big("-7") / big("-2")), "3");
+}
+
+test "division undoes multiplication, whatever the limbs" {
+    // Limbs drawn from values that stress the quotient estimate: all ones, a lone top bit, and
+    // pseudo-random ones.
+    let shapes = [4294967295, 2147483648, 1, 0, 2147483647, 305419896, 4294967294];
+    let mut seed = 12345;
+    let mut trials = 0;
+    while trials < 120 {
+        let mut a = BigInt::zero();
+        let mut b = BigInt::zero();
+        let limbs_a = 1 + seed % 7;
+        let limbs_b = 1 + (seed / 7) % 4;
+        let mut i = 0;
+        while i < limbs_a || i < limbs_b {
+            seed = (seed * 1103515245 + 12345) % 2147483648;
+            let x = BigInt::from_int(shapes[seed % 7]);
+            let y = BigInt::from_int(if seed % 3 == 0 { seed } else { shapes[(seed / 7) % 7] });
+            let shift = BigInt::from_int(4294967296);
+            if i < limbs_a {
+                a = a * shift.clone() + x;
+            }
+            if i < limbs_b {
+                b = b * shift + y;
+            }
+            i += 1;
+        }
+        if !b.is_zero() {
+            let (q, r) = a.div_rem(&b);
+            assert(q.times(&b).plus(&r) == a);
+            assert(r.abs() < b.abs());
+        }
+        trials += 1;
+    }
+}
+
+test "parsing and writing in other bases" {
+    let x = BigInt::parse_radix("deadbeefcafebabe0123456789abcdef", 16) ?! "hex";
+    check(&x, "295990755076957304698161171062762229231");
+    let s = x.to_string_radix(16);
+    let s: &str = &s;
+    assert(s == "deadbeefcafebabe0123456789abcdef");
+    assert(BigInt::parse("12x").is_none());
+    assert(BigInt::parse("-").is_none());
+    assert(BigInt::parse_radix("102", 2).is_none());
+    check(&big("-000123"), "-123");
+    check(&big("1000000000000000000000000000001"), "1000000000000000000000000000001");
+}
+
+test "order and gcd" {
+    assert(big("-10") < big("-9"));
+    assert(big("-1") < big("0"));
+    assert(big("18446744073709551616") > big("18446744073709551615"));
+    check(&big("462").gcd(&big("-1071")), "21");
+    check(&BigInt::zero().gcd(&big("-5")), "5");
+}
+
+test "rationals stay in lowest terms" {
+    let a = Rational::of(6, -8);
+    check_q(&a, "-3/4");
+    let b = Rational::of(1, 6);
+    check_q(&(a.clone() + b.clone()), "-7/12");
+    check_q(&(a.clone() * b.clone()), "-1/8");
+    check_q(&(a.clone() / b.clone()), "-9/2");
+    check_q(&(Rational::of(1, 3) + Rational::of(2, 3)), "1");
+    assert(Rational::of(1, 3) < Rational::of(1, 2));
+    assert(Rational::of(2, 4) == Rational::of(1, 2));
+    check(&Rational::of(-7, 2).floor(), "-4");
+    check(&Rational::of(7, 2).floor(), "3");
+}

@@ -266,12 +266,15 @@ fn passes_everywhere(dir: &str, n: usize) {
 #[test]
 fn the_standard_mods_pass_their_tests_everywhere() {
     for (dir, n) in [
-        ("mods/collections/tests", 1),
+        ("mods/collections/tests", 9),
         ("mods/sync/tests", 2),
         ("mods/rand/tests", 1),
         ("mods/serde/tests", 4),
         ("mods/net/tests", 4),
         ("mods/sim/tests", 3),
+        ("mods/crypto/tests", 7),
+        ("mods/num/tests", 10),
+        ("mods/decimal/tests", 6),
     ] {
         passes_everywhere(dir, n);
     }

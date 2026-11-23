@@ -1,0 +1,22 @@
+//! Cryptography (`stdlib.md`: Initial standard-mod catalogue), written in Moddil: for now the
+//! hashes SHA-256, SHA-512 and BLAKE3, and hex encoding. They are not constant-time and have not
+//! been audited.
+
+pub use mod::blake::{Blake3, blake3};
+pub use mod::sha2::{Sha256, Sha512, sha256, sha512};
+
+/// `bytes` in lowercase hex, two digits a byte.
+pub fn hex(bytes: &[u8]) -> String {
+    let mut out = String::new();
+    for b in bytes {
+        out.push(digit(*b >> 4));
+        out.push(digit(*b & 15));
+    }
+    out
+}
+
+fn digit(n: u8) -> char {
+    let n: int = n;
+    let code = if n < 10 { 48 + n } else { 87 + n };
+    char::from_code(code) ?! "a hex digit is a character"
+}

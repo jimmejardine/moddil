@@ -1,0 +1,10 @@
+//! Decimals for money (`numerics.md`: Decimals for money): `Fixed<S>`, an `int` scaled by 10^S
+//! with the scale in the type, and `BigDecimal`, of any size. Rounding is always stated, with the
+//! prelude's `Round`.
+//!
+//! Not here yet: `Fixed<2> * Fixed<4>` giving `Fixed<6>` (a type cannot compute `S + T`, so
+//! `mul` names its result's scale), exact literals (`let p: Fixed<2> = 0.10`), and units
+//! (`Fixed<4>[USD]`).
+
+pub use mod::big::BigDecimal;
+pub use mod::fixed::Fixed;

@@ -1015,6 +1015,37 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
     - every mod's and the tour's tests, everywhere;
     - a CLI test per runner that serves the tour, creates and follows a link over real TCP,
       and stops it, checking the exit code.
+- **Standard mods beyond the tour (November 2026), written alongside M2d.** These are pure
+  Moddil, with no compiler changes. Each has its own tests, run natively, on the MIR interpreter
+  and as WASM by `crates/moddil/tests/cli.rs`, and is re-exported by the umbrella stub.
+  - **`collections`:** `Set`, `Deque`, `RingBuffer`, `BinaryHeap`, and the sorted `TreeMap` and
+    `TreeSet`.
+    - The tree is an AA tree whose nodes live in a `Vec`.
+    - `OrderedMap`, `EnumSet` and the persistent collections are still to come.
+  - **`crypto`:** SHA-256, SHA-512 and BLAKE3 (hash mode), with hex.
+    - They are checked against the FIPS 180-4 vectors and the BLAKE3 reference's.
+    - They are not constant-time.
+  - **`num`:** `BigInt` (32-bit limbs, with Knuth's division) and `Rational`.
+  - **`decimal`:** `Fixed<S>`, with the scale as a const parameter, and `BigDecimal`. Every
+    rounding uses the prelude's `Round`.
+    - `mul`, `div` and `rescale` name their result's scale (`px.mul::<0, 2>(qty, mode)`).
+  - **TODO:** `Fixed<S>`'s `Clone`, `Copy`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash`,
+    `Debug` and `Default` are written by hand (`mods/decimal/src/fixed.moddil`), because
+    `#[derive]` does not take a type with const parameters (E0404). Derive them once it does.
+  - **Gaps found on the way** (worked around in the mods; for the compiler):
+    - **Native and WASM:** `assert(f(v))`, where `f` takes `v` by value, crashes native code and
+      leaks on WASM, which can break the next test there. The interpreter is right.
+    - **Native:** Cranelift cannot yet compile `i128`'s `%` or its overflow-checked `*`, so such
+      code falls back to the interpreter. `Fixed` uses `BigInt` instead.
+    - **Types:** `Fixed<{S + T}>` (const arithmetic in a type) is not supported yet, nor are the
+      exact literals of `numerics.md` (`let p: Fixed<2> = 0.10`).
+    - **Prelude:** `Option<&T>` has no `PartialEq`. `[1, 2]` for a `Vec<u8>` types its elements
+      as `int`, not `u8` (E0402). `int` has no `checked_add`.
+    - **Coherence:** `impl IntoIterator for &Deque<T>` outside `core` conflicts with the blanket
+      `impl<I: Iterator> IntoIterator for I` (E0406), so these collections have `iter()` but no
+      `for x in &d`.
+    - **Borrows:** `self.f(self.x)` with `&mut self` is refused, as there are no two-phase
+      borrows. `let x;` without an initialiser is not supported yet.
 - **Next:** the rest of M2: the LSP prototype and the first GPU path, and the standard mods the
   tour does not reach.
 

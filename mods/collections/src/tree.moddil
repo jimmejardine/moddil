@@ -8,7 +8,7 @@
 /// No node.
 const NIL: int = -1;
 
-/// A node: `pub` only because `TreeMap`'s fields name it; nothing outside reaches its fields.
+/// A node: `pub` only because `TreeMap` holds them (`mod.expose.1`); its fields are private.
 pub struct Node<K, V> {
     key: K,
     value: V,

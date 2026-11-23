@@ -1,0 +1,165 @@
+//! `Rational`, an exact fraction of `BigInt`s.
+
+use mod::BigInt;
+
+/// A fraction `num / den`, always in lowest terms with `den` positive, so each value has one
+/// representation and `==` compares values.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Rational {
+    num: BigInt,
+    den: BigInt,
+}
+
+impl Rational {
+    /// `num / den` in lowest terms; traps if `den` is zero.
+    pub fn new(num: BigInt, den: BigInt) -> Rational {
+        assert(!den.is_zero());
+        let g = num.gcd(&den);
+        let (mut n, _) = num.div_rem(&g);
+        let (mut d, _) = den.div_rem(&g);
+        if d.is_negative() {
+            n = n.negated();
+            d = d.negated();
+        }
+        Rational { num: n, den: d }
+    }
+
+    pub fn from_int(n: int) -> Rational {
+        Rational { num: BigInt::from_int(n), den: BigInt::one() }
+    }
+
+    pub fn from_big(n: BigInt) -> Rational {
+        Rational { num: n, den: BigInt::one() }
+    }
+
+    /// `n / d` from `int`s; traps if `d` is zero.
+    pub fn of(n: int, d: int) -> Rational {
+        Rational::new(BigInt::from_int(n), BigInt::from_int(d))
+    }
+
+    pub fn numerator(&self) -> &BigInt {
+        &self.num
+    }
+
+    pub fn denominator(&self) -> &BigInt {
+        &self.den
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.num.is_zero()
+    }
+
+    pub fn is_integer(&self) -> bool {
+        self.den == BigInt::one()
+    }
+
+    pub fn plus(&self, other: &Rational) -> Rational {
+        Rational::new(
+            self.num.times(&other.den).plus(&other.num.times(&self.den)),
+            self.den.times(&other.den),
+        )
+    }
+
+    pub fn minus(&self, other: &Rational) -> Rational {
+        Rational::new(
+            self.num.times(&other.den).minus(&other.num.times(&self.den)),
+            self.den.times(&other.den),
+        )
+    }
+
+    pub fn times(&self, other: &Rational) -> Rational {
+        Rational::new(self.num.times(&other.num), self.den.times(&other.den))
+    }
+
+    /// The quotient; traps if `other` is zero.
+    pub fn over(&self, other: &Rational) -> Rational {
+        Rational::new(self.num.times(&other.den), self.den.times(&other.num))
+    }
+
+    pub fn negated(&self) -> Rational {
+        Rational { num: self.num.negated(), den: self.den.clone() }
+    }
+
+    /// One over the value; traps if it is zero.
+    pub fn recip(&self) -> Rational {
+        Rational::new(self.den.clone(), self.num.clone())
+    }
+
+    /// The greatest integer not above the value.
+    pub fn floor(&self) -> BigInt {
+        let (q, r) = self.num.div_rem(&self.den);
+        if r.is_negative() { q.minus(&BigInt::one()) } else { q }
+    }
+}
+
+impl Add for Rational {
+    type Output = Rational;
+    fn add(self, rhs: Rational) -> Rational {
+        self.plus(&rhs)
+    }
+}
+
+impl Sub for Rational {
+    type Output = Rational;
+    fn sub(self, rhs: Rational) -> Rational {
+        self.minus(&rhs)
+    }
+}
+
+impl Mul for Rational {
+    type Output = Rational;
+    fn mul(self, rhs: Rational) -> Rational {
+        self.times(&rhs)
+    }
+}
+
+impl Div for Rational {
+    type Output = Rational;
+    fn div(self, rhs: Rational) -> Rational {
+        self.over(&rhs)
+    }
+}
+
+impl Neg for Rational {
+    type Output = Rational;
+    fn neg(self) -> Rational {
+        self.negated()
+    }
+}
+
+impl PartialOrd for Rational {
+    fn partial_cmp(&self, other: &Rational) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Rational {
+    // The denominators are positive, so cross-multiplying keeps the order.
+    fn cmp(&self, other: &Rational) -> Ordering {
+        self.num.times(&other.den).cmp(&other.num.times(&self.den))
+    }
+}
+
+impl Hash for Rational {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.num.hash(state);
+        self.den.hash(state);
+    }
+}
+
+/// `n/d`, or `n` for an integer.
+impl Display for Rational {
+    fn fmt(&self, out: &mut String) {
+        Display::fmt(&self.num, out);
+        if !self.is_integer() {
+            out.push('/');
+            Display::fmt(&self.den, out);
+        }
+    }
+}
+
+impl Debug for Rational {
+    fn fmt(&self, out: &mut String) {
+        Display::fmt(self, out);
+    }
+}

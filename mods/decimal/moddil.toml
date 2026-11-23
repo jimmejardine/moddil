@@ -1,0 +1,6 @@
+[mod]
+name = "moddil.com/decimal"
+edition = "2027"
+
+[dependencies]
+num = { path = "../num" }

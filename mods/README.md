@@ -10,12 +10,15 @@ umbrella stub mod [`stubs/moddil`](../stubs/moddil/README.md), which re-exports 
 
 | Mod | What it has | Capabilities |
 |---|---|---|
-| [`collections`](collections/src/lib.moddil) | `Map`, over the `core` mod's `HashMap` | |
+| [`collections`](collections/src/lib.moddil) | `Map` and `Set` over the `core` mod's hash maps, `Deque`, `RingBuffer`, `BinaryHeap`, and the sorted `TreeMap` and `TreeSet` | |
 | [`sync`](sync/src/lib.moddil) | `Mutex` (with a `Guard` view, and `with`), over `UnsafeCell` and atomics | `unsafe` |
 | [`rand`](rand/src/lib.moddil) | the `Rand` effect, and `Seeded` (`seeded`) | `unsafe` |
 | [`serde`](serde/src/lib.moddil) | `Serialize` and `Deserialize` with their derives (impl templates), `DecodeError`, JSON | |
 | [`net`](net/src/lib.moddil) | the `Net` effect, `Port`, `Url`, `Conn` (bytes, over a simulated link or an OS connection), `Listener` (a selectable `accept`); [`http`](net/src/http.moddil): HTTP/1.1, `Router`, `Request`, `Response`, `serve_connection`, `post` with retries | `os` |
 | [`sim`](sim/src/lib.moddil) | `Sim`, nodes, seeded randomness, a simulated network, `drop_messages` | `unsafe` |
+| [`crypto`](crypto/src/lib.moddil) | SHA-256, SHA-512 and BLAKE3, and `hex`; not constant-time | |
+| [`num`](num/src/lib.moddil) | `BigInt` and `Rational` | |
+| [`decimal`](decimal/src/lib.moddil) | `Fixed<S>` (the scale in the type) and `BigDecimal`, rounding by the prelude's `Round` | |
 | [`runtime`](runtime/src/lib.moddil) | the root capabilities (`root`: `Args`, `Stdio`, `NetRoot`, `Entropy`, …), the terminal (`io`), `serve_until_stopped` and `Signal` | `os` |
 
 `Vec`, `String` and the hash maps are in the prelude and the `core` mod

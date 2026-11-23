@@ -1,0 +1,7 @@
+[mod]
+name = "decimal_tests"
+edition = "2027"
+
+[dependencies]
+decimal = { path = ".." }
+num = { path = "../../num" }

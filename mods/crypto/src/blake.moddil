@@ -1,0 +1,244 @@
+//! BLAKE3's hash mode, after the specification's reference implementation (O'Connor, Aumasson,
+//! Neves and Wilcox-O'Hearn, 2020). The keyed and key-derivation modes are not here yet.
+
+const IV: [u32; 8] = [
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+];
+
+/// The order a round's message words are taken in by the next round.
+const PERMUTATION: [int; 16] = [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8];
+
+const CHUNK_START: u32 = 1;
+const CHUNK_END: u32 = 2;
+const PARENT: u32 = 4;
+const ROOT: u32 = 8;
+
+const BLOCK_LEN: int = 64;
+const CHUNK_LEN: int = 1024;
+
+/// `x` rotated right by `n` bits, `0 < n < 32`.
+fn rotr(x: u32, n: u32) -> u32 {
+    (x >> n) | ((x & ((1 << n) - 1)) << (32 - n))
+}
+
+/// The quarter-round, on the state's words `a`, `b`, `c` and `d`.
+fn g(s: &mut [u32; 16], a: int, b: int, c: int, d: int, mx: u32, my: u32) {
+    s[a] = s[a] +% s[b] +% mx;
+    s[d] = rotr(s[d] ^ s[a], 16);
+    s[c] = s[c] +% s[d];
+    s[b] = rotr(s[b] ^ s[c], 12);
+    s[a] = s[a] +% s[b] +% my;
+    s[d] = rotr(s[d] ^ s[a], 8);
+    s[c] = s[c] +% s[d];
+    s[b] = rotr(s[b] ^ s[c], 7);
+}
+
+fn round(s: &mut [u32; 16], m: &[u32; 16]) {
+    // The columns, then the diagonals.
+    g(s, 0, 4, 8, 12, m[0], m[1]);
+    g(s, 1, 5, 9, 13, m[2], m[3]);
+    g(s, 2, 6, 10, 14, m[4], m[5]);
+    g(s, 3, 7, 11, 15, m[6], m[7]);
+    g(s, 0, 5, 10, 15, m[8], m[9]);
+    g(s, 1, 6, 11, 12, m[10], m[11]);
+    g(s, 2, 7, 8, 13, m[12], m[13]);
+    g(s, 3, 4, 9, 14, m[14], m[15]);
+}
+
+/// The compression function: a block of 16 words into the chaining value `cv`, giving all 16
+/// words of the output (the first 8 are the next chaining value).
+fn compress(cv: &[u32; 8], block: &[u32; 16], counter: u64, block_len: u32, flags: u32) -> [u32; 16] {
+    let mut s: [u32; 16] = [
+        cv[0], cv[1], cv[2], cv[3], cv[4], cv[5], cv[6], cv[7],
+        IV[0], IV[1], IV[2], IV[3],
+        counter.truncate::<u32>(), (counter >> 32).truncate::<u32>(), block_len, flags,
+    ];
+    let mut m = *block;
+    let mut r = 0;
+    while r < 7 {
+        round(&mut s, &m);
+        if r < 6 {
+            let mut next: [u32; 16] = [0; 16];
+            let mut i = 0;
+            while i < 16 {
+                next[i] = m[PERMUTATION[i]];
+                i += 1;
+            }
+            m = next;
+        }
+        r += 1;
+    }
+    let mut i = 0;
+    while i < 8 {
+        s[i] = s[i] ^ s[i + 8];
+        s[i + 8] = s[i + 8] ^ cv[i];
+        i += 1;
+    }
+    s
+}
+
+fn first_8(w: &[u32; 16]) -> [u32; 8] {
+    [w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]]
+}
+
+/// The 64 bytes of a block as 16 little-endian words.
+fn words(block: &[u8; 64]) -> [u32; 16] {
+    let mut w: [u32; 16] = [0; 16];
+    let mut i = 0;
+    while i < 16 {
+        let a: u32 = block[4 * i];
+        let b: u32 = block[4 * i + 1];
+        let c: u32 = block[4 * i + 2];
+        let d: u32 = block[4 * i + 3];
+        w[i] = a | (b << 8) | (c << 16) | (d << 24);
+        i += 1;
+    }
+    w
+}
+
+/// What a node of the tree gives before its last compression: a chaining value, or the root's
+/// output.
+struct Output {
+    cv: [u32; 8],
+    block: [u32; 16],
+    counter: u64,
+    block_len: u32,
+    flags: u32,
+}
+
+impl Output {
+    fn chaining_value(&self) -> [u32; 8] {
+        first_8(&compress(&self.cv, &self.block, self.counter, self.block_len, self.flags))
+    }
+
+    /// The first 32 bytes of the root's output.
+    fn root_hash(&self) -> Vec<u8> {
+        let w = compress(&self.cv, &self.block, 0, self.block_len, self.flags | ROOT);
+        let mut out: Vec<u8> = Vec::with_capacity(32);
+        let mut i = 0;
+        while i < 8 {
+            out.push(w[i].truncate::<u8>());
+            out.push((w[i] >> 8).truncate::<u8>());
+            out.push((w[i] >> 16).truncate::<u8>());
+            out.push((w[i] >> 24).truncate::<u8>());
+            i += 1;
+        }
+        out
+    }
+}
+
+fn parent(left: &[u32; 8], right: &[u32; 8]) -> Output {
+    let mut block: [u32; 16] = [0; 16];
+    let mut i = 0;
+    while i < 8 {
+        block[i] = left[i];
+        block[i + 8] = right[i];
+        i += 1;
+    }
+    Output { cv: IV, block, counter: 0, block_len: 64, flags: PARENT }
+}
+
+/// The chunk being fed: up to 1024 bytes, compressed a 64-byte block at a time. `pub` only
+/// because `Blake3` holds one (`mod.expose.1`); its fields are private.
+pub struct Chunk {
+    cv: [u32; 8],
+    counter: u64,
+    block: [u8; 64],
+    block_len: int,
+    blocks_done: int,
+}
+
+impl Chunk {
+    fn new(counter: u64) -> Chunk {
+        Chunk { cv: IV, counter, block: [0; 64], block_len: 0, blocks_done: 0 }
+    }
+
+    fn len(&self) -> int {
+        BLOCK_LEN * self.blocks_done + self.block_len
+    }
+
+    fn start_flag(&self) -> u32 {
+        if self.blocks_done == 0 { CHUNK_START } else { 0 }
+    }
+
+    fn push(&mut self, b: u8) {
+        // A full block is compressed only once more input comes: the last one is the output's.
+        if self.block_len == BLOCK_LEN {
+            let flags = self.start_flag();
+            self.cv = first_8(&compress(&self.cv, &words(&self.block), self.counter, 64, flags));
+            self.blocks_done += 1;
+            self.block = [0; 64];
+            self.block_len = 0;
+        }
+        self.block[self.block_len] = b;
+        self.block_len += 1;
+    }
+
+    fn output(&self) -> Output {
+        Output {
+            cv: self.cv,
+            block: words(&self.block),
+            counter: self.counter,
+            block_len: self.block_len.wrap::<u32>(),
+            flags: self.start_flag() | CHUNK_END,
+        }
+    }
+}
+
+/// BLAKE3, fed in parts: `update` as often as wanted, then `finalize`. Finished chunks' chaining
+/// values wait on `stack`, merged into parents as soon as a subtree is complete.
+pub struct Blake3 {
+    chunk: Chunk,
+    stack: Vec<[u32; 8]>,
+}
+
+impl Blake3 {
+    pub fn new() -> Blake3 {
+        Blake3 { chunk: Chunk::new(0), stack: Vec::new() }
+    }
+
+    pub fn update(&mut self, data: &[u8]) {
+        let mut i = 0;
+        while i < data.len() {
+            if self.chunk.len() == CHUNK_LEN {
+                let cv = self.chunk.output().chaining_value();
+                let total = self.chunk.counter + 1;
+                self.add_chunk(cv, total);
+                self.chunk = Chunk::new(total);
+            }
+            self.chunk.push(data[i]);
+            i += 1;
+        }
+    }
+
+    /// Pushes a finished chunk's chaining value, the `total`th, merging each complete subtree:
+    /// one for each trailing zero bit of `total`.
+    fn add_chunk(&mut self, cv: [u32; 8], total: u64) {
+        let mut cv = cv;
+        let mut total = total;
+        while total & 1 == 0 {
+            let left = self.stack.pop() ?! "a complete subtree has a left half waiting";
+            cv = parent(&left, &cv).chaining_value();
+            total = total >> 1;
+        }
+        self.stack.push(cv);
+    }
+
+    /// The 32-byte hash.
+    pub fn finalize(&self) -> Vec<u8> {
+        let mut out = self.chunk.output();
+        let mut i = self.stack.len();
+        while i > 0 {
+            i -= 1;
+            out = parent(&self.stack[i], &out.chaining_value());
+        }
+        out.root_hash()
+    }
+}
+
+/// The BLAKE3 hash of `data`, 32 bytes.
+pub fn blake3(data: &[u8]) -> Vec<u8> {
+    let mut h = Blake3::new();
+    h.update(data);
+    h.finalize()
+}

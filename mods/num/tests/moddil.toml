@@ -1,0 +1,6 @@
+[mod]
+name = "num_tests"
+edition = "2027"
+
+[dependencies]
+num = { path = ".." }

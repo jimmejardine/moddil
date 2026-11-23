@@ -1,0 +1,40 @@
+//! Rounding a quotient by the prelude's `Round` (`num.round.1`): to the nearest, ties to the
+//! even one or away from zero; or down (toward −∞), up (toward +∞), or toward zero.
+
+use num::BigInt;
+
+/// Whether a quotient truncated toward zero to `q`, with a remainder that is not zero, moves one
+/// away from zero. `negative` is the exact quotient's sign; `half` compares twice the remainder's
+/// size with the divisor's (`Less`: below a half, `Equal`: exactly a half).
+fn away(mode: Round, negative: bool, half: Ordering, q_is_odd: bool) -> bool {
+    match mode {
+        Round::TowardZero => false,
+        Round::Down => negative,
+        Round::Up => !negative,
+        Round::NearestAway => match half {
+            Ordering::Less => false,
+            _ => true,
+        },
+        Round::NearestEven => match half {
+            Ordering::Less => false,
+            Ordering::Greater => true,
+            Ordering::Equal => q_is_odd,
+        },
+    }
+}
+
+/// `n / d` rounded by `mode`, for `BigInt`s; traps if `d` is zero.
+pub fn div_round_big(n: &BigInt, d: &BigInt, mode: Round) -> BigInt {
+    let (q, r) = n.div_rem(d);
+    if r.is_zero() {
+        return q;
+    }
+    let negative = n.is_negative() != d.is_negative();
+    let twice = r.abs().times(&BigInt::from_int(2));
+    let half = twice.cmp(&d.abs());
+    if away(mode, negative, half, !q.is_even()) {
+        if negative { q.minus(&BigInt::one()) } else { q.plus(&BigInt::one()) }
+    } else {
+        q
+    }
+}
