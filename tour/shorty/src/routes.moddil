@@ -56,7 +56,7 @@ impl IntoResponse for LinkError {
 }
 
 /// The routes.
-pub fn app() -> impl Handler with Links, Rand, suspend {
+pub fn app() -> impl Handler with Links, Rand {
     Router::new()
         .post("/links", create)
         .get("/{code}", follow)

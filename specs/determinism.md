@@ -136,7 +136,7 @@ nondeterminism, caught immediately (TigerBeetle does this).
 | Per-node handlers | `sim.clock(node)`, `sim.rng(node)`, `sim.net.endpoint(node)`, `sim.disk(node)` |
 | Faults | Interposing handlers (`drop_messages(rate: 0.1)`), `sim.net.partition(a, b)`, `sim.net.heal()` |
 | Standard faults | Network: drop, delay, duplicate, reorder, partition, heal. Disk: write errors, torn writes, lost `fsync`. Clocks: skew, jumps. Nodes: crash and restart. All seed-driven; more are added as interposing handlers |
-| Running and stopping | `sim.run_until(condition)`; `sim.stop_all()` requests every node to stop |
+| Running and stopping | `sim.run_until(condition)`; `sim.stop_all()` requests every node to stop (not built yet: for now a test stops its own scope, [`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 10) |
 
 ### Peers not written in Moddil
 

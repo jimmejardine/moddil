@@ -77,6 +77,14 @@ names `E` in a bound but does not list it handles them itself (E0501, E0502). A 
 needs are met where it is written, so the bound of a closure parameter lists no handler's effect
 (E0609).
 
+**expr.closure.control.1** A closure bound that lists control effects (`F: Fn(&Request) -> Response
+with suspend`) takes them, as **expr.closure.fails.2** takes errors: a closure passed for it, or a
+function named as a value for it, may suspend (or spawn) as listed without the function it is
+written in doing so, since it suspends where it is called. A call of a parameter so bounded has
+those effects, so the function that makes it lists them (E0603), as a router's `handle` does; one
+the bound does not list is an error in the closure (E0603). A bound that lists none leaves a
+closure's control effects to the function it is written in, which may call it during the call.
+
 **expr.closure.stored.1** A closure is kept beyond the call it is passed to as a
 `Box<dyn Fn(A₁, …, Aₙ) -> R with …>` (or `FnMut`, `FnOnce`), a **stored closure**: a
 `Box::new(|…| …)` written where one is expected takes its parameters' and result's types from it.

@@ -3,7 +3,22 @@
 The **standard mods**, written in Moddil: `core-*`, `collections`, `text`, `net`, `serde` and the
 rest of the catalogue ([`specs/stdlib.md`](../specs/stdlib.md)).
 
-**Status:** empty until slice S7, when `Vec` and `Map` become the first mods written in Moddil.
+**Status:** M2 slice M2c: the mods the tour reaches, each with its tests in its own `tests/`
+project (so a mod that depends on one does not run them), run natively, on the MIR interpreter
+and as WASM by `crates/moddil/tests/cli.rs`. A program names them as `moddil::<mod>` through the
+umbrella stub mod [`stubs/moddil`](../stubs/moddil/README.md), which re-exports them.
+
+| Mod | What it has | Capabilities |
+|---|---|---|
+| [`collections`](collections/src/lib.moddil) | `Map`, over the `core` mod's `HashMap` | |
+| [`sync`](sync/src/lib.moddil) | `Mutex` (with a `Guard` view, and `with`), over `UnsafeCell` and atomics | `unsafe` |
+| [`rand`](rand/src/lib.moddil) | the `Rand` effect, and `Seeded` (`seeded`) | `unsafe` |
+| [`serde`](serde/src/lib.moddil) | `Serialize` and `Deserialize` with their derives (impl templates), `DecodeError`, JSON | |
+| [`net`](net/src/lib.moddil) | the `Net` effect, `Port`, `Url`, `Conn`, `Listener` (a selectable `accept`); [`http`](net/src/http.moddil): `Router`, `Request`, `Response`, `serve_connection`, `post` with retries | |
+| [`sim`](sim/src/lib.moddil) | `Sim`, nodes, seeded randomness, a simulated network, `drop_messages` | `unsafe` |
+
+`Vec`, `String` and the hash maps are in the prelude and the `core` mod
+([`reference/2027/`](../reference/2027/README.md)).
 
 ## Layout and releases
 

@@ -1,0 +1,6 @@
+[mod]
+name = "collections_tests"
+edition = "2027"
+
+[dependencies]
+collections = { path = ".." }

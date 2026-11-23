@@ -1,0 +1,78 @@
+//! Sync cells: the only state tasks share and change (`concurrency.md`: Shared mutable state).
+//! Written over the `core` mod's `UnsafeCell` and atomics.
+
+use core::atomic::{self, Ordering};
+use core::cell::UnsafeCell;
+
+/// A value behind a lock. Every runtime runs one task at a time for now, so a task that finds it
+/// held lets the others run until it is free.
+pub struct Mutex<T> {
+    locked: UnsafeCell<bool>,
+    value: UnsafeCell<T>,
+}
+
+impl<T> Mutex<T> {
+    pub fn new(value: T) -> Mutex<T> {
+        Mutex { locked: UnsafeCell::new(false), value: UnsafeCell::new(value) }
+    }
+
+    /// The value, held until the guard is dropped; the guard reaches it through `Deref` and
+    /// `DerefMut`, so its methods are called on the guard (`expr.method.deref.1`).
+    pub fn lock(&self) -> Guard<T> with suspend {
+        loop {
+            match atomic::compare_exchange(
+                self.locked.get(),
+                false,
+                true,
+                Ordering::Acquire,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(_) => yield_now(),
+            }
+        }
+        Guard { mutex: self }
+    }
+
+    /// Runs `f` on the value, holding the lock for the call only.
+    pub fn with<R, F: FnOnce(&mut T) -> R>(&self, f: F) -> R with suspend {
+        let g = self.lock();
+        let r = unsafe("the guard holds the lock, so nothing else reaches the value") {
+            f(&mut *self.value.get())
+        };
+        drop(g);
+        r
+    }
+
+    pub fn into_inner(self) -> T {
+        self.value.into_inner()
+    }
+}
+
+/// A held lock: dropping it unlocks it.
+pub view Guard<T> {
+    mutex: &Mutex<T>,
+}
+
+impl<T> Deref for Guard<T> {
+    type Output = T;
+    fn deref(&self) -> &T {
+        unsafe("the guard holds the lock, so nothing else reaches the value") {
+            &*self.mutex.value.get()
+        }
+    }
+}
+
+impl<T> DerefMut for Guard<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        unsafe("the guard holds the lock, so nothing else reaches the value") {
+            &mut *self.mutex.value.get()
+        }
+    }
+}
+
+impl<T> Drop for Guard<T> {
+    fn drop(self) {
+        atomic::store(self.mutex.locked.get(), false, Ordering::Release);
+    }
+}

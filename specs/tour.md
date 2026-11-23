@@ -44,9 +44,11 @@ Done in slice S9d (November 2026).
   ([`testing.md`: Examples are tests](testing.md#examples-are-tests)).
 - **`moddil doc` renders the mod as the tour** (once `moddil doc` exists), and this page shrinks
   to a pointer plus the gaps table.
-- **Until M2, its libraries are stubs:** the standard mods it uses are signatures only, in
-  [`stubs/moddil/`](../stubs/moddil/README.md), a mod whose manifest says `stub = true`, so the
-  tour checks against them and its tests trap if run.
+- **Its libraries are the standard mods, written in Moddil** (since M2 slice M2c), under
+  [`mods/`](../mods/README.md): `collections`, `sync`, `rand`, `serde`, `net` (with `http`) and
+  `sim`. It names them through [`stubs/moddil/`](../stubs/moddil/README.md), which re-exports
+  them and still holds the signatures not written yet (the root capabilities, `io` and
+  `runtime`), so `main` checks but does not run.
 - **Gates, run in CI from then on** ([`roadmap.md`: Milestones](roadmap.md#milestones)):
   - **M0:** the tour parses and passes the type, effect and ownership checks;
   - **M2:** its tests pass, including the simulated-network test under `moddil/runtime-sim`.
@@ -102,3 +104,14 @@ now uses each answer:
 7. `Mutex::lock()` gives a `Guard<T>` that reaches the value through `Deref`
    ([`concurrency.md`: Shared mutable state](concurrency.md#shared-mutable-state)).
 8. The lossy network takes `rate: 0.1`, a float.
+
+Found when the tour's tests first ran (M2 slice M2c, November 2026):
+
+9. `app()` lists `Links` and `Rand` but not `suspend`: its routes capture the handlers where
+   they are named, and suspend only when `handle` calls them, since the router's bounds list
+   `suspend` ([`closures.md`: Stored (escaping) closures](closures.md#stored-escaping-closures);
+   `expr.closure.control.1`).
+10. The simulated-network test stops its own scope, `s.stop()`, rather than calling
+    `sim.stop_all()`: a library cannot reach the scope `serve` runs in, and stopping the scope is
+    what `stop_all` would do. `sim.stop_all()` waits until it can be built on the runtime
+    ([The `Sim` API](determinism.md#the-sim-api)).

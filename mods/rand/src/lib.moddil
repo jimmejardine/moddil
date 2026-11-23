@@ -1,0 +1,54 @@
+//! Randomness, as an effect (`effects-and-capabilities.md`: The effect catalogue).
+
+use core::cell::UnsafeCell;
+
+/// A source of random choices.
+pub trait Rand {
+    /// One of the characters of `choices`.
+    fn pick(&self, choices: &str) -> char;
+    /// A number from 0 up to, not including, `n`, which is positive.
+    fn below(&self, n: int) -> int;
+}
+
+/// Randomness from a seed: the same choices every run. A Park-Miller generator, whose state
+/// stays below 2^31, so nothing overflows.
+pub struct Seeded {
+    state: UnsafeCell<int>,
+}
+
+const MODULUS: int = 2147483647;
+
+impl Seeded {
+    fn next(&self) -> int {
+        let p = self.state.get();
+        unsafe("one task runs at a time, and nothing else borrows the state") {
+            *p = *p * 48271 % MODULUS;
+            *p
+        }
+    }
+}
+
+impl Rand for Seeded {
+    fn pick(&self, choices: &str) -> char {
+        let n = choices.chars().count();
+        let mut i = self.below(n);
+        for c in choices.chars() {
+            if i == 0 {
+                return c;
+            }
+            i -= 1;
+        }
+        ' '
+    }
+
+    fn below(&self, n: int) -> int {
+        self.next() % n
+    }
+}
+
+/// The seeded source for `seed`.
+pub fn seeded(seed: int) -> Seeded {
+    let s = seed % MODULUS;
+    let s = if s <= 0 { s + MODULUS - 1 } else { s };
+    Seeded { state: UnsafeCell::new(s) }
+}

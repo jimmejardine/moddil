@@ -3,9 +3,10 @@
 The **dogfood tour**: one small, complete Moddil program whose documentation is the tour of the
 language ([`specs/tour.md`](../specs/tour.md)).
 
-**Status:** slice S9d: the tour is the [`shorty/`](shorty/README.md) mod, and
-`python tools/ci.py tour` checks it (M0's gate is met); its libraries are the signature-only stubs
-in [`stubs/moddil/`](../stubs/moddil/README.md) until M2.
+**Status:** M2 slice M2c: the tour is the [`shorty/`](shorty/README.md) mod;
+`python tools/ci.py tour` checks it (M0's gate), and its three tests pass natively, on the MIR
+interpreter and as WASM, over the standard mods written in Moddil ([`mods/`](../mods/README.md))
+(M2's gate).
 
 ## Gates
 

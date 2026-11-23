@@ -1,0 +1,15 @@
+use collections::Map;
+
+test "a map keeps what is put in it" {
+    let mut m: Map<String, int> = Map::new();
+    m.insert("a".to_string(), 1);
+    m.insert("b".to_string(), 2);
+    m.insert("a".to_string(), 3);
+    m.len()                                         // => 2
+    ;
+    m.get(&"a".to_string()).map(|x| *x).unwrap_or(0)   // => 3
+    ;
+    m.contains_key(&"c".to_string())                // => false
+    ;
+    m.remove(&"b".to_string())                      // => Some(2)
+}

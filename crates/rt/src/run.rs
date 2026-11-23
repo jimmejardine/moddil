@@ -545,6 +545,13 @@ pub extern "C" fn channel(capacity: u64) -> u64 {
     with(|s| s.sched.channel(capacity as usize) as u64)
 }
 
+/// `__timer`: a timer's channel, whose one value arrives `nanos` from now (`task.timer.1`).
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_timer")]
+pub extern "C" fn timer(nanos: i64) -> u64 {
+    with(|s| s.sched.timer(nanos) as u64)
+}
+
 /// `Sender::clone`.
 #[unsafe(export_name = "moddil_rt_clone_sender")]
 pub extern "C" fn clone_sender(c: u64) {

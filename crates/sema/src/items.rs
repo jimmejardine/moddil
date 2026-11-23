@@ -195,6 +195,9 @@ pub struct Pred {
     pub trait_ref: TraitRef,
     /// Associated types fixed by the bound: their index in the trait, and the type.
     pub assoc: Vec<(u32, Ty)>,
+    /// For a closure bound, the control effects it lists (`with suspend`): the bounded closure's
+    /// are then its caller's, not where it is written (`expr.closure.control.1`).
+    pub control: Control,
     /// Where the bound is written.
     pub range: TextRange,
 }

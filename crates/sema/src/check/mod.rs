@@ -400,6 +400,7 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         stored: Vec::new(),
         boxed_hint: None,
         stored_ctx: Vec::new(),
+        bound_control: Vec::new(),
         opaque_hint: None,
         spawns: Vec::new(),
         result_closures: HashSet::new(),
@@ -673,9 +674,14 @@ struct Checker<'a> {
     /// A closure passed to a call whose result is expected to be a `Box<dyn Fn…>`, and that
     /// `dyn` type, which gives the closure's parameters their types.
     boxed_hint: Option<(ExprId, Ty)>,
-    /// The stored closures being checked, innermost last: each closure, the control effects its
-    /// type lists, and how many handlers are installed around it.
+    /// The closures being checked whose control effects are met by their type or bound,
+    /// innermost last: stored closures (`expr.closure.stored.1`) and closures passed for a bound
+    /// that lists control effects (`expr.closure.control.1`). Each closure, the control effects
+    /// listed, and how many handlers are installed around it.
     stored_ctx: Vec<(ExprId, crate::Control, usize)>,
+    /// The types a call's closure bounds bound, with the control effects each lists
+    /// (`expr.closure.control.1`): a closure checked as one of them has its control met there.
+    bound_control: Vec<(Ty, crate::Control)>,
     /// For a function whose result is `impl Fn…`: the type its body gives, and the closure
     /// type as a stored one's, which a closure written for it takes (`expr.closure.result.1`).
     opaque_hint: Option<(Ty, Ty)>,

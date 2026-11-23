@@ -1,0 +1,6 @@
+[mod]
+name = "moddil.com/net"
+edition = "2027"
+
+[dependencies]
+serde = { path = "../serde" }

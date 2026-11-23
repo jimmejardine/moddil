@@ -1,0 +1,23 @@
+// covers: task.timer.1
+
+test "sleeps wake in time order" {
+    let (tx, rx) = channel(8);
+    let a = tx.clone();
+    let b = tx.clone();
+    scope(|s| {
+        s.spawn(|| { sleep(Duration::seconds(3)); a.send(3) ?! "open"; });
+        s.spawn(|| { sleep(Duration::seconds(1)); b.send(1) ?! "open"; });
+    });
+    drop(tx);
+    let first = rx.recv().unwrap_or(0);
+    let second = rx.recv().unwrap_or(0);
+    first * 10 + second                     // => 13
+}
+
+test "a timer ends a select" {
+    let (tx, rx) = channel::<int>(1);
+    select {
+        x = rx.recv() => x.unwrap_or(-1),
+        _ = timer(Duration::millis(5)).recv() => 0,
+    }                                       // => 0
+}

@@ -43,7 +43,7 @@ const HOST: [&str; 2] = ["moddil_rt_observe", "moddil_rt_log"];
 
 /// The runtime's functions for tasks and their isolated scopes: a module that calls them runs
 /// only where the host has JSPI.
-const TASKS: [&str; 19] = [
+const TASKS: [&str; 20] = [
     "moddil_rt_scope_open",
     "moddil_rt_spawn",
     "moddil_rt_scope_run",
@@ -53,6 +53,7 @@ const TASKS: [&str; 19] = [
     "moddil_rt_yield_now",
     "moddil_rt_stop_requested",
     "moddil_rt_channel",
+    "moddil_rt_timer",
     "moddil_rt_clone_sender",
     "moddil_rt_drop_sender",
     "moddil_rt_drop_receiver",

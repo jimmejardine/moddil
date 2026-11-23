@@ -1,3 +1,10 @@
-//! The signatures of the standard mods the tour uses, until they are written at M2
-//! (`roadmap.md`: M0). A function here has no body: a program checks against it, and calling
-//! one traps (`not implemented yet`).
+//! The standard mods, under one name: those written in Moddil, re-exported, and the signatures
+//! of those still to be written (`root`, `io`, `runtime`), whose functions have no body, so a
+//! program checks against them and calling one traps (`not implemented yet`).
+
+pub use collections;
+pub use sync;
+pub use rand;
+pub use serde;
+pub use net;
+pub use sim;

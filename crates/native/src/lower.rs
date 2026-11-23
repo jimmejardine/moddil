@@ -212,6 +212,7 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
     ("yield_now", &['s', 'b'], Some('b')),
     ("stop_requested", &['s', 'b'], Some('b')),
     ("channel", &['w'], Some('w')),
+    ("timer", &['w'], Some('w')),
     ("clone_sender", &['w'], None),
     ("drop_sender", &['w'], None),
     ("drop_receiver", &['w', 'p'], Some('b')),
@@ -649,8 +650,7 @@ impl<M: Module> Compiler<'_, M> {
     /// `ty` with the type arguments `targs` for its parameters, its associated types resolved,
     /// and each refined type as its base (a refinement is checked, not represented).
     fn concrete(&self, ty: &Ty, targs: &[Ty]) -> Ty {
-        let t = Solver::new(self.items, &[]).deep(&ty.subst(targs));
-        base_of(self.items, &t)
+        Solver::new(self.items, &[]).deep(&ty.subst(targs))
     }
 
     /// Function `f` with type arguments `targs`: declared (and queued to be compiled) the first
@@ -1472,14 +1472,6 @@ impl<M: Module> Compiler<'_, M> {
     }
 }
 
-/// `t` with each refined type as its base.
-fn base_of(items: &ItemTree, t: &Ty) -> Ty {
-    match t {
-        Ty::Refined(..) => base_of(items, &items.base(t)),
-        t => t.map(&mut |x| base_of(items, x)),
-    }
-}
-
 /// The scheduler's operation that built-in function `f` of the prelude is, if it is one (as
 /// the interpreter's `task_native`).
 fn task_op(items: &ItemTree, f: u32) -> Option<&'static str> {
@@ -1500,6 +1492,7 @@ fn task_op(items: &ItemTree, f: u32) -> Option<&'static str> {
         ("", "__scope_open") => "__scope_open",
         ("", "__scope_run") => "__scope_run",
         ("", "channel") => "channel",
+        ("", "__timer") => "timer",
         ("", "__select") => "__select",
         ("Scope", "spawn") => "spawn",
         ("Scope", "stop") => "stop",
@@ -4062,6 +4055,14 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let st = self.task_call(op, &[site, tracked]).expect("a status");
                 let null = self.b.ins().iconst(ptr, 0);
                 self.task_status(st, catch, null, Before::Nothing)
+            }
+            // A timer's channel (`task.timer.1`): its id is the `Receiver`'s.
+            "timer" => {
+                let n = self.value(&args[0])?;
+                let c = self.task_call("timer", &[n]).expect("a channel");
+                let a = self.addr_of(d)?;
+                self.b.ins().store(flags, c, a, 0);
+                Ok(())
             }
             "channel" => {
                 let n = self.value(&args[0])?;

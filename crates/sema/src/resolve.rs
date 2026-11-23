@@ -973,11 +973,14 @@ fn closure_bound(
         args: args.clone(),
     };
     let once = closure_trait("FnOnce").expect("the prelude's `FnOnce`");
+    // The control effects the bound lists (`expr.closure.control.1`).
+    let control = effects.map_or(0, |e| bound_effects(e, scope, &mut Vec::new()).control);
     vec![
         Pred {
             ty: ty.clone(),
             trait_ref: trait_ref(t),
             assoc: Vec::new(),
+            control,
             range,
         },
         Pred {
@@ -1009,6 +1012,7 @@ fn closure_bound(
                 }
                 None => vec![(0, output)],
             },
+            control,
             range,
         },
     ]
@@ -1133,6 +1137,7 @@ pub(crate) fn bounds(
                 ty: ty.clone(),
                 trait_ref,
                 assoc,
+                control: 0,
                 range: b.text_range(),
             });
         }

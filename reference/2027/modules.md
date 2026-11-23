@@ -87,7 +87,7 @@ its own ([Effects](effects.md)); a private or `pub(mod)` function's are inferred
 modules of its mod.
 
 **mod.stub.1** A **stub** mod (`stub = true` in `[mod]`) holds signatures standing in for mods
-not written yet, as `stubs/moddil` does for the standard mods until M2. Its functions may have no
+not written yet, as `stubs/moddil` does for the root capabilities until they are. Its functions may have no
 body (elsewhere that is not supported yet), and calling one traps (`not implemented yet`). A
 `#[derive(T)]` of one of its traits `T` declares an empty impl (`impl T for X {}`), so its traits
 are written with no methods a derive would have to define; any other derive not in

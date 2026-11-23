@@ -922,7 +922,7 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
     - a refined field is decoded with its refinement's `new`, and a value that breaks it is a
       `DecodeError`;
     - it lives in the stub mod, `stubs/moddil`, beside the signatures still to be written. The
-      tour checks against it.
+      tour checks against it. (M2c moved it to `mods/serde`.)
   - **Two fixes found on the way:**
     - a type holding itself through a `Vec` is no longer refused as infinitely large: the check
       follows fields, as the rule says, not type arguments;
@@ -930,7 +930,8 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
   - **Checked:**
     - conformance files for templates (fields, private fields across modules, `if const`, a
       refined field, and every error), agreeing on all four implementations;
-    - serde's tests (`stubs/tests/serde`) pass natively, on the MIR interpreter and as WASM.
+    - serde's tests (then `stubs/tests/serde`, now `mods/serde/tests`) pass natively, on the MIR
+      interpreter and as WASM.
 - **Slice M2b (decided November 2026): the language the standard mods need.** The language comes
   first, so its ideas are tried in real code before the mods are written.
   - **Unsafe code** (`reference/2027/unsafe.md`):
@@ -956,15 +957,36 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
       channel and then runs the rest;
     - the rest runs where the `select` is, so it uses no handler.
   - **Checked:** conformance for each, agreeing on all four implementations.
-- **Next, M2c:**
-  - first, **a bound that lists `suspend` (or `spawn`) takes the closure's suspension** (decided
-    November 2026), as `expr.closure.fails.2` takes its errors. The closure is called by code that
-    suspends, so the function that calls the parameter needs `suspend`, not the one that names
-    the closure. Today bounds accept `with suspend` but do not record it, so naming a suspending
-    function as a value charges the namer. With this, the tour's `app()` is `with Links, Rand`;
-  - the standard mods the tour reaches, each a mod of its own under `mods/`: `collections`,
-    `sync` (`Mutex` over `UnsafeCell` and atomics), `rand`, `serde`, `net` with `http`, and `sim`;
-  - the tour's three tests, the simulated lossy network included, on every implementation.
+- **Slice M2c (decided November 2026): the standard mods, and the tour's tests pass.** M2's
+  gate for the tour is met: its three tests, the simulated lossy network included, pass natively,
+  on the MIR interpreter and as WASM.
+  - **A bound that lists `suspend` (or `spawn`) takes the closure's suspension**
+    (`expr.closure.control.1`), as `expr.closure.fails.2` takes its errors:
+    - a closure, or a function named as a value, passed for such a bound has its control met by
+      the bound;
+    - a call of the parameter has the bound's control effects;
+    - so the tour's `app()` is `with Links, Rand`, and its router's `handle` suspends.
+  - **Virtual time** (`task.timer.1`), in every runtime's scheduler:
+    - a run's time starts at zero and moves only when every task waits, straight to the earliest
+      timer;
+    - the prelude has `Duration`, `timer(d)` (a channel, so `select` waits on it) and `sleep(d)`.
+  - **The mods**, each under `mods/` with its own tests (`mods/README.md`):
+    - `collections` (`Map`);
+    - `sync` (`Mutex` over `UnsafeCell` and atomics);
+    - `rand` (`Rand`, `Seeded`);
+    - `serde` (moved from the stub);
+    - `net`: `Url`, `Port`, `Conn` and `Listener`, and `http` with a `Router` whose route types
+      nest, path parameters made through `Refined`, and `post` with retries on timeouts;
+    - `sim`: nodes, seeded randomness, a simulated network, and `drop_messages`.
+  - **The umbrella:** the stub mod `moddil` re-exports them (`pub use`), so the tour's imports
+    did not change; it keeps the root capabilities, `io` and `runtime` as signatures.
+  - **The tour** stops its own scope (`s.stop()`) instead of `sim.stop_all()`, which waits for the
+    runtime (`tour.md`: Gaps, 10).
+  - **A fix found on the way:** native code kept refinements only as their bases in type
+    arguments, so `T::refine` could not find its refinement; type arguments now keep them, and
+    layouts use the base.
+- **Next:** the rest of M2: the LSP prototype and the first GPU path, and the standard mods the
+  tour does not reach.
 
 ## Staging: distributed programs
 

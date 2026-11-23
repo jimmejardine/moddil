@@ -230,9 +230,13 @@ fn a_release_build_runs_and_splits_its_line_tables() {
     }
 }
 
-#[test]
-fn serde_written_in_moddil_passes_its_tests_everywhere() {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../stubs/tests/serde");
+/// Runs the tests of the project at `dir` (from the repository's root) natively, on the MIR
+/// interpreter and, where Node has JSPI, as WASM: each run passes all `n`, natively compiled
+/// (none falls back to the interpreter).
+fn passes_everywhere(dir: &str, n: usize) {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(dir);
     let wasm = Command::new(std::env::var("MODDIL_NODE").unwrap_or_else(|_| "node".to_string()))
         .args([
             "-e",
@@ -246,11 +250,34 @@ fn serde_written_in_moddil_passes_its_tests_everywhere() {
         }
         let out = moddil(how, &dir);
         let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{how:?}: {stdout}{stderr}");
         assert!(
-            out.status.success(),
-            "{how:?}: {stdout}{}",
-            String::from_utf8_lossy(&out.stderr)
+            stdout.contains(&format!("{n} passed, 0 failed")),
+            "{how:?}: {stdout}"
         );
-        assert!(stdout.contains("4 passed, 0 failed"), "{how:?}: {stdout}");
+        assert!(
+            !stderr.contains("runs on the interpreter"),
+            "{how:?}: {stderr}"
+        );
     }
+}
+
+#[test]
+fn the_standard_mods_pass_their_tests_everywhere() {
+    for (dir, n) in [
+        ("mods/collections/tests", 1),
+        ("mods/sync/tests", 2),
+        ("mods/rand/tests", 1),
+        ("mods/serde/tests", 4),
+        ("mods/net/tests", 4),
+        ("mods/sim/tests", 3),
+    ] {
+        passes_everywhere(dir, n);
+    }
+}
+
+#[test]
+fn the_tour_passes_its_tests_everywhere() {
+    passes_everywhere("tour/shorty", 3);
 }

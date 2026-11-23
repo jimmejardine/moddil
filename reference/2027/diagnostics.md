@@ -94,7 +94,7 @@ and a code never changes meaning.
 | E0508 | An error type that is not a struct or enum, or a second instance of a generic one | [err.fail.1](errors.md), [err.set.1](errors.md) |
 | E0601 | Something after `with` that is not an effect, or an effect named wrongly | [eff.1](effects.md), [eff.name.1](effects.md), [eff.control.1](effects.md) |
 | E0602 | An entry point whose call needs an effect nothing installs | [eff.entry.1](effects.md) |
-| E0603 | A need that a function whose effects are written out does not list | [eff.infer.1](effects.md), [eff.method.1](effects.md), [eff.control.1](effects.md) |
+| E0603 | A need that a function whose effects are written out does not list | [eff.infer.1](effects.md), [eff.method.1](effects.md), [eff.control.1](effects.md), [expr.closure.control.1](expressions/closures.md) |
 | E0604 | An effect other than `fail` on a trait's method or an impl's | [eff.method.1](effects.md) |
 | E0605 | A `dyn` type not behind a borrow or a `Box`, of more than one trait, or of a trait that cannot be used as `dyn` | [type.dyn.1](types.md), [type.box.dyn.1](types.md) |
 | E0606 | An effect listed twice, or given two handlers by one `with` | [eff.1](effects.md), [eff.with.1](effects.md), [eff.control.1](effects.md) |

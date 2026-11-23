@@ -21,7 +21,7 @@ data (S7c); const items, `const fn` and `const { }`, evaluated when compiling, a
 `select` (S9b); functions as values, `impl Trait` results, `map`, `filter` and `collect`,
 `test … for`, `log`, `main`'s root capabilities and `ExitCode`, and `#[selectable]` (S9c); stub
 mods, doc comments, `Pattern`, and bounds on a closure's errors (S9d); numbers (S10); `String` in Moddil (S11); derives
-written in Moddil (M2a); unsafe code, `Refined`, results that hold handlers, and selectable functions in `select` (M2b).
+written in Moddil (M2a); unsafe code, `Refined`, results that hold handlers, and selectable functions in `select` (M2b); closure bounds that take control effects, and virtual time (M2c).
 
 ## Paragraphs
 

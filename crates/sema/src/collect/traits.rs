@@ -168,6 +168,7 @@ impl Collector<'_> {
                 args: args.into(),
             },
             assoc: Vec::new(),
+            control: 0,
             range: def.name_range,
         }
     }

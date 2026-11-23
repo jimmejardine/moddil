@@ -1,0 +1,6 @@
+[mod]
+name = "rand_tests"
+edition = "2027"
+
+[dependencies]
+rand = { path = ".." }

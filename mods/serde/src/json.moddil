@@ -2,7 +2,7 @@
 //!
 //! Numbers are integers, for now.
 
-use mod::serde::{DecodeError, Deserialize, Serialize};
+use mod::{DecodeError, Deserialize, Serialize};
 
 /// Decodes `text` as a `T`, validating it.
 pub fn decode<T: Deserialize>(text: &str) -> T with fail(DecodeError) {

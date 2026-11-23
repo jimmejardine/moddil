@@ -25,6 +25,10 @@ impl Checker<'_> {
         let ret = sig.ret.subst(args);
         for p in sig.generics.preds.clone() {
             let (ty, tr) = (p.ty.subst(args), p.trait_ref.subst(args));
+            // A closure bound that lists control effects takes them (`expr.closure.control.1`).
+            if p.control != 0 {
+                self.bound_control.push((ty.clone(), p.control));
+            }
             for (i, fixed) in &p.assoc {
                 let name = self.items.traits[tr.trait_ as usize].assoc[*i as usize]
                     .0

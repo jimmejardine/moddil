@@ -1,0 +1,4 @@
+[mod]
+name = "moddil.com/sync"
+edition = "2027"
+capabilities = ["unsafe"]

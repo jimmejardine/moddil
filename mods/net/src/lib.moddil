@@ -1,0 +1,153 @@
+//! The network (`stdlib.md`: Networking): the `Net` effect, connections that carry text, and
+//! URLs. `http` is written over it. A network is a handler for `Net`: the runtime's, or a
+//! simulated one (`moddil.com/sim`).
+
+use serde::json::{Decoder, Encoder};
+use serde::{DecodeError, Deserialize, Serialize};
+
+/// Network access, as an effect.
+pub trait Net {
+    /// The address `host` names.
+    fn resolve(&self, host: &str) -> String;
+    /// A connection to `port` at `addr`.
+    fn connect(&self, addr: &str, port: int) -> Conn with suspend, fail(NetError);
+}
+
+/// A TCP or UDP port.
+pub type Port = int where 1 <= self && self <= 65535;
+
+/// Why a network operation failed.
+#[derive(Debug, Clone)]
+pub struct NetError {
+    reason: String,
+}
+
+impl NetError {
+    pub fn new(reason: &str) -> NetError {
+        NetError { reason: reason.to_string() }
+    }
+
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+}
+
+impl Display for NetError {
+    fn fmt(&self, out: &mut String) {
+        out.push_str(&self.reason);
+    }
+}
+
+/// A URL, as its text.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Url {
+    text: String,
+}
+
+impl Url {
+    pub fn new(text: &str) -> Url {
+        Url { text: text.to_string() }
+    }
+
+    /// Its scheme: what comes before `:` (`https`).
+    pub const fn scheme(&self) -> &str {
+        let text: &str = &self.text;
+        match text.split_once(":") {
+            Some((scheme, _)) => scheme,
+            None => "",
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.text
+    }
+}
+
+impl Display for Url {
+    fn fmt(&self, out: &mut String) {
+        out.push_str(&self.text);
+    }
+}
+
+/// A URL is written as its text.
+impl Serialize for Url {
+    fn serialize(&self, out: &mut Encoder) {
+        out.text(&self.text);
+    }
+}
+
+/// A URL is read from its text.
+impl Deserialize for Url {
+    fn deserialize(d: Decoder) -> Url with fail(DecodeError) {
+        Url { text: d.text()? }
+    }
+}
+
+/// A connection: messages of text each way.
+pub struct Conn {
+    out: Sender<String>,
+    incoming: Receiver<String>,
+    /// For a connection that loses messages: whether to send the next one.
+    keep: Option<Box<dyn Fn() -> bool>>,
+}
+
+impl Conn {
+    /// Two ends of a new connection, each sending what the other receives.
+    pub fn pair() -> (Conn, Conn) {
+        let (a_out, b_in) = channel(16);
+        let (b_out, a_in) = channel(16);
+        (
+            Conn { out: a_out, incoming: a_in, keep: None },
+            Conn { out: b_out, incoming: b_in, keep: None },
+        )
+    }
+
+    /// The same connection, sending only the messages `keep` says to; the rest are lost.
+    pub fn lossy(self, keep: Box<dyn Fn() -> bool>) -> Conn {
+        Conn { out: self.out, incoming: self.incoming, keep: Some(keep) }
+    }
+
+    /// Sends `text`, unless the connection loses it.
+    pub fn send(&self, text: String) with suspend, fail(NetError) {
+        let lost = match &self.keep {
+            Some(keep) => !(**keep)(),
+            None => false,
+        };
+        if !lost {
+            try { self.out.send(text)? } catch {
+                Closed => fail(NetError::new("the connection is closed")),
+            }
+        }
+    }
+
+    /// The next message, or `None` once the other end is gone.
+    pub fn recv(&self) -> Option<String> with suspend {
+        self.incoming.recv()
+    }
+
+    /// The next message, or `None` if none comes within `d`.
+    pub fn recv_within(&self, d: Duration) -> Option<String> with suspend {
+        select {
+            m = self.incoming.recv() => m,
+            _ = timer(d).recv() => None,
+        }
+    }
+}
+
+/// A socket listening for connections.
+pub struct Listener {
+    incoming: Receiver<Conn>,
+}
+
+impl Listener {
+    /// A listener for the connections `incoming` brings.
+    pub fn new(incoming: Receiver<Conn>) -> Listener {
+        Listener { incoming }
+    }
+
+    /// The next connection.
+    #[selectable]
+    pub fn accept(&self) -> Conn with suspend {
+        self.incoming.recv() ?! "a network keeps its listeners' channels open"
+    }
+}

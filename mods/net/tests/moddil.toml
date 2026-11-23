@@ -1,0 +1,7 @@
+[mod]
+name = "net_tests"
+edition = "2027"
+
+[dependencies]
+net = { path = ".." }
+serde = { path = "../../serde" }

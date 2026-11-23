@@ -3,10 +3,11 @@
 A link shortener, and the tour of Moddil written as real source
 ([`specs/tour.md`: From markdown to source](../../specs/tour.md#from-markdown-to-source)).
 
-**Status:** slice S9d: it parses and passes the type, effect and ownership checks, in CI
-(`python tools/ci.py tour`, or `moddil check tour/shorty`), against the signature-only standard
-mods in [`stubs/moddil/`](../../stubs/moddil/README.md). Its tests trap until those are written,
-at M2. Where the code had to differ from the tour as first written, the gaps table in
+**Status:** M2 slice M2c: it passes the type, effect and ownership checks
+(`python tools/ci.py tour`, or `moddil check tour/shorty`), and its three tests pass natively, on
+the MIR interpreter and as WASM (`moddil test tour/shorty`), over the standard mods written in
+Moddil ([`mods/`](../../mods/README.md)), named through [`stubs/moddil/`](../../stubs/moddil/README.md).
+`main` checks but does not run: the root capabilities are still signatures. Where the code had to differ from the tour as first written, the gaps table in
 [`specs/tour.md`](../../specs/tour.md#gaps-the-tour-exposed) says why.
 
 ## Layout

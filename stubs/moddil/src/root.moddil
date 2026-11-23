@@ -2,8 +2,11 @@
 //! runtime makes them.
 
 use mod::io::StdErr;
-use mod::net::{Listener, Net, NetError};
-use mod::rand::Rand;
+use net::{Conn, Listener, Net, NetError};
+use rand::Rand;
+
+/// A TCP or UDP port.
+pub use net::Port;
 
 /// A command-line argument that is missing or does not parse.
 pub struct ArgError { name: String }
@@ -44,6 +47,7 @@ impl NetRoot {
 
 impl Net for NetRoot {
     fn resolve(&self, host: &str) -> String;
+    fn connect(&self, addr: &str, port: int) -> Conn with suspend, fail(NetError);
 }
 
 /// Real time.
@@ -56,7 +60,5 @@ pub struct Entropy { handle: int }
 
 impl Rand for Entropy {
     fn pick(&self, choices: &str) -> char;
+    fn below(&self, n: int) -> int;
 }
-
-/// A TCP or UDP port.
-pub type Port = int where 1 <= self && self <= 65535;

@@ -6,12 +6,8 @@ pub enum Signal {
     Term,
 }
 
-/// A length of time.
-pub struct Duration { nanos: int }
-
-impl Duration {
-    pub fn seconds(n: int) -> Duration;
-}
+/// A length of time: the prelude's (`task.timer.1`).
+pub use Duration;
 
 /// Runs `run` until one of `signals` arrives, then asks it to stop, and cancels it if it has
 /// not stopped after `grace`.

@@ -1,9 +1,11 @@
 # moddil (stubs)
 
-The **signatures** of the standard mods the tour uses, until they are written in Moddil at M2
+The **umbrella** for the standard mods: it re-exports those written in Moddil
+([`mods/`](../../mods/README.md)), so a program names them as `moddil::net` and so on, and holds the
+**signatures** of those still to be written
 ([`specs/roadmap.md`: Milestones](../../specs/roadmap.md#milestones)).
 
-**Status:** slice S9d. A stub mod (`stub = true` in its manifest,
+**Status:** M2 slice M2c. A stub mod (`stub = true` in its manifest,
 [`reference/2027/modules.md`](../../reference/2027/modules.md)): its functions may have no body, so
 a program checks against them, and calling one traps (`not implemented yet`). A derive of one of
 its traits declares an empty impl, and `#[root_capability]` marks the structs that only `main`
@@ -13,14 +15,7 @@ takes. Each item is written just far enough for [the tour](../../tour/shorty/REA
 
 | Module | Stands in for |
 |---|---|
-| `root` | The root capabilities: `Args`, `Env`, `Stdio`, `FsRoot`, `NetRoot`, `Clock`, `Entropy`, and `Port` |
+| `root` | The root capabilities: `Args`, `Env`, `Stdio`, `FsRoot`, `NetRoot`, `Clock`, `Entropy`, and `Port` (re-exported from `net`) |
 | `io` | `Stderr` and `eprintln` |
-| `collections` | `Map` |
-| `sync` | `Mutex` |
-| `rand` | `Rand` and `seeded` |
-| `net`, `net::http` | `Net`, `Url`, `Listener`, `Conn`; the router, requests and responses |
-| `serde`, `serde::json` | Written in Moddil (M2a): `Serialize` and `Deserialize` with their derives (impl templates), `DecodeError`, and JSON's `encode` and `decode`; its tests are in [`../tests/serde`](../tests/serde) |
-| `runtime` | `serve_until_stopped`, `Signal`, `Duration` |
-| `sim` | `Sim` and `drop_messages` |
-
-At M2 the real mods replace these, and the tour's tests run.
+| `runtime` | `serve_until_stopped` and `Signal`; `Duration` is the prelude's |
+| `collections`, `sync`, `rand`, `serde`, `net`, `sim` | Re-exported from [`mods/`](../../mods/README.md), written in Moddil |

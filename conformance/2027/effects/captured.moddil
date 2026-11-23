@@ -10,15 +10,15 @@ struct Adding { by: int }
 impl Links for Adding { fn get(&self, code: int) -> int { code + self.by } }
 
 /// What answers requests.
-trait Handler { fn handle(&self, x: int) -> int; }
+trait Handler { fn handle(&self, x: int) -> int with suspend; }
 
 /// One route, then the rest: a router's shape.
 struct Route<F, R> { at: int, f: F, rest: R }
 struct Nowhere;
 
-impl Handler for Nowhere { fn handle(&self, x: int) -> int { -1 } }
+impl Handler for Nowhere { fn handle(&self, x: int) -> int with suspend { -1 } }
 impl<F: Fn(int) -> int with suspend, R: Handler> Handler for Route<F, R> {
-    fn handle(&self, x: int) -> int {
+    fn handle(&self, x: int) -> int with suspend {
         if x == self.at { (self.f)(x) } else { self.rest.handle(x) }
     }
 }

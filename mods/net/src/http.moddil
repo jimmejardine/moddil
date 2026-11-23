@@ -1,0 +1,341 @@
+//! HTTP (`stdlib.md`: HTTP), over `Conn`'s messages: a request is `METHOD PATH`, a line, then
+//! its body; a response is its status code, a line, then its body.
+//!
+//! A `Router` holds its routes' handlers as they were named, with the handlers they captured
+//! there (`type.impl.ret.2`), so its users see only `handle`'s `suspend`. Each route's errors
+//! become responses, so none passes on (`expr.closure.fails.2`).
+
+use mod::{Conn, Net, Url};
+use serde::Serialize;
+use serde::json;
+
+/// A response's status.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Status {
+    Ok,
+    Created,
+    PermanentRedirect,
+    BadRequest,
+    NotFound,
+    Conflict,
+}
+
+impl Status {
+    pub fn code(&self) -> int {
+        match self {
+            Status::Ok => 200,
+            Status::Created => 201,
+            Status::PermanentRedirect => 308,
+            Status::BadRequest => 400,
+            Status::NotFound => 404,
+            Status::Conflict => 409,
+        }
+    }
+
+    fn from_code(code: &str) -> Option<Status> {
+        match code {
+            "200" => Some(Status::Ok),
+            "201" => Some(Status::Created),
+            "308" => Some(Status::PermanentRedirect),
+            "400" => Some(Status::BadRequest),
+            "404" => Some(Status::NotFound),
+            "409" => Some(Status::Conflict),
+            _ => None,
+        }
+    }
+}
+
+/// A request.
+pub struct Request {
+    method: String,
+    path: String,
+    body: String,
+}
+
+impl Request {
+    pub fn get(path: String) -> Request {
+        Request { method: "GET".to_string(), path, body: String::new() }
+    }
+
+    pub fn post(path: &str, body: &str) -> Request {
+        Request { method: "POST".to_string(), path: path.to_string(), body: body.to_string() }
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
+    pub fn body(&self) -> &str {
+        &self.body
+    }
+
+    fn to_text(&self) -> String {
+        fmt"{self.method} {self.path}\n{self.body}"
+    }
+
+    fn parse(text: &str) -> Option<Request> {
+        let (head, body) = text.split_once("\n")?;
+        let (method, path) = head.split_once(" ")?;
+        Some(Request {
+            method: method.to_string(),
+            path: path.to_string(),
+            body: body.to_string(),
+        })
+    }
+}
+
+/// A response.
+pub struct Response {
+    status: Status,
+    body: String,
+}
+
+impl Response {
+    /// A response with `status` and no body; `r.status()` reads it (`item.impl.same-name.1`).
+    pub fn status(status: Status) -> Response {
+        Response { status, body: String::new() }
+    }
+
+    pub fn text(status: Status, body: String) -> Response {
+        Response { status, body }
+    }
+
+    pub fn json<T: Serialize>(status: Status, value: &T) -> Response {
+        Response { status, body: json::encode(value) }
+    }
+
+    /// A redirect to `to`, which is the body.
+    pub fn redirect(status: Status, to: &Url) -> Response {
+        Response { status, body: to.as_str().to_string() }
+    }
+
+    pub fn status(&self) -> Status {
+        self.status.clone()
+    }
+
+    pub fn body(&self) -> &str {
+        &self.body
+    }
+
+    fn to_text(&self) -> String {
+        fmt"{self.status.code()}\n{self.body}"
+    }
+
+    fn parse(text: &str) -> Option<Response> {
+        let (code, body) = text.split_once("\n")?;
+        Some(Response { status: Status::from_code(code)?, body: body.to_string() })
+    }
+}
+
+/// How an error becomes a response.
+pub trait IntoResponse {
+    fn into_response(self) -> Response;
+}
+
+/// What answers requests.
+pub trait Handler {
+    fn handle(&self, req: &Request) -> Response with suspend;
+}
+
+/// Routes requests to handlers by method and path: the routes added last are tried first, and
+/// a request no route takes is answered `404`.
+pub struct Router {}
+
+/// `POST path` to `handler`, then the routes before it.
+pub struct Post<R, F, E> {
+    path: String,
+    handler: F,
+    rest: R,
+    errors: Option<E>,
+}
+
+/// `GET prefix{param}` to `handler`, then the routes before it.
+pub struct Get<R, F, P, E> {
+    prefix: String,
+    handler: F,
+    rest: R,
+    param: Option<P>,
+    errors: Option<E>,
+}
+
+impl Router {
+    pub fn new() -> Router {
+        Router {}
+    }
+
+    /// Routes `POST path` to `handler`, which `handle` calls, so it may suspend. Every error it
+    /// can fail with becomes a response, so none passes on (`expr.closure.fails.2`).
+    pub fn post<F: Fn(&Request) -> Response with (suspend, E), E: IntoResponse>(
+        self,
+        path: &str,
+        handler: F,
+    ) -> Post<Router, F, E> {
+        Post { path: path.to_string(), handler, rest: self, errors: None }
+    }
+
+    /// Routes `GET path` to `handler`, which takes the path's parameter: the text after `{`
+    /// becomes a `P` through its refinement, or the request is answered `404`.
+    pub fn get<P: Refined<Base = String>, F: Fn(P) -> Response with (suspend, E), E: IntoResponse>(
+        self,
+        path: &str,
+        handler: F,
+    ) -> Get<Router, F, P, E> {
+        Get { prefix: prefix_of(path), handler, rest: self, param: None, errors: None }
+    }
+}
+
+impl<R: Handler, F: Fn(&Request) -> Response with (suspend, E), E: IntoResponse> Post<R, F, E> {
+    pub fn post<G: Fn(&Request) -> Response with (suspend, X), X: IntoResponse>(
+        self,
+        path: &str,
+        handler: G,
+    ) -> Post<Post<R, F, E>, G, X> {
+        Post { path: path.to_string(), handler, rest: self, errors: None }
+    }
+
+    pub fn get<P: Refined<Base = String>, G: Fn(P) -> Response with (suspend, X), X: IntoResponse>(
+        self,
+        path: &str,
+        handler: G,
+    ) -> Get<Post<R, F, E>, G, P, X> {
+        Get { prefix: prefix_of(path), handler, rest: self, param: None, errors: None }
+    }
+}
+
+impl<R: Handler, F: Fn(Q) -> Response with (suspend, E), Q: Refined<Base = String>, E: IntoResponse>
+    Get<R, F, Q, E>
+{
+    pub fn post<G: Fn(&Request) -> Response with (suspend, X), X: IntoResponse>(
+        self,
+        path: &str,
+        handler: G,
+    ) -> Post<Get<R, F, Q, E>, G, X> {
+        Post { path: path.to_string(), handler, rest: self, errors: None }
+    }
+
+    pub fn get<P: Refined<Base = String>, G: Fn(P) -> Response with (suspend, X), X: IntoResponse>(
+        self,
+        path: &str,
+        handler: G,
+    ) -> Get<Get<R, F, Q, E>, G, P, X> {
+        Get { prefix: prefix_of(path), handler, rest: self, param: None, errors: None }
+    }
+}
+
+/// What a path pattern's parameter follows: `/` for `/{code}`.
+fn prefix_of(path: &str) -> String {
+    match path.split_once("{") {
+        Some((prefix, _)) => prefix.to_string(),
+        None => path.to_string(),
+    }
+}
+
+impl Handler for Router {
+    fn handle(&self, req: &Request) -> Response with suspend {
+        Response::status(Status::NotFound)
+    }
+}
+
+impl<R: Handler, F: Fn(&Request) -> Response with (suspend, E), E: IntoResponse> Handler
+    for Post<R, F, E>
+{
+    fn handle(&self, req: &Request) -> Response with suspend {
+        if req.method.as_str() == "POST" && req.path == self.path {
+            try { (self.handler)(req)? } catch {
+                e => e.into_response(),
+            }
+        } else {
+            self.rest.handle(req)
+        }
+    }
+}
+
+impl<R: Handler, F: Fn(P) -> Response with (suspend, E), P: Refined<Base = String>, E: IntoResponse>
+    Handler for Get<R, F, P, E>
+{
+    fn handle(&self, req: &Request) -> Response with suspend {
+        let path: &str = &req.path;
+        if req.method.as_str() == "GET" && path.starts_with(self.prefix.as_str()) {
+            let (_, segment) = path.split_once(self.prefix.as_str()) ?! "it starts with the prefix";
+            if !segment.contains("/") {
+                return match try { P::refine(segment.to_string())? } {
+                    Ok(p) => try { (self.handler)(p)? } catch {
+                        e => e.into_response(),
+                    },
+                    Err(_) => Response::status(Status::NotFound),
+                };
+            }
+        }
+        self.rest.handle(req)
+    }
+}
+
+/// Why an HTTP exchange failed.
+#[derive(Debug)]
+pub struct HttpError {
+    reason: String,
+}
+
+impl HttpError {
+    fn new(reason: &str) -> HttpError {
+        HttpError { reason: reason.to_string() }
+    }
+}
+
+impl Display for HttpError {
+    fn fmt(&self, out: &mut String) {
+        out.push_str(&self.reason);
+    }
+}
+
+/// Serves one connection with `app`: one request, then its response.
+pub fn serve_connection<H: Handler>(conn: Conn, app: &H) with suspend, fail(HttpError) {
+    let text = match conn.recv() {
+        Some(t) => t,
+        None => fail(HttpError::new("the connection closed before a request")),
+    };
+    let req = match Request::parse(&text) {
+        Some(r) => r,
+        None => fail(HttpError::new("a request that does not parse")),
+    };
+    let resp = app.handle(&req);
+    try { conn.send(resp.to_text())? } catch {
+        e => fail(HttpError::new(e.reason())),
+    }
+}
+
+/// How long `post` waits for an answer before it tries again.
+const PATIENCE: int = 1000;
+
+/// Sends a `POST` of `body` to `url` (`http://host/path`), trying again up to `retries` times
+/// when no answer comes.
+pub fn post(url: String, body: &str, retries: int) -> Response with net: Net, suspend, fail(HttpError) {
+    let rest = match url.split_once("http://") {
+        Some((_, rest)) => rest,
+        None => fail(HttpError::new("only http:// URLs are supported")),
+    };
+    let (host, path) = match rest.find("/") {
+        Some(at) => (rest.between(rest.start(), at), rest.between(at, rest.end())),
+        None => (rest, "/"),
+    };
+    let request = Request::post(path, body).to_text();
+    let mut tries = 0;
+    loop {
+        let conn = try { net.connect(host, 80)? } catch {
+            e => fail(HttpError::new(e.reason())),
+        };
+        try { conn.send(request.clone())? } catch {
+            e => fail(HttpError::new(e.reason())),
+        };
+        if let Some(text) = conn.recv_within(Duration::millis(PATIENCE)) {
+            return match Response::parse(&text) {
+                Some(r) => r,
+                None => fail(HttpError::new("a response that does not parse")),
+            };
+        }
+        tries += 1;
+        if tries > retries {
+            fail(HttpError::new("no answer"))
+        }
+    }
+}

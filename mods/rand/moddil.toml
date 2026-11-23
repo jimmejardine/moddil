@@ -1,0 +1,4 @@
+[mod]
+name = "moddil.com/rand"
+edition = "2027"
+capabilities = ["unsafe"]

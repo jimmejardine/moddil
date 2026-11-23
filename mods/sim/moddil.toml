@@ -1,0 +1,8 @@
+[mod]
+name = "moddil.com/sim"
+edition = "2027"
+capabilities = ["unsafe"]
+
+[dependencies]
+net = { path = "../net" }
+rand = { path = "../rand" }

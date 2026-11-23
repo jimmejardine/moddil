@@ -1,7 +1,7 @@
 // serde's own tests: JSON, and `Serialize` and `Deserialize` derived with their templates.
 // They are a project of their own so that the programs using the stub mod do not run them.
 
-use moddil::serde::{Deserialize, Serialize, json};
+use serde::{Deserialize, Serialize, json};
 
 test "values are encoded and decoded" {
     let text = json::encode(&String::from_str("a \"q\""));

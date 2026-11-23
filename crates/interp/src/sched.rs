@@ -99,6 +99,10 @@ pub(crate) struct Scheduler {
     /// The suspended tasks, in the order they began to wait.
     blocked: Vec<usize>,
     ended: usize,
+    /// The run's virtual time, in nanoseconds (`task.timer.1`).
+    now: i64,
+    /// The timers not yet fired: when each fires, in the order made, and its channel.
+    timers: Vec<(i64, usize)>,
 }
 
 impl Scheduler {
@@ -110,7 +114,16 @@ impl Scheduler {
             ready: VecDeque::new(),
             blocked: Vec::new(),
             ended: 0,
+            now: 0,
+            timers: Vec::new(),
         }
+    }
+
+    /// A timer's channel, whose one value arrives `nanos` from now (`task.timer.1`).
+    pub(crate) fn timer(&mut self, nanos: i64) -> usize {
+        let c = self.channel(1);
+        self.timers.push((self.now.saturating_add(nanos.max(0)), c));
+        c
     }
 
     /// Opens a scope for task `owner`'s `scope` call, and gives its index.
@@ -379,8 +392,23 @@ impl Scheduler {
         self.ready.push_back(t);
     }
 
-    /// The next task to run, if any is ready.
+    /// The next task to run, if any is ready. With none, time moves to the earliest timer,
+    /// which fires (`task.timer.1`), until a task is ready or no timer is left.
     pub(crate) fn next(&mut self) -> Option<usize> {
+        while self.ready.is_empty() && !self.timers.is_empty() {
+            let (i, _) = self
+                .timers
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, (at, _))| *at)
+                .expect("a timer");
+            let (at, c) = self.timers.remove(i);
+            self.now = at;
+            if self.channels[c].receiver {
+                self.push(c, Value::Unit);
+            }
+            self.drop_sender(c);
+        }
         self.ready.pop_front()
     }
 

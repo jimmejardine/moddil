@@ -100,6 +100,10 @@ pub(crate) struct Tasks {
     threads: Vec<std::thread::JoinHandle<()>>,
     /// Whether a task's thread panicked (a bug in the interpreter): every task stops.
     panicked: bool,
+    /// The test's virtual time, in nanoseconds (`task.timer.1`).
+    now: i64,
+    /// The timers not yet fired: when each fires, in the order made, and its channel.
+    timers: Vec<(i64, usize)>,
 }
 
 impl TaskState {
@@ -128,6 +132,8 @@ impl Tasks {
             running: 0,
             trapped: None,
             observed: Vec::new(),
+            now: 0,
+            timers: Vec::new(),
             threads: Vec::new(),
             panicked: false,
         }
@@ -291,6 +297,28 @@ impl Tasks {
         r
     }
 
+    /// The next task to run, if any is ready. With none, time moves to the earliest timer, whose
+    /// channel gets its `()` and loses its sender (`task.timer.1`), until a task is ready or no
+    /// timer is left.
+    fn next(&mut self) -> Option<usize> {
+        while self.ready.is_empty() && !self.timers.is_empty() {
+            let mut i = 0;
+            for (k, t) in self.timers.iter().enumerate() {
+                if t.0 < self.timers[i].0 {
+                    i = k;
+                }
+            }
+            let (at, c) = self.timers.remove(i);
+            self.now = at;
+            if self.channels[c].receiver {
+                self.push(c, Value::Unit);
+            }
+            self.channels[c].senders -= 1;
+            self.wake();
+        }
+        self.ready.pop_front()
+    }
+
     fn pop(&mut self, c: usize) -> Option<Value> {
         let ch = &mut self.channels[c];
         let v = ch.values.pop_front()?;
@@ -430,6 +458,26 @@ impl Machine<'_> {
                     handle("Sender", c),
                     handle("Receiver", c),
                 ]))
+            }
+            // A timer's channel, whose one value arrives `nanos` from now (`task.timer.1`).
+            ("", "__timer") => {
+                let Value::Int(n) = args[0] else {
+                    unreachable!("an int")
+                };
+                let c = self.with_tasks(|ts| {
+                    ts.channels.push(Channel {
+                        values: VecDeque::new(),
+                        capacity: 1,
+                        senders: 1,
+                        receiver: true,
+                        sent: 0,
+                        received: 0,
+                    });
+                    let c = ts.channels.len() - 1;
+                    ts.timers.push((ts.now.saturating_add(n.max(0)), c));
+                    c
+                });
+                Ok(handle("Receiver", c))
             }
             ("Sender", "clone") => {
                 let c = id(self, &args[0]);
@@ -648,7 +696,7 @@ impl Machine<'_> {
         let (lock, turn) = &*shared;
         let mut s = lock.lock().expect("the memory's lock");
         park(&mut s.tasks, me);
-        let Some(next) = s.tasks.ready.pop_front() else {
+        let Some(next) = s.tasks.next() else {
             return Err(crate::trap(TrapClass::Deadlock, range));
         };
         s.tasks.running = next;
@@ -829,7 +877,7 @@ fn run_task(
         }
         Err(_) => unreachable!("a closure's body leaves only by its value, an error or a trap"),
     }
-    if let Some(next) = s.tasks.ready.pop_front() {
+    if let Some(next) = s.tasks.next() {
         s.tasks.running = next;
     } else {
         let d = Trap {

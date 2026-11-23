@@ -4217,3 +4217,37 @@ impl<T> Drop for Receiver<T> {
     #[intrinsic]
     fn drop(self);
 }
+
+// Time (`task.timer.1`): a run's time is virtual. It starts at zero and moves only when every
+// task waits, straight to the earliest timer.
+
+// A length of time, in nanoseconds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct Duration {
+    nanos: int,
+}
+
+impl Duration {
+    fn seconds(n: int) -> Duration {
+        Duration { nanos: n * 1000000000 }
+    }
+    fn millis(n: int) -> Duration {
+        Duration { nanos: n * 1000000 }
+    }
+    fn nanos(&self) -> int {
+        self.nanos
+    }
+}
+
+// A channel whose one value, `()`, arrives once `after` has passed; then it has no sender.
+fn timer(after: Duration) -> Receiver<()> {
+    __timer(after.nanos)
+}
+
+#[intrinsic]
+fn __timer(nanos: int) -> Receiver<()>;
+
+// Waits until `d` has passed.
+fn sleep(d: Duration) with suspend {
+    timer(d).recv();
+}

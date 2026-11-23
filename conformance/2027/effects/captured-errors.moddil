@@ -4,10 +4,10 @@ trait Links { fn get(&self) -> int; }
 struct Fixed;
 impl Links for Fixed { fn get(&self) -> int { 1 } }
 
-trait Handler { fn handle(&self) -> int; }
+trait Handler { fn handle(&self) -> int with suspend; }
 struct Route<F> { f: F }
 impl<F: Fn() -> int with suspend> Handler for Route<F> {
-    fn handle(&self) -> int { (self.f)() }
+    fn handle(&self) -> int with suspend { (self.f)() }
 }
 
 fn get() -> int with links: Links { links.get() }

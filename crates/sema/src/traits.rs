@@ -208,6 +208,7 @@ pub fn elaborate(tree: &ItemTree, preds: &[Pred]) -> Vec<Pred> {
                 ty: p.ty.clone(),
                 trait_ref: s.subst(&args),
                 assoc: Vec::new(),
+                control: 0,
                 range: p.range,
             });
         }
@@ -470,6 +471,7 @@ impl<'a> Solver<'a> {
                 ty: ty.clone(),
                 trait_ref: d.clone(),
                 assoc: Vec::new(),
+                control: 0,
                 range: moddil_syntax::TextRange::new(0, 0),
             };
             for p in elaborate(self.tree, &[pred]) {
@@ -751,6 +753,7 @@ impl<'a> Solver<'a> {
                     .iter()
                     .map(|(k, x)| (*k, x.subst(&o.args)))
                     .collect(),
+                control: p.control,
                 range: p.range,
             })
             .collect()

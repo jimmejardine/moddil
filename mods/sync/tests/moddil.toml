@@ -1,0 +1,6 @@
+[mod]
+name = "sync_tests"
+edition = "2027"
+
+[dependencies]
+sync = { path = ".." }

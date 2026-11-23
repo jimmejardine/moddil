@@ -1,0 +1,7 @@
+[mod]
+name = "sim_tests"
+edition = "2027"
+
+[dependencies]
+sim = { path = ".." }
+net = { path = "../../net" }

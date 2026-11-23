@@ -68,6 +68,7 @@ impl Machine<'_> {
             ("", "__scope_open") => "__scope_open",
             ("", "__scope_run") => "__scope_run",
             ("", "channel") => "channel",
+            ("", "__timer") => "timer",
             ("", "__select") => "__select",
             ("Scope", "spawn") => "spawn",
             ("Scope", "stop") => "stop",
@@ -159,6 +160,11 @@ impl Machine<'_> {
                     self.natives.handle("Receiver", c),
                 ]);
                 return self.deliver(ret, Ok(pair));
+            }
+            "timer" => {
+                let c = self.sched.timer(values[0].as_int());
+                let rx = self.natives.handle("Receiver", c);
+                return self.deliver(ret, Ok(rx));
             }
             "clone" => {
                 let c = id_of(&self.stack.deref(&values[0]));

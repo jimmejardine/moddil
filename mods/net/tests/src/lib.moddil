@@ -1,0 +1,69 @@
+use net::http::{Handler, IntoResponse, Request, Response, Router, Status};
+
+struct Bad { why: String }
+struct Worse;
+
+impl IntoResponse for Bad {
+    fn into_response(self) -> Response {
+        Response::status(Status::BadRequest)
+    }
+}
+
+impl IntoResponse for Worse {
+    fn into_response(self) -> Response {
+        Response::status(Status::Conflict)
+    }
+}
+
+/// An effect the routes use, which `app` captures.
+trait Tag { fn tag(&self) -> int; }
+struct Seven;
+impl Tag for Seven { fn tag(&self) -> int { 7 } }
+
+fn create(req: &Request) -> Response with tag: Tag, suspend, fail(Bad | Worse) {
+    if req.body() == "bad" {
+        fail(Bad { why: "bad".to_string() })
+    }
+    if req.body() == "worse" {
+        fail(Worse)
+    }
+    Response::text(Status::Created, fmt"{req.body()}{tag.tag()}")
+}
+
+type Code = String where self.len() == 3;
+
+fn follow(code: Code) -> Response with tag: Tag, suspend {
+    Response::text(Status::Ok, fmt"{code}{tag.tag()}")
+}
+
+fn app() -> impl Handler with Tag {
+    Router::new().post("/links", create).get("/{code}", follow)
+}
+
+test "a route answers" {
+    with Tag = Seven {
+        app().handle(&Request::post("/links", body: "x")).body().to_string()   // => "x7"
+    }
+}
+
+test "a route's error becomes a response" {
+    with Tag = Seven {
+        app().handle(&Request::post("/links", body: "bad")).status() == Status::BadRequest   // => true
+    }
+}
+
+test "each error of a set becomes its response" {
+    with Tag = Seven {
+        app().handle(&Request::post("/links", body: "worse")).status() == Status::Conflict   // => true
+    }
+}
+
+test "a path parameter is refined, or the answer is 404" {
+    with Tag = Seven {
+        app().handle(&Request::get("/abc".to_string())).body().to_string()   // => "abc7"
+        ;
+        app().handle(&Request::get("/abcd".to_string())).status() == Status::NotFound   // => true
+        ;
+        app().handle(&Request::get("/x/y".to_string())).status() == Status::NotFound   // => true
+    }
+}

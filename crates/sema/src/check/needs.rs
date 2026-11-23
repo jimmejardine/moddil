@@ -239,8 +239,8 @@ impl Checker<'_> {
                             Code::E0603,
                             range,
                             format!(
-                                "this call needs `{name}`, which the stored closure's type does \
-                                 not list: add `with {name}` to it"
+                                "this call needs `{name}`, which the closure's bound or stored type \
+                                 does not list: add `with {name}` to it"
                             ),
                         );
                     }

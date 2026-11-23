@@ -1,0 +1,151 @@
+//! Deterministic simulation (`determinism.md`: The `Sim` API): nodes, seeded randomness for
+//! each, and a simulated network between them. Time is the runtime's, which is virtual
+//! (`task.timer.1`), so a run that loses messages and waits out timeouts takes no real time, and
+//! the same seed replays it exactly.
+
+use core::cell::UnsafeCell;
+use net::{Conn, Listener, Net, NetError, Port};
+use rand::{Rand, Seeded, seeded};
+
+/// A simulated world: seeded randomness and a simulated network.
+pub struct Sim {
+    seed: int,
+    nodes: UnsafeCell<int>,
+    pub net: SimNet,
+}
+
+/// A simulated machine.
+pub struct Node {
+    id: int,
+}
+
+impl Node {
+    /// Its address on the simulated network.
+    pub fn addr(&self) -> String {
+        fmt"10.0.0.{self.id}"
+    }
+}
+
+impl Sim {
+    pub fn new(seed: int) -> Sim {
+        Sim {
+            seed,
+            nodes: UnsafeCell::new(0),
+            net: SimNet { listening: UnsafeCell::new(Vec::new()), seed },
+        }
+    }
+
+    /// A new node.
+    pub fn node(&self) -> Node {
+        let p = self.nodes.get();
+        let id = unsafe("one task runs at a time, and nothing else borrows the count") {
+            *p += 1;
+            *p
+        };
+        Node { id }
+    }
+
+    /// Randomness for `node`, from the simulation's seed.
+    pub fn rng(&self, node: &Node) -> Seeded {
+        seeded(self.seed * 1000 + node.id)
+    }
+}
+
+/// The simulated network: who listens where.
+pub struct SimNet {
+    /// Each listener: its address, its port, and where its connections go.
+    listening: UnsafeCell<Vec<(String, int, Sender<Conn>)>>,
+    seed: int,
+}
+
+impl SimNet {
+    /// `node`'s view of the network: a handler for `Net`.
+    pub fn endpoint(&self, node: &Node) -> Endpoint {
+        Endpoint { net: self, addr: node.addr() }
+    }
+}
+
+/// A node's view of the simulated network.
+pub view Endpoint {
+    net: &SimNet,
+    addr: String,
+}
+
+impl Endpoint {
+    /// Listens for connections on `port`.
+    pub fn listen(&self, port: Port) -> Listener with fail(NetError) {
+        let port: int = port;
+        let (tx, rx) = channel(16);
+        let all = self.net.listening.get();
+        unsafe("one task runs at a time, and nothing else borrows the listeners") {
+            for (a, p, _) in &*all {
+                if *a == self.addr && *p == port {
+                    fail(NetError::new("the port is taken"))
+                }
+            }
+            (*all).push((self.addr.clone(), port, tx));
+        }
+        Listener::new(rx)
+    }
+}
+
+impl Net for Endpoint {
+    fn resolve(&self, host: &str) -> String {
+        host.to_string()
+    }
+
+    fn connect(&self, addr: &str, port: int) -> Conn with suspend, fail(NetError) {
+        let all = self.net.listening.get();
+        let (mine, theirs) = Conn::pair();
+        let to = unsafe("one task runs at a time, and nothing else borrows the listeners") {
+            let mut found = None;
+            for (a, p, tx) in &*all {
+                if a.as_str() == addr && *p == port {
+                    found = Some(tx.clone());
+                }
+            }
+            found
+        };
+        match to {
+            Some(tx) => {
+                try { tx.send(theirs)? } catch {
+                    Closed => fail(NetError::new("the listener is gone")),
+                }
+                mine
+            }
+            None => fail(NetError::new("nothing listens there")),
+        }
+    }
+}
+
+/// A network that loses a share of the messages its connections send.
+pub struct Lossy<N> {
+    per_mille: int,
+    outer: N,
+    made: UnsafeCell<int>,
+}
+
+impl<N: Net> Net for Lossy<N> {
+    fn resolve(&self, host: &str) -> String {
+        self.outer.resolve(host)
+    }
+
+    fn connect(&self, addr: &str, port: int) -> Conn with suspend, fail(NetError) {
+        let conn = self.outer.connect(addr, port)?;
+        let p = self.made.get();
+        let n = unsafe("one task runs at a time, and nothing else borrows the count") {
+            *p += 1;
+            *p
+        };
+        // Each connection loses its own seeded share, so a run replays exactly.
+        let rng = seeded(n * 7919 + self.per_mille);
+        let per_mille = self.per_mille;
+        conn.lossy(Box::new(|| rng.below(1000) >= per_mille))
+    }
+}
+
+/// `outer`, losing a `rate` (from 0 to 1) of the messages its connections send.
+pub fn drop_messages<N: Net>(rate: f64, outer: N) -> Lossy<N> {
+    let per_mille = (rate * 1000.0).round::<int>(Round::NearestEven) ?! "a rate from 0 to 1";
+    Lossy { per_mille, outer, made: UnsafeCell::new(0) }
+}

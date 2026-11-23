@@ -6,7 +6,7 @@
 //! validation: a refined field's value is made with its refinement's `new`, and a value that
 //! breaks the refinement is a `DecodeError`, like any other bad input.
 
-use mod::serde::json::{Decoder, Encoder};
+use mod::json::{Decoder, Encoder};
 
 /// A type that can be written out; derived.
 #[derive_by(serialize)]

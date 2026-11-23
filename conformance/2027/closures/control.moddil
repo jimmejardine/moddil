@@ -1,0 +1,32 @@
+// covers: expr.closure.control.1
+
+/// Keeps a closure and calls it later, in `run`, which suspends.
+pub struct Keep<F> { f: F }
+
+impl<F: Fn(int) -> int with suspend> Keep<F> {
+    pub fn run(&self, x: int) -> int with suspend { (self.f)(x) }
+}
+
+/// Its bound lists `suspend`, so it takes the closure's suspension.
+pub fn keep<F: Fn(int) -> int with suspend>(f: F) -> Keep<F> { Keep { f } }
+
+fn waits(x: int) -> int with suspend {
+    yield_now();
+    x + 1
+}
+
+/// Naming a function that suspends, or writing a closure that does, for such a bound does not
+/// suspend here: this function is `pub`, its effects written, and lists none.
+pub fn names() -> int {
+    let a = keep(waits);
+    let b = keep(|x| { yield_now(); x * 2 });
+    0
+}
+
+test "the closure suspends where it is called" {
+    keep(waits).run(1)                          // => 2
+    ;
+    keep(|x| { yield_now(); x * 2 }).run(3)     // => 6
+    ;
+    names()                                     // => 0
+}

@@ -76,6 +76,13 @@ prelude's `Closed`, and the values left in the channel are dropped, their destru
 **task.channel.3** The ends of a channel are values like any other: a task borrows them, or has
 them moved into its closure (`let tx = tx;`), so that the channel closes when the task ends.
 
+**task.timer.1** A run's time is **virtual**: it starts at zero and moves only when every task
+waits, straight to the earliest timer, which fires then. `Duration` is a length of time
+(`Duration::seconds(n)`, `Duration::millis(n)`, `d.nanos()`); `timer(d)` is a `Receiver<()>`
+whose one value arrives once `d` has passed, after which it has no sender, so a `select` arm
+`_ = timer(d).recv()` is a timeout; `sleep(d)` waits until `d` has passed. Timers that fire at the
+same time fire in the order they were made.
+
 **task.select.1** `select { p = op => body, … }` waits on several operations, each an arm's `op`:
 `rx.recv()`, `tx.send(v)`, `t.join()` or `stop_requested()` (E0217), maybe marked with `?`. Every
 arm's handle and value to send are evaluated first, in order; then the first arm, in written

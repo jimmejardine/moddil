@@ -29,7 +29,7 @@ pub use baton::{DropFn, TaskFn};
 pub use run::{
     TaskSpec, begin_run, channel, clone_sender, detach, drop_receiver, drop_sender, end_run, host,
     join, join_now, keep_text, last_trapped, recv, recv_now, scope_open, scope_run, select, send,
-    send_now, set_host, set_trap_text, spawn, stop, stop_requested, yield_now,
+    send_now, set_host, set_trap_text, spawn, stop, stop_requested, timer, yield_now,
 };
 
 /// How many calls deep a run may go, the frame it starts in included: as the MIR interpreter's
@@ -408,6 +408,7 @@ pub fn symbols() -> Vec<(&'static str, *const u8)> {
         ("moddil_rt_yield_now", yield_now as *const u8),
         ("moddil_rt_stop_requested", stop_requested as *const u8),
         ("moddil_rt_channel", channel as *const u8),
+        ("moddil_rt_timer", timer as *const u8),
         ("moddil_rt_clone_sender", clone_sender as *const u8),
         ("moddil_rt_drop_sender", drop_sender as *const u8),
         ("moddil_rt_drop_receiver", drop_receiver as *const u8),

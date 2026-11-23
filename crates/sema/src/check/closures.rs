@@ -137,6 +137,18 @@ impl Checker<'_> {
         (params, ret)
     }
 
+    /// The control effects a closure bound lists for `hint`, the type a closure is checked as,
+    /// if a call's bound gave it some (`expr.closure.control.1`).
+    fn bound_control_of(&mut self, hint: &Ty) -> Option<crate::Control> {
+        let h = self.norm(hint);
+        let found = self
+            .bound_control
+            .iter()
+            .filter(|(t, _)| self.solver.norm(t) == h)
+            .fold(0, |c, (_, x)| c | x);
+        (found != 0).then_some(found)
+    }
+
     /// `|p, …| body` (`expr.closure.1`).
     pub(super) fn closure_expr(
         &mut self,
@@ -204,6 +216,16 @@ impl Checker<'_> {
                 self.stored_ctx.push((e, h.dyn_control(), depth));
                 true
             }
+            // A closure passed for a bound that lists control effects: its caller's
+            // (`expr.closure.control.1`).
+            Some(h) => match self.bound_control_of(h) {
+                Some(control) => {
+                    let depth = self.installs.iter().map(|(_, fx)| fx.len()).sum();
+                    self.stored_ctx.push((e, control, depth));
+                    true
+                }
+                None => false,
+            },
             _ => false,
         };
         self.check(body, &rt);
@@ -329,6 +351,17 @@ impl Checker<'_> {
                     };
                     let ret = self.closure_assoc(&t, &bound, 0);
                     let fails = self.closure_assoc(&t, &bound, 1);
+                    // The control effects its bound lists are this call's
+                    // (`expr.closure.control.1`).
+                    let control = self
+                        .solver
+                        .env
+                        .iter()
+                        .filter(|p| p.ty == t)
+                        .fold(0, |c, p| c | p.control);
+                    if control != 0 {
+                        self.record_needs(e, control, Vec::new(), range);
+                    }
                     (params, ret, fails, bound)
                 }
                 _ => return None,

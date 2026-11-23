@@ -1,0 +1,67 @@
+use net::Net;
+use net::http::{self, Handler, Request, Response, Router, Status};
+use sim::{Sim, drop_messages};
+
+fn echo(req: &Request) -> Response with suspend {
+    Response::text(Status::Ok, req.body().to_string())
+}
+
+/// Answers each connection on `listener` with the router.
+fn serve_one(conn: net::Conn) with suspend {
+    try { http::serve_connection(conn, &Router::new().post("/echo", echo))? } catch {
+        _ => {}
+    }
+}
+
+/// Accepts connections until asked to stop, one task each: those whose request was lost end
+/// without one.
+fn serve(listener: &net::Listener) with suspend, spawn {
+    scope(|s| {
+        loop {
+            select {
+                c = listener.accept() => { s.spawn(|| serve_one(c)); }
+                _ = stop_requested() => break,
+            }
+        }
+    })
+}
+
+test "a post crosses the simulated network" {
+    let sim = Sim::new(seed: 3);
+    let (server, client) = (sim.node(), sim.node());
+    let listener = sim.net.endpoint(&server).listen(80)?;
+    let r = scope(|s| {
+        s.spawn(|| serve_one(listener.accept()));
+        with Net = sim.net.endpoint(&client) {
+            http::post(fmt"http://{server.addr()}/echo", body: "hi", retries: 0)?
+        }
+    })?;
+    r.body().to_string()                            // => "hi"
+}
+
+test "a lost request is sent again" {
+    let sim = Sim::new(seed: 3);
+    let (server, client) = (sim.node(), sim.node());
+    let listener = sim.net.endpoint(&server).listen(80)?;
+    let r = scope(|s| {
+        s.spawn(|| serve(&listener));
+        let r = with Net = drop_messages(rate: 0.5, outer: sim.net.endpoint(&client)) {
+            http::post(fmt"http://{server.addr()}/echo", body: "again", retries: 20)?
+        };
+        s.stop();
+        r
+    })?;
+    r.status() == Status::Ok                        // => true
+}
+
+test "with every message lost, post gives up" {
+    let sim = Sim::new(seed: 3);
+    let (server, client) = (sim.node(), sim.node());
+    let listener = sim.net.endpoint(&server).listen(80)?;
+    let r = with Net = drop_messages(rate: 1.0, outer: sim.net.endpoint(&client)) {
+        try { http::post(fmt"http://{server.addr()}/echo", body: "lost", retries: 2)?; 1 } catch {
+            _ => 0,
+        }
+    };
+    r                                               // => 0
+}
