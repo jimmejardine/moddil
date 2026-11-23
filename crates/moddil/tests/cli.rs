@@ -76,6 +76,43 @@ fn a_failed_assert_shows_its_parts() {
     assert!(stderr.contains("= 275"), "{stderr}");
 }
 
+/// A `// =>` line is an expected value (`testing.md`: Examples are tests): a test fails where the
+/// value is another, or the line never runs, alike everywhere.
+#[test]
+fn a_test_checks_its_expected_values_everywhere() {
+    let text = "test \"right\" { 1 + 2 // => 3\n}\n\
+                test \"wrong\" { 1 + 2 // => 4\n}\n\
+                test \"never\" { if false { 5 // => 5\n ; } }\n";
+    let path = file("expected-values.moddil", text);
+    for how in [&["test"][..], &["test", "--interp"], &["test", "--wasm"]] {
+        let out = moddil(how, &path);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        if how.contains(&"--wasm") && stderr.contains("no Node") {
+            continue;
+        }
+        assert_eq!(out.status.code(), Some(1), "{how:?}: {stdout}{stderr}");
+        assert!(
+            stdout.contains("test \"right\" ... ok"),
+            "{how:?}: {stdout}"
+        );
+        assert!(
+            stdout.contains("test \"wrong\" ... failed"),
+            "{how:?}: {stdout}"
+        );
+        assert!(
+            stdout.contains("test \"never\" ... failed"),
+            "{how:?}: {stdout}"
+        );
+        assert!(stdout.contains("1 passed, 2 failed"), "{how:?}: {stdout}");
+        assert!(stderr.contains("expected 4, found 3"), "{how:?}: {stderr}");
+        assert!(
+            stderr.contains("expected 5, but the line never ran"),
+            "{how:?}: {stderr}"
+        );
+    }
+}
+
 /// A part borrowed where it lives (a method's receiver, and what it is a field of) is shown from
 /// there, and one the condition moves away later is not shown, alike everywhere.
 #[test]

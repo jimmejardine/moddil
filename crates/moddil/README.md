@@ -12,7 +12,7 @@ shows the value of each part of its condition. The rest of the command set (`fmt
 ```
 moddil check file.moddil           # report errors (exit 1 if any)
 moddil run file.moddil             # run `fn main()` natively and print its result (70 on a trap)
-moddil test file.moddil            # run the file's `test` items natively
+moddil test file.moddil            # run the file's `test` items natively, checking `// =>` values
 moddil run --interp file.moddil    # the same on the MIR interpreter (and `test --interp`)
 moddil build file.moddil [-o out]  # an executable: `main`'s exit code, 70 on a trap
 moddil build --release file.moddil # linked with lld (or mold), with line tables

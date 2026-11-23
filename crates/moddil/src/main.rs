@@ -351,10 +351,20 @@ fn test_wasm(db: &Database, program: Program, files: &[(String, String)]) -> Exi
         }
     };
     let mut failed = 0;
-    for (&i, (_, result)) in tests.iter().zip(&runs) {
-        let name = &items.tests[i as usize].name;
+    for (&i, (observed, result)) in tests.iter().zip(&runs) {
+        let t = &items.tests[i as usize];
+        let name = &t.name;
         match result {
-            Ok(()) => println!("test \"{name}\" ... ok"),
+            Ok(()) => {
+                let wrong = wrong_values(files, t, observed);
+                if wrong.is_empty() {
+                    println!("test \"{name}\" ... ok");
+                } else {
+                    failed += 1;
+                    println!("test \"{name}\" ... failed");
+                    report_wrong_values(files, t, &wrong);
+                }
+            }
             Err(moddil_wasm::Wasm::Trap(class, file, range, parts)) => {
                 failed += 1;
                 println!("test \"{name}\" ... trapped");
@@ -390,8 +400,18 @@ fn native_test(
     files: &[(String, String)],
     index: u32,
 ) -> ExitCode {
-    match moddil_native::run_test(db, program, index).1 {
-        Ok(()) => println!("ok"),
+    let (observed, result) = moddil_native::run_test(db, program, index);
+    match result {
+        Ok(()) => {
+            let t = &moddil_sema::item_tree(db, program).tests[index as usize];
+            let wrong = wrong_values(files, t, &observed);
+            if wrong.is_empty() {
+                println!("ok");
+            } else {
+                println!("failed");
+                report_wrong_values(files, t, &wrong);
+            }
+        }
         Err(moddil_native::Native::Trap(class, file, range, parts)) => {
             println!("trapped");
             let (name, text) = &files[file as usize];
@@ -634,10 +654,21 @@ fn test(
 fn interp_test(db: &Database, program: Program, files: &[(String, String)], index: u32) -> bool {
     let items = moddil_sema::item_tree(db, program);
     let t = &items.tests[index as usize];
-    match moddil_interp::run_test(db, program, index, &mut |_, _, _| {}) {
+    let mut observed = Vec::new();
+    let result = moddil_interp::run_test(db, program, index, &mut |file, range, value| {
+        observed.push((file, range, value.render(items)));
+    });
+    match result {
         Ok(()) => {
-            println!("test \"{}\" ... ok", t.name);
-            true
+            let wrong = wrong_values(files, t, &observed);
+            if wrong.is_empty() {
+                println!("test \"{}\" ... ok", t.name);
+                true
+            } else {
+                println!("test \"{}\" ... failed", t.name);
+                report_wrong_values(files, t, &wrong);
+                false
+            }
         }
         Err(Stop::Trap(trap)) => {
             println!("test \"{}\" ... trapped", t.name);
@@ -651,6 +682,71 @@ fn interp_test(db: &Database, program: Program, files: &[(String, String)], inde
             report_error(name, text, items, range, &error);
             false
         }
+    }
+}
+
+/// The `// =>` lines of test `t` (`testing.md`: Examples are tests) whose values were not what
+/// they say: each comment's range, and what was wrong. `observed` is what the run showed, each
+/// value at the expression it is the value of, as Moddil source.
+fn wrong_values(
+    files: &[(String, String)],
+    t: &moddil_sema::TestSig,
+    observed: &[(u32, TextRange, String)],
+) -> Vec<(TextRange, String)> {
+    let text = &files[t.file as usize].1;
+    let mut wrong = Vec::new();
+    let mut offset = 0u32;
+    for tok in moddil_syntax::lex(text).0 {
+        let at = offset;
+        offset += tok.len;
+        if tok.kind != moddil_syntax::SyntaxKind::LINE_COMMENT
+            || at < t.node.start
+            || offset > t.node.end
+        {
+            continue;
+        }
+        let comment = &text[at as usize..offset as usize];
+        let Some(expected) = comment.strip_prefix("// =>").map(str::trim) else {
+            continue;
+        };
+        let range = TextRange::new(at, offset);
+        let line = moddil_syntax::line_col(text, at).0;
+        let seen: Vec<&String> = observed
+            .iter()
+            .filter(|(f, r, _)| *f == t.file && moddil_syntax::line_col(text, r.end).0 == line)
+            .map(|(_, _, v)| v)
+            .collect();
+        if seen.is_empty() {
+            wrong.push((
+                range,
+                format!("expected {expected}, but the line never ran"),
+            ));
+        }
+        for v in seen {
+            if v != expected {
+                wrong.push((range, format!("expected {expected}, found {v}")));
+            }
+        }
+    }
+    wrong
+}
+
+/// Reports the `// =>` lines [`wrong_values`] found.
+fn report_wrong_values(
+    files: &[(String, String)],
+    t: &moddil_sema::TestSig,
+    wrong: &[(TextRange, String)],
+) {
+    let (name, text) = &files[t.file as usize];
+    for (range, message) in wrong {
+        let span = (name.as_str(), range.to_range());
+        let report = Report::build(ReportKind::Error, span.clone())
+            .with_config(config())
+            .with_message(message)
+            .with_label(Label::new(span).with_message("this value"));
+        let _ = report
+            .finish()
+            .eprint((name.as_str(), Source::from(text.as_str())));
     }
 }
 
