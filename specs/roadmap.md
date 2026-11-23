@@ -1106,7 +1106,38 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
       drives (`#[export]` and `moddil bind` come later), and the page is plain, not the Svelte app;
     - each frame's pixels are read back and drawn on a 2D canvas, rather than staying on the GPU;
     - E0221 recognises the tile by its type's name, `Tile`.
-- **Next:** the rest of M2: the LSP prototype, and the standard mods the tour does not reach.
+- **Slice M2f (decided November 2026): the LSP prototype.** `moddil lsp` is a language server
+  over standard input and output, built on `lsp-server` and `lsp-types` (the `moddil-lsp` crate).
+  - **One analysis, the compiler's:**
+    - each open file's program is loaded from its mod (the nearest `moddil.toml`), or is the file
+      alone;
+    - an edit sets that file's text in the salsa database, so only what depends on it is
+      recomputed.
+  - **Diagnostics:** as `moddil check` gives them, with codes, published for each file of the mod
+    after each change.
+  - **Hover:**
+    - a local's type, and a field's;
+    - a function's signature (called, or named in a method call or a path), with what it needs:
+      its effects, `suspend` and `spawn`, and `fail(…)`, as written or inferred;
+    - any other expression's type;
+    - a name in a signature, a type or a `use`: the item it stands for.
+  - **Go to definition:** locals, functions, methods (a trait's, to the impl's), fields, and
+    named items.
+  - **Inlay hints:** "suspends" (or "spawns") after each call that may.
+  - **Completion:**
+    - after `.`, the value's fields and methods: the file is analysed with a placeholder name at
+      the cursor, as rust-analyzer does;
+    - after `::`, a module's members, an enum's variants, a type's associated functions;
+    - otherwise the locals bound before the cursor, the module's names and the prelude's.
+  - **Checked:** `Analysis` tests for each feature, and a protocol test that drives `moddil lsp`
+    through an editor's session (open, diagnostics, fix, hover, definition, completion, shutdown).
+  - **Interim limits:**
+    - no editor extension yet (any LSP client can start `moddil lsp`);
+    - the prelude and `core` are embedded, so going to their definitions finds nothing;
+    - names in types are resolved by name in the file's module, not by their full path;
+    - locals in completion are those bound before the cursor, not exactly those in scope;
+    - documents are synchronised whole, and analysed on the server's one thread.
+- **Next:** M3; and the standard mods the tour does not reach, as they are needed.
 
 ## Staging: distributed programs
 

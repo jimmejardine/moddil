@@ -19,6 +19,7 @@ moddil-mir.workspace = true
 moddil-native.workspace = true
 moddil-wasm.workspace = true
 moddil-gpu.workspace = true
+moddil-lsp.workspace = true
 moddil-project.workspace = true
 moddil-sema.workspace = true
 moddil-syntax.workspace = true
@@ -26,6 +27,9 @@ ariadne.workspace = true
 clap.workspace = true
 cc.workspace = true
 
+
+[dev-dependencies]
+serde_json.workspace = true
 
 [lints]
 workspace = true

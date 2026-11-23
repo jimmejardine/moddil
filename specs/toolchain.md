@@ -83,6 +83,10 @@ human-oriented text.
   - the active handler stack in tests and simulations ([`determinism.md`: Handlers are scoped, not global](determinism.md#handlers-are-scoped-not-global));
   - `explain` expansions inline;
   - a semantic diff view ([Diffs, code review and version control](semantic-vcs.md)).
+- **As built (M2f):** `moddil lsp` gives diagnostics, hover (types, signatures with effects,
+  `suspend` and error sets), go to definition, inlay hints at suspension points, and completion
+  ([`roadmap.md`](roadmap.md), slice M2f). Units, capabilities and contracts on hover, the handler
+  stack, `explain` and the semantic diff come later.
 - An official **tree-sitter grammar** for syntax highlighting elsewhere (GitHub, other editors and
   tools).
 - Official editor integrations, in priority order (decided): VS Code (most users; the playground's

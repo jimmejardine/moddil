@@ -39,7 +39,9 @@ lowering and is added for Wasmtime and other WASI hosts once it leaves Tier 3
   - `gimli`: DWARF debug info.
   - `salsa`: query-based incremental compilation, as used by rust-analyzer ([Build times](build-times.md), compiler-as-a-service [LLMs as first-class programmers](agent-interface.md)).
   - `inkwell` / `llvm-sys`: LLVM.
-  - `tower-lsp`, `ariadne`/`codespan-reporting`, `logos`: language server, diagnostics, lexing.
+  - `lsp-server` with `lsp-types` (rust-analyzer's synchronous loop, which suits salsa; chosen
+    over `tower-lsp` in M2f), `ariadne`/`codespan-reporting`, `logos`: language server,
+    diagnostics, lexing.
 - **Familiarity.** The project owner works in Rust daily (Hashiverse).
 - **Translation path.** Rust's ownership model is close to Moddil's, so rewriting the compiler in
   Moddil later is largely mechanical, which suits LLM-assisted porting.

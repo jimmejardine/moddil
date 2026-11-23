@@ -1,0 +1,282 @@
+//! The Moddil language server (`moddil lsp`, `toolchain.md`: Editor support): live diagnostics,
+//! hover, go to definition, inlay hints at suspension points, and completion.
+//!
+//! - [`Analysis`] answers by file and byte offset, over the same salsa queries `moddil check` uses,
+//!   so an edit recomputes only what depends on it. It is the testable part.
+//! - [`run`] speaks LSP over standard input and output (`lsp-server`), converting between its
+//!   UTF-16 positions and byte offsets.
+
+mod complete;
+mod query;
+mod server;
+mod text;
+
+use std::path::{Path, PathBuf};
+
+use moddil_sema::{Database, Diagnostic, ModInfo, Program, ProgramFile, SourceFile};
+use moddil_syntax::TextRange;
+use salsa::Setter;
+
+pub use complete::{Completion, CompletionKind};
+pub use server::run;
+pub use text::{LineIndex, path_uri, uri_path};
+
+/// A problem found: where, how serious, its code and its message.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Problem {
+    /// Where, in bytes.
+    pub range: TextRange,
+    /// Whether it is an error (or a warning).
+    pub error: bool,
+    /// Its code (`E0201`).
+    pub code: String,
+    /// What is wrong, with any secondary labels after it.
+    pub message: String,
+}
+
+/// An inlay hint: text shown after byte `offset`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Hint {
+    /// Where it goes.
+    pub offset: u32,
+    /// What it says.
+    pub label: String,
+}
+
+/// The programs being edited, each loaded from its mod (the nearest `moddil.toml` above a file)
+/// or a single file, with the open files' texts in place of what is on disk.
+#[derive(Default)]
+pub struct Analysis {
+    db: Database,
+    roots: Vec<Root>,
+}
+
+/// One program: a mod with its dependencies, or a single file.
+struct Root {
+    /// The manifest's directory, or the file.
+    at: PathBuf,
+    program: Program,
+    /// Each file's path on disk, by its index in the program, canonical.
+    paths: Vec<PathBuf>,
+    /// Problems reading the project (a manifest, a cycle): its files are not checked.
+    load_problems: Vec<(PathBuf, Problem)>,
+}
+
+/// `p`, canonical where it exists (so paths compare whatever their spelling).
+fn canonical(p: &Path) -> PathBuf {
+    std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
+}
+
+/// Where the program containing `file` starts: the nearest directory above it with a
+/// `moddil.toml`, or the file itself.
+fn root_of(file: &Path) -> PathBuf {
+    let mut dir = file.parent();
+    while let Some(d) = dir {
+        if d.join("moddil.toml").is_file() {
+            return d.to_path_buf();
+        }
+        dir = d.parent();
+    }
+    file.to_path_buf()
+}
+
+impl Analysis {
+    /// No programs yet.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The root and file index of `path`, loading its program the first time.
+    fn locate(&mut self, path: &Path) -> Option<(usize, u32)> {
+        let path = canonical(path);
+        if let Some(found) = self.find(&path) {
+            return Some(found);
+        }
+        let at = canonical(&root_of(&path));
+        // A root already loaded that does not have the file (a new one) is reloaded.
+        if let Some(r) = self.roots.iter().position(|r| r.at == at) {
+            self.roots.remove(r);
+        }
+        let root = self.load(&at);
+        self.roots.push(root);
+        self.find(&path)
+    }
+
+    fn find(&self, path: &Path) -> Option<(usize, u32)> {
+        self.roots.iter().enumerate().find_map(|(r, root)| {
+            root.paths
+                .iter()
+                .position(|p| p == path)
+                .map(|f| (r, f as u32))
+        })
+    }
+
+    fn load(&mut self, at: &Path) -> Root {
+        let db = &self.db;
+        match moddil_project::load(at) {
+            Ok(project) => {
+                let files = project
+                    .files
+                    .iter()
+                    .map(|f| ProgramFile {
+                        source: SourceFile::new(db, f.display.clone(), f.text.clone()),
+                        mod_: f.mod_,
+                        module: f.module.clone(),
+                        exe: f.exe,
+                    })
+                    .collect();
+                let mods = project
+                    .mods
+                    .iter()
+                    .map(|m| ModInfo {
+                        name: m.name.clone(),
+                        deps: m.deps.clone(),
+                        stub: m.stub,
+                        unsafe_ok: m.unsafe_ok,
+                        os_ok: m.os_ok,
+                    })
+                    .collect();
+                Root {
+                    at: at.to_path_buf(),
+                    program: Program::new(db, files, mods),
+                    paths: project.files.iter().map(|f| canonical(&f.path)).collect(),
+                    load_problems: Vec::new(),
+                }
+            }
+            Err(problems) => Root {
+                at: at.to_path_buf(),
+                program: Program::new(db, Vec::new(), Vec::new()),
+                paths: Vec::new(),
+                load_problems: problems
+                    .into_iter()
+                    .map(|p| {
+                        let range = TextRange::new(p.range.start as u32, p.range.end as u32);
+                        let problem = Problem {
+                            range,
+                            error: true,
+                            code: p.code.to_string(),
+                            message: p.message,
+                        };
+                        (canonical(&p.path), problem)
+                    })
+                    .collect(),
+            },
+        }
+    }
+
+    /// Sets the text of `path` (an open file, as its editor has it). Its program is loaded the
+    /// first time; a file new to its mod reloads it. Whether the file is part of a program.
+    pub fn set_text(&mut self, path: &Path, text: &str) -> bool {
+        let text = text.replace("\r\n", "\n");
+        let Some((r, f)) = self.locate(path) else {
+            return false;
+        };
+        let source = self.roots[r].program.files(&self.db)[f as usize].source;
+        if source.text(&self.db) != &text {
+            source.set_text(&mut self.db).to(text);
+        }
+        true
+    }
+
+    /// Forgets the programs, so each is read from disk again when next needed (after a manifest
+    /// changes).
+    pub fn reload(&mut self) {
+        self.roots.clear();
+    }
+
+    /// The text of `path`, as the program has it (an open file's editor text).
+    pub fn text(&mut self, path: &Path) -> Option<String> {
+        let (r, f) = self.locate(path)?;
+        let source = self.roots[r].program.files(&self.db)[f as usize].source;
+        Some(source.text(&self.db).clone())
+    }
+
+    /// The problems of every file of the mod `path` belongs to (not its dependencies), by path:
+    /// each file appears, so a fixed one is cleared. Problems reading the project come first.
+    pub fn problems(&mut self, path: &Path) -> Vec<(PathBuf, Vec<Problem>)> {
+        let path = canonical(path);
+        let at = canonical(&root_of(&path));
+        if self.locate(&path).is_none() {
+            let Some(root) = self.roots.iter().find(|r| r.at == at) else {
+                return Vec::new();
+            };
+            let mut out: Vec<(PathBuf, Vec<Problem>)> = Vec::new();
+            for (p, problem) in &root.load_problems {
+                match out.iter_mut().find(|(q, _)| q == p) {
+                    Some((_, ps)) => ps.push(problem.clone()),
+                    None => out.push((p.clone(), vec![problem.clone()])),
+                }
+            }
+            return out;
+        }
+        let Some((r, _)) = self.find(&path) else {
+            return Vec::new();
+        };
+        let root = &self.roots[r];
+        let files = root.program.files(&self.db);
+        let mut out: Vec<(PathBuf, Vec<Problem>)> = files
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| f.mod_ == 0)
+            .map(|(i, _)| (root.paths[i].clone(), Vec::new()))
+            .collect();
+        for d in moddil_interp::diagnostics(&self.db, root.program) {
+            if files.get(d.file as usize).is_none_or(|f| f.mod_ != 0) {
+                continue;
+            }
+            let p = &root.paths[d.file as usize];
+            if let Some((_, ps)) = out.iter_mut().find(|(q, _)| q == p) {
+                ps.push(problem(&d));
+            }
+        }
+        out
+    }
+
+    /// What to show on hovering over byte `offset` of `path`.
+    pub fn hover(&mut self, path: &Path, offset: u32) -> Option<String> {
+        let (r, f) = self.locate(path)?;
+        query::Query::new(&self.db, self.roots[r].program, f).hover(offset)
+    }
+
+    /// Where what is at byte `offset` of `path` is defined: a file and the range of its name.
+    pub fn definition(&mut self, path: &Path, offset: u32) -> Option<(PathBuf, TextRange)> {
+        let (r, f) = self.locate(path)?;
+        let (file, range) =
+            query::Query::new(&self.db, self.roots[r].program, f).definition(offset)?;
+        Some((self.roots[r].paths.get(file as usize)?.clone(), range))
+    }
+
+    /// The inlay hints of `path`: after each call that may suspend or spawn.
+    pub fn hints(&mut self, path: &Path) -> Vec<Hint> {
+        let Some((r, f)) = self.locate(path) else {
+            return Vec::new();
+        };
+        query::Query::new(&self.db, self.roots[r].program, f).hints()
+    }
+
+    /// The completions at byte `offset` of `path`.
+    pub fn complete(&mut self, path: &Path, offset: u32) -> Vec<Completion> {
+        let Some((r, f)) = self.locate(path) else {
+            return Vec::new();
+        };
+        let program = self.roots[r].program;
+        complete::complete(&mut self.db, program, f, offset)
+    }
+}
+
+/// `d` as a [`Problem`], its secondary labels in its message.
+fn problem(d: &Diagnostic) -> Problem {
+    let mut message = d.message.clone();
+    for (_, l) in &d.labels {
+        if !l.is_empty() {
+            message.push_str("\n- ");
+            message.push_str(l);
+        }
+    }
+    Problem {
+        range: d.range,
+        error: d.severity == moddil_sema::Severity::Error,
+        code: d.code.as_str().to_string(),
+        message,
+    }
+}

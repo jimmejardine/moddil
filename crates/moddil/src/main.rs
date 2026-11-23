@@ -72,6 +72,9 @@ enum Command {
         #[arg(long, conflicts_with = "wasm")]
         release: bool,
     },
+    /// Runs the language server on standard input and output (LSP): diagnostics, hover, go to
+    /// definition, inlay hints and completion, for an editor.
+    Lsp,
     /// Runs test `index` natively, for `moddil test`, which runs each in a process of its own.
     #[command(name = "__native-test", hide = true)]
     NativeTest { file: PathBuf, index: u32 },
@@ -82,7 +85,17 @@ const TRAPPED: u8 = 70;
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    if matches!(cli.command, Command::Lsp) {
+        return match moddil_lsp::run() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("moddil lsp: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     let path = match &cli.command {
+        Command::Lsp => unreachable!("handled above"),
         Command::Check { file }
         | Command::Run { file, .. }
         | Command::Test { file, .. }
@@ -136,6 +149,7 @@ fn main() -> ExitCode {
             output, release, ..
         } => build(&db, program, path, output.as_deref(), *release),
         Command::NativeTest { index, .. } => native_test(&db, program, &files, *index),
+        Command::Lsp => unreachable!("handled above"),
     }
 }
 
