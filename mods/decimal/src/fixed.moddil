@@ -1,7 +1,7 @@
 //! `Fixed<S>`: a decimal with `S` digits after the point, as an `int` of units of 10^-S.
 
 use num::BigInt;
-use mod::round::div_round_big;
+use mod::round::{div_round_i128, pow10_i128};
 
 /// A decimal with `S` digits after the point, `S` at least 0: an `int` counting units of
 /// 10^-S, so `Fixed<2>` counts cents. Its arithmetic is exact and traps on overflow, as `int`'s
@@ -91,8 +91,9 @@ impl<const S: int> Fixed<S> {
             return None;
         }
         let have = if after < 0 { 0 } else { after };
-        let scaled = BigInt::from_int(units).times(&pow10_big(S - have));
-        match (if neg { scaled.negated() } else { scaled }).to_int() {
+        let units: i128 = units;
+        let scaled = units * pow10_i128(S - have);
+        match (if neg { -scaled } else { scaled }).checked_to::<int>() {
             Some(u) => Some(Fixed { units: u }),
             None => None,
         }
@@ -100,39 +101,41 @@ impl<const S: int> Fixed<S> {
 
     /// The value at scale `R`, rounded by `mode` if `R` is less than `S`.
     pub fn rescale<const R: int>(self, mode: Round) -> Fixed<R> {
-        let u = BigInt::from_int(self.units);
+        let u: i128 = self.units;
         let units = if R >= S {
-            u.times(&pow10_big(R - S))
+            u * pow10_i128(R - S)
         } else {
-            div_round_big(&u, &pow10_big(S - R), mode)
+            div_round_i128(u, pow10_i128(S - R), mode)
         };
-        Fixed { units: narrow(&units) }
+        Fixed { units: narrow(units) }
     }
 
     /// The product at scale `R`: exact at scale `S + T`, then rounded by `mode` if `R` is less.
     pub fn mul<const T: int, const R: int>(self, other: Fixed<T>, mode: Round) -> Fixed<R> {
-        let exact = BigInt::from_int(self.units).times(&BigInt::from_int(other.units()));
+        let a: i128 = self.units;
+        let b: i128 = other.units();
+        let exact = a * b;
         let units = if R >= S + T {
-            exact.times(&pow10_big(R - S - T))
+            exact * pow10_i128(R - S - T)
         } else {
-            div_round_big(&exact, &pow10_big(S + T - R), mode)
+            div_round_i128(exact, pow10_i128(S + T - R), mode)
         };
-        Fixed { units: narrow(&units) }
+        Fixed { units: narrow(units) }
     }
 
     /// The quotient at scale `R`, rounded by `mode`; traps if `other` is zero.
     pub fn div<const T: int, const R: int>(self, other: Fixed<T>, mode: Round) -> Fixed<R> {
         assert(other.units() != 0);
-        let a = BigInt::from_int(self.units);
-        let b = BigInt::from_int(other.units());
+        let a: i128 = self.units;
+        let b: i128 = other.units();
         // (a / 10^S) / (b / 10^T) in units of 10^-R is a × 10^(R - S + T) / b.
         let e = R - S + T;
         let units = if e >= 0 {
-            div_round_big(&a.times(&pow10_big(e)), &b, mode)
+            div_round_i128(a * pow10_i128(e), b, mode)
         } else {
-            div_round_big(&a, &b.times(&pow10_big(-e)), mode)
+            div_round_i128(a, b * pow10_i128(-e), mode)
         };
-        Fixed { units: narrow(&units) }
+        Fixed { units: narrow(units) }
     }
 
     /// The product with a whole number, exact.
@@ -153,16 +156,11 @@ fn pow10(e: int) -> int {
     p
 }
 
-/// 10^e, for `e` at least 0.
-fn pow10_big(e: int) -> BigInt {
-    BigInt::from_int(10).pow(e)
-}
-
 /// A result's units as an `int`; traps, as `int` arithmetic would, if they are not one. (The
-/// exact product or quotient is worked out in a `BigInt`, since it can pass what an `int` holds
-/// before it is rounded back; `i128` would do, but native code cannot divide one yet.)
-fn narrow(x: &BigInt) -> int {
-    x.to_int() ?! "a Fixed's units fit an int"
+/// exact product or quotient is worked out in an `i128`, since it can pass what an `int` holds
+/// before it is rounded back.)
+fn narrow(x: i128) -> int {
+    x.to::<int>() ?! "a Fixed's units fit an int"
 }
 
 impl<const S: int> Add for Fixed<S> {

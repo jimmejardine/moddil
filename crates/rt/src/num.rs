@@ -219,3 +219,46 @@ pub fn code(name: &str) -> Option<u32> {
         .position(|(n, ..)| *n == name)
         .map(|k| k as u32 + 1)
 }
+
+/// An `i128` or `u128` operation native code leaves to the runtime, as Cranelift cannot compile
+/// it for every target: `op` 0 is signed `/`, 1 unsigned `/`, 2 signed `%`, 3 unsigned `%`, 4
+/// whether the signed product overflows (1 if so), 5 whether the unsigned one does. The operands
+/// come as their low and high words. A division by zero, or of the least `i128` by -1, is checked
+/// before; here it gives 0.
+pub fn wide(op: u32, alo: u64, ahi: u64, blo: u64, bhi: u64) -> u128 {
+    let a = u128::from(alo) | (u128::from(ahi) << 64);
+    let b = u128::from(blo) | (u128::from(bhi) << 64);
+    let (sa, sb) = (a as i128, b as i128);
+    match op {
+        0 if sb != 0 => sa.wrapping_div(sb) as u128,
+        1 if b != 0 => a / b,
+        2 if sb != 0 => sa.wrapping_rem(sb) as u128,
+        3 if b != 0 => a % b,
+        4 => u128::from(sa.checked_mul(sb).is_none()),
+        5 => u128::from(a.checked_mul(b).is_none()),
+        _ => 0,
+    }
+}
+
+#[cfg(test)]
+mod wide_tests {
+    use super::wide;
+
+    fn run(op: u32, a: u128, b: u128) -> u128 {
+        wide(op, a as u64, (a >> 64) as u64, b as u64, (b >> 64) as u64)
+    }
+
+    #[test]
+    fn wide_operations() {
+        let a = (-81_000_000_000_000_000_000_000_000_000_000_000_007i128) as u128;
+        let b = 9_000_000_000_000_000_000u128;
+        assert_eq!(run(0, a, b) as i128, -9_000_000_000_000_000_000);
+        assert_eq!(run(2, a, b) as i128, -7);
+        assert_eq!(run(1, u128::MAX, 3), u128::MAX / 3);
+        assert_eq!(run(3, u128::MAX, 7), u128::MAX % 7);
+        assert_eq!(run(4, i128::MAX as u128, 2), 1);
+        assert_eq!(run(4, b, b), 0);
+        assert_eq!(run(5, u128::MAX, 2), 1);
+        assert_eq!(run(5, 1 << 64, 3), 0);
+    }
+}

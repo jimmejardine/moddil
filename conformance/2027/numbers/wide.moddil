@@ -1,0 +1,53 @@
+// covers: num.types.1, num.ops.1
+// `i128` and `u128` division, remainder and multiplication, and their traps: native code does
+// the division and the overflow check in the runtime, as Cranelift cannot compile them.
+
+test "i128 division and remainder round toward zero" {
+    let a: i128 = -81000000000000000000000000000000000007;
+    let b: i128 = 9000000000000000000;
+    a / b                                   // => -9000000000000000000
+    ;
+    a % b                                   // => -7
+    ;
+    a * -1 / b                              // => 9000000000000000000
+}
+
+test "u128 division and remainder" {
+    let half: u128 = 170141183460469231731687303715884105727;
+    let max = half * 2 + 1;
+    max / 3                                 // => 113427455640312821154458202477256070485
+    ;
+    max % 7                                 // => 3
+}
+
+test "a product that fits is exact" {
+    let a: i128 = -9000000000000000000;
+    a * 9000000000000000000                 // => -81000000000000000000000000000000000000
+    ;
+    let u: u128 = 18446744073709551616;
+    u * 3                                   // => 55340232221128654848
+}
+
+test "an i128 product that does not fit traps" {
+    let a: i128 = 170141183460469231731687303715884105727;
+    let b: i128 = 2;
+    a * b;                                  //~ trap
+}
+
+test "a u128 product that does not fit traps" {
+    let a: u128 = 170141183460469231731687303715884105727;
+    let b: u128 = 3;
+    a * b;                                  //~ trap
+}
+
+test "dividing by zero traps" {
+    let a: u128 = 5;
+    let b: u128 = 0;
+    a % b;                                  //~ trap
+}
+
+test "the least i128 over -1 traps" {
+    let a: i128 = -170141183460469231731687303715884105727 - 1;
+    let b: i128 = -1;
+    a / b;                                  //~ trap
+}

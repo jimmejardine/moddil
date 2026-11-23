@@ -3,6 +3,18 @@
 
 use num::BigInt;
 
+/// 10^e as an `i128`, for `e` from 0 to 38.
+pub fn pow10_i128(e: int) -> i128 {
+    assert(e >= 0);
+    let mut p: i128 = 1;
+    let mut i = 0;
+    while i < e {
+        p = p * 10;
+        i += 1;
+    }
+    p
+}
+
 /// Whether a quotient truncated toward zero to `q`, with a remainder that is not zero, moves one
 /// away from zero. `negative` is the exact quotient's sign; `half` compares twice the remainder's
 /// size with the divisor's (`Less`: below a half, `Equal`: exactly a half).
@@ -20,6 +32,31 @@ fn away(mode: Round, negative: bool, half: Ordering, q_is_odd: bool) -> bool {
             Ordering::Greater => true,
             Ordering::Equal => q_is_odd,
         },
+    }
+}
+
+/// `n / d` rounded by `mode`; traps if `d` is zero.
+pub fn div_round_i128(n: i128, d: i128, mode: Round) -> i128 {
+    let q = n / d;
+    let r = n % d;
+    if r == 0 {
+        return q;
+    }
+    let negative = (n < 0) != (d < 0);
+    let r = if r < 0 { -r } else { r };
+    let d = if d < 0 { -d } else { d };
+    // Twice the remainder against the divisor, without doubling past `i128`.
+    let half = if r > d - r {
+        Ordering::Greater
+    } else if r == d - r {
+        Ordering::Equal
+    } else {
+        Ordering::Less
+    };
+    if away(mode, negative, half, q % 2 != 0) {
+        if negative { q - 1 } else { q + 1 }
+    } else {
+        q
     }
 }
 

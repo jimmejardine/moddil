@@ -150,6 +150,20 @@ pub extern "C" fn fmod(a: f64, b: f64) -> f64 {
     libm::fmod(a, b)
 }
 
+/// The low word of an `i128` operation native code leaves to the runtime ([`num::wide`]).
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_i128_lo")]
+pub extern "C" fn i128_lo(op: u32, alo: u64, ahi: u64, blo: u64, bhi: u64) -> u64 {
+    num::wide(op, alo, ahi, blo, bhi) as u64
+}
+
+/// Its high word.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_i128_hi")]
+pub extern "C" fn i128_hi(op: u32, alo: u64, ahi: u64, blo: u64, bhi: u64) -> u64 {
+    (num::wide(op, alo, ahi, blo, bhi) >> 64) as u64
+}
+
 /// `a % b` on `f32`s.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "moddil_rt_fmodf")]
@@ -388,6 +402,8 @@ pub fn symbols() -> Vec<(&'static str, *const u8)> {
         ("moddil_rt_leave", leave as *const u8),
         ("moddil_rt_fmod", fmod as *const u8),
         ("moddil_rt_fmodf", fmodf as *const u8),
+        ("moddil_rt_i128_lo", i128_lo as *const u8),
+        ("moddil_rt_i128_hi", i128_hi as *const u8),
         ("moddil_rt_float_fn", float_fn as *const u8),
         ("moddil_rt_float_fn_f32", float_fn_f32 as *const u8),
         ("moddil_rt_char_at_byte", char_at_byte as *const u8),

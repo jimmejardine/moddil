@@ -1037,8 +1037,12 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
       leaked on WASM. The MIR copied the part instead of moving it, so it was dropped twice. It
       now moves it, and a failure no longer shows a part that was moved away
       (`conformance/2027/assert/moves.moddil`).
-    - **Native:** Cranelift cannot yet compile `i128`'s `%` or its overflow-checked `*`, so such
-      code falls back to the interpreter. `Fixed` uses `BigInt` instead.
+    - **Fixed since:** Cranelift cannot compile `i128` and `u128` division, remainder or
+      overflow-checked `*`, so native code fell back to the interpreter. It now calls the runtime
+      for them (`moddil_rt_i128_lo` and `_hi`; WASM shares them), and `Fixed` works in `i128`
+      (`conformance/2027/numbers/wide.moddil`).
+    - **Literals:** one past `i128`'s range is refused even for a `u128` (E0204), so `u128`'s
+      greatest value is written as arithmetic.
     - **Types:** `Fixed<{S + T}>` (const arithmetic in a type) is not supported yet, nor are the
       exact literals of `numerics.md` (`let p: Fixed<2> = 0.10`).
     - **Prelude:** `Option<&T>` has no `PartialEq`. `[1, 2]` for a `Vec<u8>` types its elements
