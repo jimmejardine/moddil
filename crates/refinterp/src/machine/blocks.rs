@@ -129,7 +129,7 @@ impl Machine<'_> {
                     crate::num::Kind::named(n).is_some() || n == "int" || n == "i64"
                 } =>
             {
-                let v = self.eval(&init)?;
+                let v = self.eval_as(&init, Some(&t))?;
                 Src::Place(self.memory.temp(self.typed(v, Some(&t))), false)
             }
             _ => self.scrutinee(&init)?,

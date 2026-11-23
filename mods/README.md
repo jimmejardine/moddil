@@ -18,6 +18,8 @@ umbrella stub mod [`stubs/moddil`](../stubs/moddil/README.md), which re-exports 
 | [`sim`](sim/src/lib.moddil) | `Sim`, nodes, seeded randomness, a simulated network, `drop_messages` | `unsafe` |
 | [`crypto`](crypto/src/lib.moddil) | SHA-256, SHA-512 and BLAKE3, and `hex`; not constant-time | |
 | [`num`](num/src/lib.moddil) | `BigInt` and `Rational` | |
+| [`time`](time/src/lib.moddil) | `Date` (proleptic Gregorian), `TimeOfDay`, `DateTime` and `Timestamp`, in UTC, with ISO 8601 and RFC 3339 text; no clock yet | |
+| [`regex`](regex/src/lib.moddil) | `Regex`: linear-time matching (a Pike VM), groups and named groups, `find_all`, `replace_all`; backreferences and lookaround refused | |
 | [`decimal`](decimal/src/lib.moddil) | `Fixed<S>` (the scale in the type) and `BigDecimal`, rounding by the prelude's `Round` | |
 | [`runtime`](runtime/src/lib.moddil) | the root capabilities (`root`: `Args`, `Stdio`, `NetRoot`, `Entropy`, …), the terminal (`io`), `serve_until_stopped` and `Signal` | `os` |
 | [`gpu`](gpu/src/lib.moddil) | `Rgba8`, `Tile`, `Image`, the `Gpu` effect, the CPU `simulator()`, the root capability `GpuRoot` (WebGPU in a browser), and `launch`, which runs a `#[kernel]` over an image | `os` |

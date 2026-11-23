@@ -1,0 +1,235 @@
+//! A compiled pattern: a program of instructions for the Pike VM (`mod::matching`).
+
+use mod::matching::{self, Captures, Match};
+use mod::syntax::{ClassItem, Node, Parsed, parse};
+
+/// An instruction.
+#[derive(Clone)]
+pub enum Inst {
+    /// Consumes this character.
+    Char(char),
+    /// Consumes any character but a newline.
+    Any,
+    /// Consumes a character of the class (negated if the flag says).
+    Class(Vec<ClassItem>, bool),
+    /// Goes on at both, preferring the first.
+    Split(int, int),
+    Jump(int),
+    /// Records the position in capture slot `n` (a group's start is `2k`, its end `2k + 1`).
+    Save(int),
+    /// Goes on only at the text's start, or its end.
+    AssertStart,
+    AssertEnd,
+    Match,
+}
+
+/// Why a pattern was refused: where in it (counted in characters), and what was wrong.
+#[derive(Clone, Debug)]
+pub struct RegexError {
+    at: int,
+    reason: String,
+}
+
+impl RegexError {
+    pub fn new(at: int, reason: &str) -> RegexError {
+        RegexError { at, reason: reason.to_string() }
+    }
+
+    /// Where in the pattern, in characters from its start.
+    pub fn at(&self) -> int {
+        self.at
+    }
+
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+}
+
+impl Display for RegexError {
+    fn fmt(&self, out: &mut String) {
+        out.push_str("at character ");
+        out.push_str(&self.at.to_string());
+        out.push_str(": ");
+        out.push_str(&self.reason);
+    }
+}
+
+/// A compiled regular expression.
+pub struct Regex {
+    pub(mod) prog: Vec<Inst>,
+    /// Capture slots: two for each group, the whole match being group 0.
+    pub(mod) slots: int,
+    pub(mod) names: Vec<(String, int)>,
+}
+
+impl Regex {
+    /// `pattern` compiled; fails if it is not one this engine matches.
+    pub fn new(pattern: &str) -> Regex with fail(RegexError) {
+        let parsed = parse(pattern)?;
+        let mut c = Compiler { prog: Vec::new() };
+        c.emit(Inst::Save(0));
+        c.node(&parsed, parsed.root);
+        c.emit(Inst::Save(1));
+        c.emit(Inst::Match);
+        Regex { prog: c.prog, slots: parsed.captures * 2, names: parsed.names }
+    }
+
+    /// Whether the pattern matches somewhere in `text`.
+    pub fn is_match(&self, text: &str) -> bool {
+        matching::is_match(self, text)
+    }
+
+    /// The leftmost-first match in `text`.
+    pub fn find(&self, text: &str) -> Option<Match> {
+        matching::find(self, text)
+    }
+
+    /// Every match in `text`, left to right, none overlapping. As in Rust's `regex`, an empty
+    /// match where the one before ended is skipped (`x*` in `axxb` matches at 0, 1 to 3, and 4).
+    pub fn find_all(&self, text: &str) -> Vec<Match> {
+        matching::find_all(self, text)
+    }
+
+    /// The groups of the leftmost-first match in `text`.
+    pub fn captures(&self, text: &str) -> Option<Captures> {
+        matching::captures(self, text)
+    }
+
+    /// `text` with every match replaced by `replacement`, taken as it is written.
+    pub fn replace_all(&self, text: &str, replacement: &str) -> String {
+        matching::replace_all(self, text, replacement)
+    }
+
+    /// How many groups it has, the whole match (group 0) counted.
+    pub fn group_count(&self) -> int {
+        self.slots / 2
+    }
+
+    /// The number of the group named `name`.
+    pub fn group_named(&self, name: &str) -> Option<int> {
+        for (n, k) in self.names.iter() {
+            let n: &str = n;
+            if n == name {
+                return Some(*k);
+            }
+        }
+        None
+    }
+}
+
+struct Compiler {
+    prog: Vec<Inst>,
+}
+
+impl Compiler {
+    fn emit(&mut self, i: Inst) -> int {
+        self.prog.push(i);
+        self.prog.len() - 1
+    }
+
+    fn here(&self) -> int {
+        self.prog.len()
+    }
+
+    /// Points the `Split` or `Jump` at `at` (made with a placeholder) to `to`, as its `which`th
+    /// target.
+    fn patch(&mut self, at: int, which: int, to: int) {
+        let new = match &self.prog[at] {
+            Inst::Split(a, b) => if which == 0 { Inst::Split(to, *b) } else { Inst::Split(*a, to) },
+            _ => Inst::Jump(to),
+        };
+        self.prog[at] = new;
+    }
+
+    fn node(&mut self, p: &Parsed, n: int) {
+        match p.nodes[n].clone() {
+            Node::Empty => {}
+            Node::Char(c) => {
+                self.emit(Inst::Char(c));
+            }
+            Node::Any => {
+                self.emit(Inst::Any);
+            }
+            Node::Class(items, negated) => {
+                self.emit(Inst::Class(items, negated));
+            }
+            Node::Start => {
+                self.emit(Inst::AssertStart);
+            }
+            Node::End => {
+                self.emit(Inst::AssertEnd);
+            }
+            Node::Group(inner, capture) => {
+                if capture >= 0 {
+                    self.emit(Inst::Save(2 * capture));
+                    self.node(p, inner);
+                    self.emit(Inst::Save(2 * capture + 1));
+                } else {
+                    self.node(p, inner);
+                }
+            }
+            Node::Concat(items) => {
+                for x in items.iter() {
+                    self.node(p, *x);
+                }
+            }
+            Node::Alt(alts) => {
+                // split L1, next; L1: a; jump end; next: split L2, … ; last: z; end:
+                let mut jumps: Vec<int> = Vec::new();
+                let mut i = 0;
+                while i < alts.len() {
+                    if i + 1 < alts.len() {
+                        let split = self.emit(Inst::Split(-1, -1));
+                        let start = self.here();
+                        self.patch(split, 0, start);
+                        self.node(p, alts[i]);
+                        jumps.push(self.emit(Inst::Jump(-1)));
+                        let next = self.here();
+                        self.patch(split, 1, next);
+                    } else {
+                        self.node(p, alts[i]);
+                    }
+                    i += 1;
+                }
+                let end = self.here();
+                for j in jumps.iter() {
+                    self.patch(*j, 0, end);
+                }
+            }
+            Node::Repeat(inner, min, max, greedy) => {
+                let mut i = 0;
+                while i < min {
+                    self.node(p, inner);
+                    i += 1;
+                }
+                if max < 0 {
+                    // L: split body, out; body; jump L; out:
+                    let split = self.emit(Inst::Split(-1, -1));
+                    let body = self.here();
+                    self.node(p, inner);
+                    self.emit(Inst::Jump(split));
+                    let out = self.here();
+                    self.optional(split, body, out, greedy);
+                } else {
+                    // Each optional copy: split body, out; body; … the outs all to the end.
+                    let mut splits: Vec<int> = Vec::new();
+                    while i < max {
+                        let split = self.emit(Inst::Split(-1, -1));
+                        splits.push(split);
+                        self.node(p, inner);
+                        i += 1;
+                    }
+                    let out = self.here();
+                    for s in splits.iter() {
+                        self.optional(*s, *s + 1, out, greedy);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Points `split` at `body` and `out`, preferring `body` if `greedy`.
+    fn optional(&mut self, split: int, body: int, out: int, greedy: bool) {
+        self.prog[split] = if greedy { Inst::Split(body, out) } else { Inst::Split(out, body) };
+    }
+}

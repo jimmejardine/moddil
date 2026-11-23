@@ -1,0 +1,241 @@
+//! The Pike VM: the program run over the text's characters once, all its threads in step, so a
+//! search takes time proportional to the text's length times the program's.
+
+use mod::program::{Inst, Regex};
+
+use mod::syntax::in_class;
+
+/// Where a match is in the text searched: byte offsets, its start and its end.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Match {
+    start: int,
+    end: int,
+}
+
+impl Match {
+    pub fn start(&self) -> int {
+        self.start
+    }
+
+    pub fn end(&self) -> int {
+        self.end
+    }
+
+    pub fn len(&self) -> int {
+        self.end - self.start
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.end == self.start
+    }
+
+    /// The text matched, in `text`, the text searched.
+    pub fn text(&self, text: &str) -> String {
+        text.bytes_between(self.start, self.end).to_string()
+    }
+}
+
+/// The groups of a match: each one's [`Match`], if it took part.
+#[derive(Clone, Debug)]
+pub struct Captures {
+    /// Each group's start and end, as byte offsets, -1 for a group that did not take part.
+    slots: Vec<int>,
+}
+
+impl Captures {
+    /// Group `i`'s match (0 is the whole match), if it took part.
+    pub fn get(&self, i: int) -> Option<Match> {
+        if i < 0 || 2 * i + 1 >= self.slots.len() {
+            return None;
+        }
+        let (start, end) = (self.slots[2 * i], self.slots[2 * i + 1]);
+        if start < 0 || end < 0 {
+            return None;
+        }
+        Some(Match { start, end })
+    }
+
+    /// How many groups there are, the whole match counted.
+    pub fn len(&self) -> int {
+        self.slots.len() / 2
+    }
+}
+
+/// A thread of the program: where it is, and its capture slots (character positions).
+struct Thread {
+    pc: int,
+    caps: Vec<int>,
+}
+
+/// The text as characters, and each one's byte offset, then the text's length.
+struct Text {
+    chars: Vec<char>,
+    offsets: Vec<int>,
+}
+
+fn decode(text: &str) -> Text {
+    let mut chars: Vec<char> = Vec::new();
+    let mut offsets: Vec<int> = Vec::new();
+    let mut at = 0;
+    while at < text.len() {
+        let c = text.char_at_byte(at) ?! "a character starts here";
+        chars.push(c);
+        offsets.push(at);
+        at += c.len_utf8();
+    }
+    offsets.push(text.len());
+    Text { chars, offsets }
+}
+
+/// Whether the pattern matches somewhere in `text`.
+pub(mod) fn is_match(re: &Regex, text: &str) -> bool {
+    let t = decode(text);
+    run(re, &t, 0).is_some()
+}
+
+/// The leftmost-first match in `text`.
+pub(mod) fn find(re: &Regex, text: &str) -> Option<Match> {
+    let t = decode(text);
+    match run(re, &t, 0) {
+        Some(caps) => Some(Match { start: t.offsets[caps[0]], end: t.offsets[caps[1]] }),
+        None => None,
+    }
+}
+
+/// Every match in `text`, left to right, none overlapping. As in Rust's `regex`, an empty
+/// match where the one before ended is skipped (`x*` in `axxb` matches at 0, 1 to 3, and 4),
+/// and an empty match moves the search on a character, so it ends.
+pub(mod) fn find_all(re: &Regex, text: &str) -> Vec<Match> {
+    let t = decode(text);
+    let mut out: Vec<Match> = Vec::new();
+    let mut start_at = 0;
+    let mut last_end = -1;
+    while start_at <= t.chars.len() {
+        let caps = match run(re, &t, start_at) {
+            Some(c) => c,
+            None => break,
+        };
+        let empty = caps[1] == caps[0];
+        if !(empty && caps[0] == last_end) {
+            out.push(Match { start: t.offsets[caps[0]], end: t.offsets[caps[1]] });
+            last_end = caps[1];
+        }
+        start_at = if empty { caps[1] + 1 } else { caps[1] };
+    }
+    out
+}
+
+/// The groups of the leftmost-first match in `text`.
+pub(mod) fn captures(re: &Regex, text: &str) -> Option<Captures> {
+    let t = decode(text);
+    let caps = match run(re, &t, 0) {
+        Some(c) => c,
+        None => return None,
+    };
+    let mut slots: Vec<int> = Vec::new();
+    for c in caps.iter() {
+        slots.push(if *c < 0 { -1 } else { t.offsets[*c] });
+    }
+    Some(Captures { slots })
+}
+
+/// `text` with every match replaced by `replacement`, taken as it is written.
+pub(mod) fn replace_all(re: &Regex, text: &str, replacement: &str) -> String {
+    let mut out = String::new();
+    let mut last = 0;
+    let all = find_all(re, text);
+    for m in all.iter() {
+        out.push_str(text.bytes_between(last, m.start));
+        out.push_str(replacement);
+        last = m.end;
+    }
+    out.push_str(text.bytes_between(last, text.len()));
+    out
+}
+
+/// The capture slots of the leftmost-first match starting at character `start_at` or after.
+fn run(re: &Regex, t: &Text, start_at: int) -> Option<Vec<int>> {
+    let n = t.chars.len();
+    let mut mark: Vec<int> = Vec::with_capacity(re.prog.len());
+    while mark.len() < re.prog.len() {
+        mark.push(-1);
+    }
+    let mut current: Vec<Thread> = Vec::new();
+    let mut next: Vec<Thread> = Vec::new();
+    let mut matched: Option<Vec<int>> = None;
+    let mut i = start_at;
+    loop {
+        // A new thread at each position, until a match: it comes after the others, which
+        // started earlier.
+        if matched.is_none() {
+            let mut caps: Vec<int> = Vec::with_capacity(re.slots);
+            while caps.len() < re.slots {
+                caps.push(-1);
+            }
+            add(re, &mut current, &mut mark, 0, caps, i, n);
+        }
+        let mut k = 0;
+        while k < current.len() {
+            let pc = current[k].pc;
+            let step = match &re.prog[pc] {
+                Inst::Char(c) => i < n && t.chars[i] == *c,
+                Inst::Any => i < n && t.chars[i] != '\n',
+                Inst::Class(items, negated) => i < n && in_class(items.as_slice(), *negated, t.chars[i]),
+                Inst::Match => {
+                    // The threads after this one are less preferred: they stop here.
+                    matched = Some(current[k].caps.clone());
+                    break;
+                }
+                _ => false,
+            };
+            if step {
+                let caps = current[k].caps.clone();
+                add(re, &mut next, &mut mark, pc + 1, caps, i + 1, n);
+            }
+            k += 1;
+        }
+        current = replace(&mut next, Vec::new());
+        if i >= n || (current.is_empty() && matched.is_some()) {
+            break;
+        }
+        i += 1;
+    }
+    matched
+}
+
+/// Adds the threads reached start_at `pc` at character position `pos` to `list`, following
+/// jumps, splits (the first target first), saves and assertions; each instruction once a
+/// position.
+fn add(re: &Regex, list: &mut Vec<Thread>, mark: &mut Vec<int>, pc: int, caps: Vec<int>, pos: int, n: int) {
+    let mut stack: Vec<(int, Vec<int>)> = Vec::new();
+    stack.push((pc, caps));
+    while let Some((pc, caps)) = stack.pop() {
+        if mark[pc] == pos {
+            continue;
+        }
+        mark[pc] = pos;
+        match &re.prog[pc] {
+            Inst::Jump(to) => stack.push((*to, caps)),
+            Inst::Split(a, b) => {
+                stack.push((*b, caps.clone()));
+                stack.push((*a, caps));
+            }
+            Inst::Save(slot) => {
+                let mut caps = caps;
+                caps[*slot] = pos;
+                stack.push((pc + 1, caps));
+            }
+            Inst::AssertStart => {
+                if pos == 0 {
+                    stack.push((pc + 1, caps));
+                }
+            }
+            Inst::AssertEnd => {
+                if pos == n {
+                    stack.push((pc + 1, caps));
+                }
+            }
+            _ => list.push(Thread { pc, caps }),
+        }
+    }
+}

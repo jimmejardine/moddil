@@ -12,6 +12,8 @@ pub use runtime;
 pub use crypto;
 pub use num;
 pub use decimal;
+pub use time;
+pub use regex;
 pub use gpu;
 pub use web;
 pub use runtime::root;

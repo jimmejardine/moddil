@@ -1,0 +1,94 @@
+// Dates and instants, checked against Python's `datetime`.
+
+use time::{Date, DateTime, TimeOfDay, Timestamp, Weekday, days_in_month, is_leap_year};
+
+fn date(y: int, m: int, d: int) -> Date {
+    Date::new(y, m, d) ?! "the test's dates are dates"
+}
+
+/// Checks that `x` is written `want`.
+fn check<T: Display>(x: &T, want: &str) {
+    let s = x.to_string();
+    let s: &str = &s;
+    assert(s == want);
+}
+
+test "leap years and month lengths" {
+    assert(is_leap_year(2000) && is_leap_year(2024) && !is_leap_year(1900) && !is_leap_year(2023));
+    assert(days_in_month(2024, 2) == 29 && days_in_month(2023, 2) == 28);
+    assert(days_in_month(2023, 4) == 30 && days_in_month(2023, 12) == 31);
+    assert(Date::new(2023, 2, 29).is_none() && Date::new(2023, 13, 1).is_none());
+    assert(Date::new(2023, 4, 31).is_none() && Date::new(2023, 4, 0).is_none());
+}
+
+test "days since the epoch, both ways" {
+    assert(date(1970, 1, 1).days_since_epoch() == 0);
+    assert(date(2000, 2, 29).days_since_epoch() == 11016);
+    assert(date(1, 1, 1).days_since_epoch() == -719162);
+    assert(date(9999, 12, 31).days_since_epoch() == 2932896);
+    assert(date(1969, 12, 31).days_since_epoch() == -1);
+    let mut n = -800000;
+    while n < 3000000 {
+        let d = Date::from_days_since_epoch(n);
+        assert(d.days_since_epoch() == n);
+        n += 7919;
+    }
+    check(&Date::from_days_since_epoch(19783), "2024-03-01");
+}
+
+test "weekdays and ordinals" {
+    assert(date(1970, 1, 1).weekday() == Weekday::Thursday);
+    assert(date(2000, 2, 29).weekday() == Weekday::Tuesday);
+    assert(date(1, 1, 1).weekday() == Weekday::Monday);
+    assert(date(1969, 12, 31).weekday() == Weekday::Wednesday);
+    check(&date(2024, 3, 1).weekday(), "Friday");
+    assert(date(2000, 2, 29).ordinal() == 60 && date(9999, 12, 31).ordinal() == 365);
+}
+
+test "adding days and months" {
+    check(&date(2024, 1, 31).add_days(1000), "2026-10-27");
+    check(&date(2024, 3, 1).add_days(-1), "2024-02-29");
+    check(&date(2024, 1, 31).add_months(1), "2024-02-29");
+    check(&date(2023, 1, 31).add_months(1), "2023-02-28");
+    check(&date(2023, 11, 15).add_months(3), "2024-02-15");
+    check(&date(2024, 3, 15).add_months(-15), "2022-12-15");
+    assert(date(2023, 3, 1).days_until(&date(2024, 3, 1)) == 366);
+    assert(date(2023, 3, 1) < date(2023, 3, 2) && date(2022, 12, 31) < date(2023, 1, 1));
+}
+
+test "ISO 8601 dates" {
+    let d = Date::parse("2024-02-29") ?! "a date";
+    assert(d == date(2024, 2, 29));
+    assert(Date::parse("2023-02-29").is_none());
+    assert(Date::parse("2024-2-29").is_none());
+    assert(Date::parse("2024/02/29").is_none());
+    check(&date(5, 6, 7), "0005-06-07");
+    check(&date(-44, 3, 15), "-0044-03-15");
+}
+
+test "instants as date-times" {
+    check(&Timestamp::from_unix_seconds(1700000000), "2023-11-14T22:13:20Z");
+    check(&Timestamp::from_unix_seconds(-1), "1969-12-31T23:59:59Z");
+    check(&Timestamp::from_unix_nanos(1500000000), "1970-01-01T00:00:01.500Z");
+    check(&Timestamp::from_unix_nanos(-1), "1969-12-31T23:59:59.999999999Z");
+    assert(Timestamp::from_unix_nanos(-1).unix_seconds() == -1);
+    let t = TimeOfDay::new(22, 13, 20, 0) ?! "a time";
+    let dt = DateTime::new(date(2023, 11, 14), t);
+    assert(dt.to_timestamp() == Timestamp::from_unix_seconds(1700000000));
+    let later = Timestamp::from_unix_seconds(10).plus(Duration::millis(250));
+    assert(later.nanos_since(&Timestamp::from_unix_seconds(10)) == 250000000);
+}
+
+test "RFC 3339 instants, with offsets" {
+    let t = Timestamp::parse("2024-02-29T12:00:00+05:30") ?! "an instant";
+    assert(t.unix_seconds() == 1709188200);
+    let t = Timestamp::parse("1900-03-01T00:00:00-01:00") ?! "an instant";
+    assert(t.unix_seconds() == -2203887600);
+    let t = Timestamp::parse("2023-11-14t22:13:20.25z") ?! "an instant";
+    assert(t.unix_nanos() == 1700000000250000000);
+    check(&t, "2023-11-14T22:13:20.250Z");
+    assert(Timestamp::parse("2023-11-14T22:13:20").is_none());
+    assert(Timestamp::parse("2023-11-14T24:00:00Z").is_none());
+    assert(Timestamp::parse("2023-11-14T22:13:20.Z").is_none());
+    assert(Timestamp::parse("2023-11-14T22:13:20+0530").is_none());
+}

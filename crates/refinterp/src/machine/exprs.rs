@@ -287,6 +287,53 @@ impl Machine<'_> {
         })
     }
 
+    /// `e`, where number type `ty` is written for it (`num.lit.1`): arithmetic on literals that
+    /// does not fold exactly (past `i128`) is left to the type, so its literals take the type
+    /// first and the arithmetic is the type's (`i128::MAX + 1` as an `i128` overflows,
+    /// `u128::MAX - 1` as a `u128` does not). Anything else is evaluated as it is.
+    pub(super) fn eval_as(&mut self, e: &ast::Expr, ty: Option<&ast::Type>) -> Eval {
+        let kind = ty.and_then(|t| crate::num::Kind::named(t.syntax().text().to_string().trim()));
+        match kind {
+            Some(k) if literal_tree(e) && crate::num::folded(e).is_none() => self.at_kind(e, k),
+            _ => self.eval(e),
+        }
+    }
+
+    /// Literal arithmetic `e` (a [`literal_tree`]) in number kind `k`: each part that folds,
+    /// folded first, as the checker folds them.
+    fn at_kind(&mut self, e: &ast::Expr, k: crate::num::Kind) -> Eval {
+        let node = e.syntax();
+        let range = node.text_range();
+        if let Some(v) = crate::num::folded(e) {
+            return Ok(crate::num::as_kind(v, k));
+        }
+        match e {
+            ast::Expr::Literal(_) => Ok(crate::num::as_kind(literal(node, false), k)),
+            ast::Expr::Paren(_) => self.at_kind(&e.sub_exprs()[0], k),
+            ast::Expr::Prefix(_) => {
+                let operand = &e.sub_exprs()[0];
+                if let ast::Expr::Literal(_) = operand {
+                    // `-170141183460469231731687303715884105728` is one literal.
+                    return Ok(crate::num::as_kind(literal(operand.syntax(), true), k));
+                }
+                let neg = node.child_tokens().any(|t| t.kind() == K::MINUS);
+                let v = self.at_kind(operand, k)?;
+                crate::num::unary(neg, v, range)
+            }
+            _ => {
+                let (l, r) = e.operands();
+                let (l, r) = (l.expect("operands"), r.expect("operands"));
+                let op = node
+                    .child_tokens()
+                    .find(|t| !t.kind().is_trivia())
+                    .expect("an operator");
+                let a = self.at_kind(&l, k)?;
+                let b = self.at_kind(&r, k)?;
+                crate::num::arith(op.text(), a, b, range)
+            }
+        }
+    }
+
     /// A struct literal's fields, into `fields`: `name: e` and `name`, and in a template
     /// `[f]: e` and `inline for f in fields(t) { … }` (`comptime.template.inline.1`).
     fn struct_fields(
@@ -299,19 +346,19 @@ impl Machine<'_> {
             match init.kind() {
                 K::FIELD_INIT => {
                     let name = member_name(&init);
+                    let i = info
+                        .fields
+                        .iter()
+                        .position(|f| *f == name)
+                        .expect("a checked field");
                     let v = match init.children().find_map(ast::Expr::cast) {
-                        Some(x) => self.eval(&x)?,
+                        Some(x) => self.eval_as(&x, info.types.get(i).and_then(Option::as_ref))?,
                         None => {
                             let s = self.memory.slot(&name).expect("a checked shorthand");
                             let p = self.memory.here(s);
                             self.take(&p, false)
                         }
                     };
-                    let i = info
-                        .fields
-                        .iter()
-                        .position(|f| *f == name)
-                        .expect("a checked field");
                     fields[i] = self.typed(v, info.types.get(i).and_then(Option::as_ref));
                 }
                 K::REFLECTED_FIELD_INIT => {
@@ -863,5 +910,40 @@ impl Machine<'_> {
             self.memory.store(&p, new);
         }
         Ok(Value::Unit)
+    }
+}
+
+/// Whether `e` is arithmetic on integer literals only: literals, parentheses, `-` and `!`, and
+/// the arithmetic, bitwise and shift operators (`num.lit.1`).
+fn literal_tree(e: &ast::Expr) -> bool {
+    let node = e.syntax();
+    match e {
+        ast::Expr::Literal(_) => node.child_tokens().any(|t| t.kind() == K::INTEGER),
+        ast::Expr::Paren(_) | ast::Expr::Prefix(_) => {
+            let op_ok = node
+                .child_tokens()
+                .filter(|t| !t.kind().is_trivia())
+                .all(|t| matches!(t.kind(), K::MINUS | K::BANG | K::L_PAREN | K::R_PAREN));
+            op_ok && e.sub_exprs().iter().all(literal_tree)
+        }
+        ast::Expr::Bin(_) => {
+            let arithmetic = node.child_tokens().filter(|t| !t.kind().is_trivia()).all(|t| {
+                matches!(
+                    t.kind(),
+                    K::PLUS
+                        | K::MINUS
+                        | K::STAR
+                        | K::SLASH
+                        | K::PERCENT
+                        | K::AMP
+                        | K::PIPE
+                        | K::CARET
+                        | K::LT_LT
+                        | K::GT_GT
+                )
+            });
+            arithmetic && e.sub_exprs().iter().all(literal_tree)
+        }
+        _ => false,
     }
 }

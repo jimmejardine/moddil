@@ -1,0 +1,17 @@
+//! Regular expressions that match in linear time (`text.md`: Regular expressions): a pattern is
+//! parsed, compiled to a program for a Pike VM (Thompson's construction, as RE2 and Rust's
+//! `regex` do), and run over the text's characters once, keeping every thread of the program in
+//! step. Matching is leftmost-first: of the matches that start first, the one the pattern
+//! prefers (greedy or lazy, the earlier alternative).
+//!
+//! The syntax: literals; `.` (any character but a newline); classes `[a-z_]`, `[^…]`; `\d`, `\w`,
+//! `\s` and their negations (Unicode digits, letters and digits and `_`, white space); `\n`,
+//! `\t`, `\r` and escaped metacharacters; `^` and `$` (the text's ends); groups `(…)`, named
+//! groups `(?<name>…)` and `(?P<name>…)`, and non-capturing `(?:…)`; alternation `|`; and `*`,
+//! `+`, `?`, `{n}`, `{n,}`, `{n,m}`, each lazy with a `?` after it. Backreferences and lookaround
+//! cannot match in linear time, so a pattern using them is refused, naming `moddil/regex-backtrack`.
+//!
+//! Not here yet: `re"…"` literals compiled at compile time, with typed captures (`comptime.md`).
+
+pub use mod::matching::{Captures, Match};
+pub use mod::program::{Regex, RegexError};

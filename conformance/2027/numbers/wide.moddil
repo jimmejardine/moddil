@@ -64,3 +64,22 @@ test "the least i128 over -1 traps" {
     let b: i128 = -1;
     a / b;                                  //~ trap
 }
+
+test "literal arithmetic past i128 is done in its type" {
+    let a: u128 = 340282366920938463463374607431768211455 - 1;
+    a                                       // => 340282366920938463463374607431768211454
+    ;
+    let b: u128 = 170141183460469231731687303715884105727 + 1;
+    b                                       // => 170141183460469231731687303715884105728
+    ;
+    let f: f64 = 170141183460469231731687303715884105727 * 4;
+    f > 6.0e38                              // => true
+}
+
+test "literal arithmetic past i128 overflows an i128" {
+    let a: i128 = 170141183460469231731687303715884105727 + 1;      //~ trap
+}
+
+test "literal arithmetic past u128 overflows a u128" {
+    let a: u128 = 340282366920938463463374607431768211455 + 1;      //~ trap
+}

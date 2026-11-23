@@ -1,0 +1,238 @@
+//! Times of day, UTC date-times, and instants as nanoseconds since the Unix epoch (leap seconds
+//! are not counted, as in Unix time), with RFC 3339 text.
+
+use mod::date::{Date, digits, padded};
+
+const NANOS_PER_SECOND: int = 1000000000;
+const SECONDS_PER_DAY: int = 86400;
+
+/// A time of day: hours from 0 to 23, minutes and seconds from 0 to 59, and nanoseconds.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct TimeOfDay {
+    hour: int,
+    minute: int,
+    second: int,
+    nano: int,
+}
+
+impl TimeOfDay {
+    pub fn new(hour: int, minute: int, second: int, nano: int) -> Option<TimeOfDay> {
+        if hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59 {
+            return None;
+        }
+        if nano < 0 || nano >= NANOS_PER_SECOND {
+            return None;
+        }
+        Some(TimeOfDay { hour, minute, second, nano })
+    }
+
+    pub fn midnight() -> TimeOfDay {
+        TimeOfDay { hour: 0, minute: 0, second: 0, nano: 0 }
+    }
+
+    pub fn hour(&self) -> int {
+        self.hour
+    }
+
+    pub fn minute(&self) -> int {
+        self.minute
+    }
+
+    pub fn second(&self) -> int {
+        self.second
+    }
+
+    pub fn nano(&self) -> int {
+        self.nano
+    }
+
+    /// Nanoseconds since midnight.
+    fn nanos_of_day(&self) -> int {
+        ((self.hour * 60 + self.minute) * 60 + self.second) * NANOS_PER_SECOND + self.nano
+    }
+
+    fn from_nanos_of_day(n: int) -> TimeOfDay {
+        let secs = n / NANOS_PER_SECOND;
+        TimeOfDay {
+            hour: secs / 3600,
+            minute: secs / 60 % 60,
+            second: secs % 60,
+            nano: n % NANOS_PER_SECOND,
+        }
+    }
+}
+
+/// `HH:MM:SS`, with as many digits of fraction as the nanoseconds need (none, 3, 6 or 9).
+impl Display for TimeOfDay {
+    fn fmt(&self, out: &mut String) {
+        padded(out, self.hour, 2);
+        out.push(':');
+        padded(out, self.minute, 2);
+        out.push(':');
+        padded(out, self.second, 2);
+        if self.nano != 0 {
+            out.push('.');
+            if self.nano % 1000000 == 0 {
+                padded(out, self.nano / 1000000, 3);
+            } else if self.nano % 1000 == 0 {
+                padded(out, self.nano / 1000, 6);
+            } else {
+                padded(out, self.nano, 9);
+            }
+        }
+    }
+}
+
+/// A date and a time of day, in UTC.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct DateTime {
+    date: Date,
+    time: TimeOfDay,
+}
+
+impl DateTime {
+    pub fn new(date: Date, time: TimeOfDay) -> DateTime {
+        DateTime { date, time }
+    }
+
+    pub fn date(&self) -> Date {
+        self.date
+    }
+
+    pub fn time(&self) -> TimeOfDay {
+        self.time
+    }
+
+    pub fn to_timestamp(&self) -> Timestamp {
+        let days = self.date.days_since_epoch();
+        Timestamp { nanos: days * SECONDS_PER_DAY * NANOS_PER_SECOND + self.time.nanos_of_day() }
+    }
+}
+
+/// RFC 3339 in UTC: `2023-11-14T22:13:20Z`.
+impl Display for DateTime {
+    fn fmt(&self, out: &mut String) {
+        Display::fmt(&self.date, out);
+        out.push('T');
+        Display::fmt(&self.time, out);
+        out.push('Z');
+    }
+}
+
+/// An instant: nanoseconds since 1970-01-01T00:00:00Z, so from 1677 to 2262. Instants order by
+/// time.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct Timestamp {
+    nanos: int,
+}
+
+impl Timestamp {
+    pub fn from_unix_seconds(secs: int) -> Timestamp {
+        Timestamp { nanos: secs * NANOS_PER_SECOND }
+    }
+
+    pub fn from_unix_nanos(nanos: int) -> Timestamp {
+        Timestamp { nanos }
+    }
+
+    /// Whole seconds since the epoch, rounded toward −∞.
+    pub fn unix_seconds(&self) -> int {
+        let s = self.nanos / NANOS_PER_SECOND;
+        if self.nanos % NANOS_PER_SECOND < 0 { s - 1 } else { s }
+    }
+
+    pub fn unix_nanos(&self) -> int {
+        self.nanos
+    }
+
+    /// The instant `d` later.
+    pub fn plus(&self, d: Duration) -> Timestamp {
+        Timestamp { nanos: self.nanos + d.nanos() }
+    }
+
+    /// Nanoseconds from `earlier` to this instant: negative if `earlier` is later.
+    pub fn nanos_since(&self, earlier: &Timestamp) -> int {
+        self.nanos - earlier.nanos
+    }
+
+    pub fn to_date_time(&self) -> DateTime {
+        let per_day = SECONDS_PER_DAY * NANOS_PER_SECOND;
+        let mut days = self.nanos / per_day;
+        let mut rest = self.nanos % per_day;
+        if rest < 0 {
+            days -= 1;
+            rest += per_day;
+        }
+        DateTime {
+            date: Date::from_days_since_epoch(days),
+            time: TimeOfDay::from_nanos_of_day(rest),
+        }
+    }
+
+    /// RFC 3339: `2024-02-29T12:00:00+05:30`, `…Z` or `…z`, with `T`, `t` or a space between,
+    /// and an optional fraction of a second of up to nine digits.
+    pub fn parse(s: &str) -> Option<Timestamp> {
+        if s.len() < 20 {
+            return None;
+        }
+        let date = Date::parse(s.bytes_between(0, 10))?;
+        let sep = s.byte_at(10);
+        if sep != 84 && sep != 116 && sep != 32 {
+            return None;
+        }
+        if s.byte_at(13) != 58 || s.byte_at(16) != 58 {
+            return None;
+        }
+        let (h, m, sec) = (digits(s, 11, 2)?, digits(s, 14, 2)?, digits(s, 17, 2)?);
+        let mut at = 19;
+        let mut nano = 0;
+        if s.byte_at(at) == 46 {
+            at += 1;
+            let mut n = 0;
+            while at < s.len() && s.byte_at(at) >= 48 && s.byte_at(at) <= 57 {
+                if n == 9 {
+                    return None;
+                }
+                let c: int = s.byte_at(at);
+                nano = nano * 10 + (c - 48);
+                n += 1;
+                at += 1;
+            }
+            if n == 0 {
+                return None;
+            }
+            while n < 9 {
+                nano = nano * 10;
+                n += 1;
+            }
+        }
+        let time = TimeOfDay::new(h, m, sec, nano)?;
+        // The offset: UTC, or how far ahead of it the time written is.
+        let offset = if at + 1 == s.len() && (s.byte_at(at) == 90 || s.byte_at(at) == 122) {
+            0
+        } else if at + 6 == s.len() && s.byte_at(at + 3) == 58 {
+            let c: int = s.byte_at(at);
+            let sign = match c {
+                43 => 1,
+                45 => -1,
+                _ => return None,
+            };
+            let (oh, om) = (digits(s, at + 1, 2)?, digits(s, at + 4, 2)?);
+            if oh > 23 || om > 59 {
+                return None;
+            }
+            sign * (oh * 60 + om) * 60
+        } else {
+            return None;
+        };
+        let local = DateTime { date, time }.to_timestamp();
+        Some(Timestamp { nanos: local.nanos - offset * NANOS_PER_SECOND })
+    }
+}
+
+/// RFC 3339 in UTC.
+impl Display for Timestamp {
+    fn fmt(&self, out: &mut String) {
+        Display::fmt(&self.to_date_time(), out);
+    }
+}

@@ -290,7 +290,8 @@ fn passes_everywhere(dir: &str, n: usize) {
 
 #[test]
 fn the_standard_mods_pass_their_tests_everywhere() {
-    for (dir, n) in [
+    // Each project on a thread of its own: they share nothing, and each runs three times.
+    let projects = [
         ("mods/collections/tests", 9),
         ("mods/sync/tests", 2),
         ("mods/rand/tests", 1),
@@ -300,11 +301,16 @@ fn the_standard_mods_pass_their_tests_everywhere() {
         ("mods/crypto/tests", 7),
         ("mods/num/tests", 10),
         ("mods/decimal/tests", 6),
+        ("mods/time/tests", 7),
+        ("mods/regex/tests", 6),
         ("mods/gpu/tests", 2),
         ("examples/mandelbulb/web", 2),
-    ] {
-        passes_everywhere(dir, n);
-    }
+    ];
+    std::thread::scope(|s| {
+        for (dir, n) in projects {
+            s.spawn(move || passes_everywhere(dir, n));
+        }
+    });
 }
 
 #[test]

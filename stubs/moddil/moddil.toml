@@ -15,5 +15,7 @@ runtime = { path = "../../mods/runtime" }
 crypto = { path = "../../mods/crypto" }
 num = { path = "../../mods/num" }
 decimal = { path = "../../mods/decimal" }
+time = { path = "../../mods/time" }
+regex = { path = "../../mods/regex" }
 gpu = { path = "../../mods/gpu" }
 web = { path = "../../mods/web" }

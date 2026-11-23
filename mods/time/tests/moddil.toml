@@ -1,0 +1,6 @@
+[mod]
+name = "time_tests"
+edition = "2027"
+
+[dependencies]
+time = { path = ".." }

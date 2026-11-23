@@ -1029,6 +1029,14 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
   - **`decimal`:** `Fixed<S>`, with the scale as a const parameter, and `BigDecimal`. Every
     rounding uses the prelude's `Round`.
     - `mul`, `div` and `rescale` name their result's scale (`px.mul::<0, 2>(qty, mode)`).
+  - **`time` (written alongside the LSP prototype):** `Date` in the proleptic Gregorian
+    calendar (Hinnant's day algorithms), `Weekday`, `TimeOfDay`, `DateTime` and `Timestamp`,
+    all UTC, with ISO 8601 and RFC 3339 text. Reading a clock (a root capability of the runtime)
+    and time zones are still to come.
+  - **`regex` (likewise):** linear-time matching, as `text.md` decides. A pattern is compiled
+    for a Pike VM and matched leftmost-first, with groups, named groups, `find_all` and
+    `replace_all`. Backreferences and lookaround are refused, naming `moddil/regex-backtrack`.
+    `re"…"` compiled at compile time, with typed captures, is still to come.
   - **TODO:** `Fixed<S>`'s `Clone`, `Copy`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash`,
     `Debug` and `Default` are written by hand (`mods/decimal/src/fixed.moddil`), because
     `#[derive]` does not take a type with const parameters (E0404). Derive them once it does.
@@ -1045,10 +1053,11 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
       (E0204), and so was `i128`'s least value (its magnitude was parsed first). A literal's
       value is now a sign and a `u128` magnitude until it has a type (`ast::IntValue`), and the
       reference interpreter keeps one past `i128` as a literal only a `u128` or a float takes.
-    - **Reference interpreter:** arithmetic on literals that does not fold in `i128`
-      (`i128::MAX + 1`, `u128::MAX - 1`, all literals) panics it. The checker leaves such
-      arithmetic to the type, but the reference interpreter has no types for it. The other
-      three implementations do it at the type.
+    - **Fixed since, mostly:** arithmetic on literals that does not fold in `i128`
+      (`i128::MAX + 1`, `u128::MAX - 1`, all literals) panicked the reference interpreter,
+      which has no types for it. It now does it at the type written for it, in a `let` or a
+      struct field, as the others do. Passed straight as an argument or given as a result, it
+      still panics it: the type is the callee's, known only after the argument is evaluated.
     - **Types:** `Fixed<{S + T}>` (const arithmetic in a type) is not supported yet, nor are the
       exact literals of `numerics.md` (`let p: Fixed<2> = 0.10`).
     - **Prelude:** `Option<&T>` has no `PartialEq`. `[1, 2]` for a `Vec<u8>` types its elements

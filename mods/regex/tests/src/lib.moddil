@@ -1,0 +1,123 @@
+// Matches checked against Python's `re` (the same leftmost-first semantics for these patterns),
+// and Rust's `regex` for empty matches after a match.
+
+use regex::{Match, Regex, RegexError};
+
+fn re(p: &str) -> Regex {
+    Regex::new(p) ?! "the test's patterns compile"
+}
+
+/// Checks the leftmost-first match of `p` in `text` spans bytes `start` to `end`.
+fn finds(p: &str, text: &str, start: int, end: int) {
+    match re(p).find(text) {
+        Some(m) => assert(m.start() == start && m.end() == end),
+        None => assert(false),
+    }
+}
+
+/// Checks group `g` of the match spans `start` to `end` (-1 for a group that did not take part).
+fn check_group(p: &str, text: &str, g: int, start: int, end: int) {
+    let caps = re(p).captures(text) ?! "a match";
+    match caps.get(g) {
+        Some(m) => assert(m.start() == start && m.end() == end),
+        None => assert(start == -1),
+    }
+}
+
+/// Checks `p` is refused, its reason containing `why`.
+fn refused(p: &str, why: &str) {
+    let r = try { Regex::new(p)? };
+    match r {
+        Ok(_) => assert(false),
+        Err(e) => assert(e.reason().contains(why)),
+    }
+}
+
+test "literals, repetition and alternation" {
+    finds("a+b", "xxaaab", 2, 6);
+    finds("colou?r", "the color red", 4, 9);
+    finds("a*?b", "aaab", 0, 4);
+    finds("x{2,3}", "xxxxxxx", 0, 3);
+    finds("x{2}", "axxxb", 1, 3);
+    finds("x{2,}", "axxxxb", 1, 5);
+    finds("cat|dog|bird", "a bird, a dog", 2, 6);
+    assert(re("^\\w+$").is_match("hello_1"));
+    assert(!re("^\\w+$").is_match("hello world"));
+    assert(re("").is_match("anything"));
+}
+
+test "classes" {
+    finds("[^a-c]+", "abcxyzabc", 3, 6);
+    finds("\\s+", "a  b\tc", 1, 3);
+    finds("[0-9a-f]+", "ID: 3fa9z", 4, 8);
+    finds("[\\d.]+", "pi is 3.14!", 6, 10);
+    finds("[-a]+", "b-a-c", 1, 4);
+    finds("[]a]+", "x]a]y", 1, 4);
+    finds("\\D+", "12ab34", 2, 4);
+    // Characters, not bytes: `é` is two bytes.
+    finds("é+", "café é", 3, 5);
+    finds("caf.", "café", 0, 5);
+    assert(!re("a.b").is_match("a\nb"));
+}
+
+test "groups" {
+    let p = "(\\d{4})-(\\d{2})-(\\d{2})";
+    check_group(p, "on 2024-02-29 at", 0, 3, 13);
+    check_group(p, "on 2024-02-29 at", 1, 3, 7);
+    check_group(p, "on 2024-02-29 at", 3, 11, 13);
+    // Leftmost-first: the first alternative that leads to a match, not the longest.
+    check_group("(a|ab)(c|bcd)(d*)", "abcd", 1, 0, 1);
+    check_group("(a|ab)(c|bcd)(d*)", "abcd", 2, 1, 4);
+    check_group("(a|ab)(c|bcd)(d*)", "abcd", 3, 4, 4);
+    check_group("(a)|b", "b", 1, -1, -1);
+    check_group("(?:ab)+(c)", "ababc", 1, 4, 5);
+    let r = re("(?P<k>\\w+)=(?<v>\\w*)");
+    let caps = r.captures("key=value;") ?! "a match";
+    assert(r.group_count() == 3);
+    let v = caps.get(r.group_named("v") ?! "named") ?! "taken part";
+    let text = v.text("key=value;");
+    let text: &str = &text;
+    assert(text == "value");
+    assert(r.group_named("nope").is_none());
+}
+
+test "every match, and replacing them" {
+    let ms = re("\\d+").find_all("a1b22c333");
+    assert(ms.len() == 3);
+    assert(ms[0].start() == 1 && ms[1].start() == 3 && ms[2].start() == 6 && ms[2].end() == 9);
+    let empties = re("x*").find_all("axxb");
+    assert(empties.len() == 3);
+    assert(empties[0].is_empty() && empties[1].start() == 1 && empties[1].end() == 3);
+    assert(empties[2].start() == 4 && empties[2].is_empty());
+    let out = re("\\d+").replace_all("a1b22c333", "#");
+    let out: &str = &out;
+    assert(out == "a#b#c#");
+    let out = re("x*").replace_all("axxb", "-");
+    let out: &str = &out;
+    assert(out == "-a-b-");
+}
+
+test "linear time: a pattern that makes a backtracker exponential" {
+    // (a*)*b against thirty `a`s: a backtracking engine tries 2^30 ways; this runs in step.
+    let mut text = String::new();
+    let mut i = 0;
+    while i < 30 {
+        text.push('a');
+        i += 1;
+    }
+    assert(!re("(a*)*b").is_match(&text));
+    assert(!re("(a|aa)+$b").is_match(&text));
+}
+
+test "patterns this engine refuses" {
+    refused("(a)\\1", "backreference");
+    refused("a(?=b)", "lookahead");
+    refused("(?<=a)b", "lookbehind");
+    refused("(?!a)", "lookahead");
+    refused("a{3,2}", "count");
+    refused("(ab", "`)`");
+    refused("ab)", "`(`");
+    refused("[ab", "`]`");
+    refused("*a", "nothing to repeat");
+    refused("\\q", "unknown escape");
+}

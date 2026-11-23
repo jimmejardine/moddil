@@ -5335,10 +5335,8 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             // What `Display` writes (`text.display.1`), and the quoted text, made in the host.
             (Ty::Int | Ty::Num(_) | Ty::Bool | Ty::Char, "text") | (Ty::Char, "quoted_text") => {
                 let ty = self.operand_ty(&args[0])?;
-                let inner = match &ty {
-                    Ty::Ref(_, t) => (**t).clone(),
-                    t => t.clone(),
-                };
+                // The impl's own type: a refined number's is its base (`Small` is an `int`).
+                let inner = self_ty.clone();
                 let x = match self.operand(&args[0])? {
                     Val::Scalar(p) if matches!(ty, Ty::Ref(..)) => {
                         let at = PlaceRef {

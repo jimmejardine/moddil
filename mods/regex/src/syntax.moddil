@@ -1,0 +1,368 @@
+//! A pattern's syntax tree: nodes in a `Vec`, children by index.
+
+use mod::program::RegexError;
+
+/// What a class matches: a range of characters, or one of the classes `\d`, `\w`, `\s`, each
+/// negated or not.
+#[derive(Clone, Copy, PartialEq)]
+pub enum ClassItem {
+    Range(char, char),
+    Digit(bool),
+    Word(bool),
+    Space(bool),
+}
+
+/// Whether `c` is in the class made of `items` (negated if `negated`).
+pub fn in_class(items: &[ClassItem], negated: bool, c: char) -> bool {
+    let mut found = false;
+    for item in items {
+        let hit = match *item {
+            ClassItem::Range(lo, hi) => c.code() >= lo.code() && c.code() <= hi.code(),
+            ClassItem::Digit(neg) => c.is_numeric() != neg,
+            ClassItem::Word(neg) => (c.is_alphabetic() || c.is_numeric() || c == '_') != neg,
+            ClassItem::Space(neg) => c.is_whitespace() != neg,
+        };
+        if hit {
+            found = true;
+            break;
+        }
+    }
+    found != negated
+}
+
+/// A node of the tree.
+#[derive(Clone)]
+pub enum Node {
+    Empty,
+    Char(char),
+    /// `.`
+    Any,
+    Class(Vec<ClassItem>, bool),
+    /// `^`
+    Start,
+    /// `$`
+    End,
+    /// A group: its child, and its capture's number if it captures.
+    Group(int, int),
+    Concat(Vec<int>),
+    Alt(Vec<int>),
+    /// A repetition: the child, at least `min` and at most `max` times (-1 for no limit), and
+    /// whether it is greedy.
+    Repeat(int, int, int, bool),
+}
+
+/// The most times `{n,m}` may repeat (each copy is compiled out).
+const MAX_REPEAT: int = 1000;
+
+/// A pattern parsed: its nodes (the root last), how many captures it has (the whole match
+/// counted), and the named ones.
+pub struct Parsed {
+    pub nodes: Vec<Node>,
+    pub root: int,
+    pub captures: int,
+    pub names: Vec<(String, int)>,
+}
+
+/// The parser: the pattern as characters, and where it is.
+struct Parser {
+    chars: Vec<char>,
+    at: int,
+    nodes: Vec<Node>,
+    captures: int,
+    names: Vec<(String, int)>,
+}
+
+pub fn parse(pattern: &str) -> Parsed with fail(RegexError) {
+    let mut chars: Vec<char> = Vec::new();
+    for c in pattern.chars() {
+        chars.push(c);
+    }
+    let mut p = Parser { chars, at: 0, nodes: Vec::new(), captures: 1, names: Vec::new() };
+    let root = p.alternation()?;
+    if p.at < p.chars.len() {
+        // Only a `)` stops an alternation early.
+        fail(p.error("a `)` with no `(`"));
+    }
+    Parsed { nodes: p.nodes, root, captures: p.captures, names: p.names }
+}
+
+impl Parser {
+    fn error(&self, reason: &str) -> RegexError {
+        RegexError::new(self.at, reason)
+    }
+
+    fn peek(&self) -> Option<char> {
+        match self.chars.get(self.at) {
+            Some(c) => Some(*c),
+            None => None,
+        }
+    }
+
+    fn eat(&mut self, c: char) -> bool {
+        if self.peek() == Some(c) {
+            self.at += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn add(&mut self, n: Node) -> int {
+        self.nodes.push(n);
+        self.nodes.len() - 1
+    }
+
+    /// `a|b|…`
+    fn alternation(&mut self) -> int with fail(RegexError) {
+        let mut alts: Vec<int> = Vec::new();
+        alts.push(self.concatenation()?);
+        while self.eat('|') {
+            alts.push(self.concatenation()?);
+        }
+        if alts.len() == 1 {
+            return alts[0];
+        }
+        self.add(Node::Alt(alts))
+    }
+
+    /// Repeated atoms, up to a `|`, a `)` or the end.
+    fn concatenation(&mut self) -> int with fail(RegexError) {
+        let mut items: Vec<int> = Vec::new();
+        loop {
+            match self.peek() {
+                None => break,
+                Some(c) => {
+                    if c == '|' || c == ')' {
+                        break;
+                    }
+                }
+            }
+            let atom = self.atom()?;
+            items.push(self.repetition(atom)?);
+        }
+        match items.len() {
+            0 => self.add(Node::Empty),
+            1 => items[0],
+            _ => self.add(Node::Concat(items)),
+        }
+    }
+
+    /// `atom` with the quantifiers after it.
+    fn repetition(&mut self, atom: int) -> int with fail(RegexError) {
+        let mut node = atom;
+        loop {
+            let (min, max) = if self.eat('*') {
+                (0, -1)
+            } else if self.eat('+') {
+                (1, -1)
+            } else if self.eat('?') {
+                (0, 1)
+            } else if self.peek() == Some('{') {
+                self.at += 1;
+                self.counts()?
+            } else {
+                break;
+            };
+            match &self.nodes[node] {
+                Node::Start | Node::End | Node::Empty => fail(self.error("nothing to repeat")),
+                _ => {}
+            }
+            let greedy = !self.eat('?');
+            node = self.add(Node::Repeat(node, min, max, greedy));
+        }
+        node
+    }
+
+    /// `n}`, `n,}` or `n,m}`, after the `{`.
+    fn counts(&mut self) -> (int, int) with fail(RegexError) {
+        let min = self.number()?;
+        let max = if self.eat(',') {
+            if self.peek() == Some('}') { -1 } else { self.number()? }
+        } else {
+            min
+        };
+        if !self.eat('}') {
+            fail(self.error("a `{` repetition without its `}`"));
+        }
+        if min > MAX_REPEAT || max > MAX_REPEAT || (max >= 0 && max < min) {
+            fail(self.error("a repetition count out of range (at most 1000, the least first)"));
+        }
+        (min, max)
+    }
+
+    fn number(&mut self) -> int with fail(RegexError) {
+        let mut n = 0;
+        let mut digits = 0;
+        while let Some(c) = self.peek() {
+            if c < '0' || c > '9' {
+                break;
+            }
+            if n <= MAX_REPEAT {
+                n = n * 10 + (c.code() - 48);
+            }
+            digits += 1;
+            self.at += 1;
+        }
+        if digits == 0 {
+            fail(self.error("a repetition count"));
+        }
+        n
+    }
+
+    fn atom(&mut self) -> int with fail(RegexError) {
+        let c = self.peek() ?! "an atom starts at a character";
+        self.at += 1;
+        match c {
+            '.' => self.add(Node::Any),
+            '^' => self.add(Node::Start),
+            '$' => self.add(Node::End),
+            '[' => self.class()?,
+            '(' => self.group()?,
+            '\\' => {
+                let node = self.escape(false)?;
+                self.add(node)
+            }
+            '*' | '+' | '?' | '{' => fail(self.error("nothing to repeat")),
+            c => self.add(Node::Char(c)),
+        }
+    }
+
+    /// A group, after its `(`.
+    fn group(&mut self) -> int with fail(RegexError) {
+        let mut capture = -1;
+        if self.eat('?') {
+            if self.eat(':') {
+                // Non-capturing.
+            } else if self.eat('<') || (self.eat('P') && self.eat('<')) {
+                match self.peek() {
+                    Some(c) => {
+                        if c == '=' || c == '!' {
+                            fail(self.backtracking("lookbehind"));
+                        }
+                    }
+                    None => {}
+                }
+                let mut name = String::new();
+                while let Some(c) = self.peek() {
+                    if c == '>' {
+                        break;
+                    }
+                    if !(c.is_alphabetic() || c.is_numeric() || c == '_') {
+                        fail(self.error("a group name of letters, digits and `_`"));
+                    }
+                    name.push(c);
+                    self.at += 1;
+                }
+                if !self.eat('>') || name.is_empty() {
+                    fail(self.error("a group name in `<…>`"));
+                }
+                capture = self.captures;
+                self.names.push((name, capture));
+                self.captures += 1;
+            } else if self.peek() == Some('=') || self.peek() == Some('!') {
+                fail(self.backtracking("lookahead"));
+            } else {
+                fail(self.error("an unknown group: `(?:…)`, `(?<name>…)` or `(?P<name>…)`"));
+            }
+        } else {
+            capture = self.captures;
+            self.captures += 1;
+        }
+        let inner = self.alternation()?;
+        if !self.eat(')') {
+            fail(self.error("a `(` with no `)`"));
+        }
+        self.add(Node::Group(inner, capture))
+    }
+
+    /// An error for syntax only a backtracking engine can match.
+    fn backtracking(&self, what: &str) -> RegexError {
+        let reason = fmt"{what} cannot be matched in linear time: use `moddil/regex-backtrack`";
+        RegexError::new(self.at, &reason)
+    }
+
+    /// An escape, after its `\`: in a class (`in_class`) a class item, else a node.
+    fn escape(&mut self, in_class: bool) -> Node with fail(RegexError) {
+        let c = match self.peek() {
+            Some(c) => c,
+            None => fail(self.error("a `\\` at the end")),
+        };
+        self.at += 1;
+        match c {
+            'd' => Node::Class([ClassItem::Digit(false)], false),
+            'D' => Node::Class([ClassItem::Digit(true)], false),
+            'w' => Node::Class([ClassItem::Word(false)], false),
+            'W' => Node::Class([ClassItem::Word(true)], false),
+            's' => Node::Class([ClassItem::Space(false)], false),
+            'S' => Node::Class([ClassItem::Space(true)], false),
+            'n' => Node::Char('\n'),
+            't' => Node::Char('\t'),
+            'r' => Node::Char('\r'),
+            '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' if !in_class => {
+                fail(self.backtracking("a backreference"))
+            }
+            c => {
+                if c.is_alphabetic() || c.is_numeric() {
+                    fail(self.error("an unknown escape"));
+                }
+                Node::Char(c)
+            }
+        }
+    }
+
+    /// A class, after its `[`.
+    fn class(&mut self) -> int with fail(RegexError) {
+        let negated = self.eat('^');
+        let mut items: Vec<ClassItem> = Vec::new();
+        let mut first = true;
+        loop {
+            let c = match self.peek() {
+                Some(c) => c,
+                None => fail(self.error("a `[` with no `]`")),
+            };
+            if c == ']' && !first {
+                self.at += 1;
+                break;
+            }
+            first = false;
+            self.at += 1;
+            let lo = if c == '\\' {
+                match self.escape(true)? {
+                    Node::Char(x) => x,
+                    Node::Class(inner, _) => {
+                        for item in inner.iter() {
+                            items.push(*item);
+                        }
+                        continue;
+                    }
+                    _ => fail(self.error("an escape that is not a character")),
+                }
+            } else {
+                c
+            };
+            // A range, unless the `-` is last.
+            if self.peek() == Some('-') && self.chars.get(self.at + 1).is_some()
+                && self.chars[self.at + 1] != ']'
+            {
+                self.at += 1;
+                let h = self.peek() ?! "checked";
+                self.at += 1;
+                let hi = if h == '\\' {
+                    match self.escape(true)? {
+                        Node::Char(x) => x,
+                        _ => fail(self.error("a range ending in a class")),
+                    }
+                } else {
+                    h
+                };
+                if hi.code() < lo.code() {
+                    fail(self.error("a range whose end comes before its start"));
+                }
+                items.push(ClassItem::Range(lo, hi));
+            } else {
+                items.push(ClassItem::Range(lo, lo));
+            }
+        }
+        self.add(Node::Class(items, negated))
+    }
+}
