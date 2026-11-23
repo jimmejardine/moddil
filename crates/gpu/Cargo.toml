@@ -1,0 +1,17 @@
+[package]
+name = "moddil-gpu"
+description = "Lowers Moddil kernels (#[kernel]) to naga's IR, validates them, and writes WGSL."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+moddil-sema.workspace = true
+moddil-mir.workspace = true
+naga.workspace = true
+
+[lints]
+workspace = true

@@ -33,8 +33,8 @@ pub use run::{
     send_now, set_host, set_os, set_trap_text, spawn, stop, stop_requested, timer, yield_now,
 };
 pub use run::{
-    os_arg_copy, os_arg_count, os_arg_len, os_channel, os_close, os_connect, os_listen, os_random,
-    os_send, os_take, os_write_stderr,
+    gpu_dispatch, gpu_frame, os_arg_copy, os_arg_count, os_arg_len, os_channel, os_close,
+    os_connect, os_listen, os_random, os_send, os_take, os_write_stderr,
 };
 
 /// How many calls deep a run may go, the frame it starts in included: as the MIR interpreter's
@@ -435,6 +435,8 @@ pub fn symbols() -> Vec<(&'static str, *const u8)> {
         ("moddil_rt_os_arg_copy", os_arg_copy as *const u8),
         ("moddil_rt_os_write_stderr", os_write_stderr as *const u8),
         ("moddil_rt_os_random", os_random as *const u8),
+        ("moddil_rt_gpu_dispatch", gpu_dispatch as *const u8),
+        ("moddil_rt_gpu_frame", gpu_frame as *const u8),
         ("moddil_rt_os_listen", os_listen as *const u8),
         ("moddil_rt_os_connect", os_connect as *const u8),
         ("moddil_rt_os_channel", os_channel as *const u8),

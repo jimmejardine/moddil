@@ -243,6 +243,9 @@ impl Machine<'_> {
         if f.module as usize == self.program.core_os {
             return Ok(self.no_os(&name, args));
         }
+        if f.module as usize == self.program.core_gpu {
+            return Ok(self.no_gpu(&name, args));
+        }
         if let Some(r) = self.task_intrinsic(&name, head, args, range) {
             return r;
         }

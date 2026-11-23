@@ -1052,8 +1052,46 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
       `for x in &d`.
     - **Borrows:** `self.f(self.x)` with `&mut self` is refused, as there are no two-phase
       borrows. `let x;` without an initialiser is not supported yet.
-- **Next:** the rest of M2: the LSP prototype and the first GPU path, and the standard mods the
-  tour does not reach.
+- **Slice M2e (decided November 2026): the first GPU path, Mandelbulb flight in a browser.**
+  `moddil build --wasm examples/mandelbulb/web` writes a page that flies through the fractal: the
+  kernel is Moddil, lowered to WGSL, and runs on WebGPU.
+  - **`#[kernel]`** (`gpu.kernel.1`, E0221): a free function `fn k(params: &P, out: &mut Tile)`
+    in the kernel effect set (no handlers, errors, suspension or spawning). Named as a value, it
+    is a closure that calls it, so the CPU simulator calls it as any function.
+  - **`moddil-gpu`:** a kernel's MIR, and that of each function it calls, specialised, is
+    lowered to naga's IR, validated by naga, and written as WGSL.
+    - Each body is a loop over a switch on its current block, so any control flow is structured.
+    - A borrow is passed as the value it borrows (kernel code only reads through shared
+      borrows); the tile is its position, and `Tile::set` writes the image's pixel.
+    - The parameters reach the GPU as their bytes in Moddil's own layout, decoded by the entry
+      point, so no second layout can disagree.
+  - **`core::gpu`** (`gpu.1`, `gpu.cap.1`, `gpu.test.1`): `source` (the WGSL, embedded by native
+    and WASM code as text), `bytes`, `dispatch` and `frame`. A browser run of `main` has WebGPU
+    and the window (the glue's host functions, suspending through JSPI); elsewhere a dispatch
+    gives false and a frame asks to stop. The interpreters have no GPU.
+  - **`mods/gpu`:** `Rgba8`, `Tile`, `Image`, the `Gpu` effect, the CPU `simulator()`, the root
+    capability `GpuRoot`, and `launch`, which runs a kernel on the GPU or, failing that, tile by
+    tile on the CPU. **`mods/web`:** the root capability `Window`, whose `next_frame()` gives each
+    animation frame's input and size.
+  - **The example's `web/`:** a `main(gpu: GpuRoot, window: Window)` frame loop over the pure
+    `mandelbulb` mod, with WASD and the mouse.
+  - **Checked:**
+    - golden images on the CPU simulator, everywhere;
+    - the kernel lowers to WGSL that naga validates (`crates/moddil/tests/gpu.rs`);
+    - headless Chrome, on SwiftShader's WebGPU, draws the first frame on the GPU, and lights the
+      same 302 pixels as the simulator, with brightness within 2% (`crates/moddil/tests/web.rs`);
+    - conformance for `#[kernel]` and `core::gpu`.
+  - **Interim limits:**
+    - `int` is 32 bits on the GPU, and a kernel's traps (overflow, a failed `?!`) are not
+      checked there;
+    - no arrays, slices, closures, `dyn` or text in a kernel yet;
+    - `launch` returns once the GPU is done (it is the fence): `scope`'s `s.launch` comes later;
+    - `Tile` is 8 x 8 `Rgba8`, not generic;
+    - the browser program is a `main` that awaits frames, not an exported `Flight` that the page
+      drives (`#[export]` and `moddil bind` come later), and the page is plain, not the Svelte app;
+    - each frame's pixels are read back and drawn on a 2D canvas, rather than staying on the GPU;
+    - E0221 recognises the tile by its type's name, `Tile`.
+- **Next:** the rest of M2: the LSP prototype, and the standard mods the tour does not reach.
 
 ## Staging: distributed programs
 

@@ -1,0 +1,36 @@
+// covers: gpu.kernel.1, gpu.cap.1
+
+struct Tile {
+    x: int,
+    y: int,
+}
+
+#[kernel]                                   //~ E0221
+fn one_parameter(p: &int) {}
+
+#[kernel]                                   //~ E0221
+fn gives_a_value(p: &int, out: &mut Tile) -> int {
+    *p + out.x
+}
+
+#[kernel]                                   //~ E0221
+fn takes_the_tile_shared(p: &int, out: &Tile) {}
+
+#[kernel]                                   //~ E0221
+fn suspends(p: &int, out: &mut Tile) with suspend {}
+
+trait Shade {
+    fn shade(&self) -> int;
+}
+
+#[kernel]                                   //~ E0221
+fn needs_a_handler(p: &int, out: &mut Tile) with s: Shade {}
+
+#[kernel]
+fn draws(p: &int, out: &mut Tile) {
+    out.x = *p;
+}
+
+fn source() -> int {
+    core::gpu::source(&draws).len()         //~ E0220
+}

@@ -1,0 +1,4 @@
+[mod]
+name = "cap"
+edition = "2027"
+capabilities = ["os"]

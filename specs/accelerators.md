@@ -247,6 +247,23 @@ fallback otherwise.
   tensor-core accumulation order), it documents a tolerance; those paths perform `nondet`
   ([`determinism.md`: The `nondet` effect](determinism.md#the-nondet-effect)).
 
+## As built (M2e)
+
+The first GPU path ([`roadmap.md`](roadmap.md), slice M2e; reference `gpu.md`), built for
+[Mandelbulb flight](examples/mandelbulb.md). It is a small part of this design:
+- **Tile kernels only**, as `#[kernel] fn k(params: &P, out: &mut Tile)`, with the kernel effect
+  set checked (E0221). The tile is a fixed 8 x 8 of RGBA8 pixels (`mods/gpu`), not a generic tile.
+- **WGSL through naga** (the `moddil-gpu` crate): the kernel's MIR and its callees, specialised, are
+  built as naga IR, validated, and written as WGSL. `int` is 32 bits on the GPU, and a kernel's
+  traps are not checked there yet.
+- **One device kind, WebGPU in a browser**, reached through the `Gpu` effect (`GpuRoot`); the CPU
+  simulator (`simulator()`) runs the same kernel tile by tile, and is what tests and native runs
+  use. There are no device sets, roles, buffers or transfers yet.
+- **`gpu::launch` returns once the kernel has run**, so it is its own fence; launches as child tasks
+  of a scope (`s.launch`), with joins, come later.
+- **Parameters cross as bytes in Moddil's own layout**, decoded by the generated entry point, so the
+  host and the kernel cannot disagree about a layout.
+
 ## Errors
 
 Following [`error-handling.md`](error-handling.md):

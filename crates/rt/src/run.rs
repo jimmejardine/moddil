@@ -612,6 +612,64 @@ pub extern "C" fn os_random() -> u64 {
     }
 }
 
+/// `core::gpu::dispatch` (`gpu.1`): kernel `source` (`sn` bytes at `sp`) with the `pn` bytes of
+/// parameters at `pp`, over a `width` by `height` image, its `on` pixels at `op`; 1 if it ran.
+/// Only a run of `main` has a GPU, and only in a browser: a test's never does, so it replays.
+///
+/// # Safety
+///
+/// Each pointer points to as many bytes (or, for `op`, words) as its length says.
+#[allow(unsafe_code, clippy::too_many_arguments)]
+#[unsafe(export_name = "moddil_rt_gpu_dispatch")]
+pub unsafe extern "C" fn gpu_dispatch(
+    sp: *const u8,
+    sn: u64,
+    pp: *const u8,
+    pn: u64,
+    width: u64,
+    height: u64,
+    op: *mut u32,
+    on: u64,
+    present: u8,
+) -> u8 {
+    if !with(|s| s.sched.os().is_some()) {
+        return 0;
+    }
+    // SAFETY: as the caller promises.
+    let (source, params, out) = unsafe {
+        (
+            std::str::from_utf8_unchecked(std::slice::from_raw_parts(sp, sn as usize)),
+            std::slice::from_raw_parts(pp, pn as usize),
+            std::slice::from_raw_parts_mut(op, on as usize),
+        )
+    };
+    u8::from(crate::os::gpu_dispatch(
+        source,
+        params,
+        width as i64,
+        height as i64,
+        out,
+        present != 0,
+    ))
+}
+
+/// `core::gpu::frame` (`gpu.1`): the next frame's 8 words into `out`. Outside a run of `main`
+/// (a test) there is no window, so the frame asks to stop.
+///
+/// # Safety
+///
+/// `out` points to 8 writable words.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_gpu_frame")]
+pub unsafe extern "C" fn gpu_frame(out: *mut i64) {
+    let mut words = [0, 0, 0, 0, 0, 0, 0, 1];
+    if with(|s| s.sched.os().is_some()) {
+        crate::os::gpu_frame(&mut words);
+    }
+    // SAFETY: as the caller promises.
+    unsafe { std::ptr::copy_nonoverlapping(words.as_ptr(), out, 8) };
+}
+
 /// `core::os::listen`: a listener's handle, or -1.
 #[unsafe(export_name = "moddil_rt_os_listen")]
 pub extern "C" fn os_listen(port: u64) -> u64 {

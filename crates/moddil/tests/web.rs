@@ -250,3 +250,84 @@ fn a_built_program_runs_in_a_browser() {
     assert!(dom.contains("data-exit=\"3\""), "{dom}");
     assert!(dom.contains("[info] fib(20) is 6765"), "{dom}");
 }
+
+/// The Mandelbulb example (`examples/mandelbulb/web`) in a browser: its first frame, drawn by
+/// the kernel lowered to WGSL on WebGPU (SwiftShader's, in a headless Chrome), lights the pixels
+/// the CPU simulator's golden test does, within a tolerance for the GPU's own arithmetic.
+#[test]
+fn the_mandelbulb_flies_on_webgpu_in_a_browser() {
+    let Some(chrome) = chrome() else {
+        eprintln!("skipped: no Chrome to run the page in");
+        return;
+    };
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("web")
+        .join("flight");
+    std::fs::create_dir_all(&dir).expect("a temporary directory");
+    let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/mandelbulb/web");
+    let out = Command::new(env!("CARGO_BIN_EXE_moddil"))
+        .args(["build", "--wasm"])
+        .arg(&example)
+        .arg("-o")
+        .arg(dir.join("flight.mjs"))
+        .output()
+        .expect("moddil runs");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let (port, done) = serve(&dir);
+    let profile = dir.join("chrome-profile");
+    let _ = std::fs::remove_dir_all(&profile);
+    let _browser = Browser(
+        Command::new(chrome)
+            .args([
+                "--headless=new",
+                "--no-first-run",
+                "--no-sandbox",
+                // WebGPU on the CPU, so the test needs no GPU.
+                "--enable-unsafe-webgpu",
+                "--use-webgpu-adapter=swiftshader",
+                // SwiftShader's WebGPU runs over Vulkan, which Linux's Chrome enables on request.
+                "--enable-features=Vulkan",
+            ])
+            .arg(format!("--user-data-dir={}", profile.display()))
+            .arg(format!(
+                "http://127.0.0.1:{port}/flight.html?size=48x24&frames=1"
+            ))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("chrome runs"),
+    );
+    // SwiftShader compiles and runs the kernel on the CPU, slowly when the other tests load it.
+    let dom = done
+        .recv_timeout(Duration::from_secs(300))
+        .expect("the page finishes within 300 s");
+    assert!(dom.contains("data-exit=\"0\""), "{dom}");
+    assert!(
+        dom.contains("data-gpu=\"used\""),
+        "the GPU did not run: {dom}"
+    );
+    // `first frame 48x24: {lit} lit, {sum}`, against the simulator's 302 and 31138.
+    let line = dom
+        .lines()
+        .find_map(|l| {
+            l.split_once("first frame 48x24: ")
+                .map(|(_, r)| r.to_string())
+        })
+        .unwrap_or_else(|| panic!("no first frame: {dom}"));
+    let nums: Vec<i64> = line
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.parse().expect("a number"))
+        .collect();
+    let (lit, sum) = (nums[0], nums[1]);
+    eprintln!("the GPU: {lit} lit, a sum of {sum} (the simulator: 302, 31138)");
+    assert!((lit - 302).abs() <= 6, "{lit} lit, against 302");
+    assert!(
+        (sum - 31138).abs() <= 31138 / 50,
+        "a sum of {sum}, against 31138"
+    );
+}

@@ -925,6 +925,25 @@ impl Machine<'_> {
         }
     }
 
+    /// A function of the `core` mod's `gpu` module, `name`, here, where there is no GPU
+    /// (`gpu.1`): a kernel has no WGSL, a value no bytes, nothing is dispatched, and a frame
+    /// asks to stop.
+    pub(super) fn no_gpu(&mut self, name: &str, args: &[Value]) -> Value {
+        match name {
+            "source" => Value::Ref(self.memory.temp(Value::Str("".into())), false),
+            "bytes" => Value::Ref(self.memory.temp(Value::Array(Vec::new())), false),
+            "dispatch" => Value::Bool(false),
+            "frame" => {
+                if let Value::Ref(p, _) = &args[0] {
+                    let words = (0..8).map(|i| Value::Int(i64::from(i == 7))).collect();
+                    self.memory.store(p, Value::Array(words));
+                }
+                Value::Unit
+            }
+            _ => Value::Unit,
+        }
+    }
+
     /// Selectable function `f`'s receive, by range, and the channel it receives from, read
     /// from its arguments `values`: its body starts with `place.recv()`, `place` a parameter
     /// or a field of one (`task.select.4`).

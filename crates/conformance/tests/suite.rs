@@ -70,6 +70,7 @@ areas!(
     enums,
     errors,
     generics,
+    gpu,
     r#if,
     items,
     iteration,

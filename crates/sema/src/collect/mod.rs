@@ -39,10 +39,11 @@ pub(crate) const PRELUDE: &str = concat!(
     include_str!("../../../../reference/2027/core/cell.moddil"),
     include_str!("../../../../reference/2027/core/atomic.moddil"),
     include_str!("../../../../reference/2027/core/os.moddil"),
+    include_str!("../../../../reference/2027/core/gpu.moddil"),
 );
 
 /// The `core` mod's modules, in [`PRELUDE`]'s order: each one's name and source.
-pub(crate) const CORE_MODULES: [(&str, &str); 5] = [
+pub(crate) const CORE_MODULES: [(&str, &str); 6] = [
     (
         "collections",
         include_str!("../../../../reference/2027/core/collections.moddil"),
@@ -62,6 +63,10 @@ pub(crate) const CORE_MODULES: [(&str, &str); 5] = [
     (
         "os",
         include_str!("../../../../reference/2027/core/os.moddil"),
+    ),
+    (
+        "gpu",
+        include_str!("../../../../reference/2027/core/gpu.moddil"),
     ),
 ];
 
@@ -940,6 +945,7 @@ impl Collector<'_> {
             opaque: Vec::new(),
             opaque_fn: None,
             selectable: false,
+            kernel: false,
             default_arg: false,
             intrinsic: false,
             is_const: !is_new,
@@ -1082,6 +1088,7 @@ impl Collector<'_> {
                     opaque: Vec::new(),
                     opaque_fn: None,
                     selectable: false,
+                    kernel: false,
                     default_arg: true,
                     intrinsic: false,
                     is_const: true,

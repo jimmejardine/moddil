@@ -143,6 +143,26 @@ Initial targets, to be refined:
 
 - The Svelte 5 overlay, through the generated TypeScript bindings. Nothing else.
 
+## As built (M2e)
+
+The first build ([`roadmap.md`](../roadmap.md), slice M2e), `examples/mandelbulb/web`:
+- **The kernel, `render`, is Moddil**, lowered to WGSL, and drawn on WebGPU; the camera, the
+  estimator and the shading are the pure `mandelbulb` mod, shared with the CPU preview.
+- **The program is a `main(gpu: GpuRoot, window: Window)` frame loop**: each animation frame gives
+  the input (WASD, the mouse while dragging or with the pointer locked, the wheel) and the time
+  since the last, which moves the camera and adapts the quality. The page is the plain one
+  `moddil build --wasm` writes, with a full-window canvas.
+- **Tested:** golden images on the CPU simulator, everywhere; and headless Chrome on SwiftShader's
+  WebGPU draws the first frame on the GPU, lighting the simulator's pixels with brightness within
+  2%.
+- **Not yet:**
+  - the exported `Flight` that the page drives, `moddil bind`, and the Svelte overlay (sliders,
+    fps, "copy link");
+  - ambient occlusion, and colour;
+  - keeping each frame on the GPU: its pixels are read back and drawn on a 2D canvas;
+  - a message without WebGPU (it falls back to the CPU simulator, slowly);
+  - the success criteria's measurements.
+
 ## Open questions
 
 - **Deep zoom:** `f32` limits how close the camera can get to the surface. How far do

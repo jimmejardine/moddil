@@ -1,0 +1,45 @@
+use gpu::{Gpu, Image, Rgba8, Tile};
+
+test "a pixel packs red lowest, alpha opaque" {
+    assert(Rgba8::rgb(1.0, 0.0, 0.0).packed() == 4278190335);
+    assert(Rgba8::grey(0.5).packed() & 255 == 128);
+    // Out of range components are clamped.
+    assert(Rgba8::rgb(2.0, -1.0, 0.0) == Rgba8::rgb(1.0, 0.0, 0.0));
+}
+
+/// How far right a pixel is, as its brightness: 0 at the left edge, near 1 at the right.
+struct Ramp {
+    width: int,
+}
+
+fn float(i: int) -> f32 {
+    i.to::<f32>() ?! "a small number"
+}
+
+#[kernel]
+fn ramp(p: &Ramp, out: &mut Tile) {
+    let mut py = 0;
+    while py < 8 {
+        let mut px = 0;
+        while px < 8 {
+            let c = Rgba8::grey(float(out.x + px) / float(p.width));
+            out.set(px, py, c);
+            px += 1;
+        }
+        py += 1;
+    }
+}
+
+test "the simulator runs a kernel over each tile, clipped to the image" {
+    // 10 x 9: tiles overhang the right and bottom edges, which are not drawn.
+    let mut image = Image::new(10, 9);
+    with Gpu = gpu::simulator() {
+        gpu::launch(ramp, &Ramp { width: 10 }, &mut image);
+    }
+    assert(image.pixel(0, 0).packed() & 255 == 0);
+    assert(image.pixel(5, 8).packed() & 255 == 128);
+    assert(image.pixel(9, 4).packed() & 255 == 230);
+    // Each row lights its 9 pixels right of the left edge, 0.1 to 0.9 of 255 rounded: 1150.
+    let (lit, sum) = image.summary();
+    assert(lit == 81 && sum == 9 * 1150);
+}

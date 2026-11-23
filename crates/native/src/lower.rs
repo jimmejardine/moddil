@@ -228,6 +228,12 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
     ("os_take", &['w', 'p', 'w'], Some('w')),
     ("os_send", &['w', 'p', 'w'], Some('b')),
     ("os_close", &['w'], None),
+    (
+        "gpu_dispatch",
+        &['p', 'w', 'p', 'w', 'w', 'w', 'p', 'w', 'b'],
+        Some('b'),
+    ),
+    ("gpu_frame", &['p'], None),
     ("clone_sender", &['w'], None),
     ("drop_sender", &['w'], None),
     ("drop_receiver", &['w', 'p'], Some('b')),
@@ -4857,6 +4863,65 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         Ok((p, n))
     }
 
+    /// A call of the `core` mod's `gpu` module, `name`, into `d` (`gpu.1`): a kernel's WGSL
+    /// (made here, kept as text), a value's bytes, and the runtime's dispatch and frame.
+    fn gpu(
+        &mut self,
+        name: &str,
+        targs: &[Ty],
+        args: &[Operand],
+        d: &PlaceRef,
+    ) -> Result<(), String> {
+        match name {
+            "source" => {
+                let (db, program) = (self.c.db, self.c.program);
+                let k = moddil_gpu::kernel_of(db, program, &targs[0])
+                    .ok_or("`gpu::source` of other than a `#[kernel]` named as a value")?;
+                let layouts = &mut self.c.layouts;
+                let mut offsets = |t: &Ty| match &layouts.of(t).ok()?.shape {
+                    Shape::Fields(fs) => Some(fs.iter().map(|(o, _)| u64::from(*o)).collect()),
+                    _ => None,
+                };
+                let text = moddil_gpu::wgsl(db, program, k, &mut offsets)?;
+                let data = self.c.text_data(&text)?;
+                let gv = self.c.module.declare_data_in_func(data, self.b.func);
+                let ptr = self.ptr();
+                let p = self.b.ins().symbol_value(ptr, gv);
+                let n = self.b.ins().iconst(types::I64, text.len() as i64);
+                let w = self.wide(p, n);
+                self.write(d, Val::Mem(w))
+            }
+            "bytes" => {
+                let size = self.layout(&targs[0])?.size;
+                let p = self.value(&args[0])?;
+                let n = self.b.ins().iconst(types::I64, i64::from(size));
+                let w = self.wide(p, n);
+                self.write(d, Val::Mem(w))
+            }
+            "dispatch" => {
+                let (sp, sn) = self.text(&args[0])?;
+                let (pp, pn) = self.text(&args[1])?;
+                let width = self.value(&args[2])?;
+                let height = self.value(&args[3])?;
+                let (op, on) = self.text(&args[4])?;
+                let present = self.value(&args[5])?;
+                let r = self
+                    .task_call(
+                        "gpu_dispatch",
+                        &[sp, sn, pp, pn, width, height, op, on, present],
+                    )
+                    .expect("a flag");
+                self.write(d, Val::Scalar(r))
+            }
+            "frame" => {
+                let (p, _) = self.text(&args[0])?;
+                self.task_call("gpu_frame", &[p]);
+                Ok(())
+            }
+            _ => Err(format!("the built-in function `gpu::{name}`")),
+        }
+    }
+
     /// A call of the `core` mod's `os` module, `op`, into `d` (`os.1`): the runtime's function
     /// of the same name, with each `&str` and `&[u8]` as its address and length.
     fn os(&mut self, op: &str, args: &[Operand], d: &PlaceRef) -> Result<(), String> {
@@ -4960,6 +5025,10 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         let items = self.c.items;
         if let Some(op) = task_op(items, f) {
             return self.task(op, targs, args, d, range, catch);
+        }
+        let sig = &items.fns[f as usize];
+        if sig.src == Src::Prelude && items.modules[sig.module as usize].path == ["gpu"] {
+            return self.gpu(sig.name.as_str(), targs, args, d);
         }
         let sig = &items.fns[f as usize];
         let self_ty = match sig.container {

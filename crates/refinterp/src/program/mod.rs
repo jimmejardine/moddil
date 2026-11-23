@@ -191,6 +191,8 @@ pub(crate) struct Program {
     mods: Vec<ModEntry>,
     /// The `core` mod's `os` module (`os.1`).
     pub(crate) core_os: usize,
+    /// The `core` mod's `gpu` module (`gpu.1`).
+    pub(crate) core_gpu: usize,
     /// The const items, by key: their initialiser and the module whose names it uses.
     pub(crate) consts: HashMap<String, (ast::Expr, usize)>,
     /// The `type` items, by key (`refine.1`).
@@ -231,6 +233,7 @@ impl Program {
             file_paths: files.iter().map(|f| f.module.clone()).collect(),
             roots: Vec::new(),
             core_os: usize::MAX,
+            core_gpu: usize::MAX,
             sources: std::sync::Arc::new((files.to_vec(), mods.to_vec())),
         };
         for (i, m) in mods.iter().enumerate() {
@@ -285,6 +288,9 @@ impl Program {
             core_modules.push(m);
             if name == "os" {
                 p.core_os = m;
+            }
+            if name == "gpu" {
+                p.core_gpu = m;
             }
         }
         for m in &mut p.mods {

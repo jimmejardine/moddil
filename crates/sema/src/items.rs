@@ -277,6 +277,8 @@ pub struct FnSig {
     pub opaque_fn: Option<Ty>,
     /// Whether it is marked `#[selectable]`: a `select` arm may wait on it (`task.select.3`).
     pub selectable: bool,
+    /// Whether it is marked `#[kernel]`: a GPU kernel, one instance per tile (`gpu.kernel.1`).
+    pub kernel: bool,
     /// Whether it is such a hidden const, whose body is the default written at `node`.
     pub default_arg: bool,
     /// Whether it is the prelude's and built in (`#[intrinsic]`): it has no body, and the
@@ -378,6 +380,7 @@ impl FnSig {
             opaque: Vec::new(),
             opaque_fn: None,
             selectable: false,
+            kernel: false,
             default_arg: false,
             intrinsic: false,
             is_const: false,

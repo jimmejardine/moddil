@@ -1,0 +1,28 @@
+// covers: gpu.1, gpu.test.1
+
+use core::gpu;
+
+struct Tile {
+    x: int,
+    y: int,
+}
+
+struct Params {
+    n: int,
+}
+
+#[kernel]
+fn draws(p: &Params, out: &mut Tile) {
+    out.x = p.n;
+}
+
+test "a test has no GPU and no window" {
+    // The kernel's WGSL is made by a compiler with a GPU back end; a test never dispatches it.
+    let params = Params { n: 1 };
+    let mut out: [u32; 4] = [0; 4];
+    gpu::dispatch(gpu::source(&draws), gpu::bytes(&params), 2, 2, &mut out, false) // => false
+    ;
+    let mut words = [0; 8];
+    gpu::frame(&mut words);
+    words[7]                                // => 1
+}

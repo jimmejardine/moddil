@@ -27,4 +27,4 @@ signal comes. A test's time is virtual (**task.timer.1**).
 
 | Code | Meaning |
 |---|---|
-| E0220 | `core::os` named in a mod without the `os` capability |
+| E0220 | `core::os` (or `core::gpu`, **gpu.cap.1**) named in a mod without the `os` capability |

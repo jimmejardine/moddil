@@ -1,0 +1,6 @@
+[mod]
+name = "gpu_tests"
+edition = "2027"
+
+[dependencies]
+gpu = { path = ".." }

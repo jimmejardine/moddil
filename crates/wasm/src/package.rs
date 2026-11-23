@@ -117,7 +117,8 @@ export async function run({{ error = (s) => console.error(s) }} = {{}}) {{
   }});
   let status;
   try {{
-    status = await p.run(0);
+    // A run of `main`, with the OS (`os.1`): its arguments, and in a page its GPU and window.
+    status = await p.runMain(0, inNode ? process.argv.slice(2) : []);
   }} catch (e) {{
     error(`the run stopped: ${{e}}`);
     return TRAPPED;

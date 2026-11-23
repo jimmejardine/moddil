@@ -99,6 +99,16 @@ mod native {
         moddil_os::random()
     }
 
+    /// No GPU natively yet (`gpu.1`): nothing is dispatched.
+    pub(crate) fn gpu_dispatch(_: &str, _: &[u8], _: i64, _: i64, _: &mut [u32], _: bool) -> bool {
+        false
+    }
+
+    /// No window natively: a frame asks to stop (`gpu.1`).
+    pub(crate) fn gpu_frame(out: &mut [i64; 8]) {
+        *out = [0, 0, 0, 0, 0, 0, 0, 1];
+    }
+
     pub(crate) fn write_stderr(text: &str) {
         moddil_os::write_stderr(text);
     }
@@ -131,6 +141,23 @@ mod host {
         /// Event `i` of the last poll: its kind (0 accepted, 1 data, 2 ended, 3 signal) and
         /// its two numbers.
         fn moddil_host_os_event(i: u32, out: *mut f64) -> u32;
+        /// Runs a kernel (`gpu.1`): WGSL `source`, `params`, over a `width` by `height` image
+        /// whose pixels it writes to `out` (and, if `present`, shows); suspends (JSPI) until it
+        /// has. 1 if it could.
+        fn moddil_host_gpu_dispatch(
+            source: *const u8,
+            source_len: u32,
+            params: *const u8,
+            params_len: u32,
+            width: u32,
+            height: u32,
+            out: *mut u32,
+            out_len: u32,
+            present: u32,
+        ) -> u32;
+        /// Waits for the next animation frame (JSPI), then writes its 8 words to `out`
+        /// (`gpu.1`).
+        fn moddil_host_gpu_frame(out: *mut i64);
     }
 
     /// The OS: the host's.
@@ -249,9 +276,41 @@ mod host {
         // SAFETY: the text lives across the call.
         unsafe { moddil_host_os_write_stderr(text.as_ptr(), text.len() as u32) }
     }
+
+    #[allow(unsafe_code)]
+    pub(crate) fn gpu_dispatch(
+        source: &str,
+        params: &[u8],
+        width: i64,
+        height: i64,
+        out: &mut [u32],
+        present: bool,
+    ) -> bool {
+        // SAFETY: each buffer lives across the call, and the host writes at most `out.len()`
+        // words.
+        unsafe {
+            moddil_host_gpu_dispatch(
+                source.as_ptr(),
+                source.len() as u32,
+                params.as_ptr(),
+                params.len() as u32,
+                width as u32,
+                height as u32,
+                out.as_mut_ptr(),
+                out.len() as u32,
+                u32::from(present),
+            ) != 0
+        }
+    }
+
+    #[allow(unsafe_code)]
+    pub(crate) fn gpu_frame(out: &mut [i64; 8]) {
+        // SAFETY: the host writes 8 words.
+        unsafe { moddil_host_gpu_frame(out.as_mut_ptr()) }
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
-pub(crate) use host::{Os, Start, random, write_stderr};
+pub(crate) use host::{Os, Start, gpu_dispatch, gpu_frame, random, write_stderr};
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) use native::{Os, Start, random, write_stderr};
+pub(crate) use native::{Os, Start, gpu_dispatch, gpu_frame, random, write_stderr};

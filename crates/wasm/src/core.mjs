@@ -178,6 +178,164 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
   };
   const promising = jspi && (L.tasks || promisingAlways);
 
+  // The GPU and the window a run of `main` has in a browser (`gpu.1`): WebGPU, a canvas the
+  // image is shown on, and the page's keyboard and mouse. Without WebGPU a dispatch says it
+  // could not (so `gpu::launch` runs the kernel on the CPU simulator); outside a page, a frame
+  // asks the program to stop. A page's `?size=WxH` fixes the image's size, and `?frames=N`
+  // stops the program after N frames (as the browser test does).
+  const page = typeof document !== 'undefined';
+  const query = page ? new URLSearchParams(location.search) : null;
+  const screen = {
+    device: undefined,
+    pipelines: new Map(),
+    canvas: null,
+    keys: 0,
+    dx: 0,
+    dy: 0,
+    wheel: 0,
+    last: null,
+    frames: 0,
+  };
+  const KEYS = { KeyW: 1, KeyA: 2, KeyS: 4, KeyD: 8, KeyQ: 16, KeyE: 32 };
+  // The canvas, made (with the input's listeners) the first time it is needed.
+  const canvas = () => {
+    if (screen.canvas) return screen.canvas;
+    const c = document.createElement('canvas');
+    c.id = 'screen';
+    c.style.cssText =
+      'position:fixed;inset:0;width:100vw;height:100vh;image-rendering:pixelated;z-index:-1';
+    document.body.prepend(c);
+    addEventListener('keydown', (e) => {
+      screen.keys |= KEYS[e.code] ?? 0;
+    });
+    addEventListener('keyup', (e) => {
+      screen.keys &= ~(KEYS[e.code] ?? 0);
+    });
+    c.addEventListener('click', () => c.requestPointerLock?.());
+    addEventListener('mousemove', (e) => {
+      if (document.pointerLockElement !== c && !(e.buttons & 1)) return;
+      screen.dx += e.movementX;
+      screen.dy += e.movementY;
+    });
+    addEventListener('wheel', (e) => {
+      screen.wheel += Math.sign(e.deltaY);
+    });
+    screen.canvas = c;
+    return c;
+  };
+  // The image's size: the page's `?size=WxH`, or half the window's (a GPU's worth of pixels).
+  const imageSize = () => {
+    const m = /^(\d+)x(\d+)$/.exec(query.get('size') ?? '');
+    if (m) return [Number(m[1]), Number(m[2])];
+    return [Math.max(8, Math.ceil(innerWidth / 2)), Math.max(8, Math.ceil(innerHeight / 2))];
+  };
+  const device = async () => {
+    if (screen.device !== undefined) return screen.device;
+    screen.device = null;
+    try {
+      const adapter = await navigator.gpu?.requestAdapter();
+      if (adapter) screen.device = await adapter.requestDevice();
+    } catch {
+      screen.device = null;
+    }
+    return screen.device;
+  };
+  // Shows `pixels` (RGBA8, red lowest) on the canvas.
+  const present = (pixels, width, height) => {
+    const c = canvas();
+    if (c.width !== width || c.height !== height) {
+      c.width = width;
+      c.height = height;
+    }
+    const rgba = new Uint8ClampedArray(pixels.buffer, pixels.byteOffset, width * height * 4);
+    c.getContext('2d').putImageData(new ImageData(rgba, width, height), 0, 0);
+  };
+  // Runs the kernel `source` over a `width` x `height` image: one invocation per 8 x 8 tile, 64
+  // to a workgroup; its pixels are read back into `out` (and shown, if `show`). 1 if it ran.
+  const dispatch = async (sp, sn, pp, pn, width, height, op, on, show) => {
+    const d = page ? await device() : null;
+    if (!d) return 0;
+    try {
+      const source = text(sp >>> 0, sn >>> 0);
+      let pipeline = screen.pipelines.get(source);
+      if (!pipeline) {
+        const module = d.createShaderModule({ code: source });
+        pipeline = d.createComputePipeline({
+          layout: 'auto',
+          compute: { module, entryPoint: 'main' },
+        });
+        screen.pipelines.set(source, pipeline);
+      }
+      const words = on >>> 0;
+      const buffer = (data, usage) => {
+        const b = d.createBuffer({
+          size: Math.max(16, Math.ceil(data.byteLength / 4) * 4),
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | usage,
+        });
+        const padded = new Uint8Array(Math.ceil(data.byteLength / 4) * 4);
+        padded.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+        d.queue.writeBuffer(b, 0, padded);
+        return b;
+      };
+      const params = buffer(bytes(pp >>> 0, pn >>> 0), 0);
+      const size = buffer(new Uint32Array([width, height]), 0);
+      const pixels = d.createBuffer({
+        size: Math.max(16, words * 4),
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+      });
+      const read = d.createBuffer({
+        size: Math.max(16, words * 4),
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+      });
+      const group = d.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [params, pixels, size].map((b, i) => ({ binding: i, resource: { buffer: b } })),
+      });
+      const tiles = Math.ceil(width / 8) * Math.ceil(height / 8);
+      const enc = d.createCommandEncoder();
+      const pass = enc.beginComputePass();
+      pass.setPipeline(pipeline);
+      pass.setBindGroup(0, group);
+      pass.dispatchWorkgroups(Math.max(1, Math.ceil(tiles / 64)));
+      pass.end();
+      enc.copyBufferToBuffer(pixels, 0, read, 0, Math.max(16, words * 4));
+      d.queue.submit([enc.finish()]);
+      await read.mapAsync(GPUMapMode.READ);
+      const got = new Uint32Array(read.getMappedRange().slice(0, words * 4));
+      read.unmap();
+      for (const b of [params, size, pixels, read]) b.destroy();
+      new Uint32Array(memory.buffer, op >>> 0, words).set(got);
+      if (show) present(got, width, height);
+      // For a test (and anyone curious): the GPU drew a frame.
+      document.body.dataset.gpu = 'used';
+      return 1;
+    } catch (e) {
+      console.error('the GPU could not run the kernel:', e);
+      return 0;
+    }
+  };
+  // Waits for the next animation frame, then writes its 8 words to `out`: the microseconds
+  // since the last frame, the image's size, the keys held, the mouse's and wheel's movement,
+  // and whether to stop.
+  const frame = async (out) => {
+    const words = [0, 0, 0, 0, 0, 0, 0, 1];
+    if (page) {
+      canvas();
+      const now = await new Promise((r) => requestAnimationFrame(r));
+      const dt = screen.last === null ? 0 : Math.round((now - screen.last) * 1000);
+      screen.last = now;
+      screen.frames += 1;
+      const limit = Number(query.get('frames') ?? 0);
+      const [w, h] = imageSize();
+      words.splice(0, 8, dt, w, h, screen.keys, screen.dx, screen.dy, screen.wheel, 0);
+      if (limit > 0 && screen.frames > limit) words[7] = 1;
+      screen.dx = 0;
+      screen.dy = 0;
+      screen.wheel = 0;
+    }
+    new BigInt64Array(memory.buffer, out >>> 0, 8).set(words.map(BigInt));
+  };
+
   let rt = null;
   let prog = null;
   let callTask = null;
@@ -261,6 +419,10 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
       : () => {
           throw new Error('the OS needs JSPI');
         },
+    moddil_host_gpu_dispatch: jspi ? new WebAssembly.Suspending(dispatch) : () => 0,
+    moddil_host_gpu_frame: jspi
+      ? new WebAssembly.Suspending(frame)
+      : (out) => new BigInt64Array(memory.buffer, out >>> 0, 8).set([0n, 0n, 0n, 0n, 0n, 0n, 0n, 1n]),
   };
   const shimI = await WebAssembly.instantiate(shim, { env: { table } });
   const rtI = await WebAssembly.instantiate(runtime, {

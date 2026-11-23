@@ -1,0 +1,159 @@
+//! GPU kernels (`accelerators.md`): images of RGBA8 pixels, the tiles a kernel draws, the `Gpu`
+//! effect, and `launch`, which runs a `#[kernel]` over an image on the GPU, or on the CPU
+//! simulator where there is none. The simulator runs the same kernel, tile by tile, so an image is
+//! the same on every machine with no GPU.
+
+use core::gpu as sys;
+
+/// A pixel: red, green, blue and alpha, a byte each, packed into a `u32` with red lowest.
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub struct Rgba8 {
+    packed: u32,
+}
+
+impl Rgba8 {
+    /// A grey of brightness `v`, from 0 (black) to 1 (white), clamped.
+    pub fn grey(v: f32) -> Rgba8 {
+        let b = byte(v);
+        Rgba8 { packed: b | (b << 8) | (b << 16) | (255 << 24) }
+    }
+
+    /// The colour with these components, each from 0 to 1, clamped.
+    pub fn rgb(r: f32, g: f32, b: f32) -> Rgba8 {
+        Rgba8 { packed: byte(r) | (byte(g) << 8) | (byte(b) << 16) | (255 << 24) }
+    }
+
+    pub fn packed(&self) -> u32 {
+        self.packed
+    }
+}
+
+/// `v`, clamped to [0, 1], as a byte from 0 to 255.
+fn byte(v: f32) -> u32 {
+    let c = (v.clamp(0.0, 1.0) * 255.0 + 0.5).floor();
+    c.to::<u32>() ?! "a whole number from 0 to 255"
+}
+
+/// The 8 x 8 pixels one kernel instance draws: the tile at (`x`, `y`) of the image.
+pub struct Tile {
+    /// The tile's top left pixel in the image.
+    pub x: int,
+    pub y: int,
+    pixels: [u32; 64],
+}
+
+impl Tile {
+    /// Sets pixel (`px`, `py`) of the tile, each from 0 to 7.
+    pub fn set(&mut self, px: int, py: int, c: Rgba8) {
+        self.pixels[py * 8 + px] = c.packed;
+    }
+}
+
+/// An image: `width` x `height` pixels, row by row.
+pub struct Image {
+    width: int,
+    height: int,
+    pixels: Vec<u32>,
+}
+
+impl Image {
+    /// A black image of `width` x `height` pixels.
+    pub fn new(width: int, height: int) -> Image {
+        let mut pixels = Vec::with_capacity(width * height);
+        let mut i = 0;
+        while i < width * height {
+            pixels.push(0);
+            i += 1;
+        }
+        Image { width, height, pixels }
+    }
+
+    pub fn width(&self) -> int {
+        self.width
+    }
+
+    pub fn height(&self) -> int {
+        self.height
+    }
+
+    /// Pixel (`x`, `y`).
+    pub fn pixel(&self, x: int, y: int) -> Rgba8 {
+        Rgba8 { packed: self.pixels[y * self.width + x] }
+    }
+
+    /// A summary for comparing images: how many pixels are not black, and their brightness (the
+    /// red byte) summed.
+    pub fn summary(&self) -> (int, int) {
+        let mut lit = 0;
+        let mut sum = 0;
+        for p in self.pixels.iter() {
+            let r = (*p & 255).to::<int>() ?! "a byte";
+            if r > 0 {
+                lit += 1;
+                sum += r;
+            }
+        }
+        (lit, sum)
+    }
+}
+
+/// Running kernels, as an effect: on a GPU, or not at all (then `launch` uses the simulator).
+pub trait Gpu {
+    /// Runs kernel `source` (WGSL) with `params` over `image`, filling it: whether it could.
+    fn run(&self, source: &str, params: &[u8], image: &mut Image) -> bool with suspend;
+}
+
+/// The CPU simulator: no GPU, so `launch` runs each kernel instance on the CPU.
+pub struct Simulator {}
+
+impl Gpu for Simulator {
+    fn run(&self, source: &str, params: &[u8], image: &mut Image) -> bool with suspend {
+        false
+    }
+}
+
+/// The CPU simulator.
+pub fn simulator() -> Simulator {
+    Simulator {}
+}
+
+/// The machine's GPU: WebGPU in a browser page, which also shows each image it draws in the
+/// page's canvas. Without one (a native run, a test), the simulator draws instead.
+#[root_capability]
+pub struct GpuRoot {
+    handle: int,
+}
+
+impl Gpu for GpuRoot {
+    fn run(&self, source: &str, params: &[u8], image: &mut Image) -> bool with suspend {
+        sys::dispatch(source, params, image.width, image.height, image.pixels.as_mut_slice(), true)
+    }
+}
+
+/// Runs `kernel` (a function marked `#[kernel]`) over `image`, one instance per 8 x 8 tile, each
+/// given `params` and its tile: on the GPU if there is one, else on the CPU simulator. It returns
+/// once every instance has run: the image is drawn.
+pub fn launch<P, K: Fn(&P, &mut Tile)>(kernel: K, params: &P, image: &mut Image) with gpu: Gpu, suspend {
+    if gpu.run(sys::source(&kernel), sys::bytes(params), image) {
+        return;
+    }
+    let mut ty = 0;
+    while ty < image.height {
+        let mut tx = 0;
+        while tx < image.width {
+            let mut tile = Tile { x: tx, y: ty, pixels: [0; 64] };
+            kernel(params, &mut tile);
+            let mut py = 0;
+            while py < 8 && ty + py < image.height {
+                let mut px = 0;
+                while px < 8 && tx + px < image.width {
+                    image.pixels[(ty + py) * image.width + tx + px] = tile.pixels[py * 8 + px];
+                    px += 1;
+                }
+                py += 1;
+            }
+            tx += 8;
+        }
+        ty += 8;
+    }
+}

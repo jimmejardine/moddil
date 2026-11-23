@@ -1,0 +1,4 @@
+[mod]
+name = "moddil.com/gpu"
+edition = "2027"
+capabilities = ["os"]

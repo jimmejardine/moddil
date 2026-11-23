@@ -561,6 +561,21 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         }
     }
     cx.finish();
+    // A kernel's body keeps to the kernel effect set: no handlers, errors or suspension
+    // (`gpu.kernel.1`).
+    if let Item::Fn(i) = owner.item(db)
+        && items.fns[i as usize].kernel
+        && (!cx.out.escaping_needs.is_empty()
+            || !cx.out.escaping_errors.is_empty()
+            || cx.out.escaping_control != 0)
+    {
+        cx.out.diagnostics.push(Diagnostic::error(
+            Code::E0221,
+            items.fns[i as usize].name_range,
+            "a `#[kernel]`'s body needs no handlers, cannot fail, and does not suspend or spawn \
+             (the kernel effect set)",
+        ));
+    }
     // A selectable function's parts run in its caller's frame, so they capture nothing: not
     // the function's handlers either (`task.select.4`).
     if let Some(parts) = body.select {

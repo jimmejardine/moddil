@@ -2,6 +2,11 @@
 name = "mandelbulb-web"
 edition = "2027"
 
+[[exe]]
+name = "flight"
+main = "src/main.moddil"
+
 [dependencies]
 mandelbulb = { path = ".." }
-# Not yet available (M2): gpu = "moddil.com/gpu", for devices, surfaces, textures and tiles.
+gpu = { path = "../../../mods/gpu" }
+web = { path = "../../../mods/web" }

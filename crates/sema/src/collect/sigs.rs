@@ -54,6 +54,8 @@ impl Collector<'_> {
         let mut intrinsic = false;
         let mut selectable = false;
         let mut selectable_at = None;
+        let mut kernel = false;
+        let mut kernel_at = None;
         for attr in node
             .children()
             .filter(|c| c.kind() == K::OUTER_ATTR && !crate::is_doc(c))
@@ -70,6 +72,9 @@ impl Collector<'_> {
             } else if path == ["selectable"] && input.is_none() {
                 selectable = true;
                 selectable_at = Some(attr.text_range());
+            } else if path == ["kernel"] && input.is_none() {
+                kernel = true;
+                kernel_at = Some(attr.text_range());
             } else if path == ["around"] && src.is_file() {
                 if input.is_none() {
                     ds.push(Diagnostic::error(
@@ -326,6 +331,31 @@ impl Collector<'_> {
             Some(c) => effect_clause(&c, &scope, &mut ds),
             None => (Ty::Never, None, Vec::new(), 0),
         };
+        // A kernel: a free function taking its parameters, `&P`, then its tile, `&mut Tile`,
+        // giving nothing and listing no effects (`gpu.kernel.1`).
+        if let Some(at) = kernel_at {
+            let tile = |t: &Ty| matches!(t, Ty::Ref(true, inner) if matches!(&**inner, Ty::Adt(_, n, _) if &**n == "Tile"));
+            let shape = matches!(container, Container::Free)
+                && params.len() == 2
+                && matches!(params[0].ty, Ty::Ref(false, _))
+                && tile(&params[1].ty)
+                && ret == Ty::Unit;
+            if !shape {
+                ds.push(Diagnostic::error(
+                    Code::E0221,
+                    at,
+                    "a `#[kernel]` is a free function `fn k(params: &P, out: &mut Tile)`, giving \
+                     nothing",
+                ));
+            } else if !effects.is_empty() || control != 0 || fails != Ty::Never {
+                ds.push(Diagnostic::error(
+                    Code::E0221,
+                    at,
+                    "a `#[kernel]` needs no handlers, cannot fail, and does not suspend or spawn \
+                     (the kernel effect set)",
+                ));
+            }
+        }
         // A `select` waits on what may suspend (`task.select.3`).
         if let Some(at) = selectable_at
             && control & crate::items::SUSPEND == 0
@@ -376,6 +406,7 @@ impl Collector<'_> {
             opaque,
             opaque_fn,
             selectable,
+            kernel,
             default_arg: false,
             intrinsic,
             is_const,
@@ -435,6 +466,7 @@ impl Collector<'_> {
             opaque: Vec::new(),
             opaque_fn: None,
             selectable: false,
+            kernel: false,
             default_arg: false,
             intrinsic: false,
             is_const: true,

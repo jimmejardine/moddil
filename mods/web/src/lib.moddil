@@ -1,0 +1,63 @@
+//! A page in the browser (`ui.md`: The browser): the window a program draws in, and its input,
+//! one animation frame at a time. Enough for a canvas and the keyboard and mouse.
+
+use core::gpu as sys;
+
+/// The keys a frame reports: one bit each in `Frame::keys`.
+pub const KEY_W: int = 1;
+pub const KEY_A: int = 2;
+pub const KEY_S: int = 4;
+pub const KEY_D: int = 8;
+pub const KEY_Q: int = 16;
+pub const KEY_E: int = 32;
+
+/// One animation frame: what happened since the last one.
+#[derive(Copy, Clone, Debug)]
+pub struct Frame {
+    /// Seconds since the last frame.
+    pub dt: f32,
+    /// The canvas's size, in pixels.
+    pub width: int,
+    pub height: int,
+    /// The keys held: `KEY_W` and the others.
+    pub keys: int,
+    /// The mouse's movement since the last frame, in pixels.
+    pub mouse_x: int,
+    pub mouse_y: int,
+    /// The wheel's movement since the last frame.
+    pub wheel: int,
+    /// Whether the page asks the program to stop: a frame outside a page always does.
+    pub stop: bool,
+}
+
+impl Frame {
+    /// Whether `key` is held.
+    pub fn held(&self, key: int) -> bool {
+        self.keys & key != 0
+    }
+}
+
+/// The browser window the program draws in: its canvas and its input.
+#[root_capability]
+pub struct Window {
+    handle: int,
+}
+
+impl Window {
+    /// Waits for the next animation frame.
+    pub fn next_frame(&self) -> Frame with suspend {
+        let mut words = [0; 8];
+        sys::frame(&mut words);
+        let micros = words[0].to::<f32>() ?! "a frame is far shorter than 2^24 microseconds";
+        Frame {
+            dt: micros / 1000000.0,
+            width: words[1],
+            height: words[2],
+            keys: words[3],
+            mouse_x: words[4],
+            mouse_y: words[5],
+            wheel: words[6],
+            stop: words[7] != 0,
+        }
+    }
+}

@@ -300,6 +300,8 @@ fn the_standard_mods_pass_their_tests_everywhere() {
         ("mods/crypto/tests", 7),
         ("mods/num/tests", 10),
         ("mods/decimal/tests", 6),
+        ("mods/gpu/tests", 2),
+        ("examples/mandelbulb/web", 2),
     ] {
         passes_everywhere(dir, n);
     }

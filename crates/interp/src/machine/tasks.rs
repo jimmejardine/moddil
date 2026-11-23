@@ -74,6 +74,16 @@ impl Machine<'_> {
                 _ => return None,
             });
         }
+        // The `core` mod's `gpu` module (`gpu.1`): no GPU here.
+        if items.modules[sig.module as usize].path == ["gpu"] {
+            return Some(match sig.name.as_str() {
+                "source" => "gpu_source",
+                "bytes" => "gpu_bytes",
+                "dispatch" => "gpu_dispatch",
+                "frame" => "gpu_frame",
+                _ => return None,
+            });
+        }
         let owner = match sig.container {
             Container::Impl(k) => match &items.impls[k as usize].self_ty {
                 Ty::Adt(a, ..) => items.adts[*a as usize].name.as_str(),
@@ -179,6 +189,10 @@ impl Machine<'_> {
                     self.natives.handle("Receiver", c),
                 ]);
                 return self.deliver(ret, Ok(pair));
+            }
+            name if name.starts_with("gpu_") => {
+                let v = self.gpu_call(name, values);
+                return self.deliver(ret, Ok(v));
             }
             name if name.starts_with("os_") => {
                 let v = self.os_call(name, values);
@@ -343,6 +357,31 @@ impl Machine<'_> {
                 Value::Unit
             }
             _ => unreachable!("an `os` function: {name}"),
+        }
+    }
+
+    /// A call of the `core` mod's `gpu` module, `name` (`gpu.1`): the interpreter has no GPU, so
+    /// a kernel has no WGSL, values no bytes, nothing is dispatched, and a frame asks to stop.
+    fn gpu_call(&mut self, name: &str, values: &[Value]) -> Value {
+        // A slot for the empty slice the calls give, as statics are kept.
+        const EMPTY: u32 = u32::MAX - 1;
+        match name {
+            "gpu_source" => Value::Str("".into()),
+            "gpu_bytes" => {
+                if self.stack.static_ref(EMPTY).is_none() {
+                    self.stack.set_static(EMPTY, Value::Array(Vec::new()));
+                }
+                self.stack.static_ref(EMPTY).expect("just set")
+            }
+            "gpu_dispatch" => Value::Bool(false),
+            "gpu_frame" => {
+                if let Value::Ref(p, _) = &values[0] {
+                    let words = (0..8).map(|i| Value::Int(i64::from(i == 7))).collect();
+                    self.stack.store(p, Value::Array(words));
+                }
+                Value::Unit
+            }
+            _ => unreachable!("a `gpu` function: {name}"),
         }
     }
 

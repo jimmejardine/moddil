@@ -48,6 +48,7 @@ moddil-rt = { path = "crates/rt", version = "0.0.0" }
 moddil-wasm = { path = "crates/wasm", version = "0.0.0" }
 moddil-native = { path = "crates/native", version = "0.0.0" }
 moddil-os = { path = "crates/os", version = "0.0.0" }
+moddil-gpu = { path = "crates/gpu", version = "0.0.0" }
 
 # External crates (versions checked on crates.io, November 2026).
 salsa = "0.28.5"            # query-based incremental compilation
@@ -60,6 +61,7 @@ unicode-normalization = "0.1.26"  # NFC checks on identifiers (the lexer)
 cargo_metadata = "0.23.1"   # the refinterp independence check
 libm = "0.2.16"             # float functions with the same bits on every platform (both interpreters)
 ctrlc = "3.5.3"             # Ctrl-C and termination as `core::os` signals (`moddil-os`)
+naga = { version = "30.0.2", features = ["wgsl-out", "wgsl-in"] }  # kernels to WGSL, validated (`moddil-gpu`)
 cranelift-codegen = "0.138.0"   # native code generation (M1, `moddil-native`)
 cranelift-frontend = "0.138.0"
 cranelift-module = "0.138.0"

@@ -278,7 +278,7 @@ impl Lowerer<'_> {
     /// the `os` capability (`os.cap.1`).
     fn check_os(&mut self, func: u32, range: TextRange) {
         let m = &self.items.modules[self.items.fns[func as usize].module as usize];
-        let in_os = m.path == ["os"]
+        let in_os = (m.path == ["os"] || m.path == ["gpu"])
             && self
                 .items
                 .mods
@@ -297,9 +297,9 @@ impl Lowerer<'_> {
             self.report(
                 Code::E0220,
                 range,
-                "`core::os` is named only in a mod whose manifest lists the capability: \
-                 `capabilities = [\"os\"]` under `[mod]`; an application reaches the OS \
-                 through the root capabilities `main` takes",
+                "`core::os` and `core::gpu` are named only in a mod whose manifest lists the \
+                 capability: `capabilities = [\"os\"]` under `[mod]`; an application reaches \
+                 the OS through the root capabilities `main` takes",
             );
         }
     }

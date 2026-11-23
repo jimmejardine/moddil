@@ -126,7 +126,10 @@ codes! {
     E0219 = "`unsafe` without the capability",
     /// A function of `core::os` named in a mod whose manifest does not declare the `os`
     /// capability.
-    E0220 = "`core::os` without the capability",
+    E0220 = "`core::os` or `core::gpu` without the capability",
+    /// A `#[kernel]` that is not a free function taking `&P` and `&mut Tile`, or that needs
+    /// handlers, can fail, suspends or spawns.
+    E0221 = "invalid kernel",
     /// An assignment to, or a `&mut` borrow of, a local not declared `mut`.
     E0301 = "mutation of an immutable local",
     /// An assignment through, or a `&mut` borrow through, a shared borrow.

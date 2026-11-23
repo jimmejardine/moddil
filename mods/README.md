@@ -3,7 +3,7 @@
 The **standard mods**, written in Moddil: `core-*`, `collections`, `text`, `net`, `serde` and the
 rest of the catalogue ([`specs/stdlib.md`](../specs/stdlib.md)).
 
-**Status:** M2 slices M2c and M2d: the mods the tour reaches, each with its tests in its own `tests/`
+**Status:** M2 slices M2c to M2e: the mods the tour and Mandelbulb flight reach, each with its tests in its own `tests/`
 project (so a mod that depends on one does not run them), run natively, on the MIR interpreter
 and as WASM by `crates/moddil/tests/cli.rs`. A program names them as `moddil::<mod>` through the
 umbrella stub mod [`stubs/moddil`](../stubs/moddil/README.md), which re-exports them.
@@ -20,6 +20,8 @@ umbrella stub mod [`stubs/moddil`](../stubs/moddil/README.md), which re-exports 
 | [`num`](num/src/lib.moddil) | `BigInt` and `Rational` | |
 | [`decimal`](decimal/src/lib.moddil) | `Fixed<S>` (the scale in the type) and `BigDecimal`, rounding by the prelude's `Round` | |
 | [`runtime`](runtime/src/lib.moddil) | the root capabilities (`root`: `Args`, `Stdio`, `NetRoot`, `Entropy`, …), the terminal (`io`), `serve_until_stopped` and `Signal` | `os` |
+| [`gpu`](gpu/src/lib.moddil) | `Rgba8`, `Tile`, `Image`, the `Gpu` effect, the CPU `simulator()`, the root capability `GpuRoot` (WebGPU in a browser), and `launch`, which runs a `#[kernel]` over an image | `os` |
+| [`web`](web/src/lib.moddil) | the root capability `Window`: each animation frame's input (keys, mouse, wheel) and size | `os` |
 
 `Vec`, `String` and the hash maps are in the prelude and the `core` mod
 ([`reference/2027/`](../reference/2027/README.md)).
