@@ -1,7 +1,7 @@
 // Sphere tracing: marching a ray by the distance estimate until it reaches the surface.
 
-use mod::vec3::Vec3;
-use mod::fractal::{Params, distance, normal};
+use mod::vec3::{Vec3, float};
+use mod::fractal::{Params, distance, estimate, normal};
 
 #[derive(Copy, Clone)]
 pub struct Ray {
@@ -26,10 +26,11 @@ impl Quality {
     }
 }
 
-/// Where a ray ended up, and how many steps it took to get there.
+/// Where a ray ended up, and how many steps it took to get there. A surface point carries its
+/// orbit traps (`Estimate`), which colour it.
 #[derive(Copy, Clone)]
 pub enum Hit {
-    Surface { at: Vec3, steps: int },
+    Surface { at: Vec3, steps: int, origin: f32, planes: Vec3 },
     Miss { steps: int },
 }
 
@@ -38,11 +39,11 @@ pub fn march(ray: Ray, params: Params, quality: Quality) -> Hit {
     let mut steps = 0;
     while steps < quality.max_steps {
         let p = ray.origin + ray.dir.scale(t);
-        let d = distance(p, params);
-        if d < quality.epsilon {
-            return Hit::Surface { at: p, steps: steps };
+        let e = estimate(p, params);
+        if e.distance < quality.epsilon {
+            return Hit::Surface { at: p, steps: steps, origin: e.origin, planes: e.planes };
         }
-        t += d;
+        t += e.distance;
         if t > quality.max_distance {
             break;
         }
@@ -52,10 +53,11 @@ pub fn march(ray: Ray, params: Params, quality: Quality) -> Hit {
 }
 
 /// Brightness in [0, 1]: diffuse light from `light` (length 1), darkened where the ray needed
-/// many steps, which happens in crevices (a cheap ambient occlusion).
+/// many steps, which happens in crevices (a cheap ambient occlusion). The CPU preview's measure;
+/// the page draws with [`colour`].
 pub fn shade(hit: Hit, params: Params, quality: Quality, light: Vec3) -> f32 {
     match hit {
-        Hit::Surface { at, steps } => {
+        Hit::Surface { at, steps, .. } => {
             let n = normal(at, params, quality.epsilon);
             let diffuse = n.dot(light).max(0.0);
             let occlusion = 1.0 - mod::vec3::float(steps) / mod::vec3::float(quality.max_steps);
@@ -63,6 +65,106 @@ pub fn shade(hit: Hit, params: Params, quality: Quality, light: Vec3) -> f32 {
         }
         Hit::Miss { .. } => 0.0,
     }
+}
+
+/// A smooth palette: `a + b cos(2π(c t + d))`, per channel (Iñigo Quilez's cosine palettes).
+fn palette(t: f32) -> Vec3 {
+    let tau: f32 = 6.2831853;
+    Vec3::new(
+        0.5 + 0.5 * (tau * (t + 0.80)).cos(),
+        0.5 + 0.5 * (tau * (t + 0.90)).cos(),
+        0.5 + 0.5 * (tau * (0.5 * t + 0.30)).cos(),
+    )
+}
+
+/// The sky in direction `dir`: deep blue overhead, paler at the horizon, warm towards `light`.
+pub fn sky(dir: Vec3, light: Vec3) -> Vec3 {
+    let up = dir.y.max(-0.2) + 0.2;
+    let base = Vec3::new(0.55, 0.65, 0.80).mix(Vec3::new(0.12, 0.22, 0.48), up.min(1.0));
+    let sun = dir.dot(light).max(0.0);
+    let glow = sun * sun * sun * sun;
+    base + Vec3::new(0.6, 0.4, 0.2).scale(glow * 0.6)
+}
+
+/// How open the surface at `p` (normal `n`) is to the sky, from 0 (a deep crevice) to 1: five
+/// samples of the distance field along the normal, each closer to the surface than its height
+/// above it darkening it a little.
+fn occlusion(p: Vec3, n: Vec3, params: Params) -> f32 {
+    let mut occ: f32 = 0.0;
+    let mut weight: f32 = 1.0;
+    let mut i = 0;
+    while i < 5 {
+        let h = 0.01 + 0.03 * float(i);
+        let d = distance(p + n.scale(h), params);
+        occ += (h - d) * weight;
+        weight *= 0.85;
+        i += 1;
+    }
+    (1.0 - 3.0 * occ).clamp(0.0, 1.0)
+}
+
+/// How much of the light towards `light` reaches `p`, from 0 to 1, with soft edges: a short march
+/// towards the light, darkening by how closely the ray passes the surface (penumbra 16).
+fn shadow(p: Vec3, light: Vec3, params: Params) -> f32 {
+    let mut res: f32 = 1.0;
+    let mut t: f32 = 0.01;
+    let mut i = 0;
+    while i < 24 {
+        let d = distance(p + light.scale(t), params);
+        res = res.min(16.0 * d / t);
+        if res < 0.001 {
+            return 0.0;
+        }
+        t += d.clamp(0.005, 0.2);
+        if t > 2.5 {
+            break;
+        }
+        i += 1;
+    }
+    res.clamp(0.0, 1.0)
+}
+
+/// The colour of `hit`, seen along `ray`, lit by the sun in direction `light` (length 1), each
+/// channel from 0 to 1 (gamma-corrected): orbit-trap colours, sunlight with soft shadows, sky
+/// light scaled by ambient occlusion, a rim light at grazing angles, and fog with distance. A
+/// miss is the sky.
+pub fn colour(hit: Hit, ray: Ray, params: Params, quality: Quality, light: Vec3) -> Vec3 {
+    let background = sky(ray.dir, light);
+    let lit = match hit {
+        Hit::Surface { at, origin, planes, .. } => {
+            let n = normal(at, params, quality.epsilon);
+            let base = palette(origin * 1.6 + planes.y * 0.8).mix(
+                Vec3::new(0.95, 0.80, 0.55),
+                (1.0 - planes.x * 4.0).clamp(0.0, 1.0) * 0.35,
+            );
+            let ao = occlusion(at, n, params);
+            let sun = n.dot(light).max(0.0) * shadow(at + n.scale(quality.epsilon * 4.0), light, params);
+            let fill = 0.5 + 0.5 * n.y;
+            let graze = (1.0 + ray.dir.dot(n)).clamp(0.0, 1.0);
+            let rim = graze * graze * graze;
+            let light_in = Vec3::new(1.30, 1.10, 0.85).scale(sun * 1.8)
+                + Vec3::new(0.35, 0.45, 0.65).scale(fill * ao * 0.9)
+                + Vec3::new(0.60, 0.50, 0.70).scale(rim * ao * 0.8)
+                + Vec3::new(0.05, 0.05, 0.06).scale(ao);
+            let surface = base.times(light_in);
+            let t = (at - ray.origin).length();
+            surface.mix(background, 1.0 - (-0.06 * t * t).exp())
+        }
+        Hit::Miss { .. } => background,
+    };
+    // Gamma 2: the eye's response to brightness, roughly.
+    Vec3::new(
+        lit.x.clamp(0.0, 1.0).sqrt(),
+        lit.y.clamp(0.0, 1.0).sqrt(),
+        lit.z.clamp(0.0, 1.0).sqrt(),
+    )
+}
+
+test "a colour's channels are from 0 to 1" {
+    let ray = Ray { origin: Vec3::new(0.0, 0.0, -3.0), dir: Vec3::new(0.0, 0.0, 1.0) };
+    let light = Vec3::new(-0.5, 0.7, -0.5).normalized();
+    let c = colour(march(ray, Params::classic(), Quality::standard()), ray, Params::classic(), Quality::standard(), light);
+    assert(c.x >= 0.0 && c.x <= 1.0 && c.y >= 0.0 && c.y <= 1.0 && c.z >= 0.0 && c.z <= 1.0);
 }
 
 test "a ray at the bulb's centre hits it" {

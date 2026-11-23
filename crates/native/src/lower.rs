@@ -230,10 +230,11 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
     ("os_close", &['w'], None),
     (
         "gpu_dispatch",
-        &['p', 'w', 'p', 'w', 'w', 'w', 'p', 'w', 'b'],
+        &['p', 'w', 'p', 'w', 'w', 'w', 'p', 'w', 'w'],
         Some('b'),
     ),
     ("gpu_frame", &['p'], None),
+    ("gpu_show", &['p', 'w', 'w', 'w'], None),
     ("clone_sender", &['w'], None),
     ("drop_sender", &['w'], None),
     ("drop_receiver", &['w', 'p'], Some('b')),
@@ -4910,14 +4911,21 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let width = self.value(&args[2])?;
                 let height = self.value(&args[3])?;
                 let (op, on) = self.text(&args[4])?;
-                let present = self.value(&args[5])?;
+                let mode = self.value(&args[5])?;
                 let r = self
                     .task_call(
                         "gpu_dispatch",
-                        &[sp, sn, pp, pn, width, height, op, on, present],
+                        &[sp, sn, pp, pn, width, height, op, on, mode],
                     )
                     .expect("a flag");
                 self.write(d, Val::Scalar(r))
+            }
+            "show" => {
+                let (p, n) = self.text(&args[0])?;
+                let width = self.value(&args[1])?;
+                let height = self.value(&args[2])?;
+                self.task_call("gpu_show", &[p, n, width, height]);
+                Ok(())
             }
             "frame" => {
                 let (p, _) = self.text(&args[0])?;

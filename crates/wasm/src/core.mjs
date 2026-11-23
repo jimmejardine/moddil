@@ -180,31 +180,53 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
 
   // The GPU and the window a run of `main` has in a browser (`gpu.1`): WebGPU, a canvas the
   // image is shown on, and the page's keyboard and mouse. Without WebGPU a dispatch says it
-  // could not (so `gpu::launch` runs the kernel on the CPU simulator); outside a page, a frame
-  // asks the program to stop. A page's `?size=WxH` fixes the image's size, and `?frames=N`
-  // stops the program after N frames (as the browser test does).
+  // could not (so `gpu::launch` and `gpu::present` run the kernel on the CPU simulator, and
+  // `gpu::show` draws its image on a 2D canvas); outside a page, a frame asks the program to
+  // stop. A page's `?size=WxH` fixes the window's size, and `?frames=N` stops the program after
+  // N frames (as the browser test does).
+  //
+  // With WebGPU, an image is drawn into a pixel buffer and shown by a full-screen pass that reads
+  // it, so a frame costs no copy back to the CPU; it is read back only when the program asks.
+  // Pipelines, buffers and bind groups are made once and kept (buffers grow as images do). A
+  // corner of the page shows the frame rate, the image's size and the GPU's time per frame.
   const page = typeof document !== 'undefined';
   const query = page ? new URLSearchParams(location.search) : null;
   const screen = {
     device: undefined,
-    pipelines: new Map(),
+    format: null,
     canvas: null,
+    context: null,
+    overlay: null,
+    pipelines: new Map(),
+    blit: null,
+    buffers: {},
+    groups: new Map(),
     keys: 0,
     dx: 0,
     dy: 0,
     wheel: 0,
     last: null,
     frames: 0,
+    fps: 0,
+    gpuMs: null,
+    size: '',
+    dispatches: 0,
   };
   const KEYS = { KeyW: 1, KeyA: 2, KeyS: 4, KeyD: 8, KeyQ: 16, KeyE: 32 };
-  // The canvas, made (with the input's listeners) the first time it is needed.
+  // The canvas and the overlay, made (with the input's listeners) the first time they are needed.
   const canvas = () => {
     if (screen.canvas) return screen.canvas;
     const c = document.createElement('canvas');
     c.id = 'screen';
-    c.style.cssText =
-      'position:fixed;inset:0;width:100vw;height:100vh;image-rendering:pixelated;z-index:-1';
+    c.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;z-index:-1;background:#000';
     document.body.prepend(c);
+    const o = document.createElement('div');
+    o.id = 'stats';
+    o.style.cssText =
+      'position:fixed;right:8px;top:8px;padding:4px 8px;font:12px ui-monospace,monospace;' +
+      'color:#e8eef8;background:rgba(0,0,0,.45);border-radius:4px;pointer-events:none';
+    document.body.append(o);
+    screen.overlay = o;
     addEventListener('keydown', (e) => {
       screen.keys |= KEYS[e.code] ?? 0;
     });
@@ -223,89 +245,155 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
     screen.canvas = c;
     return c;
   };
-  // The image's size: the page's `?size=WxH`, or half the window's (a GPU's worth of pixels).
-  const imageSize = () => {
+  // The window's size: the page's `?size=WxH`, or the window's in CSS pixels. The program
+  // draws a fraction of it, as fast frames allow.
+  const windowSize = () => {
     const m = /^(\d+)x(\d+)$/.exec(query.get('size') ?? '');
     if (m) return [Number(m[1]), Number(m[2])];
-    return [Math.max(8, Math.ceil(innerWidth / 2)), Math.max(8, Math.ceil(innerHeight / 2))];
+    return [Math.max(8, innerWidth), Math.max(8, innerHeight)];
   };
   const device = async () => {
     if (screen.device !== undefined) return screen.device;
     screen.device = null;
     try {
       const adapter = await navigator.gpu?.requestAdapter();
-      if (adapter) screen.device = await adapter.requestDevice();
+      if (adapter) {
+        screen.device = await adapter.requestDevice();
+        screen.format = navigator.gpu.getPreferredCanvasFormat();
+      }
     } catch {
       screen.device = null;
     }
     return screen.device;
   };
-  // Shows `pixels` (RGBA8, red lowest) on the canvas.
-  const present = (pixels, width, height) => {
+  // Buffer `name`, at least `bytes` long, with `usage`: kept, and made again (bigger) only when
+  // it is too small; a new one forgets the bind groups that named the old.
+  const buffer = (d, name, bytes, usage) => {
+    const size = Math.max(16, Math.ceil(bytes / 16) * 16);
+    const b = screen.buffers[name];
+    if (b && b.size >= size) return b;
+    b?.destroy();
+    screen.groups.clear();
+    const made = d.createBuffer({ size, usage });
+    screen.buffers[name] = made;
+    return made;
+  };
+  // The bind group of `layout`'s `buffers`, kept by `key` until a buffer is made again.
+  const group = (d, key, layout, buffers) => {
+    let g = screen.groups.get(key);
+    if (!g) {
+      g = d.createBindGroup({
+        layout,
+        entries: buffers.map((b, i) => ({ binding: i, resource: { buffer: b } })),
+      });
+      screen.groups.set(key, g);
+    }
+    return g;
+  };
+  // The pass that shows the pixel buffer: a triangle covering the canvas, each fragment the
+  // pixel under it (the canvas is the image's size; CSS stretches it to the window).
+  const BLIT = `
+@group(0) @binding(0) var<storage, read> pixels: array<u32>;
+@group(0) @binding(1) var<storage, read> size: array<u32>;
+@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+  var p = array(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  return vec4f(p[i], 0.0, 1.0);
+}
+@fragment fn fs(@builtin(position) at: vec4f) -> @location(0) vec4f {
+  let x = min(u32(at.x), size[0] - 1u);
+  let y = min(u32(at.y), size[1] - 1u);
+  return unpack4x8unorm(pixels[y * size[0] + x]);
+}`;
+  // Encodes showing the pixel buffer (`width` x `height`) on the canvas.
+  const encodeShow = (d, enc, width, height) => {
     const c = canvas();
+    if (!screen.context) {
+      screen.context = c.getContext('webgpu');
+      screen.context.configure({ device: d, format: screen.format, alphaMode: 'opaque' });
+    }
     if (c.width !== width || c.height !== height) {
       c.width = width;
       c.height = height;
     }
-    const rgba = new Uint8ClampedArray(pixels.buffer, pixels.byteOffset, width * height * 4);
-    c.getContext('2d').putImageData(new ImageData(rgba, width, height), 0, 0);
+    if (!screen.blit) {
+      const module = d.createShaderModule({ code: BLIT });
+      screen.blit = d.createRenderPipeline({
+        layout: 'auto',
+        vertex: { module, entryPoint: 'vs' },
+        fragment: { module, entryPoint: 'fs', targets: [{ format: screen.format }] },
+        primitive: { topology: 'triangle-list' },
+      });
+    }
+    const pass = enc.beginRenderPass({
+      colorAttachments: [
+        {
+          view: screen.context.getCurrentTexture().createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0, g: 0, b: 0, a: 1 },
+        },
+      ],
+    });
+    pass.setPipeline(screen.blit);
+    const { pixels, size } = screen.buffers;
+    pass.setBindGroup(0, group(d, 'blit', screen.blit.getBindGroupLayout(0), [pixels, size]));
+    pass.draw(3);
+    pass.end();
   };
-  // Runs the kernel `source` over a `width` x `height` image: one invocation per 8 x 8 tile, 64
-  // to a workgroup; its pixels are read back into `out` (and shown, if `show`). 1 if it ran.
-  const dispatch = async (sp, sn, pp, pn, width, height, op, on, show) => {
+  const STORAGE = () => GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
+  // The pixel and size buffers for a `width` x `height` image.
+  const imageBuffers = (d, width, height) => {
+    const pixels = buffer(d, 'pixels', width * height * 4, STORAGE() | GPUBufferUsage.COPY_SRC);
+    const size = buffer(d, 'size', 16, STORAGE());
+    d.queue.writeBuffer(size, 0, new Uint32Array([width, height, 0, 0]));
+    return { pixels, size };
+  };
+  // Runs the kernel `source` over a `width` x `height` image: a workgroup of 8 x 8 invocations
+  // per 8 x 8 tile. `mode` 1 shows the image, 2 reads its pixels back into `out`. 1 if it ran.
+  const dispatch = async (sp, sn, pp, pn, width, height, op, on, mode) => {
     const d = page ? await device() : null;
-    if (!d) return 0;
+    if (!d || width <= 0 || height <= 0) return 0;
     try {
       const source = text(sp >>> 0, sn >>> 0);
       let pipeline = screen.pipelines.get(source);
       if (!pipeline) {
         const module = d.createShaderModule({ code: source });
-        pipeline = d.createComputePipeline({
-          layout: 'auto',
-          compute: { module, entryPoint: 'main' },
-        });
+        pipeline = d.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
         screen.pipelines.set(source, pipeline);
       }
-      const words = on >>> 0;
-      const buffer = (data, usage) => {
-        const b = d.createBuffer({
-          size: Math.max(16, Math.ceil(data.byteLength / 4) * 4),
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | usage,
-        });
-        const padded = new Uint8Array(Math.ceil(data.byteLength / 4) * 4);
-        padded.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
-        d.queue.writeBuffer(b, 0, padded);
-        return b;
-      };
-      const params = buffer(bytes(pp >>> 0, pn >>> 0), 0);
-      const size = buffer(new Uint32Array([width, height]), 0);
-      const pixels = d.createBuffer({
-        size: Math.max(16, words * 4),
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-      });
-      const read = d.createBuffer({
-        size: Math.max(16, words * 4),
-        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-      });
-      const group = d.createBindGroup({
-        layout: pipeline.getBindGroupLayout(0),
-        entries: [params, pixels, size].map((b, i) => ({ binding: i, resource: { buffer: b } })),
-      });
-      const tiles = Math.ceil(width / 8) * Math.ceil(height / 8);
+      const n = pn >>> 0;
+      const params = buffer(d, 'params', n, STORAGE());
+      const padded = new Uint8Array(Math.ceil(n / 4) * 4);
+      padded.set(bytes(pp >>> 0, n));
+      d.queue.writeBuffer(params, 0, padded);
+      const { pixels, size } = imageBuffers(d, width, height);
       const enc = d.createCommandEncoder();
       const pass = enc.beginComputePass();
       pass.setPipeline(pipeline);
-      pass.setBindGroup(0, group);
-      pass.dispatchWorkgroups(Math.max(1, Math.ceil(tiles / 64)));
+      pass.setBindGroup(0, group(d, source, pipeline.getBindGroupLayout(0), [params, pixels, size]));
+      pass.dispatchWorkgroups(Math.ceil(width / 8), Math.ceil(height / 8));
       pass.end();
-      enc.copyBufferToBuffer(pixels, 0, read, 0, Math.max(16, words * 4));
+      if (mode & 1) encodeShow(d, enc, width, height);
+      const words = Math.min(on >>> 0, width * height);
+      let read = null;
+      if (mode & 2) {
+        read = buffer(d, 'read', words * 4, GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
+        enc.copyBufferToBuffer(pixels, 0, read, 0, words * 4);
+      }
+      const t0 = performance.now();
       d.queue.submit([enc.finish()]);
-      await read.mapAsync(GPUMapMode.READ);
-      const got = new Uint32Array(read.getMappedRange().slice(0, words * 4));
-      read.unmap();
-      for (const b of [params, size, pixels, read]) b.destroy();
-      new Uint32Array(memory.buffer, op >>> 0, words).set(got);
-      if (show) present(got, width, height);
+      screen.size = `${width}x${height}`;
+      // The GPU's time, now and then: how long until the queue is done (this frame waits).
+      if (screen.dispatches++ % 30 === 0) {
+        await d.queue.onSubmittedWorkDone();
+        screen.gpuMs = performance.now() - t0;
+      }
+      if (read) {
+        await read.mapAsync(GPUMapMode.READ, 0, words * 4);
+        const got = new Uint32Array(read.getMappedRange(0, words * 4).slice(0));
+        read.unmap();
+        new Uint32Array(memory.buffer, op >>> 0, words).set(got);
+      }
       // For a test (and anyone curious): the GPU drew a frame.
       document.body.dataset.gpu = 'used';
       return 1;
@@ -314,8 +402,31 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
       return 0;
     }
   };
+  // Shows `n` pixels at `p`, a `width` x `height` image the CPU drew: through WebGPU's pass
+  // where the GPU is in use, else on a 2D canvas.
+  const show = (p, n, width, height) => {
+    if (!page || width <= 0 || height <= 0) return;
+    const pixels = new Uint32Array(memory.buffer, p >>> 0, Math.min(n >>> 0, width * height)).slice();
+    const d = screen.device;
+    screen.size = `${width}x${height}`;
+    if (d) {
+      const b = imageBuffers(d, width, height);
+      d.queue.writeBuffer(b.pixels, 0, pixels);
+      const enc = d.createCommandEncoder();
+      encodeShow(d, enc, width, height);
+      d.queue.submit([enc.finish()]);
+      return;
+    }
+    const c = canvas();
+    if (c.width !== width || c.height !== height) {
+      c.width = width;
+      c.height = height;
+    }
+    const rgba = new Uint8ClampedArray(pixels.buffer, 0, width * height * 4);
+    c.getContext('2d').putImageData(new ImageData(rgba, width, height), 0, 0);
+  };
   // Waits for the next animation frame, then writes its 8 words to `out`: the microseconds
-  // since the last frame, the image's size, the keys held, the mouse's and wheel's movement,
+  // since the last frame, the window's size, the keys held, the mouse's and wheel's movement,
   // and whether to stop.
   const frame = async (out) => {
     const words = [0, 0, 0, 0, 0, 0, 0, 1];
@@ -323,10 +434,16 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
       canvas();
       const now = await new Promise((r) => requestAnimationFrame(r));
       const dt = screen.last === null ? 0 : Math.round((now - screen.last) * 1000);
+      if (screen.last !== null && dt > 0) {
+        const fps = 1e6 / dt;
+        screen.fps = screen.fps ? screen.fps * 0.9 + fps * 0.1 : fps;
+      }
       screen.last = now;
       screen.frames += 1;
+      const gpu = screen.gpuMs === null ? '' : ` · gpu ${screen.gpuMs.toFixed(1)} ms`;
+      screen.overlay.textContent = `${screen.fps.toFixed(0)} fps · ${screen.size}${gpu}`;
       const limit = Number(query.get('frames') ?? 0);
-      const [w, h] = imageSize();
+      const [w, h] = windowSize();
       words.splice(0, 8, dt, w, h, screen.keys, screen.dx, screen.dy, screen.wheel, 0);
       if (limit > 0 && screen.frames > limit) words[7] = 1;
       screen.dx = 0;
@@ -420,6 +537,7 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
           throw new Error('the OS needs JSPI');
         },
     moddil_host_gpu_dispatch: jspi ? new WebAssembly.Suspending(dispatch) : () => 0,
+    moddil_host_gpu_show: show,
     moddil_host_gpu_frame: jspi
       ? new WebAssembly.Suspending(frame)
       : (out) => new BigInt64Array(memory.buffer, out >>> 0, 8).set([0n, 0n, 0n, 0n, 0n, 0n, 0n, 1n]),

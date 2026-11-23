@@ -39,7 +39,33 @@ test "the simulator runs a kernel over each tile, clipped to the image" {
     assert(image.pixel(0, 0).packed() & 255 == 0);
     assert(image.pixel(5, 8).packed() & 255 == 128);
     assert(image.pixel(9, 4).packed() & 255 == 230);
-    // Each row lights its 9 pixels right of the left edge, 0.1 to 0.9 of 255 rounded: 1150.
-    let (lit, sum) = image.summary();
-    assert(lit == 81 && sum == 9 * 1150);
+    // Each row's pixels are 0 to 0.9 of 255, rounded (1150 in all), in each channel alike.
+    let (r, g, b) = image.summary();
+    assert(r == 9 * 1150 && g == r && b == r);
+}
+
+#[kernel]
+fn ramp_each(p: &Ramp, out: &mut Tile) {
+    let x = out.x;
+    out.each(|px, py| Rgba8::grey(float(x + px) / float(p.width)));
+}
+
+test "each draws a tile's pixels as set does" {
+    let mut a = Image::new(10, 9);
+    let mut b = Image::new(10, 9);
+    with Gpu = gpu::simulator() {
+        gpu::launch(ramp, &Ramp { width: 10 }, &mut a);
+        gpu::launch(ramp_each, &Ramp { width: 10 }, &mut b);
+    }
+    let (r, _, _) = b.summary();
+    assert(r == 9 * 1150 && b.pixel(9, 4) == a.pixel(9, 4));
+}
+
+test "present draws on the simulator where there is no GPU" {
+    let mut image = Image::new(10, 9);
+    with Gpu = gpu::simulator() {
+        gpu::present(ramp_each, &Ramp { width: 10 }, &mut image);
+    }
+    let (r, _, _) = image.summary();
+    assert(r == 9 * 1150);
 }

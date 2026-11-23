@@ -22,7 +22,7 @@ umbrella stub mod [`stubs/moddil`](../stubs/moddil/README.md), which re-exports 
 | [`regex`](regex/src/lib.moddil) | `Regex`: linear-time matching (a Pike VM), groups and named groups, `find_all`, `replace_all`; backreferences and lookaround refused | |
 | [`decimal`](decimal/src/lib.moddil) | `Fixed<S>` (the scale in the type) and `BigDecimal`, rounding by the prelude's `Round` | |
 | [`runtime`](runtime/src/lib.moddil) | the root capabilities (`root`: `Args`, `Stdio`, `NetRoot`, `Entropy`, …), the terminal (`io`), `serve_until_stopped` and `Signal` | `os` |
-| [`gpu`](gpu/src/lib.moddil) | `Rgba8`, `Tile`, `Image`, the `Gpu` effect, the CPU `simulator()`, the root capability `GpuRoot` (WebGPU in a browser), and `launch`, which runs a `#[kernel]` over an image | `os` |
+| [`gpu`](gpu/src/lib.moddil) | `Rgba8`, `Tile` (with `each`: a pixel per GPU thread), `Image`, the `Gpu` effect, the CPU `simulator()`, the root capability `GpuRoot` (WebGPU in a browser), `launch` (draws an image and reads it back) and `present` (shows it, with no copy back) | `os` |
 | [`web`](web/src/lib.moddil) | the root capability `Window`: each animation frame's input (keys, mouse, wheel) and size | `os` |
 
 `Vec`, `String` and the hash maps are in the prelude and the `core` mod

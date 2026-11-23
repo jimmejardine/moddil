@@ -312,8 +312,8 @@ fn the_standard_mods_pass_their_tests_everywhere() {
         ("mods/decimal/tests", 6),
         ("mods/time/tests", 7),
         ("mods/regex/tests", 6),
-        ("mods/gpu/tests", 2),
-        ("examples/mandelbulb/web", 2),
+        ("mods/gpu/tests", 4),
+        ("examples/mandelbulb/web", 3),
     ];
     std::thread::scope(|s| {
         for (dir, n) in projects {

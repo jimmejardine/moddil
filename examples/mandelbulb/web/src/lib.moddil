@@ -6,10 +6,11 @@
 // `mandelbulb` mod, shared with the CPU preview and the tests. The kernel is ordinary Moddil,
 // lowered to WGSL for the GPU, and run tile by tile on the CPU simulator where there is none.
 
-use mandelbulb::{Camera, Input, Params, Quality, Vec3, fly, march, shade};
+use mandelbulb::{Camera, Input, Params, Quality, Vec3, colour, fly, march};
 use gpu::{Gpu, Image, Rgba8, Tile};
 
-/// Everything the kernel reads: one frame's camera, fractal and quality.
+/// Everything the kernel reads: one frame's camera, fractal and quality, and the image's size,
+/// which is the window's times `scale`.
 #[derive(Clone)]
 pub struct Scene {
     pub camera: Camera,
@@ -18,6 +19,9 @@ pub struct Scene {
     pub light: Vec3,
     pub width: int,
     pub height: int,
+    /// The image's size as a fraction of the window's, from 0.25 to 1: lowered when frames are
+    /// slow, raised again when they are fast.
+    pub scale: f32,
 }
 
 impl Scene {
@@ -30,73 +34,114 @@ impl Scene {
             light: Vec3::new(-0.5, 0.7, -0.5).normalized(),
             width,
             height,
+            scale: 1.0,
         }
     }
 }
 
-/// One program instance draws one 8 × 8 tile of the image: it ray-marches each of its pixels with
-/// the same `march` and `shade` the CPU preview uses.
+/// One program instance draws one 8 × 8 tile of the image, a pixel per thread on a GPU: it
+/// ray-marches each pixel with the same `march` the CPU preview uses, and colours it.
 #[kernel]
 pub fn render(scene: &Scene, out: &mut Tile) {
-    let mut py = 0;
-    while py < 8 {
-        let mut px = 0;
-        while px < 8 {
-            let ray = scene.camera.ray(out.x + px, out.y + py, scene.width, scene.height);
-            let hit = march(ray, scene.params, scene.quality);
-            let brightness = shade(hit, scene.params, scene.quality, scene.light);
-            out.set(px, py, Rgba8::grey(brightness));
-            px += 1;
-        }
-        py += 1;
-    }
+    let x = out.x;
+    let y = out.y;
+    out.each(|px, py| {
+        let ray = scene.camera.ray(x + px, y + py, scene.width, scene.height);
+        let hit = march(ray, scene.params, scene.quality);
+        let c = colour(hit, ray, scene.params, scene.quality, scene.light);
+        Rgba8::rgb(c.x, c.y, c.z)
+    });
 }
 
-/// A frame budget of 60 fps, with some room: slower frames lower the quality.
+/// A frame budget of 60 fps, with some room.
 const BUDGET: f32 = 0.018;
 
-/// One frame: moves the camera by `input` over `dt` seconds, adapts the quality to how long the
-/// frame took, and draws the scene into `image`.
-pub fn frame(scene: Scene, input: Input, dt: f32, image: &mut Image) -> Scene with Gpu, suspend {
+/// `n` pixels as an `f32`, and back, rounded down.
+fn float(n: int) -> f32 {
+    n.to::<f32>() ?! "a window is far narrower than 2^24 pixels"
+}
+
+fn whole(v: f32) -> int {
+    v.floor().to::<int>() ?! "a window's size, scaled down, is a whole number of pixels"
+}
+
+/// One frame's plan: moves the camera by `input` over `dt` seconds, and adapts to how long the
+/// frame took. A slow frame lowers the resolution first (down to a quarter of the window's), then
+/// the steps a ray may take; a fast one raises the steps first, then the resolution. The image is
+/// the `width` x `height` window's size times the scale. A first frame (`dt` 0) adapts nothing.
+pub fn step(scene: Scene, input: Input, dt: f32, width: int, height: int) -> Scene {
     let mut next = scene;
     next.camera = fly(next.camera, input, next.params, dt);
-    next.width = image.width();
-    next.height = image.height();
-    if dt > BUDGET && next.quality.max_steps > 32 {
-        next.quality.max_steps -= 8;
-    } else if dt < BUDGET * 0.6 && next.quality.max_steps < 256 {
-        next.quality.max_steps += 8;
+    if dt > BUDGET {
+        if next.scale > 0.3 {
+            next.scale -= 0.05;
+        } else if next.quality.max_steps > 48 {
+            next.quality.max_steps -= 8;
+        }
+    } else if dt > 0.0 && dt < BUDGET * 0.6 {
+        if next.quality.max_steps < 160 {
+            next.quality.max_steps += 8;
+        } else if next.scale < 1.0 {
+            next.scale = (next.scale + 0.05).min(1.0);
+        }
     }
-    gpu::launch(render, &next, image);
+    next.width = whole((float(width) * next.scale).max(8.0));
+    next.height = whole((float(height) * next.scale).max(8.0));
     next
 }
 
-// Golden images, drawn by the kernel on the CPU simulator: the same on every machine.
+/// Draws `scene` into `image` (its size) and reads it back, on the GPU or the simulator.
+pub fn draw(scene: &Scene, image: &mut Image) with Gpu, suspend {
+    gpu::launch(render, scene, image);
+}
+
+/// Shows `scene` on the screen: on the GPU with no copy back, or the simulator's image.
+pub fn show(scene: &Scene, image: &mut Image) with Gpu, suspend {
+    gpu::present(render, scene, image);
+}
 
 /// No input: what a first frame, and a frame with no keys or mouse, has.
 pub fn still() -> Input {
     Input { forward: 0.0, strafe: 0.0, look_yaw: 0.0, look_pitch: 0.0, speed: 1.0 }
 }
 
+// Golden images, drawn by the kernel on the CPU simulator: the same on every machine.
+
 test "the start, on the simulator" {
     with Gpu = gpu::simulator() {
         let mut image = Image::new(48, 24);
-        gpu::launch(render, &Scene::start(48, 24), &mut image);
-        // The CPU preview lights the same 302 pixels.
-        let (lit, sum) = image.summary();
-        assert(lit == 302 && sum == 30793);
+        draw(&Scene::start(48, 24), &mut image);
+        let (r, g, b) = image.summary();
+        assert(r == 183982 && g == 199192 && b == 232097);
     }
 }
 
-// The browser test (`crates/moddil/tests/gpu.rs`) compares its first frame, drawn on the GPU,
+// The browser test (`crates/moddil/tests/web.rs`) compares its first frame, drawn on the GPU,
 // with this one.
 test "the first frame of flight, on the simulator" {
     with Gpu = gpu::simulator() {
-        let mut image = Image::new(48, 24);
-        let next = frame(Scene::start(0, 0), still(), 0.0, &mut image);
-        let (lit, sum) = image.summary();
-        assert(lit == 302 && sum == 31138);
-        // A fast first frame raises the quality a step.
-        assert(next.quality.max_steps == Quality::standard().max_steps + 8);
+        let scene = step(Scene::start(0, 0), still(), 0.0, 48, 24);
+        assert(scene.width == 48 && scene.height == 24);
+        assert(scene.quality.max_steps == Quality::standard().max_steps);
+        let mut image = Image::new(scene.width, scene.height);
+        draw(&scene, &mut image);
+        let (r, g, b) = image.summary();
+        assert(r == 183982 && g == 199192 && b == 232097);
     }
+}
+
+test "slow frames lower the resolution, then the steps; fast ones raise them again" {
+    let mut scene = Scene::start(0, 0);
+    let mut i = 0;
+    while i < 30 {
+        scene = step(scene, still(), 0.05, 400, 200);
+        i += 1;
+    }
+    assert(scene.scale < 0.3 && scene.quality.max_steps < Quality::standard().max_steps);
+    assert(scene.width >= 8 && scene.width < 200);
+    while i < 200 {
+        scene = step(scene, still(), 0.005, 400, 200);
+        i += 1;
+    }
+    assert(scene.scale == 1.0 && scene.width == 400);
 }

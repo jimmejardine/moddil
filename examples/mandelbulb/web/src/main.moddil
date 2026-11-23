@@ -5,7 +5,7 @@
 use gpu::{Gpu, GpuRoot, Image};
 use web::{Frame, KEY_A, KEY_D, KEY_S, KEY_W, Window};
 use mandelbulb::Input;
-use mod::{Scene, frame};
+use mod::{Scene, draw, show, step};
 
 /// 1 if `plus` is held, -1 if `minus` is, else 0.
 fn axis(f: &Frame, plus: int, minus: int) -> f32 {
@@ -30,6 +30,7 @@ fn input(f: Frame) -> Input {
 
 fn main(gpu: GpuRoot, window: Window) {
     let mut scene = Scene::start(0, 0);
+    let mut image = Image::new(8, 8);
     let mut drawn = 0;
     with Gpu = &gpu {
         loop {
@@ -37,12 +38,20 @@ fn main(gpu: GpuRoot, window: Window) {
             if f.stop {
                 break;
             }
-            let mut image = Image::new(f.width, f.height);
-            scene = frame(scene, input(f), f.dt, &mut image);
-            // The first frame's summary, for the browser test to compare with the simulator's.
+            scene = step(scene, input(f), f.dt, f.width, f.height);
+            // One image, made again only when the size changes.
+            if image.width() != scene.width || image.height() != scene.height {
+                image = Image::new(scene.width, scene.height);
+            }
             if drawn == 0 {
-                let (lit, sum) = image.summary();
-                log.info(fmt"first frame {f.width}x{f.height}: {lit} lit, {sum}");
+                // The first frame is read back, for the browser test to compare its summary with
+                // the simulator's, then shown.
+                draw(&scene, &mut image);
+                gpu.show(&image);
+                let (r, g, b) = image.summary();
+                log.info(fmt"first frame {scene.width}x{scene.height}: {r}, {g}, {b}");
+            } else {
+                show(&scene, &mut image);
             }
             drawn += 1;
         }

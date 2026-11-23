@@ -19,47 +19,117 @@ impl Params {
     }
 }
 
-/// A lower bound on the distance from `p` to the surface of the Mandelbulb: marching a ray by
-/// this much can never step through the surface. Zero inside the set.
+/// What the estimator finds out about a point: how far it is from the surface, and how close its
+/// orbit came to the origin and to the three coordinate planes (its orbit traps, which colour the
+/// surface).
+#[derive(Copy, Clone)]
+pub struct Estimate {
+    /// A lower bound on the distance to the surface: marching a ray by this much can never step
+    /// through it. Zero inside the set.
+    pub distance: f32,
+    /// The orbit's least distance from the origin.
+    pub origin: f32,
+    /// Its least distances from the planes x = 0, y = 0 and z = 0.
+    pub planes: Vec3,
+}
+
+/// `(cos 2a, sin 2a)` from `(cos a, sin a)`.
+fn doubled(c: f32, s: f32) -> (f32, f32) {
+    (c * c - s * s, 2.0 * c * s)
+}
+
+/// Estimates point `p`: its distance from the surface of the Mandelbulb, and its orbit traps.
 ///
-/// The CPU calls it to set the camera's speed, and the GPU kernel calls it for every pixel.
-pub fn distance(p: Vec3, params: Params) -> f32 {
+/// Each iteration raises the orbit's point to the power `n` in spherical coordinates: its radius
+/// to the `n`th power, its angles times `n`. For the classic power 8 the angles are multiplied by
+/// doubling them three times (`cos 2a = cos² a − sin² a`, `sin 2a = 2 sin a cos a`), which gives
+/// the same point as `acos`, `atan2`, `sin` and `cos` would, without them: much cheaper on a GPU.
+pub fn estimate(p: Vec3, params: Params) -> Estimate {
     let n = params.power;
     let mut z = p;
     let mut dr: f32 = 1.0;
     let mut r: f32 = 0.0;
+    let mut origin: f32 = 1000.0;
+    let mut planes = Vec3::new(1000.0, 1000.0, 1000.0);
     let mut i = 0;
     while i < params.iterations {
         r = z.length();
         if r > params.bailout {
             break;
         }
+        origin = origin.min(r);
+        planes = Vec3::new(planes.x.min(z.x.abs()), planes.y.min(z.y.abs()), planes.z.min(z.z.abs()));
         if r == 0.0 {
-            return 0.0;                          // the orbit is stuck at the origin: inside
+            // The orbit is stuck at the origin: inside.
+            return Estimate { distance: 0.0, origin: 0.0, planes: Vec3::zero() };
         }
-        let theta = (z.z / r).acos() * n;
-        let phi = z.y.atan2(z.x) * n;
-        dr = r.powf(n - 1.0) * n * dr + 1.0;
-        z = Vec3::from_spherical(r.powf(n), theta, phi) + p;
+        if n == 8.0 {
+            let ct = z.z / r;
+            let st = (1.0 - ct * ct).max(0.0).sqrt();
+            let rxy = (z.x * z.x + z.y * z.y).sqrt();
+            let cp = if rxy > 0.0 { z.x / rxy } else { 1.0 };
+            let sp = if rxy > 0.0 { z.y / rxy } else { 0.0 };
+            let (ct2, st2) = doubled(ct, st);
+            let (ct4, st4) = doubled(ct2, st2);
+            let (ct8, st8) = doubled(ct4, st4);
+            let (cp2, sp2) = doubled(cp, sp);
+            let (cp4, sp4) = doubled(cp2, sp2);
+            let (cp8, sp8) = doubled(cp4, sp4);
+            let r2 = r * r;
+            let r4 = r2 * r2;
+            dr = 8.0 * r4 * r2 * r * dr + 1.0;
+            let r8 = r4 * r4;
+            z = Vec3::new(r8 * st8 * cp8, r8 * st8 * sp8, r8 * ct8) + p;
+        } else {
+            let theta = (z.z / r).acos() * n;
+            let phi = z.y.atan2(z.x) * n;
+            let rn1 = r.powf(n - 1.0);
+            dr = rn1 * n * dr + 1.0;
+            z = Vec3::from_spherical(rn1 * r, theta, phi) + p;
+        }
         i += 1;
     }
-    if r <= params.bailout {
-        return 0.0;                              // never escaped: inside
-    }
-    0.5 * r.ln() * r / dr
+    // An orbit that never escaped is inside.
+    let distance = if r <= params.bailout { 0.0 } else { 0.5 * r.ln() * r / dr };
+    Estimate { distance, origin, planes }
 }
 
-/// The surface normal at `p`, from central differences of the distance field.
+/// A lower bound on the distance from `p` to the surface of the Mandelbulb: marching a ray by
+/// this much can never step through the surface. Zero inside the set.
+///
+/// The CPU calls it to set the camera's speed, and the GPU kernel calls it for every pixel.
+pub fn distance(p: Vec3, params: Params) -> f32 {
+    estimate(p, params).distance
+}
+
+/// The surface normal at `p`: the distance field's gradient, from four samples at the corners of
+/// a tetrahedron (two fewer than central differences take).
 pub fn normal(p: Vec3, params: Params, eps: f32) -> Vec3 {
-    let dx = Vec3::new(eps, 0.0, 0.0);
-    let dy = Vec3::new(0.0, eps, 0.0);
-    let dz = Vec3::new(0.0, 0.0, eps);
-    Vec3::new(
-        distance(p + dx, params) - distance(p - dx, params),
-        distance(p + dy, params) - distance(p - dy, params),
-        distance(p + dz, params) - distance(p - dz, params),
-    )
-    .normalized()
+    let a = Vec3::new(1.0, -1.0, -1.0);
+    let b = Vec3::new(-1.0, -1.0, 1.0);
+    let c = Vec3::new(-1.0, 1.0, -1.0);
+    let d = Vec3::new(1.0, 1.0, 1.0);
+    let g = a.scale(distance(p + a.scale(eps), params))
+        + b.scale(distance(p + b.scale(eps), params))
+        + c.scale(distance(p + c.scale(eps), params))
+        + d.scale(distance(p + d.scale(eps), params));
+    g.normalized()
+}
+
+test "the power-8 step by doubled angles agrees with the trigonometric one" {
+    // A power just off 8 takes the trigonometric path.
+    let eight = Params::classic();
+    let near = Params { power: 7.99999, iterations: 12, bailout: 2.0 };
+    let p = Vec3::new(0.7, -0.4, 0.5);
+    let a = distance(p, eight);
+    let b = distance(p, near);
+    assert((a - b).abs() < 0.001);
+}
+
+test "an orbit's traps are no further than its starting point" {
+    let p = Vec3::new(0.3, 0.2, -0.1);
+    let e = estimate(p, Params::classic());
+    assert(e.origin <= p.length() && e.planes.x <= 0.3 && e.planes.y <= 0.2);
 }
 
 test "the origin is inside the bulb" {

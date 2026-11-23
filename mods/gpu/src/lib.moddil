@@ -47,6 +47,22 @@ impl Tile {
     pub fn set(&mut self, px: int, py: int, c: Rgba8) {
         self.pixels[py * 8 + px] = c.packed;
     }
+
+    /// Sets each pixel (`px`, `py`) of the tile, each from 0 to 7, to `f(px, py)`. On a GPU the
+    /// tile is a workgroup of 8 x 8 threads, each computing its own pixel in parallel; the CPU
+    /// simulator computes them in turn.
+    pub fn each<F: Fn(int, int) -> Rgba8>(&mut self, f: F) {
+        let mut py = 0;
+        while py < 8 {
+            let mut px = 0;
+            while px < 8 {
+                let c = f(px, py);
+                self.set(px, py, c);
+                px += 1;
+            }
+            py += 1;
+        }
+    }
 }
 
 /// An image: `width` x `height` pixels, row by row.
@@ -59,12 +75,8 @@ pub struct Image {
 impl Image {
     /// A black image of `width` x `height` pixels.
     pub fn new(width: int, height: int) -> Image {
-        let mut pixels = Vec::with_capacity(width * height);
-        let mut i = 0;
-        while i < width * height {
-            pixels.push(0);
-            i += 1;
-        }
+        let black: u32 = 0;
+        let pixels: Vec<u32> = [black; width * height];
         Image { width, height, pixels }
     }
 
@@ -81,35 +93,41 @@ impl Image {
         Rgba8 { packed: self.pixels[y * self.width + x] }
     }
 
-    /// A summary for comparing images: how many pixels are not black, and their brightness (the
-    /// red byte) summed.
-    pub fn summary(&self) -> (int, int) {
-        let mut lit = 0;
-        let mut sum = 0;
+    /// A summary for comparing images: the red, green and blue bytes, each summed over every
+    /// pixel.
+    pub fn summary(&self) -> (int, int, int) {
+        let mut r = 0;
+        let mut g = 0;
+        let mut b = 0;
         for p in self.pixels.iter() {
-            let r = (*p & 255).to::<int>() ?! "a byte";
-            if r > 0 {
-                lit += 1;
-                sum += r;
-            }
+            r += (*p & 255).to::<int>() ?! "a byte";
+            g += ((*p >> 8) & 255).to::<int>() ?! "a byte";
+            b += ((*p >> 16) & 255).to::<int>() ?! "a byte";
         }
-        (lit, sum)
+        (r, g, b)
     }
 }
 
-/// Running kernels, as an effect: on a GPU, or not at all (then `launch` uses the simulator).
+/// Running kernels, as an effect: on a GPU, or not at all (then `launch` and `present` use the
+/// simulator).
 pub trait Gpu {
-    /// Runs kernel `source` (WGSL) with `params` over `image`, filling it: whether it could.
-    fn run(&self, source: &str, params: &[u8], image: &mut Image) -> bool with suspend;
+    /// Runs kernel `source` (WGSL) with `params` over an image the size of `image`: shows it on
+    /// the screen if `show`, and reads its pixels back into `image` if `read`. Whether it could.
+    fn run(&self, source: &str, params: &[u8], image: &mut Image, show: bool, read: bool) -> bool with suspend;
+
+    /// Shows `image`, drawn on the CPU, on the screen, where there is one.
+    fn show(&self, image: &Image) with suspend;
 }
 
 /// The CPU simulator: no GPU, so `launch` runs each kernel instance on the CPU.
 pub struct Simulator {}
 
 impl Gpu for Simulator {
-    fn run(&self, source: &str, params: &[u8], image: &mut Image) -> bool with suspend {
+    fn run(&self, source: &str, params: &[u8], image: &mut Image, show: bool, read: bool) -> bool with suspend {
         false
     }
+
+    fn show(&self, image: &Image) with suspend {}
 }
 
 /// The CPU simulator.
@@ -124,9 +142,18 @@ pub struct GpuRoot {
     handle: int,
 }
 
+/// `dispatch`'s modes (`gpu.1`): show the image on the screen, read its pixels back.
+const SHOW: int = 1;
+const READ: int = 2;
+
 impl Gpu for GpuRoot {
-    fn run(&self, source: &str, params: &[u8], image: &mut Image) -> bool with suspend {
-        sys::dispatch(source, params, image.width, image.height, image.pixels.as_mut_slice(), true)
+    fn run(&self, source: &str, params: &[u8], image: &mut Image, show: bool, read: bool) -> bool with suspend {
+        let mode = (if show { SHOW } else { 0 }) + (if read { READ } else { 0 });
+        sys::dispatch(source, params, image.width, image.height, image.pixels.as_mut_slice(), mode)
+    }
+
+    fn show(&self, image: &Image) with suspend {
+        sys::show(image.pixels.as_slice(), image.width, image.height);
     }
 }
 
@@ -134,9 +161,25 @@ impl Gpu for GpuRoot {
 /// given `params` and its tile: on the GPU if there is one, else on the CPU simulator. It returns
 /// once every instance has run: the image is drawn.
 pub fn launch<P, K: Fn(&P, &mut Tile)>(kernel: K, params: &P, image: &mut Image) with gpu: Gpu, suspend {
-    if gpu.run(sys::source(&kernel), sys::bytes(params), image) {
+    if gpu.run(sys::source(&kernel), sys::bytes(params), image, false, true) {
         return;
     }
+    simulate(kernel, params, image);
+}
+
+/// Shows the image `kernel` draws with `params`, the size of `image`, on the screen: on the GPU,
+/// straight to the screen, with no copy back (`image` is left as it was); without one, drawn on
+/// the CPU simulator into `image`, then shown.
+pub fn present<P, K: Fn(&P, &mut Tile)>(kernel: K, params: &P, image: &mut Image) with gpu: Gpu, suspend {
+    if gpu.run(sys::source(&kernel), sys::bytes(params), image, true, false) {
+        return;
+    }
+    simulate(kernel, params, image);
+    gpu.show(image);
+}
+
+/// Runs `kernel` over `image` on the CPU, tile by tile.
+fn simulate<P, K: Fn(&P, &mut Tile)>(kernel: K, params: &P, image: &mut Image) {
     let mut ty = 0;
     while ty < image.height {
         let mut tx = 0;

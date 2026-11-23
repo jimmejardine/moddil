@@ -42,6 +42,16 @@ impl Vec3 {
         Vec3::new(self.x * k, self.y * k, self.z * k)
     }
 
+    /// Component by component: a colour lit by a light of colour `other`.
+    pub fn times(self, other: Vec3) -> Vec3 {
+        Vec3::new(self.x * other.x, self.y * other.y, self.z * other.z)
+    }
+
+    /// The point a fraction `k` of the way from `self` to `other`.
+    pub fn mix(self, other: Vec3, k: f32) -> Vec3 {
+        self + (other - self).scale(k)
+    }
+
     /// The same direction with length 1. The zero vector has no direction, and stays zero.
     pub fn normalized(self) -> Vec3 {
         let len = self.length();

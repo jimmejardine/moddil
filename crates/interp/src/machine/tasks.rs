@@ -81,6 +81,7 @@ impl Machine<'_> {
                 "bytes" => "gpu_bytes",
                 "dispatch" => "gpu_dispatch",
                 "frame" => "gpu_frame",
+                "show" => "gpu_show",
                 _ => return None,
             });
         }
@@ -374,6 +375,7 @@ impl Machine<'_> {
                 self.stack.static_ref(EMPTY).expect("just set")
             }
             "gpu_dispatch" => Value::Bool(false),
+            "gpu_show" => Value::Unit,
             "gpu_frame" => {
                 if let Value::Ref(p, _) = &values[0] {
                     let words = (0..8).map(|i| Value::Int(i64::from(i == 7))).collect();

@@ -1137,6 +1137,53 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
     - names in types are resolved by name in the file's module, not by their full path;
     - locals in completion are those bound before the cursor, not exactly those in scope;
     - documents are synchronised whole, and analysed on the server's one thread.
+- **Slice M2g (decided November 2026): Mandelbulb flight, fast and in colour.** After M2e the
+  flight was impressive but slow; this slice fixes the causes, in the order of their likely cost,
+  and makes it beautiful.
+  - **A thread per pixel:** `Tile::each(|px, py| colour)` (the user's choice, keeping the tile
+    kernel of `accelerators.md`).
+    - On a GPU a tile is a workgroup of 8 x 8 threads. Every thread runs the kernel's body,
+      which is pure, and the closure runs for that thread's pixel.
+    - The closure is lowered as a function of its captures and its pixel. A kernel that only
+      uses `set` runs on the workgroup's first thread.
+  - **Structured WGSL** (`moddil-gpu`'s `structure`), rebuilt from the MIR:
+    - natural loops, with branches merging at their immediate post-dominators;
+    - a path that runs straight to a `return` is written where it is taken, and blocks with no
+      statements are seen through;
+    - a shape WGSL's unlabelled `break` cannot express (a jump out of two loops) keeps the
+      loop-over-switch, so correctness never depends on it. The Mandelbulb kernel has none left.
+  - **No read-back to show a frame:**
+    - `core::gpu::dispatch` takes a `mode` (1 show, 2 read back), and `show` shows an image the
+      CPU drew;
+    - `gpu::present` shows a kernel's image (falling back to the simulator and `show`), and
+      `launch` still reads one back;
+    - the glue draws the pixel buffer to a `webgpu` canvas with a full-screen pass, and keeps its
+      pipelines, buffers and bind groups.
+  - **The Moddil side of a frame:**
+    - one image, made again only when the size changes;
+    - `Image::new` fills by repetition;
+    - `step` adapts the resolution (a quarter of the window's at least) and the steps to the
+      frame time.
+  - **The maths:**
+    - the power-8 step multiplies the angles by doubling them (no `acos`, `atan2`, `sin`, `cos`
+      or `powf`): the same bulb, and the CPU preview still lights 302 pixels;
+    - normals take four samples (a tetrahedron).
+  - **The look:**
+    - orbit-trap colours through a cosine palette;
+    - ambient occlusion along the normal, and soft shadows from the sun;
+    - sky fill and rim light, a sky gradient with the sun's glow, fog, and gamma.
+  - **Measured on the page:** fps, the image's size, and the GPU's time per frame (to the
+    queue's completion, every 30 frames).
+  - **Checked:**
+    - golden images (each channel's sum) on the simulator, everywhere;
+    - the kernel's WGSL has no dispatcher, and a two-level `break` falls back and validates;
+    - headless Chrome on SwiftShader matches the simulator's first frame to 0.01% per channel,
+      then shows frames with no read-back;
+    - `each` and `present` on the simulator.
+  - **Gaps found on the way** (worked around):
+    - `[0; n]` for a `Vec<u32>` types its element as `int` (E0402, as noted under the standard
+      mods), so `Image::new` repeats a typed zero;
+    - `int` has no `max`.
 - **Next:** M3; and the standard mods the tour does not reach, as they are needed.
 
 ## Staging: distributed programs

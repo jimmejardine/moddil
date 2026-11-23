@@ -5,6 +5,6 @@
 // (`specs/examples/mandelbulb.md`).
 
 pub use mod::vec3::Vec3;
-pub use mod::fractal::{Params, distance, normal};
-pub use mod::trace::{Ray, Quality, Hit, march, shade};
+pub use mod::fractal::{Estimate, Params, distance, estimate, normal};
+pub use mod::trace::{Ray, Quality, Hit, colour, march, shade, sky};
 pub use mod::camera::{Camera, Input, fly};

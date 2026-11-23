@@ -252,8 +252,9 @@ fn a_built_program_runs_in_a_browser() {
 }
 
 /// The Mandelbulb example (`examples/mandelbulb/web`) in a browser: its first frame, drawn by
-/// the kernel lowered to WGSL on WebGPU (SwiftShader's, in a headless Chrome), lights the pixels
-/// the CPU simulator's golden test does, within a tolerance for the GPU's own arithmetic.
+/// the kernel lowered to WGSL on WebGPU (SwiftShader's, in a headless Chrome), a thread per
+/// pixel, and read back, has the colours of the CPU simulator's golden image, within a tolerance
+/// for the GPU's own arithmetic; the frames after it are shown with no read-back.
 #[test]
 fn the_mandelbulb_flies_on_webgpu_in_a_browser() {
     let Some(chrome) = chrome() else {
@@ -294,7 +295,7 @@ fn the_mandelbulb_flies_on_webgpu_in_a_browser() {
             ])
             .arg(format!("--user-data-dir={}", profile.display()))
             .arg(format!(
-                "http://127.0.0.1:{port}/flight.html?size=48x24&frames=1"
+                "http://127.0.0.1:{port}/flight.html?size=48x24&frames=3"
             ))
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -310,7 +311,7 @@ fn the_mandelbulb_flies_on_webgpu_in_a_browser() {
         dom.contains("data-gpu=\"used\""),
         "the GPU did not run: {dom}"
     );
-    // `first frame 48x24: {lit} lit, {sum}`, against the simulator's 302 and 31138.
+    // `first frame 48x24: {r}, {g}, {b}`, each channel's sum, against the simulator's.
     let line = dom
         .lines()
         .find_map(|l| {
@@ -323,11 +324,13 @@ fn the_mandelbulb_flies_on_webgpu_in_a_browser() {
         .filter(|s| !s.is_empty())
         .map(|s| s.parse().expect("a number"))
         .collect();
-    let (lit, sum) = (nums[0], nums[1]);
-    eprintln!("the GPU: {lit} lit, a sum of {sum} (the simulator: 302, 31138)");
-    assert!((lit - 302).abs() <= 6, "{lit} lit, against 302");
-    assert!(
-        (sum - 31138).abs() <= 31138 / 50,
-        "a sum of {sum}, against 31138"
-    );
+    let want = [183_982, 199_192, 232_097];
+    eprintln!("the GPU's sums: {nums:?} (the simulator's: {want:?})");
+    for (got, want) in nums.iter().zip(want) {
+        assert!(
+            (got - want).abs() <= want * 3 / 100,
+            "{nums:?} against {want}"
+        );
+    }
+    assert_eq!(nums.len(), 3, "{line}");
 }

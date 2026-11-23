@@ -100,9 +100,12 @@ mod native {
     }
 
     /// No GPU natively yet (`gpu.1`): nothing is dispatched.
-    pub(crate) fn gpu_dispatch(_: &str, _: &[u8], _: i64, _: i64, _: &mut [u32], _: bool) -> bool {
+    pub(crate) fn gpu_dispatch(_: &str, _: &[u8], _: i64, _: i64, _: &mut [u32], _: u32) -> bool {
         false
     }
+
+    /// No page natively: nothing is shown (`gpu.1`).
+    pub(crate) fn gpu_show(_: &[u32], _: i64, _: i64) {}
 
     /// No window natively: a frame asks to stop (`gpu.1`).
     pub(crate) fn gpu_frame(out: &mut [i64; 8]) {
@@ -141,9 +144,9 @@ mod host {
         /// Event `i` of the last poll: its kind (0 accepted, 1 data, 2 ended, 3 signal) and
         /// its two numbers.
         fn moddil_host_os_event(i: u32, out: *mut f64) -> u32;
-        /// Runs a kernel (`gpu.1`): WGSL `source`, `params`, over a `width` by `height` image
-        /// whose pixels it writes to `out` (and, if `present`, shows); suspends (JSPI) until it
-        /// has. 1 if it could.
+        /// Runs a kernel (`gpu.1`): WGSL `source`, `params`, over a `width` by `height` image,
+        /// which `mode` says to show (1) and to read back into `out` (2); suspends (JSPI) until
+        /// it has. 1 if it could.
         fn moddil_host_gpu_dispatch(
             source: *const u8,
             source_len: u32,
@@ -153,8 +156,10 @@ mod host {
             height: u32,
             out: *mut u32,
             out_len: u32,
-            present: u32,
+            mode: u32,
         ) -> u32;
+        /// Shows `n` pixels at `p`, a `width` by `height` image, in the page (`gpu.1`).
+        fn moddil_host_gpu_show(p: *const u32, n: u32, width: u32, height: u32);
         /// Waits for the next animation frame (JSPI), then writes its 8 words to `out`
         /// (`gpu.1`).
         fn moddil_host_gpu_frame(out: *mut i64);
@@ -284,7 +289,7 @@ mod host {
         width: i64,
         height: i64,
         out: &mut [u32],
-        present: bool,
+        mode: u32,
     ) -> bool {
         // SAFETY: each buffer lives across the call, and the host writes at most `out.len()`
         // words.
@@ -298,8 +303,21 @@ mod host {
                 height as u32,
                 out.as_mut_ptr(),
                 out.len() as u32,
-                u32::from(present),
+                mode,
             ) != 0
+        }
+    }
+
+    #[allow(unsafe_code)]
+    pub(crate) fn gpu_show(pixels: &[u32], width: i64, height: i64) {
+        // SAFETY: the pixels live across the call; the host only reads them.
+        unsafe {
+            moddil_host_gpu_show(
+                pixels.as_ptr(),
+                pixels.len() as u32,
+                width as u32,
+                height as u32,
+            )
         }
     }
 
@@ -311,6 +329,6 @@ mod host {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub(crate) use host::{Os, Start, gpu_dispatch, gpu_frame, random, write_stderr};
+pub(crate) use host::{Os, Start, gpu_dispatch, gpu_frame, gpu_show, random, write_stderr};
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) use native::{Os, Start, gpu_dispatch, gpu_frame, random, write_stderr};
+pub(crate) use native::{Os, Start, gpu_dispatch, gpu_frame, gpu_show, random, write_stderr};

@@ -33,7 +33,7 @@ pub use run::{
     send_now, set_host, set_os, set_trap_text, spawn, stop, stop_requested, timer, yield_now,
 };
 pub use run::{
-    gpu_dispatch, gpu_frame, os_arg_copy, os_arg_count, os_arg_len, os_channel, os_close,
+    gpu_dispatch, gpu_frame, gpu_show, os_arg_copy, os_arg_count, os_arg_len, os_channel, os_close,
     os_connect, os_listen, os_random, os_send, os_take, os_write_stderr,
 };
 
@@ -437,6 +437,7 @@ pub fn symbols() -> Vec<(&'static str, *const u8)> {
         ("moddil_rt_os_random", os_random as *const u8),
         ("moddil_rt_gpu_dispatch", gpu_dispatch as *const u8),
         ("moddil_rt_gpu_frame", gpu_frame as *const u8),
+        ("moddil_rt_gpu_show", gpu_show as *const u8),
         ("moddil_rt_os_listen", os_listen as *const u8),
         ("moddil_rt_os_connect", os_connect as *const u8),
         ("moddil_rt_os_channel", os_channel as *const u8),

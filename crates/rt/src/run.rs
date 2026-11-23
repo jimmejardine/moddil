@@ -613,7 +613,8 @@ pub extern "C" fn os_random() -> u64 {
 }
 
 /// `core::gpu::dispatch` (`gpu.1`): kernel `source` (`sn` bytes at `sp`) with the `pn` bytes of
-/// parameters at `pp`, over a `width` by `height` image, its `on` pixels at `op`; 1 if it ran.
+/// parameters at `pp`, over a `width` by `height` image, its `on` pixels at `op`, as `mode` says
+/// (1 show it, 2 read it back); 1 if it ran.
 /// Only a run of `main` has a GPU, and only in a browser: a test's never does, so it replays.
 ///
 /// # Safety
@@ -630,7 +631,7 @@ pub unsafe extern "C" fn gpu_dispatch(
     height: u64,
     op: *mut u32,
     on: u64,
-    present: u8,
+    mode: u64,
 ) -> u8 {
     if !with(|s| s.sched.os().is_some()) {
         return 0;
@@ -649,8 +650,25 @@ pub unsafe extern "C" fn gpu_dispatch(
         width as i64,
         height as i64,
         out,
-        present != 0,
+        mode as u32,
     ))
+}
+
+/// `core::gpu::show` (`gpu.1`): shows the `n` pixels at `p`, a `width` by `height` image drawn
+/// on the CPU, in the page. Only a run of `main` in a browser has a page.
+///
+/// # Safety
+///
+/// `p` points to `n` words.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_gpu_show")]
+pub unsafe extern "C" fn gpu_show(p: *const u32, n: u64, width: u64, height: u64) {
+    if !with(|s| s.sched.os().is_some()) {
+        return;
+    }
+    // SAFETY: as the caller promises.
+    let pixels = unsafe { std::slice::from_raw_parts(p, n as usize) };
+    crate::os::gpu_show(pixels, width as i64, height as i64);
 }
 
 /// `core::gpu::frame` (`gpu.1`): the next frame's 8 words into `out`. Outside a run of `main`

@@ -146,20 +146,32 @@ Initial targets, to be refined:
 ## As built (M2e)
 
 The first build ([`roadmap.md`](../roadmap.md), slice M2e), `examples/mandelbulb/web`:
-- **The kernel, `render`, is Moddil**, lowered to WGSL, and drawn on WebGPU; the camera, the
-  estimator and the shading are the pure `mandelbulb` mod, shared with the CPU preview.
+- **The kernel, `render`, is Moddil**, lowered to WGSL, and drawn on WebGPU, a thread per pixel
+  (`Tile::each`); the camera, the estimator and the shading are the pure `mandelbulb` mod, shared
+  with the CPU preview.
+- **The look (M2g):**
+  - colours from the orbit's traps through a cosine palette;
+  - ambient occlusion sampled along the normal;
+  - soft shadows from the sun;
+  - sky light, a rim light at grazing angles, a sky gradient with the sun's glow, distance fog
+    and gamma.
+- **Speed (M2g):**
+  - the power-8 step multiplies the angles by doubling them, with no trigonometric functions,
+    and normals take four samples;
+  - frames are shown from the GPU with no copy back;
+  - buffers and bind groups are made once;
+  - the resolution and the steps adapt to the frame time;
+  - a corner of the page shows the fps, the image's size and the GPU's time.
 - **The program is a `main(gpu: GpuRoot, window: Window)` frame loop**: each animation frame gives
   the input (WASD, the mouse while dragging or with the pointer locked, the wheel) and the time
   since the last, which moves the camera and adapts the quality. The page is the plain one
   `moddil build --wasm` writes, with a full-window canvas.
 - **Tested:** golden images on the CPU simulator, everywhere; and headless Chrome on SwiftShader's
-  WebGPU draws the first frame on the GPU, lighting the simulator's pixels with brightness within
-  2%.
+  WebGPU draws the first frame on the GPU with each colour channel's sum within 3% of the
+  simulator's (it is within 0.01%), then shows two more frames without reading them back.
 - **Not yet:**
   - the exported `Flight` that the page drives, `moddil bind`, and the Svelte overlay (sliders,
     fps, "copy link");
-  - ambient occlusion, and colour;
-  - keeping each frame on the GPU: its pixels are read back and drawn on a 2D canvas;
   - a message without WebGPU (it falls back to the CPU simulator, slowly);
   - the success criteria's measurements.
 

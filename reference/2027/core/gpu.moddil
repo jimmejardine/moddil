@@ -3,7 +3,8 @@
 // `gpu` mod builds launches and the root capability `GpuRoot` over it.
 
 // The WGSL of kernel `k` (a function marked `#[kernel]`, named as a value): its compute entry
-// point `main`, one invocation per 8 x 8 tile. Empty where no backend made it (an interpreter).
+// point `main`, a workgroup of 8 x 8 invocations per 8 x 8 tile. Empty where no backend made it
+// (an interpreter).
 #[intrinsic]
 pub fn source<K>(k: &K) -> &str;
 
@@ -13,10 +14,16 @@ pub fn source<K>(k: &K) -> &str;
 pub fn bytes<T>(v: &T) -> &[u8];
 
 // Runs kernel `source` on the GPU over a `width` x `height` image (in 8 x 8 tiles), with its
-// parameters `params`, into `out` (a packed RGBA8 pixel each, row by row); with `present`, also
-// shows the image in the page's canvas. False where there is no GPU, and then nothing ran.
+// parameters `params`. `mode` is the sum of what to do with the image: 1, show it in the page's
+// canvas (on the GPU, with no copy back); 2, read its pixels back into `out` (a packed RGBA8
+// pixel each, row by row). False where there is no GPU, and then nothing ran.
 #[intrinsic]
-pub fn dispatch(source: &str, params: &[u8], width: int, height: int, out: &mut [u32], present: bool) -> bool with suspend;
+pub fn dispatch(source: &str, params: &[u8], width: int, height: int, out: &mut [u32], mode: int) -> bool with suspend;
+
+// Shows `pixels` (packed RGBA8, row by row), a `width` x `height` image drawn on the CPU, in the
+// page's canvas. Nothing outside a page.
+#[intrinsic]
+pub fn show(pixels: &[u32], width: int, height: int) with suspend;
 
 // Waits for the page's next animation frame: how long since the last one in microseconds, the
 // canvas's width and height, the keys held (a bit each), the mouse's movement and the wheel's

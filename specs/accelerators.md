@@ -263,6 +263,14 @@ The first GPU path ([`roadmap.md`](roadmap.md), slice M2e; reference `gpu.md`), 
   of a scope (`s.launch`), with joins, come later.
 - **Parameters cross as bytes in Moddil's own layout**, decoded by the generated entry point, so the
   host and the kernel cannot disagree about a layout.
+- **Since M2g:**
+  - a tile is a workgroup of 8 x 8 threads, and `Tile::each(|px, py| colour)` gives each thread
+    its own pixel: the kernel's body runs on every thread, being pure;
+  - the WGSL has real loops and branches, rebuilt from the MIR; a shape WGSL's unlabelled `break`
+    cannot express keeps the loop-over-switch fallback;
+  - `gpu::present` shows an image straight from the GPU, with no copy back, and `launch` reads
+    one back.
+  - WGSL's back ends inline every function, so Moddil does no inlining of its own.
 
 ## Errors
 

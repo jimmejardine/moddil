@@ -1,9 +1,15 @@
 //! Lowers a Moddil kernel (`#[kernel]`, `reference/2027/gpu.md`) to naga's IR, validates it, and
-//! writes it as WGSL: a compute entry point `main` with one invocation per 8 x 8 tile.
+//! writes it as WGSL: a compute entry point `main`, a workgroup of 8 x 8 invocations per 8 x 8
+//! tile.
 //!
-//! - **From the MIR**, specialised: the kernel and each function it calls, with concrete type
-//!   arguments, become naga functions. A body is a loop over a switch on its current block, which
-//!   is structured whatever the MIR's control flow.
+//! - **One thread per pixel:** a kernel that draws with `Tile::each` runs on every thread of its
+//!   tile's workgroup (it is pure, so each computes the same values), and each thread runs the
+//!   closure `each` is given for its own pixel. A kernel that only uses `Tile::set` runs on the
+//!   workgroup's first thread.
+//! - **From the MIR**, specialised: the kernel and each function (and the `each` closure) it
+//!   calls, with concrete type arguments, become naga functions. Their control flow is rebuilt as
+//!   `if` and `loop` (`structure`); a body whose shape does not fit is a loop over a switch on
+//!   its current block, which is structured whatever the MIR's control flow.
 //! - **Values:** `int` is `i32` (WGSL has no 64-bit integers), `f32` and `bool` themselves, `u8`
 //!   to `u32` as `u32`; structs and tuples are structs, an enum a struct of its tag and every
 //!   variant's fields; a borrow is the value it borrows (kernel code only reads through shared
@@ -14,13 +20,19 @@
 //!   generated code reads), the image's pixels (`@binding(1)`, packed RGBA8 row by row), and its
 //!   width and height (`@binding(2)`).
 
+mod structure;
+
 use std::collections::HashMap;
+
+use structure::Exit;
 
 use moddil_mir::{
     AggregateKind, BinOp, Body, Const, Operand, Place, Projection, Rvalue, Statement, Terminator,
     UnOp,
 };
-use moddil_sema::{Callee, Db, Item, ItemTree, Num, Owner, Program, Solver, TraitRef, Ty};
+use moddil_sema::{
+    Callee, ClosureTy, Db, Item, ItemTree, Num, Owner, Program, Solver, TraitRef, Ty,
+};
 use naga::{
     AddressSpace, ArraySize, BinaryOperator, Binding, Block, BuiltIn, EntryPoint, Expression,
     Function, FunctionArgument, FunctionResult, GlobalVariable, Handle, Literal, LocalVariable,
@@ -39,12 +51,7 @@ pub fn kernel_of(db: &dyn Db, program: Program, k: &Ty) -> Option<u32> {
     let Ty::Closure(c) = k else {
         return None;
     };
-    let item = match c.owner {
-        Item::Fn(f) => Item::Closure(f, false, c.expr),
-        Item::Test(t) => Item::Closure(t, true, c.expr),
-        Item::Closure(..) => return None,
-    };
-    let body = moddil_mir::mir(db, Owner::new(db, program, item)).as_ref()?;
+    let body = moddil_mir::mir(db, Owner::new(db, program, closure_item(c)?)).as_ref()?;
     body.blocks.iter().find_map(|b| match &b.terminator {
         Terminator::Call {
             callee: Callee::Fn { func, .. },
@@ -52,6 +59,16 @@ pub fn kernel_of(db: &dyn Db, program: Program, k: &Ty) -> Option<u32> {
         } if items.fns[*func as usize].kernel => Some(*func),
         _ => None,
     })
+}
+
+/// The body of closure type `c`, as an item: a closure written in a function or a test (not in
+/// another closure).
+fn closure_item(c: &ClosureTy) -> Option<Item> {
+    match c.owner {
+        Item::Fn(f) => Some(Item::Closure(f, false, c.expr)),
+        Item::Test(t) => Some(Item::Closure(t, true, c.expr)),
+        Item::Closure(..) => None,
+    }
 }
 
 /// The WGSL of kernel `kernel` (a function of `program`'s item tree marked `#[kernel]`).
@@ -103,12 +120,14 @@ pub fn module(
     Ok(l.module)
 }
 
-/// The module's buffers.
+/// The module's buffers, and the pixel of its tile this thread draws (for `Tile::each`).
 #[derive(Clone, Copy)]
 struct Globals {
     params: Handle<GlobalVariable>,
     pixels: Handle<GlobalVariable>,
     size: Handle<GlobalVariable>,
+    px: Handle<GlobalVariable>,
+    py: Handle<GlobalVariable>,
 }
 
 struct Lowering<'a> {
@@ -174,10 +193,28 @@ impl Lowering<'_> {
             naga::StorageAccess::LOAD | naga::StorageAccess::STORE,
         );
         let size = g("size", 2, naga::StorageAccess::LOAD);
+        let i32t = self.scalar(Scalar::I32);
+        let mut private = |name: &str| {
+            self.module.global_variables.append(
+                GlobalVariable {
+                    name: Some(name.to_string()),
+                    space: AddressSpace::Private,
+                    binding: None,
+                    ty: i32t,
+                    init: None,
+                    memory_decorations: naga::MemoryDecorations::empty(),
+                },
+                U,
+            )
+        };
+        let px = private("px");
+        let py = private("py");
         Globals {
             params,
             pixels,
             size,
+            px,
+            py,
         }
     }
 
@@ -281,10 +318,40 @@ impl Lowering<'_> {
                 // A struct without fields has no value, as `()`.
                 (!members.is_empty()).then(|| self.structure(&name, members))
             }
+            // A closure (`Tile::each`'s): its captures, the first parameter of its body.
+            Ty::Closure(c) => {
+                let item = closure_item(c).ok_or("a closure in a closure, in a kernel")?;
+                let owner = Owner::new(self.db, self.program, item);
+                let body = moddil_mir::mir(self.db, owner)
+                    .as_ref()
+                    .ok_or("a program with errors")?;
+                let env = body.locals.get(1).ok_or("a closure's captures")?.ty.clone();
+                self.ty(&env)?
+            }
             t => return Err(format!("a `{t}` in a kernel")),
         };
         self.types.insert(t, h);
         Ok(h)
+    }
+
+    /// Whether kernel `kernel` draws with `Tile::each`, so each thread of a tile draws a pixel.
+    fn draws_each(&self, kernel: u32) -> Result<bool, String> {
+        let owner = Owner::new(self.db, self.program, Item::Fn(kernel));
+        let body = moddil_mir::mir(self.db, owner)
+            .as_ref()
+            .ok_or("a program with errors")?;
+        Ok(body.blocks.iter().any(|b| match &b.terminator {
+            Terminator::Call {
+                callee: Callee::Fn { func, .. },
+                ..
+            } => {
+                let f = &self.items.fns[*func as usize];
+                f.name == "each"
+                    && matches!(f.container, moddil_sema::Container::Impl(k)
+                        if self.is_tile(&self.items.impls[k as usize].self_ty))
+            }
+            _ => false,
+        }))
     }
 
     /// A struct of `members` (each a scalar or a struct of them), laid out as WGSL lays it out.
@@ -344,8 +411,9 @@ impl Lowering<'_> {
         Ok(h)
     }
 
-    /// The entry point: one invocation per 8 x 8 tile, which reads the parameters and calls the
-    /// kernel with them and its tile.
+    /// The entry point: a workgroup of 8 x 8 invocations per 8 x 8 tile, each of which reads the
+    /// parameters, notes its pixel, and calls the kernel with them and its tile (for a kernel
+    /// without `Tile::each`, only the first).
     fn entry(&mut self, kernel: u32) -> Result<(), String> {
         let sig = &self.items.fns[kernel as usize];
         if !sig.kernel {
@@ -353,6 +421,7 @@ impl Lowering<'_> {
         }
         let param_ty = sig.params[0].ty.clone();
         let tile_ty = sig.params[1].ty.clone();
+        let each = self.draws_each(kernel)?;
         let k = self.function(Item::Fn(kernel), &[])?;
         let g = self.globals.expect("the globals");
         let u32v = self.module.types.insert(
@@ -365,47 +434,64 @@ impl Lowering<'_> {
             },
             U,
         );
+        let arg = |name: &str, b| FunctionArgument {
+            name: Some(name.to_string()),
+            ty: u32v,
+            binding: Some(Binding::BuiltIn(b)),
+        };
         let mut f = Function {
             name: Some("main".to_string()),
-            arguments: vec![FunctionArgument {
-                name: Some("id".to_string()),
-                ty: u32v,
-                binding: Some(Binding::BuiltIn(BuiltIn::GlobalInvocationId)),
-            }],
+            arguments: vec![
+                arg("tile", BuiltIn::WorkGroupId),
+                arg("pixel", BuiltIn::LocalInvocationId),
+            ],
             ..Function::default()
         };
         let mut e = Exprs::new(&mut f);
-        let id = e.add(Expression::FunctionArgument(0));
-        let index = e.emit(Expression::AccessIndex { base: id, index: 0 });
-        let width = e.word(g.size, 0);
-        let height = e.word(g.size, 1);
-        let seven = e.add(Expression::Literal(Literal::U32(7)));
+        let wg = e.add(Expression::FunctionArgument(0));
+        let lid = e.add(Expression::FunctionArgument(1));
         let eight = e.add(Expression::Literal(Literal::U32(8)));
-        let w7 = e.bin(BinaryOperator::Add, width, seven);
-        let across = e.bin(BinaryOperator::Divide, w7, eight);
-        let h7 = e.bin(BinaryOperator::Add, height, seven);
-        let down = e.bin(BinaryOperator::Divide, h7, eight);
-        let tiles = e.bin(BinaryOperator::Multiply, across, down);
-        let outside = e.bin(BinaryOperator::GreaterEqual, index, tiles);
-        e.push(S::If {
-            condition: outside,
-            accept: Block::from_vec(vec![S::Return { value: None }]),
-            reject: Block::new(),
+        let int = |e: &mut Exprs<'_>, v| {
+            e.emit(Expression::As {
+                expr: v,
+                kind: ScalarKind::Sint,
+                convert: Some(4),
+            })
+        };
+        let wx = e.emit(Expression::AccessIndex { base: wg, index: 0 });
+        let wy = e.emit(Expression::AccessIndex { base: wg, index: 1 });
+        let x = e.bin(BinaryOperator::Multiply, wx, eight);
+        let y = e.bin(BinaryOperator::Multiply, wy, eight);
+        let xi = int(&mut e, x);
+        let yi = int(&mut e, y);
+        let lx = e.emit(Expression::AccessIndex {
+            base: lid,
+            index: 0,
         });
-        let col = e.bin(BinaryOperator::Modulo, index, across);
-        let row = e.bin(BinaryOperator::Divide, index, across);
-        let x = e.bin(BinaryOperator::Multiply, col, eight);
-        let y = e.bin(BinaryOperator::Multiply, row, eight);
-        let xi = e.emit(Expression::As {
-            expr: x,
-            kind: ScalarKind::Sint,
-            convert: Some(4),
+        let ly = e.emit(Expression::AccessIndex {
+            base: lid,
+            index: 1,
         });
-        let yi = e.emit(Expression::As {
-            expr: y,
-            kind: ScalarKind::Sint,
-            convert: Some(4),
-        });
+        let lxi = int(&mut e, lx);
+        let lyi = int(&mut e, ly);
+        for (g, v) in [(g.px, lxi), (g.py, lyi)] {
+            let p = e.add(Expression::GlobalVariable(g));
+            e.push(S::Store {
+                pointer: p,
+                value: v,
+            });
+        }
+        if !each {
+            // A kernel that draws its tile itself: the workgroup's first thread.
+            let any = e.bin(BinaryOperator::InclusiveOr, lx, ly);
+            let zero = e.add(Expression::Literal(Literal::U32(0)));
+            let other = e.bin(BinaryOperator::NotEqual, any, zero);
+            e.push(S::If {
+                condition: other,
+                accept: Block::from_vec(vec![S::Return { value: None }]),
+                reject: Block::new(),
+            });
+        }
         let tile = self.ty(&tile_ty)?.expect("a tile type");
         let params = self.decode(&mut f, &param_ty, 0)?;
         let mut e = Exprs::new(&mut f);
@@ -422,7 +508,7 @@ impl Lowering<'_> {
             name: "main".to_string(),
             stage: ShaderStage::Compute,
             early_depth_test: None,
-            workgroup_size: [64, 1, 1],
+            workgroup_size: [8, 8, 1],
             workgroup_size_overrides: None,
             function: f,
             mesh_info: None,
@@ -624,6 +710,42 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                 value: a,
             });
         }
+        let mut body = std::mem::take(&mut self.out);
+        // Each block's statements, and where it goes after them.
+        let mut stmts = Vec::new();
+        let mut exits = Vec::new();
+        for block in &self.body.blocks {
+            for s in &block.statements {
+                self.statement(s)?;
+            }
+            exits.push(self.exit(&block.terminator)?);
+            stmts.push(std::mem::take(&mut self.out));
+        }
+        let structured = {
+            let mut fresh_return = || {
+                let value = self.var_value(0);
+                let mut s = std::mem::take(&mut self.out);
+                s.push(S::Return { value });
+                s
+            };
+            structure::structure(&stmts, &exits, &mut fresh_return)
+        };
+        match structured {
+            Some(mut s) => body.append(&mut s),
+            None => body.extend(self.dispatcher(stmts, &exits)),
+        }
+        // Never reached (each path returns), but a function giving a value ends with a return:
+        // its own load, as the others are out of scope here.
+        let ret_value = self.var_value(0);
+        body.append(&mut self.out);
+        body.push(S::Return { value: ret_value });
+        self.f.body = Block::from_vec(body);
+        Ok(self.f)
+    }
+
+    /// The blocks `stmts` (with their exits) as the cases of a switch in a loop, the variable
+    /// `bb` saying which runs next: correct for any control flow.
+    fn dispatcher(&mut self, stmts: Vec<Vec<S>>, exits: &[Exit]) -> Vec<S> {
         let i32t = self.l.scalar(Scalar::I32);
         let bb = self.f.local_variables.append(
             LocalVariable {
@@ -634,22 +756,21 @@ impl<'l, 'a> FnLowering<'l, 'a> {
             U,
         );
         self.bb = Some(bb);
-        let zero = self.add(Expression::Literal(Literal::I32(0)));
-        let pbb = self.add(Expression::LocalVariable(bb));
-        self.out.push(S::Store {
-            pointer: pbb,
-            value: zero,
-        });
-        let entry = std::mem::take(&mut self.out);
+        let mut out = vec![self.goto(0)];
         let mut cases = Vec::new();
-        for (n, block) in self.body.blocks.iter().enumerate() {
-            for s in &block.statements {
-                self.statement(s)?;
+        for (n, (mut s, exit)) in stmts.into_iter().zip(exits).enumerate() {
+            match *exit {
+                Exit::Goto(t) => s.push(self.goto(t)),
+                Exit::Branch(condition, t, e) => s.push(S::If {
+                    condition,
+                    accept: Block::from_vec(vec![self.goto(t)]),
+                    reject: Block::from_vec(vec![self.goto(e)]),
+                }),
+                Exit::Return(value) | Exit::Abort(value) => s.push(S::Return { value }),
             }
-            self.terminator(&block.terminator)?;
             cases.push(SwitchCase {
                 value: SwitchValue::I32(n as i32),
-                body: Block::from_vec(std::mem::take(&mut self.out)),
+                body: Block::from_vec(s),
                 fall_through: false,
             });
         }
@@ -666,20 +787,12 @@ impl<'l, 'a> FnLowering<'l, 'a> {
             selector: sel,
             cases,
         });
-        let mut body = entry;
-        body.push(S::Loop {
+        out.push(S::Loop {
             body: Block::from_vec(loop_body),
             continuing: Block::new(),
             break_if: None,
         });
-        // Never reached (each block returns or goes on), but a function giving a value ends
-        // with a return: its own load, as the loop's are out of scope here.
-        let ret_value = self.var_value(0);
-        body.append(&mut self.out);
-        body.push(S::Return { value: ret_value });
-        // Expressions were emitted into `out`; the function's body is what was built here.
-        self.f.body = Block::from_vec(body);
-        Ok(self.f)
+        out
     }
 
     fn add(&mut self, e: Expression) -> Handle<Expression> {
@@ -707,14 +820,14 @@ impl<'l, 'a> FnLowering<'l, 'a> {
         Some(self.emit_expr(Expression::Load { pointer: p }))
     }
 
-    /// Goes to block `b` next.
-    fn goto(&mut self, b: usize) {
+    /// Goes to block `b` next, in the dispatcher.
+    fn goto(&mut self, b: usize) -> S {
         let v = self.add(Expression::Literal(Literal::I32(b as i32)));
         let p = self.add(Expression::LocalVariable(self.bb.expect("bb")));
-        self.out.push(S::Store {
+        S::Store {
             pointer: p,
             value: v,
-        });
+        }
     }
 
     /// A pointer to `place`, and the place's type; `None` for a place with no value.
@@ -929,9 +1042,12 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                         }
                         c
                     }
-                    AggregateKind::Tuple | AggregateKind::Adt { .. } => vals,
-                    AggregateKind::Array | AggregateKind::Closure(_) => {
-                        return Err("an array or closure in a kernel".to_string());
+                    // A closure's value is its captures (`Tile::each`'s).
+                    AggregateKind::Tuple
+                    | AggregateKind::Adt { .. }
+                    | AggregateKind::Closure(_) => vals,
+                    AggregateKind::Array => {
+                        return Err("an array in a kernel".to_string());
                     }
                 };
                 Some(self.emit_expr(Expression::Compose { ty: th, components }))
@@ -972,33 +1088,20 @@ impl<'l, 'a> FnLowering<'l, 'a> {
         }))
     }
 
-    fn terminator(&mut self, t: &Terminator) -> Result<(), String> {
-        match t {
-            Terminator::Goto(b) | Terminator::Drop { target: b, .. } => self.goto(b.index()),
+    /// Where a block with terminator `t` goes; a call's statements are written first.
+    fn exit(&mut self, t: &Terminator) -> Result<Exit, String> {
+        Ok(match t {
+            Terminator::Goto(b) | Terminator::Drop { target: b, .. } => Exit::Goto(b.index()),
             Terminator::SwitchBool { cond, then, else_ } => {
                 let c = self.operand(cond)?.ok_or("a condition")?;
-                let outer = std::mem::take(&mut self.out);
-                self.goto(then.index());
-                let accept = std::mem::take(&mut self.out);
-                self.goto(else_.index());
-                let reject = std::mem::take(&mut self.out);
-                self.out = outer;
-                self.out.push(S::If {
-                    condition: c,
-                    accept: Block::from_vec(accept),
-                    reject: Block::from_vec(reject),
-                });
+                Exit::Branch(c, then.index(), else_.index())
             }
-            // A return; or a trap, or code that cannot run: the invocation ends (traps are not
-            // checked).
-            Terminator::Return
-            | Terminator::Trap(..)
+            Terminator::Return => Exit::Return(self.var_value(0)),
+            // A trap, or code that cannot run: the invocation ends (traps are not checked).
+            Terminator::Trap(..)
             | Terminator::Unreachable
             | Terminator::Resume
-            | Terminator::Fail(_) => {
-                let v = self.var_value(0);
-                self.out.push(S::Return { value: v });
-            }
+            | Terminator::Fail(_) => Exit::Abort(self.var_value(0)),
             Terminator::Call {
                 callee,
                 args,
@@ -1007,10 +1110,9 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                 ..
             } => {
                 self.call(callee, args, dest)?;
-                self.goto(target.index());
+                Exit::Goto(target.index())
             }
-        }
-        Ok(())
+        })
     }
 
     /// Calls `callee` with `args`, its result into `dest`.
@@ -1068,6 +1170,10 @@ impl<'l, 'a> FnLowering<'l, 'a> {
         // The tile's `set`: a pixel of the image.
         if owner == "Tile" && name == "set" {
             return self.set_pixel(&vals);
+        }
+        // The tile's `each`: this thread's pixel, from the closure.
+        if owner == "Tile" && name == "each" {
+            return self.each(&args[1], &vals);
         }
         // The number functions: WGSL's built-ins.
         if owner == "number" && (sig.intrinsic || matches!(name, "to")) {
@@ -1129,6 +1235,43 @@ impl<'l, 'a> FnLowering<'l, 'a> {
             store(self, r);
         }
         Ok(())
+    }
+
+    /// The tile's `each(f)`, `vals` its tile and `f`'s captures (if any): this thread's pixel of
+    /// the tile, `f(px, py)`.
+    fn each(&mut self, closure: &Operand, vals: &[Handle<Expression>]) -> Result<(), String> {
+        let g = self.l.globals.expect("the globals");
+        let ct = self.l.plain(&self.concrete(&self.operand_ty(closure)));
+        let Ty::Closure(c) = &ct else {
+            return Err("a tile's `each` of other than a closure".to_string());
+        };
+        let item = closure_item(c).ok_or("a closure in a closure, in a kernel")?;
+        let h = self.l.function(item, &self.targs)?;
+        let pair_ty = self.l.module.functions[h]
+            .arguments
+            .last()
+            .map(|a| a.ty)
+            .ok_or("the closure's arguments")?;
+        let tile = *vals.first().ok_or("a tile")?;
+        let mut arguments: Vec<Handle<Expression>> = vals.get(1).copied().into_iter().collect();
+        let coord = |this: &mut Self, v| {
+            let p = this.add(Expression::GlobalVariable(v));
+            this.emit_expr(Expression::Load { pointer: p })
+        };
+        let px = coord(self, g.px);
+        let py = coord(self, g.py);
+        let pair = self.emit_expr(Expression::Compose {
+            ty: pair_ty,
+            components: vec![px, py],
+        });
+        arguments.push(pair);
+        let result = self.add(Expression::CallResult(h));
+        self.out.push(S::Call {
+            function: h,
+            arguments,
+            result: Some(result),
+        });
+        self.set_pixel(&[tile, px, py, result])
     }
 
     /// The tile's `set(px, py, colour)`: the image's pixel, if it is in the image.
