@@ -108,6 +108,7 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
         locals: vec![None; hir.locals.len()],
         recording: HashMap::new(),
         moved_parts: HashSet::new(),
+        parts_in_place: HashMap::new(),
         compare_expr: ExprId::from_raw(la_arena::RawIdx::from_u32(0)),
         targets: vec![Target::Out],
         on_error: HashMap::new(),
@@ -238,6 +239,7 @@ fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
         locals: vec![None; hir.locals.len()],
         recording: HashMap::new(),
         moved_parts: HashSet::new(),
+        parts_in_place: HashMap::new(),
         compare_expr: ExprId::from_raw(la_arena::RawIdx::from_u32(0)),
         targets: vec![Target::Out],
         on_error: HashMap::new(),
@@ -309,6 +311,9 @@ struct Builder<'a> {
     /// The parts of the `assert` being built whose values were moved away (to a call that takes
     /// them, say), so a failure cannot show them: their locals are empty then.
     moved_parts: HashSet<ExprId>,
+    /// The parts of the `assert` being built that are borrowed where they live, not computed
+    /// into a local of their own (a method's receiver): the place a failure shows.
+    parts_in_place: HashMap<ExprId, (Place, Vec<(usize, bool)>)>,
     /// The comparison chain being built.
     compare_expr: ExprId,
     /// Where an error raised now goes, innermost last.

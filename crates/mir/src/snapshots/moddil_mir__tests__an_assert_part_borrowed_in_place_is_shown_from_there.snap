@@ -1,0 +1,55 @@
+---
+source: crates/mir/src/tests.rs
+expression: "dump(\"test \\\"t\\\" {\n    let v: Vec<int> = Vec::new();\n    assert(v.len() == 1);\n}\")"
+---
+fn "t"() -> () {
+    let _1: ();
+    let _2: Vec<int>;
+    let _3: Vec<int>; // v
+    let _4: ();
+    let _5: bool;
+    let _6: bool;
+    let _7: int;
+    let _8: bool;
+    let _9: Vec<int>;
+    let _10: bool;
+    let _11: &Vec<int>;
+
+    bb0: {
+        _2 = Vec<T>::new::<int>() -> bb1 @ 33..43;
+    }
+
+    bb1: {
+        _3 = move _2;
+        drop(_2) -> bb2;
+    }
+
+    bb2: {
+        _6 = const false;
+        _8 = const false;
+        _10 = const false;
+        _10 = const true;
+        _11 = &_3;
+        _7 = Vec<T>::len::<int>(move _11) -> bb3 @ 56..63;
+    }
+
+    bb3: {
+        _8 = const true;
+        _5 = Eq(_7, const 1);
+        _6 = const true;
+        assert(_5, assertion failed) @ 49..69 showing [_5 if _6, _7 if _8, _3 if _10];
+        _4 = const ();
+        drop(_9) -> bb4;
+    }
+
+    bb4: {
+        _1 = const ();
+        drop(_3) -> bb5;
+    }
+
+    bb5: {
+        StorageDead(_3);
+        _0 = const ();
+        return;
+    }
+}

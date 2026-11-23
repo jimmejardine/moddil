@@ -268,15 +268,17 @@ pub enum Statement {
     },
 }
 
-/// A part of an `assert`'s condition (a local, a call, an operator): where it is, the local its
-/// value is stored in, and a `bool` local that says whether it was evaluated (`&&`, `||` and
-/// comparison chains may skip parts).
+/// A part of an `assert`'s condition (a local, a call, an operator): where it is, the place its
+/// value is in, and a `bool` local that says whether it was evaluated (`&&`, `||` and
+/// comparison chains may skip parts). The place is a local of its own for a value computed, or
+/// where the value lives for one borrowed where it is (a method's receiver), which a failure
+/// shows only if it still holds a value there.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AssertPart {
     /// The part's source.
     pub range: TextRange,
     /// Its value, if it was evaluated.
-    pub value: Local,
+    pub value: Place,
     /// Whether it was evaluated.
     pub evaluated: Local,
 }

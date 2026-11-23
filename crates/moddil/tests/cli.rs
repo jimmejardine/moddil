@@ -76,6 +76,31 @@ fn a_failed_assert_shows_its_parts() {
     assert!(stderr.contains("= 275"), "{stderr}");
 }
 
+/// A part borrowed where it lives (a method's receiver, and what it is a field of) is shown from
+/// there, and one the condition moves away later is not shown, alike everywhere.
+#[test]
+fn a_failed_assert_shows_borrowed_parts_everywhere() {
+    let text = "fn has(v: Vec<int>, n: int) -> bool { v.len() == n }\n\
+                struct Bag { items: Vec<int> }\n\
+                test \"borrowed\" { let b = Bag { items: [7] }; assert(b.items.len() == 2); }\n\
+                test \"moved\" { let v: Vec<int> = [1, 2]; assert(v.len() == 2 && has(v, 9)); }\n";
+    let path = file("assert-borrowed.moddil", text);
+    for how in [&["test"][..], &["test", "--interp"], &["test", "--wasm"]] {
+        let out = moddil(how, &path);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        if how.contains(&"--wasm") && stderr.contains("no Node") {
+            continue;
+        }
+        assert_eq!(out.status.code(), Some(1), "{how:?}: {stderr}");
+        assert!(!stderr.contains("not evaluated"), "{how:?}: {stderr}");
+        assert!(stderr.contains("b.items            = [7]"), "{how:?}: {stderr}");
+        assert!(stderr.contains("b                  = Bag { items: [7] }"), "{how:?}: {stderr}");
+        // `v` was moved to `has` after `v.len()` borrowed it: not there to show.
+        assert!(!stderr.contains("v      "), "{how:?}: {stderr}");
+        assert!(stderr.contains("has(v, 9)                 = false"), "{how:?}: {stderr}");
+    }
+}
+
 #[test]
 fn runs_as_wasm_when_asked() {
     let out = moddil(&["run", "--wasm"], &file("fib-wasm.moddil", PROGRAM));

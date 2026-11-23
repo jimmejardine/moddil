@@ -101,6 +101,17 @@ fn an_assert_part_moved_away_is_not_shown() {
     ));
 }
 
+/// A method's receiver borrowed where it lives is shown from there, not copied.
+#[test]
+fn an_assert_part_borrowed_in_place_is_shown_from_there() {
+    insta::assert_snapshot!(dump(
+        "test \"t\" {
+    let v: Vec<int> = Vec::new();
+    assert(v.len() == 1);
+}"
+    ));
+}
+
 #[test]
 fn aggregates_and_fields() {
     insta::assert_snapshot!(dump(

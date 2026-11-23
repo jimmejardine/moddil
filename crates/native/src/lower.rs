@@ -2335,7 +2335,6 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 // Each part of the condition, with its value if it was evaluated, for the
                 // report.
                 for (k, p) in parts.iter().enumerate() {
-                    let ty = self.tys[p.value.index()].clone();
                     let Val::Scalar(evaluated) = self.read_local(p.evaluated)? else {
                         continue;
                     };
@@ -2344,7 +2343,10 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                     let next = self.b.create_block();
                     self.b.ins().brif(evaluated, yes, &[], no, &[]);
                     self.b.switch_to_block(yes);
-                    let v = self.read_local(p.value)?;
+                    // Its own local, or where it lives if it was borrowed there.
+                    let r = self.place(&p.value)?;
+                    let ty = r.ty.clone();
+                    let v = self.read(&r)?;
                     let addr = self.spilled(v, &ty)?;
                     let site = self.site(Site::Part(p.range, Some(ty), k == 0));
                     self.observe_call(site, addr);

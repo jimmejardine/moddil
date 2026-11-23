@@ -70,6 +70,26 @@ impl Builder<'_> {
         self.eval_plain(dest, e);
     }
 
+    /// If `e` is a part of the `assert` being built and a place, borrowed where it lives (a
+    /// method's receiver), it is shown from there, as are the places it is a field of: they are
+    /// not computed, so not copied, and stay where they are.
+    pub(super) fn part_in_place(&mut self, e: ExprId) {
+        let Some(&(_, evaluated)) = self.recording.get(&e) else {
+            return;
+        };
+        let Some(place) = self.place_of(e) else {
+            return;
+        };
+        self.recording.remove(&e);
+        self.cfg
+            .assign(evaluated, Rvalue::Use(Operand::Const(Const::Bool(true))));
+        let mark = self.cfg.mark();
+        self.parts_in_place.insert(e, (place, mark));
+        if let ExprKind::Field { base, .. } = self.hir.exprs[e].kind {
+            self.part_in_place(base);
+        }
+    }
+
     /// The parts of an `assert`'s condition whose values a failure shows: every sub-expression
     /// that is not a literal, through operators, calls, fields, tuples and struct expressions.
     pub(super) fn assert_parts(&self, e: ExprId, out: &mut Vec<ExprId>) {
@@ -439,7 +459,7 @@ impl Builder<'_> {
                     self.recording.insert(x, (value, evaluated));
                     parts.push(AssertPart {
                         range: self.range(x),
-                        value,
+                        value: Place::local(value),
                         evaluated,
                     });
                 }
@@ -450,8 +470,14 @@ impl Builder<'_> {
                 // A part moved away has no value left to show (and reading it would read what
                 // its new owner may have freed).
                 let mut kept = Vec::with_capacity(parts.len());
-                for (x, part) in exprs.iter().zip(parts) {
-                    if !self.moved_parts.remove(x) {
+                for (x, mut part) in exprs.iter().zip(parts) {
+                    let mut moved = self.moved_parts.remove(x);
+                    if let Some((p, mark)) = self.parts_in_place.remove(x) {
+                        // Shown where it lives, unless the rest of the condition moved it away.
+                        moved |= self.cfg.moved_since(&mark, p.local);
+                        part.value = p;
+                    }
+                    if !moved {
                         kept.push(part);
                     }
                 }
@@ -580,6 +606,7 @@ impl Builder<'_> {
                     .fns
                     .get(callee.func() as usize)
                     .is_some_and(|f| f.name == "deref_mut");
+                self.part_in_place(receiver);
                 let mut place = self.place(receiver);
                 let mut base = self.ty(receiver);
                 while let Ty::Ref(_, inner) = base.clone() {
@@ -625,6 +652,7 @@ impl Builder<'_> {
                 let adjust = self.types.adjust(e);
                 let recv = match adjust.autoref {
                     Some(m) => {
+                        self.part_in_place(receiver);
                         let mut place = self.place(receiver);
                         if adjust.deref {
                             place = place.deref();

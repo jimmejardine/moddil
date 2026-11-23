@@ -60,6 +60,58 @@ impl Cfg {
         self.current = block;
     }
 
+    /// Where each block's statements end now, and whether it is terminated: a point to look
+    /// back to with [`Cfg::moved_since`].
+    pub(super) fn mark(&self) -> Vec<(usize, bool)> {
+        self.body
+            .blocks
+            .iter()
+            .map(|b| (b.statements.len(), !matches!(b.terminator, Terminator::Unreachable)))
+            .collect()
+    }
+
+    /// Whether anything built since `mark` moves out of `local` (or a part of it) or drops it.
+    pub(super) fn moved_since(&self, mark: &[(usize, bool)], local: Local) -> bool {
+        let moves = |o: &Operand| matches!(o, Operand::Move(p) if p.local == local);
+        let in_rvalue = |r: &Rvalue| match r {
+            Rvalue::Use(a)
+            | Rvalue::Unsize(a, _)
+            | Rvalue::Widen(a, _)
+            | Rvalue::Unary(_, a)
+            | Rvalue::NegOverflows(a)
+            | Rvalue::Repeat(a, _)
+            | Rvalue::InBounds(a, _) => moves(a),
+            Rvalue::Binary(_, a, b) | Rvalue::Overflows(_, a, b) | Rvalue::SpanOk(a, b, _) => {
+                moves(a) || moves(b)
+            }
+            Rvalue::Aggregate(_, ops) => ops.iter().any(moves),
+            Rvalue::Discriminant(_)
+            | Rvalue::ErrorIs(..)
+            | Rvalue::Ref(..)
+            | Rvalue::Len(_)
+            | Rvalue::Length(_)
+            | Rvalue::StaticRef(_) => false,
+        };
+        self.body.blocks.iter().enumerate().any(|(i, b)| {
+            let (from, terminated) = mark.get(i).copied().unwrap_or((0, false));
+            let statements = b.statements[from..].iter().any(|s| match s {
+                Statement::Assign(_, r) => in_rvalue(r),
+                Statement::Assert { cond: o, .. } | Statement::Observe { value: o, .. } => {
+                    moves(o)
+                }
+                _ => false,
+            });
+            let terminator = !terminated
+                && match &b.terminator {
+                    Terminator::Call { args, .. } => args.iter().any(moves),
+                    Terminator::SwitchBool { cond: o, .. } | Terminator::Fail(o) => moves(o),
+                    Terminator::Drop { place, .. } => place.local == local,
+                    _ => false,
+                };
+            statements || terminator
+        })
+    }
+
     /// Records `span` with what is built from now on, and returns the span it replaces.
     pub(super) fn set_span(&mut self, span: TextRange) -> TextRange {
         std::mem::replace(&mut self.span, span)
