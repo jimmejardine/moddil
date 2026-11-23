@@ -163,28 +163,36 @@ impl Host {
         ));
         let io = |e: std::io::Error| Wasm::NoHost(e.to_string());
         std::fs::create_dir_all(&dir).map_err(io)?;
-        let (rt, module, host) = (
+        let (rt, shim, module, host) = (
             dir.join("runtime.wasm"),
+            dir.join("shim.wasm"),
             dir.join("module.wasm"),
             dir.join("host.cjs"),
         );
         std::fs::write(&rt, crate::runtime::BYTES).map_err(io)?;
+        std::fs::write(&shim, crate::module::shim()).map_err(io)?;
         std::fs::write(&module, &c.bytes).map_err(io)?;
         std::fs::write(&host, include_str!("host.cjs")).map_err(io)?;
         let l = c.layout;
         let mut child = Command::new(node())
             .arg(&host)
             .arg(&rt)
+            .arg(&shim)
             .arg(&module)
             .args(
                 [
                     l.pages,
+                    l.table,
                     l.out,
                     l.err,
                     l.record,
                     RECORD_WORDS,
                     l.data.0,
                     l.data.1,
+                    l.sites.0,
+                    l.sites.1,
+                    l.sites.2,
+                    u32::from(l.tasks),
                 ]
                 .map(|n| n.to_string()),
             )
@@ -212,6 +220,12 @@ impl Host {
         let l = h.line()?;
         if !l.contains_key("ready") {
             return Err(Wasm::Crash(format!("the host did not start: {l:?}")));
+        }
+        // Tasks suspend with JSPI, which Node has from version 26.
+        if c.layout.tasks && l.get("jspi").map_or(0, Value::num) == 0 {
+            return Err(Wasm::NoHost(
+                "tasks need JSPI, which this Node lacks (Node 26 has it)".to_string(),
+            ));
         }
         Ok(h)
     }

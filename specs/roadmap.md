@@ -827,8 +827,34 @@ calls is a Rust crate, `moddil-rt`, for now.
     Natively that went unseen; WASM's typed indirect calls refused it.
   - **Checking:** 110 conformance files run as WASM, every file native code runs but the nine
     with tasks, all agreeing with the interpreters.
-- **Next:** tasks on WASM with the JSPI lowering (`compiler.md`: WASM concurrency lowering).
-  Release builds (`lld` or `mold`, optimisation and debug info) after.
+- **Slice W2 (decided November 2026): tasks on WASM, with JSPI.** The WASM backend now runs
+  everything the native one does: all 119 conformance files native code runs, all agreeing.
+  - **Node 26**, where JSPI is standard. Where a Node lacks it, a module with tasks is reported
+    as having no host and skipped; modules without tasks run as plain calls anywhere.
+  - **The baton** (`moddil-rt`'s `baton.rs`): what differs between targets sits behind one
+    small interface:
+    - starting a task;
+    - handing the turn to a task and waiting for this one's;
+    - a task's body ending, and giving the turn on;
+    - waking every task in an aborted run.
+  - **Two implementations of the baton:**
+    - natively, a thread per task, as before;
+    - on `wasm32`, a promising call per task. Handing over calls the host's suspending
+      `switch`, and each task's call-site stack is saved across it.
+  - The scheduler and every task function stay shared.
+  - **Calls into the program:** the runtime calls a task's code and a value's drop glue through
+    a shim module that `WasmModule` writes. It shares the program's table (now the host's), so
+    every call is wasm to wasm, and JSPI never meets a JS frame.
+  - **Stacks:** each task has its own program and runtime shadow stacks (4 MiB and 256 KiB,
+    taken by growing memory and pooled), swapped by the host on each switch. JSPI's stacks are
+    made growable with `--experimental-wasm-growable-stacks`, which the host sets inside Node
+    (nothing on the command line). Without it, JSPI's fixed 1 MB stacks overflow before the
+    interpreters' 10,000-call limit.
+  - **A `Trapped`'s text** comes from the program's site tables, which `backend::lower` now
+    writes as `moddil build` does. The code that reads them moved into `moddil-rt` (`sites.rs`)
+    and is shared with `moddil-rt-main`.
+- **Next:** release builds (`lld` or `mold`, optimisation and debug info), and the browser
+  host.
 
 ## Staging: distributed programs
 

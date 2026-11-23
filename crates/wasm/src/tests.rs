@@ -229,3 +229,93 @@ fn tests_observe_values() {
         .collect();
     assert_eq!(shown, [vec!["P { x: 4, y: true }", "5"], vec!["[1, 2]"]]);
 }
+
+/// As [`check`], for code with tasks: skipped where Node has no JSPI.
+fn check_tasks(text: &str, want: &str) {
+    match run(text) {
+        Some(Err(Wasm::NoHost(why))) => eprintln!("skipped: {why}"),
+        Some(r) => assert_eq!(r.expect("a value"), want, "{text}"),
+        None => {}
+    }
+}
+
+#[test]
+fn tasks_run_in_turn_and_join() {
+    check_tasks(
+        "fn main() -> int { scope(|s| { let a = s.spawn(|| 20); let b = s.spawn(|| 22); a.join() + b.join() }) }",
+        "42",
+    );
+    check_tasks(
+        "fn main() -> Vec<int> {
+            let (tx, rx) = channel::<int>(1);
+            let mut got = Vec::new();
+            scope(|s| {
+                s.spawn(|| { let tx = tx; tx.send(1)?! \"alive\"; tx.send(2)?! \"alive\"; });
+                loop { match rx.recv() { Some(v) => got.push(v), None => break } }
+            });
+            got
+        }",
+        "[1, 2]",
+    );
+}
+
+#[test]
+fn select_and_deadlock() {
+    check_tasks(
+        "fn main() -> Option<int> {
+            let (atx, arx) = channel::<int>(1);
+            let (btx, brx) = channel::<int>(1);
+            atx.send(1)?! \"alive\";
+            btx.send(2)?! \"alive\";
+            select { x = brx.recv() => x, y = arx.recv() => y }
+        }",
+        "Some(2)",
+    );
+    match run("fn main() -> Option<int> { let (tx, rx) = channel::<int>(1); rx.recv() }") {
+        Some(Err(Wasm::NoHost(why))) => eprintln!("skipped: {why}"),
+        Some(Err(Wasm::Trap(class, ..))) => assert_eq!(class, TrapClass::Deadlock),
+        Some(other) => panic!("expected a deadlock, got {other:?}"),
+        None => {}
+    }
+}
+
+#[test]
+fn cancellation_unwinds_and_isolation_catches_traps() {
+    check_tasks(
+        "struct Oops { n: int }
+        fn main() -> (int, bool) {
+            let mut cleaned = false;
+            let (tx, rx) = channel::<int>(1);
+            let r = try {
+                scope(|s| {
+                    s.spawn(|| { defer { cleaned = true; } rx.recv(); });
+                    yield_now();
+                    fail(Oops { n: 3 });
+                    0
+                })?
+            };
+            let n = match r { Ok(v) => v, Err(Oops { n }) => -n };
+            (n, cleaned)
+        }",
+        "(-3, true)",
+    );
+    check_tasks(
+        "fn main() -> String {
+            let r = try { scope(|s| { let v = Vec::from_array([1]); v[3] }, isolate: true)? };
+            match r { Ok(_) => String::new(), Err(t) => t.class }
+        }",
+        "\"index out of bounds\"",
+    );
+}
+
+#[test]
+fn recursion_in_a_task_traps_at_the_interpreters_depth() {
+    match run("fn down(n: int) -> int { down(n + 1) }
+               fn main() -> int { scope(|s| s.spawn(|| down(0)).join()) }")
+    {
+        Some(Err(Wasm::NoHost(why))) => eprintln!("skipped: {why}"),
+        Some(Err(Wasm::Trap(class, ..))) => assert_eq!(class, TrapClass::StackOverflow),
+        Some(other) => panic!("expected a stack overflow, got {other:?}"),
+        None => {}
+    }
+}

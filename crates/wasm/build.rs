@@ -1,7 +1,8 @@
 //! Builds the runtime, `moddil-rt-wasm`, for `wasm32-unknown-unknown` (a target
 //! `rust-toolchain.toml` pins), into this build's own directory, and gives its bytes to the
 //! crate as `runtime.wasm` in `OUT_DIR`. It imports its memory, so the program shares it, and
-//! exports `__heap_base`, where the program's own memory starts.
+//! exports `__heap_base`, where the program's own memory starts, and `__stack_pointer`, which the
+//! host gives each task its own of.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -50,6 +51,7 @@ fn main() {
             [
                 "-Clink-arg=--import-memory",
                 "-Clink-arg=--export=__heap_base",
+                "-Clink-arg=--export=__stack_pointer",
             ]
             .join("\u{1f}"),
         );

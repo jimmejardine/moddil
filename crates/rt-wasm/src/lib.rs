@@ -5,15 +5,58 @@
 //! shares the program's: the program calls `moddil-rt`'s functions (exported as `moddil_rt_*`,
 //! as native code links them) with its own addresses. Its allocator takes memory only by growing
 //! it, above the program's data and stack. Besides those, it exports what the host needs to
-//! run entries and read what they recorded, and the `i128` arithmetic WASM has no instructions
-//! for.
+//! run entries and read what they recorded, start tasks and give the text of a `Trapped`, and
+//! the `i128` arithmetic WASM has no instructions for.
 
 #![allow(unsafe_code)]
+
+use std::cell::Cell;
+
+use moddil_rt::sites::Tables;
+
+thread_local! {
+    /// The program's site tables, once the host has said where they are.
+    static TABLES: Cell<Option<Tables>> = const { Cell::new(None) };
+}
+
+/// The text of a `Trapped`, from the program's site tables.
+fn trapped(t: &moddil_rt::Trapped, which: u32) -> String {
+    TABLES
+        .with(Cell::get)
+        .map_or_else(String::new, |tables| tables.trapped(t, which))
+}
+
+/// Says where the program's site tables are: their count, their sites and their strings.
+///
+/// # Safety
+///
+/// The addresses are the program's tables', which live as long as the module.
+#[unsafe(export_name = "moddil_wasm_sites")]
+pub unsafe extern "C" fn sites(count: *const u64, sites: *const u32, strings: *const u8) {
+    // SAFETY: as the caller says.
+    let count = unsafe { *count };
+    TABLES.with(|c| {
+        c.set(Some(Tables {
+            count,
+            sites,
+            strings,
+        }));
+    });
+}
 
 /// Starts a new run: what the last one recorded is forgotten.
 #[unsafe(export_name = "moddil_wasm_begin")]
 pub extern "C" fn begin() {
     moddil_rt::begin_run();
+    moddil_rt::set_trap_text(trapped);
+}
+
+/// Task `t`'s call: the host starts it the first time the task gets the turn, as a promising
+/// call ([`moddil_rt::task`]).
+#[cfg(target_arch = "wasm32")]
+#[unsafe(export_name = "moddil_wasm_task")]
+pub extern "C" fn task(t: u32) {
+    moddil_rt::task(t as usize);
 }
 
 /// How many allocations are not yet freed.

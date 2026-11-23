@@ -13,5 +13,10 @@ module calls into ([`specs/roadmap.md`: M1](../../specs/roadmap.md)).
 - **What it adds** ([`src/lib.rs`](src/lib.rs)):
   - for the host: `moddil_wasm_begin` (a new run), `moddil_wasm_live` and `moddil_wasm_record`
     (the trap and the last `fail` a run recorded);
+  - `moddil_wasm_task`, a task's call, which the host starts as a promising one;
+  - `moddil_wasm_sites`, where the program's site tables are (the text of a `Trapped`);
   - for the code: `moddil_wasm_i128`, the `i128` arithmetic WASM has no instructions for.
-- **Not used yet:** its task functions, which need the JSPI lowering.
+- **Tasks:** its baton (`moddil-rt`'s `baton.rs`) hands the turn over through the host's
+  suspending `moddil_host_switch`. It calls the program's task code and drop glue through the
+  shim module (`moddil_call_task`, `moddil_call_drop`), so no JS frame is in between.
+- **Its stack pointer** is exported too (`__stack_pointer`): the host gives each task its own.

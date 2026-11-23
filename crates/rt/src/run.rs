@@ -1,10 +1,10 @@
-//! A run: the state its threads share, and its tasks (`task.sched.1`).
+//! A run: the state its tasks share, and its tasks (`task.sched.1`).
 //!
-//! Each task is a thread, but only the one holding the baton (the running task's number) runs;
-//! a task that suspends hands it to the next ready one, as the scheduler says, and waits for its
-//! turn. So one task runs at a time, in the interpreters' order. A trap outside an isolated
-//! scope aborts the run: each task waiting is woken to return a trapped status, running no more
-//! of its code.
+//! Only the task holding the baton (the running task's number) runs; a task that suspends hands
+//! it to the next ready one, as the scheduler says, and waits for its turn ([`crate::baton`]:
+//! a thread per task natively, a JSPI call per task on `wasm32`). So one task runs at a time, in
+//! the interpreters' order. A trap outside an isolated scope aborts the run: each task waiting
+//! is woken to return a trapped status, running no more of its code.
 //!
 //! The statuses the code and these functions use: 0 returned, 1 trapped (the run ends),
 //! 2 failed (an error), 3 unwinding (cancelled, or a trap in an isolated scope).
@@ -14,11 +14,9 @@
 use std::cell::{Cell, RefCell};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
-use crate::sched::{DropFn, Failure, Op, Outcome, Scheduler, Wait};
+use crate::baton::{self, Baton, DropFn, TaskFn};
+use crate::sched::{Failure, Op, Outcome, Scheduler, Wait};
 use crate::{Observer, Trapped};
-
-/// How much stack a task's thread has.
-const TASK_STACK: usize = 256 * 1024 * 1024;
 
 /// What a run's threads share.
 pub(crate) struct State {
@@ -36,9 +34,9 @@ pub(crate) struct State {
     pub(crate) trap_text: Option<crate::host::TrapText>,
     sched: Scheduler,
     /// The running task.
-    current: usize,
-    aborted: bool,
-    threads: Vec<std::thread::JoinHandle<()>>,
+    pub(crate) current: usize,
+    pub(crate) aborted: bool,
+    pub(crate) baton: Baton,
 }
 
 // SAFETY: the observer's context pointer is used only by the task holding the baton, while the
@@ -47,7 +45,17 @@ unsafe impl Send for State {}
 
 pub(crate) struct Ctx {
     state: Mutex<State>,
-    turn: Condvar,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub(crate) turn: Condvar,
+}
+
+impl Ctx {
+    /// The state, locked.
+    pub(crate) fn lock(&self) -> MutexGuard<'_, State> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
 }
 
 thread_local! {
@@ -73,14 +81,14 @@ fn new_ctx() -> Arc<Ctx> {
             sched: Scheduler::new(),
             current: 0,
             aborted: false,
-            threads: Vec::new(),
+            baton: Baton::default(),
         }),
         turn: Condvar::new(),
     })
 }
 
 /// This thread's run.
-fn ctx() -> Arc<Ctx> {
+pub(crate) fn ctx() -> Arc<Ctx> {
     CTX.with(|c| c.borrow_mut().get_or_insert_with(new_ctx).clone())
 }
 
@@ -94,8 +102,15 @@ pub(crate) fn with<R>(f: impl FnOnce(&mut State) -> R) -> R {
     f(&mut s)
 }
 
-fn me() -> usize {
+/// The running task's number.
+pub(crate) fn me() -> usize {
     TASK.with(Cell::get)
+}
+
+/// Makes this thread run task `t` of run `c`.
+pub(crate) fn enter_task(c: &Arc<Ctx>, t: usize) {
+    CTX.with(|x| *x.borrow_mut() = Some(c.clone()));
+    TASK.with(|x| x.set(t));
 }
 
 /// Starts a new run on this thread, as its first task; what earlier runs left is forgotten.
@@ -107,7 +122,7 @@ pub fn begin_run() {
 
 /// Ends this thread's run: waits for its tasks' threads to end.
 pub fn end_run() {
-    let threads = with(|s| std::mem::take(&mut s.threads));
+    let threads = with(baton::end_run);
     for t in threads {
         let _ = t.join();
     }
@@ -168,20 +183,11 @@ pub(crate) fn record_trap(site: u32, tracked: bool) -> u8 {
 /// Hands the baton to the next ready task and waits for this one's turn again: 0, or 1 if the
 /// run is aborted, or, with no task ready, the status of a deadlock trap at `site`.
 fn suspend(c: &Ctx, mut s: MutexGuard<'_, State>, site: u32, tracked: bool) -> u8 {
-    let me = me();
     let Some(next) = s.sched.next() else {
         drop(s);
         return record_trap(site, tracked);
     };
-    s.current = next;
-    c.turn.notify_all();
-    while s.current != me && !s.aborted {
-        s = c
-            .turn
-            .wait(s)
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-    }
-    if s.aborted { 1 } else { 0 }
+    baton::hand_over(c, s, next)
 }
 
 /// Runs `op` until it gives a status: it is tried, and while it says to wait (`None`, having
@@ -211,7 +217,7 @@ fn waiting(site: u32, tracked: bool, mut op: impl FnMut(&mut State, usize) -> Op
 /// first destructor that trapped (the rest then left).
 fn drop_all(dropped: Vec<(DropFn, Vec<u8>)>) -> u8 {
     for (d, mut v) in dropped {
-        let status = d(v.as_mut_ptr());
+        let status = baton::call_drop(d, v.as_mut_ptr());
         if status != 0 {
             return status as u8;
         }
@@ -236,12 +242,9 @@ fn bytes(p: *const u8, n: u64) -> Vec<u8> {
     unsafe { std::slice::from_raw_parts(p, n as usize).to_vec() }
 }
 
-/// A task's code: its closure's body, given its captures and its argument, writing its result
-/// to `out` and an error to `err`, in the platform's C convention: its status.
-pub type TaskFn = extern "C" fn(*mut u8, u64, *mut u8, *mut u8) -> i8;
-
-/// A task to start: its code, captures (freed once it ends, `size` bytes aligned to `align`),
-/// argument, and room for its result and its error.
+/// A task to start, as native code writes it: its code, captures (freed once it ends, `size`
+/// bytes aligned to `align`), argument, and room for its result and its error.
+#[cfg(not(target_arch = "wasm32"))]
 #[repr(C)]
 pub struct TaskSpec {
     /// Its code.
@@ -262,99 +265,89 @@ pub struct TaskSpec {
     pub drop: Option<DropFn>,
 }
 
+/// A task to start, as a WASM module writes it: eight words, as native code's, the code and the
+/// drop glue slots in the program's table (0 for none) and the captures an address.
+#[cfg(target_arch = "wasm32")]
+#[repr(C)]
+pub struct TaskSpec {
+    /// Its code's slot.
+    pub code: TaskFn,
+    /// Its closure's captures, which it owns.
+    pub captures: u64,
+    /// The captures' size.
+    pub size: u64,
+    /// The captures' alignment.
+    pub align: u64,
+    /// Its argument: the scope's borrow, for a scope's body.
+    pub arg: u64,
+    /// How many bytes its result has.
+    pub out: u64,
+    /// How many bytes its error may have.
+    pub err: u64,
+    /// Its result's drop glue's slot, or 0.
+    pub drop: u64,
+}
+
+/// A task as the baton starts it.
 #[derive(Clone, Copy)]
-struct Start {
-    code: TaskFn,
-    captures: usize,
+pub(crate) struct Start {
+    pub(crate) code: TaskFn,
+    pub(crate) captures: usize,
     size: u64,
     align: u64,
-    arg: u64,
+    pub(crate) arg: u64,
     out: u64,
     err: u64,
 }
 
-/// Starts a thread for task `t`, which waits for its turn and then runs.
-fn start(s: &mut State, c: Arc<Ctx>, t: usize, spec: Start) {
-    let thread = std::thread::Builder::new()
-        .stack_size(TASK_STACK)
-        .spawn(move || {
-            CTX.with(|x| *x.borrow_mut() = Some(c.clone()));
-            TASK.with(|x| x.set(t));
-            {
-                let mut s = c
-                    .state
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                while s.current != t && !s.aborted {
-                    s = c
-                        .turn
-                        .wait(s)
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                }
-                if s.aborted {
-                    return;
-                }
+/// Task `t`'s code, run in its turn, to its end; then the turn is given on (or the run aborted).
+pub(crate) fn run_task(c: &Arc<Ctx>, t: usize, spec: Start) {
+    let mut out = vec![0u128; (spec.out as usize).div_ceil(16).max(1)];
+    let mut err = vec![0u128; (spec.err as usize).div_ceil(16).max(1)];
+    let status = baton::call_code(&spec, out.as_mut_ptr().cast(), err.as_mut_ptr().cast());
+    // SAFETY: the captures are the task's, given by `alloc`; it has ended.
+    unsafe { crate::free(spec.captures as *mut u8, spec.size, spec.align) };
+    let mut s = c.lock();
+    if s.aborted {
+        return;
+    }
+    let outcome = match status {
+        0 => Outcome::Value(bytes(out.as_ptr().cast(), spec.out)),
+        2 => Outcome::Error(bytes(err.as_ptr().cast(), spec.err)),
+        3 => Outcome::Cancelled,
+        // A trap: the run ends.
+        _ => {
+            s.aborted = true;
+            baton::pass_on(c, &s);
+            return;
+        }
+    };
+    let dropped = s.sched.end(t, outcome);
+    if !dropped.is_empty() {
+        drop(s);
+        let status = drop_all(dropped);
+        s = c.lock();
+        if status != 0 {
+            s.aborted = true;
+            baton::pass_on(c, &s);
+            return;
+        }
+    }
+    match s.sched.next() {
+        Some(next) => s.current = next,
+        None => {
+            // Every other task waits: a deadlock, where nothing says.
+            if s.trap.is_none() {
+                s.trap = Some(Trapped {
+                    site: u32::MAX,
+                    tracked: false,
+                    stack: Vec::new(),
+                });
             }
-            let mut out = vec![0u128; (spec.out as usize).div_ceil(16).max(1)];
-            let mut err = vec![0u128; (spec.err as usize).div_ceil(16).max(1)];
-            let status = (spec.code)(
-                spec.captures as *mut u8,
-                spec.arg,
-                out.as_mut_ptr().cast(),
-                err.as_mut_ptr().cast(),
-            );
-            // SAFETY: the captures are the task's, given by `alloc`; it has ended.
-            unsafe { crate::free(spec.captures as *mut u8, spec.size, spec.align) };
-            let mut s = c
-                .state
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if s.aborted {
-                return;
-            }
-            let outcome = match status {
-                0 => Outcome::Value(bytes(out.as_ptr().cast(), spec.out)),
-                2 => Outcome::Error(bytes(err.as_ptr().cast(), spec.err)),
-                3 => Outcome::Cancelled,
-                // A trap: the run ends.
-                _ => {
-                    s.aborted = true;
-                    c.turn.notify_all();
-                    return;
-                }
-            };
-            let dropped = s.sched.end(t, outcome);
-            if !dropped.is_empty() {
-                drop(s);
-                let status = drop_all(dropped);
-                s = c
-                    .state
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                if status != 0 {
-                    s.aborted = true;
-                    c.turn.notify_all();
-                    return;
-                }
-            }
-            match s.sched.next() {
-                Some(next) => s.current = next,
-                None => {
-                    // Every other task waits: a deadlock, where nothing says.
-                    if s.trap.is_none() {
-                        s.trap = Some(Trapped {
-                            site: u32::MAX,
-                            tracked: false,
-                            stack: Vec::new(),
-                        });
-                    }
-                    s.aborted = true;
-                }
-            }
-            c.turn.notify_all();
-        })
-        .expect("a thread for a task");
-    s.threads.push(thread);
+            s.aborted = true;
+        }
+    }
+    baton::pass_on(c, &s);
 }
 
 fn spec_of(spec: &TaskSpec) -> Start {
@@ -392,8 +385,10 @@ pub unsafe extern "C" fn spawn(scope: u64, spec: *const TaskSpec) -> u64 {
         .state
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let t = s.sched.spawn(scope as usize, false, spec.drop);
-    start(&mut s, c.clone(), t, spec_of(spec));
+    let t = s
+        .sched
+        .spawn(scope as usize, false, baton::drop_of(spec.drop));
+    baton::start(&mut s, &c, t, spec_of(spec));
     t as u64
 }
 
@@ -420,23 +415,12 @@ pub unsafe extern "C" fn scope_run(
     let me = me();
     let s_id = scope as usize;
     {
-        let mut s = c
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let t = s.sched.spawn(s_id, true, spec.drop);
-        start(&mut s, c.clone(), t, spec_of(spec));
+        let mut s = c.lock();
+        let t = s.sched.spawn(s_id, true, baton::drop_of(spec.drop));
+        baton::start(&mut s, &c, t, spec_of(spec));
         s.sched.block(me, Wait::Scope(s_id));
         // The body runs at once.
-        s.current = t;
-        c.turn.notify_all();
-        while s.current != me && !s.aborted {
-            s = c
-                .turn
-                .wait(s)
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-        }
-        if s.aborted {
+        if baton::hand_over(&c, s, t) != 0 {
             return 1;
         }
     }

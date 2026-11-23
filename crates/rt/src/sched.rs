@@ -11,10 +11,7 @@
 use std::collections::VecDeque;
 
 use crate::Trapped;
-
-/// A function that drops the value at its argument (the value's drop glue, in the platform's
-/// C convention): 0, or the status of a trap in a destructor.
-pub type DropFn = extern "C" fn(*mut u8) -> i8;
+use crate::baton::DropFn;
 
 /// Values to drop, each with its glue.
 pub(crate) type Dropped = Vec<(DropFn, Vec<u8>)>;

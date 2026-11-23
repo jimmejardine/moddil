@@ -1216,7 +1216,7 @@ impl<M: Module> Compiler<'_, M> {
     }
 
     /// The tables a built program reports a trap from (see [`compile_object`]).
-    fn site_tables(&mut self, files: &[(String, String)]) -> Result<(), String> {
+    pub(crate) fn site_tables(&mut self, files: &[(String, String)]) -> Result<(), String> {
         let mut strings: Vec<u8> = Vec::new();
         let mut intern = |s: &str| -> (u32, u32) {
             let at = strings.len() as u32;

@@ -27,7 +27,9 @@ pub struct Lowered<'db, M> {
 
 /// Lowers what `items` (each a test, or a function whose parameters are root capabilities)
 /// reach into `module`. The first entry's trampoline is exported as `moddil_entry` and its drop
-/// as `moddil_drop_result`; the `k`th other one's with `_k` after them.
+/// as `moddil_drop_result`; the `k`th other one's with `_k` after them. The site tables a trap's
+/// text is read from without the compiler are data exported as `moddil_site_count`,
+/// `moddil_sites` and `moddil_strings`, as `moddil build`'s objects have them.
 ///
 /// # Errors
 ///
@@ -38,14 +40,16 @@ pub fn lower<'db, M: Module>(
     items: &[Item],
     module: M,
 ) -> Result<Lowered<'db, M>, String> {
-    let b = crate::lower::build(db, program, items, module)?;
+    let mut b = crate::lower::build(db, program, items, module)?;
+    let files = crate::lower::files_of(db, program);
+    b.c.site_tables(&files)?;
     Ok(Lowered {
         module: b.c.module,
         entries: b.entries,
         sites: b.c.sites,
         items: b.c.items,
         dyn_types: b.c.dyn_types,
-        files: crate::lower::files_of(db, program),
+        files,
     })
 }
 

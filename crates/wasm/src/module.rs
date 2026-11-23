@@ -8,7 +8,9 @@
 //!
 //! **Functions** are numbered imports first: the host's (`observe` and `log`), then the
 //! runtime's the code calls, then the module's own. A function's address is its slot in the
-//! table, its number plus one (0 is null).
+//! table, its number plus one (0 is null). The table is the host's, so the shim module
+//! ([`shim`]) can call the functions the runtime is given the addresses of: a task's code and a
+//! value's drop glue.
 
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -23,7 +25,7 @@ use cranelift_module::{
 use wasm_encoder::{
     CodeSection, ConstExpr, DataSection, ElementSection, Elements, EntityType, ExportKind,
     ExportSection, Function, FunctionSection, GlobalSection, GlobalType, ImportSection,
-    Instruction as I, MemoryType, Module, RefType, TableSection, TableType, TypeSection, ValType,
+    Instruction as I, MemoryType, Module, RefType, TableType, TypeSection, ValType,
 };
 
 use crate::clif::{self, Body, Callee, Env, Op};
@@ -39,8 +41,8 @@ pub const RECORD_WORDS: u32 = 10_016;
 /// the log, which the host writes.
 const HOST: [&str; 2] = ["moddil_rt_observe", "moddil_rt_log"];
 
-/// The runtime's functions for tasks and their isolated scopes, which a WASM module runs only
-/// with JSPI.
+/// The runtime's functions for tasks and their isolated scopes: a module that calls them runs
+/// only where the host has JSPI.
 const TASKS: [&str; 19] = [
     "moddil_rt_scope_open",
     "moddil_rt_spawn",
@@ -77,6 +79,12 @@ pub struct Layout {
     pub data: (u32, u32),
     /// How many pages of memory the module needs to start with.
     pub pages: u32,
+    /// How many slots the table needs.
+    pub table: u32,
+    /// Where the site tables are: the count, the sites and their strings.
+    pub sites: (u32, u32, u32),
+    /// Whether the code uses tasks (and so needs JSPI).
+    pub tasks: bool,
 }
 
 /// A module being built, its functions translated as they are defined.
@@ -119,9 +127,6 @@ impl Env for Answers<'_> {
         let name = d.linkage_name(f);
         if HOST.contains(&&*name) {
             return Ok(Callee::AsDeclared);
-        }
-        if TASKS.contains(&&*name) {
-            return Err("tasks, which WASM runs with JSPI (a later slice)".to_string());
         }
         let (ps, rs) = self
             .runtime
@@ -207,19 +212,8 @@ impl WasmModule {
         }
         let mut index: HashMap<FuncId, u32> = HashMap::new();
         let mut rt_index: HashMap<String, u32> = HashMap::new();
-        let mut imports = ImportSection::new();
-        imports.import(
-            "env",
-            "memory",
-            EntityType::Memory(MemoryType {
-                minimum: u64::from(pages),
-                maximum: None,
-                memory64: false,
-                shared: false,
-                page_size_log2: None,
-            }),
-        );
         let mut n = 0u32;
+        let mut import_list: Vec<(&str, String, u32)> = Vec::new();
         let funcs: Vec<(FuncId, ir::Signature, Linkage, String)> = self
             .decls
             .get_functions()
@@ -251,7 +245,7 @@ impl WasmModule {
                 };
                 let ty = type_index(&mut self.types, &ps, &rs);
                 let module = if host { "host" } else { "rt" };
-                imports.import(module, name, EntityType::Function(ty));
+                import_list.push((module, name.clone(), ty));
                 rt_index.insert(name.clone(), n);
                 index.insert(*id, n);
                 n += 1;
@@ -269,7 +263,7 @@ impl WasmModule {
                 .cloned()
                 .ok_or_else(|| format!("the runtime's `{name}`"))?;
             let ty = type_index(&mut self.types, &ps, &rs);
-            imports.import("rt", name, EntityType::Function(ty));
+            import_list.push(("rt", name.to_string(), ty));
             rt_index.insert(name.to_string(), n);
             n += 1;
         }
@@ -286,6 +280,9 @@ impl WasmModule {
             n += 1;
             defined.push((*id, *linkage, name.clone(), body));
         }
+        let tasks = funcs.iter().any(|(id, _, linkage, name)| {
+            *linkage == Linkage::Import && used.contains(id) && TASKS.contains(&name.as_str())
+        });
         // Imports the code names but does not call (their addresses) are not imported.
         for f in &used {
             if !index.contains_key(f) {
@@ -356,6 +353,36 @@ impl WasmModule {
                 ds.active(0, &ConstExpr::i32_const(data_at[id] as i32), bytes);
             }
         }
+        // The table's size is known only now: its import says so.
+        let mut imports = ImportSection::new();
+        imports.import("env", "table", EntityType::Table(table_type(n + 1)));
+        imports.import(
+            "env",
+            "memory",
+            EntityType::Memory(MemoryType {
+                minimum: u64::from(pages),
+                maximum: None,
+                memory64: false,
+                shared: false,
+                page_size_log2: None,
+            }),
+        );
+        for (module, name, ty) in &import_list {
+            imports.import(module, name, EntityType::Function(*ty));
+        }
+        let site = |name: &str| -> u32 {
+            match self.decls.get_name(name) {
+                Some(cranelift_module::FuncOrDataId::Data(d)) => {
+                    data_at.get(&d).copied().unwrap_or(0)
+                }
+                _ => 0,
+            }
+        };
+        let sites = (
+            site("moddil_site_count"),
+            site("moddil_sites"),
+            site("moddil_strings"),
+        );
         let mut m = Module::new();
         let mut ts = TypeSection::new();
         for (ps, rs) in &self.types {
@@ -364,15 +391,6 @@ impl WasmModule {
         m.section(&ts);
         m.section(&imports);
         m.section(&fs);
-        let mut tables = TableSection::new();
-        tables.table(TableType {
-            element_type: RefType::FUNCREF,
-            minimum: u64::from(n) + 1,
-            maximum: Some(u64::from(n) + 1),
-            table64: false,
-            shared: false,
-        });
-        m.section(&tables);
         let mut gs = GlobalSection::new();
         for (init, mutable) in [(stack_top, true), (stack_base, false), (i128_out, false)] {
             gs.global(
@@ -411,9 +429,86 @@ impl WasmModule {
                 record,
                 data: (data_start, stack_base),
                 pages,
+                table: n + 1,
+                sites,
+                tasks,
             },
         ))
     }
+}
+
+/// A table of `n` function references.
+fn table_type(n: u32) -> TableType {
+    TableType {
+        element_type: RefType::FUNCREF,
+        minimum: u64::from(n),
+        maximum: None,
+        table64: false,
+        shared: false,
+    }
+}
+
+/// The shim module: it imports the program's table and exports the functions the runtime calls
+/// the program's code through, taking the runtime's wasm32 arguments (addresses as `i32`s):
+/// `moddil_call_task(code, captures, arg, out, err)`, a task's code, and
+/// `moddil_call_drop(glue, value)`, a value's drop glue. Each is a slot in the table.
+pub fn shim() -> Vec<u8> {
+    let mut m = Module::new();
+    let mut ts = TypeSection::new();
+    let (a, b) = (ValType::I32, ValType::I64);
+    // 0: the task code's type; 1: the glue's; 2: `moddil_call_task`'s; 3: `moddil_call_drop`'s.
+    ts.ty().function([b, b, b, b], [a]);
+    ts.ty().function([b], [a]);
+    ts.ty().function([b, b, b, a, a], [a]);
+    ts.ty().function([a, a], [a]);
+    m.section(&ts);
+    let mut imports = ImportSection::new();
+    imports.import("env", "table", EntityType::Table(table_type(1)));
+    m.section(&imports);
+    let mut fs = FunctionSection::new();
+    fs.function(2);
+    fs.function(3);
+    m.section(&fs);
+    let mut es = ExportSection::new();
+    es.export("moddil_call_task", ExportKind::Func, 0);
+    es.export("moddil_call_drop", ExportKind::Func, 1);
+    m.section(&es);
+    let mut code = CodeSection::new();
+    let mut task = Function::new([]);
+    for i in [
+        I::LocalGet(1),
+        I::LocalGet(2),
+        I::LocalGet(3),
+        I::I64ExtendI32U,
+        I::LocalGet(4),
+        I::I64ExtendI32U,
+        I::LocalGet(0),
+        I::I32WrapI64,
+        I::CallIndirect {
+            type_index: 0,
+            table_index: 0,
+        },
+        I::End,
+    ] {
+        task.instruction(&i);
+    }
+    code.function(&task);
+    let mut drop = Function::new([]);
+    for i in [
+        I::LocalGet(1),
+        I::I64ExtendI32U,
+        I::LocalGet(0),
+        I::CallIndirect {
+            type_index: 1,
+            table_index: 0,
+        },
+        I::End,
+    ] {
+        drop.instruction(&i);
+    }
+    code.function(&drop);
+    m.section(&code);
+    m.finish()
 }
 
 impl cranelift_module::Module for WasmModule {

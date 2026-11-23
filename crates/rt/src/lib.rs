@@ -16,17 +16,21 @@
 //!
 //! What they record is kept per run, shared by its threads, until the host [`take`]s it.
 
+mod baton;
 pub mod host;
 pub mod num;
 mod run;
 mod sched;
+pub mod sites;
 
+#[cfg(target_arch = "wasm32")]
+pub use baton::task;
+pub use baton::{DropFn, TaskFn};
 pub use run::{
-    TaskFn, TaskSpec, begin_run, channel, clone_sender, detach, drop_receiver, drop_sender,
-    end_run, host, join, join_now, keep_text, last_trapped, recv, recv_now, scope_open, scope_run,
-    select, send, send_now, set_host, set_trap_text, spawn, stop, stop_requested, yield_now,
+    TaskSpec, begin_run, channel, clone_sender, detach, drop_receiver, drop_sender, end_run, host,
+    join, join_now, keep_text, last_trapped, recv, recv_now, scope_open, scope_run, select, send,
+    send_now, set_host, set_trap_text, spawn, stop, stop_requested, yield_now,
 };
-pub use sched::DropFn;
 
 /// How many calls deep a run may go, the frame it starts in included: as the MIR interpreter's
 /// limit (`moddil_interp::MAX_DEPTH`).

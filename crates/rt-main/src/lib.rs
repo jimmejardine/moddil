@@ -26,47 +26,21 @@ unsafe extern "C" {
 /// What a built program exits with after a trap (`EX_SOFTWARE`).
 const TRAPPED: i32 = 70;
 
-/// Site `k`'s eight words.
-fn site(k: u32) -> Option<[u32; 8]> {
-    // SAFETY: the object defines the count and that many sites of eight words.
+/// The object's site tables.
+fn tables() -> moddil_rt::sites::Tables {
+    // SAFETY: the object defines the count, the sites and their strings.
     unsafe {
-        if u64::from(k) >= moddil_site_count {
-            return None;
+        moddil_rt::sites::Tables {
+            count: moddil_site_count,
+            sites: (&raw const moddil_sites).cast::<u32>(),
+            strings: (&raw const moddil_strings).cast::<u8>(),
         }
-        let p = (&raw const moddil_sites).cast::<u32>().add(8 * k as usize);
-        Some(std::array::from_fn(|i| *p.add(i)))
     }
-}
-
-/// The text at offset `at` (`n` bytes) of the object's strings.
-fn string(at: u32, n: u32) -> String {
-    // SAFETY: the object's strings hold every offset and length its sites name.
-    let bytes = unsafe {
-        std::slice::from_raw_parts(
-            (&raw const moddil_strings).cast::<u8>().add(at as usize),
-            n as usize,
-        )
-    };
-    String::from_utf8_lossy(bytes).into_owned()
-}
-
-/// A trap's class and where it is reported, as `file:line:column`.
-fn trap_text(t: &moddil_rt::Trapped) -> (String, String) {
-    let Some(own) = site(t.site) else {
-        return ("deadlock".to_string(), String::new());
-    };
-    let at = t.reported_at(|s| site(s).is_some_and(|w| w[0] == 1 && w[1] == 0));
-    let w = site(at).unwrap_or(own);
-    (
-        string(own[2], own[3]),
-        format!("{}:{}:{}", string(w[4], w[5]), w[6], w[7]),
-    )
 }
 
 /// The text of a `Trapped` (`task.isolate.1`): its class, or where it was.
 fn trapped(t: &moddil_rt::Trapped, which: u32) -> String {
-    let (class, at) = trap_text(t);
-    if which == 0 { class } else { at }
+    tables().trapped(t, which)
 }
 
 /// The process's `main`: the program's, then its exit code (`main.exit.1`).
@@ -91,7 +65,7 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
     }
     match moddil_rt::take().trap {
         Some(t) => {
-            let (class, at) = trap_text(&t);
+            let (class, at) = tables().trap_text(&t);
             eprintln!("trap: {class}");
             eprintln!("  at {at}");
         }

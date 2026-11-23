@@ -5,8 +5,8 @@ The WASM backend of M1 ([`specs/roadmap.md`: M1](../../specs/roadmap.md)). The n
 which translates each function to core WebAssembly with our own emitter, on `wasm-encoder`
 ([`specs/compiler.md`](../../specs/compiler.md)). The module runs in Node.
 
-**Status:** slice W1: everything the native backend compiles but tasks, which wait for the JSPI
-lowering.
+**Status:** slice W2: everything the native backend compiles, tasks included, with JSPI
+(Node 26).
 
 - **One lowering for both backends:** [`module.rs`](src/module.rs) implements
   `cranelift_module::Module`, so the lowering builds into it as it builds into the JIT, and
@@ -26,7 +26,8 @@ lowering.
   [`build.rs`](build.rs)). It shares the module's memory, and its allocator is the heap.
   - A call to it is adapted to its wasm32 signature: addresses cross as `i32`s.
   - The host gives `observe` and `log`.
-  - A call to a task function is refused for now.
+  - It calls the program's task code and drop glue through a shim module (`module::shim`),
+    which shares the program's table (the host's), so a task never has a JS frame on its stack.
 - **Memory** ([`module.rs`](src/module.rs)), from the bottom:
   - the runtime's static data;
   - the program's scratch: each entry's result and error, the run's record and `i128` results;
@@ -42,6 +43,15 @@ lowering.
   - Results, errors, failed `assert`s' parts, leaks and traps are reported as the JIT runner
     reports them.
   - Node is found on the path, or where `MODDIL_NODE` says.
+- **Tasks** (JSPI):
+  - Each entry of a module with tasks, and each task, is a promising call.
+  - A task handing over the turn suspends in the host's `switch` until its turn comes again.
+  - Each task has its own program and runtime shadow stacks (4 MiB and 256 KiB, pooled),
+    swapped on each switch.
+  - JSPI's stacks are made growable, set inside the host, so recursion reaches the
+    interpreters' limit in a task too.
+  - Where Node lacks JSPI, a module with tasks is reported as having no host; one without
+    them runs as plain calls.
 
 ## Rules
 
