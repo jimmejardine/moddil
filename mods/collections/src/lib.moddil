@@ -1,10 +1,13 @@
 //! Collections beyond the prelude's (`stdlib.md`: Collections): `Map` and `Set` over the `core`
-//! mod's hash maps, `Deque`, `RingBuffer`, `BinaryHeap`, and the sorted `TreeMap` and `TreeSet`.
+//! mod's hash maps, `Deque`, `RingBuffer`, `BinaryHeap`, the sorted `TreeMap` and `TreeSet`, the
+//! insertion-ordered `OrderedMap` and `OrderedSet`, and `Interner` with its `Symbol`s.
 
 use core::collections::{HashMap, HashSet, SetIter};
 
 pub use mod::deque::{Deque, DequeIter, RingBuffer};
 pub use mod::heap::BinaryHeap;
+pub use mod::interner::{Interner, Symbol};
+pub use mod::ordered::{OrderedIter, OrderedMap, OrderedSet, OrderedSetIter};
 pub use mod::tree::{TreeIter, TreeMap, TreeSet, TreeSetIter};
 
 /// A map from keys to values, in no particular order.

@@ -1021,7 +1021,10 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
   - **`collections`:** `Set`, `Deque`, `RingBuffer`, `BinaryHeap`, and the sorted `TreeMap` and
     `TreeSet`.
     - The tree is an AA tree whose nodes live in a `Vec`.
-    - `OrderedMap`, `EnumSet` and the persistent collections are still to come.
+    - Since then, the insertion-ordered `OrderedMap` and `OrderedSet`, and `Interner` with
+      typed `Symbol`s (`text.md`: Interning).
+    - `EnumSet` is still to come. So are the persistent collections, which wait for a shared,
+      reference-counted pointer: there is no `Rc` yet.
   - **`crypto`:** SHA-256, SHA-512 and BLAKE3 (hash mode), with hex.
     - They are checked against the FIPS 180-4 vectors and the BLAKE3 reference's.
     - They are not constant-time.

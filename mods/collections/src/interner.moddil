@@ -1,0 +1,129 @@
+//! `Interner` and `Symbol` (`text.md`: Interning): each distinct value stored once, and named by
+//! a small handle that compares and hashes in O(1).
+
+use core::collections::{HashMap, hash_of};
+
+/// A handle to a value an `Interner<T>` holds: equal handles name equal values, from the same
+/// interner. Its type says what it names, so a `Symbol<Name>` is not a `Symbol<Path>`.
+pub struct Symbol<T> {
+    id: int,
+}
+
+impl<T> Symbol<T> {
+    /// Its number: the order its value was first interned in, from 0.
+    pub fn id(&self) -> int {
+        self.id
+    }
+}
+
+// Written out, not derived: a derive would ask the same of `T`, which a symbol does not hold.
+impl<T> Clone for Symbol<T> {
+    fn clone(&self) -> Symbol<T> {
+        Symbol { id: self.id }
+    }
+}
+
+impl<T> Copy for Symbol<T> {}
+
+impl<T> PartialEq for Symbol<T> {
+    fn eq(&self, other: &Symbol<T>) -> bool {
+        self.id == other.id
+    }
+}
+
+impl<T> Eq for Symbol<T> {}
+
+impl<T> PartialOrd for Symbol<T> {
+    fn partial_cmp(&self, other: &Symbol<T>) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T> Ord for Symbol<T> {
+    fn cmp(&self, other: &Symbol<T>) -> Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+
+impl<T> Hash for Symbol<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.id);
+    }
+}
+
+impl<T> Debug for Symbol<T> {
+    fn fmt(&self, out: &mut String) {
+        out.push_str("Symbol(");
+        out.push_str(&self.id.to_string());
+        out.push(')');
+    }
+}
+
+/// Values, each stored once, in the order first interned; an index from each value's hash to
+/// the ids with it finds them. There are no global interners: each is a value of its own.
+pub struct Interner<T> {
+    values: Vec<T>,
+    index: HashMap<int, Vec<int>>,
+}
+
+impl<T: Hash + Eq> Interner<T> {
+    pub fn new() -> Interner<T> {
+        Interner { values: Vec::new(), index: HashMap::new() }
+    }
+
+    /// How many distinct values it holds.
+    pub fn len(&self) -> int {
+        self.values.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    /// `x`'s symbol, if it has been interned.
+    pub fn get(&self, x: &T) -> Option<Symbol<T>> {
+        match self.index.get(&hash_of(x)) {
+            Some(ids) => {
+                for id in ids.iter() {
+                    if self.values[*id] == *x {
+                        return Some(Symbol { id: *id });
+                    }
+                }
+                None
+            }
+            None => None,
+        }
+    }
+
+    /// `x`'s symbol, storing `x` if it is new (and dropping it if not).
+    pub fn intern(&mut self, x: T) -> Symbol<T> {
+        match self.get(&x) {
+            Some(s) => s,
+            None => {
+                let id = self.values.len();
+                let h = hash_of(&x);
+                self.values.push(x);
+                match self.index.get_mut(&h) {
+                    Some(ids) => ids.push(id),
+                    None => {
+                        let mut ids: Vec<int> = Vec::new();
+                        ids.push(id);
+                        self.index.insert(h, ids);
+                    }
+                }
+                Symbol { id }
+            }
+        }
+    }
+
+    /// The value `s` names; traps if `s` is not one of this interner's.
+    pub fn resolve(&self, s: Symbol<T>) -> &T {
+        &self.values[s.id]
+    }
+}
+
+impl<T: Hash + Eq> Default for Interner<T> {
+    fn default() -> Interner<T> {
+        Interner::new()
+    }
+}

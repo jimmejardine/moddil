@@ -10,7 +10,7 @@ umbrella stub mod [`stubs/moddil`](../stubs/moddil/README.md), which re-exports 
 
 | Mod | What it has | Capabilities |
 |---|---|---|
-| [`collections`](collections/src/lib.moddil) | `Map` and `Set` over the `core` mod's hash maps, `Deque`, `RingBuffer`, `BinaryHeap`, and the sorted `TreeMap` and `TreeSet` | |
+| [`collections`](collections/src/lib.moddil) | `Map` and `Set` over the `core` mod's hash maps, `Deque`, `RingBuffer`, `BinaryHeap`, the sorted `TreeMap` and `TreeSet`, the insertion-ordered `OrderedMap` and `OrderedSet`, and `Interner` with typed `Symbol`s | |
 | [`sync`](sync/src/lib.moddil) | `Mutex` (with a `Guard` view, and `with`), over `UnsafeCell` and atomics | `unsafe` |
 | [`rand`](rand/src/lib.moddil) | the `Rand` effect, and `Seeded` (`seeded`) | `unsafe` |
 | [`serde`](serde/src/lib.moddil) | `Serialize` and `Deserialize` with their derives (impl templates), `DecodeError`, JSON | |

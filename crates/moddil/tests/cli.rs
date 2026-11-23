@@ -301,7 +301,7 @@ fn passes_everywhere(dir: &str, n: usize) {
 fn the_standard_mods_pass_their_tests_everywhere() {
     // Each project on a thread of its own: they share nothing, and each runs three times.
     let projects = [
-        ("mods/collections/tests", 9),
+        ("mods/collections/tests", 13),
         ("mods/sync/tests", 2),
         ("mods/rand/tests", 1),
         ("mods/serde/tests", 4),

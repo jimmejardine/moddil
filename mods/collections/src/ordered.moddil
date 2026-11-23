@@ -1,0 +1,353 @@
+//! `OrderedMap` and `OrderedSet`: iterated in the order their keys were first inserted.
+
+use core::collections::{HashMap, hash_of};
+
+/// A map that remembers the order its keys were inserted in. Entries sit in a `Vec` in that
+/// order, a removed one leaving a hole until there are as many holes as entries; an index from
+/// each key's hash to its entries' positions finds them, so keys are stored once.
+pub struct OrderedMap<K, V> {
+    entries: Vec<Option<(K, V)>>,
+    index: HashMap<int, Vec<int>>,
+    len: int,
+}
+
+impl<K: Hash + Eq, V> OrderedMap<K, V> {
+    pub fn new() -> OrderedMap<K, V> {
+        OrderedMap { entries: Vec::new(), index: HashMap::new(), len: 0 }
+    }
+
+    pub fn len(&self) -> int {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// The position of `key`'s entry, or -1.
+    fn find(&self, key: &K) -> int {
+        match self.index.get(&hash_of(key)) {
+            Some(positions) => {
+                for p in positions.iter() {
+                    match &self.entries[*p] {
+                        Some((k, _)) => {
+                            if *k == *key {
+                                return *p;
+                            }
+                        }
+                        None => {}
+                    }
+                }
+                -1
+            }
+            None => -1,
+        }
+    }
+
+    pub fn get(&self, key: &K) -> Option<&V> {
+        let p = self.find(key);
+        if p < 0 {
+            return None;
+        }
+        match &self.entries[p] {
+            Some((_, v)) => Some(v),
+            None => None,
+        }
+    }
+
+    pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+        let p = self.find(key);
+        if p < 0 {
+            return None;
+        }
+        match &mut self.entries[p] {
+            Some((_, v)) => Some(v),
+            None => None,
+        }
+    }
+
+    pub fn contains_key(&self, key: &K) -> bool {
+        self.find(key) >= 0
+    }
+
+    /// Puts `value` under `key`, giving back what was there. A key already in the map keeps its
+    /// place; a new one goes last.
+    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+        let p = self.find(&key);
+        if p >= 0 {
+            return match &mut self.entries[p] {
+                Some((_, v)) => Some(replace(v, value)),
+                None => None,
+            };
+        }
+        let h = hash_of(&key);
+        let at = self.entries.len();
+        self.entries.push(Some((key, value)));
+        match self.index.get_mut(&h) {
+            Some(positions) => positions.push(at),
+            None => {
+                let mut positions: Vec<int> = Vec::new();
+                positions.push(at);
+                self.index.insert(h, positions);
+            }
+        }
+        self.len += 1;
+        None
+    }
+
+    /// Takes out `key`'s entry, giving back its value; the others keep their order.
+    pub fn remove(&mut self, key: &K) -> Option<V> {
+        let p = self.find(key);
+        if p < 0 {
+            return None;
+        }
+        let h = hash_of(key);
+        let taken = replace(&mut self.entries[p], None);
+        match self.index.get_mut(&h) {
+            Some(positions) => {
+                let mut i = 0;
+                while i < positions.len() {
+                    if positions[i] == p {
+                        positions.remove(i);
+                        break;
+                    }
+                    i += 1;
+                }
+            }
+            None => {}
+        }
+        self.len -= 1;
+        if self.entries.len() - self.len > self.len && self.entries.len() > 8 {
+            self.compact();
+        }
+        match taken {
+            Some((_, v)) => Some(v),
+            None => None,
+        }
+    }
+
+    /// Closes the holes, keeping the order, and indexes the entries again.
+    fn compact(&mut self) {
+        let old = replace(&mut self.entries, Vec::new());
+        self.index = HashMap::new();
+        for e in old {
+            match e {
+                Some((k, v)) => {
+                    let h = hash_of(&k);
+                    let at = self.entries.len();
+                    self.entries.push(Some((k, v)));
+                    match self.index.get_mut(&h) {
+                        Some(positions) => positions.push(at),
+                        None => {
+                            let mut positions: Vec<int> = Vec::new();
+                            positions.push(at);
+                            self.index.insert(h, positions);
+                        }
+                    }
+                }
+                None => {}
+            }
+        }
+    }
+
+    /// The entries, borrowed, in the order their keys were inserted.
+    pub fn iter(&self) -> OrderedIter<K, V> {
+        OrderedIter { entries: self.entries.as_slice(), at: 0 }
+    }
+
+    /// The first entry inserted that is still there.
+    pub fn first(&self) -> Option<(&K, &V)> {
+        self.iter().next()
+    }
+}
+
+/// An ordered map's entries, borrowed, in insertion order.
+pub view OrderedIter<K, V> {
+    entries: &[Option<(K, V)>],
+    at: int,
+}
+
+impl<K, V> Iterator for OrderedIter<K, V> {
+    type Item = (&K, &V);
+    fn next(&mut self) -> Option<(&K, &V)> {
+        while self.at < self.entries.len() {
+            let e = &self.entries[self.at];
+            self.at += 1;
+            match e {
+                Some((k, v)) => return Some((k, v)),
+                None => {}
+            }
+        }
+        None
+    }
+}
+
+impl<K: Hash + Eq, V> IntoIterator for &OrderedMap<K, V> {
+    type Item = (&K, &V);
+    type IntoIter = OrderedIter<K, V>;
+    fn into_iter(self) -> OrderedIter<K, V> {
+        self.iter()
+    }
+}
+
+impl<K: Hash + Eq, V> core::collections::Map<K, V> for OrderedMap<K, V> {
+    fn len(&self) -> int {
+        self.len
+    }
+
+    fn get(&self, k: &K) -> Option<&V> {
+        OrderedMap::get(self, k)
+    }
+
+    fn insert(&mut self, k: K, v: V) -> Option<V> {
+        OrderedMap::insert(self, k, v)
+    }
+
+    fn remove(&mut self, k: &K) -> Option<V> {
+        OrderedMap::remove(self, k)
+    }
+}
+
+// `[(k, v), …]`, in that order; later pairs win, as with `insert`.
+impl<K: Hash + Eq, V> FromArrayLiteral<(K, V)> for OrderedMap<K, V> {
+    fn from_array<const N: int>(items: [(K, V); N]) -> OrderedMap<K, V> {
+        let mut m = OrderedMap::new();
+        for (k, v) in items {
+            m.insert(k, v);
+        }
+        m
+    }
+
+    fn from_repeat(x: (K, V), n: int) -> OrderedMap<K, V> where (K, V): Clone {
+        let mut m = OrderedMap::new();
+        if n > 0 {
+            let (k, v) = x;
+            m.insert(k, v);
+        }
+        m
+    }
+}
+
+impl<K: Hash + Eq, V> Default for OrderedMap<K, V> {
+    fn default() -> OrderedMap<K, V> {
+        OrderedMap::new()
+    }
+}
+
+// `{k: v, …}`, in insertion order.
+impl<K: Hash + Eq + Debug, V: Debug> Debug for OrderedMap<K, V> {
+    fn fmt(&self, out: &mut String) {
+        out.push('{');
+        let mut first = true;
+        for (k, v) in self.iter() {
+            if !first {
+                out.push_str(", ");
+            }
+            first = false;
+            Debug::fmt(k, out);
+            out.push_str(": ");
+            Debug::fmt(v, out);
+        }
+        out.push('}');
+    }
+}
+
+/// A set that remembers the order its values were inserted in: the keys of an `OrderedMap`.
+pub struct OrderedSet<T> {
+    map: OrderedMap<T, ()>,
+}
+
+impl<T: Hash + Eq> OrderedSet<T> {
+    pub fn new() -> OrderedSet<T> {
+        OrderedSet { map: OrderedMap::new() }
+    }
+
+    pub fn len(&self) -> int {
+        self.map.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
+    pub fn contains(&self, x: &T) -> bool {
+        self.map.contains_key(x)
+    }
+
+    /// Adds `x` last: whether it was not there already (if it was, it keeps its place).
+    pub fn insert(&mut self, x: T) -> bool {
+        self.map.insert(x, ()).is_none()
+    }
+
+    /// Takes `x` out: whether it was there.
+    pub fn remove(&mut self, x: &T) -> bool {
+        self.map.remove(x).is_some()
+    }
+
+    /// The values, borrowed, in insertion order.
+    pub fn iter(&self) -> OrderedSetIter<T> {
+        OrderedSetIter { inner: self.map.iter() }
+    }
+}
+
+/// An ordered set's values, borrowed, in insertion order.
+pub view OrderedSetIter<T> {
+    inner: OrderedIter<T, ()>,
+}
+
+impl<T> Iterator for OrderedSetIter<T> {
+    type Item = &T;
+    fn next(&mut self) -> Option<&T> {
+        match self.inner.next() {
+            Some((x, _)) => Some(x),
+            None => None,
+        }
+    }
+}
+
+impl<T: Hash + Eq> IntoIterator for &OrderedSet<T> {
+    type Item = &T;
+    type IntoIter = OrderedSetIter<T>;
+    fn into_iter(self) -> OrderedSetIter<T> {
+        self.iter()
+    }
+}
+
+impl<T: Hash + Eq> FromArrayLiteral<T> for OrderedSet<T> {
+    fn from_array<const N: int>(items: [T; N]) -> OrderedSet<T> {
+        let mut s = OrderedSet::new();
+        for x in items {
+            s.insert(x);
+        }
+        s
+    }
+
+    fn from_repeat(x: T, n: int) -> OrderedSet<T> where T: Clone {
+        let mut s = OrderedSet::new();
+        if n > 0 {
+            s.insert(x);
+        }
+        s
+    }
+}
+
+impl<T: Hash + Eq> Default for OrderedSet<T> {
+    fn default() -> OrderedSet<T> {
+        OrderedSet::new()
+    }
+}
+
+impl<T: Hash + Eq + Debug> Debug for OrderedSet<T> {
+    fn fmt(&self, out: &mut String) {
+        out.push('{');
+        let mut first = true;
+        for x in self.iter() {
+            if !first {
+                out.push_str(", ");
+            }
+            first = false;
+            Debug::fmt(x, out);
+        }
+        out.push('}');
+    }
+}
