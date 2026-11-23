@@ -798,9 +798,37 @@ calls is a Rust crate, `moddil-rt`, for now.
     use it.
   - **Checking:** a fourth conformance runner, `Wasm`. 45 files run as WASM, as many as C1 ran
     natively, all agreeing with the interpreters. Tests validate each module with `wasmparser`.
-- **Next, W1:** wide pointers, generics and trait methods, then the heap, mirroring C2 and C3;
-  the JSPI lowering for suspension once tasks are reached. Release builds (`lld` or `mold`,
-  optimisation and debug info) after.
+- **Slice W1 (decided November 2026): WASM at parity with native, but for tasks, by
+  translating Cranelift IR.** Rather than a second lowering, the WASM backend reuses the native
+  one: it builds through a generic `cranelift_module::Module`, so `moddil-wasm`'s `WasmModule`
+  takes each finished Cranelift IR function and translates it to WASM. One lowering serves
+  both backends, so they stay at parity. W0's direct emitter is replaced; its structuring stays.
+  - **The translation:**
+    - each Cranelift value is a wasm local: `i128` two `i64`s, and `i8` and `i16` zero-extended
+      in an `i32`;
+    - pointers are `i64`s, as the shared 64-bit layouts have them, wrapped to `i32` addresses at
+      each access;
+    - stack slots are a frame on a shadow stack;
+    - blocks are structured from the dominator tree, with each branch's arguments stored on
+      its edge.
+  - **The runtime is `moddil-rt` itself**, built for `wasm32-unknown-unknown` by `moddil-wasm`'s
+    build script as a new crate, `moddil-rt-wasm`.
+    - It imports the program's memory, so the program calls it with its own addresses.
+    - Its allocator, with the live count the leak check uses, is the heap.
+    - Its `i128` arithmetic covers what WASM has no instructions for.
+  - **Memory:** the runtime's static data, then the program's scratch, its data at fixed
+    addresses and a 16 MiB shadow stack; the heap grows above.
+  - **Running:** the host runs the module in a worker thread with a deep stack, driven over a
+    pipe. Values are rendered lazily, the renderer reading memory a page at a time. Results,
+    errors leaving a run, failed `assert`s' parts, leaks and tracked traps are reported as the
+    JIT runner reports them.
+  - **One native fix:** a call through a `dyn Fn…` passed the needs its method is given after
+    the arguments' tuple, which the closure's body does not take (it takes them in the tuple).
+    Natively that went unseen; WASM's typed indirect calls refused it.
+  - **Checking:** 110 conformance files run as WASM, every file native code runs but the nine
+    with tasks, all agreeing with the interpreters.
+- **Next:** tasks on WASM with the JSPI lowering (`compiler.md`: WASM concurrency lowering).
+  Release builds (`lld` or `mold`, optimisation and debug info) after.
 
 ## Staging: distributed programs
 

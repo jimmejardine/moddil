@@ -793,6 +793,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "moddil-rt-wasm"
+version = "0.0.0"
+dependencies = [
+ "moddil-rt",
+]
+
+[[package]]
 name = "moddil-sema"
 version = "0.0.0"
 dependencies = [
@@ -816,8 +823,10 @@ name = "moddil-wasm"
 version = "0.0.0"
 dependencies = [
  "cranelift-codegen",
+ "cranelift-module",
  "moddil-mir",
  "moddil-native",
+ "moddil-rt",
  "moddil-sema",
  "moddil-syntax",
  "wasm-encoder",

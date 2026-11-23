@@ -244,15 +244,22 @@ fn run_wasm(db: &Database, program: Program, files: &[(String, String)], name: &
         return ExitCode::FAILURE;
     };
     match moddil_wasm::run_main(db, program, main) {
-        Ok(v) if v == "()" => ExitCode::SUCCESS,
-        Ok(v) => {
+        // An `ExitCode` (`main.exit.1`): the number it stands for.
+        Ok((_, Some(code))) => ExitCode::from(code),
+        Ok((v, None)) if v == "()" => ExitCode::SUCCESS,
+        Ok((v, None)) => {
             println!("{v}");
             ExitCode::SUCCESS
         }
-        Err(moddil_wasm::Wasm::Trap(class, file, range)) => {
+        Err(moddil_wasm::Wasm::Trap(class, file, range, parts)) => {
             let (name, text) = &files[file as usize];
-            report_native_trap(name, text, class, range, &[]);
+            report_native_trap(name, text, class, range, &parts);
             ExitCode::from(TRAPPED)
+        }
+        Err(moddil_wasm::Wasm::Failed(file, range, error)) => {
+            let (name, text) = &files[file as usize];
+            report_native_error(name, text, range, &error);
+            ExitCode::FAILURE
         }
         Err(e) => {
             eprintln!("moddil: {}", wasm_problem(&e));
@@ -267,7 +274,11 @@ fn wasm_problem(e: &moddil_wasm::Wasm) -> String {
         moddil_wasm::Wasm::Unsupported(what) => format!("not compiled to WASM yet: {what}"),
         moddil_wasm::Wasm::NoHost(why) => format!("no Node to run WASM in: {why}"),
         moddil_wasm::Wasm::Crash(how) => format!("the WASM run stopped (a backend bug): {how}"),
+        moddil_wasm::Wasm::Leak(n) => {
+            format!("the WASM run leaked {n} allocations (a backend bug)")
+        }
         moddil_wasm::Wasm::Trap(..) => "a trap".to_string(),
+        moddil_wasm::Wasm::Failed(..) => "an error".to_string(),
     }
 }
 
@@ -289,11 +300,17 @@ fn test_wasm(db: &Database, program: Program, files: &[(String, String)]) -> Exi
         let name = &items.tests[i as usize].name;
         match result {
             Ok(()) => println!("test \"{name}\" ... ok"),
-            Err(moddil_wasm::Wasm::Trap(class, file, range)) => {
+            Err(moddil_wasm::Wasm::Trap(class, file, range, parts)) => {
                 failed += 1;
                 println!("test \"{name}\" ... trapped");
                 let (fname, text) = &files[*file as usize];
-                report_native_trap(fname, text, *class, *range, &[]);
+                report_native_trap(fname, text, *class, *range, parts);
+            }
+            Err(moddil_wasm::Wasm::Failed(file, range, error)) => {
+                failed += 1;
+                println!("test \"{name}\" ... failed");
+                let (fname, text) = &files[*file as usize];
+                report_native_error(fname, text, *range, error);
             }
             Err(e) => {
                 failed += 1;

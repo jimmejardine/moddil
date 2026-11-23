@@ -19,6 +19,9 @@ pub(crate) enum Exit {
 pub(crate) trait Emit {
     /// Node `n`'s code, and how it ends.
     fn node(&mut self, n: usize) -> Result<Exit, String>;
+    /// What goes along edge `k` (0 for the first successor, 1 for the second) out of node
+    /// `from`, before control goes on: a block's arguments.
+    fn edge(&mut self, from: usize, k: usize) -> Result<(), String>;
     fn block(&mut self);
     fn loop_(&mut self);
     /// An `if` on the condition on the stack.
@@ -200,13 +203,13 @@ fn node_within(
         return do_tree(g, y, ctx, e);
     }
     match e.node(x)? {
-        Exit::Goto(t) => do_branch(g, x, t, ctx, e),
+        Exit::Goto(t) => do_branch(g, x, 0, t, ctx, e),
         Exit::Branch(t, f) => {
             e.if_();
             ctx.push(Frame::IfThenElse);
-            do_branch(g, x, t, ctx, e)?;
+            do_branch(g, x, 0, t, ctx, e)?;
             e.else_();
-            do_branch(g, x, f, ctx, e)?;
+            do_branch(g, x, 1, f, ctx, e)?;
             ctx.pop();
             e.end();
             Ok(())
@@ -218,10 +221,12 @@ fn node_within(
 fn do_branch(
     g: &Graph<'_>,
     src: usize,
+    k: usize,
     t: usize,
     ctx: &mut Vec<Frame>,
     e: &mut dyn Emit,
 ) -> Result<(), String> {
+    e.edge(src, k)?;
     let backward = g.rpo[t] <= g.rpo[src];
     if backward || g.merge[t] {
         let want = if backward {
@@ -267,6 +272,9 @@ mod tests {
                 Branch(t, f) => Exit::Branch(t, f),
                 Done => Exit::Done,
             })
+        }
+        fn edge(&mut self, _: usize, _: usize) -> Result<(), String> {
+            Ok(())
         }
         fn block(&mut self) {
             self.out.push("block".into());

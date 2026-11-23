@@ -280,8 +280,11 @@ impl Implementation for Wasm {
             );
             match result {
                 Ok(()) => {}
-                Err(moddil_wasm::Wasm::Trap(_, file, range)) => {
+                Err(moddil_wasm::Wasm::Trap(_, file, range, _)) => {
                     outcome.traps.insert(line_of(project, file, range.start));
+                }
+                Err(moddil_wasm::Wasm::Failed(file, range, _)) => {
+                    outcome.errors.insert(line_of(project, file, range.start));
                 }
                 // A crash is a disagreement: no interpreter has one.
                 Err(e) => outcome.observed.push((

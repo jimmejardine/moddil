@@ -42,7 +42,7 @@ use crate::layout::{Layout, Layouts, Shape, Tag};
 
 /// What a site is.
 #[derive(Clone, Debug)]
-pub(crate) enum Site {
+pub enum Site {
     /// A check: its class, the file and where.
     Trap(TrapClass, u32, TextRange),
     /// A call: the file, where, and whether the code that makes it is tracked
@@ -167,7 +167,7 @@ pub(crate) fn pass_of(l: &Layout) -> Pass {
 }
 
 /// Where an error's value is in the error channel and in an error set: after its id, a word.
-pub(crate) const ERROR_VALUE: u32 = 8;
+pub const ERROR_VALUE: u32 = 8;
 
 /// How many words a vtable starts with before its methods.
 pub(crate) const VTABLE_HEADER: usize = 4;
@@ -226,23 +226,23 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
 /// A function instance: a function (or a closure's body) and its (concrete) type arguments.
 type Instance = (Item, Vec<Ty>);
 
-struct Compiler<'db, M: Module> {
+pub(crate) struct Compiler<'db, M: Module> {
     db: &'db dyn Db,
     program: Program,
-    items: &'db ItemTree,
+    pub(crate) items: &'db ItemTree,
     layouts: Layouts<'db>,
-    module: M,
+    pub(crate) module: M,
     rt: Rt,
     /// Each instance declared: its id, and its parameters' and result's types.
     fns: HashMap<Instance, (FuncId, Vec<Ty>, Ty)>,
     /// The instances declared and not yet compiled.
     queue: Vec<Instance>,
-    sites: Vec<Site>,
+    pub(crate) sites: Vec<Site>,
     /// Each text constant's data.
     strs: HashMap<String, DataId>,
     /// Each vtable: for a type and a trait (with its arguments).
     vtables: HashMap<(Ty, TraitRef), DataId>,
-    dyn_types: Vec<Ty>,
+    pub(crate) dyn_types: Vec<Ty>,
     /// Each type's drop glue: `fn(*mut T) -> i8`.
     glues: HashMap<Ty, FuncId>,
     /// The drop glue declared and not yet compiled.
@@ -256,7 +256,7 @@ struct Compiler<'db, M: Module> {
 }
 
 /// The host's target, with the flags the code needs: `pic` for an object to link.
-fn isa(pic: bool) -> Result<cranelift_codegen::isa::OwnedTargetIsa, String> {
+pub(crate) fn isa(pic: bool) -> Result<cranelift_codegen::isa::OwnedTargetIsa, String> {
     let mut flags = settings::builder();
     flags.set("opt_level", "speed").map_err(|e| e.to_string())?;
     // `i128` and `u128` are passed and returned as two registers.
@@ -283,18 +283,19 @@ pub(crate) fn compile<'db>(
     for (name, at) in moddil_rt::symbols() {
         builder.symbol(name, at);
     }
-    let b = build(db, program, item, JITModule::new(builder))?;
+    let mut b = build(db, program, &[item], JITModule::new(builder))?;
     let mut module = b.c.module;
     module.finalize_definitions().map_err(|e| e.to_string())?;
+    let e = b.entries.remove(0);
     Ok(Compiled {
         module,
-        entry: b.entry,
-        drop_result: b.drop_result,
-        ret: b.ret,
+        entry: e.entry,
+        drop_result: e.drop_result,
+        ret: e.ret,
         sites: b.c.sites,
         items: b.c.items,
         dyn_types: b.c.dyn_types,
-        errors: b.errors,
+        errors: e.errors,
         files: files_of(db, program),
     })
 }
@@ -314,18 +315,18 @@ pub(crate) fn compile_object(db: &dyn Db, program: Program, item: Item) -> Resul
     let b = build(
         db,
         program,
-        item,
+        &[item],
         cranelift_object::ObjectModule::new(builder),
     )?;
     let mut c = b.c;
-    c.exit_code(&b.ret)?;
+    c.exit_code(&b.entries[0].ret)?;
     c.site_tables(&files_of(db, program))?;
     let product = c.module.finish();
     product.emit().map_err(|e| e.to_string())
 }
 
 /// The program's files: each one's path and text.
-fn files_of(db: &dyn Db, program: Program) -> Vec<(String, String)> {
+pub(crate) fn files_of(db: &dyn Db, program: Program) -> Vec<(String, String)> {
     program
         .files(db)
         .iter()
@@ -333,22 +334,45 @@ fn files_of(db: &dyn Db, program: Program) -> Vec<(String, String)> {
         .collect()
 }
 
-/// What [`build`] gives: the compiler, with its module holding the code, and the entry.
-struct Built<'db, M: Module> {
-    c: Compiler<'db, M>,
-    entry: FuncId,
-    drop_result: FuncId,
-    ret: Ty,
-    errors: Vec<Ty>,
+/// An entry point compiled: its trampoline, `fn(out: *mut u8, err: *mut u8) -> i8` in the
+/// platform's C convention, which calls it and stores its result's bytes at `out` or its error
+/// at `err`; `fn(out: *mut u8) -> i8`, which drops the result at `out` once the host has shown it;
+/// its result type; and the types of the errors it can fail with.
+pub struct Entry {
+    /// The trampoline.
+    pub entry: FuncId,
+    /// What drops the result.
+    pub drop_result: FuncId,
+    /// The result type.
+    pub ret: Ty,
+    /// The errors it can fail with.
+    pub errors: Vec<Ty>,
 }
 
-/// Compiles what `item` reaches into `module`.
-fn build<M: Module>(
-    db: &dyn Db,
+/// What [`build`] gives: the compiler, with its module holding the code, and the entries.
+pub(crate) struct Built<'db, M: Module> {
+    pub(crate) c: Compiler<'db, M>,
+    pub(crate) entries: Vec<Entry>,
+}
+
+/// The name an entry's function `base` is exported as: as it is for the first entry, and with
+/// the entry's number after it for the others.
+fn entry_name(base: &str, k: usize) -> String {
+    if k == 0 {
+        base.to_string()
+    } else {
+        format!("{base}_{k}")
+    }
+}
+
+/// Compiles what `entries` reach into `module`, each an entry point (a test, or a function
+/// whose parameters are root capabilities).
+pub(crate) fn build<'db, M: Module>(
+    db: &'db dyn Db,
     program: Program,
-    item: Item,
+    entries: &[Item],
     mut module: M,
-) -> Result<Built<'_, M>, String> {
+) -> Result<Built<'db, M>, String> {
     let ptr = module.target_config().pointer_type();
     let mut import = |name: &str, params: &[ir::Type], ret: Option<ir::Type>| {
         let mut sig = module.make_signature();
@@ -476,28 +500,32 @@ fn build<M: Module>(
         tramps: HashMap::new(),
         c_drops: HashMap::new(),
     };
-    let (target, params, ret) = match item {
-        Item::Test(_) => {
-            let id = c.declare_item("test", &[], &Ty::Unit, false)?;
-            c.body_of(item, &[], id, &[], &Ty::Unit)?;
-            (id, Vec::new(), Ty::Unit)
-        }
-        Item::Fn(f) => {
-            let (id, params, ret) = c.declare_fn(f, &[])?;
-            // `main`'s root capabilities (`main.root.1`): each a struct of a stub mod, made with
-            // its handle zero, as the interpreters make it.
-            let roots = params
-                .iter()
-                .all(|p| matches!(p, Ty::Adt(a, ..) if c.items.adts[*a as usize].root));
-            if !roots {
-                return Err("an entry point with parameters".to_string());
+    let mut pending = Vec::new();
+    for (k, &item) in entries.iter().enumerate() {
+        let (target, params, ret) = match item {
+            Item::Test(_) => {
+                let id = c.declare_item("test", &[], &Ty::Unit, false)?;
+                c.body_of(item, &[], id, &[], &Ty::Unit)?;
+                (id, Vec::new(), Ty::Unit)
             }
-            (id, params, ret)
-        }
-        Item::Closure(..) => return Err("a closure as an entry point".to_string()),
-    };
-    let drop_result = c.drop_result(&ret)?;
-    let errors = c.errors_of(item)?;
+            Item::Fn(f) => {
+                let (id, params, ret) = c.declare_fn(f, &[])?;
+                // `main`'s root capabilities (`main.root.1`): each a struct of a stub mod, made with
+                // its handle zero, as the interpreters make it.
+                let roots = params
+                    .iter()
+                    .all(|p| matches!(p, Ty::Adt(a, ..) if c.items.adts[*a as usize].root));
+                if !roots {
+                    return Err("an entry point with parameters".to_string());
+                }
+                (id, params, ret)
+            }
+            Item::Closure(..) => return Err("a closure as an entry point".to_string()),
+        };
+        let drop_result = c.drop_result(&ret, k)?;
+        let errors = c.errors_of(item)?;
+        pending.push((target, params, ret, drop_result, errors));
+    }
     loop {
         if let Some(inst) = c.queue.pop() {
             let (id, params, ret) = c.fns[&inst].clone();
@@ -508,14 +536,17 @@ fn build<M: Module>(
             break;
         }
     }
-    let entry = c.trampoline(target, &params, &ret)?;
-    Ok(Built {
-        c,
-        entry,
-        drop_result,
-        ret,
-        errors,
-    })
+    let mut entries = Vec::new();
+    for (k, (target, params, ret, drop_result, errors)) in pending.into_iter().enumerate() {
+        let entry = c.trampoline(target, &params, &ret, k)?;
+        entries.push(Entry {
+            entry,
+            drop_result,
+            ret,
+            errors,
+        });
+    }
+    Ok(Built { c, entries })
 }
 
 impl<M: Module> Compiler<'_, M> {
@@ -1252,14 +1283,14 @@ impl<M: Module> Compiler<'_, M> {
 
     /// `fn(out: *mut u8) -> i8`, in the platform's C convention: drops the entry's result, of
     /// type `ret`, at `out`.
-    fn drop_result(&mut self, ret: &Ty) -> Result<FuncId, String> {
+    fn drop_result(&mut self, ret: &Ty, k: usize) -> Result<FuncId, String> {
         let ptr = self.module.target_config().pointer_type();
         let mut sig = self.module.make_signature();
         sig.params.push(AbiParam::new(ptr));
         sig.returns.push(AbiParam::new(types::I8));
         let id = self
             .module
-            .declare_function("moddil_drop_result", Linkage::Export, &sig)
+            .declare_function(&entry_name("moddil_drop_result", k), Linkage::Export, &sig)
             .map_err(|e| e.to_string())?;
         let needs = Solver::new(self.items, &[]).needs_drop(ret);
         let glue = if needs { Some(self.glue(ret)?) } else { None };
@@ -1291,7 +1322,13 @@ impl<M: Module> Compiler<'_, M> {
 
     /// `fn(out: *mut u8, err: *mut u8) -> i8`, in the platform's C convention: calls `target`,
     /// storing its result's bytes at `out`, or its error at `err`.
-    fn trampoline(&mut self, target: FuncId, params: &[Ty], ret: &Ty) -> Result<FuncId, String> {
+    fn trampoline(
+        &mut self,
+        target: FuncId,
+        params: &[Ty],
+        ret: &Ty,
+        k: usize,
+    ) -> Result<FuncId, String> {
         let ptr = self.module.target_config().pointer_type();
         let mut sig = self.module.make_signature();
         sig.params.push(AbiParam::new(ptr));
@@ -1299,7 +1336,7 @@ impl<M: Module> Compiler<'_, M> {
         sig.returns.push(AbiParam::new(types::I8));
         let id = self
             .module
-            .declare_function("moddil_entry", Linkage::Export, &sig)
+            .declare_function(&entry_name("moddil_entry", k), Linkage::Export, &sig)
             .map_err(|e| e.to_string())?;
         let pass = self.pass(ret)?;
         let mut ctx = self.module.make_context();
@@ -3012,12 +3049,23 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                     };
                     let at = 8 * (VTABLE_HEADER + k) as i32;
                     let fp = self.b.ins().load(types::I64, flags, vt, at);
+                    // A closure's body takes its needs in its arguments' tuple, so a call
+                    // through a `dyn Fn…` gives it the tuple, not the needs the trait's method
+                    // is given after it (`expr.closure.stored.1`).
+                    let closure = ["Fn", "FnMut", "FnOnce"]
+                        .iter()
+                        .any(|n| self.c.items.lang(n) == Some(tr.trait_));
+                    let rest = if closure {
+                        &args[1..args.len().min(2)]
+                    } else {
+                        &args[1..]
+                    };
                     let mut params = vec![Ty::reference(false, Ty::Unit)];
-                    for a in &args[1..] {
+                    for a in rest {
                         params.push(self.operand_ty(a)?);
                     }
                     let mut vals = vec![thin];
-                    vals.extend(self.arguments(&args[1..], &params[1..])?);
+                    vals.extend(self.arguments(rest, &params[1..])?);
                     (Run::Indirect(fp, params, d.ty.clone()), vals)
                 }
                 // A closure called: its body, with its captures (by pointer) and its arguments.

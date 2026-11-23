@@ -5,6 +5,7 @@
 //! outside the subset compiled so far gives [`Native::Unsupported`], so a caller can say so or
 //! fall back to an interpreter.
 
+pub mod backend;
 mod host;
 mod jit;
 pub mod layout;

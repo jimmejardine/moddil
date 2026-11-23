@@ -1,0 +1,19 @@
+[package]
+name = "moddil-rt-wasm"
+description = "moddil-rt built for wasm32: the runtime a Moddil WASM module calls into, in the module's own memory"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+moddil-rt.workspace = true
+
+[lints]
+workspace = true

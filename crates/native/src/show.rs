@@ -14,8 +14,8 @@ pub trait Memory {
     fn bytes(&self, addr: u64, n: usize) -> Vec<u8>;
 }
 
-/// What showing values needs: the items, the layouts, how wide a thin borrow is, and the types
-/// `dyn` borrows point to (by the number their vtables start with).
+/// What showing values needs: the items, the layouts, and the types `dyn` borrows point to (by
+/// the number their vtables start with).
 pub struct Show<'a> {
     /// The program's items.
     pub items: &'a ItemTree,
@@ -23,8 +23,6 @@ pub struct Show<'a> {
     pub layouts: Layouts<'a>,
     /// The types `dyn` borrows point to.
     pub dyn_types: &'a [Ty],
-    /// How many bytes a thin borrow has: 8 natively, 4 on wasm32.
-    pub ptr_bytes: u32,
 }
 
 fn num_bytes(n: Num) -> u32 {
@@ -79,7 +77,7 @@ impl Show<'_> {
                         }
                     }
                     inner => {
-                        let q = mem.bits(p, self.ptr_bytes) as u64;
+                        let q = mem.bits(p, 8) as u64;
                         self.render(mem, inner, q)
                     }
                 };

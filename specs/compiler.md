@@ -252,7 +252,7 @@ moddil/
 | MIR interpreter | Compile-time evaluation, fast tests | **Own** | Needed anyway for [Metaprogramming](comptime.md) |
 | **Cranelift** | Debug/dev builds | Reuse | Fast compile; x86-64, AArch64, RISC-V 64, s390x |
 | **LLVM** | Release builds; iOS/Android/embedded; mature optimisation | Reuse | Pin one version; use via the C API / `inkwell` |
-| **WASM** | Browser, Node, WASI, components, bootstrap | **Own** emitter (`wasm-encoder`) + Binaryen `wasm-opt` | WASM is simple; needs stack switching, JSPI glue, exnref, GC and Component Model earlier than LLVM provides them; binary size matters |
+| **WASM** | Browser, Node, WASI, components, bootstrap | **Own** emitter (`wasm-encoder`), translating the native lowering's Cranelift IR (one lowering for both), + Binaryen `wasm-opt` | WASM is simple; needs stack switching, JSPI glue, exnref, GC and Component Model earlier than LLVM provides them; binary size matters |
 | **GPU** | Kernels | Reuse | `naga` for WGSL/SPIR-V/MSL/HLSL; LLVM NVPTX/AMDGPU for CUDA/ROCm-class targets; MLIR later if tensor-level optimisation is needed |
 | **C** | Third bootstrap path, odd platforms | Own (optional) | Decide later |
 | Native backends of our own | Faster compiles, full control | **Not now** | Go and Zig did this at great cost; revisit only if Cranelift + LLVM block the build-time goals |

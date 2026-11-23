@@ -106,7 +106,6 @@ impl Compiled<'_> {
                             items,
                             layouts: Layouts::new(items),
                             dyn_types,
-                            ptr_bytes: 8,
                         },
                         observed: Vec::new(),
                         parts: Vec::new(),

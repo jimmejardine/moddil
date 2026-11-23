@@ -109,37 +109,23 @@ fn align_up(n: u32, a: u32) -> u32 {
     n.div_ceil(a) * a
 }
 
-/// Every type's layout, computed once, for a target whose pointers are of type `ptr`.
+/// Every type's layout, computed once. Native code and WASM modules use the same layouts: WASM
+/// keeps pointers as 8-byte words too.
 pub struct Layouts<'a> {
     items: &'a ItemTree,
     cache: HashMap<Ty, Arc<Layout>>,
-    /// A thin borrow's type: `i64` natively, `i32` on wasm32.
-    ptr: ir::Type,
 }
 
 impl<'a> Layouts<'a> {
-    /// The layouts native code uses: 64-bit pointers.
+    /// The layouts, none computed yet.
     pub fn new(items: &'a ItemTree) -> Self {
-        Self::with_pointer(items, types::I64)
-    }
-
-    /// The layouts for a target whose pointers are of type `ptr` (`i32` for wasm32). A target
-    /// with other than 64-bit pointers has only thin borrows, for now: no wide borrows, `Buf`s,
-    /// error sets or anonymous impls.
-    pub fn with_pointer(items: &'a ItemTree, ptr: ir::Type) -> Self {
         Layouts {
             items,
             cache: HashMap::new(),
-            ptr,
         }
     }
 
-    /// Whether this target's layouts are the native ones (64-bit pointers).
-    fn native(&self) -> bool {
-        self.ptr == types::I64
-    }
-
-    /// `ty`'s layout, or what about it is not compiled for this target yet.
+    /// `ty`'s layout, or what about it is not compiled yet.
     pub fn of(&mut self, ty: &Ty) -> Result<Arc<Layout>, String> {
         if let Some(l) = self.cache.get(ty) {
             return Ok(l.clone());
@@ -154,11 +140,6 @@ impl<'a> Layouts<'a> {
             Ty::Unit | Ty::Never => Ok(empty()),
             Ty::Ref(_, inner) => {
                 if matches!(**inner, Ty::Str | Ty::Slice(_) | Ty::Dyn(..)) {
-                    if !self.native() {
-                        return Err(format!(
-                            "a borrow of `{inner}`, which needs its length or type"
-                        ));
-                    }
                     let dyn_slice = matches!(&**inner, Ty::Slice(e) if matches!(**e, Ty::Dyn(..)));
                     return Ok(Layout {
                         size: if dyn_slice { 24 } else { 16 },
@@ -173,10 +154,7 @@ impl<'a> Layouts<'a> {
                         }),
                     });
                 }
-                Ok(scalar(self.ptr, Some((0, 1))))
-            }
-            Ty::Buf(_) | Ty::Errors(_) | Ty::Anon(_) if !self.native() => {
-                Err(format!("a value of type `{ty}`"))
+                Ok(scalar(types::I64, Some((0, 1))))
             }
             Ty::Bool => Ok(scalar(types::I8, Some((2, 254)))),
             Ty::Char => Ok(scalar(
