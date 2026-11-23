@@ -212,7 +212,7 @@ impl Body {
         let mut variant = 0;
         for proj in &place.projection {
             ty = match (proj, &ty) {
-                (Projection::Deref, Ty::Ref(_, t)) => (**t).clone(),
+                (Projection::Deref, Ty::Ref(_, t) | Ty::Ptr(_, t)) => (**t).clone(),
                 (Projection::Downcast(v), t) => {
                     variant = *v;
                     t.clone()

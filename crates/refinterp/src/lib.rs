@@ -30,9 +30,26 @@ use value::Value;
 /// The prelude's source.
 pub(crate) const PRELUDE: &str = include_str!("../../../reference/2027/prelude.moddil");
 
-/// The built-in `core` mod's `collections` module, which every mod depends on as `core`.
-pub(crate) const CORE_COLLECTIONS: &str =
-    include_str!("../../../reference/2027/core/collections.moddil");
+/// The built-in `core` mod's modules, which every mod depends on as `core`: each one's name and
+/// source.
+pub(crate) const CORE_MODULES: [(&str, &str); 4] = [
+    (
+        "collections",
+        include_str!("../../../reference/2027/core/collections.moddil"),
+    ),
+    (
+        "ptr",
+        include_str!("../../../reference/2027/core/ptr.moddil"),
+    ),
+    (
+        "cell",
+        include_str!("../../../reference/2027/core/cell.moddil"),
+    ),
+    (
+        "atomic",
+        include_str!("../../../reference/2027/core/atomic.moddil"),
+    ),
+];
 
 /// Why a program traps.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

@@ -61,13 +61,13 @@ impl<'a> Reporter<'a> {
             .and_then(|&(_, s, attr)| s.is_file().then_some(attr))
     }
 
-    /// For an item in the derived source: the source its `derive` attribute is in.
-    pub(super) fn origin_src(&self, range: TextRange) -> Option<Src> {
+    /// For an item in the derived source: the source its `derive` attribute is in, and where.
+    pub(super) fn origin_src(&self, range: TextRange) -> Option<(Src, TextRange)> {
         self.expansion
             .origins
             .iter()
             .find(|(r, _, _)| r.start <= range.start && range.end <= r.end)
-            .map(|&(_, s, _)| s)
+            .map(|&(_, s, attr)| (s, attr))
     }
 
     /// The file of the `derive` attribute at `attr`.

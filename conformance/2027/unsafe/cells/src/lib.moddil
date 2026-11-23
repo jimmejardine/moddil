@@ -1,0 +1,55 @@
+// covers: type.ptr.1, expr.unsafe.1, mod.caps.1, core.ptr.1, core.cell.1, core.atomic.1
+
+use core::atomic::{self, Ordering};
+use core::cell::UnsafeCell;
+
+/// A count that goes up through a shared borrow.
+struct Counter { n: UnsafeCell<int> }
+
+impl Counter {
+    fn bump(&self) -> int {
+        atomic::fetch_add(self.n.get(), 1, Ordering::SeqCst)
+    }
+}
+
+test "a cell changes behind a shared borrow" {
+    let c = Counter { n: UnsafeCell::new(10) };
+    let r = &c;
+    r.bump();
+    r.bump()                                    // => 11
+    ;
+    atomic::load(c.n.get(), Ordering::Relaxed)  // => 12
+}
+
+test "a raw pointer is read and written in an `unsafe` block" {
+    let cell = UnsafeCell::new(5);
+    let p = cell.get();
+    unsafe("p points into cell, which outlives it") { *p = *p * 2; }
+    let q: *const int = p;
+    unsafe("q points into cell") { *q }         // => 10
+}
+
+test "a borrow becomes a raw pointer" {
+    let mut x = 1;
+    let p: *mut int = &mut x;
+    unsafe("p is the only way to x meanwhile") { *p += 4; }
+    x                                           // => 5
+}
+
+test "a value is borrowed through a raw pointer" {
+    let cell = UnsafeCell::new("a".to_string());
+    unsafe("nothing else reaches the text") { (&mut *cell.get()).push_str("bc"); }
+    cell.into_inner()                           // => "abc"
+}
+
+test "read-modify-writes give back what was there" {
+    let x = UnsafeCell::new(1);
+    atomic::compare_exchange(x.get(), 1, 5, Ordering::SeqCst, Ordering::SeqCst)   // => Ok(1)
+    ;
+    atomic::compare_exchange(x.get(), 1, 6, Ordering::SeqCst, Ordering::SeqCst)   // => Err(5)
+    ;
+    atomic::swap(x.get(), 7, Ordering::AcqRel)  // => 5
+    ;
+    atomic::store(x.get(), 8, Ordering::Release);
+    x.into_inner()                              // => 8
+}

@@ -783,7 +783,14 @@ impl Builder<'_> {
                     (op, (*inner).clone())
                 }
                 t => {
-                    let held = self.cfg.new_local(t.clone(), None);
+                    // Named for what it is, in errors about what borrows it.
+                    let what = match &h.effect {
+                        Ty::Dyn(tr, _) => tr.name.to_string(),
+                        e => format!("{e:?}"),
+                    };
+                    let held = self
+                        .cfg
+                        .new_local(t.clone(), Some(format!("the `{what}` handler")));
                     self.scopes.push(ScopeItem::Local(held));
                     self.cfg.node = self.scopes.node();
                     self.eval_into(held, h.value);

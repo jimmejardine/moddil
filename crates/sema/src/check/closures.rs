@@ -196,16 +196,12 @@ impl Checker<'_> {
             errors: Vec::new(),
             option,
         });
-        // A closure written for a `Box<dyn Fn… with …>`: its type meets its control effects and
-        // its caller its needs (`expr.closure.stored.1`).
+        // A closure written for a `Box<dyn Fn… with …>`: its type meets its control effects
+        // (`expr.closure.stored.1`).
         let stored = match &hint {
             Some(h @ Ty::Dyn(..)) => {
-                let needs = h.dyn_needs();
-                if !needs.is_empty() {
-                    self.out.call_needs.insert(e, needs.clone());
-                }
                 let depth = self.installs.iter().map(|(_, fx)| fx.len()).sum();
-                self.stored_ctx.push((e, needs, h.dyn_control(), depth));
+                self.stored_ctx.push((e, h.dyn_control(), depth));
                 true
             }
             _ => false,
@@ -309,8 +305,8 @@ impl Checker<'_> {
                 };
                 let ret = self.closure_assoc(&d, &bound, 0);
                 let fails = self.closure_assoc(&d, &bound, 1);
-                // Its type's needs and control effects are this call's.
-                self.record_needs(e, d.dyn_control(), d.dyn_needs(), range);
+                // Its type's control effects are this call's.
+                self.record_needs(e, d.dyn_control(), Vec::new(), range);
                 (params, self.norm(&ret), self.norm(&fails), bound)
             }
             _ => match &t {
@@ -484,8 +480,8 @@ impl Checker<'_> {
                 Capture::Evidence(_) => self.report(
                     Code::E0802,
                     range,
-                    "a stored closure owns what it captures, and a handler is borrowed: list the \
-                     effect in its type (`dyn Fn() with Effect`) to have it met where it is called",
+                    "a stored closure owns what it captures, and a handler is borrowed: install \
+                     it inside the closure, or move the closure's `with` further out",
                 ),
             }
         }
@@ -585,10 +581,6 @@ impl Checker<'_> {
                         Evidence::Install(w, k) if !visited.contains(&w) => {
                             evidence.insert((1, index(w), k));
                         }
-                        // A closure inside a stored closure uses what its caller gives it.
-                        Evidence::Call(s, k) if s != c => {
-                            evidence.insert((2, index(s), k));
-                        }
                         _ => {}
                     }
                 }
@@ -602,8 +594,7 @@ impl Checker<'_> {
             for (kind, a, b) in evidence {
                 captures.push(Capture::Evidence(match kind {
                     0 => Evidence::Param(a),
-                    1 => Evidence::Install(installs[&a], b),
-                    _ => Evidence::Call(installs[&a], b),
+                    _ => Evidence::Install(installs[&a], b),
                 }));
             }
             let kind = if locals.values().any(|m| *m == CaptureMode::Move) {
@@ -631,15 +622,6 @@ impl Checker<'_> {
                     Capture::Evidence(Evidence::Param(i)) => {
                         Ty::reference(false, self.own.get(i).cloned().unwrap_or(Ty::Error))
                     }
-                    Capture::Evidence(Evidence::Call(s, k)) => Ty::reference(
-                        false,
-                        self.out
-                            .call_needs
-                            .get(&s)
-                            .and_then(|ns| ns.get(k))
-                            .cloned()
-                            .unwrap_or(Ty::Error),
-                    ),
                     Capture::Evidence(Evidence::Install(w, k)) => match &self.body.exprs[w].kind {
                         ExprKind::With { handlers, .. } => {
                             Ty::reference(false, handlers[k].effect.clone())

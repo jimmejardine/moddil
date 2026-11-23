@@ -14,8 +14,8 @@ It also holds `Index`, `IndexMut` and `FromArrayLiteral`, the iteration traits `
 `IntoIterator`, the ranges `Range`, `RangeInclusive` and `RangeFrom`, `Iter` and `Chars`, `Buf`,
 `Vec`, and `Hash` and `Hasher` ([Collections](collections.md)), and `Debug` and `Default`
 (**expr.fmt.debug.1**, **attr.derive.default.1**), with `Default` for `int` (0), `bool`
-(`false`), `String`, `()`, `Vec` and `Option` (`None`); `RefinementError`
-([Refinements](refinements.md)); `FnInfo` and `ParamInfo` ([Attributes](attributes.md)); `scope`, `Scope`, `Task`, `yield_now`, `stop_requested`, `Trapped`, `channel`, `Sender`,
+(`false`), `String`, `()`, `Vec` and `Option` (`None`); `RefinementError` and
+`Refined` ([Refinements](refinements.md)); `FnInfo` and `ParamInfo` ([Attributes](attributes.md)); `scope`, `Scope`, `Task`, `yield_now`, `stop_requested`, `Trapped`, `channel`, `Sender`,
 `Receiver` and `Closed` ([Concurrency](concurrency.md)); `ExitCode` (**main.exit.1**); `Log` and
 `log` (**obs.log.1**); `Pattern` (**text.pattern.1**); `Option::map`; the impls and methods of
 the sized integers and the floats, `Number` and `RangeError` (**num.types.1**,

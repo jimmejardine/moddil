@@ -89,8 +89,15 @@ value to be received.
 
 **task.select.3** `#[selectable]` on a function that needs `suspend` (E0217 otherwise) makes a call
 of it an operation a `select` arm may wait on, as a library's `listener.accept()` is. It is called
-as any other function. For now a `select` with such an arm traps (`not implemented yet`) when it
-runs: waiting on it comes with the runtimes.
+as any other function.
+
+**task.select.4** A selectable function **receives first**: its body is one expression that
+starts with `p.recv()`, where `p` is a parameter or a field of one, read without running anything;
+the rest works with what was received (`match self.incoming.recv() { Some(c) => …, None => fail(…) }`)
+(E0217 otherwise). A `select` arm on a call of it evaluates the call's arguments, then waits on
+`p`'s channel as an arm `p.recv()` would; if the arm is chosen, the rest of the body runs with what
+was received, and its value is the arm's result, its error passing on as the arm's `?` says. The
+rest runs where the `select` is, so it may fail but uses no handler (E0217).
 
 **task.stop.1** `s.stop()` asks scope `s` to stop. `stop_requested()`, which needs `suspend`,
 waits until a stop reaches the running task: it is in `s` or in a scope inside it, and every scope

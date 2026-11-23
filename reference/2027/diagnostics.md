@@ -51,7 +51,9 @@ and a code never changes meaning.
 | E0214 | An empty range pattern | [pat.range.1](patterns.md) |
 | E0215 | A named argument with no parameter of its name, given twice, or before a positional one | [expr.call.named.1](expressions/calls.md) |
 | E0216 | A default on a method of an impl of a trait | [expr.call.default.1](expressions/calls.md) |
-| E0217 | A `select` arm whose operation is not one a `select` waits on, or `#[selectable]` on a function that does not suspend | [task.select.1](concurrency.md), [task.select.3](concurrency.md) |
+| E0217 | A `select` arm whose operation is not one a `select` waits on, `#[selectable]` on a function that does not suspend, or one that does not receive first or whose rest uses a handler | [task.select.1](concurrency.md), [task.select.3](concurrency.md), [task.select.4](concurrency.md) |
+| E0218 | A raw pointer dereferenced outside an `unsafe` block | [type.ptr.1](unsafe.md) |
+| E0219 | An `unsafe` block in a mod without the `unsafe` capability, or with no reason given | [expr.unsafe.1](unsafe.md), [mod.caps.1](unsafe.md) |
 | E0301 | Mutation of an immutable local (assigning, or borrowing with `&mut`) | [expr.assign.1](expressions/assignment.md), [borrow.mut.1](borrows.md) |
 | E0302 | Mutation through a shared borrow | [borrow.mut.1](borrows.md) |
 | E0303 | Use of a moved value | [own.move.1](ownership.md), [own.move.partial.1](ownership.md) |
@@ -72,7 +74,7 @@ and a code never changes meaning.
 | E0403 | A method or function that the type does not have | [expr.method.1](expressions/methods.md), [expr.path.assoc.1](expressions/methods.md), [generic.bound.1](generics.md) |
 | E0404 | Wrong number of type arguments | [generic.1](generics.md) |
 | E0405 | A type that cannot be inferred | [generic.infer.1](generics.md) |
-| E0406 | Two impls of a trait for the same type | [item.impl.coherence.1](items/impls.md) |
+| E0406 | Two impls of a trait for the same type, or an impl of `Refined` | [item.impl.coherence.1](items/impls.md), [refine.trait.1](refinements.md) |
 | E0407 | An impl that leaves out a method or associated type of its trait | [item.impl.trait.1](items/impls.md), [expr.anon-impl.1](expressions/closures.md) |
 | E0408 | An impl that defines something its trait does not declare | [item.impl.trait.1](items/impls.md), [expr.anon-impl.1](expressions/closures.md) |
 | E0409 | An impl's method whose signature differs from the trait's | [item.impl.trait.1](items/impls.md) |
@@ -99,7 +101,7 @@ and a code never changes meaning.
 | E0607 | Effects inferred without end | [eff.infer.1](effects.md) |
 | E0608 | A parameter of `main` that is not a root capability (a struct marked `#[root_capability]`), or one taken twice | [main.root.1](items/functions.md) |
 | E0610 | A task spawned into a scope opened outside a `with` whose handler it uses | [task.with.1](concurrency.md) |
-| E0609 | A handler's effect in the bound of a closure parameter, whose needs are met where the closure is written | [expr.closure.effects.2](expressions/closures.md) |
+| E0609 | A handler's effect in the bound of a closure parameter, or in a stored or returned closure's type: a closure's needs are met where it is written | [expr.closure.effects.2](expressions/closures.md), [expr.closure.stored.1](expressions/closures.md), [expr.closure.result.1](expressions/closures.md) |
 | E0801 | A closure whose kind is weaker than a bound needs | [expr.closure.param.1](expressions/closures.md) |
 | E0802 | A stored closure (`Box<dyn Fn…>`) that captures a borrow, or borrows a handler its type does not list | [expr.closure.stored.1](expressions/closures.md) |
 | E0701 | A path or import naming an item its module cannot see | [mod.vis.1](modules.md), [mod.use.1](modules.md) |

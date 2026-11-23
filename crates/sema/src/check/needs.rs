@@ -48,9 +48,6 @@ pub enum Evidence {
     /// By a handler of a `with` around the call: the `with` expression, and the handler's index
     /// in it.
     Install(ExprId, usize),
-    /// By the caller of a stored closure whose type lists the need (`expr.closure.stored.1`):
-    /// the closure, and the need's index in its type, passed after its arguments.
-    Call(ExprId, usize),
 }
 
 /// How a body's needs are checked.
@@ -75,9 +72,8 @@ pub(super) struct Need {
     /// and its effect.
     installs: Vec<(ExprId, usize, Ty)>,
     range: TextRange,
-    /// Inside a stored closure whose type lists needs: the closure, those needs, and how many of
-    /// `installs` are around it rather than in it.
-    stored: Option<(ExprId, Vec<Ty>, usize)>,
+    /// Inside a stored closure: how many of `installs` are around it rather than in it.
+    stored: Option<usize>,
 }
 
 /// Whether function `i`'s effects and errors are inferred: it is a private function or method
@@ -225,8 +221,7 @@ impl Checker<'_> {
     }
 
     /// Records that call `e` has the control effects `control` and the needs `needs`. Inside a
-    /// stored closure, its type meets the control effects it lists, and the needs, by each
-    /// call of it (`expr.closure.stored.1`).
+    /// stored closure, its type meets the control effects it lists (`expr.closure.stored.1`).
     pub(super) fn record_needs(
         &mut self,
         e: ExprId,
@@ -236,7 +231,7 @@ impl Checker<'_> {
     ) {
         if control != 0 {
             match self.stored_ctx.last() {
-                Some(&(_, _, own, _)) => {
+                Some(&(_, own, _)) => {
                     let missing = control & !own;
                     if missing != 0 {
                         let name = crate::items::show_control(missing);
@@ -266,10 +261,7 @@ impl Checker<'_> {
                     .map(move |(k, t)| (*w, k, t.clone()))
             })
             .collect();
-        let stored = self
-            .stored_ctx
-            .last()
-            .map(|(c, ds, _, depth)| (*c, ds.clone(), *depth));
+        let stored = self.stored_ctx.last().map(|&(_, _, depth)| depth);
         self.needs.push(Need {
             call: e,
             needs,
@@ -359,20 +351,13 @@ impl Checker<'_> {
                     found.push(Evidence::Param(usize::MAX));
                     continue;
                 }
-                // In a stored closure, a handler installed in it meets the need, and else its
-                // caller does, if its type lists it (`expr.closure.stored.1`).
-                if let Some((c, listed, depth)) = &n.stored {
-                    let inside = n.installs.get(*depth..).unwrap_or_default();
+                // In a stored closure, a handler installed in it meets the need first; one around
+                // it would be borrowed, which its owning what it captures refuses
+                // (`expr.closure.stored.1`).
+                if let Some(depth) = n.stored {
+                    let inside = n.installs.get(depth..).unwrap_or_default();
                     if let Some(&(w, k, _)) = inside.iter().rev().find(|(_, _, x)| *x == t) {
                         found.push(Evidence::Install(w, k));
-                        continue;
-                    }
-                    let listed: Vec<Ty> = listed
-                        .iter()
-                        .map(|x| super::finish::erase(&self.solver.deep(x)))
-                        .collect();
-                    if let Some(k) = listed.iter().position(|x| *x == t) {
-                        found.push(Evidence::Call(*c, k));
                         continue;
                     }
                 }
@@ -459,7 +444,7 @@ impl Checker<'_> {
             if closure {
                 let args = tr.args.first().cloned().unwrap_or(Ty::Unit);
                 for (k, t) in fixed.iter() {
-                    if *k < crate::ty::DYN_NEEDS {
+                    if *k < crate::ty::DYN_CONTROL {
                         let a = self.closure_assoc(&inner, &args, *k);
                         self.assoc_eqs.push((a, t.clone(), range));
                     }

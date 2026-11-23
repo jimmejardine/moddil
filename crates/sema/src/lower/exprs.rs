@@ -14,6 +14,9 @@ impl Lowerer<'_> {
     pub(super) fn expr(&mut self, e: &ast::Expr) -> ExprId {
         let node = e.syntax().clone();
         let range = node.text_range();
+        if let Some(got) = self.received_at(&node) {
+            return got;
+        }
         match e {
             ast::Expr::Literal(_) => self.literal(&node, false),
             ast::Expr::InlineFor(_) => self.inline_for(&node),
@@ -99,6 +102,7 @@ impl Lowerer<'_> {
                 Some(b) => self.block(&b),
                 None => self.missing(range),
             },
+            ast::Expr::Unsafe(_) => self.unsafe_block(&node),
             ast::Expr::If(_) => self.if_expr(&node, e),
             ast::Expr::LetCond(_) => self.let_cond(&node),
             ast::Expr::Match(_) => self.match_expr(&node),
@@ -871,6 +875,42 @@ impl Lowerer<'_> {
         self.alloc(kind, range)
     }
 
+    /// `unsafe("why") { … }` (`expr.unsafe.1`): a block in which raw pointers may be
+    /// dereferenced. Its mod must declare the `unsafe` capability (`mod.caps.1`), and the
+    /// justification must say something.
+    fn unsafe_block(&mut self, node: &SyntaxNode) -> ExprId {
+        let range = node.text_range();
+        let module = &self.items.modules[self.types.module as usize];
+        let allowed = self
+            .items
+            .mods
+            .get(module.mod_ as usize)
+            .is_none_or(|m| m.unsafe_ok);
+        if !allowed {
+            self.report(
+                Code::E0219,
+                range,
+                "`unsafe` is used only in a mod whose manifest declares the capability: \
+                 `capabilities = [\"unsafe\"]` under `[mod]`",
+            );
+        }
+        let why = node.token(K::STRING);
+        if why.is_some_and(|t| t.text().trim_matches('"').trim().is_empty()) {
+            self.report(
+                Code::E0219,
+                range,
+                "an `unsafe` block says why it is sound: `unsafe(\"…\") { … }`",
+            );
+        }
+        let Some(block) = node.children().find_map(ast::Block::cast) else {
+            return self.missing(range);
+        };
+        self.unsafe_depth += 1;
+        let e = self.block(&block);
+        self.unsafe_depth -= 1;
+        e
+    }
+
     pub(super) fn prefix(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {
         let range = node.text_range();
         let Some(op) = ast::operator(node) else {
@@ -879,7 +919,11 @@ impl Lowerer<'_> {
         let operand = e.sub_exprs().into_iter().next();
         if op.kind() == K::STAR {
             let x = self.expr_or_missing(operand, range);
-            return self.alloc(ExprKind::Deref(x), range);
+            let e = self.alloc(ExprKind::Deref(x), range);
+            if self.unsafe_depth > 0 {
+                self.out.body.unsafe_derefs.insert(e);
+            }
+            return e;
         }
         let op = match op.kind() {
             K::MINUS => UnaryOp::Neg,

@@ -1,0 +1,27 @@
+// covers: refine.trait.1
+
+type Small = int where self < 10;
+type Word = String where self.len() <= 4;
+
+/// Makes any refined value from its base, generically.
+fn make<T: Refined>(v: T::Base) -> Option<T> {
+    try { Some(T::refine(v)?) } catch { _ => None }
+}
+
+/// The error a generic refinement gives.
+fn why<T: Refined>(v: T::Base) -> String {
+    try { T::refine(v)?; "fine".to_string() } catch { e => e.clause }
+}
+
+test "a refinement implements `Refined`" {
+    let s = make::<Small>(3);
+    s.is_some()                                 // => true
+    ;
+    let t = make::<Small>(30);
+    t.is_none()                                 // => true
+    ;
+    let w = make::<Word>("abc".to_string());
+    w.unwrap_or(Word::new("x".to_string()) ?! "short").len()   // => 3
+    ;
+    why::<Small>(12)                            // => "self < 10"
+}

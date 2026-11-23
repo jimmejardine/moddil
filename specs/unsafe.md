@@ -193,6 +193,11 @@ runtimes and FFI wrappers live in audited standard mods
 ([`stdlib.md`: Initial standard-mod catalogue](stdlib.md#initial-standard-mod-catalogue)), so
 applications get their performance without holding the capability.
 
+**Built so far (M2b, November 2026):** raw pointers, `unsafe("why") { … }` with its justification
+required, the `unsafe` capability in the manifest, and the `core` mod's `ptr`, `cell`
+(`UnsafeCell`) and `atomic` modules ([`reference/2027/unsafe.md`](../reference/2027/unsafe.md)).
+`requires` contracts on `unsafe fn`, the checker and the audit rules come later.
+
 ## Fit check against the reference examples
 
 | Example | Uses |

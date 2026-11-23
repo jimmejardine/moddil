@@ -83,7 +83,7 @@ pub(crate) fn clif_type(ty: &Ty) -> Result<Option<ir::Type>, String> {
     Ok(Some(match ty {
         Ty::Unit | Ty::Never => return Ok(None),
         // A borrow is a pointer, as wide as an `int` on the 64-bit targets C1 runs on.
-        Ty::Int | Ty::Ref(..) => types::I64,
+        Ty::Int | Ty::Ref(..) | Ty::Ptr(..) => types::I64,
         Ty::Bool => types::I8,
         Ty::Char => types::I32,
         Ty::Num(n) => match n {
@@ -1859,7 +1859,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         for proj in &p.projection {
             match proj {
                 Projection::Deref => {
-                    let Ty::Ref(_, inner) = r.ty.clone() else {
+                    let (Ty::Ref(_, inner) | Ty::Ptr(_, inner)) = r.ty.clone() else {
                         return Err(format!("dereferencing a `{}`", r.ty));
                     };
                     let dyn_slice = matches!(&*inner, Ty::Slice(e) if matches!(**e, Ty::Dyn(..)));
@@ -5028,6 +5028,8 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 self.copy(b, tmp, l.size);
                 Val::Unit
             }
+            // The same pointer, to change through (`core.ptr.1`).
+            (Ty::Unit, "cast_mut") => self.operand(&args[0])?,
             (Ty::Unit, "replace") => {
                 let Val::Scalar(p) = self.operand(&args[0])? else {
                     return unsupported();

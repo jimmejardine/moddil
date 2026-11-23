@@ -1,0 +1,19 @@
+// covers: type.impl.ret.2
+
+trait Links { fn get(&self) -> int; }
+struct Fixed;
+impl Links for Fixed { fn get(&self) -> int { 1 } }
+
+trait Handler { fn handle(&self) -> int; }
+struct Route<F> { f: F }
+impl<F: Fn() -> int with suspend> Handler for Route<F> {
+    fn handle(&self) -> int { (self.f)() }
+}
+
+fn get() -> int with links: Links { links.get() }
+fn app() -> impl Handler with Links { Route { f: get } }
+
+fn escapes() -> int {
+    let a = with Links = Fixed { app() };       //~ E0308
+    a.handle()
+}

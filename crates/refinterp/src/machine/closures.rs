@@ -59,14 +59,10 @@ impl Machine<'_> {
         Value::Anon(key, methods)
     }
 
-    /// The handlers closure `c` runs with: those where it was written, and, once it has left
-    /// the function it was written in, its caller's after them (`expr.closure.result.1`).
+    /// The handlers closure `c` runs with: those where it was written
+    /// (`expr.closure.effects.1`).
     fn handlers_for(&self, c: &Closure) -> Vec<(String, Value)> {
-        let mut hs = c.handlers.clone();
-        if c.escaped {
-            hs.extend(self.handlers.iter().cloned());
-        }
-        hs
+        c.handlers.clone()
     }
 
     /// Calls closure `c` with `args`: its parameters are matched against them, and its body runs

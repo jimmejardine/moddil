@@ -259,6 +259,12 @@ impl<'a> Solver<'a> {
         if self_ty == Ty::Error {
             return Ty::Error;
         }
+        // A refinement's `Base` is its base (`refine.trait.1`).
+        if let Ty::Refined(..) = &self_ty
+            && self.tree.lang("Refined") == Some(trait_ref.trait_)
+        {
+            return self.tree.base(&self_ty);
+        }
         // A closure's `Output` and `Fails` are its result and errors.
         if let Ty::Closure(c) = &self_ty
             && self.tree.lang("FnOnce") == Some(trait_ref.trait_)
@@ -324,7 +330,9 @@ impl<'a> Solver<'a> {
             (Ty::Adt(i, _, xs), Ty::Adt(j, _, ys)) => {
                 i == j && xs.iter().zip(ys.iter()).all(|(x, y)| self.unify(x, y))
             }
-            (Ty::Ref(m, x), Ty::Ref(n, y)) => m == n && self.unify(x, y),
+            (Ty::Ref(m, x), Ty::Ref(n, y)) | (Ty::Ptr(m, x), Ty::Ptr(n, y)) => {
+                m == n && self.unify(x, y)
+            }
             (Ty::Array(x, n), Ty::Array(y, k)) => self.unify(x, y) && self.unify(n, k),
             (Ty::Slice(x), Ty::Slice(y)) | (Ty::Buf(x), Ty::Buf(y)) => self.unify(x, y),
             (Ty::Anon(x), Ty::Anon(y)) => x.owner == y.owner && x.expr == y.expr,
@@ -410,6 +418,17 @@ impl<'a> Solver<'a> {
         match &ty {
             Ty::Infer(_) => return Answer::Maybe,
             Ty::Error | Ty::Never => return Answer::Yes(Source::Builtin),
+            // Refinements implement `Refined`, and nothing else does (`refine.trait.1`).
+            // (A type parameter does if a bound says so, as below.)
+            _ if self.is_lang(tr, "Refined")
+                && !matches!(ty, Ty::Param(..) | Ty::Assoc(_) | Ty::Opaque(_)) =>
+            {
+                return if matches!(ty, Ty::Refined(..)) {
+                    Answer::Yes(Source::Builtin)
+                } else {
+                    Answer::No
+                };
+            }
             // A refined type has its base's traits (`refine.base.1`).
             Ty::Refined(..) => {
                 let base = self.tree.base(&ty);
@@ -471,7 +490,7 @@ impl<'a> Solver<'a> {
         }
         if self.is_lang(tr, "Copy") || self.is_lang(tr, "Clone") {
             match &ty {
-                Ty::Ref(false, _) => return Answer::Yes(Source::Builtin),
+                Ty::Ref(false, _) | Ty::Ptr(..) => return Answer::Yes(Source::Builtin),
                 Ty::Ref(true, _) => return Answer::No,
                 // A tuple is `Copy` and `Clone` if its elements are `Copy`; it is then cloned by
                 // copying it.
@@ -670,6 +689,7 @@ impl<'a> Solver<'a> {
             | Ty::Never
             | Ty::Error
             | Ty::Ref(..)
+            | Ty::Ptr(..)
             | Ty::Char
             | Ty::Str
             | Ty::Len(_) => false,
@@ -886,6 +906,15 @@ impl<'a> Solver<'a> {
         trait_ref: &TraitRef,
     ) -> Option<(u32, Vec<Ty>)> {
         let name = self.tree.fns[func as usize].name.clone();
+        // A refinement's `refine` is its `new` (`refine.trait.1`).
+        if let Ty::Refined(k, _) = self.deep(self_ty)
+            && self.is_lang(trait_ref.trait_, "Refined")
+        {
+            return self.tree.types[k as usize]
+                .refinement
+                .as_ref()
+                .map(|r| (r.new, Vec::new()));
+        }
         match self.implements(self_ty, trait_ref) {
             Answer::Yes(Source::Impl(i, args)) => {
                 let imp = &self.tree.impls[i as usize];

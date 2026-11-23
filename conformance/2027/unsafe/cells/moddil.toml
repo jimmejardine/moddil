@@ -1,0 +1,4 @@
+[mod]
+name = "cells"
+edition = "2027"
+capabilities = ["unsafe"]

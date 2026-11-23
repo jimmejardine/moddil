@@ -44,9 +44,33 @@ impl Machine<'_> {
                 .filter_map(|c| c.children().find_map(ast::Type::cast));
             for (n, t) in names.iter().zip(types) {
                 out.insert(n.clone(), self.head_of(&t));
+                // A refinement named for a parameter is remembered beside its base's kind, for
+                // `T::refine` (`refine.trait.1`).
+                if let Some(k) = self.refinement_named(&t) {
+                    out.insert(refined_key(n), Head::Adt(k));
+                }
             }
         }
         out
+    }
+
+    /// The refinement type `t` names, by key: written out, or a type parameter bound to one.
+    fn refinement_named(&self, t: &ast::Type) -> Option<String> {
+        let path = crate::program::type_path(t.syntax());
+        if let [p] = path.as_slice()
+            && let Some(Head::Adt(k)) = self.memory.type_of(&refined_key(p))
+        {
+            return Some(k);
+        }
+        match self.resolve(&path) {
+            Some((Def::Item(k), n))
+                if n == path.len()
+                    && self.program.types.get(&k).is_some_and(|t| t.pred.is_some()) =>
+            {
+                Some(k)
+            }
+            _ => None,
+        }
     }
 
     /// Finds the kinds of type parameters `names` from a value of type `t` (`v`), as far as
@@ -786,7 +810,6 @@ impl Machine<'_> {
         }
         // A closure (`expr.closure.call.1`), or one kept in a box (`expr.closure.stored.1`).
         if local || !matches!(callee, ast::Expr::Path(_)) {
-            self.through_box = false;
             let p = self.place(callee)?;
             if let Some(c) = self.closure_at(p, range)? {
                 let values = self.eval_all(&args)?;
@@ -868,6 +891,13 @@ impl Machine<'_> {
                         return self.run_method(m, &head, values, range);
                     }
                     return self.call_trait(&k, name, values, range);
+                }
+                // `T::refine(v)`, `T` a refinement (`refine.trait.1`).
+                if name == "refine"
+                    && let [t] = ty
+                    && let Some(Head::Adt(k)) = self.memory.type_of(&refined_key(t))
+                {
+                    return self.refine(&k, values.into_iter().next().expect("a value"), range);
                 }
                 let head = match ty {
                     [t] if t == "int" || t == "i64" => Head::Int,
@@ -1027,6 +1057,10 @@ impl Machine<'_> {
         e: &ast::Expr,
         range: TextRange,
     ) -> Eval {
+        // A selectable function's receive, done already by a `select` (`task.select.4`).
+        if self.received.as_ref().is_some_and(|(r, _)| *r == range) {
+            return Ok(self.received.take().expect("received").1);
+        }
         let receiver = &e.sub_exprs()[0];
         // A method's name may be a keyword (`s.spawn(…)`).
         let name = ast::member_name(node)
@@ -1201,4 +1235,9 @@ impl Machine<'_> {
         }
         self.run_method(m, &head, values, range)
     }
+}
+
+/// Where a frame's types keep the refinement type parameter `name` is bound to.
+fn refined_key(name: &str) -> String {
+    format!("{name}#refined")
 }

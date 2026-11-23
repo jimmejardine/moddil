@@ -62,6 +62,9 @@ pub struct Mod {
     /// Whether its manifest says `stub = true`: its functions may be signatures only
     /// (`mod.stub.1`).
     pub stub: bool,
+    /// Whether its manifest declares the `unsafe` capability, so its code may use `unsafe`
+    /// blocks (`mod.caps.1`).
+    pub unsafe_ok: bool,
 }
 
 /// A problem reading a project: a manifest that is wrong, or a file that cannot be read.
@@ -119,6 +122,7 @@ pub fn load(path: &Path) -> Result<Project, Vec<Problem>> {
                 deps: Vec::new(),
                 manifest: None,
                 stub: false,
+                unsafe_ok: false,
             }],
         }),
         Err(e) => Err(vec![Problem {
@@ -229,15 +233,17 @@ impl Loader {
             deps: Vec::new(),
             manifest: Some(manifest.clone()),
             stub: false,
+            unsafe_ok: false,
         });
         let m = Manifest {
             path: &manifest,
             text: &text,
             tables: &tables,
         };
-        let (name, stub) = self.mod_section(&m);
+        let (name, stub, unsafe_ok) = self.mod_section(&m);
         self.project.mods[index as usize].name = name;
         self.project.mods[index as usize].stub = stub;
+        self.project.mods[index as usize].unsafe_ok = unsafe_ok;
         let (src_dir, root) = self.lib_root(&m, dir);
         let exes = self.exes(&m, dir);
         self.module_tree(dir, &src_dir, root.as_deref(), &exes, index);
@@ -248,7 +254,7 @@ impl Loader {
                     Value::Table(kv) => {
                         kv.iter().find(|(k, _)| k == "path").map(|(_, v)| v.clone())
                     }
-                    Value::Str(_) | Value::Bool(_) => None,
+                    Value::Str(_) | Value::Bool(_) | Value::Array(_) => None,
                 };
                 let Some(path) = path else {
                     self.problem(
@@ -283,8 +289,9 @@ impl Loader {
         Some(index)
     }
 
-    /// `[mod]`: the mod's name, its edition, which must be 2027, and whether it is a stub.
-    fn mod_section(&mut self, m: &Manifest) -> (String, bool) {
+    /// `[mod]`: the mod's name, its edition, which must be 2027, whether it is a stub, and
+    /// whether its capabilities include `unsafe`.
+    fn mod_section(&mut self, m: &Manifest) -> (String, bool, bool) {
         for t in m.tables {
             if !matches!(t.name.as_str(), "" | "mod" | "lib" | "exe" | "dependencies") {
                 self.problem(
@@ -304,14 +311,19 @@ impl Loader {
                 0..0,
                 "a manifest has a `[mod]` table".to_string(),
             );
-            return (String::new(), false);
+            return (String::new(), false, false);
         };
         let mut name = String::new();
         let mut stub = false;
+        let mut unsafe_ok = false;
         for p in &t.pairs {
             match (p.key.as_str(), &p.value) {
                 ("name", Value::Str(s)) => name = s.clone(),
                 ("stub", Value::Bool(b)) => stub = *b,
+                // The capabilities the mod may use (`mod.caps.1`); only `unsafe` is checked yet.
+                ("capabilities", Value::Array(caps)) => {
+                    unsafe_ok = caps.iter().any(|c| c == "unsafe");
+                }
                 ("edition", Value::Str(s)) if s == EDITION => {}
                 ("edition", _) => self.problem(
                     "E0704",
@@ -338,7 +350,7 @@ impl Loader {
                 "a mod has a `name`".to_string(),
             );
         }
-        (name, stub)
+        (name, stub, unsafe_ok)
     }
 
     /// `[lib] root`: the source directory and the root module's file, if there is a library.

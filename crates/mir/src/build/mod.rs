@@ -110,11 +110,11 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
         compare_expr: ExprId::from_raw(la_arena::RawIdx::from_u32(0)),
         targets: vec![Target::Out],
         on_error: HashMap::new(),
+        selectables: selectables(db, owner.program(db), hir, types),
         binds: None,
         fx,
         evidence: HashMap::new(),
         installed: HashMap::new(),
-        called: HashMap::new(),
         uncoerced: None,
         captured: HashMap::new(),
         in_closure: false,
@@ -239,11 +239,11 @@ fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
         compare_expr: ExprId::from_raw(la_arena::RawIdx::from_u32(0)),
         targets: vec![Target::Out],
         on_error: HashMap::new(),
+        selectables: selectables(db, owner.program(db), hir, types),
         binds: None,
         fx,
         evidence: HashMap::new(),
         installed: HashMap::new(),
-        called: HashMap::new(),
         uncoerced: None,
         captured: HashMap::new(),
         in_closure: true,
@@ -252,17 +252,10 @@ fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
         Ty::tuple(c.captures.to_vec()),
         Some("{captures}".to_string()),
     );
-    // A stored closure whose type lists needs is given them after its arguments.
-    let given = types.call_needs(e).to_vec();
-    let mut arg_tys = c.params.to_vec();
-    arg_tys.extend(given.iter().map(|t| Ty::reference(false, t.clone())));
-    let args = b
-        .cfg
-        .new_local(Ty::tuple(arg_tys), Some("{arguments}".to_string()));
-    for k in 0..given.len() {
-        let place = Place::local(args).field((c.params.len() + k) as u32);
-        b.called.insert((e, k), place);
-    }
+    let args = b.cfg.new_local(
+        Ty::tuple(c.params.to_vec()),
+        Some("{arguments}".to_string()),
+    );
     for (k, cap) in types.captures(e).iter().enumerate() {
         let field = Place::local(env).field(k as u32);
         match *cap {
@@ -277,9 +270,6 @@ fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
             }
             moddil_sema::Capture::Evidence(moddil_sema::Evidence::Install(w, k)) => {
                 b.installed.insert((w, k), field);
-            }
-            moddil_sema::Capture::Evidence(moddil_sema::Evidence::Call(s, k)) => {
-                b.called.insert((s, k), field);
             }
         }
     }
@@ -330,8 +320,6 @@ struct Builder<'a> {
     evidence: HashMap<usize, Place>,
     /// Where the handlers each `with` installs are: by the `with` and the handler's index.
     installed: HashMap<(ExprId, usize), Place>,
-    /// Where each need a stored closure's caller gives is (`expr.closure.stored.1`).
-    called: HashMap<(ExprId, usize), Place>,
     /// In a closure's body: where each local of the enclosing body it captures is.
     captured: HashMap<hir::LocalId, Place>,
     /// Whether the body built is a closure's, whose returns check none of its function's
@@ -340,6 +328,43 @@ struct Builder<'a> {
     /// The expression being evaluated before its conversion to a `dyn` borrow, which is not
     /// converted again.
     uncoerced: Option<ExprId>,
+    /// For each `#[selectable]` function a `select` here waits on: the types of its two parts,
+    /// the closures that give its receiver and do the rest (`task.select.4`).
+    selectables: HashMap<u32, (Ty, Ty)>,
+}
+
+/// The parts of each `#[selectable]` function the `select`s of `hir` wait on.
+fn selectables(
+    db: &dyn Db,
+    program: moddil_sema::Program,
+    hir: &hir::Body,
+    types: &Inference,
+) -> HashMap<u32, (Ty, Ty)> {
+    let items = moddil_sema::item_tree(db, program);
+    let mut out = HashMap::new();
+    for (_, x) in hir.exprs.iter() {
+        let hir::ExprKind::Select(arms) = &x.kind else {
+            continue;
+        };
+        for arm in arms {
+            let call = match hir.exprs[arm.op].kind {
+                hir::ExprKind::Question(c) => c,
+                _ => arm.op,
+            };
+            let Some(f) = types.callee(call).map(moddil_sema::Callee::func) else {
+                continue;
+            };
+            if !items.fns[f as usize].selectable || out.contains_key(&f) {
+                continue;
+            }
+            let o = Owner::new(db, program, Item::Fn(f));
+            if let Some(p) = moddil_sema::body(db, o).body.select {
+                let inf = moddil_sema::infer(db, o);
+                out.insert(f, (inf.expr(p.chan), inf.expr(p.done)));
+            }
+        }
+    }
+    out
 }
 
 impl Builder<'_> {

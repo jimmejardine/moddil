@@ -181,7 +181,8 @@ assert(calls == 3);
   uses the same handler, so a handler's mutable state lives in sync cells
   ([`concurrency.md`: Shared mutable state](concurrency.md#shared-mutable-state)). An anonymous impl
   that captures a local by `&mut` (like `calls` above) is rejected if the block spawns tasks, the same
-  rule as for closures ([`closures.md`](closures.md)).
+  rule as for closures ([`closures.md`](closures.md)). Views and closures that hold a handler share
+  it the same way: each holds a shared borrow of the one instance.
 - **Methods declare their control effects.** A trait method may carry `with suspend` and `fail(E)`;
   those are what callers see ([Effects inside handlers](#effects-inside-handlers)).
 - **A single-method trait can be installed from a closure.** When a trait has exactly one required
@@ -234,6 +235,24 @@ fn main(…) -> ExitCode {
   capability is second-class, a [view type](memory.md#view-types), so it cannot outlive the scope
   that provided `Db`. Callers of `Links` never see `Db`, and **swapping a handler never changes a
   caller's signature**.
+- **A value built with handlers is a view (decided November 2026).**
+  - `fn app() -> impl Handler with Links, Rand` builds a router whose routes captured `Links` and
+    `Rand` where they were named.
+  - So the router lives inside the `with` that provides them, as `SqlLinks` does.
+  - Its users (`http::serve_connection`) see no effects of the routes, only `suspend` and `fail`
+    on `handle`.
+  - This holds for closures too, stored ones included ([`closures.md`: Stored (escaping)
+    closures](closures.md#stored-escaping-closures)).
+  - **Why, and what it gives up.**
+    - Meeting a value's needs where it is *called* would let it outlive the `with`. But every
+      library type that stores or calls it would then carry the effects of code it was not
+      written for (effect variables on trait bounds and `impl Trait` results), and swapping a
+      handler would change those signatures.
+    - Capturing where it is written keeps handlers configured near the top and trait methods free
+      of handler effects (`eff.method.1`).
+    - Its one limit, that a view cannot leave its `with`, is met by moving the `with` further out.
+    - Per-request context that middleware learns is passed as a value instead
+      ([`stdlib.md`: HTTP](stdlib.md#http)).
 - **Interposition falls out.** A recorder built inside a scope with a `Net` handler captures that
   outer `Net` and forwards to it, so a recorder, a fault injector or a rate limiter is an ordinary
   handler ([`determinism.md`: Handlers are scoped, not global](determinism.md#handlers-are-scoped-not-global)).

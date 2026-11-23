@@ -70,6 +70,14 @@ pub fn borrowck<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Vec<Diagnostic> {
     };
     let items = moddil_sema::item_tree(db, owner.program(db));
     let ret_from = match owner.item(db) {
+        // An `impl Trait` result may keep the handlers the function was given, after its
+        // parameters (`type.impl.ret.2`).
+        Item::Fn(i) if matches!(items.fns[i as usize].ret, Ty::Opaque(_)) => {
+            let sig = &items.fns[i as usize];
+            let mut from = sig.ret_from.clone();
+            from.extend(sig.params.len() as u32..body.arg_count as u32);
+            from
+        }
         Item::Fn(i) => items.fns[i as usize].ret_from.clone(),
         Item::Test(_) => Vec::new(),
         // A closure may return a borrow of what it captures or is given.
@@ -246,7 +254,7 @@ impl<'a> Checker<'a> {
         let mut variant = 0;
         for proj in &p.projection[..upto] {
             ty = match (proj, &ty) {
-                (Projection::Deref, Ty::Ref(_, t))
+                (Projection::Deref, Ty::Ref(_, t) | Ty::Ptr(_, t))
                 | (Projection::Index(_), Ty::Array(t, _) | Ty::Slice(t)) => (**t).clone(),
                 (Projection::Subslice(..), Ty::Array(t, _) | Ty::Slice(t)) => Ty::Slice(t.clone()),
                 (Projection::Downcast(v), t) => {
@@ -317,6 +325,10 @@ impl<'a> Checker<'a> {
             }
         }
         let _ = indirect;
+        // A name that is a description already (a handler's) is not quoted.
+        if s.starts_with("the ") {
+            return s;
+        }
         format!("`{s}`")
     }
 
@@ -688,7 +700,15 @@ impl<'a> Checker<'a> {
                 let sig = &self.items.fns[callee.func() as usize];
                 let mut flowing = BTreeSet::new();
                 let flows: Vec<BTreeSet<usize>> = args.iter().map(|a| self.flows(a, h)).collect();
-                if self.items.is_view(&sig.ret) {
+                if matches!(sig.ret, Ty::Opaque(_))
+                    && self.items.is_view(&self.body.locals[dest.local.index()].ty)
+                {
+                    // An `impl Trait` result that holds a borrow holds the handlers passed,
+                    // after the arguments (`type.impl.ret.2`).
+                    for f in flows.iter().skip(sig.params.len()) {
+                        flowing.extend(f.iter().copied());
+                    }
+                } else if self.items.is_view(&sig.ret) {
                     for &i in &sig.ret_from {
                         if let Some(f) = flows.get(i as usize) {
                             flowing.extend(f.iter().copied());

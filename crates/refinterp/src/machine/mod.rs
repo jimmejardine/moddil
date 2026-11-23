@@ -42,9 +42,6 @@ struct Machine<'p> {
     /// The handlers installed by the `with` blocks being run, innermost last: how the effect is
     /// looked up, and a borrow of the handler.
     handlers: Vec<(String, Value)>,
-    /// Whether the last place found went through a box (`*b` through `Deref`), so a closure
-    /// called there is a stored one (`expr.closure.stored.1`).
-    through_box: bool,
     /// Whether the call that last returned is one that can fail, for a `?` around it.
     failing_call: bool,
     /// A trap a refinement test raised while a pattern was matched, until what is matching
@@ -58,6 +55,9 @@ struct Machine<'p> {
     /// The fields `inline for` names (`comptime.template.inline.1`), innermost last: each
     /// name, the struct's key and the field's index.
     reflected: Vec<(String, String, usize)>,
+    /// While a `#[selectable]` function runs for a `select` (`task.select.4`): its receive, by
+    /// range, and what was received in its place.
+    received: Option<(TextRange, Value)>,
     /// For a conversion being run (`num.convert.1`): the type it converts to.
     convert_to: Option<Head>,
 }
@@ -106,12 +106,12 @@ impl<'p> Machine<'p> {
             observed: Vec::new(),
             try_modes: Vec::new(),
             handlers: Vec::new(),
-            through_box: false,
             failing_call: false,
             pending_trap: None,
             olds: Vec::new(),
             nodes: HashMap::new(),
             reflected: Vec::new(),
+            received: None,
             convert_to: None,
         }
     }
@@ -330,7 +330,6 @@ impl Machine<'_> {
                         let Value::Ref(q, _) = r else {
                             unreachable!("a borrow of the value")
                         };
-                        self.through_box = true;
                         Some((q, true))
                     }
                 }
@@ -393,15 +392,10 @@ impl Machine<'_> {
         mut p: Pointer,
         range: TextRange,
     ) -> Eval<Option<std::sync::Arc<crate::value::Closure>>> {
-        let mut boxed = std::mem::take(&mut self.through_box);
         loop {
             match self.memory.load(&p) {
                 Value::Ref(q, _) => p = q,
-                Value::Closure(c) if boxed => {
-                    let mut c = (*c).clone();
-                    c.handlers.extend(self.handlers.iter().cloned());
-                    return Ok(Some(std::sync::Arc::new(c)));
-                }
+                // It runs with the handlers where it was written (`expr.closure.effects.1`).
                 Value::Closure(c) => return Ok(Some(c)),
                 v @ Value::Adt { .. } => {
                     let head = v.head();
@@ -409,10 +403,7 @@ impl Machine<'_> {
                         return Ok(None);
                     };
                     match self.run_method(m, &head, vec![Value::Ref(p, false)], range)? {
-                        Value::Ref(q, _) => {
-                            p = q;
-                            boxed = true;
-                        }
+                        Value::Ref(q, _) => p = q,
                         _ => return Ok(None),
                     }
                 }

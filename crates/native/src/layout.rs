@@ -156,6 +156,10 @@ impl<'a> Layouts<'a> {
                 }
                 Ok(scalar(types::I64, Some((0, 1))))
             }
+            // A raw pointer to a sized value: an address, which may be anything.
+            Ty::Ptr(_, inner) if !matches!(**inner, Ty::Str | Ty::Slice(_) | Ty::Dyn(..)) => {
+                Ok(scalar(types::I64, None))
+            }
             Ty::Bool => Ok(scalar(types::I8, Some((2, 254)))),
             Ty::Char => Ok(scalar(
                 types::I32,

@@ -94,6 +94,7 @@ areas!(
     traits,
     tuples,
     types,
+    r#unsafe,
     views,
     wrappers,
 );

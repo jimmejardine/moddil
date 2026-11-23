@@ -105,6 +105,11 @@ impl<'a> Natives<'a> {
                 };
                 crate::num::float_fn(*n, name, x(0), x(1)).expect("a float function")
             }
+            // The same pointer, to change through (`core.ptr.1`).
+            (Ty::Unit, "cast_mut") => match &args[0] {
+                Value::Ref(p, _) => Value::Ref(p.clone(), true),
+                other => unreachable!("a pointer: {other:?}"),
+            },
             (Ty::Unit, "replace") => {
                 let p = pointer(&args[0]);
                 let old = stack.load(&p);

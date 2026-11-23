@@ -127,9 +127,6 @@ pub struct Inference {
     try_errors: HashMap<ExprId, Ty>,
     evidence: EvidenceMap,
     dyn_coercions: HashMap<ExprId, Ty>,
-    /// For a stored closure whose type lists needs: those needs, which each call of it passes
-    /// after its arguments (`expr.closure.stored.1`).
-    call_needs: HashMap<ExprId, Vec<Ty>>,
     /// For a function whose effects are inferred: the effects its body needs that nothing in it
     /// meets.
     escaping_needs: Vec<Ty>,
@@ -249,12 +246,6 @@ impl Inference {
     /// the `deref` (or `deref_mut`) that gives it.
     pub fn method_deref(&self, e: ExprId) -> Option<&Callee> {
         self.method_derefs.get(&e)
-    }
-
-    /// For a stored closure whose type lists needs (`dyn Fn() with Time`): those needs, which
-    /// each call of it passes after its arguments.
-    pub fn call_needs(&self, e: ExprId) -> &[Ty] {
-        self.call_needs.get(&e).map_or(&[], Vec::as_slice)
     }
 
     /// Whether call `e`, of a closure parameter and not marked, passes its errors on as `?`
@@ -525,7 +516,67 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
             cx.out.diagnostics.push(d);
         }
     }
+    // A selectable function's parts (`task.select.4`): the receiver, and the rest, which takes
+    // what was received, an `Option` of what the receiver carries.
+    if let Some(parts) = body.select {
+        let chan = cx.infer(parts.chan);
+        let received = match &chan {
+            Ty::Closure(c) => match cx.norm(&c.ret) {
+                Ty::Ref(_, r) => match cx.norm(&r) {
+                    Ty::Adt(a, _, args)
+                        if items.adts[a as usize].src == crate::items::Src::Prelude
+                            && items.adts[a as usize].name == "Receiver" =>
+                    {
+                        items
+                            .lang("Option")
+                            .map(|o| items.adts[o as usize].ty_with(o, args.to_vec()))
+                    }
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        };
+        match received {
+            Some(t) => {
+                let mut params: Vec<Ty> = match owner.item(db) {
+                    Item::Fn(i) => items.fns[i as usize]
+                        .params
+                        .iter()
+                        .map(|p| p.ty.clone())
+                        .collect(),
+                    _ => Vec::new(),
+                };
+                params.push(t);
+                cx.sig_hint = Some((params, Some(ret.clone())));
+                cx.infer(parts.done);
+            }
+            None => cx.report(
+                Code::E0217,
+                body.exprs[parts.chan].range,
+                "a `#[selectable]` function receives first from a channel: \
+                 `self.incoming.recv()`, `incoming` a `Receiver`",
+            ),
+        }
+    }
     cx.finish();
+    // A selectable function's parts run in its caller's frame, so they capture nothing: not
+    // the function's handlers either (`task.select.4`).
+    if let Some(parts) = body.select {
+        for e in [parts.chan, parts.done] {
+            if let Ty::Closure(c) = &cx.out.expr_types[index(e)]
+                && !c.captures.is_empty()
+            {
+                cx.out.diagnostics.push(Diagnostic::error(
+                    Code::E0217,
+                    body.exprs[e].range,
+                    "what a `#[selectable]` function does with what it received runs where it \
+                     is selected, so it uses no handler: it may only fail",
+                ));
+                break;
+            }
+        }
+    }
     if let Some(h) = hidden {
         let t = finish::erase(&cx.solver.deep(&h));
         // A closure it gives, as closure analysis completed it (with what it captures). What a
@@ -533,20 +584,15 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         // below looks at the type as inferred.
         let done = completed_closures(&t, &cx.out.expr_types, cx.owner);
         let at = ret_range.unwrap_or_default();
-        if t.has_infer() || t == Ty::Error {
-            if cx.out.diagnostics.is_empty() {
-                cx.out.diagnostics.push(Diagnostic::error(
-                    Code::E0405,
-                    at,
-                    "the type this function gives cannot be inferred: annotate it",
-                ));
-            }
-        } else if items.is_view(&t) && !owns_all(items, &t) {
-            cx.out.diagnostics.push(Diagnostic::unsupported(
+        if (t.has_infer() || t == Ty::Error) && cx.out.diagnostics.is_empty() {
+            cx.out.diagnostics.push(Diagnostic::error(
+                Code::E0405,
                 at,
-                "an `impl Trait` result whose type holds a borrow or a closure",
+                "the type this function gives cannot be inferred: annotate it",
             ));
         }
+        // A hidden type that holds a borrow (a closure or function value that captured the
+        // function's handlers, `type.impl.ret.2`) is the borrow checker's to check.
         cx.out.hidden = Some(done);
     }
     cx.out
@@ -571,12 +617,6 @@ fn result_closure(body: &Body, e: ExprId, out: &mut Vec<ExprId>) {
         ExprKind::Block { tail: Some(t), .. } => result_closure(body, *t, out),
         _ => {}
     }
-}
-
-/// Whether `t` is a closure that owns what it captures, as one returned as `impl Fn…` does
-/// (`expr.closure.result.1`).
-fn owns_all(items: &ItemTree, t: &Ty) -> bool {
-    matches!(t, Ty::Closure(c) if c.captures.iter().all(|x| !items.is_view(x)))
 }
 
 /// An enclosing loop while its body is checked.
@@ -633,9 +673,9 @@ struct Checker<'a> {
     /// A closure passed to a call whose result is expected to be a `Box<dyn Fn…>`, and that
     /// `dyn` type, which gives the closure's parameters their types.
     boxed_hint: Option<(ExprId, Ty)>,
-    /// The stored closures being checked, innermost last: each closure, the needs and control
-    /// effects its type lists, and how many handlers are installed around it.
-    stored_ctx: Vec<(ExprId, Vec<Ty>, crate::Control, usize)>,
+    /// The stored closures being checked, innermost last: each closure, the control effects its
+    /// type lists, and how many handlers are installed around it.
+    stored_ctx: Vec<(ExprId, crate::Control, usize)>,
     /// For a function whose result is `impl Fn…`: the type its body gives, and the closure
     /// type as a stored one's, which a closure written for it takes (`expr.closure.result.1`).
     opaque_hint: Option<(Ty, Ty)>,
@@ -705,13 +745,19 @@ impl Checker<'_> {
     }
 
     /// Whether a value of type `found` can be used where `expected` is wanted, making them agree
-    /// if it can: `!` goes anywhere, and `&mut T` where `&T` is wanted.
+    /// if it can: `!` goes anywhere, `&mut T` where `&T` is wanted, and a borrow where a raw
+    /// pointer is.
     fn coerce(&mut self, found: &Ty, expected: &Ty) -> bool {
         let f = self.norm(found);
         let e = self.norm(expected);
         match (&f, &e) {
             (Ty::Never | Ty::Error, _) | (_, Ty::Error) => true,
-            (Ty::Ref(true, a), Ty::Ref(false, b)) => self.solver.unify(a, b),
+            (Ty::Ref(true, a), Ty::Ref(false, b)) | (Ty::Ptr(true, a), Ty::Ptr(false, b)) => {
+                self.solver.unify(a, b)
+            }
+            // A borrow where a raw pointer is wanted (`type.ptr.1`): `&T` as `*const T`, and
+            // `&mut T` as either.
+            (Ty::Ref(m, a), Ty::Ptr(n, b)) if *m || !*n => self.solver.unify(a, b),
             // A refined value where its base is wanted (`refine.base.1`), and a borrow of one
             // where a borrow of its base is.
             (Ty::Refined(..), _) if !self.solver.can_unify(&f, &e) => {

@@ -6,11 +6,6 @@ fn lookup(x: int) -> int with fail(Missing) {
     x
 }
 
-trait Clock { fn now(&self) -> int; }
-struct Fixed { at: int }
-impl Clock for Fixed { fn now(&self) -> int { self.at } }
-fn fixed(at: int) -> Fixed { Fixed { at } }
-fn now() -> int with clock: Clock { clock.now() }
 
 fn adder(k: int) -> impl Fn(int) -> int {
     |x| x + k
@@ -30,10 +25,6 @@ fn greeting(name: String) -> impl FnOnce() -> String {
 
 fn checked() -> (impl Fn(int) -> int with fail(Missing)) {
     |x| lookup(x)?
-}
-
-fn stamped() -> (impl Fn(int) -> int with Clock) {
-    |x| x + now()
 }
 
 /// A closure it is given is moved into the one it returns, whose errors are its.
@@ -61,11 +52,6 @@ test "a returned closure's type names its effects" {
     f(5)?                                           // => 5
     ;
     try { f(0)? } catch { Missing => -1 }           // => -1
-    ;
-    let s = stamped();
-    with Clock = fixed(100) {
-        s(1)                                        // => 101
-    }
     ;
     let g = scaled(|x| lookup(x)?, 3);
     try { g(0)? } catch { Missing => -1 }           // => -1

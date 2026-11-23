@@ -21,6 +21,11 @@ prelude's `RefinementError { ty, clause, value }`: `X`'s name, `p` as written, a
 
 **refine.new.2** The base of a refinement holds no borrow (E0309).
 
+**refine.trait.1** Every refinement implements the prelude's trait `Refined`, built in: its
+`Base` is the refinement's base, and `refine(v)` is its `new(v)`. So generic code makes a value of
+a refined type: `fn make<T: Refined>(v: T::Base) -> T with fail(RefinementError) { T::refine(v)? }`.
+Nothing else implements it, and an impl of it is an error (E0406).
+
 **refine.lit.1** A literal where an `X` is expected (a `let`'s type, a parameter, a function's
 result) is an `X`, and compiling checks that `p` holds for it (E1101).
 

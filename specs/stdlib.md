@@ -460,19 +460,25 @@ http::serve(listener, app)?;
 - **Typed extractors (decided).** Besides path parameters, a handler's parameters can be
   extractors: `Query<T>`, `Header<"name", T>` and `Json<T>`. The router decodes and validates each
   one, answering `400` (or `404` for a path parameter) before the handler runs.
-- **Middleware is a plain function (decided):** `fn(req: &Request, next: Next) -> Response`, attached
-  with `router.wrap(…)`. Middleware can **install handlers** for everything inside it, so a handler
-  asks for the current user as an effect instead of digging through request extensions:
+- **Middleware is a plain function (decided):** `fn(req: &Request, next: Next<T>) -> Response`,
+  attached with `router.wrap(…)`. Middleware **passes what it learns as a value**, not as a handler
+  (decided November 2026): handlers are captured where routes are named
+  ([`effects-and-capabilities.md`: Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)),
+  so one cannot be installed per request beneath them.
+  - A route behind the middleware takes the value as an extractor parameter, `user: Ctx<User>`.
+  - A route asking for a `Ctx<T>` that no middleware around it provides is a build error.
+  - So the value is typed and checked when the router is built, not looked up in request
+    extensions at run time.
 
   ```rust
-  fn auth(req: &Request, next: Next) -> Response with Sessions, suspend {
+  fn auth(req: &Request, next: Next<User>) -> Response with Sessions, suspend {
       match sessions.user_for(req.header("authorization")) {
-          Some(user) => with CurrentUser = user { next(req) },
+          Some(user) => next(req, user),
           None       => Response::status(Status::Unauthorized),
       }
   }
 
-  fn orders(q: Query<Page>) -> Response with user: CurrentUser, Db, suspend { … }
+  fn orders(q: Query<Page>, user: Ctx<User>) -> Response with Db, suspend { … }
 
   let app = Router::new().get("/orders", orders).wrap(auth);
   ```

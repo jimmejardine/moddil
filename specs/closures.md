@@ -155,17 +155,23 @@ type Handler = Box<dyn Fn(Event) with (suspend, fail(HandlerError))>;
 fn on_message(&mut self, h: Handler) { self.handlers.push(h) }
 ```
 
-- They capture by **move or rc**, never borrows.
+- Owned stored closures capture by **move or rc**, never borrows, while one that holds a handler
+  is a view (below).
 - Their **stored type names their effects**. Effect polymorphism does not leak into stored values
   except through explicit effect variables.
 - They are the only place where effects are usually written out by hand.
-- **A stored closure's handler needs are met where it is called (decided November 2026).** A
-  closure that is kept may run long after the `with` around where it was written has ended, so it
-  cannot borrow that handler. Its type lists the needs instead (`Box<dyn Fn(Request) -> Response
-  with Links>`), and each call of it passes the caller's handlers, as a call of a function with
-  those effects does. This is the one exception to "met where it is written" ([Effects flow
-  through](#effects-flow-through)); a non-escaping closure still has its needs met lexically, so a
-  bound on a closure parameter lists no handler's effect.
+- **A closure's handler needs are always met where it is written (decided November 2026,
+  superseding the earlier decision that a stored closure's are met where it is called).**
+  - A closure that uses a handler captures a shared borrow of it, so it is a
+    [view](memory.md#view-types), and so is a `Box<dyn Fn …>` holding it. That borrow is tracked
+    like any other a value holds.
+  - An owned stored closure, one kept past its `with`, cannot use handlers. Its type lists only
+    `suspend`, `spawn` and `fail`.
+  - To keep such a closure longer, move the `with` further out, or pass the dependency as an
+    argument.
+  - Why: see [`effects-and-capabilities.md`: Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers).
+    There is one model for closures, anonymous impls and handlers that depend on other handlers,
+    and library code that stores or calls a value never provides effects it was not written for.
 - **A function that keeps a closure names its errors (decided November 2026).** `Iterator::map`
   keeps `f` in the `Map` it returns and calls it in `next`, so `f`'s errors are `Map`'s, not
   `map`'s: its bound names them with an effect variable it does not list,

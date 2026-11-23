@@ -128,8 +128,9 @@ impl Machine<'_> {
                 let p = self.place(inner)?;
                 Ok(Value::Ref(p, mutable))
             }
-            // `const { e }` (`comptime.block.1`): evaluated where it is.
-            ast::Expr::ConstBlock(_) => {
+            // `const { e }` (`comptime.block.1`): evaluated where it is; and `unsafe("why") { … }`
+            // (`expr.unsafe.1`), its block run as any other.
+            ast::Expr::ConstBlock(_) | ast::Expr::Unsafe(_) => {
                 let b = node.children().find_map(ast::Block::cast).expect("a block");
                 self.block(&b)
             }

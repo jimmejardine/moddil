@@ -656,6 +656,7 @@ fn program_codes(
             name: (*n).to_string(),
             deps: deps.iter().map(|(d, i)| ((*d).to_string(), *i)).collect(),
             stub: false,
+            unsafe_ok: false,
         })
         .collect();
     let program = Program::new(&db, pfiles, pmods);

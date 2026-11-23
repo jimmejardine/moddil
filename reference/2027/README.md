@@ -20,7 +20,8 @@ data (S7c); const items, `const fn` and `const { }`, evaluated when compiling, a
 `Default` derives (S8a); refinements and contracts (S8b); function wrappers, `#[around]` (S8c); tasks and scopes (S9a); named and default arguments, cancellation, isolation, channels and
 `select` (S9b); functions as values, `impl Trait` results, `map`, `filter` and `collect`,
 `test … for`, `log`, `main`'s root capabilities and `ExitCode`, and `#[selectable]` (S9c); stub
-mods, doc comments, `Pattern`, and bounds on a closure's errors (S9d); numbers (S10); `String` in Moddil (S11).
+mods, doc comments, `Pattern`, and bounds on a closure's errors (S9d); numbers (S10); `String` in Moddil (S11); derives
+written in Moddil (M2a); unsafe code, `Refined`, results that hold handlers, and selectable functions in `select` (M2b).
 
 ## Paragraphs
 
@@ -47,7 +48,7 @@ Each page lists its diagnostics by code; the codes are in [Diagnostics](diagnost
 - [Ownership](ownership.md), [Borrows](borrows.md), [Views](views.md)
 - [Iteration and collections](collections.md) ([core source](core/collections.moddil))
 - [Errors](errors.md), [Effects](effects.md), [Contracts](contracts.md),
-  [Concurrency](concurrency.md)
+  [Concurrency](concurrency.md), [Unsafe code](unsafe.md)
 - Expressions: [Evaluation](expressions/evaluation.md), [Literals](expressions/literals.md),
   [Arithmetic](expressions/arithmetic.md), [Bitwise operators](expressions/bitwise.md),
   [Comparisons](expressions/comparison.md), [Logic](expressions/logic.md),

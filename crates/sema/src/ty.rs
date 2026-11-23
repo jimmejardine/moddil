@@ -42,6 +42,9 @@ pub enum Ty {
     Refined(u32, Arc<str>),
     /// A borrow: `&T` (shared) or `&mut T` (exclusive).
     Ref(bool, Arc<Ty>),
+    /// A raw pointer (`type.ptr.1`): `*const T` or `*mut T`. It carries no borrow, so nothing
+    /// checks what it points to; `*p` is allowed only in an `unsafe` block.
+    Ptr(bool, Arc<Ty>),
     /// `dyn Trait`: a value of some type that implements the trait, known only through it. It
     /// has no size, so it is only ever behind a borrow (`&dyn Trait`).
     /// `dyn Trait`, and for a closure trait the associated types of `FnOnce` it fixes, by
@@ -74,10 +77,8 @@ pub enum Ty {
     Error,
 }
 
-/// Where a `dyn` closure type keeps the handler needs its calls have, among its fixed
-/// associated types: past `FnOnce`'s own (`Output`, `Fails`).
-pub(crate) const DYN_NEEDS: u32 = 100;
-/// Where it keeps its control effects, as a `Len` of their bits.
+/// Where a `dyn` closure type keeps its control effects, as a `Len` of their bits, among its
+/// fixed associated types: past `FnOnce`'s own (`Output`, `Fails`).
 pub(crate) const DYN_CONTROL: u32 = 101;
 
 /// A closure's type: where it is written, and what checking it found.
@@ -311,8 +312,10 @@ impl Ty {
     /// inference variables.
     pub fn fits(&self, expected: &Ty) -> bool {
         match (self, expected) {
-            // `&mut T` can be used where `&T` is wanted.
-            (Ty::Ref(true, a), Ty::Ref(false, b)) => a.fits(b) && b.fits(a),
+            // `&mut T` can be used where `&T` is wanted, and `*mut T` where `*const T` is.
+            (Ty::Ref(true, a), Ty::Ref(false, b)) | (Ty::Ptr(true, a), Ty::Ptr(false, b)) => {
+                a.fits(b) && b.fits(a)
+            }
             _ => {
                 self == expected || matches!(self, Ty::Never | Ty::Error) || *expected == Ty::Error
             }
@@ -341,7 +344,7 @@ impl Ty {
         }
         match self {
             Ty::Tuple(ts) | Ty::Adt(_, _, ts) | Ty::Errors(ts) => ts.iter().any(|t| t.any(f)),
-            Ty::Ref(_, t) | Ty::Slice(t) | Ty::Buf(t) => t.any(f),
+            Ty::Ref(_, t) | Ty::Ptr(_, t) | Ty::Slice(t) | Ty::Buf(t) => t.any(f),
             Ty::Array(t, n) => t.any(f) || n.any(f),
             Ty::Dyn(tr, fixed) => {
                 tr.args.iter().any(|t| t.any(f)) || fixed.iter().any(|(_, t)| t.any(f))
@@ -370,6 +373,7 @@ impl Ty {
             Ty::Errors(ts) => Ty::errors(ts.iter().map(&mut *f).collect()),
             Ty::Adt(a, n, ts) => Ty::Adt(*a, n.clone(), ts.iter().map(&mut *f).collect()),
             Ty::Ref(m, t) => Ty::Ref(*m, Arc::new(f(t))),
+            Ty::Ptr(m, t) => Ty::Ptr(*m, Arc::new(f(t))),
             Ty::Array(t, n) => Ty::Array(Arc::new(f(t)), Arc::new(f(n))),
             Ty::Slice(t) => Ty::Slice(Arc::new(f(t))),
             Ty::Buf(t) => Ty::Buf(Arc::new(f(t))),
@@ -420,19 +424,6 @@ impl Ty {
         }
     }
 
-    /// The handler needs a stored closure's call has (`dyn Fn() with Links`), if any: what
-    /// [`DYN_NEEDS`] fixes.
-    pub fn dyn_needs(&self) -> Vec<Ty> {
-        match self {
-            Ty::Dyn(_, fixed) => fixed
-                .iter()
-                .find(|(i, _)| *i == DYN_NEEDS)
-                .map(|(_, t)| t.members_of_tuple())
-                .unwrap_or_default(),
-            _ => Vec::new(),
-        }
-    }
-
     /// The control effects a stored closure's call has (`dyn Fn() with suspend`).
     pub fn dyn_control(&self) -> u8 {
         match self {
@@ -444,14 +435,6 @@ impl Ty {
                 })
                 .unwrap_or(0),
             _ => 0,
-        }
-    }
-
-    fn members_of_tuple(&self) -> Vec<Ty> {
-        match self {
-            Ty::Tuple(ts) => ts.to_vec(),
-            Ty::Unit => Vec::new(),
-            t => vec![t.clone()],
         }
     }
 
@@ -603,6 +586,8 @@ impl fmt::Debug for Ty {
             Ty::Len(n) => write!(f, "{n}"),
             Ty::Ref(true, t) => write!(f, "&mut {t:?}"),
             Ty::Ref(false, t) => write!(f, "&{t:?}"),
+            Ty::Ptr(true, t) => write!(f, "*mut {t:?}"),
+            Ty::Ptr(false, t) => write!(f, "*const {t:?}"),
             Ty::Tuple(ts) => {
                 f.write_str("(")?;
                 list(f, ts)?;

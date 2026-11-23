@@ -157,6 +157,17 @@ impl Checker<'_> {
                 self.solver.table.default_literal(&t);
                 match self.norm(&t) {
                     Ty::Ref(_, t) => (*t).clone(),
+                    // A raw pointer, only in an `unsafe` block (`expr.unsafe.1`).
+                    Ty::Ptr(_, t) => {
+                        if !self.body.unsafe_derefs.contains(&e) {
+                            self.report(
+                                Code::E0218,
+                                range,
+                                "a raw pointer is dereferenced only in an `unsafe(\"why\") { … }`                                  block",
+                            );
+                        }
+                        (*t).clone()
+                    }
                     Ty::Error => Ty::Error,
                     Ty::Infer(_) => self.unknown(range, "to dereference it"),
                     // Through `Deref` (`type.box.1`); `DerefMut` where it is changed.
@@ -525,12 +536,18 @@ impl Checker<'_> {
             | ExprKind::Slice { base: x, .. }
             | ExprKind::Deref(x) => {
                 let t = self.out.expr(x);
-                if let Ty::Ref(false, _) = self.norm(&t) {
-                    self.report(
+                match self.norm(&t) {
+                    Ty::Ref(false, _) => self.report(
                         Code::E0302,
                         range,
                         format!("this is behind a shared borrow (`&`), so it cannot be {what}"),
-                    );
+                    ),
+                    Ty::Ptr(false, _) => self.report(
+                        Code::E0302,
+                        range,
+                        format!("this is behind a `*const` pointer, so it cannot be {what}"),
+                    ),
+                    _ => {}
                 }
             }
             _ => {}

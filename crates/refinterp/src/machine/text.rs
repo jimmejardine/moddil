@@ -391,6 +391,13 @@ impl Machine<'_> {
                     .and_then(|rest| rest.chars().next());
                 option(c.map(Value::Char))
             }
+            // The same pointer, to change through (`core.ptr.1`).
+            (Head::Unit, "cast_mut") => {
+                let Value::Ref(p, _) = args[0].clone() else {
+                    unreachable!("a pointer")
+                };
+                Value::Ref(p, true)
+            }
             (Head::Unit, "replace") => {
                 let Value::Ref(p, _) = args[0].clone() else {
                     unreachable!("a borrow")

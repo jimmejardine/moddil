@@ -251,6 +251,7 @@ impl Cx<'_> {
             Ty::Unit
             | Ty::Tuple(_)
             | Ty::Buf(_)
+            | Ty::Ptr(..)
             | Ty::Param(..)
             | Ty::Opaque(_)
             | Ty::Assoc(_)

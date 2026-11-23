@@ -20,6 +20,7 @@ mod fold;
 mod names;
 mod paths;
 mod patterns;
+mod selectable;
 mod templates;
 pub(crate) mod text;
 mod wrappers;
@@ -64,6 +65,8 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
         },
         template: None,
         reflected: Vec::new(),
+        unsafe_depth: 0,
+        received: None,
     };
     let block = match owner.item(db) {
         Item::Fn(i) => {
@@ -286,6 +289,13 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
     if let Some(block) = block {
         let id = cx.block(&block);
         cx.out.body.root = Some(id);
+        // A selectable function's parts (`task.select.4`).
+        if let Item::Fn(i) = owner.item(db)
+            && items.fns[i as usize].selectable
+            && items.fns[i as usize].control & crate::items::SUSPEND != 0
+        {
+            cx.selectable_parts(&items.fns[i as usize], &block);
+        }
     }
     cx.out
 }
@@ -336,6 +346,11 @@ struct Lowerer<'a> {
     template: Option<&'a crate::items::Template>,
     /// The reflected fields `inline for` names in scope, innermost last: each name and field.
     reflected: Vec<(String, u32)>,
+    /// How many `unsafe` blocks the expression being lowered is in (`expr.unsafe.1`).
+    unsafe_depth: u32,
+    /// While a selectable function's rest is lowered: where its receive is, and the local that
+    /// holds what was received in its place (`task.select.4`).
+    received: Option<(TextRange, LocalId)>,
 }
 
 impl Lowerer<'_> {

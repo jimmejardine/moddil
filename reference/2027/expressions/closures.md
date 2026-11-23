@@ -84,24 +84,22 @@ Its type names its effects, as a bound does (**expr.closure.effects.2**): the cl
 with the errors it lists, or not at all if it lists none (E0502), and suspend or spawn only if it
 lists `suspend` or `spawn` (E0603). It may run after the function it is written in has returned, so
 it owns what it captures: each local it uses is moved in (copied, if it is `Copy`), and one that
-holds a borrow is an error (E0802). The handlers' effects its type lists (`dyn Fn() with Clock`)
-are met where it is called, by the caller's handlers, not where it is written; one it uses that
-its type does not list is an error (E0802), as a handler it would borrow. `f(a₁, …, aₙ)`, for `f`
-such a box, calls the closure through it: the call can fail with its errors, and needs what its
-type lists; one of a `Box<dyn FnOnce…>` gives up the box, which is moved. For now only a closure
-written as `Box::new(|…| …)` where the box is expected meets its needs at the call.
+holds a borrow is an error (E0802). Its handler needs are met where it is written
+(**expr.closure.effects.1**), and a handler is borrowed, so one it uses from around it is an error
+(E0802), and its type lists none (E0609); a handler it installs inside itself is its own.
+`f(a₁, …, aₙ)`, for `f` such a box, calls the closure through it: the call can fail with its
+errors; one of a `Box<dyn FnOnce…>` gives up the box, which is moved.
 
 **expr.closure.result.1** A function whose result type is `impl Fn(A₁, …, Aₙ) -> R` (or `FnMut`,
 `FnOnce`) returns a closure: one it gives as its value, or returns, takes its parameters' and
 result's types from that type, and is a stored closure (**expr.closure.stored.1**), since it may
-be called after the function has returned. So it owns what it captures (E0802), and its result
-type names its effects, parenthesised after the return arrow:
-`-> (impl Fn(int) -> int with fail(Missing))`, `-> (impl Fn() with Clock)`; with none, it cannot
-fail (E0502). An effect variable of the function may name them (`with E`), so a closure it is
+be called after the function has returned. So it owns what it captures (E0802): no handler of the
+function, whose type lists none (E0609). Its result type names its other effects, parenthesised
+after the return arrow: `-> (impl Fn(int) -> int with fail(Missing))`; with none, it cannot fail
+(E0502). An effect variable of the function may name them (`with E`), so a closure it is
 given and moves into the one it returns passes its errors on. A call of the result is a call of
-the closure (**expr.closure.call.1**): it can fail with the errors its type lists, needs the
-handlers it lists, met by the caller, and borrows, borrows with `&mut` or moves the value as the
-type is `Fn`, `FnMut` or `FnOnce`.
+the closure (**expr.closure.call.1**): it can fail with the errors its type lists, and borrows,
+borrows with `&mut` or moves the value as the type is `Fn`, `FnMut` or `FnOnce`.
 
 **expr.fn-value.1** A function named as a value, not called (`apply(inc, 41)`, `let f = mul;`,
 `Shout::shout`), is a closure that takes the function's arguments and calls it: it implements the

@@ -12,7 +12,7 @@ use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode};
 
 use crate::value::{Head, Value};
-use crate::{CORE_COLLECTIONS, PRELUDE};
+use crate::{CORE_MODULES, PRELUDE};
 
 mod dispatch;
 
@@ -264,21 +264,23 @@ impl Program {
             }
             file_modules.push(at);
         }
-        // The built-in `core` mod and its `collections` module; every mod depends on it.
+        // The built-in `core` mod and its modules; every mod depends on it.
         let core = p.mods.len();
         let core_root = p.modules.len();
         p.modules.push(Module {
             mod_: core,
             ..Module::default()
         });
-        let collections = p.modules.len();
-        p.modules.push(Module {
-            mod_: core,
-            ..Module::default()
-        });
-        p.modules[core_root]
-            .children
-            .insert("collections".to_string(), collections);
+        let mut core_modules = Vec::new();
+        for (name, _) in CORE_MODULES {
+            let m = p.modules.len();
+            p.modules.push(Module {
+                mod_: core,
+                ..Module::default()
+            });
+            p.modules[core_root].children.insert(name.to_string(), m);
+            core_modules.push(m);
+        }
         for m in &mut p.mods {
             m.deps.entry("core".to_string()).or_insert(core);
         }
@@ -290,12 +292,14 @@ impl Program {
         for item in prelude.children() {
             p.item(None, PRELUDE_MODULE, item);
         }
-        let core_items = moddil_syntax::parse(CORE_COLLECTIONS).syntax();
-        for item in core_items.children() {
-            p.item(None, collections, item);
-        }
         p.roots.push(prelude);
-        p.roots.push(core_items);
+        for ((_, src), m) in CORE_MODULES.iter().zip(core_modules) {
+            let core_items = moddil_syntax::parse(src).syntax();
+            for item in core_items.children() {
+                p.item(None, m, item);
+            }
+            p.roots.push(core_items);
+        }
         for (f, file) in files.iter().enumerate() {
             let root = moddil_syntax::parse(&file.text).syntax();
             for item in root.children() {

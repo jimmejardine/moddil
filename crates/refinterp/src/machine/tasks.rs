@@ -843,6 +843,72 @@ fn run_task(
 }
 
 impl Machine<'_> {
+    /// Selectable function `f`'s receive, by range, and the channel it receives from, read
+    /// from its arguments `values`: its body starts with `place.recv()`, `place` a parameter
+    /// or a field of one (`task.select.4`).
+    fn selectable_receiver(
+        &self,
+        f: &crate::program::FnDef,
+        values: &[Value],
+    ) -> (TextRange, Value) {
+        use moddil_syntax::SyntaxKind as K;
+        use moddil_syntax::ast::{self, AstNode};
+        let block = f.node.body().expect("a body");
+        let mut e = block
+            .syntax()
+            .children()
+            .find_map(ast::Expr::cast)
+            .expect("a checked selectable body");
+        while !(e.syntax().kind() == K::METHOD_CALL_EXPR
+            && ast::member_name(e.syntax()).is_some_and(|n| n.text() == "recv"))
+        {
+            e = e
+                .sub_exprs()
+                .into_iter()
+                .next()
+                .expect("a checked selectable body");
+        }
+        let at = e.syntax().text_range();
+        // The place: a parameter, then fields.
+        let mut fields = Vec::new();
+        let mut p = e.sub_exprs()[0].clone();
+        loop {
+            match p.syntax().kind() {
+                K::FIELD_EXPR => {
+                    fields.push(
+                        ast::member_name(p.syntax())
+                            .expect("a field")
+                            .text()
+                            .to_string(),
+                    );
+                    p = p.sub_exprs()[0].clone();
+                }
+                K::PAREN_EXPR => p = p.sub_exprs()[0].clone(),
+                _ => break,
+            }
+        }
+        let name = p.syntax().text().trim().to_string();
+        let mut names = Vec::new();
+        if f.self_kind.is_some() {
+            names.push("self".to_string());
+        }
+        names.extend(f.node.params().into_iter().flat_map(|l| {
+            l.params()
+                .filter_map(|q| q.pat().map(|x| x.syntax().text().trim().to_string()))
+                .collect::<Vec<_>>()
+        }));
+        let k = names.iter().position(|n| *n == name).expect("a parameter");
+        let mut v = self.target(values[k].clone());
+        for field in fields.iter().rev() {
+            let i = self.field_index(&v, field);
+            v = match v {
+                Value::Adt { fields, .. } => self.target(fields[i].clone()),
+                other => other,
+            };
+        }
+        (at, v)
+    }
+
     /// `select { p = op => body, … }` (`task.select.1`): each arm's operation's handle and
     /// value to send are evaluated first, in order; then the first arm whose operation is ready
     /// does it (or, with none ready, the task waits for one to be), its pattern binds the
@@ -856,7 +922,10 @@ impl Machine<'_> {
         let mut ops = Vec::new();
         let mut payloads: Vec<Option<Value>> = Vec::new();
         let mut arms = Vec::new();
+        // For an arm on a `#[selectable]` function: the function, its arguments, and its receive.
+        let mut rests: Vec<Option<(crate::program::FnDef, Vec<Value>, TextRange)>> = Vec::new();
         for arm in list.children().filter(|c| c.kind() == K::SELECT_ARM) {
+            let mut rest = None;
             let exprs: Vec<ast::Expr> = arm.children().filter_map(ast::Expr::cast).collect();
             let pat = arm.children().find_map(ast::Pat::cast).expect("a pattern");
             let op = exprs[0].clone();
@@ -876,28 +945,57 @@ impl Machine<'_> {
                     Some((p, _)) => self.memory.load(&p),
                     None => self.eval(&receiver)?,
                 };
+                let recv_arg = v.clone();
                 let v = self.target(v);
                 let prelude = matches!(&v, Value::Adt { ty, .. }
                     if ["Receiver", "Sender", "Task"].contains(&ty.as_str()));
                 if !prelude {
-                    // A `#[selectable]` function: waits for the runtimes (`task.select.3`).
-                    return Err(crate::trap(TrapClass::Unimplemented, range));
-                }
-                let h = id_of(&v);
-                match name.as_str() {
-                    "recv" => Op::Recv(h),
-                    "send" => {
-                        let arg = call
-                            .syntax()
-                            .child(K::ARG_LIST)
-                            .and_then(ast::ArgList::cast)
-                            .and_then(|l| l.args().next())
-                            .and_then(|a| a.expr())
-                            .expect("a value to send");
-                        payload = Some(self.eval(&arg)?);
-                        Op::Send(h)
+                    // A `#[selectable]` function: it waits on the channel its body receives
+                    // from first (`task.select.4`).
+                    let f = self
+                        .program
+                        .methods(&v.head(), &name)
+                        .into_iter()
+                        .find_map(|m| match m {
+                            crate::program::Method::Code(f, _) => Some(f),
+                            _ => None,
+                        })
+                        .expect("a checked selectable method");
+                    let this = match (self.place_of(&receiver)?, recv_arg) {
+                        (_, r @ Value::Ref(..)) => r,
+                        (Some((p, _)), _) => Value::Ref(p, false),
+                        (None, other) => other,
+                    };
+                    let mut values = vec![this];
+                    for a in call
+                        .syntax()
+                        .child(K::ARG_LIST)
+                        .and_then(ast::ArgList::cast)
+                        .into_iter()
+                        .flat_map(|l| l.args().filter_map(|a| a.expr()).collect::<Vec<_>>())
+                    {
+                        values.push(self.eval(&a)?);
                     }
-                    _ => Op::Join(h),
+                    let (at, chan) = self.selectable_receiver(&f, &values);
+                    rest = Some((f, values, at));
+                    Op::Recv(id_of(&chan))
+                } else {
+                    let h = id_of(&v);
+                    match name.as_str() {
+                        "recv" => Op::Recv(h),
+                        "send" => {
+                            let arg = call
+                                .syntax()
+                                .child(K::ARG_LIST)
+                                .and_then(ast::ArgList::cast)
+                                .and_then(|l| l.args().next())
+                                .and_then(|a| a.expr())
+                                .expect("a value to send");
+                            payload = Some(self.eval(&arg)?);
+                            Op::Send(h)
+                        }
+                        _ => Op::Join(h),
+                    }
                 }
             } else if crate::machine::segments(
                 call.sub_exprs()
@@ -907,10 +1005,29 @@ impl Machine<'_> {
             {
                 Op::Stop
             } else {
-                return Err(crate::trap(TrapClass::Unimplemented, range));
+                // A selectable free function (`task.select.4`).
+                let path = crate::machine::segments(call.sub_exprs()[0].syntax());
+                let f = match self.program.resolve(self.memory.module(), &path) {
+                    Some((crate::program::Def::Item(k), _)) => self.program.fns[&k].clone(),
+                    _ => unreachable!("a checked selectable function"),
+                };
+                let mut values = Vec::new();
+                for a in call
+                    .syntax()
+                    .child(K::ARG_LIST)
+                    .and_then(ast::ArgList::cast)
+                    .into_iter()
+                    .flat_map(|l| l.args().filter_map(|a| a.expr()).collect::<Vec<_>>())
+                {
+                    values.push(self.eval(&a)?);
+                }
+                let (at, chan) = self.selectable_receiver(&f, &values);
+                rest = Some((f, values, at));
+                Op::Recv(id_of(&chan))
             };
             ops.push(op);
             payloads.push(payload);
+            rests.push(rest);
             arms.push((pat, exprs[1].clone()));
         }
         let closed = Value::Adt {
@@ -954,6 +1071,16 @@ impl Machine<'_> {
             unreachable!("an index")
         };
         let (pat, body) = arms[i as usize].clone();
+        // A selectable function's rest, with what was received.
+        let v = match rests[i as usize].take() {
+            Some((f, values, at)) => {
+                self.received = Some((at, v));
+                let r = self.invoke(&f, values, std::collections::HashMap::new(), range);
+                self.received = None;
+                r?
+            }
+            None => v,
+        };
         let mark = self.memory.mark();
         let slot = self.memory.temp(v);
         let mut binds = Vec::new();

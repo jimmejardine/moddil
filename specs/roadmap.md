@@ -464,7 +464,7 @@ something runs from the first slice.
     - A `Box<dyn Fn(A) -> R with …>` holds a closure that owns its captures (E0802 for a borrow).
     - Its type fixes its errors and control effects.
     - The handlers' effects it lists are met where it is called (`closures.md`), passed after its
-      arguments.
+      arguments. Superseded: handlers are captured where written (below).
   - **Lazy adapters** (`iter.adapt.1`, `iter.fails.1`, `item.trait.assoc.default.1`):
     - `Iterator` has `type Fails = !` (associated types may have defaults), and `next`,
       `count`, `all`, `any` and `collect` fail with it.
@@ -499,6 +499,16 @@ something runs from the first slice.
     as its strongest bound says (`Fn`, `FnMut`, `FnOnce`), not always a write.
   - **Interim limit:** only a closure written as the function's value, or after `return`, is
     taken as the one returned (a closure bound to a local first is not).
+- **Handlers captured where written (decided November 2026, done in M2b).** This supersedes S12's
+  "met where it is called" for stored closures and `impl Fn` results
+  ([`closures.md`: Stored (escaping) closures](closures.md#stored-escaping-closures)).
+  - `expr.closure.stored.1` and `expr.closure.result.1` lose it. A handler's effect in a stored
+    or returned closure's type is an error (E0609), and a closure that uses a handler from around
+    it borrows it, which an owned box cannot hold (E0802).
+  - `boxes/stored-effects.moddil` is rewritten for the rule, with `stored-effects-errors.moddil`.
+  - Sema, the MIR and the reference interpreter no longer pass handlers at the call.
+  - Open: how a type-erased `Box<dyn Fn …>` that holds a handler borrow is tracked. The likely
+    answer is that its borrows flow with the value, as for any view, with no new syntax.
 - **Slice S13 (decided November 2026): slicing and text.**
   - **Range slicing** (`expr.slice.1`):
     - `xs[a..b]`, with `..=`, `a..`, `..b` and `..`, lowers from the syntax to a HIR `Slice`, so
@@ -921,8 +931,35 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
     - conformance files for templates (fields, private fields across modules, `if const`, a
       refined field, and every error), agreeing on all four implementations;
     - serde's tests (`stubs/tests/serde`) pass natively, on the MIR interpreter and as WASM.
-- **Next, M2b:** the other standard mods the tour reaches (`Map`, `Mutex`, `Rand`, the HTTP router
-  and requests), written in Moddil, and the layout of `mods/`.
+- **Slice M2b (decided November 2026): the language the standard mods need.** The language comes
+  first, so its ideas are tried in real code before the mods are written.
+  - **Unsafe code** (`reference/2027/unsafe.md`):
+    - raw pointers `*const T` and `*mut T`, where a borrow becomes one where one is wanted;
+    - `unsafe("why") { … }`, the only place a raw pointer is dereferenced (E0218);
+    - a mod may use it only if its manifest lists `capabilities = ["unsafe"]` (E0219; the
+      manifest reads arrays now);
+    - the `core` mod gains `ptr` (`cast_mut`, an intrinsic), `cell` (`UnsafeCell`) and `atomic`
+      (`load`, `store`, `swap`, `compare_exchange`, `fetch_add`, with orderings).
+    - `cell` and `atomic` are written in Moddil. Each runtime runs one task at a time, so plain
+      reads and writes are atomic; that changes when tasks run in parallel.
+  - **`Refined`:** every refinement implements this prelude trait, built in, and nothing else
+    may, so generic code makes refined values (`T::refine(v)`), as the router's path parameters
+    will.
+  - **Results that hold handlers** (`type.impl.ret.2`): an `impl Trait` result may hold function
+    values and closures that captured the function's handlers. The caller's result then borrows
+    the handlers it passed, so it stays inside their `with`. With this, handlers are captured
+    where written everywhere (the step after S12b above).
+  - **Selectable functions in `select`** (`task.select.4`):
+    - a `#[selectable]` function receives first (`self.incoming.recv()`), then works with what it
+      received;
+    - lowering makes the two halves closures in its own body, so a `select` waits on the
+      channel and then runs the rest;
+    - the rest runs where the `select` is, so it uses no handler.
+  - **Checked:** conformance for each, agreeing on all four implementations.
+- **Next, M2c:**
+  - the standard mods the tour reaches, each a mod of its own under `mods/`: `collections`,
+    `sync` (`Mutex` over `UnsafeCell` and atomics), `rand`, `serde`, `net` with `http`, and `sim`;
+  - the tour's three tests, the simulated lossy network included, on every implementation.
 
 ## Staging: distributed programs
 

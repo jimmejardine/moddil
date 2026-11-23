@@ -13,3 +13,15 @@ fn unlisted() -> impl Fn(int) -> int {             //~ E0502
 fn borrowed(v: &Vec<int>) -> impl Fn() -> int {
     || v.len()                                      //~ E0802
 }
+
+trait Clock { fn now(&self) -> int; }
+fn now() -> int with clock: Clock { clock.now() }
+
+/// A returned closure owns what it captures, so it uses no handler: its type cannot list one.
+fn stamped() -> (impl Fn(int) -> int with Clock) {  //~ E0609
+    |x| x
+}
+
+fn captures_one() -> (impl Fn(int) -> int) with Clock {
+    |x| x + now()                                   //~ E0802
+}

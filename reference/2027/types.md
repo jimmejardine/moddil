@@ -65,9 +65,16 @@ a value of one type of its choice, its **hidden** type, which must meet the boun
 caller sees only the bounds: it can call the bounds' methods and pass the value where they are
 required, but not use what else the hidden type has (E0403). Each call of a generic function, for
 its type arguments, gives one opaque type. For now the result type is `impl Trait` itself (or
-`(impl Fn() with E)`, parenthesised), not a type containing one; a trait's methods cannot have
-one; and the hidden type cannot hold a borrow, nor a closure but one the function returns as
-`impl Fn…` (**expr.closure.result.1**).
+`(impl Fn() with E)`, parenthesised), not a type containing one; and a trait's methods cannot
+have one. A closure the function returns as `impl Fn…` owns what it captures
+(**expr.closure.result.1**); otherwise the hidden type may hold borrows only as
+**type.impl.ret.2** says.
+
+**type.impl.ret.2** The hidden type may hold closures and functions named as values that met their
+needs where they were written (**expr.closure.effects.1**), so they hold the function's handlers:
+`fn app() -> impl Handler with Links { Router::new().get("/{code}", follow) }`. A call's result
+then borrows the handlers its caller passed, so it is used while they are installed, inside the
+`with` that installs them, and not after (E0308). It may hold no other borrow (E0308, E0310).
 
 **type.dyn.coerce.1** A `&T` can be used where a `&dyn Trait` is expected if `T` implements `Trait`
 (E0402), and so can a `&dyn Sub` of a subtrait `Sub` of `Trait`; likewise for `&mut`, which can also

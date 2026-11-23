@@ -10,7 +10,7 @@ use moddil_sema::hir::{ExprId, ExprKind};
 use moddil_sema::{Callee, Capture, CaptureMode, Evidence, SelfKind, Ty};
 
 use super::Builder;
-use crate::{AggregateKind, Const, Local, Operand, Place, Projection, Rvalue};
+use crate::{AggregateKind, Const, Local, Operand, Place, Rvalue};
 
 impl Builder<'_> {
     /// The place a local is: its own, or, in a closure's body, where its capture is.
@@ -43,9 +43,6 @@ impl Builder<'_> {
                 Capture::Evidence(Evidence::Install(w, k)) => {
                     Operand::Copy(self.installed[&(w, k)].clone())
                 }
-                Capture::Evidence(Evidence::Call(s, k)) => {
-                    Operand::Copy(self.called[&(s, k)].clone())
-                }
             };
             ops.push(op);
         }
@@ -58,7 +55,6 @@ impl Builder<'_> {
         match ev {
             Evidence::Param(i) => self.evidence[&i].clone(),
             Evidence::Install(w, k) => self.installed[&(w, k)].clone(),
-            Evidence::Call(s, k) => self.called[&(s, k)].clone(),
         }
     }
 
@@ -108,54 +104,16 @@ impl Builder<'_> {
             }
             _ => self.operand(callee, args),
         };
-        // A stored closure's needs are given after its arguments (`expr.closure.stored.1`).
-        let given: Vec<Place> = self
-            .types
-            .evidence(e)
-            .to_vec()
-            .into_iter()
-            .map(|ev| self.evidence_place(ev))
-            .collect();
-        let given_tys: Vec<Ty> = match self.ty(callee) {
-            Ty::Adt(_, _, xs) if !xs.is_empty() => xs[0].dyn_needs(),
-            t => t.dyn_needs(),
-        };
-        let tuple = if args.is_empty() && given.is_empty() {
+        let tuple = if args.is_empty() {
             Operand::Const(Const::Unit)
         } else {
-            let mut ops = self.operands(args);
-            let mut tys: Vec<Ty> = args.iter().map(|&a| self.ty(a)).collect();
-            // A closure returned as `impl Fn… with …` is revealed as its own type here, so what
-            // it is given is typed by the closure's body.
-            let mut given_tys = given_tys.into_iter();
-            for p in given {
-                // Typed by the callee's needs, or else (a closure revealed as its own type,
-                // which lists none) by the handler's place: a borrow of the handler already.
-                let t = match given_tys.next() {
-                    Some(t) => Ty::reference(false, t),
-                    None => self.place_ty(&p),
-                };
-                tys.push(t);
-                ops.push(Operand::Copy(p));
-            }
+            let ops = self.operands(args);
+            let tys: Vec<Ty> = args.iter().map(|&a| self.ty(a)).collect();
             let t = self.temp(Ty::tuple(tys));
             self.cfg
                 .assign(t, Rvalue::Aggregate(AggregateKind::Tuple, ops));
             Operand::Move(Place::local(t))
         };
         self.call(e, dest, vec![recv, tuple]);
-    }
-
-    /// The type of place `p`: its local's, through tuple fields and borrows.
-    fn place_ty(&self, p: &Place) -> Ty {
-        let mut t = self.cfg.local_ty(p.local);
-        for proj in &p.projection {
-            t = match (proj, &t) {
-                (Projection::Field(i), Ty::Tuple(ts)) => ts[*i as usize].clone(),
-                (Projection::Deref, Ty::Ref(_, inner)) => (**inner).clone(),
-                _ => return Ty::Error,
-            };
-        }
-        t
     }
 }

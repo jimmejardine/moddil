@@ -1,4 +1,4 @@
-// covers: task.select.1, task.select.3
+// covers: task.select.1, task.select.3, task.select.4
 
 fn f() -> int {
     1
@@ -12,3 +12,18 @@ fn bad() -> int {
 
 #[selectable]                               //~ E0217
 fn no_wait() -> int { 1 }
+
+struct Holder { rx: Receiver<int> }
+
+#[selectable]
+fn not_first(h: &Holder) -> int with suspend {   //~ E0217
+    yield_now();
+    h.rx.recv().unwrap_or(0)
+}
+
+trait Clock { fn now(&self) -> int; }
+
+#[selectable]
+fn uses_a_handler(h: &Holder) -> int with clock: Clock, suspend {
+    h.rx.recv().unwrap_or(0) + clock.now()      //~ E0217
+}

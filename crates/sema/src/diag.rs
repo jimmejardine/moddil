@@ -120,6 +120,10 @@ codes! {
     E0216 = "default on an impl's method",
     /// A `select` arm that does not wait on an operation a `select` can wait on.
     E0217 = "invalid `select` arm",
+    /// A raw pointer dereferenced outside an `unsafe` block.
+    E0218 = "dereference of a raw pointer outside `unsafe`",
+    /// An `unsafe` block in a mod whose manifest does not declare the `unsafe` capability.
+    E0219 = "`unsafe` without the capability",
     /// An assignment to, or a `&mut` borrow of, a local not declared `mut`.
     E0301 = "mutation of an immutable local",
     /// An assignment through, or a `&mut` borrow through, a shared borrow.

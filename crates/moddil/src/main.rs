@@ -151,6 +151,7 @@ fn program(db: &Database, project: &moddil_project::Project) -> Program {
             name: m.name.clone(),
             deps: m.deps.clone(),
             stub: m.stub,
+            unsafe_ok: m.unsafe_ok,
         })
         .collect();
     Program::new(db, files, mods)

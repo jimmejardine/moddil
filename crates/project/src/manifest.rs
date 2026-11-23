@@ -17,17 +17,18 @@
 //! ```
 //!
 //! The subset: `#` comments, `[table]` and `[[array]]` headers, and `key = value` lines whose
-//! value is a string in double quotes, `true` or `false`, or an inline table of strings on one
-//! line. Anything else is a problem at its line.
+//! value is a string in double quotes, `true` or `false`, an inline table of strings on one
+//! line, or an array of strings on one line. Anything else is a problem at its line.
 
 use std::ops::Range;
 
-/// A value: a string, a boolean, or an inline table of strings.
+/// A value: a string, a boolean, an inline table of strings, or an array of strings.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Value {
     Str(String),
     Bool(bool),
     Table(Vec<(String, String)>),
+    Array(Vec<String>),
 }
 
 /// A `key = value` line: the key, the value, and the byte range of the line.
@@ -153,6 +154,16 @@ fn parse_value(v: &str) -> Result<Value, String> {
         }
         return Ok(Value::Table(pairs));
     }
+    if let Some(inner) = v.strip_prefix('[') {
+        let inner = inner.strip_suffix(']').ok_or("an array ends with `]`")?;
+        let items = inner
+            .split(',')
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .map(parse_string)
+            .collect::<Result<_, _>>()?;
+        return Ok(Value::Array(items));
+    }
     match v {
         "true" => return Ok(Value::Bool(true)),
         "false" => return Ok(Value::Bool(false)),
@@ -179,6 +190,10 @@ mod tests {
         assert_eq!(
             t[3].pairs[0].value,
             Value::Table(vec![("path".into(), "../b".into())])
+        );
+        assert_eq!(
+            parse("capabilities = [\"unsafe\", \"net\"]\n").unwrap()[0].pairs[0].value,
+            Value::Array(vec!["unsafe".into(), "net".into()])
         );
         assert!(parse("[mod\n").is_err());
         assert!(parse("name = 3\n").is_err());

@@ -1,0 +1,7 @@
+// The `core` mod's `ptr` module (`core.ptr.1`): what raw pointers are made with. A borrow becomes a
+// raw pointer where one is wanted, `&T` a `*const T` and `&mut T` a `*mut T` (`type.ptr.1`).
+
+// The same pointer, as one through which the value may be changed. Changing a value through it
+// is sound only if nothing else reads or borrows the value meanwhile.
+#[intrinsic]
+pub fn cast_mut<T>(p: *const T) -> *mut T;

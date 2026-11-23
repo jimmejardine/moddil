@@ -42,6 +42,23 @@ pub struct Body {
     pub result: Option<LocalId>,
     /// The arguments passed by name (`port: 8443`): each one's label, and where it is.
     pub labels: std::collections::BTreeMap<ExprId, (String, TextRange)>,
+    /// The `*e` written inside an `unsafe` block, where a raw pointer may be dereferenced
+    /// (`expr.unsafe.1`).
+    pub unsafe_derefs: std::collections::HashSet<ExprId>,
+    /// For a `#[selectable]` function, its two parts (`task.select.4`).
+    pub select: Option<SelectParts>,
+}
+
+/// A `#[selectable]` function's two parts, each a closure in its body taking its parameters
+/// (`task.select.4`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SelectParts {
+    /// Gives the receiver the body receives from, borrowed.
+    pub chan: ExprId,
+    /// The rest of the body, taking what was received after the parameters.
+    pub done: ExprId,
+    /// The local `done` binds what was received to.
+    pub received: LocalId,
 }
 
 /// A local variable.

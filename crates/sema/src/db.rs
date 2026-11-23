@@ -55,6 +55,8 @@ pub struct ModInfo {
     pub deps: Vec<(String, u32)>,
     /// Whether it is a stub (`mod.stub.1`).
     pub stub: bool,
+    /// Whether it may use `unsafe` blocks: its manifest declares the capability (`mod.caps.1`).
+    pub unsafe_ok: bool,
 }
 
 impl Program {
@@ -73,6 +75,7 @@ impl Program {
                 name: String::new(),
                 deps: Vec::new(),
                 stub: false,
+                unsafe_ok: false,
             }],
         )
     }

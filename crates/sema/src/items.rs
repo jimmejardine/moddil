@@ -146,6 +146,8 @@ pub struct ModDef {
     pub deps: std::collections::BTreeMap<String, u32>,
     /// Whether it is a stub, whose functions may be signatures only (`mod.stub.1`).
     pub stub: bool,
+    /// Whether it may use `unsafe` blocks (`mod.caps.1`).
+    pub unsafe_ok: bool,
 }
 
 /// A type parameter.
@@ -647,6 +649,7 @@ const LANG: &[&str] = &[
     "Debug",
     "Default",
     "RefinementError",
+    "Refined",
     "Trapped",
     "String",
 ];
@@ -915,7 +918,7 @@ impl ItemTree {
                 Some(d) => self.size_of_depth(&d.ty, depth + 1),
                 None => (0, 1),
             },
-            Ty::Int | Ty::Ref(..) => (8, 8),
+            Ty::Int | Ty::Ref(..) | Ty::Ptr(..) => (8, 8),
             Ty::Num(n) => {
                 let b = u64::from(n.bits() / 8);
                 (b, b)

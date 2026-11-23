@@ -7,22 +7,9 @@ fn fixed(at: int) -> Fixed { Fixed { at } }
 
 fn now() -> int with clock: Clock { clock.now() }
 
-/// A stored closure's handler needs are met where it is called, by its caller's handlers.
-fn run(f: &Box<dyn Fn(int) -> int with Clock>, x: int) -> int with Clock {
-    (**f)(x)
-}
-
-test "a stored closure's needs are met where it is called" {
-    let stamp: Box<dyn Fn(int) -> int with Clock> = Box::new(|x| x + now());
-    with Clock = fixed(100) {
-        stamp(1)                                     // => 101
-    }
-    ;
-    with Clock = fixed(7) {
-        run(&stamp, 2)                               // => 9
-    }
-    ;
-    let inner: Box<dyn Fn() -> int with Clock> = Box::new(|| {
+/// A stored closure's handler needs are met where it is written; one it owns is installed in it.
+test "a stored closure installs the handlers it uses" {
+    let inner: Box<dyn Fn() -> int> = Box::new(|| {
         with Clock = fixed(1) { now() }
     });
     with Clock = fixed(50) {

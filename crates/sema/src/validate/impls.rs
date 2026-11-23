@@ -30,6 +30,20 @@ pub(crate) fn check_impls(tree: &ItemTree) -> Vec<Found> {
             );
             continue;
         }
+        if let Some(tr) = &imp.trait_ref
+            && tree.lang("Refined") == Some(tr.trait_)
+            && imp.src != Src::Prelude
+        {
+            push(
+                &mut found,
+                Diagnostic::error(
+                    Code::E0406,
+                    imp.range,
+                    "every refinement implements `Refined`, built in, and nothing else may",
+                ),
+            );
+            continue;
+        }
         let Some(tr) = &imp.trait_ref else {
             // Inherent impls: only for the file's own structs and enums.
             match imp.self_ty.adt() {

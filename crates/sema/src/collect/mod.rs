@@ -30,12 +30,35 @@ mod traits;
 
 use report::Reporter;
 
-/// The prelude's source, followed by the built-in `core` mod's `collections` module
-/// (`reference/2027/core/collections.moddil`), whose items start at [`CORE_START`].
+/// The prelude's source, followed by the built-in `core` mod's modules
+/// (`reference/2027/core/`), in the order of [`CORE_MODULES`].
 pub(crate) const PRELUDE: &str = concat!(
     include_str!("../../../../reference/2027/prelude.moddil"),
-    include_str!("../../../../reference/2027/core/collections.moddil")
+    include_str!("../../../../reference/2027/core/collections.moddil"),
+    include_str!("../../../../reference/2027/core/ptr.moddil"),
+    include_str!("../../../../reference/2027/core/cell.moddil"),
+    include_str!("../../../../reference/2027/core/atomic.moddil"),
 );
+
+/// The `core` mod's modules, in [`PRELUDE`]'s order: each one's name and source.
+pub(crate) const CORE_MODULES: [(&str, &str); 4] = [
+    (
+        "collections",
+        include_str!("../../../../reference/2027/core/collections.moddil"),
+    ),
+    (
+        "ptr",
+        include_str!("../../../../reference/2027/core/ptr.moddil"),
+    ),
+    (
+        "cell",
+        include_str!("../../../../reference/2027/core/cell.moddil"),
+    ),
+    (
+        "atomic",
+        include_str!("../../../../reference/2027/core/atomic.moddil"),
+    ),
+];
 
 /// Where the `core` mod's items start in [`PRELUDE`].
 pub(crate) const CORE_START: usize =
@@ -187,7 +210,7 @@ pub fn item_tree(db: &dyn Db, program: Program) -> ItemTree {
         module: PRELUDE_MODULE,
         prelude_first: false,
         file_modules: Vec::new(),
-        core_module: PRELUDE_MODULE,
+        core_modules: Vec::new(),
         derivers: HashMap::new(),
         template: None,
         derive_by_names: HashMap::new(),
@@ -224,8 +247,9 @@ struct Collector<'a> {
     prelude_first: bool,
     /// The module of each file of the program.
     file_modules: Vec<u32>,
-    /// The built-in `core` mod's `collections` module.
-    core_module: u32,
+    /// The built-in `core` mod's modules: where each one's source starts in the prelude's, and
+    /// the module.
+    core_modules: Vec<(usize, u32)>,
     /// Each derive function (`comptime.derive.1`), by index among the functions: its source,
     /// its module and its node.
     derivers: HashMap<u32, (Src, u32, SyntaxNode)>,
@@ -274,6 +298,7 @@ impl Collector<'_> {
                 root,
                 deps: m.deps.iter().cloned().collect(),
                 stub: m.stub,
+                unsafe_ok: m.unsafe_ok,
             });
         }
         for (f, file) in files.iter().enumerate() {
@@ -299,17 +324,20 @@ impl Collector<'_> {
             self.file_modules.push(at);
         }
         // The built-in `core` mod, which every mod depends on (as `core`, unless it names a
-        // dependency so itself), and its `collections` module.
+        // dependency so itself), and its modules, each starting where its source does.
         let core = self.tree.mods.len() as u32;
         let root = self.tree.modules.len() as u32;
         self.tree.modules.push(module(core, Vec::new()));
-        let collections = root + 1;
-        self.tree
-            .modules
-            .push(module(core, vec!["collections".to_string()]));
-        self.tree.modules[root as usize]
-            .children
-            .insert("collections".to_string(), collections);
+        let mut start = CORE_START;
+        for (name, src) in CORE_MODULES {
+            let m = self.tree.modules.len() as u32;
+            self.tree.modules.push(module(core, vec![name.to_string()]));
+            self.tree.modules[root as usize]
+                .children
+                .insert(name.to_string(), m);
+            self.core_modules.push((start, m));
+            start += src.len();
+        }
         for m in &mut self.tree.mods {
             m.deps.entry("core".to_string()).or_insert(core);
         }
@@ -318,14 +346,28 @@ impl Collector<'_> {
             root,
             deps: std::collections::BTreeMap::new(),
             stub: false,
+            unsafe_ok: true,
         });
-        self.core_module = collections;
+    }
+
+    /// The module of the prelude's source at offset `at`: the prelude's, or a `core` module's.
+    fn prelude_module_at(&self, at: usize) -> u32 {
+        if at < CORE_START {
+            return PRELUDE_MODULE;
+        }
+        self.core_modules
+            .iter()
+            .rev()
+            .find(|(s, _)| at >= *s)
+            .map_or(PRELUDE_MODULE, |(_, m)| *m)
     }
 
     /// The module the derived item `node` belongs to: its type's.
     fn derived_module(&self, node: &SyntaxNode) -> u32 {
         match self.reporter.origin_src(node.text_range()) {
-            Some(Src::File(f)) => self.file_modules[f as usize],
+            Some((Src::File(f), _)) => self.file_modules[f as usize],
+            // A `core` module's type, whose derive is in that module.
+            Some((Src::Prelude, attr)) => self.prelude_module_at(attr.start as usize),
             _ => PRELUDE_MODULE,
         }
     }
@@ -408,10 +450,7 @@ impl Collector<'_> {
         for (src, root) in sources {
             for node in root.children() {
                 let module = match src {
-                    Src::Prelude if node.text_range().start as usize >= CORE_START => {
-                        self.core_module
-                    }
-                    Src::Prelude => PRELUDE_MODULE,
+                    Src::Prelude => self.prelude_module_at(node.text_range().start as usize),
                     Src::File(f) => self.file_modules[*f as usize],
                     Src::Derived => self.derived_module(&node),
                 };

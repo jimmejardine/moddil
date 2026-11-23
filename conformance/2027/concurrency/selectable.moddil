@@ -1,26 +1,60 @@
-// covers: task.select.3
+// covers: task.select.3, task.select.4
 
 struct Conn { id: int }
-struct Listener { next: int }
+struct Gone;
+
+/// Connections arrive on a channel; `accept` receives one, then makes it a `Conn`.
+struct Listener { incoming: Receiver<int> }
 
 impl Listener {
     #[selectable]
-    fn accept(&self) -> Conn with suspend {
-        yield_now();
-        Conn { id: self.next }
+    fn accept(&self) -> Conn with suspend, fail(Gone) {
+        match self.incoming.recv() {
+            Some(id) => Conn { id },
+            None => fail(Gone),
+        }
     }
 }
 
-test "a selectable function called as any other" {
-    let l = Listener { next: 3 };
-    l.accept().id                           // => 3
+/// A free function whose parameter holds the channel.
+#[selectable]
+fn next(l: &Listener) -> int with suspend {
+    l.incoming.recv().unwrap_or(-1) * 10
 }
 
-test "a select on it waits for the runtimes" {
-    let l = Listener { next: 3 };
-    let n = select {                        //~ trap
-        c = l.accept() => c.id,
+test "a selectable function called as any other" {
+    let (tx, rx) = channel(4);
+    let l = Listener { incoming: rx };
+    tx.send(3)?;
+    l.accept()?.id                          // => 3
+}
+
+test "a select waits on it, then does the rest" {
+    let (tx, rx) = channel(4);
+    let l = Listener { incoming: rx };
+    tx.send(7)?;
+    let n = select {
+        c = l.accept()? => c.id,
         _ = stop_requested() => 0,
     };
-    n
+    n                                       // => 7
+    ;
+    tx.send(2)?;
+    select {
+        x = next(&l) => x,
+        _ = stop_requested() => 0,
+    }                                       // => 20
+}
+
+test "the rest's error passes on" {
+    let (tx, rx) = channel(4);
+    let l = Listener { incoming: rx };
+    drop(tx);
+    try {
+        select {
+            c = l.accept()? => c.id,
+        }
+    } catch {
+        Gone => -1,
+    }                                       // => -1
 }

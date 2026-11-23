@@ -34,7 +34,7 @@ fn passes(_1: &dyn Time) -> int {
 
 fn installs(_1: Clock) -> int {
     // _1: c
-    let _2: Clock;
+    let _2: Clock; // the `Time` handler
     let _3: &Clock;
     let _4: &dyn Time;
 

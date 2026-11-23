@@ -1,0 +1,48 @@
+// covers: type.impl.ret.2, expr.closure.effects.1
+
+/// Where links are kept: an effect.
+trait Links { fn get(&self, code: int) -> int; }
+
+struct Doubling;
+impl Links for Doubling { fn get(&self, code: int) -> int { code * 2 } }
+
+struct Adding { by: int }
+impl Links for Adding { fn get(&self, code: int) -> int { code + self.by } }
+
+/// What answers requests.
+trait Handler { fn handle(&self, x: int) -> int; }
+
+/// One route, then the rest: a router's shape.
+struct Route<F, R> { at: int, f: F, rest: R }
+struct Nowhere;
+
+impl Handler for Nowhere { fn handle(&self, x: int) -> int { -1 } }
+impl<F: Fn(int) -> int with suspend, R: Handler> Handler for Route<F, R> {
+    fn handle(&self, x: int) -> int {
+        if x == self.at { (self.f)(x) } else { self.rest.handle(x) }
+    }
+}
+
+fn follow(code: int) -> int with links: Links { links.get(code) }
+fn count(code: int) -> int { code + 100 }
+
+/// The handlers' needs are met where they are named, here, so the router holds what `app`'s
+/// caller installed.
+fn app() -> impl Handler with Links {
+    Route { at: 1, f: follow, rest: Route { at: 2, f: count, rest: Nowhere } }
+}
+
+test "a result holds the handlers its function was given" {
+    with Links = Doubling {
+        let a = app();
+        a.handle(1)                             // => 2
+        ;
+        a.handle(2)                             // => 102
+        ;
+        a.handle(3)                             // => -1
+    };
+    let by = Adding { by: 10 };
+    with Links = &by {
+        app().handle(1)                         // => 11
+    }
+}

@@ -1,0 +1,24 @@
+// The `core` mod's `cell` module (`core.cell.1`): `UnsafeCell<T>`, the one way to change a value
+// behind a shared borrow. Sync cells (`moddil/sync`) are written over it, with `unsafe` blocks
+// ([Unsafe code](../unsafe.md)).
+
+// A value that may be changed through a shared borrow of it, by way of the raw pointer `get`
+// gives. Nothing checks that those changes do not race: the code that uses `get` must.
+pub struct UnsafeCell<T> {
+    value: T,
+}
+
+impl<T> UnsafeCell<T> {
+    pub fn new(value: T) -> UnsafeCell<T> {
+        UnsafeCell { value }
+    }
+
+    // A pointer to the value, through which it may be read and changed in an `unsafe` block.
+    pub fn get(&self) -> *mut T {
+        mod::ptr::cast_mut(&self.value)
+    }
+
+    pub fn into_inner(self) -> T {
+        self.value
+    }
+}

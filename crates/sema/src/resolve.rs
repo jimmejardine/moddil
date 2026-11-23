@@ -197,6 +197,15 @@ pub(crate) fn resolve_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnos
             }
             Ty::reference(mutable, inner)
         }
+        // `*const T` and `*mut T` (`type.ptr.1`).
+        ast::Type::Ptr(_) => {
+            let mutable = node.token(K::MUT_KW).is_some();
+            let inner = match node.children().find_map(ast::Type::cast) {
+                Some(t) => resolve_type(&t, scope, diags),
+                None => Ty::Error,
+            };
+            Ty::Ptr(mutable, Arc::new(inner))
+        }
         ast::Type::Paren(_) => match node.children().find_map(ast::Type::cast) {
             Some(inner) => resolve_type(&inner, scope, diags),
             None => Ty::Error,
@@ -319,12 +328,6 @@ pub(crate) fn dyn_type(node: &SyntaxNode, scope: &Scope, diags: &mut Vec<Diagnos
         }
         if let Some(e) = &effects {
             let fx = bound_effects(e, scope, &mut Vec::new());
-            if !fx.needs.is_empty() {
-                fixed.push((
-                    crate::ty::DYN_NEEDS,
-                    Ty::Tuple(fx.needs.into_iter().map(|(t, _)| t).collect()),
-                ));
-            }
             if fx.control != 0 {
                 fixed.push((crate::ty::DYN_CONTROL, Ty::Len(i64::from(fx.control))));
             }
@@ -982,22 +985,25 @@ fn closure_bound(
             trait_ref: trait_ref(once),
             assoc: match effects.map(|e| bound_effects(e, scope, diags)) {
                 Some(fx) => {
-                    // A closure it bounds is not kept, so its needs are met where it is
-                    // written (`expr.closure.effects.1`); only a stored closure's type lists
-                    // them (`expr.closure.stored.1`).
-                    if !stored {
-                        for (need, at) in &fx.needs {
-                            diags.push(Diagnostic::error(
-                                Code::E0609,
-                                *at,
-                                format!(
-                                    "a closure parameter's needs are met where the closure is \
-                                     written, so its bound lists only `fail` and the control \
-                                     effects, not `{}`",
-                                    crate::check::show_effect(need)
-                                ),
-                            ));
-                        }
+                    // A closure's needs are met where it is written, so neither a bound nor a
+                    // stored closure's type lists them (`expr.closure.effects.1`,
+                    // `expr.closure.stored.1`).
+                    for (need, at) in &fx.needs {
+                        let what = if stored {
+                            "a stored closure owns what it captures, so it uses no handler: \
+                             its type lists"
+                        } else {
+                            "a closure parameter's needs are met where the closure is \
+                             written, so its bound lists"
+                        };
+                        diags.push(Diagnostic::error(
+                            Code::E0609,
+                            *at,
+                            format!(
+                                "{what} only `fail` and the control effects, not `{}`",
+                                crate::check::show_effect(need)
+                            ),
+                        ));
                     }
                     vec![(0, output), (1, fx.fails)]
                 }
@@ -1015,7 +1021,7 @@ pub(crate) struct BoundEffects {
     pub fails: Ty,
     /// The control effects.
     pub control: crate::items::Control,
-    /// The needs a handler meets: only a stored closure's type lists them.
+    /// The handlers' effects it names, which are errors (E0609).
     pub needs: Vec<(Ty, TextRange)>,
 }
 
