@@ -142,8 +142,8 @@ impl<'a> Machine<'a> {
                         .iter()
                         .map(|p| {
                             let evaluated = *self.stack.local(p.evaluated) == Value::Bool(true);
-                            let value = evaluated
-                                .then(|| self.stack.shown(self.stack.read(&p.value)));
+                            let value =
+                                evaluated.then(|| self.stack.shown(self.stack.read(&p.value)));
                             (p.range, value)
                         })
                         .collect();

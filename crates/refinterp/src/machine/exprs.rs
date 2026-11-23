@@ -730,9 +730,10 @@ impl Machine<'_> {
             return Ok(self.memory.load(&p));
         }
         match (op.kind(), self.eval(operand)?) {
-            (k, v @ (Value::Num(..) | Value::FloatLit(_) | Value::BigLit(_) | Value::HugeLit(_))) => {
-                crate::num::unary(k == K::MINUS, v, range)
-            }
+            (
+                k,
+                v @ (Value::Num(..) | Value::FloatLit(_) | Value::BigLit(_) | Value::HugeLit(_)),
+            ) => crate::num::unary(k == K::MINUS, v, range),
             (K::MINUS, Value::Int(v)) => v
                 .checked_neg()
                 .map(Value::Int)
@@ -927,21 +928,24 @@ fn literal_tree(e: &ast::Expr) -> bool {
             op_ok && e.sub_exprs().iter().all(literal_tree)
         }
         ast::Expr::Bin(_) => {
-            let arithmetic = node.child_tokens().filter(|t| !t.kind().is_trivia()).all(|t| {
-                matches!(
-                    t.kind(),
-                    K::PLUS
-                        | K::MINUS
-                        | K::STAR
-                        | K::SLASH
-                        | K::PERCENT
-                        | K::AMP
-                        | K::PIPE
-                        | K::CARET
-                        | K::LT_LT
-                        | K::GT_GT
-                )
-            });
+            let arithmetic = node
+                .child_tokens()
+                .filter(|t| !t.kind().is_trivia())
+                .all(|t| {
+                    matches!(
+                        t.kind(),
+                        K::PLUS
+                            | K::MINUS
+                            | K::STAR
+                            | K::SLASH
+                            | K::PERCENT
+                            | K::AMP
+                            | K::PIPE
+                            | K::CARET
+                            | K::LT_LT
+                            | K::GT_GT
+                    )
+                });
             arithmetic && e.sub_exprs().iter().all(literal_tree)
         }
         _ => false,

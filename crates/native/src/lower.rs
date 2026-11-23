@@ -2911,13 +2911,19 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         let (yl, yh) = self.b.ins().isplit(y);
         let op = self.b.ins().iconst(types::I32, code);
         let args = [op, xl, xh, yl, yh];
-        let f = self.c.module.declare_func_in_func(self.c.rt.i128_lo, self.b.func);
+        let f = self
+            .c
+            .module
+            .declare_func_in_func(self.c.rt.i128_lo, self.b.func);
         let call = self.b.ins().call(f, &args);
         let lo = self.b.inst_results(call)[0];
         if !both {
             return lo;
         }
-        let f = self.c.module.declare_func_in_func(self.c.rt.i128_hi, self.b.func);
+        let f = self
+            .c
+            .module
+            .declare_func_in_func(self.c.rt.i128_hi, self.b.func);
         let call = self.b.ins().call(f, &args);
         let hi = self.b.inst_results(call)[0];
         self.b.ins().iconcat(lo, hi)

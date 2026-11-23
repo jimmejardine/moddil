@@ -93,11 +93,20 @@ fn a_failed_assert_shows_borrowed_parts_everywhere() {
         }
         assert_eq!(out.status.code(), Some(1), "{how:?}: {stderr}");
         assert!(!stderr.contains("not evaluated"), "{how:?}: {stderr}");
-        assert!(stderr.contains("b.items            = [7]"), "{how:?}: {stderr}");
-        assert!(stderr.contains("b                  = Bag { items: [7] }"), "{how:?}: {stderr}");
+        assert!(
+            stderr.contains("b.items            = [7]"),
+            "{how:?}: {stderr}"
+        );
+        assert!(
+            stderr.contains("b                  = Bag { items: [7] }"),
+            "{how:?}: {stderr}"
+        );
         // `v` was moved to `has` after `v.len()` borrowed it: not there to show.
         assert!(!stderr.contains("v      "), "{how:?}: {stderr}");
-        assert!(stderr.contains("has(v, 9)                 = false"), "{how:?}: {stderr}");
+        assert!(
+            stderr.contains("has(v, 9)                 = false"),
+            "{how:?}: {stderr}"
+        );
     }
 }
 

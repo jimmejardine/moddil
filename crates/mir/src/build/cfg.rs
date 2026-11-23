@@ -66,7 +66,12 @@ impl Cfg {
         self.body
             .blocks
             .iter()
-            .map(|b| (b.statements.len(), !matches!(b.terminator, Terminator::Unreachable)))
+            .map(|b| {
+                (
+                    b.statements.len(),
+                    !matches!(b.terminator, Terminator::Unreachable),
+                )
+            })
             .collect()
     }
 
@@ -96,9 +101,7 @@ impl Cfg {
             let (from, terminated) = mark.get(i).copied().unwrap_or((0, false));
             let statements = b.statements[from..].iter().any(|s| match s {
                 Statement::Assign(_, r) => in_rvalue(r),
-                Statement::Assert { cond: o, .. } | Statement::Observe { value: o, .. } => {
-                    moves(o)
-                }
+                Statement::Assert { cond: o, .. } | Statement::Observe { value: o, .. } => moves(o),
                 _ => false,
             });
             let terminator = !terminated

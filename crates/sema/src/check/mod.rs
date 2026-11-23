@@ -1013,11 +1013,7 @@ impl Checker<'_> {
             let t = self.out.expr_types[index(e)].clone();
             let t = self.items.base(&t);
             let (lo, hi, name) = match &t {
-                Ty::Int => (
-                    i128::from(i64::MIN),
-                    i64::MAX as u128,
-                    "int".to_string(),
-                ),
+                Ty::Int => (i128::from(i64::MIN), i64::MAX as u128, "int".to_string()),
                 Ty::Num(crate::ty::Num::U128) => (0, u128::MAX, "u128".to_string()),
                 Ty::Num(n) if !n.is_float() => {
                     let (lo, hi) = n.int_range();
