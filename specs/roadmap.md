@@ -237,7 +237,6 @@ L)
 
 **P24. The language server, next** (`crates/lsp`; M)
 - Names in types resolved by their full path, not by name in the file's module.
-- Completion offering exactly the locals in scope, not those bound before the cursor.
 - Incremental document sync, and analysis off the server's one thread; an editor extension.
 
 **P26. A line-by-line review of the checkers and the native lowering** (`crates/sema` `check/`,

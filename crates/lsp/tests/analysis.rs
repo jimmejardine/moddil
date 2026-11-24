@@ -212,3 +212,32 @@ fn completion_after_a_dot_a_path_and_in_scope() {
     );
     assert!(got.iter().any(|(l, _)| l == "Vec"), "the prelude's names");
 }
+
+/// Completion offers the locals in scope where the name is typed: not those of a block that has
+/// ended, a match arm's or a loop's after them, and of two of one name the later one.
+#[test]
+fn completion_offers_only_the_locals_in_scope() {
+    let typed = "\
+fn f() -> int {
+    let a = 1;
+    {
+        let inner = 2;
+    }
+    let b = match a { n => n + 1 };
+    for k in 0..3 {}
+    let a = \"shadowed\";
+    let c = 
+    0
+}
+";
+    let (mut a, path) = open("scoped", typed);
+    let got: Vec<(String, String)> = a
+        .complete(&path, at(typed, "let c = ", 0, 8))
+        .into_iter()
+        .filter(|c| c.kind == CompletionKind::Local)
+        .map(|c| (c.label, c.detail))
+        .collect();
+    let names: Vec<&str> = got.iter().map(|(l, _)| l.as_str()).collect();
+    assert_eq!(names, vec!["a", "b"], "{got:?}");
+    assert_eq!(got[0].1, "&str", "the later `a`: {got:?}");
+}

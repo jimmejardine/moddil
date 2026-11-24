@@ -4,6 +4,7 @@
 
 use moddil_sema::hir::ExprKind;
 use moddil_sema::{Database, Def, ItemTree, Owner, PRELUDE_MODULE, Program, Src, Ty};
+use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
 use salsa::Setter;
 
 use crate::query::{signature, strip};
@@ -389,8 +390,8 @@ fn kind_of(def: Def) -> CompletionKind {
     }
 }
 
-/// The names in scope at the placeholder at `at`: the locals bound before it in its body, then
-/// the module's names and the prelude's.
+/// The names in scope at the placeholder at `at`: the locals whose scope holds it, the innermost
+/// of each name, then the module's names and the prelude's.
 fn scope(db: &Database, program: Program, file: u32, at: u32) -> Vec<Completion> {
     let items = moddil_sema::item_tree(db, program);
     let from = module_of(items, file);
@@ -398,8 +399,21 @@ fn scope(db: &Database, program: Program, file: u32, at: u32) -> Vec<Completion>
     if let Some((owner, _)) = placeholder_expr(db, program, file, at) {
         let body = &moddil_sema::body(db, owner).body;
         let types = moddil_sema::infer(db, owner);
-        for (l, local) in body.locals.iter() {
-            if local.range.end <= at && local.name != "_" && !local.name.starts_with('$') {
+        let text = program.files(db)[file as usize].source.text(db).clone();
+        let nodes = moddil_syntax::parse(&text).syntax().descendants();
+        // The latest binding of a name first, so it is the one kept.
+        let mut seen: Vec<String> = Vec::new();
+        let mut locals: Vec<_> = body.locals.iter().collect();
+        locals.sort_by_key(|(_, local)| std::cmp::Reverse(local.range.start));
+        for (l, local) in locals {
+            let visible = local.range.end <= at
+                && local_scope(&nodes, local.range).is_none_or(|(s, e)| s <= at && at <= e);
+            if visible
+                && local.name != "_"
+                && !local.name.starts_with('$')
+                && !seen.contains(&local.name)
+            {
+                seen.push(local.name.clone());
                 out.push(Completion {
                     label: local.name.clone(),
                     kind: CompletionKind::Local,
@@ -411,4 +425,36 @@ fn scope(db: &Database, program: Program, file: u32, at: u32) -> Vec<Completion>
     out.extend(module_names(db, program, items, from, from));
     out.extend(module_names(db, program, items, PRELUDE_MODULE, from));
     out
+}
+
+/// Where the local bound at `bind` can be named, of the file's `nodes`: from the end of its
+/// `let` to the end of the block it is in, or its match arm, closure, loop or `if let`, or its
+/// function; `None` if it is none of those (then the whole body).
+fn local_scope(nodes: &[SyntaxNode], bind: TextRange) -> Option<(u32, u32)> {
+    let node = nodes
+        .iter()
+        .filter(|n| {
+            let r = n.text_range();
+            r.start <= bind.start && bind.end <= r.end
+        })
+        .min_by_key(|n| n.text_range().len())?;
+    for a in std::iter::once(node.clone()).chain(node.ancestors()) {
+        let r = a.text_range();
+        match a.kind() {
+            K::LET_STMT => {
+                let block = a.parent()?.text_range();
+                return Some((r.end, block.end));
+            }
+            K::MATCH_ARM
+            | K::SELECT_ARM
+            | K::CLOSURE_EXPR
+            | K::FOR_EXPR
+            | K::WHILE_EXPR
+            | K::IF_EXPR
+            | K::FN_ITEM
+            | K::TEST_ITEM => return Some((r.start, r.end)),
+            _ => {}
+        }
+    }
+    None
 }
