@@ -128,6 +128,89 @@ pub(crate) fn link_extension(
     })
 }
 
+/// Merges `object` (a library's, `moddil build --lib --static`) with the runtime and the mods' C
+/// code into the static library `name.lib` (Windows) or `libname.a` in `dir`, with `lib.exe`,
+/// macOS's `libtool`, or an `ar` script. Its path, and the arguments a C program's link needs
+/// beside it: the system libraries the runtime and the C code use.
+pub(crate) fn archive_library(
+    object: &[u8],
+    dir: &Path,
+    name: &str,
+    c: &[moddil_ffi::Built],
+) -> Result<(PathBuf, Vec<String>), String> {
+    let lib = library()?;
+    let out = dir.join(if cfg!(windows) {
+        format!("{name}.lib")
+    } else {
+        format!("lib{name}.a")
+    });
+    let obj = dir.join(format!(
+        "{name}.{}",
+        if cfg!(windows) { "obj" } else { "o" }
+    ));
+    std::fs::write(&obj, object).map_err(|e| format!("writing {}: {e}", obj.display()))?;
+    let _ = std::fs::remove_file(&out);
+    let inputs: Vec<&Path> = std::iter::once(lib.as_path())
+        .chain(c.iter().map(|b| b.static_lib.as_path()))
+        .collect();
+    let o = if cfg!(windows) {
+        let target = format!("{}-pc-windows-msvc", std::env::consts::ARCH);
+        let tool = cc::windows_registry::find_tool(&target, "lib.exe")
+            .ok_or("MSVC's lib.exe (install Visual Studio's C++ build tools)")?;
+        let mut cmd = tool.to_command();
+        cmd.arg("/NOLOGO")
+            .arg(format!("/OUT:{}", out.display()))
+            .arg(&obj)
+            .args(&inputs);
+        cmd.output()
+    } else if cfg!(target_os = "macos") {
+        Command::new("libtool")
+            .arg("-static")
+            .arg("-o")
+            .arg(&out)
+            .arg(&obj)
+            .args(&inputs)
+            .output()
+    } else {
+        // GNU `ar`'s MRI script: the object, and each archive's members.
+        use std::io::Write as _;
+        let mut script = format!("create {}\naddmod {}\n", out.display(), obj.display());
+        for i in &inputs {
+            script.push_str(&format!("addlib {}\n", i.display()));
+        }
+        script.push_str("save\nend\n");
+        let mut child = Command::new(std::env::var_os("AR").unwrap_or_else(|| "ar".into()))
+            .arg("-M")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("running ar: {e}"))?;
+        child
+            .stdin
+            .take()
+            .ok_or("ar's input")?
+            .write_all(script.as_bytes())
+            .map_err(|e| format!("writing ar's script: {e}"))?;
+        child.wait_with_output()
+    }
+    .map_err(|e| format!("running the archiver: {e}"))?;
+    let _ = std::fs::remove_file(&obj);
+    if !o.status.success() {
+        return Err(format!(
+            "the archiver failed ({}):\n{}{}",
+            o.status,
+            String::from_utf8_lossy(&o.stdout),
+            String::from_utf8_lossy(&o.stderr)
+        ));
+    }
+    let mut args = system_lib_args();
+    for b in c {
+        args.extend(b.libs.iter().map(|l| lib_arg(l)));
+    }
+    Ok((out, args))
+}
+
 /// A shared library's link ([`link_shared`]).
 struct Shared<'a> {
     /// The Moddil object's bytes.
@@ -214,15 +297,15 @@ fn msvc_link() -> Result<Command, String> {
 
 /// The system libraries the runtime needs (Rust's standard library's): the ones
 /// `rustc --print native-static-libs` lists for `moddil-rt-main` on each platform.
-fn system_libs(cmd: &mut Command) {
-    if cfg!(windows) {
-        cmd.args(WINDOWS_LIBS);
+fn system_lib_args() -> Vec<String> {
+    let libs: &[&str] = if cfg!(windows) {
+        &WINDOWS_LIBS
     } else if cfg!(target_os = "macos") {
         // `-lobjc`: the runtime's signal handling (`ctrlc`, through `dispatch2` and `objc2`)
         // uses Apple's Objective-C runtime; libdispatch is part of libSystem.
-        cmd.args(["-lSystem", "-lobjc", "-lc", "-lm"]);
+        &["-lSystem", "-lobjc", "-lc", "-lm"]
     } else {
-        cmd.args([
+        &[
             "-lgcc_s",
             "-lutil",
             "-lrt",
@@ -230,7 +313,21 @@ fn system_libs(cmd: &mut Command) {
             "-lm",
             "-ldl",
             "-lc",
-        ]);
+        ]
+    };
+    libs.iter().map(|s| (*s).to_string()).collect()
+}
+
+fn system_libs(cmd: &mut Command) {
+    cmd.args(system_lib_args());
+}
+
+/// The linker's argument for the system library `l`.
+fn lib_arg(l: &str) -> String {
+    if cfg!(windows) {
+        format!("{l}.lib")
+    } else {
+        format!("-l{l}")
     }
 }
 
@@ -239,11 +336,7 @@ fn c_libs(cmd: &mut Command, c: &[moddil_ffi::Built]) {
     for b in c {
         cmd.arg(&b.static_lib);
         for l in &b.libs {
-            cmd.arg(if cfg!(windows) {
-                format!("{l}.lib")
-            } else {
-                format!("-l{l}")
-            });
+            cmd.arg(lib_arg(l));
         }
     }
 }

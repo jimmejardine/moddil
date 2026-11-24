@@ -1,6 +1,6 @@
 //! C calling Moddil (`ffi.export.1`): `moddil build --lib examples/cabi` makes a shared library
-//! and its header, and `examples/cabi/c/main.c`, compiled by the system's C compiler against
-//! them, calls every export and checks its result.
+//! (or, with `--static`, a static one) and its header, and `examples/cabi/c/main.c`, compiled by
+//! the system's C compiler against them, calls every export and checks its result.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -19,12 +19,30 @@ fn target() -> String {
 
 #[test]
 fn c_calls_the_exports_through_the_generated_header() {
+    c_calls_the_library(false);
+}
+
+#[test]
+fn c_calls_the_exports_in_a_static_library() {
+    c_calls_the_library(true);
+}
+
+/// Builds `examples/cabi` as a library (shared, or static), and `main.c` against it, and runs it.
+fn c_calls_the_library(static_lib: bool) {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("cabi");
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(if static_lib {
+        "cabi-static"
+    } else {
+        "cabi"
+    });
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("a directory");
-    let out = Command::new(env!("CARGO_BIN_EXE_moddil"))
-        .args(["build", "--lib"])
+    let mut build = Command::new(env!("CARGO_BIN_EXE_moddil"));
+    build.args(["build", "--lib"]);
+    if static_lib {
+        build.arg("--static");
+    }
+    let out = build
         .arg(repo.join("examples/cabi"))
         .arg("-o")
         .arg(&dir)
@@ -36,6 +54,16 @@ fn c_calls_the_exports_through_the_generated_header() {
         return;
     }
     assert!(out.status.success(), "{stderr}");
+    // A static library's program links the system libraries it names too.
+    let system: Vec<String> = if static_lib {
+        std::fs::read_to_string(dir.join("cabi.link"))
+            .expect("the link line")
+            .split_whitespace()
+            .map(str::to_string)
+            .collect()
+    } else {
+        Vec::new()
+    };
     let header = std::fs::read_to_string(dir.join("cabi.h")).expect("the header");
     assert!(
         header.contains("double moddil_distance(const Point *a, const Point *b);"),
@@ -59,15 +87,20 @@ fn c_calls_the_exports_through_the_generated_header() {
             .arg(format!("/Fe{}", exe.display()))
             .arg(format!("/Fo{}", dir.join("main.obj").display()))
             .arg("/link")
-            .arg(dir.join("cabi.lib"));
+            .arg(dir.join("cabi.lib"))
+            .args(&system);
     } else {
         c.arg(&main_c)
             .arg(format!("-I{}", dir.display()))
-            .arg(format!("-L{}", dir.display()))
-            .arg("-lcabi")
-            .arg(format!("-Wl,-rpath,{}", dir.display()))
             .arg("-o")
             .arg(&exe);
+        if static_lib {
+            c.arg(dir.join("libcabi.a")).args(&system);
+        } else {
+            c.arg(format!("-L{}", dir.display()))
+                .arg("-lcabi")
+                .arg(format!("-Wl,-rpath,{}", dir.display()));
+        }
     }
     let built = c.output().expect("the C compiler runs");
     assert!(
@@ -84,4 +117,8 @@ fn c_calls_the_exports_through_the_generated_header() {
     let stdout = String::from_utf8_lossy(&run.stdout);
     assert_eq!(run.status.code(), Some(0), "{stdout}");
     assert!(stdout.contains("every result is right"), "{stdout}");
+    if static_lib {
+        // Nothing to find at run time: the program holds the library.
+        assert!(!dir.join("cabi.dll").exists() && !dir.join("libcabi.so").exists());
+    }
 }

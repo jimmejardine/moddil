@@ -84,9 +84,8 @@ READMEs describe what exists.
 
 **M4 and M5** as the milestones above say; nothing of either is built yet.
 
-**Next:** any work package below (P1 and P2 are the ones the last review left); or async in the
-Python bindings; or the Hashiverse client's first pieces through the C ABI; or the LLVM release
-backend.
+**Next:** any work package below; or async in the Python bindings; or the Hashiverse client's
+first pieces through the C ABI; or the LLVM release backend.
 
 ## Deferred from built work
 
@@ -100,11 +99,6 @@ when part of one is, remove that part.
 - An enum error's variant and its fields as the exception's attributes (a struct error's fields
   are).
 - Two error types of the same name in different modules (both would be `name.E`).
-
-**P2. A static library** (`crates/moddil` `link.rs`, `crates/ffi`; M)
-- `moddil build --lib --static`: the object and the runtime's static library merged (`lib.exe`
-  on Windows, `libtool` on macOS, an `ar` script on Linux), and `examples/cabi`'s C program
-  linked against it in its test.
 
 **P3. Formatting** (`crates/sema` holes, prelude `fmt` and `text`; L)
 - Format specs beyond those built: width, fill, alignment and precision (`{x:>8}`, `{f:.3}`).

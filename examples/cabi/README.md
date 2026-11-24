@@ -42,6 +42,16 @@ On Windows the DLL is found beside the program. The program prints
 `C called Moddil: every result is right` and exits with 0, or exits with the number of the first
 result that was wrong.
 
+Or as a static library, which the program holds, so nothing is found at run time:
+
+```
+moddil build --lib --static examples/cabi -o out/cabi-static
+cc examples/cabi/c/main.c -Iout/cabi-static out/cabi-static/libcabi.a $(cat out/cabi-static/cabi.link) -o main
+```
+
+This writes `cabi.lib` (Windows) or `libcabi.a`, the header, and `cabi.link`: the system
+libraries the runtime needs, for the program's link (on Windows, after `/link out\cabi-static\cabi.lib`).
+
 The Moddil side tests on its own too. It calls `c/shapes.c`, compiled with it, so natively and
 on the MIR interpreter, not as WASM:
 

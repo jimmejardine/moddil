@@ -43,7 +43,10 @@ largest alignment. Other structs' layout is the compiler's to choose.
 from C under its own name, with C's types (**ffi.types.1**). `moddil build --lib` builds the root
 mod's exported functions, with the runtime, into a shared library, and writes its header,
 `name.h`: the `#[repr(C)]` structs the signatures name, the other structs as incomplete types,
-and the prototypes. The runtime starts with the first call. A trap in an exported function ends
+and the prototypes. With `--static` it builds a static library instead (`name.lib` on Windows,
+`libname.a` elsewhere) holding the functions, the runtime and the mods' C code, and writes
+`name.link`, the system libraries a program linking it needs too. The runtime starts with the
+first call. A trap in an exported function ends
 the process with exit code 70, as a built program's does: C has no way to be told. In Moddil an
 exported function is called as any other.
 

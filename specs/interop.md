@@ -174,7 +174,7 @@ The first slice of the C ABI (slice M3a; reference `interop.md`):
 - **`#[repr(C)]` structs** cross behind pointers only. No variadic calls or callbacks yet (structs
   by value and callbacks came in M3c, below).
 - **Exports:** `#[export]` functions, a generated header, and `moddil build --lib` for a shared
-  library. The generated Rust crate comes later.
+  library (`--static` for a static one). The generated Rust crate comes later.
 - **Runners:** native code and the MIR interpreter (marshalling pointer arguments); not WASM.
 
 ## As built (M3c)

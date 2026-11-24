@@ -78,6 +78,11 @@ enum Command {
         /// here).
         #[arg(long, conflicts_with_all = ["wasm", "release"])]
         lib: bool,
+        /// With `--lib`, a static library instead (`name.lib` or `libname.a`): the mod's code,
+        /// the runtime and the mods' C code in one archive, and `name.link`, the system
+        /// libraries a program's link needs beside it.
+        #[arg(long = "static", requires = "lib")]
+        static_lib: bool,
         /// Build the mod's `#[export(python)]` functions and structs as a Python extension
         /// module instead (`ffi.python.1`): the module, its stubs and a wheel, in the directory
         /// `-o` names (by default, here).
@@ -193,8 +198,18 @@ fn main() -> ExitCode {
             output, wasm: true, ..
         } => finish(build_wasm(&db, program, path, output.as_deref())),
         Command::Build {
-            output, lib: true, ..
-        } => finish(build_lib(&db, program, &project, output.as_deref(), &c)),
+            output,
+            lib: true,
+            static_lib,
+            ..
+        } => finish(build_lib(
+            &db,
+            program,
+            &project,
+            output.as_deref(),
+            *static_lib,
+            &c,
+        )),
         Command::Build {
             output,
             wheel: true,
@@ -819,12 +834,14 @@ fn build_wheel(
 }
 
 /// `moddil build --lib` (`ffi.export.1`): the root mod's `#[export]` functions, as a shared
-/// library linked with the runtime, and their header, in `dir`.
+/// library linked with the runtime (or, `static_lib`, a static library holding it), and their
+/// header, in `dir`.
 fn build_lib(
     db: &Database,
     program: Program,
     project: &moddil_project::Project,
     dir: Option<&Path>,
+    static_lib: bool,
     c: &[moddil_ffi::Built],
 ) -> Result<(), String> {
     let items = moddil_sema::item_tree(db, program);
@@ -849,6 +866,21 @@ fn build_lib(
     let header = moddil_native::header(db, program, &exports, &name);
     let h = dir.join(format!("{name}.h"));
     std::fs::write(&h, header).map_err(|e| format!("writing {}: {e}", h.display()))?;
+    if static_lib {
+        let (lib, args) = link::archive_library(&object, &dir, &name, c)
+            .map_err(|why| format!("archiving `{name}`: {why}"))?;
+        let line = dir.join(format!("{name}.link"));
+        std::fs::write(&line, format!("{}\n", args.join(" ")))
+            .map_err(|e| format!("writing {}: {e}", line.display()))?;
+        eprintln!(
+            "moddil: wrote {}, {} and {} (link a program with it and: {})",
+            lib.display(),
+            h.display(),
+            line.display(),
+            args.join(" ")
+        );
+        return Ok(());
+    }
     let lib = link::link_library(&object, &dir, &name, &symbols, c)
         .map_err(|why| format!("linking `{name}`: {why}"))?;
     eprintln!("moddil: wrote {} and {}", lib.display(), h.display());
