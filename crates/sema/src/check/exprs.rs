@@ -39,6 +39,10 @@ impl Checker<'_> {
             let number = matches!(base, Ty::Int | Ty::Num(_));
             let float = matches!(base, Ty::Num(n) if n.is_float());
             let text = base == Ty::Str || base == self.items.string_ty();
+            // A width or precision named `name$` is an `int`.
+            for x in [spec.width_arg, spec.precision_arg].into_iter().flatten() {
+                self.check(x, &Ty::Int);
+            }
             let integer = matches!(base, Ty::Int) || (number && !float);
             let wrong = if spec.zero && !number {
                 Some("`0` pads a number with zeros")
@@ -46,9 +50,11 @@ impl Checker<'_> {
                 Some("`+` writes a number's sign")
             } else if spec.radix.is_some() && !integer {
                 Some("`x`, `X`, `b` and `o` write an integer's digits in base 16, 2 or 8")
-            } else if spec.precision.is_some() && !(float || text) {
+            } else if spec.exponent.is_some() && !float {
+                Some("`e` and `E` write a float in exponent form")
+            } else if spec.has_precision() && !(float || text) {
                 Some("a precision is a float's digits or how much of a text is written")
-            } else if spec.precision.is_some() && text && spec.debug {
+            } else if spec.has_precision() && text && spec.debug {
                 Some("a precision cuts text written by `Display`, not by `Debug`")
             } else {
                 None

@@ -206,25 +206,32 @@ impl Machine<'_> {
     /// (`expr.fmt.spec.1`) writes it into a `String` of its own first, then cuts and pads it.
     fn hole(&mut self, text: &str, start: usize, out: &crate::value::Pointer) -> Eval<()> {
         let (text, spec) = match spec_colon(text) {
-            Some(k) => (
-                &text[..k],
-                parse_spec(&text[k + 1..]).expect("a checked spec"),
-            ),
+            Some(k) => {
+                let mut spec = parse_spec(&text[k + 1..]).expect("a checked spec");
+                // A width or precision named `name$`, evaluated where it stands.
+                for (named, precision) in [
+                    (spec.width_name.take(), false),
+                    (spec.precision_name.take(), true),
+                ] {
+                    let Some((name, off)) = named else { continue };
+                    let x = hole_expr(&name, start + k + 1 + off);
+                    let n = match self.eval(&x)? {
+                        Value::Int(n) => u32::try_from(n).unwrap_or(0),
+                        other => unreachable!("a checked `int`: {other:?}"),
+                    };
+                    if precision {
+                        spec.precision = Some(n);
+                    } else {
+                        spec.width = Some(n);
+                    }
+                }
+                (&text[..k], spec)
+            }
             None => (text, Spec::default()),
         };
         // `{x:?}` writes `x`'s `Debug` (`expr.fmt.debug.1`).
         let tr = if spec.debug { "Debug" } else { "Display" };
-        let wrapper = "fn f(){(";
-        let pad = start.saturating_sub(wrapper.len());
-        let source = format!("{}{wrapper}{text})}}", " ".repeat(pad));
-        let parse = moddil_syntax::parse(&source);
-        let expr = parse
-            .syntax()
-            .descendants()
-            .into_iter()
-            .find(|n| n.kind() == K::PAREN_EXPR)
-            .and_then(|p| p.children().find_map(ast::Expr::cast))
-            .expect("a checked hole");
+        let expr = hole_expr(text, start);
         let this = match self.place_of(&expr)? {
             Some((p, _)) => match self.memory.load(&p) {
                 v @ (Value::Ref(..) | Value::Str(_)) => v,
@@ -236,7 +243,12 @@ impl Machine<'_> {
             },
         };
         let range = expr.syntax().text_range();
-        if spec.width.is_none() && spec.precision.is_none() && !spec.plus && spec.radix.is_none() {
+        if spec.width.is_none()
+            && spec.precision.is_none()
+            && !spec.plus
+            && spec.radix.is_none()
+            && spec.exponent.is_none()
+        {
             self.call_trait(tr, "fmt", vec![this, Value::Ref(out.clone(), true)], range)?;
             return Ok(());
         }
@@ -249,6 +261,17 @@ impl Machine<'_> {
         let written = match (&value, spec.precision) {
             _ if spec.radix.is_some() => {
                 radix_text(&value, spec.radix.expect("a base"), spec.prefix)
+            }
+            // A float in exponent form (`expr.fmt.spec.5`).
+            (Value::Num(k, bits), digits) if spec.exponent.is_some() => exp_text(
+                *k == crate::num::Kind::F32,
+                *bits as u64,
+                digits,
+                spec.exponent == Some(true),
+            ),
+            (Value::FloatLit(t), digits) if spec.exponent.is_some() => {
+                let x: f64 = t.replace('_', "").parse().expect("a float literal");
+                exp_text(false, x.to_bits(), digits, spec.exponent == Some(true))
             }
             (Value::Num(k, bits), Some(digits)) if k.is_float() => {
                 let digits = digits as usize;
@@ -694,6 +717,38 @@ struct Spec {
     width: Option<u32>,
     precision: Option<u32>,
     radix: Option<char>,
+    /// `e` (`false`) or `E` (`true`).
+    exponent: Option<bool>,
+    /// A width or precision named `name$`: the name and its byte offset in the spec.
+    width_name: Option<(String, usize)>,
+    precision_name: Option<(String, usize)>,
+}
+
+/// A float's text in exponent form (`expr.fmt.spec.5`), `digits` after the point or as many as
+/// it needs, the `e` upper-case for `upper`: an `f32` if `f32` says so, from its bits.
+fn exp_text(f32: bool, bits: u64, digits: Option<u32>, upper: bool) -> String {
+    let s = match (digits, f32) {
+        (Some(d), true) => format!("{:.*e}", d as usize, f32::from_bits(bits as u32)),
+        (Some(d), false) => format!("{:.*e}", d as usize, f64::from_bits(bits)),
+        (None, true) => format!("{:e}", f32::from_bits(bits as u32)),
+        (None, false) => format!("{:e}", f64::from_bits(bits)),
+    };
+    if upper { s.replace('e', "E") } else { s }
+}
+
+/// The expression `text` of a hole that starts at byte `start` of the file, parsed where it
+/// stands so its ranges are the file's.
+fn hole_expr(text: &str, start: usize) -> ast::Expr {
+    let wrapper = "fn f(){(";
+    let pad = start.saturating_sub(wrapper.len());
+    let source = format!("{}{wrapper}{text})}}", " ".repeat(pad));
+    moddil_syntax::parse(&source)
+        .syntax()
+        .descendants()
+        .into_iter()
+        .find(|n| n.kind() == K::PAREN_EXPR)
+        .and_then(|p| p.children().find_map(ast::Expr::cast))
+        .expect("a checked hole")
 }
 
 /// Integer `v`'s digits in the base of `radix` (`x`, `X`, `b` or `o`), its bits as its type holds
@@ -784,14 +839,37 @@ fn parse_spec(text: &str) -> Option<Spec> {
         }
         cs[from..*i].iter().collect::<String>().parse().ok()
     };
-    spec.width = number(&mut i);
+    // `name$`, and its offset in bytes.
+    let named = |i: &mut usize| {
+        let from = *i;
+        let mut j = from;
+        while cs.get(j).is_some_and(|c| c.is_alphanumeric() || *c == '_') {
+            j += 1;
+        }
+        let first = cs.get(from).is_some_and(|c| c.is_alphabetic() || *c == '_');
+        if !first || cs.get(j) != Some(&'$') {
+            return None;
+        }
+        *i = j + 1;
+        let off: usize = cs[..from].iter().map(|c| c.len_utf8()).sum();
+        Some((cs[from..j].iter().collect::<String>(), off))
+    };
+    spec.width_name = named(&mut i);
+    if spec.width_name.is_none() {
+        spec.width = number(&mut i);
+    }
     if cs.get(i) == Some(&'.') {
         i += 1;
-        spec.precision = Some(number(&mut i)?);
+        spec.precision_name = named(&mut i);
+        if spec.precision_name.is_none() {
+            spec.precision = Some(number(&mut i)?);
+        }
     }
     match cs.get(i) {
         Some('?') => spec.debug = true,
         Some(&c @ ('x' | 'X' | 'b' | 'o')) => spec.radix = Some(c),
+        Some('e') => spec.exponent = Some(false),
+        Some('E') => spec.exponent = Some(true),
         _ => return (i == cs.len()).then_some(spec),
     }
     (i + 1 == cs.len()).then_some(spec)

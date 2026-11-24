@@ -274,6 +274,23 @@ pub fn fixed_text(f32: bool, bits: u64, digits: usize) -> String {
     }
 }
 
+/// A float's text in exponent form (`expr.fmt.spec.5`), `digits` digits after the point (as
+/// many as it needs for `None`), the `e` upper-case for `upper`: an `f32` if `f32` says so.
+pub fn exp_text(f32: bool, bits: u64, digits: Option<usize>, upper: bool) -> String {
+    let x = if f32 {
+        f64::from(f32::from_bits(bits as u32))
+    } else {
+        f64::from_bits(bits)
+    };
+    let s = match (digits, f32) {
+        (Some(d), true) => format!("{:.*e}", d, x as f32),
+        (Some(d), false) => format!("{x:.d$e}"),
+        (None, true) => format!("{:e}", x as f32),
+        (None, false) => format!("{x:e}"),
+    };
+    if upper { s.replace('e', "E") } else { s }
+}
+
 /// The code of the number type named `name` (`int`, `i8`, …).
 pub fn code(name: &str) -> Option<u32> {
     if name == "int" {

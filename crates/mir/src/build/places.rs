@@ -60,9 +60,16 @@ impl Builder<'_> {
                     || start.is_some_and(|x| self.assigns(x))
                     || end.is_some_and(|x| self.assigns(x))
             }
-            ExprKind::Fmt(pieces) => pieces
-                .iter()
-                .any(|p| matches!(p, FmtPiece::Hole(h, _) if self.assigns(*h))),
+            ExprKind::Fmt(pieces) => pieces.iter().any(|p| match p {
+                FmtPiece::Hole(h, spec) => {
+                    self.assigns(*h)
+                        || [spec.width_arg, spec.precision_arg]
+                            .into_iter()
+                            .flatten()
+                            .any(|x| self.assigns(x))
+                }
+                FmtPiece::Lit(_) => false,
+            }),
             ExprKind::Adt { fields, .. } => fields.iter().any(|&(_, x)| self.assigns(x)),
             ExprKind::Field { base, .. } => self.assigns(*base),
             ExprKind::Call { args, .. } => any(args),

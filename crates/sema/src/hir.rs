@@ -402,12 +402,34 @@ pub struct Spec {
     pub prefix: bool,
     /// `x`, `X`, `b` or `o`: an integer's digits in base 16 (lower or upper case), 2 or 8.
     pub radix: Option<Radix>,
+    /// `e` (`false`) or `E` (`true`): a float in exponent form.
+    pub exponent: Option<bool>,
+    /// `name$`: the width, an `int` named in the hole's scope.
+    pub width_arg: Option<ExprId>,
+    /// `.name$`: the precision, an `int` named in the hole's scope.
+    pub precision_arg: Option<ExprId>,
 }
 
 impl Spec {
     /// Whether the piece is written as it is, with nothing to pad, cut, sign or change base.
     pub fn is_plain(&self) -> bool {
-        self.width.is_none() && self.precision.is_none() && !self.plus && self.radix.is_none()
+        self.width.is_none()
+            && self.precision.is_none()
+            && !self.plus
+            && self.radix.is_none()
+            && self.exponent.is_none()
+            && self.width_arg.is_none()
+            && self.precision_arg.is_none()
+    }
+
+    /// Whether it has a width, written or named.
+    pub fn has_width(&self) -> bool {
+        self.width.is_some() || self.width_arg.is_some()
+    }
+
+    /// Whether it has a precision, written or named.
+    pub fn has_precision(&self) -> bool {
+        self.precision.is_some() || self.precision_arg.is_some()
     }
 }
 

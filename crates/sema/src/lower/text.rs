@@ -248,16 +248,29 @@ impl Lowerer<'_> {
                     let at = TextRange::new(hole_start as u32, (hole_start + hole.len()) as u32);
                     // `{x:spec}`: `?` writes `x`'s `Debug` (`expr.fmt.debug.1`), and the rest
                     // pads and cuts it (`expr.fmt.spec.1`).
-                    let (expr_text, spec) = match spec_colon(&hole) {
+                    let (expr_text, mut spec, names) = match spec_colon(&hole) {
                         Some(k) => match parse_spec(&hole[k + 1..]) {
-                            Ok(spec) => (&hole[..k], spec),
+                            Ok((spec, names)) => (&hole[..k], spec, (k + 1, names)),
                             Err(why) => {
                                 self.report(Code::E0902, at, why);
                                 return self.missing(range);
                             }
                         },
-                        None => (hole.as_str(), Spec::default()),
+                        None => (hole.as_str(), Spec::default(), (0, [None, None])),
                     };
+                    // A width or precision named `name$`: an expression where it stands.
+                    let (from, [width, precision]) = names;
+                    for (named, slot) in [(width, 0), (precision, 1)] {
+                        let Some((name, off)) = named else { continue };
+                        let Some(x) = self.hole(&name, hole_start + from + off, at) else {
+                            return self.missing(range);
+                        };
+                        if slot == 0 {
+                            spec.width_arg = Some(x);
+                        } else {
+                            spec.precision_arg = Some(x);
+                        }
+                    }
                     match self.hole(expr_text, hole_start, at) {
                         Some(e) => pieces.push(FmtPiece::Hole(e, spec)),
                         None => return self.missing(range),
@@ -367,13 +380,18 @@ fn spec_colon(hole: &str) -> Option<usize> {
     None
 }
 
+/// A width or precision named in a spec, `name$`: the name, and its byte offset in the spec.
+type Named = Option<(String, usize)>;
+
 /// A format spec, `[[fill]align][+][#][0][width][.precision][type]` with `type` one of `?`, `x`,
-/// `X`, `b` and `o` (`expr.fmt.spec.1`), or what is wrong with it.
-fn parse_spec(text: &str) -> Result<Spec, String> {
+/// `X`, `b`, `o`, `e` and `E`, and a width or precision a number or `name$`
+/// (`expr.fmt.spec.1`), with the names of those named; or what is wrong with it.
+fn parse_spec(text: &str) -> Result<(Spec, [Named; 2]), String> {
     let bad = || {
         format!(
             "`{text}` is not a format spec: `[[fill]align][+][#][0][width][.precision][type]`, \
-             the type `?`, `x`, `X`, `b` or `o`"
+             the width and precision a number or `name$`, the type `?`, `x`, `X`, `b`, `o`, `e` \
+             or `E`"
         )
     };
     let align_of = |c: char| match c {
@@ -414,30 +432,53 @@ fn parse_spec(text: &str) -> Result<Spec, String> {
         }
         cs[start..*i].iter().collect::<String>().parse().ok()
     };
-    spec.width = number(&mut i);
+    // `name$`: an identifier, then `$`; its offset in bytes.
+    let named = |i: &mut usize| -> Named {
+        let start = *i;
+        let mut j = start;
+        while cs.get(j).is_some_and(|c| c.is_alphanumeric() || *c == '_') {
+            j += 1;
+        }
+        let first = cs
+            .get(start)
+            .is_some_and(|c| c.is_alphabetic() || *c == '_');
+        if !first || cs.get(j) != Some(&'$') {
+            return None;
+        }
+        *i = j + 1;
+        let off = cs[..start].iter().map(|c| c.len_utf8()).sum();
+        Some((cs[start..j].iter().collect(), off))
+    };
+    let width_name = named(&mut i);
+    if width_name.is_none() {
+        spec.width = number(&mut i);
+    }
+    let mut precision_name = None;
     if cs.get(i) == Some(&'.') {
         i += 1;
-        spec.precision = Some(number(&mut i).ok_or_else(bad)?);
+        precision_name = named(&mut i);
+        if precision_name.is_none() {
+            spec.precision = Some(number(&mut i).ok_or_else(bad)?);
+        }
     }
-    let ty = match cs.get(i) {
-        Some('?') => Some(None),
-        Some('x') => Some(Some(Radix::Hex)),
-        Some('X') => Some(Some(Radix::UpperHex)),
-        Some('b') => Some(Some(Radix::Binary)),
-        Some('o') => Some(Some(Radix::Octal)),
-        _ => None,
-    };
-    if let Some(radix) = ty {
-        spec.debug = radix.is_none();
-        spec.radix = radix;
-        i += 1;
+    match cs.get(i) {
+        Some('?') => spec.debug = true,
+        Some('x') => spec.radix = Some(Radix::Hex),
+        Some('X') => spec.radix = Some(Radix::UpperHex),
+        Some('b') => spec.radix = Some(Radix::Binary),
+        Some('o') => spec.radix = Some(Radix::Octal),
+        Some('e') => spec.exponent = Some(false),
+        Some('E') => spec.exponent = Some(true),
+        _ => i = i.wrapping_sub(1),
     }
+    i = i.wrapping_add(1);
     // An alignment or `0` says how to fill a width, so it needs one; `#` is a base's prefix.
+    let width = spec.width.is_some() || width_name.is_some();
     if i != cs.len()
-        || ((spec.align.is_some() || spec.zero) && spec.width.is_none())
+        || ((spec.align.is_some() || spec.zero) && !width)
         || (spec.prefix && spec.radix.is_none())
     {
         return Err(bad());
     }
-    Ok(spec)
+    Ok((spec, [width_name, precision_name]))
 }

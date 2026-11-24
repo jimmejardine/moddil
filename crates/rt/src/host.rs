@@ -75,6 +75,11 @@ pub extern "C" fn text(
         105 => text_at(p, n).to_lowercase(),
         106 => text_at(p, n).trim().to_string(),
         107 | 108 => crate::num::fixed_text(code == 107, lo, hi as usize),
+        // The digits and the case travel in the high word: `(digits + 1) * 2 + upper`.
+        109 | 110 => {
+            let digits = (hi >> 1).checked_sub(1).map(|d| d as usize);
+            crate::num::exp_text(code == 109, lo, digits, hi & 1 == 1)
+        }
         k => crate::num::text(k, bits),
     };
     keep(s, len)

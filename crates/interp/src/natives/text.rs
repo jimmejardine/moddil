@@ -45,6 +45,14 @@ impl Natives<'_> {
                 }
                 other => unreachable!("a float: {other:?}"),
             },
+            // A float in exponent form (`expr.fmt.spec.5`).
+            (Ty::Num(_), "exp_text") => match arg(stack, 0) {
+                Value::Num(n, bits) => {
+                    let upper = matches!(arg(stack, 2), Value::Bool(true));
+                    str_of(moddil_mir::exp_text(n, bits, arg(stack, 1).as_int(), upper))
+                }
+                other => unreachable!("a float: {other:?}"),
+            },
             (Ty::Char, "code") => Value::Int(i64::from(u32::from(ch(stack, 0)))),
             (Ty::Char, "from_code") => {
                 let c = u32::try_from(arg(stack, 0).as_int())

@@ -101,9 +101,8 @@ when part of one is, remove that part.
   when it runs and comparing by text.
 - Tagged literals other than `fmt`, first `re"…"` compiled when compiling, with typed captures
   (`mods/regex`, with P11).
-- The rest of Rust's format specs: a width or precision from an argument (`{x:w$}`, `{x:.*}`),
-  `e` and `E` (a float's exponent form), and `#?` (`Debug` across lines); and `fmt"…"` written
-  straight into a `TextWrite` sink, not only as a new `String`.
+- `#?` (`Debug` across lines, indented), and `fmt"…"` written straight into a `TextWrite` sink,
+  not only as a new `String`.
 
 **P5. Numbers** (`crates/sema`, the prelude, every runner; L)
 - `usize` and `isize`, for FFI and memory-level code: a `Num` each, the width of a pointer on

@@ -983,12 +983,27 @@ impl Builder<'_> {
                     let base = self.items.base(&base);
                     let number = matches!(base, Ty::Int | Ty::Num(_));
                     let text = base == Ty::Str || base == self.items.string_ty();
-                    // A float's fixed digits (`expr.fmt.spec.3`).
-                    let fixed = match (&base, spec.precision) {
-                        (Ty::Num(n), Some(digits)) if n.is_float() => self
+                    // The precision, written or named (`.name$`), as an operand; -1 for none.
+                    let precision = match (spec.precision, spec.precision_arg) {
+                        (_, Some(x)) => Some(self.operand(x, &[])),
+                        (Some(k), None) => Some(Operand::Const(Const::Int(i64::from(k)))),
+                        (None, None) => None,
+                    };
+                    let float = matches!(base, Ty::Num(n) if n.is_float());
+                    // A float's fixed digits (`expr.fmt.spec.3`), or its exponent form
+                    // (`expr.fmt.spec.5`): the float's `fixed_text` or `exp_text`.
+                    let fixed = match (&precision, spec.exponent) {
+                        (_, Some(upper)) if float => {
+                            self.items.builtin_method(&base, "exp_text").map(|f| {
+                                let digits =
+                                    precision.clone().unwrap_or(Operand::Const(Const::Int(-1)));
+                                (f, vec![digits, Operand::Const(Const::Bool(upper))])
+                            })
+                        }
+                        (Some(digits), None) if float => self
                             .items
                             .builtin_method(&base, "fixed_text")
-                            .map(|f| (f, digits)),
+                            .map(|f| (f, vec![digits.clone()])),
                         _ => None,
                     };
                     let radix = spec.radix.and_then(|r| {
@@ -1021,21 +1036,16 @@ impl Builder<'_> {
                             ];
                             self.call_into(None, callee, Place::local(unit), args, self.range(h));
                         }
-                        Some((func, digits)) => {
+                        Some((func, rest)) => {
                             let this = self.hole_ref(h);
                             let s = self.temp(Ty::reference(false, Ty::Str));
                             let callee = Callee::Fn {
                                 func,
                                 args: Vec::new(),
                             };
-                            let digits = Operand::Const(Const::Int(i64::from(digits)));
-                            self.call_into(
-                                None,
-                                callee,
-                                Place::local(s),
-                                vec![this, digits],
-                                self.range(h),
-                            );
+                            let mut args = vec![this];
+                            args.extend(rest);
+                            self.call_into(None, callee, Place::local(s), args, self.range(h));
                             self.push_str(piece, Operand::Move(Place::local(s)), range);
                         }
                         None => self.write_hole(h, piece),
@@ -1054,9 +1064,14 @@ impl Builder<'_> {
                         None if number => 2,
                         Some(Align::Left) | None => 0,
                     };
-                    let keep = match spec.precision {
-                        Some(k) if text && !spec.debug => i64::from(k),
-                        _ => -1,
+                    let keep = match precision {
+                        Some(k) if text && !spec.debug => k,
+                        _ => Operand::Const(Const::Int(-1)),
+                    };
+                    // The width, written or named (`name$`).
+                    let width = match spec.width_arg {
+                        Some(x) => self.operand(x, &[]),
+                        None => Operand::Const(Const::Int(spec.width.map_or(0, i64::from))),
                     };
                     let out = self.temp(Ty::reference(true, self.items.string_ty()));
                     self.cfg.assign(out, Rvalue::Ref(true, Place::local(dest)));
@@ -1066,9 +1081,9 @@ impl Builder<'_> {
                         Operand::Move(Place::local(piece)),
                         Operand::Const(Const::Char(spec.fill.unwrap_or(' '))),
                         Operand::Const(Const::Int(align)),
-                        Operand::Const(Const::Int(spec.width.map_or(0, i64::from))),
+                        width,
                         Operand::Const(Const::Bool(spec.zero)),
-                        Operand::Const(Const::Int(keep)),
+                        keep,
                     ];
                     let padded = self.string_method("push_padded");
                     self.call_into(None, padded, Place::local(unit), args, range);

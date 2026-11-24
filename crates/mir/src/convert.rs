@@ -40,3 +40,10 @@ pub fn num_text(n: Num, bits: u128) -> String {
 pub fn fixed_text(n: Num, bits: u128, digits: usize) -> String {
     moddil_rt::num::fixed_text(n == Num::F32, bits as u64, digits)
 }
+
+/// A float's text in exponent form (`expr.fmt.spec.5`), as `moddil-rt`'s `exp_text` writes it:
+/// `digits` after the point, or as many as it needs if negative.
+pub fn exp_text(n: Num, bits: u128, digits: i64, upper: bool) -> String {
+    let digits = usize::try_from(digits).ok();
+    moddil_rt::num::exp_text(n == Num::F32, bits as u64, digits, upper)
+}

@@ -39,3 +39,11 @@ fn a_prefix_needs_a_base(n: int) -> String {
 fn one_type_only(n: int) -> String {
     fmt"{n:x?}"                             //~ E0902
 }
+
+fn an_exponent_is_for_floats(n: int) -> String {
+    fmt"{n:e}"                              //~ E0902
+}
+
+fn a_named_width_is_an_int(f: f64, w: bool) -> String {
+    fmt"{f:w$}"                             //~ E0201
+}

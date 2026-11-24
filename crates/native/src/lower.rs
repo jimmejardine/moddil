@@ -5679,7 +5679,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             }
             (Ty::Int | Ty::Num(_) | Ty::Bool | Ty::Char, "text")
             | (Ty::Char, "quoted_text")
-            | (Ty::Num(Num::F32 | Num::F64), "fixed_text") => {
+            | (Ty::Num(Num::F32 | Num::F64), "fixed_text" | "exp_text") => {
                 self.display_text(&self_ty, name, args)?
             }
             (Ty::Str, _) => self.str_intrinsic(name, args, d, range)?,
@@ -6072,12 +6072,22 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             (Ty::Char, _) => 101,
             (Ty::Num(Num::F32), "fixed_text") => 107,
             (Ty::Num(Num::F64), "fixed_text") => 108,
+            (Ty::Num(Num::F32), "exp_text") => 109,
+            (Ty::Num(Num::F64), "exp_text") => 110,
             (t, _) => Self::num_code(t).ok_or("text of something not a number")?,
         };
         let (lo, mut hi) = self.number_words(x, &inner);
-        // A float's fixed digits travel where a wide number's high word would.
+        // A float's fixed digits travel where a wide number's high word would; for its
+        // exponent form, `(digits + 1) * 2 + upper`.
         if name == "fixed_text" {
             hi = self.value(&args[1])?;
+        } else if name == "exp_text" {
+            let digits = self.value(&args[1])?;
+            let upper = self.value(&args[2])?;
+            let d = self.b.ins().iadd_imm_s(digits, 1);
+            let d = self.b.ins().ishl_imm_u(d, 1);
+            let u = self.b.ins().uextend(types::I64, upper);
+            hi = self.b.ins().bor(d, u);
         }
         let ptr = self.ptr();
         let null = self.b.ins().iconst(ptr, 0);

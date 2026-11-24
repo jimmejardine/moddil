@@ -105,7 +105,9 @@ impl<'a> Natives<'a> {
                 }
             }
             // The float functions (`num.float.fn.1`).
-            (Ty::Num(n), _) if n.is_float() && name != "text" && name != "fixed_text" => {
+            (Ty::Num(n), _)
+                if n.is_float() && !matches!(name, "text" | "fixed_text" | "exp_text") =>
+            {
                 let x = |i: usize| match args.get(i).map(|a| stack.deref(a)) {
                     Some(Value::Num(_, bits)) => crate::num::float(*n, bits),
                     _ => 0.0,

@@ -677,6 +677,11 @@ impl f32 {
     #[intrinsic]
     fn fixed_text(&self, digits: int) -> &str;
 
+    // The value in exponent form, `1.2345e3`, with `digits` digits after the point (all it needs
+    // for -1), the `e` upper-case for `upper` (`{x:e}`, `expr.fmt.spec.5`).
+    #[intrinsic]
+    fn exp_text(&self, digits: int, upper: bool) -> &str;
+
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
     #[intrinsic]
@@ -700,6 +705,11 @@ impl f64 {
     // `expr.fmt.spec.3`).
     #[intrinsic]
     fn fixed_text(&self, digits: int) -> &str;
+
+    // The value in exponent form, `1.2345e3`, with `digits` digits after the point (all it needs
+    // for -1), the `e` upper-case for `upper` (`{x:e}`, `expr.fmt.spec.5`).
+    #[intrinsic]
+    fn exp_text(&self, digits: int, upper: bool) -> &str;
 
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).

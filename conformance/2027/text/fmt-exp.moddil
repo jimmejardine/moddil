@@ -1,0 +1,21 @@
+// covers: expr.fmt.spec.5, expr.fmt.spec.6
+// Each value is typed where it is bound: the reference interpreter types a literal by its own
+// context only.
+
+test "e and E write a float in exponent form" {
+    let f: f64 = 1234.5;
+    let g: f32 = 0.00012;
+    fmt"{f:e} {f:E} {g:e}"                  // => "1.2345e3 1.2345E3 1.2e-4"
+    ;
+    fmt"{f:.2e} [{f:>10e}]"                 // => "1.23e3 [  1.2345e3]"
+}
+
+test "a width and a precision named in the hole's scope" {
+    let f: f64 = 1234.5;
+    let w = 9;
+    let p = 2;
+    fmt"[{f:w$}] [{f:w$.p$}] [{f:.p$e}]"    // => "[   1234.5] [  1234.50] [1.23e3]"
+    ;
+    let s = "abcdef";
+    fmt"[{s:.p$}] [{s:>w$}]"                // => "[ab] [   abcdef]"
+}
