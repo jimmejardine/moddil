@@ -223,6 +223,10 @@ pub(crate) fn link_extension(
             // Python's symbols are the interpreter's, found when it loads the module.
             cmd.args(["-undefined", "dynamic_lookup"]);
         }
+        // The glue is a static library and nothing refers to its `PyInit_name`, so without
+        // `-u` the linker would leave it out (Windows has `/EXPORT` for this).
+        let init = format!("{}PyInit_{name}", if mac { "_" } else { "" });
+        cmd.arg(format!("-Wl,-u,{init}"));
         cmd.arg(&obj).arg(glue).arg(&lib).arg("-o").arg(out);
         if mac {
             cmd.args(["-lSystem", "-lobjc", "-lc", "-lm"]);

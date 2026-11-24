@@ -72,6 +72,8 @@ pub(crate) fn platform() -> String {
             format!("win_{arch}")
         }
     } else if cfg!(target_os = "macos") {
+        // macOS's tags say `arm64` where Rust says `aarch64`.
+        let arch = if arch == "aarch64" { "arm64" } else { arch };
         format!("macosx_11_0_{arch}")
     } else {
         format!("linux_{arch}")
