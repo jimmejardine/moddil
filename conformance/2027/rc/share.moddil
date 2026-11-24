@@ -19,7 +19,7 @@ test "to_rc moves a value into an rc, and share counts another owner" {
 test "every owner reads the same value" {
     let a = Node { name: "leaf".to_string(), size: 7 }.to_rc();
     let b = a.share();
-    (*b).size + (*a).name.len()                 // => 11
+    b.size + a.name.len()                       // => 11
 }
 
 test "ptr_eq tells shared values from equal ones" {

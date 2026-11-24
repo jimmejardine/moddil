@@ -538,7 +538,7 @@ impl Checker<'_> {
 impl Checker<'_> {
     /// For a receiver of type `r` (or a borrow of one) that implements `Deref`: that type, and
     /// what it dereferences to.
-    fn deref_target(&mut self, r: &Ty) -> Option<(Ty, Ty)> {
+    pub(super) fn deref_target(&mut self, r: &Ty) -> Option<(Ty, Ty)> {
         let base = self.norm(r.strip_ref());
         if !matches!(base, Ty::Adt(..)) {
             return None;

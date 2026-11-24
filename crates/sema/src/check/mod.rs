@@ -119,6 +119,9 @@ pub struct Inference {
     /// For a method call through `Deref` (`expr.method.deref.1`): the `deref` or `deref_mut`
     /// that gives its receiver.
     method_derefs: HashMap<ExprId, Callee>,
+    /// For a field reached through `Deref` (`expr.field.deref.1`): the `deref` or `deref_mut`
+    /// that gives the struct, and the struct's type.
+    field_through: HashMap<ExprId, (Callee, Ty)>,
     literal_calls: HashMap<ExprId, Callee>,
     refined_literals: Vec<(ExprId, u32)>,
     adjusts: HashMap<ExprId, Adjust>,
@@ -257,6 +260,12 @@ impl Inference {
         self.method_derefs.get(&e)
     }
 
+    /// For a field expression whose struct is reached through `Deref` (`expr.field.deref.1`):
+    /// the `deref` (or `deref_mut`) that gives it, and its type.
+    pub fn field_deref(&self, e: ExprId) -> Option<&(Callee, Ty)> {
+        self.field_through.get(&e)
+    }
+
     /// Whether call `e`, of a closure parameter and not marked, passes its errors on as `?`
     /// would.
     pub fn passes_on(&self, e: ExprId) -> bool {
@@ -280,6 +289,7 @@ impl Inference {
             .chain(out.local_types.iter_mut())
             .chain(out.try_errors.values_mut())
             .chain(out.dyn_coercions.values_mut())
+            .chain(out.field_through.values_mut().map(|(_, t)| t))
         {
             *t = f(t);
         }
@@ -290,6 +300,7 @@ impl Inference {
             .chain(out.fmt_calls.values_mut())
             .chain(out.index_calls.values_mut())
             .chain(out.method_derefs.values_mut())
+            .chain(out.field_through.values_mut().map(|(c, _)| c))
             .chain(out.literal_calls.values_mut())
         {
             *c = c.map(f);

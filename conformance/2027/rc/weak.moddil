@@ -33,12 +33,12 @@ struct TreeNode { value: int, parent: Option<Weak<TreeNode>> }
 test "a back-edge is weak" {
     let root = TreeNode { value: 1, parent: None }.to_rc();
     let child = TreeNode { value: 2, parent: Some(root.weak()) }.to_rc();
-    let up = match &(*child).parent {
+    let up = match &child.parent {
         Some(p) => match p.upgrade() {
-            Some(r) => (*r).value,
+            Some(r) => r.value,
             None => 0,
         },
         None => 0,
     };
-    up + (*child).value                         // => 3
+    up + child.value                            // => 3
 }

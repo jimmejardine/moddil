@@ -9,7 +9,7 @@ written in Moddil over a raw pointer ([source](prelude.moddil)). Added after M3 
 `Rc<T>`, its first owner. `rc.share()` gives another owner of the same value, adding one to the
 count, and copies nothing. Borrowing an `Rc` (`&Rc<T>`) touches no count. Dereferencing one, `*rc`,
 names the value, and a method of the value is called on the `Rc` as on the value
-(**expr.method.deref.1**); a field is reached through `*`, as `(*rc).name`. `Rc::strong_count(&rc)`
+(**expr.method.deref.1**), and so is a field, `rc.name` (**expr.field.deref.1**). `Rc::strong_count(&rc)`
 is how many owners the value has, and `Rc::ptr_eq(&a, &b)` whether two `Rc`s own the same value:
 the only test of identity, as `==` compares the values. An `Rc` compares, orders, hashes and shows
 as its value (`PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash`, `Debug`), where the value does.
@@ -32,7 +32,7 @@ allocation goes with the last owner or `Weak`, whichever is later. `Rc`s that ow
 cycle are never dropped: nothing collects them. Only one task runs at a time
 (**task.sched.1**), so the counts are plain numbers.
 
-Not yet: `Rc<dyn Trait>`, field access through an `Rc` without `*`, and the biased counts and
+Not yet: `Rc<dyn Trait>`, and the biased counts and
 `AtomicRc` of [`specs/memory.md`](../../specs/memory.md) for parallel runtimes.
 
 ## Diagnostics

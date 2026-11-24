@@ -863,8 +863,10 @@ impl Walk<'_, '_> {
             }
             ExprKind::Field { base, .. } => {
                 let ft = &self.cx.out.expr_types[index(e)];
+                // Through `Deref`, the base is borrowed (`expr.field.deref.1`).
+                let through = self.cx.out.field_through.contains_key(&e);
                 let inner = match u {
-                    Use::Value if !self.is_copy(ft) => Use::Value,
+                    Use::Value if !through && !self.is_copy(ft) => Use::Value,
                     Use::Write => Use::Write,
                     _ => Use::Read,
                 };

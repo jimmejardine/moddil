@@ -479,7 +479,8 @@ something runs from the first slice.
     - a `Box<dyn Fn>` is called through its box (`f(x)`, `(**f)(x)`), not as a `&dyn Fn`
       parameter;
     - field access and method calls do not look through a `Box` (`(*b).x`; method calls do
-      since the tour's questions were decided, field access still does not);
+      since the tour's questions were decided, field access since November 2026,
+      `expr.field.deref.1`);
     - a `for` loop over an iterator that can fail with known errors is E0501 (use
       `while let Some(x) = it.next()? { … }`), since how `for` marks one is not decided;
     - the reference interpreter takes `?` on a call of a function whose signature lists `fail`
@@ -549,7 +550,8 @@ something runs from the first slice.
       before its imports, so `use mod::m::{self}` in the root resolves;
     - method calls through `Deref` (`expr.method.deref.1`), so `Mutex::lock()` gives a
       `Guard<T>` in the stubs.
-  - **Interim limit:** field access does not look through `Deref`.
+  - **Interim limit:** field access does not look through `Deref`. Done since (November 2026):
+    `b.x` and `rc.name` reach the field (`expr.field.deref.1`).
 - **The path root becomes `mod` (decided, [`modules.md`: Imports](modules.md#imports)): done
   after S7a (November 2026).** In types, `mod` only starts a path (`mod::T`), so `pub(mod)` and a
   parenthesised type differ at their third token. S6 shipped Rust's `crate::`; Moddil has mods, so `use crate::a`
@@ -1099,7 +1101,6 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
   - **The reference interpreter** runs an impl for every type (`impl<T> ToRc for T`).
   - **Not yet:**
     - `Rc<dyn Trait>`: coercing to `dyn` is built for `Box` only;
-    - reaching a field through an `Rc`, or a `Box`, without `*`: `(*rc).name`;
     - biased counting, `AtomicRc`, and the cycle detector, which wait for a parallel runtime.
 - **Slice M2e (decided November 2026): the first GPU path, Mandelbulb flight in a browser.**
   `moddil build --wasm examples/mandelbulb/web` writes a page that flies through the fractal: the

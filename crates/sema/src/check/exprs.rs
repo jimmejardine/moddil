@@ -509,6 +509,40 @@ impl Checker<'_> {
                     );
                 }
             }
+            // A field changed through `DerefMut` (`expr.field.deref.1`): a `Box`'s, not an
+            // `Rc`'s.
+            ExprKind::Field { base, .. } if self.out.field_through.contains_key(&e) => {
+                let (callee, target) = self.out.field_through[&e].clone();
+                let bt = callee.args()[0].clone();
+                if let Some((tr, func)) = self.op_trait("DerefMut", "deref_mut") {
+                    if self.solver.implements(&bt, &tr) == crate::traits::Answer::No {
+                        let s = self.show(&bt);
+                        self.report(
+                            Code::E0205,
+                            range,
+                            format!(
+                                "a field of `{s}`'s value cannot be {what}: `{s}` does not                                  implement `DerefMut`"
+                            ),
+                        );
+                        return;
+                    }
+                    self.require(bt.clone(), tr, range);
+                    let callee = Callee::Trait {
+                        func,
+                        args: vec![bt],
+                    };
+                    self.out.field_through.insert(e, (callee, target));
+                }
+                if !self.out.field_derefs.contains(&e) {
+                    self.check_mutable(base, what);
+                } else if let Ty::Ref(false, _) = self.norm(&self.out.expr(base)) {
+                    self.report(
+                        Code::E0302,
+                        range,
+                        format!("this is behind a shared borrow (`&`), so it cannot be {what}"),
+                    );
+                }
+            }
             // Part of a `Vec` changed: through its `as_mut_slice` (`expr.slice.1`).
             ExprKind::Slice { base, .. } if self.out.index_calls.contains_key(&e) => {
                 let bt = self.out.expr(base);
@@ -768,21 +802,27 @@ impl Checker<'_> {
             self.out.field_derefs.insert(e);
             bt = self.norm(inner);
         }
-        let found = match &bt {
+        let mut found = match &bt {
             Ty::Error => return Ty::Error,
             Ty::Infer(_) => return self.unknown(self.range(base), "to read a field of it"),
-            Ty::Tuple(ts) => name
-                .parse::<usize>()
-                .ok()
-                .filter(|&i| i < ts.len())
-                .map(|i| (i as u32, ts[i].clone())),
-            Ty::Adt(a, ..) if !self.items.adts[*a as usize].is_enum => {
-                let def = self.items.variant(*a, 0);
-                def.field(name)
-                    .map(|i| (i, self.items.field_types(&bt, 0)[i as usize].clone()))
-            }
-            _ => None,
+            _ => self.field_of(&bt, name),
         };
+        // A field of what the base dereferences to, through `Deref`, if it has none of its own
+        // (`expr.field.deref.1`): a `Box`'s or an `Rc`'s value.
+        if found.is_none()
+            && let Some((through, target)) = self.deref_target(&bt)
+            && let Some(f) = self.field_of(&target, name)
+            && let Some((trait_ref, func)) = self.op_trait("Deref", "deref")
+        {
+            self.require(through.clone(), trait_ref, self.range(base));
+            let callee = Callee::Trait {
+                func,
+                args: vec![through],
+            };
+            self.out.field_through.insert(e, (callee, target.clone()));
+            bt = target;
+            found = Some(f);
+        }
         match found {
             Some((i, t)) => {
                 if let Ty::Adt(a, ..) = &bt {
@@ -804,6 +844,23 @@ impl Checker<'_> {
                 );
                 Ty::Error
             }
+        }
+    }
+
+    /// Field `name` of a struct or tuple of type `t`: its index and type.
+    fn field_of(&self, t: &Ty, name: &str) -> Option<(u32, Ty)> {
+        match t {
+            Ty::Tuple(ts) => name
+                .parse::<usize>()
+                .ok()
+                .filter(|&i| i < ts.len())
+                .map(|i| (i as u32, ts[i].clone())),
+            Ty::Adt(a, ..) if !self.items.adts[*a as usize].is_enum => {
+                let def = self.items.variant(*a, 0);
+                def.field(name)
+                    .map(|i| (i, self.items.field_types(t, 0)[i as usize].clone()))
+            }
+            _ => None,
         }
     }
 

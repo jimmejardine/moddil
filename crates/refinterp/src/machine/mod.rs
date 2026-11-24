@@ -227,6 +227,21 @@ impl Machine<'_> {
                     p = target;
                     indirect = true;
                 }
+                // A field of what the base dereferences to, if it has none of its own
+                // (`expr.field.deref.1`).
+                if let ast::Expr::Field(_) = e
+                    && let Value::Adt { ty, variant, .. } = self.memory.load(&p)
+                    && !self
+                        .program
+                        .variant(&ty, &variant)
+                        .fields
+                        .contains(&member_name(e.syntax()))
+                {
+                    p = self
+                        .deref_place(p, e.syntax().text_range())?
+                        .expect("a checked field through `Deref`");
+                    indirect = true;
+                }
                 let i = match e {
                     // `x.[f]`: the field `f` names (`comptime.template.field.1`).
                     ast::Expr::ReflectedField(_) => {
@@ -315,22 +330,9 @@ impl Machine<'_> {
                 match self.memory.load(&p) {
                     Value::Ref(target, _) => Some((target, true)),
                     // Through `Deref` (`type.box.1`): the value its borrow points to.
-                    v => {
-                        let head = v.head();
-                        let m = self
-                            .program
-                            .trait_method("Deref", &head, "deref")
-                            .expect("a checked dereference");
-                        let r = self.run_method(
-                            m,
-                            &head,
-                            vec![Value::Ref(p, false)],
-                            e.syntax().text_range(),
-                        )?;
-                        let Value::Ref(q, _) = r else {
-                            unreachable!("a borrow of the value")
-                        };
-                        Some((q, true))
+                    _ => {
+                        let q = self.deref_place(p, e.syntax().text_range())?;
+                        Some((q.expect("a checked dereference"), true))
                     }
                 }
             }
@@ -395,19 +397,27 @@ impl Machine<'_> {
                 Value::Ref(q, _) => p = q,
                 // It runs with the handlers where it was written (`expr.closure.effects.1`).
                 Value::Closure(c) => return Ok(Some(c)),
-                v @ Value::Adt { .. } => {
-                    let head = v.head();
-                    let Some(m) = self.program.trait_method("Deref", &head, "deref") else {
-                        return Ok(None);
-                    };
-                    match self.run_method(m, &head, vec![Value::Ref(p, false)], range)? {
-                        Value::Ref(q, _) => p = q,
-                        _ => return Ok(None),
-                    }
-                }
+                Value::Adt { .. } => match self.deref_place(p, range)? {
+                    Some(q) => p = q,
+                    None => return Ok(None),
+                },
                 _ => return Ok(None),
             }
         }
+    }
+
+    /// Where what the value at `p` dereferences to is, through its `Deref`, if it has one.
+    pub(super) fn deref_place(&mut self, p: Pointer, range: TextRange) -> Eval<Option<Pointer>> {
+        let head = self.memory.load(&p).head();
+        let Some(m) = self.program.trait_method("Deref", &head, "deref") else {
+            return Ok(None);
+        };
+        Ok(
+            match self.run_method(m, &head, vec![Value::Ref(p, false)], range)? {
+                Value::Ref(q, _) => Some(q),
+                _ => None,
+            },
+        )
     }
 
     /// Where the place `e` is; any other expression is evaluated into a nameless variable, so

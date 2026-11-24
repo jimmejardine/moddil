@@ -1188,12 +1188,7 @@ impl Machine<'_> {
             from = steps.len();
             let (p, v, _) = steps.last().cloned().expect("a receiver");
             let Value::Adt { .. } = &v else { break };
-            let head = v.head();
-            let Some(m) = self.program.trait_method("Deref", &head, "deref") else {
-                break;
-            };
-            let Value::Ref(q, _) = self.run_method(m, &head, vec![Value::Ref(p, false)], range)?
-            else {
+            let Some(q) = self.deref_place(p, range)? else {
                 break;
             };
             let mut at = self.memory.load(&q);
