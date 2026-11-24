@@ -2,6 +2,7 @@
 //! and the text types' in [`text`].
 
 mod buf;
+mod cptr;
 mod text;
 
 use moddil_mir::TrapClass;
@@ -72,6 +73,12 @@ impl<'a> Natives<'a> {
             _ => Ty::Unit,
         };
         let name = sig.name.as_str();
+        // Raw pointers and C's memory (`core.ptr.2`, `ffi.core.2`).
+        if sig.src == Src::Prelude
+            && let Some(r) = self.c_native(sig.module, name, args, type_args, stack)
+        {
+            return r;
+        }
         Ok(match (&self_ty, name) {
             (Ty::Buf(_), _) => return self.buf(name, args, stack),
             // A byte of the text (`text.string.inline.1`).

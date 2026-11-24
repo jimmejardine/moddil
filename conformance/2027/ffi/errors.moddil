@@ -1,4 +1,4 @@
-// covers: ffi.extern.1, ffi.native.1, ffi.core.1, ffi.python.1
+// covers: ffi.extern.1, ffi.native.1, ffi.core.1, ffi.python.1, type.fnptr.1
 
 // A single file has no capabilities, so it declares no C functions.
 extern "C" {
@@ -12,6 +12,29 @@ extern "Rust" {                             //~ E0222
 // `core::ffi` needs the `unsafe` capability too.
 fn pointer() -> *const u8 {
     core::ffi::text_ptr("x")                //~ E0219
+}
+
+// A `fn` type is a C function pointer: C's scalar types only.
+fn takes(f: fn(&str) -> int) {}             //~ E0222
+
+// What is given as one is a free function, not generic, of its signature, that cannot fail.
+struct Oops {}
+
+fn may_fail(x: i32) -> i32 with fail(Oops) {
+    x
+}
+
+fn wider(x: int) -> i32 {
+    0
+}
+
+fn run(f: fn(i32) -> i32) -> i32 {
+    0
+}
+
+fn given() -> i32 {
+    run(may_fail);                          //~ E0222
+    run(wider)                              //~ E0222
 }
 
 // `#[export]` is for C, `#[export(python)]` for Python.

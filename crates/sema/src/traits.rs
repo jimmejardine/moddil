@@ -335,6 +335,11 @@ impl<'a> Solver<'a> {
                 m == n && self.unify(x, y)
             }
             (Ty::Array(x, n), Ty::Array(y, k)) => self.unify(x, y) && self.unify(n, k),
+            (Ty::FnPtr(xs, r), Ty::FnPtr(ys, s)) => {
+                xs.len() == ys.len()
+                    && xs.iter().zip(ys.iter()).all(|(x, y)| self.unify(x, y))
+                    && self.unify(r, s)
+            }
             (Ty::Slice(x), Ty::Slice(y)) | (Ty::Buf(x), Ty::Buf(y)) => self.unify(x, y),
             (Ty::Anon(x), Ty::Anon(y)) => x.owner == y.owner && x.expr == y.expr,
             (Ty::Opaque(x), Ty::Opaque(y)) => {
@@ -505,7 +510,9 @@ impl<'a> Solver<'a> {
         }
         if self.is_lang(tr, "Copy") || self.is_lang(tr, "Clone") {
             match &ty {
-                Ty::Ref(false, _) | Ty::Ptr(..) => return Answer::Yes(Source::Builtin),
+                Ty::Ref(false, _) | Ty::Ptr(..) | Ty::FnPtr(..) => {
+                    return Answer::Yes(Source::Builtin);
+                }
                 Ty::Ref(true, _) => return Answer::No,
                 // A tuple is `Copy` and `Clone` if its elements are `Copy`; it is then cloned by
                 // copying it.
@@ -705,6 +712,7 @@ impl<'a> Solver<'a> {
             | Ty::Error
             | Ty::Ref(..)
             | Ty::Ptr(..)
+            | Ty::FnPtr(..)
             | Ty::Char
             | Ty::Str
             | Ty::Len(_) => false,

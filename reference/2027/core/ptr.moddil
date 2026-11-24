@@ -5,3 +5,32 @@
 // is sound only if nothing else reads or borrows the value meanwhile.
 #[intrinsic]
 pub fn cast_mut<T>(p: *const T) -> *mut T;
+
+// A pointer to nothing (`core.ptr.2`): C's `NULL`. Reading through it is never sound.
+#[intrinsic]
+pub fn null<T>() -> *const T;
+
+// A pointer to nothing, as one to change through.
+#[intrinsic]
+pub fn null_mut<T>() -> *mut T;
+
+// Whether `p` points to nothing.
+#[intrinsic]
+pub fn is_null<T>(p: *const T) -> bool;
+
+// The pointer `n` values of type `T` after `p` (before it, if `n` is negative), as C's `p + n`.
+// It is sound to read through only if the values from `p` to it are one array.
+#[intrinsic]
+pub fn add<T>(p: *const T, n: int) -> *const T;
+
+// The pointer `n` values after `p`, to change through.
+#[intrinsic]
+pub fn add_mut<T>(p: *mut T, n: int) -> *mut T;
+
+// The same address, as a pointer to a `U`: as C's cast. A `*const ()` is C's `const void *`.
+#[intrinsic]
+pub fn cast<T, U>(p: *const T) -> *const U;
+
+// The same address, as a pointer to a `U` to change through.
+#[intrinsic]
+pub fn cast_mut_to<T, U>(p: *mut T) -> *mut U;

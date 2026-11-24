@@ -95,7 +95,8 @@ impl Cfg {
             | Rvalue::Ref(..)
             | Rvalue::Len(_)
             | Rvalue::Length(_)
-            | Rvalue::StaticRef(_) => false,
+            | Rvalue::StaticRef(_)
+            | Rvalue::FnPtr(_) => false,
         };
         self.body.blocks.iter().enumerate().any(|(i, b)| {
             let (from, terminated) = mark.get(i).copied().unwrap_or((0, false));

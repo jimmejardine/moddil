@@ -571,7 +571,7 @@ impl<'a> Checker<'a> {
                         flowing = self.flows(o, h);
                         self.operand(at, span, o, h, m, check);
                     }
-                    Rvalue::Length(_) | Rvalue::StaticRef(_) => {}
+                    Rvalue::Length(_) | Rvalue::StaticRef(_) | Rvalue::FnPtr(_) => {}
                     Rvalue::SpanOk(a, b, p) => {
                         self.operand(at, span, a, h, m, check);
                         self.operand(at, span, b, h, m, check);
@@ -908,7 +908,7 @@ fn rvalue_uses(r: &Rvalue, local: Local) -> bool {
         | Rvalue::Unary(_, a)
         | Rvalue::NegOverflows(a)
         | Rvalue::Repeat(a, _) => uses(a),
-        Rvalue::Length(_) | Rvalue::StaticRef(_) => false,
+        Rvalue::Length(_) | Rvalue::StaticRef(_) | Rvalue::FnPtr(_) => false,
         Rvalue::InBounds(a, p) => uses(a) || p.local == local,
         Rvalue::SpanOk(a, b, p) => uses(a) || uses(b) || p.local == local,
         Rvalue::Binary(_, a, b) | Rvalue::Overflows(_, a, b) => uses(a) || uses(b),
@@ -940,7 +940,7 @@ fn uses_defs(stmt: Option<&Statement>, term: Option<&Terminator>) -> (Vec<Local>
                     | Rvalue::Repeat(a, _) => {
                         op(a, &mut uses);
                     }
-                    Rvalue::Length(_) | Rvalue::StaticRef(_) => {}
+                    Rvalue::Length(_) | Rvalue::StaticRef(_) | Rvalue::FnPtr(_) => {}
                     Rvalue::InBounds(a, p) => {
                         op(a, &mut uses);
                         uses.push(p.local);

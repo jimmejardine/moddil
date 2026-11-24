@@ -48,8 +48,12 @@ pub enum Value {
     Borrowed(Box<Value>, bool),
     /// Nothing: a place not assigned yet, or moved out of.
     Empty,
-    /// A pointer C gave (`ffi.extern.1`): its address, kept as it is and passed back to C.
+    /// A pointer C gave (`ffi.extern.1`): its address, kept as it is and passed back to C. What
+    /// it points to is read and written there (`ffi.native.2`).
     Foreign(u64),
+    /// A Moddil function as a C function pointer (`type.fnptr.1`): it crosses to C as a
+    /// callback.
+    FnPtr(u32),
 }
 
 /// Where a borrow points: a local of a frame of a task, and a path of field indices into it.
@@ -84,6 +88,7 @@ impl Value {
             Value::Unit => "()".to_string(),
             // A C pointer: its address, which differs from run to run.
             Value::Foreign(a) => format!("{a:#x}"),
+            Value::FnPtr(f) => format!("fn#{f}"),
             Value::Char(c) => format!("{c:?}"),
             Value::Str(s) => format!("{:?}", &**s),
             Value::Array(xs) | Value::Buf(_, xs) => {

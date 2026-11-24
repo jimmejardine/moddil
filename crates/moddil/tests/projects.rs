@@ -105,6 +105,7 @@ macro_rules! c_projects {
 }
 
 c_projects! {
+    cabi => "examples/cabi",
     zlib => "examples/zlib",
 }
 
@@ -121,7 +122,6 @@ projects! {
     sim => "mods/sim/tests",
     sync => "mods/sync/tests",
     time => "mods/time/tests",
-    cabi => "examples/cabi",
     mandelbulb => "examples/mandelbulb",
     mandelbulb_web => "examples/mandelbulb/web",
     python => "examples/python",

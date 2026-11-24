@@ -1,4 +1,5 @@
 // covers: ffi.extern.1, ffi.types.1, ffi.repr.1, ffi.export.1, ffi.c.1, ffi.export.2, ffi.python.2
+// covers: ffi.types.2, ffi.core.2, ffi.native.2, type.fnptr.1, core.ptr.2
 // native
 
 extern "C" {
@@ -7,6 +8,107 @@ extern "C" {
     fn fabs(x: f64) -> f64;
     fn strlen(s: *const u8) -> u64;
     fn memcpy(dst: *mut u8, src: *const Pair, n: u64) -> *mut u8;
+    fn qsort(base: *mut (), n: u64, size: u64, cmp: fn(*const (), *const ()) -> i32);
+    fn bsearch(
+        key: *const (),
+        base: *const (),
+        n: u64,
+        size: u64,
+        cmp: fn(*const (), *const ()) -> i32,
+    ) -> *const ();
+    fn div(numer: i32, denom: i32) -> Div;
+    fn lldiv(numer: int, denom: int) -> LongDiv;
+    fn getenv(name: *const u8) -> *const u8;
+    fn strerror(code: i32) -> *const u8;
+}
+
+/// C's `div_t`: 8 bytes, given back in a register.
+#[repr(C)]
+pub struct Div {
+    pub quot: i32,
+    pub rem: i32,
+}
+
+/// C's `lldiv_t`: 16 bytes, in two registers or through a hidden pointer.
+#[repr(C)]
+pub struct LongDiv {
+    pub quot: int,
+    pub rem: int,
+}
+
+/// A comparator for `qsort` and `bsearch`, which C calls with pointers to two `i32`s.
+fn by_value(a: *const (), b: *const ()) -> i32 {
+    unsafe("qsort and bsearch pass pointers to two of the `i32`s") {
+        let x: *const i32 = core::ptr::cast(a);
+        let y: *const i32 = core::ptr::cast(b);
+        if *x < *y {
+            -1
+        } else if *x > *y {
+            1
+        } else {
+            0
+        }
+    }
+}
+
+test "C calls a Moddil function back" {
+    let mut xs: [i32; 6] = [5, 1, 4, 2, 6, 3];
+    let key: i32 = 4;
+    let missing: i32 = 9;
+    unsafe("qsort sorts the six `i32`s in place; bsearch looks through them") {
+        qsort(core::ptr::cast_mut_to(&mut xs[0]), 6, 4, by_value);
+        let found = bsearch(core::ptr::cast(&key), core::ptr::cast(&xs[0]), 6, 4, by_value);
+        let lost = bsearch(core::ptr::cast(&missing), core::ptr::cast(&xs[0]), 6, 4, by_value);
+        core::ptr::is_null(found)           // => false
+        ;
+        core::ptr::is_null(lost)            // => true
+        ;
+    }
+    xs                                      // => [1, 2, 3, 4, 5, 6]
+}
+
+test "structs come back from C by value" {
+    let d = unsafe("div of two `int`s") { div(17, 5) };
+    d.quot                                  // => 3
+    ;
+    d.rem                                   // => 2
+    ;
+    let l = unsafe("lldiv of two `long long`s") { lldiv(-17, 5) };
+    l.quot                                  // => -3
+    ;
+    l.rem                                   // => -2
+}
+
+test "pointers walk an array, and null points to nothing" {
+    let xs: [i32; 4] = [10, 20, 30, 40];
+    let p: *const i32 = &xs[0];
+    unsafe("`p` and the two values after it are in `xs`") {
+        *core::ptr::add(p, 2)               // => 30
+        ;
+    }
+    core::ptr::is_null(p)                   // => false
+    ;
+    let none: *const i32 = core::ptr::null();
+    core::ptr::is_null(none)                // => true
+}
+
+test "C strings, both ways" {
+    let name = core::ffi::c_string("PATH");
+    name.len()                              // => 5
+    ;
+    let at = core::ffi::ptr_of(name.as_slice());
+    core::ffi::c_len(at)                    // => 4
+    ;
+    unsafe("getenv and strerror give NUL-terminated strings, and PATH is set") {
+        let path = getenv(at);
+        core::ptr::is_null(path)            // => false
+        ;
+        core::ffi::c_len(path) > 0          // => true
+        ;
+        let why = core::ffi::c_text(strerror(2));
+        why.len() > 0                       // => true
+        ;
+    }
 }
 
 /// C's layout: `a` at 0, then seven bytes of padding, then `b` at 8.

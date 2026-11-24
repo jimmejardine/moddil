@@ -9,8 +9,8 @@ against ([`specs/examples/README.md`](../specs/examples/README.md)).
 | Directory | Example | Milestone |
 |---|---|---|
 | `mandelbulb/` | Showcase: fly through the Mandelbulb, ray-marched on WebGPU; the first to be built | M2 |
-| [`zlib/`](zlib/src/lib.moddil) | C from Moddil: zlib (vendored) behind a typed API, through `extern "C"` | M3a |
-| [`cabi/`](cabi/src/lib.moddil) | Moddil from C: `#[export]` functions, a `#[repr(C)]` struct, the generated header | M3a |
+| [`zlib/`](zlib/src/lib.moddil) | C from Moddil: zlib (vendored) behind a typed API, through `extern "C"`; its strings, its CRC table, and `inflateBack` calling Moddil back | M3a, M3c |
+| [`cabi/`](cabi/src/lib.moddil) | Moddil from C: `#[export]` functions, `#[repr(C)]` structs by pointer and by value, the generated header; C called with the same structs, and calling back | M3a, M3c |
 | [`python/`](python/src/lib.moddil) | A Python module in Moddil: `#[export(python)]` functions and a class, built as a wheel | M3b |
 | `hashiverse/` | Hashiverse client: CLI/native first, then the browser | M3, M5 |
 | `web-store/` | Web store API with `sql`, HTTP and deterministic simulation | M4 |

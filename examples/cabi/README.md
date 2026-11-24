@@ -2,8 +2,10 @@
 
 C calling Moddil: a Moddil library whose `#[export]` functions are built into an ordinary shared
 library with a generated C header, and a C program, [`c/main.c`](c/main.c), that calls them. It is
-the example for **exporting to C** ([`reference/2027/interop.md`](../../reference/2027/interop.md)).
-For the other direction, Moddil calling a C library, see [`../zlib`](../zlib/README.md).
+the example for **exporting to C** ([`reference/2027/interop.md`](../../reference/2027/interop.md)),
+and for structs by value in both directions: the library calls C too,
+[`c/shapes.c`](c/shapes.c), and hands it Moddil functions to call back. For a whole C library
+called from Moddil, see [`../zlib`](../zlib/README.md).
 
 ## Build it and call it from C
 
@@ -40,10 +42,11 @@ On Windows the DLL is found beside the program. The program prints
 `C called Moddil: every result is right` and exits with 0, or exits with the number of the first
 result that was wrong.
 
-The Moddil side tests on its own, too, everywhere, because it calls no C:
+The Moddil side tests on its own too. It calls `c/shapes.c`, compiled with it, so natively and
+on the MIR interpreter, not as WASM:
 
 ```
-moddil test examples/cabi            # natively; --interp and --wasm as well
+moddil test examples/cabi            # natively; --interp as well
 ```
 
 ## What crosses
@@ -54,13 +57,18 @@ moddil test examples/cabi            # natively; --interp and --wasm as well
 | `moddil_is_even(n: u8) -> bool` | `bool moddil_is_even(uint8_t n);` | sized integers and `bool` |
 | `moddil_distance(a: *const Point, b: *const Point) -> f64` | `double moddil_distance(const Point *a, const Point *b);` | a struct read through `const` pointers |
 | `moddil_scale(p: *mut Point, k: f64)` | `void moddil_scale(Point *p, double k);` | a struct changed in place; `()` is `void` |
+| `moddil_midpoint(a: Point, b: Point) -> Point` | `Point moddil_midpoint(Point a, Point b);` | structs by value: two doubles |
+| `moddil_swap(p: Pair) -> Pair`, `moddil_bump(m: Mixed) -> Mixed`, `moddil_rotate(t: Triple) -> Triple`, `moddil_halves(h: Halves) -> Halves` | likewise | the other shapes the C conventions treat differently |
 
 - **`Point` is `#[repr(C)]`** (`ffi.repr.1`), so the header declares it as a full C struct with
   the same fields, and C can make one on its own stack. A struct without `#[repr(C)]` would be an
   incomplete type in the header, which C can only hold a pointer to.
-- **Structs cross behind pointers** (`ffi.types.1`). Reading or writing through one is an `unsafe`
-  block, whose text says what C promises: "C passes a point it owns, and nothing else uses it
-  meanwhile".
+- **Structs cross behind pointers** (`ffi.types.1`), or by value (`ffi.types.2`). Reading or
+  writing through a pointer is an `unsafe` block, whose text says what C promises: "C passes a
+  point it owns, and nothing else uses it meanwhile".
+- **By value, each shape crosses as the platform's C compiler passes it.** Two doubles go in
+  vector registers on Linux, in float registers on AArch64, and behind a pointer on Windows;
+  three words go in memory or behind a pointer; and so on. The five structs cover the cases.
 - **An exported function is still an ordinary Moddil function.** The `test` block in
   [`src/lib.moddil`](src/lib.moddil) calls each export directly, passing borrows where C passes
   pointers.
@@ -68,14 +76,24 @@ moddil test examples/cabi            # natively; --interp and --wasm as well
   types. It can't need effect handlers, fail with an error, suspend or spawn (E0222). A trap in one
   ends the process with exit code 70, since C has no way to be told (`ffi.export.1`).
 
+## Moddil calling C back
+
+`c/shapes.c` takes and gives the same five structs by value, so the library's tests check the
+calling side as `c/main.c` checks the called side. It also calls Moddil back (`type.fnptr.1`):
+- `shape_fold(xs, n, add, init)` folds an array with `add`, a Moddil function given as a
+  `fn(int, int) -> int`;
+- `shape_each(n, count, data)` calls `count` with each number and `data`, a `void *` to the
+  Moddil `Tally` it adds them up in, as C APIs with callbacks do.
+
 ## Where it is checked
 
 - `crates/moddil/tests/ffi.rs` builds the library, checks the header's prototypes, compiles
   `c/main.c` with the system's C compiler, and runs it.
-- `crates/moddil/tests/projects.rs` runs the Moddil tests natively, on the MIR interpreter, and
-  as WASM.
+- `crates/moddil/tests/projects.rs` runs the Moddil tests natively and on the MIR interpreter,
+  and checks that WASM refuses them.
 
 ## Status
 
-Built in M3 slice M3a ([`specs/roadmap.md`](../../specs/roadmap.md#milestones)). Next, in M3b,
-`#[export(python)]` and `moddil build --wheel` export to Python (`ffi.python.1`).
+Built in M3 slice M3a ([`specs/roadmap.md`](../../specs/roadmap.md#milestones)); structs by
+value and the calls back in M3c. `#[export(python)]` and `moddil build --wheel` export to Python
+(M3b, [`../python`](../python/src/lib.moddil)).

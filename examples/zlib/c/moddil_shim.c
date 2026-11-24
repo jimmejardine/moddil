@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "zlib.h"
 
@@ -80,11 +81,31 @@ int32_t moddil_zlib_deflate(void *h, const uint8_t *in, uint64_t in_len, uint8_t
     return r;
 }
 
-void moddil_zlib_deflater_stats(void *h, moddil_zlib_stats *stats) {
+/* What the deflater has done, by value: 24 bytes, so in memory or through a hidden pointer. */
+moddil_zlib_stats moddil_zlib_deflater_stats(void *h) {
     z_stream *s = h;
-    stats->total_in = (uint64_t)s->total_in;
-    stats->total_out = (uint64_t)s->total_out;
-    stats->adler = (uint32_t)s->adler;
+    moddil_zlib_stats stats = {(uint64_t)s->total_in, (uint64_t)s->total_out,
+                               (uint32_t)s->adler};
+    return stats;
+}
+
+/* Inflates a raw deflate stream with zlib's `inflateBack`, which calls `in` for input and `out`
+ * with each piece of output, passing each the pointer it was given. zlib's code: Z_STREAM_END
+ * (1) when the stream ended. */
+int32_t moddil_zlib_inflate_back(in_func in, void *in_desc, out_func out, void *out_desc) {
+    z_stream s;
+    memset(&s, 0, sizeof s);
+    unsigned char *window = malloc(32768);
+    if (window == NULL) {
+        return Z_MEM_ERROR;
+    }
+    int r = inflateBackInit(&s, 15, window);
+    if (r == Z_OK) {
+        r = inflateBack(&s, in, in_desc, out, out_desc);
+        inflateBackEnd(&s);
+    }
+    free(window);
+    return r;
 }
 
 void moddil_zlib_deflater_end(void *h) {

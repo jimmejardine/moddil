@@ -565,7 +565,7 @@ impl Machine<'_> {
                 self.sched.end(self.stack.current(), Outcome::Cancelled);
                 self.switch_next()
             }
-            Ret::Drop | Ret::Top => unreachable!("only a task unwinds"),
+            Ret::Drop | Ret::Top | Ret::Callback => unreachable!("only a task unwinds"),
         }
     }
 

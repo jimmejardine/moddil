@@ -15,6 +15,11 @@ impl Builder<'_> {
     /// Evaluates `e` and stores its value in `dest`. A part of an `assert`'s condition is
     /// evaluated into its own local first, and marked as evaluated.
     pub(super) fn eval_into(&mut self, dest: Local, e: ExprId) {
+        // A function named where a C function pointer is wanted: its address, not a closure.
+        if let Some(f) = self.types.fn_ptr(e) {
+            self.cfg.assign(dest, Rvalue::FnPtr(f));
+            return;
+        }
         // A borrow used as a `dyn` borrow is converted.
         if let Some(target) = self.coercion(e) {
             let ty = self.ty(e);

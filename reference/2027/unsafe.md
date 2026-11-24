@@ -22,6 +22,12 @@ list it, or in a single file, is an error (E0219). The prelude and `core` may us
 **core.ptr.1** The `core` mod's `ptr` module ([source](core/ptr.moddil)) holds `cast_mut(p)`,
 which gives the `*mut T` with the address of the `*const T` `p`.
 
+**core.ptr.2** It also holds `null()` and `null_mut()` (pointers to nothing, C's `NULL`),
+`is_null(p)`, `add(p, n)` and `add_mut(p, n)` (the pointer `n` values of its type on, as C's
+`p + n`: reading through it is sound only within one array), and `cast(p)` and `cast_mut_to(p)`
+(the same address, as a pointer to another type, as C's casts). Native code and the MIR
+interpreter run them (added in M3 slice M3c).
+
 **core.cell.1** The `core` mod's `cell` module ([source](core/cell.moddil)) holds `UnsafeCell<T>`,
 the one way to change a value behind a shared borrow: `UnsafeCell::new(v)`, `c.get()`, a `*mut T`
 to its value even through `&c`, and `c.into_inner()`.

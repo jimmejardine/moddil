@@ -1,165 +1,21 @@
 //! Calls of C functions (`ffi.extern.1`) from the MIR interpreter, through `moddil-ffi`'s
-//! trampolines.
+//! trampolines, and the callbacks C makes into it meanwhile (`ffi.native.2`).
 //!
 //! The interpreter's memory is its own (a borrow is a path into a frame, not an address), so a
 //! pointer argument is **marshalled**: what it points to, and the rest of the array it points
 //! into, is written in C's layout into real memory for the call, and read back after it. A
-//! pointer C gives is kept as its address ([`Value::Foreign`]) and passed back as it is; reading
-//! through one is native code's alone.
+//! struct argument is written so too, and a struct result read back. What crosses otherwise is
+//! [`crate::cmem`]'s: C's addresses, handles, and callbacks.
 
 #![allow(unsafe_code)]
 
-use moddil_ffi::CType;
-use moddil_sema::{ItemTree, Num, Ty};
+use moddil_sema::Ty;
 
-use super::Machine;
+use super::{Machine, Stop};
+use crate::cmem::{self, ctype, size_align};
+use crate::stack::{Frame, Ret};
 use crate::value::{Pointer, Value};
-
-/// C's size and alignment of a value of `ty`, as `moddil-ffi` lays it out.
-fn size_align(items: &ItemTree, ty: &Ty) -> Result<(usize, usize), String> {
-    Ok(match ty {
-        Ty::Bool => (1, 1),
-        Ty::Int | Ty::Ptr(..) => (8, 8),
-        Ty::Num(n) => {
-            let s = match n {
-                Num::I8 | Num::U8 => 1,
-                Num::I16 | Num::U16 => 2,
-                Num::I32 | Num::U32 | Num::F32 => 4,
-                Num::U64 | Num::F64 => 8,
-                Num::I128 | Num::U128 => return Err("a 128-bit integer passed to C".to_string()),
-            };
-            (s, s)
-        }
-        Ty::Adt(a, ..) if items.adts[*a as usize].repr_c => {
-            let mut off: usize = 0;
-            let mut align = 1;
-            for f in &items.adts[*a as usize].variants[0].fields {
-                let (s, al) = size_align(items, &f.ty)?;
-                off = off.div_ceil(al) * al + s;
-                align = align.max(al);
-            }
-            (off.div_ceil(align) * align, align)
-        }
-        t => return Err(format!("a `{t}` behind a pointer passed to C")),
-    })
-}
-
-/// `ty` as `moddil-ffi` calls with it.
-fn ctype(ty: &Ty) -> Result<CType, String> {
-    Ok(match ty {
-        Ty::Unit => CType::Void,
-        Ty::Bool => CType::I8,
-        Ty::Int => CType::I64,
-        Ty::Ptr(..) => CType::Ptr,
-        Ty::Num(n) => match n {
-            Num::I8 | Num::U8 => CType::I8,
-            Num::I16 | Num::U16 => CType::I16,
-            Num::I32 | Num::U32 => CType::I32,
-            Num::U64 => CType::I64,
-            Num::F32 => CType::F32,
-            Num::F64 => CType::F64,
-            Num::I128 | Num::U128 => return Err("a 128-bit integer passed to C".to_string()),
-        },
-        t => return Err(format!("a `{t}` passed to C")),
-    })
-}
-
-/// Scalar `v` of type `ty` as a word: an integer widened as its sign says, a float's bits, an
-/// address.
-fn word(ty: &Ty, v: &Value) -> Result<u64, String> {
-    Ok(match (ty, v) {
-        (Ty::Int, Value::Int(i)) => *i as u64,
-        (Ty::Bool, Value::Bool(b)) => u64::from(*b),
-        (Ty::Num(n), Value::Num(_, bits)) => {
-            let bits = *bits as u64;
-            match n {
-                Num::I8 => bits as u8 as i8 as i64 as u64,
-                Num::I16 => bits as u16 as i16 as i64 as u64,
-                Num::I32 => bits as u32 as i32 as i64 as u64,
-                _ => bits,
-            }
-        }
-        (Ty::Ptr(..), Value::Foreign(a)) => *a,
-        (Ty::Ptr(..), Value::Ref(..)) => {
-            return Err("a pointer to a Moddil value inside what is passed to C".to_string());
-        }
-        (t, v) => return Err(format!("a `{t}` passed to C as {v:?}")),
-    })
-}
-
-/// The value of type `ty` that word `w` holds.
-fn from_word(ty: &Ty, w: u64) -> Value {
-    match ty {
-        Ty::Int => Value::Int(w as i64),
-        Ty::Bool => Value::Bool(w & 0xff != 0),
-        Ty::Ptr(..) => Value::Foreign(w),
-        Ty::Num(n) => {
-            let mask: u128 = match n {
-                Num::I8 | Num::U8 => 0xff,
-                Num::I16 | Num::U16 => 0xffff,
-                Num::I32 | Num::U32 | Num::F32 => 0xffff_ffff,
-                _ => u128::from(u64::MAX),
-            };
-            Value::Num(*n, u128::from(w) & mask)
-        }
-        _ => Value::Unit,
-    }
-}
-
-/// Writes `v`, of type `ty`, at `at` of `buf` in C's layout.
-fn write(items: &ItemTree, buf: &mut [u8], at: usize, ty: &Ty, v: &Value) -> Result<(), String> {
-    if let (Ty::Adt(a, ..), Value::Adt { fields, .. }) = (ty, v) {
-        let mut off: usize = 0;
-        for (f, fv) in items.adts[*a as usize].variants[0]
-            .fields
-            .iter()
-            .zip(fields)
-        {
-            let (s, al) = size_align(items, &f.ty)?;
-            off = off.div_ceil(al) * al;
-            write(items, buf, at + off, &f.ty, fv)?;
-            off += s;
-        }
-        return Ok(());
-    }
-    // An out-parameter not assigned yet: zeros.
-    if matches!(v, Value::Empty) {
-        return Ok(());
-    }
-    let (s, _) = size_align(items, ty)?;
-    let w = word(ty, v)?;
-    buf[at..at + s].copy_from_slice(&w.to_le_bytes()[..s]);
-    Ok(())
-}
-
-/// The value of type `ty` at `at` of `buf`, in C's layout.
-fn read(
-    items: &ItemTree,
-    buf: &[u8],
-    at: usize,
-    ty: &Ty,
-    adt_variant: Option<u32>,
-) -> Result<Value, String> {
-    if let Ty::Adt(a, ..) = ty {
-        let mut off: usize = 0;
-        let mut fields = Vec::new();
-        for f in &items.adts[*a as usize].variants[0].fields {
-            let (s, al) = size_align(items, &f.ty)?;
-            off = off.div_ceil(al) * al;
-            fields.push(read(items, buf, at + off, &f.ty, None)?);
-            off += s;
-        }
-        return Ok(Value::Adt {
-            adt: *a,
-            variant: adt_variant.unwrap_or(0),
-            fields,
-        });
-    }
-    let (s, _) = size_align(items, ty)?;
-    let mut w = [0u8; 8];
-    w[..s].copy_from_slice(&buf[at..at + s]);
-    Ok(from_word(ty, u64::from_le_bytes(w)))
-}
+use moddil_sema::Item;
 
 /// A pointer argument's memory for the call: where its values came from, and their bytes.
 struct Marshalled {
@@ -177,36 +33,180 @@ enum Place {
     Elements(Pointer, u32),
 }
 
+/// The C type of value `v`, if C can read it: a number, a `bool`, a `#[repr(C)]` struct (not
+/// generic), or an array of those (its element's type).
+fn c_type_of(items: &moddil_sema::ItemTree, v: &Value) -> Option<Ty> {
+    match v {
+        Value::Int(_) => Some(Ty::Int),
+        Value::Bool(_) => Some(Ty::Bool),
+        Value::Num(n, _) if !matches!(n, moddil_sema::Num::I128 | moddil_sema::Num::U128) => {
+            Some(Ty::Num(*n))
+        }
+        Value::Adt { adt, .. } => {
+            let def = &items.adts[*adt as usize];
+            let ty = Ty::Adt(*adt, def.name.as_str().into(), Vec::new().into());
+            (def.repr_c && items.is_c_type(&ty)).then_some(ty)
+        }
+        Value::Array(xs) | Value::Buf(_, xs) => xs.first().and_then(|x| c_type_of(items, x)),
+        _ => None,
+    }
+}
+
+/// Why a C call did not give a value.
+pub(super) enum CallStop {
+    /// It could not be made.
+    Failed(String),
+    /// A callback it made trapped.
+    Stopped(Stop),
+}
+
+impl From<String> for CallStop {
+    fn from(why: String) -> Self {
+        CallStop::Failed(why)
+    }
+}
+
 impl Machine<'_> {
     /// Calls C function `f` with `values`: its result.
-    pub(super) fn c_call(&mut self, f: u32, values: &[Value]) -> Result<Value, String> {
+    pub(super) fn c_call(&mut self, f: u32, values: &[Value]) -> Result<Value, CallStop> {
         let items = self.dispatch.items();
         let sig = &items.fns[f as usize];
         let addr = moddil_ffi::lookup(&sig.name)
             .ok_or_else(|| format!("no C library this run has loaded defines `{}`", sig.name))?;
         let params: Vec<Ty> = sig.params.iter().map(|p| p.ty.clone()).collect();
         let ret = sig.ret.clone();
+        self.c_call_at(addr, &params, &ret, values)
+    }
+
+    /// The value of `Rvalue::FnPtr(f)` (`type.fnptr.1`): a C function's address, or the
+    /// Moddil function, which crosses to C as a callback.
+    pub(super) fn fn_ptr(&self, f: u32) -> Value {
+        let sig = &self.dispatch.items().fns[f as usize];
+        if sig.foreign {
+            Value::Foreign(moddil_ffi::lookup(&sig.name).map_or(0, |a| a as u64))
+        } else {
+            Value::FnPtr(f)
+        }
+    }
+
+    /// Calls the C function at `addr`, taking `params` and giving `ret`, with `values`.
+    fn c_call_at(
+        &mut self,
+        addr: *const u8,
+        params: &[Ty],
+        ret: &Ty,
+        values: &[Value],
+    ) -> Result<Value, CallStop> {
+        let items = self.dispatch.items();
         let mut marshalled = Vec::new();
+        let mut structs: Vec<Vec<u64>> = Vec::new();
         let mut words = Vec::new();
         let mut types = Vec::new();
-        for (v, ty) in values.iter().zip(&params) {
-            types.push(ctype(ty)?);
-            match (ty, v) {
-                (Ty::Ptr(_, inner), Value::Ref(p, _)) => {
-                    let m = self.marshal(p, inner)?;
-                    words.push(m.words.as_ptr() as u64);
-                    marshalled.push(m);
+        for (v, ty) in values.iter().zip(params) {
+            let ct = ctype(items, ty)?;
+            // A `void *` to a value C can read is marshalled as that value; to another, it is a
+            // handle.
+            let pointee = match (ty, v) {
+                (Ty::Ptr(_, inner), Value::Ref(p, _)) if **inner == Ty::Unit => {
+                    c_type_of(items, &self.stack.load(p))
                 }
-                _ => words.push(word(ty, v)?),
+                (Ty::Ptr(_, inner), Value::Ref(..)) => Some((**inner).clone()),
+                _ => None,
+            };
+            if let (Some(inner), Value::Ref(p, _)) = (pointee, v) {
+                let m = self.marshal(p, &inner)?;
+                words.push(m.words.as_ptr() as u64);
+                marshalled.push(m);
+                types.push(ct);
+                continue;
             }
+            match (ty, v) {
+                (Ty::Adt(..), v) => {
+                    let (size, _) = size_align(items, ty)?;
+                    let mut bytes = vec![0u8; size.div_ceil(8) * 8 + 8];
+                    self.stack.cmem().write(items, &mut bytes, 0, ty, v)?;
+                    let w = cmem::to_words(&bytes);
+                    words.push(w.as_ptr() as u64);
+                    structs.push(w);
+                }
+                _ => words.push(self.stack.cmem().word(items, ty, v)?),
+            }
+            types.push(ct);
         }
-        // SAFETY: the symbol is the C function the `extern` block declares, called with the
-        // signature it gives; pointer arguments point into `marshalled`, alive across the call.
-        let w = unsafe { moddil_ffi::call(addr, &types, ctype(&ret)?, &words) }?;
+        let rt = ctype(items, ret)?;
+        let this: *mut Self = self;
+        let mut stopped: Option<Stop> = None;
+        let mut handler = |id: u64, args: &[u64]| {
+            // SAFETY: the machine is waiting in this call, and C calls back on this thread.
+            unsafe { (*this).callback(id as u32, args, &mut stopped) }
+        };
+        // SAFETY: the address is the C function the `extern` block (or a `fn` value) names,
+        // called with the signature it gives; pointer arguments point into `marshalled` and
+        // `structs`, alive across the call.
+        let out = moddil_ffi::with_callbacks(&mut handler, || unsafe {
+            moddil_ffi::call(addr, &types, &rt, &words)
+        })?;
+        drop(structs);
         for m in marshalled {
             self.unmarshal(m)?;
         }
-        Ok(from_word(&ret, w))
+        if let Some(stop) = stopped {
+            return Err(CallStop::Stopped(stop));
+        }
+        Ok(match ret {
+            Ty::Adt(..) => self
+                .stack
+                .cmem()
+                .read(items, &cmem::to_bytes(&out), 0, ret)?,
+            _ => self.stack.cmem().value(items, ret, out[0]),
+        })
+    }
+
+    /// Runs the callback C made to function `f` with `args`, while a C call runs: its result's
+    /// word. A trap is kept in `stopped`, and C gets zeros from then on.
+    fn callback(&mut self, f: u32, args: &[u64], stopped: &mut Option<Stop>) -> u64 {
+        if stopped.is_some() {
+            return 0;
+        }
+        let items = self.dispatch.items();
+        let sig = &items.fns[f as usize];
+        let values: Vec<Value> = sig
+            .params
+            .iter()
+            .zip(args)
+            .map(|(p, w)| self.stack.cmem().value(items, &p.ty, *w))
+            .collect();
+        let ret = sig.ret.clone();
+        match self.run_callback(f, values) {
+            Ok(v) if ret == Ty::Unit => {
+                drop(v);
+                0
+            }
+            Ok(v) => self.stack.cmem().word(items, &ret, &v).unwrap_or(0),
+            Err(stop) => {
+                *stopped = Some(stop);
+                0
+            }
+        }
+    }
+
+    /// Runs function `f` with `values` to its end, above the frames already running: its
+    /// result, or why it stopped (with the frames it pushed gone).
+    fn run_callback(&mut self, f: u32, values: Vec<Value>) -> Result<Value, Stop> {
+        let depth = self.stack.depth();
+        let code = self.body(Item::Fn(f));
+        self.stack
+            .push(Frame::new(code, values, Vec::new(), Ret::Callback));
+        loop {
+            match self.step(&mut |_, _, _| {}) {
+                None => {}
+                Some(Ok(v)) => return Ok(v),
+                Some(Err(stop)) => {
+                    self.stack.unwind_to(depth);
+                    return Err(stop);
+                }
+            }
+        }
     }
 
     /// The memory for a pointer `p` to a `ty`: the value it points to, and, if it points into
@@ -242,35 +242,31 @@ impl Machine<'_> {
         let count = values.len();
         let mut bytes = vec![0u8; (stride * count).max(8)];
         for (k, v) in values.iter().enumerate() {
-            write(items, &mut bytes, k * stride, ty, v)?;
-        }
-        let mut words = vec![0u64; bytes.len().div_ceil(8)];
-        for (i, chunk) in bytes.chunks(8).enumerate() {
-            let mut w = [0u8; 8];
-            w[..chunk.len()].copy_from_slice(chunk);
-            words[i] = u64::from_le_bytes(w);
+            self.stack
+                .cmem()
+                .write(items, &mut bytes, k * stride, ty, v)?;
         }
         Ok(Marshalled {
             place,
             ty: ty.clone(),
             stride,
             count,
-            words,
+            words: cmem::to_words(&bytes),
         })
     }
 
     /// Reads a pointer argument's memory back into the places it came from.
     fn unmarshal(&mut self, m: Marshalled) -> Result<(), String> {
         let items = self.dispatch.items();
-        let bytes: Vec<u8> = m.words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let bytes = cmem::to_bytes(&m.words);
         match m.place {
             Place::One(p) => {
-                let v = read(items, &bytes, 0, &m.ty, None)?;
+                let v = self.stack.cmem().read(items, &bytes, 0, &m.ty)?;
                 self.stack.store(&p, v);
             }
             Place::Elements(parent, start) => {
                 for k in 0..m.count {
-                    let v = read(items, &bytes, k * m.stride, &m.ty, None)?;
+                    let v = self.stack.cmem().read(items, &bytes, k * m.stride, &m.ty)?;
                     let mut path = parent.path.clone();
                     path.push(start + k as u32);
                     let p = Pointer {

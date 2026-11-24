@@ -1,7 +1,9 @@
-//! A Moddil library called from C (`ffi.export.1`). Each `#[export]` function is a C function
-//! under its own name, with C's types; `Point` is laid out as C lays out its struct
-//! (`#[repr(C)]`), so C passes one by pointer. `moddil build --lib` writes the library and its
-//! header, `cabi.h`; `c/main.c` calls them.
+//! A Moddil library called from C (`ffi.export.1`), which calls C back. Each `#[export]`
+//! function is a C function under its own name, with C's types; the structs are laid out as C
+//! lays out its structs (`#[repr(C)]`), so C passes them by pointer or by value
+//! (`ffi.types.2`). `moddil build --lib` writes the library and its header, `cabi.h`;
+//! `c/main.c` calls them. The library calls `c/shapes.c` with the same shapes, and gives it
+//! Moddil functions to call back (`type.fnptr.1`).
 
 /// A point in the plane, laid out as C's `Point`.
 #[repr(C)]
@@ -48,6 +50,121 @@ pub fn moddil_scale(p: *mut Point, k: f64) {
     }
 }
 
+/// Two `i32`s: one register in every C convention.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Pair {
+    pub a: i32,
+    pub b: i32,
+}
+
+/// A float and an integer, which the conventions split differently.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Mixed {
+    pub d: f64,
+    pub i: i32,
+}
+
+/// Three words: too big for registers, so in memory or behind a pointer.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Triple {
+    pub a: int,
+    pub b: int,
+    pub c: int,
+}
+
+/// Two `f32`s in 8 bytes.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Halves {
+    pub lo: f32,
+    pub hi: f32,
+}
+
+/// The point halfway between `a` and `b`: structs by value, in and out.
+#[export]
+pub fn moddil_midpoint(a: Point, b: Point) -> Point {
+    Point { x: (a.x + b.x) / 2.0, y: (a.y + b.y) / 2.0 }
+}
+
+/// The pair the other way round.
+#[export]
+pub fn moddil_swap(p: Pair) -> Pair {
+    Pair { a: p.b, b: p.a }
+}
+
+/// Half more, and one more.
+#[export]
+pub fn moddil_bump(m: Mixed) -> Mixed {
+    Mixed { d: m.d + 0.5, i: m.i + 1 }
+}
+
+/// The words, rotated left.
+#[export]
+pub fn moddil_rotate(t: Triple) -> Triple {
+    Triple { a: t.b, b: t.c, c: t.a }
+}
+
+/// The halves swapped.
+#[export]
+pub fn moddil_halves(h: Halves) -> Halves {
+    Halves { lo: h.hi, hi: h.lo }
+}
+
+extern "C" {
+    fn shape_midpoint(a: Point, b: Point) -> Point;
+    fn shape_swap(p: Pair) -> Pair;
+    fn shape_bump(m: Mixed) -> Mixed;
+    fn shape_rotate(t: Triple) -> Triple;
+    fn shape_halves(h: Halves) -> Halves;
+    fn shape_fold(xs: *const int, n: int, f: fn(int, int) -> int, init: int) -> int;
+    fn shape_each(n: i32, f: fn(i32, *mut ()), data: *mut ());
+}
+
+/// What `count` adds up, through the pointer C hands back to it.
+#[repr(C)]
+pub struct Tally {
+    pub count: i32,
+    pub sum: i32,
+}
+
+fn add(a: int, b: int) -> int {
+    a + b
+}
+
+/// Called by C with each number and the tally it was given.
+fn count(k: i32, data: *mut ()) {
+    unsafe("shape_each passes back the tally it was given") {
+        let t: *mut Tally = core::ptr::cast_mut_to(data);
+        (*t).count += 1;
+        (*t).sum += k;
+    }
+}
+
+test "Moddil calls C with structs by value" {
+    unsafe("the C functions take and give the structs they declare") {
+        let m = shape_midpoint(Point { x: 0.0, y: 0.0 }, Point { x: 4.0, y: 2.0 });
+        assert(m == Point { x: 2.0, y: 1.0 });
+        assert(shape_swap(Pair { a: 1, b: 2 }) == Pair { a: 2, b: 1 });
+        assert(shape_bump(Mixed { d: 1.0, i: 7 }) == Mixed { d: 1.5, i: 8 });
+        assert(shape_rotate(Triple { a: 1, b: 2, c: 3 }) == Triple { a: 2, b: 3, c: 1 });
+        assert(shape_halves(Halves { lo: 1.5, hi: 2.5 }) == Halves { lo: 2.5, hi: 1.5 });
+    }
+}
+
+test "C calls Moddil back" {
+    let xs: [int; 4] = [1, 2, 3, 4];
+    let total = unsafe("shape_fold reads the four values") { shape_fold(&xs[0], 4, add, 10) };
+    assert(total == 20);
+    let mut t = Tally { count: 0, sum: 0 };
+    unsafe("shape_each hands the tally back to `count`, and keeps it no longer") {
+        shape_each(4, count, core::ptr::cast_mut_to(&mut t));
+    }
+    assert(t.count == 4 && t.sum == 10);
+}
+
 test "the exports, called from Moddil" {
     assert(moddil_gcd(84, -36) == 12);
     assert(moddil_is_even(4) && !moddil_is_even(7));
@@ -56,4 +173,6 @@ test "the exports, called from Moddil" {
     assert(moddil_distance(&a, &b) == 5.0);
     moddil_scale(&mut b, 2.0);
     assert(b == Point { x: 6.0, y: 8.0 });
+    assert(moddil_midpoint(a, b) == Point { x: 3.0, y: 4.0 });
+    assert(moddil_swap(Pair { a: 1, b: 2 }) == Pair { a: 2, b: 1 });
 }

@@ -2,9 +2,10 @@
 //! borrow is a [`Pointer`] into a frame, and only this module reads or writes through one.
 
 use moddil_mir::{Body, Const, Local, Operand, Place, Projection, Statement, Terminator};
-use moddil_sema::{Src, Ty};
+use moddil_sema::{ItemTree, Solver, Src, Ty};
 use moddil_syntax::TextRange;
 
+use crate::cmem::{CMEM, CMem, COPIES};
 use crate::value::{Pointer, Value};
 
 /// Where a call's result goes.
@@ -18,6 +19,8 @@ pub(crate) enum Ret {
     Drop,
     /// To the scheduler: the call is a task's closure (`task.spawn.1`).
     Task,
+    /// Back to C: the call is a callback C made while a C call ran (`ffi.native.2`).
+    Callback,
 }
 
 /// A destructor call waiting to run: the function, its type arguments, and the value.
@@ -88,6 +91,11 @@ pub(crate) struct Stack<'a> {
     tasks: Vec<Vec<Frame<'a>>>,
     /// The running task.
     current: usize,
+    /// The program's items, for C's layouts.
+    items: &'a ItemTree,
+    /// What the run has given C, and the places in C's memory it reads and writes
+    /// (`ffi.native.2`).
+    cmem: CMem,
     /// The values of the const items borrowed so far: static data, which a [`Pointer`] with
     /// [`STATIC`] for its frame points into.
     statics: std::collections::HashMap<u32, Value>,
@@ -97,10 +105,12 @@ pub(crate) struct Stack<'a> {
 pub(crate) const STATIC: usize = usize::MAX;
 
 impl<'a> Stack<'a> {
-    pub(crate) fn new(first: Frame<'a>) -> Self {
+    pub(crate) fn new(first: Frame<'a>, items: &'a ItemTree) -> Self {
         Stack {
             tasks: vec![vec![first]],
             current: 0,
+            items,
+            cmem: CMem::default(),
             statics: std::collections::HashMap::new(),
         }
     }
@@ -149,6 +159,26 @@ impl<'a> Stack<'a> {
     /// Keeps const item `f`'s value as static data.
     pub(crate) fn set_static(&mut self, f: u32, v: Value) {
         self.statics.insert(f, v);
+    }
+
+    /// What the run has given C (`ffi.native.2`).
+    pub(crate) fn cmem(&mut self) -> &mut CMem {
+        &mut self.cmem
+    }
+
+    /// The place a pointer C gave, `addr`, points to: `place`'s projections up to `k` are the
+    /// pointer, whose type says what is there.
+    fn c_place(&self, place: &Place, k: usize, addr: u64) -> Pointer {
+        let prefix = Place {
+            local: place.local,
+            projection: place.projection[..k].to_vec(),
+        };
+        let ty = self.body().place_ty(self.items, &prefix);
+        let ty = Solver::new(self.items, &[]).deep(&ty.subst(self.type_args()));
+        let (Ty::Ptr(_, inner) | Ty::Ref(_, inner)) = ty else {
+            unreachable!("dereferencing a `{ty}`")
+        };
+        self.cmem.place(addr, (*inner).clone())
     }
 
     pub(crate) fn depth(&self) -> usize {
@@ -204,6 +234,16 @@ impl<'a> Stack<'a> {
     /// Whether the top frame is the call the interpreter was asked to run.
     pub(crate) fn at_root(&self) -> bool {
         matches!(self.top().ret, Ret::Top)
+    }
+
+    /// Whether the top frame is a callback C made (`ffi.native.2`).
+    pub(crate) fn at_callback(&self) -> bool {
+        matches!(self.top().ret, Ret::Callback)
+    }
+
+    /// Ends the running task's calls above the first `depth`, as a trap in a callback does.
+    pub(crate) fn unwind_to(&mut self, depth: usize) {
+        self.frames_mut().truncate(depth);
     }
 
     /// A local of the top frame.
@@ -342,12 +382,28 @@ impl<'a> Stack<'a> {
             path: Vec::new(),
             span: None,
         };
-        for p in &place.projection {
+        for (k, p) in place.projection.iter().enumerate() {
             match p {
+                // C's memory (`ffi.native.2`).
+                Projection::Field(i) if ptr.frame == CMEM => {
+                    ptr = self.cmem.field_of(self.items, &ptr, *i);
+                }
+                Projection::Index(l) if ptr.frame == CMEM => {
+                    let i = self.local(*l).as_int();
+                    ptr = self.cmem.element_of(self.items, &ptr, i);
+                }
+                Projection::Deref if ptr.frame == CMEM => {
+                    match self.cmem.load_at(self.items, &ptr) {
+                        Value::Foreign(addr) => ptr = self.c_place(place, k, addr),
+                        Value::Ref(target, _) => ptr = target,
+                        other => unreachable!("dereferencing {other:?}"),
+                    }
+                }
                 Projection::Field(i) => ptr.path.push(*i),
                 Projection::Downcast(_) => {}
                 Projection::Deref => match self.load(&ptr) {
                     Value::Ref(target, _) | Value::Dyn(target, _, _) => ptr = target,
+                    Value::Foreign(addr) => ptr = self.c_place(place, k, addr),
                     other => unreachable!("dereferencing {other:?}"),
                 },
                 // An index into part of an array is one into the array.
@@ -372,7 +428,12 @@ impl<'a> Stack<'a> {
     }
 
     pub(crate) fn load(&self, ptr: &Pointer) -> Value {
-        let mut v = if ptr.frame == STATIC {
+        if ptr.frame == CMEM {
+            return self.cmem.load_at(self.items, ptr);
+        }
+        let mut v = if ptr.frame == COPIES {
+            self.cmem.copy(ptr.local)
+        } else if ptr.frame == STATIC {
             &self.statics[&ptr.local]
         } else {
             &self.tasks[ptr.task][ptr.frame].locals[ptr.local as usize]
@@ -400,6 +461,10 @@ impl<'a> Stack<'a> {
     }
 
     pub(crate) fn store(&mut self, ptr: &Pointer, value: Value) {
+        if ptr.frame == CMEM {
+            self.cmem.store_at(self.items, ptr, &value);
+            return;
+        }
         let mut v = &mut self.tasks[ptr.task][ptr.frame].locals[ptr.local as usize];
         for &i in &ptr.path {
             v = match v {

@@ -176,6 +176,21 @@ The first slice of the C ABI ([`roadmap.md`](roadmap.md), slice M3a; reference `
   library. The generated Rust crate comes later.
 - **Runners:** native code and the MIR interpreter (marshalling pointer arguments); not WASM.
 
+## As built (M3c)
+
+The C ABI's completions ([`roadmap.md`](roadmap.md), slice M3c; reference `interop.md`):
+- **Structs by value** (`ffi.types.2`): `#[repr(C)]` structs as C and `#[export]` functions'
+  parameters and results, passed by each target's rules (Windows x64, SysV x86-64, AArch64
+  including Apple's) from one classification, `moddil-ffi`'s `abi` module, which native code and
+  the MIR interpreter's trampolines share.
+- **Callbacks** (`type.fnptr.1`): `fn(A) -> R` types, Moddil functions given to C through C-ABI
+  wrappers (native) or Cranelift-made C functions that call back into the interpreter, and
+  `void *` user data.
+- **C's memory** (`core.ptr.2`, `ffi.core.2`, `ffi.native.2`): null pointers, pointer
+  arithmetic, casts, and C strings; the MIR interpreter reads and writes through C's pointers.
+- **Not yet:** variadic functions, struct values in callbacks, calling a `fn` value from Moddil,
+  and C strings or arrays given back to C on the interpreter other than as copies.
+
 ## Fit check against the reference examples
 
 | Example | Uses |

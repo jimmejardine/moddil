@@ -10,10 +10,11 @@
 
 #![allow(unsafe_code)]
 
+pub mod abi;
 mod build;
 mod call;
 mod libs;
 
 pub use build::{Built, CSpec, build};
-pub use call::{CType, call};
+pub use call::{CType, c_signature, call, callback, with_callbacks};
 pub use libs::{load, lookup};

@@ -326,6 +326,9 @@ pub enum Rvalue {
     /// A borrow of the value of const item `n` (by its function's index): static data, which
     /// borrows nothing (`borrow.static.1`).
     StaticRef(u32),
+    /// The address of function `n` (by its index) as a C function pointer (`type.fnptr.1`):
+    /// a C function's own, or that of the C-ABI wrapper of a Moddil one.
+    FnPtr(u32),
 }
 
 /// What an [`Rvalue::Aggregate`] builds.

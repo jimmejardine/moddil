@@ -37,11 +37,12 @@ The steps below go from C up to the safe API.
    64 elsewhere. Its `z_stream` holds `uLong`s, so its layout changes with the platform too. The
    shim takes `uint64_t` lengths and keeps each `z_stream` behind an opaque pointer, so a single
    set of Moddil declarations is right on every platform. That's the usual practice for a portable
-   C ABI, and the reason not to bind zlib's own functions directly.
+   C ABI, and the reason not to bind most of zlib's own functions directly. The few whose types
+   are the same everywhere, `zlibVersion`, `zError` and `get_crc_table`, are bound directly.
 2. **The `extern "C"` block declares the shim's functions** with C's types (`ffi.types.1`): `u64`,
    `i32`, and raw pointers. `ZStream` is an empty struct that is only ever behind a pointer C gave.
-   `Stats` is `#[repr(C)]` (`ffi.repr.1`), laid out like the shim's `moddil_zlib_stats`, so C fills
-   it in place.
+   `Stats` is `#[repr(C)]` (`ffi.repr.1`), laid out like the shim's `moddil_zlib_stats`, so C
+   gives one back by value (`ffi.types.2`: 24 bytes, so through a hidden pointer or in memory).
 3. **Every call is in an `unsafe` block, and the block's text says why the call is sound**: for
    example, "the buffers are as long as the lengths say, and live across the call". Nothing checks
    what C does, so those reasons are the contract.
@@ -51,7 +52,13 @@ The steps below go from C up to the safe API.
    - `crc32` and `adler32` give the checksums;
    - `bound(n)` gives the most bytes that compressing `n` bytes can make;
    - `Deflater` compresses a piece at a time (`write`, then `finish`). It owns its C state and frees
-     it in `Drop`, so a deflater can't leak or be freed twice.
+     it in `Drop`, so a deflater can't leak or be freed twice;
+   - `version()` and `ZlibError::message()` read zlib's C strings (`ffi.core.2`);
+   - `crc32_by_table` works the CRC-32 out in Moddil from zlib's table, a C array walked through
+     its pointer (`core.ptr.2`);
+   - `uncompress_through_callbacks` hands zlib's `inflateBack` two Moddil functions (`type.fnptr.1`):
+     `pull`, which gives it the input, and `push`, which appends each piece of output to a `Vec`.
+     Each gets its state back through the `void *` it was given with.
 
 Some details worth noticing:
 - **An empty input still passes a valid pointer.** C reads no byte of it, but `&data[0]` would
@@ -63,7 +70,10 @@ Some details worth noticing:
 
 - **Native code and the MIR interpreter both run it** (`ffi.native.1`). On the interpreter, each
   buffer a pointer argument points to is copied into C's layout for the call and copied back
-  afterwards. The `ZStream` pointer C gives is kept as an address, which only C reads through.
+  afterwards. Pointers C gives are kept as addresses, and read through in C's layout
+  (`ffi.native.2`). `pull` and `push` run as C functions the interpreter makes, which call back
+  into it during the C call; the `Vec` behind `push`'s `void *` crosses as a handle, since C
+  can't read it.
 - **WASM doesn't run C yet.** `moddil test --wasm examples/zlib` is refused ("runs only in native
   code"), and the reference interpreter doesn't run it either.
 - **CI:** `crates/moddil/tests/projects.rs` runs the tests natively and on the interpreter, and
@@ -71,6 +81,7 @@ Some details worth noticing:
 
 ## Status
 
-Built in M3 slice M3a ([`specs/roadmap.md`](../../specs/roadmap.md#milestones)). Later, header
+Built in M3 slice M3a ([`specs/roadmap.md`](../../specs/roadmap.md#milestones)); the strings, the
+CRC table, `Stats` by value and the callbacks in slice M3c. Later, header
 import (`#[c_import]`) will read `zlib.h` itself. The shim would still be the portable choice for
 the `uLong` types.

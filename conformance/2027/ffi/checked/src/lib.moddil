@@ -1,9 +1,15 @@
-// covers: ffi.types.1, ffi.export.1, ffi.extern.1
+// covers: ffi.types.1, ffi.export.1, ffi.extern.1, ffi.types.2
+
+/// Not `#[repr(C)]`, so its layout is the compiler's: it does not cross C by value.
+pub struct Loose {
+    pub a: i32,
+}
 
 extern "C" {
     fn takes_text(s: &str) -> i32;          //~ E0222
     fn gives_vec() -> Vec<u8>;              //~ E0222
     fn has_body(x: i32) -> i32 { x }        //~ E0222
+    fn by_value(l: Loose) -> i32;           //~ E0222
     fn abs(x: i32) -> i32;
 }
 

@@ -1,7 +1,8 @@
 # C interop
 
 Calling C from Moddil and Moddil from C, with the C ABI ([`specs/interop.md`](../../specs/interop.md)).
-Added in M3 slice M3a; Python in M3b; header import (`#[c_import]`) comes later.
+Added in M3 slice M3a; Python in M3b; structs by value, function pointers and C's memory on the
+MIR interpreter in M3c; header import (`#[c_import]`) comes later.
 
 **ffi.extern.1** `extern "C" { fn name(params) -> T; … }` declares C functions: each is a free
 function without a body, named by its C symbol, called with the platform's C calling convention.
@@ -13,7 +14,23 @@ allowed only inside an `unsafe` block (E0218): nothing checks what C does.
 types** (E0222 otherwise): the sized numbers but the 128-bit ones (`i8` as `int8_t`, … `f64` as
 `double`), `int` (`int64_t`), `bool` (C's `bool`), and raw pointers (`*const T` as `const T *`,
 `*mut T` as `T *`), to anything; a result may also be `()` (`void`). A struct crosses behind a
-pointer. Neither kind of function needs handlers, can fail, or suspends or spawns (E0222).
+pointer, or by value (**ffi.types.2**). Neither kind of function needs handlers, can fail, or
+suspends or spawns (E0222).
+
+**ffi.types.2** A `#[repr(C)]` struct that is not generic and whose fields are C's types (numbers,
+`bool`, raw pointers, `fn` types, and such structs) is one of C's types too: C functions and
+`#[export]` functions take and give it by value, passed as the platform's C compiler passes it (in
+registers, split into parts, or through a hidden pointer, by its size and its fields' types), and
+the header declares it so. `*const ()` and `*mut ()` are C's `const void *` and `void *`.
+
+**type.fnptr.1** `fn(A, B) -> R` is the type of a C function pointer: C's scalar types only (sized
+numbers, `int`, `bool`, raw pointers and `fn` types; E0222 otherwise), and no result for `void`.
+Its values are C functions' addresses, and functions named where one is wanted: a free function,
+not generic, with the pointer's parameters and result, which needs no handlers, cannot fail and
+does not suspend or spawn (E0222 otherwise). C calls a Moddil function so given through a C-ABI
+wrapper, as an `#[export]`'s; a trap in it ends the process with exit code 70 (on the MIR
+interpreter, see **ffi.native.2**). A `fn` value is kept in variables and `#[repr(C)]` fields and
+given to C; Moddil does not yet call one itself.
 
 **ffi.repr.1** `#[repr(C)]` on a struct lays it out as C lays out a struct of the same fields:
 in the order written, each at the next offset its alignment allows, the size rounded up to the
@@ -36,6 +53,10 @@ with the `unsafe` capability (E0219), makes borrows of what C gives and hands bo
 `ptr_of(s)` and `text_ptr(s)` (where a slice's or a text's values are), and `into_raw(b)` and
 `from_raw(p)` (a box's value kept alive behind a raw pointer, and owned again). Nothing checks
 that a pointer and a length describe live memory. Native code runs them; the interpreters trap.
+
+**ffi.core.2** `core::ffi` also has C's strings: `c_len(p)` (the bytes of the NUL-terminated
+string at `p` before its NUL), `c_text(p)` (that string as text, which traps if it is not UTF-8)
+and `c_string(s)` (the bytes of `s` and a NUL, which traps if `s` holds a NUL).
 
 **ffi.python.1** `#[export(python)]` on a `pub fn` of a mod's root module makes it a function of
 the mod's Python module, which `moddil build --wheel` builds (with CPython's stable ABI, 3.11 and
@@ -63,9 +84,20 @@ the code loaded; `moddil build` links it in.
 
 **ffi.native.1** C functions run in native code and on the MIR interpreter. On the interpreter a
 pointer argument's value (and the rest of the array it points into) is copied into C's layout for
-the call and back after it; a pointer C gives is kept as its address, and only native code reads
-through it. WASM does not run C yet: building or testing a program that calls C as WASM is an
-error, and the reference interpreter does not run it.
+the call and back after it; a pointer C gives is kept as its address (**ffi.native.2**). WASM does
+not run C yet: building or testing a program that calls C as WASM is an error, and the reference
+interpreter does not run it.
+
+**ffi.native.2** On the MIR interpreter, a pointer C gives is read and written through as in
+native code, in C's layout: what it points to, its fields, and the values after it. A Moddil
+pointer given C as `void *` is copied as **ffi.native.1** copies other pointers' values if C can
+read its value (a number, a `bool`, a `#[repr(C)]` struct, or an array of those), and otherwise
+crosses as a handle, which C does not read through and which is the pointer again when C gives it
+back. A Moddil function given as a `fn` value crosses as a C function the interpreter makes, which
+runs it when C calls it during the C call; a trap in it is raised when the C call returns, C
+getting zeros from it meanwhile. There `core::ffi`'s `slice`, `text` and `c_text` of C's memory
+borrow a copy of it, and `ptr_of` and `text_ptr` give the address of a copy kept until the run
+ends; `slice_mut` of C's memory traps.
 
 ## Diagnostics
 

@@ -1,8 +1,9 @@
 //! zlib from Moddil (`reference/2027/interop.md`). The C library is compiled with the mod (its
-//! manifest's `[c]` table) and reached through `extern "C"` bindings to a small C shim with
-//! fixed-width types (`c/moddil_shim.c`: zlib's `uLong` is 32 bits on Windows and 64 elsewhere).
-//! Over them, a typed API: compression in one go, checksums, and a streaming `Deflater` that
-//! frees its C state when it is dropped.
+//! manifest's `[c]` table) and reached through `extern "C"` bindings: to zlib itself where its
+//! types are the same everywhere, and to a small C shim with fixed-width types where they are
+//! not (`c/moddil_shim.c`: zlib's `uLong` is 32 bits on Windows and 64 elsewhere). Over them, a
+//! typed API: compression in one go, checksums, a streaming `Deflater` that frees its C state
+//! when it is dropped, and inflation through zlib's callbacks into Moddil (`inflateBack`).
 
 /// zlib's state for streaming compression: only ever behind a pointer C gave.
 pub struct ZStream {}
@@ -27,14 +28,41 @@ extern "C" {
     fn moddil_zlib_adler32(adler: u32, buf: *const u8, len: u64) -> u32;
     fn moddil_zlib_deflater_new(level: i32, status: *mut i32) -> *mut ZStream;
     fn moddil_zlib_deflate(s: *mut ZStream, input: *const u8, in_len: u64, out: *mut u8, out_cap: u64, out_len: *mut u64, finish: i32) -> i32;
-    fn moddil_zlib_deflater_stats(s: *mut ZStream, stats: *mut Stats);
+    fn moddil_zlib_deflater_stats(s: *mut ZStream) -> Stats;
     fn moddil_zlib_deflater_end(s: *mut ZStream);
+    fn moddil_zlib_inflate_back(
+        input: fn(*mut (), *mut *const u8) -> u32,
+        in_desc: *mut (),
+        output: fn(*mut (), *mut u8, u32) -> i32,
+        out_desc: *mut (),
+    ) -> i32;
+    // zlib's own, whose types are the same everywhere: C strings, and its CRC table.
+    fn zlibVersion() -> *const u8;
+    fn zError(code: i32) -> *const u8;
+    fn get_crc_table() -> *const u32;
 }
 
 /// A zlib error: its code (`Z_DATA_ERROR` is -3, `Z_BUF_ERROR` -5, and so on).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ZlibError {
     pub code: int,
+}
+
+impl ZlibError {
+    /// What zlib calls the error: "data error" for `Z_DATA_ERROR`, and so on.
+    pub fn message(&self) -> String {
+        let code = self.code.to::<i32>() ?! "zlib's codes are `i32`s";
+        unsafe("zError gives a NUL-terminated string zlib keeps") {
+            core::ffi::c_text(zError(code)).to_string()
+        }
+    }
+}
+
+/// zlib's version, as it gives it.
+pub fn version() -> String {
+    unsafe("zlibVersion gives a NUL-terminated string zlib keeps") {
+        core::ffi::c_text(zlibVersion()).to_string()
+    }
 }
 
 fn error(code: i32) -> ZlibError {
@@ -104,6 +132,83 @@ pub fn crc32(data: &[u8]) -> u32 {
     }
 }
 
+/// The CRC-32 of `data` as `crc32` gives it, worked out here from zlib's table of 256 values:
+/// a C array, walked through its pointer.
+pub fn crc32_by_table(data: &[u8]) -> u32 {
+    let table = unsafe("get_crc_table gives zlib's table, which it keeps") { get_crc_table() };
+    let all: u32 = 4294967295;
+    let mut crc = all;
+    for b in data.iter() {
+        let byte: u32 = *b;
+        let at: int = (crc ^ byte) & 255;
+        let entry = unsafe("the table has 256 values, and `at` is below 256") {
+            *core::ptr::add(table, at)
+        };
+        crc = entry ^ (crc >> 8);
+    }
+    crc ^ all
+}
+
+/// The input `pull` gives zlib: where the bytes are, how many, and whether they were given.
+#[repr(C)]
+struct Source {
+    at: *const u8,
+    len: u32,
+    given: i32,
+}
+
+/// zlib asks for input: all of it, once, then none.
+fn pull(desc: *mut (), buf: *mut *const u8) -> u32 {
+    unsafe("inflateBack passes the source it was given, and where to put the input's address") {
+        let s: *mut Source = core::ptr::cast_mut_to(desc);
+        if (*s).given != 0 {
+            0
+        } else {
+            (*s).given = 1;
+            *buf = (*s).at;
+            (*s).len
+        }
+    }
+}
+
+/// zlib gives a piece of output: it goes on the end of the sink.
+fn push(desc: *mut (), buf: *mut u8, n: u32) -> i32 {
+    let n: int = n;
+    unsafe("inflateBack passes the sink it was given, and `n` bytes at `buf`") {
+        let sink: *mut Vec<u8> = core::ptr::cast_mut_to(desc);
+        for b in core::ffi::slice(buf, n).iter() {
+            (*sink).push(*b);
+        }
+    }
+    0
+}
+
+/// `data` (a zlib stream, as `compress` gives) uncompressed through zlib's `inflateBack`, which
+/// calls `pull` for its input and `push` with its output.
+pub fn uncompress_through_callbacks(data: &[u8]) -> Vec<u8> with fail(ZlibError) {
+    // A zlib stream is a 2-byte header, the raw deflate stream, and a 4-byte checksum;
+    // inflateBack reads the raw stream, and stops at its end.
+    if data.len() < 6 {
+        fail(error(-3));
+    }
+    let raw = &data[2..data.len()];
+    let n = raw.len().to::<u32>() ?! "the data is shorter than 4 GiB";
+    let mut source = Source { at: core::ffi::ptr_of(raw), len: n, given: 0 };
+    let mut sink: Vec<u8> = Vec::new();
+    let code = unsafe("inflateBack calls pull and push with these pointers, during the call only") {
+        moddil_zlib_inflate_back(
+            pull,
+            core::ptr::cast_mut_to(&mut source),
+            push,
+            core::ptr::cast_mut_to(&mut sink),
+        )
+    };
+    if code != 1 {
+        fail(error(code));
+    }
+    sink
+}
+
 /// The Adler-32 of `data` (as the zlib format uses it).
 pub fn adler32(data: &[u8]) -> u32 {
     if data.is_empty() {
@@ -160,13 +265,11 @@ impl Deflater {
         out
     }
 
-    /// What it has done so far.
+    /// What it has done so far: a `#[repr(C)]` struct C gives by value.
     pub fn stats(&self) -> Stats {
-        let mut s = Stats { total_in: 0, total_out: 0, adler: 0 };
-        unsafe("C fills in a `#[repr(C)]` struct, laid out as its own") {
-            moddil_zlib_deflater_stats(self.stream, &mut s);
+        unsafe("the stream is the deflater's own, alive until it is dropped") {
+            moddil_zlib_deflater_stats(self.stream)
         }
-        s
     }
 }
 
@@ -202,6 +305,20 @@ test "the checksums are the known ones" {
     assert(crc32(text.as_slice()) == 1095738169);
     assert(adler32(text.as_slice()) == 1541148634);
     assert(crc32(Vec::new().as_slice()) == 0);
+}
+
+test "zlib's callbacks into Moddil inflate the stream" {
+    let text = bytes("the quick brown fox jumps over the lazy dog, the quick brown fox again");
+    let packed = try { compress(text.as_slice(), 9)? } catch { _ => Vec::new() };
+    let back = try { uncompress_through_callbacks(packed.as_slice())? } catch { _ => Vec::new() };
+    assert(back == text);
+}
+
+test "zlib's strings and table, read through its pointers" {
+    assert(version().as_str() == "1.3.1");
+    assert(error(-3).message().as_str() == "data error");
+    let text = bytes("The quick brown fox jumps over the lazy dog");
+    assert(crc32_by_table(text.as_slice()) == crc32(text.as_slice()));
 }
 
 test "corrupt data is an error" {

@@ -156,6 +156,8 @@ impl<'a> Layouts<'a> {
                 }
                 Ok(scalar(types::I64, Some((0, 1))))
             }
+            // A C function pointer (`type.fnptr.1`): an address.
+            Ty::FnPtr(..) => Ok(scalar(types::I64, None)),
             // A raw pointer to a sized value: an address, which may be anything.
             Ty::Ptr(_, inner) if !matches!(**inner, Ty::Str | Ty::Slice(_) | Ty::Dyn(..)) => {
                 Ok(scalar(types::I64, None))

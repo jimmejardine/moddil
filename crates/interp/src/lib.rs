@@ -13,6 +13,7 @@
 //! empty, which is the drop flag: dropping an empty place does nothing.
 
 mod calls;
+mod cmem;
 mod dispatch;
 mod machine;
 mod natives;

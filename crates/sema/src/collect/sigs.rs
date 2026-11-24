@@ -395,7 +395,7 @@ impl Collector<'_> {
                         p.range,
                         format!(
                             "{what}'s parameters have C's types: sized numbers, `int`, `bool`, raw \
-                             pointers and `#[repr(C)]` structs behind them, not `{}`",
+                             pointers, `fn` types and `#[repr(C)]` structs of those, not `{}`",
                             p.ty
                         ),
                     ));

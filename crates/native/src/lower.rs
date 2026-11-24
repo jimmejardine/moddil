@@ -38,6 +38,9 @@ use moddil_sema::{
 };
 use moddil_syntax::TextRange;
 
+use moddil_ffi::CType;
+use moddil_ffi::abi::{CLayout, Scalar as CScalar};
+
 use crate::layout::{Layout, Layouts, Shape, Tag};
 
 /// What a site is.
@@ -83,7 +86,7 @@ pub(crate) fn clif_type(ty: &Ty) -> Result<Option<ir::Type>, String> {
     Ok(Some(match ty {
         Ty::Unit | Ty::Never => return Ok(None),
         // A borrow is a pointer, as wide as an `int` on the 64-bit targets C1 runs on.
-        Ty::Int | Ty::Ref(..) | Ty::Ptr(..) => types::I64,
+        Ty::Int | Ty::Ref(..) | Ty::Ptr(..) | Ty::FnPtr(..) => types::I64,
         Ty::Bool => types::I8,
         Ty::Char => types::I32,
         Ty::Num(n) => match n {
@@ -97,6 +100,73 @@ pub(crate) fn clif_type(ty: &Ty) -> Result<Option<ir::Type>, String> {
         },
         t => return Err(format!("a value of type `{t}`")),
     }))
+}
+
+/// A slot of `size` bytes, 8-byte aligned: its address.
+fn scratch(b: &mut FunctionBuilder<'_>, size: u32) -> ir::Value {
+    let slot = b.create_sized_stack_slot(ir::StackSlotData::new(
+        ir::StackSlotKind::ExplicitSlot,
+        size,
+        3,
+    ));
+    b.ins().stack_addr(types::I64, slot, 0)
+}
+
+/// Copies `size` bytes from `src` to `dest`, reading none past them.
+fn copy_bytes(b: &mut FunctionBuilder<'_>, dest: ir::Value, src: ir::Value, size: u32) {
+    let flags = ir::MemFlagsData::trusted();
+    let mut at = 0u32;
+    for (n, t) in [
+        (8, types::I64),
+        (4, types::I32),
+        (2, types::I16),
+        (1, types::I8),
+    ] {
+        while size - at >= n {
+            let v = b.ins().load(t, flags, src, at as i32);
+            b.ins().store(flags, v, dest, at as i32);
+            at += n;
+        }
+    }
+}
+
+/// The values a Moddil call passes, as `pass` says, for the value at `at`.
+fn load_pass(b: &mut FunctionBuilder<'_>, pass: &Pass, at: ir::Value) -> Vec<ir::Value> {
+    let flags = ir::MemFlagsData::trusted();
+    match pass {
+        Pass::Nothing => Vec::new(),
+        Pass::Scalar(t) => vec![b.ins().load(*t, flags, at, 0)],
+        Pass::Words(ts) => {
+            let mut off = 0;
+            ts.iter()
+                .map(|t| {
+                    let v = b.ins().load(*t, flags, at, off);
+                    off += t.bytes() as i32;
+                    v
+                })
+                .collect()
+        }
+        Pass::Indirect => vec![at],
+    }
+}
+
+/// Stores the values a Moddil call gave, as `pass` says, at `at`. (A result given through a
+/// pointer is there already.)
+fn store_pass(b: &mut FunctionBuilder<'_>, pass: &Pass, vals: &[ir::Value], at: ir::Value) {
+    let flags = ir::MemFlagsData::trusted();
+    match pass {
+        Pass::Scalar(_) => {
+            b.ins().store(flags, vals[0], at, 0);
+        }
+        Pass::Words(ts) => {
+            let mut off = 0;
+            for (t, v) in ts.iter().zip(vals) {
+                b.ins().store(flags, *v, at, off);
+                off += t.bytes() as i32;
+            }
+        }
+        Pass::Nothing | Pass::Indirect => {}
+    }
 }
 
 /// Whether `ty` is a signed integer type.
@@ -278,6 +348,8 @@ pub(crate) struct Compiler<'db, M: Module> {
     c_drops: HashMap<Ty, FuncId>,
     /// Each C function called (`ffi.extern.1`), imported by its symbol.
     foreigns: HashMap<u32, FuncId>,
+    /// Each Moddil function given C as a function pointer (`type.fnptr.1`): its C-ABI wrapper.
+    callbacks: HashMap<u32, FuncId>,
     /// The places code comes from: a file and an offset in it, numbered by the source location
     /// (less one) the lowering gives that code.
     places: Vec<(u32, u32)>,
@@ -450,6 +522,17 @@ fn c_type_name(items: &ItemTree, ty: &Ty) -> String {
             }
         }
         Ty::Adt(a, ..) => items.adts[*a as usize].name.clone(),
+        // A function pointer (`type.fnptr.1`): `int32_t (*)(const void *, const void *)`; a
+        // declaration puts its name after the `*`.
+        Ty::FnPtr(ps, r) => {
+            let ps: Vec<String> = ps.iter().map(|p| c_type_name(items, p)).collect();
+            let ps = if ps.is_empty() {
+                "void".to_string()
+            } else {
+                ps.join(", ")
+            };
+            format!("{} (*)({ps})", c_type_name(items, r))
+        }
         t => format!("/* {t} */ void"),
     }
 }
@@ -458,6 +541,12 @@ fn c_type_name(items: &ItemTree, ty: &Ty) -> String {
 fn structs_in(ty: &Ty, out: &mut Vec<u32>) {
     match ty {
         Ty::Ptr(_, inner) => structs_in(inner, out),
+        Ty::FnPtr(ps, r) => {
+            for p in ps.iter() {
+                structs_in(p, out);
+            }
+            structs_in(r, out);
+        }
         Ty::Adt(a, ..) if !out.contains(a) => out.push(*a),
         _ => {}
     }
@@ -479,7 +568,9 @@ pub(crate) fn header(db: &dyn Db, program: Program, exports: &[u32], name: &str)
     // A type and a name: `int64_t n`, `const Point *p`.
     let decl = |t: &Ty, n: &str| {
         let t = c_type_name(items, t);
-        if t.ends_with('*') {
+        if t.contains("(*)") {
+            t.replacen("(*)", &format!("(*{n})"), 1)
+        } else if t.ends_with('*') {
             format!("{t}{n}")
         } else {
             format!("{t} {n}")
@@ -713,6 +804,7 @@ pub(crate) fn build<'db, M: Module>(
         tramps: HashMap::new(),
         c_drops: HashMap::new(),
         foreigns: HashMap::new(),
+        callbacks: HashMap::new(),
         places: Vec::new(),
         place_ids: HashMap::new(),
         lines: lines.then(Vec::new),
@@ -851,34 +943,100 @@ impl<M: Module> Compiler<'_, M> {
     }
 
     /// C function `f` (`ffi.extern.1`), imported by its symbol with the platform's C signature
-    /// (8- and 16-bit integers as 32), the first time it is called.
+    /// (8- and 16-bit integers as 32, structs as [`moddil_ffi::abi`] says), the first time it is
+    /// called.
     fn foreign_fn(&mut self, f: u32) -> Result<FuncId, String> {
         if let Some(&id) = self.foreigns.get(&f) {
             return Ok(id);
         }
         let sig = &self.items.fns[f as usize];
-        let c = |t: &Ty| -> Result<Option<ir::Type>, String> {
-            Ok(clif_type(t)?.map(|t| {
-                if t == types::I8 || t == types::I16 {
-                    types::I32
-                } else {
-                    t
-                }
-            }))
-        };
-        let mut s = self.module.make_signature();
-        for p in &sig.params {
-            let t = c(&p.ty)?.ok_or("a C function's parameter of type `()`")?;
-            s.params.push(AbiParam::new(t));
-        }
-        if let Some(t) = c(&sig.ret)? {
-            s.returns.push(AbiParam::new(t));
-        }
+        let (name, params, ret) = (
+            sig.name.clone(),
+            sig.params.iter().map(|p| p.ty.clone()).collect::<Vec<_>>(),
+            sig.ret.clone(),
+        );
+        let s = self.c_sig(&params, &ret)?;
         let id = self
             .module
-            .declare_function(&sig.name, Linkage::Import, &s)
+            .declare_function(&name, Linkage::Import, &s)
             .map_err(|e| format!("Cranelift: {e:?}"))?;
         self.foreigns.insert(f, id);
+        Ok(id)
+    }
+
+    /// `ty` as C takes or gives it (`ffi.types.1`, `ffi.types.2`).
+    fn c_type(&mut self, ty: &Ty) -> Result<CType, String> {
+        if matches!(ty, Ty::Adt(..)) {
+            return Ok(CType::Struct(Arc::new(self.c_layout(ty)?)));
+        }
+        Ok(match clif_type(ty)? {
+            None => CType::Void,
+            Some(t) if t == types::I8 => CType::I8,
+            Some(t) if t == types::I16 => CType::I16,
+            Some(t) if t == types::I32 => CType::I32,
+            Some(t) if t == types::F32 => CType::F32,
+            Some(t) if t == types::F64 => CType::F64,
+            Some(_) => CType::I64,
+        })
+    }
+
+    /// The C layout of `#[repr(C)]` struct type `ty`: its scalars by offset, nested structs
+    /// flattened.
+    fn c_layout(&mut self, ty: &Ty) -> Result<CLayout, String> {
+        fn flatten<M: Module>(
+            c: &mut Compiler<'_, M>,
+            ty: &Ty,
+            at: u32,
+            out: &mut Vec<(u32, CScalar)>,
+        ) -> Result<(), String> {
+            let l = c.layouts.of(ty)?;
+            match &l.shape {
+                Shape::Fields(fs) => {
+                    for (o, t) in fs.clone() {
+                        flatten(c, &t, at + o, out)?;
+                    }
+                }
+                Shape::Scalar(t) if *t == types::F32 => out.push((at, CScalar::F32)),
+                Shape::Scalar(t) if *t == types::F64 => out.push((at, CScalar::F64)),
+                Shape::Scalar(t) => out.push((at, CScalar::Int(t.bytes() as u8))),
+                _ => return Err(format!("a `{ty}` in a struct given to C by value")),
+            }
+            Ok(())
+        }
+        let l = self.layouts.of(ty)?;
+        let mut fields = Vec::new();
+        flatten(self, ty, 0, &mut fields)?;
+        Ok(CLayout {
+            size: l.size,
+            align: l.align,
+            fields,
+        })
+    }
+
+    /// The C signature of a function taking `params` and giving `ret`.
+    fn c_sig(&mut self, params: &[Ty], ret: &Ty) -> Result<Signature, String> {
+        let cparams = params
+            .iter()
+            .map(|p| self.c_type(p))
+            .collect::<Result<Vec<_>, _>>()?;
+        if cparams.contains(&CType::Void) {
+            return Err("a C function's parameter of type `()`".to_string());
+        }
+        let cret = self.c_type(ret)?;
+        let cc = self.module.isa().default_call_conv();
+        Ok(moddil_ffi::c_signature(cc, &cparams, &cret))
+    }
+
+    /// The C-ABI wrapper of Moddil function `f`, through which C calls it when it is given C as
+    /// a function pointer (`type.fnptr.1`): made the first time it is.
+    fn callback_fn(&mut self, f: u32) -> Result<FuncId, String> {
+        if let Some(&id) = self.callbacks.get(&f) {
+            return Ok(id);
+        }
+        let (target, params, ret) = self.declare_fn(f, &[])?;
+        let name = format!("moddil_callback_{f}");
+        let id = self.c_wrapper(target, &params, &ret, &name, Linkage::Local, false)?;
+        self.callbacks.insert(f, id);
         Ok(id)
     }
 
@@ -1601,14 +1759,31 @@ impl<M: Module> Compiler<'_, M> {
     }
 
     /// `#[export]` function `f`'s wrapper (`ffi.export.1`): under its own name, with C's types
-    /// (8- and 16-bit integers as 32, as C passes them) in the platform's C convention. It starts
-    /// the runtime, calls `target`, and ends the process if that traps.
+    /// in the platform's C convention ([`Compiler::c_wrapper`]).
     fn export_wrapper(
         &mut self,
         f: u32,
         target: FuncId,
         params: &[Ty],
         ret: &Ty,
+    ) -> Result<FuncId, String> {
+        let name = self.items.fns[f as usize].name.clone();
+        let status = self.items.fns[f as usize].export_status;
+        self.c_wrapper(target, params, ret, &name, Linkage::Export, status)
+    }
+
+    /// A C-ABI function `name` that calls Moddil function `target` (taking `params`, giving
+    /// `ret`): C's types (8- and 16-bit integers as 32, as C passes them; structs as
+    /// [`moddil_ffi::abi`] says) in the platform's C convention. It starts the runtime, calls
+    /// `target`, and if that traps, gives 2 (`status`, `ffi.export.2`) or ends the process.
+    fn c_wrapper(
+        &mut self,
+        target: FuncId,
+        params: &[Ty],
+        ret: &Ty,
+        name: &str,
+        linkage: Linkage,
+        status: bool,
     ) -> Result<FuncId, String> {
         let wide = |t: ir::Type| {
             if t == types::I8 || t == types::I16 {
@@ -1617,19 +1792,11 @@ impl<M: Module> Compiler<'_, M> {
                 t
             }
         };
-        let name = self.items.fns[f as usize].name.clone();
-        let mut sig = self.module.make_signature();
-        for p in params {
-            let t = clif_type(p)?.ok_or("an `#[export]` parameter of type `()`")?;
-            sig.params.push(AbiParam::new(wide(t)));
-        }
-        let ret_t = clif_type(ret)?;
-        if let Some(t) = ret_t {
-            sig.returns.push(AbiParam::new(wide(t)));
-        }
+        let on = moddil_ffi::abi::target();
+        let sig = self.c_sig(params, ret)?;
         let id = self
             .module
-            .declare_function(&name, Linkage::Export, &sig)
+            .declare_function(name, linkage, &sig)
             .map_err(|e| format!("Cranelift: {e:?}"))?;
         let import = |m: &mut M, n: &str| -> Result<FuncId, String> {
             let s = m.make_signature();
@@ -1639,6 +1806,15 @@ impl<M: Module> Compiler<'_, M> {
         let begin = import(&mut self.module, "moddil_rt_export_begin")?;
         let trapped = import(&mut self.module, "moddil_rt_export_trapped")?;
         let ptr = self.module.target_config().pointer_type();
+        // How each struct crosses, worked out before the builder borrows the context.
+        let mut cparams = Vec::new();
+        let mut passes = Vec::new();
+        for p in params {
+            cparams.push(self.c_type(p)?);
+            passes.push(self.pass(p)?);
+        }
+        let cret = self.c_type(ret)?;
+        let ret_pass = self.pass(ret)?;
         let mut ctx = self.module.make_context();
         ctx.func.signature = sig;
         let mut fctx = FunctionBuilderContext::new();
@@ -1646,17 +1822,53 @@ impl<M: Module> Compiler<'_, M> {
         let block = b.create_block();
         b.append_block_params_for_function_params(block);
         b.switch_to_block(block);
-        let args = b.block_params(block).to_vec();
+        let mut args = b.block_params(block).to_vec();
+        let flags = ir::MemFlagsData::trusted();
+        // A struct result given through a hidden pointer: the first parameter.
+        let sret = match &cret {
+            CType::Struct(l) if moddil_ffi::abi::ret(on, l) == moddil_ffi::abi::Ret::Indirect => {
+                Some(args.remove(0))
+            }
+            _ => None,
+        };
         let begin = self.module.declare_func_in_func(begin, b.func);
         b.ins().call(begin, &[]);
         let mut vals = Vec::new();
-        for (a, p) in args.iter().zip(params) {
-            let t = clif_type(p)?.expect("checked above");
+        let mut args = args.into_iter();
+        for ((p, cp), pass) in params.iter().zip(&cparams).zip(&passes) {
+            if let CType::Struct(l) = cp {
+                // The struct, assembled in a slot of its own, then passed as Moddil passes it.
+                let slot = scratch(&mut b, l.padded() + 8);
+                match moddil_ffi::abi::arg(on, l) {
+                    moddil_ffi::abi::Arg::Parts(parts) => {
+                        for (off, _) in parts {
+                            let v = args.next().ok_or("a struct's part")?;
+                            b.ins().store(flags, v, slot, off as i32);
+                        }
+                    }
+                    moddil_ffi::abi::Arg::Pointer | moddil_ffi::abi::Arg::Stack => {
+                        let at = args.next().ok_or("a struct's address")?;
+                        copy_bytes(&mut b, slot, at, l.size);
+                    }
+                }
+                vals.extend(load_pass(&mut b, pass, slot));
+                continue;
+            }
+            let a = args.next().ok_or("a parameter")?;
+            let t = clif_type(p)?.expect("a C scalar");
             vals.push(if wide(t) == t {
-                *a
+                a
             } else {
-                b.ins().ireduce(t, *a)
+                b.ins().ireduce(t, a)
             });
+        }
+        // Where Moddil gives a struct result.
+        let rslot = match &cret {
+            CType::Struct(l) => Some(scratch(&mut b, l.padded() + 8)),
+            _ => None,
+        };
+        if let (Some(r), Pass::Indirect) = (rslot, &ret_pass) {
+            vals.push(r);
         }
         // Room for an error, which an export cannot give.
         let slot = b.create_sized_stack_slot(ir::StackSlotData::new(
@@ -1673,7 +1885,7 @@ impl<M: Module> Compiler<'_, M> {
         let bad = b.create_block();
         b.ins().brif(results[0], bad, &[], ok, &[]);
         b.switch_to_block(bad);
-        if self.items.fns[f as usize].export_status {
+        if status {
             // `#[export(status)]` (`ffi.export.2`): the caller is told, with 2.
             let two = b.ins().iconst(types::I32, 2);
             b.ins().return_(&[two]);
@@ -1683,20 +1895,38 @@ impl<M: Module> Compiler<'_, M> {
             b.ins().trap(ir::TrapCode::unwrap_user(1));
         }
         b.switch_to_block(ok);
-        match ret_t {
-            Some(t) if wide(t) != t => {
-                let v = if signed(ret) {
-                    b.ins().sextend(wide(t), results[1])
-                } else {
-                    b.ins().uextend(wide(t), results[1])
-                };
-                b.ins().return_(&[v]);
+        if let (CType::Struct(l), Some(r)) = (&cret, rslot) {
+            store_pass(&mut b, &ret_pass, &results[1..], r);
+            match moddil_ffi::abi::ret(on, l) {
+                moddil_ffi::abi::Ret::Parts(parts) => {
+                    let out: Vec<ir::Value> = parts
+                        .iter()
+                        .map(|(off, t)| b.ins().load(*t, flags, r, *off as i32))
+                        .collect();
+                    b.ins().return_(&out);
+                }
+                moddil_ffi::abi::Ret::Indirect => {
+                    let at = sret.ok_or("the hidden result pointer")?;
+                    copy_bytes(&mut b, at, r, l.size);
+                    b.ins().return_(&[]);
+                }
             }
-            Some(_) => {
-                b.ins().return_(&[results[1]]);
-            }
-            None => {
-                b.ins().return_(&[]);
+        } else {
+            match clif_type(ret)? {
+                Some(t) if wide(t) != t => {
+                    let v = if signed(ret) {
+                        b.ins().sextend(wide(t), results[1])
+                    } else {
+                        b.ins().uextend(wide(t), results[1])
+                    };
+                    b.ins().return_(&[v]);
+                }
+                Some(_) => {
+                    b.ins().return_(&[results[1]]);
+                }
+                None => {
+                    b.ins().return_(&[]);
+                }
             }
         }
         b.seal_all_blocks();
@@ -2776,6 +3006,18 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                     }
                 };
                 self.write(&dest, Val::Scalar(v))
+            }
+            // A function's address as a C function pointer (`type.fnptr.1`): a C function's
+            // own, or a Moddil function's C-ABI wrapper's.
+            Rvalue::FnPtr(f) => {
+                let id = if self.c.items.fns[*f as usize].foreign {
+                    self.c.foreign_fn(*f)?
+                } else {
+                    self.c.callback_fn(*f)?
+                };
+                let fref = self.c.module.declare_func_in_func(id, self.b.func);
+                let a = self.b.ins().func_addr(types::I64, fref);
+                self.write(&dest, Val::Scalar(a))
             }
             Rvalue::StaticRef(f) => {
                 let a = self.static_ref(*f)?;
@@ -5222,8 +5464,39 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             sig.params.iter().map(|p| p.ty.clone()).collect(),
             sig.ret.clone(),
         );
+        let on = moddil_ffi::abi::target();
+        let flags = ir::MemFlagsData::trusted();
+        let cret = self.c.c_type(&ret)?;
         let mut vals = Vec::new();
+        // Room for a struct result; given as the hidden pointer if C writes it there.
+        let rslot = match &cret {
+            CType::Struct(l) => {
+                let r = scratch(&mut self.b, l.padded() + 8);
+                if moddil_ffi::abi::ret(on, l) == moddil_ffi::abi::Ret::Indirect {
+                    vals.push(r);
+                }
+                Some(r)
+            }
+            _ => None,
+        };
         for (a, ty) in args.iter().zip(&params) {
+            if let CType::Struct(l) = self.c.c_type(ty)? {
+                // A copy, padded, which the parts are read from or C is given.
+                let Val::Mem(at) = self.operand(a)? else {
+                    return Err("a struct not in memory".to_string());
+                };
+                let copy = scratch(&mut self.b, l.padded() + 8);
+                copy_bytes(&mut self.b, copy, at, l.size);
+                match moddil_ffi::abi::arg(on, &l) {
+                    moddil_ffi::abi::Arg::Parts(parts) => {
+                        for (off, t) in parts {
+                            vals.push(self.b.ins().load(t, flags, copy, off as i32));
+                        }
+                    }
+                    moddil_ffi::abi::Arg::Pointer | moddil_ffi::abi::Arg::Stack => vals.push(copy),
+                }
+                continue;
+            }
             let v = self.value(a)?;
             let small = matches!(clif_type(ty)?, Some(t) if t == types::I8 || t == types::I16);
             vals.push(match (small, signed(ty)) {
@@ -5234,7 +5507,18 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         }
         let fref = self.c.module.declare_func_in_func(id, self.b.func);
         let call = self.b.ins().call(fref, &vals);
-        if let Some(&r) = self.b.inst_results(call).first() {
+        let results = self.b.inst_results(call).to_vec();
+        if let (CType::Struct(l), Some(r)) = (&cret, rslot) {
+            if let moddil_ffi::abi::Ret::Parts(parts) = moddil_ffi::abi::ret(on, l) {
+                for ((off, _), v) in parts.iter().zip(&results) {
+                    self.b.ins().store(flags, *v, r, *off as i32);
+                }
+            }
+            let at = self.addr_of(d)?;
+            copy_bytes(&mut self.b, at, r, l.size);
+            return Ok(());
+        }
+        if let Some(&r) = results.first() {
             let r = match clif_type(&ret)? {
                 Some(t) if t == types::I8 || t == types::I16 => self.b.ins().ireduce(t, r),
                 _ => r,
@@ -5276,8 +5560,62 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 self.b.ins().store(flags, one, a, 16);
                 Ok(())
             }
+            "c_len" => {
+                // The bytes before the first NUL.
+                let p = self.value(&args[0])?;
+                let head = self.b.create_block();
+                let more = self.b.create_block();
+                let done = self.b.create_block();
+                self.b.append_block_param(head, types::I64);
+                self.b.append_block_param(done, types::I64);
+                let zero = self.b.ins().iconst(types::I64, 0);
+                self.b.ins().jump(head, &[zero.into()]);
+                self.b.switch_to_block(head);
+                let i = self.b.block_params(head)[0];
+                let at = self.b.ins().iadd(p, i);
+                let byte = self.b.ins().load(types::I8, flags, at, 0);
+                self.b.ins().brif(byte, more, &[], done, &[i.into()]);
+                self.b.switch_to_block(more);
+                let next = self.b.ins().iadd_imm_s(i, 1);
+                self.b.ins().jump(head, &[next.into()]);
+                self.b.seal_block(head);
+                self.b.seal_block(more);
+                self.b.switch_to_block(done);
+                self.b.seal_block(done);
+                let n = self.b.block_params(done)[0];
+                self.write(d, Val::Scalar(n))
+            }
             _ => Err(format!("the built-in function `ffi::{name}`")),
         }
+    }
+
+    /// A call of the `core` mod's `ptr` module, `name`, into `d` (`core.ptr.2`): null pointers,
+    /// a pointer's distance on in values of its type, and casts, which keep the address.
+    fn ptr_op(
+        &mut self,
+        name: &str,
+        targs: &[Ty],
+        args: &[Operand],
+        d: &PlaceRef,
+    ) -> Result<(), String> {
+        let v = match name {
+            "null" | "null_mut" => self.b.ins().iconst(types::I64, 0),
+            "is_null" => {
+                let p = self.value(&args[0])?;
+                self.b.ins().icmp_imm_s(IntCC::Equal, p, 0)
+            }
+            "add" | "add_mut" => {
+                let t = targs.first().ok_or("`ptr::add` without its type")?;
+                let size = i64::from(self.layout(t)?.size);
+                let p = self.value(&args[0])?;
+                let n = self.value(&args[1])?;
+                let by = self.b.ins().imul_imm_s(n, size);
+                self.b.ins().iadd(p, by)
+            }
+            "cast" | "cast_mut_to" => self.value(&args[0])?,
+            _ => return Err(format!("the built-in function `ptr::{name}`")),
+        };
+        self.write(d, Val::Scalar(v))
     }
 
     /// A call of the `core` mod's `gpu` module, `name`, into `d` (`gpu.1`): a kernel's WGSL
@@ -5456,6 +5794,22 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         }
         if sig.src == Src::Prelude && items.modules[sig.module as usize].path == ["ffi"] {
             return self.ffi(sig.name.as_str(), args, d);
+        }
+        // An `Rc`'s allocation, to its raw pointer and back (`rc.1`): `core::ffi`'s.
+        if sig.src == Src::Prelude
+            && let moddil_sema::Container::Impl(k) = sig.container
+            && items.impls[k as usize]
+                .self_ty
+                .adt()
+                .is_some_and(|a| items.adts[a as usize].name == "RcBox")
+        {
+            return self.ffi(sig.name.as_str(), args, d);
+        }
+        if sig.src == Src::Prelude
+            && items.modules[sig.module as usize].path == ["ptr"]
+            && sig.name != "cast_mut"
+        {
+            return self.ptr_op(sig.name.as_str(), targs, args, d);
         }
         let sig = &items.fns[f as usize];
         let self_ty = match sig.container {

@@ -127,6 +127,9 @@ pub struct Inference {
     try_errors: HashMap<ExprId, Ty>,
     evidence: EvidenceMap,
     dyn_coercions: HashMap<ExprId, Ty>,
+    /// The functions named where a C function pointer is wanted (`type.fnptr.1`), by the
+    /// expression naming them.
+    fn_ptrs: HashMap<ExprId, u32>,
     /// For a function whose effects are inferred: the effects its body needs that nothing in it
     /// meets.
     escaping_needs: Vec<Ty>,
@@ -240,6 +243,12 @@ impl Inference {
     /// `dyn` borrow type.
     pub fn dyn_coercion(&self, e: ExprId) -> Option<&Ty> {
         self.dyn_coercions.get(&e)
+    }
+
+    /// For a function named where a C function pointer is wanted (`type.fnptr.1`): the
+    /// function, whose address the expression's value is.
+    pub fn fn_ptr(&self, e: ExprId) -> Option<u32> {
+        self.fn_ptrs.get(&e).copied()
     }
 
     /// For a method call whose receiver is reached through `Deref` (`expr.method.deref.1`):
@@ -838,10 +847,65 @@ impl Checker<'_> {
         }
         let t = self.infer(e);
         self.unsized_value(e);
+        if self.fn_pointer(e, expected) {
+            return t;
+        }
         if !self.unsize(e, &t, expected) && !self.coerce(&t, expected) {
             self.mismatch(e, expected, &t);
         }
         t
+    }
+
+    /// Whether `e` names a function where a C function pointer of type `expected` is wanted
+    /// (`type.fnptr.1`), recording it if so. The function is free and not generic, its
+    /// signature is the pointer's, and it needs no handlers, cannot fail and does not suspend
+    /// or spawn (E0222 otherwise).
+    fn fn_pointer(&mut self, e: ExprId, expected: &Ty) -> bool {
+        let Ty::FnPtr(ps, r) = self.norm(expected) else {
+            return false;
+        };
+        let ExprKind::Closure { body, .. } = self.body.exprs[e].kind else {
+            return false;
+        };
+        let ExprKind::Pass(call) = self.body.exprs[body].kind else {
+            return false;
+        };
+        let ExprKind::Call { callee, .. } = self.body.exprs[call].kind else {
+            return false;
+        };
+        let ExprKind::Fn { func, .. } = self.body.exprs[callee].kind else {
+            return false;
+        };
+        if self.body.exprs[callee].range != self.body.exprs[e].range {
+            return false;
+        }
+        let sig = &self.items.fns[func as usize];
+        let fits = sig.generics.params.is_empty()
+            && sig.self_kind.is_none()
+            && sig.params.len() == ps.len()
+            && sig.params.iter().zip(ps.iter()).all(|(p, t)| p.ty == *t)
+            && sig.ret == *r;
+        let plain = sig.effects.is_empty() && sig.control == 0 && sig.fails == Ty::Never;
+        if !fits || !plain {
+            let name = sig.name.clone();
+            let why = if fits {
+                "needs no handlers, cannot fail, and does not suspend or spawn"
+            } else {
+                "is a free function, not generic, with the pointer's parameters and result"
+            };
+            let (shown, range) = (self.show(expected), self.range(e));
+            self.report(
+                Code::E0222,
+                range,
+                format!(
+                    "a function given as a C function pointer `{shown}` {why}: `{name}` is not"
+                ),
+            );
+            return true;
+        }
+        self.out.fn_ptrs.insert(e, func);
+        self.out.dyn_coercions.insert(e, Ty::FnPtr(ps, r));
+        true
     }
 
     /// E0605 for a part of an array or text used as a value, not behind a borrow: it has no

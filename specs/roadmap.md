@@ -1281,9 +1281,47 @@ M3a, M3b, …
     - methods taking `self` by value are not carried;
     - an error crosses as its type and `Debug` text, not its fields;
     - the module calls into Moddil one call at a time.
+- **Slice M3c (decided November 2026): the C ABI's completions.** The user's choices: pointers
+  and C strings, callbacks, and structs by value, on the MIR interpreter as on native code, shown
+  in `examples/zlib` (variadic functions later).
+  - **Structs by value** (`ffi.types.2`): `#[repr(C)]` structs of C's types as C and `#[export]`
+    functions' parameters and results, and in the header.
+    - One classification, `moddil-ffi`'s `abi` module, gives each target's rules: Windows x64
+      (1, 2, 4 or 8 bytes in a register, else a pointer), SysV x86-64 (eightbytes in integer or
+      vector registers up to 16 bytes, else memory), and AArch64 (homogeneous float aggregates
+      in float registers, else up to two words, else a pointer). Native code (calls and
+      wrappers) and the MIR interpreter's trampolines share it.
+  - **Callbacks** (`type.fnptr.1`): `fn(A, B) -> R` types of C's scalar types (`Ty::FnPtr`).
+    - A function named where one is wanted becomes `Rvalue::FnPtr`: natively the address of a
+      C-ABI wrapper (the `#[export]` wrapper's code, local), on the MIR interpreter a C function
+      Cranelift makes that calls back into the waiting interpreter (a nested run of the frame).
+    - `void *` user data: on the interpreter, a value C can read is copied as other pointers'
+      are; another crosses as a handle.
+  - **C's memory** (`core.ptr.2`, `ffi.core.2`, `ffi.native.2`):
+    - `core::ptr` gains `null`, `null_mut`, `is_null`, `add`, `add_mut`, `cast` and
+      `cast_mut_to`;
+    - `core::ffi` gains `c_len`, `c_text` and `c_string`;
+    - the MIR interpreter reads and writes through C's pointers (C places, in its own frame
+      kind), and runs `slice`, `text`, `ptr_of` and `text_ptr` on copies.
+  - **Shown in:**
+    - `examples/zlib`: `zlibVersion` and `zError` as text, a CRC-32 from zlib's table, the
+      deflater's statistics by value, and `inflateBack` calling Moddil's `pull` and `push`;
+    - `examples/cabi`: five struct shapes both ways (`c/main.c` calls the exports;
+      `c/shapes.c` is called), and C calling Moddil back with and without user data.
+    - Conformance: libc's `qsort`, `bsearch`, `div`, `lldiv`, `getenv` and `strerror`, and the
+      new E0222s.
+  - **Interim limits:**
+    - no variadic functions;
+    - no struct values in callbacks;
+    - Moddil gives `fn` values to C but does not call one;
+    - on the interpreter, borrows of C's memory are copies, `slice_mut` of it traps, and a trap
+      in a callback is raised only when the C call returns;
+    - allocator hooks kept by C past the call (zlib's `zalloc`) wait for state that outlives a
+      call on the interpreter;
+    - AArch64's rule that a struct is not split between registers and the stack holds only as
+      far as Cranelift assigns registers; the tests stay within them.
 - **Next:** async in the Python bindings and numpy-friendly results; or the Hashiverse client's
-  first pieces through the C ABI; or the C ABI's own completions (pointer arithmetic, callbacks,
-  structs by value).
+  first pieces through the C ABI; or the LLVM release backend.
 
 ## Staging: distributed programs
 

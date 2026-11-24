@@ -296,7 +296,8 @@ impl Lowerer<'_> {
                 self.report(
                     Code::E0219,
                     range,
-                    "`core::ffi` is named only in a mod whose manifest lists the `unsafe`                      capability: `capabilities = [\"unsafe\"]` under `[mod]`",
+                    "`core::ffi` is named only in a mod whose manifest lists the `unsafe` \
+                     capability: `capabilities = [\"unsafe\"]` under `[mod]`",
                 );
             }
             return;

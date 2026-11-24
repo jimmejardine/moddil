@@ -45,6 +45,10 @@ pub enum Ty {
     /// A raw pointer (`type.ptr.1`): `*const T` or `*mut T`. It carries no borrow, so nothing
     /// checks what it points to; `*p` is allowed only in an `unsafe` block.
     Ptr(bool, Arc<Ty>),
+    /// A C function pointer (`type.fnptr.1`): `fn(A, B) -> R`, its parameters' types and its
+    /// result's. Its values are C functions' addresses, and those of the C-ABI wrappers of the
+    /// Moddil functions named where one is wanted.
+    FnPtr(Arc<[Ty]>, Arc<Ty>),
     /// `dyn Trait`: a value of some type that implements the trait, known only through it. It
     /// has no size, so it is only ever behind a borrow (`&dyn Trait`).
     /// `dyn Trait`, and for a closure trait the associated types of `FnOnce` it fixes, by
@@ -345,6 +349,7 @@ impl Ty {
         match self {
             Ty::Tuple(ts) | Ty::Adt(_, _, ts) | Ty::Errors(ts) => ts.iter().any(|t| t.any(f)),
             Ty::Ref(_, t) | Ty::Ptr(_, t) | Ty::Slice(t) | Ty::Buf(t) => t.any(f),
+            Ty::FnPtr(ps, r) => ps.iter().any(|t| t.any(f)) || r.any(f),
             Ty::Array(t, n) => t.any(f) || n.any(f),
             Ty::Dyn(tr, fixed) => {
                 tr.args.iter().any(|t| t.any(f)) || fixed.iter().any(|(_, t)| t.any(f))
@@ -374,6 +379,7 @@ impl Ty {
             Ty::Adt(a, n, ts) => Ty::Adt(*a, n.clone(), ts.iter().map(&mut *f).collect()),
             Ty::Ref(m, t) => Ty::Ref(*m, Arc::new(f(t))),
             Ty::Ptr(m, t) => Ty::Ptr(*m, Arc::new(f(t))),
+            Ty::FnPtr(ps, r) => Ty::FnPtr(ps.iter().map(&mut *f).collect(), Arc::new(f(r))),
             Ty::Array(t, n) => Ty::Array(Arc::new(f(t)), Arc::new(f(n))),
             Ty::Slice(t) => Ty::Slice(Arc::new(f(t))),
             Ty::Buf(t) => Ty::Buf(Arc::new(f(t))),
@@ -588,6 +594,15 @@ impl fmt::Debug for Ty {
             Ty::Ref(false, t) => write!(f, "&{t:?}"),
             Ty::Ptr(true, t) => write!(f, "*mut {t:?}"),
             Ty::Ptr(false, t) => write!(f, "*const {t:?}"),
+            Ty::FnPtr(ps, r) => {
+                f.write_str("fn(")?;
+                list(f, ps)?;
+                f.write_str(")")?;
+                if **r != Ty::Unit {
+                    write!(f, " -> {r:?}")?;
+                }
+                Ok(())
+            }
             Ty::Tuple(ts) => {
                 f.write_str("(")?;
                 list(f, ts)?;

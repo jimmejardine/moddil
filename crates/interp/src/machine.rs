@@ -61,7 +61,7 @@ pub(crate) fn run(
     let mut m = Machine {
         db,
         program,
-        stack: Stack::new(first),
+        stack: Stack::new(first, items),
         dispatch: Dispatch::new(items),
         natives: Natives::new(items),
         fuel,
@@ -208,6 +208,11 @@ impl<'a> Machine<'a> {
             }
             Terminator::Return => {
                 let value = self.stack.local(Local::RETURN).clone();
+                // A callback's result goes back to C (`ffi.native.2`).
+                if self.stack.at_callback() {
+                    self.stack.pop();
+                    return Some(Ok(value));
+                }
                 if self.stack.at_root() {
                     // Show borrows while what they point to still exists.
                     return Some(Ok(self.stack.shown(value)));
@@ -221,7 +226,7 @@ impl<'a> Machine<'a> {
                         self.sched.end(self.stack.current(), Outcome::Value(value));
                         return self.switch_next().map(Err);
                     }
-                    Ret::Drop | Ret::Top => {}
+                    Ret::Drop | Ret::Top | Ret::Callback => {}
                 }
             }
             Terminator::Fail(e) => {
@@ -290,7 +295,9 @@ impl<'a> Machine<'a> {
                 // A C function (`ffi.extern.1`).
                 match self.c_call(f, &values) {
                     Ok(v) => v,
-                    Err(why) => {
+                    // A callback C made trapped (`ffi.native.2`).
+                    Err(ffi::CallStop::Stopped(stop)) => return Some(stop),
+                    Err(ffi::CallStop::Failed(why)) => {
                         eprintln!("moddil: calling C: {why}");
                         let t = self.trap(TrapClass::Unimplemented, Some(range), Vec::new());
                         return Some(Stop::Trap(t));
@@ -332,6 +339,8 @@ impl<'a> Machine<'a> {
 
     fn rvalue(&mut self, r: &Rvalue) -> Value {
         match r {
+            // A function's address as a C function pointer (`type.fnptr.1`).
+            Rvalue::FnPtr(f) => self.fn_ptr(*f),
             // A const's value, computed once (it was checked when compiling).
             Rvalue::StaticRef(f) => {
                 if let Some(r) = self.stack.static_ref(*f) {

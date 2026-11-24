@@ -396,6 +396,10 @@ pub unsafe extern "C" fn memmove(dst: *mut u8, src: *const u8, n: u64) {
 pub fn symbols() -> Vec<(&'static str, *const u8)> {
     vec![
         ("moddil_rt_trap", trap as *const u8),
+        // A Moddil function given C as a function pointer starts and traps as an export does
+        // (`type.fnptr.1`).
+        ("moddil_rt_export_begin", export_begin as *const u8),
+        ("moddil_rt_export_trapped", export_trapped as *const u8),
         ("moddil_rt_trap_tracked", trap_tracked as *const u8),
         ("moddil_rt_fail_at", fail_at as *const u8),
         ("moddil_rt_observe", observe as *const u8),

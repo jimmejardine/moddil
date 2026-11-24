@@ -913,15 +913,38 @@ impl ItemTree {
     }
 
     /// Whether `ty` is one of C's types, as C functions and `#[export]` functions take and give
-    /// them (`ffi.types.1`): a sized number but the 128-bit ones, `int` (C's `int64_t`), `bool`,
-    /// or a raw pointer (to anything, a `#[repr(C)]` struct included). Structs cross by pointer.
+    /// them (`ffi.types.1`, `ffi.types.2`): a C scalar ([`ItemTree::is_c_scalar`]), or a
+    /// `#[repr(C)]` struct, not generic, of C's types, by value.
     pub fn is_c_type(&self, ty: &Ty) -> bool {
+        self.is_c_scalar(ty) || self.c_struct(ty, 0)
+    }
+
+    /// Whether `ty` is a C scalar: a sized number but the 128-bit ones, `int` (C's `int64_t`),
+    /// `bool`, a raw pointer (to anything), or a C function pointer (`type.fnptr.1`).
+    pub fn is_c_scalar(&self, ty: &Ty) -> bool {
         match ty {
-            Ty::Int | Ty::Bool | Ty::Ptr(..) => true,
+            Ty::Int | Ty::Bool | Ty::Ptr(..) | Ty::FnPtr(..) => true,
             Ty::Num(n) => !matches!(n, crate::Num::I128 | crate::Num::U128),
-            Ty::Refined(..) => self.is_c_type(&self.base(ty)),
+            Ty::Refined(..) => self.is_c_scalar(&self.base(ty)),
             _ => false,
         }
+    }
+
+    /// Whether `ty` is a `#[repr(C)]` struct, not generic, whose fields are C's types.
+    fn c_struct(&self, ty: &Ty, depth: u32) -> bool {
+        let Ty::Adt(a, _, args) = ty else {
+            return false;
+        };
+        let def = &self.adts[*a as usize];
+        depth < 16
+            && def.repr_c
+            && args.is_empty()
+            && def.variants.len() == 1
+            && !def.variants[0].fields.is_empty()
+            && def.variants[0]
+                .fields
+                .iter()
+                .all(|f| self.is_c_scalar(&f.ty) || self.c_struct(&f.ty, depth + 1))
     }
 
     /// Whether values of `ty` are copied rather than moved, with no bounds in scope.
@@ -956,7 +979,7 @@ impl ItemTree {
                 Some(d) => self.size_of_depth(&d.ty, depth + 1),
                 None => (0, 1),
             },
-            Ty::Int | Ty::Ref(..) | Ty::Ptr(..) => (8, 8),
+            Ty::Int | Ty::Ref(..) | Ty::Ptr(..) | Ty::FnPtr(..) => (8, 8),
             Ty::Num(n) => {
                 let b = u64::from(n.bits() / 8);
                 (b, b)

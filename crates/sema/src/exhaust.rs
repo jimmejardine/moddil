@@ -275,6 +275,7 @@ impl Cx<'_> {
             | Ty::Tuple(_)
             | Ty::Buf(_)
             | Ty::Ptr(..)
+            | Ty::FnPtr(..)
             | Ty::Param(..)
             | Ty::Opaque(_)
             | Ty::Assoc(_)

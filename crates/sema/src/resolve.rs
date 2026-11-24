@@ -206,6 +206,37 @@ pub(crate) fn resolve_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnos
             };
             Ty::Ptr(mutable, Arc::new(inner))
         }
+        // `fn(A, B) -> R`: a C function pointer (`type.fnptr.1`), of C's scalar types only.
+        ast::Type::Fn(_) => {
+            let params: Vec<Ty> = node
+                .child(K::TYPE_LIST)
+                .map(|l| {
+                    l.children()
+                        .filter_map(ast::Type::cast)
+                        .map(|t| resolve_type(&t, scope, diags))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let ret = node
+                .children()
+                .find_map(ast::Type::cast)
+                .map_or(Ty::Unit, |t| resolve_type(&t, scope, diags));
+            let scalar = |t: &Ty| match t {
+                Ty::Int | Ty::Bool | Ty::Ptr(..) | Ty::FnPtr(..) | Ty::Error => true,
+                Ty::Num(n) => !matches!(n, crate::Num::I128 | crate::Num::U128),
+                _ => false,
+            };
+            if !params.iter().all(scalar) || !(ret == Ty::Unit || scalar(&ret)) {
+                diags.push(Diagnostic::error(
+                    Code::E0222,
+                    range,
+                    "a `fn` type is a C function pointer: its parameters and result are C's \
+                     scalar types (sized numbers, `int`, `bool`, raw pointers and `fn` types)",
+                ));
+                return Ty::Error;
+            }
+            Ty::FnPtr(params.into(), Arc::new(ret))
+        }
         ast::Type::Paren(_) => match node.children().find_map(ast::Type::cast) {
             Some(inner) => resolve_type(&inner, scope, diags),
             None => Ty::Error,
