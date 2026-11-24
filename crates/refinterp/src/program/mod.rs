@@ -387,7 +387,9 @@ impl Program {
                 continue;
             };
             for ty in types {
-                made.extend(template_impl(def, tr.clone(), name_head(&ty)));
+                for head in for_heads(&ty) {
+                    made.extend(template_impl(def, tr.clone(), head));
+                }
             }
         }
         self.impls.extend(made);
@@ -1143,6 +1145,25 @@ fn around_input(attr: &SyntaxNode) -> Option<ast::Expr> {
         .body()?;
     let e = body.syntax().children().find_map(ast::Expr::cast)?;
     Some(e)
+}
+
+/// The kinds of value one entry of `#[derive_for(…)]` stands for: a built-in type, or each
+/// size of tuple `tuples(m..=n)` names.
+fn for_heads(entry: &str) -> Vec<Head> {
+    let sizes = entry
+        .strip_prefix("tuples(")
+        .and_then(|r| r.strip_suffix(')'))
+        .and_then(|r| r.split_once("..="))
+        .and_then(|(m, n)| {
+            Some((
+                m.trim().parse::<usize>().ok()?,
+                n.trim().parse::<usize>().ok()?,
+            ))
+        });
+    match sizes {
+        Some((m, n)) => (m.max(2)..=n).map(Head::Tuple).collect(),
+        None => vec![name_head(entry)],
+    }
 }
 
 /// The kind of value built-in type `name` is (`i8`, `f64`), for `#[derive_for]`.

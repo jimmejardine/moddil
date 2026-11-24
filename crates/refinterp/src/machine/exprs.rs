@@ -94,6 +94,9 @@ impl Machine<'_> {
                 let (key, i) = self
                     .reflected(e.sub_exprs()[0].syntax())
                     .expect("a reflected field");
+                if key.is_empty() {
+                    return Ok(Value::Str(i.to_string().into()));
+                }
                 Ok(Value::Str(
                     self.program.adts[&key].variants[0].fields[i].clone().into(),
                 ))
@@ -276,6 +279,22 @@ impl Machine<'_> {
 
     pub(super) fn struct_lit(&mut self, node: &SyntaxNode) -> Eval {
         let segments = segments(node);
+        // A template's tuple, `t { [f]: e, … }` (`comptime.derive.for.1`): its elements in
+        // order.
+        if let [one] = segments.as_slice()
+            && let Some(Head::Tuple(n)) = self.memory.type_of(one)
+        {
+            let info = VariantInfo {
+                name: String::new(),
+                shape: crate::program::Shape::Tuple,
+                fields: (0..n).map(|i| i.to_string()).collect(),
+                types: vec![None; n],
+                default: false,
+            };
+            let mut fields = vec![Value::Unit; n];
+            self.struct_fields(node, &info, &mut fields)?;
+            return Ok(Value::Tuple(fields));
+        }
         let (ty, info) = self.ctor(&segments).expect("a checked struct");
         let info = info.clone();
         let mut fields = vec![Value::Unit; info.fields.len()];
@@ -404,11 +423,16 @@ impl Machine<'_> {
             .trim_end_matches(')')
             .trim()
             .to_string();
-        let Some(Head::Adt(key)) = self.memory.type_of(&var) else {
-            unreachable!("a checked template")
-        };
-        let n = self.program.adts[&key].variants[0].fields.len();
-        (name, key, n)
+        // A tuple's elements, from `#[derive_for]` (`comptime.derive.for.1`): the key is
+        // empty, and element `i` is named `i`.
+        match self.memory.type_of(&var) {
+            Some(Head::Adt(key)) => {
+                let n = self.program.adts[&key].variants[0].fields.len();
+                (name, key, n)
+            }
+            Some(Head::Tuple(n)) => (name, String::new(), n),
+            _ => unreachable!("a checked template"),
+        }
     }
 
     /// `inline for f in fields(t) { … }`: its block once for each of the struct's fields.

@@ -95,7 +95,11 @@ pub(crate) fn derive_for_attr(node: &SyntaxNode) -> Option<(TextRange, Vec<Strin
             .child(K::ATTR_INPUT)
             .map(|i| i.text().to_string())
             .unwrap_or_default();
-        let inner = input.trim().trim_start_matches('(').trim_end_matches(')');
+        let input = input.trim();
+        let inner = input
+            .strip_prefix('(')
+            .and_then(|i| i.strip_suffix(')'))
+            .unwrap_or(input);
         let types = inner
             .split(',')
             .map(str::trim)
@@ -105,6 +109,39 @@ pub(crate) fn derive_for_attr(node: &SyntaxNode) -> Option<(TextRange, Vec<Strin
         return Some((attr.text_range(), types));
     }
     None
+}
+
+/// The types one entry of `#[derive_for(…)]` stands for, each with the impl's generic
+/// parameters (`<A: Tr, B: Tr>`, or nothing): a built-in type's name, or `tuples(m..=n)`, the
+/// tuples of `m` to `n` elements `A`, `B`, …, each bounded by trait `tr`.
+fn for_types(entry: &str, tr: &str) -> Vec<(String, String)> {
+    let sizes = entry
+        .strip_prefix("tuples(")
+        .and_then(|r| r.strip_suffix(')'))
+        .and_then(|r| r.split_once("..="))
+        .and_then(|(m, n)| {
+            Some((
+                m.trim().parse::<usize>().ok()?,
+                n.trim().parse::<usize>().ok()?,
+            ))
+        });
+    let Some((m, n)) = sizes else {
+        return vec![(String::new(), entry.to_string())];
+    };
+    const NAMES: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    (m.max(2)..=n.min(NAMES.len()))
+        .map(|k| {
+            let names: Vec<String> = NAMES[..k]
+                .iter()
+                .map(|c| (*c as char).to_string())
+                .collect();
+            let bounds: Vec<String> = names.iter().map(|p| format!("{p}: {tr}")).collect();
+            (
+                format!("<{}>", bounds.join(", ")),
+                format!("({})", names.join(", ")),
+            )
+        })
+        .collect()
 }
 
 /// The associated types (`type Output = t;`) of derive function `node`'s template, for type
@@ -267,11 +304,11 @@ pub(crate) fn expand<'t>(
             && let Some((range, types)) = derive_for_attr(&node)
             && let Some(tr) = impl_trait(&node)
         {
-            for ty in types {
+            for (params, ty) in types.iter().flat_map(|t| for_types(t, &tr)) {
                 let assoc = template_assoc_types(&node, &ty);
                 let start = out.text.len() as u32;
                 out.text
-                    .push_str(&format!("impl {tr} for {ty} {{ {assoc}}}"));
+                    .push_str(&format!("impl{params} {tr} for {ty} {{ {assoc}}}"));
                 let end = out.text.len() as u32;
                 out.text.push('\n');
                 out.origins.push((TextRange::new(start, end), src, range));

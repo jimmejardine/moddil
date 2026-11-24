@@ -75,8 +75,11 @@ and `||` (E1007). Outside a template, `if const` is not supported yet (I0001).
 template once for each built-in type listed: an impl of the trait its `Impl<Tr>` names, for each
 `Ti`, with `t` and `Self` naming `Ti`, under the rules of **comptime.template.1**. The impls and
 the types they are for are written in one place, with no `#[derive]` on the types. A function with
-`#[derive_for]` is not named by other code. A built-in type has no fields, so a template
-instantiated for one uses no field reflection (`inline for`, `t { … }`, E1007). The prelude
-writes the impls of the sized integers and the floats this way
-([`prelude/numbers.moddil`](prelude/numbers.moddil)). Outside the prelude, `#[derive_for]` is
-not supported yet (I0001).
+`#[derive_for]` is not named by other code. `tuples(m..=n)` in the list stands for the tuples of
+`m` to `n` elements, `(A, B, …)`, each impl bounding every element type by the trait
+(`impl<A: Tr, B: Tr> Tr for (A, B)`). A tuple's elements are its fields, named `0`, `1`, … in
+order, for `inline for`, `f.name` and `x.[f]`, and `t { [f]: e, … }` makes the tuple, each element
+given once (E1007). Another built-in type has no fields, so a template instantiated for one uses
+no field reflection (E1007). The prelude writes the impls of the sized integers and the floats
+this way ([`prelude/numbers.moddil`](prelude/numbers.moddil)), and tuples' `Clone`, `Debug` and
+`Hash`. Outside the prelude, `#[derive_for]` is not supported yet (I0001).

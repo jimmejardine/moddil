@@ -171,69 +171,16 @@ impl Eq for () {}
 // A tuple of `Clone` elements (`type.tuple.traits.1`): each element cloned. One of `Copy`
 // elements is cloned by copying it, at any size.
 
-impl<A: Clone, B: Clone> Clone for (A, B) {
-    fn clone(&self) -> (A, B) {
-        (self.0.clone(), self.1.clone())
-    }
-}
-
-impl<A: Clone, B: Clone, C: Clone> Clone for (A, B, C) {
-    fn clone(&self) -> (A, B, C) {
-        (self.0.clone(), self.1.clone(), self.2.clone())
-    }
-}
-
-impl<A: Clone, B: Clone, C: Clone, D: Clone> Clone for (A, B, C, D) {
-    fn clone(&self) -> (A, B, C, D) {
-        (self.0.clone(), self.1.clone(), self.2.clone(), self.3.clone())
-    }
-}
-
-impl<A: Clone, B: Clone, C: Clone, D: Clone, E: Clone> Clone for (A, B, C, D, E) {
-    fn clone(&self) -> (A, B, C, D, E) {
-        (self.0.clone(), self.1.clone(), self.2.clone(), self.3.clone(), self.4.clone())
-    }
-}
-
-impl<A: Clone, B: Clone, C: Clone, D: Clone, E: Clone, F: Clone> Clone for (A, B, C, D, E, F) {
-    fn clone(&self) -> (A, B, C, D, E, F) {
-        (self.0.clone(), self.1.clone(), self.2.clone(), self.3.clone(), self.4.clone(), self.5.clone())
-    }
-}
-
-impl<A: Clone, B: Clone, C: Clone, D: Clone, E: Clone, F: Clone, G: Clone> Clone for (A, B, C, D, E, F, G) {
-    fn clone(&self) -> (A, B, C, D, E, F, G) {
-        (self.0.clone(), self.1.clone(), self.2.clone(), self.3.clone(), self.4.clone(), self.5.clone(), self.6.clone())
-    }
-}
-
-impl<A: Clone, B: Clone, C: Clone, D: Clone, E: Clone, F: Clone, G: Clone, H: Clone> Clone for (A, B, C, D, E, F, G, H) {
-    fn clone(&self) -> (A, B, C, D, E, F, G, H) {
-        (self.0.clone(), self.1.clone(), self.2.clone(), self.3.clone(), self.4.clone(), self.5.clone(), self.6.clone(), self.7.clone())
-    }
-}
-
-impl<A: Clone, B: Clone, C: Clone, D: Clone, E: Clone, F: Clone, G: Clone, H: Clone, I: Clone> Clone for (A, B, C, D, E, F, G, H, I) {
-    fn clone(&self) -> (A, B, C, D, E, F, G, H, I) {
-        (self.0.clone(), self.1.clone(), self.2.clone(), self.3.clone(), self.4.clone(), self.5.clone(), self.6.clone(), self.7.clone(), self.8.clone())
-    }
-}
-
-impl<A: Clone, B: Clone, C: Clone, D: Clone, E: Clone, F: Clone, G: Clone, H: Clone, I: Clone, J: Clone> Clone for (A, B, C, D, E, F, G, H, I, J) {
-    fn clone(&self) -> (A, B, C, D, E, F, G, H, I, J) {
-        (self.0.clone(), self.1.clone(), self.2.clone(), self.3.clone(), self.4.clone(), self.5.clone(), self.6.clone(), self.7.clone(), self.8.clone(), self.9.clone())
-    }
-}
-
-impl<A: Clone, B: Clone, C: Clone, D: Clone, E: Clone, F: Clone, G: Clone, H: Clone, I: Clone, J: Clone, K: Clone> Clone for (A, B, C, D, E, F, G, H, I, J, K) {
-    fn clone(&self) -> (A, B, C, D, E, F, G, H, I, J, K) {
-        (self.0.clone(), self.1.clone(), self.2.clone(), self.3.clone(), self.4.clone(), self.5.clone(), self.6.clone(), self.7.clone(), self.8.clone(), self.9.clone(), self.10.clone())
-    }
-}
-
-impl<A: Clone, B: Clone, C: Clone, D: Clone, E: Clone, F: Clone, G: Clone, H: Clone, I: Clone, J: Clone, K: Clone, L: Clone> Clone for (A, B, C, D, E, F, G, H, I, J, K, L) {
-    fn clone(&self) -> (A, B, C, D, E, F, G, H, I, J, K, L) {
-        (self.0.clone(), self.1.clone(), self.2.clone(), self.3.clone(), self.4.clone(), self.5.clone(), self.6.clone(), self.7.clone(), self.8.clone(), self.9.clone(), self.10.clone(), self.11.clone())
+#[derive_for(tuples(2..=12))]
+const fn tuple_clone(t: type) -> Impl<Clone> {
+    impl Clone for t {
+        fn clone(&self) -> t {
+            t {
+                inline for f in fields(t) {
+                    [f]: self.[f].clone(),
+                }
+            }
+        }
     }
 }
 

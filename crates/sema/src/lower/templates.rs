@@ -30,8 +30,26 @@ impl Lowerer<'_> {
             .map(|(_, k)| *k)
     }
 
-    /// The struct's field `k`: its name and its type.
+    /// How many fields the template's type has: a struct's, or a tuple's elements, named `0`,
+    /// `1`, …; `None` for a type with none to reflect on.
+    fn field_count(&self) -> Option<u32> {
+        let t = self.template?;
+        match (t.adt, &t.ty) {
+            (Some(adt), _) => Some(self.items.variant(adt, 0).fields.len() as u32),
+            (None, Ty::Tuple(elems)) => Some(elems.len() as u32),
+            _ => None,
+        }
+    }
+
+    /// The template's field `k`: its name and its type. A tuple's elements are named `0`, `1`, …
     fn field_of(&self, k: u32) -> (String, Ty) {
+        if let Some(t) = self.template
+            && t.adt.is_none()
+            && let Ty::Tuple(elems) = &t.ty
+        {
+            let ty = elems.get(k as usize).cloned().unwrap_or(Ty::Error);
+            return (k.to_string(), ty);
+        }
         let Some((t, adt)) = self.template.and_then(|t| t.adt.map(|a| (t, a))) else {
             return (String::new(), Ty::Error);
         };
@@ -81,15 +99,15 @@ impl Lowerer<'_> {
         });
         match name {
             Some(n) if fields_of_t => {
-                let Some(adt) = t.adt else {
+                let Some(count) = self.field_count() else {
                     self.report(
                         Code::E1007,
                         range,
-                        "a template for a built-in type has no fields to unroll over                          (`comptime.derive.for.1`)",
+                        "a template for a built-in type other than a tuple has no fields to \
+                         unroll over (`comptime.derive.for.1`)",
                     );
                     return None;
                 };
-                let count = self.items.variant(adt, 0).fields.len() as u32;
                 Some((n, count))
             }
             _ => {

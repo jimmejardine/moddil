@@ -331,6 +331,33 @@ impl Lowerer<'_> {
         } else {
             self.resolve(node)
         };
+        // A template's tuple, `t { [f]: e, … }`: the tuple of those elements, in order.
+        if names_template
+            && let Some(t) = self.template
+            && t.adt.is_none()
+            && let Ty::Tuple(elems) = &t.ty
+        {
+            let n = elems.len();
+            let mut values: Vec<Option<ExprId>> = vec![None; n];
+            let mut ok = true;
+            for (name, _, value) in self.struct_inits(node) {
+                match name.parse::<usize>() {
+                    Ok(k) if k < n && values[k].is_none() => values[k] = Some(value),
+                    _ => ok = false,
+                }
+            }
+            return match values.into_iter().collect::<Option<Vec<_>>>() {
+                Some(elements) if ok => self.alloc(ExprKind::Tuple(elements), range),
+                _ => {
+                    self.report(
+                        Code::E1007,
+                        range,
+                        "a template's tuple is written with each of its elements once",
+                    );
+                    self.missing(range)
+                }
+            };
+        }
         let target = match resolved {
             _ if names_template => match self.template.and_then(|t| t.adt) {
                 Some(adt) => Some((adt, 0)),
@@ -338,7 +365,8 @@ impl Lowerer<'_> {
                     self.report(
                         Code::E1007,
                         range,
-                        "a template for a built-in type has no fields to write                          (`comptime.derive.for.1`)",
+                        "a template for a built-in type other than a tuple has no fields to \
+                         write (`comptime.derive.for.1`)",
                     );
                     None
                 }

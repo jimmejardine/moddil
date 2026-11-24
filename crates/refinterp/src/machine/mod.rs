@@ -167,7 +167,8 @@ impl Machine<'_> {
 
     /// The refinement field `i` of struct `key` is of, by its key, if it is one.
     fn field_refinement(&self, key: &str, i: usize) -> Option<String> {
-        let adt = &self.program.adts[key];
+        // A tuple's element (an empty key) is not a field with a declared type.
+        let adt = self.program.adts.get(key)?;
         let ty = adt.variants[0].types.get(i).cloned().flatten()?;
         let path = crate::program::type_path(ty.syntax());
         match self.program.resolve(adt.module, &path) {
