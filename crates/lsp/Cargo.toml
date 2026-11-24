@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 moddil-syntax.workspace = true
 moddil-sema.workspace = true
+moddil-sources.workspace = true
 moddil-interp.workspace = true
 moddil-project.workspace = true
 lsp-server.workspace = true

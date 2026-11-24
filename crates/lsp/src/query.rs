@@ -11,6 +11,26 @@ use moddil_syntax::{SyntaxKind, TextRange};
 use crate::Hint;
 
 /// Queries about one file of a program.
+/// Where a definition is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Place {
+    /// In a file of the program, by its index.
+    File(u32, TextRange),
+    /// In the prelude or `core`, at this range of [`moddil_sources::PRELUDE_AND_CORE`].
+    Library(TextRange),
+}
+
+impl Place {
+    /// Where `range` of source `src` is; derived code has no source to go to.
+    fn of(src: Src, range: TextRange) -> Option<Place> {
+        match src {
+            Src::File(f) => Some(Place::File(f, range)),
+            Src::Prelude => Some(Place::Library(range)),
+            Src::Derived => None,
+        }
+    }
+}
+
 pub(crate) struct Query<'db> {
     db: &'db dyn Db,
     program: Program,
@@ -144,8 +164,8 @@ impl<'db> Query<'db> {
         self.items.lookup(self.module(), &name, false)
     }
 
-    /// The file and range of `def`'s name, if it is in a file of the program.
-    fn def_location(&self, def: Def) -> Option<(u32, TextRange)> {
+    /// Where `def`'s name is: in a file of the program, or in the prelude or `core`.
+    fn def_location(&self, def: Def) -> Option<Place> {
         let items = self.items;
         let (src, range) = match def {
             Def::Fn(f) => (items.fns[f as usize].src, items.fns[f as usize].name_range),
@@ -168,16 +188,16 @@ impl<'db> Query<'db> {
             Def::Module(m) => {
                 return items.modules[m as usize]
                     .file
-                    .map(|f| (f, TextRange::new(0, 0)));
+                    .map(|f| Place::File(f, TextRange::new(0, 0)));
             }
         };
-        Some((src.file()?, range))
+        Place::of(src, range)
     }
 
     /// Where what is at `offset` is defined.
-    pub(crate) fn definition(&self, offset: u32) -> Option<(u32, TextRange)> {
+    pub(crate) fn definition(&self, offset: u32) -> Option<Place> {
         if let Some(b) = self.body_at(offset) {
-            let here = |r: TextRange| Some((self.file, r));
+            let here = |r: TextRange| Some(Place::File(self.file, r));
             // A binding's own name, or a local used.
             for (_, p) in b.lowered.body.pats.iter() {
                 if let PatKind::Bind { local, .. } = &p.kind
@@ -207,7 +227,7 @@ impl<'db> Query<'db> {
                         if let Ty::Adt(a, ..) = strip(&b.types.expr(*base)) {
                             let adt = &self.items.adts[a as usize];
                             let field = adt.variants.first()?.fields.get(k as usize)?;
-                            return Some((adt.src.file()?, field.range));
+                            return Place::of(adt.src, field.range);
                         }
                     }
                     _ => {}

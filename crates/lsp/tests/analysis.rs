@@ -129,6 +129,25 @@ fn definitions_of_locals_functions_fields_and_methods() {
 }
 
 #[test]
+fn definitions_in_the_prelude_are_in_its_files() {
+    let (mut a, path) = open("library", PROGRAM);
+    let mut def = |off| {
+        let (file, r) = a.definition(&path, off).expect("a definition");
+        let text = a.text(&file).expect("its text");
+        (file, text[r.start as usize..r.end as usize].to_string())
+    };
+    let (file, name) = def(at(PROGRAM, "Receiver", 0, 1));
+    assert!(
+        file.ends_with("reference/2027/prelude/concurrency.moddil"),
+        "{}",
+        file.display()
+    );
+    assert_eq!(name, "Receiver");
+    let (_, name) = def(at(PROGRAM, "unwrap_or", 0, 1));
+    assert_eq!(name, "unwrap_or");
+}
+
+#[test]
 fn hints_mark_the_calls_that_suspend() {
     let (mut a, path) = open("hints", PROGRAM);
     let hints = a.hints(&path);

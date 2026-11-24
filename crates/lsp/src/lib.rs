@@ -11,10 +11,12 @@ mod query;
 mod server;
 mod text;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use moddil_sema::{Database, Diagnostic, Program};
 use moddil_syntax::TextRange;
+use query::Place;
 use salsa::Setter;
 
 pub use complete::{Completion, CompletionKind};
@@ -49,6 +51,9 @@ pub struct Hint {
 pub struct Analysis {
     db: Database,
     roots: Vec<Root>,
+    /// The prelude's and `core`'s files a definition has been found in, by path, with their
+    /// text: not part of any program.
+    library: HashMap<PathBuf, String>,
 }
 
 /// One program: a mod with its dependencies, or a single file.
@@ -60,6 +65,19 @@ struct Root {
     paths: Vec<PathBuf>,
     /// Problems reading the project (a manifest, a cycle): its files are not checked.
     load_problems: Vec<(PathBuf, Problem)>,
+}
+
+/// The file of the prelude or `core` at `rel` under `reference/2027/`, holding `text`: under the
+/// program's directory `at` or one above it (a checkout of Moddil's repository), or where this
+/// server was built from. One whose text differs is not it: its offsets would not match.
+fn library_file(at: &Path, rel: &str, text: &str) -> Option<PathBuf> {
+    let built = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../reference/2027");
+    at.ancestors()
+        .map(|d| d.join("reference/2027"))
+        .chain(std::iter::once(built))
+        .map(|dir| dir.join(rel))
+        .find(|p| std::fs::read_to_string(p).is_ok_and(|t| t == text))
+        .map(|p| canonical(&p))
 }
 
 /// `p`, canonical where it exists (so paths compare whatever their spelling).
@@ -163,6 +181,9 @@ impl Analysis {
 
     /// The text of `path`, as the program has it (an open file's editor text).
     pub fn text(&mut self, path: &Path) -> Option<String> {
+        if let Some(text) = self.library.get(path) {
+            return Some(text.clone());
+        }
         let (r, f) = self.locate(path)?;
         let source = self.roots[r].program.files(&self.db)[f as usize].source;
         Some(source.text(&self.db).clone())
@@ -216,11 +237,22 @@ impl Analysis {
     }
 
     /// Where what is at byte `offset` of `path` is defined: a file and the range of its name.
+    /// One in the prelude or `core` is in its file under `reference/2027/`, when that file is
+    /// found and is the text built in.
     pub fn definition(&mut self, path: &Path, offset: u32) -> Option<(PathBuf, TextRange)> {
         let (r, f) = self.locate(path)?;
-        let (file, range) =
-            query::Query::new(&self.db, self.roots[r].program, f).definition(offset)?;
-        Some((self.roots[r].paths.get(file as usize)?.clone(), range))
+        match query::Query::new(&self.db, self.roots[r].program, f).definition(offset)? {
+            Place::File(file, range) => {
+                Some((self.roots[r].paths.get(file as usize)?.clone(), range))
+            }
+            Place::Library(range) => {
+                let (rel, text, at) = moddil_sources::file_at(range.start as usize)?;
+                let file = library_file(&self.roots[r].at, rel, text)?;
+                self.library.insert(file.clone(), text.to_string());
+                let start = at as u32;
+                Some((file, TextRange::new(start, start + range.end - range.start)))
+            }
+        }
     }
 
     /// The inlay hints of `path`: after each call that may suspend or spawn.

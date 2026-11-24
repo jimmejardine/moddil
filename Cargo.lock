@@ -974,6 +974,7 @@ dependencies = [
  "moddil-interp",
  "moddil-project",
  "moddil-sema",
+ "moddil-sources",
  "moddil-syntax",
  "salsa",
  "serde",
