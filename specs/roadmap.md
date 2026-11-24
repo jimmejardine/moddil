@@ -191,9 +191,14 @@ L)
 - A handler that holds another handler it captured; `log` with handlers; a test run for listed
   types, or declaring capabilities.
 
-**P17. Built programs' results** (`crates/native`, `crates/rt-main`; M)
+**P17. Built programs' results** (`crates/native`, `crates/rt-main`, a crate for showing values;
+L)
 - A built program's `main` giving any type, printed as `moddil run` prints it, not only `()` or
-  `ExitCode`.
+  `ExitCode`. `moddil run` shows a value from its type's layout (`crates/native/src/show.rs`),
+  with no `Debug` needed, and a built program has no types at run time: so `Show` moves to a
+  crate that renders from a type description (fields, offsets, tags, names), which native code
+  builds from the item tree for `moddil run` and writes into a built program's object for
+  `rt-main` to render `main`'s result with.
 
 **P18. The reference interpreter's differences** (`crates/refinterp`; M)
 - `?` on a call of a function whose signature lists `fail` but whose errors turn out to be `!`
@@ -234,10 +239,6 @@ L)
 - Names in types resolved by their full path, not by name in the file's module.
 - Completion offering exactly the locals in scope, not those bound before the cursor.
 - Incremental document sync, and analysis off the server's one thread; an editor extension.
-
-**P25. A trailing comma in `where`** (`reference/grammar`, `crates/syntax`, `crates/grammar`; M)
-- A trailing comma at the end of a `where` clause before a body, made unambiguous for
-  tree-sitter (a type can start with `{`).
 
 **P26. A line-by-line review of the checkers and the native lowering** (`crates/sema` `check/`,
 `crates/native` `lower.rs`; L)

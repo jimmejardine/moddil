@@ -1266,6 +1266,14 @@ impl Machine<'_> {
                 at = next;
             }
         }
+        // A borrow is `Copy`, so its `clone` is a copy of it, where what it points to has none
+        // (`&str`'s).
+        if found.is_none()
+            && name == "clone"
+            && let v @ (Value::Str(_) | Value::Ref(..)) = self.target(value.clone())
+        {
+            return Ok(v);
+        }
         let (m, head, recv) = found.unwrap_or_else(|| {
             panic!(
                 "a checked method call: `{name}` on {:?}",

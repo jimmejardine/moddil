@@ -6,7 +6,7 @@ module.exports = grammar({
   word: $ => $.ident,
   extras: $ => [/[ \t\r\n]+/, $.line_comment, $.block_comment],
   externals: $ => [$.block_comment, $.raw_string, $.block_string, $.tagged_string],
-  conflicts: $ => [[$.use_path], [$.literal], [$.primary, $.block_like], [$.vis], [$.defer_stmt, $.primary], [$.jump], [$.range], [$.primary], [$.impl_item, $.primary], [$.in_operand], [$.postfix_op], [$.pattern_no_alt, $.pattern_path], [$.and_operand], [$.if_expr]],
+  conflicts: $ => [[$.use_path], [$.literal], [$.primary, $.block_like], [$.vis], [$.defer_stmt, $.primary], [$.jump], [$.range], [$.primary], [$.impl_item, $.primary], [$.in_operand], [$.postfix_op], [$.pattern_no_alt, $.pattern_path], [$.and_operand], [$.if_expr], [$.where_clause]],
   rules: {
     file: $ => seq(repeat($.inner_attr), repeat($.item)),
     line_comment: $ => token(/(\/\/([^\/!\n]([^\n])*)?|\/\/\/\/([^\n])*)/),
@@ -43,7 +43,7 @@ module.exports = grammar({
     sig_effect: $ => seq(optional(seq($.ident, ':')), $.effect_atom),
     effect_atom: $ => choice('suspend', 'spawn', 'nondet', seq('fail', '(', $.error_types, ')'), seq('&', $.type), $.path_type),
     error_types: $ => seq($.type, repeat(seq('|', $.type))),
-    where_clause: $ => seq('where', $.where_pred, repeat(seq(',', $.where_pred))),
+    where_clause: $ => seq('where', $.where_pred, repeat(seq(',', $.where_pred)), optional(',')),
     where_pred: $ => seq($.type, ':', $.pred_bounds),
     contract: $ => choice(seq('requires', optional('always'), $.contract_body), seq('ensures', $.contract_body)),
     contract_body: $ => seq(optional(seq($.ident, ':')), $.expr),

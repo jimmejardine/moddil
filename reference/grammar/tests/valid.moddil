@@ -342,6 +342,8 @@ test "s" { //! doc
 // ---
 view x where ! : Self , ! : Self { }
 // ---
+view x where ! : Self , { }
+// ---
 view x { invariant escape }
 // ---
 view x { invariant escape , invariant escape }
@@ -843,6 +845,12 @@ test "s" { gen { } }
 // ---
 test "s" { { } ; }
 // ---
+view x where impl Self : Self { }
+// ---
+view x where dyn Self : Self { }
+// ---
+view x where ! with suspend : Self { }
+// ---
 view x { pub x : ! }
 // ---
 view x { x : ! = escape }
@@ -979,6 +987,22 @@ test "s" { "s" }
 // ---
 test "s" { .. = escape }
 // ---
+view x where Self : Self { }
+// ---
+view x where & ! : Self { }
+// ---
+view x where * const ! : Self { }
+// ---
+view x where [ ! ] : Self { }
+// ---
+view x where ( ) : Self { }
+// ---
+view x where fn ( ) : Self { }
+// ---
+view x where _ : Self { }
+// ---
+view x where type : Self { }
+// ---
 fn x ( ) with fail ( ! | ! ) ;
 // ---
 const x : ! = "s" || "s" ;
@@ -1060,6 +1084,16 @@ test "s" { "s" .. }
 test "s" { "s" .. "s" }
 // ---
 test "s" { .. "s" }
+// ---
+view x where & mut ! : Self { }
+// ---
+view x where * mut ! : Self { }
+// ---
+view x where [ ! ; escape ] : Self { }
+// ---
+view x where fn ( ! ) : Self { }
+// ---
+view x where fn ( ) -> ! : Self { }
 // ---
 const x : ! = "s" && "s" ;
 // ---

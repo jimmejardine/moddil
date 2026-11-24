@@ -802,8 +802,10 @@ fn struct_fields(p: &mut Parser) {
                 p.expect(T![":"]);
                 expr(p);
                 f.complete(p, K::REFLECTED_FIELD_INIT);
-            } else if p.eat(T![inline]) {
-                p.expect(T![for]);
+            } else if p.at(T![inline]) && p.nth(1) == T![for] {
+                // `inline` is a field's name too (`member_name`), unless `for` follows.
+                p.bump(T![inline]);
+                p.bump(T![for]);
                 pattern(p);
                 p.expect(T![in]);
                 expr_r(p, R::NS);

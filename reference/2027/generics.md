@@ -25,7 +25,8 @@ type annotation on `let` (`let x: Option<int> = None;`) or as type arguments; in
 
 **generic.bound.1** A **bound** `T: Trait` requires the type argument for `T` to implement the trait
 ([Traits](items/traits.md)), and is written after the parameter (`<T: Clone + PartialEq>`) or in a
-`where` clause after the signature (`where T: Clone`). A generic item is checked once, as written:
+`where` clause after the signature (`where T: Clone`, which may end with a comma before the body;
+a bound's type there is not an anonymous record, as a `{` after it starts the body). A generic item is checked once, as written:
 its body may use only what its bounds give a type parameter (the traits' methods, and their
 operators: E0205, E0403). A use with a type argument that does not implement a bound's trait is an
 error (E0402). A bound also gives the trait's supertraits.

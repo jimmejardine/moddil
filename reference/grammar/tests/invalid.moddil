@@ -322,42 +322,39 @@ test "s" { } //! doc
 // ---
 view x where ! : Self , ! += : Self { }
 // ---
-view x { { invariant escape }
+view x where ! : Self , { } }
 // ---
-view x invariant { escape , invariant escape }
+view x { invariant escape += }
 // ---
-view x { escape , }
+linear view x { invariant escape , invariant escape }
 // ---
-struct <<= x ( ! ) ;
+struct x .. ( ! , ! ) ;
 // ---
-struct x ( ! ? , ! ) ;
+struct x ! ( , ) ;
 // ---
-struct x .. ( ! , ) ;
+enum x { , /// doc
+x }
 // ---
-enum x { /// doc
-x #![ }
+enum x { x } { }
 // ---
-enum x { x { { } }
+enum x { x ( enum ) }
 // ---
-enum x { x ) ( }
+enum x { x = escape
 // ---
-enum x { x = enum escape }
+x trait : Self + Self { }
 // ---
-trait x : Self Self { }
-// ---
-x trait { /// doc
-type x ; }
+trait x { /// doc
+type x x ; }
 // ---
 trait x x { note "s" type x ; }
 // ---
-trait x x { fn x ( ) ; }
+trait x { fn x ( ) } ;
 // ---
-trait x { const x : ! = escape ; /// doc
-}
+x { const x : ! = escape ; }
 // ---
-impl ! with suspend } {
+impl impl ! with suspend { }
 // ---
-impl ! { type x const ; }
+impl impl ! { type x ; }
 // ---
 x const : ! = yield ;
 // ---
@@ -616,3 +613,5 @@ unit x = 1 ^ ( 1 1 ) ;
 #![ ( fmt"{x.f("y")}" ) ]
 // ---
 #![ x 'c' ) ]
+// ---
+#![ \ x ( - ) ]

@@ -22,6 +22,6 @@ npx tree-sitter-cli@0.26.13 parse path/to/file.moddil
 - tree-sitter allows only the start rule to match the empty string, so a rule `R ::= X?` becomes
   `R ::= X` with every use optional, and other rules that can match nothing are inlined.
 - tree-sitter looks one token ahead, where the grammar uses three, so the places it settles with
-  more lookahead, a greedy optional or a flag are declared as GLR `conflicts` (14 of them).
+  more lookahead, a greedy optional or a flag are declared as GLR `conflicts` (15 of them).
 
 CI parses every valid corpus case and the hand-written samples with it (`python tools/ci.py grammars`).

@@ -155,8 +155,8 @@ effect_clause  ::= 'with' sig_effect ( ',' sig_effect )*
 sig_effect     ::= ( IDENT ':' )? effect_atom                     # `time: Time` names the handle
 effect_atom    ::= 'suspend' | 'spawn' | 'nondet' | 'fail' '(' error_types ')' | '&' type | path_type
 error_types    ::= type ( '|' type )*
-where_clause   ::= 'where' where_pred ( ',' where_pred )*            # bounds; never a refinement here
-where_pred     ::= type ':' pred_bounds
+where_clause   ::= 'where' where_pred ( ',' where_pred )* ','?        # bounds; never a refinement here
+where_pred     ::= type+ns ':' pred_bounds                             # not a record: a body follows
 contract       ::= 'requires' 'always'? contract_body | 'ensures' contract_body
 contract_body  ::= ( IDENT ':' )? expr+ns                         # an optional name, cited by unsafe("name: …")
 
@@ -232,15 +232,15 @@ number         ::= INTEGER | FLOAT
 # Types
 # ═══════════════════════════════════════════════════════════════════════════
 
-type           ::= type_ne type_effects?                             # Box<dyn Fn(Event) with (suspend, fail(E))>
-type_ne        ::= 'impl' bounds | 'dyn' bounds | type_core          # no trailing effects: a signature's return
+type           ::= type_ne@ type_effects?                            # Box<dyn Fn(Event) with (suspend, fail(E))>
+type_ne        ::= 'impl' bounds | 'dyn' bounds | type_core@         # no trailing effects: a signature's return
 type_nb        ::= 'impl' bound | 'dyn' bound | type_core            # no bounds list, no effects: -> inside fn types
 type_core      ::= path_type
                  | '&' 'mut'? type_nb
                  | '*' ( 'const' | 'mut' ) type_nb
                  | '[' type ( ';' expr )? ']'                         # array [T; N] or slice [T]
                  | '(' paren_type_rest
-                 | '{' member_name ':' type ( ',' member_name ':' type )* ','? '}'   # anonymous record
+                 | !ns '{' member_name ':' type ( ',' member_name ':' type )* ','? '}'   # anonymous record
                  | 'fn' '(' type_list? ')' ( '->' type_nb )?
                  | '!'
                  | '_'

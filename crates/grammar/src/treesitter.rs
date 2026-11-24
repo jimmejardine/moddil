@@ -31,6 +31,7 @@ const CONFLICTS: &[&[&str]] = &[
     &["pattern_no_alt", "pattern_path"],
     &["and_operand"],
     &["if_expr"],
+    &["where_clause"],
 ];
 
 /// How a nullable rule is emitted.

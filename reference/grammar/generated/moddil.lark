@@ -56,7 +56,7 @@ block: "{" block_1_rep statements "}"
 struct_item_1_opt: ("linear")?
 struct_item_2_opt: (generic_params)?
 struct_item_3_grp: struct_item_4_opt struct_item_5_grp | tuple_fields struct_item_6_opt ";"
-where_clause: "where" where_pred where_clause_2_rep
+where_clause: "where" where_pred where_clause_2_rep where_clause_3_opt
 struct_item_4_opt: (where_clause)?
 struct_item_5_grp: struct_body | ";"
 struct_body: "{" struct_body_5_opt "}"
@@ -143,9 +143,10 @@ contract: "requires" contract_1_opt contract_body | "ensures" contract_body
 signature_tail_7_rep: (contract signature_tail_7_rep)?
 block_1_rep: (inner_attr block_1_rep)?
 statements: statements_4_opt
-where_pred: type ":" pred_bounds
+where_pred: type_ns ":" pred_bounds
 where_clause_1_grp: "," where_pred
 where_clause_2_rep: (where_clause_1_grp where_clause_2_rep)?
+where_clause_3_opt: (",")?
 struct_body_1_grp: struct_member struct_body_3_rep struct_body_4_opt
 struct_member: struct_member_1_rep struct_member_2_grp
 struct_body_2_grp: "," struct_member
@@ -235,6 +236,7 @@ expr_stmt: jump | closure | assign_stmt
 statements_2_grp: ";" statements
 statements_3_opt: (statements_2_grp)?
 statements_4_opt: (statements_1_grp)?
+type_ns: type_ne_ns type_ns_1_opt
 struct_member_1_rep: (outer_attr struct_member_1_rep)?
 struct_member_2_grp: field | "invariant" expr
 field: field_1_opt member_name ":" type field_3_opt
@@ -345,6 +347,8 @@ defer_stmt: defer_stmt_1_grp defer_stmt_2_grp
 block_like: block | "const" block | block_like_keyword
 statement_3_opt: (";")?
 assign_stmt: range_stmt assign_stmt_2_opt
+type_ne_ns: "impl" bounds | "dyn" bounds | type_core_ns
+type_ns_1_opt: (type_effects)?
 field_1_opt: (vis)?
 field_2_grp: "=" expr
 field_3_opt: (field_2_grp)?
@@ -421,6 +425,7 @@ block_like_keyword: if_expr | match_expr | loop_expr | while_expr | for_expr | l
 range_stmt: or_stmt range_stmt_3_opt | range_op range_stmt_4_opt
 assign_stmt_1_grp: assign_op expr
 assign_stmt_2_opt: (assign_stmt_1_grp)?
+type_core_ns: path_type | "&" type_core_ns_1_opt type_nb | "*" type_core_ns_2_grp type_nb | "[" type type_core_ns_4_opt "]" | "(" paren_type_rest | "fn" "(" type_core_ns_5_opt ")" type_core_ns_7_opt | "!" | "_" | "type"
 error_types_1_grp: "|" type
 error_types_2_rep: (error_types_1_grp error_types_2_rep)?
 and: and_operand and_2_rep
@@ -483,6 +488,13 @@ range_stmt_1_grp: range_op range_stmt_2_opt
 range_stmt_2_opt: (or)?
 range_stmt_3_opt: (range_stmt_1_grp)?
 range_stmt_4_opt: (or)?
+type_core_ns_1_opt: ("mut")?
+type_core_ns_2_grp: "const" | "mut"
+type_core_ns_3_grp: ";" expr
+type_core_ns_4_opt: (type_core_ns_3_grp)?
+type_core_ns_5_opt: (type_list)?
+type_core_ns_6_grp: "->" type_nb
+type_core_ns_7_opt: (type_core_ns_6_grp)?
 and_operand: compare
 and_1_grp: "&&" and_operand
 and_2_rep: (and_1_grp and_2_rep)?

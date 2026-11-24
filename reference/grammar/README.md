@@ -34,7 +34,7 @@ One extension expresses Rust's restrictions without writing the expression rules
 
 | Flag | Meaning |
 |---|---|
-| `ns` | No struct or record literal and no bare block: set in heads that a block follows (`if`, `while`, `match`, `for`, handler values, contracts) |
+| `ns` | No struct or record literal and no bare block: set in heads that a block follows (`if`, `while`, `match`, `for`, handler values, contracts); on a type, no anonymous record at its start (a `where` clause's, before a body) |
 | `stmt` | The expression starts a statement, so it may not begin with a block-like expression |
 | `cond` | A `let` condition may appear (`if` and `while` heads) |
 

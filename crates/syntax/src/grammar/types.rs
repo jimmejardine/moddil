@@ -48,6 +48,10 @@ fn type_effects(p: &mut Parser) {
     let e = p.start();
     p.bump(T![with]);
     if p.eat(T!["("]) {
+        // At least one effect: `with ()` is not a list of them.
+        if p.at(T![")"]) {
+            p.error("expected an effect, found `)`");
+        }
         comma_list(
             p,
             T![")"],

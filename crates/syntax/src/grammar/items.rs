@@ -451,18 +451,24 @@ pub(super) fn effect_atom(p: &mut Parser) {
     m.complete(p, K::EFFECT);
 }
 
-/// `where_clause ::= 'where' where_pred ( ',' where_pred )*` with
-/// `where_pred ::= type ':' pred_bounds`
+/// `where_clause ::= 'where' where_pred ( ',' where_pred )* ','?` with
+/// `where_pred ::= type+ns ':' pred_bounds`
+///
+/// A predicate's type is never an anonymous record, so a `{` after a trailing comma is the body.
 pub(super) fn where_clause(p: &mut Parser) {
     let m = p.start();
     p.bump(T![where]);
     loop {
         let w = p.start();
-        type_(p);
+        if p.at(T!["{"]) {
+            p.error("expected a type: a `where` clause's is not an anonymous record");
+        } else {
+            type_(p);
+        }
         p.expect(T![":"]);
         pred_bounds(p);
         w.complete(p, K::WHERE_PRED);
-        if !p.eat(T![","]) {
+        if !p.eat(T![","]) || p.at(T!["{"]) || !super::types::at_type(p) {
             break;
         }
     }
