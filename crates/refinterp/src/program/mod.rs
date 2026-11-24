@@ -98,6 +98,9 @@ pub(crate) struct Wrapping {
     pub(crate) path: String,
     /// Its parameters: each one's name and type as written.
     pub(crate) params: Vec<(String, String)>,
+    /// Its attributes, each as written inside `#[…]`, and the effects its `with` lists.
+    pub(crate) attrs: Vec<String>,
+    pub(crate) effects: Vec<String>,
 }
 
 pub(crate) struct ImplInfo {
@@ -807,12 +810,43 @@ impl Program {
         );
         let mut path = self.file_paths[file as usize].clone();
         path.push(name.to_string());
+        // Its attributes and its `with` clause's effects, each as written, whitespace squeezed.
+        let squeezed = |n: &SyntaxNode| {
+            n.text()
+                .to_string()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        let attrs = f
+            .syntax()
+            .children()
+            .filter(|c| c.kind() == K::OUTER_ATTR)
+            .flat_map(|a| {
+                a.children()
+                    .filter(|c| c.kind() == K::ATTR)
+                    .collect::<Vec<_>>()
+            })
+            .map(|a| squeezed(&a))
+            .collect();
+        let effects = f
+            .syntax()
+            .child(K::EFFECT_CLAUSE)
+            .map(|c| {
+                c.children()
+                    .filter(|e| e.kind() == K::SIG_EFFECT)
+                    .map(|e| squeezed(&e))
+                    .collect()
+            })
+            .unwrap_or_default();
         Some(Wrapping {
             key: String::new(),
             wrappers,
             args,
             path: path.join("::"),
             params,
+            attrs,
+            effects,
         })
     }
 

@@ -278,7 +278,9 @@ pub(crate) fn expand<'t>(
             let mut path = paths.get(f as usize).cloned().unwrap_or_default();
             path.push(name.clone());
             let range = first.text_range();
-            for line in crate::wrap::items(&name, &path.join("::"), &params) {
+            let generic = node.child(K::GENERIC_PARAMS).is_some();
+            let described = crate::wrap::attrs_and_effects(&node);
+            for line in crate::wrap::items(&name, &path.join("::"), &params, generic, &described) {
                 let start = out.text.len() as u32;
                 out.text.push_str(&line);
                 let end = out.text.len() as u32;

@@ -162,8 +162,9 @@ L)
 
 **P13. Wrappers** (`crates/sema` `wrap.rs`, `crates/moddil`; M)
 - Wrapping methods (a field to hold `self`).
-- Wrapper arguments evaluated once, not at each call; `f::Args` named in code.
-- `FnInfo` with attributes and effects; `moddil explain` printing the expansion.
+- Wrapper arguments evaluated once, not at each call (with P11's compile-time evaluation).
+- `f::Args` made and matched by that name (`f::Args { a, b }`), and for a generic function.
+- `moddil explain` printing the expansion (the command itself is not built).
 
 **P14. Cancellation, finished** (`crates/sched`, both runtimes, the reference interpreter; M)
 - A cancelled task's pending operation's value dropped with its destructors.

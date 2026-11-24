@@ -104,12 +104,14 @@ trait Refined {
     fn refine(v: Self::Base) -> Self with fail(RefinementError);
 }
 
-// What a wrapper is told of the function it wraps (`attr.around.1`): its path, and each
-// parameter's name and type as written.
+// What a wrapper is told of the function it wraps (`attr.around.info.1`): its path, each
+// parameter's name and type, its attributes and its effects, as written.
 #[derive(Debug, Clone, PartialEq)]
 struct FnInfo {
     path: String,
     params: Vec<ParamInfo>,
+    attrs: Vec<String>,
+    effects: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

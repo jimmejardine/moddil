@@ -1,0 +1,52 @@
+// covers: attr.around.info.1, attr.around.args.1
+
+#[derive(Debug, Clone, PartialEq)]
+enum Late { Yes }
+
+// What the wrapper is told: the function's attributes and effects, as written, after its result.
+fn told<A, E>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> String with E) -> String with E {
+    let r = inner(args);
+    fmt"{r} {f.attrs:?} {f.effects:?}"
+}
+
+#[track_caller]
+#[around(told)]
+fn plain(x: int) -> String {
+    fmt"{x + 1}"
+}
+
+#[around(told)]
+fn checked(n: int) -> String with fail(Late) {
+    if n < 0 {
+        fail(Late::Yes);
+    }
+    fmt"{n}"
+}
+
+test "FnInfo gives a function's attributes and effects" {
+    plain(1)                                // => "2 [\"track_caller\", \"around(told)\"] []"
+    ;
+    try { checked(3)? } catch { _ => "late".to_string() }   // => "3 [\"around(told)\"] [\"fail(Late)\"]"
+}
+
+// `f::Args` names the arguments' struct, as a type.
+fn spy<A: Debug, R>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> R) -> R {
+    inner(args)
+}
+
+#[around(spy)]
+fn counted(a: int, b: bool) -> int {
+    if b { a } else { 0 }
+}
+
+fn shown(args: &counted::Args) -> String {
+    fmt"{args:?}"
+}
+
+fn made(args: counted::Args) -> counted::Args {
+    args.clone()
+}
+
+test "f::Args is a type in code" {
+    counted(5, true)                        // => 5
+}

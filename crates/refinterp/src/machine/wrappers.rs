@@ -87,10 +87,18 @@ impl Machine<'_> {
             variant: "Vec".to_string(),
             fields: vec![Value::Buf(params.len(), params)],
         };
+        let texts = |xs: &[String]| {
+            let xs: Vec<Value> = xs.iter().map(|x| string(x)).collect();
+            Value::Adt {
+                ty: "Vec".to_string(),
+                variant: "Vec".to_string(),
+                fields: vec![Value::Buf(xs.len(), xs)],
+            }
+        };
         let info = Value::Adt {
             ty: "FnInfo".to_string(),
             variant: "FnInfo".to_string(),
-            fields: vec![string(&w.path), vec],
+            fields: vec![string(&w.path), vec, texts(&w.attrs), texts(&w.effects)],
         };
         self.memory.add_static(key, info)
     }

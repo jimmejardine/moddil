@@ -37,6 +37,42 @@ pub(crate) fn info_name(f: &str) -> String {
     format!("__INFO_{f}")
 }
 
+/// The name of the hidden alias `f::Args` names: the arguments' struct at the parameters' types.
+pub(crate) fn args_type_name(f: &str) -> String {
+    format!("__ArgsType_{f}")
+}
+
+/// Text with its whitespace runs made single spaces.
+fn squeezed(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The attributes on function `node`, each as written inside `#[…]` (`track_caller`,
+/// `around(trace::log)`), and the effects its `with` clause lists, each as written (`Net`,
+/// `suspend`, `fail(E)`): what its `FnInfo` gives (`attr.around.info.1`).
+pub(crate) fn attrs_and_effects(node: &SyntaxNode) -> (Vec<String>, Vec<String>) {
+    let attrs = node
+        .children()
+        .filter(|c| c.kind() == K::OUTER_ATTR)
+        .flat_map(|a| {
+            a.children()
+                .filter(|c| c.kind() == K::ATTR)
+                .collect::<Vec<_>>()
+        })
+        .map(|a| squeezed(&a.text().to_string()))
+        .collect();
+    let effects = node
+        .child(K::EFFECT_CLAUSE)
+        .map(|c| {
+            c.children()
+                .filter(|e| e.kind() == K::SIG_EFFECT)
+                .map(|e| squeezed(&e.text().to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+    (attrs, effects)
+}
+
 /// A wrapped function's parameters, each its name, whether it is `mut`, and its type as
 /// written; `None` if one is not a plain name (or is `self`).
 pub(crate) fn params(node: &SyntaxNode) -> Option<Vec<(String, bool, String)>> {
@@ -121,8 +157,16 @@ pub(crate) fn input(text: &str, attr: &SyntaxNode) -> Option<ast::Expr> {
 }
 
 /// The Moddil source of the items a wrapped function's expansion names, one per line: the
-/// arguments' struct, its derived impls, and the description; `path` is the function's path.
-pub(crate) fn items(f: &str, path: &str, params: &[(String, bool, String)]) -> Vec<String> {
+/// arguments' struct, its derived impls, the alias `f::Args` names (for a function without type
+/// parameters, `generic` false), and the description, with `path` the function's path and
+/// `attrs` and `effects` its attributes and effects as written.
+pub(crate) fn items(
+    f: &str,
+    path: &str,
+    params: &[(String, bool, String)],
+    generic: bool,
+    (attrs, effects): &(Vec<String>, Vec<String>),
+) -> Vec<String> {
     let args = args_name(f);
     let generics: Vec<String> = (0..params.len()).map(|i| format!("P{i}")).collect();
     let mut out = Vec::new();
@@ -147,15 +191,30 @@ pub(crate) fn items(f: &str, path: &str, params: &[(String, bool, String)]) -> V
             tr, &args, &shown, &generics, &names,
         ));
     }
+    if !generic {
+        let types: Vec<&str> = params.iter().map(|(_, _, t)| t.as_str()).collect();
+        let at = if types.is_empty() {
+            String::new()
+        } else {
+            format!("<{}>", types.join(", "))
+        };
+        out.push(format!("type {} = {args}{at};", args_type_name(f)));
+    }
     let infos: Vec<String> = params
         .iter()
         .map(|(n, _, t)| format!("ParamInfo {{ name: fmt{n:?}, ty: fmt{:?} }}", escape(t)))
         .collect();
+    let texts = |xs: &[String]| -> String {
+        let xs: Vec<String> = xs.iter().map(|x| format!("fmt{:?}", escape(x))).collect();
+        format!("[{}]", xs.join(", "))
+    };
     out.push(format!(
-        "const {}: FnInfo = FnInfo {{ path: fmt{:?}, params: [{}] }};",
+        "const {}: FnInfo = FnInfo {{ path: fmt{:?}, params: [{}], attrs: {}, effects: {} }};",
         info_name(f),
         escape(path),
-        infos.join(", ")
+        infos.join(", "),
+        texts(attrs),
+        texts(effects)
     ));
     out
 }

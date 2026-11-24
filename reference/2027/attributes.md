@@ -75,14 +75,18 @@ other, its problems reported at the attribute: `#[around]` without a wrapper, or
 not a function's path or a call of one, is an error (E1005).
 
 **attr.around.info.1** `INFO` is the function's description, a const `FnInfo` of the prelude
-([The prelude](prelude.md)): `path`, the function's path in its mod (`accounts::transfer`), and
-`params`, each parameter's `name` and `ty`, its type as written. `&INFO` is static data
+([The prelude](prelude.md)): `path`, the function's path in its mod (`accounts::transfer`);
+`params`, each parameter's `name` and `ty`, its type as written; `attrs`, its attributes, each as
+written inside `#[…]` (`track_caller`, `around(trace)`); and `effects`, what its `with` clause
+lists, each as written (`fail(Late)`). `&INFO` is static data
 ([Compile-time evaluation](comptime.md)).
 
 **attr.around.args.1** `f::Args` is a struct with a field of each parameter's type for each
 parameter, named like it; it is a view if a parameter is a borrow ([Views](views.md)), and it
 implements `Debug`, `Clone` and `PartialEq` when every parameter's type does. Its `Debug` writes
-`f::Args { p₁: …, … }`; it cannot be named in code, for now. `#[around(w(c₁, …))]` passes the arguments `c₁, …` before `&INFO`;
+`f::Args { p₁: …, … }`. In code, `f::Args` names it as a type, at the parameters' types, for a
+function without type parameters (E0102 for a function that is not wrapped); it is not yet made
+or matched by that name. `#[around(w(c₁, …))]` passes the arguments `c₁, …` before `&INFO`;
 they are compile-time code (E1001), evaluated at each call for now, and cannot name the
 parameters (E0101).
 

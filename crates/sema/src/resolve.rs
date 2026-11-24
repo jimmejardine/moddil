@@ -688,6 +688,28 @@ pub(crate) fn path_type(
             let names: Vec<&str> = segs.iter().map(|s| s.name.as_str()).collect();
             let last = segs.last().expect("two or more segments");
             match tree.path(scope.module, &names, scope.prelude_first) {
+                // `f::Args`: a wrapped function's arguments (`attr.around.args.1`), the alias
+                // its expansion has beside it.
+                Ok((Def::Fn(f), n)) if n + 1 == segs.len() && last.name == "Args" => {
+                    no_args(last, diags);
+                    let sig = &tree.fns[f as usize];
+                    let alias = crate::wrap::args_type_name(&sig.name);
+                    match tree.lookup(sig.module, &alias, false) {
+                        Some(Def::Type(t)) => type_of_item(tree, t),
+                        _ => {
+                            diags.push(Diagnostic::error(
+                                Code::E0102,
+                                range,
+                                format!(
+                                    "`{}` has no `Args`: only a wrapped function without type \
+                                     parameters has (`#[around(…)]`)",
+                                    sig.name
+                                ),
+                            ));
+                            Ty::Error
+                        }
+                    }
+                }
                 Ok((Def::Adt(a), n)) if n == segs.len() => {
                     let args = adt_args(a, last.args.as_ref(), range, scope, diags);
                     tree.adts[a as usize].ty_with(a, args)

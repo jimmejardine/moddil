@@ -75,3 +75,12 @@ fn admin_only<A>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> int) -> int with 
 pub fn secret(x: int) -> int {
     x
 }
+
+// Only a wrapped function has `Args` (`attr.around.args.1`).
+fn unwrapped(x: int) -> int {
+    x
+}
+
+fn takes(a: unwrapped::Args) -> int {      //~ E0102
+    0
+}
