@@ -26,12 +26,22 @@ pub fn load(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// The C runtime's libraries: the process itself on Unix (libc is in it); the CRT's DLLs on
-/// Windows.
+/// The C runtime's libraries: the process itself on Unix (libc is in it), and libm where it is
+/// a library of its own (glibc's, which the process has only if something in it used libm);
+/// the CRT's DLLs on Windows.
 fn system() -> Vec<Library> {
     #[cfg(unix)]
     {
-        vec![libloading::os::unix::Library::this().into()]
+        let mut v: Vec<Library> = vec![libloading::os::unix::Library::this().into()];
+        #[cfg(not(target_vendor = "apple"))]
+        for name in ["libm.so.6", "libm.so"] {
+            // SAFETY: the system's own maths library.
+            if let Ok(l) = unsafe { Library::new(name) } {
+                v.push(l);
+                break;
+            }
+        }
+        v
     }
     #[cfg(windows)]
     {
