@@ -219,15 +219,19 @@ fn run_exits_with_mains_exit_code() {
     assert_eq!(moddil(&["run", "--interp"], &path).status.code(), Some(42));
 }
 
+/// Its `main` reads the real time through `Clock`, so exiting with 0 says the clock is the
+/// system's, in each runner (`os.clock.1`).
 #[test]
 fn a_main_with_root_capabilities_runs_and_builds() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../conformance/2027/main/roots");
-    let out = moddil(&["run"], &dir);
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    for how in [&["run"][..], &["run", "--interp"], &["run", "--wasm"]] {
+        let out = moddil(how, &dir);
+        assert!(
+            out.status.success(),
+            "{how:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
     let exe = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join("cli")
         .join("roots")

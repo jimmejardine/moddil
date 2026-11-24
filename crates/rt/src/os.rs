@@ -92,6 +92,10 @@ mod native {
         moddil_os::random()
     }
 
+    pub(crate) fn wall_clock() -> i64 {
+        moddil_os::wall_clock()
+    }
+
     /// No GPU natively yet (`gpu.1`): nothing is dispatched.
     pub(crate) fn gpu_dispatch(_: &str, _: &[u8], _: i64, _: i64, _: &mut [u32], _: u32) -> bool {
         false
@@ -123,6 +127,7 @@ mod host {
         fn moddil_host_os_write_stderr(p: *const u8, n: u32);
         fn moddil_host_os_random() -> f64;
         fn moddil_host_os_now() -> f64;
+        fn moddil_host_os_wall_clock() -> f64;
         fn moddil_host_os_listen(port: u32) -> i32;
         fn moddil_host_os_connect(p: *const u8, n: u32, port: u32) -> i32;
         fn moddil_host_os_take(conn: u32, out: *mut u8, n: u32) -> u32;
@@ -269,6 +274,13 @@ mod host {
         unsafe { moddil_host_os_random() as i64 }
     }
 
+    /// The host's real time, as nanoseconds since the epoch (to its milliseconds).
+    #[allow(unsafe_code)]
+    pub(crate) fn wall_clock() -> i64 {
+        // SAFETY: as above.
+        unsafe { moddil_host_os_wall_clock() as i64 }
+    }
+
     #[allow(unsafe_code)]
     pub(crate) fn write_stderr(text: &str) {
         // SAFETY: the text lives across the call.
@@ -322,6 +334,10 @@ mod host {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub(crate) use host::{Os, Start, gpu_dispatch, gpu_frame, gpu_show, random, write_stderr};
+pub(crate) use host::{
+    Os, Start, gpu_dispatch, gpu_frame, gpu_show, random, wall_clock, write_stderr,
+};
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) use native::{Os, Start, gpu_dispatch, gpu_frame, gpu_show, random, write_stderr};
+pub(crate) use native::{
+    Os, Start, gpu_dispatch, gpu_frame, gpu_show, random, wall_clock, write_stderr,
+};

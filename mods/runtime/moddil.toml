@@ -6,3 +6,4 @@ capabilities = ["os"]
 [dependencies]
 net = { path = "../net" }
 rand = { path = "../rand" }
+time = { path = "../time" }

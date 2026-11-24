@@ -261,6 +261,11 @@ impl Machine<'_> {
                 Some(_) => Value::Int(moddil_os::random().max(1)),
                 None => Value::Int(4),
             },
+            // Under a test, the epoch, so a run replays.
+            "os_wall_clock" => match self.sched.os() {
+                Some(_) => Value::Int(moddil_os::wall_clock()),
+                None => Value::Int(0),
+            },
             "os_listen" => {
                 let port = u16::try_from(int(&values[0])).unwrap_or(0);
                 let h = self

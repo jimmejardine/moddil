@@ -896,7 +896,8 @@ impl Machine<'_> {
     /// channels of connections and arrivals have no sender, and no signal comes.
     pub(super) fn no_os(&mut self, name: &str, args: &[Value]) -> Value {
         match name {
-            "arg_count" | "arg_len" | "take" => Value::Int(0),
+            // No arguments, nothing taken, and the epoch for the time.
+            "arg_count" | "arg_len" | "take" | "wall_clock" => Value::Int(0),
             "random" => Value::Int(4),
             "listen" | "connect" => Value::Int(-1),
             "send" => Value::Bool(false),

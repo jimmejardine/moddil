@@ -27,6 +27,11 @@ pub fn write_stderr(text: &str);
 #[intrinsic]
 pub fn random() -> int;
 
+// The system's real time, in nanoseconds since 1970-01-01T00:00:00 UTC (which the system can
+// set back); 0 under a test, so a run replays.
+#[intrinsic]
+pub fn wall_clock() -> int;
+
 // Listens on `port` of the local machine: its handle, or -1 if it cannot.
 #[intrinsic]
 pub fn listen(port: int) -> int;

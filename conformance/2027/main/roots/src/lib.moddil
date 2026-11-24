@@ -1,9 +1,14 @@
-// covers: main.root.1
+// covers: main.root.1, os.clock.1
 
-use moddil::root::{Args, NetRoot, Stdio};
+use moddil::root::{Args, Clock, NetRoot, Stdio};
 
-fn main(args: Args, stdio: Stdio, net: NetRoot) -> ExitCode {
-    ExitCode::Ok
+// The clock reads the system's real time: after 2020-01-01 (1577836800 seconds).
+fn main(args: Args, stdio: Stdio, net: NetRoot, clock: Clock) -> ExitCode {
+    if clock.now().unix_seconds() > 1577836800 && clock.unix_nanos() > 0 {
+        ExitCode::Ok
+    } else {
+        ExitCode::Software
+    }
 }
 
 // The capabilities are values like any other: `main` passes them on.

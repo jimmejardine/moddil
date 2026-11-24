@@ -601,6 +601,17 @@ pub unsafe extern "C" fn os_write_stderr(p: *const u8, n: u64) {
     crate::os::write_stderr(text);
 }
 
+/// `core::os::wall_clock`: under a test, the epoch, so a run replays.
+#[unsafe(export_name = "moddil_rt_os_wall_clock")]
+pub extern "C" fn os_wall_clock() -> u64 {
+    let real = with(|s| s.sched.os().is_some());
+    if real {
+        crate::os::wall_clock() as u64
+    } else {
+        0
+    }
+}
+
 /// `core::os::random`: under a test, a fixed number, so a run replays.
 #[unsafe(export_name = "moddil_rt_os_random")]
 pub extern "C" fn os_random() -> u64 {

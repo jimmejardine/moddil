@@ -92,6 +92,7 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
     },
     moddil_host_os_random: () => Math.floor(Math.random() * 2 ** 52) + 1,
     moddil_host_os_now: () => performance.now(),
+    moddil_host_os_wall_clock: () => Date.now() * 1e6,
     moddil_host_os_listen: (port) => {
       if (!net) return -1;
       const h = { kind: 'listener', server: null, watched: false, pending: [] };

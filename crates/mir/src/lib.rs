@@ -616,6 +616,7 @@ pub fn runtime_op(items: &moddil_sema::ItemTree, f: u32) -> Option<&'static str>
             "arg_copy" => "os_arg_copy",
             "write_stderr" => "os_write_stderr",
             "random" => "os_random",
+            "wall_clock" => "os_wall_clock",
             "listen" => "os_listen",
             "incoming" => "os_incoming",
             "connect" => "os_connect",

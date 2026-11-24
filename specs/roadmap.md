@@ -215,8 +215,9 @@ L)
 - Perceus-style reuse of a node no one else holds; the persistent map's iterator in O(1) per
   entry (needs a view that holds a stack of borrows).
 
-**P20. Time** (`mods/time`, `core::os`, both runtimes; M)
-- Reading the clock, as a root capability; then time zones (they need the zone data).
+**P20. Time zones** (`mods/time`; M)
+- Time zones, from the zone data (IANA's `tzdata`, compiled into the mod or read through a root
+  capability).
 
 **P21. GPU kernels** (`crates/gpu`, `mods/gpu`, `core::gpu`; L)
 - Arrays and slices in a kernel (closures, `dyn` and text later).

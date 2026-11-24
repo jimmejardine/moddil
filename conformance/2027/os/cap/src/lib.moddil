@@ -1,4 +1,4 @@
-// covers: os.1, os.cap.1, os.test.1
+// covers: os.1, os.cap.1, os.test.1, os.clock.1
 
 use core::os;
 
@@ -10,6 +10,8 @@ test "a test has no OS" {
     os::connect("localhost", 80)            // => -1
     ;
     os::random() > 0                        // => true
+    ;
+    os::wall_clock()                        // => 0
     ;
     os::incoming(0).recv().is_none()        // => true
     ;

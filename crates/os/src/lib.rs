@@ -256,6 +256,14 @@ impl Os {
     }
 }
 
+/// The system's real time, in nanoseconds since 1970-01-01T00:00:00 UTC; before it, negative.
+pub fn wall_clock() -> i64 {
+    match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+        Ok(d) => i64::try_from(d.as_nanos()).unwrap_or(i64::MAX),
+        Err(e) => i64::try_from(e.duration().as_nanos()).map_or(i64::MIN, |n| -n),
+    }
+}
+
 /// A random number from the OS's sources: the system's randomly keyed hasher, which is seeded
 /// from the OS, over a counter.
 pub fn random() -> i64 {
