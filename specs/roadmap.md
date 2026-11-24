@@ -222,13 +222,11 @@ L)
 - Struct values in callbacks.
 - On the MIR interpreter: `slice_mut` over C memory, borrows of it without copies, hooks C keeps
   past the call (zlib's `zalloc`), and a trap in a callback raised where it happens.
-- An exported function's trap made a status C can check, beyond `#[export(status)]`.
 
 **P23. Documentation tooling** (`crates/syntax`, `crates/sema`, `crates/moddil`; L)
 - Doc comments read: `moddil doc`, doc links, and doc tests run by `moddil test`.
 
 **P24. The language server, next** (`crates/lsp`; M)
-- Names in types resolved by their full path, not by name in the file's module.
 - Incremental document sync, and analysis off the server's one thread; an editor extension.
 
 **P26. A line-by-line review of the checkers and the native lowering** (`crates/sema` `check/`,
@@ -248,6 +246,9 @@ L)
 - The allocator in scope (`with Alloc = …`, `Vec::new_in`).
 - Exact decimal literals (`let p: Fixed<2> = 0.10`), and `f16`, `bf16` and arbitrary widths
   (`u3`).
+- What a plain `#[export]` function gives C when it traps, instead of ending the process: a zero
+  value and a status C reads after the call (`moddil_trapped()`), or nothing (as now), with
+  `#[export(status)]` the way to get one.
 
 **Waits on bigger work** (not packaged)
 - The rest of M3 and M4 and M5 (above, "Still to build").

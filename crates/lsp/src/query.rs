@@ -158,10 +158,61 @@ impl<'db> Query<'db> {
             .map(|t| (t.text().to_string(), t.text_range()))
     }
 
-    /// What the name at `offset` stands for in this file's module, if it names an item.
+    /// What the name at `offset` stands for in this file's module, if it names an item: as the
+    /// segment of its path it is (`geo::Rect`, `Shape::Circle`), resolved as the compiler does,
+    /// or else by its name.
     fn def_at(&self, offset: u32) -> Option<Def> {
         let (name, _) = self.ident_at(offset)?;
+        if let Some(segs) = self.path_to(offset)
+            && segs.len() > 1
+        {
+            let refs: Vec<&str> = segs.iter().map(String::as_str).collect();
+            match self.items.path(self.module(), &refs, false) {
+                Ok((d, n)) if n == refs.len() => return Some(d),
+                // A variant, after its enum.
+                Ok((Def::Adt(a), n)) if n + 1 == refs.len() => {
+                    let v = self.items.adts[a as usize]
+                        .variants
+                        .iter()
+                        .position(|v| v.name == name)?;
+                    return Some(Def::Variant(a, v as u32));
+                }
+                _ => {}
+            }
+        }
         self.items.lookup(self.module(), &name, false)
+    }
+
+    /// The names of the path the identifier at `offset` is a segment of, up to and including it;
+    /// `None` if it is in no path, or a qualified one (`<T as Tr>::X`).
+    fn path_to(&self, offset: u32) -> Option<Vec<String>> {
+        let source = self.program.files(self.db).get(self.file as usize)?.source;
+        let tree = moddil_sema::parse(self.db, source).syntax();
+        let tok = tree
+            .tokens()
+            .into_iter()
+            .find(|t| t.kind() == SyntaxKind::IDENT && contains(t.text_range(), offset))?;
+        let path = tok
+            .parent()
+            .ancestors()
+            .find(|n| n.kind() == SyntaxKind::PATH)?;
+        let mut segs = Vec::new();
+        for c in path.children() {
+            match c.kind() {
+                SyntaxKind::QUALIFIED_PATH => return None,
+                SyntaxKind::PATH_SEGMENT => {
+                    let name = c
+                        .child_tokens()
+                        .find(|t| t.kind() == SyntaxKind::IDENT || t.kind().is_keyword())?;
+                    segs.push(name.text().to_string());
+                    if contains(c.text_range(), offset) {
+                        return Some(segs);
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
     }
 
     /// Where `def`'s name is: in a file of the program, or in the prelude or `core`.

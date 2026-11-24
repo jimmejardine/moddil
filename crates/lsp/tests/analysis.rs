@@ -241,3 +241,39 @@ fn f() -> int {
     assert_eq!(names, vec!["a", "b"], "{got:?}");
     assert_eq!(got[0].1, "&str", "the later `a`: {got:?}");
 }
+
+/// A name in a type is resolved by its whole path, as the compiler does: `HashMap` in
+/// `core::collections::HashMap` is `core`'s, not the file's own `HashMap`.
+#[test]
+fn a_name_in_a_type_goes_by_its_path() {
+    let text = "\
+struct HashMap {
+    x: int,
+}
+
+fn size(m: &core::collections::HashMap<int, int>, own: HashMap) -> int {
+    m.len() + own.x
+}
+";
+    let (mut a, path) = open("paths", text);
+    let theirs = a
+        .definition(&path, at(text, "collections::HashMap", 0, 14))
+        .expect("core's HashMap");
+    let canon = |p: &PathBuf| std::fs::canonicalize(p).expect("a file");
+    assert_ne!(
+        canon(&theirs.0),
+        canon(&path),
+        "core's, in its own file: {theirs:?}"
+    );
+    let ours = a
+        .definition(&path, at(text, "own: HashMap", 0, 6))
+        .expect("the file's HashMap");
+    assert_eq!(
+        (canon(&ours.0), ours.1.start),
+        (canon(&path), at(text, "HashMap {", 0, 0))
+    );
+    let hover = a
+        .hover(&path, at(text, "collections::HashMap", 0, 14))
+        .unwrap_or_default();
+    assert!(!hover.contains("x: int"), "{hover}");
+}
