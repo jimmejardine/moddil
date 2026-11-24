@@ -86,6 +86,15 @@ pub struct Expr {
     pub range: TextRange,
 }
 
+/// What a [`ExprKind::Halt`] says: why the program stops there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Halt {
+    /// `unreachable("reason")` (`expr.unreachable.1`): a broken invariant.
+    Unreachable,
+    /// `todo("what")` (`expr.todo.1`): code not written yet.
+    Todo,
+}
+
 /// The kinds of expression.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExprKind {
@@ -277,6 +286,8 @@ pub enum ExprKind {
     Return(Option<ExprId>),
     /// `assert(cond)`: traps unless `cond` holds.
     Assert(ExprId),
+    /// `unreachable("reason")` or `todo("what")`: traps, with the reason.
+    Halt(Halt, String),
     /// `e?`: the error of a fallible call, or of an `Err`, goes to the enclosing `try` block or
     /// out of the function; `None` likewise. Otherwise it is the value.
     Question(ExprId),

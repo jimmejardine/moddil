@@ -27,7 +27,8 @@ impl Builder<'_> {
             | ExprKind::TraitFn { .. }
             | ExprKind::Closure { .. }
             | ExprKind::AnonImpl { .. }
-            | ExprKind::Continue { .. } => false,
+            | ExprKind::Continue { .. }
+            | ExprKind::Halt(..) => false,
             ExprKind::Assert(c)
             | ExprKind::Deref(c)
             | ExprKind::Ref { expr: c, .. }

@@ -841,6 +841,13 @@ impl Machine<'_> {
                 _ => Err(trap(TrapClass::Assertion, range)),
             };
         }
+        // So are `unreachable` and `todo` (`expr.unreachable.1`, `expr.todo.1`).
+        if !local && matches!(segments.as_slice(), [one] if one == "unreachable" && !item(one)) {
+            return Err(trap(TrapClass::Unreachable, range));
+        }
+        if !local && matches!(segments.as_slice(), [one] if one == "todo" && !item(one)) {
+            return Err(trap(TrapClass::Unimplemented, range));
+        }
         let resolved = self.resolve(&segments);
         let is_fn = !local
             && matches!(&resolved, Some((Def::Item(k), n)) if *n == segments.len() && self.program.fns.contains_key(k));

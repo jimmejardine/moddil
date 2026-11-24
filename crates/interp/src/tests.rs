@@ -376,6 +376,14 @@ fn errors_return_through_their_edge() {
 }
 
 #[test]
+fn unreachable_and_todo_trap_with_their_classes() {
+    let t = "fn main() -> int { if 1 < 2 { unreachable(\"1 is not less than 2\") } else { 3 } }";
+    assert_eq!(trap(t), TrapClass::Unreachable);
+    let t = "fn main() -> int { todo(\"the answer\") }";
+    assert_eq!(trap(t), TrapClass::Unimplemented);
+}
+
+#[test]
 fn a_method_on_an_error_set_runs_the_error_s_own_impl() {
     // `e` is `Missing | Bad`: the method is the one of the error's own type.
     let t = "trait Answer { fn answer(self) -> int; }\n\

@@ -11,7 +11,8 @@ path through modules, `mod::shapes::Shape::Circle`). An enum or variant that doe
 error (E0101).
 
 **names.prelude.1** The prelude holds the items every module sees without importing them
-([Prelude](prelude.md)), and `assert` ([`assert`](expressions/assert.md)).
+([Prelude](prelude.md)), and `assert` ([`assert`](expressions/assert.md)), `unreachable` and
+`todo` ([`unreachable` and `todo`](expressions/unreachable.md)).
 
 **names.item.1** The functions of a module have distinct names, and so do its tests (E0103). A
 function and a test may share a name.

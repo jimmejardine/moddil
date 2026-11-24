@@ -89,6 +89,15 @@ impl Lowerer<'_> {
                         "`assert` is a built-in, not a value: call it as `assert(condition)`",
                     );
                     return None;
+                } else if segs.len() == 1 && (name == "unreachable" || name == "todo") {
+                    self.report(
+                        Code::E0112,
+                        range,
+                        format!(
+                            "`{name}` is a built-in, not a value: call it as `{name}(\"reason\")`"
+                        ),
+                    );
+                    return None;
                 }
                 let what = if k == 0 && segs.len() == 1 {
                     format!("there is nothing called `{name}` here")

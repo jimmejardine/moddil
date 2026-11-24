@@ -532,6 +532,8 @@ pub enum TrapClass {
     Postcondition,
     /// An error that `?!` said cannot happen.
     Unexpected,
+    /// `unreachable("reason")` reached: a broken invariant (`expr.unreachable.1`).
+    Unreachable,
     /// What waits for a runtime: a `select` on an operation other than the prelude's
     /// (`task.select.3`).
     Unimplemented,
@@ -552,6 +554,7 @@ impl TrapClass {
             TrapClass::Precondition => "precondition broken",
             TrapClass::Postcondition => "postcondition broken",
             TrapClass::Unexpected => "unexpected error",
+            TrapClass::Unreachable => "unreachable",
             TrapClass::Unimplemented => "not implemented yet",
         }
     }

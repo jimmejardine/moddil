@@ -1048,9 +1048,11 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
           `Clone`, `Debug` and `Hash` when their elements are (`type.tuple.traits.1`), and the
           reference interpreter tells tuples of different sizes apart. The map's collision nodes
           keep their `Slot::Entry`s, which let them share the iterator's code.
-        - **No `panic` or `unreachable` for a broken invariant** in library code: a `match` gives
-          an `Option` and `?!` traps on `None` (`values` and `children` in the vector, as in the
-          prelude's `Box`).
+        - **Fixed since: no `panic` or `unreachable` for a broken invariant** in library code, so a
+          `match` gave an `Option` for `?!` to trap on. `unreachable("reason")` and
+          `todo("what")` are now prelude built-ins of type `!` (`expr.unreachable.1`,
+          `expr.todo.1`), and the vector's `values` and `children` use `unreachable`. There is
+          still no `panic`: only bugs trap.
         - **Binding through a view's borrow field:** in `match w.at { Node::Leaf(x) => *x }`, with
           `w` a view whose `at` is a `&Node`, `x` is typed `int`, not `&int` as it is when the
           scrutinee is a local borrow, so `*x` is E0205. Not reproducible since (November 2026): in

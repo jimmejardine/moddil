@@ -30,20 +30,18 @@ pub struct PersistentVec<T> {
 
 /// The values of a leaf.
 fn values<T>(n: &Rc<Node<T>>) -> &Vec<T> {
-    let xs = match &**n {
-        Node::Leaf(xs) => Some(xs),
-        Node::Branch(_) => None,
-    };
-    xs ?! "a leaf"
+    match &**n {
+        Node::Leaf(xs) => xs,
+        Node::Branch(_) => unreachable("a leaf"),
+    }
 }
 
 /// The children of a branch.
 fn children<T>(n: &Rc<Node<T>>) -> &Vec<Rc<Node<T>>> {
-    let cs = match &**n {
-        Node::Branch(cs) => Some(cs),
-        Node::Leaf(_) => None,
-    };
-    cs ?! "a branch"
+    match &**n {
+        Node::Branch(cs) => cs,
+        Node::Leaf(_) => unreachable("a branch"),
+    }
 }
 
 /// Copies of `xs`' handles: the nodes they point to are shared.

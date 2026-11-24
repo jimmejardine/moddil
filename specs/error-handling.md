@@ -14,7 +14,7 @@
 | D5 | **Integer overflow traps, in every build** (as in Swift). Wrapping is explicit: `+%`, `-%`, `*%` or `Wrapping<T>` ([`numerics.md`: Overflow traps](numerics.md#overflow-traps)). Floats follow IEEE 754 (NaN, ±∞). |
 | D6 | **Integer division traps, as in Rust**: `x / 0`, `x % 0`, `MIN / -1`. Same crash class as out-of-memory. |
 | D7 | **Indexing traps on out-of-bounds**; `get(i)` returns `Option`. Bounds checks are elided where the compiler proves the index is in range. |
-| D8 | **Resource exhaustion and faults are crashes**, not R3 violations: out of memory, stack overflow, `unreachable`, native FFI faults. |
+| D8 | **Resource exhaustion and faults are crashes**, not R3 violations: out of memory, stack overflow, `unreachable` (and `todo`, [reference](../reference/2027/expressions/unreachable.md)), native FFI faults. |
 | D9 | **Drop cannot fail or suspend**: a drop implementation has an empty effect set, checked by the compiler. Cleanup that can fail is a linear type with an explicit `close`/`commit` ([`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)). |
 | D10 | **Cleanup failures during error handling are suppressed, not lost**: they are attached to the primary error (as in Java's try-with-resources), never replace it and never terminate ([`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)). |
 | D11 | **`defer` is infallible; `errdefer` may fail.** `defer` follows drop's rules (no fail, no suspend); `errdefer` runs on error and cancellation exits, and its failure is suppressed ([`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)). |

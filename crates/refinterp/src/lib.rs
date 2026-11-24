@@ -47,6 +47,8 @@ pub enum TrapClass {
     Assertion,
     /// An error that `?!` said cannot happen.
     Unexpected,
+    /// `unreachable("reason")` reached (`expr.unreachable.1`).
+    Unreachable,
     /// An index out of bounds (`expr.index.1`).
     IndexOutOfBounds,
     /// More elements pushed into a `Buf` than its capacity (`collections.buf.1`).
@@ -70,6 +72,7 @@ impl fmt::Display for TrapClass {
             TrapClass::StackOverflow => "stack overflow",
             TrapClass::Assertion => "assertion failed",
             TrapClass::Unexpected => "unexpected error",
+            TrapClass::Unreachable => "unreachable",
             TrapClass::Unimplemented => "not implemented yet",
             TrapClass::IndexOutOfBounds => "index out of bounds",
             TrapClass::CapacityExceeded => "capacity exceeded",

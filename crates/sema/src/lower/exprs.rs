@@ -5,7 +5,9 @@ use moddil_syntax::{SyntaxKind as K, SyntaxNode, SyntaxToken, TextRange};
 
 use super::names::JumpError;
 use super::{Binds, Lowerer, Resolved};
-use crate::hir::{Arm, BinaryOp, CompareOp, ExprId, ExprKind, Handler, LogicOp, PatKind, UnaryOp};
+use crate::hir::{
+    Arm, BinaryOp, CompareOp, ExprId, ExprKind, Halt, Handler, LogicOp, PatKind, UnaryOp,
+};
 use crate::items::{Def, Shape};
 use crate::resolve::{generic_args, path_segments};
 use crate::{Code, Diagnostic, Ty};
@@ -1243,6 +1245,18 @@ impl Lowerer<'_> {
                 }
                 return self.alloc(ExprKind::Assert(args[0]), range);
             }
+            // So are `unreachable` and `todo` (`expr.unreachable.1`, `expr.todo.1`).
+            if let [one] = segments.as_slice()
+                && let Some(halt) = match one.name.as_str() {
+                    "unreachable" => Some(Halt::Unreachable),
+                    "todo" => Some(Halt::Todo),
+                    _ => None,
+                }
+                && self.lookup(&one.name).is_none()
+                && self.item(&one.name).is_none()
+            {
+                return self.halt(node, halt, &one.name, range);
+            }
             let resolved = self.resolve(c.syntax());
             if let Some(Resolved::Fn(func, _)) = &resolved
                 && self.items.fns[*func as usize].deriver.is_some()
@@ -1290,6 +1304,28 @@ impl Lowerer<'_> {
         }
         let r = self.expr(&args[0]);
         self.alloc(ExprKind::Discard(r), range)
+    }
+
+    /// `unreachable("reason")` or `todo("what")`: the reason is a string literal.
+    fn halt(&mut self, node: &SyntaxNode, halt: Halt, name: &str, range: TextRange) -> ExprId {
+        let args: Vec<ast::Expr> = node
+            .child(K::ARG_LIST)
+            .and_then(ast::ArgList::cast)
+            .map(|l| l.args().filter_map(|a| a.expr()).collect())
+            .unwrap_or_default();
+        let reason = match args.as_slice() {
+            [ast::Expr::Literal(l)] => l.token(K::STRING).map(|t| unquote(t.text())),
+            _ => None,
+        };
+        let Some(reason) = reason else {
+            self.report(
+                Code::E0202,
+                range,
+                format!("`{name}` takes a string saying why: `{name}(\"reason\")`"),
+            );
+            return self.missing(range);
+        };
+        self.alloc(ExprKind::Halt(halt, reason), range)
     }
 
     /// `try { … }`, maybe with `catch { arms }`.

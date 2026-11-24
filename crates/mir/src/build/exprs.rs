@@ -1,6 +1,8 @@
 //! Expressions and statements: each HIR expression kind as blocks and statements.
 
-use moddil_sema::hir::{ExprId, ExprKind, FmtPiece, Handler, LogicOp, PatKind, Stmt, UnaryOp};
+use moddil_sema::hir::{
+    ExprId, ExprKind, FmtPiece, Halt, Handler, LogicOp, PatKind, Stmt, UnaryOp,
+};
 use moddil_sema::{Callee, Ty};
 use moddil_syntax::TextRange;
 
@@ -451,6 +453,13 @@ impl Builder<'_> {
                 self.ensures();
                 self.leave_scopes(0);
                 self.cfg.terminate(Terminator::Return);
+            }
+            ExprKind::Halt(halt, reason) => {
+                let class = match halt {
+                    Halt::Unreachable => TrapClass::Unreachable,
+                    Halt::Todo => TrapClass::Unimplemented,
+                };
+                self.cfg.terminate(Terminator::Trap(class, reason));
             }
             ExprKind::Assert(cond) => {
                 let mut exprs = Vec::new();

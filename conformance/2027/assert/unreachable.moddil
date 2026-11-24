@@ -1,0 +1,47 @@
+// covers: expr.unreachable.1, expr.todo.1
+
+enum Shape {
+    Square(int),
+    Circle(int),
+}
+
+/// The side of a shape known to be a square.
+fn side(s: &Shape) -> int {
+    match s {
+        Shape::Square(n) => *n,
+        Shape::Circle(_) => unreachable("a square"),
+    }
+}
+
+test "an arm that is never taken" {
+    side(&Shape::Square(3))                 // => 3
+}
+
+test "unreachable fits where a value is wanted" {
+    let n = 4;
+    let half = if n % 2 == 0 { n / 2 } else { unreachable("n is even") };
+    half                                    // => 2
+}
+
+test "reaching unreachable traps" {
+    let s = Shape::Circle(1);
+    let n = match s {
+        Shape::Square(n) => n,
+        Shape::Circle(_) => unreachable("a square"),    //~ trap
+    };
+    n
+}
+
+test "todo traps" {
+    let n: int = todo("work out the answer");           //~ trap
+    n
+}
+
+fn check(n: int) -> int {
+    let todo = n + 1;
+    todo
+}
+
+test "a local named todo comes first" {
+    check(1)                                // => 2
+}

@@ -59,6 +59,7 @@ Each page lists its diagnostics by code; the codes are in [Diagnostics](diagnost
   [Fields](expressions/fields.md), [Methods](expressions/methods.md),
   [Arrays and indexing](expressions/arrays.md),
   [Closures and anonymous impls](expressions/closures.md), [`match`](expressions/match.md),
-  [Loops](expressions/loops.md), [`assert`](expressions/assert.md)
+  [Loops](expressions/loops.md), [`assert`](expressions/assert.md),
+  [`unreachable` and `todo`](expressions/unreachable.md)
 - [Traps](traps.md)
 - [Diagnostics](diagnostics.md)
