@@ -409,13 +409,19 @@ impl Collector<'_> {
             }
         }
         self.reporter.report(src, origin, ds);
-        // A derive of a trait whose derive function is a template (`comptime.derive.1`): its
+        // A derive of a trait whose derive function is a template (`comptime.derive.1`), or an
+        // impl a prelude derive function's `#[derive_for]` makes (`comptime.derive.for.1`): its
         // methods are the template's.
+        let derive_for = (src == Src::Derived)
+            .then(|| self.derive_for_of(node.text_range()))
+            .flatten();
         let template = (src == Src::Derived)
             .then(|| {
-                trait_ref
-                    .as_ref()
-                    .and_then(|t| self.tree.traits[t.trait_ as usize].derive_by)
+                derive_for.or_else(|| {
+                    trait_ref
+                        .as_ref()
+                        .and_then(|t| self.tree.traits[t.trait_ as usize].derive_by)
+                })
             })
             .flatten();
         self.tree.impls.push(ImplDef {
@@ -448,6 +454,7 @@ impl Collector<'_> {
                 trait_ref.as_ref(),
                 &assoc,
                 origin,
+                derive_for.is_some(),
             );
             return;
         }

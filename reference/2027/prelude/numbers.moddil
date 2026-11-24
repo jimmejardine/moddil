@@ -3,1373 +3,259 @@
 // The sized integers and the floats (`num.types.1`): each is `Copy`, compares, and has the
 // arithmetic operators, built in on two values of the type. The integers are `Eq` and `Ord`; the
 // floats only `PartialEq` and `PartialOrd`, as IEEE 754 says (NaN is unordered).
+//
+// Each impl is written once, as a template that `#[derive_for]` makes for each type it lists
+// (`comptime.derive.for.1`). The integers' arithmetic is `#[track_caller]`, as it can trap.
 
-impl Clone for i8 {
-    fn clone(&self) -> i8 {
-        *self
-    }
-}
-
-impl Copy for i8 {}
-
-impl PartialEq for i8 {
-    fn eq(&self, other: &i8) -> bool {
-        *self == *other
-    }
-}
-
-impl PartialOrd for i8 {
-    fn partial_cmp(&self, other: &i8) -> Option<Ordering> {
-        if *self < *other {
-            Some(Ordering::Less)
-        } else if *self == *other {
-            Some(Ordering::Equal)
-        } else if *self > *other {
-            Some(Ordering::Greater)
-        } else {
-            None
-        }
-    }
-
-    fn lt(&self, other: &i8) -> bool {
-        *self < *other
-    }
-
-    fn le(&self, other: &i8) -> bool {
-        *self <= *other
-    }
-
-    fn gt(&self, other: &i8) -> bool {
-        *self > *other
-    }
-
-    fn ge(&self, other: &i8) -> bool {
-        *self >= *other
-    }
-}
-
-impl Eq for i8 {}
-
-impl Ord for i8 {
-    fn cmp(&self, other: &i8) -> Ordering {
-        if *self < *other {
-            Ordering::Less
-        } else if *self == *other {
-            Ordering::Equal
-        } else {
-            Ordering::Greater
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
+const fn number_clone(t: type) -> Impl<Clone> {
+    impl Clone for t {
+        fn clone(&self) -> t {
+            *self
         }
     }
 }
 
-impl Add for i8 {
-    type Output = i8;
-    #[track_caller]
-    fn add(self, rhs: i8) -> i8 {
-        self + rhs
-    }
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
+const fn number_copy(t: type) -> Impl<Copy> {
+    impl Copy for t {}
 }
 
-impl Sub for i8 {
-    type Output = i8;
-    #[track_caller]
-    fn sub(self, rhs: i8) -> i8 {
-        self - rhs
-    }
-}
-
-impl Mul for i8 {
-    type Output = i8;
-    #[track_caller]
-    fn mul(self, rhs: i8) -> i8 {
-        self * rhs
-    }
-}
-
-impl Div for i8 {
-    type Output = i8;
-    #[track_caller]
-    fn div(self, rhs: i8) -> i8 {
-        self / rhs
-    }
-}
-
-impl Rem for i8 {
-    type Output = i8;
-    #[track_caller]
-    fn rem(self, rhs: i8) -> i8 {
-        self % rhs
-    }
-}
-
-impl Neg for i8 {
-    type Output = i8;
-    #[track_caller]
-    fn neg(self) -> i8 {
-        -self
-    }
-}
-
-impl Not for i8 {
-    type Output = i8;
-    fn not(self) -> i8 {
-        !self
-    }
-}
-
-impl Display for i8 {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self.text());
-    }
-}
-
-impl Debug for i8 {
-    fn fmt(&self, out: &mut String) {
-        Display::fmt(self, out);
-    }
-}
-
-impl Default for i8 {
-    fn default() -> i8 {
-        0
-    }
-}
-
-impl Number for i8 {}
-
-impl Clone for i16 {
-    fn clone(&self) -> i16 {
-        *self
-    }
-}
-
-impl Copy for i16 {}
-
-impl PartialEq for i16 {
-    fn eq(&self, other: &i16) -> bool {
-        *self == *other
-    }
-}
-
-impl PartialOrd for i16 {
-    fn partial_cmp(&self, other: &i16) -> Option<Ordering> {
-        if *self < *other {
-            Some(Ordering::Less)
-        } else if *self == *other {
-            Some(Ordering::Equal)
-        } else if *self > *other {
-            Some(Ordering::Greater)
-        } else {
-            None
-        }
-    }
-
-    fn lt(&self, other: &i16) -> bool {
-        *self < *other
-    }
-
-    fn le(&self, other: &i16) -> bool {
-        *self <= *other
-    }
-
-    fn gt(&self, other: &i16) -> bool {
-        *self > *other
-    }
-
-    fn ge(&self, other: &i16) -> bool {
-        *self >= *other
-    }
-}
-
-impl Eq for i16 {}
-
-impl Ord for i16 {
-    fn cmp(&self, other: &i16) -> Ordering {
-        if *self < *other {
-            Ordering::Less
-        } else if *self == *other {
-            Ordering::Equal
-        } else {
-            Ordering::Greater
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
+const fn number_partial_eq(t: type) -> Impl<PartialEq> {
+    impl PartialEq for t {
+        fn eq(&self, other: &t) -> bool {
+            *self == *other
         }
     }
 }
 
-impl Add for i16 {
-    type Output = i16;
-    #[track_caller]
-    fn add(self, rhs: i16) -> i16 {
-        self + rhs
-    }
-}
-
-impl Sub for i16 {
-    type Output = i16;
-    #[track_caller]
-    fn sub(self, rhs: i16) -> i16 {
-        self - rhs
-    }
-}
-
-impl Mul for i16 {
-    type Output = i16;
-    #[track_caller]
-    fn mul(self, rhs: i16) -> i16 {
-        self * rhs
-    }
-}
-
-impl Div for i16 {
-    type Output = i16;
-    #[track_caller]
-    fn div(self, rhs: i16) -> i16 {
-        self / rhs
-    }
-}
-
-impl Rem for i16 {
-    type Output = i16;
-    #[track_caller]
-    fn rem(self, rhs: i16) -> i16 {
-        self % rhs
-    }
-}
-
-impl Neg for i16 {
-    type Output = i16;
-    #[track_caller]
-    fn neg(self) -> i16 {
-        -self
-    }
-}
-
-impl Not for i16 {
-    type Output = i16;
-    fn not(self) -> i16 {
-        !self
-    }
-}
-
-impl Display for i16 {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self.text());
-    }
-}
-
-impl Debug for i16 {
-    fn fmt(&self, out: &mut String) {
-        Display::fmt(self, out);
-    }
-}
-
-impl Default for i16 {
-    fn default() -> i16 {
-        0
-    }
-}
-
-impl Number for i16 {}
-
-impl Clone for i32 {
-    fn clone(&self) -> i32 {
-        *self
-    }
-}
-
-impl Copy for i32 {}
-
-impl PartialEq for i32 {
-    fn eq(&self, other: &i32) -> bool {
-        *self == *other
-    }
-}
-
-impl PartialOrd for i32 {
-    fn partial_cmp(&self, other: &i32) -> Option<Ordering> {
-        if *self < *other {
-            Some(Ordering::Less)
-        } else if *self == *other {
-            Some(Ordering::Equal)
-        } else if *self > *other {
-            Some(Ordering::Greater)
-        } else {
-            None
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
+const fn number_partial_ord(t: type) -> Impl<PartialOrd> {
+    impl PartialOrd for t {
+        fn partial_cmp(&self, other: &t) -> Option<Ordering> {
+            if *self < *other {
+                Some(Ordering::Less)
+            } else if *self == *other {
+                Some(Ordering::Equal)
+            } else if *self > *other {
+                Some(Ordering::Greater)
+            } else {
+                None
+            }
         }
-    }
 
-    fn lt(&self, other: &i32) -> bool {
-        *self < *other
-    }
+        fn lt(&self, other: &t) -> bool {
+            *self < *other
+        }
 
-    fn le(&self, other: &i32) -> bool {
-        *self <= *other
-    }
+        fn le(&self, other: &t) -> bool {
+            *self <= *other
+        }
 
-    fn gt(&self, other: &i32) -> bool {
-        *self > *other
-    }
+        fn gt(&self, other: &t) -> bool {
+            *self > *other
+        }
 
-    fn ge(&self, other: &i32) -> bool {
-        *self >= *other
-    }
-}
-
-impl Eq for i32 {}
-
-impl Ord for i32 {
-    fn cmp(&self, other: &i32) -> Ordering {
-        if *self < *other {
-            Ordering::Less
-        } else if *self == *other {
-            Ordering::Equal
-        } else {
-            Ordering::Greater
+        fn ge(&self, other: &t) -> bool {
+            *self >= *other
         }
     }
 }
 
-impl Add for i32 {
-    type Output = i32;
-    #[track_caller]
-    fn add(self, rhs: i32) -> i32 {
-        self + rhs
-    }
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+const fn int_eq(t: type) -> Impl<Eq> {
+    impl Eq for t {}
 }
 
-impl Sub for i32 {
-    type Output = i32;
-    #[track_caller]
-    fn sub(self, rhs: i32) -> i32 {
-        self - rhs
-    }
-}
-
-impl Mul for i32 {
-    type Output = i32;
-    #[track_caller]
-    fn mul(self, rhs: i32) -> i32 {
-        self * rhs
-    }
-}
-
-impl Div for i32 {
-    type Output = i32;
-    #[track_caller]
-    fn div(self, rhs: i32) -> i32 {
-        self / rhs
-    }
-}
-
-impl Rem for i32 {
-    type Output = i32;
-    #[track_caller]
-    fn rem(self, rhs: i32) -> i32 {
-        self % rhs
-    }
-}
-
-impl Neg for i32 {
-    type Output = i32;
-    #[track_caller]
-    fn neg(self) -> i32 {
-        -self
-    }
-}
-
-impl Not for i32 {
-    type Output = i32;
-    fn not(self) -> i32 {
-        !self
-    }
-}
-
-impl Display for i32 {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self.text());
-    }
-}
-
-impl Debug for i32 {
-    fn fmt(&self, out: &mut String) {
-        Display::fmt(self, out);
-    }
-}
-
-impl Default for i32 {
-    fn default() -> i32 {
-        0
-    }
-}
-
-impl Number for i32 {}
-
-impl Clone for i128 {
-    fn clone(&self) -> i128 {
-        *self
-    }
-}
-
-impl Copy for i128 {}
-
-impl PartialEq for i128 {
-    fn eq(&self, other: &i128) -> bool {
-        *self == *other
-    }
-}
-
-impl PartialOrd for i128 {
-    fn partial_cmp(&self, other: &i128) -> Option<Ordering> {
-        if *self < *other {
-            Some(Ordering::Less)
-        } else if *self == *other {
-            Some(Ordering::Equal)
-        } else if *self > *other {
-            Some(Ordering::Greater)
-        } else {
-            None
-        }
-    }
-
-    fn lt(&self, other: &i128) -> bool {
-        *self < *other
-    }
-
-    fn le(&self, other: &i128) -> bool {
-        *self <= *other
-    }
-
-    fn gt(&self, other: &i128) -> bool {
-        *self > *other
-    }
-
-    fn ge(&self, other: &i128) -> bool {
-        *self >= *other
-    }
-}
-
-impl Eq for i128 {}
-
-impl Ord for i128 {
-    fn cmp(&self, other: &i128) -> Ordering {
-        if *self < *other {
-            Ordering::Less
-        } else if *self == *other {
-            Ordering::Equal
-        } else {
-            Ordering::Greater
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+const fn int_ord(t: type) -> Impl<Ord> {
+    impl Ord for t {
+        fn cmp(&self, other: &t) -> Ordering {
+            if *self < *other {
+                Ordering::Less
+            } else if *self == *other {
+                Ordering::Equal
+            } else {
+                Ordering::Greater
+            }
         }
     }
 }
 
-impl Add for i128 {
-    type Output = i128;
-    #[track_caller]
-    fn add(self, rhs: i128) -> i128 {
-        self + rhs
-    }
-}
-
-impl Sub for i128 {
-    type Output = i128;
-    #[track_caller]
-    fn sub(self, rhs: i128) -> i128 {
-        self - rhs
-    }
-}
-
-impl Mul for i128 {
-    type Output = i128;
-    #[track_caller]
-    fn mul(self, rhs: i128) -> i128 {
-        self * rhs
-    }
-}
-
-impl Div for i128 {
-    type Output = i128;
-    #[track_caller]
-    fn div(self, rhs: i128) -> i128 {
-        self / rhs
-    }
-}
-
-impl Rem for i128 {
-    type Output = i128;
-    #[track_caller]
-    fn rem(self, rhs: i128) -> i128 {
-        self % rhs
-    }
-}
-
-impl Neg for i128 {
-    type Output = i128;
-    #[track_caller]
-    fn neg(self) -> i128 {
-        -self
-    }
-}
-
-impl Not for i128 {
-    type Output = i128;
-    fn not(self) -> i128 {
-        !self
-    }
-}
-
-impl Display for i128 {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self.text());
-    }
-}
-
-impl Debug for i128 {
-    fn fmt(&self, out: &mut String) {
-        Display::fmt(self, out);
-    }
-}
-
-impl Default for i128 {
-    fn default() -> i128 {
-        0
-    }
-}
-
-impl Number for i128 {}
-
-impl Clone for u8 {
-    fn clone(&self) -> u8 {
-        *self
-    }
-}
-
-impl Copy for u8 {}
-
-impl PartialEq for u8 {
-    fn eq(&self, other: &u8) -> bool {
-        *self == *other
-    }
-}
-
-impl PartialOrd for u8 {
-    fn partial_cmp(&self, other: &u8) -> Option<Ordering> {
-        if *self < *other {
-            Some(Ordering::Less)
-        } else if *self == *other {
-            Some(Ordering::Equal)
-        } else if *self > *other {
-            Some(Ordering::Greater)
-        } else {
-            None
-        }
-    }
-
-    fn lt(&self, other: &u8) -> bool {
-        *self < *other
-    }
-
-    fn le(&self, other: &u8) -> bool {
-        *self <= *other
-    }
-
-    fn gt(&self, other: &u8) -> bool {
-        *self > *other
-    }
-
-    fn ge(&self, other: &u8) -> bool {
-        *self >= *other
-    }
-}
-
-impl Eq for u8 {}
-
-impl Ord for u8 {
-    fn cmp(&self, other: &u8) -> Ordering {
-        if *self < *other {
-            Ordering::Less
-        } else if *self == *other {
-            Ordering::Equal
-        } else {
-            Ordering::Greater
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+const fn int_add(t: type) -> Impl<Add> {
+    impl Add for t {
+        type Output = t;
+        #[track_caller]
+        fn add(self, rhs: t) -> t {
+            self + rhs
         }
     }
 }
 
-impl Add for u8 {
-    type Output = u8;
-    #[track_caller]
-    fn add(self, rhs: u8) -> u8 {
-        self + rhs
-    }
-}
-
-impl Sub for u8 {
-    type Output = u8;
-    #[track_caller]
-    fn sub(self, rhs: u8) -> u8 {
-        self - rhs
-    }
-}
-
-impl Mul for u8 {
-    type Output = u8;
-    #[track_caller]
-    fn mul(self, rhs: u8) -> u8 {
-        self * rhs
-    }
-}
-
-impl Div for u8 {
-    type Output = u8;
-    #[track_caller]
-    fn div(self, rhs: u8) -> u8 {
-        self / rhs
-    }
-}
-
-impl Rem for u8 {
-    type Output = u8;
-    #[track_caller]
-    fn rem(self, rhs: u8) -> u8 {
-        self % rhs
-    }
-}
-
-impl Not for u8 {
-    type Output = u8;
-    fn not(self) -> u8 {
-        !self
-    }
-}
-
-impl Display for u8 {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self.text());
-    }
-}
-
-impl Debug for u8 {
-    fn fmt(&self, out: &mut String) {
-        Display::fmt(self, out);
-    }
-}
-
-impl Default for u8 {
-    fn default() -> u8 {
-        0
-    }
-}
-
-impl Number for u8 {}
-
-impl Clone for u16 {
-    fn clone(&self) -> u16 {
-        *self
-    }
-}
-
-impl Copy for u16 {}
-
-impl PartialEq for u16 {
-    fn eq(&self, other: &u16) -> bool {
-        *self == *other
-    }
-}
-
-impl PartialOrd for u16 {
-    fn partial_cmp(&self, other: &u16) -> Option<Ordering> {
-        if *self < *other {
-            Some(Ordering::Less)
-        } else if *self == *other {
-            Some(Ordering::Equal)
-        } else if *self > *other {
-            Some(Ordering::Greater)
-        } else {
-            None
-        }
-    }
-
-    fn lt(&self, other: &u16) -> bool {
-        *self < *other
-    }
-
-    fn le(&self, other: &u16) -> bool {
-        *self <= *other
-    }
-
-    fn gt(&self, other: &u16) -> bool {
-        *self > *other
-    }
-
-    fn ge(&self, other: &u16) -> bool {
-        *self >= *other
-    }
-}
-
-impl Eq for u16 {}
-
-impl Ord for u16 {
-    fn cmp(&self, other: &u16) -> Ordering {
-        if *self < *other {
-            Ordering::Less
-        } else if *self == *other {
-            Ordering::Equal
-        } else {
-            Ordering::Greater
+#[derive_for(f32, f64)]
+const fn float_add(t: type) -> Impl<Add> {
+    impl Add for t {
+        type Output = t;
+        fn add(self, rhs: t) -> t {
+            self + rhs
         }
     }
 }
 
-impl Add for u16 {
-    type Output = u16;
-    #[track_caller]
-    fn add(self, rhs: u16) -> u16 {
-        self + rhs
-    }
-}
-
-impl Sub for u16 {
-    type Output = u16;
-    #[track_caller]
-    fn sub(self, rhs: u16) -> u16 {
-        self - rhs
-    }
-}
-
-impl Mul for u16 {
-    type Output = u16;
-    #[track_caller]
-    fn mul(self, rhs: u16) -> u16 {
-        self * rhs
-    }
-}
-
-impl Div for u16 {
-    type Output = u16;
-    #[track_caller]
-    fn div(self, rhs: u16) -> u16 {
-        self / rhs
-    }
-}
-
-impl Rem for u16 {
-    type Output = u16;
-    #[track_caller]
-    fn rem(self, rhs: u16) -> u16 {
-        self % rhs
-    }
-}
-
-impl Not for u16 {
-    type Output = u16;
-    fn not(self) -> u16 {
-        !self
-    }
-}
-
-impl Display for u16 {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self.text());
-    }
-}
-
-impl Debug for u16 {
-    fn fmt(&self, out: &mut String) {
-        Display::fmt(self, out);
-    }
-}
-
-impl Default for u16 {
-    fn default() -> u16 {
-        0
-    }
-}
-
-impl Number for u16 {}
-
-impl Clone for u32 {
-    fn clone(&self) -> u32 {
-        *self
-    }
-}
-
-impl Copy for u32 {}
-
-impl PartialEq for u32 {
-    fn eq(&self, other: &u32) -> bool {
-        *self == *other
-    }
-}
-
-impl PartialOrd for u32 {
-    fn partial_cmp(&self, other: &u32) -> Option<Ordering> {
-        if *self < *other {
-            Some(Ordering::Less)
-        } else if *self == *other {
-            Some(Ordering::Equal)
-        } else if *self > *other {
-            Some(Ordering::Greater)
-        } else {
-            None
-        }
-    }
-
-    fn lt(&self, other: &u32) -> bool {
-        *self < *other
-    }
-
-    fn le(&self, other: &u32) -> bool {
-        *self <= *other
-    }
-
-    fn gt(&self, other: &u32) -> bool {
-        *self > *other
-    }
-
-    fn ge(&self, other: &u32) -> bool {
-        *self >= *other
-    }
-}
-
-impl Eq for u32 {}
-
-impl Ord for u32 {
-    fn cmp(&self, other: &u32) -> Ordering {
-        if *self < *other {
-            Ordering::Less
-        } else if *self == *other {
-            Ordering::Equal
-        } else {
-            Ordering::Greater
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+const fn int_sub(t: type) -> Impl<Sub> {
+    impl Sub for t {
+        type Output = t;
+        #[track_caller]
+        fn sub(self, rhs: t) -> t {
+            self - rhs
         }
     }
 }
 
-impl Add for u32 {
-    type Output = u32;
-    #[track_caller]
-    fn add(self, rhs: u32) -> u32 {
-        self + rhs
-    }
-}
-
-impl Sub for u32 {
-    type Output = u32;
-    #[track_caller]
-    fn sub(self, rhs: u32) -> u32 {
-        self - rhs
-    }
-}
-
-impl Mul for u32 {
-    type Output = u32;
-    #[track_caller]
-    fn mul(self, rhs: u32) -> u32 {
-        self * rhs
-    }
-}
-
-impl Div for u32 {
-    type Output = u32;
-    #[track_caller]
-    fn div(self, rhs: u32) -> u32 {
-        self / rhs
-    }
-}
-
-impl Rem for u32 {
-    type Output = u32;
-    #[track_caller]
-    fn rem(self, rhs: u32) -> u32 {
-        self % rhs
-    }
-}
-
-impl Not for u32 {
-    type Output = u32;
-    fn not(self) -> u32 {
-        !self
-    }
-}
-
-impl Display for u32 {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self.text());
-    }
-}
-
-impl Debug for u32 {
-    fn fmt(&self, out: &mut String) {
-        Display::fmt(self, out);
-    }
-}
-
-impl Default for u32 {
-    fn default() -> u32 {
-        0
-    }
-}
-
-impl Number for u32 {}
-
-impl Clone for u64 {
-    fn clone(&self) -> u64 {
-        *self
-    }
-}
-
-impl Copy for u64 {}
-
-impl PartialEq for u64 {
-    fn eq(&self, other: &u64) -> bool {
-        *self == *other
-    }
-}
-
-impl PartialOrd for u64 {
-    fn partial_cmp(&self, other: &u64) -> Option<Ordering> {
-        if *self < *other {
-            Some(Ordering::Less)
-        } else if *self == *other {
-            Some(Ordering::Equal)
-        } else if *self > *other {
-            Some(Ordering::Greater)
-        } else {
-            None
-        }
-    }
-
-    fn lt(&self, other: &u64) -> bool {
-        *self < *other
-    }
-
-    fn le(&self, other: &u64) -> bool {
-        *self <= *other
-    }
-
-    fn gt(&self, other: &u64) -> bool {
-        *self > *other
-    }
-
-    fn ge(&self, other: &u64) -> bool {
-        *self >= *other
-    }
-}
-
-impl Eq for u64 {}
-
-impl Ord for u64 {
-    fn cmp(&self, other: &u64) -> Ordering {
-        if *self < *other {
-            Ordering::Less
-        } else if *self == *other {
-            Ordering::Equal
-        } else {
-            Ordering::Greater
+#[derive_for(f32, f64)]
+const fn float_sub(t: type) -> Impl<Sub> {
+    impl Sub for t {
+        type Output = t;
+        fn sub(self, rhs: t) -> t {
+            self - rhs
         }
     }
 }
 
-impl Add for u64 {
-    type Output = u64;
-    #[track_caller]
-    fn add(self, rhs: u64) -> u64 {
-        self + rhs
-    }
-}
-
-impl Sub for u64 {
-    type Output = u64;
-    #[track_caller]
-    fn sub(self, rhs: u64) -> u64 {
-        self - rhs
-    }
-}
-
-impl Mul for u64 {
-    type Output = u64;
-    #[track_caller]
-    fn mul(self, rhs: u64) -> u64 {
-        self * rhs
-    }
-}
-
-impl Div for u64 {
-    type Output = u64;
-    #[track_caller]
-    fn div(self, rhs: u64) -> u64 {
-        self / rhs
-    }
-}
-
-impl Rem for u64 {
-    type Output = u64;
-    #[track_caller]
-    fn rem(self, rhs: u64) -> u64 {
-        self % rhs
-    }
-}
-
-impl Not for u64 {
-    type Output = u64;
-    fn not(self) -> u64 {
-        !self
-    }
-}
-
-impl Display for u64 {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self.text());
-    }
-}
-
-impl Debug for u64 {
-    fn fmt(&self, out: &mut String) {
-        Display::fmt(self, out);
-    }
-}
-
-impl Default for u64 {
-    fn default() -> u64 {
-        0
-    }
-}
-
-impl Number for u64 {}
-
-impl Clone for u128 {
-    fn clone(&self) -> u128 {
-        *self
-    }
-}
-
-impl Copy for u128 {}
-
-impl PartialEq for u128 {
-    fn eq(&self, other: &u128) -> bool {
-        *self == *other
-    }
-}
-
-impl PartialOrd for u128 {
-    fn partial_cmp(&self, other: &u128) -> Option<Ordering> {
-        if *self < *other {
-            Some(Ordering::Less)
-        } else if *self == *other {
-            Some(Ordering::Equal)
-        } else if *self > *other {
-            Some(Ordering::Greater)
-        } else {
-            None
-        }
-    }
-
-    fn lt(&self, other: &u128) -> bool {
-        *self < *other
-    }
-
-    fn le(&self, other: &u128) -> bool {
-        *self <= *other
-    }
-
-    fn gt(&self, other: &u128) -> bool {
-        *self > *other
-    }
-
-    fn ge(&self, other: &u128) -> bool {
-        *self >= *other
-    }
-}
-
-impl Eq for u128 {}
-
-impl Ord for u128 {
-    fn cmp(&self, other: &u128) -> Ordering {
-        if *self < *other {
-            Ordering::Less
-        } else if *self == *other {
-            Ordering::Equal
-        } else {
-            Ordering::Greater
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+const fn int_mul(t: type) -> Impl<Mul> {
+    impl Mul for t {
+        type Output = t;
+        #[track_caller]
+        fn mul(self, rhs: t) -> t {
+            self * rhs
         }
     }
 }
 
-impl Add for u128 {
-    type Output = u128;
-    #[track_caller]
-    fn add(self, rhs: u128) -> u128 {
-        self + rhs
-    }
-}
-
-impl Sub for u128 {
-    type Output = u128;
-    #[track_caller]
-    fn sub(self, rhs: u128) -> u128 {
-        self - rhs
-    }
-}
-
-impl Mul for u128 {
-    type Output = u128;
-    #[track_caller]
-    fn mul(self, rhs: u128) -> u128 {
-        self * rhs
-    }
-}
-
-impl Div for u128 {
-    type Output = u128;
-    #[track_caller]
-    fn div(self, rhs: u128) -> u128 {
-        self / rhs
-    }
-}
-
-impl Rem for u128 {
-    type Output = u128;
-    #[track_caller]
-    fn rem(self, rhs: u128) -> u128 {
-        self % rhs
-    }
-}
-
-impl Not for u128 {
-    type Output = u128;
-    fn not(self) -> u128 {
-        !self
-    }
-}
-
-impl Display for u128 {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self.text());
-    }
-}
-
-impl Debug for u128 {
-    fn fmt(&self, out: &mut String) {
-        Display::fmt(self, out);
-    }
-}
-
-impl Default for u128 {
-    fn default() -> u128 {
-        0
-    }
-}
-
-impl Number for u128 {}
-
-impl Clone for f32 {
-    fn clone(&self) -> f32 {
-        *self
-    }
-}
-
-impl Copy for f32 {}
-
-impl PartialEq for f32 {
-    fn eq(&self, other: &f32) -> bool {
-        *self == *other
-    }
-}
-
-impl PartialOrd for f32 {
-    fn partial_cmp(&self, other: &f32) -> Option<Ordering> {
-        if *self < *other {
-            Some(Ordering::Less)
-        } else if *self == *other {
-            Some(Ordering::Equal)
-        } else if *self > *other {
-            Some(Ordering::Greater)
-        } else {
-            None
+#[derive_for(f32, f64)]
+const fn float_mul(t: type) -> Impl<Mul> {
+    impl Mul for t {
+        type Output = t;
+        fn mul(self, rhs: t) -> t {
+            self * rhs
         }
     }
-
-    fn lt(&self, other: &f32) -> bool {
-        *self < *other
-    }
-
-    fn le(&self, other: &f32) -> bool {
-        *self <= *other
-    }
-
-    fn gt(&self, other: &f32) -> bool {
-        *self > *other
-    }
-
-    fn ge(&self, other: &f32) -> bool {
-        *self >= *other
-    }
 }
 
-impl Add for f32 {
-    type Output = f32;
-    fn add(self, rhs: f32) -> f32 {
-        self + rhs
-    }
-}
-
-impl Sub for f32 {
-    type Output = f32;
-    fn sub(self, rhs: f32) -> f32 {
-        self - rhs
-    }
-}
-
-impl Mul for f32 {
-    type Output = f32;
-    fn mul(self, rhs: f32) -> f32 {
-        self * rhs
-    }
-}
-
-impl Div for f32 {
-    type Output = f32;
-    fn div(self, rhs: f32) -> f32 {
-        self / rhs
-    }
-}
-
-impl Rem for f32 {
-    type Output = f32;
-    fn rem(self, rhs: f32) -> f32 {
-        self % rhs
-    }
-}
-
-impl Neg for f32 {
-    type Output = f32;
-    fn neg(self) -> f32 {
-        -self
-    }
-}
-
-impl Display for f32 {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self.text());
-    }
-}
-
-impl Debug for f32 {
-    fn fmt(&self, out: &mut String) {
-        Display::fmt(self, out);
-    }
-}
-
-impl Default for f32 {
-    fn default() -> f32 {
-        0.0
-    }
-}
-
-impl Number for f32 {}
-
-impl Clone for f64 {
-    fn clone(&self) -> f64 {
-        *self
-    }
-}
-
-impl Copy for f64 {}
-
-impl PartialEq for f64 {
-    fn eq(&self, other: &f64) -> bool {
-        *self == *other
-    }
-}
-
-impl PartialOrd for f64 {
-    fn partial_cmp(&self, other: &f64) -> Option<Ordering> {
-        if *self < *other {
-            Some(Ordering::Less)
-        } else if *self == *other {
-            Some(Ordering::Equal)
-        } else if *self > *other {
-            Some(Ordering::Greater)
-        } else {
-            None
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+const fn int_div(t: type) -> Impl<Div> {
+    impl Div for t {
+        type Output = t;
+        #[track_caller]
+        fn div(self, rhs: t) -> t {
+            self / rhs
         }
     }
+}
 
-    fn lt(&self, other: &f64) -> bool {
-        *self < *other
-    }
-
-    fn le(&self, other: &f64) -> bool {
-        *self <= *other
-    }
-
-    fn gt(&self, other: &f64) -> bool {
-        *self > *other
-    }
-
-    fn ge(&self, other: &f64) -> bool {
-        *self >= *other
+#[derive_for(f32, f64)]
+const fn float_div(t: type) -> Impl<Div> {
+    impl Div for t {
+        type Output = t;
+        fn div(self, rhs: t) -> t {
+            self / rhs
+        }
     }
 }
 
-impl Add for f64 {
-    type Output = f64;
-    fn add(self, rhs: f64) -> f64 {
-        self + rhs
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+const fn int_rem(t: type) -> Impl<Rem> {
+    impl Rem for t {
+        type Output = t;
+        #[track_caller]
+        fn rem(self, rhs: t) -> t {
+            self % rhs
+        }
     }
 }
 
-impl Sub for f64 {
-    type Output = f64;
-    fn sub(self, rhs: f64) -> f64 {
-        self - rhs
+#[derive_for(f32, f64)]
+const fn float_rem(t: type) -> Impl<Rem> {
+    impl Rem for t {
+        type Output = t;
+        fn rem(self, rhs: t) -> t {
+            self % rhs
+        }
     }
 }
 
-impl Mul for f64 {
-    type Output = f64;
-    fn mul(self, rhs: f64) -> f64 {
-        self * rhs
+#[derive_for(i8, i16, i32, i128)]
+const fn int_neg(t: type) -> Impl<Neg> {
+    impl Neg for t {
+        type Output = t;
+        #[track_caller]
+        fn neg(self) -> t {
+            -self
+        }
     }
 }
 
-impl Div for f64 {
-    type Output = f64;
-    fn div(self, rhs: f64) -> f64 {
-        self / rhs
+#[derive_for(f32, f64)]
+const fn float_neg(t: type) -> Impl<Neg> {
+    impl Neg for t {
+        type Output = t;
+        fn neg(self) -> t {
+            -self
+        }
     }
 }
 
-impl Rem for f64 {
-    type Output = f64;
-    fn rem(self, rhs: f64) -> f64 {
-        self % rhs
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+const fn int_not(t: type) -> Impl<Not> {
+    impl Not for t {
+        type Output = t;
+        fn not(self) -> t {
+            !self
+        }
     }
 }
 
-impl Neg for f64 {
-    type Output = f64;
-    fn neg(self) -> f64 {
-        -self
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
+const fn number_display(t: type) -> Impl<Display> {
+    impl Display for t {
+        fn fmt(&self, out: &mut String) {
+            out.push_str(self.text());
+        }
     }
 }
 
-impl Display for f64 {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self.text());
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
+const fn number_debug(t: type) -> Impl<Debug> {
+    impl Debug for t {
+        fn fmt(&self, out: &mut String) {
+            Display::fmt(self, out);
+        }
     }
 }
 
-impl Debug for f64 {
-    fn fmt(&self, out: &mut String) {
-        Display::fmt(self, out);
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+const fn int_default(t: type) -> Impl<Default> {
+    impl Default for t {
+        fn default() -> t {
+            0
+        }
     }
 }
 
-impl Default for f64 {
-    fn default() -> f64 {
-        0.0
+#[derive_for(f32, f64)]
+const fn float_default(t: type) -> Impl<Default> {
+    impl Default for t {
+        fn default() -> t {
+            0.0
+        }
     }
 }
 
-impl Number for f64 {}
-
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
+const fn number_marker(t: type) -> Impl<Number> {
+    impl Number for t {}
+}

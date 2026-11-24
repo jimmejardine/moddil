@@ -69,3 +69,13 @@ way, it is an error (E1007).
 if not (`()` without `else`). Only the branch taken is part of the impl, so only it is checked. `c`
 is reflection: `f.is_refined()`, `f.name == "…"` or `!=`, `true` and `false`, joined by `!`, `&&`
 and `||` (E1007). Outside a template, `if const` is not supported yet (I0001).
+
+**comptime.derive.for.1** `#[derive_for(T1, T2, …)]` before a derive function instantiates its
+template once for each built-in type listed: an impl of the trait its `Impl<Tr>` names, for each
+`Ti`, with `t` and `Self` naming `Ti`, under the rules of **comptime.template.1**. The impls and
+the types they are for are written in one place, with no `#[derive]` on the types. A function with
+`#[derive_for]` is not named by other code. A built-in type has no fields, so a template
+instantiated for one uses no field reflection (`inline for`, `t { … }`, E1007). The prelude
+writes the impls of the sized integers and the floats this way
+([`prelude/numbers.moddil`](prelude/numbers.moddil)). Outside the prelude, `#[derive_for]` is
+not supported yet (I0001).

@@ -527,8 +527,8 @@ impl Machine<'_> {
             }
         }
         // A template's method: its parameter names the struct (`comptime.template.1`).
-        if let Some((var, key)) = &f.template {
-            types.insert(var.clone(), Head::Adt(key.clone()));
+        if let Some((var, head)) = &f.template {
+            types.insert(var.clone(), head.clone());
         }
         let caller_user = self.memory.user();
         let caller_tracked = self.memory.tracked();

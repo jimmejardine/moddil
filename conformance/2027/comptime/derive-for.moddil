@@ -1,0 +1,76 @@
+// covers: comptime.derive.for.1
+// The prelude's impls for the sized integers and the floats, which its templates make, through
+// generic code: so each call needs the impl, not the built-in operator.
+
+fn twice<T: Clone>(x: &T) -> (T, T) {
+    (x.clone(), x.clone())
+}
+
+fn sum<T: Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Copy>(a: T, b: T) -> T {
+    a + b * b - a
+}
+
+fn div_rem<T: Div<Output = T> + Rem<Output = T> + Copy>(a: T, b: T) -> (T, T) {
+    (a / b, a % b)
+}
+
+fn neg<T: Neg<Output = T>>(a: T) -> T {
+    -a
+}
+
+fn not<T: Not<Output = T>>(a: T) -> T {
+    !a
+}
+
+fn larger<T: Ord>(a: T, b: T) -> bool {
+    a.cmp(&b) == Ordering::Greater
+}
+
+fn less<T: PartialOrd>(a: T, b: T) -> bool {
+    a < b
+}
+
+fn same<T: PartialEq + Eq>(a: T, b: T) -> bool {
+    a == b
+}
+
+fn zero<T: Default + Debug + Display>() -> String {
+    let z: T = T::default();
+    fmt"{z} {z:?}"
+}
+
+fn number<T: Number>(x: T) -> T {
+    x
+}
+
+test "every number trait through generics" {
+    let a: i8 = -3;
+    let b: u128 = 7;
+    let c: f32 = 1.5;
+    twice(&a).1                    // => -3
+    ;
+    sum(b, b)                      // => 49
+    ;
+    sum(c, c)                      // => 2.25
+    ;
+    div_rem(b, 3)                  // => (2, 1)
+    ;
+    neg(a)                         // => 3
+    ;
+    neg(c)                         // => -1.5
+    ;
+    not(b)                         // => 340282366920938463463374607431768211448
+    ;
+    larger(b, 3)                   // => true
+    ;
+    less(c, 2.0)                   // => true
+    ;
+    same(a, -3)                    // => true
+    ;
+    zero::<i32>()                  // => "0 0"
+    ;
+    zero::<f64>()                  // => "0.0 0.0"
+    ;
+    number(a)                      // => -3
+    ;
+}

@@ -996,7 +996,7 @@ impl Checker<'_> {
             && self.items.fns[i as usize]
                 .template
                 .as_ref()
-                .is_some_and(|t| t.adt == adt)
+                .is_some_and(|t| t.adt == Some(adt))
         {
             return true;
         }

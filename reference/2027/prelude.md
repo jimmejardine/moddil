@@ -8,7 +8,7 @@ behaviour are as written there. The files are one source, joined in this order:
 |---|---|
 | [`core.moddil`](prelude/core.moddil) | `Option`, `Result`, `Clone` and `Copy`, equality and ordering, the operator traits, `Drop` and `drop`, the closure traits |
 | [`int.moddil`](prelude/int.moddil) | `int`, `bool` and `()` |
-| [`numbers.moddil`](prelude/numbers.moddil) | the sized integers and the floats, and `Number` |
+| [`numbers.moddil`](prelude/numbers.moddil) | the sized integers and the floats, and `Number`, written as templates (**comptime.derive.for.1**) |
 | [`convert.moddil`](prelude/convert.moddil) | conversions between the numbers, rounding, `RangeError` |
 | [`float.moddil`](prelude/float.moddil) | the float functions |
 | [`text.moddil`](prelude/text.moddil) | `Display`, `char`, `str`, `String`, `Pattern`, `Chars`, text positions, UTF-8 |

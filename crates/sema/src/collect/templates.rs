@@ -168,6 +168,16 @@ impl Collector<'_> {
                  `impl Tr for t { … }`",
             ));
         }
+        // `#[derive_for(…)]` makes impls for built-in types: the prelude's, for now
+        // (`comptime.derive.for.1`).
+        if src != Src::Prelude
+            && let Some((range, _)) = crate::derive::derive_for_attr(node)
+        {
+            ds.push(Diagnostic::unsupported(
+                range,
+                "`#[derive_for]` outside the prelude",
+            ));
+        }
         let origin = self.reporter.origin(src, node.text_range());
         self.reporter.report(src, origin, ds);
         let mut sig = FnSig::placeholder(name, src, self.module, super::vis_of(node));
@@ -186,8 +196,8 @@ impl Collector<'_> {
     }
 
     /// The methods of impl `index`, a derive of a trait whose derive function `f` is a
-    /// template: each of the template's methods, collected where the template is, with its
-    /// parameter and `Self` naming `self_ty`.
+    /// template, or an impl `f`'s `#[derive_for]` makes (`for_types`): each of the template's
+    /// methods, collected where the template is, with its parameter and `Self` naming `self_ty`.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn template_methods(
         &mut self,
@@ -198,6 +208,7 @@ impl Collector<'_> {
         trait_ref: Option<&TraitRef>,
         assoc: &[Option<Ty>],
         origin: Option<TextRange>,
+        for_types: bool,
     ) {
         let Some((src, module, node)) = self.derivers.get(&f).cloned() else {
             return;
@@ -207,16 +218,22 @@ impl Collector<'_> {
         };
         // The function's signature is collected after the impls: its parameter is read here.
         let var = param_name(&node);
-        let Ty::Adt(adt, ..) = self_ty else {
-            let d = Diagnostic::unsupported(
-                origin.unwrap_or_default(),
-                "deriving with a template for anything but a struct",
-            );
-            self.reporter.report(Src::Derived, origin, vec![d]);
-            return;
+        let adt = match self_ty {
+            Ty::Adt(adt, ..) => Some(*adt),
+            // A built-in type, from `#[derive_for]`: it has no fields to reflect on.
+            _ if for_types => None,
+            _ => {
+                let d = Diagnostic::unsupported(
+                    origin.unwrap_or_default(),
+                    "deriving with a template for anything but a struct",
+                );
+                self.reporter.report(Src::Derived, origin, vec![d]);
+                return;
+            }
         };
-        let adt = *adt;
-        if self.tree.adts[adt as usize].is_enum || !generics.params.is_empty() {
+        if let Some(adt) = adt
+            && (self.tree.adts[adt as usize].is_enum || !generics.params.is_empty())
+        {
             let what = if self.tree.adts[adt as usize].is_enum {
                 "deriving with a template for an enum"
             } else {

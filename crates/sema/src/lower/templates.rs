@@ -32,12 +32,12 @@ impl Lowerer<'_> {
 
     /// The struct's field `k`: its name and its type.
     fn field_of(&self, k: u32) -> (String, Ty) {
-        let Some(t) = self.template else {
+        let Some((t, adt)) = self.template.and_then(|t| t.adt.map(|a| (t, a))) else {
             return (String::new(), Ty::Error);
         };
         let name = self
             .items
-            .variant(t.adt, 0)
+            .variant(adt, 0)
             .fields
             .get(k as usize)
             .map(|f| f.name.clone())
@@ -81,7 +81,15 @@ impl Lowerer<'_> {
         });
         match name {
             Some(n) if fields_of_t => {
-                let count = self.items.variant(t.adt, 0).fields.len() as u32;
+                let Some(adt) = t.adt else {
+                    self.report(
+                        Code::E1007,
+                        range,
+                        "a template for a built-in type has no fields to unroll over                          (`comptime.derive.for.1`)",
+                    );
+                    return None;
+                };
+                let count = self.items.variant(adt, 0).fields.len() as u32;
                 Some((n, count))
             }
             _ => {

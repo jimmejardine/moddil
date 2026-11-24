@@ -2,7 +2,7 @@
 //! Moddil, which are then checked and compiled like any other code (`values.md`: Explicit
 //! derives). The expansion is structural: field by field, and variant order for enums.
 
-use moddil_syntax::ast;
+use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
 
 use crate::items::Src;
@@ -74,6 +74,85 @@ pub(crate) fn derive_attrs(node: &SyntaxNode) -> Vec<(TextRange, Vec<String>)> {
         out.push((attr.text_range(), names));
     }
     out
+}
+
+/// The types `#[derive_for(…)]` on derive function `node` lists (`comptime.derive.for.1`), with
+/// the attribute's range.
+pub(crate) fn derive_for_attr(node: &SyntaxNode) -> Option<(TextRange, Vec<String>)> {
+    for attr in node.children().filter(|c| c.kind() == K::OUTER_ATTR) {
+        let Some(a) = attr.child(K::ATTR) else {
+            continue;
+        };
+        let path = a
+            .child(K::PATH)
+            .and_then(ast::Path::cast)
+            .map(|p| p.segments())
+            .unwrap_or_default();
+        if path != ["derive_for"] {
+            continue;
+        }
+        let input = a
+            .child(K::ATTR_INPUT)
+            .map(|i| i.text().to_string())
+            .unwrap_or_default();
+        let inner = input.trim().trim_start_matches('(').trim_end_matches(')');
+        let types = inner
+            .split(',')
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        return Some((attr.text_range(), types));
+    }
+    None
+}
+
+/// The associated types (`type Output = t;`) of derive function `node`'s template, for type
+/// `ty`: each written as it is, with the function's parameter replaced by `ty`, then a space.
+/// The template's methods are collected from the template itself.
+fn template_assoc_types(node: &SyntaxNode, ty: &str) -> String {
+    let var = ast::FnItem::cast(node.clone())
+        .and_then(|f| f.params())
+        .and_then(|l| l.params().next())
+        .and_then(|p| p.pat())
+        .map(|p| p.syntax().text().trim().to_string())
+        .unwrap_or_default();
+    let Some(template) = node.child(K::BLOCK).and_then(|b| {
+        b.descendants()
+            .into_iter()
+            .find(|n| n.kind() == K::IMPL_ITEM)
+    }) else {
+        return String::new();
+    };
+    let mut out = String::new();
+    for m in template
+        .child(K::IMPL_BODY)
+        .into_iter()
+        .flat_map(|b| b.children().collect::<Vec<_>>())
+        .filter(|m| m.kind() == K::ASSOC_TYPE)
+    {
+        for t in m.tokens() {
+            if t.kind() == K::IDENT && t.text() == var {
+                out.push_str(ty);
+            } else {
+                out.push_str(t.text());
+            }
+        }
+        out.push(' ');
+    }
+    out
+}
+
+/// The trait a derive function's `-> Impl<Tr>` names.
+fn impl_trait(node: &SyntaxNode) -> Option<String> {
+    let ret = ast::FnItem::cast(node.clone())?.ret_type()?;
+    let text = ret.syntax().text().to_string();
+    let inner = text
+        .trim_start_matches("->")
+        .trim()
+        .strip_prefix("Impl<")?
+        .strip_suffix('>')?;
+    Some(inner.trim().to_string())
 }
 
 fn name_of(node: &SyntaxNode) -> String {
@@ -181,6 +260,24 @@ pub(crate) fn expand<'t>(
 ) -> Expansion {
     let mut out = Expansion::default();
     for (src, _text, node) in items {
+        // A prelude derive function's `#[derive_for(…)]`: its template's impl for each type
+        // listed (`comptime.derive.for.1`). Elsewhere it is reported where it is collected.
+        if node.kind() == K::FN_ITEM
+            && src == Src::Prelude
+            && let Some((range, types)) = derive_for_attr(&node)
+            && let Some(tr) = impl_trait(&node)
+        {
+            for ty in types {
+                let assoc = template_assoc_types(&node, &ty);
+                let start = out.text.len() as u32;
+                out.text
+                    .push_str(&format!("impl {tr} for {ty} {{ {assoc}}}"));
+                let end = out.text.len() as u32;
+                out.text.push('\n');
+                out.origins.push((TextRange::new(start, end), src, range));
+            }
+            continue;
+        }
         if node.kind() == K::FN_ITEM {
             let attrs = crate::wrap::around_attrs(&node);
             let (Some(first), Some(params), Src::File(f)) =

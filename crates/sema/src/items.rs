@@ -321,12 +321,13 @@ pub struct FnSig {
 /// struct (as a type, and by its index among the structs and enums).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Template {
-    /// The parameter's name (`t`), which names the struct in the template.
+    /// The parameter's name (`t`), which names the type in the template.
     pub var: String,
-    /// The struct.
+    /// The type it is instantiated for: a struct, or a built-in type (`comptime.derive.for.1`).
     pub ty: Ty,
-    /// Its index among the structs and enums.
-    pub adt: u32,
+    /// The struct's index among the structs and enums; `None` for a built-in type, which has no
+    /// fields to reflect on.
+    pub adt: Option<u32>,
 }
 
 /// The built-in control effects a function lists or needs (`eff.control.1`), as bits:

@@ -332,7 +332,17 @@ impl Lowerer<'_> {
             self.resolve(node)
         };
         let target = match resolved {
-            _ if names_template => self.template.map(|t| (t.adt, 0)),
+            _ if names_template => match self.template.and_then(|t| t.adt) {
+                Some(adt) => Some((adt, 0)),
+                None => {
+                    self.report(
+                        Code::E1007,
+                        range,
+                        "a template for a built-in type has no fields to write                          (`comptime.derive.for.1`)",
+                    );
+                    None
+                }
+            },
             Some(Resolved::Ctor(adt, variant, args)) => {
                 let def = self.items.variant(adt, variant);
                 ty_args = args;

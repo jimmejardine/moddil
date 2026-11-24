@@ -188,6 +188,7 @@ pub fn item_tree(db: &dyn Db, program: Program) -> ItemTree {
         file_modules: Vec::new(),
         core_modules: Vec::new(),
         derivers: HashMap::new(),
+        derive_for: HashMap::new(),
         template: None,
         derive_by_names: HashMap::new(),
         extern_fns: std::collections::HashSet::new(),
@@ -230,6 +231,9 @@ struct Collector<'a> {
     /// Each derive function (`comptime.derive.1`), by index among the functions: its source,
     /// its module and its node.
     derivers: HashMap<u32, (Src, u32, SyntaxNode)>,
+    /// Each prelude derive function's `#[derive_for(…)]` (`comptime.derive.for.1`), by the
+    /// attribute's range: the function, whose template each impl it makes is.
+    derive_for: HashMap<TextRange, u32>,
     /// While a template's methods are collected: what its parameter is.
     template: Option<crate::items::Template>,
     /// Each trait's `#[derive_by(f)]`, by the trait's index: the name it gives, before it is
@@ -344,6 +348,15 @@ impl Collector<'_> {
     }
 
     /// The module the derived item `node` belongs to: its type's.
+    /// For a derived impl at `range`: the derive function whose `#[derive_for(…)]` made it
+    /// (`comptime.derive.for.1`), if one did.
+    fn derive_for_of(&self, range: TextRange) -> Option<u32> {
+        match self.reporter.origin_src(range) {
+            Some((Src::Prelude, attr)) => self.derive_for.get(&attr).copied(),
+            _ => None,
+        }
+    }
+
     fn derived_module(&self, node: &SyntaxNode) -> u32 {
         match self.reporter.origin_src(node.text_range()) {
             Some((Src::File(f), _)) => self.file_modules[f as usize],
@@ -518,6 +531,11 @@ impl Collector<'_> {
             if templates::is_deriver(node) {
                 self.derivers
                     .insert((first_free + k) as u32, (*src, *module, node.clone()));
+                if *src == Src::Prelude
+                    && let Some((range, _)) = derive::derive_for_attr(node)
+                {
+                    self.derive_for.insert(range, (first_free + k) as u32);
+                }
             }
         }
         for (k, (src, module, node)) in nodes.types.iter().enumerate() {
@@ -545,6 +563,7 @@ impl Collector<'_> {
                 && !derive::DERIVABLE.contains(&tr.as_str())
                 && !self.stub_trait(&tr)
                 && self.derive_fn(&tr).is_none()
+                && self.derive_for_of(node.text_range()).is_none()
             {
                 continue;
             }
@@ -639,7 +658,12 @@ impl Collector<'_> {
                 Src::File(_) => vis_of(node),
                 _ => Vis::Pub,
             };
-            self.declare(*src, &name, Def::Fn((first + k) as u32), vis, range);
+            // A prelude derive function with `#[derive_for]` is never named: its impls are
+            // made where it is (`comptime.derive.for.1`), and its name is not the prelude's.
+            let unnamed = *src == Src::Prelude && derive::derive_for_attr(node).is_some();
+            if !unnamed {
+                self.declare(*src, &name, Def::Fn((first + k) as u32), vis, range);
+            }
             self.tree
                 .fns
                 .push(FnSig::placeholder(name, *src, *module, vis));
