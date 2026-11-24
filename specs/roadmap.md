@@ -192,7 +192,9 @@ L)
   10)` gives two `int`s there).
 
 **P19. Standard collections** (`mods/collections`, prelude `rc`, `core::collections`; L)
-- `EnumSet`; a sorted persistent map.
+- A sorted persistent map.
+- `EnumSet`'s bits in the smallest unsigned integer that fits its enum, as `stdlib.md` decides
+  (for packed structs and wire formats): a `u128` for now, chosen when compiling (P11).
 - The hasher keyed from `Rand`, with tests printing their seed, so map order differs per run.
 - Perceus-style reuse of a node no one else holds; the persistent map's iterator in O(1) per
   entry (needs a view that holds a stack of borrows).

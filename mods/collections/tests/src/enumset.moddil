@@ -1,0 +1,37 @@
+use collections::{EnumSet, Variant};
+
+#[derive(Debug, Clone, Copy, PartialEq, Variant)]
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+test "variants are numbered in the order they are declared" {
+    Color::variant_count()                          // => 3
+    ;
+    Color::Blue.variant_index()                     // => 2
+    ;
+    Color::from_variant_index(1)                    // => Color::Green
+}
+
+test "a set of an enum's variants" {
+    let mut s: EnumSet<Color> = EnumSet::new();
+    s.insert(Color::Blue)                           // => true
+    ;
+    s.insert(Color::Blue)                           // => false
+    ;
+    s.insert(Color::Red);
+    (s.len(), s.contains(Color::Green), s.contains(Color::Red))   // => (2, false, true)
+    ;
+    fmt"{s:?}"                                      // => "{Color::Red, Color::Blue}"
+    ;
+    s.remove(Color::Red)                            // => true
+    ;
+    let rest = s.complement();
+    fmt"{s:?} {rest:?}"                             // => "{Color::Blue} {Color::Red, Color::Green}"
+    ;
+    let both: EnumSet<Color> = [Color::Red, Color::Blue];
+    let all: EnumSet<Color> = EnumSet::all();
+    (both.union(&rest) == all, both.intersection(&rest).is_empty(), s.is_subset(&both))   // => (true, false, true)
+}

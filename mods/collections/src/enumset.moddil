@@ -1,0 +1,215 @@
+//! `EnumSet`: a set of an enum's unit variants, held as the bits of one `u128` (`stdlib.md`:
+//! Collections), so it is `Copy`, and its operations are a few bitwise steps. Its elements
+//! implement `Variant`, which `#[derive(Variant)]` writes for an enum of unit variants.
+
+/// An enum's variants, numbered from 0 in the order they are declared: what an `EnumSet` holds.
+/// `#[derive(Variant)]` implements it for an enum whose variants are units (`Red`, not `Red(int)`),
+/// of at most 128 variants.
+#[derive_by(derive_variant)]
+pub trait Variant: Copy {
+    /// How many variants there are.
+    fn variant_count() -> int;
+    /// This value's variant's number.
+    fn variant_index(&self) -> int;
+    /// The variant numbered `i`; traps if there is none.
+    fn from_variant_index(i: int) -> Self;
+}
+
+/// The template `#[derive(Variant)]` instantiates (`attr.derive-by.1`).
+pub const fn derive_variant(t: type) -> Impl<Variant> {
+    impl Variant for t {
+        fn variant_count() -> int {
+            let mut n = 0;
+            inline for v in variants(t) {
+                n = v.index + 1;
+            }
+            n
+        }
+
+        fn variant_index(&self) -> int {
+            inline for v in variants(t) {
+                if v.is(self) {
+                    return v.index;
+                }
+            }
+            unreachable("a value is one of its type's variants")
+        }
+
+        fn from_variant_index(i: int) -> Self {
+            inline for v in variants(t) {
+                if const v.is_unit() {
+                    if i == v.index {
+                        return v.make();
+                    }
+                }
+            }
+            unreachable("a variant's number, of a unit variant")
+        }
+    }
+}
+
+/// A set of `T`'s variants.
+pub struct EnumSet<T> {
+    bits: u128,
+    of: Option<T>,
+}
+
+impl<T: Variant> EnumSet<T> {
+    /// The bit for `x`.
+    fn bit(x: &T) -> u128 {
+        let one: u128 = 1;
+        let i = x.variant_index();
+        assert(i < 128);
+        one << (i.to::<u128>() ?! "a variant's number is at least 0")
+    }
+
+    /// The empty set.
+    pub fn new() -> EnumSet<T> {
+        EnumSet { bits: 0, of: None }
+    }
+
+    /// Every variant.
+    pub fn all() -> EnumSet<T> {
+        let n = T::variant_count();
+        assert(n <= 128);
+        let mut s = EnumSet::new();
+        for i in 0..n {
+            s.insert(T::from_variant_index(i));
+        }
+        s
+    }
+
+    pub fn len(&self) -> int {
+        self.bits.count_ones()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.bits == 0
+    }
+
+    pub fn contains(&self, x: T) -> bool {
+        self.bits & EnumSet::bit(&x) != 0
+    }
+
+    /// Adds `x`: whether it was not there.
+    pub fn insert(&mut self, x: T) -> bool {
+        let b = EnumSet::bit(&x);
+        let new = self.bits & b == 0;
+        self.bits = self.bits | b;
+        new
+    }
+
+    /// Takes `x` out: whether it was there.
+    pub fn remove(&mut self, x: T) -> bool {
+        let b = EnumSet::bit(&x);
+        let was = self.bits & b != 0;
+        self.bits = self.bits & !b;
+        was
+    }
+
+    /// The variants in either.
+    pub fn union(&self, other: &EnumSet<T>) -> EnumSet<T> {
+        EnumSet { bits: self.bits | other.bits, of: None }
+    }
+
+    /// The variants in both.
+    pub fn intersection(&self, other: &EnumSet<T>) -> EnumSet<T> {
+        EnumSet { bits: self.bits & other.bits, of: None }
+    }
+
+    /// The variants in this one and not in `other`.
+    pub fn difference(&self, other: &EnumSet<T>) -> EnumSet<T> {
+        EnumSet { bits: self.bits & !other.bits, of: None }
+    }
+
+    /// The variants not in it.
+    pub fn complement(&self) -> EnumSet<T> {
+        EnumSet::all().difference(self)
+    }
+
+    /// Whether every variant in it is in `other`.
+    pub fn is_subset(&self, other: &EnumSet<T>) -> bool {
+        self.bits & !other.bits == 0
+    }
+
+    /// Its variants, in the order they are declared.
+    pub fn iter(&self) -> EnumSetIter<T> {
+        EnumSetIter { bits: self.bits, at: 0, of: None }
+    }
+}
+
+/// An `EnumSet`'s variants, in the order they are declared.
+pub struct EnumSetIter<T> {
+    bits: u128,
+    at: int,
+    of: Option<T>,
+}
+
+impl<T: Variant> Iterator for EnumSetIter<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        while self.at < 128 {
+            let i = self.at;
+            self.at += 1;
+            let one: u128 = 1;
+            if self.bits & (one << (i.to::<u128>() ?! "less than 128")) != 0 {
+                return Some(T::from_variant_index(i));
+            }
+        }
+        None
+    }
+}
+
+impl<T: Variant> Clone for EnumSet<T> {
+    fn clone(&self) -> EnumSet<T> {
+        EnumSet { bits: self.bits, of: None }
+    }
+}
+
+impl<T: Variant> PartialEq for EnumSet<T> {
+    fn eq(&self, other: &EnumSet<T>) -> bool {
+        self.bits == other.bits
+    }
+}
+
+impl<T: Variant> Eq for EnumSet<T> {}
+
+impl<T: Variant + Debug> Debug for EnumSet<T> {
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str("{");
+        let mut first = true;
+        for x in self.iter() {
+            if !first {
+                out.write_str(", ");
+            }
+            first = false;
+            x.fmt(out);
+        }
+        out.write_str("}");
+    }
+}
+
+impl<T: Variant> Default for EnumSet<T> {
+    fn default() -> EnumSet<T> {
+        EnumSet::new()
+    }
+}
+
+// The variants written: `[Red, Blue]`.
+impl<T: Variant> FromArrayLiteral<T> for EnumSet<T> {
+    fn from_array<const N: int>(items: [T; N]) -> EnumSet<T> {
+        let mut s = EnumSet::new();
+        for x in items {
+            s.insert(x);
+        }
+        s
+    }
+
+    fn from_repeat(x: T, n: int) -> EnumSet<T> where T: Clone {
+        let mut s = EnumSet::new();
+        if n > 0 {
+            s.insert(x);
+        }
+        s
+    }
+}

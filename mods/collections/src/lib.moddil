@@ -1,5 +1,6 @@
 //! Collections beyond the prelude's (`stdlib.md`: Collections): `Map` and `Set` over the `core`
-//! mod's hash maps, `Deque`, `RingBuffer`, `BinaryHeap`, the sorted `TreeMap` and `TreeSet`, the
+//! mod's hash maps, `Deque`, `RingBuffer`, `BinaryHeap`, `EnumSet` of an enum's variants (with
+//! `#[derive(Variant)]`), the sorted `TreeMap` and `TreeSet`, the
 //! insertion-ordered `OrderedMap` and `OrderedSet`, `Interner` with its `Symbol`s, and the
 //! persistent `PersistentList`, `PersistentVec`, `PersistentMap` and `PersistentSet`, whose
 //! updates give a new collection and leave the old one as it was, sharing what did not change.
@@ -7,6 +8,7 @@
 use core::collections::{HashMap, HashSet, SetIter};
 
 pub use mod::deque::{Deque, DequeIter, RingBuffer};
+pub use mod::enumset::{EnumSet, EnumSetIter, Variant, derive_variant};
 pub use mod::heap::BinaryHeap;
 pub use mod::interner::{Interner, Symbol};
 pub use mod::ordered::{OrderedIter, OrderedMap, OrderedSet, OrderedSetIter};
