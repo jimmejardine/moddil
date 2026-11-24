@@ -6,7 +6,7 @@ A link shortener, and the tour of Moddil written as real source
 **Status:** M2 slice M2c: it passes the type, effect and ownership checks
 (`python tools/ci.py tour`, or `moddil check tour/shorty`), and its three tests pass natively, on
 the MIR interpreter and as WASM (`moddil test tour/shorty`), over the standard mods written in
-Moddil ([`mods/`](../../mods/README.md)), named through [`stubs/moddil/`](../../stubs/moddil/README.md).
+Moddil ([`mods/`](../../mods/README.md)), named through the umbrella mod [`mods/moddil/`](../../mods/moddil/README.md).
 Since M2d it runs: `moddil run tour/shorty -- --port 8080` serves HTTP/1.1 on the local machine
 (natively, with `--interp`, or `--wasm` under Node), and a `stop` line on standard input, or
 Ctrl-C, stops it gracefully:
@@ -32,4 +32,5 @@ curl -i http://127.0.0.1:8080/<code>
 - The tests are attached `test` blocks (`for app`, `for serve`); the `// =>` example in a doc
   comment is to run as a test once doc tests do.
 - `moddil doc` renders the mod as the tour.
-- Until M2, its library dependencies (HTTP, serde, `Url`) are signature-only stubs.
+- Its library dependencies (HTTP, serde, `Url`) were signature-only stubs until M2; they are all
+  written in Moddil now.

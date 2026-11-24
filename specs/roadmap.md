@@ -1005,7 +1005,8 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
   - **`mods/runtime`**, in Moddil over `core::os`:
     - the root capabilities, the terminal, and `serve_until_stopped`, which stops its run at a
       signal and cancels it after the grace period;
-    - the stub mod is now only an umbrella of re-exports.
+    - the stub mod is now only an umbrella of re-exports. It has since moved from `stubs/moddil`
+      to `mods/moddil` (November 2026), as it stubs nothing.
   - **`net`:**
     - `Conn` carries bytes, over a simulated link or an OS connection;
     - `http` speaks HTTP/1.1 (`Content-Length`, no chunking or keep-alive);

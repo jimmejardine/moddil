@@ -3,4 +3,4 @@ name = "root_errors"
 edition = "2027"
 
 [dependencies]
-moddil = { path = "../../../../stubs/moddil" }
+moddil = { path = "../../../../mods/moddil" }

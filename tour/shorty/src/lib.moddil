@@ -10,8 +10,8 @@
 //! with isolation, graceful shutdown, and tests that run against a simulated network.
 //!
 //! Read the modules in order: [`types`], [`links`], [`routes`], [`serve`], then `main`
-//! (`src/main.moddil`). Until M2 the standard mods it uses are signature-only stubs
-//! (`stubs/moddil`), so the tour is checked but its tests do not run yet
+//! (`src/main.moddil`). The standard mods it uses are written in Moddil and named through the
+//! umbrella mod (`mods/moddil`); its tests run natively, on the interpreter and as WASM
 //! (`specs/tour.md`: From markdown to source).
 
 pub use mod::types::{Code, Target, LinkError};

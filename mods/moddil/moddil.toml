@@ -1,0 +1,21 @@
+# The umbrella for the standard mods: it re-exports them (`mods/`), all written in Moddil now, so a
+# program names them as `moddil::net`, `moddil::root` and so on.
+[mod]
+name = "moddil"
+edition = "2027"
+
+[dependencies]
+collections = { path = "../collections" }
+sync = { path = "../sync" }
+rand = { path = "../rand" }
+serde = { path = "../serde" }
+net = { path = "../net" }
+sim = { path = "../sim" }
+runtime = { path = "../runtime" }
+crypto = { path = "../crypto" }
+num = { path = "../num" }
+decimal = { path = "../decimal" }
+time = { path = "../time" }
+regex = { path = "../regex" }
+gpu = { path = "../gpu" }
+web = { path = "../web" }

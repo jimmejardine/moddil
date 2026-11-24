@@ -69,11 +69,11 @@ def step_test():
 
 def step_tour():
     # M0's gate (specs/roadmap.md): the tour, tour/shorty, parses and passes the type, effect and
-    # ownership checks, against the signature-only standard mods in stubs/moddil. Its tests run
-    # from M2.
-    stubs = run("cargo", "run", "-q", "-p", "moddil", "--", "check", "stubs/moddil")
+    # ownership checks, against the standard mods through the umbrella mod mods/moddil. Its tests
+    # run in the test step (crates/moddil/tests/projects.rs).
+    umbrella = run("cargo", "run", "-q", "-p", "moddil", "--", "check", "mods/moddil")
     tour = run("cargo", "run", "-q", "-p", "moddil", "--", "check", "tour/shorty")
-    return stubs and tour
+    return umbrella and tour
 
 
 def step_examples():

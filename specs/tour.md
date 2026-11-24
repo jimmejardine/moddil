@@ -47,7 +47,7 @@ Done in slice S9d (November 2026).
 - **Its libraries are the standard mods, written in Moddil** (since M2 slices M2c and M2d), under
   [`mods/`](../mods/README.md): `collections`, `sync`, `rand`, `serde`, `net` (with `http`),
   `sim` and `runtime` (the root capabilities). It names them through
-  [`stubs/moddil/`](../stubs/moddil/README.md), which re-exports them. `moddil run tour/shorty`
+  the umbrella mod [`mods/moddil/`](../mods/moddil/README.md), which re-exports them. `moddil run tour/shorty`
   serves real HTTP/1.1, natively, on the MIR interpreter and as WebAssembly under Node.
 - **Gates, run in CI from then on** ([`roadmap.md`: Milestones](roadmap.md#milestones)):
   - **M0:** the tour parses and passes the type, effect and ownership checks;

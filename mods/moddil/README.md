@@ -1,13 +1,13 @@
 # moddil
 
-The **umbrella** for the standard mods: it re-exports them ([`mods/`](../../mods/README.md)), so a
+The **umbrella** for the standard mods: it re-exports them ([`mods/`](../README.md)), so a
 program names them as `moddil::net`, `moddil::root` and so on
 ([`specs/roadmap.md`: Milestones](../../specs/roadmap.md#milestones)).
 
 **Status:** M2 slice M2d: every module is a re-export of a mod written in Moddil. Until M2d it was
 a stub mod (`stub = true`, [`reference/2027/modules.md`](../../reference/2027/modules.md)) holding
-the signatures of the standard mods the tour uses; it stays in `stubs/` until mods are published
-under their own names.
+the signatures of the standard mods the tour uses, in `stubs/moddil`; with nothing left to stub,
+it moved here beside the mods it re-exports.
 
 ## Modules
 
