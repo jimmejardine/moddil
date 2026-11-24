@@ -39,6 +39,12 @@ false for NaN and true for `-0.0 == 0.0`, and a float has no bitwise operators (
 **num.wrap.1** `a +% b`, `a -% b` and `a *% b` (and `+%=`, `-%=`, `*%=`) on integers wrap around
 the type's width instead of trapping: the result is the exact one modulo 2ⁿ, as the type holds it.
 
+**num.wrap.2** `Wrapping<T>`, in the prelude, is an integer whose `+`, `-` and `*` all wrap, for
+hashes, checksums and sequence numbers: `Wrapping(x)`, its value `.0`, for `T` any integer type
+(the prelude's trait `WrappingInt`). It compares and hashes as its value does, and `Debug` shows
+`Wrapping(1)`; it is printed by its value, `{w.0}`. Its operands are both `Wrapping`s: `h * Wrapping(31)`, and
+`x = x + Wrapping(1)`, as `+=` is defined only for `int` and `bool`.
+
 **num.checked.1** On every integer type, `a.checked_add(b)`, `a.checked_sub(b)` and
 `a.checked_mul(b)` are `Some` of the result, or `None` where the operator would trap on
 overflow.

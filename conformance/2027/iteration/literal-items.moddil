@@ -36,3 +36,21 @@ test "an iterator over a literal's value" {
     let mut f = Once { v: 1.5, done: false };
     f.next()                                // => Some(1.5)
 }
+
+// An impl whose bound the literal's type is still open for (`T: Add<Output = T>`): it is still
+// the only impl for `Twice`, so `next`'s errors and item are its.
+struct Twice<T> {
+    v: T,
+}
+
+impl<T: Copy + Add<Output = T>> Iterator for Twice<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        Some(self.v + self.v)
+    }
+}
+
+test "an iterator whose impl's bound waits on a literal" {
+    let mut t = Twice { v: 3 };
+    t.next()                                // => Some(6)
+}

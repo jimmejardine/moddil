@@ -111,9 +111,16 @@ when part of one is, remove that part.
 - Tagged literals other than `fmt`, first `re"…"` compiled when compiling, with typed captures
   (`mods/regex`, with P11).
 
-**P5. Numbers** (`crates/sema` `exhaust.rs`, prelude `int` and `numbers`; M)
-- Exhaustiveness on `i128` and `u128` counting their greatest value.
-- `Wrapping<T>`; `usize` and `isize`.
+**P5. Numbers** (`crates/sema`, the prelude, every runner; L)
+- `usize` and `isize`, for FFI and memory-level code: a `Num` each, the width of a pointer on
+  each target, through sema, MIR and all four runners and the C ABI.
+- A `u128` pattern naming a value past `i128`'s greatest (pattern literals are `i128`s); the
+  match analysis counts those values already.
+- A literal where a `Wrapping<T>` is expected (`let seq: Wrapping<u32> = last + 1`, as
+  `numerics.md` writes it), and `+=` on types with operator traits.
+- The prelude's `int` `wrapping_add`, `wrapping_sub` and `wrapping_mul` intrinsics, from before
+  `+%`: `WrappingInt` now gives them, so the intrinsics and the runners' code for them go.
+- `Display` for `Wrapping<T>`, once `Display` writes to a `Write` sink (P3).
 
 **P6. Arrays and iteration** (prelude `arrays` and `iter`, `crates/sema`, the runners' clone glue;
 M)
@@ -191,7 +198,8 @@ L)
 - A literal typed by a later use of an unannotated variable (it types a literal when it meets
   one at run time).
 - A collection literal typed from every context, not only a `let`'s type, a parameter or a
-  result.
+  result; and a tuple literal's elements by a tuple pattern's type (`let (x, y): (u8, u8) = (250,
+  10)` gives two `int`s there).
 
 **P19. Standard collections** (`mods/collections`, prelude `rc`, `core::collections`; L)
 - `EnumSet`; a sorted persistent map.

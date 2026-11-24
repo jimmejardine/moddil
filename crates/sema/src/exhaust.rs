@@ -12,15 +12,16 @@ use moddil_syntax::TextRange;
 use crate::check::{Inference, tuple_positions};
 use crate::hir::{Arm, Body, PatId, PatKind};
 use crate::items::Shape;
-use crate::{Code, Diagnostic, ItemTree, Ty};
+use crate::{Code, Diagnostic, ItemTree, Num, Ty};
 
 /// A constructor: what a pattern's head matches.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Ctor {
     /// `true` or `false`.
     Bool(bool),
-    /// The integers from `lo` to `hi`, both included (`lo > hi` matches nothing).
-    Int(i128, i128),
+    /// The integers from `lo` to `hi`, both included (`lo > hi` matches nothing), as offsets
+    /// from their type's least value (a `char`'s code points), so every type's whole range fits.
+    Int(u128, u128),
     /// The only constructor of a tuple, struct or `()`.
     Single,
     /// An enum's variant.
@@ -60,26 +61,46 @@ impl DPat {
 }
 
 /// The largest code point.
-const CHAR_MAX: i128 = 0x10_FFFF;
+const CHAR_MAX: u128 = 0x10_FFFF;
 
-const INT_MIN: i128 = i64::MIN as i128;
-const INT_MAX: i128 = i64::MAX as i128;
-
-/// The greatest value of integer type `ty` the analysis counts (`int`'s for any other type).
-fn int_top(ty: &Ty) -> i128 {
-    match ty {
-        // The analysis counts to one past the greatest value, so an `i128`'s or a `u128`'s top
-        // value is left out of it.
-        Ty::Num(n) if !n.is_float() => n.int_range().1.min(i128::MAX - 1),
-        _ => INT_MAX,
-    }
-}
-
-/// The least value of integer type `ty` (`int`'s for any other type).
+/// The least value of integer type `ty`: 0 for `char`, `int`'s for any other type.
 fn int_bottom(ty: &Ty) -> i128 {
     match ty {
         Ty::Num(n) if !n.is_float() => n.int_range().0,
-        _ => INT_MIN,
+        Ty::Char => 0,
+        _ => i128::from(i64::MIN),
+    }
+}
+
+/// The greatest offset of integer type `ty`'s values from its least one.
+fn int_span(ty: &Ty) -> u128 {
+    match ty {
+        Ty::Num(Num::I128 | Num::U128) => u128::MAX,
+        Ty::Num(n) if !n.is_float() => {
+            let (lo, hi) = n.int_range();
+            hi.abs_diff(lo)
+        }
+        Ty::Char => CHAR_MAX,
+        _ => u128::from(u64::MAX),
+    }
+}
+
+/// Value `v`'s offset in `ty` (a value out of its range, already an error, at the nearer end).
+fn offset(ty: &Ty, v: i128) -> u128 {
+    let b = int_bottom(ty);
+    if v < b {
+        0
+    } else {
+        v.abs_diff(b).min(int_span(ty))
+    }
+}
+
+/// The value at offset `o` in `ty`, as written.
+fn value_at(ty: &Ty, o: u128) -> String {
+    match ty {
+        Ty::Num(Num::U128) => o.to_string(),
+        // Two's complement: the least value's bits, plus the offset.
+        _ => (int_bottom(ty).cast_unsigned().wrapping_add(o).cast_signed()).to_string(),
     }
 }
 
@@ -111,8 +132,7 @@ impl Cx<'_> {
             | &PatKind::Ref { pat: s, .. }
             | &PatKind::OfType { pat: s, .. } => self.lower(s),
             &PatKind::Int(v) => {
-                // `i128::MAX` is past the counted range: it stands for its top.
-                let v = v.min(int_top(&self.items.base(ty.strip_ref())).max(INT_MAX));
+                let v = offset(&self.items.base(ty.strip_ref()), v);
                 DPat {
                     ctor: Ctor::Int(v, v),
                     ty,
@@ -125,7 +145,7 @@ impl Cx<'_> {
                 fields: Vec::new(),
             },
             &PatKind::Char(c) => {
-                let c = i128::from(u32::from(c));
+                let c = u128::from(u32::from(c));
                 DPat {
                     ctor: Ctor::Int(c, c),
                     ty,
@@ -143,14 +163,18 @@ impl Cx<'_> {
                 inclusive,
                 chars,
             } => {
-                let top = int_top(&self.items.base(ty.strip_ref())).max(INT_MAX);
-                let hi = match hi {
-                    None if chars => CHAR_MAX,
-                    None => int_top(&self.items.base(ty.strip_ref())),
-                    Some(h) if inclusive => h.min(top),
-                    Some(h) => (h - 1).min(top),
+                let t = if chars {
+                    Ty::Char
+                } else {
+                    self.items.base(ty.strip_ref())
                 };
-                let lo = lo.min(top);
+                let (lo, hi) = match hi {
+                    None => (offset(&t, lo), int_span(&t)),
+                    Some(h) if inclusive => (offset(&t, lo), offset(&t, h)),
+                    // `a..b` up to `b`'s offset, so nothing if `b` is the least value.
+                    Some(h) if h <= int_bottom(&t) => (1, 0),
+                    Some(h) => (offset(&t, lo), offset(&t, h - 1)),
+                };
                 DPat {
                     ctor: Ctor::Int(lo, hi),
                     ty,
@@ -228,15 +252,10 @@ impl Cx<'_> {
         Some(match ty.strip_ref() {
             Ty::Bool => vec![Ctor::Bool(false), Ctor::Bool(true)],
             Ty::Refined(..) => return self.all_ctors(&self.items.base(ty.strip_ref()), heads),
-            Ty::Int => split_ints(heads, INT_MIN, INT_MAX),
-            Ty::Num(n) if !n.is_float() => {
-                // The analysis counts to one past the greatest value, so an `i128`'s or a
-                // `u128`'s top value is left out of it.
-                split_ints(heads, int_bottom(ty.strip_ref()), int_top(ty.strip_ref()))
-            }
+            t @ (Ty::Int | Ty::Char) => split_ints(heads, 0, int_span(t)),
+            t @ Ty::Num(n) if !n.is_float() => split_ints(heads, 0, int_span(t)),
             // A float is matched by bindings and `_` only.
             Ty::Num(_) => vec![Ctor::Single],
-            Ty::Char => split_ints(heads, 0, CHAR_MAX),
             // The literals the rows name, and the strings they do not.
             Ty::Str => {
                 let mut cs: Vec<Ctor> = Vec::new();
@@ -372,26 +391,31 @@ fn expand(row: &[DPat], out: &mut Vec<Vec<DPat>>) {
     }
 }
 
-/// The ranges from `lo` to `hi` split at every boundary of the integer patterns in `heads`.
-fn split_ints(heads: &[&DPat], lo: i128, hi: i128) -> Vec<Ctor> {
+/// The ranges from `lo` to `hi` (both included) split at every boundary of the integer patterns
+/// in `heads`: each piece starts at `lo` or where a pattern starts or ends inside, and goes on to
+/// the next one's start, so nothing is counted past `hi`.
+fn split_ints(heads: &[&DPat], lo: u128, hi: u128) -> Vec<Ctor> {
     if lo > hi {
         return Vec::new();
     }
-    // One past `hi`, saturating: `i128`'s greatest value is left out of the analysis, as is a
-    // `u128`'s past it.
-    let end = hi.saturating_add(1);
-    let mut cuts: Vec<i128> = vec![lo, end];
+    let mut starts: Vec<u128> = vec![lo];
     for h in heads {
         if let Ctor::Int(a, b) = h.ctor
             && a <= b
         {
-            cuts.push(a.clamp(lo, end));
-            cuts.push(b.saturating_add(1).clamp(lo, end));
+            if a > lo && a <= hi {
+                starts.push(a);
+            }
+            if b >= lo && b < hi {
+                starts.push(b + 1);
+            }
         }
     }
-    cuts.sort_unstable();
-    cuts.dedup();
-    cuts.windows(2).map(|w| Ctor::Int(w[0], w[1] - 1)).collect()
+    starts.sort_unstable();
+    starts.dedup();
+    (0..starts.len())
+        .map(|i| Ctor::Int(starts[i], starts.get(i + 1).map_or(hi, |n| n - 1)))
+        .collect()
 }
 
 /// `row` with its head replaced by the fields of constructor `c`, if the head can match `c`.
@@ -432,7 +456,7 @@ impl Witness {
             (Ctor::Str(s), _) => format!("{s:?}"),
             (Ctor::OtherStr, _) | (Ctor::Int(0, CHAR_MAX), Ty::Char) => "_".to_string(),
             (Ctor::Int(lo, hi), Ty::Char) => {
-                let c = |v: &i128| {
+                let c = |v: &u128| {
                     u32::try_from(*v)
                         .ok()
                         .and_then(char::from_u32)
@@ -444,10 +468,19 @@ impl Witness {
                     format!("{}..={}", c(lo), c(hi))
                 }
             }
-            (Ctor::Int(lo, hi), t) if (*lo, *hi) == (int_bottom(t), int_top(t)) => "_".to_string(),
-            (Ctor::Int(lo, hi), _) if lo == hi => lo.to_string(),
-            (Ctor::Int(lo, hi), t) if *hi == int_top(t) => format!("{lo}.."),
-            (Ctor::Int(lo, hi), _) => format!("{lo}..={hi}"),
+            (Ctor::Int(lo, hi), t) => {
+                let t = items.base(t);
+                let span = int_span(&t);
+                if (*lo, *hi) == (0, span) {
+                    "_".to_string()
+                } else if lo == hi {
+                    value_at(&t, *lo)
+                } else if *hi == span {
+                    format!("{}..", value_at(&t, *lo))
+                } else {
+                    format!("{}..={}", value_at(&t, *lo), value_at(&t, *hi))
+                }
+            }
             (Ctor::Single, Ty::Unit) => "()".to_string(),
             (Ctor::Single, Ty::Tuple(_)) if fields.len() == 1 => format!("({},)", fields[0]),
             (Ctor::Single, Ty::Tuple(_)) => format!("({})", fields.join(", ")),

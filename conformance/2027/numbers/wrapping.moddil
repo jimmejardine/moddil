@@ -1,0 +1,49 @@
+// covers: num.wrap.2
+// Each literal is typed where it is bound: the reference interpreter types a literal by its own
+// context only.
+
+// FNV-1a over `bytes`: a hash, whose multiplication wraps by design.
+fn fnv(bytes: &[u8]) -> Wrapping<u64> {
+    let basis: u64 = 14695981039346656037;
+    let prime: u64 = 1099511628211;
+    let mut h = Wrapping(basis);
+    for b in bytes.iter() {
+        h = Wrapping(h.0 ^ b.to::<u64>() ?! "a byte fits");
+        h = h * Wrapping(prime);
+    }
+    h
+}
+
+test "a Wrapping integer wraps at its type's width" {
+    let x: u8 = 250;
+    let y: u8 = 10;
+    (Wrapping(x) + Wrapping(y)).0           // => 4
+    ;
+    x +% y                                  // => 4
+    ;
+    x.wrapping_add(y)                       // => 4
+    ;
+    let z: u32 = 0;
+    let one: u32 = 1;
+    (Wrapping(z) - Wrapping(one)).0         // => 4294967295
+    ;
+    let i = Wrapping(9223372036854775807) + Wrapping(1);
+    i.0                                     // => -9223372036854775808
+    ;
+    let n: i8 = -128;
+    let m: i8 = -1;
+    (Wrapping(n) * Wrapping(m)).0           // => -128
+    ;
+    fnv("hello".as_bytes()).0               // => 11831194018420276491
+}
+
+test "a Wrapping integer compares as its value does, and debug-prints as itself" {
+    let a: i16 = 3;
+    let b: i16 = 4;
+    Wrapping(a) < Wrapping(b)               // => true
+    ;
+    let c: u8 = 255;
+    let two: u8 = 2;
+    let w = Wrapping(c);
+    fmt"{(w + Wrapping(two)).0} {w:?}"      // => "1 Wrapping(255)"
+}

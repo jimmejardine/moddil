@@ -302,17 +302,78 @@ impl<'a> Solver<'a> {
                 return self.norm(t);
             }
         }
-        match self.implements(&self_ty, &trait_ref) {
-            Answer::Yes(Source::Impl(i, args)) => {
-                match self.tree.impls[i as usize].assoc.get(a.index as usize) {
-                    Some(Some(t)) => {
-                        let t = t.subst(&args);
-                        self.norm(&t)
-                    }
-                    _ => Ty::Error,
+        let chosen = match self.implements(&self_ty, &trait_ref) {
+            Answer::Yes(Source::Impl(i, args)) => Some((i, args)),
+            // Its impl's bounds are not decided yet (`Wrapping<{integer}>: Add` while the
+            // literal's type is open), but only one impl can be the one.
+            Answer::Maybe => self.only_impl(&self_ty, &trait_ref),
+            _ => None,
+        };
+        match chosen {
+            Some((i, args)) => match self.tree.impls[i as usize].assoc.get(a.index as usize) {
+                Some(Some(t)) => {
+                    let t = t.subst(&args);
+                    self.norm(&t)
                 }
+                _ => Ty::Error,
+            },
+            None => unchanged(),
+        }
+    }
+
+    /// The impl of `trait_ref` for `ty` and its arguments, if it is the only impl whose header
+    /// could fit `ty`, and fits it without deciding anything still open in `ty`: an associated
+    /// type is that impl's whatever its bounds come to, as they are required where the trait is
+    /// used. Not where a bound in scope could be the one.
+    fn only_impl(&mut self, ty: &Ty, trait_ref: &TraitRef) -> Option<(u32, Vec<Ty>)> {
+        let tr = trait_ref.trait_;
+        if self.env.iter().any(|p| p.trait_ref.trait_ == tr) {
+            return None;
+        }
+        let before = self.deep(ty);
+        let open = std::cell::RefCell::new(Vec::new());
+        before.any(&|t| {
+            if let Ty::Infer(v) = t {
+                open.borrow_mut().push(*v);
             }
-            _ => unchanged(),
+            false
+        });
+        let open = open.into_inner();
+        let mut found = None;
+        for i in 0..self.tree.impls.len() {
+            let imp = &self.tree.impls[i];
+            let Some(itr) = &imp.trait_ref else { continue };
+            if itr.trait_ != tr {
+                continue;
+            }
+            let saved = self.table.clone();
+            let args = self.fresh_n(imp.generics.params.len());
+            let self_ty = imp.self_ty.subst(&args);
+            let itr = itr.subst(&args);
+            let ok = self.unify(&self_ty, ty)
+                && itr
+                    .args
+                    .iter()
+                    .zip(trait_ref.args.iter())
+                    .all(|(x, y)| self.unify(x, y));
+            if ok {
+                if found.is_some() {
+                    self.table = saved;
+                    return None;
+                }
+                let args: Vec<Ty> = args.iter().map(|a| self.deep(a)).collect();
+                // Nothing of `ty` decided, and every argument named by what `ty` holds.
+                let kept = self.deep(ty) == before
+                    && !args
+                        .iter()
+                        .any(|a| a.any(&|t| matches!(t, Ty::Infer(v) if !open.contains(v))));
+                found = Some((i as u32, args, kept));
+            }
+            self.table = saved;
+        }
+        match found {
+            Some((i, args, true)) => Some((i, args)),
+            _ => None,
         }
     }
 

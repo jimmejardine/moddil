@@ -26,6 +26,15 @@ fn wide(x: u128) -> int {
     }
 }
 
+/// Every `i128` is covered: down to its least value and up to its greatest.
+fn signs(x: i128) -> int {
+    match x {
+        -170141183460469231731687303715884105728..=-1 => -1,
+        0 => 0,
+        1..=170141183460469231731687303715884105727 => 1,
+    }
+}
+
 fn by_borrow(b: &u16) -> bool {
     match b {
         65535 => true,
@@ -56,4 +65,8 @@ test "literals and ranges at the matched type" {
     ;
     let m: u16 = 65535;
     by_borrow(&m)                           // => true
+    ;
+    signs(-170141183460469231731687303715884105728) // => -1
+    ;
+    signs(170141183460469231731687303715884105727)  // => 1
 }

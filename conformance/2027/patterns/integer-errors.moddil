@@ -5,3 +5,6 @@ fn too_low(b: u8) -> int { match b { -1 => 0, _ => 1 } }                  //~ E0
 fn range_past(b: i8) -> int { match b { 0..=200 => 0, _ => 1 } }          //~ E0204
 fn not_an_integer(c: char) -> int { match c { 3 => 0, _ => 1 } }          //~ E0201
 fn not_covered(b: u8) -> int { match b { 0..=254 => 0 } }                 //~ E0208
+// An `i128`'s greatest value, and a `u128`'s past `i128`'s, are values a match must cover.
+fn no_top(x: i128) -> int { match x { -170141183460469231731687303715884105728..=0 => 0, 1..=170141183460469231731687303715884105726 => 1 } } //~ E0208
+fn no_upper_half(x: u128) -> int { match x { 0..=170141183460469231731687303715884105727 => 0 } } //~ E0208

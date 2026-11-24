@@ -286,3 +286,66 @@ impl int {
     fn rotate_left(self, n: int) -> int;
 }
 
+// The integers whose arithmetic can wrap (`num.wrap.2`): what `Wrapping<T>` holds.
+trait WrappingInt: Copy {
+    fn wrapping_add(self, rhs: Self) -> Self;
+    fn wrapping_sub(self, rhs: Self) -> Self;
+    fn wrapping_mul(self, rhs: Self) -> Self;
+}
+
+#[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128)]
+const fn int_wrapping(t: type) -> Impl<WrappingInt> {
+    impl WrappingInt for t {
+        fn wrapping_add(self, rhs: t) -> t {
+            self +% rhs
+        }
+
+        fn wrapping_sub(self, rhs: t) -> t {
+            self -% rhs
+        }
+
+        fn wrapping_mul(self, rhs: t) -> t {
+            self *% rhs
+        }
+    }
+}
+
+impl WrappingInt for int {
+    fn wrapping_add(self, rhs: int) -> int {
+        self +% rhs
+    }
+
+    fn wrapping_sub(self, rhs: int) -> int {
+        self -% rhs
+    }
+
+    fn wrapping_mul(self, rhs: int) -> int {
+        self *% rhs
+    }
+}
+
+// An integer whose `+`, `-` and `*` wrap around its type's width (`num.wrap.2`), for hashes,
+// checksums and sequence numbers: `Wrapping(x)`, its value `.0`, which prints it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct Wrapping<T>(pub T);
+
+impl<T: WrappingInt> Add for Wrapping<T> {
+    type Output = Wrapping<T>;
+    fn add(self, rhs: Wrapping<T>) -> Wrapping<T> {
+        Wrapping(self.0.wrapping_add(rhs.0))
+    }
+}
+
+impl<T: WrappingInt> Sub for Wrapping<T> {
+    type Output = Wrapping<T>;
+    fn sub(self, rhs: Wrapping<T>) -> Wrapping<T> {
+        Wrapping(self.0.wrapping_sub(rhs.0))
+    }
+}
+
+impl<T: WrappingInt> Mul for Wrapping<T> {
+    type Output = Wrapping<T>;
+    fn mul(self, rhs: Wrapping<T>) -> Wrapping<T> {
+        Wrapping(self.0.wrapping_mul(rhs.0))
+    }
+}
