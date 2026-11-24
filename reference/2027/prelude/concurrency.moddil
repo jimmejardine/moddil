@@ -65,10 +65,10 @@ struct Trapped {
 }
 
 impl Display for Trapped {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(&self.class);
-        out.push_str(" at ");
-        out.push_str(&self.at);
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str(&self.class);
+        out.write_str(" at ");
+        out.write_str(&self.at);
     }
 }
 

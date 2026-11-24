@@ -185,17 +185,17 @@ impl<T> Default for Deque<T> {
 }
 
 impl<T: Debug> Debug for Deque<T> {
-    fn fmt(&self, out: &mut String) {
-        out.push('[');
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_char('[');
         let mut first = true;
         for x in self.iter() {
             if !first {
-                out.push_str(", ");
+                out.write_str(", ");
             }
             first = false;
             Debug::fmt(x, out);
         }
-        out.push(']');
+        out.write_char(']');
     }
 }
 
@@ -261,7 +261,7 @@ impl<T> RingBuffer<T> {
 }
 
 impl<T: Debug> Debug for RingBuffer<T> {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         Debug::fmt(&self.values, out);
     }
 }

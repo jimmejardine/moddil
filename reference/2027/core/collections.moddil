@@ -355,38 +355,38 @@ impl<T: Hash + Eq> FromArrayLiteral<T> for HashSet<T> {
 
 // `{k: v, …}`, in the map's order.
 impl<K: Debug, V: Debug> Debug for HashMap<K, V> {
-    fn fmt(&self, out: &mut String) {
-        out.push('{');
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_char('{');
         let mut first = true;
         for bucket in self.buckets.as_slice() {
             for e in bucket.as_slice() {
                 if !first {
-                    out.push_str(", ");
+                    out.write_str(", ");
                 }
                 first = false;
                 Debug::fmt(&e.0, out);
-                out.push_str(": ");
+                out.write_str(": ");
                 Debug::fmt(&e.1, out);
             }
         }
-        out.push('}');
+        out.write_char('}');
     }
 }
 
 impl<T: Debug> Debug for HashSet<T> {
-    fn fmt(&self, out: &mut String) {
-        out.push('{');
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_char('{');
         let mut first = true;
         for bucket in self.map.buckets.as_slice() {
             for e in bucket.as_slice() {
                 if !first {
-                    out.push_str(", ");
+                    out.write_str(", ");
                 }
                 first = false;
                 Debug::fmt(&e.0, out);
             }
         }
-        out.push('}');
+        out.write_char('}');
     }
 }
 

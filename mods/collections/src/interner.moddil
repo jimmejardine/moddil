@@ -52,10 +52,10 @@ impl<T> Hash for Symbol<T> {
 }
 
 impl<T> Debug for Symbol<T> {
-    fn fmt(&self, out: &mut String) {
-        out.push_str("Symbol(");
-        out.push_str(&self.id.to_string());
-        out.push(')');
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str("Symbol(");
+        out.write_str(&self.id.to_string());
+        out.write_char(')');
     }
 }
 

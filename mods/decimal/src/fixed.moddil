@@ -174,34 +174,34 @@ impl<const S: int> Neg for Fixed<S> {
 
 /// With exactly `S` digits after the point: `-1.50` for `Fixed<2>`.
 impl<const S: int> Display for Fixed<S> {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         let digits = BigInt::from_int(self.units).abs().to_string();
         let digits: &str = &digits;
         if self.units < 0 {
-            out.push('-');
+            out.write_char('-');
         }
         let n = digits.len();
         if n <= S {
-            out.push('0');
+            out.write_char('0');
         } else {
-            out.push_str(digits.bytes_between(0, n - S));
+            out.write_str(digits.bytes_between(0, n - S));
         }
         if S > 0 {
-            out.push('.');
+            out.write_char('.');
             let digits = if n <= S { digits } else { digits.bytes_between(n - S, n) };
             let mut pad = S - digits.len();
             while pad > 0 {
-                out.push('0');
+                out.write_char('0');
                 pad -= 1;
             }
-            out.push_str(digits);
+            out.write_str(digits);
         }
     }
 }
 
 /// As `Display` writes it, not as a struct: `1.50`.
 impl<const S: int> Debug for Fixed<S> {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         Display::fmt(self, out);
     }
 }

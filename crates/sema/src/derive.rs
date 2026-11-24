@@ -447,7 +447,7 @@ fn debug(variants: &[Variant]) -> String {
         .iter()
         .map(|v| {
             let mut parts = Vec::new();
-            let text = |s: &str| format!("out.push_str({s:?});");
+            let text = |s: &str| format!("out.write_str({s:?});");
             if v.unit {
                 parts.push(text(&v.shown));
             } else if v.named {
@@ -472,7 +472,7 @@ fn debug(variants: &[Variant]) -> String {
         })
         .collect();
     format!(
-        "fn fmt(&self, out: &mut String) {{ match self {{ {} }} }}",
+        "fn fmt(&self, out: &mut dyn TextWrite) {{ match self {{ {} }} }}",
         arms.join(" ")
     )
 }

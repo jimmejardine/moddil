@@ -18,8 +18,8 @@ pub struct ArgError {
 }
 
 impl Display for ArgError {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(fmt"--{self.name}: {self.why}".as_str());
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str(fmt"--{self.name}: {self.why}".as_str());
     }
 }
 

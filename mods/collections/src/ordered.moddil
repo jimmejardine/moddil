@@ -236,19 +236,19 @@ impl<K: Hash + Eq, V> Default for OrderedMap<K, V> {
 
 // `{k: v, …}`, in insertion order.
 impl<K: Hash + Eq + Debug, V: Debug> Debug for OrderedMap<K, V> {
-    fn fmt(&self, out: &mut String) {
-        out.push('{');
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_char('{');
         let mut first = true;
         for (k, v) in self.iter() {
             if !first {
-                out.push_str(", ");
+                out.write_str(", ");
             }
             first = false;
             Debug::fmt(k, out);
-            out.push_str(": ");
+            out.write_str(": ");
             Debug::fmt(v, out);
         }
-        out.push('}');
+        out.write_char('}');
     }
 }
 
@@ -338,16 +338,16 @@ impl<T: Hash + Eq> Default for OrderedSet<T> {
 }
 
 impl<T: Hash + Eq + Debug> Debug for OrderedSet<T> {
-    fn fmt(&self, out: &mut String) {
-        out.push('{');
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_char('{');
         let mut first = true;
         for x in self.iter() {
             if !first {
-                out.push_str(", ");
+                out.write_str(", ");
             }
             first = false;
             Debug::fmt(x, out);
         }
-        out.push('}');
+        out.write_char('}');
     }
 }

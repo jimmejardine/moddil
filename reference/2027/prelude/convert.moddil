@@ -22,8 +22,8 @@ impl Number for int {}
 struct RangeError;
 
 impl Display for RangeError {
-    fn fmt(&self, out: &mut String) {
-        out.push_str("out of range");
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str("out of range");
     }
 }
 

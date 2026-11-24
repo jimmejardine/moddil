@@ -100,16 +100,15 @@ when part of one is, remove that part.
   are).
 - Two error types of the same name in different modules (both would be `name.E`).
 
-**P3. Formatting** (`crates/sema` holes, prelude `fmt` and `text`; L)
-- Format specs beyond those built: width, fill, alignment and precision (`{x:>8}`, `{f:.3}`).
-- Then `Display` and `Debug` over a `Write` sink, rather than `&mut String`.
-
 **P4. Text** (prelude `text`, `crates/sema`; M)
 - `char_indices`, and `RcStr` slices.
 - A text position used on other text refused when checking (as `text.md` says), not trapping
   when it runs and comparing by text.
 - Tagged literals other than `fmt`, first `re"…"` compiled when compiling, with typed captures
   (`mods/regex`, with P11).
+- The rest of Rust's format specs: a width or precision from an argument (`{x:w$}`, `{x:.*}`),
+  `+`, `#`, and `x`/`b`/`o`/`e` (`{n:#x}`); and `fmt"…"` written straight into a `TextWrite`
+  sink, not only as a new `String`.
 
 **P5. Numbers** (`crates/sema`, the prelude, every runner; L)
 - `usize` and `isize`, for FFI and memory-level code: a `Num` each, the width of a pointer on

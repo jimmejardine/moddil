@@ -421,19 +421,19 @@ impl<K: Ord, V> Default for TreeMap<K, V> {
 
 // `{k: v, …}`, in key order.
 impl<K: Ord + Debug, V: Debug> Debug for TreeMap<K, V> {
-    fn fmt(&self, out: &mut String) {
-        out.push('{');
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_char('{');
         let mut first = true;
         for (k, v) in self.iter() {
             if !first {
-                out.push_str(", ");
+                out.write_str(", ");
             }
             first = false;
             Debug::fmt(k, out);
-            out.push_str(": ");
+            out.write_str(": ");
             Debug::fmt(v, out);
         }
-        out.push('}');
+        out.write_char('}');
     }
 }
 
@@ -560,16 +560,16 @@ impl<T: Ord> Default for TreeSet<T> {
 }
 
 impl<T: Ord + Debug> Debug for TreeSet<T> {
-    fn fmt(&self, out: &mut String) {
-        out.push('{');
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_char('{');
         let mut first = true;
         for x in self.iter() {
             if !first {
-                out.push_str(", ");
+                out.write_str(", ");
             }
             first = false;
             Debug::fmt(x, out);
         }
-        out.push('}');
+        out.write_char('}');
     }
 }

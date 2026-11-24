@@ -248,14 +248,14 @@ impl<T: Hash> Hash for Rc<T> {
 }
 
 impl<T: Debug> Debug for Rc<T> {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         Debug::fmt(self.deref(), out);
     }
 }
 
 impl<T> Debug for Weak<T> {
-    fn fmt(&self, out: &mut String) {
-        out.push_str("(Weak)");
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str("(Weak)");
     }
 }
 

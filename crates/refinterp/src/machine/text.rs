@@ -168,14 +168,19 @@ impl Machine<'_> {
         Ok(self.memory.load(&out))
     }
 
-    /// Pushes `s` onto the `String` at `out`, through the prelude's `push_str`, as the compiled
-    /// code does.
+    /// Writes `s` to the sink at `out`, a `String` or another `TextWrite` (`text.write.1`),
+    /// through its `write_str`, as the compiled code does.
     pub(super) fn push_text(&mut self, out: &crate::value::Pointer, s: &str) -> Eval<()> {
         if s.is_empty() {
             return Ok(());
         }
         let args = vec![Value::Ref(out.clone(), true), Value::Str(s.into())];
-        self.string_call("push_str", args, moddil_syntax::TextRange::default())?;
+        self.call_trait(
+            "TextWrite",
+            "write_str",
+            args,
+            moddil_syntax::TextRange::default(),
+        )?;
         Ok(())
     }
 

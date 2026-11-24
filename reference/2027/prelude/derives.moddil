@@ -165,37 +165,37 @@ const fn derive_hash(t: type) -> Impl<Hash> {
 // `Pair(1, 2)`, `Shape::Circle(3)`, each field by its own `Debug`.
 const fn derive_debug(t: type) -> Impl<Debug> {
     impl Debug for t {
-        fn fmt(&self, out: &mut String) {
-            out.push_str(t.name);
+        fn fmt(&self, out: &mut dyn TextWrite) {
+            out.write_str(t.name);
             if const t.is_enum() {
                 inline for v in variants(t) {
                     if v.is(self) {
-                        out.push_str("::");
-                        out.push_str(v.name);
+                        out.write_str("::");
+                        out.write_str(v.name);
                         if const v.is_unit() {
                         } else {
                             if const v.is_positional() {
-                                out.push('(');
+                                out.write_char('(');
                                 inline for f in fields(v) {
                                     if const f.name != "0" {
-                                        out.push_str(", ");
+                                        out.write_str(", ");
                                     }
                                     Debug::fmt(&self.[f], out);
                                 }
-                                out.push(')');
+                                out.write_char(')');
                             } else {
-                                out.push_str(" { ");
+                                out.write_str(" { ");
                                 let mut first = true;
                                 inline for f in fields(v) {
                                     if !first {
-                                        out.push_str(", ");
+                                        out.write_str(", ");
                                     }
                                     first = false;
-                                    out.push_str(f.name);
-                                    out.push_str(": ");
+                                    out.write_str(f.name);
+                                    out.write_str(": ");
                                     Debug::fmt(&self.[f], out);
                                 }
-                                out.push_str(" }");
+                                out.write_str(" }");
                             }
                         }
                     }
@@ -204,27 +204,27 @@ const fn derive_debug(t: type) -> Impl<Debug> {
                 if const t.is_unit() {
                 } else {
                     if const t.is_positional() {
-                        out.push('(');
+                        out.write_char('(');
                         inline for f in fields(t) {
                             if const f.name != "0" {
-                                out.push_str(", ");
+                                out.write_str(", ");
                             }
                             Debug::fmt(&self.[f], out);
                         }
-                        out.push(')');
+                        out.write_char(')');
                     } else {
-                        out.push_str(" { ");
+                        out.write_str(" { ");
                         let mut first = true;
                         inline for f in fields(t) {
                             if !first {
-                                out.push_str(", ");
+                                out.write_str(", ");
                             }
                             first = false;
-                            out.push_str(f.name);
-                            out.push_str(": ");
+                            out.write_str(f.name);
+                            out.write_str(": ");
                             Debug::fmt(&self.[f], out);
                         }
-                        out.push_str(" }");
+                        out.write_str(" }");
                     }
                 }
             }

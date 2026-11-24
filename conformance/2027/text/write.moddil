@@ -1,0 +1,59 @@
+// covers: text.write.1, text.display.1, expr.fmt.debug.1
+
+/// A sink that keeps only how much was written to it.
+struct Count { chars: int, writes: int }
+
+impl TextWrite for Count {
+    fn write_str(&mut self, s: &str) {
+        self.chars += s.chars().count();
+        self.writes += 1;
+    }
+}
+
+struct Point { x: int, y: int }
+
+impl Display for Point {
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_char('(');
+        Display::fmt(&self.x, out);
+        out.write_str(", ");
+        Display::fmt(&self.y, out);
+        out.write_char(')');
+    }
+}
+
+#[derive(Debug)]
+struct Tagged { name: String, n: int }
+
+test "a String is a sink" {
+    let mut s = String::new();
+    s.write_str("ab");
+    s.write_char('c');
+    s                                       // => "abc"
+}
+
+test "a type's own Display writes to any sink" {
+    let p = Point { x: 1, y: -2 };
+    let mut c = Count { chars: 0, writes: 0 };
+    p.fmt(&mut c);
+    c.chars                                 // => 7
+    ;
+    fmt"{p}"                                // => "(1, -2)"
+    ;
+    p.to_string()                           // => "(1, -2)"
+}
+
+test "a derived Debug writes to any sink" {
+    let t = Tagged { name: "a".to_string(), n: 3 };
+    let mut c = Count { chars: 0, writes: 0 };
+    Debug::fmt(&t, &mut c);
+    c.chars                                 // => 26
+    ;
+    fmt"{t:?}"                              // => "Tagged { name: \"a\", n: 3 }"
+}
+
+test "a sink's write_char writes through its write_str" {
+    let mut c = Count { chars: 0, writes: 0 };
+    c.write_char('é');
+    c.chars                                 // => 1
+}

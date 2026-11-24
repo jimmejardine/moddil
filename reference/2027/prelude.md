@@ -11,7 +11,7 @@ behaviour are as written there. The files are one source, joined in this order:
 | [`numbers.moddil`](prelude/numbers.moddil) | the sized integers and the floats, and `Number`, written as templates (**comptime.derive.for.1**) |
 | [`convert.moddil`](prelude/convert.moddil) | conversions between the numbers, rounding, `RangeError` |
 | [`float.moddil`](prelude/float.moddil) | the float functions |
-| [`text.moddil`](prelude/text.moddil) | `Display`, `char`, `str`, `String`, `Pattern`, `Chars`, text positions, UTF-8 |
+| [`text.moddil`](prelude/text.moddil) | `TextWrite`, `Display`, `char`, `str`, `String`, `Pattern`, `Chars`, text positions, UTF-8 |
 | [`fmt.moddil`](prelude/fmt.moddil) | `Debug` and `Default` |
 | [`arrays.moddil`](prelude/arrays.moddil) | arrays and slices |
 | [`iter.moddil`](prelude/iter.moddil) | `Iterator` and `IntoIterator`, the adapters, `FromIterator`, the ranges, the slice and array iterators |
@@ -25,8 +25,8 @@ behaviour are as written there. The files are one source, joined in this order:
 **prelude.1** The prelude holds `assert` ([`assert`](expressions/assert.md)), `unreachable` and
 `todo` ([`unreachable` and `todo`](expressions/unreachable.md)) and `discard` ([Errors](errors.md)), the types `Option`, `Result` and `Ordering`, the traits `Clone`, `Copy`,
 `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, `Not` and
-`Drop`, the closure traits `FnOnce`, `FnMut` and `Fn`, `Display`, the functions `drop`, `replace`
-and `swap`, their impls for `int`, `bool` and `()`, and the methods and impls of `char`, `str` and
+`Drop`, the closure traits `FnOnce`, `FnMut` and `Fn`, `Display` and `TextWrite`, the
+functions `drop`, `replace` and `swap`, their impls for `int`, `bool` and `()`, and the methods and impls of `char`, `str` and
 `String` ([Text](text.md)), and of arrays and slices ([Arrays and indexing](expressions/arrays.md)).
 It also holds `Index`, `IndexMut` and `FromArrayLiteral`, the iteration traits `Iterator` and
 `IntoIterator`, the ranges `Range`, `RangeInclusive` and `RangeFrom`, `Iter` and `Chars`, `Buf`,

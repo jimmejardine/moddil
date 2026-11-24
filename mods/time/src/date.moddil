@@ -41,8 +41,8 @@ impl Weekday {
 }
 
 impl Display for Weekday {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(match self {
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str(match self {
             Weekday::Monday => "Monday",
             Weekday::Tuesday => "Tuesday",
             Weekday::Wednesday => "Wednesday",
@@ -196,31 +196,31 @@ pub(mod) fn digits(s: &str, at: int, n: int) -> Option<int> {
 }
 
 /// `n` in at least `width` digits, zeros in front.
-pub(mod) fn padded(out: &mut String, n: int, width: int) {
+pub(mod) fn padded(out: &mut dyn TextWrite, n: int, width: int) {
     let s = n.to_string();
     let mut pad = width - s.len();
     while pad > 0 {
-        out.push('0');
+        out.write_char('0');
         pad -= 1;
     }
-    out.push_str(&s);
+    out.write_str(&s);
 }
 
 /// ISO 8601: `2024-02-29`; a year before 1 or past 9999 is written with its sign.
 impl Display for Date {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         if self.year < 0 {
-            out.push('-');
+            out.write_char('-');
             padded(out, -self.year, 4);
         } else {
             if self.year > 9999 {
-                out.push('+');
+                out.write_char('+');
             }
             padded(out, self.year, 4);
         }
-        out.push('-');
+        out.write_char('-');
         padded(out, self.month, 2);
-        out.push('-');
+        out.write_char('-');
         padded(out, self.day, 2);
     }
 }

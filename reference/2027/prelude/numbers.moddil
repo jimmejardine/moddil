@@ -222,8 +222,8 @@ const fn int_not(t: type) -> Impl<Not> {
 #[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
 const fn number_display(t: type) -> Impl<Display> {
     impl Display for t {
-        fn fmt(&self, out: &mut String) {
-            out.push_str(self.text());
+        fn fmt(&self, out: &mut dyn TextWrite) {
+            out.write_str(self.text());
         }
     }
 }
@@ -231,7 +231,7 @@ const fn number_display(t: type) -> Impl<Display> {
 #[derive_for(i8, i16, i32, i128, u8, u16, u32, u64, u128, f32, f64)]
 const fn number_debug(t: type) -> Impl<Debug> {
     impl Debug for t {
-        fn fmt(&self, out: &mut String) {
+        fn fmt(&self, out: &mut dyn TextWrite) {
             Display::fmt(self, out);
         }
     }

@@ -664,6 +664,7 @@ const LANG: &[&str] = &[
     "FnMut",
     "Fn",
     "Display",
+    "TextWrite",
     "Iterator",
     "IntoIterator",
     "Range",

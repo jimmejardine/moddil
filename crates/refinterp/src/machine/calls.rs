@@ -351,7 +351,7 @@ impl Machine<'_> {
             // As Moddil source writes the value (`attr.derive.debug.1`).
             "Debug" => {
                 let Value::Ref(out, _) = args[1].clone() else {
-                    unreachable!("a `&mut String`")
+                    unreachable!("a `&mut dyn TextWrite`")
                 };
                 let info = &self.program.adts[ty];
                 let path = if info.is_enum {

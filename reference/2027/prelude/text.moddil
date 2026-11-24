@@ -1,11 +1,33 @@
-// Part of the prelude (`../prelude.md`): `Display`, `char`, `str` and `String`, `Pattern`,
+// Part of the prelude (`../prelude.md`): `TextWrite`, `Display`, `char`, `str` and `String`, `Pattern`,
 // `Chars`, text positions and UTF-8.
 
 // Text: `char`, `str` and `String`. Their methods marked `#[intrinsic]` are built in.
 
+// Where text is written (`text.write.1`): what `Display` and `Debug` write to. Writing cannot
+// fail.
+trait TextWrite {
+    fn write_str(&mut self, s: &str);
+
+    fn write_char(&mut self, c: char) {
+        let mut one = String::new();
+        one.push(c);
+        self.write_str(one.as_str());
+    }
+}
+
+impl TextWrite for String {
+    fn write_str(&mut self, s: &str) {
+        self.push_str(s);
+    }
+
+    fn write_char(&mut self, c: char) {
+        self.push(c);
+    }
+}
+
 // How a value is written as text: in `fmt"…"`'s holes, and by `to_string`.
 trait Display {
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut dyn TextWrite);
 
     fn to_string(&self) -> String {
         let mut s = String::new();
@@ -15,14 +37,14 @@ trait Display {
 }
 
 impl Display for int {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self.text());
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str(self.text());
     }
 }
 
 impl Display for bool {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self.text());
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str(self.text());
     }
 }
 
@@ -33,20 +55,20 @@ impl bool {
 }
 
 impl Display for char {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self.text());
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str(self.text());
     }
 }
 
 impl Display for str {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self);
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str(self);
     }
 }
 
 impl Display for String {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(self.as_str());
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str(self.as_str());
     }
 }
 

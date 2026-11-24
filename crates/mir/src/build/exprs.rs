@@ -71,8 +71,10 @@ impl Builder<'_> {
                 self.cfg.assign(dest, Rvalue::Widen(op, target));
                 return;
             }
-            // A `&String` as a `&str`: its `as_str` (`text.coerce.1`).
-            if from == self.items.string_ty() {
+            // A `&String` as a `&str`: its `as_str` (`text.coerce.1`). As a `dyn` borrow it is
+            // converted as any other borrow is.
+            if from == self.items.string_ty() && matches!(&target, Ty::Ref(_, t) if **t == Ty::Str)
+            {
                 let func = self
                     .items
                     .builtin_method(&from, "as_str")
@@ -1079,11 +1081,23 @@ impl Builder<'_> {
         }
     }
 
-    /// Hole `h` written onto the `String` in `dest` by the `fmt` its check chose.
+    /// Hole `h` written onto the `String` in `dest` by the `fmt` its check chose, which writes
+    /// to it as a `&mut dyn TextWrite` (`text.write.1`).
     fn write_hole(&mut self, h: ExprId, dest: Local) {
         let this = self.hole_ref(h);
-        let out = self.temp(Ty::reference(true, self.items.string_ty()));
-        self.cfg.assign(out, Rvalue::Ref(true, Place::local(dest)));
+        let string = self.items.string_ty();
+        let borrow = self.temp(Ty::reference(true, string.clone()));
+        self.cfg
+            .assign(borrow, Rvalue::Ref(true, Place::local(dest)));
+        let sink = self
+            .items
+            .lang_ref("TextWrite")
+            .expect("the prelude's `TextWrite`");
+        let out = self.temp(Ty::reference(true, Ty::dyn_of(sink)));
+        self.cfg.assign(
+            out,
+            Rvalue::Unsize(Operand::Move(Place::local(borrow)), string),
+        );
         let unit = self.temp(Ty::Unit);
         let callee = self
             .types

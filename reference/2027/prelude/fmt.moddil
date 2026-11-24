@@ -4,97 +4,97 @@
 // Moddil source writes it. Derived by the template in `derives.moddil`.
 #[derive_by(derive_debug)]
 trait Debug {
-    fn fmt(&self, out: &mut String);
+    fn fmt(&self, out: &mut dyn TextWrite);
 }
 
 impl Debug for int {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         Display::fmt(self, out);
     }
 }
 
 impl Debug for bool {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         Display::fmt(self, out);
     }
 }
 
 impl Debug for char {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(&self.quoted());
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str(&self.quoted());
     }
 }
 
 impl Debug for str {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(&self.quoted());
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str(&self.quoted());
     }
 }
 
 impl Debug for String {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(&self.as_str().quoted());
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str(&self.as_str().quoted());
     }
 }
 
 impl Debug for () {
-    fn fmt(&self, out: &mut String) {
-        out.push_str("()");
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str("()");
     }
 }
 
 impl<T: Debug> Debug for [T] {
-    fn fmt(&self, out: &mut String) {
-        out.push('[');
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_char('[');
         let mut first = true;
         for x in self {
             if !first {
-                out.push_str(", ");
+                out.write_str(", ");
             }
             first = false;
             Debug::fmt(x, out);
         }
-        out.push(']');
+        out.write_char(']');
     }
 }
 
 impl<T: Debug, const N: int> Debug for [T; N] {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         Debug::fmt(self.as_slice(), out);
     }
 }
 
 impl<T: Debug> Debug for Vec<T> {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         Debug::fmt(self.as_slice(), out);
     }
 }
 
 impl<T: Debug> Debug for Option<T> {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         match self {
-            None => out.push_str("None"),
+            None => out.write_str("None"),
             Some(x) => {
-                out.push_str("Some(");
+                out.write_str("Some(");
                 Debug::fmt(x, out);
-                out.push(')');
+                out.write_char(')');
             }
         }
     }
 }
 
 impl<T: Debug, E: Debug> Debug for Result<T, E> {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         match self {
             Ok(x) => {
-                out.push_str("Ok(");
+                out.write_str("Ok(");
                 Debug::fmt(x, out);
-                out.push(')');
+                out.write_char(')');
             }
             Err(e) => {
-                out.push_str("Err(");
+                out.write_str("Err(");
                 Debug::fmt(e, out);
-                out.push(')');
+                out.write_char(')');
             }
         }
     }
@@ -103,15 +103,15 @@ impl<T: Debug, E: Debug> Debug for Result<T, E> {
 #[derive_for(tuples(2..=12))]
 const fn tuple_debug(t: type) -> Impl<Debug> {
     impl Debug for t {
-        fn fmt(&self, out: &mut String) {
-            out.push('(');
+        fn fmt(&self, out: &mut dyn TextWrite) {
+            out.write_char('(');
             inline for f in fields(t) {
                 if const f.name != "0" {
-                    out.push_str(", ");
+                    out.write_str(", ");
                 }
                 Debug::fmt(&self.[f], out);
             }
-            out.push(')');
+            out.write_char(')');
         }
     }
 }

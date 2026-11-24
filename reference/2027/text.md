@@ -94,8 +94,15 @@ indentation but has no escapes.
 
 ## Formatting
 
+**text.write.1** The prelude's trait `TextWrite` is where text is written:
+`fn write_str(&mut self, s: &str)` writes `s`, and `fn write_char(&mut self, c: char)` writes one
+character, through `write_str` unless the type gives its own. Writing to it cannot fail. `String`
+implements it, appending; a `&mut String` is used as a `&mut dyn TextWrite` as any borrow is
+(**type.dyn.coerce.1**).
+
 **text.display.1** The prelude's trait `Display` is how a value is written as text:
-`fn fmt(&self, out: &mut String)` appends it to `out`, and `x.to_string()` is a new `String` of it.
+`fn fmt(&self, out: &mut dyn TextWrite)` writes it to `out`, and `x.to_string()` is a new `String`
+of it.
 `int`, `bool`, `char`, `str` and `String` implement it: an `int` in decimal with a `-` if it is
 negative, a `bool` as `true` or `false`, and text as itself.
 
@@ -105,7 +112,7 @@ is evaluated, borrowed, and written by its `Display::fmt`. A hole whose value is
 what it points to.
 
 **expr.fmt.debug.1** A hole `{e:?}` writes `e`'s `Debug` in place of its `Display`. The
-prelude's `Debug`, `fn fmt(&self, out: &mut String)`, writes a value as Moddil source does: text
+prelude's `Debug`, `fn fmt(&self, out: &mut dyn TextWrite)`, writes a value as Moddil source does: text
 and characters in quotes and escaped, `[1, 2]`, `Some(x)`, `(a, b)`; `int`, `bool`, `char`, `str`,
 `String`, `()`, slices, arrays, `Vec`, `Option`, `Result`, pairs, and the core mod's maps
 (`{k: v}`) and sets implement it.

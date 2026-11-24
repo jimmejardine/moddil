@@ -34,8 +34,8 @@ impl NetError {
 }
 
 impl Display for NetError {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(&self.reason);
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str(&self.reason);
     }
 }
 
@@ -65,8 +65,8 @@ impl Url {
 }
 
 impl Display for Url {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(&self.text);
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str(&self.text);
     }
 }
 

@@ -151,16 +151,16 @@ impl<T> Default for PersistentList<T> {
 }
 
 impl<T: Debug> Debug for PersistentList<T> {
-    fn fmt(&self, out: &mut String) {
-        out.push('[');
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_char('[');
         let mut first = true;
         for x in self.iter() {
             if !first {
-                out.push_str(", ");
+                out.write_str(", ");
             }
             first = false;
             Debug::fmt(x, out);
         }
-        out.push(']');
+        out.write_char(']');
     }
 }

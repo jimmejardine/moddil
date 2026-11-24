@@ -140,7 +140,7 @@ impl DecodeError {
 }
 
 impl Display for DecodeError {
-    fn fmt(&self, out: &mut String) {
-        out.push_str(&self.reason);
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str(&self.reason);
     }
 }

@@ -209,35 +209,35 @@ impl Hash for BigDecimal {
 
 /// At its scale: `-0.050` for unscaled -50 at scale 3.
 impl Display for BigDecimal {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         let digits = self.unscaled.abs().to_string();
         if self.unscaled.is_negative() {
-            out.push('-');
+            out.write_char('-');
         }
         if self.scale == 0 {
-            out.push_str(&digits);
+            out.write_str(&digits);
             return;
         }
         let n = digits.len();
         if n <= self.scale {
-            out.push_str("0.");
+            out.write_str("0.");
             let mut pad = self.scale - n;
             while pad > 0 {
-                out.push('0');
+                out.write_char('0');
                 pad -= 1;
             }
-            out.push_str(&digits);
+            out.write_str(&digits);
         } else {
             let d: &str = &digits;
-            out.push_str(d.bytes_between(0, n - self.scale));
-            out.push('.');
-            out.push_str(d.bytes_between(n - self.scale, n));
+            out.write_str(d.bytes_between(0, n - self.scale));
+            out.write_char('.');
+            out.write_str(d.bytes_between(n - self.scale, n));
         }
     }
 }
 
 impl Debug for BigDecimal {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         Display::fmt(self, out);
     }
 }

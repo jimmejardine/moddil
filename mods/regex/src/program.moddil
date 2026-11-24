@@ -46,11 +46,11 @@ impl RegexError {
 }
 
 impl Display for RegexError {
-    fn fmt(&self, out: &mut String) {
-        out.push_str("at character ");
-        out.push_str(&self.at.to_string());
-        out.push_str(": ");
-        out.push_str(&self.reason);
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str("at character ");
+        out.write_str(&self.at.to_string());
+        out.write_str(": ");
+        out.write_str(&self.reason);
     }
 }
 

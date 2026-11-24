@@ -64,14 +64,14 @@ impl TimeOfDay {
 
 /// `HH:MM:SS`, with as many digits of fraction as the nanoseconds need (none, 3, 6 or 9).
 impl Display for TimeOfDay {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         padded(out, self.hour, 2);
-        out.push(':');
+        out.write_char(':');
         padded(out, self.minute, 2);
-        out.push(':');
+        out.write_char(':');
         padded(out, self.second, 2);
         if self.nano != 0 {
-            out.push('.');
+            out.write_char('.');
             if self.nano % 1000000 == 0 {
                 padded(out, self.nano / 1000000, 3);
             } else if self.nano % 1000 == 0 {
@@ -111,11 +111,11 @@ impl DateTime {
 
 /// RFC 3339 in UTC: `2023-11-14T22:13:20Z`.
 impl Display for DateTime {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         Display::fmt(&self.date, out);
-        out.push('T');
+        out.write_char('T');
         Display::fmt(&self.time, out);
-        out.push('Z');
+        out.write_char('Z');
     }
 }
 
@@ -231,7 +231,7 @@ impl Timestamp {
 
 /// RFC 3339 in UTC.
 impl Display for Timestamp {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         Display::fmt(&self.to_date_time(), out);
     }
 }

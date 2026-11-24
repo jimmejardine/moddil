@@ -287,13 +287,13 @@ impl Hash for BigInt {
 
 /// In decimal.
 impl Display for BigInt {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         if self.mag.is_empty() {
-            out.push('0');
+            out.write_char('0');
             return;
         }
         if self.neg {
-            out.push('-');
+            out.write_char('-');
         }
         // Nine decimal digits at a time, least significant first.
         let mut chunks: Vec<int> = Vec::new();
@@ -302,22 +302,22 @@ impl Display for BigInt {
             chunks.push(mag::div_small(&mut m, 1000000000));
         }
         let mut i = chunks.len() - 1;
-        out.push_str(chunks[i].text());
+        out.write_str(chunks[i].text());
         while i > 0 {
             i -= 1;
             let c = chunks[i];
             let mut pad = 100000000;
             while pad > 1 && c < pad {
-                out.push('0');
+                out.write_char('0');
                 pad = pad / 10;
             }
-            out.push_str(c.text());
+            out.write_str(c.text());
         }
     }
 }
 
 impl Debug for BigInt {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         Display::fmt(self, out);
     }
 }

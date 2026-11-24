@@ -149,17 +149,17 @@ impl Hash for Rational {
 
 /// `n/d`, or `n` for an integer.
 impl Display for Rational {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         Display::fmt(&self.num, out);
         if !self.is_integer() {
-            out.push('/');
+            out.write_char('/');
             Display::fmt(&self.den, out);
         }
     }
 }
 
 impl Debug for Rational {
-    fn fmt(&self, out: &mut String) {
+    fn fmt(&self, out: &mut dyn TextWrite) {
         Display::fmt(self, out);
     }
 }
