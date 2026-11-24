@@ -1,3 +1,6 @@
+// Part of the prelude (`../prelude.md`): iteration: `Iterator`, its adapters, `FromIterator`,
+// the ranges, and the slice and array iterators.
+
 // Iteration (`expr.for.1`): `for p in e` calls `IntoIterator::into_iter(e)`, then `next` until
 // it gives `None`.
 

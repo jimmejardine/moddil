@@ -1,3 +1,5 @@
+// Part of the prelude (`../prelude.md`): `Debug` and `Default`.
+
 // How a value is shown to a developer (`expr.fmt.debug.1`): by `{x:?}` in `fmt"…"`, written as
 // Moddil source writes it.
 trait Debug {

@@ -1,3 +1,5 @@
+// Part of the prelude (`../prelude.md`): scopes and tasks, channels and time.
+
 // Structured concurrency (`task.scope.1`): `scope` runs its body as its first task, with a handle
 // further tasks are spawned into, and ends once every one of them has. A task's errors go to its
 // `join`; one that fails with its `Task` dropped, or a failing body, fails the scope, whose other

@@ -1,3 +1,5 @@
+// Part of the prelude (`../prelude.md`): the float functions.
+
 // The float functions (`num.float.fn.1`): the same bits on every machine.
 impl f32 {
     #[intrinsic]

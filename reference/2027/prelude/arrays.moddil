@@ -1,3 +1,5 @@
+// Part of the prelude (`../prelude.md`): arrays and slices.
+
 // Arrays and slices.
 
 impl<T> [T] {

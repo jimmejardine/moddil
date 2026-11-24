@@ -1,3 +1,6 @@
+// Part of the prelude (`../prelude.md`): conversions between the numbers, how floats round,
+// and `RangeError`.
+
 // What a number converts to (`num.convert.1`): `int`, the sized integers and the floats.
 trait Number: Copy {}
 

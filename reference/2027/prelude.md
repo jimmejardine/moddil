@@ -2,7 +2,24 @@
 
 The prelude is the items every module can name without importing them. It is written in Moddil,
 in the files of [`prelude/`](prelude/), which are part of this reference: its items and their
-behaviour are as written there.
+behaviour are as written there. The files are one source, joined in this order:
+
+| File | Holds |
+|---|---|
+| [`core.moddil`](prelude/core.moddil) | `Option`, `Result`, `Clone` and `Copy`, equality and ordering, the operator traits, `Drop` and `drop`, the closure traits |
+| [`int.moddil`](prelude/int.moddil) | `int`, `bool` and `()` |
+| [`numbers.moddil`](prelude/numbers.moddil) | the sized integers and the floats, and `Number` |
+| [`convert.moddil`](prelude/convert.moddil) | conversions between the numbers, rounding, `RangeError` |
+| [`float.moddil`](prelude/float.moddil) | the float functions |
+| [`text.moddil`](prelude/text.moddil) | `Display`, `char`, `str`, `String`, `Pattern`, `Chars`, text positions, UTF-8 |
+| [`fmt.moddil`](prelude/fmt.moddil) | `Debug` and `Default` |
+| [`arrays.moddil`](prelude/arrays.moddil) | arrays and slices |
+| [`iter.moddil`](prelude/iter.moddil) | `Iterator` and `IntoIterator`, the adapters, `FromIterator`, the ranges, the slice and array iterators |
+| [`pointers.moddil`](prelude/pointers.moddil) | `Index`, `Deref`, `Box`, `Rc` |
+| [`collections.moddil`](prelude/collections.moddil) | collection literals, `Buf`, `Vec`, `replace` and `swap`, wrapping arithmetic |
+| [`hash.moddil`](prelude/hash.moddil) | `Hash` and `Hasher` |
+| [`program.moddil`](prelude/program.moddil) | `ExitCode`, `Log`, `RefinementError` and `Refined`, `FnInfo` and `ParamInfo` |
+| [`concurrency.moddil`](prelude/concurrency.moddil) | scopes and tasks, channels, `Duration` and timers |
 
 **prelude.1** The prelude holds `assert` ([`assert`](expressions/assert.md)) and `discard`
 ([Errors](errors.md)), the types `Option`, `Result` and `Ordering`, the traits `Clone`, `Copy`,

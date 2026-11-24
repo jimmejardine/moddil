@@ -1,3 +1,6 @@
+// Part of the prelude (`../prelude.md`): `ExitCode`, the log, refinements, and what a wrapper
+// is told of the function it wraps.
+
 // What `main` can give back (`main.exit.1`): each `sysexits.h` code by name, or another.
 #[derive(Debug, Clone, PartialEq)]
 enum ExitCode {
@@ -84,4 +87,34 @@ impl Log {
 }
 
 const log: Log = Log;
+
+// The error `X::new(v)` fails with when `v` is not an `X` (`refine.new.1`): the refined type's
+// name, its `where` clause as written, and the value as `Debug` shows it.
+#[derive(Debug, Clone, PartialEq)]
+struct RefinementError {
+    ty: String,
+    clause: String,
+    value: String,
+}
+
+// Every refinement implements `Refined`, built in, and nothing else does (`refine.trait.1`):
+// generic code makes a value of a refined type with it. `refine` is the type's `new`.
+trait Refined {
+    type Base;
+    fn refine(v: Self::Base) -> Self with fail(RefinementError);
+}
+
+// What a wrapper is told of the function it wraps (`attr.around.1`): its path, and each
+// parameter's name and type as written.
+#[derive(Debug, Clone, PartialEq)]
+struct FnInfo {
+    path: String,
+    params: Vec<ParamInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ParamInfo {
+    name: String,
+    ty: String,
+}
 

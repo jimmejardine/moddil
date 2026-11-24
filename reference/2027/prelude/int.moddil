@@ -1,3 +1,5 @@
+// Part of the prelude (`../prelude.md`): `int`, `bool` and `()`.
+
 // `int`.
 
 impl Clone for int {
@@ -104,4 +106,65 @@ impl Not for int {
         !self
     }
 }
+
+// `bool`: `false` orders before `true`.
+
+impl Clone for bool {
+    fn clone(&self) -> bool {
+        *self
+    }
+}
+
+impl Copy for bool {}
+
+impl PartialEq for bool {
+    fn eq(&self, other: &bool) -> bool {
+        *self == *other
+    }
+}
+
+impl Eq for bool {}
+
+impl PartialOrd for bool {
+    fn partial_cmp(&self, other: &bool) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for bool {
+    fn cmp(&self, other: &bool) -> Ordering {
+        if *self == *other {
+            Ordering::Equal
+        } else if *other {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        }
+    }
+}
+
+impl Not for bool {
+    type Output = bool;
+    fn not(self) -> bool {
+        !self
+    }
+}
+
+// `()`.
+
+impl Clone for () {
+    fn clone(&self) -> () {
+        ()
+    }
+}
+
+impl Copy for () {}
+
+impl PartialEq for () {
+    fn eq(&self, other: &()) -> bool {
+        true
+    }
+}
+
+impl Eq for () {}
 

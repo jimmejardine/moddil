@@ -1,7 +1,7 @@
-// The prelude: the items every Moddil file can name without importing them (`prelude.md`).
+// The prelude: the items every Moddil file can name without importing them (`../prelude.md`).
 //
-// The compiler and the reference interpreter both read this file. A file may not define an item
-// with the same name as one of these.
+// The compiler and the reference interpreter both read the files of this directory, joined. A
+// file may not define an item with the same name as one of these.
 
 // Optional values.
 

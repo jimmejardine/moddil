@@ -1,3 +1,5 @@
+// Part of the prelude (`../prelude.md`): `Index`, `Deref`, `Box` and `Rc`.
+
 // Indexing: `xs[i]` on a type other than an array or slice is `*xs.index(i)`, or
 // `*xs.index_mut(i)` where the element is changed.
 

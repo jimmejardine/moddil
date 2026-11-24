@@ -1,3 +1,5 @@
+// Part of the prelude (`../prelude.md`): the sized integers and the floats, and `Number`.
+
 // The sized integers and the floats (`num.types.1`): each is `Copy`, compares, and has the
 // arithmetic operators, built in on two values of the type. The integers are `Eq` and `Ord`; the
 // floats only `PartialEq` and `PartialOrd`, as IEEE 754 says (NaN is unordered).

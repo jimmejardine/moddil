@@ -1,3 +1,6 @@
+// Part of the prelude (`../prelude.md`): collection literals, `Buf`, `Vec`, `replace` and
+// `swap`, and wrapping arithmetic.
+
 // Collection literals (`expr.array.from.1`): `[a, b]` and `[x; n]` make the type the context
 // expects, if it implements this.
 trait FromArrayLiteral<T> {

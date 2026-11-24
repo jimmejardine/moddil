@@ -1,3 +1,5 @@
+// Part of the prelude (`../prelude.md`): `Hash` and `Hasher`.
+
 // Hashing (`coll.hash.1`): a type says what it hashes, a `Hasher` how.
 trait Hasher {
     fn write_int(&mut self, x: int);
