@@ -29,6 +29,13 @@ Nothing else implements it, and an impl of it is an error (E0406).
 **refine.lit.1** A literal where an `X` is expected (a `let`'s type, a parameter, a function's
 result) is an `X`, and compiling checks that `p` holds for it (E1101).
 
+**refine.inline.1** A refinement may be written in a type, in parentheses: `(u32 where self >= 1)`,
+in a parameter, a field, a result or a `let`'s type. It is a refinement of its own, without a
+name, shown as written: its values come from literals (**refine.lit.1**) and from values of it,
+so a value that must be checked when it runs is given a named refinement and its `X::new`. `type`
+items may name each other in any order.
+
 **refine.pat.1** At the top of a `match` arm, `q: X` matches a value of `X`'s base for which `p`
-holds, and then matches it as an `X` with `q`; the base is `Copy`, for now. Exhaustiveness
-treats the arm as one with a guard: it covers nothing.
+holds, and then matches it as an `X` with `q`. A base that is not `Copy` is given to the
+predicate and back, so the value is the same for the next arm; matched through a borrow it must
+be `Copy`, for now (I0001). Exhaustiveness treats the arm as one with a guard: it covers nothing.

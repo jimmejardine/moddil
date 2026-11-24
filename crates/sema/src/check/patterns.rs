@@ -100,11 +100,12 @@ impl Checker<'_> {
                     );
                     return;
                 }
-                // The predicate runs on a copy of the value.
-                if !self.solver.is_copy(&base) && base != Ty::Error {
+                // The predicate runs on a copy of the value, or on the value itself, which it
+                // gives back; one matched through a borrow cannot be moved there.
+                if !self.solver.is_copy(&base) && base != Ty::Error && mode.is_some() {
                     self.out.diagnostics.push(crate::Diagnostic::unsupported(
                         range,
-                        "a refinement test of a value that is not `Copy`",
+                        "a refinement test, through a borrow, of a value that is not `Copy`",
                     ));
                 }
                 self.check_pat(pat, &refined, mode);

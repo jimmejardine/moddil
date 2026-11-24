@@ -157,8 +157,8 @@ L)
 
 **P12. Contracts and refinements** (`crates/sema`, `crates/mir`; M)
 - `invariant`; `requires always`; contracts on trait methods.
-- Parenthesised refinements in types (`(u32 where self >= 1)`); a refinement pattern whose base
-  is not `Copy`; an alias naming an alias after it.
+- A refinement pattern, matched through a borrow, whose base is not `Copy` (it would need the
+  value cloned, or `holds` to take a borrow).
 
 **P13. Wrappers** (`crates/sema` `wrap.rs`, `crates/moddil`; M)
 - Wrapping methods (a field to hold `self`).

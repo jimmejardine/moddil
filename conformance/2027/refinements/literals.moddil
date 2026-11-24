@@ -13,3 +13,12 @@ fn fine() -> Port {
 test "literals are checked when compiling" {
     let p: Port = 70;                       //~ E1101
 }
+
+// A refinement written in a type checks its literals the same way (`refine.inline.1`).
+fn wants_two(x: (int where self >= 2)) -> int {
+    x
+}
+
+fn too_small() -> int {
+    wants_two(1)                            //~ E1101
+}

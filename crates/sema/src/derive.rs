@@ -34,6 +34,12 @@ pub(crate) struct Expansion {
     pub origins: Vec<(TextRange, Src, TextRange)>,
 }
 
+/// The name of the hidden `type` item a refinement written in a type at `range` of its file is
+/// (`refine.inline.1`).
+pub(crate) fn inline_refinement_name(range: TextRange) -> String {
+    format!("__Refined_{}_{}", range.start, range.end)
+}
+
 /// A struct's or variant's fields, as a derive sees them.
 struct Variant {
     /// How it is written in a pattern or expression: `Point`, `Shape::Circle`.
@@ -249,6 +255,33 @@ pub(crate) fn expand<'t>(
 ) -> Expansion {
     let mut out = Expansion::default();
     for (src, _text, node) in items {
+        // A refinement written in a type, `(u32 where self >= 1)` (`refine.inline.1`): a hidden
+        // `type` item of its own, which the type names by where it is.
+        if let Src::File(_) = src {
+            for r in node
+                .descendants()
+                .into_iter()
+                .filter(|d| d.kind() == K::REFINED_TYPE)
+            {
+                let base = r.children().find_map(ast::Type::cast);
+                let pred = r.children().find_map(ast::Expr::cast);
+                let (Some(base), Some(pred)) = (base, pred) else {
+                    continue;
+                };
+                let line = format!(
+                    "type {} = {} where {};",
+                    inline_refinement_name(r.text_range()),
+                    base.syntax().text(),
+                    pred.syntax().text()
+                );
+                let start = out.text.len() as u32;
+                out.text.push_str(&line);
+                let end = out.text.len() as u32;
+                out.text.push('\n');
+                out.origins
+                    .push((TextRange::new(start, end), src, r.text_range()));
+            }
+        }
         // A prelude derive function's `#[derive_for(…)]`: its template's impl for each type
         // listed (`comptime.derive.for.1`). Elsewhere it is reported where it is collected.
         if node.kind() == K::FN_ITEM

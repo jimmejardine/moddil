@@ -276,6 +276,18 @@ pub(crate) fn resolve_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnos
             ));
             Ty::Error
         }
+        // `(u32 where self >= 1)`: the hidden `type` item the expansion made of it
+        // (`refine.inline.1`).
+        ast::Type::Refined(_) => {
+            let name = crate::derive::inline_refinement_name(range);
+            match scope.tree.lookup(scope.module, &name, false) {
+                Some(Def::Type(t)) => type_of_item(scope.tree, t),
+                _ => {
+                    diags.push(Diagnostic::unsupported(range, "this refinement, here,"));
+                    Ty::Error
+                }
+            }
+        }
         ast::Type::Infer(_) if scope.holes => hole(),
         ast::Type::Infer(_) => {
             diags.push(Diagnostic::error(

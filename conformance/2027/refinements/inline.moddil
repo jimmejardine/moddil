@@ -1,0 +1,48 @@
+// covers: refine.inline.1, refine.lit.1, refine.pat.1
+
+// A refinement written in a type, in a parameter, a field and a result.
+fn halve(x: (int where self >= 2)) -> int {
+    x / 2
+}
+
+struct Conf {
+    workers: (int where self >= 1 && self <= 64),
+}
+
+fn one() -> (int where self >= 1) {
+    1
+}
+
+// A later alias, and a refinement over it (`type` items in any order).
+type Big = Small where self > 10;
+type Small = Wide;
+type Wide = int;
+
+// A refinement test of a value that is not `Copy`: it is given back, for the other arms.
+type Name = String where self.len() > 2;
+
+fn kind(s: String) -> String {
+    match s {
+        n: Name => fmt"name {n}",
+        other => fmt"short {other}",
+    }
+}
+
+test "a refinement in a type checks its literals" {
+    halve(10)                               // => 5
+    ;
+    let c = Conf { workers: 8 };
+    c.workers + one()                       // => 9
+}
+
+test "type items may name ones written after them" {
+    let b: Big = Big::new(50) ?! "50 is past 10";
+    let w: Wide = 3;
+    b + w                                   // => 53
+}
+
+test "a refinement test of a String" {
+    kind("alice".to_string())               // => "name alice"
+    ;
+    kind("al".to_string())                  // => "short al"
+}

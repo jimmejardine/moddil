@@ -72,7 +72,8 @@ impl Builder<'_> {
             PatKind::Missing | PatKind::Wild | PatKind::Unit => {}
             // The error's type is tested before (`try_catch`); here the pattern matches it.
             PatKind::OfType { pat: inner, .. } => self.test_pat(inner, place, fail),
-            // `p: X`: `X::holds` on (a copy of) the value, then `p`.
+            // `p: X`: `X::holds` on (a copy of) the value, then `p`. A value that is not `Copy`
+            // is moved into `holds` and put back from what it gives back.
             PatKind::Refined {
                 refinement,
                 pat: inner,
@@ -83,8 +84,14 @@ impl Builder<'_> {
                     .expect("a refinement")
                     .holds;
                 let base = self.items.types[refinement as usize].ty.clone();
+                let copy = self.is_copy(&base);
                 let ok = self.temp(Ty::tuple(vec![Ty::Bool, base]));
                 let range = self.hir.pats[pat].range;
+                let value = if copy {
+                    Operand::Copy(place.clone())
+                } else {
+                    Operand::Move(place.clone())
+                };
                 self.call_into(
                     None,
                     moddil_sema::Callee::Fn {
@@ -92,9 +99,15 @@ impl Builder<'_> {
                         args: Vec::new(),
                     },
                     Place::local(ok),
-                    vec![Operand::Copy(place.clone())],
+                    vec![value],
                     range,
                 );
+                if !copy {
+                    self.cfg.assign(
+                        place.clone(),
+                        Rvalue::Use(Operand::Move(Place::local(ok).field(1))),
+                    );
+                }
                 self.cfg
                     .branch(Operand::Copy(Place::local(ok).field(0)), fail);
                 self.test_pat(inner, place, fail);

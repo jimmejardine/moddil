@@ -538,7 +538,9 @@ impl Collector<'_> {
                 }
             }
         }
-        for (k, (src, module, node)) in nodes.types.iter().enumerate() {
+        // Each after the ones its type names, so an alias may name one written after it.
+        for k in type_order(&nodes.types) {
+            let (src, module, node) = &nodes.types[k];
             self.enter(*src, *module);
             self.type_item(k, *src, node);
         }
@@ -881,6 +883,19 @@ impl Collector<'_> {
         };
         let index = self.tree.types.len() as u32;
         self.declare(src, &name, Def::Type(index), vis, name_range);
+        // A refinement written in a type is shown as written: `(u32 where self >= 1)`.
+        let name = if name.starts_with("__Refined_") {
+            let base = node.children().find_map(ast::Type::cast);
+            let pred = node.children().find_map(ast::Expr::cast);
+            match (base, pred) {
+                (Some(b), Some(p)) => {
+                    format!("({} where {})", b.syntax().text(), p.syntax().text())
+                }
+                _ => name,
+            }
+        } else {
+            name
+        };
         self.tree.types.push(crate::items::TypeDef {
             name,
             name_range,
@@ -1079,4 +1094,58 @@ impl Collector<'_> {
 fn derived_trait(node: &SyntaxNode) -> Option<String> {
     let t = node.children().find_map(ast::Type::cast)?;
     Some(t.syntax().text().to_string().trim().to_string())
+}
+
+/// The order to resolve `type` items in: each after the `type` items of its module that its type
+/// names by a one-segment path (depth first, a cycle stopping where it closes), so an item may
+/// name one written after it.
+fn type_order(types: &[(Src, u32, SyntaxNode)]) -> Vec<usize> {
+    let name = |n: &SyntaxNode| {
+        n.child(K::NAME)
+            .and_then(ast::Name::cast)
+            .map(|x| x.text())
+            .unwrap_or_default()
+    };
+    let names: Vec<String> = types.iter().map(|(_, _, n)| name(n)).collect();
+    // The other `type` items each one's type names.
+    let deps: Vec<Vec<usize>> = types
+        .iter()
+        .map(|(src, module, node)| {
+            let Some(t) = node.children().find_map(ast::Type::cast) else {
+                return Vec::new();
+            };
+            t.syntax()
+                .descendants()
+                .into_iter()
+                .filter(|d| d.kind() == K::PATH)
+                .filter_map(|p| {
+                    let segs: Vec<SyntaxNode> = p
+                        .children()
+                        .filter(|c| c.kind() == K::PATH_SEGMENT)
+                        .collect();
+                    let [one] = segs.as_slice() else { return None };
+                    let id = one.child_tokens().find(|t| t.kind() == K::IDENT)?;
+                    (0..types.len()).find(|&j| {
+                        names[j] == id.text() && types[j].0 == *src && types[j].1 == *module
+                    })
+                })
+                .collect()
+        })
+        .collect();
+    let mut order = Vec::new();
+    let mut seen = vec![false; types.len()];
+    fn visit(k: usize, deps: &[Vec<usize>], seen: &mut [bool], order: &mut Vec<usize>) {
+        if seen[k] {
+            return;
+        }
+        seen[k] = true;
+        for &d in &deps[k] {
+            visit(d, deps, seen, order);
+        }
+        order.push(k);
+    }
+    for k in 0..types.len() {
+        visit(k, &deps, &mut seen, &mut order);
+    }
+    order
 }
