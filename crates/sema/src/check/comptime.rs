@@ -6,7 +6,8 @@ use crate::hir::ExprKind;
 use crate::{Callee, Code, Db, Diagnostic, Item, Program, Ty};
 
 /// The contracts of `owner`'s body are pure: no assignment, and no call of a function with an
-/// effect or an error (E1102); and `old(e)` is of a `Copy` value (E1103).
+/// effect or an error (E1102); and `old(e)` is of a `Clone` value (E1103), kept as a copy or a
+/// clone.
 fn contracts(db: &dyn Db, program: Program, owner: crate::Owner<'_>) -> Vec<Diagnostic> {
     let items = crate::item_tree(db, program);
     let fx = crate::effects(db, program);
@@ -49,13 +50,20 @@ fn contracts(db: &dyn Db, program: Program, owner: crate::Owner<'_>) -> Vec<Diag
         }
     }
     let mut solver = crate::traits::Solver::new(items, &[]);
+    let clone = items.lang_ref("Clone");
     for &(local, e) in &body.olds {
         let t = types.local(local);
-        if !t.has_error() && !t.has_param() && !solver.is_copy(&t) {
+        let cloned = clone
+            .as_ref()
+            .is_some_and(|c| matches!(solver.implements(&t, c), crate::traits::Answer::Yes(_)));
+        if !t.has_error() && !t.has_param() && !solver.is_copy(&t) && !cloned {
             ds.push(Diagnostic::error(
                 Code::E1103,
                 body.exprs[e].range,
-                format!("`old` keeps a copy of the value on entry, so it is `Copy`; `{t}` is not"),
+                format!(
+                    "`old` keeps the value on entry, a copy or a clone, so it is `Clone`; `{t}` \
+                     is not"
+                ),
             ));
         }
     }

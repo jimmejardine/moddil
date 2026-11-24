@@ -29,10 +29,12 @@ fn effect_in_contract() -> int with t: Time
     0
 }
 
-fn old_of_text(s: &mut String)
-    ensures s.len() > old(s.clone()).len()  //~ E1103
+struct Token { n: int }
+
+fn old_of_what_cannot_be_cloned(t: &mut Token)
+    ensures t.n > old(*t).n                 //~ E1103
 {
-    s.push('x');
+    t.n += 1;
 }
 
 fn assigns(mut x: int) -> int

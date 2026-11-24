@@ -164,8 +164,7 @@ L)
 - A const holding a borrow of static data beyond text.
 
 **P12. Contracts and refinements** (`crates/sema`, `crates/mir`; M)
-- `invariant`; `requires always`; contracts on trait methods; `old(e)` of a value that is not
-  `Copy` (by clone).
+- `invariant`; `requires always`; contracts on trait methods.
 - Parenthesised refinements in types (`(u32 where self >= 1)`); a refinement pattern whose base
   is not `Copy`; an alias naming an alias after it.
 

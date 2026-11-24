@@ -19,4 +19,5 @@ on `None`), each `ensures` is evaluated with `result` naming the value returned;
 `false` traps at the clause (a broken postcondition). Leaving with an error checks none.
 
 **contract.old.1** In an `ensures`, `old(e)` is the value `e` had on entry: `e` is evaluated then,
-and must be of a `Copy` type, for now (E1103).
+and kept as a copy if its type is `Copy`, or else as a clone (`e` itself is not moved), so its
+type is `Clone` (E1103).

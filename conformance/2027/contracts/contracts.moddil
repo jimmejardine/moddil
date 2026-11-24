@@ -88,3 +88,27 @@ test "a broken precondition traps where it is called" {
 test "a broken postcondition traps at its clause" {
     broken(1);
 }
+
+// `old` of a value that is `Clone` but not `Copy` keeps a clone of it on entry, leaving it in
+// place for the body.
+fn append(s: &mut String, x: char)
+    ensures s.len() == old(s.clone()).len() + x.len_utf8()
+{
+    s.push(x);
+}
+
+fn grow(v: &mut Vec<int>, n: int)
+    ensures v.len() == old(v.clone()).len() + 1 && old(v.clone()).len() < v.len()
+{
+    v.push(n);
+}
+
+test "old of a cloned value" {
+    let mut s = "ab".to_string();
+    append(&mut s, 'é');
+    s                                       // => "abé"
+    ;
+    let mut v: Vec<int> = [1, 2];
+    grow(&mut v, 3);
+    v.len()                                 // => 3
+}

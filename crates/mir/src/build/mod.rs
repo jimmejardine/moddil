@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 
 use moddil_sema::hir::{self, ExprId};
-use moddil_sema::{Container, Db, Inference, Item, ItemTree, Owner, Solver, Src, Ty};
+use moddil_sema::{Callee, Container, Db, Inference, Item, ItemTree, Owner, Solver, Src, Ty};
 use moddil_syntax::TextRange;
 
 use crate::{Body, Const, Local, Operand, Place, Rvalue, Statement, Terminator, TrapClass};
@@ -116,7 +116,7 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
     }
     for &(local, e) in &hir.olds {
         let l = b.local(local);
-        b.eval_into(l, e);
+        b.keep_old(l, e);
     }
     if let Some(root) = hir.root {
         if let Item::Test(_) = owner.item(db) {
@@ -331,7 +331,7 @@ fn selectables(
                 hir::ExprKind::Question(c) => c,
                 _ => arm.op,
             };
-            let Some(f) = types.callee(call).map(moddil_sema::Callee::func) else {
+            let Some(f) = types.callee(call).map(Callee::func) else {
                 continue;
             };
             if !items.fns[f as usize].selectable || out.contains_key(&f) {
@@ -467,6 +467,38 @@ impl Builder<'_> {
 
     fn is_copy(&mut self, ty: &Ty) -> bool {
         self.solver.is_copy(ty)
+    }
+
+    /// `old(e)`'s value on entry (`contract.old.1`) into `dest`: a copy of `e`, or, for a value
+    /// that is `Clone` but not `Copy`, its clone, so `e` itself is left as it is.
+    fn keep_old(&mut self, dest: Local, e: ExprId) {
+        let t = self.ty(e);
+        let clone = self.items.lang("Clone").and_then(|tr| {
+            self.items.traits[tr as usize]
+                .methods
+                .iter()
+                .copied()
+                .find(|&m| self.items.fns[m as usize].name == "clone")
+        });
+        let Some(func) = clone.filter(|_| !self.is_copy(&t)) else {
+            self.eval_into(dest, e);
+            return;
+        };
+        let place = self.place(e);
+        let r = self.temp(Ty::reference(false, t.clone()));
+        self.cfg.assign(r, Rvalue::Ref(false, place));
+        let callee = Callee::Trait {
+            func,
+            args: vec![t],
+        };
+        let range = self.range(e);
+        self.call_into(
+            None,
+            callee,
+            Place::local(dest),
+            vec![Operand::Move(Place::local(r))],
+            range,
+        );
     }
 }
 
