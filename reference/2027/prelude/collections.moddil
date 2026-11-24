@@ -157,6 +157,10 @@ impl<T> Vec<T> {
     fn iter(&self) -> Iter<T> {
         self.buf.as_slice().iter()
     }
+
+    fn iter_mut(&mut self) -> IterMut<T> {
+        self.buf.as_mut_slice().iter_mut()
+    }
 }
 
 impl<T: PartialEq> Vec<T> {
@@ -238,6 +242,14 @@ impl<T> IntoIterator for &Vec<T> {
     type IntoIter = Iter<T>;
     fn into_iter(self) -> Iter<T> {
         self.iter()
+    }
+}
+
+impl<T> IntoIterator for &mut Vec<T> {
+    type Item = &mut T;
+    type IntoIter = IterMut<T>;
+    fn into_iter(self) -> IterMut<T> {
+        self.iter_mut()
     }
 }
 

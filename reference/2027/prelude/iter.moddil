@@ -192,9 +192,33 @@ impl<T> Iterator for Iter<T> {
     }
 }
 
+// The elements of a slice, each borrowed with `&mut` in order (`iter.slice.2`): what each
+// borrow points to is the slice's, so the borrows are of different elements and live together.
+view IterMut<T> {
+    slice: &mut [T],
+    pos: int,
+}
+
+impl<T> Iterator for IterMut<T> {
+    type Item = &mut T;
+    fn next(&mut self) -> Option<&mut T> {
+        if self.pos < self.slice.len() {
+            let i = self.pos;
+            self.pos += 1;
+            Some(&mut self.slice[i])
+        } else {
+            None
+        }
+    }
+}
+
 impl<T> [T] {
     fn iter(&self) -> Iter<T> {
         Iter { slice: self, pos: 0 }
+    }
+
+    fn iter_mut(&mut self) -> IterMut<T> {
+        IterMut { slice: self, pos: 0 }
     }
 
     // The elements before `at` and from `at` on (`expr.slice.1`); traps if `at` is past the end.
@@ -217,6 +241,11 @@ impl<T> [T] {
 impl<T, const N: int> [T; N] {
     fn iter(&self) -> Iter<T> {
         Iter { slice: self, pos: 0 }
+    }
+
+    fn iter_mut(&mut self) -> IterMut<T> {
+        let all: &mut [T] = &mut self[..];
+        all.iter_mut()
     }
 
     fn split_at(&self, at: int) -> (&[T], &[T]) {
@@ -242,6 +271,22 @@ impl<T, const N: int> IntoIterator for &[T; N] {
     type IntoIter = Iter<T>;
     fn into_iter(self) -> Iter<T> {
         self.iter()
+    }
+}
+
+impl<T> IntoIterator for &mut [T] {
+    type Item = &mut T;
+    type IntoIter = IterMut<T>;
+    fn into_iter(self) -> IterMut<T> {
+        self.iter_mut()
+    }
+}
+
+impl<T, const N: int> IntoIterator for &mut [T; N] {
+    type Item = &mut T;
+    type IntoIter = IterMut<T>;
+    fn into_iter(self) -> IterMut<T> {
+        self.iter_mut()
     }
 }
 

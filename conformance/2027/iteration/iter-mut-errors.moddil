@@ -1,0 +1,17 @@
+// covers: iter.slice.2
+// While `IterMut`'s borrows live, the `Vec` is borrowed (`iter.slice.2`).
+fn grow(v: &mut Vec<int>) {
+    for x in &mut *v {
+        v.push(*x);                                     //~ E0305
+    }
+}
+
+fn keep(v: &mut Vec<int>) -> int {
+    let mut it = v.iter_mut();
+    let a = it.next();
+    v.push(1);                                          //~ E0305
+    match a {
+        Some(x) => *x,
+        None => 0,
+    }
+}

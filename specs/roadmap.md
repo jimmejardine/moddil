@@ -121,10 +121,13 @@ when part of one is, remove that part.
   `+%`: `WrappingInt` now gives them, so the intrinsics and the runners' code for them go.
 - `Display` for `Wrapping<T>`, once `Display` writes to a `Write` sink (P3).
 
-**P6. Arrays and iteration** (prelude `arrays` and `iter`, `crates/sema`, the runners' clone glue;
-M)
-- `IterMut`.
-- `[x; n]`, and an array's `Clone`, for elements that are only `Clone`.
+**P6. Arrays and iteration** (prelude `arrays` and `iter`, `crates/sema`, `crates/mir`, the
+runners; M)
+- `[x; n]` for elements that are only `Clone`: a loop in MIR cloning the value into each
+  element but the last (a const parameter's length too), and a trap in a clone dropping the
+  elements made so far.
+- An array's `Clone` for elements that are only `Clone` (it is `Clone` only when `Copy`): the
+  same loop, or a `Buf` filled and turned into the array.
 - `Index` beyond `int` (ranges as `Index`).
 
 **P7. Shared and anonymous values** (`crates/sema`, prelude `rc` and `derives`; L)

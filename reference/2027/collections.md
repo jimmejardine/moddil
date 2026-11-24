@@ -34,12 +34,17 @@ names (`let v: Vec<int> = it.collect();`), one that implements `FromIterator<Ite
 **iter.into.1** `IntoIterator`, with `type Item`, `type IntoIter` and
 `fn into_iter(self) -> Self::IntoIter`, is what `for` iterates over
 ([Loops](expressions/loops.md)). Every iterator implements it, as itself; so do `&[T]` and
-`&[T; N]` (borrowing each element, an `&T`), `[T; N]` and `Vec<T>` (giving up each element),
+`&[T; N]` (borrowing each element, an `&T`), `&mut [T]`, `&mut [T; N]` and `&mut Vec<T>`
+(borrowing each with `&mut`, **iter.slice.2**), `[T; N]` and `Vec<T>` (giving up each element),
 `&Vec<T>`, `&HashMap<K, V>` (each entry, a `(&K, &V)`) and `&HashSet<T>`.
 
 **iter.slice.1** `xs.iter()`, for a slice, an array or a `Vec`, is a view of type `Iter<T>` that
 gives a borrow of each element in order ([Views](views.md)). `s.chars()`, for a `str` or `String`,
 gives its characters in order.
+
+**iter.slice.2** `xs.iter_mut()`, for a slice, an array or a `Vec` borrowed with `&mut`, is a view
+of type `IterMut<T>` that gives an `&mut` borrow of each element in order. The borrows are of
+different elements, so they can be held together; while any lives, `xs` is borrowed (E0305).
 
 ## Buffers and vectors
 

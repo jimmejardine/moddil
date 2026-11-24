@@ -1,0 +1,44 @@
+// covers: iter.slice.2, iter.into.1
+
+test "each element of a Vec, an array and a slice, borrowed with &mut" {
+    let mut v: Vec<int> = [1, 2, 3];
+    for x in &mut v {
+        *x = *x * 10;
+    }
+    for x in v.iter_mut() {
+        *x += 1;
+    }
+    v                                       // => [11, 21, 31]
+    ;
+    let mut a: [int; 3] = [1, 2, 3];
+    for x in &mut a {
+        *x = -*x;
+    }
+    let s: &mut [int] = &mut a[1..];
+    for x in s {
+        *x = 0;
+    }
+    a                                       // => [-1, 0, 0]
+}
+
+test "the borrows are of different elements, so they live together" {
+    let mut v: Vec<int> = [1, 2, 3];
+    let mut it = v.iter_mut();
+    let (p, q) = (it.next(), it.next());
+    match (p, q) {
+        (Some(x), Some(y)) => {
+            *x = 5;
+            *y = 6;
+        }
+        _ => {}
+    }
+    v                                       // => [5, 6, 3]
+}
+
+test "elements that own memory" {
+    let mut names: Vec<String> = ["a".to_string(), "b".to_string()];
+    for n in &mut names {
+        n.push_str("!");
+    }
+    names                                   // => ["a!", "b!"]
+}

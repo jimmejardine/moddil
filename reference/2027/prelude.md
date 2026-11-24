@@ -14,7 +14,7 @@ behaviour are as written there. The files are one source, joined in this order:
 | [`text.moddil`](prelude/text.moddil) | `TextWrite`, `Display`, `char`, `str`, `String`, `Pattern`, `Chars`, text positions, UTF-8 |
 | [`fmt.moddil`](prelude/fmt.moddil) | `Debug` and `Default` |
 | [`arrays.moddil`](prelude/arrays.moddil) | arrays and slices |
-| [`iter.moddil`](prelude/iter.moddil) | `Iterator` and `IntoIterator`, the adapters, `FromIterator`, the ranges, the slice and array iterators |
+| [`iter.moddil`](prelude/iter.moddil) | `Iterator` and `IntoIterator`, the adapters, `FromIterator`, the ranges, the slice and array iterators (`Iter`, `IterMut`) |
 | [`pointers.moddil`](prelude/pointers.moddil) | `Index`, `Deref`, `Box`, `Rc` |
 | [`collections.moddil`](prelude/collections.moddil) | collection literals, `Buf`, `Vec`, `replace` and `swap`, wrapping arithmetic, `Wrapping` and `WrappingInt` (**num.wrap.2**) |
 | [`hash.moddil`](prelude/hash.moddil) | `Hash` and `Hasher` |
