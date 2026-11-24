@@ -1037,8 +1037,8 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
         for each entry, O(depth), because a view cannot hold a stack of borrows.
       - **Shortcomings found writing them**, each worked around in the mod and still open unless
         marked fixed:
-        - **No population count:** `int` has no `count_ones`, so the map counts a bitmap's bits
-          with a loop of its own (`ones`).
+        - **Fixed since: no population count.** Every integer type now has `count_ones`
+          (`num.bits.1`), which the map's bitmaps use.
         - **No deref coercion:** a `&Rc<Node>` or a `&Box<T>` is not accepted where a `&Node` or a
           `&T` is expected, as Rust accepts it. The nodes' helpers take `&Rc<Node<T>>` and match
           on `&**n`; `&**n` is written where a `&T` is wanted.

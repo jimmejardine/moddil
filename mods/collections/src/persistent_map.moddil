@@ -40,17 +40,6 @@ impl<K: Clone, V: Clone> Clone for Slot<K, V> {
     }
 }
 
-/// How many bits of `x`, a node's bitmap, are set.
-fn ones(x: int) -> int {
-    let mut x = x;
-    let mut n = 0;
-    while x != 0 {
-        x = x & (x - 1);
-        n += 1;
-    }
-    n
-}
-
 /// The position hash `h` takes at the level of shift `shift`, as a bit.
 fn bit(h: int, shift: int) -> int {
     1 << ((h >> shift) & (WIDTH - 1))
@@ -58,7 +47,7 @@ fn bit(h: int, shift: int) -> int {
 
 /// Where in a node with bitmap `bits` the slot for `b` is.
 fn index(bits: int, b: int) -> int {
-    ones(bits & (b - 1))
+    (bits & (b - 1)).count_ones()
 }
 
 /// A map from keys to values, in hash order, whose updates leave it as it was.

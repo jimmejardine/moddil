@@ -81,6 +81,18 @@ impl int {
         // Dividing back gives `other` exactly if nothing wrapped.
         if r / self == other { Some(r) } else { None }
     }
+
+    // How many of the value's bits are 1, two's complement (`num.bits.1`).
+    fn count_ones(self) -> int {
+        let mut x = self;
+        let mut n = 0;
+        while x != 0 {
+            // Clears the lowest 1 bit.
+            x = x & (x -% 1);
+            n += 1;
+        }
+        n
+    }
 }
 
 impl i8 {
@@ -136,6 +148,18 @@ impl i8 {
         }
         // Dividing back gives `other` exactly if nothing wrapped.
         if r / self == other { Some(r) } else { None }
+    }
+
+    // How many of the value's bits are 1, two's complement (`num.bits.1`).
+    fn count_ones(self) -> int {
+        let mut x = self;
+        let mut n = 0;
+        while x != 0 {
+            // Clears the lowest 1 bit.
+            x = x & (x -% 1);
+            n += 1;
+        }
+        n
     }
 }
 
@@ -193,6 +217,18 @@ impl i16 {
         // Dividing back gives `other` exactly if nothing wrapped.
         if r / self == other { Some(r) } else { None }
     }
+
+    // How many of the value's bits are 1, two's complement (`num.bits.1`).
+    fn count_ones(self) -> int {
+        let mut x = self;
+        let mut n = 0;
+        while x != 0 {
+            // Clears the lowest 1 bit.
+            x = x & (x -% 1);
+            n += 1;
+        }
+        n
+    }
 }
 
 impl i32 {
@@ -248,6 +284,18 @@ impl i32 {
         }
         // Dividing back gives `other` exactly if nothing wrapped.
         if r / self == other { Some(r) } else { None }
+    }
+
+    // How many of the value's bits are 1, two's complement (`num.bits.1`).
+    fn count_ones(self) -> int {
+        let mut x = self;
+        let mut n = 0;
+        while x != 0 {
+            // Clears the lowest 1 bit.
+            x = x & (x -% 1);
+            n += 1;
+        }
+        n
     }
 }
 
@@ -305,6 +353,18 @@ impl i128 {
         // Dividing back gives `other` exactly if nothing wrapped.
         if r / self == other { Some(r) } else { None }
     }
+
+    // How many of the value's bits are 1, two's complement (`num.bits.1`).
+    fn count_ones(self) -> int {
+        let mut x = self;
+        let mut n = 0;
+        while x != 0 {
+            // Clears the lowest 1 bit.
+            x = x & (x -% 1);
+            n += 1;
+        }
+        n
+    }
 }
 
 impl u8 {
@@ -352,6 +412,18 @@ impl u8 {
     fn checked_mul(self, other: u8) -> Option<u8> {
         let r = self *% other;
         if self == 0 || r / self == other { Some(r) } else { None }
+    }
+
+    // How many of the value's bits are 1, two's complement (`num.bits.1`).
+    fn count_ones(self) -> int {
+        let mut x = self;
+        let mut n = 0;
+        while x != 0 {
+            // Clears the lowest 1 bit.
+            x = x & (x -% 1);
+            n += 1;
+        }
+        n
     }
 }
 
@@ -401,6 +473,18 @@ impl u16 {
         let r = self *% other;
         if self == 0 || r / self == other { Some(r) } else { None }
     }
+
+    // How many of the value's bits are 1, two's complement (`num.bits.1`).
+    fn count_ones(self) -> int {
+        let mut x = self;
+        let mut n = 0;
+        while x != 0 {
+            // Clears the lowest 1 bit.
+            x = x & (x -% 1);
+            n += 1;
+        }
+        n
+    }
 }
 
 impl u32 {
@@ -448,6 +532,18 @@ impl u32 {
     fn checked_mul(self, other: u32) -> Option<u32> {
         let r = self *% other;
         if self == 0 || r / self == other { Some(r) } else { None }
+    }
+
+    // How many of the value's bits are 1, two's complement (`num.bits.1`).
+    fn count_ones(self) -> int {
+        let mut x = self;
+        let mut n = 0;
+        while x != 0 {
+            // Clears the lowest 1 bit.
+            x = x & (x -% 1);
+            n += 1;
+        }
+        n
     }
 }
 
@@ -497,6 +593,18 @@ impl u64 {
         let r = self *% other;
         if self == 0 || r / self == other { Some(r) } else { None }
     }
+
+    // How many of the value's bits are 1, two's complement (`num.bits.1`).
+    fn count_ones(self) -> int {
+        let mut x = self;
+        let mut n = 0;
+        while x != 0 {
+            // Clears the lowest 1 bit.
+            x = x & (x -% 1);
+            n += 1;
+        }
+        n
+    }
 }
 
 impl u128 {
@@ -544,6 +652,18 @@ impl u128 {
     fn checked_mul(self, other: u128) -> Option<u128> {
         let r = self *% other;
         if self == 0 || r / self == other { Some(r) } else { None }
+    }
+
+    // How many of the value's bits are 1, two's complement (`num.bits.1`).
+    fn count_ones(self) -> int {
+        let mut x = self;
+        let mut n = 0;
+        while x != 0 {
+            // Clears the lowest 1 bit.
+            x = x & (x -% 1);
+            n += 1;
+        }
+        n
     }
 }
 

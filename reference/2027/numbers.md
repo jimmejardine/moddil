@@ -43,6 +43,9 @@ the type's width instead of trapping: the result is the exact one modulo 2ⁿ, a
 `a.checked_mul(b)` are `Some` of the result, or `None` where the operator would trap on
 overflow.
 
+**num.bits.1** On every integer type, `a.count_ones()` is how many of `a`'s bits are 1, as an
+`int`, in the type's width and two's complement: `(-1i8).count_ones()` is 8.
+
 **num.widen.1** A number converts implicitly where a number of another type is expected only if
 that type holds every value of its own exactly: a signed integer to a wider signed one, an unsigned
 integer to a wider unsigned or a strictly wider signed one, `f32` to `f64`, and an integer to a
