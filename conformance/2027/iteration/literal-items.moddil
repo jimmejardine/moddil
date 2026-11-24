@@ -1,0 +1,38 @@
+// covers: iter.fails.1, generic.infer.1, num.lit.1
+
+// A generic iterator built from a literal: its impl is known before the literal's type is
+// settled (every number type is `Copy` and `Clone`), so `next` cannot fail, as `Fails` says.
+
+struct Once<T> {
+    v: T,
+    done: bool,
+}
+
+impl<T: Copy> Iterator for Once<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        if self.done {
+            return None;
+        }
+        self.done = true;
+        Some(self.v)
+    }
+}
+
+impl<T: Clone> Once<T> {
+    fn peek(&self) -> T {
+        self.v.clone()
+    }
+}
+
+test "an iterator over a literal's value" {
+    let mut o = Once { v: 3, done: false };
+    o.peek()                                // => 3
+    ;
+    o.next()                                // => Some(3)
+    ;
+    o.next()                                // => None
+    ;
+    let mut f = Once { v: 1.5, done: false };
+    f.next()                                // => Some(1.5)
+}

@@ -422,6 +422,15 @@ impl<'a> Solver<'a> {
         let ty = self.norm(ty);
         let tr = trait_ref.trait_;
         match &ty {
+            // A number literal's type, not yet known (`num.lit.1`), is some number type, and
+            // every one is `Copy` and `Clone`: so `impl<T: Copy> … for S<T>` applies to an
+            // `S { v: 3 }` before the literal's type is settled.
+            Ty::Infer(_)
+                if self.table.lit_kind(&ty).is_some()
+                    && (self.is_lang(tr, "Copy") || self.is_lang(tr, "Clone")) =>
+            {
+                return Answer::Yes(Source::Builtin);
+            }
             Ty::Infer(_) => return Answer::Maybe,
             Ty::Error | Ty::Never => return Answer::Yes(Source::Builtin),
             // Refinements implement `Refined`, and nothing else does (`refine.trait.1`).

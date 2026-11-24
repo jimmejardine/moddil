@@ -232,11 +232,26 @@ impl Checker<'_> {
             matches!(m, Ty::Assoc(a) if a.name.as_ref() == "Fails"
                 && matches!(a.self_ty, Ty::Param(..) | Ty::Assoc(_)))
         });
+        // Errors that are a type's not yet inferred (`<S<_> as Iterator>::Fails`): whether the
+        // call can fail is not known, so ask for the type rather than claim it fails.
+        let undecided = fails
+            .members()
+            .iter()
+            .any(|m| matches!(m, Ty::Assoc(a) if a.self_ty.has_infer()));
         if self.marked == Some(e) {
             self.call_fails = Some(fails);
         } else if abstract_fails {
             self.out.passes_on.insert(e);
             self.deliver(&fails.members(), range);
+        } else if undecided {
+            self.report(
+                Code::E0405,
+                range,
+                format!(
+                    "whether this call can fail depends on a type not known yet (`{fails}`): \
+                     annotate the type of what it is called on"
+                ),
+            );
         } else {
             self.report(
                 Code::E0501,

@@ -30,3 +30,21 @@ pub fn total<I: Iterator<Item = int>>(it: I) -> int {
     }
     sum
 }
+
+// Whether `next` can fail is a type's not known yet: the literal's, which `Add` does not settle.
+// So the type is asked for, rather than the call said to fail.
+struct Twice<T> {
+    v: T,
+}
+
+impl<T: Copy + Add<Output = T>> Iterator for Twice<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        Some(self.v + self.v)
+    }
+}
+
+fn twice() {
+    let mut t = Twice { v: 3 };
+    t.next();                               //~ E0405
+}
