@@ -710,7 +710,13 @@ impl Lowerer<'_> {
                         },
                     }
                 } else if let Some(v) = self.reflected_variant(receiver.syntax()) {
-                    shape(self, self.template_enum()?, v)
+                    let adt = self.template_enum()?;
+                    if method == "is_default" {
+                        // Marked `#[default]` (`attr.derive.default.1`).
+                        Some(self.items.variant(adt, v).default)
+                    } else {
+                        shape(self, adt, v)
+                    }
                 } else {
                     let k = self.reflected(receiver.syntax())?;
                     let (_, ty) = self.field_of(k);

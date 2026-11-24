@@ -172,8 +172,11 @@ pub(crate) fn derived_fields(tree: &ItemTree) -> Vec<Diagnostic> {
             continue;
         }
         // A derive with a template asks of the fields only what the template's code does,
-        // and that is checked where it is (`comptime.template.1`).
-        if tree.traits[tr.trait_ as usize].derive_by.is_some() {
+        // and that is checked where it is (`comptime.template.1`). The prelude's derives
+        // (`attr.derive.1`) ask each field for the trait, and are checked here, at the derive.
+        if tree.traits[tr.trait_ as usize].derive_by.is_some()
+            && !crate::derive::DERIVABLE.contains(&name)
+        {
             continue;
         }
         let mut solver = Solver::new(tree, &imp.generics.preds);

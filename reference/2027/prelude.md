@@ -20,6 +20,7 @@ behaviour are as written there. The files are one source, joined in this order:
 | [`hash.moddil`](prelude/hash.moddil) | `Hash` and `Hasher` |
 | [`program.moddil`](prelude/program.moddil) | `ExitCode`, `Log`, `RefinementError` and `Refined`, `FnInfo` and `ParamInfo` |
 | [`concurrency.moddil`](prelude/concurrency.moddil) | scopes and tasks, channels, `Duration` and timers |
+| [`derives.moddil`](prelude/derives.moddil) | the templates `#[derive]` instantiates for `Clone`, `PartialEq`, `PartialOrd`, `Ord`, `Hash`, `Debug` and `Default` (**attr.derive.1**) |
 
 **prelude.1** The prelude holds `assert` ([`assert`](expressions/assert.md)) and `discard`
 ([Errors](errors.md)), the types `Option`, `Result` and `Ordering`, the traits `Clone`, `Copy`,

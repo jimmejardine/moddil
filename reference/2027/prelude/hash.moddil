@@ -6,6 +6,7 @@ trait Hasher {
     fn finish(&self) -> int;
 }
 
+#[derive_by(derive_hash)]
 trait Hash {
     fn hash<H: Hasher>(&self, state: &mut H);
 }

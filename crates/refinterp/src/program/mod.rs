@@ -350,6 +350,14 @@ impl Program {
         let mut made = Vec::new();
         for (key, adt) in &self.adts {
             for d in &adt.derives {
+                // The prelude's derives (`attr.derive.1`) are built in here, structurally, as
+                // the reference states them; the compiler runs their templates.
+                if matches!(
+                    d.as_str(),
+                    "Clone" | "PartialEq" | "PartialOrd" | "Ord" | "Hash" | "Debug" | "Default"
+                ) {
+                    continue;
+                }
                 let Some((Def::Item(tr), 1)) = self.resolve(adt.module, std::slice::from_ref(d))
                 else {
                     continue;

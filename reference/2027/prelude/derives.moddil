@@ -1,0 +1,264 @@
+// Part of the prelude (`../prelude.md`): what `#[derive(…)]` makes of `Clone`, `PartialEq`,
+// `PartialOrd`, `Ord`, `Hash`, `Debug` and `Default` (`attr.derive.1`): one template each
+// (`comptime.derive.1`), for any struct or enum. Each trait names its template with
+// `#[derive_by]`. `Copy` and `Eq` have no methods, so their derives are built in.
+//
+// An enum's variant is found by `v.is(self)` (`comptime.template.variant.1`), and its fields read
+// through `self.[f]`.
+
+// Each field cloned; a variant as itself.
+const fn derive_clone(t: type) -> Impl<Clone> {
+    impl Clone for t {
+        fn clone(&self) -> Self {
+            if const t.is_enum() {
+                inline for v in variants(t) {
+                    if v.is(self) {
+                        return v {
+                            inline for f in fields(v) {
+                                [f]: self.[f].clone(),
+                            }
+                        };
+                    }
+                }
+                loop {}
+            } else {
+                t {
+                    inline for f in fields(t) {
+                        [f]: self.[f].clone(),
+                    }
+                }
+            }
+        }
+    }
+}
+
+// The same variant, and each field equal.
+const fn derive_partial_eq(t: type) -> Impl<PartialEq> {
+    impl PartialEq for t {
+        fn eq(&self, other: &Self) -> bool {
+            if const t.is_enum() {
+                inline for v in variants(t) {
+                    if v.is(self) {
+                        if !v.is(other) {
+                            return false;
+                        }
+                        inline for f in fields(v) {
+                            if !(self.[f] == other.[f]) {
+                                return false;
+                            }
+                        }
+                        return true;
+                    }
+                }
+                false
+            } else {
+                inline for f in fields(t) {
+                    if !(self.[f] == other.[f]) {
+                        return false;
+                    }
+                }
+                true
+            }
+        }
+    }
+}
+
+// By variant, in the order they are declared, then field by field.
+const fn derive_partial_ord(t: type) -> Impl<PartialOrd> {
+    impl PartialOrd for t {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            if const t.is_enum() {
+                let mut a = 0;
+                let mut b = 0;
+                inline for v in variants(t) {
+                    if v.is(self) {
+                        a = v.index;
+                    }
+                    if v.is(other) {
+                        b = v.index;
+                    }
+                }
+                if a != b {
+                    return Some(a.cmp(&b));
+                }
+                inline for v in variants(t) {
+                    if v.is(self) {
+                        inline for f in fields(v) {
+                            match self.[f].partial_cmp(&other.[f]) {
+                                Some(Ordering::Equal) => {}
+                                c => return c,
+                            }
+                        }
+                    }
+                }
+                Some(Ordering::Equal)
+            } else {
+                inline for f in fields(t) {
+                    match self.[f].partial_cmp(&other.[f]) {
+                        Some(Ordering::Equal) => {}
+                        c => return c,
+                    }
+                }
+                Some(Ordering::Equal)
+            }
+        }
+    }
+}
+
+// As `PartialOrd`'s, but total.
+const fn derive_ord(t: type) -> Impl<Ord> {
+    impl Ord for t {
+        fn cmp(&self, other: &Self) -> Ordering {
+            if const t.is_enum() {
+                let mut a = 0;
+                let mut b = 0;
+                inline for v in variants(t) {
+                    if v.is(self) {
+                        a = v.index;
+                    }
+                    if v.is(other) {
+                        b = v.index;
+                    }
+                }
+                if a != b {
+                    return a.cmp(&b);
+                }
+                inline for v in variants(t) {
+                    if v.is(self) {
+                        inline for f in fields(v) {
+                            match self.[f].cmp(&other.[f]) {
+                                Ordering::Equal => {}
+                                c => return c,
+                            }
+                        }
+                    }
+                }
+                Ordering::Equal
+            } else {
+                inline for f in fields(t) {
+                    match self.[f].cmp(&other.[f]) {
+                        Ordering::Equal => {}
+                        c => return c,
+                    }
+                }
+                Ordering::Equal
+            }
+        }
+    }
+}
+
+// An enum's variant's index, then each field in order (`coll.hash.derive.1`).
+const fn derive_hash(t: type) -> Impl<Hash> {
+    impl Hash for t {
+        fn hash<H: Hasher>(&self, state: &mut H) {
+            if const t.is_enum() {
+                inline for v in variants(t) {
+                    if v.is(self) {
+                        state.write_int(v.index);
+                        inline for f in fields(v) {
+                            self.[f].hash(state);
+                        }
+                    }
+                }
+            } else {
+                inline for f in fields(t) {
+                    self.[f].hash(state);
+                }
+            }
+        }
+    }
+}
+
+// The value as Moddil source writes it (`attr.derive.debug.1`): `Point { x: 1, y: 2 }`,
+// `Pair(1, 2)`, `Shape::Circle(3)`, each field by its own `Debug`.
+const fn derive_debug(t: type) -> Impl<Debug> {
+    impl Debug for t {
+        fn fmt(&self, out: &mut String) {
+            out.push_str(t.name);
+            if const t.is_enum() {
+                inline for v in variants(t) {
+                    if v.is(self) {
+                        out.push_str("::");
+                        out.push_str(v.name);
+                        if const v.is_unit() {
+                        } else {
+                            if const v.is_positional() {
+                                out.push('(');
+                                inline for f in fields(v) {
+                                    if const f.name != "0" {
+                                        out.push_str(", ");
+                                    }
+                                    Debug::fmt(&self.[f], out);
+                                }
+                                out.push(')');
+                            } else {
+                                out.push_str(" { ");
+                                let mut first = true;
+                                inline for f in fields(v) {
+                                    if !first {
+                                        out.push_str(", ");
+                                    }
+                                    first = false;
+                                    out.push_str(f.name);
+                                    out.push_str(": ");
+                                    Debug::fmt(&self.[f], out);
+                                }
+                                out.push_str(" }");
+                            }
+                        }
+                    }
+                }
+            } else {
+                if const t.is_unit() {
+                } else {
+                    if const t.is_positional() {
+                        out.push('(');
+                        inline for f in fields(t) {
+                            if const f.name != "0" {
+                                out.push_str(", ");
+                            }
+                            Debug::fmt(&self.[f], out);
+                        }
+                        out.push(')');
+                    } else {
+                        out.push_str(" { ");
+                        let mut first = true;
+                        inline for f in fields(t) {
+                            if !first {
+                                out.push_str(", ");
+                            }
+                            first = false;
+                            out.push_str(f.name);
+                            out.push_str(": ");
+                            Debug::fmt(&self.[f], out);
+                        }
+                        out.push_str(" }");
+                    }
+                }
+            }
+        }
+    }
+}
+
+// A struct of its fields' defaults, or an enum's unit variant marked `#[default]`
+// (`attr.derive.default.1`).
+const fn derive_default(t: type) -> Impl<Default> {
+    impl Default for t {
+        fn default() -> Self {
+            if const t.is_enum() {
+                inline for v in variants(t) {
+                    if const v.is_default() {
+                        return v.make();
+                    }
+                }
+                loop {}
+            } else {
+                t {
+                    inline for f in fields(t) {
+                        [f]: Default::default(),
+                    }
+                }
+            }
+        }
+    }
+}

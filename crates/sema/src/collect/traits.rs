@@ -432,7 +432,10 @@ impl Collector<'_> {
         let derive_for = (src == Src::Derived)
             .then(|| self.derive_for_of(node.text_range()))
             .flatten();
-        let template = (src == Src::Derived)
+        // A derive's impl is written with no methods; derived code that writes its own (a
+        // wrapped function's `Args`, `attr.around.1`) keeps them.
+        let fn_free = members.iter().all(|m| m.kind() != K::FN_ITEM);
+        let template = (src == Src::Derived && fn_free)
             .then(|| {
                 derive_for.or_else(|| {
                     trait_ref

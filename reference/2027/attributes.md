@@ -17,6 +17,12 @@ its fields. The traits that can be derived are `Copy`, `Clone`, `PartialEq`, `Eq
 - `fmt` (of `Debug`) writes the value as Moddil source writes it (**attr.derive.debug.1**), and
   `default` makes one of its fields' defaults (**attr.derive.default.1**).
 
+The prelude writes these impls in Moddil, as templates
+([`prelude/derives.moddil`](prelude/derives.moddil)): each of `Clone`, `PartialEq`,
+`PartialOrd`, `Ord`, `Hash`, `Debug` and `Default` names its own with `#[derive_by]`
+(**attr.derive-by.1**). `Copy` and `Eq`, which have no methods, and the copying `Clone` of a `Copy`
+type with no type parameters are built in.
+
 For a generic type, the impl has the type's parameters: each type parameter bounded by the
 trait (`impl<T: Clone> Clone for Pair<T>`), and each const parameter as it is declared
 (`impl<const S: int> Clone for Fixed<S>`).
@@ -39,7 +45,8 @@ the derived impl of a generic type bounds each type parameter by the trait
 the same module ([Compile-time evaluation](comptime.md)), E1006 otherwise. `#[derive(Tr)]` on a
 struct, for such a trait `Tr`, instantiates `f`'s template for the struct (**comptime.template.1**),
 whichever mod the struct is in: the impl asks of the fields only what the template's code does,
-so the rule above, that every field implement the trait, does not apply to it.
+so the rule above, that every field implement the trait, does not apply to it. It does apply to
+the traits of **attr.derive.1**, whose templates are the prelude's.
 
 **attr.track-caller.1** `#[track_caller]` before a function makes a trap in it be reported where it
 was called ([Traps](traps.md)), and through a tracked caller, where that one was called, up to the

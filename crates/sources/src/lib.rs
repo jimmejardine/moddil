@@ -23,6 +23,7 @@ macro_rules! prelude {
             include_str!("../../../reference/2027/prelude/hash.moddil"),
             include_str!("../../../reference/2027/prelude/program.moddil"),
             include_str!("../../../reference/2027/prelude/concurrency.moddil"),
+            include_str!("../../../reference/2027/prelude/derives.moddil"),
         )
     };
 }

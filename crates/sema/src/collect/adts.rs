@@ -309,6 +309,7 @@ pub(super) fn variant_def(
         name_range,
         shape,
         fields,
+        default: node.kind() == K::VARIANT && derive::is_default(node),
     }
 }
 

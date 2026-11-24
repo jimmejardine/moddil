@@ -202,6 +202,14 @@ struct Order {
   `is_unit()`/`is_positional()` of `t` and `v` in `if const` give what `Debug`, `Hash` and the
   orderings need. Templates cannot bind fields in patterns, so a variant is chosen by `v.is(x)`
   rather than by a match: an if chain, one test per variant.
+- **The built-in derives are prelude templates (decided 24 November 2026).** `Clone`,
+  `PartialEq`, `PartialOrd`, `Ord`, `Hash`, `Debug` and `Default` are derived by templates in
+  `prelude/derives.moddil`, named by `#[derive_by]` on each trait. That replaced the generators in
+  `crates/sema/src/derive.rs`. `Copy`, `Eq` and a `Copy` type's `*self` clone stay built in. The
+  reference interpreter keeps its structural derives, so the conformance suite compares the two.
+  Every field must still implement the trait, checked at the `#[derive]`. On a loop of derived
+  operations on an enum and a struct, the templates' if chains ran about 7% slower than the
+  generated matches.
 - **Tuples in `#[derive_for]` (decided 24 November 2026).** `#[derive_for(tuples(2..=12))]`
   makes a template's impl for each size of tuple, with every element type bounded. A tuple's
   elements reflect as fields named `0`, `1`, …, so the prelude's `Clone`, `Debug` and `Hash` for

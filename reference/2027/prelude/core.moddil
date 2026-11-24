@@ -62,6 +62,7 @@ impl<T, E> Result<T, E> {
 
 // Copying and cloning.
 
+#[derive_by(derive_clone)]
 trait Clone {
     fn clone(&self) -> Self;
 }
@@ -77,6 +78,7 @@ enum Ordering {
     Greater,
 }
 
+#[derive_by(derive_partial_eq)]
 trait PartialEq {
     fn eq(&self, other: &Self) -> bool;
 
@@ -87,6 +89,7 @@ trait PartialEq {
 
 trait Eq: PartialEq {}
 
+#[derive_by(derive_partial_ord)]
 trait PartialOrd: PartialEq {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering>;
 
@@ -119,6 +122,7 @@ trait PartialOrd: PartialEq {
     }
 }
 
+#[derive_by(derive_ord)]
 trait Ord: Eq + PartialOrd {
     fn cmp(&self, other: &Self) -> Ordering;
 }

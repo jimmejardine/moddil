@@ -1,7 +1,8 @@
 // Part of the prelude (`../prelude.md`): `Debug` and `Default`.
 
 // How a value is shown to a developer (`expr.fmt.debug.1`): by `{x:?}` in `fmt"…"`, written as
-// Moddil source writes it.
+// Moddil source writes it. Derived by the template in `derives.moddil`.
+#[derive_by(derive_debug)]
 trait Debug {
     fn fmt(&self, out: &mut String);
 }
@@ -140,6 +141,7 @@ impl str {
 }
 
 // A type's default value (`attr.derive.default.1`).
+#[derive_by(derive_default)]
 trait Default {
     fn default() -> Self;
 }

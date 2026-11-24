@@ -1,6 +1,9 @@
-//! Derives: `#[derive(Clone, PartialEq, …)]` on a struct or enum expands to impls written in
-//! Moddil, which are then checked and compiled like any other code (`values.md`: Explicit
-//! derives). The expansion is structural: field by field, and variant order for enums.
+//! Derives: `#[derive(Clone, PartialEq, …)]` on a struct or enum expands to impls, which are
+//! then checked and compiled like any other code (`values.md`: Explicit derives). Most are
+//! empty here: their methods come from their trait's template, the prelude's
+//! `derives.moddil` for the built-in derives (`attr.derive.1`), when the impl is collected.
+//! `Copy`, `Eq` and a `Copy` type's `*self` clone are written here, as are a wrapped function's
+//! `Args` impls (`struct_impl`).
 
 use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
@@ -43,8 +46,6 @@ struct Variant {
     named: bool,
     /// Whether it has no fields at all (`Colour::Red`, `struct Marker;`).
     unit: bool,
-    /// Whether it is marked `#[default]`.
-    default: bool,
 }
 
 /// The derive names of each `#[derive(…)]` attribute on `node`, with the attribute's range.
@@ -196,48 +197,8 @@ fn name_of(node: &SyntaxNode) -> String {
     ast::name(node).map(|n| n.text()).unwrap_or_default()
 }
 
-fn variant(node: &SyntaxNode, path: String) -> Variant {
-    if let Some(body) = node.child(K::STRUCT_BODY) {
-        let fields = body
-            .children()
-            .filter(|f| f.kind() == K::FIELD)
-            .map(|f| name_of(&f))
-            .collect();
-        Variant {
-            shown: path.clone(),
-            path,
-            fields,
-            named: true,
-            unit: false,
-            default: false,
-        }
-    } else if let Some(list) = node.child(K::TUPLE_FIELDS) {
-        let n = list
-            .children()
-            .filter(|f| f.kind() == K::TUPLE_FIELD)
-            .count();
-        Variant {
-            shown: path.clone(),
-            path,
-            fields: vec![String::new(); n],
-            named: false,
-            unit: false,
-            default: false,
-        }
-    } else {
-        Variant {
-            shown: path.clone(),
-            path,
-            fields: Vec::new(),
-            named: false,
-            unit: true,
-            default: is_default(node),
-        }
-    }
-}
-
 /// Whether a variant is marked `#[default]`.
-fn is_default(node: &SyntaxNode) -> bool {
+pub(crate) fn is_default(node: &SyntaxNode) -> bool {
     node.children()
         .filter(|c| c.kind() == K::OUTER_ATTR)
         .filter_map(|a| a.child(K::ATTR))
@@ -275,15 +236,6 @@ impl Variant {
             format!("{} {{ {} }}", self.path, fields.join(", "))
         } else {
             format!("{}({})", self.path, values.join(", "))
-        }
-    }
-
-    /// A pattern matching the variant whatever its fields hold.
-    fn any(&self) -> String {
-        match (self.unit, self.named) {
-            (true, _) => self.path.clone(),
-            (false, true) => format!("{} {{ .. }}", self.path),
-            (false, false) => format!("{}(..)", self.path),
         }
     }
 }
@@ -355,21 +307,6 @@ pub(crate) fn expand<'t>(
             })
             .unwrap_or_default();
         let type_params = generics.iter().any(|(_, decl)| decl.is_none());
-        let variants: Vec<Variant> = if node.kind() == K::STRUCT_ITEM {
-            vec![variant(&node, name.clone())]
-        } else {
-            node.child(K::VARIANT_LIST)
-                .map(|l| {
-                    l.children()
-                        .filter(|v| v.kind() == K::VARIANT)
-                        .map(|v| {
-                            let path = format!("{name}::{}", name_of(&v));
-                            variant(&v, path)
-                        })
-                        .collect()
-                })
-                .unwrap_or_default()
-        };
         let attrs = derive_attrs(&node);
         let all: Vec<&String> = attrs.iter().flat_map(|(_, n)| n).collect();
         let copy = all.iter().any(|n| *n == "Copy");
@@ -380,9 +317,14 @@ pub(crate) fn expand<'t>(
                 if d == "Copy" && !has_clone {
                     continue;
                 }
-                // Another trait: a stub mod's, whose derive declares the impl (`mod.stub.1`);
-                // an impl of any other is dropped where impls are collected.
-                if !DERIVABLE.contains(&d.as_str()) {
+                // A `Copy` type without type parameters clones by copying.
+                let copies = d == "Clone" && copy && !type_params;
+                // A trait whose derive is a template (the prelude's `derives.moddil` for
+                // `Clone`, `PartialEq`, `PartialOrd`, `Ord`, `Hash`, `Debug` and `Default`), or a
+                // stub mod's, whose derive declares the impl (`mod.stub.1`): an impl whose
+                // methods and bounds are added where it is collected. An impl of any other
+                // trait is dropped there.
+                if !matches!(d.as_str(), "Copy" | "Eq") && !copies {
                     let start = out.text.len() as u32;
                     out.text.push_str(&format!(
                         "impl{} {d} for {name}{} {{ }}",
@@ -394,21 +336,14 @@ pub(crate) fn expand<'t>(
                     out.origins.push((TextRange::new(start, end), src, *range));
                     continue;
                 }
+                // `Copy` and `Eq` have no methods; a copying `Clone` is `*self`. A const
+                // parameter does not stop `*self`: only a type parameter, which might not be
+                // `Copy`, does.
                 let header = header(d, &name, &generics);
-                let body = match d.as_str() {
-                    "Copy" | "Eq" => String::new(),
-                    // A const parameter does not stop `*self`: only a type parameter, which
-                    // might not be `Copy`, does.
-                    "Clone" if copy && !type_params => {
-                        "fn clone(&self) -> Self { *self }".to_string()
-                    }
-                    "Clone" => clone(&variants),
-                    "PartialEq" => partial_eq(&variants),
-                    "Hash" => hash(&variants, node.kind() == K::ENUM_ITEM),
-                    "Debug" => debug(&variants),
-                    "Default" => default(&variants, node.kind() == K::ENUM_ITEM),
-                    "PartialOrd" => ordering(&variants, true),
-                    _ => ordering(&variants, false),
+                let body = if copies {
+                    "fn clone(&self) -> Self { *self }"
+                } else {
+                    ""
                 };
                 let start = out.text.len() as u32;
                 out.text.push_str(&format!("{header} {{ {body} }}"));
@@ -436,7 +371,6 @@ pub(crate) fn struct_impl(
         fields: fields.to_vec(),
         named: !fields.is_empty(),
         unit: fields.is_empty(),
-        default: false,
     }];
     let body = match tr {
         "Debug" => debug(&v),
@@ -543,44 +477,6 @@ fn debug(variants: &[Variant]) -> String {
     )
 }
 
-/// `Default` (`attr.derive.default.1`): a struct of its fields' defaults, or an enum's
-/// `#[default]` unit variant.
-fn default(variants: &[Variant], is_enum: bool) -> String {
-    let value = if is_enum {
-        variants
-            .iter()
-            .find(|v| v.default)
-            .map_or_else(|| "loop {}".to_string(), |v| v.path.clone())
-    } else {
-        let v = &variants[0];
-        let values: Vec<String> = (0..v.fields.len())
-            .map(|_| "Default::default()".to_string())
-            .collect();
-        v.build(&values)
-    };
-    format!("fn default() -> Self {{ {value} }}")
-}
-
-/// `Hash` (`coll.hash.derive.1`): an enum's variant's index, then each field in order.
-fn hash(variants: &[Variant], is_enum: bool) -> String {
-    let arms: Vec<String> = variants
-        .iter()
-        .enumerate()
-        .map(|(k, v)| {
-            let mut parts = Vec::new();
-            if is_enum {
-                parts.push(format!("state.write_int({k});"));
-            }
-            parts.extend((0..v.fields.len()).map(|i| format!("a{i}.hash(state);")));
-            format!("{} => {{ {} }}", v.bind("a"), parts.join(" "))
-        })
-        .collect();
-    format!(
-        "fn hash<H: Hasher>(&self, state: &mut H) {{ match self {{ {} }} }}",
-        arms.join(" ")
-    )
-}
-
 fn partial_eq(variants: &[Variant]) -> String {
     let arms: Vec<String> = variants
         .iter()
@@ -606,51 +502,6 @@ fn partial_eq(variants: &[Variant]) -> String {
         .collect();
     format!(
         "fn eq(&self, other: &Self) -> bool {{ match self {{ {} }} }}",
-        arms.join(" ")
-    )
-}
-
-/// `partial_cmp` (`partial` is true) or `cmp`: by variant, then field by field.
-fn ordering(variants: &[Variant], partial: bool) -> String {
-    let (method, ret) = if partial {
-        ("partial_cmp", "Option<Ordering>")
-    } else {
-        ("cmp", "Ordering")
-    };
-    let wrap = |s: &str| {
-        if partial {
-            format!("Some({s})")
-        } else {
-            s.to_string()
-        }
-    };
-    let arms: Vec<String> = variants
-        .iter()
-        .enumerate()
-        .map(|(i, v)| {
-            let mut fields = wrap("Ordering::Equal");
-            for f in (0..v.fields.len()).rev() {
-                fields = format!(
-                    "match a{f}.{method}(b{f}) {{ {} => {fields}, c => c, }}",
-                    wrap("Ordering::Equal")
-                );
-            }
-            let mut inner = vec![format!("{} => {fields},", v.bind("b"))];
-            for (j, w) in variants.iter().enumerate() {
-                if j != i {
-                    let o = if i < j {
-                        "Ordering::Less"
-                    } else {
-                        "Ordering::Greater"
-                    };
-                    inner.push(format!("{} => {},", w.any(), wrap(o)));
-                }
-            }
-            format!("{} => match other {{ {} }},", v.bind("a"), inner.join(" "))
-        })
-        .collect();
-    format!(
-        "fn {method}(&self, other: &Self) -> {ret} {{ match self {{ {} }} }}",
         arms.join(" ")
     )
 }

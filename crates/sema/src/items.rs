@@ -501,6 +501,8 @@ pub struct VariantDef {
     pub shape: Shape,
     /// The fields, in order; positional fields are named `0`, `1`, ….
     pub fields: Vec<FieldDef>,
+    /// Whether it is an enum's variant marked `#[default]` (`attr.derive.default.1`).
+    pub default: bool,
 }
 
 /// How a struct or variant writes its fields.
