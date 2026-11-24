@@ -183,7 +183,7 @@ pub(crate) fn record_trap(site: u32, tracked: bool) -> u8 {
 /// Hands the baton to the next ready task and waits for this one's turn again: 0, or 1 if the
 /// run is aborted, or, with no task ready, the status of a deadlock trap at `site`.
 fn suspend(c: &Ctx, mut s: MutexGuard<'_, State>, site: u32, tracked: bool) -> u8 {
-    let Some(next) = s.sched.next() else {
+    let Some(next) = s.sched.next_ready() else {
         drop(s);
         return record_trap(site, tracked);
     };
@@ -333,7 +333,7 @@ pub(crate) fn run_task(c: &Arc<Ctx>, t: usize, spec: Start) {
             return;
         }
     }
-    match s.sched.next() {
+    match s.sched.next_ready() {
         Some(next) => s.current = next,
         None => {
             // Every other task waits: a deadlock, where nothing says.
@@ -554,7 +554,7 @@ pub extern "C" fn timer(nanos: i64) -> u64 {
 
 /// For a run of `main`: the OS, with the program's arguments `args` (`os.1`).
 pub fn set_os(args: Vec<String>) {
-    with(|s| s.sched.os = Some((crate::os::Os::new(args), crate::os::Start::now())));
+    with(|s| s.sched.set_os(crate::sched::RunOs::new(args)));
 }
 
 /// `core::os::arg_count`.

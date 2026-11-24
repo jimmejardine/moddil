@@ -2,14 +2,7 @@
 //! `net` module, through JSPI) in WebAssembly. Both give [`Event`]s for the scheduler to put
 //! into channels.
 
-/// What the OS brought: as `moddil_os::Event`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Event {
-    Accepted(usize, usize),
-    Data(usize, usize),
-    Ended(usize),
-    Signal(i64),
-}
+pub(crate) use moddil_sched::Event;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod native {

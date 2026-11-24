@@ -1,587 +1,86 @@
-//! The scheduler (`task.sched.1`): the tasks and scopes, which tasks are ready and what the
-//! others wait for, how each ended, and the channels.
-//!
-//! One task runs at a time. The others are queued, first in, first out, and run only when the
-//! running one suspends. A task waiting for something becomes ready once it has happened, in the
-//! order the waiting tasks began to wait; a cancelled task waiting where cancellation is seen
-//! becomes ready too, to unwind.
-
-use std::collections::{HashMap, VecDeque};
+//! The scheduler (`task.sched.1`): `moddil-sched`'s, native code's runtime's too, with values as
+//! the interpreter's and traps as [`Trap`]. The interpreter runs destructors itself, so it gives
+//! tasks no drop glue and gets no values back to drop.
 
 use crate::Trap;
 use crate::value::Value;
 
+pub(crate) use moddil_sched::{Op, OsSource, Wait};
+
+/// The scheduler of a run.
+pub(crate) type Scheduler = moddil_sched::Scheduler<Value, Trap, (), RunOs>;
 /// How a task ended.
-#[derive(Clone, Debug)]
-pub(crate) enum Outcome {
-    Value(Value),
-    Error(Value),
-    /// It was cancelled, and unwound (`task.cancel.1`).
-    Cancelled,
-}
+pub(crate) type Outcome = moddil_sched::Outcome<Value>;
+/// Why a scope failed.
+pub(crate) type Failure = moddil_sched::Failure<Value, Trap>;
 
-/// Why a scope failed: the first failure of its body or of a task given up (`task.error.1`), or
-/// a trap in it, if it is isolated (`task.isolate.1`).
-#[derive(Clone, Debug)]
-pub(crate) enum Failure {
-    Error(Value),
-    Trapped(Trap),
-}
-
-/// What a suspended task waits for.
-#[derive(Clone, Debug)]
-pub(crate) enum Wait {
-    Join(usize),
-    /// Every task of a scope, its body's included, to end.
-    Scope(usize),
-    /// Room in a channel, or its receiver to go.
-    Send(usize),
-    /// Its value, the `n`th sent on a rendezvous channel, to be received.
-    Taken(usize, u64),
-    /// A value in a channel, or its senders to go.
-    Recv(usize),
-    /// A stop to reach the task (`task.stop.1`).
-    Stop,
-    /// One of a `select`'s operations to be ready.
-    Select(Vec<Op>),
-}
-
-/// An operation a `select` arm waits on (`task.select.1`).
-#[derive(Clone, Debug)]
-pub(crate) enum Op {
-    Recv(usize),
-    Send(usize),
-    Join(usize),
-    Stop,
-}
-
-struct TaskState {
-    /// The scope it belongs to (none for the run's own task).
-    scope: Option<usize>,
-    outcome: Option<Outcome>,
-    /// When it ended, among the tasks that have.
-    ended: Option<usize>,
-    /// Whether its `Task` has been dropped without a `join`.
-    detached: bool,
-    joined: bool,
-    cancelled: bool,
-    /// Whether it is unwinding, during which cancellation is not seen again.
-    unwinding: bool,
-    waiting: Option<Wait>,
-}
-
-struct ScopeState {
-    /// The task whose `scope` call it is.
-    owner: usize,
-    /// Its tasks: its body's first.
-    tasks: Vec<usize>,
-    isolated: bool,
-    failure: Option<Failure>,
-    stopped: bool,
-}
-
-/// A channel: its values in order, how many it holds, how many senders it has, whether its
-/// receiver is alive, and how many values have been sent and received.
-struct Channel {
-    values: VecDeque<Value>,
-    capacity: usize,
-    senders: usize,
-    receiver: bool,
-    sent: u64,
-    received: u64,
-}
-
-/// What an OS channel brings (`os.1`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum OsSource {
-    /// A listener's connections.
-    Incoming,
-    /// A connection's arrivals.
-    Arrivals,
-    /// The signals.
-    Signals,
-}
-
-pub(crate) struct Scheduler {
-    tasks: Vec<TaskState>,
-    scopes: Vec<ScopeState>,
-    channels: Vec<Channel>,
-    ready: VecDeque<usize>,
-    /// The suspended tasks, in the order they began to wait.
-    blocked: Vec<usize>,
-    ended: usize,
-    /// The run's virtual time, in nanoseconds (`task.timer.1`).
-    now: i64,
-    /// The timers not yet fired: when each fires, in the order made, and its channel.
-    timers: Vec<(i64, usize)>,
-    /// For a run of `main`: the OS, whose events feed channels, and when the run began (its
-    /// time is then the wall clock's) (`os.1`).
-    os: Option<(moddil_os::Os, std::time::Instant)>,
-    /// The channels the OS's events go to: each listener's connections, each connection's
-    /// arrivals, and the signals.
-    incoming: HashMap<usize, usize>,
-    arrivals: HashMap<usize, usize>,
-    signals: Option<usize>,
-}
-
-impl Scheduler {
-    pub(crate) fn new() -> Self {
-        Scheduler {
-            tasks: vec![TaskState::new(None)],
-            scopes: Vec::new(),
-            channels: Vec::new(),
-            ready: VecDeque::new(),
-            blocked: Vec::new(),
-            ended: 0,
-            now: 0,
-            timers: Vec::new(),
-            os: None,
-            incoming: HashMap::new(),
-            arrivals: HashMap::new(),
-            signals: None,
-        }
+impl moddil_sched::Item for Value {
+    fn unit() -> Self {
+        Value::Unit
     }
 
-    /// For a run of `main`: the OS, with the program's arguments (`os.1`).
-    pub(crate) fn with_os(mut self, args: Vec<String>) -> Self {
-        self.os = Some((moddil_os::Os::new(args), std::time::Instant::now()));
-        self
-    }
-
-    /// The OS of a run of `main`, if this is one.
-    pub(crate) fn os(&mut self) -> Option<&mut moddil_os::Os> {
-        self.os.as_mut().map(|(os, _)| os)
-    }
-
-    /// A channel the OS feeds: its events for `id` (a listener's connections, a connection's
-    /// arrivals) or the signals. Outside a run of `main` nothing feeds it, so it has no sender,
-    /// but for the signals, which never come.
-    pub(crate) fn os_channel(&mut self, kind: OsSource, id: usize) -> usize {
-        let c = self.channel(1024);
-        match (kind, self.os.as_mut()) {
-            (OsSource::Incoming, Some((os, _))) => {
-                os.watch(id);
-                self.incoming.insert(id, c);
-            }
-            (OsSource::Arrivals, Some((os, _))) => {
-                os.watch(id);
-                self.arrivals.insert(id, c);
-            }
-            (OsSource::Signals, Some((os, _))) => {
-                os.watch_signals();
-                self.signals = Some(c);
-            }
-            (OsSource::Signals, None) => {}
-            (_, None) => self.channels[c].senders = 0,
-        }
-        c
-    }
-
-    /// The time since the run began: the wall clock's for a run of `main`, else virtual.
-    fn clock(&self) -> i64 {
-        match &self.os {
-            Some((_, start)) => i64::try_from(start.elapsed().as_nanos()).unwrap_or(i64::MAX),
-            None => self.now,
-        }
-    }
-
-    /// Puts what the OS brought into the channels waiting for it.
-    fn deliver_os(&mut self, events: Vec<moddil_os::Event>) {
-        use moddil_os::Event;
-        for e in events {
-            match e {
-                Event::Accepted(l, conn) => {
-                    if let Some(&c) = self.incoming.get(&l) {
-                        self.push(c, Value::Int(conn as i64));
-                    }
-                }
-                Event::Data(conn, n) => {
-                    if let Some(&c) = self.arrivals.get(&conn) {
-                        self.push(c, Value::Int(n as i64));
-                    }
-                }
-                Event::Ended(conn) => {
-                    if let Some(c) = self.arrivals.remove(&conn) {
-                        self.drop_sender(c);
-                    }
-                }
-                Event::Signal(s) => {
-                    if let Some(c) = self.signals {
-                        self.push(c, Value::Int(s));
-                    }
-                }
-            }
-        }
-    }
-
-    /// A timer's channel, whose one value arrives `nanos` from now (`task.timer.1`).
-    pub(crate) fn timer(&mut self, nanos: i64) -> usize {
-        let c = self.channel(1);
-        self.timers
-            .push((self.clock().saturating_add(nanos.max(0)), c));
-        c
-    }
-
-    /// Fires the earliest timer, at `at`.
-    fn fire(&mut self, i: usize) {
-        let (at, c) = self.timers.remove(i);
-        self.now = at;
-        if self.channels[c].receiver {
-            self.push(c, Value::Unit);
-        }
-        self.drop_sender(c);
-    }
-
-    /// The earliest timer: its index and when it fires.
-    fn earliest(&self) -> Option<(usize, i64)> {
-        self.timers
-            .iter()
-            .enumerate()
-            .min_by_key(|(_, (at, _))| *at)
-            .map(|(i, (at, _))| (i, *at))
-    }
-
-    /// Opens a scope for task `owner`'s `scope` call, and gives its index.
-    pub(crate) fn open_scope(&mut self, owner: usize, isolated: bool) -> usize {
-        self.scopes.push(ScopeState {
-            owner,
-            tasks: Vec::new(),
-            isolated,
-            failure: None,
-            stopped: false,
-        });
-        self.scopes.len() - 1
-    }
-
-    /// Records task `t`, just started in `scope`. Unless it is the scope's body, which runs at
-    /// once, it is ready after those already ready. A task started in a cancelled scope is
-    /// cancelled.
-    pub(crate) fn spawn(&mut self, t: usize, scope: usize, body: bool) {
-        debug_assert_eq!(t, self.tasks.len(), "tasks are numbered as they start");
-        let mut task = TaskState::new(Some(scope));
-        task.cancelled = self.scope_cancelled(scope);
-        self.tasks.push(task);
-        self.scopes[scope].tasks.push(t);
-        if !body {
-            self.ready.push_back(t);
-        }
-    }
-
-    fn scope_cancelled(&self, s: usize) -> bool {
-        self.scopes[s].failure.is_some() || self.tasks[self.scopes[s].owner].cancelled
-    }
-
-    /// Records how task `t` ended: a body's error, or that of a task given up, fails its scope.
-    pub(crate) fn end(&mut self, t: usize, outcome: Outcome) {
-        let scope = self.tasks[t].scope;
-        let fails = match &outcome {
-            Outcome::Error(e) => {
-                let body = scope.is_some_and(|s| self.scopes[s].tasks.first() == Some(&t));
-                (body || self.tasks[t].detached).then(|| e.clone())
-            }
-            _ => None,
-        };
-        let task = &mut self.tasks[t];
-        task.ended = Some(self.ended);
-        self.ended += 1;
-        task.outcome = Some(if fails.is_some() {
-            Outcome::Cancelled
-        } else {
-            outcome
-        });
-        if let (Some(e), Some(s)) = (fails, scope) {
-            self.fail(s, Failure::Error(e));
-        }
-        self.wake();
-    }
-
-    /// Fails scope `s` with `f`, unless it has failed already, and cancels it.
-    pub(crate) fn fail(&mut self, s: usize, f: Failure) {
-        if self.scopes[s].failure.is_none() {
-            self.scopes[s].failure = Some(f);
-            self.cancel(s);
-        }
-    }
-
-    /// Cancels scope `s`: its tasks, and the scopes they have opened.
-    fn cancel(&mut self, s: usize) {
-        let tasks = self.scopes[s].tasks.clone();
-        for &t in &tasks {
-            if self.tasks[t].ended.is_none() {
-                self.tasks[t].cancelled = true;
-            }
-        }
-        for inner in 0..self.scopes.len() {
-            if tasks.contains(&self.scopes[inner].owner) && !self.scope_done(inner) {
-                self.cancel(inner);
-            }
-        }
-        self.wake();
-    }
-
-    /// The isolated scope a trap in task `t` ends, if any: its own scope's, or that of the task
-    /// whose scope call that is, and so on out.
-    pub(crate) fn isolating(&self, t: usize) -> Option<usize> {
-        let mut scope = self.tasks[t].scope;
-        while let Some(s) = scope {
-            if self.scopes[s].isolated {
-                return Some(s);
-            }
-            scope = self.tasks[self.scopes[s].owner].scope;
-        }
-        None
-    }
-
-    pub(crate) fn cancelled(&self, t: usize) -> bool {
-        self.tasks[t].cancelled && !self.tasks[t].unwinding
-    }
-
-    pub(crate) fn unwinding(&self, t: usize) -> bool {
-        self.tasks[t].unwinding
-    }
-
-    pub(crate) fn start_unwinding(&mut self, t: usize) {
-        self.tasks[t].unwinding = true;
-    }
-
-    /// Records that task `t`'s `Task` has been dropped: an error it ended with fails its scope.
-    pub(crate) fn detach(&mut self, t: usize) {
-        self.tasks[t].detached = true;
-        if let Some(Outcome::Error(e)) = &self.tasks[t].outcome {
-            let e = e.clone();
-            self.tasks[t].outcome = Some(Outcome::Cancelled);
-            if let Some(s) = self.tasks[t].scope {
-                self.fail(s, Failure::Error(e));
-            }
-        }
-    }
-
-    /// Task `t`'s outcome, taken by its `join`, once it has ended.
-    pub(crate) fn take(&mut self, t: usize) -> Option<Outcome> {
-        let task = &mut self.tasks[t];
-        task.ended?;
-        task.joined = true;
-        Some(std::mem::replace(
-            task.outcome.as_mut()?,
-            Outcome::Cancelled,
-        ))
-    }
-
-    /// Whether every task of scope `s` has ended.
-    pub(crate) fn scope_done(&self, s: usize) -> bool {
-        self.scopes[s]
-            .tasks
-            .iter()
-            .all(|&t| self.tasks[t].ended.is_some())
-    }
-
-    /// How scope `s` ends, once its tasks have: its failure, or its body's value.
-    pub(crate) fn scope_result(&mut self, s: usize) -> Result<Value, Failure> {
-        if let Some(f) = self.scopes[s].failure.take() {
-            return Err(f);
-        }
-        let body = self.scopes[s].tasks[0];
-        match self.tasks[body].outcome.take() {
-            Some(Outcome::Value(v)) => Ok(v),
-            Some(Outcome::Error(e)) => Err(Failure::Error(e)),
-            _ => Ok(Value::Unit),
-        }
-    }
-
-    /// Asks scope `s` to stop (`task.stop.1`).
-    pub(crate) fn stop(&mut self, s: usize) {
-        self.scopes[s].stopped = true;
-        self.wake();
-    }
-
-    /// Whether a stop has reached task `t`: its scope, or one around it, has been asked to stop,
-    /// and the scopes its scope's tasks have opened inside it have all ended.
-    pub(crate) fn stop_reached(&self, t: usize) -> bool {
-        let Some(own) = self.tasks[t].scope else {
-            return false;
-        };
-        let mut stopped = false;
-        let mut scope = Some(own);
-        while let Some(s) = scope {
-            stopped |= self.scopes[s].stopped;
-            scope = self.tasks[self.scopes[s].owner].scope;
-        }
-        let tasks = &self.scopes[own].tasks;
-        stopped
-            && (0..self.scopes.len())
-                .all(|s| !tasks.contains(&self.scopes[s].owner) || self.scope_done(s))
-    }
-
-    /// A channel holding up to `capacity` values, with one sender and its receiver.
-    pub(crate) fn channel(&mut self, capacity: usize) -> usize {
-        self.channels.push(Channel {
-            values: VecDeque::new(),
-            capacity,
-            senders: 1,
-            receiver: true,
-            sent: 0,
-            received: 0,
-        });
-        self.channels.len() - 1
-    }
-
-    pub(crate) fn clone_sender(&mut self, c: usize) {
-        self.channels[c].senders += 1;
-    }
-
-    pub(crate) fn drop_sender(&mut self, c: usize) {
-        self.channels[c].senders -= 1;
-        self.wake();
-    }
-
-    /// The receiver is gone: what the channel holds is given back, for its destructors to run
-    /// (`task.channel.2`).
-    pub(crate) fn drop_receiver(&mut self, c: usize) -> Vec<Value> {
-        let ch = &mut self.channels[c];
-        ch.receiver = false;
-        let left: Vec<Value> = ch.values.drain(..).collect();
-        self.wake();
-        left
-    }
-
-    pub(crate) fn receiver_alive(&self, c: usize) -> bool {
-        self.channels[c].receiver
-    }
-
-    /// Whether `send` on channel `c` can go ahead: it has room, or its receiver is gone.
-    pub(crate) fn can_send(&self, c: usize) -> bool {
-        let ch = &self.channels[c];
-        !ch.receiver || ch.values.len() < ch.capacity.max(1)
-    }
-
-    /// Puts `v` in channel `c`, which has room: the number it is among those sent, and whether
-    /// the sender waits for it to be received (a rendezvous).
-    pub(crate) fn push(&mut self, c: usize, v: Value) -> (u64, bool) {
-        let ch = &mut self.channels[c];
-        ch.values.push_back(v);
-        ch.sent += 1;
-        let r = (ch.sent, ch.capacity == 0);
-        self.wake();
-        r
-    }
-
-    /// Whether the `n`th value sent on channel `c` has been received, or cannot be.
-    pub(crate) fn taken(&self, c: usize, n: u64) -> bool {
-        let ch = &self.channels[c];
-        ch.received >= n || !ch.receiver
-    }
-
-    /// Whether `recv` on channel `c` can go ahead: it holds a value, or has no senders.
-    pub(crate) fn can_recv(&self, c: usize) -> bool {
-        let ch = &self.channels[c];
-        !ch.values.is_empty() || ch.senders == 0
-    }
-
-    /// The next value of channel `c`, which can be received: `None` if it has no senders left.
-    pub(crate) fn pop(&mut self, c: usize) -> Option<Value> {
-        let ch = &mut self.channels[c];
-        let v = ch.values.pop_front()?;
-        ch.received += 1;
-        self.wake();
-        Some(v)
-    }
-
-    /// Whether `op` can go ahead for task `t`.
-    pub(crate) fn op_ready(&self, t: usize, op: &Op) -> bool {
-        match op {
-            Op::Recv(c) => self.can_recv(*c),
-            Op::Send(c) => self.can_send(*c),
-            Op::Join(j) => self.tasks[*j].ended.is_some(),
-            Op::Stop => self.stop_reached(t),
-        }
-    }
-
-    /// Suspends task `t` until `w` happens.
-    pub(crate) fn block(&mut self, t: usize, w: Wait) {
-        self.tasks[t].waiting = Some(w);
-        self.blocked.push(t);
-    }
-
-    /// Queues task `t` again, after those already ready (`yield_now`).
-    pub(crate) fn requeue(&mut self, t: usize) {
-        self.ready.push_back(t);
-    }
-
-    /// The next task to run, if any is ready. With none, time moves to the earliest timer,
-    /// which fires (`task.timer.1`), until a task is ready or no timer is left.
-    pub(crate) fn next(&mut self) -> Option<usize> {
-        if self.os.is_some() {
-            // A run of `main`: the OS's events and the wall clock's timers, waiting for either.
-            while self.ready.is_empty() {
-                let now = self.clock();
-                if let Some((i, at)) = self.earliest()
-                    && at <= now
-                {
-                    self.fire(i);
-                    continue;
-                }
-                let until = self.earliest().map(|(_, at)| at);
-                let (os, _) = self.os.as_mut().expect("the OS");
-                if until.is_none() && !os.waiting() {
-                    break;
-                }
-                let wait =
-                    until.map(|at| std::time::Duration::from_nanos((at - now).max(0) as u64));
-                let events = os.poll(wait);
-                self.deliver_os(events);
-            }
-        } else {
-            while self.ready.is_empty()
-                && let Some((i, _)) = self.earliest()
-            {
-                self.fire(i);
-            }
-        }
-        self.ready.pop_front()
-    }
-
-    /// Makes ready, in the order they began to wait, the suspended tasks whose wait is over, or
-    /// which are cancelled where cancellation is seen (anywhere but a scope's end).
-    fn wake(&mut self) {
-        let mut still = Vec::new();
-        for t in std::mem::take(&mut self.blocked) {
-            let done = match self.tasks[t].waiting.as_ref().expect("a waiting task") {
-                Wait::Scope(s) => self.scope_done(*s),
-                w => {
-                    self.cancelled(t)
-                        || match w {
-                            Wait::Join(j) => self.tasks[*j].ended.is_some(),
-                            Wait::Send(c) => self.can_send(*c),
-                            Wait::Taken(c, n) => self.taken(*c, *n),
-                            Wait::Recv(c) => self.can_recv(*c),
-                            Wait::Stop => self.stop_reached(t),
-                            Wait::Select(ops) => ops.iter().any(|o| self.op_ready(t, o)),
-                            Wait::Scope(_) => unreachable!("handled above"),
-                        }
-                }
-            };
-            if done {
-                self.tasks[t].waiting = None;
-                self.ready.push_back(t);
-            } else {
-                still.push(t);
-            }
-        }
-        self.blocked = still;
+    fn int(i: i64) -> Self {
+        Value::Int(i)
     }
 }
 
-impl TaskState {
-    fn new(scope: Option<usize>) -> Self {
-        TaskState {
-            scope,
-            outcome: None,
-            ended: None,
-            detached: false,
-            joined: false,
-            cancelled: false,
-            unwinding: false,
-            waiting: None,
+/// The OS of a run of `main` (`os.1`), and when the run began.
+pub(crate) struct RunOs {
+    os: moddil_os::Os,
+    start: std::time::Instant,
+}
+
+impl RunOs {
+    /// The OS, with the program's arguments.
+    pub(crate) fn new(args: Vec<String>) -> RunOs {
+        RunOs {
+            os: moddil_os::Os::new(args),
+            start: std::time::Instant::now(),
         }
+    }
+}
+
+impl std::ops::Deref for RunOs {
+    type Target = moddil_os::Os;
+    fn deref(&self) -> &moddil_os::Os {
+        &self.os
+    }
+}
+
+impl std::ops::DerefMut for RunOs {
+    fn deref_mut(&mut self) -> &mut moddil_os::Os {
+        &mut self.os
+    }
+}
+
+impl moddil_sched::Host for RunOs {
+    fn watch(&mut self, id: usize) {
+        self.os.watch(id);
+    }
+
+    fn watch_signals(&mut self) {
+        self.os.watch_signals();
+    }
+
+    fn waiting(&self) -> bool {
+        self.os.waiting()
+    }
+
+    fn poll(&mut self, wait: Option<std::time::Duration>) -> Vec<moddil_sched::Event> {
+        use moddil_sched::Event;
+        self.os
+            .poll(wait)
+            .into_iter()
+            .map(|e| match e {
+                moddil_os::Event::Accepted(l, c) => Event::Accepted(l, c),
+                moddil_os::Event::Data(c, n) => Event::Data(c, n),
+                moddil_os::Event::Ended(c) => Event::Ended(c),
+                moddil_os::Event::Signal(s) => Event::Signal(s),
+            })
+            .collect()
+    }
+
+    fn elapsed(&self) -> i64 {
+        i64::try_from(self.start.elapsed().as_nanos()).unwrap_or(i64::MAX)
     }
 }

@@ -1,0 +1,12 @@
+[package]
+name = "moddil-sched"
+description = "The task scheduler the runtimes written in Rust share: the MIR interpreter's and moddil-rt's (natively and in WebAssembly)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

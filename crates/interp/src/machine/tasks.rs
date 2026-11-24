@@ -83,7 +83,10 @@ impl Machine<'_> {
         };
         let id = id_of(v);
         match items.adts[*a as usize].name.as_str() {
-            "Task" => self.sched.detach(id),
+            // The interpreter drops values itself, so the scheduler gives none back.
+            "Task" => {
+                self.sched.detach(id);
+            }
             "Sender" => self.sched.drop_sender(id),
             // What the channel holds is dropped, its destructors first (`task.channel.2`).
             "Receiver" => {
@@ -121,7 +124,8 @@ impl Machine<'_> {
             "__scope_run" => {
                 let s = id_of(&self.stack.deref(&values[0]));
                 let t = self.start_task(&args[0], &values[1], vec![values[0].clone()]);
-                self.sched.spawn(t, s, true);
+                let n = self.sched.spawn(s, true, None);
+                debug_assert_eq!(n, t, "tasks are numbered as they start");
                 self.sched.block(me, Wait::Scope(s));
                 self.pending.insert(me, (Pending::Scope(s), ret));
                 self.stack.switch(t);
@@ -130,7 +134,8 @@ impl Machine<'_> {
             "spawn" => {
                 let s = id_of(&self.stack.deref(&values[0]));
                 let t = self.start_task(&args[0], &values[1], Vec::new());
-                self.sched.spawn(t, s, false);
+                let n = self.sched.spawn(s, false, None);
+                debug_assert_eq!(n, t, "tasks are numbered as they start");
                 let task = self.natives.handle("Task", t);
                 return self.deliver(ret, Ok(task));
             }
@@ -408,12 +413,12 @@ impl Machine<'_> {
                 if !self.sched.scope_done(s) {
                     return Attempt::Wait(Pending::Scope(s), Wait::Scope(s));
                 }
-                let result = self.sched.scope_result(s);
+                let (result, _) = self.sched.scope_result(s);
                 if self.sched.cancelled(me) {
                     return Attempt::Unwind;
                 }
                 match result {
-                    Ok(v) => Attempt::Done(Ok(v)),
+                    Ok(v) => Attempt::Done(Ok(v.unwrap_or(Value::Unit))),
                     Err(Failure::Error(e)) => Attempt::Done(Err(e)),
                     Err(Failure::Trapped(t)) => Attempt::Done(Err(self.trapped(&t))),
                 }
@@ -477,7 +482,7 @@ impl Machine<'_> {
     /// Runs the next ready task, trying again the operation it was suspended in. With none
     /// ready, the run is deadlocked: every task waits.
     pub(super) fn switch_next(&mut self) -> Option<Stop> {
-        let Some(t) = self.sched.next() else {
+        let Some(t) = self.sched.next_ready() else {
             let trap = self.trap(TrapClass::Deadlock, None, Vec::new());
             return Some(Stop::Trap(trap));
         };

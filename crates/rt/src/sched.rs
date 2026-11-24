@@ -1,599 +1,67 @@
-//! The scheduler (`task.sched.1`), as `moddil-interp`'s, with values as their bytes: the tasks
-//! and scopes, which tasks are ready and what the others wait for, how each ended, and the
-//! channels.
-//!
-//! One task runs at a time. The others are queued, first in, first out, and run only when the
-//! running one suspends. A task waiting for something becomes ready once it has happened, in the
-//! order the waiting tasks began to wait; a cancelled task waiting where cancellation is seen
-//! becomes ready too, to unwind. Keeping the interpreter's order makes a native run's order the
-//! interpreters'.
-
-use std::collections::{HashMap, VecDeque};
+//! The scheduler (`task.sched.1`): `moddil-sched`'s, the MIR interpreter's too, with values as
+//! their bytes, traps as [`Trapped`], and drop glue for the values nobody takes.
 
 use crate::Trapped;
 use crate::baton::DropFn;
 
-/// Values to drop, each with its glue.
-pub(crate) type Dropped = Vec<(DropFn, Vec<u8>)>;
+pub(crate) use moddil_sched::{Op, OsSource, Wait};
 
+/// The scheduler of a run.
+pub(crate) type Scheduler = moddil_sched::Scheduler<Bytes, Trapped, DropFn, RunOs>;
 /// How a task ended.
-#[derive(Clone, Debug)]
-pub(crate) enum Outcome {
-    Value(Vec<u8>),
-    Error(Vec<u8>),
-    /// It was cancelled, and unwound (`task.cancel.1`).
-    Cancelled,
+pub(crate) type Outcome = moddil_sched::Outcome<Bytes>;
+/// Why a scope failed.
+pub(crate) type Failure = moddil_sched::Failure<Bytes, Trapped>;
+
+/// A value, as its bytes.
+pub(crate) type Bytes = Vec<u8>;
+
+/// The OS of a run of `main`, natively or the host's in WebAssembly, and when the run began.
+pub(crate) struct RunOs {
+    os: crate::os::Os,
+    start: crate::os::Start,
 }
 
-/// Why a scope failed: the first failure of its body or of a task given up, or a trap in it, if
-/// it is isolated.
-#[derive(Clone, Debug)]
-pub(crate) enum Failure {
-    Error(Vec<u8>),
-    Trapped(Trapped),
-}
-
-/// What a suspended task waits for.
-#[derive(Clone, Debug)]
-pub(crate) enum Wait {
-    Join(usize),
-    /// Every task of a scope, its body's included, to end.
-    Scope(usize),
-    /// Room in a channel, or its receiver to go.
-    Send(usize),
-    /// Its value, the `n`th sent on a rendezvous channel, to be received.
-    Taken(usize, u64),
-    /// A value in a channel, or its senders to go.
-    Recv(usize),
-    /// A stop to reach the task (`task.stop.1`).
-    Stop,
-    /// One of a `select`'s operations to be ready.
-    Select(Vec<Op>),
-}
-
-/// An operation a `select` arm waits on (`task.select.1`).
-#[derive(Clone, Debug)]
-pub(crate) enum Op {
-    Recv(usize),
-    Send(usize),
-    Join(usize),
-    Stop,
-}
-
-struct TaskState {
-    /// The scope it belongs to (none for the run's own task).
-    scope: Option<usize>,
-    outcome: Option<Outcome>,
-    /// When it ended, among the tasks that have.
-    ended: Option<usize>,
-    /// Whether its `Task` has been dropped without a `join`.
-    detached: bool,
-    cancelled: bool,
-    /// Whether it is unwinding, during which cancellation is not seen again.
-    unwinding: bool,
-    waiting: Option<Wait>,
-    /// What drops its value, if nobody takes it.
-    drop: Option<DropFn>,
-}
-
-struct ScopeState {
-    /// The task whose `scope` call it is.
-    owner: usize,
-    /// Its tasks: its body's first.
-    tasks: Vec<usize>,
-    isolated: bool,
-    failure: Option<Failure>,
-    stopped: bool,
-}
-
-/// A channel: its values in order, how many it holds, how many senders it has, whether its
-/// receiver is alive, and how many values have been sent and received.
-struct Channel {
-    values: VecDeque<Vec<u8>>,
-    capacity: usize,
-    senders: usize,
-    receiver: bool,
-    sent: u64,
-    received: u64,
-}
-
-pub(crate) struct Scheduler {
-    tasks: Vec<TaskState>,
-    scopes: Vec<ScopeState>,
-    channels: Vec<Channel>,
-    ready: VecDeque<usize>,
-    /// The suspended tasks, in the order they began to wait.
-    blocked: Vec<usize>,
-    ended: usize,
-    /// The run's virtual time, in nanoseconds (`task.timer.1`).
-    now: i64,
-    /// The timers not yet fired: when each fires, in the order made, and its channel.
-    timers: Vec<(i64, usize)>,
-    /// For a run of `main`: the OS, whose events feed channels, and when the run began (its
-    /// time is then the wall clock's) (`os.1`).
-    pub(crate) os: Option<(crate::os::Os, crate::os::Start)>,
-    /// The channels the OS's events go to: each listener's connections, each connection's
-    /// arrivals, and the signals.
-    incoming: HashMap<usize, usize>,
-    arrivals: HashMap<usize, usize>,
-    signals: Option<usize>,
-}
-
-/// What an OS channel brings (`os.1`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum OsSource {
-    /// A listener's connections.
-    Incoming,
-    /// A connection's arrivals.
-    Arrivals,
-    /// The signals.
-    Signals,
-}
-
-impl Scheduler {
-    pub(crate) fn new() -> Self {
-        Scheduler {
-            tasks: vec![TaskState::new(None, None)],
-            scopes: Vec::new(),
-            channels: Vec::new(),
-            ready: VecDeque::new(),
-            blocked: Vec::new(),
-            ended: 0,
-            now: 0,
-            timers: Vec::new(),
-            os: None,
-            incoming: HashMap::new(),
-            arrivals: HashMap::new(),
-            signals: None,
+impl RunOs {
+    pub(crate) fn new(args: Vec<String>) -> RunOs {
+        RunOs {
+            os: crate::os::Os::new(args),
+            start: crate::os::Start::now(),
         }
-    }
-
-    /// A timer's channel, whose one value arrives `nanos` from now (`task.timer.1`).
-    pub(crate) fn timer(&mut self, nanos: i64) -> usize {
-        let c = self.channel(1);
-        self.timers
-            .push((self.clock().saturating_add(nanos.max(0)), c));
-        c
-    }
-
-    /// The OS of a run of `main`, if this is one.
-    pub(crate) fn os(&mut self) -> Option<&mut crate::os::Os> {
-        self.os.as_mut().map(|(os, _)| os)
-    }
-
-    /// A channel the OS feeds: its events for `id` (a listener's connections, a connection's
-    /// arrivals) or the signals. Outside a run of `main` nothing feeds it, so it has no sender,
-    /// but for the signals, which never come.
-    pub(crate) fn os_channel(&mut self, kind: OsSource, id: usize) -> usize {
-        let c = self.channel(1024);
-        match (kind, self.os.as_mut()) {
-            (OsSource::Incoming, Some((os, _))) => {
-                os.watch(id);
-                self.incoming.insert(id, c);
-            }
-            (OsSource::Arrivals, Some((os, _))) => {
-                os.watch(id);
-                self.arrivals.insert(id, c);
-            }
-            (OsSource::Signals, Some((os, _))) => {
-                os.watch_signals();
-                self.signals = Some(c);
-            }
-            (OsSource::Signals, None) => {}
-            (_, None) => self.channels[c].senders = 0,
-        }
-        c
-    }
-
-    /// The time since the run began: the wall clock's for a run of `main`, else virtual.
-    fn clock(&self) -> i64 {
-        match &self.os {
-            Some((_, start)) => start.elapsed(),
-            None => self.now,
-        }
-    }
-
-    /// Puts what the OS brought into the channels waiting for it; an `int` is its 8 bytes.
-    fn deliver_os(&mut self, events: Vec<crate::os::Event>) {
-        use crate::os::Event;
-        for e in events {
-            match e {
-                Event::Accepted(l, conn) => {
-                    if let Some(&c) = self.incoming.get(&l) {
-                        self.push(c, (conn as i64).to_le_bytes().to_vec());
-                    }
-                }
-                Event::Data(conn, n) => {
-                    if let Some(&c) = self.arrivals.get(&conn) {
-                        self.push(c, (n as i64).to_le_bytes().to_vec());
-                    }
-                }
-                Event::Ended(conn) => {
-                    if let Some(c) = self.arrivals.remove(&conn) {
-                        self.drop_sender(c);
-                    }
-                }
-                Event::Signal(s) => {
-                    if let Some(c) = self.signals {
-                        self.push(c, s.to_le_bytes().to_vec());
-                    }
-                }
-            }
-        }
-    }
-
-    /// Fires timer `i`.
-    fn fire(&mut self, i: usize) {
-        let (at, c) = self.timers.remove(i);
-        self.now = at;
-        if self.channels[c].receiver {
-            // `()` has no bytes.
-            self.push(c, Vec::new());
-        }
-        self.drop_sender(c);
-    }
-
-    /// The earliest timer: its index and when it fires.
-    fn earliest(&self) -> Option<(usize, i64)> {
-        self.timers
-            .iter()
-            .enumerate()
-            .min_by_key(|(_, (at, _))| *at)
-            .map(|(i, (at, _))| (i, *at))
-    }
-
-    pub(crate) fn open_scope(&mut self, owner: usize, isolated: bool) -> usize {
-        self.scopes.push(ScopeState {
-            owner,
-            tasks: Vec::new(),
-            isolated,
-            failure: None,
-            stopped: false,
-        });
-        self.scopes.len() - 1
-    }
-
-    /// Records a task, just started in `scope`, and gives its number. Unless it is the scope's
-    /// body, which runs at once, it is ready after those already ready. A task started in a
-    /// cancelled scope is cancelled.
-    pub(crate) fn spawn(&mut self, scope: usize, body: bool, drop: Option<DropFn>) -> usize {
-        let t = self.tasks.len();
-        let mut task = TaskState::new(Some(scope), drop);
-        task.cancelled = self.scope_cancelled(scope);
-        self.tasks.push(task);
-        self.scopes[scope].tasks.push(t);
-        if !body {
-            self.ready.push_back(t);
-        }
-        t
-    }
-
-    fn scope_cancelled(&self, s: usize) -> bool {
-        self.scopes[s].failure.is_some() || self.tasks[self.scopes[s].owner].cancelled
-    }
-
-    /// Records how task `t` ended: a body's error, or that of a task given up, fails its scope.
-    /// What is to be dropped (a value nobody will take) is given back.
-    pub(crate) fn end(&mut self, t: usize, outcome: Outcome) -> Vec<(DropFn, Vec<u8>)> {
-        let scope = self.tasks[t].scope;
-        let fails = match &outcome {
-            Outcome::Error(e) => {
-                let body = scope.is_some_and(|s| self.scopes[s].tasks.first() == Some(&t));
-                (body || self.tasks[t].detached).then(|| e.clone())
-            }
-            _ => None,
-        };
-        let mut dropped = Vec::new();
-        let task = &mut self.tasks[t];
-        task.ended = Some(self.ended);
-        self.ended += 1;
-        task.outcome = Some(if fails.is_some() {
-            Outcome::Cancelled
-        } else {
-            outcome
-        });
-        // A detached task's value: nobody will take it.
-        if task.detached
-            && let (Some(Outcome::Value(v)), Some(d)) = (&task.outcome, task.drop)
-        {
-            dropped.push((d, v.clone()));
-            task.outcome = Some(Outcome::Cancelled);
-        }
-        if let (Some(e), Some(s)) = (fails, scope) {
-            self.fail(s, Failure::Error(e));
-        }
-        self.wake();
-        dropped
-    }
-
-    pub(crate) fn fail(&mut self, s: usize, f: Failure) {
-        if self.scopes[s].failure.is_none() {
-            self.scopes[s].failure = Some(f);
-            self.cancel(s);
-        }
-    }
-
-    fn cancel(&mut self, s: usize) {
-        let tasks = self.scopes[s].tasks.clone();
-        for &t in &tasks {
-            if self.tasks[t].ended.is_none() {
-                self.tasks[t].cancelled = true;
-            }
-        }
-        for inner in 0..self.scopes.len() {
-            if tasks.contains(&self.scopes[inner].owner) && !self.scope_done(inner) {
-                self.cancel(inner);
-            }
-        }
-        self.wake();
-    }
-
-    /// The isolated scope a trap in task `t` ends, if any.
-    pub(crate) fn isolating(&self, t: usize) -> Option<usize> {
-        let mut scope = self.tasks[t].scope;
-        while let Some(s) = scope {
-            if self.scopes[s].isolated {
-                return Some(s);
-            }
-            scope = self.tasks[self.scopes[s].owner].scope;
-        }
-        None
-    }
-
-    pub(crate) fn cancelled(&self, t: usize) -> bool {
-        self.tasks[t].cancelled && !self.tasks[t].unwinding
-    }
-
-    pub(crate) fn unwinding(&self, t: usize) -> bool {
-        self.tasks[t].unwinding
-    }
-
-    pub(crate) fn start_unwinding(&mut self, t: usize) {
-        self.tasks[t].unwinding = true;
-    }
-
-    /// Task `t`'s `Task` has been dropped: an error it ended with fails its scope, and a value
-    /// it ended with is given back to be dropped.
-    pub(crate) fn detach(&mut self, t: usize) -> Option<(DropFn, Vec<u8>)> {
-        self.tasks[t].detached = true;
-        match self.tasks[t].outcome.clone() {
-            Some(Outcome::Error(e)) => {
-                self.tasks[t].outcome = Some(Outcome::Cancelled);
-                if let Some(s) = self.tasks[t].scope {
-                    self.fail(s, Failure::Error(e));
-                }
-                None
-            }
-            Some(Outcome::Value(v)) => {
-                self.tasks[t].outcome = Some(Outcome::Cancelled);
-                self.tasks[t].drop.map(|d| (d, v))
-            }
-            _ => None,
-        }
-    }
-
-    /// Task `t`'s outcome, taken by its `join`, once it has ended.
-    pub(crate) fn take(&mut self, t: usize) -> Option<Outcome> {
-        let task = &mut self.tasks[t];
-        task.ended?;
-        Some(std::mem::replace(
-            task.outcome.as_mut()?,
-            Outcome::Cancelled,
-        ))
-    }
-
-    pub(crate) fn scope_done(&self, s: usize) -> bool {
-        self.scopes[s]
-            .tasks
-            .iter()
-            .all(|&t| self.tasks[t].ended.is_some())
-    }
-
-    /// How scope `s` ends, once its tasks have: its failure, or its body's value. The values of
-    /// its other tasks that nobody took are given back to be dropped.
-    pub(crate) fn scope_result(&mut self, s: usize) -> (Result<Option<Vec<u8>>, Failure>, Dropped) {
-        let mut dropped = Vec::new();
-        for &t in &self.scopes[s].tasks[1..] {
-            if let (Some(Outcome::Value(v)), Some(d)) = (&self.tasks[t].outcome, self.tasks[t].drop)
-            {
-                dropped.push((d, v.clone()));
-            }
-        }
-        for &t in &self.scopes[s].tasks.clone()[1..] {
-            if matches!(self.tasks[t].outcome, Some(Outcome::Value(_))) {
-                self.tasks[t].outcome = Some(Outcome::Cancelled);
-            }
-        }
-        if let Some(f) = self.scopes[s].failure.take() {
-            return (Err(f), dropped);
-        }
-        let body = self.scopes[s].tasks[0];
-        let r = match self.tasks[body].outcome.take() {
-            Some(Outcome::Value(v)) => Ok(Some(v)),
-            Some(Outcome::Error(e)) => Err(Failure::Error(e)),
-            _ => Ok(None),
-        };
-        (r, dropped)
-    }
-
-    pub(crate) fn stop(&mut self, s: usize) {
-        self.scopes[s].stopped = true;
-        self.wake();
-    }
-
-    pub(crate) fn stop_reached(&self, t: usize) -> bool {
-        let Some(own) = self.tasks[t].scope else {
-            return false;
-        };
-        let mut stopped = false;
-        let mut scope = Some(own);
-        while let Some(s) = scope {
-            stopped |= self.scopes[s].stopped;
-            scope = self.tasks[self.scopes[s].owner].scope;
-        }
-        let tasks = &self.scopes[own].tasks;
-        stopped
-            && (0..self.scopes.len())
-                .all(|s| !tasks.contains(&self.scopes[s].owner) || self.scope_done(s))
-    }
-
-    pub(crate) fn channel(&mut self, capacity: usize) -> usize {
-        self.channels.push(Channel {
-            values: VecDeque::new(),
-            capacity,
-            senders: 1,
-            receiver: true,
-            sent: 0,
-            received: 0,
-        });
-        self.channels.len() - 1
-    }
-
-    pub(crate) fn clone_sender(&mut self, c: usize) {
-        self.channels[c].senders += 1;
-    }
-
-    pub(crate) fn drop_sender(&mut self, c: usize) {
-        self.channels[c].senders -= 1;
-        self.wake();
-    }
-
-    /// The receiver is gone: what the channel holds is given back, to be dropped.
-    pub(crate) fn drop_receiver(&mut self, c: usize) -> Vec<Vec<u8>> {
-        let ch = &mut self.channels[c];
-        ch.receiver = false;
-        let left: Vec<Vec<u8>> = ch.values.drain(..).collect();
-        self.wake();
-        left
-    }
-
-    pub(crate) fn receiver_alive(&self, c: usize) -> bool {
-        self.channels[c].receiver
-    }
-
-    pub(crate) fn can_send(&self, c: usize) -> bool {
-        let ch = &self.channels[c];
-        !ch.receiver || ch.values.len() < ch.capacity.max(1)
-    }
-
-    pub(crate) fn push(&mut self, c: usize, v: Vec<u8>) -> (u64, bool) {
-        let ch = &mut self.channels[c];
-        ch.values.push_back(v);
-        ch.sent += 1;
-        let r = (ch.sent, ch.capacity == 0);
-        self.wake();
-        r
-    }
-
-    pub(crate) fn taken(&self, c: usize, n: u64) -> bool {
-        let ch = &self.channels[c];
-        ch.received >= n || !ch.receiver
-    }
-
-    pub(crate) fn can_recv(&self, c: usize) -> bool {
-        let ch = &self.channels[c];
-        !ch.values.is_empty() || ch.senders == 0
-    }
-
-    pub(crate) fn pop(&mut self, c: usize) -> Option<Vec<u8>> {
-        let ch = &mut self.channels[c];
-        let v = ch.values.pop_front()?;
-        ch.received += 1;
-        self.wake();
-        Some(v)
-    }
-
-    pub(crate) fn op_ready(&self, t: usize, op: &Op) -> bool {
-        match op {
-            Op::Recv(c) => self.can_recv(*c),
-            Op::Send(c) => self.can_send(*c),
-            Op::Join(j) => self.tasks[*j].ended.is_some(),
-            Op::Stop => self.stop_reached(t),
-        }
-    }
-
-    pub(crate) fn block(&mut self, t: usize, w: Wait) {
-        self.tasks[t].waiting = Some(w);
-        self.blocked.push(t);
-    }
-
-    pub(crate) fn requeue(&mut self, t: usize) {
-        self.ready.push_back(t);
-    }
-
-    /// The next task to run, if any is ready. With none, time moves to the earliest timer,
-    /// which fires (`task.timer.1`), until a task is ready or no timer is left.
-    pub(crate) fn next(&mut self) -> Option<usize> {
-        if self.os.is_some() {
-            // A run of `main`: the OS's events and the wall clock's timers, waiting for either.
-            while self.ready.is_empty() {
-                let now = self.clock();
-                if let Some((i, at)) = self.earliest()
-                    && at <= now
-                {
-                    self.fire(i);
-                    continue;
-                }
-                let until = self.earliest().map(|(_, at)| at);
-                let (os, _) = self.os.as_mut().expect("the OS");
-                if until.is_none() && !os.waiting() {
-                    break;
-                }
-                let wait =
-                    until.map(|at| std::time::Duration::from_nanos((at - now).max(0) as u64));
-                let events = os.poll(wait);
-                self.deliver_os(events);
-            }
-        } else {
-            while self.ready.is_empty()
-                && let Some((i, _)) = self.earliest()
-            {
-                self.fire(i);
-            }
-        }
-        self.ready.pop_front()
-    }
-
-    fn wake(&mut self) {
-        let mut still = Vec::new();
-        for t in std::mem::take(&mut self.blocked) {
-            let done = match self.tasks[t].waiting.as_ref().expect("a waiting task") {
-                Wait::Scope(s) => self.scope_done(*s),
-                w => {
-                    self.cancelled(t)
-                        || match w {
-                            Wait::Join(j) => self.tasks[*j].ended.is_some(),
-                            Wait::Send(c) => self.can_send(*c),
-                            Wait::Taken(c, n) => self.taken(*c, *n),
-                            Wait::Recv(c) => self.can_recv(*c),
-                            Wait::Stop => self.stop_reached(t),
-                            Wait::Select(ops) => ops.iter().any(|o| self.op_ready(t, o)),
-                            Wait::Scope(_) => unreachable!("handled above"),
-                        }
-                }
-            };
-            if done {
-                self.tasks[t].waiting = None;
-                self.ready.push_back(t);
-            } else {
-                still.push(t);
-            }
-        }
-        self.blocked = still;
     }
 }
 
-impl TaskState {
-    fn new(scope: Option<usize>, drop: Option<DropFn>) -> Self {
-        TaskState {
-            scope,
-            outcome: None,
-            ended: None,
-            detached: false,
-            cancelled: false,
-            unwinding: false,
-            waiting: None,
-            drop,
-        }
+impl std::ops::Deref for RunOs {
+    type Target = crate::os::Os;
+    fn deref(&self) -> &crate::os::Os {
+        &self.os
+    }
+}
+
+impl std::ops::DerefMut for RunOs {
+    fn deref_mut(&mut self) -> &mut crate::os::Os {
+        &mut self.os
+    }
+}
+
+impl moddil_sched::Host for RunOs {
+    fn watch(&mut self, id: usize) {
+        self.os.watch(id);
+    }
+
+    fn watch_signals(&mut self) {
+        self.os.watch_signals();
+    }
+
+    fn waiting(&self) -> bool {
+        self.os.waiting()
+    }
+
+    fn poll(&mut self, wait: Option<std::time::Duration>) -> Vec<moddil_sched::Event> {
+        self.os.poll(wait)
+    }
+
+    fn elapsed(&self) -> i64 {
+        self.start.elapsed()
     }
 }

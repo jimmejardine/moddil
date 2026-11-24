@@ -10,6 +10,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+moddil-sched.workspace = true
 moddil-mir.workspace = true
 moddil-sema.workspace = true
 moddil-syntax.workspace = true

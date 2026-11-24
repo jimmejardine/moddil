@@ -960,6 +960,7 @@ dependencies = [
  "moddil-ffi",
  "moddil-mir",
  "moddil-os",
+ "moddil-sched",
  "moddil-sema",
  "moddil-syntax",
 ]
@@ -1046,6 +1047,7 @@ version = "0.0.0"
 dependencies = [
  "libm",
  "moddil-os",
+ "moddil-sched",
 ]
 
 [[package]]
@@ -1061,6 +1063,10 @@ version = "0.0.0"
 dependencies = [
  "moddil-rt",
 ]
+
+[[package]]
+name = "moddil-sched"
+version = "0.0.0"
 
 [[package]]
 name = "moddil-sema"

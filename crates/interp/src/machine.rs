@@ -65,9 +65,12 @@ pub(crate) fn run(
         dispatch: Dispatch::new(items),
         natives: Natives::new(items),
         fuel,
-        sched: match os {
-            Some(args) => Scheduler::new().with_os(args),
-            None => Scheduler::new(),
+        sched: {
+            let mut s = Scheduler::new();
+            if let Some(args) = os {
+                s.set_os(crate::sched::RunOs::new(args));
+            }
+            s
         },
         pending: std::collections::HashMap::new(),
     };
