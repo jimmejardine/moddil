@@ -5,10 +5,17 @@ step, and the same script runs locally, so the two cannot drift.
 
     python tools/ci.py                 every step, here
     python tools/ci.py clippy test     chosen steps, here
+    python tools/ci.py quick           the quick check, while working
     python tools/ci.py --wsl           every step inside WSL (Linux), on this same checkout
     python tools/ci.py --all           here, then inside WSL
 
 Steps: fmt, clippy, deny, test, tour, examples, links, grammars. Compatible with Python 3.8 (WSL's Ubuntu 20.04).
+
+`quick` is not one of them: it is `fmt` and the tests of every crate but the CLI's, which is the
+libraries' tests and the whole conformance suite on all four implementations, in about half a
+minute. It leaves out the CLI's tests (its commands, the projects on each runtime, the browser and
+Python tests), `random_edits`, doc tests, clippy, deny, links, `tour`, `examples` and `grammars`:
+run the steps themselves before committing.
 This script never installs anything; when a tool is missing it says how to install it.
 """
 
@@ -67,6 +74,19 @@ def step_test():
     return run("cargo", "test", "--workspace", "--doc") and ok
 
 
+def step_quick():
+    # Every crate's tests but the CLI's (`crates/moddil`), whose tests build and run whole
+    # projects, in browsers and Python too, and which needs the `moddil` binary linked.
+    if not step_fmt():
+        return False
+    if has_cargo_tool("nextest"):
+        return run("cargo", "nextest", "run", "--workspace", "--exclude", "moddil",
+                   "-E", "not test(random_edits)")
+    print("(cargo-nextest not installed; using cargo test, random_edits included. "
+          "Install it with: cargo install --locked cargo-nextest)")
+    return run("cargo", "test", "--workspace", "--exclude", "moddil", "--all-targets")
+
+
 def step_tour():
     # M0's gate (specs/roadmap.md): the standard mods check together through the umbrella mod
     # mods/moddil, which nothing else checks as a whole. The tour itself, tour/shorty, is checked
@@ -113,7 +133,11 @@ STEPS = {
     "examples": step_examples,
     "links": step_links,
     "grammars": step_grammars,
+    "quick": step_quick,
 }
+
+# The steps run when none are named: all but `quick`, which is a subset for working.
+DEFAULT = [name for name in STEPS if name != "quick"]
 
 
 def check_toolchain():
@@ -165,7 +189,7 @@ def run_in_wsl(steps):
 
 def main(argv):
     flags = {a for a in argv if a.startswith("--")}
-    steps = [a for a in argv if not a.startswith("--")] or list(STEPS)
+    steps = [a for a in argv if not a.startswith("--")] or DEFAULT
     unknown = [s for s in steps if s not in STEPS] + sorted(flags - {"--wsl", "--all"})
     if unknown:
         sys.exit("unknown: {}\n\n{}".format(", ".join(unknown), __doc__))

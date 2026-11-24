@@ -90,6 +90,7 @@ itself on first use.
 ```
 cargo build --workspace
 python tools/ci.py        # fmt, clippy, deny, test, links, grammars: the same checks GitHub runs
+python tools/ci.py quick  # while working: fmt, and the library and conformance tests (~30 s)
 ```
 
 A small program, saved as `hello.moddil`:
