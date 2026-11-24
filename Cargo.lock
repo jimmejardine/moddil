@@ -1010,6 +1010,7 @@ dependencies = [
  "moddil-project",
  "moddil-rt",
  "moddil-sema",
+ "moddil-show",
  "moddil-syntax",
  "object",
 ]
@@ -1056,6 +1057,7 @@ name = "moddil-rt-main"
 version = "0.0.0"
 dependencies = [
  "moddil-rt",
+ "moddil-show",
 ]
 
 [[package]]
@@ -1078,6 +1080,13 @@ dependencies = [
  "moddil-sources",
  "moddil-syntax",
  "salsa",
+]
+
+[[package]]
+name = "moddil-show"
+version = "0.0.0"
+dependencies = [
+ "moddil-rt",
 ]
 
 [[package]]

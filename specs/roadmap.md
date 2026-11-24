@@ -181,15 +181,6 @@ L)
 - A handler that holds another handler it captured; `log` with handlers; a test run for listed
   types, or declaring capabilities.
 
-**P17. Built programs' results** (`crates/native`, `crates/rt-main`, a crate for showing values;
-L)
-- A built program's `main` giving any type, printed as `moddil run` prints it, not only `()` or
-  `ExitCode`. `moddil run` shows a value from its type's layout (`crates/native/src/show.rs`),
-  with no `Debug` needed, and a built program has no types at run time: so `Show` moves to a
-  crate that renders from a type description (fields, offsets, tags, names), which native code
-  builds from the item tree for `moddil run` and writes into a built program's object for
-  `rt-main` to render `main`'s result with.
-
 **P18. The reference interpreter's differences** (`crates/refinterp`; M)
 - `?` on a call of a function whose signature lists `fail` but whose errors turn out to be `!`
   (it takes the `?` as the call's).

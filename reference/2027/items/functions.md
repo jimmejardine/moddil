@@ -38,7 +38,9 @@ mods' are `Args` and `Env` (the command line and the environment), `Stdio`, `FsR
 **main.exit.1** `main` returns `()`, or an `ExitCode`, which the process exits with: `ExitCode::Ok`
 (0) or one of the `sysexits.h` codes by name (`Usage` 64 to `Config` 78), or
 `ExitCode::new(n)` for another number, which is the named code if `n` has one; `code()` gives the
-number. For now `main` may also return another type, whose value is printed.
+number. For now `main` may also return another type, whose value is printed as the interpreters
+write values (`Point { x: 1, y: 2 }`), by `moddil run` and by a built program alike, which then
+exits with 0.
 
 **item.fn.body.1** Calling the function runs its body ([Calls](../expressions/calls.md)). The
 body's value is the result unless `return` ends it sooner; its type must fit the result type

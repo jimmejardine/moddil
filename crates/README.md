@@ -43,6 +43,7 @@ python tools/ci.py --wsl       # the same steps in WSL (Linux); --all runs both
 | [`wasm/`](wasm/README.md) | `moddil-wasm` | The WASM backend: the native lowering's Cranelift IR translated to core WebAssembly modules, run in Node (M1) |
 | [`rt/`](rt/README.md) | `moddil-rt` | The runtime native code calls: traps, the heap, tasks, numbers and text |
 | [`rt-main/`](rt-main/README.md) | `moddil-rt-main` | A built program's `main`: the static library `moddil build` links with |
+| [`show/`](show/README.md) | `moddil-show` | Values shown as the interpreters write them, from a description of their types |
 | [`ffi/`](ffi/src/lib.rs) | `moddil-ffi` | C interop for the runtimes: a mod's `[c]` code compiled, C libraries loaded, and calls into C from the MIR interpreter (M3a) |
 | [`py/`](py/src/lib.rs) | `moddil-py` | Python bindings: the Moddil shims, the C glue and the stubs that `moddil build --wheel` builds (M3b) |
 | [`gpu/`](gpu/src/lib.rs) | `moddil-gpu` | Kernels (`#[kernel]`) to WGSL: their MIR built as naga IR, with structured control flow and a thread per pixel, validated by naga, and written out (M2e, M2g) |

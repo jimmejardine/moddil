@@ -1591,13 +1591,38 @@ impl<M: Module> Compiler<'_, M> {
 
     /// `moddil_exit_code(out) -> i32`, for a built program: `main`'s result at `out` as the
     /// process's exit code (`main.exit.1`): 0 for `()`, an `ExitCode`'s `sysexits.h` number, or
-    /// `Other(n)`'s `n`.
+    /// `Other(n)`'s `n`, and 0 for any other result, which the program prints as `moddil run`
+    /// does: the data `moddil_result_size` (its size) and `moddil_result_types` (the length of
+    /// a `moddil_show::Types` table, the result's index in it, and the table; a length of 0 for
+    /// `()` and `ExitCode`, which are not printed).
     pub(crate) fn exit_code(&mut self, ret: &Ty) -> Result<(), String> {
         let exit = self.prelude_ty("ExitCode")?;
-        if *ret != Ty::Unit && ret.adt() != exit.adt() {
-            return Err(format!(
-                "a built program's `main` gives `()` or `ExitCode`, not `{ret}`"
-            ));
+        let shown = *ret != Ty::Unit && ret.adt() != exit.adt();
+        let size = self.layouts.of(ret).map_or(0, |l| u64::from(l.size));
+        let mut types = Vec::new();
+        if shown {
+            let (table, root) = crate::show::Show::new(self.items, &self.dyn_types).table(ret);
+            let bytes = table.encode();
+            types.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
+            types.extend_from_slice(&u64::from(root).to_le_bytes());
+            types.extend_from_slice(&bytes);
+        } else {
+            types.extend_from_slice(&0u64.to_le_bytes());
+        }
+        for (name, bytes) in [
+            ("moddil_result_size", size.to_le_bytes().to_vec()),
+            ("moddil_result_types", types),
+        ] {
+            let id = self
+                .module
+                .declare_data(name, Linkage::Export, false, false)
+                .map_err(|e| e.to_string())?;
+            let mut desc = DataDescription::new();
+            desc.define(bytes.into_boxed_slice());
+            desc.set_align(8);
+            self.module
+                .define_data(id, &desc)
+                .map_err(|e| e.to_string())?;
         }
         let ptr = self.module.target_config().pointer_type();
         let mut sig = self.module.make_signature();
@@ -1613,7 +1638,7 @@ impl<M: Module> Compiler<'_, M> {
             b.append_block_params_for_function_params(block);
             b.switch_to_block(block);
             let out = b.block_params(block)[0];
-            let code = if *ret == Ty::Unit {
+            let code = if *ret == Ty::Unit || shown {
                 b.ins().iconst(types::I32, 0)
             } else {
                 let Shape::Enum {

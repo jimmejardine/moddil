@@ -7,7 +7,6 @@ use moddil_mir::TrapClass;
 
 use moddil_syntax::TextRange;
 
-use crate::layout::Layouts;
 use crate::lower::{Compiled, Site};
 use crate::show::{Memory, Show};
 use crate::{Native, Observed};
@@ -109,11 +108,7 @@ impl Compiled<'_> {
                     let live = moddil_rt::live();
                     let mut seen = Seen {
                         sites,
-                        show: Show {
-                            items,
-                            layouts: Layouts::new(items),
-                            dyn_types,
-                        },
+                        show: Show::new(items, dyn_types),
                         observed: Vec::new(),
                         parts: Vec::new(),
                     };

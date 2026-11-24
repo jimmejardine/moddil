@@ -45,6 +45,7 @@ moddil-interp = { path = "crates/interp", version = "0.0.0" }
 moddil-refinterp = { path = "crates/refinterp", version = "0.0.0" }
 moddil-project = { path = "crates/project", version = "0.0.0" }
 moddil-rt = { path = "crates/rt", version = "0.0.0" }
+moddil-show = { path = "crates/show", version = "0.0.0" }
 moddil-wasm = { path = "crates/wasm", version = "0.0.0" }
 moddil-native = { path = "crates/native", version = "0.0.0" }
 moddil-os = { path = "crates/os", version = "0.0.0" }

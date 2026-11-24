@@ -201,6 +201,48 @@ fn a_built_program_exits_with_its_exit_code() {
     }
 }
 
+/// A built program's `main` may give any type: it prints it as `moddil run` does, and exits 0.
+#[test]
+fn a_built_program_prints_its_result_as_run_does() {
+    let text = "struct Node { value: int, next: Option<Box<Node>> }
+enum Shape { Dot, Circle(f64), Box { w: int } }
+
+fn main() -> (Vec<Shape>, Node, Option<&str>, u128, String) {
+    let shapes: Vec<Shape> = [Shape::Dot, Shape::Circle(1.5), Shape::Box { w: 3 }];
+    let list = Node { value: 1, next: Some(Box::new(Node { value: 2, next: None })) };
+    let big: u128 = 340282366920938463463374607431768211455;
+    (shapes, list, Some(\"s\"), big, \"text longer than twenty-three bytes\".to_string())
+}
+";
+    let Some(out) = built("shown", text) else {
+        return;
+    };
+    assert_eq!(out.status.code(), Some(0));
+    let run = moddil(&["run"], &file("shown.moddil", text));
+    let (built, ran) = (
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&run.stdout),
+    );
+    assert_eq!(built, ran);
+    assert!(
+        built.contains("Node { value: 1, next: Some(Box { "),
+        "{built}"
+    );
+    // `()` is not printed.
+    if let Some(out) = built_unit() {
+        assert!(out.stdout.is_empty() && out.status.success());
+    }
+}
+
+/// A built `main` giving `()`.
+fn built_unit() -> Option<Output> {
+    built(
+        "unit",
+        "fn main() { let x = 1; }
+",
+    )
+}
+
 #[test]
 fn a_built_program_reports_a_trap_and_exits_with_70() {
     let text = "fn main() { let v = Vec::from_array([1, 2]); let i = 5; let x = v[i]; }\n";

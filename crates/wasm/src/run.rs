@@ -12,7 +12,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use moddil_mir::TrapClass;
 use moddil_native::backend::Site;
-use moddil_native::layout::Layouts;
 use moddil_native::show::{Memory, Show};
 use moddil_sema::{Db, Item, Program};
 use moddil_syntax::TextRange;
@@ -344,11 +343,7 @@ fn run_entry(c: &Compiled<'_>, host: &mut Host, k: usize) -> Ran {
 
 /// Runs entry `k` with host command `cmd`: as [`run_entry`].
 fn run_command(c: &Compiled<'_>, host: &mut Host, k: usize, cmd: &str) -> Ran {
-    let mut show = Show {
-        items: c.items,
-        layouts: Layouts::new(c.items),
-        dyn_types: &c.dyn_types,
-    };
+    let mut show = Show::new(c.items, &c.dyn_types);
     let mut observed = Vec::new();
     let mut parts: Vec<(TextRange, Option<String>)> = Vec::new();
     let entry = &c.entries[k];

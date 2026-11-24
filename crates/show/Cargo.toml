@@ -1,0 +1,16 @@
+[package]
+name = "moddil-show"
+description = "Values shown as the interpreters write them, from a description of their types"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+moddil-rt.workspace = true
+
+[lints]
+workspace = true
