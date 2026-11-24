@@ -37,6 +37,14 @@ impl Natives<'_> {
                 Value::Char(c) => c.to_string(),
                 other => unreachable!("`Display` of {other:?}"),
             }),
+            // A float with fixed digits (`expr.fmt.spec.3`).
+            (Ty::Num(_), "fixed_text") => match arg(stack, 0) {
+                Value::Num(n, bits) => {
+                    let digits = usize::try_from(arg(stack, 1).as_int()).unwrap_or(0);
+                    str_of(moddil_mir::fixed_text(n, bits, digits))
+                }
+                other => unreachable!("a float: {other:?}"),
+            },
             (Ty::Char, "code") => Value::Int(i64::from(u32::from(ch(stack, 0)))),
             (Ty::Char, "from_code") => {
                 let c = u32::try_from(arg(stack, 0).as_int())

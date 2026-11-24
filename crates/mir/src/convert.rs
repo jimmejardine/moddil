@@ -35,3 +35,8 @@ pub fn convert(how: &str, from: Option<Num>, bits: u128, to: Option<Num>) -> Opt
 pub fn num_text(n: Num, bits: u128) -> String {
     moddil_rt::num::text(num_code(Some(n)), bits)
 }
+
+/// Float `n`'s text, from its bits, with `digits` digits after the point (`expr.fmt.spec.3`).
+pub fn fixed_text(n: Num, bits: u128, digits: usize) -> String {
+    moddil_rt::num::fixed_text(n == Num::F32, bits as u64, digits)
+}

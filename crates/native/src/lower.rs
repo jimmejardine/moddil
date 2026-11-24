@@ -5676,7 +5676,9 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             (Ty::Int | Ty::Num(_), "checked_to" | "truncate" | "wrap" | "saturate") => {
                 self.convert(name, targs, args, d)?
             }
-            (Ty::Int | Ty::Num(_) | Ty::Bool | Ty::Char, "text") | (Ty::Char, "quoted_text") => {
+            (Ty::Int | Ty::Num(_) | Ty::Bool | Ty::Char, "text")
+            | (Ty::Char, "quoted_text")
+            | (Ty::Num(Num::F32 | Num::F64), "fixed_text") => {
                 self.display_text(&self_ty, name, args)?
             }
             (Ty::Str, _) => self.str_intrinsic(name, args, d, range)?,
@@ -6053,8 +6055,8 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         })
     }
 
-    /// What `Display` writes for a number, a `bool` or a `char` (`text.display.1`), or a
-    /// `char` quoted: made in the host.
+    /// What `Display` writes for a number, a `bool` or a `char` (`text.display.1`), a `char`
+    /// quoted, or a float with fixed digits (`expr.fmt.spec.3`): made in the host.
     fn display_text(&mut self, self_ty: &Ty, name: &str, args: &[Operand]) -> Result<Val, String> {
         let ty = self.operand_ty(&args[0])?;
         // The impl's own type: a refined number's is its base (`Small` is an `int`).
@@ -6074,9 +6076,15 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             (Ty::Char, "quoted_text") => 102,
             (Ty::Bool, _) => 100,
             (Ty::Char, _) => 101,
+            (Ty::Num(Num::F32), "fixed_text") => 107,
+            (Ty::Num(Num::F64), "fixed_text") => 108,
             (t, _) => Self::num_code(t).ok_or("text of something not a number")?,
         };
-        let (lo, hi) = self.number_words(x, &inner);
+        let (lo, mut hi) = self.number_words(x, &inner);
+        // A float's fixed digits travel where a wide number's high word would.
+        if name == "fixed_text" {
+            hi = self.value(&args[1])?;
+        }
         let ptr = self.ptr();
         let null = self.b.ins().iconst(ptr, 0);
         let zero = self.b.ins().iconst(types::I64, 0);

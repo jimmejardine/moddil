@@ -975,7 +975,7 @@ impl Walk<'_, '_> {
             // A hole is written through `Display::fmt(&self, …)`: it is borrowed.
             ExprKind::Fmt(pieces) => {
                 for p in pieces {
-                    if let crate::hir::FmtPiece::Hole(h) | crate::hir::FmtPiece::Debug(h) = p {
+                    if let crate::hir::FmtPiece::Hole(h, _) = p {
                         self.expr(h, Use::Read);
                     }
                 }

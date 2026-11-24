@@ -1,7 +1,7 @@
 //! Expressions and statements: each HIR expression kind as blocks and statements.
 
 use moddil_sema::hir::{
-    ExprId, ExprKind, FmtPiece, Halt, Handler, LogicOp, PatKind, Stmt, UnaryOp,
+    Align, ExprId, ExprKind, FmtPiece, Halt, Handler, LogicOp, PatKind, Stmt, UnaryOp,
 };
 use moddil_sema::{Callee, Ty};
 use moddil_syntax::TextRange;
@@ -957,62 +957,146 @@ impl Builder<'_> {
     }
 
     /// `fmt"…"`: a new `String`, then each piece in order: text is pushed onto it, and each
-    /// hole is borrowed and written by its `Display::fmt`.
+    /// hole is borrowed and written by its `Display::fmt` (or `Debug::fmt`). A hole with a width
+    /// or a precision is written into a `String` of its own first, which is then cut and padded
+    /// onto it (`expr.fmt.spec.1`).
     fn fmt(&mut self, dest: Local, pieces: &[FmtPiece], range: TextRange) {
-        let string = |name: &str| {
-            let func = self
-                .items
-                .builtin_method(&self.items.string_ty(), name)
-                .expect("the prelude's `String`");
-            Callee::Fn {
-                func,
-                args: Vec::new(),
-            }
-        };
-        self.call_into(None, string("new"), Place::local(dest), Vec::new(), range);
-        let push_str = string("push_str");
+        let new = self.string_method("new");
+        self.call_into(None, new.clone(), Place::local(dest), Vec::new(), range);
         for p in pieces {
-            let out = self.temp(Ty::reference(true, self.items.string_ty()));
-            self.cfg.assign(out, Rvalue::Ref(true, Place::local(dest)));
-            let unit = self.temp(Ty::Unit);
             match p {
                 FmtPiece::Lit(s) => {
                     let c = self.cfg.str_const(s);
-                    self.call_into(
-                        None,
-                        push_str.clone(),
-                        Place::local(unit),
-                        vec![Operand::Move(Place::local(out)), Operand::Const(c)],
-                        range,
-                    );
+                    self.push_str(dest, Operand::Const(c), range);
                 }
-                &(FmtPiece::Hole(h) | FmtPiece::Debug(h)) => {
-                    let ty = self.ty(h);
-                    // A borrow is written as what it points to.
-                    let this = match &ty {
-                        Ty::Ref(..) => self.operand(h, &[]),
-                        t => {
-                            let place = self.place(h);
-                            let r = self.temp(Ty::reference(false, t.clone()));
-                            self.cfg.assign(r, Rvalue::Ref(false, place));
-                            Operand::Move(Place::local(r))
-                        }
+                FmtPiece::Hole(h, spec) if spec.is_plain() => self.write_hole(*h, dest),
+                FmtPiece::Hole(h, spec) => {
+                    let h = *h;
+                    let piece = self.temp(self.items.string_ty());
+                    self.call_into(None, new.clone(), Place::local(piece), Vec::new(), range);
+                    let base = match self.ty(h) {
+                        Ty::Ref(_, t) => (*t).clone(),
+                        t => t,
                     };
-                    let callee = self
-                        .types
-                        .fmt_callee(h)
-                        .expect("a checked `fmt` hole")
-                        .clone();
-                    self.call_into(
-                        None,
-                        callee,
-                        Place::local(unit),
-                        vec![this, Operand::Move(Place::local(out))],
-                        self.range(h),
-                    );
+                    let base = self.items.base(&base);
+                    let number = matches!(base, Ty::Int | Ty::Num(_));
+                    let text = base == Ty::Str || base == self.items.string_ty();
+                    // A float's fixed digits (`expr.fmt.spec.3`).
+                    let fixed = match (&base, spec.precision) {
+                        (Ty::Num(n), Some(digits)) if n.is_float() => self
+                            .items
+                            .builtin_method(&base, "fixed_text")
+                            .map(|f| (f, digits)),
+                        _ => None,
+                    };
+                    match fixed {
+                        Some((func, digits)) => {
+                            let this = self.hole_ref(h);
+                            let s = self.temp(Ty::reference(false, Ty::Str));
+                            let callee = Callee::Fn {
+                                func,
+                                args: Vec::new(),
+                            };
+                            let digits = Operand::Const(Const::Int(i64::from(digits)));
+                            self.call_into(
+                                None,
+                                callee,
+                                Place::local(s),
+                                vec![this, digits],
+                                self.range(h),
+                            );
+                            self.push_str(piece, Operand::Move(Place::local(s)), range);
+                        }
+                        None => self.write_hole(h, piece),
+                    }
+                    let align = match spec.align {
+                        Some(Align::Center) => 1,
+                        Some(Align::Right) => 2,
+                        None if number => 2,
+                        Some(Align::Left) | None => 0,
+                    };
+                    let keep = match spec.precision {
+                        Some(k) if text && !spec.debug => i64::from(k),
+                        _ => -1,
+                    };
+                    let out = self.temp(Ty::reference(true, self.items.string_ty()));
+                    self.cfg.assign(out, Rvalue::Ref(true, Place::local(dest)));
+                    let unit = self.temp(Ty::Unit);
+                    let args = vec![
+                        Operand::Move(Place::local(out)),
+                        Operand::Move(Place::local(piece)),
+                        Operand::Const(Const::Char(spec.fill.unwrap_or(' '))),
+                        Operand::Const(Const::Int(align)),
+                        Operand::Const(Const::Int(spec.width.map_or(0, i64::from))),
+                        Operand::Const(Const::Bool(spec.zero)),
+                        Operand::Const(Const::Int(keep)),
+                    ];
+                    let padded = self.string_method("push_padded");
+                    self.call_into(None, padded, Place::local(unit), args, range);
                 }
             }
         }
+    }
+
+    /// The prelude's `String` method `name`.
+    fn string_method(&self, name: &str) -> Callee {
+        let func = self
+            .items
+            .builtin_method(&self.items.string_ty(), name)
+            .expect("the prelude's `String`");
+        Callee::Fn {
+            func,
+            args: Vec::new(),
+        }
+    }
+
+    /// `s`, a `&str`, pushed onto the `String` in `dest`.
+    fn push_str(&mut self, dest: Local, s: Operand, range: TextRange) {
+        let out = self.temp(Ty::reference(true, self.items.string_ty()));
+        self.cfg.assign(out, Rvalue::Ref(true, Place::local(dest)));
+        let unit = self.temp(Ty::Unit);
+        let push_str = self.string_method("push_str");
+        self.call_into(
+            None,
+            push_str,
+            Place::local(unit),
+            vec![Operand::Move(Place::local(out)), s],
+            range,
+        );
+    }
+
+    /// A borrow of hole `h`'s value: the value itself if it is a borrow, which is written as what
+    /// it points to.
+    fn hole_ref(&mut self, h: ExprId) -> Operand {
+        match self.ty(h) {
+            Ty::Ref(..) => self.operand(h, &[]),
+            t => {
+                let place = self.place(h);
+                let r = self.temp(Ty::reference(false, t));
+                self.cfg.assign(r, Rvalue::Ref(false, place));
+                Operand::Move(Place::local(r))
+            }
+        }
+    }
+
+    /// Hole `h` written onto the `String` in `dest` by the `fmt` its check chose.
+    fn write_hole(&mut self, h: ExprId, dest: Local) {
+        let this = self.hole_ref(h);
+        let out = self.temp(Ty::reference(true, self.items.string_ty()));
+        self.cfg.assign(out, Rvalue::Ref(true, Place::local(dest)));
+        let unit = self.temp(Ty::Unit);
+        let callee = self
+            .types
+            .fmt_callee(h)
+            .expect("a checked `fmt` hole")
+            .clone();
+        self.call_into(
+            None,
+            callee,
+            Place::local(unit),
+            vec![this, Operand::Move(Place::local(out))],
+            self.range(h),
+        );
     }
 
     pub(super) fn call_into(

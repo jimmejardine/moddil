@@ -52,8 +52,9 @@ fn text_at<'a>(p: *const u8, n: u64) -> &'a str {
 
 /// What a text function gives: `text` of a number (by its code), of a `bool` (code 100) or of a
 /// `char` (code 101), in `lo`; `quoted_text` of a `char` (code 102); or, of the text at `p` (`n`
-/// bytes), `quoted_text` (103), `upper_text` (104), `lower_text` (105) or `trim` (106). Its
-/// address, and its length at `len`.
+/// bytes), `quoted_text` (103), `upper_text` (104), `lower_text` (105) or `trim` (106); or
+/// `fixed_text` of an `f32` (107) or an `f64` (108) in `lo`, with `hi` digits. Its address, and
+/// its length at `len`.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "moddil_rt_text")]
 pub extern "C" fn text(
@@ -73,6 +74,7 @@ pub extern "C" fn text(
         104 => text_at(p, n).to_uppercase(),
         105 => text_at(p, n).to_lowercase(),
         106 => text_at(p, n).trim().to_string(),
+        107 | 108 => crate::num::fixed_text(code == 107, lo, hi as usize),
         k => crate::num::text(k, bits),
     };
     keep(s, len)

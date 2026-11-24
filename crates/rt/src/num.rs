@@ -264,6 +264,16 @@ pub fn text(code: u32, bits: u128) -> String {
     }
 }
 
+/// A float's text with `digits` digits after the point, rounded to the nearest
+/// (`expr.fmt.spec.3`): an `f32` if `f32` says so, else an `f64`, from its bits.
+pub fn fixed_text(f32: bool, bits: u64, digits: usize) -> String {
+    if f32 {
+        format!("{:.*}", digits, f32::from_bits(bits as u32))
+    } else {
+        format!("{:.*}", digits, f64::from_bits(bits))
+    }
+}
+
 /// The code of the number type named `name` (`int`, `i8`, …).
 pub fn code(name: &str) -> Option<u32> {
     if name == "int" {

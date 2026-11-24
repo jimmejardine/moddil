@@ -62,7 +62,7 @@ impl Builder<'_> {
             }
             ExprKind::Fmt(pieces) => pieces
                 .iter()
-                .any(|p| matches!(p, FmtPiece::Hole(h) | FmtPiece::Debug(h) if self.assigns(*h))),
+                .any(|p| matches!(p, FmtPiece::Hole(h, _) if self.assigns(*h))),
             ExprKind::Adt { fields, .. } => fields.iter().any(|&(_, x)| self.assigns(x)),
             ExprKind::Field { base, .. } => self.assigns(*base),
             ExprKind::Call { args, .. } => any(args),

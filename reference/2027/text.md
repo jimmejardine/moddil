@@ -108,10 +108,28 @@ what it points to.
 prelude's `Debug`, `fn fmt(&self, out: &mut String)`, writes a value as Moddil source does: text
 and characters in quotes and escaped, `[1, 2]`, `Some(x)`, `(a, b)`; `int`, `bool`, `char`, `str`,
 `String`, `()`, slices, arrays, `Vec`, `Option`, `Result`, pairs, and the core mod's maps
-(`{k: v}`) and sets implement it. Other format specs wait.
+(`{k: v}`) and sets implement it.
 
 **expr.fmt.2** The type of each hole, or what a borrow in it points to, implements `Display`
 (E0402); for `{e:?}`, `Debug`. A hole holds one expression (E0902).
+
+**expr.fmt.spec.1** A hole's **format spec**, after a `:` that is not part of a path's `::`, is
+`[[fill]align][0][width][.precision][?]`, as Rust's: `{n:>6}`, `{s:*^9}`, `{f:8.2}`, `{x:>12?}`.
+With a width, what the hole writes is padded to that many characters (not bytes) with the fill,
+a space unless one is written: to its left for `>`, to its right for `<`, and on both sides for
+`^`, the extra one on the right. Without an alignment a number (`int`, a sized integer, a float)
+goes to the right and anything else to the left. Text longer than the width is written whole. A
+spec that is not of that form, or an alignment or `0` without a width, is an invalid literal
+(E0902).
+
+**expr.fmt.spec.2** `0` before the width pads a number with `0`s after its sign, whatever the
+alignment: `{n:06}` of `-42` is `-00042`. On anything but a number it is E0902.
+
+**expr.fmt.spec.3** A precision is a float's digits after the point, rounded to the nearest
+(`{f:.3}` of `3.14159` is `3.142`; the float's `fixed_text(digits)` gives the same text), or the
+most characters of a `str` or `String` that `Display` writes (`{s:.2}` of `"abc"` is `ab`). On
+any other type, and on text with `?`, it is E0902. A width and a precision written as `name$`
+or `.*` wait.
 
 ## Patterns
 

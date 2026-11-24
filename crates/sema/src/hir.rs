@@ -376,10 +376,44 @@ pub enum ExprKind {
 pub enum FmtPiece {
     /// Text as it is.
     Lit(String),
-    /// A hole: an expression whose `Display` goes here.
-    Hole(ExprId),
-    /// A hole with `:?`: an expression whose `Debug` goes here.
-    Debug(ExprId),
+    /// A hole: an expression whose `Display` (or, with `?`, `Debug`) goes here, as its spec
+    /// says.
+    Hole(ExprId, Spec),
+}
+
+/// A hole's format spec, `{e:[[fill]align][0][width][.precision][?]}` (`expr.fmt.spec.1`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Spec {
+    /// `?`: `Debug`, not `Display`.
+    pub debug: bool,
+    /// The character padding fills with, if written (a space otherwise).
+    pub fill: Option<char>,
+    /// The alignment, if written (numbers to the right, others to the left otherwise).
+    pub align: Option<Align>,
+    /// `0`: a number padded with zeros after its sign.
+    pub zero: bool,
+    /// The fewest characters written.
+    pub width: Option<u32>,
+    /// A float's digits after the point, or the most characters of text written.
+    pub precision: Option<u32>,
+}
+
+impl Spec {
+    /// Whether the piece is written as it is, with nothing to pad or cut.
+    pub fn is_plain(&self) -> bool {
+        self.width.is_none() && self.precision.is_none()
+    }
+}
+
+/// Where a hole's text goes in its width.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Align {
+    /// `<`.
+    Left,
+    /// `^`: the extra fill after it when it does not split evenly.
+    Center,
+    /// `>`.
+    Right,
 }
 
 /// A handler a `with` installs: `Time = clock`.

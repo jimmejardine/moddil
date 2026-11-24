@@ -197,13 +197,18 @@ impl Machine<'_> {
     }
 
     /// One hole: its expression, parsed where it stands in the file so its ranges are the
-    /// file's, then written onto `out` by `Display::fmt` with a borrow of its value.
+    /// file's, then written onto `out` by `Display::fmt` with a borrow of its value. A spec
+    /// (`expr.fmt.spec.1`) writes it into a `String` of its own first, then cuts and pads it.
     fn hole(&mut self, text: &str, start: usize, out: &crate::value::Pointer) -> Eval<()> {
-        // `{x:?}` writes `x`'s `Debug` (`expr.fmt.debug.1`).
-        let (text, tr) = match text.strip_suffix(":?") {
-            Some(t) => (t, "Debug"),
-            None => (text, "Display"),
+        let (text, spec) = match spec_colon(text) {
+            Some(k) => (
+                &text[..k],
+                parse_spec(&text[k + 1..]).expect("a checked spec"),
+            ),
+            None => (text, Spec::default()),
         };
+        // `{x:?}` writes `x`'s `Debug` (`expr.fmt.debug.1`).
+        let tr = if spec.debug { "Debug" } else { "Display" };
         let wrapper = "fn f(){(";
         let pad = start.saturating_sub(wrapper.len());
         let source = format!("{}{wrapper}{text})}}", " ".repeat(pad));
@@ -226,8 +231,55 @@ impl Machine<'_> {
             },
         };
         let range = expr.syntax().text_range();
-        self.call_trait(tr, "fmt", vec![this, Value::Ref(out.clone(), true)], range)?;
-        Ok(())
+        if spec.width.is_none() && spec.precision.is_none() {
+            self.call_trait(tr, "fmt", vec![this, Value::Ref(out.clone(), true)], range)?;
+            return Ok(());
+        }
+        let value = self.target(this.clone());
+        let number = matches!(value, Value::Int(_) | Value::Num(..) | Value::FloatLit(_));
+        let text_value =
+            matches!(value, Value::Str(_)) || crate::value::string_text(&value).is_some();
+        // A float's fixed digits (`expr.fmt.spec.3`), or what its `fmt` writes.
+        let written = match (&value, spec.precision) {
+            (Value::Num(k, bits), Some(digits)) if k.is_float() => {
+                let digits = digits as usize;
+                if *k == crate::num::Kind::F32 {
+                    format!("{:.*}", digits, f32::from_bits(*bits as u32))
+                } else {
+                    format!("{:.*}", digits, f64::from_bits(*bits as u64))
+                }
+            }
+            // A float literal whose type is not written is an `f64` (`num.lit.1`).
+            (Value::FloatLit(t), Some(digits)) => {
+                let x: f64 = t.replace('_', "").parse().expect("a float literal");
+                format!("{:.*}", digits as usize, x)
+            }
+            _ => {
+                let empty = self.string_call("new", Vec::new(), range)?;
+                let piece = self.memory.temp(empty);
+                self.call_trait(
+                    tr,
+                    "fmt",
+                    vec![this, Value::Ref(piece.clone(), true)],
+                    range,
+                )?;
+                crate::value::string_text(&self.memory.load(&piece)).expect("a `String`")
+            }
+        };
+        let keep = match spec.precision {
+            Some(k) if text_value && !spec.debug => k as usize,
+            _ => usize::MAX,
+        };
+        let align = spec.align.unwrap_or(if number { '>' } else { '<' });
+        let padded = padded(
+            &written,
+            spec.fill,
+            align,
+            spec.width.unwrap_or(0) as usize,
+            spec.zero,
+            keep,
+        );
+        self.push_text(out, &padded)
     }
 
     /// The prelude's built-in function `f`, for values of kind `head`.
@@ -617,4 +669,101 @@ pub(super) fn ordered<T: Ord + ?Sized>(op: K, a: &T, b: &T) -> bool {
         K::GT => a > b,
         _ => a >= b,
     }
+}
+
+/// A hole's format spec (`expr.fmt.spec.1`): `[[fill]align][0][width][.precision][?]`.
+#[derive(Default)]
+struct Spec {
+    debug: bool,
+    fill: char,
+    align: Option<char>,
+    zero: bool,
+    width: Option<u32>,
+    precision: Option<u32>,
+}
+
+/// Where a hole's spec starts: its first `:` outside brackets and strings, not in a `::`.
+fn spec_colon(hole: &str) -> Option<usize> {
+    let cs: Vec<(usize, char)> = hole.char_indices().collect();
+    let mut depth = 0;
+    let mut i = 0;
+    while i < cs.len() {
+        match cs[i].1 {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            '"' => {
+                i += 1;
+                while i < cs.len() && cs[i].1 != '"' {
+                    i += 1;
+                }
+            }
+            ':' if cs.get(i + 1).map(|c| c.1) == Some(':') => i += 1,
+            ':' if depth == 0 && (i == 0 || cs[i - 1].1 != ':') => return Some(cs[i].0),
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+/// A checked hole's spec.
+fn parse_spec(text: &str) -> Option<Spec> {
+    let cs: Vec<char> = text.chars().collect();
+    let align = |c: &char| matches!(c, '<' | '^' | '>');
+    let mut spec = Spec {
+        fill: ' ',
+        ..Spec::default()
+    };
+    let mut i = 0;
+    if cs.get(1).is_some_and(align) {
+        spec.fill = cs[0];
+        spec.align = Some(cs[1]);
+        i = 2;
+    } else if cs.first().is_some_and(align) {
+        spec.align = Some(cs[0]);
+        i = 1;
+    }
+    if cs.get(i) == Some(&'0') {
+        spec.zero = true;
+        i += 1;
+    }
+    let number = |i: &mut usize| {
+        let from = *i;
+        while cs.get(*i).is_some_and(char::is_ascii_digit) {
+            *i += 1;
+        }
+        cs[from..*i].iter().collect::<String>().parse().ok()
+    };
+    spec.width = number(&mut i);
+    if cs.get(i) == Some(&'.') {
+        i += 1;
+        spec.precision = Some(number(&mut i)?);
+    }
+    if cs.get(i) == Some(&'?') {
+        spec.debug = true;
+        i += 1;
+    }
+    (i == cs.len()).then_some(spec)
+}
+
+/// `s` cut to its first `keep` characters, then filled with `fill` to `width` characters, to the
+/// left (`<`), centred (`^`) or to the right (`>`); with `zero`, filled with `0`s after a leading
+/// sign (`expr.fmt.spec.1`, `expr.fmt.spec.2`).
+fn padded(s: &str, fill: char, align: char, width: usize, zero: bool, keep: usize) -> String {
+    let kept: String = s.chars().take(keep).collect();
+    let room = width.saturating_sub(kept.chars().count());
+    if zero {
+        let (sign, rest) = match kept.strip_prefix(['-', '+']) {
+            Some(rest) => (&kept[..1], rest),
+            None => ("", kept.as_str()),
+        };
+        return format!("{sign}{}{rest}", "0".repeat(room));
+    }
+    let before = match align {
+        '<' => 0,
+        '^' => room / 2,
+        _ => room,
+    };
+    let fill = |n: usize| fill.to_string().repeat(n);
+    format!("{}{kept}{}", fill(before), fill(room - before))
 }

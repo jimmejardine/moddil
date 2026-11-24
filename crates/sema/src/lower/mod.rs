@@ -192,7 +192,16 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
                     let clause =
                         cx.alloc(ExprKind::Fmt(vec![FmtPiece::Lit(r.clause.clone())]), range);
                     let shown_v = cx.alloc(ExprKind::Local(value), range);
-                    let shown = cx.alloc(ExprKind::Fmt(vec![FmtPiece::Debug(shown_v)]), range);
+                    let shown = cx.alloc(
+                        ExprKind::Fmt(vec![FmtPiece::Hole(
+                            shown_v,
+                            crate::hir::Spec {
+                                debug: true,
+                                ..crate::hir::Spec::default()
+                            },
+                        )]),
+                        range,
+                    );
                     let else_ = match items.lang("RefinementError") {
                         Some(adt) => {
                             let err = cx.alloc(

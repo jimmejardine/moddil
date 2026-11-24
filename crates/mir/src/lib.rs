@@ -598,7 +598,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg(test)]
 mod tests;
 
-pub use convert::{convert, num_code, num_text};
+pub use convert::{convert, fixed_text, num_code, num_text};
 pub use moddil_rt::num::{float_f32, float_f64};
 
 /// The runtime's operation a built-in function of the prelude stands for, as the runtimes

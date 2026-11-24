@@ -317,6 +317,45 @@ impl String {
         }
     }
 
+    // `s` written as a hole's format spec says (`expr.fmt.spec.1`): cut to its first `keep`
+    // characters unless `keep` is -1, then filled with `fill` to `width` characters, the text
+    // to the left (`align` 0), centred (1) or to the right (2); or, with `zero`, filled with
+    // `0`s after a leading sign.
+    fn push_padded(&mut self, s: String, fill: char, align: int, width: int, zero: bool, keep: int) {
+        let s = s.as_str();
+        let mut end = 0;
+        let mut count = 0;
+        while end < s.len() && (keep < 0 || count < keep) {
+            let c = s.char_at_byte(end) ?! "a character starts at each character's end";
+            end += c.len_utf8();
+            count += 1;
+        }
+        let room = if width > count { width - count } else { 0 };
+        if zero {
+            let sign = if end > 0 && (s.byte_at(0) == 45 || s.byte_at(0) == 43) { 1 } else { 0 };
+            self.push_str(s.bytes_between(0, sign));
+            for _ in 0..room {
+                self.push('0');
+            }
+            self.push_str(s.bytes_between(sign, end));
+            return;
+        }
+        let before = if align == 0 {
+            0
+        } else if align == 1 {
+            room / 2
+        } else {
+            room
+        };
+        for _ in 0..before {
+            self.push(fill);
+        }
+        self.push_str(s.bytes_between(0, end));
+        for _ in 0..room - before {
+            self.push(fill);
+        }
+    }
+
     // Adds `c`, encoded as UTF-8: one to four bytes.
     fn push(&mut self, c: char) {
         let n = c.len_utf8();

@@ -5,7 +5,7 @@ use moddil_syntax::ast;
 use moddil_syntax::{SyntaxKind as K, SyntaxToken, TextRange};
 
 use super::Lowerer;
-use crate::hir::{ExprId, ExprKind, FmtPiece};
+use crate::hir::{Align, ExprId, ExprKind, FmtPiece, Spec};
 use crate::{Code, Diagnostic};
 
 /// The text of a string literal token, or why it is not one.
@@ -246,14 +246,20 @@ impl Lowerer<'_> {
                     let hole: String = bytes[i + 1..end].iter().collect();
                     let hole_start = start + offset + 1;
                     let at = TextRange::new(hole_start as u32, (hole_start + hole.len()) as u32);
-                    // `{x:?}` writes `x`'s `Debug` (`expr.fmt.debug.1`).
-                    let (expr_text, debug) = match hole.strip_suffix(":?") {
-                        Some(e) if !format_spec(e) => (e.to_string(), true),
-                        _ => (hole.clone(), false),
+                    // `{x:spec}`: `?` writes `x`'s `Debug` (`expr.fmt.debug.1`), and the rest
+                    // pads and cuts it (`expr.fmt.spec.1`).
+                    let (expr_text, spec) = match spec_colon(&hole) {
+                        Some(k) => match parse_spec(&hole[k + 1..]) {
+                            Ok(spec) => (&hole[..k], spec),
+                            Err(why) => {
+                                self.report(Code::E0902, at, why);
+                                return self.missing(range);
+                            }
+                        },
+                        None => (hole.as_str(), Spec::default()),
                     };
-                    match self.hole(&expr_text, hole_start, at) {
-                        Some(e) if debug => pieces.push(FmtPiece::Debug(e)),
-                        Some(e) => pieces.push(FmtPiece::Hole(e)),
+                    match self.hole(expr_text, hole_start, at) {
+                        Some(e) => pieces.push(FmtPiece::Hole(e, spec)),
                         None => return self.missing(range),
                     }
                     let taken: usize = bytes[i..=end.min(bytes.len() - 1)]
@@ -279,10 +285,6 @@ impl Lowerer<'_> {
     /// The expression of a `fmt` hole whose text starts at byte `at` of the file, parsed where it
     /// stands so its ranges are the file's.
     fn hole(&mut self, text: &str, at: usize, range: TextRange) -> Option<ExprId> {
-        if format_spec(text) {
-            self.error(Diagnostic::unsupported(range, "a format spec (`{x:…}`)"));
-            return None;
-        }
         let wrapper = "fn f(){(";
         if at < wrapper.len() {
             self.error(Diagnostic::unsupported(range, "this hole"));
@@ -340,26 +342,77 @@ fn hole_end(cs: &[char], from: usize) -> usize {
     cs.len()
 }
 
-/// Whether a hole has a format spec: a `:` outside brackets, strings and `::`.
-fn format_spec(hole: &str) -> bool {
-    let cs: Vec<char> = hole.chars().collect();
+/// Where the hole's format spec starts: the byte of its `:`, the first not in brackets, a string
+/// or a path's `::`.
+fn spec_colon(hole: &str) -> Option<usize> {
+    let cs: Vec<(usize, char)> = hole.char_indices().collect();
     let mut depth = 0;
     let mut i = 0;
     while i < cs.len() {
-        match cs[i] {
+        match cs[i].1 {
             '(' | '[' | '{' => depth += 1,
             ')' | ']' | '}' => depth -= 1,
             '"' => {
                 i += 1;
-                while i < cs.len() && cs[i] != '"' {
+                while i < cs.len() && cs[i].1 != '"' {
                     i += 1;
                 }
             }
-            ':' if cs.get(i + 1) == Some(&':') => i += 1,
-            ':' if depth == 0 && (i == 0 || cs[i - 1] != ':') => return true,
+            ':' if cs.get(i + 1).map(|c| c.1) == Some(':') => i += 1,
+            ':' if depth == 0 && (i == 0 || cs[i - 1].1 != ':') => return Some(cs[i].0),
             _ => {}
         }
         i += 1;
     }
-    false
+    None
+}
+
+/// A format spec, `[[fill]align][0][width][.precision][?]` (`expr.fmt.spec.1`), or what is
+/// wrong with it.
+fn parse_spec(text: &str) -> Result<Spec, String> {
+    let bad = || format!("`{text}` is not a format spec: `[[fill]align][0][width][.precision][?]`");
+    let align_of = |c: char| match c {
+        '<' => Some(Align::Left),
+        '^' => Some(Align::Center),
+        '>' => Some(Align::Right),
+        _ => None,
+    };
+    let cs: Vec<char> = text.chars().collect();
+    let mut spec = Spec::default();
+    let mut i = 0;
+    if cs.len() >= 2
+        && let Some(a) = align_of(cs[1])
+    {
+        spec.fill = Some(cs[0]);
+        spec.align = Some(a);
+        i = 2;
+    } else if let Some(a) = cs.first().copied().and_then(align_of) {
+        spec.align = Some(a);
+        i = 1;
+    }
+    if cs.get(i) == Some(&'0') {
+        spec.zero = true;
+        i += 1;
+    }
+    let number = |i: &mut usize| -> Option<u32> {
+        let start = *i;
+        while cs.get(*i).is_some_and(char::is_ascii_digit) {
+            *i += 1;
+        }
+        cs[start..*i].iter().collect::<String>().parse().ok()
+    };
+    spec.width = number(&mut i);
+    if cs.get(i) == Some(&'.') {
+        i += 1;
+        spec.precision = Some(number(&mut i).ok_or_else(bad)?);
+    }
+    if cs.get(i) == Some(&'?') {
+        spec.debug = true;
+        i += 1;
+    }
+    // An alignment or `0` says how to fill a width, so it needs one.
+    if i != cs.len() || ((spec.align.is_some() || spec.zero) && spec.width.is_none()) {
+        return Err(bad());
+    }
+    Ok(spec)
 }

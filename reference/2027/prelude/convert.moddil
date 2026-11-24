@@ -672,6 +672,11 @@ impl f32 {
     #[intrinsic]
     fn text(&self) -> &str;
 
+    // The value with `digits` digits after the point, rounded to the nearest (`{x:.3}`,
+    // `expr.fmt.spec.3`).
+    #[intrinsic]
+    fn fixed_text(&self, digits: int) -> &str;
+
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
     #[intrinsic]
@@ -690,6 +695,11 @@ impl f64 {
     // The value as `Display` writes it.
     #[intrinsic]
     fn text(&self) -> &str;
+
+    // The value with `digits` digits after the point, rounded to the nearest (`{x:.3}`,
+    // `expr.fmt.spec.3`).
+    #[intrinsic]
+    fn fixed_text(&self, digits: int) -> &str;
 
     // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
     // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
