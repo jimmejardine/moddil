@@ -127,10 +127,14 @@ runners; M)
   same loop, or a `Buf` filled and turned into the array.
 - `Index` beyond `int` (ranges as `Index`).
 
-**P7. Shared and anonymous values** (`crates/sema`, prelude `rc` and `derives`; L)
-- `Rc<dyn Trait>`: coercing to `dyn` beyond `Box`.
-- `#[derive]` on a `view`.
+**P7. Shared and anonymous values** (`crates/sema`, the prelude's `pointers`; L)
+- `Rc<dyn Trait>`: `Rc` is the prelude's, over `*mut RcBox<T>` with `value: Option<T>`, so a
+  `dyn` in it needs a struct whose last field is unsized (its size and alignment from the
+  vtable, the pointer fat) through sema's layout, MIR and every runner; then the coercion, as
+  `Box`'s.
 - Anonymous impls that implement the trait's supertraits, and methods taking `&mut self`.
+- `Debug` derived for a view with a borrow field: `&T` implements `Debug` once a borrow of a
+  borrow exists (P10).
 
 **P8. The trait system** (`crates/sema`, `crates/syntax` and the grammar, the prelude, both
 interpreters; L)

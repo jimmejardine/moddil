@@ -338,7 +338,12 @@ impl Machine<'_> {
         match tr {
             "Clone" => {
                 let mut out = Vec::new();
-                for i in 0..fields.len() {
+                for (i, f) in fields.iter().enumerate() {
+                    // A borrow (a view's field) is copied: borrows are `Copy`.
+                    if matches!(f, Value::Ref(..) | Value::Str(_)) {
+                        out.push(f.clone());
+                        continue;
+                    }
                     let x = vec![Value::Ref(field(&a, i), false)];
                     out.push(self.call_trait("Clone", "clone", x, range)?);
                 }

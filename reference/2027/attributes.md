@@ -5,8 +5,8 @@
 struct Version { major: int, minor: int }
 ```
 
-**attr.derive.1** `#[derive(T₁, …, Tₙ)]` before a struct or enum implements the traits named, from
-its fields. The traits that can be derived are `Copy`, `Clone`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`,
+**attr.derive.1** `#[derive(T₁, …, Tₙ)]` before a struct, enum or view implements the traits named,
+from its fields. The traits that can be derived are `Copy`, `Clone`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`,
 `Hash`, `Debug` and `Default` ([Prelude](prelude.md)). The impls are **structural**:
 
 - `clone` clones each field (or, for a `Copy` type with no type parameters, copies the value);

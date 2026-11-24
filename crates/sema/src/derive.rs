@@ -287,7 +287,7 @@ pub(crate) fn expand<'t>(
             }
             continue;
         }
-        if !matches!(node.kind(), K::STRUCT_ITEM | K::ENUM_ITEM) {
+        if !matches!(node.kind(), K::STRUCT_ITEM | K::ENUM_ITEM | K::VIEW_ITEM) {
             continue;
         }
         let name = name_of(&node);
