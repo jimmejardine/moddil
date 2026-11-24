@@ -557,7 +557,7 @@ pub enum PatKind {
         sub: Option<PatId>,
     },
     /// An integer literal (a leading `-` folded in).
-    Int(i128),
+    Int(moddil_syntax::ast::IntValue),
     /// A `char` literal.
     Char(char),
     /// A string literal, matched against a `&str`.
@@ -568,9 +568,9 @@ pub enum PatKind {
     /// written (`None` for no upper bound).
     Range {
         /// The lower bound, included.
-        lo: i128,
+        lo: moddil_syntax::ast::IntValue,
         /// The upper bound, if any.
-        hi: Option<i128>,
+        hi: Option<moddil_syntax::ast::IntValue>,
         /// Whether the bounds are `char`s (as code points).
         chars: bool,
         /// Whether the upper bound is included (`..=`).

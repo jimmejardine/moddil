@@ -126,7 +126,7 @@ impl Builder<'_> {
             // At the scrutinee's integer type (`pat.lit.1`).
             PatKind::Int(v) => {
                 let t = self.items.base(self.types.pat(pat).strip_ref());
-                let c = crate::int_const(&t, v.into());
+                let c = crate::int_const(&t, v);
                 self.test_cmp(BinOp::Eq, place, c, fail);
             }
             PatKind::Bool(v) => self.test_cmp(BinOp::Eq, place, Const::Bool(v), fail),
@@ -142,11 +142,11 @@ impl Builder<'_> {
                 chars,
             } => {
                 let t = self.items.base(self.types.pat(pat).strip_ref());
-                let bound = |v: i128| {
+                let bound = |v: moddil_syntax::ast::IntValue| {
                     if chars {
-                        Const::Char(char::from_u32(v as u32).expect("a checked `char`"))
+                        Const::Char(char::from_u32(v.bits() as u32).expect("a checked `char`"))
                     } else {
-                        crate::int_const(&t, v.into())
+                        crate::int_const(&t, v)
                     }
                 };
                 self.test_cmp(BinOp::Ge, place, bound(lo), fail);

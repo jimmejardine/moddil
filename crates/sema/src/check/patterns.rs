@@ -12,18 +12,17 @@ impl Checker<'_> {
     /// The range and name of the integer type an integer pattern is matched against: the
     /// expected type if it is an integer type (or a refinement of one), else `int`, which the
     /// pattern then makes it. `None` if it is some other type.
-    fn int_pattern_type(&mut self, expected: &Ty) -> Option<(i128, i128, String)> {
+    fn int_pattern_type(&mut self, expected: &Ty) -> Option<(i128, u128, String)> {
         let t = self.norm(expected);
         match self.items.base(&t) {
+            Ty::Num(crate::Num::U128) => Some((0, u128::MAX, "u128".to_string())),
             Ty::Num(n) if !n.is_float() => {
                 let (lo, hi) = n.int_range();
-                Some((lo, hi, n.name().to_string()))
+                Some((lo, hi.cast_unsigned(), n.name().to_string()))
             }
-            _ if self.coerce(&Ty::Int, expected) => Some((
-                i128::from(i64::MIN),
-                i128::from(i64::MAX),
-                "int".to_string(),
-            )),
+            _ if self.coerce(&Ty::Int, expected) => {
+                Some((i128::from(i64::MIN), i64::MAX as u128, "int".to_string()))
+            }
             _ => None,
         }
     }
@@ -150,7 +149,7 @@ impl Checker<'_> {
                     self.report(Code::E0201, range, wrong("an integer"));
                     return;
                 };
-                if v < lo || v > hi {
+                if !v.fits(lo, hi) {
                     self.report(
                         Code::E0204,
                         range,
@@ -201,7 +200,7 @@ impl Checker<'_> {
                     return;
                 };
                 for v in [Some(lo), hi].into_iter().flatten() {
-                    if v < min || v > max {
+                    if !v.fits(min, max) {
                         self.report(
                             Code::E0204,
                             range,

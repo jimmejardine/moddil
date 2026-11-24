@@ -259,6 +259,21 @@ impl IntValue {
         if self.neg { -m } else { m }
     }
 
+    /// One less (`i128::MIN`'s predecessor is past what a literal holds, so it stays).
+    pub fn pred(self) -> IntValue {
+        match (self.neg, self.mag) {
+            (false, 0) => IntValue { neg: true, mag: 1 },
+            (false, m) => IntValue {
+                neg: false,
+                mag: m - 1,
+            },
+            (true, m) => IntValue {
+                neg: true,
+                mag: m.saturating_add(1),
+            },
+        }
+    }
+
     /// Whether it is from `lo` to `hi`, inclusive.
     pub fn fits(self, lo: i128, hi: u128) -> bool {
         if self.neg {
@@ -266,6 +281,24 @@ impl IntValue {
         } else {
             self.mag <= hi && (lo <= 0 || self.mag >= lo.unsigned_abs())
         }
+    }
+}
+
+/// Values in their numeric order.
+impl Ord for IntValue {
+    fn cmp(&self, other: &IntValue) -> std::cmp::Ordering {
+        match (self.neg, other.neg) {
+            (false, false) => self.mag.cmp(&other.mag),
+            (true, true) => other.mag.cmp(&self.mag),
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+        }
+    }
+}
+
+impl PartialOrd for IntValue {
+    fn partial_cmp(&self, other: &IntValue) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 

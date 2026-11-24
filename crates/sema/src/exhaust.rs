@@ -12,6 +12,8 @@ use moddil_syntax::TextRange;
 use crate::check::{Inference, tuple_positions};
 use crate::hir::{Arm, Body, PatId, PatKind};
 use crate::items::Shape;
+use moddil_syntax::ast::IntValue;
+
 use crate::{Code, Diagnostic, ItemTree, Num, Ty};
 
 /// A constructor: what a pattern's head matches.
@@ -86,12 +88,14 @@ fn int_span(ty: &Ty) -> u128 {
 }
 
 /// Value `v`'s offset in `ty` (a value out of its range, already an error, at the nearer end).
-fn offset(ty: &Ty, v: i128) -> u128 {
+fn offset(ty: &Ty, v: IntValue) -> u128 {
     let b = int_bottom(ty);
-    if v < b {
-        0
-    } else {
-        v.abs_diff(b).min(int_span(ty))
+    match v.to_i128() {
+        Some(v) if v < b => 0,
+        Some(v) => v.abs_diff(b).min(int_span(ty)),
+        // Past `i128::MAX`: only a `u128` holds it, whose least value is 0.
+        None if v > IntValue::from(0) => v.bits().min(int_span(ty)),
+        None => 0,
     }
 }
 
@@ -172,8 +176,8 @@ impl Cx<'_> {
                     None => (offset(&t, lo), int_span(&t)),
                     Some(h) if inclusive => (offset(&t, lo), offset(&t, h)),
                     // `a..b` up to `b`'s offset, so nothing if `b` is the least value.
-                    Some(h) if h <= int_bottom(&t) => (1, 0),
-                    Some(h) => (offset(&t, lo), offset(&t, h - 1)),
+                    Some(h) if h <= IntValue::from(int_bottom(&t)) => (1, 0),
+                    Some(h) => (offset(&t, lo), offset(&t, h.pred())),
                 };
                 DPat {
                     ctor: Ctor::Int(lo, hi),

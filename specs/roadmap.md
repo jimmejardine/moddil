@@ -107,8 +107,6 @@ when part of one is, remove that part.
 **P5. Numbers** (`crates/sema`, the prelude, every runner; L)
 - `usize` and `isize`, for FFI and memory-level code: a `Num` each, the width of a pointer on
   each target, through sema, MIR and all four runners and the C ABI.
-- A `u128` pattern naming a value past `i128`'s greatest (pattern literals are `i128`s); the
-  match analysis counts those values already.
 - A literal where a `Wrapping<T>` is expected (`let seq: Wrapping<u32> = last + 1`, as
   `numerics.md` writes it), and `+=` on types with operator traits.
 

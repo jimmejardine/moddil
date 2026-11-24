@@ -8,3 +8,6 @@ fn not_covered(b: u8) -> int { match b { 0..=254 => 0 } }                 //~ E0
 // An `i128`'s greatest value, and a `u128`'s past `i128`'s, are values a match must cover.
 fn no_top(x: i128) -> int { match x { -170141183460469231731687303715884105728..=0 => 0, 1..=170141183460469231731687303715884105726 => 1 } } //~ E0208
 fn no_upper_half(x: u128) -> int { match x { 0..=170141183460469231731687303715884105727 => 0 } } //~ E0208
+fn past_u128(x: u128) -> int { match x { 340282366920938463463374607431768211456 => 0, _ => 1 } } //~ E0204
+fn past_u64(x: u64) -> int { match x { 18446744073709551616 => 0, _ => 1 } } //~ E0204
+fn upper_half_missing(x: u128) -> int { match x { 0..=340282366920938463463374607431768211454 => 0 } } //~ E0208
