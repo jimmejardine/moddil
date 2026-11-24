@@ -275,7 +275,24 @@ impl Collector<'_> {
             ..self.scope()
         };
         let mut ds = Vec::new();
-        let preds = preds_of(node, &bounded, &scope, &mut ds);
+        let mut preds = preds_of(node, &bounded, &scope, &mut ds);
+        // A template's derive for a generic struct bounds each of its type parameters by the
+        // trait, as the built-in derives do (`comptime.template.1`).
+        if src == Src::Derived
+            && self.derive_for_of(node.text_range()).is_none()
+            && let Some(t) = &trait_ref
+            && self.tree.traits[t.trait_ as usize].derive_by.is_some()
+        {
+            for (k, p) in params.iter().enumerate().filter(|(_, p)| !p.konst) {
+                preds.push(Pred {
+                    ty: Ty::Param(k as u32, p.name.as_str().into()),
+                    trait_ref: t.clone(),
+                    assoc: Vec::new(),
+                    control: 0,
+                    range: p.range,
+                });
+            }
+        }
         // Every parameter must be fixed by the self type or the trait's arguments, or by what a
         // bound on such a parameter fixes (`F: FnMut(A) -> B` fixes `B` by `F`).
         let mut fixed: Vec<bool> = params

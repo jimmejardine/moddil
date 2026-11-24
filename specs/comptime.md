@@ -187,9 +187,11 @@ struct Order {
   written once, and the types it is made for are written in the same place. Generation stays
   visible at one annotation, typed and checked like any template. It replaced about 1,100 lines of
   per-type impls in the prelude (`prelude/numbers.moddil`). It is prelude-only for now: user
-  types keep `#[derive]` at their declaration. Next: generic targets (each type parameter bounded
-  by the trait, as the built-in derives do) and tuples, so the prelude's tuple impls can be
-  written the same way.
+  types keep `#[derive]` at their declaration.
+- **Templates for generic structs (decided 24 November 2026).** A template's derive for a generic
+  struct bounds each type parameter by the trait, as the built-in derives do (`impl<T: Tr> Tr for
+  S<T>`), in place of the I0001 it was. Next: tuples, so the prelude's tuple impls can be written
+  as templates too.
 - **Derives can depend on each other.** Derives are compiler queries: a derive may ask whether
   `T: Eq` holds, which runs that derive first, and a cycle is a compile error that shows it. A derive
   sees which traits are implemented, never another derive's generated body.

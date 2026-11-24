@@ -349,7 +349,7 @@ pub(crate) fn expand<'t>(
                     let start = out.text.len() as u32;
                     out.text.push_str(&format!(
                         "impl{} {d} for {name}{} {{ }}",
-                        consts_of(&generics),
+                        unbounded(&generics),
                         args_of(&generics)
                     ));
                     let end = out.text.len() as u32;
@@ -422,10 +422,14 @@ fn args_of(generics: &[(String, Option<String>)]) -> String {
     }
 }
 
-/// `<const S: int>` for the const parameters among `generics`, or nothing: an impl of a trait
-/// whose derive gives no bounds.
-fn consts_of(generics: &[(String, Option<String>)]) -> String {
-    let decls: Vec<&str> = generics.iter().filter_map(|(_, d)| d.as_deref()).collect();
+/// `<T, const S: int>` for `generics`, each declared with no bound, or nothing: an impl of a
+/// trait whose derive gives no bounds here. A template's derive is given its bounds where it is
+/// collected (`comptime.template.1`).
+fn unbounded(generics: &[(String, Option<String>)]) -> String {
+    let decls: Vec<&str> = generics
+        .iter()
+        .map(|(n, d)| d.as_deref().unwrap_or(n))
+        .collect();
     if decls.is_empty() {
         String::new()
     } else {

@@ -232,14 +232,12 @@ impl Collector<'_> {
             }
         };
         if let Some(adt) = adt
-            && (self.tree.adts[adt as usize].is_enum || !generics.params.is_empty())
+            && self.tree.adts[adt as usize].is_enum
         {
-            let what = if self.tree.adts[adt as usize].is_enum {
-                "deriving with a template for an enum"
-            } else {
-                "deriving with a template for a generic struct"
-            };
-            let d = Diagnostic::unsupported(origin.unwrap_or_default(), what);
+            let d = Diagnostic::unsupported(
+                origin.unwrap_or_default(),
+                "deriving with a template for an enum",
+            );
             self.reporter.report(Src::Derived, origin, vec![d]);
             return;
         }

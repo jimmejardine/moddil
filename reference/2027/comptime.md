@@ -48,8 +48,9 @@ impl the template is, with these rules:
 - The impl is then checked like one written by hand, and an error in it is reported in the
   template.
 
-For now the template is for structs without type parameters; an enum or a generic struct
-deriving with a template is not supported yet (I0001).
+For a generic struct, the impl bounds each of its type parameters by the trait (`impl<T: Tr> Tr for
+S<T>`), as the built-in derives do, so it applies only where every type argument implements the
+trait. For now an enum deriving with a template is not supported yet (I0001).
 
 **comptime.template.inline.1** In a template, `inline for f in fields(t) { … }` is its block once
 for each of `S`'s fields, in the order they are declared, with `f` naming that field. It is a
