@@ -174,3 +174,39 @@ test "an export is a function as any other in Moddil" {
     ;
     tally(Tally { n: 1 }.n)                 // => 2
 }
+
+/// Two `fn` values to choose from, as a C table of callbacks is.
+#[repr(C)]
+pub struct Ops {
+    pub first: fn(i32) -> i32,
+    pub second: fn(i32) -> i32,
+}
+
+fn negate(x: i32) -> i32 {
+    -x
+}
+
+fn add(a: int, b: int) -> int {
+    a + b
+}
+
+fn run(f: fn(i32) -> i32, x: i32) -> i32 {
+    unsafe("`f` is `negate` or C's `abs`, which take any `i32`") { f(x) }
+}
+
+test "Moddil calls fn values" {
+    run(negate, 5)                          // => -5
+    ;
+    let c_abs: fn(i32) -> i32 = abs;
+    run(c_abs, -7)                          // => 7
+    ;
+    let ops = Ops { first: negate, second: abs };
+    unsafe("the table holds `negate` and C's `abs`") {
+        (ops.second)((ops.first)(4))        // => 4
+        ;
+    }
+    let sum: fn(int, int) -> int = add;
+    unsafe("`add` takes any two `int`s") {
+        sum(40, 2)                          // => 42
+    }
+}

@@ -193,7 +193,8 @@ is still open; when one is done, it is removed from this list.
 **C interop**
 - Header import through libclang (`#[c_import]`), and annotation overlays.
 - Variadic C functions; struct values in callbacks.
-- Moddil gives `fn` values to C but does not call one.
+- A trap in a Moddil function called through a `fn` value ends the process natively (it runs
+  through its C-ABI wrapper), while the MIR interpreter traps as for any call.
 - An exported function's trap ends the process; `moddil build --lib` makes no static library.
 - On the MIR interpreter: borrows of C's memory are copies, `slice_mut` of it traps, a trap in a
   callback is raised only when the C call returns, and C cannot keep hooks past the call (zlib's

@@ -931,6 +931,14 @@ impl Checker<'_> {
             );
             return true;
         }
+        // A C function named as a value was checked as a closure that calls it, which needs
+        // `unsafe` (E0218); as a pointer it is its address, and nothing is called here.
+        if self.items.fns[func as usize].foreign {
+            let at = self.range(e);
+            self.out
+                .diagnostics
+                .retain(|d| !(d.code == Code::E0218 && d.range == at));
+        }
         self.out.fn_ptrs.insert(e, func);
         self.out.dyn_coercions.insert(e, Ty::FnPtr(ps, r));
         true

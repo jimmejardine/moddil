@@ -121,6 +121,7 @@ extern "C" {
     fn shape_halves(h: Halves) -> Halves;
     fn shape_fold(xs: *const int, n: int, f: fn(int, int) -> int, init: int) -> int;
     fn shape_each(n: i32, f: fn(i32, *mut ()), data: *mut ());
+    fn shape_op(which: i32) -> fn(int, int) -> int;
 }
 
 /// What `count` adds up, through the pointer C hands back to it.
@@ -163,6 +164,14 @@ test "C calls Moddil back" {
         shape_each(4, count, core::ptr::cast_mut_to(&mut t));
     }
     assert(t.count == 4 && t.sum == 10);
+}
+
+test "Moddil calls the fn values C gives" {
+    unsafe("shape_op gives one of its own two functions, which take any two `int`s") {
+        let mul = shape_op(1);
+        let sub = shape_op(0);
+        assert(mul(6, 7) == 42 && sub(6, 7) == -1);
+    }
 }
 
 test "the exports, called from Moddil" {

@@ -29,8 +29,11 @@ Its values are C functions' addresses, and functions named where one is wanted: 
 not generic, with the pointer's parameters and result, which needs no handlers, cannot fail and
 does not suspend or spawn (E0222 otherwise). C calls a Moddil function so given through a C-ABI
 wrapper, as an `#[export]`'s; a trap in it ends the process with exit code 70 (on the MIR
-interpreter, see **ffi.native.2**). A `fn` value is kept in variables and `#[repr(C)]` fields and
-given to C; Moddil does not yet call one itself.
+interpreter, see **ffi.native.2**). A `fn` value is kept in variables and `#[repr(C)]` fields,
+given to C, and called as a function, `f(x)`, but only in an `unsafe` block (E0218), with as many
+arguments as its type takes (E0202): nothing checks what it runs. Natively a Moddil function so
+called runs through its C-ABI wrapper too, so a trap in it ends the process; on the MIR
+interpreter it is a call as any other.
 
 **ffi.repr.1** `#[repr(C)]` on a struct lays it out as C lays out a struct of the same fields:
 in the order written, each at the next offset its alignment allows, the size rounded up to the

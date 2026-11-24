@@ -70,3 +70,16 @@ void shape_each(int32_t n, void (*f)(int32_t, void *), void *data) {
         f(k, data);
     }
 }
+
+static int64_t shape_mul(int64_t a, int64_t b) {
+    return a * b;
+}
+
+static int64_t shape_sub(int64_t a, int64_t b) {
+    return a - b;
+}
+
+/* A function pointer C gives back: multiplication, or subtraction for 0. */
+int64_t (*shape_op(int32_t which))(int64_t, int64_t) {
+    return which ? shape_mul : shape_sub;
+}

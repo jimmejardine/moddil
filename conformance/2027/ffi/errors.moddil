@@ -40,3 +40,8 @@ fn given() -> i32 {
 // `#[export]` is for C, `#[export(python)]` for Python.
 #[export(java)]                             //~ E0222
 pub fn java() {}
+
+// A `fn` value is called only in `unsafe`, with as many arguments as its type takes.
+fn calls(f: fn(i32) -> i32) -> i32 {
+    f(1)                                    //~ E0218
+}

@@ -26,6 +26,9 @@ pub(crate) enum CallPlan {
     Intrinsic(u32, Vec<Value>, Vec<Ty>),
     /// The built-in `Clone` of a borrow or tuple: this copy is the result.
     Copy(Value),
+    /// A C function by its address, through a `fn` value (`type.fnptr.1`): its parameters'
+    /// types, its result's, and the arguments.
+    CFn(u64, Vec<Ty>, Ty, Vec<Value>),
 }
 
 /// The plan for calling `callee` with `values`, from the top frame of `stack`.
@@ -36,6 +39,22 @@ pub(crate) fn plan(
     dispatch: &mut Dispatch<'_>,
 ) -> CallPlan {
     let concrete = |d: &Dispatch<'_>, t: &Ty| d.concrete(t, stack.type_args());
+    // A `fn` value called (`type.fnptr.1`): the Moddil function it names, or the C function at
+    // its address, with the arguments' tuple taken apart.
+    if let Callee::Trait { args, .. } = callee
+        && let Ty::FnPtr(ps, r) = concrete(dispatch, &args[0])
+    {
+        let arguments = match values.get(1).map(|v| stack.deref(v)) {
+            Some(Value::Tuple(xs)) => xs,
+            Some(Value::Unit) | None => Vec::new(),
+            Some(v) => vec![v],
+        };
+        return match stack.deref(&values[0]) {
+            Value::FnPtr(f) => CallPlan::Fn((f, Vec::new()), arguments),
+            Value::Foreign(a) => CallPlan::CFn(a, ps.to_vec(), (*r).clone(), arguments),
+            other => unreachable!("a `fn` value: {other:?}"),
+        };
+    }
     // A method called through a `dyn` borrow is the one of the type it points to.
     let callee = match callee {
         Callee::Trait { func, args } if matches!(concrete(dispatch, &args[0]), Ty::Dyn(..)) => {

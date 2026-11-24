@@ -82,6 +82,8 @@ moddil test examples/cabi            # natively; --interp as well
 calling side as `c/main.c` checks the called side. It also calls Moddil back (`type.fnptr.1`):
 - `shape_fold(xs, n, add, init)` folds an array with `add`, a Moddil function given as a
   `fn(int, int) -> int`;
+- `shape_op(which)` gives back one of two C functions as a `fn(int, int) -> int`, which
+  Moddil then calls itself (in an `unsafe` block);
 - `shape_each(n, count, data)` calls `count` with each number and `data`, a `void *` to the
   Moddil `Tally` it adds them up in, as C APIs with callbacks do.
 

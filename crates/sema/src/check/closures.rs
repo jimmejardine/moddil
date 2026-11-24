@@ -336,6 +336,20 @@ impl Checker<'_> {
                     let tuple = Ty::tuple(c.params.to_vec());
                     (c.params.to_vec(), c.ret.clone(), c.fails.clone(), tuple)
                 }
+                // A C function pointer (`type.fnptr.1`): its signature, which cannot fail, called
+                // only in an `unsafe` block, as a C function is: nothing checks what it runs.
+                Ty::FnPtr(ps, r) => {
+                    if !self.body.in_unsafe.contains(&e) {
+                        self.report(
+                            Code::E0218,
+                            range,
+                            "a `fn` value is called only in an `unsafe(\"why\") { … }` block: \
+                             nothing checks what it runs",
+                        );
+                    }
+                    let tuple = Ty::tuple(ps.to_vec());
+                    (ps.to_vec(), (**r).clone(), Ty::Never, tuple)
+                }
                 Ty::Param(..) => {
                     let bound = self
                         .solver

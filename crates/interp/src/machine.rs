@@ -334,6 +334,18 @@ impl<'a> Machine<'a> {
                 }
             }
             CallPlan::Copy(v) => v,
+            // A C function through a `fn` value (`type.fnptr.1`).
+            CallPlan::CFn(addr, params, ret, values) => {
+                match self.c_call_at(addr as *const u8, &params, &ret, &values) {
+                    Ok(v) => v,
+                    Err(ffi::CallStop::Stopped(stop)) => return Some(stop),
+                    Err(ffi::CallStop::Failed(why)) => {
+                        eprintln!("moddil: calling C: {why}");
+                        let t = self.trap(TrapClass::Unimplemented, Some(range), Vec::new());
+                        return Some(Stop::Trap(t));
+                    }
+                }
+            }
         };
         self.stack.store(dest, result);
         self.stack.goto(target);

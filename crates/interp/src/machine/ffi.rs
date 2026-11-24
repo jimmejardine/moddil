@@ -90,7 +90,7 @@ impl Machine<'_> {
     }
 
     /// Calls the C function at `addr`, taking `params` and giving `ret`, with `values`.
-    fn c_call_at(
+    pub(super) fn c_call_at(
         &mut self,
         addr: *const u8,
         params: &[Ty],

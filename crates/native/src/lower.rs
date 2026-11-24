@@ -3593,6 +3593,16 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 (Run::Direct(id, ret), vals)
             }
             Callee::Trait { func, .. } => match &cargs[0] {
+                // A C function pointer (`type.fnptr.1`): an indirect call in the platform's C
+                // convention, of the value with the arguments' tuple.
+                Ty::FnPtr(ps, r) => {
+                    let (ps, r) = (ps.to_vec(), (**r).clone());
+                    self.fn_ptr_call(&ps, &r, args, &d)?;
+                    self.set_init(dest);
+                    let b = self.block(target.index())?;
+                    self.b.ins().jump(b, &[]);
+                    return Ok(());
+                }
                 Ty::Dyn(tr, _) => {
                     let methods = self.c.dyn_methods(&cargs[0], tr);
                     let k = methods
@@ -5324,6 +5334,57 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         }
         if let Some(&r) = results.first() {
             let r = match clif_type(&ret)? {
+                Some(t) if t == types::I8 || t == types::I16 => self.b.ins().ireduce(t, r),
+                _ => r,
+            };
+            self.write(d, Val::Scalar(r))?;
+        }
+        Ok(())
+    }
+
+    /// A call of a C function pointer (`type.fnptr.1`), `args` its value and its arguments'
+    /// tuple, into `d`: C's signature for `params` and `ret`, small integers widened as C's
+    /// callers do (`foreign`'s).
+    fn fn_ptr_call(
+        &mut self,
+        params: &[Ty],
+        ret: &Ty,
+        args: &[Operand],
+        d: &PlaceRef,
+    ) -> Result<(), String> {
+        let flags = ir::MemFlagsData::trusted();
+        let f = self.value(&args[0])?;
+        // The arguments: the tuple's fields, or its one scalar.
+        let mut vals = Vec::new();
+        if !params.is_empty() {
+            let tuple = Ty::tuple(params.to_vec());
+            let l = self.layout(&tuple)?;
+            match (self.operand(&args[1])?, &l.shape) {
+                (Val::Scalar(v), _) => vals.push(v),
+                (Val::Mem(at), Shape::Fields(fs)) => {
+                    for (off, t) in fs.clone() {
+                        let ct = clif_type(&t)?.ok_or("a `()` argument of a `fn` value")?;
+                        vals.push(self.b.ins().load(ct, flags, at, off as i32));
+                    }
+                }
+                _ => return Err("the arguments of a `fn` value".to_string()),
+            }
+        }
+        for (v, ty) in vals.iter_mut().zip(params) {
+            let small = matches!(clif_type(ty)?, Some(t) if t == types::I8 || t == types::I16);
+            if small {
+                *v = if signed(ty) {
+                    self.b.ins().sextend(types::I32, *v)
+                } else {
+                    self.b.ins().uextend(types::I32, *v)
+                };
+            }
+        }
+        let sig = self.c.c_sig(params, ret)?;
+        let sref = self.b.import_signature(sig);
+        let call = self.b.ins().call_indirect(sref, f, &vals);
+        if let Some(&r) = self.b.inst_results(call).first() {
+            let r = match clif_type(ret)? {
                 Some(t) if t == types::I8 || t == types::I16 => self.b.ins().ireduce(t, r),
                 _ => r,
             };
