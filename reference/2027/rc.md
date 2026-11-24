@@ -27,6 +27,9 @@ not `DerefMut` (E0205). A value shared and changed is in a sync cell ([Unsafe co
 another `Weak`, and `Rc::weak_count(&rc)` is how many there are. A back-edge (a child's link to
 its parent) is a `Weak`, so that the two do not keep each other alive.
 
+**rc.unwrap.1** `Rc::try_unwrap(rc)` gives `Ok` of the value if `rc` is its only owner, and
+`Err(rc)` otherwise. Its weak handles then see it gone (`upgrade` gives `None`).
+
 **rc.drop.1** Dropping an `Rc` takes one from the count. The last owner drops the value; the
 allocation goes with the last owner or `Weak`, whichever is later. `Rc`s that own each other in a
 cycle are never dropped: nothing collects them. Only one task runs at a time

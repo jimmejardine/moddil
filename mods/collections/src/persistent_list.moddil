@@ -93,6 +93,20 @@ impl<T> IntoIterator for &PersistentList<T> {
 }
 
 // Another handle to the same cells: nothing is copied, and neither list can change them.
+// A list lets go of its cells one by one, so a long list is not dropped by a recursion per cell:
+// each cell only it owns is taken apart, and the first one shared stays with its other owners.
+impl<T> Drop for PersistentList<T> {
+    fn drop(self) {
+        let mut cell = self.head;
+        while let Some(rc) = cell {
+            match Rc::try_unwrap(rc) {
+                Ok(c) => cell = c.next,
+                Err(_) => break,
+            }
+        }
+    }
+}
+
 impl<T> Clone for PersistentList<T> {
     fn clone(&self) -> PersistentList<T> {
         let head = match &self.head {

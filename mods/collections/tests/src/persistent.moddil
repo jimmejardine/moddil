@@ -42,6 +42,18 @@ test "a list of values that need dropping" {
     empty.rest().is_empty()                         // => true
 }
 
+test "a long list is dropped cell by cell, and a shared tail stays" {
+    let mut long: PersistentList<int> = PersistentList::new();
+    for i in 0..300000 {
+        long = long.push_front(i);
+    }
+    let tail = long.rest().rest();
+    drop(long);
+    tail.len()                                      // => 299998
+    ;
+    tail.first().map(|x| *x).unwrap_or(-1)          // => 299997
+}
+
 /// `0, 1, …, n - 1`, pushed one at a time.
 fn upto(n: int) -> PersistentVec<int> {
     let mut v = PersistentVec::new();

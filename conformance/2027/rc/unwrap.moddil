@@ -1,0 +1,34 @@
+// covers: rc.unwrap.1
+
+test "the only owner gets the value back" {
+    let a = "mine".to_string().to_rc();
+    match Rc::try_unwrap(a) {
+        Ok(s) => s,
+        Err(_) => "shared".to_string(),
+    }                                           // => "mine"
+}
+
+test "a shared value stays shared" {
+    let a = "ours".to_string().to_rc();
+    let b = a.share();
+    let back = match Rc::try_unwrap(a) {
+        Ok(_) => None,
+        Err(r) => Some(r),
+    };
+    match back {
+        Some(r) => Rc::strong_count(&r) + Rc::strong_count(&b),
+        None => 0,
+    }                                           // => 4
+}
+
+test "weak handles see the value gone" {
+    let a = "kept".to_string().to_rc();
+    let w = a.weak();
+    let s = match Rc::try_unwrap(a) {
+        Ok(s) => s,
+        Err(_) => String::new(),
+    };
+    s.len()                                     // => 4
+    ;
+    w.upgrade().is_none()                       // => true
+}

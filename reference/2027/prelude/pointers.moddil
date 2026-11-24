@@ -129,6 +129,20 @@ impl<T> Rc<T> {
     fn weak_count(rc: &Rc<T>) -> int {
         unsafe("p is a live allocation: rc keeps it") { (*rc.p).weak - 1 }
     }
+
+    // The value, if `rc` is its only owner (`rc.unwrap.1`); otherwise `rc` back. Its weak
+    // handles see it gone.
+    fn try_unwrap(rc: Rc<T>) -> Result<T, Rc<T>> {
+        if Rc::strong_count(&rc) != 1 {
+            return Err(rc);
+        }
+        let value = unsafe("p is a live allocation: rc, its only owner, keeps it") {
+            replace(&mut (*rc.p).value, None)
+        };
+        // The last owner goes, its value already taken: only the allocation is let go.
+        drop(rc);
+        Ok(value ?! "an owned rc has its value")
+    }
 }
 
 impl<T> Deref for Rc<T> {
