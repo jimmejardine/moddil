@@ -54,18 +54,8 @@ pub(crate) fn link(
     } else {
         linker(&obj, &lib, out)
     };
-    // The mods' C code (`ffi.c.1`): its static libraries, and the system libraries it needs.
     let cmd = cmd.map(|mut cmd| {
-        for b in c {
-            cmd.arg(&b.static_lib);
-            for l in &b.libs {
-                cmd.arg(if cfg!(windows) {
-                    format!("{l}.lib")
-                } else {
-                    format!("-l{l}")
-                });
-            }
-        }
+        c_libs(&mut cmd, c);
         cmd
     });
     let status = cmd.and_then(|mut c| c.status().map_err(|e| format!("running the linker: {e}")));
@@ -93,84 +83,23 @@ pub(crate) fn link_library(
     symbols: &[String],
     c: &[moddil_ffi::Built],
 ) -> Result<PathBuf, String> {
-    let lib = library()?;
-    let obj = dir.join(format!(
-        "{name}.{}",
-        if cfg!(windows) { "obj" } else { "o" }
-    ));
-    std::fs::write(&obj, object).map_err(|e| format!("writing {}: {e}", obj.display()))?;
-    let mut cmd;
-    let out;
-    if cfg!(windows) {
-        out = dir.join(format!("{name}.dll"));
-        let target = format!("{}-pc-windows-msvc", std::env::consts::ARCH);
-        let tool = cc::windows_registry::find_tool(&target, "link.exe")
-            .ok_or("MSVC's link.exe (install Visual Studio's C++ build tools)")?;
-        cmd = tool.to_command();
-        cmd.arg("/NOLOGO")
-            .arg("/DLL")
-            .arg(format!("/OUT:{}", out.display()))
-            .arg(format!(
-                "/IMPLIB:{}",
-                dir.join(format!("{name}.lib")).display()
-            ))
-            .arg(&obj)
-            .arg(&lib);
-        for s in symbols {
-            cmd.arg(format!("/EXPORT:{s}"));
-        }
-        for l in WINDOWS_LIBS {
-            cmd.arg(l);
-        }
+    let out = dir.join(if cfg!(windows) {
+        format!("{name}.dll")
+    } else if cfg!(target_os = "macos") {
+        format!("lib{name}.dylib")
     } else {
-        let mac = cfg!(target_os = "macos");
-        out = dir.join(if mac {
-            format!("lib{name}.dylib")
-        } else {
-            format!("lib{name}.so")
-        });
-        cmd = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
-        cmd.arg(if mac { "-dynamiclib" } else { "-shared" })
-            .arg(&obj)
-            .arg(&lib)
-            .arg("-o")
-            .arg(&out);
-        if mac {
-            cmd.args(["-lSystem", "-lobjc", "-lc", "-lm"]);
-        } else {
-            cmd.args([
-                "-lgcc_s",
-                "-lutil",
-                "-lrt",
-                "-lpthread",
-                "-lm",
-                "-ldl",
-                "-lc",
-            ]);
-        }
-    }
-    for b in c {
-        cmd.arg(&b.static_lib);
-        for l in &b.libs {
-            cmd.arg(if cfg!(windows) {
-                format!("{l}.lib")
-            } else {
-                format!("-l{l}")
-            });
-        }
-    }
-    let o = cmd
-        .output()
-        .map_err(|e| format!("running the linker: {e}"))?;
-    let _ = std::fs::remove_file(&obj);
-    if !o.status.success() {
-        return Err(format!(
-            "the linker failed ({}):\n{}{}",
-            o.status,
-            String::from_utf8_lossy(&o.stdout),
-            String::from_utf8_lossy(&o.stderr)
-        ));
-    }
+        format!("lib{name}.so")
+    });
+    link_shared(&Shared {
+        object,
+        out: &out,
+        implib: &dir.join(format!("{name}.lib")),
+        exports: symbols,
+        inputs: &[],
+        windows_inputs: &[],
+        python: false,
+        c,
+    })?;
     Ok(out)
 }
 
@@ -185,73 +114,81 @@ pub(crate) fn link_extension(
     python_lib: Option<&Path>,
     c: &[moddil_ffi::Built],
 ) -> Result<(), String> {
-    let lib = library()?;
     let dir = out.parent().ok_or("the module's directory")?;
-    let obj = dir.join(format!(
-        "{name}.{}",
-        if cfg!(windows) { "obj" } else { "o" }
-    ));
-    std::fs::write(&obj, object).map_err(|e| format!("writing {}: {e}", obj.display()))?;
+    let python: Vec<PathBuf> = python_lib.map(Path::to_path_buf).into_iter().collect();
+    link_shared(&Shared {
+        object,
+        out,
+        implib: &dir.join(format!("{name}-module.lib")),
+        exports: &[format!("PyInit_{name}")],
+        inputs: &[glue.to_path_buf()],
+        windows_inputs: &python,
+        python: true,
+        c,
+    })
+}
+
+/// A shared library's link ([`link_shared`]).
+struct Shared<'a> {
+    /// The Moddil object's bytes.
+    object: &'a [u8],
+    /// The library.
+    out: &'a Path,
+    /// On Windows, where its import library goes.
+    implib: &'a Path,
+    /// The symbols it exports.
+    exports: &'a [String],
+    /// More inputs, before the runtime (a static library whose symbols are exported).
+    inputs: &'a [PathBuf],
+    /// More inputs on Windows only, after the runtime (Python's `python3.lib`).
+    windows_inputs: &'a [PathBuf],
+    /// A Python extension module: on macOS, Python's symbols are left for the interpreter
+    /// that loads it.
+    python: bool,
+    /// The mods' C code.
+    c: &'a [moddil_ffi::Built],
+}
+
+/// Links a shared library of `l.object` with the runtime: on Windows with `link.exe`, its
+/// exports named; elsewhere with `cc`, each export kept even if only a static input defines it.
+fn link_shared(l: &Shared<'_>) -> Result<(), String> {
+    let lib = library()?;
+    let obj = l
+        .out
+        .with_extension(if cfg!(windows) { "obj" } else { "o" });
+    std::fs::write(&obj, l.object).map_err(|e| format!("writing {}: {e}", obj.display()))?;
     let mut cmd;
     if cfg!(windows) {
-        let target = format!("{}-pc-windows-msvc", std::env::consts::ARCH);
-        let tool = cc::windows_registry::find_tool(&target, "link.exe")
-            .ok_or("MSVC's link.exe (install Visual Studio's C++ build tools)")?;
-        cmd = tool.to_command();
+        cmd = msvc_link()?;
         cmd.arg("/NOLOGO")
             .arg("/DLL")
-            .arg(format!("/OUT:{}", out.display()))
-            .arg(format!(
-                "/IMPLIB:{}",
-                dir.join(format!("{name}-module.lib")).display()
-            ))
-            .arg(format!("/EXPORT:PyInit_{name}"))
-            .arg(&obj)
-            .arg(glue)
-            .arg(&lib);
-        if let Some(p) = python_lib {
-            cmd.arg(p);
+            .arg(format!("/OUT:{}", l.out.display()))
+            .arg(format!("/IMPLIB:{}", l.implib.display()));
+        for s in l.exports {
+            cmd.arg(format!("/EXPORT:{s}"));
         }
-        for l in WINDOWS_LIBS {
-            cmd.arg(l);
-        }
+        cmd.arg(&obj)
+            .args(l.inputs)
+            .arg(&lib)
+            .args(l.windows_inputs);
     } else {
         let mac = cfg!(target_os = "macos");
         cmd = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
         cmd.arg(if mac { "-dynamiclib" } else { "-shared" });
-        if mac {
-            // Python's symbols are the interpreter's, found when it loads the module.
+        if mac && l.python {
             cmd.args(["-undefined", "dynamic_lookup"]);
         }
-        // The glue is a static library and nothing refers to its `PyInit_name`, so without
-        // `-u` the linker would leave it out (Windows has `/EXPORT` for this).
-        let init = format!("{}PyInit_{name}", if mac { "_" } else { "" });
-        cmd.arg(format!("-Wl,-u,{init}"));
-        cmd.arg(&obj).arg(glue).arg(&lib).arg("-o").arg(out);
-        if mac {
-            cmd.args(["-lSystem", "-lobjc", "-lc", "-lm"]);
-        } else {
-            cmd.args([
-                "-lgcc_s",
-                "-lutil",
-                "-lrt",
-                "-lpthread",
-                "-lm",
-                "-ldl",
-                "-lc",
-            ]);
+        // An export only a static input defines would be left out without `-u`, as nothing
+        // in the link refers to it (Windows has `/EXPORT` for this).
+        if !l.inputs.is_empty() {
+            for s in l.exports {
+                cmd.arg(format!("-Wl,-u,{}{s}", if mac { "_" } else { "" }));
+            }
         }
+        cmd.arg(&obj).args(l.inputs).arg(&lib).arg("-o").arg(l.out);
     }
-    for b in c {
-        cmd.arg(&b.static_lib);
-        for l in &b.libs {
-            cmd.arg(if cfg!(windows) {
-                format!("{l}.lib")
-            } else {
-                format!("-l{l}")
-            });
-        }
-    }
+    system_libs(&mut cmd);
+    c_libs(&mut cmd, l.c);
     let o = cmd
         .output()
         .map_err(|e| format!("running the linker: {e}"))?;
@@ -265,6 +202,50 @@ pub(crate) fn link_extension(
         ));
     }
     Ok(())
+}
+
+/// MSVC's `link.exe`, with its environment.
+fn msvc_link() -> Result<Command, String> {
+    let target = format!("{}-pc-windows-msvc", std::env::consts::ARCH);
+    let tool = cc::windows_registry::find_tool(&target, "link.exe")
+        .ok_or("MSVC's link.exe (install Visual Studio's C++ build tools)")?;
+    Ok(tool.to_command())
+}
+
+/// The system libraries the runtime needs (Rust's standard library's): the ones
+/// `rustc --print native-static-libs` lists for `moddil-rt-main` on each platform.
+fn system_libs(cmd: &mut Command) {
+    if cfg!(windows) {
+        cmd.args(WINDOWS_LIBS);
+    } else if cfg!(target_os = "macos") {
+        // `-lobjc`: the runtime's signal handling (`ctrlc`, through `dispatch2` and `objc2`)
+        // uses Apple's Objective-C runtime; libdispatch is part of libSystem.
+        cmd.args(["-lSystem", "-lobjc", "-lc", "-lm"]);
+    } else {
+        cmd.args([
+            "-lgcc_s",
+            "-lutil",
+            "-lrt",
+            "-lpthread",
+            "-lm",
+            "-ldl",
+            "-lc",
+        ]);
+    }
+}
+
+/// The mods' C code (`ffi.c.1`): its static libraries, and the system libraries it needs.
+fn c_libs(cmd: &mut Command, c: &[moddil_ffi::Built]) {
+    for b in c {
+        cmd.arg(&b.static_lib);
+        for l in &b.libs {
+            cmd.arg(if cfg!(windows) {
+                format!("{l}.lib")
+            } else {
+                format!("-l{l}")
+            });
+        }
+    }
 }
 
 /// Where the Rust toolchain's own tools are (`rust-lld`, `rust-objcopy`, the `gcc-ld` wrappers):
@@ -328,9 +309,7 @@ fn release_linker(obj: &Path, lib: &Path, out: &Path) -> Result<Command, String>
             .arg("/OPT:REF,ICF")
             .arg(obj)
             .arg(lib);
-        for l in WINDOWS_LIBS {
-            cmd.arg(l);
-        }
+        system_libs(&mut cmd);
         return Ok(cmd);
     }
     let mut cmd = linker(obj, lib, out)?;
@@ -397,38 +376,19 @@ const WINDOWS_LIBS: [&str; 7] = [
 /// The linker's command for `obj` and `lib` into `out`: MSVC's `link.exe` on Windows, with the
 /// system libraries Rust's standard library needs; the system's `cc` elsewhere.
 fn linker(obj: &Path, lib: &Path, out: &Path) -> Result<Command, String> {
-    if cfg!(windows) {
-        let target = format!("{}-pc-windows-msvc", std::env::consts::ARCH);
-        let tool = cc::windows_registry::find_tool(&target, "link.exe")
-            .ok_or("MSVC's link.exe (install Visual Studio's C++ build tools)")?;
-        let mut cmd = tool.to_command();
+    let mut cmd = if cfg!(windows) {
+        let mut cmd = msvc_link()?;
         cmd.arg("/NOLOGO")
             .arg(format!("/OUT:{}", out.display()))
             .arg("/SUBSYSTEM:CONSOLE")
             .arg(obj)
             .arg(lib);
-        for l in WINDOWS_LIBS {
-            cmd.arg(l);
-        }
-        return Ok(cmd);
-    }
-    let mut cmd = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
-    cmd.arg(obj).arg(lib).arg("-o").arg(out);
-    if cfg!(target_os = "macos") {
-        // `-lobjc`: the runtime's signal handling (`ctrlc`, through `dispatch2` and `objc2`)
-        // uses Apple's Objective-C runtime; libdispatch is part of libSystem. These are the
-        // libraries `rustc --print native-static-libs` lists for `moddil-rt-main` there.
-        cmd.args(["-lSystem", "-lobjc", "-lc", "-lm"]);
+        cmd
     } else {
-        cmd.args([
-            "-lgcc_s",
-            "-lutil",
-            "-lrt",
-            "-lpthread",
-            "-lm",
-            "-ldl",
-            "-lc",
-        ]);
-    }
+        let mut cmd = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
+        cmd.arg(obj).arg(lib).arg("-o").arg(out);
+        cmd
+    };
+    system_libs(&mut cmd);
     Ok(cmd)
 }

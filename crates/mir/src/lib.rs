@@ -570,6 +570,58 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 mod tests;
 
 pub use convert::{convert, num_code, num_text};
+pub use moddil_rt::num::{float_f32, float_f64};
+
+/// The runtime's operation a built-in function of the prelude stands for, as the runtimes
+/// written in Rust name it (the MIR interpreter's tasks and `moddil-rt`'s): the `core` mod's `os`
+/// module (`os.1`), and the tasks, scopes and channels (`task.sched.1`).
+pub fn runtime_op(items: &moddil_sema::ItemTree, f: u32) -> Option<&'static str> {
+    let sig = &items.fns[f as usize];
+    if sig.src != Src::Prelude || !sig.intrinsic {
+        return None;
+    }
+    if items.modules[sig.module as usize].path == ["os"] {
+        return Some(match sig.name.as_str() {
+            "arg_count" => "os_arg_count",
+            "arg_len" => "os_arg_len",
+            "arg_copy" => "os_arg_copy",
+            "write_stderr" => "os_write_stderr",
+            "random" => "os_random",
+            "listen" => "os_listen",
+            "incoming" => "os_incoming",
+            "connect" => "os_connect",
+            "arrivals" => "os_arrivals",
+            "take" => "os_take",
+            "send" => "os_send",
+            "close" => "os_close",
+            "signals" => "os_signals",
+            _ => return None,
+        });
+    }
+    let owner = match sig.container {
+        moddil_sema::Container::Impl(k) => match &items.impls[k as usize].self_ty {
+            Ty::Adt(a, ..) => items.adts[*a as usize].name.as_str(),
+            _ => return None,
+        },
+        _ => "",
+    };
+    Some(match (owner, sig.name.as_str()) {
+        ("", "yield_now") => "yield_now",
+        ("", "stop_requested") => "stop_requested",
+        ("", "__scope_open") => "__scope_open",
+        ("", "__scope_run") => "__scope_run",
+        ("", "channel") => "channel",
+        ("", "__timer") => "timer",
+        ("", "__select") => "__select",
+        ("Scope", "spawn") => "spawn",
+        ("Scope", "stop") => "stop",
+        ("Task", "join") => "join",
+        ("Sender", "send") => "send",
+        ("Sender", "clone") => "clone",
+        ("Receiver", "recv") => "recv",
+        _ => return None,
+    })
+}
 
 /// The constant of number type `t` (`int` or a [`Ty::Num`]) for the exact integer `v`, which the
 /// checker has made sure fits; a float gets the nearest value.

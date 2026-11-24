@@ -284,10 +284,8 @@ impl Drop for Deflater {
 /// `s`'s bytes.
 fn bytes(s: &str) -> Vec<u8> {
     let mut v = Vec::new();
-    let mut i = 0;
-    while i < s.len() {
-        v.push(s.byte_at(i));
-        i += 1;
+    for b in s.as_bytes().iter() {
+        v.push(*b);
     }
     v
 }

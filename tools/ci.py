@@ -68,20 +68,17 @@ def step_test():
 
 
 def step_tour():
-    # M0's gate (specs/roadmap.md): the tour, tour/shorty, parses and passes the type, effect and
-    # ownership checks, against the standard mods through the umbrella mod mods/moddil. Its tests
-    # run in the test step (crates/moddil/tests/projects.rs).
-    umbrella = run("cargo", "run", "-q", "-p", "moddil", "--", "check", "mods/moddil")
-    tour = run("cargo", "run", "-q", "-p", "moddil", "--", "check", "tour/shorty")
-    return umbrella and tour
+    # M0's gate (specs/roadmap.md): the standard mods check together through the umbrella mod
+    # mods/moddil, which nothing else checks as a whole. The tour itself, tour/shorty, is checked
+    # and its tests run in the test step (crates/moddil/tests/projects.rs).
+    return run("cargo", "run", "-q", "-p", "moddil", "--", "check", "mods/moddil")
 
 
 def step_examples():
-    # The Mandelbulb's pure core (specs/examples/mandelbulb.md): it checks, its tests pass, and
-    # its CPU preview lights the same 302 pixels on every platform (floats are IEEE 754, their
-    # functions from libm).
+    # The Mandelbulb's CPU preview (specs/examples/mandelbulb.md) lights the same 302 pixels on
+    # every platform (floats are IEEE 754, their functions from libm). Its tests run in the test
+    # step (crates/moddil/tests/projects.rs).
     cmd = ["cargo", "run", "-q", "-p", "moddil", "--"]
-    tests = run(*cmd, "test", "examples/mandelbulb")
     print("$", " ".join(cmd + ["run", "examples/mandelbulb"]), flush=True)
     out = subprocess.run(cmd + ["run", "examples/mandelbulb"], capture_output=True, text=True)
     lit = out.stdout.strip()
@@ -89,7 +86,7 @@ def step_examples():
     if not preview:
         print(f"the preview gave {lit!r} (exit {out.returncode}), not 302")
         print(out.stderr)
-    return tests and preview
+    return preview
 
 
 def step_links():

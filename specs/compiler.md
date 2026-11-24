@@ -225,7 +225,8 @@ moddil/
   once, in `tools/ci.py`: GitHub Actions runs it on Linux, Windows and macOS, and it runs locally
   on Windows and in WSL. `cargo-deny` checks licences, advisories and sources.
 - **The reference interpreter's independence is checked:** CI fails if `crates/refinterp` depends on
-  anything but `crates/syntax` and general-purpose crates ([Two interpreters](#two-interpreters)).
+  anything but `crates/syntax`, `crates/sources` (the prelude's text, which every implementation
+  reads, and no code) and general-purpose crates ([Two interpreters](#two-interpreters)).
 - **The reference examples become code in `examples/<name>/`**, built and tested in CI on every
   change, so a language change that breaks one is caught at once. `specs/examples/*.md` stay their
   design documents; Hashiverse may move to its own repository once it ships.

@@ -11,6 +11,8 @@ publish.workspace = true
 
 [dependencies]
 moddil-syntax.workspace = true
+moddil-sources.workspace = true
+moddil-project.workspace = true
 salsa.workspace = true
 la-arena.workspace = true
 

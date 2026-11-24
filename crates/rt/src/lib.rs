@@ -176,56 +176,16 @@ pub extern "C" fn fmodf(a: f32, b: f32) -> f32 {
 #[allow(unsafe_code)]
 #[unsafe(export_name = "moddil_rt_float_fn")]
 pub extern "C" fn float_fn(which: u32, x: f64, y: f64) -> f64 {
-    match FLOAT_FNS.get(which as usize).copied().unwrap_or("") {
-        "sqrt" => libm::sqrt(x),
-        "sin" => libm::sin(x),
-        "cos" => libm::cos(x),
-        "tan" => libm::tan(x),
-        "asin" => libm::asin(x),
-        "acos" => libm::acos(x),
-        "atan" => libm::atan(x),
-        "exp" => libm::exp(x),
-        "ln" => libm::log(x),
-        "log2" => libm::log2(x),
-        "log10" => libm::log10(x),
-        "abs" => libm::fabs(x),
-        "floor" => libm::floor(x),
-        "ceil" => libm::ceil(x),
-        "trunc" => libm::trunc(x),
-        "atan2" => libm::atan2(x, y),
-        "powf" => libm::pow(x, y),
-        "min" => libm::fmin(x, y),
-        "max" => libm::fmax(x, y),
-        _ => f64::NAN,
-    }
+    let name = FLOAT_FNS.get(which as usize).copied().unwrap_or("");
+    num::float_f64(name, x, y).unwrap_or(f64::NAN)
 }
 
 /// The same on `f32`s, by `libm`'s `f32` functions, as the interpreters compute them.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "moddil_rt_float_fn_f32")]
 pub extern "C" fn float_fn_f32(which: u32, x: f32, y: f32) -> f32 {
-    match FLOAT_FNS.get(which as usize).copied().unwrap_or("") {
-        "sqrt" => libm::sqrtf(x),
-        "sin" => libm::sinf(x),
-        "cos" => libm::cosf(x),
-        "tan" => libm::tanf(x),
-        "asin" => libm::asinf(x),
-        "acos" => libm::acosf(x),
-        "atan" => libm::atanf(x),
-        "exp" => libm::expf(x),
-        "ln" => libm::logf(x),
-        "log2" => libm::log2f(x),
-        "log10" => libm::log10f(x),
-        "abs" => libm::fabsf(x),
-        "floor" => libm::floorf(x),
-        "ceil" => libm::ceilf(x),
-        "trunc" => libm::truncf(x),
-        "atan2" => libm::atan2f(x, y),
-        "powf" => libm::powf(x, y),
-        "min" => libm::fminf(x, y),
-        "max" => libm::fmaxf(x, y),
-        _ => f32::NAN,
-    }
+    let name = FLOAT_FNS.get(which as usize).copied().unwrap_or("");
+    num::float_f32(name, x, y).unwrap_or(f32::NAN)
 }
 
 /// The float functions [`float_fn`] computes, by number.

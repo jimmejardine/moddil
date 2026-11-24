@@ -4,16 +4,6 @@
 use crypto::{Blake3, Sha256, blake3, hex, sha256, sha512};
 
 /// The bytes of `s`.
-fn bytes(s: &str) -> Vec<u8> {
-    let mut v: Vec<u8> = Vec::new();
-    let mut i = 0;
-    while i < s.len() {
-        v.push(s.byte_at(i));
-        i += 1;
-    }
-    v
-}
-
 /// `n` bytes, the `i`th `i % 251`.
 fn pattern(n: int) -> Vec<u8> {
     let mut v: Vec<u8> = Vec::with_capacity(n);
@@ -44,10 +34,10 @@ test "hex writes two digits a byte" {
 }
 
 test "SHA-256 matches FIPS 180-4" {
-    check(sha256(bytes("").as_slice()), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-    check(sha256(bytes("abc").as_slice()), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
-    check(sha256(bytes(TWO_BLOCKS).as_slice()), "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
-    check(sha256(bytes(FOUR_BLOCKS).as_slice()), "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1");
+    check(sha256("".as_bytes()), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    check(sha256("abc".as_bytes()), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    check(sha256(TWO_BLOCKS.as_bytes()), "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
+    check(sha256(FOUR_BLOCKS.as_bytes()), "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1");
 }
 
 test "SHA-256 fed in parts is SHA-256 of the whole" {
@@ -60,9 +50,9 @@ test "SHA-256 fed in parts is SHA-256 of the whole" {
 }
 
 test "SHA-512 matches FIPS 180-4" {
-    check(sha512(bytes("").as_slice()), "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e");
-    check(sha512(bytes("abc").as_slice()), "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f");
-    check(sha512(bytes(FOUR_BLOCKS).as_slice()), "8e959b75dae313da8cf4f72814fc143f8f7779c6eb9f7fa17299aeadb6889018501d289e4900f7e4331b99dec4b5433ac7d329eeb6dd26545e96e55b874be909");
+    check(sha512("".as_bytes()), "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e");
+    check(sha512("abc".as_bytes()), "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f");
+    check(sha512(FOUR_BLOCKS.as_bytes()), "8e959b75dae313da8cf4f72814fc143f8f7779c6eb9f7fa17299aeadb6889018501d289e4900f7e4331b99dec4b5433ac7d329eeb6dd26545e96e55b874be909");
     check(sha512(pattern(1000).as_slice()), "5096498d96f50f9a137c4db5b8b0cd38383ad55350fb5a98805fedc31fa1262f1f0cf4d6f12d7ecd8dedd933a4c9126344fe22e937a8ad35fdeae1e876ae698b");
 }
 

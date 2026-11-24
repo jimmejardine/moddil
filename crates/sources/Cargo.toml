@@ -1,0 +1,12 @@
+[package]
+name = "moddil-sources"
+description = "The Moddil sources every implementation reads: the prelude and the built-in core mod's modules, as text."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

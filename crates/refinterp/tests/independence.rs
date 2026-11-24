@@ -1,12 +1,13 @@
 //! The reference interpreter must stay independent of the compiler: among workspace crates it may
-//! depend only on `moddil-syntax`, directly or transitively (`specs/compiler.md`, "Two
-//! interpreters"). General-purpose crates from crates.io are allowed.
+//! depend only on `moddil-syntax`, and on `moddil-sources`, which holds the prelude's text and no
+//! code, directly or transitively (`specs/compiler.md`, "Two interpreters"). General-purpose
+//! crates from crates.io are allowed.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use cargo_metadata::{DependencyKind, MetadataCommand, PackageId};
 
-const ALLOWED: &[&str] = &["moddil-syntax"];
+const ALLOWED: &[&str] = &["moddil-syntax", "moddil-sources"];
 
 #[test]
 fn refinterp_depends_only_on_syntax() {

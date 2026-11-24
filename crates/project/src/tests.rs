@@ -81,3 +81,27 @@ fn cycles_and_bad_manifests_are_problems() {
     assert_eq!(problems[0].code, "E0704");
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_mod_may_give_its_version() {
+    let dir = tree(
+        "version",
+        &[
+            ("moddil.toml", "[mod]\nname = \"a\"\nversion = \"1.4.0\"\n"),
+            ("src/lib.moddil", ""),
+        ],
+    );
+    let p = load(&dir).expect("a project");
+    assert_eq!(p.mods[0].version.as_deref(), Some("1.4.0"));
+    let _ = fs::remove_dir_all(&dir);
+    let bad = tree(
+        "bad-version",
+        &[
+            ("moddil.toml", "[mod]\nname = \"a\"\nversion = \"1.4\"\n"),
+            ("src/lib.moddil", ""),
+        ],
+    );
+    let problems = load(&bad).expect_err("a two-part version");
+    assert!(problems.iter().any(|p| p.message.contains("three numbers")));
+    let _ = fs::remove_dir_all(&bad);
+}

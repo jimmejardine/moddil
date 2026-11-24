@@ -118,6 +118,10 @@ impl str {
     #[intrinsic]
     fn byte_at(&self, i: int) -> u8;
 
+    // Its bytes, which are UTF-8 (`text.bytes.1`).
+    #[intrinsic]
+    fn as_bytes(&self) -> &[u8];
+
     // The first `len` bytes of `bytes`, which are UTF-8, as text (`text.string.inline.1`).
     #[intrinsic]
     fn view(bytes: &[u8], len: int) -> &str;
@@ -258,6 +262,11 @@ impl String {
             StringRepr::Inline(bytes, _) => bytes[i],
             StringRepr::Heap(b) => b.as_slice()[i],
         }
+    }
+
+    // Its text's bytes, which are UTF-8 (`text.bytes.1`).
+    fn as_bytes(&self) -> &[u8] {
+        self.as_str().as_bytes()
     }
 
     fn as_str(&self) -> &str {

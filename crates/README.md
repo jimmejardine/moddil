@@ -33,6 +33,7 @@ python tools/ci.py --wsl       # the same steps in WSL (Linux); --all runs both
 |---|---|---|
 | [`grammar/`](grammar/README.md) | `moddil-grammar` | Checks the EBNF grammar and generates tests and grammars |
 | [`syntax/`](syntax/README.md) | `moddil-syntax` | Lexer, parser and AST; later the formatter |
+| [`sources/`](sources/src/lib.rs) | `moddil-sources` | The prelude's and the `core` mod's sources, as text: the one list the compiler and the reference interpreter both read |
 | [`sema/`](sema/README.md) | `moddil-sema` | Names, types and effects; produces the typed HIR |
 | [`mir/`](mir/README.md) | `moddil-mir` | The MIR, its phases, and ownership checking ([`specs/mir.md`](../specs/mir.md)) |
 | [`interp/`](interp/README.md) | `moddil-interp` | The MIR interpreter |

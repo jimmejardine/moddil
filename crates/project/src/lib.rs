@@ -70,6 +70,18 @@ pub struct Mod {
     pub os_ok: bool,
     /// Its C code, from its manifest's `[c]` table (`ffi.c.1`), with paths resolved.
     pub c: Option<CTable>,
+    /// Its version, from its manifest's `[mod] version` (`mod.1`), if it gives one.
+    pub version: Option<String>,
+}
+
+/// What a manifest's `[mod]` table says.
+#[derive(Default)]
+struct ModSection {
+    name: String,
+    stub: bool,
+    unsafe_ok: bool,
+    os_ok: bool,
+    version: Option<String>,
 }
 
 /// A mod's `[c]` table: the C sources compiled with it, the directories their headers are in,
@@ -144,6 +156,7 @@ pub fn load(path: &Path) -> Result<Project, Vec<Problem>> {
                 unsafe_ok: false,
                 os_ok: false,
                 c: None,
+                version: None,
             }],
         }),
         Err(e) => Err(vec![Problem {
@@ -257,17 +270,20 @@ impl Loader {
             unsafe_ok: false,
             os_ok: false,
             c: None,
+            version: None,
         });
         let m = Manifest {
             path: &manifest,
             text: &text,
             tables: &tables,
         };
-        let (name, stub, unsafe_ok, os_ok) = self.mod_section(&m);
-        self.project.mods[index as usize].name = name;
-        self.project.mods[index as usize].stub = stub;
-        self.project.mods[index as usize].unsafe_ok = unsafe_ok;
-        self.project.mods[index as usize].os_ok = os_ok;
+        let section = self.mod_section(&m);
+        let this = &mut self.project.mods[index as usize];
+        this.name = section.name;
+        this.stub = section.stub;
+        this.unsafe_ok = section.unsafe_ok;
+        this.os_ok = section.os_ok;
+        this.version = section.version;
         self.project.mods[index as usize].c = self.c_table(&m, dir);
         let (src_dir, root) = self.lib_root(&m, dir);
         let exes = self.exes(&m, dir);
@@ -314,9 +330,9 @@ impl Loader {
         Some(index)
     }
 
-    /// `[mod]`: the mod's name, its edition, which must be 2027, whether it is a stub, and
-    /// whether its capabilities include `unsafe`.
-    fn mod_section(&mut self, m: &Manifest) -> (String, bool, bool, bool) {
+    /// `[mod]`: the mod's name, its edition, which must be 2027, whether it is a stub, its
+    /// capabilities, and its version.
+    fn mod_section(&mut self, m: &Manifest) -> ModSection {
         for t in m.tables {
             if !matches!(
                 t.name.as_str(),
@@ -339,21 +355,33 @@ impl Loader {
                 0..0,
                 "a manifest has a `[mod]` table".to_string(),
             );
-            return (String::new(), false, false, false);
+            return ModSection::default();
         };
-        let mut name = String::new();
-        let mut stub = false;
-        let mut unsafe_ok = false;
-        let mut os_ok = false;
+        let mut out = ModSection::default();
         for p in &t.pairs {
             match (p.key.as_str(), &p.value) {
-                ("name", Value::Str(s)) => name = s.clone(),
-                ("stub", Value::Bool(b)) => stub = *b,
+                ("name", Value::Str(s)) => out.name = s.clone(),
+                ("stub", Value::Bool(b)) => out.stub = *b,
                 // The capabilities the mod may use (`mod.caps.1`); `unsafe` and `os` are checked.
                 ("capabilities", Value::Array(caps)) => {
-                    unsafe_ok = caps.iter().any(|c| c == "unsafe");
-                    os_ok = caps.iter().any(|c| c == "os");
+                    out.unsafe_ok = caps.iter().any(|c| c == "unsafe");
+                    out.os_ok = caps.iter().any(|c| c == "os");
                 }
+                // Three numbers, as packages are versioned (`1.4.0`).
+                ("version", Value::Str(v))
+                    if v.split('.').count() == 3
+                        && v.split('.')
+                            .all(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())) =>
+                {
+                    out.version = Some(v.clone());
+                }
+                ("version", _) => self.problem(
+                    "E0704",
+                    m.path,
+                    m.text,
+                    p.range.clone(),
+                    "a version is three numbers: `version = \"1.4.0\"`".to_string(),
+                ),
                 ("edition", Value::Str(s)) if s == EDITION => {}
                 ("edition", _) => self.problem(
                     "E0704",
@@ -371,7 +399,7 @@ impl Loader {
                 ),
             }
         }
-        if name.is_empty() {
+        if out.name.is_empty() {
             self.problem(
                 "E0704",
                 m.path,
@@ -380,7 +408,7 @@ impl Loader {
                 "a mod has a `name`".to_string(),
             );
         }
-        (name, stub, unsafe_ok, os_ok)
+        out
     }
 
     /// `[c]`: the mod's C code (`ffi.c.1`), its paths relative to the manifest's directory.

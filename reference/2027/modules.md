@@ -23,8 +23,8 @@ A **module** is a file of a mod.
 **mod.1** A program is a mod and the mods it depends on. A mod is a directory with a manifest,
 `moddil.toml`, a subset of TOML (`#` comments, `[table]` and `[[table]]` headers, and lines
 `key = "string"`, `key = true` (or `false`) or `key = { key = "string", … }`): `[mod]` gives its
-`name` and, optionally, its `edition`, which is `"2027"`, and whether it is a stub
-(**mod.stub.1**); `[lib] root` names its library's root file (by default
+`name` and, optionally, its `edition`, which is `"2027"`, its `version` (three numbers,
+`"1.4.0"`, which a Python wheel takes), and whether it is a stub (**mod.stub.1**); `[lib] root` names its library's root file (by default
 `src/lib.moddil`, if there is one); each `[[exe]]` names an executable's `main` file; and
 `[dependencies]` names the mods it depends on, each by the name it calls it and its directory:
 `geo = { path = "geo" }`. A manifest that is not like this, or names a file or directory that is

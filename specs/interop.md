@@ -171,7 +171,8 @@ The first slice of the C ABI ([`roadmap.md`](roadmap.md), slice M3a; reference `
   libclang (`#[c_import]`) and annotation overlays come later.
 - **C sources** are a mod's `[c]` table, compiled by the system's C compiler (MSVC, or `cc`),
   not yet by a fetched clang component; zlib is vendored in `examples/zlib`.
-- **`#[repr(C)]` structs** cross behind pointers only. No variadic calls or callbacks yet.
+- **`#[repr(C)]` structs** cross behind pointers only. No variadic calls or callbacks yet (structs
+  by value and callbacks came in M3c, below).
 - **Exports:** `#[export]` functions, a generated header, and `moddil build --lib` for a shared
   library. The generated Rust crate comes later.
 - **Runners:** native code and the MIR interpreter (marshalling pointer arguments); not WASM.

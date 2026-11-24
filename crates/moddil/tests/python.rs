@@ -60,7 +60,7 @@ fn the_example_builds_installs_and_runs_as_a_python_module() {
         .find(|p| p.extension().is_some_and(|x| x == "whl"))
         .expect("a wheel");
     assert!(
-        wheel.to_string_lossy().contains("stats-0.1.0-cp311-abi3-"),
+        wheel.to_string_lossy().contains("stats-0.2.0-cp311-abi3-"),
         "{}",
         wheel.display()
     );

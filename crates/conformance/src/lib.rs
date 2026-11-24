@@ -24,7 +24,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use moddil_project::Project;
-use moddil_sema::{Database, ModInfo, Program, ProgramFile, SourceFile};
+use moddil_sema::{Database, Program};
 use moddil_syntax::{SyntaxKind, line_col};
 
 /// The edition the suite currently tests.
@@ -93,32 +93,6 @@ fn line_of(project: &Project, file: u32, offset: u32) -> Line {
     (f.display.clone(), line_col(&f.text, offset).0)
 }
 
-/// The program `project` describes, as the compiler's input.
-pub fn program(db: &Database, project: &Project) -> Program {
-    let files = project
-        .files
-        .iter()
-        .map(|f| ProgramFile {
-            source: SourceFile::new(db, f.display.clone(), f.text.clone()),
-            mod_: f.mod_,
-            module: f.module.clone(),
-            exe: f.exe,
-        })
-        .collect();
-    let mods = project
-        .mods
-        .iter()
-        .map(|m| ModInfo {
-            name: m.name.clone(),
-            deps: m.deps.clone(),
-            stub: m.stub,
-            unsafe_ok: m.unsafe_ok,
-            os_ok: m.os_ok,
-        })
-        .collect();
-    Program::new(db, files, mods)
-}
-
 /// The compiler's front end with the MIR interpreter.
 pub struct MirInterpreter;
 
@@ -142,7 +116,7 @@ impl Implementation for MirInterpreter {
             }
         };
         let db = Database::default();
-        let program = program(&db, project);
+        let program = Program::of_project(&db, project);
         let mut outcome = Outcome {
             diagnostics: moddil_interp::diagnostics(&db, program)
                 .iter()
@@ -197,7 +171,7 @@ impl Implementation for Native {
     fn run_if(&self, loaded: &Loaded) -> Option<Outcome> {
         let project = loaded.as_ref().ok()?;
         let db = Database::default();
-        let program = program(&db, project);
+        let program = Program::of_project(&db, project);
         if moddil_interp::has_errors(&db, program) {
             return None;
         }
@@ -260,7 +234,7 @@ impl Implementation for Wasm {
     fn run_if(&self, loaded: &Loaded) -> Option<Outcome> {
         let project = loaded.as_ref().ok()?;
         let db = Database::default();
-        let program = program(&db, project);
+        let program = Program::of_project(&db, project);
         if moddil_interp::has_errors(&db, program) {
             return None;
         }
@@ -895,6 +869,7 @@ mod tests {
                 unsafe_ok: false,
                 os_ok: false,
                 c: None,
+                version: None,
             }],
         };
         compare(

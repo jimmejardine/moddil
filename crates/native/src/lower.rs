@@ -2000,52 +2000,7 @@ impl<M: Module> Compiler<'_, M> {
 /// The scheduler's operation that built-in function `f` of the prelude is, if it is one (as
 /// the interpreter's `task_native`).
 fn task_op(items: &ItemTree, f: u32) -> Option<&'static str> {
-    let sig = &items.fns[f as usize];
-    let owner = match sig.container {
-        moddil_sema::Container::Impl(k) => match &items.impls[k as usize].self_ty {
-            Ty::Adt(a, ..) => items.adts[*a as usize].name.as_str(),
-            _ => return None,
-        },
-        _ => "",
-    };
-    if sig.src != Src::Prelude {
-        return None;
-    }
-    // The `core` mod's `os` module (`os.1`).
-    if items.modules[sig.module as usize].path == ["os"] {
-        return Some(match sig.name.as_str() {
-            "arg_count" => "os_arg_count",
-            "arg_len" => "os_arg_len",
-            "arg_copy" => "os_arg_copy",
-            "write_stderr" => "os_write_stderr",
-            "random" => "os_random",
-            "listen" => "os_listen",
-            "incoming" => "os_incoming",
-            "connect" => "os_connect",
-            "arrivals" => "os_arrivals",
-            "take" => "os_take",
-            "send" => "os_send",
-            "close" => "os_close",
-            "signals" => "os_signals",
-            _ => return None,
-        });
-    }
-    Some(match (owner, sig.name.as_str()) {
-        ("", "yield_now") => "yield_now",
-        ("", "stop_requested") => "stop_requested",
-        ("", "__scope_open") => "__scope_open",
-        ("", "__scope_run") => "__scope_run",
-        ("", "channel") => "channel",
-        ("", "__timer") => "timer",
-        ("", "__select") => "__select",
-        ("Scope", "spawn") => "spawn",
-        ("Scope", "stop") => "stop",
-        ("Task", "join") => "join",
-        ("Sender", "send") => "send",
-        ("Sender", "clone") => "clone",
-        ("Receiver", "recv") => "recv",
-        _ => return None,
-    })
+    moddil_mir::runtime_op(items, f)
 }
 
 /// The error a task operation's failure is, written into the buffer before its error edge
@@ -6157,6 +6112,11 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 self.b.ins().call(f, &[level, p, n]);
                 self.drop_value(msg, &msg_ty)?;
                 Val::Unit
+            }
+            // Its bytes (`text.bytes.1`): the same address and length, as a slice.
+            (Ty::Str, "as_bytes") => {
+                let (p, n) = self.text(&args[0])?;
+                Val::Mem(self.wide(p, n))
             }
             // The first `len` bytes, which are UTF-8, as text (`text.string.inline.1`).
             (Ty::Str, "view") => {

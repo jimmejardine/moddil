@@ -4,6 +4,60 @@
 //! A number type is a code: 0 for `int` (an `i64`, its bits in the low 64), then [`NUMS`]' from
 //! 1.
 
+/// Float function `name` of the prelude (`num.float.fn.1`, one of [`crate::FLOAT_FNS`]) on
+/// `f64`s, by `libm`, so every platform and runner gives the same bits; `y` is the second
+/// argument of those that take two. `None` for another name.
+pub fn float_f64(name: &str, x: f64, y: f64) -> Option<f64> {
+    Some(match name {
+        "sqrt" => libm::sqrt(x),
+        "sin" => libm::sin(x),
+        "cos" => libm::cos(x),
+        "tan" => libm::tan(x),
+        "asin" => libm::asin(x),
+        "acos" => libm::acos(x),
+        "atan" => libm::atan(x),
+        "exp" => libm::exp(x),
+        "ln" => libm::log(x),
+        "log2" => libm::log2(x),
+        "log10" => libm::log10(x),
+        "abs" => libm::fabs(x),
+        "floor" => libm::floor(x),
+        "ceil" => libm::ceil(x),
+        "trunc" => libm::trunc(x),
+        "atan2" => libm::atan2(x, y),
+        "powf" => libm::pow(x, y),
+        "min" => libm::fmin(x, y),
+        "max" => libm::fmax(x, y),
+        _ => return None,
+    })
+}
+
+/// [`float_f64`] on `f32`s, by `libm`'s `f32` functions.
+pub fn float_f32(name: &str, x: f32, y: f32) -> Option<f32> {
+    Some(match name {
+        "sqrt" => libm::sqrtf(x),
+        "sin" => libm::sinf(x),
+        "cos" => libm::cosf(x),
+        "tan" => libm::tanf(x),
+        "asin" => libm::asinf(x),
+        "acos" => libm::acosf(x),
+        "atan" => libm::atanf(x),
+        "exp" => libm::expf(x),
+        "ln" => libm::logf(x),
+        "log2" => libm::log2f(x),
+        "log10" => libm::log10f(x),
+        "abs" => libm::fabsf(x),
+        "floor" => libm::floorf(x),
+        "ceil" => libm::ceilf(x),
+        "trunc" => libm::truncf(x),
+        "atan2" => libm::atan2f(x, y),
+        "powf" => libm::powf(x, y),
+        "min" => libm::fminf(x, y),
+        "max" => libm::fmaxf(x, y),
+        _ => return None,
+    })
+}
+
 /// The sized number types, by their codes from 1: their bits, and whether each is signed or a
 /// float.
 pub const NUMS: [(&str, u32, bool, bool); 11] = [

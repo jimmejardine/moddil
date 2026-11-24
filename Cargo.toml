@@ -48,6 +48,7 @@ moddil-rt = { path = "crates/rt", version = "0.0.0" }
 moddil-wasm = { path = "crates/wasm", version = "0.0.0" }
 moddil-native = { path = "crates/native", version = "0.0.0" }
 moddil-os = { path = "crates/os", version = "0.0.0" }
+moddil-sources = { path = "crates/sources", version = "0.0.0" }
 moddil-gpu = { path = "crates/gpu", version = "0.0.0" }
 moddil-lsp = { path = "crates/lsp", version = "0.0.0" }
 moddil-ffi = { path = "crates/ffi", version = "0.0.0" }

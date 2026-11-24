@@ -12,6 +12,7 @@ publish.workspace = true
 [dependencies]
 libm.workspace = true
 moddil-syntax.workspace = true
+moddil-sources.workspace = true
 
 [dev-dependencies]
 cargo_metadata.workspace = true

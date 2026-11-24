@@ -26,8 +26,9 @@ interpreter should get its own inference is an open question.
 
 ## Rules
 
-- **Independent of the compiler.** It depends only on `moddil-syntax` (parser and AST) and
-  general-purpose crates, never on `sema`, `mir` or `interp`; CI enforces this. If it shared the
+- **Independent of the compiler.** It depends only on `moddil-syntax` (parser and AST),
+  `moddil-sources` (the prelude's text, no code) and general-purpose crates, never on `sema`,
+  `mir` or `interp`; CI enforces this. If it shared the
   compiler's semantics, a compiler bug would change the "reference" too and nothing would notice.
 - **Written for clarity, not speed.** It covers the safe language and the closed list of undefined
   behaviour.

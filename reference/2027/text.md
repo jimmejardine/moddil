@@ -19,6 +19,9 @@ text. `s.len()` is its length in bytes, so `"café".len()` is `5`.
 **text.str.2** `str` has no size of its own: it is named only behind a borrow (`&str`,
 `&mut str`) or as the type an impl is for (E0901).
 
+**text.bytes.1** `s.as_bytes()` borrows the bytes of a `str` or a `String` as a `&[u8]`, its UTF-8:
+`"é".as_bytes()` is `[195, 169]`. `str::from_utf8` (**text.utf8.1**) goes the other way.
+
 **text.string.1** `String` is owned, growable text. `String::new()` is empty; `s.push_str(t)`
 appends the text `t`, `s.push(c)` a character, `s.pop()` removes and returns the last character
 (`None` if there is none), `s.clear()` empties it, and `s.as_str()` borrows its text as a `&str`.

@@ -130,7 +130,7 @@ fn main() -> ExitCode {
         .map(|f| (f.display.clone(), f.text.clone()))
         .collect();
     let db = Database::default();
-    let program = program(&db, &project);
+    let program = Program::of_project(&db, &project);
     let diagnostics = moddil_interp::diagnostics(&db, program);
     for d in &diagnostics {
         let (name, text) = &files[d.file as usize];
@@ -242,32 +242,6 @@ fn c_code(
         out.push(moddil_ffi::build(&spec, name, &dir, &exports)?);
     }
     Ok(out)
-}
-
-/// The program `project` describes, as the compiler's input.
-fn program(db: &Database, project: &moddil_project::Project) -> Program {
-    let files = project
-        .files
-        .iter()
-        .map(|f| ProgramFile {
-            source: SourceFile::new(db, f.display.clone(), f.text.clone()),
-            mod_: f.mod_,
-            module: f.module.clone(),
-            exe: f.exe,
-        })
-        .collect();
-    let mods = project
-        .mods
-        .iter()
-        .map(|m| ModInfo {
-            name: m.name.clone(),
-            deps: m.deps.clone(),
-            stub: m.stub,
-            unsafe_ok: m.unsafe_ok,
-            os_ok: m.os_ok,
-        })
-        .collect();
-    Program::new(db, files, mods)
 }
 
 fn run(
@@ -774,7 +748,13 @@ fn build_wheel(
     if let Err(e) = std::fs::write(&pyi, &bindings.pyi) {
         return fail(format!("writing {}: {e}", pyi.display()));
     }
-    match wheel::write(&dir, &name, "0.1.0", &module, &module_name, &bindings.pyi) {
+    // The manifest's version (`mod.1`), or 0.1.0.
+    let version = project
+        .mods
+        .first()
+        .and_then(|m| m.version.as_deref())
+        .unwrap_or("0.1.0");
+    match wheel::write(&dir, &name, version, &module, &module_name, &bindings.pyi) {
         Ok(w) => {
             eprintln!(
                 "moddil: wrote {} (for {}), and {} beside it",

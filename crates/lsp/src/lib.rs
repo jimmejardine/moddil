@@ -13,7 +13,7 @@ mod text;
 
 use std::path::{Path, PathBuf};
 
-use moddil_sema::{Database, Diagnostic, ModInfo, Program, ProgramFile, SourceFile};
+use moddil_sema::{Database, Diagnostic, Program};
 use moddil_syntax::TextRange;
 use salsa::Setter;
 
@@ -114,35 +114,12 @@ impl Analysis {
     fn load(&mut self, at: &Path) -> Root {
         let db = &self.db;
         match moddil_project::load(at) {
-            Ok(project) => {
-                let files = project
-                    .files
-                    .iter()
-                    .map(|f| ProgramFile {
-                        source: SourceFile::new(db, f.display.clone(), f.text.clone()),
-                        mod_: f.mod_,
-                        module: f.module.clone(),
-                        exe: f.exe,
-                    })
-                    .collect();
-                let mods = project
-                    .mods
-                    .iter()
-                    .map(|m| ModInfo {
-                        name: m.name.clone(),
-                        deps: m.deps.clone(),
-                        stub: m.stub,
-                        unsafe_ok: m.unsafe_ok,
-                        os_ok: m.os_ok,
-                    })
-                    .collect();
-                Root {
-                    at: at.to_path_buf(),
-                    program: Program::new(db, files, mods),
-                    paths: project.files.iter().map(|f| canonical(&f.path)).collect(),
-                    load_problems: Vec::new(),
-                }
-            }
+            Ok(project) => Root {
+                at: at.to_path_buf(),
+                program: Program::of_project(db, &project),
+                paths: project.files.iter().map(|f| canonical(&f.path)).collect(),
+                load_problems: Vec::new(),
+            },
             Err(problems) => Root {
                 at: at.to_path_buf(),
                 program: Program::new(db, Vec::new(), Vec::new()),

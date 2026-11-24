@@ -350,6 +350,15 @@ impl Machine<'_> {
                     None => return Err(crate::trap(crate::TrapClass::IndexOutOfBounds, range)),
                 }
             }
+            // Its bytes (`text.bytes.1`): a copy on the heap, borrowed.
+            (Head::Str, "as_bytes") => {
+                let bytes = text(self, 0)
+                    .as_bytes()
+                    .iter()
+                    .map(|b| Value::Num(crate::num::Kind::U8, u128::from(*b)))
+                    .collect();
+                Value::Ref(self.memory.alloc(Value::Array(bytes)), false)
+            }
             (Head::Str, "view") => {
                 let bytes = match self.target(args[0].clone()) {
                     Value::Array(xs) | Value::Buf(_, xs) => xs,

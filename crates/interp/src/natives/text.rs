@@ -62,6 +62,18 @@ impl Natives<'_> {
                     .and_then(|rest| rest.chars().next());
                 self.option(c.map(Value::Char))
             }
+            // Its bytes (`text.bytes.1`): a copy on the heap, borrowed, as text holds none.
+            (Ty::Str, "as_bytes") => {
+                let bytes = text(stack, 0)
+                    .as_bytes()
+                    .iter()
+                    .map(|b| Value::Num(moddil_sema::Num::U8, u128::from(*b)))
+                    .collect();
+                match stack.alloc(Value::Array(bytes)) {
+                    Value::Ref(p, _) => Value::Ref(p, false),
+                    other => unreachable!("a heap pointer: {other:?}"),
+                }
+            }
             // The first `len` bytes of a byte slice, which are UTF-8, as text.
             (Ty::Str, "view") => {
                 let bytes = match arg(stack, 0) {

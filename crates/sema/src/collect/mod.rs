@@ -30,75 +30,15 @@ mod traits;
 
 use report::Reporter;
 
-/// The prelude's source: the files of `reference/2027/prelude/`, joined in this order.
-macro_rules! prelude_source {
-    () => {
-        concat!(
-            include_str!("../../../../reference/2027/prelude/core.moddil"),
-            include_str!("../../../../reference/2027/prelude/int.moddil"),
-            include_str!("../../../../reference/2027/prelude/numbers.moddil"),
-            include_str!("../../../../reference/2027/prelude/convert.moddil"),
-            include_str!("../../../../reference/2027/prelude/float.moddil"),
-            include_str!("../../../../reference/2027/prelude/text.moddil"),
-            include_str!("../../../../reference/2027/prelude/fmt.moddil"),
-            include_str!("../../../../reference/2027/prelude/arrays.moddil"),
-            include_str!("../../../../reference/2027/prelude/iter.moddil"),
-            include_str!("../../../../reference/2027/prelude/pointers.moddil"),
-            include_str!("../../../../reference/2027/prelude/collections.moddil"),
-            include_str!("../../../../reference/2027/prelude/hash.moddil"),
-            include_str!("../../../../reference/2027/prelude/program.moddil"),
-            include_str!("../../../../reference/2027/prelude/concurrency.moddil"),
-        )
-    };
-}
-
 /// The prelude's source, followed by the built-in `core` mod's modules
-/// (`reference/2027/core/`), in the order of [`CORE_MODULES`].
-pub(crate) const PRELUDE: &str = concat!(
-    prelude_source!(),
-    include_str!("../../../../reference/2027/core/collections.moddil"),
-    include_str!("../../../../reference/2027/core/ptr.moddil"),
-    include_str!("../../../../reference/2027/core/cell.moddil"),
-    include_str!("../../../../reference/2027/core/atomic.moddil"),
-    include_str!("../../../../reference/2027/core/os.moddil"),
-    include_str!("../../../../reference/2027/core/gpu.moddil"),
-    include_str!("../../../../reference/2027/core/ffi.moddil"),
-);
+/// (`reference/2027/core/`), in the order of [`CORE_MODULES`] (`moddil-sources`).
+pub(crate) const PRELUDE: &str = moddil_sources::PRELUDE_AND_CORE;
 
 /// The `core` mod's modules, in [`PRELUDE`]'s order: each one's name and source.
-pub(crate) const CORE_MODULES: [(&str, &str); 7] = [
-    (
-        "collections",
-        include_str!("../../../../reference/2027/core/collections.moddil"),
-    ),
-    (
-        "ptr",
-        include_str!("../../../../reference/2027/core/ptr.moddil"),
-    ),
-    (
-        "cell",
-        include_str!("../../../../reference/2027/core/cell.moddil"),
-    ),
-    (
-        "atomic",
-        include_str!("../../../../reference/2027/core/atomic.moddil"),
-    ),
-    (
-        "os",
-        include_str!("../../../../reference/2027/core/os.moddil"),
-    ),
-    (
-        "gpu",
-        include_str!("../../../../reference/2027/core/gpu.moddil"),
-    ),
-    (
-        "ffi",
-        include_str!("../../../../reference/2027/core/ffi.moddil"),
-    ),
-];
+pub(crate) const CORE_MODULES: [(&str, &str); 7] = moddil_sources::CORE_MODULES;
 
 /// Where the `core` mod's items start in [`PRELUDE`].
-pub(crate) const CORE_START: usize = prelude_source!().len();
+pub(crate) const CORE_START: usize = moddil_sources::PRELUDE.len();
 
 /// The file parsed.
 #[salsa::tracked(returns(ref))]

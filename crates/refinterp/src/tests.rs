@@ -222,28 +222,3 @@ fn closures() {
                 }\n";
     assert_eq!(runs(text), vec![(vec!["3".to_string()], None)]);
 }
-
-/// The prelude is every file of `reference/2027/prelude/`, each once: one added there is not
-/// left out of the list in `PRELUDE`.
-#[test]
-fn the_prelude_is_every_file_of_its_directory() {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../reference/2027/prelude");
-    let mut total = 0;
-    for entry in std::fs::read_dir(&dir).expect("the prelude's directory") {
-        let path = entry.expect("an entry").path();
-        if path.extension().is_some_and(|e| e == "moddil") {
-            let text = std::fs::read_to_string(&path).expect("a prelude file");
-            assert!(
-                PRELUDE.contains(&text),
-                "{} is not in the prelude",
-                path.display()
-            );
-            total += text.len();
-        }
-    }
-    assert_eq!(
-        total,
-        PRELUDE.len(),
-        "the prelude is not its directory's files, each once"
-    );
-}

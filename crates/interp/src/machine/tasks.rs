@@ -55,25 +55,6 @@ impl Machine<'_> {
         if !sig.intrinsic {
             return None;
         }
-        // The `core` mod's `os` module (`os.1`).
-        if items.modules[sig.module as usize].path == ["os"] {
-            return Some(match sig.name.as_str() {
-                "arg_count" => "os_arg_count",
-                "arg_len" => "os_arg_len",
-                "arg_copy" => "os_arg_copy",
-                "write_stderr" => "os_write_stderr",
-                "random" => "os_random",
-                "listen" => "os_listen",
-                "incoming" => "os_incoming",
-                "connect" => "os_connect",
-                "arrivals" => "os_arrivals",
-                "take" => "os_take",
-                "send" => "os_send",
-                "close" => "os_close",
-                "signals" => "os_signals",
-                _ => return None,
-            });
-        }
         // The `core` mod's `gpu` module (`gpu.1`): no GPU here.
         if items.modules[sig.module as usize].path == ["gpu"] {
             return Some(match sig.name.as_str() {
@@ -85,29 +66,8 @@ impl Machine<'_> {
                 _ => return None,
             });
         }
-        let owner = match sig.container {
-            Container::Impl(k) => match &items.impls[k as usize].self_ty {
-                Ty::Adt(a, ..) => items.adts[*a as usize].name.as_str(),
-                _ => return None,
-            },
-            _ => "",
-        };
-        Some(match (owner, sig.name.as_str()) {
-            ("", "yield_now") => "yield_now",
-            ("", "stop_requested") => "stop_requested",
-            ("", "__scope_open") => "__scope_open",
-            ("", "__scope_run") => "__scope_run",
-            ("", "channel") => "channel",
-            ("", "__timer") => "timer",
-            ("", "__select") => "__select",
-            ("Scope", "spawn") => "spawn",
-            ("Scope", "stop") => "stop",
-            ("Task", "join") => "join",
-            ("Sender", "send") => "send",
-            ("Sender", "clone") => "clone",
-            ("Receiver", "recv") => "recv",
-            _ => return None,
-        })
+        // The `os` module and the tasks, scopes and channels: as native code names them.
+        moddil_mir::runtime_op(items, f)
     }
 
     /// A destructor the scheduler runs: of a `Task` (given up without a `join`), a `Sender` or

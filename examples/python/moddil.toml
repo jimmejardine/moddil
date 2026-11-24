@@ -2,4 +2,5 @@
 # the extension module `stats`, its stubs and a wheel; `py/check.py` uses them.
 [mod]
 name = "stats"
+version = "0.2.0"
 edition = "2027"

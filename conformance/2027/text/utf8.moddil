@@ -1,4 +1,4 @@
-// covers: text.utf8.1
+// covers: text.utf8.1, text.bytes.1
 
 test "bytes that are UTF-8 become text" {
     let bytes: [u8; 6] = [104, 195, 169, 108, 108, 111];
@@ -26,4 +26,15 @@ test "bytes that are not UTF-8 are an error that says where" {
     let v = Vec::from_array(a);
     let back = try { String::from_utf8(v)?.len() } catch { FromUtf8Error { bytes, valid_up_to } => bytes.len() * 10 + valid_up_to };
     back                                            // => 21
+}
+
+test "text's bytes are its UTF-8" {
+    "hé".as_bytes().len()                   // => 3
+    ;
+    "hé".as_bytes()[1]                      // => 195
+    ;
+    let s = "abc".to_string();
+    s.as_bytes()[2]                         // => 99
+    ;
+    str::from_utf8(s.as_bytes())?           // => "abc"
 }

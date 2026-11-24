@@ -533,7 +533,8 @@ something runs from the first slice.
       `text.md` says, and it is compared by text, so a position of equal text passes;
     - `#[derive]` does not apply to a `view` (`StrPos`'s `Clone` and `Copy` are written out);
     - integer literals in a collection literal for `Vec<u8>` take `int`
-      (`let v: Vec<u8> = [1, 2]` is E0402), so build one from a typed array;
+      (`let v: Vec<u8> = [1, 2]` is E0402), so build one from a typed array (done since, with
+      the collection literal elements of the remaining gaps);
     - no `char_indices`, `bytes`, `graphemes` or `RcStr` slices.
 - **The tour's 8 questions (decided November 2026), the last of M0's deferrals.**
   - **Closed without code:**
@@ -1166,7 +1167,8 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
     - `Tile` is 8 x 8 `Rgba8`, not generic;
     - the browser program is a `main` that awaits frames, not an exported `Flight` that the page
       drives (`#[export]` and `moddil bind` come later), and the page is plain, not the Svelte app;
-    - each frame's pixels are read back and drawn on a 2D canvas, rather than staying on the GPU;
+    - each frame's pixels are read back and drawn on a 2D canvas, rather than staying on the GPU
+      (done in M2g);
     - E0221 recognises the tile by its type's name, `Tile`.
 - **Slice M2f (decided November 2026): the LSP prototype.** `moddil lsp` is a language server
   over standard input and output, built on `lsp-server` and `lsp-types` (the `moddil-lsp` crate).
@@ -1288,12 +1290,12 @@ M3a, M3b, …
     - the export round trip through the system's C compiler;
     - `moddil-ffi`'s trampolines over the C runtime.
   - **Interim limits:**
-    - structs cross C only behind pointers, not as values;
-    - no variadic functions, and no callbacks into Moddil;
-    - no reading through a C pointer on the interpreter;
+    - structs cross C only behind pointers, not as values (done in M3c);
+    - no variadic functions, and no callbacks into Moddil (callbacks done in M3c);
+    - no reading through a C pointer on the interpreter (done in M3c);
     - no pointer arithmetic or null pointers in `core::ptr` yet, so C strings and arrays from C
       cannot be walked in Moddil (the zlib shim takes buffers instead), and the `mods/ffi`
-      helpers the plan named were not needed yet;
+      helpers the plan named were not needed yet (done in M3c, in `core::ptr` and `core::ffi`);
     - an exported function's trap ends the process;
     - `moddil build --lib` makes a shared library only, not a static one.
 - **Slice M3b (decided November 2026): Python bindings.** The user's choices: the glue as

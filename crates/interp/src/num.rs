@@ -233,44 +233,15 @@ pub(crate) fn text(n: Num, bits: u128) -> String {
 
 /// A float function of the prelude (`num.float.fn.1`), on `x` and maybe `y` of float type `n`.
 pub(crate) fn float_fn(n: Num, name: &str, x: f64, y: f64) -> Option<Value> {
-    let f32 = n == Num::F32;
-    let one = |a: fn(f64) -> f64, b: fn(f32) -> f32| {
-        if f32 {
-            from_float(n, f64::from(b(x as f32)))
-        } else {
-            from_float(n, a(x))
-        }
-    };
-    let two = |a: fn(f64, f64) -> f64, b: fn(f32, f32) -> f32| {
-        if f32 {
-            from_float(n, f64::from(b(x as f32, y as f32)))
-        } else {
-            from_float(n, a(x, y))
-        }
-    };
     Some(match name {
-        "sqrt" => one(libm::sqrt, libm::sqrtf),
-        "sin" => one(libm::sin, libm::sinf),
-        "cos" => one(libm::cos, libm::cosf),
-        "tan" => one(libm::tan, libm::tanf),
-        "asin" => one(libm::asin, libm::asinf),
-        "acos" => one(libm::acos, libm::acosf),
-        "atan" => one(libm::atan, libm::atanf),
-        "exp" => one(libm::exp, libm::expf),
-        "ln" => one(libm::log, libm::logf),
-        "log2" => one(libm::log2, libm::log2f),
-        "log10" => one(libm::log10, libm::log10f),
-        "abs" => one(libm::fabs, libm::fabsf),
-        "floor" => one(libm::floor, libm::floorf),
-        "ceil" => one(libm::ceil, libm::ceilf),
-        "trunc" => one(libm::trunc, libm::truncf),
-        "atan2" => two(libm::atan2, libm::atan2f),
-        "powf" => two(libm::pow, libm::powf),
-        "min" => two(libm::fmin, libm::fminf),
-        "max" => two(libm::fmax, libm::fmaxf),
         "is_nan" => Value::Bool(x.is_nan()),
         "is_finite" => Value::Bool(x.is_finite()),
-        _ => return None,
+        // The same `libm` functions as native code's (`moddil-rt`).
+        _ if n == Num::F32 => from_float(
+            n,
+            f64::from(moddil_mir::float_f32(name, x as f32, y as f32)?),
+        ),
+        _ => from_float(n, moddil_mir::float_f64(name, x, y)?),
     })
 }
 

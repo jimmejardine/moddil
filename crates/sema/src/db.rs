@@ -82,6 +82,32 @@ impl Program {
             }],
         )
     }
+
+    /// The program `project` describes: its files and its mods, as the compiler's input.
+    pub fn of_project(db: &dyn Db, project: &moddil_project::Project) -> Program {
+        let files = project
+            .files
+            .iter()
+            .map(|f| ProgramFile {
+                source: SourceFile::new(db, f.display.clone(), f.text.clone()),
+                mod_: f.mod_,
+                module: f.module.clone(),
+                exe: f.exe,
+            })
+            .collect();
+        let mods = project
+            .mods
+            .iter()
+            .map(|m| ModInfo {
+                name: m.name.clone(),
+                deps: m.deps.clone(),
+                stub: m.stub,
+                unsafe_ok: m.unsafe_ok,
+                os_ok: m.os_ok,
+            })
+            .collect();
+        Program::new(db, files, mods)
+    }
 }
 
 /// Something with a body: a function or a test, by its position among the program's items of
