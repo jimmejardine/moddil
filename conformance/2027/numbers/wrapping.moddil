@@ -23,6 +23,9 @@ test "a Wrapping integer wraps at its type's width" {
     ;
     x.wrapping_add(y)                       // => 4
     ;
+    let big: int = 9223372036854775807;
+    big.wrapping_add(1)                     // => -9223372036854775808
+    ;
     let z: u32 = 0;
     let one: u32 = 1;
     (Wrapping(z) - Wrapping(one)).0         // => 4294967295
@@ -37,7 +40,7 @@ test "a Wrapping integer wraps at its type's width" {
     fnv("hello".as_bytes()).0               // => 11831194018420276491
 }
 
-test "a Wrapping integer compares as its value does, and debug-prints as itself" {
+test "a Wrapping integer compares and prints as its value does" {
     let a: i16 = 3;
     let b: i16 = 4;
     Wrapping(a) < Wrapping(b)               // => true
@@ -45,5 +48,5 @@ test "a Wrapping integer compares as its value does, and debug-prints as itself"
     let c: u8 = 255;
     let two: u8 = 2;
     let w = Wrapping(c);
-    fmt"{(w + Wrapping(two)).0} {w:?}"      // => "1 Wrapping(255)"
+    fmt"{w + Wrapping(two)} {w:?}"          // => "1 Wrapping(255)"
 }

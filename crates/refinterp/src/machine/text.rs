@@ -510,18 +510,13 @@ impl Machine<'_> {
                 self.memory.store(&b, x);
                 Value::Unit
             }
-            (Head::Int, "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "rotate_left") => {
+            (Head::Int, "rotate_left") => {
                 let (Value::Int(a), Value::Int(b)) =
                     (self.target(args[0].clone()), self.target(args[1].clone()))
                 else {
                     unreachable!("two `int`s")
                 };
-                Value::Int(match name.as_str() {
-                    "wrapping_add" => a.wrapping_add(b),
-                    "wrapping_sub" => a.wrapping_sub(b),
-                    "wrapping_mul" => a.wrapping_mul(b),
-                    _ => a.rotate_left(b.rem_euclid(64) as u32),
-                })
+                Value::Int(a.rotate_left(b.rem_euclid(64) as u32))
             }
             // The two parts of an `&mut` slice borrow (`expr.slice.1`).
             (Head::Array | Head::Buf, "split_at_mut_unchecked") => {

@@ -285,14 +285,8 @@ fn replace<T>(dest: &mut T, value: T) -> T;
 #[intrinsic]
 fn swap<T>(a: &mut T, b: &mut T);
 
-// Wrapping arithmetic on the bits of an `int`, until the wrapping operators (slice S10).
+// The bits of an `int`: its wrapping arithmetic is `+%`, `-%` and `*%`, and `WrappingInt`'s.
 impl int {
-    #[intrinsic]
-    fn wrapping_add(self, other: int) -> int;
-    #[intrinsic]
-    fn wrapping_sub(self, other: int) -> int;
-    #[intrinsic]
-    fn wrapping_mul(self, other: int) -> int;
     // The 64 bits rotated left by `n` places (taken modulo 64).
     #[intrinsic]
     fn rotate_left(self, n: int) -> int;
@@ -337,7 +331,7 @@ impl WrappingInt for int {
 }
 
 // An integer whose `+`, `-` and `*` wrap around its type's width (`num.wrap.2`), for hashes,
-// checksums and sequence numbers: `Wrapping(x)`, its value `.0`, which prints it.
+// checksums and sequence numbers: `Wrapping(x)`, its value `.0`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Wrapping<T>(pub T);
 
@@ -359,5 +353,11 @@ impl<T: WrappingInt> Mul for Wrapping<T> {
     type Output = Wrapping<T>;
     fn mul(self, rhs: Wrapping<T>) -> Wrapping<T> {
         Wrapping(self.0.wrapping_mul(rhs.0))
+    }
+}
+
+impl<T: Display> Display for Wrapping<T> {
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        self.0.fmt(out);
     }
 }

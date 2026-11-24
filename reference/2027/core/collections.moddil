@@ -22,14 +22,14 @@ impl SipHasher {
     }
 
     fn round(&mut self) {
-        self.v0 = self.v0.wrapping_add(self.v1);
+        self.v0 = self.v0 +% self.v1;
         self.v1 = self.v1.rotate_left(13) ^ self.v0;
         self.v0 = self.v0.rotate_left(32);
-        self.v2 = self.v2.wrapping_add(self.v3);
+        self.v2 = self.v2 +% self.v3;
         self.v3 = self.v3.rotate_left(16) ^ self.v2;
-        self.v0 = self.v0.wrapping_add(self.v3);
+        self.v0 = self.v0 +% self.v3;
         self.v3 = self.v3.rotate_left(21) ^ self.v0;
-        self.v2 = self.v2.wrapping_add(self.v1);
+        self.v2 = self.v2 +% self.v1;
         self.v1 = self.v1.rotate_left(17) ^ self.v2;
         self.v2 = self.v2.rotate_left(32);
     }

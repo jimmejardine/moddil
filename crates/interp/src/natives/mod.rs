@@ -177,15 +177,6 @@ impl<'a> Natives<'a> {
                 stack.store(&b, x);
                 Value::Unit
             }
-            (Ty::Int, "wrapping_add") => {
-                Value::Int(args[0].as_int().wrapping_add(args[1].as_int()))
-            }
-            (Ty::Int, "wrapping_sub") => {
-                Value::Int(args[0].as_int().wrapping_sub(args[1].as_int()))
-            }
-            (Ty::Int, "wrapping_mul") => {
-                Value::Int(args[0].as_int().wrapping_mul(args[1].as_int()))
-            }
             (Ty::Int, "rotate_left") => Value::Int(
                 args[0]
                     .as_int()

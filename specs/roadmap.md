@@ -117,9 +117,6 @@ when part of one is, remove that part.
   match analysis counts those values already.
 - A literal where a `Wrapping<T>` is expected (`let seq: Wrapping<u32> = last + 1`, as
   `numerics.md` writes it), and `+=` on types with operator traits.
-- The prelude's `int` `wrapping_add`, `wrapping_sub` and `wrapping_mul` intrinsics, from before
-  `+%`: `WrappingInt` now gives them, so the intrinsics and the runners' code for them go.
-- `Display` for `Wrapping<T>`, once `Display` writes to a `Write` sink (P3).
 
 **P6. Arrays and iteration** (prelude `arrays` and `iter`, `crates/sema`, `crates/mir`, the
 runners; M)

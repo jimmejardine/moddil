@@ -5978,20 +5978,13 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         })
     }
 
-    /// A built-in of `int`: wrapping arithmetic and rotation.
+    /// A built-in of `int`: rotation.
     fn int_intrinsic(&mut self, name: &str, args: &[Operand]) -> Result<Val, String> {
         Ok(match name {
-            "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "rotate_left" => {
+            "rotate_left" => {
                 let (x, y) = (self.value(&args[0])?, self.value(&args[1])?);
-                Val::Scalar(match name {
-                    "wrapping_add" => self.b.ins().iadd(x, y),
-                    "wrapping_sub" => self.b.ins().isub(x, y),
-                    "wrapping_mul" => self.b.ins().imul(x, y),
-                    _ => {
-                        let k = self.b.ins().band_imm_s(y, 63);
-                        self.b.ins().rotl(x, k)
-                    }
-                })
+                let k = self.b.ins().band_imm_s(y, 63);
+                Val::Scalar(self.b.ins().rotl(x, k))
             }
             _ => return unsupported(name),
         })
