@@ -664,9 +664,7 @@ impl Collector<'_> {
             if !unnamed {
                 self.declare(*src, &name, Def::Fn((first + k) as u32), vis, range);
             }
-            self.tree
-                .fns
-                .push(FnSig::placeholder(name, *src, *module, vis));
+            self.tree.fns.push(FnSig::free(name, *src, *module, vis));
         }
         first
     }
@@ -937,42 +935,17 @@ impl Collector<'_> {
             self.tree.adts[a as usize].ty_with(a, Vec::new())
         });
         let sig = |name: &str, ret: Ty, fails: Ty, is_new: bool| FnSig {
-            name: name.to_string(),
             name_range,
-            src,
             node: node.text_range(),
-            container: Container::Free,
-            generics: Generics::default(),
-            self_kind: None,
             params: vec![param.clone()],
             ret,
-            ret_range: None,
-            ret_from: Vec::new(),
             has_body: true,
             origin,
             fails,
-            fails_range: None,
-            effects: Vec::new(),
             track_caller: true,
-            control: 0,
-            defaults: Vec::new(),
-            opaque: Vec::new(),
-            opaque_fn: None,
-            selectable: false,
-            kernel: false,
-            foreign: false,
-            export: false,
-            export_status: false,
-            py_export: false,
-            default_arg: false,
-            intrinsic: false,
             is_const: !is_new,
-            const_item: false,
             refine: Some((k as u32, is_new)),
-            vis: def.vis,
-            module: def.module,
-            deriver: None,
-            template: None,
+            ..FnSig::free(name.to_string(), src, def.module, def.vis)
         };
         let holds = self.tree.fns.len() as u32;
         // `holds` gives the value back, so a base that is not `Copy` is not used up.
@@ -1083,43 +1056,16 @@ impl Collector<'_> {
                 }
                 let name = self.tree.fns[f].name.clone();
                 defaults[k + skip] = Some(self.tree.fns.len() as u32);
+                let hidden = format!("{name}::{}", param.name.clone().unwrap_or_default());
                 self.tree.fns.push(FnSig {
-                    name: format!("{name}::{}", param.name.clone().unwrap_or_default()),
                     name_range: range,
-                    src,
                     node: range,
-                    container: Container::Free,
-                    generics: Generics::default(),
-                    self_kind: None,
-                    params: Vec::new(),
                     ret: param.ty.clone(),
-                    ret_range: None,
-                    ret_from: Vec::new(),
                     has_body: true,
-                    origin: None,
-                    fails: Ty::Never,
-                    fails_range: None,
-                    effects: Vec::new(),
-                    track_caller: false,
-                    control: 0,
-                    defaults: Vec::new(),
-                    opaque: Vec::new(),
-                    opaque_fn: None,
-                    selectable: false,
-                    kernel: false,
-                    foreign: false,
-                    export: false,
-                    export_status: false,
-                    py_export: false,
                     default_arg: true,
-                    intrinsic: false,
                     is_const: true,
                     const_item: true,
-                    refine: None,
-                    vis: Vis::Pub,
-                    module,
-                    deriver: None,
-                    template: None,
+                    ..FnSig::free(hidden, src, module, Vis::Pub)
                 });
             }
             if defaults.iter().any(Option::is_some) {

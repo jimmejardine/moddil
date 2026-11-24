@@ -364,9 +364,10 @@ pub struct EffectSig {
 }
 
 impl FnSig {
-    /// A free function's signature before it is collected: its name, where, and who can name
-    /// it.
-    pub(crate) fn placeholder(name: String, src: Src, module: u32, vis: Vis) -> FnSig {
+    /// A free function's signature with nothing but its name, where, and who can name it: no
+    /// parameters, giving `()`, with no body and every flag off. A function before it is
+    /// collected starts as this, and a hidden one sets what it differs in.
+    pub(crate) fn free(name: String, src: Src, module: u32, vis: Vis) -> FnSig {
         let none = TextRange::new(0, 0);
         FnSig {
             name,

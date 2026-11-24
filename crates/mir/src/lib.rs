@@ -90,6 +90,32 @@ pub struct Body {
 }
 
 impl Body {
+    /// An empty body of `arg_count` arguments, giving a `ret`: its return local, and nothing
+    /// else yet.
+    pub(crate) fn new(
+        name: String,
+        src: Src,
+        track_caller: bool,
+        ret: Ty,
+        arg_count: usize,
+    ) -> Body {
+        Body {
+            name,
+            src,
+            track_caller,
+            locals: vec![LocalDecl {
+                ty: ret,
+                name: None,
+            }],
+            arg_count,
+            blocks: Vec::new(),
+            strs: Vec::new(),
+            cleanups: Vec::new(),
+            cleanup_locals: 0,
+            late: Vec::new(),
+        }
+    }
+
     /// The cleanup block that unwinding from statement `stmt` of `block` (its terminator, if
     /// `stmt` is past the statements) runs.
     pub fn cleanup_at(&self, block: usize, stmt: usize) -> BlockId {

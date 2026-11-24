@@ -1000,6 +1000,26 @@ impl<M: Module> Compiler<'_, M> {
         })
     }
 
+    /// Builds function `id`, of signature `sig`, with `build`, and defines it in the module.
+    fn define_fn<T>(
+        &mut self,
+        id: FuncId,
+        sig: Signature,
+        build: impl FnOnce(&mut Self, &mut FunctionBuilder<'_>) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let mut ctx = self.module.make_context();
+        ctx.func.signature = sig;
+        let mut fctx = FunctionBuilderContext::new();
+        let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
+        let out = build(self, &mut b)?;
+        b.seal_all_blocks();
+        b.finalize(self.module.target_config());
+        self.module
+            .define_function(id, &mut ctx)
+            .map_err(|e| format!("Cranelift: {e:?}"))?;
+        Ok(out)
+    }
+
     /// The C signature of a function taking `params` and giving `ret`.
     fn c_sig(&mut self, params: &[Ty], ret: &Ty) -> Result<Signature, String> {
         let cparams = params
@@ -1404,25 +1424,18 @@ impl<M: Module> Compiler<'_, M> {
             .map_err(|e| e.to_string())?;
         self.c_drops.insert(ty.clone(), id);
         let glue = self.glue(ty)?;
-        let mut ctx = self.module.make_context();
-        ctx.func.signature = sig;
-        let mut fctx = FunctionBuilderContext::new();
-        let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
-        let block = b.create_block();
-        b.append_block_params_for_function_params(block);
-        b.switch_to_block(block);
-        let at = b.block_params(block)[0];
-        let f = self.module.declare_func_in_func(glue, b.func);
-        let null = b.ins().iconst(ptr, 0);
-        let call = b.ins().call(f, &[at, null]);
-        let status = b.inst_results(call)[0];
-        b.ins().return_(&[status]);
-        b.seal_all_blocks();
-        b.finalize(self.module.target_config());
-        self.module
-            .define_function(id, &mut ctx)
-            .map_err(|e| format!("Cranelift: {e:?}"))?;
-        Ok(id)
+        self.define_fn(id, sig, |this, b| {
+            let block = b.create_block();
+            b.append_block_params_for_function_params(block);
+            b.switch_to_block(block);
+            let at = b.block_params(block)[0];
+            let f = this.module.declare_func_in_func(glue, b.func);
+            let null = b.ins().iconst(ptr, 0);
+            let call = b.ins().call(f, &[at, null]);
+            let status = b.inst_results(call)[0];
+            b.ins().return_(&[status]);
+            Ok(id)
+        })
     }
 
     /// A task's code, for closure type `c` ([`moddil_rt::TaskFn`]): its body, given the
@@ -1447,37 +1460,30 @@ impl<M: Module> Compiler<'_, M> {
         let (body, params, ret) = self.declare_closure(c)?;
         let arg_pass = self.pass(&params[1])?;
         let pass = self.pass(&ret)?;
-        let mut ctx = self.module.make_context();
-        ctx.func.signature = sig;
-        let mut fctx = FunctionBuilderContext::new();
-        let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
-        let block = b.create_block();
-        b.append_block_params_for_function_params(block);
-        b.switch_to_block(block);
-        let ps = b.block_params(block).to_vec();
-        let (captures, arg, out, err) = (ps[0], ps[1], ps[2], ps[3]);
-        let mut vals = vec![captures];
-        match arg_pass {
-            Pass::Nothing => {}
-            Pass::Scalar(_) => vals.push(arg),
-            Pass::Words(ts) if ts == [types::I64] => vals.push(arg),
-            _ => return Err("a task's argument".to_string()),
-        }
-        if pass == Pass::Indirect {
-            vals.push(out);
-        }
-        vals.push(err);
-        let f = self.module.declare_func_in_func(body, b.func);
-        let call = b.ins().call(f, &vals);
-        let results = b.inst_results(call).to_vec();
-        store_pass(&mut b, &pass, &results[1..], out);
-        b.ins().return_(&[results[0]]);
-        b.seal_all_blocks();
-        b.finalize(self.module.target_config());
-        self.module
-            .define_function(id, &mut ctx)
-            .map_err(|e| format!("Cranelift: {e:?}"))?;
-        Ok(id)
+        self.define_fn(id, sig, |this, b| {
+            let block = b.create_block();
+            b.append_block_params_for_function_params(block);
+            b.switch_to_block(block);
+            let ps = b.block_params(block).to_vec();
+            let (captures, arg, out, err) = (ps[0], ps[1], ps[2], ps[3]);
+            let mut vals = vec![captures];
+            match arg_pass {
+                Pass::Nothing => {}
+                Pass::Scalar(_) => vals.push(arg),
+                Pass::Words(ts) if ts == [types::I64] => vals.push(arg),
+                _ => return Err("a task's argument".to_string()),
+            }
+            if pass == Pass::Indirect {
+                vals.push(out);
+            }
+            vals.push(err);
+            let f = this.module.declare_func_in_func(body, b.func);
+            let call = b.ins().call(f, &vals);
+            let results = b.inst_results(call).to_vec();
+            store_pass(b, &pass, &results[1..], out);
+            b.ins().return_(&[results[0]]);
+            Ok(id)
+        })
     }
 
     /// A trait method's code for method `k` of anonymous impl type `anon`, as a vtable calls it:
@@ -1523,70 +1529,63 @@ impl<M: Module> Compiler<'_, M> {
             .iter()
             .map(|t| self.layouts.of(t).map(|l| l.size))
             .collect::<Result<_, _>>()?;
-        let mut ctx = self.module.make_context();
-        ctx.func.signature = sig;
-        let mut fctx = FunctionBuilderContext::new();
-        let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
-        let block = b.create_block();
-        b.append_block_params_for_function_params(block);
-        b.switch_to_block(block);
-        let ps = b.block_params(block).to_vec();
-        let flags = ir::MemFlagsData::trusted();
-        let captures = b.ins().iadd_imm_s(ps[0], i64::from(off));
-        // The arguments, as the tuple the closure takes.
-        let slot = b.create_sized_stack_slot(ir::StackSlotData::new(
-            ir::StackSlotKind::ExplicitSlot,
-            tl.size.max(1),
-            4,
-        ));
-        let ptr = self.module.target_config().pointer_type();
-        let tuple = b.ins().stack_addr(ptr, slot, 0);
-        let mut i = 1;
-        for (e, (pass, size)) in elem_passes.iter().zip(&elem_sizes).enumerate() {
-            let at = toffs.get(e).copied().unwrap_or(0) as i32;
-            match pass {
-                Pass::Nothing => {}
-                Pass::Scalar(_) => {
-                    b.ins().store(flags, ps[i], tuple, at);
-                    i += 1;
-                }
-                Pass::Words(ts) => {
-                    let mut o = at;
-                    for t in ts {
-                        b.ins().store(flags, ps[i], tuple, o);
-                        o += t.bytes() as i32;
+        self.define_fn(id, sig, |this, b| {
+            let block = b.create_block();
+            b.append_block_params_for_function_params(block);
+            b.switch_to_block(block);
+            let ps = b.block_params(block).to_vec();
+            let flags = ir::MemFlagsData::trusted();
+            let captures = b.ins().iadd_imm_s(ps[0], i64::from(off));
+            // The arguments, as the tuple the closure takes.
+            let slot = b.create_sized_stack_slot(ir::StackSlotData::new(
+                ir::StackSlotKind::ExplicitSlot,
+                tl.size.max(1),
+                4,
+            ));
+            let ptr = this.module.target_config().pointer_type();
+            let tuple = b.ins().stack_addr(ptr, slot, 0);
+            let mut i = 1;
+            for (e, (pass, size)) in elem_passes.iter().zip(&elem_sizes).enumerate() {
+                let at = toffs.get(e).copied().unwrap_or(0) as i32;
+                match pass {
+                    Pass::Nothing => {}
+                    Pass::Scalar(_) => {
+                        b.ins().store(flags, ps[i], tuple, at);
+                        i += 1;
+                    }
+                    Pass::Words(ts) => {
+                        let mut o = at;
+                        for t in ts {
+                            b.ins().store(flags, ps[i], tuple, o);
+                            o += t.bytes() as i32;
+                            i += 1;
+                        }
+                    }
+                    Pass::Indirect => {
+                        let src = ps[i];
+                        let mut o = 0;
+                        while o < *size as i32 {
+                            let v = b.ins().load(types::I8, flags, src, o);
+                            b.ins().store(flags, v, tuple, at + o);
+                            o += 1;
+                        }
                         i += 1;
                     }
                 }
-                Pass::Indirect => {
-                    let src = ps[i];
-                    let mut o = 0;
-                    while o < *size as i32 {
-                        let v = b.ins().load(types::I8, flags, src, o);
-                        b.ins().store(flags, v, tuple, at + o);
-                        o += 1;
-                    }
-                    i += 1;
-                }
             }
-        }
-        let mut vals = vec![captures];
-        vals.extend(load_pass(&mut b, &tuple_pass, tuple));
-        // The result's place (if the caller gives one), then the error's: as the caller gave.
-        if ret_pass == Pass::Indirect {
-            vals.push(ps[ps.len() - 2]);
-        }
-        vals.push(ps[ps.len() - 1]);
-        let f = self.module.declare_func_in_func(body, b.func);
-        let call = b.ins().call(f, &vals);
-        let results = b.inst_results(call).to_vec();
-        b.ins().return_(&results);
-        b.seal_all_blocks();
-        b.finalize(self.module.target_config());
-        self.module
-            .define_function(id, &mut ctx)
-            .map_err(|e| format!("Cranelift: {e:?}"))?;
-        Ok(id)
+            let mut vals = vec![captures];
+            vals.extend(load_pass(b, &tuple_pass, tuple));
+            // The result's place (if the caller gives one), then the error's: as the caller gave.
+            if ret_pass == Pass::Indirect {
+                vals.push(ps[ps.len() - 2]);
+            }
+            vals.push(ps[ps.len() - 1]);
+            let f = this.module.declare_func_in_func(body, b.func);
+            let call = b.ins().call(f, &vals);
+            let results = b.inst_results(call).to_vec();
+            b.ins().return_(&results);
+            Ok(id)
+        })
     }
 
     /// `moddil_exit_code(out) -> i32`, for a built program: `main`'s result at `out` as the
@@ -1608,53 +1607,46 @@ impl<M: Module> Compiler<'_, M> {
             .declare_function("moddil_exit_code", Linkage::Export, &sig)
             .map_err(|e| e.to_string())?;
         let l = self.layouts.of(&exit)?;
-        let mut ctx = self.module.make_context();
-        ctx.func.signature = sig;
-        let mut fctx = FunctionBuilderContext::new();
-        let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
-        let block = b.create_block();
-        b.append_block_params_for_function_params(block);
-        b.switch_to_block(block);
-        let out = b.block_params(block)[0];
-        let code = if *ret == Ty::Unit {
-            b.ins().iconst(types::I32, 0)
-        } else {
-            let Shape::Enum {
-                tag: Tag::Direct { offset, ty },
-                variants,
-            } = &l.shape
-            else {
-                return Err("the prelude's `ExitCode`".to_string());
-            };
-            let flags = ir::MemFlagsData::trusted();
-            let t = b.ins().load(*ty, flags, out, *offset as i32);
-            let d = if *ty == types::I32 {
-                t
+        self.define_fn(id, sig, |_, b| {
+            let block = b.create_block();
+            b.append_block_params_for_function_params(block);
+            b.switch_to_block(block);
+            let out = b.block_params(block)[0];
+            let code = if *ret == Ty::Unit {
+                b.ins().iconst(types::I32, 0)
             } else {
-                b.ins().uextend(types::I32, t)
+                let Shape::Enum {
+                    tag: Tag::Direct { offset, ty },
+                    variants,
+                } = &l.shape
+                else {
+                    return Err("the prelude's `ExitCode`".to_string());
+                };
+                let flags = ir::MemFlagsData::trusted();
+                let t = b.ins().load(*ty, flags, out, *offset as i32);
+                let d = if *ty == types::I32 {
+                    t
+                } else {
+                    b.ins().uextend(types::I32, t)
+                };
+                // `Ok` 0, then `Usage` 64 to `Config` 78; `Other(n)` its `n`.
+                const CODES: [i64; 16] = [
+                    0, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78,
+                ];
+                let other = variants.len() - 1;
+                let at = variants[other].first().map_or(0, |f| f.0);
+                let n = b.ins().load(types::I64, flags, out, at as i32);
+                let mut code = b.ins().ireduce(types::I32, n);
+                for (k, c) in CODES.iter().enumerate() {
+                    let is = b.ins().icmp_imm_s(IntCC::Equal, d, k as i64);
+                    let v = b.ins().iconst(types::I32, *c);
+                    code = b.ins().select(is, v, code);
+                }
+                code
             };
-            // `Ok` 0, then `Usage` 64 to `Config` 78; `Other(n)` its `n`.
-            const CODES: [i64; 16] = [
-                0, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78,
-            ];
-            let other = variants.len() - 1;
-            let at = variants[other].first().map_or(0, |f| f.0);
-            let n = b.ins().load(types::I64, flags, out, at as i32);
-            let mut code = b.ins().ireduce(types::I32, n);
-            for (k, c) in CODES.iter().enumerate() {
-                let is = b.ins().icmp_imm_s(IntCC::Equal, d, k as i64);
-                let v = b.ins().iconst(types::I32, *c);
-                code = b.ins().select(is, v, code);
-            }
-            code
-        };
-        b.ins().return_(&[code]);
-        b.seal_all_blocks();
-        b.finalize(self.module.target_config());
-        self.module
-            .define_function(id, &mut ctx)
-            .map_err(|e| format!("Cranelift: {e:?}"))?;
-        Ok(())
+            b.ins().return_(&[code]);
+            Ok(())
+        })
     }
 
     /// The tables a built program reports a trap from (see [`compile_object`]).
@@ -1736,30 +1728,23 @@ impl<M: Module> Compiler<'_, M> {
             .map_err(|e| e.to_string())?;
         let needs = Solver::new(self.items, &[]).needs_drop(ret);
         let glue = if needs { Some(self.glue(ret)?) } else { None };
-        let mut ctx = self.module.make_context();
-        ctx.func.signature = sig;
-        let mut fctx = FunctionBuilderContext::new();
-        let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
-        let block = b.create_block();
-        b.append_block_params_for_function_params(block);
-        b.switch_to_block(block);
-        let out = b.block_params(block)[0];
-        let status = match glue {
-            Some(g) => {
-                let f = self.module.declare_func_in_func(g, b.func);
-                let null = b.ins().iconst(ptr, 0);
-                let call = b.ins().call(f, &[out, null]);
-                b.inst_results(call)[0]
-            }
-            None => b.ins().iconst(types::I8, 0),
-        };
-        b.ins().return_(&[status]);
-        b.seal_all_blocks();
-        b.finalize(self.module.target_config());
-        self.module
-            .define_function(id, &mut ctx)
-            .map_err(|e| format!("Cranelift: {e:?}"))?;
-        Ok(id)
+        self.define_fn(id, sig, |this, b| {
+            let block = b.create_block();
+            b.append_block_params_for_function_params(block);
+            b.switch_to_block(block);
+            let out = b.block_params(block)[0];
+            let status = match glue {
+                Some(g) => {
+                    let f = this.module.declare_func_in_func(g, b.func);
+                    let null = b.ins().iconst(ptr, 0);
+                    let call = b.ins().call(f, &[out, null]);
+                    b.inst_results(call)[0]
+                }
+                None => b.ins().iconst(types::I8, 0),
+            };
+            b.ins().return_(&[status]);
+            Ok(id)
+        })
     }
 
     /// `#[export]` function `f`'s wrapper (`ffi.export.1`): under its own name, with C's types
@@ -1819,126 +1804,121 @@ impl<M: Module> Compiler<'_, M> {
         }
         let cret = self.c_type(ret)?;
         let ret_pass = self.pass(ret)?;
-        let mut ctx = self.module.make_context();
-        ctx.func.signature = sig;
-        let mut fctx = FunctionBuilderContext::new();
-        let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
-        let block = b.create_block();
-        b.append_block_params_for_function_params(block);
-        b.switch_to_block(block);
-        let mut args = b.block_params(block).to_vec();
-        let flags = ir::MemFlagsData::trusted();
-        // A struct result given through a hidden pointer: the first parameter.
-        let sret = match &cret {
-            CType::Struct(l) if moddil_ffi::abi::ret(on, l) == moddil_ffi::abi::Ret::Indirect => {
-                Some(args.remove(0))
-            }
-            _ => None,
-        };
-        let begin = self.module.declare_func_in_func(begin, b.func);
-        b.ins().call(begin, &[]);
-        let mut vals = Vec::new();
-        let mut args = args.into_iter();
-        for ((p, cp), pass) in params.iter().zip(&cparams).zip(&passes) {
-            if let CType::Struct(l) = cp {
-                // The struct, assembled in a slot of its own, then passed as Moddil passes it.
-                let slot = scratch(&mut b, l.padded() + 8);
-                match moddil_ffi::abi::arg(on, l) {
-                    moddil_ffi::abi::Arg::Parts(parts) => {
-                        for (off, _) in parts {
-                            let v = args.next().ok_or("a struct's part")?;
-                            b.ins().store(flags, v, slot, off as i32);
+        self.define_fn(id, sig, |this, b| {
+            let block = b.create_block();
+            b.append_block_params_for_function_params(block);
+            b.switch_to_block(block);
+            let mut args = b.block_params(block).to_vec();
+            let flags = ir::MemFlagsData::trusted();
+            // A struct result given through a hidden pointer: the first parameter.
+            let sret = match &cret {
+                CType::Struct(l)
+                    if moddil_ffi::abi::ret(on, l) == moddil_ffi::abi::Ret::Indirect =>
+                {
+                    Some(args.remove(0))
+                }
+                _ => None,
+            };
+            let begin = this.module.declare_func_in_func(begin, b.func);
+            b.ins().call(begin, &[]);
+            let mut vals = Vec::new();
+            let mut args = args.into_iter();
+            for ((p, cp), pass) in params.iter().zip(&cparams).zip(&passes) {
+                if let CType::Struct(l) = cp {
+                    // The struct, assembled in a slot of its own, then passed as Moddil passes it.
+                    let slot = scratch(b, l.padded() + 8);
+                    match moddil_ffi::abi::arg(on, l) {
+                        moddil_ffi::abi::Arg::Parts(parts) => {
+                            for (off, _) in parts {
+                                let v = args.next().ok_or("a struct's part")?;
+                                b.ins().store(flags, v, slot, off as i32);
+                            }
+                        }
+                        moddil_ffi::abi::Arg::Pointer | moddil_ffi::abi::Arg::Stack => {
+                            let at = args.next().ok_or("a struct's address")?;
+                            copy_bytes(b, slot, at, l.size);
                         }
                     }
-                    moddil_ffi::abi::Arg::Pointer | moddil_ffi::abi::Arg::Stack => {
-                        let at = args.next().ok_or("a struct's address")?;
-                        copy_bytes(&mut b, slot, at, l.size);
+                    vals.extend(load_pass(b, pass, slot));
+                    continue;
+                }
+                let a = args.next().ok_or("a parameter")?;
+                let t = clif_type(p)?.expect("a C scalar");
+                vals.push(if wide(t) == t {
+                    a
+                } else {
+                    b.ins().ireduce(t, a)
+                });
+            }
+            // Where Moddil gives a struct result.
+            let rslot = match &cret {
+                CType::Struct(l) => Some(scratch(b, l.padded() + 8)),
+                _ => None,
+            };
+            if let (Some(r), Pass::Indirect) = (rslot, &ret_pass) {
+                vals.push(r);
+            }
+            // Room for an error, which an export cannot give.
+            let slot = b.create_sized_stack_slot(ir::StackSlotData::new(
+                ir::StackSlotKind::ExplicitSlot,
+                64,
+                3,
+            ));
+            let err = b.ins().stack_addr(ptr, slot, 0);
+            vals.push(err);
+            let target = this.module.declare_func_in_func(target, b.func);
+            let call = b.ins().call(target, &vals);
+            let results = b.inst_results(call).to_vec();
+            let ok = b.create_block();
+            let bad = b.create_block();
+            b.ins().brif(results[0], bad, &[], ok, &[]);
+            b.switch_to_block(bad);
+            if status {
+                // `#[export(status)]` (`ffi.export.2`): the caller is told, with 2.
+                let two = b.ins().iconst(types::I32, 2);
+                b.ins().return_(&[two]);
+            } else {
+                let trapped = this.module.declare_func_in_func(trapped, b.func);
+                b.ins().call(trapped, &[]);
+                b.ins().trap(ir::TrapCode::unwrap_user(1));
+            }
+            b.switch_to_block(ok);
+            if let (CType::Struct(l), Some(r)) = (&cret, rslot) {
+                store_pass(b, &ret_pass, &results[1..], r);
+                match moddil_ffi::abi::ret(on, l) {
+                    moddil_ffi::abi::Ret::Parts(parts) => {
+                        let out: Vec<ir::Value> = parts
+                            .iter()
+                            .map(|(off, t)| b.ins().load(*t, flags, r, *off as i32))
+                            .collect();
+                        b.ins().return_(&out);
+                    }
+                    moddil_ffi::abi::Ret::Indirect => {
+                        let at = sret.ok_or("the hidden result pointer")?;
+                        copy_bytes(b, at, r, l.size);
+                        b.ins().return_(&[]);
                     }
                 }
-                vals.extend(load_pass(&mut b, pass, slot));
-                continue;
-            }
-            let a = args.next().ok_or("a parameter")?;
-            let t = clif_type(p)?.expect("a C scalar");
-            vals.push(if wide(t) == t {
-                a
             } else {
-                b.ins().ireduce(t, a)
-            });
-        }
-        // Where Moddil gives a struct result.
-        let rslot = match &cret {
-            CType::Struct(l) => Some(scratch(&mut b, l.padded() + 8)),
-            _ => None,
-        };
-        if let (Some(r), Pass::Indirect) = (rslot, &ret_pass) {
-            vals.push(r);
-        }
-        // Room for an error, which an export cannot give.
-        let slot = b.create_sized_stack_slot(ir::StackSlotData::new(
-            ir::StackSlotKind::ExplicitSlot,
-            64,
-            3,
-        ));
-        let err = b.ins().stack_addr(ptr, slot, 0);
-        vals.push(err);
-        let target = self.module.declare_func_in_func(target, b.func);
-        let call = b.ins().call(target, &vals);
-        let results = b.inst_results(call).to_vec();
-        let ok = b.create_block();
-        let bad = b.create_block();
-        b.ins().brif(results[0], bad, &[], ok, &[]);
-        b.switch_to_block(bad);
-        if status {
-            // `#[export(status)]` (`ffi.export.2`): the caller is told, with 2.
-            let two = b.ins().iconst(types::I32, 2);
-            b.ins().return_(&[two]);
-        } else {
-            let trapped = self.module.declare_func_in_func(trapped, b.func);
-            b.ins().call(trapped, &[]);
-            b.ins().trap(ir::TrapCode::unwrap_user(1));
-        }
-        b.switch_to_block(ok);
-        if let (CType::Struct(l), Some(r)) = (&cret, rslot) {
-            store_pass(&mut b, &ret_pass, &results[1..], r);
-            match moddil_ffi::abi::ret(on, l) {
-                moddil_ffi::abi::Ret::Parts(parts) => {
-                    let out: Vec<ir::Value> = parts
-                        .iter()
-                        .map(|(off, t)| b.ins().load(*t, flags, r, *off as i32))
-                        .collect();
-                    b.ins().return_(&out);
-                }
-                moddil_ffi::abi::Ret::Indirect => {
-                    let at = sret.ok_or("the hidden result pointer")?;
-                    copy_bytes(&mut b, at, r, l.size);
-                    b.ins().return_(&[]);
+                match clif_type(ret)? {
+                    Some(t) if wide(t) != t => {
+                        let v = if signed(ret) {
+                            b.ins().sextend(wide(t), results[1])
+                        } else {
+                            b.ins().uextend(wide(t), results[1])
+                        };
+                        b.ins().return_(&[v]);
+                    }
+                    Some(_) => {
+                        b.ins().return_(&[results[1]]);
+                    }
+                    None => {
+                        b.ins().return_(&[]);
+                    }
                 }
             }
-        } else {
-            match clif_type(ret)? {
-                Some(t) if wide(t) != t => {
-                    let v = if signed(ret) {
-                        b.ins().sextend(wide(t), results[1])
-                    } else {
-                        b.ins().uextend(wide(t), results[1])
-                    };
-                    b.ins().return_(&[v]);
-                }
-                Some(_) => {
-                    b.ins().return_(&[results[1]]);
-                }
-                None => {
-                    b.ins().return_(&[]);
-                }
-            }
-        }
-        b.seal_all_blocks();
-        b.finalize(self.module.target_config());
-        self.module
-            .define_function(id, &mut ctx)
-            .map_err(|e| format!("Cranelift: {e:?}"))?;
-        Ok(id)
+            Ok(id)
+        })
     }
 
     /// `fn(out: *mut u8, err: *mut u8) -> i8`, in the platform's C convention: calls `target`,
@@ -1960,62 +1940,55 @@ impl<M: Module> Compiler<'_, M> {
             .declare_function(&entry_name("moddil_entry", k), Linkage::Export, &sig)
             .map_err(|e| e.to_string())?;
         let pass = self.pass(ret)?;
-        let mut ctx = self.module.make_context();
-        ctx.func.signature = sig;
-        let mut fctx = FunctionBuilderContext::new();
-        let mut b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
-        let block = b.create_block();
-        b.append_block_params_for_function_params(block);
-        b.switch_to_block(block);
-        let out = b.block_params(block)[0];
-        let err = b.block_params(block)[1];
-        let f = self.module.declare_func_in_func(target, b.func);
-        // Each parameter (a root capability) zero.
-        let mut vals = Vec::new();
-        for p in params {
-            let ts = match self.pass(p)? {
-                Pass::Nothing => Vec::new(),
-                Pass::Scalar(t) => vec![t],
-                Pass::Words(ts) => ts,
-                Pass::Indirect => {
-                    let l = self.layouts.of(p)?;
-                    let slot = b.create_sized_stack_slot(ir::StackSlotData::new(
-                        ir::StackSlotKind::ExplicitSlot,
-                        l.size.max(1),
-                        3,
-                    ));
-                    let a = b.ins().stack_addr(ptr, slot, 0);
-                    let zero = b.ins().iconst(types::I8, 0);
-                    for k in 0..l.size {
-                        b.ins()
-                            .store(ir::MemFlagsData::trusted(), zero, a, k as i32);
+        self.define_fn(id, sig, |this, b| {
+            let block = b.create_block();
+            b.append_block_params_for_function_params(block);
+            b.switch_to_block(block);
+            let out = b.block_params(block)[0];
+            let err = b.block_params(block)[1];
+            let f = this.module.declare_func_in_func(target, b.func);
+            // Each parameter (a root capability) zero.
+            let mut vals = Vec::new();
+            for p in params {
+                let ts = match this.pass(p)? {
+                    Pass::Nothing => Vec::new(),
+                    Pass::Scalar(t) => vec![t],
+                    Pass::Words(ts) => ts,
+                    Pass::Indirect => {
+                        let l = this.layouts.of(p)?;
+                        let slot = b.create_sized_stack_slot(ir::StackSlotData::new(
+                            ir::StackSlotKind::ExplicitSlot,
+                            l.size.max(1),
+                            3,
+                        ));
+                        let a = b.ins().stack_addr(ptr, slot, 0);
+                        let zero = b.ins().iconst(types::I8, 0);
+                        for k in 0..l.size {
+                            b.ins()
+                                .store(ir::MemFlagsData::trusted(), zero, a, k as i32);
+                        }
+                        vals.push(a);
+                        continue;
                     }
-                    vals.push(a);
-                    continue;
+                };
+                for t in ts {
+                    vals.push(match t {
+                        types::F32 => b.ins().f32const(0.0),
+                        types::F64 => b.ins().f64const(0.0),
+                        t => b.ins().iconst(t, 0),
+                    });
                 }
-            };
-            for t in ts {
-                vals.push(match t {
-                    types::F32 => b.ins().f32const(0.0),
-                    types::F64 => b.ins().f64const(0.0),
-                    t => b.ins().iconst(t, 0),
-                });
             }
-        }
-        if pass == Pass::Indirect {
-            vals.push(out);
-        }
-        vals.push(err);
-        let call = b.ins().call(f, &vals);
-        let results = b.inst_results(call).to_vec();
-        store_pass(&mut b, &pass, &results[1..], out);
-        b.ins().return_(&[results[0]]);
-        b.seal_all_blocks();
-        b.finalize(self.module.target_config());
-        self.module
-            .define_function(id, &mut ctx)
-            .map_err(|e| format!("Cranelift: {e:?}"))?;
-        Ok(id)
+            if pass == Pass::Indirect {
+                vals.push(out);
+            }
+            vals.push(err);
+            let call = b.ins().call(f, &vals);
+            let results = b.inst_results(call).to_vec();
+            store_pass(b, &pass, &results[1..], out);
+            b.ins().return_(&[results[0]]);
+            Ok(id)
+        })
     }
 }
 

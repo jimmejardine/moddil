@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use crate::expand::{Bnf, Sym};
+use crate::expand::Bnf;
 use crate::parse::{Body, Grammar, Quant};
 use crate::tokens::{self, Class, Named, Tx};
 
@@ -46,22 +46,7 @@ pub(crate) fn emit(grammar: &Grammar, bnf: &Bnf) -> String {
     let _ = writeln!(out, "start: {}", names[bnf.start as usize]);
     for (n, prods) in cleaned.iter().enumerate() {
         let Some(prods) = prods else { continue };
-        let mut alts = Vec::new();
-        let mut empty = false;
-        for prod in prods {
-            if prod.is_empty() {
-                empty = true;
-                continue;
-            }
-            let syms: Vec<String> = prod
-                .iter()
-                .map(|s| match s {
-                    Sym::N(m) => names[*m as usize].clone(),
-                    Sym::T(t) => terminal(&bnf.terms[*t as usize]),
-                })
-                .collect();
-            alts.push(syms.join(" "));
-        }
+        let (alts, empty) = crate::gbnf::alternatives(prods, bnf, &names, terminal);
         let body = match (alts.len(), empty) {
             (0, _) => continue,
             (_, false) => alts.join(" | "),

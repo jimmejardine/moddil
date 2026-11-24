@@ -46,22 +46,7 @@ pub(crate) fn emit(grammar: &Grammar, bnf: &Bnf) -> String {
     out.push_str("ws ::= ( tok-whitespace | tok-line-comment | tok-block-comment )*\n\n");
     for (n, prods) in cleaned.iter().enumerate() {
         let Some(prods) = prods else { continue };
-        let mut alts = Vec::new();
-        let mut empty = false;
-        for prod in prods {
-            if prod.is_empty() {
-                empty = true;
-                continue;
-            }
-            let syms: Vec<String> = prod
-                .iter()
-                .map(|s| match s {
-                    Sym::N(m) => names[*m as usize].clone(),
-                    Sym::T(t) => terminal(&bnf.terms[*t as usize]),
-                })
-                .collect();
-            alts.push(syms.join(" "));
-        }
+        let (mut alts, empty) = alternatives(prods, bnf, &names, terminal);
         let body = match (alts.len(), empty) {
             (0, _) => "\"\"".to_string(),
             (1, false) => alts.remove(0),
@@ -190,6 +175,34 @@ fn tx(t: &Tx) -> String {
         // Character-level GBNF cannot subtract: accept what `A` matches.
         Tx::Minus(from, _) => tx(from),
     }
+}
+
+/// A rule's productions as alternatives, each its symbols joined by spaces (a rule by its name
+/// in `names`, a terminal as `terminal` writes it), and whether one of them is empty, which is
+/// left out.
+pub(crate) fn alternatives(
+    prods: &[Vec<Sym>],
+    bnf: &Bnf,
+    names: &[String],
+    terminal: impl Fn(&str) -> String,
+) -> (Vec<String>, bool) {
+    let mut alts = Vec::new();
+    let mut empty = false;
+    for prod in prods {
+        if prod.is_empty() {
+            empty = true;
+            continue;
+        }
+        let syms: Vec<String> = prod
+            .iter()
+            .map(|s| match s {
+                Sym::N(m) => names[*m as usize].clone(),
+                Sym::T(t) => terminal(&bnf.terms[*t as usize]),
+            })
+            .collect();
+        alts.push(syms.join(" "));
+    }
+    (alts, empty)
 }
 
 /// The productions to emit: unproductive ones dropped, and references to nonterminals that only

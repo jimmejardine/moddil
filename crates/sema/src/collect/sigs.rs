@@ -353,46 +353,19 @@ impl Collector<'_> {
         }
         let origin = self.reporter.origin(src, node.text_range());
         self.reporter.report(src, origin, ds);
+        let vis = match src {
+            Src::File(_) => super::vis_of(node),
+            _ => crate::items::Vis::Pub,
+        };
         FnSig {
-            name,
             name_range,
-            src,
             node: node.text_range(),
-            container: Container::Free,
-            generics: Generics::default(),
-            self_kind: None,
-            params: Vec::new(),
             ret,
-            ret_range: None,
-            ret_from: Vec::new(),
             has_body: true,
             origin,
-            fails: Ty::Never,
-            fails_range: None,
-            effects: Vec::new(),
-            track_caller: false,
-            control: 0,
-            defaults: Vec::new(),
-            opaque: Vec::new(),
-            opaque_fn: None,
-            selectable: false,
-            kernel: false,
-            foreign: false,
-            export: false,
-            export_status: false,
-            py_export: false,
-            default_arg: false,
-            intrinsic: false,
             is_const: true,
             const_item: true,
-            refine: None,
-            vis: match src {
-                Src::File(_) => super::vis_of(node),
-                _ => crate::items::Vis::Pub,
-            },
-            module: self.module,
-            deriver: None,
-            template: None,
+            ..FnSig::free(name, src, self.module, vis)
         }
     }
 

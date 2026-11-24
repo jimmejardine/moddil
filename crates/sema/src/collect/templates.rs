@@ -180,7 +180,7 @@ impl Collector<'_> {
         }
         let origin = self.reporter.origin(src, node.text_range());
         self.reporter.report(src, origin, ds);
-        let mut sig = FnSig::placeholder(name, src, self.module, super::vis_of(node));
+        let mut sig = FnSig::free(name, src, self.module, super::vis_of(node));
         sig.name_range = name_range;
         sig.node = node.text_range();
         sig.is_const = true;

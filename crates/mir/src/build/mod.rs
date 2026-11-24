@@ -13,9 +13,7 @@ use moddil_sema::hir::{self, ExprId};
 use moddil_sema::{Container, Db, Inference, Item, ItemTree, Owner, Solver, Src, Ty};
 use moddil_syntax::TextRange;
 
-use crate::{
-    Body, Const, Local, LocalDecl, Operand, Place, Rvalue, Statement, Terminator, TrapClass,
-};
+use crate::{Body, Const, Local, Operand, Place, Rvalue, Statement, Terminator, TrapClass};
 
 mod arith;
 mod cfg;
@@ -81,47 +79,13 @@ pub fn mir<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Option<Body> {
         },
         _ => false,
     };
-    let mut b = Builder {
-        hir,
-        types,
-        items,
-        solver: Solver::new(items, preds),
-        glue_only: glue_only.then_some(Local(1)),
-        cfg: Cfg::new(Body {
-            name,
-            src,
-            track_caller: match owner.item(db) {
-                Item::Fn(i) => items.fns[i as usize].track_caller,
-                _ => false,
-            },
-            locals: vec![LocalDecl {
-                ty: ret,
-                name: None,
-            }],
-            arg_count: hir.params.len() + needs.len(),
-            blocks: Vec::new(),
-            strs: Vec::new(),
-            cleanups: Vec::new(),
-            cleanup_locals: 0,
-            late: Vec::new(),
-        }),
-        scopes: Scopes::new(),
-        locals: vec![None; hir.locals.len()],
-        recording: HashMap::new(),
-        moved_parts: HashSet::new(),
-        parts_in_place: HashMap::new(),
-        compare_expr: ExprId::from_raw(la_arena::RawIdx::from_u32(0)),
-        targets: vec![Target::Out],
-        on_error: HashMap::new(),
-        selectables: selectables(db, owner.program(db), hir, types),
-        binds: None,
-        fx,
-        evidence: HashMap::new(),
-        installed: HashMap::new(),
-        uncoerced: None,
-        captured: HashMap::new(),
-        in_closure: false,
+    let track_caller = match owner.item(db) {
+        Item::Fn(i) => items.fns[i as usize].track_caller,
+        _ => false,
     };
+    let mir = Body::new(name, src, track_caller, ret, hir.params.len() + needs.len());
+    let mut b = Builder::new(db, owner, hir, types, preds, mir);
+    b.glue_only = glue_only.then_some(Local(1));
     for &p in &hir.params {
         b.local(p);
     }
@@ -196,7 +160,6 @@ fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
     let hir = &moddil_sema::body(db, base).body;
     let types = revealed(db, program, moddil_sema::infer(db, base));
     let types = &*types;
-    let fx = moddil_sema::effects(db, program);
     let e = ExprId::from_raw(la_arena::RawIdx::from_u32(expr));
     let Ty::Closure(c) = types.expr(e) else {
         unreachable!("a closure's type")
@@ -216,44 +179,9 @@ fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
         ),
         Item::Closure(..) => unreachable!("an owner is a function or test"),
     };
-    let mut b = Builder {
-        hir,
-        types,
-        items,
-        solver: Solver::new(items, preds),
-        glue_only: None,
-        cfg: Cfg::new(Body {
-            name: format!("{name}::{{closure}}"),
-            src,
-            track_caller: false,
-            locals: vec![LocalDecl {
-                ty: c.ret.clone(),
-                name: None,
-            }],
-            arg_count: 2,
-            blocks: Vec::new(),
-            strs: Vec::new(),
-            cleanups: Vec::new(),
-            cleanup_locals: 0,
-            late: Vec::new(),
-        }),
-        scopes: Scopes::new(),
-        locals: vec![None; hir.locals.len()],
-        recording: HashMap::new(),
-        moved_parts: HashSet::new(),
-        parts_in_place: HashMap::new(),
-        compare_expr: ExprId::from_raw(la_arena::RawIdx::from_u32(0)),
-        targets: vec![Target::Out],
-        on_error: HashMap::new(),
-        selectables: selectables(db, owner.program(db), hir, types),
-        binds: None,
-        fx,
-        evidence: HashMap::new(),
-        installed: HashMap::new(),
-        uncoerced: None,
-        captured: HashMap::new(),
-        in_closure: true,
-    };
+    let mir = Body::new(format!("{name}::{{closure}}"), src, false, c.ret.clone(), 2);
+    let mut b = Builder::new(db, owner, hir, types, preds, mir);
+    b.in_closure = true;
     let env = b.cfg.new_local(
         Ty::tuple(c.captures.to_vec()),
         Some("{captures}".to_string()),
@@ -343,6 +271,46 @@ struct Builder<'a> {
     /// For each `#[selectable]` function a `select` here waits on: the types of its two parts,
     /// the closures that give its receiver and do the rest (`task.select.4`).
     selectables: HashMap<u32, (Ty, Ty)>,
+}
+
+impl<'a> Builder<'a> {
+    /// A builder of `body`, which has its return local and arguments, from `owner`'s `hir` and
+    /// `types`, with bounds `preds` in scope.
+    fn new(
+        db: &'a dyn Db,
+        owner: Owner<'a>,
+        hir: &'a hir::Body,
+        types: &'a Inference,
+        preds: &'a [moddil_sema::Pred],
+        body: Body,
+    ) -> Builder<'a> {
+        let program = owner.program(db);
+        let items = moddil_sema::item_tree(db, program);
+        Builder {
+            hir,
+            types,
+            items,
+            solver: Solver::new(items, preds),
+            glue_only: None,
+            cfg: Cfg::new(body),
+            scopes: Scopes::new(),
+            locals: vec![None; hir.locals.len()],
+            recording: HashMap::new(),
+            moved_parts: HashSet::new(),
+            parts_in_place: HashMap::new(),
+            compare_expr: ExprId::from_raw(la_arena::RawIdx::from_u32(0)),
+            targets: vec![Target::Out],
+            on_error: HashMap::new(),
+            selectables: selectables(db, program, hir, types),
+            binds: None,
+            fx: moddil_sema::effects(db, program),
+            evidence: HashMap::new(),
+            installed: HashMap::new(),
+            uncoerced: None,
+            captured: HashMap::new(),
+            in_closure: false,
+        }
+    }
 }
 
 /// The parts of each `#[selectable]` function the `select`s of `hir` wait on.
