@@ -191,18 +191,18 @@ fn main() -> ExitCode {
         Command::Test { interp, .. } => test(&db, program, &files, *interp, path),
         Command::Build {
             output, wasm: true, ..
-        } => build_wasm(&db, program, path, output.as_deref()),
+        } => finish(build_wasm(&db, program, path, output.as_deref())),
         Command::Build {
             output, lib: true, ..
-        } => build_lib(&db, program, &project, output.as_deref(), &c),
+        } => finish(build_lib(&db, program, &project, output.as_deref(), &c)),
         Command::Build {
             output,
             wheel: true,
             ..
-        } => build_wheel(&db, program, &project, output.as_deref(), &c),
+        } => finish(build_wheel(&db, program, &project, output.as_deref(), &c)),
         Command::Build {
             output, release, ..
-        } => build(&db, program, path, output.as_deref(), *release, &c),
+        } => finish(build(&db, program, path, output.as_deref(), *release, &c)),
         Command::NativeTest { index, .. } => native_test(&db, program, &files, *index),
         Command::Lsp => unreachable!("handled above"),
     }
@@ -602,15 +602,57 @@ fn in_parallel<S: Send, T: Send>(
     done.into_iter().map(|(_, t)| t).collect()
 }
 
+/// A build command's outcome as the process's exit code: on failure, its message, printed here
+/// for every command.
+fn finish(r: Result<(), String>) -> ExitCode {
+    match r {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(why) => {
+            eprintln!("moddil: {why}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Native code built for `name`, or why it could not be.
+fn native_object(
+    name: &str,
+    built: Result<Vec<u8>, moddil_native::Native>,
+) -> Result<Vec<u8>, String> {
+    match built {
+        Ok(o) => Ok(o),
+        Err(moddil_native::Native::Unsupported(what)) => {
+            Err(format!("`{name}` cannot be built yet: {what}"))
+        }
+        // Building gives no other failure: anything else is the compiler's own.
+        Err(_) => Err(format!("building `{name}` failed (a bug in moddil)")),
+    }
+}
+
+/// The functions marked `#[export]` of mod `mod_` (`ffi.export.1`), in the order they are
+/// declared.
+fn exports(items: &ItemTree, mod_: u32) -> Vec<u32> {
+    (0..items.fns.len() as u32)
+        .filter(|&f| {
+            let sig = &items.fns[f as usize];
+            sig.export && items.mod_of(sig.module) == mod_
+        })
+        .collect()
+}
+
 /// `moddil build --wasm`: `main` compiled to WebAssembly, written as the files that run it in a
 /// browser or in Node.
-fn build_wasm(db: &Database, program: Program, path: &Path, output: Option<&Path>) -> ExitCode {
+fn build_wasm(
+    db: &Database,
+    program: Program,
+    path: &Path,
+    output: Option<&Path>,
+) -> Result<(), String> {
     let name = path.display();
     let items = moddil_sema::item_tree(db, program);
-    let Some(main) = items.main_fn() else {
-        eprintln!("moddil: {name} has no `fn main()`");
-        return ExitCode::FAILURE;
-    };
+    let main = items
+        .main_fn()
+        .ok_or_else(|| format!("{name} has no `fn main()`"))?;
     let glue = output.map_or_else(
         || {
             let stem = path
@@ -624,13 +666,8 @@ fn build_wasm(db: &Database, program: Program, path: &Path, output: Option<&Path
         .file_stem()
         .map_or_else(|| "main".to_string(), |s| s.to_string_lossy().into_owned());
     let dir = glue.parent().unwrap_or(Path::new("")).to_path_buf();
-    let p = match moddil_wasm::package(db, program, main, &stem) {
-        Ok(p) => p,
-        Err(what) => {
-            eprintln!("moddil: {name} cannot be built for WASM yet: {what}");
-            return ExitCode::FAILURE;
-        }
-    };
+    let p = moddil_wasm::package(db, program, main, &stem)
+        .map_err(|what| format!("{name} cannot be built for WASM yet: {what}"))?;
     let files: [(&str, &[u8]); 4] = [
         (&p.glue.0, p.glue.1.as_bytes()),
         (&p.program.0, &p.program.1),
@@ -639,12 +676,9 @@ fn build_wasm(db: &Database, program: Program, path: &Path, output: Option<&Path
     ];
     for (file, bytes) in files {
         let at = dir.join(file);
-        if let Err(e) = std::fs::write(&at, bytes) {
-            eprintln!("moddil: writing {}: {e}", at.display());
-            return ExitCode::FAILURE;
-        }
+        std::fs::write(&at, bytes).map_err(|e| format!("writing {}: {e}", at.display()))?;
     }
-    ExitCode::SUCCESS
+    Ok(())
 }
 
 /// `moddil build`: `main` compiled ahead of time, linked into an executable.
@@ -655,26 +689,18 @@ fn build(
     output: Option<&Path>,
     release: bool,
     c: &[moddil_ffi::Built],
-) -> ExitCode {
-    let name = path.display();
+) -> Result<(), String> {
+    let name = path.display().to_string();
     let items = moddil_sema::item_tree(db, program);
-    let Some(main) = items.main_fn() else {
-        eprintln!("moddil: {name} has no `fn main()`");
-        return ExitCode::FAILURE;
-    };
+    let main = items
+        .main_fn()
+        .ok_or_else(|| format!("{name} has no `fn main()`"))?;
     let built = if release {
         moddil_native::build_release_object(db, program, main)
     } else {
         moddil_native::build_object(db, program, main)
     };
-    let object = match built {
-        Ok(o) => o,
-        Err(moddil_native::Native::Unsupported(what)) => {
-            eprintln!("moddil: {name} cannot be built yet: {what}");
-            return ExitCode::FAILURE;
-        }
-        Err(_) => return ExitCode::FAILURE,
-    };
+    let object = native_object(&name, built)?;
     let out = output.map_or_else(
         || {
             let stem = path
@@ -684,13 +710,7 @@ fn build(
         },
         Path::to_path_buf,
     );
-    match link::link(&object, &out, release, c) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(why) => {
-            eprintln!("moddil: linking {}: {why}", out.display());
-            ExitCode::FAILURE
-        }
-    }
+    link::link(&object, &out, release, c).map_err(|why| format!("linking {}: {why}", out.display()))
 }
 
 /// `moddil build --wheel` (`ffi.python.1`): the root mod's `#[export(python)]` functions and
@@ -701,30 +721,19 @@ fn build_wheel(
     project: &moddil_project::Project,
     dir: Option<&Path>,
     c: &[moddil_ffi::Built],
-) -> ExitCode {
-    let fail = |why: String| {
-        eprintln!("moddil: {why}");
-        ExitCode::FAILURE
-    };
+) -> Result<(), String> {
     let items = moddil_sema::item_tree(db, program);
     let name = project
         .mods
         .first()
         .map_or("module", |m| m.name.as_str())
         .to_string();
-    let bindings = match moddil_py::generate(items, &name, 0) {
-        Ok(b) => b,
-        Err(problems) => {
-            for p in &problems {
-                eprintln!("moddil: {p}");
-            }
-            return fail(format!("`{name}` cannot be built as a Python module yet"));
-        }
-    };
-    let python = match wheel::find_python() {
-        Ok(p) => p,
-        Err(why) => return fail(why),
-    };
+    let bindings = moddil_py::generate(items, &name, 0).map_err(|problems| {
+        let mut lines = problems.iter().map(ToString::to_string).collect::<Vec<_>>();
+        lines.push(format!("`{name}` cannot be built as a Python module yet"));
+        lines.join("\nmoddil: ")
+    })?;
+    let python = wheel::find_python()?;
     // The program with the shims: a mod of their own, over the user's.
     let shim_mod = project.mods.len() as u32;
     let mut files: Vec<ProgramFile> = program.files(db).clone();
@@ -751,33 +760,22 @@ fn build_wheel(
                 report("<python shims>", &bindings.shims, d);
             }
         }
-        return fail(format!(
+        return Err(format!(
             "the Python shims for `{name}` do not check (a bug in moddil)"
         ));
     }
     let shim_items = moddil_sema::item_tree(db, with_shims);
-    let exports: Vec<u32> = (0..shim_items.fns.len() as u32)
-        .filter(|&f| {
-            let s = &shim_items.fns[f as usize];
-            s.export && shim_items.mod_of(s.module) == shim_mod
-        })
-        .collect();
-    let object = match moddil_native::build_library(db, with_shims, &exports) {
-        Ok(o) => o,
-        Err(moddil_native::Native::Unsupported(what)) => {
-            return fail(format!("`{name}` cannot be built yet: {what}"));
-        }
-        Err(_) => return ExitCode::FAILURE,
-    };
+    let exports = exports(shim_items, shim_mod);
+    let object = native_object(
+        &name,
+        moddil_native::build_library(db, with_shims, &exports),
+    )?;
     let dir = dir.map_or_else(|| PathBuf::from("."), Path::to_path_buf);
     let build = dir.join("build");
-    if let Err(e) = std::fs::create_dir_all(&build) {
-        return fail(format!("creating {}: {e}", build.display()));
-    }
+    std::fs::create_dir_all(&build).map_err(|e| format!("creating {}: {e}", build.display()))?;
     let glue_c = build.join(format!("{name}_glue.c"));
-    if let Err(e) = std::fs::write(&glue_c, &bindings.glue) {
-        return fail(format!("writing {}: {e}", glue_c.display()));
-    }
+    std::fs::write(&glue_c, &bindings.glue)
+        .map_err(|e| format!("writing {}: {e}", glue_c.display()))?;
     let spec = moddil_ffi::CSpec {
         sources: vec![glue_c],
         include: vec![python.include.clone()],
@@ -785,48 +783,39 @@ fn build_wheel(
         libs: Vec::new(),
         shared: false,
     };
-    let glue = match moddil_ffi::build(&spec, &format!("{name}_glue"), &build, &[]) {
-        Ok(b) => b,
-        Err(why) => return fail(format!("compiling the Python glue: {why}")),
-    };
+    let glue = moddil_ffi::build(&spec, &format!("{name}_glue"), &build, &[])
+        .map_err(|why| format!("compiling the Python glue: {why}"))?;
     let module_name = if cfg!(windows) {
         format!("{name}.pyd")
     } else {
         format!("{name}.abi3.so")
     };
     let module = dir.join(&module_name);
-    if let Err(why) = link::link_extension(
+    link::link_extension(
         &object,
         &module,
         &name,
         &glue.static_lib,
         python.lib.as_deref(),
         c,
-    ) {
-        return fail(format!("linking the Python module `{name}`: {why}"));
-    }
+    )
+    .map_err(|why| format!("linking the Python module `{name}`: {why}"))?;
     let pyi = dir.join(format!("{name}.pyi"));
-    if let Err(e) = std::fs::write(&pyi, &bindings.pyi) {
-        return fail(format!("writing {}: {e}", pyi.display()));
-    }
+    std::fs::write(&pyi, &bindings.pyi).map_err(|e| format!("writing {}: {e}", pyi.display()))?;
     // The manifest's version (`mod.1`), or 0.1.0.
     let version = project
         .mods
         .first()
         .and_then(|m| m.version.as_deref())
         .unwrap_or("0.1.0");
-    match wheel::write(&dir, &name, version, &module, &module_name, &bindings.pyi) {
-        Ok(w) => {
-            eprintln!(
-                "moddil: wrote {} (for {}), and {} beside it",
-                w.display(),
-                python.exe,
-                module.display()
-            );
-            ExitCode::SUCCESS
-        }
-        Err(why) => fail(why),
-    }
+    let w = wheel::write(&dir, &name, version, &module, &module_name, &bindings.pyi)?;
+    eprintln!(
+        "moddil: wrote {} (for {}), and {} beside it",
+        w.display(),
+        python.exe,
+        module.display()
+    );
+    Ok(())
 }
 
 /// `moddil build --lib` (`ffi.export.1`): the root mod's `#[export]` functions, as a shared
@@ -837,56 +826,33 @@ fn build_lib(
     project: &moddil_project::Project,
     dir: Option<&Path>,
     c: &[moddil_ffi::Built],
-) -> ExitCode {
+) -> Result<(), String> {
     let items = moddil_sema::item_tree(db, program);
-    let exports: Vec<u32> = (0..items.fns.len() as u32)
-        .filter(|&f| {
-            let sig = &items.fns[f as usize];
-            sig.export && items.mod_of(sig.module) == 0
-        })
-        .collect();
+    let exports = exports(items, 0);
     let name = project
         .mods
         .first()
         .map_or("lib", |m| m.name.as_str())
         .to_string();
     if exports.is_empty() {
-        eprintln!("moddil: `{name}` has no `#[export]` function to build a library of");
-        return ExitCode::FAILURE;
+        return Err(format!(
+            "`{name}` has no `#[export]` function to build a library of"
+        ));
     }
-    let object = match moddil_native::build_library(db, program, &exports) {
-        Ok(o) => o,
-        Err(moddil_native::Native::Unsupported(what)) => {
-            eprintln!("moddil: `{name}` cannot be built yet: {what}");
-            return ExitCode::FAILURE;
-        }
-        Err(_) => return ExitCode::FAILURE,
-    };
+    let object = native_object(&name, moddil_native::build_library(db, program, &exports))?;
     let dir = dir.map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-    if let Err(e) = std::fs::create_dir_all(&dir) {
-        eprintln!("moddil: creating {}: {e}", dir.display());
-        return ExitCode::FAILURE;
-    }
+    std::fs::create_dir_all(&dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
     let symbols: Vec<String> = exports
         .iter()
         .map(|&f| items.fns[f as usize].name.clone())
         .collect();
     let header = moddil_native::header(db, program, &exports, &name);
     let h = dir.join(format!("{name}.h"));
-    if let Err(e) = std::fs::write(&h, header) {
-        eprintln!("moddil: writing {}: {e}", h.display());
-        return ExitCode::FAILURE;
-    }
-    match link::link_library(&object, &dir, &name, &symbols, c) {
-        Ok(lib) => {
-            eprintln!("moddil: wrote {} and {}", lib.display(), h.display());
-            ExitCode::SUCCESS
-        }
-        Err(why) => {
-            eprintln!("moddil: linking `{name}`: {why}");
-            ExitCode::FAILURE
-        }
-    }
+    std::fs::write(&h, header).map_err(|e| format!("writing {}: {e}", h.display()))?;
+    let lib = link::link_library(&object, &dir, &name, &symbols, c)
+        .map_err(|why| format!("linking `{name}`: {why}"))?;
+    eprintln!("moddil: wrote {} and {}", lib.display(), h.display());
+    Ok(())
 }
 
 fn report_native_trap(
