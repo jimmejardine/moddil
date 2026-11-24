@@ -52,9 +52,10 @@ struct Machine<'p> {
     olds: Vec<HashMap<TextRange, Value>>,
     /// The nodes closure values have named so far, found once.
     nodes: HashMap<crate::value::NodeRef, SyntaxNode>,
-    /// The fields `inline for` names (`comptime.template.inline.1`), innermost last: each
-    /// name, the struct's key and the field's index.
-    reflected: Vec<(String, String, usize)>,
+    /// The fields and variants `inline for` names (`comptime.template.inline.1`,
+    /// `comptime.template.variant.1`), innermost last: each name, the type's key, the field's or
+    /// variant's index, and whether it is a variant.
+    reflected: Vec<(String, String, usize, bool)>,
     /// While a `#[selectable]` function runs for a `select` (`task.select.4`): its receive, by
     /// range, and what was received in its place.
     received: Option<(TextRange, Value)>,
@@ -162,7 +163,24 @@ impl Machine<'_> {
             .iter()
             .rev()
             .find(|(n, ..)| n == name)
-            .map(|(_, k, i)| (k.clone(), *i))
+            .and_then(|(_, k, i, variant)| (!variant).then(|| (k.clone(), *i)))
+    }
+
+    /// The variant a reflected name `node` stands for (`comptime.template.variant.1`): the
+    /// enum's key and the variant's index.
+    fn reflected_variant(&self, node: &SyntaxNode) -> Option<(String, usize)> {
+        if node.kind() != K::PATH_EXPR {
+            return None;
+        }
+        let segs = segments(node);
+        let [name] = segs.as_slice() else {
+            return None;
+        };
+        self.reflected
+            .iter()
+            .rev()
+            .find(|(n, ..)| n == name)
+            .and_then(|(_, k, i, variant)| variant.then(|| (k.clone(), *i)))
     }
 
     /// The refinement field `i` of struct `key` is of, by its key, if it is one.
@@ -209,7 +227,11 @@ impl Machine<'_> {
             }
             ast::Expr::Paren(_) => self.place_of(&e.sub_exprs()[0])?,
             // `f.name` of a reflected field is a value, not a place.
-            ast::Expr::Field(_) if self.reflected(e.sub_exprs()[0].syntax()).is_some() => {
+            // `f.name` and `v.name`: text, not a place in a value.
+            ast::Expr::Field(_)
+                if self.reflected(e.sub_exprs()[0].syntax()).is_some()
+                    || self.reflected_variant(e.sub_exprs()[0].syntax()).is_some() =>
+            {
                 let v = self.eval(e)?;
                 Some((self.memory.temp(v), false))
             }

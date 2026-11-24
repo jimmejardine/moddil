@@ -89,6 +89,15 @@ impl Machine<'_> {
                 let (p, indirect) = self.place_of(e)?.expect("an element is a place");
                 Ok(self.take(&p, indirect))
             }
+            // `v.name`: a reflected variant's name (`comptime.template.variant.1`).
+            ast::Expr::Field(_) if self.reflected_variant(e.sub_exprs()[0].syntax()).is_some() => {
+                let (key, i) = self
+                    .reflected_variant(e.sub_exprs()[0].syntax())
+                    .expect("a reflected variant");
+                Ok(Value::Str(
+                    self.program.adts[&key].variants[i].name.clone().into(),
+                ))
+            }
             // `f.name`: a reflected field's name (`comptime.template.field.1`).
             ast::Expr::Field(_) if self.reflected(e.sub_exprs()[0].syntax()).is_some() => {
                 let (key, i) = self
@@ -390,9 +399,9 @@ impl Machine<'_> {
                     fields[i] = self.typed(v, info.types.get(i).and_then(Option::as_ref));
                 }
                 K::INLINE_FOR_FIELDS => {
-                    let (name, key, n) = self.inline_head(&init);
+                    let (name, key, n, _) = self.inline_head(&init);
                     for i in 0..n {
-                        self.reflected.push((name.clone(), key.clone(), i));
+                        self.reflected.push((name.clone(), key.clone(), i, false));
                         let r = self.struct_fields(&init, info, fields);
                         self.reflected.pop();
                         r?;
@@ -404,9 +413,10 @@ impl Machine<'_> {
         Ok(())
     }
 
-    /// `inline for f in fields(t)`'s head: the name it binds, the struct `t` names (by key) and
-    /// how many fields it has.
-    fn inline_head(&self, node: &SyntaxNode) -> (String, String, usize) {
+    /// `inline for f in fields(t)`'s head: the name it binds, the struct `t` names (by key),
+    /// how many fields it has, and false; or for `inline for v in variants(t)`, the enum's
+    /// variants, and true (`comptime.template.variant.1`).
+    fn inline_head(&self, node: &SyntaxNode) -> (String, String, usize, bool) {
         let name = node
             .children()
             .find_map(ast::Pat::cast)
@@ -417,33 +427,43 @@ impl Machine<'_> {
             .find_map(ast::Expr::cast)
             .expect("a checked `inline for`");
         let arg = call.syntax().text();
+        let arg = arg.trim();
+        let variants = arg.starts_with("variants(");
         let var = arg
-            .trim()
             .trim_start_matches("fields(")
+            .trim_start_matches("variants(")
             .trim_end_matches(')')
             .trim()
             .to_string();
+        if variants {
+            let Some(Head::Adt(key)) = self.memory.type_of(&var) else {
+                unreachable!("a checked template")
+            };
+            let n = self.program.adts[&key].variants.len();
+            return (name, key, n, true);
+        }
         // A tuple's elements, from `#[derive_for]` (`comptime.derive.for.1`): the key is
         // empty, and element `i` is named `i`.
         match self.memory.type_of(&var) {
             Some(Head::Adt(key)) => {
                 let n = self.program.adts[&key].variants[0].fields.len();
-                (name, key, n)
+                (name, key, n, false)
             }
-            Some(Head::Tuple(n)) => (name, String::new(), n),
+            Some(Head::Tuple(n)) => (name, String::new(), n, false),
             _ => unreachable!("a checked template"),
         }
     }
 
     /// `inline for f in fields(t) { … }`: its block once for each of the struct's fields.
     fn inline_for(&mut self, node: &SyntaxNode) -> Eval {
-        let (name, key, n) = self.inline_head(node);
+        let (name, key, n, variants) = self.inline_head(node);
         let block = node
             .child(K::BLOCK)
             .and_then(ast::Block::cast)
             .expect("a block");
         for i in 0..n {
-            self.reflected.push((name.clone(), key.clone(), i));
+            self.reflected
+                .push((name.clone(), key.clone(), i, variants));
             let r = self.block(&block);
             self.reflected.pop();
             r?;

@@ -50,7 +50,8 @@ impl the template is, with these rules:
 
 For a generic struct, the impl bounds each of its type parameters by the trait (`impl<T: Tr> Tr for
 S<T>`), as the built-in derives do, so it applies only where every type argument implements the
-trait. For now an enum deriving with a template is not supported yet (I0001).
+trait. An enum is reflected by its variants (**comptime.template.variant.1**); for now an enum
+with a variant that has fields, deriving with a template, is not supported yet (I0001).
 
 **comptime.template.inline.1** In a template, `inline for f in fields(t) { … }` is its block once
 for each of `S`'s fields, in the order they are declared, with `f` naming that field. It is a
@@ -68,8 +69,17 @@ way, it is an error (E1007).
 
 **comptime.template.if.1** In a template, `if const c { a } else { b }` is `a` if `c` holds and `b`
 if not (`()` without `else`). Only the branch taken is part of the impl, so only it is checked. `c`
-is reflection: `f.is_refined()`, `f.name == "…"` or `!=`, `true` and `false`, joined by `!`, `&&`
-and `||` (E1007). Outside a template, `if const` is not supported yet (I0001).
+is reflection: `f.is_refined()`, `f.name == "…"` or `!=`, `t.is_enum()` (whether the template is
+instantiated for an enum), `true` and `false`, joined by `!`, `&&` and `||` (E1007). Outside a
+template, `if const` is not supported yet (I0001).
+
+**comptime.template.variant.1** In a template instantiated for an enum, `inline for v in
+variants(t) { … }` is its block once for each of the enum's variants, in the order they are
+declared, with `v` naming that variant. It is a statement. `v` is a reflected variant, used only
+these ways (E1007): `v.name` is the variant's name, as text; `v.is(x)`, for `x` a `t` or a borrow
+of one, says whether `x` is that variant; and `v.make()` is that variant's value. An enum has no
+`fields(t)`, and a struct, a tuple or a built-in type no `variants(t)` (E1007). For now every
+variant of the enum is a unit variant (**comptime.template.1**).
 
 **comptime.derive.for.1** `#[derive_for(T1, T2, …)]` before a derive function instantiates its
 template once for each built-in type listed: an impl of the trait its `Impl<Tr>` names, for each

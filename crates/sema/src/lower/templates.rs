@@ -13,8 +13,9 @@ use crate::hir::{ExprId, ExprKind, Stmt};
 use crate::{Code, Ty};
 
 impl Lowerer<'_> {
-    /// The field a reflected name `node` (a path of one name) stands for, if it is one.
-    pub(super) fn reflected(&self, node: &SyntaxNode) -> Option<u32> {
+    /// What a reflected name `node` (a path of one name) stands for, if it is one: its index,
+    /// and whether it is a variant.
+    fn reflected_any(&self, node: &SyntaxNode) -> Option<(u32, bool)> {
         if node.kind() != K::PATH_EXPR {
             return None;
         }
@@ -26,14 +27,36 @@ impl Lowerer<'_> {
         self.reflected
             .iter()
             .rev()
-            .find(|(n, _)| n == name)
-            .map(|(_, k)| *k)
+            .find(|(n, ..)| n == name)
+            .map(|(_, k, v)| (*k, *v))
+    }
+
+    /// The field a reflected name `node` stands for, if it names a field.
+    pub(super) fn reflected(&self, node: &SyntaxNode) -> Option<u32> {
+        self.reflected_any(node)
+            .and_then(|(k, variant)| (!variant).then_some(k))
+    }
+
+    /// The variant a reflected name `node` stands for, if it names a variant
+    /// (`comptime.template.variant.1`).
+    pub(super) fn reflected_variant(&self, node: &SyntaxNode) -> Option<u32> {
+        self.reflected_any(node)
+            .and_then(|(k, variant)| variant.then_some(k))
+    }
+
+    /// The enum the template is instantiated for, if it is one.
+    fn template_enum(&self) -> Option<u32> {
+        let adt = self.template?.adt?;
+        self.items.adts[adt as usize].is_enum.then_some(adt)
     }
 
     /// How many fields the template's type has: a struct's, or a tuple's elements, named `0`,
-    /// `1`, …; `None` for a type with none to reflect on.
+    /// `1`, …; `None` for a type with none to reflect on (an enum has variants instead).
     fn field_count(&self) -> Option<u32> {
         let t = self.template?;
+        if self.template_enum().is_some() {
+            return None;
+        }
         match (t.adt, &t.ty) {
             (Some(adt), _) => Some(self.items.variant(adt, 0).fields.len() as u32),
             (None, Ty::Tuple(elems)) => Some(elems.len() as u32),
@@ -69,9 +92,10 @@ impl Lowerer<'_> {
         (name, ty)
     }
 
-    /// The fields `inline for`'s head ranges over, and the name it binds: `inline for f in
-    /// fields(t)` with `t` the template's parameter. E1007 otherwise.
-    fn inline_head(&mut self, node: &SyntaxNode) -> Option<(String, u32)> {
+    /// What `inline for`'s head ranges over, and the name it binds: `inline for f in fields(t)`
+    /// or, for an enum, `inline for v in variants(t)`, with `t` the template's parameter. The
+    /// name, how many, and whether they are variants. E1007 otherwise.
+    fn inline_head(&mut self, node: &SyntaxNode) -> Option<(String, u32, bool)> {
         let range = node.text_range();
         let Some(t) = self.template else {
             self.report(
@@ -87,28 +111,49 @@ impl Lowerer<'_> {
             .filter(|p| matches!(p.syntax().kind(), K::IDENT_PAT | K::PATH_PAT))
             .map(|p| p.syntax().text().trim().to_string());
         let iter = node.children().find_map(ast::Expr::cast);
-        let fields_of_t = iter.as_ref().is_some_and(|e| {
-            let text: String = e
-                .syntax()
-                .text()
-                .to_string()
-                .chars()
-                .filter(|c| !c.is_whitespace())
-                .collect();
-            text == format!("fields({})", t.var)
-        });
+        let head: String = iter
+            .as_ref()
+            .map(|e| {
+                e.syntax()
+                    .text()
+                    .to_string()
+                    .chars()
+                    .filter(|c| !c.is_whitespace())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let fields_of_t = head == format!("fields({})", t.var);
+        let variants_of_t = head == format!("variants({})", t.var);
         match name {
             Some(n) if fields_of_t => {
                 let Some(count) = self.field_count() else {
+                    let why = if self.template_enum().is_some() {
+                        format!(
+                            "an enum has no fields to unroll over: its variants are \
+                             `variants({})` (`comptime.template.variant.1`)",
+                            t.var
+                        )
+                    } else {
+                        "a template for a built-in type other than a tuple has no fields to \
+                         unroll over (`comptime.derive.for.1`)"
+                            .to_string()
+                    };
+                    self.report(Code::E1007, range, why);
+                    return None;
+                };
+                Some((n, count, false))
+            }
+            Some(n) if variants_of_t => {
+                let Some(adt) = self.template_enum() else {
                     self.report(
                         Code::E1007,
                         range,
-                        "a template for a built-in type other than a tuple has no fields to \
-                         unroll over (`comptime.derive.for.1`)",
+                        "only an enum has variants to unroll over (`comptime.template.variant.1`)",
                     );
                     return None;
                 };
-                Some((n, count))
+                let count = self.items.adts[adt as usize].variants.len() as u32;
+                Some((n, count, true))
             }
             _ => {
                 self.report(
@@ -129,7 +174,7 @@ impl Lowerer<'_> {
     /// of those blocks.
     pub(super) fn inline_for(&mut self, node: &SyntaxNode) -> ExprId {
         let range = node.text_range();
-        let Some((name, count)) = self.inline_head(node) else {
+        let Some((name, count, variants)) = self.inline_head(node) else {
             return self.missing(range);
         };
         let Some(block) = node.child(K::BLOCK).and_then(ast::Block::cast) else {
@@ -137,7 +182,7 @@ impl Lowerer<'_> {
         };
         let mut stmts = Vec::new();
         for k in 0..count {
-            self.reflected.push((name.clone(), k));
+            self.reflected.push((name.clone(), k, variants));
             let expr = self.block(&block);
             self.reflected.pop();
             stmts.push(Stmt::Expr {
@@ -212,11 +257,19 @@ impl Lowerer<'_> {
                     }
                 }
                 K::INLINE_FOR_FIELDS => {
-                    let Some((name, count)) = self.inline_head(&init) else {
+                    let Some((name, count, variants)) = self.inline_head(&init) else {
                         continue;
                     };
+                    if variants {
+                        self.report(
+                            Code::E1007,
+                            init_range,
+                            "a struct literal's `inline for` unrolls over `fields(t)`",
+                        );
+                        continue;
+                    }
                     for k in 0..count {
-                        self.reflected.push((name.clone(), k));
+                        self.reflected.push((name.clone(), k, false));
                         let inner = self.struct_inits(&init);
                         self.reflected.pop();
                         out.extend(inner);
@@ -277,6 +330,91 @@ impl Lowerer<'_> {
             format!("a reflected field has `name`, `is_refined()` and `new(e)`, not `{member}`"),
         );
         self.missing(range)
+    }
+
+    /// `v.name` of reflected variant `k`: its name, as text (`comptime.template.variant.1`).
+    pub(super) fn variant_member(&mut self, k: u32, member: &str, range: TextRange) -> ExprId {
+        if member == "name"
+            && let Some(adt) = self.template_enum()
+        {
+            let name = self.items.variant(adt, k).name.clone();
+            return self.alloc(ExprKind::Str(name), range);
+        }
+        self.report(
+            Code::E1007,
+            range,
+            format!("a reflected variant has `name`, `is(x)` and `make()`, not `{member}`"),
+        );
+        self.missing(range)
+    }
+
+    /// `v.is(x)` and `v.make()` of reflected variant `k`: whether `x` is that variant, and its
+    /// value (`comptime.template.variant.1`).
+    pub(super) fn variant_call(
+        &mut self,
+        k: u32,
+        method: &str,
+        args: &[ast::Expr],
+        range: TextRange,
+    ) -> ExprId {
+        let Some(adt) = self.template_enum() else {
+            return self.missing(range);
+        };
+        let ty_args = match self.template.map(|t| &t.ty) {
+            Some(Ty::Adt(_, _, args)) => args.to_vec(),
+            _ => Vec::new(),
+        };
+        match (method, args) {
+            ("make", []) => self.alloc(
+                ExprKind::Adt {
+                    adt,
+                    variant: k,
+                    fields: Vec::new(),
+                    args: ty_args,
+                },
+                range,
+            ),
+            ("is", [x]) => {
+                let scrutinee = self.expr(x);
+                let pat = self.alloc_pat(
+                    crate::hir::PatKind::Adt {
+                        adt,
+                        variant: k,
+                        fields: Vec::new(),
+                    },
+                    range,
+                );
+                let wild = self.alloc_pat(crate::hir::PatKind::Wild, range);
+                let yes = self.alloc(ExprKind::Bool(true), range);
+                let no = self.alloc(ExprKind::Bool(false), range);
+                self.alloc(
+                    ExprKind::Match {
+                        scrutinee,
+                        arms: vec![
+                            crate::hir::Arm {
+                                pat,
+                                guard: None,
+                                body: yes,
+                            },
+                            crate::hir::Arm {
+                                pat: wild,
+                                guard: None,
+                                body: no,
+                            },
+                        ],
+                    },
+                    range,
+                )
+            }
+            _ => {
+                self.report(
+                    Code::E1007,
+                    range,
+                    format!("a reflected variant has `name`, `is(x)` and `make()`, not `{method}`"),
+                );
+                self.missing(range)
+            }
+        }
     }
 
     /// `f.is_refined()` and `f.new(e)` of reflected field `k`.
@@ -373,10 +511,20 @@ impl Lowerer<'_> {
                 })
             }
             ast::Expr::MethodCall(_) => {
-                let k = subs.first().and_then(|r| self.reflected(r.syntax()))?;
                 let method = ast::member_name(node)?.text().to_string();
-                let (_, ty) = self.field_of(k);
-                (method == "is_refined").then_some(matches!(ty, Ty::Refined(..)))
+                let receiver = subs.first()?;
+                // `t.is_enum()`: whether the template is instantiated for an enum.
+                let names_t = self.template.is_some_and(|t| {
+                    receiver.syntax().kind() == K::PATH_EXPR
+                        && receiver.syntax().text().trim() == t.var
+                });
+                if names_t {
+                    (method == "is_enum").then_some(self.template_enum().is_some())
+                } else {
+                    let k = self.reflected(receiver.syntax())?;
+                    let (_, ty) = self.field_of(k);
+                    (method == "is_refined").then_some(matches!(ty, Ty::Refined(..)))
+                }
             }
             _ => None,
         };
@@ -385,7 +533,7 @@ impl Lowerer<'_> {
                 Code::E1007,
                 node.text_range(),
                 "`if const` decides by reflection: `f.is_refined()`, `f.name == \"…\"`, \
-                 `true` and `false`, with `!`, `&&` and `||`",
+                 `t.is_enum()`, `true` and `false`, with `!`, `&&` and `||`",
             );
         }
         value

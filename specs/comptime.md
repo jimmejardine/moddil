@@ -191,6 +191,13 @@ struct Order {
 - **Templates for generic structs (decided 24 November 2026).** A template's derive for a generic
   struct bounds each type parameter by the trait, as the built-in derives do (`impl<T: Tr> Tr for
   S<T>`), in place of the I0001 it was.
+- **Templates for fieldless enums (decided 24 November 2026).** A template reflects on an enum
+  by its variants: `inline for v in variants(t)`, `v.name`, `v.is(x)` and `v.make()`, and
+  `if const t.is_enum()` lets one template serve structs and enums. Every variant must be a unit
+  variant for now. That covers C-like enums (serde, display and parse by name, variant lists)
+  with no new syntax. Next: variants with fields, whose patterns must bind each field. That
+  would also let the built-in derives in `crates/sema/src/derive.rs` be written as prelude
+  templates.
 - **Tuples in `#[derive_for]` (decided 24 November 2026).** `#[derive_for(tuples(2..=12))]`
   makes a template's impl for each size of tuple, with every element type bounded. A tuple's
   elements reflect as fields named `0`, `1`, …, so the prelude's `Clone`, `Debug` and `Hash` for

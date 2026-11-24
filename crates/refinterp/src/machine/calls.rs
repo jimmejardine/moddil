@@ -1084,6 +1084,34 @@ impl Machine<'_> {
             .and_then(ast::ArgList::cast)
             .map(|l| l.args().filter_map(|a| a.expr()).collect())
             .unwrap_or_default();
+        // A reflected variant's `is(x)` and `make()` (`comptime.template.variant.1`).
+        if let Some((key, i)) = self.reflected_variant(receiver.syntax()) {
+            let variant = self.program.adts[&key].variants[i].name.clone();
+            return match name.as_str() {
+                "make" => Ok(Value::Adt {
+                    ty: key,
+                    variant,
+                    fields: Vec::new(),
+                }),
+                _ => {
+                    let mut v = self.eval(&args[0])?;
+                    while let Value::Ref(p, _) = v {
+                        v = self.memory.load(&p);
+                    }
+                    Ok(Value::Bool(
+                        matches!(&v, Value::Adt { variant: w, .. } if *w == variant),
+                    ))
+                }
+            };
+        }
+        // `t.is_enum()` in a template (`comptime.template.if.1`): whether `t` is an enum.
+        if name == "is_enum"
+            && let [one] = segments(receiver.syntax()).as_slice()
+            && let Some(head) = self.memory.type_of(one)
+        {
+            let is_enum = matches!(&head, Head::Adt(k) if self.program.adts.get(k).is_some_and(|a| a.is_enum));
+            return Ok(Value::Bool(is_enum));
+        }
         // A reflected field's `is_refined()` and `new(e)` (`comptime.template.field.1`).
         if let Some((key, i)) = self.reflected(receiver.syntax()) {
             let refined = self.field_refinement(&key, i);

@@ -30,6 +30,15 @@ impl Lowerer<'_> {
                 );
                 self.missing(range)
             }
+            ast::Expr::Path(_) if self.reflected_variant(&node).is_some() => {
+                self.report(
+                    Code::E1007,
+                    range,
+                    "a reflected variant is used as `v.name`, `v.is(x)` or `v.make()`, not as a \
+                     value",
+                );
+                self.missing(range)
+            }
             ast::Expr::Path(_) if self.const_param(&node).is_some() => {
                 let i = self.const_param(&node).expect("a const parameter");
                 self.alloc(ExprKind::ConstParam(i), range)
@@ -456,6 +465,20 @@ impl Lowerer<'_> {
     /// `receiver.name::<T>(args)`.
     pub(super) fn method_call(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {
         let range = node.text_range();
+        // A reflected variant's `is(x)` and `make()`, in a template.
+        if let Some(k) = e
+            .sub_exprs()
+            .first()
+            .and_then(|r| self.reflected_variant(r.syntax()))
+        {
+            let method = ast::member_name(node).map(|t| t.text().to_string());
+            let args: Vec<ast::Expr> = node
+                .child(K::ARG_LIST)
+                .and_then(ast::ArgList::cast)
+                .map(|l| l.args().filter_map(|a| a.expr()).collect())
+                .unwrap_or_default();
+            return self.variant_call(k, &method.unwrap_or_default(), &args, range);
+        }
         // A reflected field's `is_refined()` and `new(e)`, in a template.
         if let Some(k) = e
             .sub_exprs()
@@ -525,6 +548,14 @@ impl Lowerer<'_> {
         {
             let member = ast::member_name(node).map(|t| t.text().to_string());
             return self.reflected_member(k, &member.unwrap_or_default(), range);
+        }
+        if let Some(k) = e
+            .sub_exprs()
+            .first()
+            .and_then(|b| self.reflected_variant(b.syntax()))
+        {
+            let member = ast::member_name(node).map(|t| t.text().to_string());
+            return self.variant_member(k, &member.unwrap_or_default(), range);
         }
         let base = e.sub_exprs().into_iter().next();
         let base = self.expr_or_missing(base, range);

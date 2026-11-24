@@ -1,0 +1,93 @@
+// covers: comptime.template.variant.1, comptime.template.if.1
+
+/// A value's name, and a value from its name.
+#[derive_by(named)]
+trait Named {
+    fn named(&self) -> String;
+    fn from_name(name: &str) -> Option<Self>;
+    fn count() -> int;
+}
+
+const fn named(t: type) -> Impl<Named> {
+    impl Named for t {
+        fn named(&self) -> String {
+            if const t.is_enum() {
+                let mut out = String::new();
+                inline for v in variants(t) {
+                    if v.is(self) {
+                        out.push_str(v.name);
+                    }
+                }
+                out
+            } else {
+                "a struct".to_string()
+            }
+        }
+
+        fn from_name(name: &str) -> Option<Self> {
+            if const t.is_enum() {
+                inline for v in variants(t) {
+                    if name == v.name {
+                        return Some(v.make());
+                    }
+                }
+                None
+            } else {
+                None
+            }
+        }
+
+        fn count() -> int {
+            let mut n = 0;
+            if const t.is_enum() {
+                inline for v in variants(t) {
+                    n += 1;
+                }
+            } else {
+                inline for f in fields(t) {
+                    n += 1;
+                }
+            }
+            n
+        }
+    }
+}
+
+#[derive(Named, Debug, PartialEq)]
+enum Colour {
+    Red,
+    Green,
+    Blue,
+}
+
+#[derive(Named)]
+enum Tag<T> {
+    Empty,
+    Full,
+}
+
+#[derive(Named)]
+struct Point {
+    x: int,
+    y: int,
+}
+
+test "a template reflects on an enum's variants" {
+    Colour::Green.named()                  // => "Green"
+    ;
+    Colour::from_name("Blue") == Some(Colour::Blue)        // => true
+    ;
+    Colour::from_name("Pink").is_none()    // => true
+    ;
+    Colour::count()                        // => 3
+    ;
+    let t: Tag<Colour> = Tag::Full;
+    t.named()                              // => "Full"
+    ;
+    Tag::<Colour>::count()                 // => 2
+    ;
+    Point { x: 1, y: 2 }.named()           // => "a struct"
+    ;
+    Point::count()                         // => 2
+    ;
+}
