@@ -518,8 +518,8 @@ impl Checker<'_> {
 }
 
 impl Checker<'_> {
-    /// Whether call `e` of `func` is of the prelude's `scope` with `isolate` left out or written
-    /// as `false`.
+    /// Whether call `e` of `func` is of the prelude's `scope` with `isolate` left out or known to
+    /// be `false` when checking (`task.isolate.1`).
     fn not_isolated(&self, e: ExprId, func: u32) -> bool {
         let sig = &self.items.fns[func as usize];
         if sig.src != crate::items::Src::Prelude
@@ -532,10 +532,9 @@ impl Checker<'_> {
             return false;
         };
         match self.out.arg_order.get(&e).and_then(|o| o.get(1)) {
-            Some(super::ArgSlot::Arg(i)) => matches!(
-                args.get(*i).map(|&a| &self.body.exprs[a].kind),
-                Some(ExprKind::Bool(false))
-            ),
+            Some(super::ArgSlot::Arg(i)) => args.get(*i).is_some_and(|&a| {
+                super::known_bool(self.body, &self.known_bools, a) == Some(false)
+            }),
             _ => true,
         }
     }

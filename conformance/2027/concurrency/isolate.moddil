@@ -32,6 +32,15 @@ test "a scope that is not isolated passes no `Trapped`" {
     r                                       // => 1
 }
 
+const SHARED: bool = false;
+const ALONE: bool = !SHARED && SHARED;
+
+test "an isolate known to be false when compiling passes no `Trapped` either" {
+    let a = scope(|s| s.spawn(|| 2).join(), isolate: SHARED);
+    let b = scope(|s| s.spawn(|| 3).join(), isolate: ALONE || !true);
+    a + b                                   // => 5
+}
+
 test "the body's trap is the scope's too" {
     let r = try {
         scope(|s| overflow(3), isolate: true)?

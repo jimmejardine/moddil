@@ -347,6 +347,69 @@ pub fn infer<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Inference {
 }
 
 /// Type checks the body of `owner`, with the effects and errors of the functions `fx` says.
+/// The value of `bool` expression `e` of `body`, if it is known when checking: a literal, `!`,
+/// `&&` and `||` of known values, or a use of a const item in `consts`.
+pub(crate) fn known_bool(body: &Body, consts: &HashMap<u32, bool>, e: ExprId) -> Option<bool> {
+    use crate::hir::{LogicOp, UnaryOp};
+    match &body.exprs[e].kind {
+        ExprKind::Bool(b) => Some(*b),
+        ExprKind::Unary(UnaryOp::Not, x) => known_bool(body, consts, *x).map(|b| !b),
+        ExprKind::Logic(op, a, b) => {
+            let (a, b) = (known_bool(body, consts, *a), known_bool(body, consts, *b));
+            // `&&` is false with a false side and true with both; `||` the other way round.
+            let (stop, op_value) = match op {
+                LogicOp::And => (false, false),
+                LogicOp::Or => (true, true),
+            };
+            if a == Some(stop) || b == Some(stop) {
+                Some(op_value)
+            } else if a.is_some() && b.is_some() {
+                Some(!op_value)
+            } else {
+                None
+            }
+        }
+        ExprKind::Block {
+            stmts,
+            tail: Some(t),
+            ..
+        } if stmts.is_empty() => known_bool(body, consts, *t),
+        ExprKind::Call { callee, args, .. } if args.is_empty() => match &body.exprs[*callee].kind {
+            ExprKind::Fn { func, .. } => consts.get(func).copied(),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The `bool` const items of `program` whose values [`known_bool`] knows, each from its
+/// initialiser (and the consts it names), by passes until nothing more is learned.
+fn known_consts(db: &dyn Db, program: crate::Program, items: &ItemTree) -> HashMap<u32, bool> {
+    let consts: Vec<u32> = (0..items.fns.len() as u32)
+        .filter(|&f| items.fns[f as usize].const_item && items.fns[f as usize].ret == Ty::Bool)
+        .collect();
+    let mut known = HashMap::new();
+    loop {
+        let before = known.len();
+        for &f in &consts {
+            if known.contains_key(&f) {
+                continue;
+            }
+            let lowered = body(db, Owner::new(db, program, Item::Fn(f)));
+            if let Some(v) = lowered
+                .body
+                .root
+                .and_then(|r| known_bool(&lowered.body, &known, r))
+            {
+                known.insert(f, v);
+            }
+        }
+        if known.len() == before {
+            return known;
+        }
+    }
+}
+
 pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) -> Inference {
     let lowered = body(db, owner);
     let items = item_tree(db, owner.program(db));
@@ -401,7 +464,9 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
             (mode, fx.fns[i as usize].needs.clone())
         }
     };
+    let known_bools = known_consts(db, owner.program(db), items);
     let mut cx = Checker {
+        known_bools,
         body,
         items,
         solver: Solver::new(items, preds),
@@ -680,6 +745,8 @@ struct LoopCx {
 }
 
 struct Checker<'a> {
+    /// The `bool` const items whose values are known when checking ([`known_bool`]).
+    known_bools: HashMap<u32, bool>,
     body: &'a Body,
     items: &'a ItemTree,
     solver: Solver<'a>,

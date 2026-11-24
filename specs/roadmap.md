@@ -171,7 +171,6 @@ L)
 - A cancelled task's pending operation's value dropped with its destructors.
 - A `send` in `select` waiting for its rendezvous.
 - A `join` of a cancelled task not unwinding the task that joins.
-- `isolate:` from any `bool`, not only a literal `false` keeping `Trapped` out of the errors.
 
 **P15. Selectable functions in the runtimes** (`crates/sched`, `crates/interp`, `crates/rt`,
 `crates/native`; M)

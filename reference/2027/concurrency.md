@@ -59,7 +59,9 @@ the tasks of the scopes inside it that are not isolated themselves, does not end
 fails the scope, cancelling it, with the prelude's `Trapped { class, at }`: the trap's kind
 (`overflow`) and its `file:line:column`, the file as messages show it. The task that trapped unwinds from where it trapped
 (**task.cancel.1**). Only an isolated scope's call can fail with `Trapped`: one whose `isolate` is
-left out or written `false` cannot.
+left out, or known to be `false` when compiling, cannot. Known are `true` and `false`, `!`, `&&`
+and `||` of known values, and `bool` const items of them; any other `isolate` is taken as one
+that may be `true`.
 
 **task.isolate.2** A trap outside any isolated scope ends the program, as before
 ([Traps](traps.md)).
