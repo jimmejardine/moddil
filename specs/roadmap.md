@@ -169,8 +169,7 @@ is still open; when one is done, it is removed from this list.
   them mods (`moddil/core-*`).
 - Doc comments are not read: `moddil doc`, doc links and doc tests.
 - A trailing comma at the end of a `where` clause before a body (ambiguous to tree-sitter).
-- The LSP: no editor extension; going to the prelude's or `core`'s definitions finds nothing;
-  names in types resolved by name in the file's module; completion offers the locals bound
+- The LSP: no editor extension; names in types resolved by name in the file's module; completion offers the locals bound
   before the cursor; whole-document sync on one thread.
 
 **Standard mods**
