@@ -2064,6 +2064,20 @@ struct PlaceRef {
     vtable: Option<ir::Value>,
 }
 
+impl PlaceRef {
+    /// The place of a `ty` at `addr`.
+    fn at(addr: ir::Value, ty: Ty) -> PlaceRef {
+        PlaceRef {
+            var: None,
+            addr: Some(addr),
+            ty,
+            variant: None,
+            meta: None,
+            vtable: None,
+        }
+    }
+}
+
 /// A value, as an operand gives it.
 #[derive(Clone, Copy)]
 enum Val {
@@ -2273,14 +2287,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
     /// The value of type `ty` at `at`, taken out: a scalar loaded, or a copy in a slot of its
     /// own (the memory it was in is about to change).
     fn take_at(&mut self, at: ir::Value, ty: &Ty) -> Result<Val, String> {
-        let r = PlaceRef {
-            var: None,
-            addr: Some(at),
-            ty: ty.clone(),
-            variant: None,
-            meta: None,
-            vtable: None,
-        };
+        let r = PlaceRef::at(at, ty.clone());
         Ok(match self.read(&r)? {
             Val::Mem(a) => {
                 let l = self.layout(ty)?;
@@ -2360,14 +2367,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                         unreachable!()
                     };
                     let base = self.addr_of(&r)?;
-                    r = PlaceRef {
-                        var: None,
-                        addr: Some(self.offset(base, ERROR_VALUE)),
-                        ty: ms[*v as usize].clone(),
-                        variant: None,
-                        meta: None,
-                        vtable: None,
-                    };
+                    r = PlaceRef::at(self.offset(base, ERROR_VALUE), ms[*v as usize].clone());
                 }
                 Projection::Downcast(v) => r.variant = Some(*v),
                 Projection::Field(i) => {
@@ -2425,14 +2425,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                     };
                     let scaled = self.b.ins().imul_imm_s(index, i64::from(stride));
                     let addr = self.b.ins().iadd(base, scaled);
-                    r = PlaceRef {
-                        var: None,
-                        addr: Some(addr),
-                        ty: elem,
-                        variant: None,
-                        meta: None,
-                        vtable: None,
-                    };
+                    r = PlaceRef::at(addr, elem);
                 }
                 Projection::Subslice(from, to) => {
                     let (elem, stride) = self.element(&r.ty)?;
@@ -2926,14 +2919,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let base = self.addr_of(&dest)?;
                 for k in 0..len {
                     let addr = self.offset(base, k * stride);
-                    let at = PlaceRef {
-                        var: None,
-                        addr: Some(addr),
-                        ty: elem.clone(),
-                        variant: None,
-                        meta: None,
-                        vtable: None,
-                    };
+                    let at = PlaceRef::at(addr, elem.clone());
                     self.write(&at, v)?;
                 }
                 Ok(())
@@ -3082,14 +3068,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             let from = self.operand_ty(o)?;
             let v = self.operand(o)?;
             let addr = self.offset(base, *off);
-            let at = PlaceRef {
-                var: None,
-                addr: Some(addr),
-                ty: ty.clone(),
-                variant: None,
-                meta: None,
-                vtable: None,
-            };
+            let at = PlaceRef::at(addr, ty.clone());
             // An error given as a field of another view of the errors (`Err(e)`).
             if from != *ty && (matches!(from, Ty::Errors(_)) || matches!(ty, Ty::Errors(_))) {
                 self.convert_error(v, &from, &at)?;
@@ -3777,14 +3756,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                         let Val::Scalar(p) = self.operand(&args[0])? else {
                             return Err("`clone` of a value without bytes".to_string());
                         };
-                        let from = PlaceRef {
-                            var: None,
-                            addr: Some(p),
-                            ty: d.ty.clone(),
-                            variant: None,
-                            meta: None,
-                            vtable: None,
-                        };
+                        let from = PlaceRef::at(p, d.ty.clone());
                         let v = self.read(&from)?;
                         self.write(&d, v)?;
                         self.set_init(dest);
@@ -3971,14 +3943,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         let tag = self.b.ins().iconst(types::I64, i64::from(id));
         self.b.ins().store(ir::MemFlagsData::trusted(), tag, to, 0);
         let at = self.offset(to, ERROR_VALUE);
-        let place = PlaceRef {
-            var: None,
-            addr: Some(at),
-            ty: ty.clone(),
-            variant: None,
-            meta: None,
-            vtable: None,
-        };
+        let place = PlaceRef::at(at, ty.clone());
         self.write(&place, v)
     }
 
@@ -4159,14 +4124,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             .module
             .declare_func_in_func(self.c.rt.static_begin, self.b.func);
         self.b.ins().call(begin, &[]);
-        let at = PlaceRef {
-            var: None,
-            addr: Some(value),
-            ty: ret.clone(),
-            variant: None,
-            meta: None,
-            vtable: None,
-        };
+        let at = PlaceRef::at(value, ret.clone());
         let span = self.span;
         self.emit_call(Run::Direct(id, ret), Vec::new(), Some(&at), span)?;
         let end = self
@@ -4197,14 +4155,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         for ((off, t), a) in fs.iter().zip(args) {
             let v = self.operand(a)?;
             let at = self.offset(slot, *off);
-            let place = PlaceRef {
-                var: None,
-                addr: Some(at),
-                ty: t.clone(),
-                variant: None,
-                meta: None,
-                vtable: None,
-            };
+            let place = PlaceRef::at(at, t.clone());
             self.write(&place, v)?;
         }
         Ok(Val::Mem(slot))
@@ -4258,14 +4209,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             let me = if matches!(recv_ty, Ty::Ref(..)) {
                 Val::Scalar(payload)
             } else {
-                let at = PlaceRef {
-                    var: None,
-                    addr: Some(payload),
-                    ty: m.clone(),
-                    variant: None,
-                    meta: None,
-                    vtable: None,
-                };
+                let at = PlaceRef::at(payload, m.clone());
                 self.read(&at)?
             };
             let mut vals = self.pass_value(me, &params[0])?;
@@ -4483,14 +4427,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             let n = self.b.ins().load(types::I64, flags, len, 0);
             let w = self.wide(p, n);
             let at = self.offset(buf, ERROR_VALUE + off);
-            let dest = PlaceRef {
-                var: None,
-                addr: Some(at),
-                ty: ty.clone(),
-                variant: None,
-                meta: None,
-                vtable: None,
-            };
+            let dest = PlaceRef::at(at, ty.clone());
             let vals = self.pass_value(Val::Mem(w), &params[0])?;
             let span = self.span;
             self.emit_call(Run::Direct(id, ret.clone()), vals, Some(&dest), span)?;
@@ -4659,14 +4596,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let l = self.layout(&t)?;
                 let v = self.operand(&args[1])?;
                 let tmp = self.slot(&l);
-                let at = PlaceRef {
-                    var: None,
-                    addr: Some(tmp),
-                    ty: t.clone(),
-                    variant: None,
-                    meta: None,
-                    vtable: None,
-                };
+                let at = PlaceRef::at(tmp, t.clone());
                 self.write(&at, v)?;
                 let n = self.b.ins().iconst(types::I64, i64::from(l.size));
                 let drop = self.drop_fn(&t)?;
@@ -5148,14 +5078,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 return self.native_drop(addr, ty);
             }
             let (id, params, ret) = self.c.declare_fn(f, &targs)?;
-            let at = PlaceRef {
-                var: None,
-                addr: Some(addr),
-                ty: ty.clone(),
-                variant: None,
-                meta: None,
-                vtable: None,
-            };
+            let at = PlaceRef::at(addr, ty.clone());
             let v = self.read(&at)?;
             let vals = self.pass_value(v, &params[0])?;
             let span = self.span;
@@ -5176,14 +5099,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 }
             }
             Shape::Enum { variants, .. } => {
-                let at = PlaceRef {
-                    var: None,
-                    addr: Some(addr),
-                    ty: ty.clone(),
-                    variant: None,
-                    meta: None,
-                    vtable: None,
-                };
+                let at = PlaceRef::at(addr, ty.clone());
                 let d = self.discriminant(&at)?;
                 let join = self.b.create_block();
                 for (v, fs) in variants.iter().enumerate() {
@@ -5684,27 +5600,51 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         {
             return self.ptr_op(sig.name.as_str(), targs, args, d);
         }
-        let sig = &items.fns[f as usize];
         let self_ty = match sig.container {
             moddil_sema::Container::Impl(k) => items.impls[k as usize].self_ty.clone(),
             _ => Ty::Unit,
         };
         let name = sig.name.as_str();
-        let unsupported = || Err(format!("the built-in function `{name}`"));
-        let flags = ir::MemFlagsData::trusted();
         let out = match (&self_ty, name) {
-            (Ty::Str, "len") => {
+            (Ty::Buf(_), _) => return self.buf(name, targs, args, d, range),
+            (Ty::Int | Ty::Num(_), "checked_to" | "truncate" | "wrap" | "saturate") => {
+                self.convert(name, targs, args, d)?
+            }
+            (Ty::Int | Ty::Num(_) | Ty::Bool | Ty::Char, "text") | (Ty::Char, "quoted_text") => {
+                self.display_text(&self_ty, name, args)?
+            }
+            (Ty::Str, _) => self.str_intrinsic(name, args, d, range)?,
+            (Ty::Slice(_), _) => self.slice_intrinsic(name, args, d, range)?,
+            (Ty::Num(n @ (Num::F32 | Num::F64)), _) => self.float_intrinsic(*n, name, args)?,
+            (Ty::Char, _) => self.char_intrinsic(name, args, d)?,
+            (Ty::Int, _) => self.int_intrinsic(name, args)?,
+            (Ty::Unit, _) => self.mem_intrinsic(name, targs, args, d)?,
+            (Ty::Adt(a, ..), "debug" | "info" | "warn" | "error")
+                if items.adts[*a as usize].name == "Log" =>
+            {
+                self.log(name, args, range)?
+            }
+            _ => return unsupported(name),
+        };
+        self.write(d, out)
+    }
+
+    /// A built-in of `str` (`text.string.inline.1`, `text.pos.1`, `text.bytes.1`).
+    fn str_intrinsic(
+        &mut self,
+        name: &str,
+        args: &[Operand],
+        d: &PlaceRef,
+        range: TextRange,
+    ) -> Result<Val, String> {
+        let flags = ir::MemFlagsData::trusted();
+        Ok(match name {
+            "len" => {
                 let (_, n) = self.text(&args[0])?;
                 Val::Scalar(n)
             }
-            (Ty::Slice(_), "len") => {
-                let Val::Mem(w) = self.operand(&args[0])? else {
-                    return Err("a slice without its length".to_string());
-                };
-                Val::Scalar(self.b.ins().load(types::I64, flags, w, 8))
-            }
             // A byte of the text (`text.string.inline.1`).
-            (Ty::Str, "byte_at") => {
+            "byte_at" => {
                 let (p, n) = self.text(&args[0])?;
                 let i = self.value(&args[1])?;
                 let ok = self.b.ins().icmp(IntCC::UnsignedLessThan, i, n);
@@ -5714,24 +5654,14 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             }
             // The character at a byte offset, if one starts there: an `Option<char>`, whose
             // `None` is the first value past the last character (its niche).
-            (Ty::Str, "char_at_byte") => {
-                let l = self.layout(&d.ty)?;
-                let Shape::Enum {
-                    tag: Tag::Niche { niche, .. },
-                    ..
-                } = &l.shape
-                else {
-                    return unsupported();
-                };
-                if niche.first != 0x11_0000 || niche.offset != 0 {
-                    return unsupported();
-                }
+            "char_at_byte" => {
+                self.char_option(&d.ty, name)?;
                 let (p, n) = self.text(&args[0])?;
                 let i = self.value(&args[1])?;
                 Val::Scalar(self.rt_call(self.c.rt.char_at_byte, &[p, n, i]))
             }
             // The text between two byte offsets (`text.pos.1`).
-            (Ty::Str, "bytes_between") => {
+            "bytes_between" => {
                 let (p, n) = self.text(&args[0])?;
                 let (a, b) = (self.value(&args[1])?, self.value(&args[2])?);
                 let ok = self.rt_call(self.c.rt.is_between, &[p, n, a, b]);
@@ -5740,7 +5670,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let len = self.b.ins().isub(b, a);
                 Val::Mem(self.wide(start, len))
             }
-            (Ty::Str, "eq" | "ne" | "cmp" | "lt" | "le" | "gt" | "ge") => {
+            "eq" | "ne" | "cmp" | "lt" | "le" | "gt" | "ge" => {
                 let (p, n) = self.text(&args[0])?;
                 let (q, m) = self.text(&args[1])?;
                 let c = self.rt_call(self.c.rt.str_cmp, &[p, n, q, m]);
@@ -5753,7 +5683,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                             ..
                         } = &l.shape
                         else {
-                            return unsupported();
+                            return unsupported(name);
                         };
                         let (offset, ty) = (*offset, *ty);
                         let v = self.b.ins().iadd_imm_s(c, 1);
@@ -5779,47 +5709,155 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                     }
                 }
             }
-            // The float functions (`num.float.fn.1`).
-            (Ty::Num(n @ (Num::F32 | Num::F64)), _)
-                if !matches!(
-                    name,
-                    "checked_to" | "truncate" | "wrap" | "saturate" | "text"
-                ) =>
-            {
-                let x = self.value(&args[0])?;
-                match name {
-                    "is_nan" => Val::Scalar(self.b.ins().fcmp(FloatCC::Unordered, x, x)),
-                    "is_finite" => {
-                        let a = self.b.ins().fabs(x);
-                        let inf = if *n == Num::F32 {
-                            self.b.ins().f32const(f32::INFINITY)
-                        } else {
-                            self.b.ins().f64const(f64::INFINITY)
-                        };
-                        Val::Scalar(self.b.ins().fcmp(FloatCC::LessThan, a, inf))
-                    }
-                    _ => {
-                        let Some(k) = moddil_rt::FLOAT_FNS.iter().position(|f| *f == name) else {
-                            return unsupported();
-                        };
-                        let y = match args.get(1) {
-                            Some(a) => self.value(a)?,
-                            None => x,
-                        };
-                        let k = self.b.ins().iconst(types::I32, k as i64);
-                        let rt = if *n == Num::F32 {
-                            self.c.rt.float_fn_f32
-                        } else {
-                            self.c.rt.float_fn
-                        };
-                        Val::Scalar(self.rt_call(rt, &[k, x, y]))
-                    }
-                }
+            "quoted_text" | "upper_text" | "lower_text" | "trim" => {
+                let (p, n) = self.text(&args[0])?;
+                let zero = self.b.ins().iconst(types::I64, 0);
+                let code = match name {
+                    "quoted_text" => 103,
+                    "upper_text" => 104,
+                    "lower_text" => 105,
+                    _ => 106,
+                };
+                Val::Mem(self.host_text(code, zero, zero, p, n))
             }
-            (
-                Ty::Char,
-                "is_alphabetic" | "is_numeric" | "is_whitespace" | "is_uppercase" | "is_lowercase",
-            ) => {
+            // Its bytes (`text.bytes.1`): the same address and length, as a slice.
+            "as_bytes" => {
+                let (p, n) = self.text(&args[0])?;
+                Val::Mem(self.wide(p, n))
+            }
+            // The first `len` bytes, which are UTF-8, as text (`text.string.inline.1`).
+            "view" => {
+                let Val::Mem(w) = self.operand(&args[0])? else {
+                    return unsupported(name);
+                };
+                let p = self.b.ins().load(types::I64, flags, w, 0);
+                let n = self.value(&args[1])?;
+                Val::Mem(self.wide(p, n))
+            }
+            _ => return unsupported(name),
+        })
+    }
+
+    /// A built-in of a slice (`expr.slice.1`).
+    fn slice_intrinsic(
+        &mut self,
+        name: &str,
+        args: &[Operand],
+        d: &PlaceRef,
+        range: TextRange,
+    ) -> Result<Val, String> {
+        let flags = ir::MemFlagsData::trusted();
+        Ok(match name {
+            "len" => {
+                let Val::Mem(w) = self.operand(&args[0])? else {
+                    return Err("a slice without its length".to_string());
+                };
+                Val::Scalar(self.b.ins().load(types::I64, flags, w, 8))
+            }
+            // The two parts of an `&mut` slice borrow, disjoint (`expr.slice.1`).
+            "split_at_mut_unchecked" => {
+                // The element's type as the call has it (the impl's is a parameter).
+                let Ty::Ref(_, slice) = self.operand_ty(&args[0])? else {
+                    return unsupported(name);
+                };
+                let Ty::Slice(elem) = &*slice else {
+                    return unsupported(name);
+                };
+                let (stride, _) = {
+                    let e = self.layout(elem)?;
+                    (e.size.div_ceil(e.align) * e.align, e.align)
+                };
+                let Val::Mem(w) = self.operand(&args[0])? else {
+                    return unsupported(name);
+                };
+                let p = self.b.ins().load(types::I64, flags, w, 0);
+                let at = self.value(&args[1])?;
+                let n = self.value(&args[2])?;
+                let zero = self.b.ins().iconst(types::I64, 0);
+                let lo = self.b.ins().icmp(IntCC::SignedGreaterThanOrEqual, at, zero);
+                let hi = self.b.ins().icmp(IntCC::SignedLessThanOrEqual, at, n);
+                let ok = self.b.ins().band(lo, hi);
+                self.check(ok, TrapClass::IndexOutOfBounds, range)?;
+                let a = self.addr_of(d)?;
+                let l = self.layout(&d.ty)?;
+                let Shape::Fields(fs) = &l.shape else {
+                    return unsupported(name);
+                };
+                let (oa, ob) = (fs[0].0, fs[1].0);
+                let off = self.b.ins().imul_imm_s(at, i64::from(stride));
+                let q = self.b.ins().iadd(p, off);
+                let rest = self.b.ins().isub(n, at);
+                let fa = self.offset(a, oa);
+                let fb = self.offset(a, ob);
+                self.b.ins().store(flags, p, fa, 0);
+                self.b.ins().store(flags, at, fa, 8);
+                self.b.ins().store(flags, q, fb, 0);
+                self.b.ins().store(flags, rest, fb, 8);
+                Val::Unit
+            }
+            _ => return unsupported(name),
+        })
+    }
+
+    /// A float function (`num.float.fn.1`).
+    fn float_intrinsic(&mut self, n: Num, name: &str, args: &[Operand]) -> Result<Val, String> {
+        let x = self.value(&args[0])?;
+        Ok(match name {
+            "is_nan" => Val::Scalar(self.b.ins().fcmp(FloatCC::Unordered, x, x)),
+            "is_finite" => {
+                let a = self.b.ins().fabs(x);
+                let inf = if n == Num::F32 {
+                    self.b.ins().f32const(f32::INFINITY)
+                } else {
+                    self.b.ins().f64const(f64::INFINITY)
+                };
+                Val::Scalar(self.b.ins().fcmp(FloatCC::LessThan, a, inf))
+            }
+            _ => {
+                let Some(k) = moddil_rt::FLOAT_FNS.iter().position(|f| *f == name) else {
+                    return unsupported(name);
+                };
+                let y = match args.get(1) {
+                    Some(a) => self.value(a)?,
+                    None => x,
+                };
+                let k = self.b.ins().iconst(types::I32, k as i64);
+                let rt = if n == Num::F32 {
+                    self.c.rt.float_fn_f32
+                } else {
+                    self.c.rt.float_fn
+                };
+                Val::Scalar(self.rt_call(rt, &[k, x, y]))
+            }
+        })
+    }
+
+    /// Checks that `ty` is laid out as an `Option<char>` whose `None` is the first value past the
+    /// last character (its niche), as the built-ins that give one write it.
+    fn char_option(&mut self, ty: &Ty, name: &str) -> Result<(), String> {
+        let l = self.layout(ty)?;
+        let Shape::Enum {
+            tag: Tag::Niche { niche, .. },
+            ..
+        } = &l.shape
+        else {
+            return unsupported(name);
+        };
+        if niche.first != 0x11_0000 || niche.offset != 0 {
+            return unsupported(name);
+        }
+        Ok(())
+    }
+
+    /// A built-in of `char`.
+    fn char_intrinsic(
+        &mut self,
+        name: &str,
+        args: &[Operand],
+        d: &PlaceRef,
+    ) -> Result<Val, String> {
+        Ok(match name {
+            "is_alphabetic" | "is_numeric" | "is_whitespace" | "is_uppercase" | "is_lowercase" => {
                 let which = match name {
                     "is_alphabetic" => 0,
                     "is_numeric" => 1,
@@ -5833,18 +5871,8 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             }
             // The `char` with this code, if there is one: an `Option<char>`, whose `None` is the
             // first value past the last character (its niche).
-            (Ty::Char, "from_code") => {
-                let l = self.layout(&d.ty)?;
-                let Shape::Enum {
-                    tag: Tag::Niche { niche, .. },
-                    ..
-                } = &l.shape
-                else {
-                    return unsupported();
-                };
-                if niche.first != 0x11_0000 || niche.offset != 0 {
-                    return unsupported();
-                }
+            "from_code" => {
+                self.char_option(&d.ty, name)?;
                 let c = self.value(&args[0])?;
                 let below = self.b.ins().icmp_imm_s(IntCC::UnsignedLessThan, c, 0xD800);
                 let past = self
@@ -5861,11 +5889,11 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let none = self.b.ins().iconst(types::I32, 0x11_0000);
                 Val::Scalar(self.b.ins().select(ok, code, none))
             }
-            (Ty::Char, "code") => {
+            "code" => {
                 let c = self.value(&args[0])?;
                 Val::Scalar(self.b.ins().uextend(types::I64, c))
             }
-            (Ty::Char, "len_utf8") => {
+            "len_utf8" => {
                 let c = self.value(&args[0])?;
                 let mut n = self.b.ins().iconst(types::I64, 1);
                 for (limit, bytes) in [(0x80, 2), (0x800, 3), (0x1_0000, 4)] {
@@ -5878,7 +5906,14 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 }
                 Val::Scalar(n)
             }
-            (Ty::Int, "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "rotate_left") => {
+            _ => return unsupported(name),
+        })
+    }
+
+    /// A built-in of `int`: wrapping arithmetic and rotation.
+    fn int_intrinsic(&mut self, name: &str, args: &[Operand]) -> Result<Val, String> {
+        Ok(match name {
+            "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "rotate_left" => {
                 let (x, y) = (self.value(&args[0])?, self.value(&args[1])?);
                 Val::Scalar(match name {
                     "wrapping_add" => self.b.ins().iadd(x, y),
@@ -5890,14 +5925,115 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                     }
                 })
             }
-            (Ty::Unit, "swap") => {
+            _ => return unsupported(name),
+        })
+    }
+
+    /// A number converted (`num.convert.1`), by `moddil_mir::convert` in the host.
+    fn convert(
+        &mut self,
+        name: &str,
+        targs: &[Ty],
+        args: &[Operand],
+        d: &PlaceRef,
+    ) -> Result<Val, String> {
+        let flags = ir::MemFlagsData::trusted();
+        let from = self.operand_ty(&args[0])?;
+        let to = targs.last().cloned().ok_or("the type converted to")?;
+        let (Some(fc), Some(tc)) = (Self::num_code(&from), Self::num_code(&to)) else {
+            return unsupported(name);
+        };
+        let x = self.value(&args[0])?;
+        let (lo, hi) = self.number_words(x, &from);
+        let how = moddil_rt::num::CONVERSIONS.iter().position(|h| *h == name);
+        let how = self.b.ins().iconst(types::I32, how.unwrap_or(0) as i64);
+        let fc = self.b.ins().iconst(types::I32, i64::from(fc));
+        let tc = self.b.ins().iconst(types::I32, i64::from(tc));
+        let l = Layout {
+            size: 16,
+            align: 8,
+            shape: Shape::Wide,
+            niche: None,
+        };
+        let out = self.slot(&l);
+        let ok = self.rt_call(self.c.rt.convert, &[how, fc, lo, hi, tc, out]);
+        let lo = self.b.ins().load(types::I64, flags, out, 0);
+        let hi = self.b.ins().load(types::I64, flags, out, 8);
+        let v = self.number_of_words(lo, hi, &to)?;
+        Ok(if name != "checked_to" {
+            Val::Scalar(v)
+        } else {
+            // An `Option`: `Some` of it, or `None`.
+            let l = self.layout(&d.ty)?;
+            let Shape::Enum { tag, variants } = &l.shape else {
+                return unsupported(name);
+            };
+            let (tag, payload) = (tag.clone(), variants[1][0].0);
+            let a = self.addr_of(d)?;
+            let some = self.b.create_block();
+            let none = self.b.create_block();
+            let join = self.b.create_block();
+            self.b.ins().brif(ok, some, &[], none, &[]);
+            self.b.switch_to_block(none);
+            self.set_variant(a, &tag, 0);
+            self.b.ins().jump(join, &[]);
+            self.b.switch_to_block(some);
+            let at = self.offset(a, payload);
+            self.b.ins().store(flags, v, at, 0);
+            self.set_variant(a, &tag, 1);
+            self.b.ins().jump(join, &[]);
+            self.b.switch_to_block(join);
+            Val::Unit
+        })
+    }
+
+    /// What `Display` writes for a number, a `bool` or a `char` (`text.display.1`), or a
+    /// `char` quoted: made in the host.
+    fn display_text(&mut self, self_ty: &Ty, name: &str, args: &[Operand]) -> Result<Val, String> {
+        let ty = self.operand_ty(&args[0])?;
+        // The impl's own type: a refined number's is its base (`Small` is an `int`).
+        let inner = self_ty.clone();
+        let x = match self.operand(&args[0])? {
+            Val::Scalar(p) if matches!(ty, Ty::Ref(..)) => {
+                let at = PlaceRef::at(p, inner.clone());
+                match self.read(&at)? {
+                    Val::Scalar(v) => v,
+                    _ => return unsupported(name),
+                }
+            }
+            Val::Scalar(v) => v,
+            _ => return unsupported(name),
+        };
+        let code = match (&inner, name) {
+            (Ty::Char, "quoted_text") => 102,
+            (Ty::Bool, _) => 100,
+            (Ty::Char, _) => 101,
+            (t, _) => Self::num_code(t).ok_or("text of something not a number")?,
+        };
+        let (lo, hi) = self.number_words(x, &inner);
+        let ptr = self.ptr();
+        let null = self.b.ins().iconst(ptr, 0);
+        let zero = self.b.ins().iconst(types::I64, 0);
+        Ok(Val::Mem(self.host_text(code, lo, hi, null, zero)))
+    }
+
+    /// A free built-in on memory: `swap`, `replace`, and `cast_mut` (`core.ptr.1`).
+    fn mem_intrinsic(
+        &mut self,
+        name: &str,
+        targs: &[Ty],
+        args: &[Operand],
+        d: &PlaceRef,
+    ) -> Result<Val, String> {
+        Ok(match name {
+            "swap" => {
                 let (Val::Scalar(a), Val::Scalar(b)) =
                     (self.operand(&args[0])?, self.operand(&args[1])?)
                 else {
-                    return unsupported();
+                    return unsupported(name);
                 };
                 let Some(t) = targs.first().cloned() else {
-                    return unsupported();
+                    return unsupported(name);
                 };
                 let l = self.layout(&t)?;
                 let tmp = self.slot(&l);
@@ -5907,19 +6043,12 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 Val::Unit
             }
             // The same pointer, to change through (`core.ptr.1`).
-            (Ty::Unit, "cast_mut") => self.operand(&args[0])?,
-            (Ty::Unit, "replace") => {
+            "cast_mut" => self.operand(&args[0])?,
+            "replace" => {
                 let Val::Scalar(p) = self.operand(&args[0])? else {
-                    return unsupported();
+                    return unsupported(name);
                 };
-                let at = PlaceRef {
-                    var: None,
-                    addr: Some(p),
-                    ty: d.ty.clone(),
-                    variant: None,
-                    meta: None,
-                    vtable: None,
-                };
+                let at = PlaceRef::at(p, d.ty.clone());
                 // The old value, out first, then the new one in.
                 let old = self.read(&at)?;
                 let l = self.layout(&d.ty)?;
@@ -5935,201 +6064,42 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 self.write(&at, new)?;
                 old
             }
-            (Ty::Buf(_), _) => return self.buf(name, targs, args, d, range),
-            // The conversions (`num.convert.1`), by `moddil_mir::convert` in the host.
-            (Ty::Int | Ty::Num(_), "checked_to" | "truncate" | "wrap" | "saturate") => {
-                let from = self.operand_ty(&args[0])?;
-                let to = targs.last().cloned().ok_or("the type converted to")?;
-                let (Some(fc), Some(tc)) = (Self::num_code(&from), Self::num_code(&to)) else {
-                    return unsupported();
-                };
-                let x = self.value(&args[0])?;
-                let (lo, hi) = self.number_words(x, &from);
-                let how = moddil_rt::num::CONVERSIONS.iter().position(|h| *h == name);
-                let how = self.b.ins().iconst(types::I32, how.unwrap_or(0) as i64);
-                let fc = self.b.ins().iconst(types::I32, i64::from(fc));
-                let tc = self.b.ins().iconst(types::I32, i64::from(tc));
-                let l = Layout {
-                    size: 16,
-                    align: 8,
-                    shape: Shape::Wide,
-                    niche: None,
-                };
-                let out = self.slot(&l);
-                let ok = self.rt_call(self.c.rt.convert, &[how, fc, lo, hi, tc, out]);
-                let lo = self.b.ins().load(types::I64, flags, out, 0);
-                let hi = self.b.ins().load(types::I64, flags, out, 8);
-                let v = self.number_of_words(lo, hi, &to)?;
-                if name != "checked_to" {
-                    Val::Scalar(v)
-                } else {
-                    // An `Option`: `Some` of it, or `None`.
-                    let l = self.layout(&d.ty)?;
-                    let Shape::Enum { tag, variants } = &l.shape else {
-                        return unsupported();
-                    };
-                    let (tag, payload) = (tag.clone(), variants[1][0].0);
-                    let a = self.addr_of(d)?;
-                    let some = self.b.create_block();
-                    let none = self.b.create_block();
-                    let join = self.b.create_block();
-                    self.b.ins().brif(ok, some, &[], none, &[]);
-                    self.b.switch_to_block(none);
-                    self.set_variant(a, &tag, 0);
-                    self.b.ins().jump(join, &[]);
-                    self.b.switch_to_block(some);
-                    let at = self.offset(a, payload);
-                    self.b.ins().store(flags, v, at, 0);
-                    self.set_variant(a, &tag, 1);
-                    self.b.ins().jump(join, &[]);
-                    self.b.switch_to_block(join);
-                    Val::Unit
-                }
-            }
-            // What `Display` writes (`text.display.1`), and the quoted text, made in the host.
-            (Ty::Int | Ty::Num(_) | Ty::Bool | Ty::Char, "text") | (Ty::Char, "quoted_text") => {
-                let ty = self.operand_ty(&args[0])?;
-                // The impl's own type: a refined number's is its base (`Small` is an `int`).
-                let inner = self_ty.clone();
-                let x = match self.operand(&args[0])? {
-                    Val::Scalar(p) if matches!(ty, Ty::Ref(..)) => {
-                        let at = PlaceRef {
-                            var: None,
-                            addr: Some(p),
-                            ty: inner.clone(),
-                            variant: None,
-                            meta: None,
-                            vtable: None,
-                        };
-                        match self.read(&at)? {
-                            Val::Scalar(v) => v,
-                            _ => return unsupported(),
-                        }
-                    }
-                    Val::Scalar(v) => v,
-                    _ => return unsupported(),
-                };
-                let code = match (&inner, name) {
-                    (Ty::Char, "quoted_text") => 102,
-                    (Ty::Bool, _) => 100,
-                    (Ty::Char, _) => 101,
-                    (t, _) => Self::num_code(t).ok_or("text of something not a number")?,
-                };
-                let (lo, hi) = self.number_words(x, &inner);
-                let ptr = self.ptr();
-                let null = self.b.ins().iconst(ptr, 0);
-                let zero = self.b.ins().iconst(types::I64, 0);
-                Val::Mem(self.host_text(code, lo, hi, null, zero))
-            }
-            (Ty::Str, "quoted_text" | "upper_text" | "lower_text" | "trim") => {
-                let (p, n) = self.text(&args[0])?;
-                let zero = self.b.ins().iconst(types::I64, 0);
-                let code = match name {
-                    "quoted_text" => 103,
-                    "upper_text" => 104,
-                    "lower_text" => 105,
-                    _ => 106,
-                };
-                Val::Mem(self.host_text(code, zero, zero, p, n))
-            }
-            // The two parts of an `&mut` slice borrow, disjoint (`expr.slice.1`).
-            (Ty::Slice(_), "split_at_mut_unchecked") => {
-                // The element's type as the call has it (the impl's is a parameter).
-                let Ty::Ref(_, slice) = self.operand_ty(&args[0])? else {
-                    return unsupported();
-                };
-                let Ty::Slice(elem) = &*slice else {
-                    return unsupported();
-                };
-                let (stride, _) = {
-                    let e = self.layout(elem)?;
-                    (e.size.div_ceil(e.align) * e.align, e.align)
-                };
-                let Val::Mem(w) = self.operand(&args[0])? else {
-                    return unsupported();
-                };
-                let p = self.b.ins().load(types::I64, flags, w, 0);
-                let at = self.value(&args[1])?;
-                let n = self.value(&args[2])?;
-                let zero = self.b.ins().iconst(types::I64, 0);
-                let lo = self.b.ins().icmp(IntCC::SignedGreaterThanOrEqual, at, zero);
-                let hi = self.b.ins().icmp(IntCC::SignedLessThanOrEqual, at, n);
-                let ok = self.b.ins().band(lo, hi);
-                self.check(ok, TrapClass::IndexOutOfBounds, range)?;
-                let a = self.addr_of(d)?;
-                let l = self.layout(&d.ty)?;
-                let Shape::Fields(fs) = &l.shape else {
-                    return unsupported();
-                };
-                let (oa, ob) = (fs[0].0, fs[1].0);
-                let off = self.b.ins().imul_imm_s(at, i64::from(stride));
-                let q = self.b.ins().iadd(p, off);
-                let rest = self.b.ins().isub(n, at);
-                let fa = self.offset(a, oa);
-                let fb = self.offset(a, ob);
-                self.b.ins().store(flags, p, fa, 0);
-                self.b.ins().store(flags, at, fa, 8);
-                self.b.ins().store(flags, q, fb, 0);
-                self.b.ins().store(flags, rest, fb, 8);
-                Val::Unit
-            }
-            // The ambient log (`obs.log.1`): the message's text to standard error, then the
-            // message dropped.
-            (Ty::Adt(a, ..), "debug" | "info" | "warn" | "error")
-                if items.adts[*a as usize].name == "Log" =>
-            {
-                let msg_ty = self.operand_ty(&args[1])?;
-                let Val::Mem(msg) = self.operand(&args[1])? else {
-                    return unsupported();
-                };
-                let as_str = items
-                    .builtin_method(&items.string_ty(), "as_str")
-                    .ok_or("the prelude's `String::as_str`")?;
-                let (id, params, ret) = self.c.declare_fn(as_str, &[])?;
-                let l = self.layout(&ret)?;
-                let w = self.slot(&l);
-                let at = PlaceRef {
-                    var: None,
-                    addr: Some(w),
-                    ty: ret.clone(),
-                    variant: None,
-                    meta: None,
-                    vtable: None,
-                };
-                let vals = self.pass_value(Val::Scalar(msg), &params[0])?;
-                self.emit_call(Run::Direct(id, ret), vals, Some(&at), range)?;
-                let p = self.b.ins().load(types::I64, flags, w, 0);
-                let n = self.b.ins().load(types::I64, flags, w, 8);
-                let level = moddil_rt::host::LEVELS
-                    .iter()
-                    .position(|l| *l == name)
-                    .unwrap_or(0);
-                let level = self.b.ins().iconst(types::I32, level as i64);
-                let f = self
-                    .c
-                    .module
-                    .declare_func_in_func(self.c.rt.log, self.b.func);
-                self.b.ins().call(f, &[level, p, n]);
-                self.drop_value(msg, &msg_ty)?;
-                Val::Unit
-            }
-            // Its bytes (`text.bytes.1`): the same address and length, as a slice.
-            (Ty::Str, "as_bytes") => {
-                let (p, n) = self.text(&args[0])?;
-                Val::Mem(self.wide(p, n))
-            }
-            // The first `len` bytes, which are UTF-8, as text (`text.string.inline.1`).
-            (Ty::Str, "view") => {
-                let Val::Mem(w) = self.operand(&args[0])? else {
-                    return unsupported();
-                };
-                let p = self.b.ins().load(types::I64, flags, w, 0);
-                let n = self.value(&args[1])?;
-                Val::Mem(self.wide(p, n))
-            }
-            _ => return unsupported(),
+            _ => return unsupported(name),
+        })
+    }
+
+    /// The ambient log (`obs.log.1`): the message's text to standard error, then the message
+    /// dropped.
+    fn log(&mut self, name: &str, args: &[Operand], range: TextRange) -> Result<Val, String> {
+        let items = self.c.items;
+        let flags = ir::MemFlagsData::trusted();
+        let msg_ty = self.operand_ty(&args[1])?;
+        let Val::Mem(msg) = self.operand(&args[1])? else {
+            return unsupported(name);
         };
-        self.write(d, out)
+        let as_str = items
+            .builtin_method(&items.string_ty(), "as_str")
+            .ok_or("the prelude's `String::as_str`")?;
+        let (id, params, ret) = self.c.declare_fn(as_str, &[])?;
+        let l = self.layout(&ret)?;
+        let w = self.slot(&l);
+        let at = PlaceRef::at(w, ret.clone());
+        let vals = self.pass_value(Val::Scalar(msg), &params[0])?;
+        self.emit_call(Run::Direct(id, ret), vals, Some(&at), range)?;
+        let p = self.b.ins().load(types::I64, flags, w, 0);
+        let n = self.b.ins().load(types::I64, flags, w, 8);
+        let level = moddil_rt::host::LEVELS
+            .iter()
+            .position(|l| *l == name)
+            .unwrap_or(0);
+        let level = self.b.ins().iconst(types::I32, level as i64);
+        let f = self
+            .c
+            .module
+            .declare_func_in_func(self.c.rt.log, self.b.func);
+        self.b.ins().call(f, &[level, p, n]);
+        self.drop_value(msg, &msg_ty)?;
+        Ok(Val::Unit)
     }
 
     /// A `Buf`'s built-in function (`text.string.inline.1`'s storage): its address, length and
@@ -6257,14 +6227,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 };
                 let at = elem_at(self, p, i);
                 let v = self.operand(x)?;
-                let place = PlaceRef {
-                    var: None,
-                    addr: Some(at),
-                    ty: elem.clone(),
-                    variant: None,
-                    meta: None,
-                    vtable: None,
-                };
+                let place = PlaceRef::at(at, elem.clone());
                 self.write(&place, v)?;
                 let n1 = self.b.ins().iadd_imm_s(n, 1);
                 self.b.ins().store(flags, n1, b, 8);
@@ -6343,4 +6306,9 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         };
         self.write(d, out)
     }
+}
+
+/// A built-in function native code does not compile yet.
+fn unsupported<T>(name: &str) -> Result<T, String> {
+    Err(format!("the built-in function `{name}`"))
 }

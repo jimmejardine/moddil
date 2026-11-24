@@ -28,127 +28,12 @@ impl Collector<'_> {
         let node = f.syntax();
         let origin = self.reporter.origin(src, node.text_range());
         self.unsupported_parts(src, node, true);
-        // Contracts (`contract.1`): not yet on a trait's method, nor `requires always`.
-        for c in node.children().filter(|c| c.kind() == K::CONTRACT) {
-            let what = if matches!(container, Container::Trait(_)) {
-                Some("a contract on a trait's method")
-            } else if c.token(K::ALWAYS_KW).is_some() {
-                Some("`requires always`")
-            } else {
-                None
-            };
-            if let Some(what) = what {
-                let origin = self.reporter.origin(src, node.text_range());
-                self.reporter.report(
-                    src,
-                    origin,
-                    vec![Diagnostic::unsupported(c.text_range(), what)],
-                );
-            }
-        }
+        self.contracts_unsupported(src, node, container);
         let mut ds = Vec::new();
-        // `#[track_caller]` (`attr.track-caller.1`) and `#[around(w)]` (`attr.around.1`); other
-        // attributes on a function wait.
-        let mut track_caller = false;
-        let mut around = Vec::new();
-        let mut intrinsic = false;
-        let mut selectable = false;
-        let mut selectable_at = None;
-        let mut kernel = false;
-        let mut kernel_at = None;
-        let mut export = false;
-        let mut export_status = false;
-        let mut py_export = false;
-        let mut export_at = None;
+        let attrs = fn_attrs(node, src, &mut ds);
+        wrapper_unsupported(node, container, &attrs.around, &mut ds);
+        let is_const = const_and_modifiers(node, &mut ds);
         let foreign = self.extern_fns.contains(&(src, node.text_range()));
-        for attr in node
-            .children()
-            .filter(|c| c.kind() == K::OUTER_ATTR && !crate::is_doc(c))
-        {
-            let path = attr
-                .child(K::ATTR)
-                .and_then(|a| a.child(K::PATH))
-                .and_then(ast::Path::cast)
-                .map(|p| p.segments())
-                .unwrap_or_default();
-            let input = attr.child(K::ATTR).and_then(|a| a.child(K::ATTR_INPUT));
-            if path == ["track_caller"] && input.is_none() {
-                track_caller = true;
-            } else if path == ["selectable"] && input.is_none() {
-                selectable = true;
-                selectable_at = Some(attr.text_range());
-            } else if path == ["kernel"] && input.is_none() {
-                kernel = true;
-                kernel_at = Some(attr.text_range());
-            } else if path == ["export"] && src.is_file() {
-                let how = input
-                    .as_ref()
-                    .map(|i| i.text().replace(char::is_whitespace, ""));
-                match how.as_deref() {
-                    None => export = true,
-                    Some("(status)") => {
-                        export = true;
-                        export_status = true;
-                    }
-                    Some("(python)") => py_export = true,
-                    Some(_) => ds.push(Diagnostic::error(
-                        Code::E0222,
-                        attr.text_range(),
-                        "`#[export]` is for C, `#[export(python)]` for Python",
-                    )),
-                }
-                export_at = Some(attr.text_range());
-            } else if path == ["around"] && src.is_file() {
-                if input.is_none() {
-                    ds.push(Diagnostic::error(
-                        Code::E1005,
-                        attr.text_range(),
-                        "`#[around(w)]` names the function that wraps this one",
-                    ));
-                }
-                around.push(attr.text_range());
-            } else if path == ["intrinsic"] && input.is_none() && src == Src::Prelude {
-                intrinsic = true;
-            } else {
-                ds.push(Diagnostic::unsupported(attr.text_range(), "this attribute"));
-            }
-        }
-        // A wrapped function is free, not `const`, and has plain parameters, for now.
-        if let Some(&at) = around.first() {
-            let what = if !matches!(container, Container::Free) {
-                Some("a wrapper on a method")
-            } else if node
-                .child_tokens()
-                .take_while(|t| t.kind() != K::FN_KW)
-                .any(|t| t.kind() == K::CONST_KW)
-            {
-                Some("a wrapper on a `const fn`")
-            } else if crate::wrap::params(node).is_none() {
-                Some("a wrapper on a function with a parameter written as a pattern")
-            } else {
-                None
-            };
-            if let Some(what) = what {
-                ds.push(Diagnostic::unsupported(at, what));
-            }
-        }
-        // `const fn` (`comptime.const-fn.1`).
-        let mut is_const = false;
-        for t in node.child_tokens() {
-            if t.kind() == K::FN_KW {
-                break;
-            }
-            if t.kind() == K::CONST_KW {
-                is_const = true;
-                continue;
-            }
-            if t.kind().is_keyword() && !matches!(t.kind(), K::PUB_KW | K::MOD_KW | K::DEFAULT_KW) {
-                ds.push(Diagnostic::unsupported(
-                    t.text_range(),
-                    &format!("`{}` on a function", t.text()),
-                ));
-            }
-        }
         let (name, name_range) = f.name().map_or_else(
             || (String::new(), node.text_range()),
             |n| (n.text(), n.syntax().text_range()),
@@ -161,7 +46,11 @@ impl Collector<'_> {
                 .mods
                 .get(self.tree.mod_of(self.module) as usize)
                 .is_some_and(|m| m.stub);
-        if !has_body && !intrinsic && !stub && !foreign && !matches!(container, Container::Trait(_))
+        if !has_body
+            && !attrs.intrinsic
+            && !stub
+            && !foreign
+            && !matches!(container, Container::Trait(_))
         {
             ds.push(Diagnostic::unsupported(
                 name_range,
@@ -171,33 +60,7 @@ impl Collector<'_> {
         self.reporter.report(src, origin, ds);
         let (mut params, mut bounded) =
             self.params(src, origin, node.child(K::GENERIC_PARAMS), &parent.params);
-        // A parameter of type `impl Fn(A) -> R` has a type parameter of its own, bounded by it
-        // (`expr.closure.param.1`).
-        let mut impls = Vec::new();
-        if let Some(list) = f.params() {
-            for p in list.params() {
-                // `impl Fn() with E`: the bound's effects are the type's (`expr.closure.effects.2`).
-                let written = p.ty();
-                let ty = match &written {
-                    Some(ast::Type::Effect(e)) => e.children().find_map(ast::Type::cast),
-                    t => t.clone(),
-                };
-                if let Some(t @ ast::Type::Impl(_)) = ty {
-                    let range = t.syntax().text_range();
-                    let name = written.map_or_else(
-                        || t.syntax().text().to_string(),
-                        |w| w.syntax().text().to_string(),
-                    );
-                    impls.push((range, params.len()));
-                    bounded.push((params.len(), t.syntax().clone()));
-                    params.push(crate::items::GenericParam {
-                        name,
-                        range,
-                        konst: false,
-                    });
-                }
-            }
-        }
+        let impls = impl_params(f, &mut params, &mut bounded);
         let mut generics = Generics {
             params,
             parent: parent.params.len() as u32,
@@ -228,79 +91,126 @@ impl Collector<'_> {
             ..self.scope()
         };
         let mut ds = Vec::new();
-        let mut params = Vec::new();
-        let mut self_kind = None;
-        let mut names: HashMap<String, TextRange> = HashMap::new();
-        if let Some(list) = f.params() {
-            for c in list.syntax().children() {
-                match c.kind() {
-                    K::PARAM => {
-                        let p = ast::Param::cast(c).expect("a PARAM");
-                        let sig = param_sig(&p, &scope, &mut ds);
-                        if let Some(n) = &sig.name {
-                            if let Some(first) = names.get(n) {
-                                ds.push(
-                                    Diagnostic::error(
-                                        Code::E0104,
-                                        sig.range,
-                                        format!("the parameter `{n}` is declared twice"),
-                                    )
-                                    .with_label(*first, "first declared here"),
-                                );
-                            } else {
-                                names.insert(n.clone(), sig.range);
-                            }
-                        }
-                        params.push(sig);
-                    }
-                    K::SELF_PARAM => {
-                        let Some(st) = &self_ty else {
-                            ds.push(Diagnostic::error(
-                                Code::E0102,
-                                c.text_range(),
-                                "only a method of an impl or trait takes `self`",
-                            ));
-                            continue;
-                        };
-                        if !params.is_empty() {
-                            ds.push(Diagnostic::error(
-                                Code::E0001,
-                                c.text_range(),
-                                "`self` must be the first parameter",
-                            ));
-                            continue;
-                        }
-                        if c.children().any(|x| ast::Type::can_cast(x.kind())) {
-                            ds.push(Diagnostic::unsupported(
-                                c.text_range(),
-                                "a `self` parameter with a type",
-                            ));
-                        }
-                        let borrowed = c.token(K::AMP).is_some();
-                        let mutable = c.token(K::MUT_KW).is_some();
-                        let (kind, ty) = match (borrowed, mutable) {
-                            (true, true) => (SelfKind::RefMut, Ty::reference(true, st.clone())),
-                            (true, false) => (SelfKind::Ref, Ty::reference(false, st.clone())),
-                            (false, _) => (SelfKind::Value, st.clone()),
-                        };
-                        self_kind = Some(kind);
-                        names.insert("self".to_string(), c.text_range());
-                        params.push(ParamSig {
-                            name: Some("self".to_string()),
-                            mutable: mutable && !borrowed,
-                            range: c.text_range(),
-                            ty,
-                            destructures: false,
-                        });
-                    }
-                    K::NAMED_ONLY_MARKER => ds.push(Diagnostic::unsupported(
-                        c.text_range(),
-                        "a name-only parameter marker",
-                    )),
-                    _ => {}
+        let (params, self_kind, mut names) = value_params(f, &scope, self_ty.as_ref(), &mut ds);
+        let ret = self.ret_sig(f, container, &generics, &scope, &mut ds);
+        let ret_from = ret_sources(&self.tree, node, &params, &ret.ty, &mut ds);
+        let effects = match node.child(K::EFFECT_CLAUSE) {
+            Some(c) => {
+                let (fails, fails_range, effects, control) = effect_clause(&c, &scope, &mut ds);
+                Effects {
+                    fails,
+                    fails_range,
+                    effects,
+                    control,
                 }
             }
+            None => Effects {
+                fails: Ty::Never,
+                fails_range: None,
+                effects: Vec::new(),
+                control: 0,
+            },
+        };
+        if let Some(at) = attrs.kernel_at {
+            check_kernel(at, container, &params, &ret.ty, &effects, &mut ds);
         }
+        if foreign || attrs.export {
+            let sig = CSig {
+                foreign,
+                has_body,
+                name_range,
+                container,
+                params: &params,
+                ret: &ret,
+                effects: &effects,
+            };
+            self.check_c_boundary(&sig, &attrs, &mut ds);
+        }
+        // A `select` waits on what may suspend (`task.select.3`).
+        if let Some(at) = attrs.selectable_at
+            && effects.control & crate::items::SUSPEND == 0
+        {
+            ds.push(Diagnostic::error(
+                Code::E0217,
+                at,
+                "a `#[selectable]` function is one that waits: it needs `suspend`",
+            ));
+        }
+        effect_names(&effects.effects, &mut names, &mut ds);
+        self.reporter.report(src, origin, ds);
+        FnSig {
+            name,
+            name_range,
+            src,
+            node: node.text_range(),
+            container,
+            generics,
+            self_kind,
+            params,
+            ret: ret.ty,
+            ret_range: ret.range,
+            ret_from,
+            has_body,
+            origin,
+            fails: effects.fails,
+            fails_range: effects.fails_range,
+            effects: effects.effects,
+            track_caller: attrs.track_caller,
+            control: effects.control,
+            defaults: Vec::new(),
+            opaque: ret.opaque,
+            opaque_fn: ret.opaque_fn,
+            selectable: attrs.selectable_at.is_some(),
+            kernel: attrs.kernel_at.is_some(),
+            foreign,
+            export: attrs.export,
+            export_status: attrs.export_status,
+            py_export: attrs.py_export,
+            default_arg: false,
+            intrinsic: attrs.intrinsic,
+            is_const,
+            const_item: false,
+            refine: None,
+            vis: match (src, container) {
+                (Src::File(_), Container::Free | Container::Impl(_)) => super::vis_of(node),
+                _ => crate::items::Vis::Pub,
+            },
+            module: self.module,
+            deriver: None,
+            template: self.template.clone(),
+        }
+    }
+
+    /// Contracts (`contract.1`): not yet on a trait's method, nor `requires always`.
+    fn contracts_unsupported(&mut self, src: Src, node: &SyntaxNode, container: Container) {
+        for c in node.children().filter(|c| c.kind() == K::CONTRACT) {
+            let what = if matches!(container, Container::Trait(_)) {
+                Some("a contract on a trait's method")
+            } else if c.token(K::ALWAYS_KW).is_some() {
+                Some("`requires always`")
+            } else {
+                None
+            };
+            if let Some(what) = what {
+                let origin = self.reporter.origin(src, node.text_range());
+                self.reporter.report(
+                    src,
+                    origin,
+                    vec![Diagnostic::unsupported(c.text_range(), what)],
+                );
+            }
+        }
+    }
+
+    /// The return type, and for `-> impl Trait` its bounds.
+    fn ret_sig(
+        &self,
+        f: &ast::FnItem,
+        container: Container,
+        generics: &Generics,
+        scope: &Scope,
+        ds: &mut Vec<Diagnostic>,
+    ) -> RetSig {
         let mut opaque = Vec::new();
         let mut opaque_fn = None;
         // `-> (impl Fn() with E)`: the closure bound's effects are the parenthesised type's.
@@ -316,7 +226,7 @@ impl Collector<'_> {
                 _ => break,
             }
         }
-        let (ret, ret_range) = match written {
+        let (ty, range) = match written {
             // `-> impl Trait` (`type.impl.ret.1`): an opaque type, numbered once the function
             // has its index.
             Some(t @ ast::Type::Impl(_)) if !matches!(container, Container::Trait(_)) => {
@@ -325,7 +235,7 @@ impl Collector<'_> {
                     args: generics.identity().into(),
                     name: t.syntax().text().to_string().trim().into(),
                 }));
-                opaque = crate::resolve::bounds(t.syntax(), &ty, &scope, &mut ds);
+                opaque = crate::resolve::bounds(t.syntax(), &ty, scope, ds);
                 // A closure it returns may be called after it has returned, so its type fixes
                 // its errors, as a stored closure's does (`expr.closure.result.1`).
                 let once = self.tree.lang("FnOnce");
@@ -336,185 +246,89 @@ impl Collector<'_> {
                             p.assoc.push((1, Ty::Never));
                         }
                     }
-                    opaque_fn = Some(crate::resolve::dyn_type(
-                        t.syntax(),
-                        &scope,
-                        &mut Vec::new(),
-                    ));
+                    opaque_fn = Some(crate::resolve::dyn_type(t.syntax(), scope, &mut Vec::new()));
                 }
                 (ty, Some(t.syntax().text_range()))
             }
-            Some(t) => (
-                resolve_type(&t, &scope, &mut ds),
-                Some(t.syntax().text_range()),
-            ),
+            Some(t) => (resolve_type(&t, scope, ds), Some(t.syntax().text_range())),
             None => (Ty::Unit, None),
         };
-        let ret_from = ret_sources(&self.tree, node, &params, &ret, &mut ds);
-        let (fails, fails_range, effects, control) = match node.child(K::EFFECT_CLAUSE) {
-            Some(c) => effect_clause(&c, &scope, &mut ds),
-            None => (Ty::Never, None, Vec::new(), 0),
-        };
-        // A kernel: a free function taking its parameters, `&P`, then its tile, `&mut Tile`,
-        // giving nothing and listing no effects (`gpu.kernel.1`).
-        if let Some(at) = kernel_at {
-            let tile = |t: &Ty| matches!(t, Ty::Ref(true, inner) if matches!(&**inner, Ty::Adt(_, n, _) if &**n == "Tile"));
-            let shape = matches!(container, Container::Free)
-                && params.len() == 2
-                && matches!(params[0].ty, Ty::Ref(false, _))
-                && tile(&params[1].ty)
-                && ret == Ty::Unit;
-            if !shape {
-                ds.push(Diagnostic::error(
-                    Code::E0221,
-                    at,
-                    "a `#[kernel]` is a free function `fn k(params: &P, out: &mut Tile)`, giving \
-                     nothing",
-                ));
-            } else if !effects.is_empty() || control != 0 || fails != Ty::Never {
-                ds.push(Diagnostic::error(
-                    Code::E0221,
-                    at,
-                    "a `#[kernel]` needs no handlers, cannot fail, and does not suspend or spawn \
-                     (the kernel effect set)",
-                ));
-            }
-        }
-        // C functions and exports: C's types only, and nothing C cannot do (`ffi.types.1`).
-        if foreign || export {
-            let what = if foreign {
-                "a C function"
-            } else {
-                "an `#[export]` function"
-            };
-            let at = export_at.unwrap_or(name_range);
-            for p in &params {
-                if !self.tree.is_c_type(&p.ty) {
-                    ds.push(Diagnostic::error(
-                        Code::E0222,
-                        p.range,
-                        format!(
-                            "{what}'s parameters have C's types: sized numbers, `int`, `bool`, raw \
-                             pointers, `fn` types and `#[repr(C)]` structs of those, not `{}`",
-                            p.ty
-                        ),
-                    ));
-                }
-            }
-            if ret != Ty::Unit && !self.tree.is_c_type(&ret) {
-                ds.push(Diagnostic::error(
-                    Code::E0222,
-                    ret_range.unwrap_or(name_range),
-                    format!("{what} gives a C type or nothing, not `{ret}`"),
-                ));
-            }
-            if !effects.is_empty() || control != 0 || fails != Ty::Never {
-                ds.push(Diagnostic::error(
-                    Code::E0222,
-                    at,
-                    format!("{what} needs no handlers, cannot fail, and does not suspend or spawn"),
-                ));
-            }
-            if foreign {
-                if has_body {
-                    ds.push(Diagnostic::error(
-                        Code::E0222,
-                        name_range,
-                        "a C function in an `extern \"C\"` block is a signature: `fn f(…) -> T;`",
-                    ));
-                }
-                let unsafe_ok = self
-                    .tree
-                    .mods
-                    .get(self.tree.mod_of(self.module) as usize)
-                    .is_none_or(|m| m.unsafe_ok);
-                if !unsafe_ok {
-                    ds.push(Diagnostic::error(
-                        Code::E0219,
-                        name_range,
-                        "C functions are declared only in a mod whose manifest lists the `unsafe` \
-                         capability: `capabilities = [\"unsafe\"]` under `[mod]`",
-                    ));
-                }
-            }
-            if export
-                && (!matches!(container, Container::Free)
-                    || !params.iter().all(|p| p.name.is_some()))
-            {
-                ds.push(Diagnostic::error(
-                    Code::E0222,
-                    at,
-                    "an `#[export]` function is a free function with named parameters",
-                ));
-            }
-        }
-        // A `select` waits on what may suspend (`task.select.3`).
-        if let Some(at) = selectable_at
-            && control & crate::items::SUSPEND == 0
-        {
-            ds.push(Diagnostic::error(
-                Code::E0217,
-                at,
-                "a `#[selectable]` function is one that waits: it needs `suspend`",
-            ));
-        }
-        for e in &effects {
-            if let Some(n) = &e.name {
-                if let Some(first) = names.get(n) {
-                    ds.push(
-                        Diagnostic::error(
-                            Code::E0104,
-                            e.range,
-                            format!("`{n}` is already a parameter"),
-                        )
-                        .with_label(*first, "first declared here"),
-                    );
-                } else {
-                    names.insert(n.clone(), e.range);
-                }
-            }
-        }
-        self.reporter.report(src, origin, ds);
-        FnSig {
-            name,
-            name_range,
-            src,
-            node: node.text_range(),
-            container,
-            generics,
-            self_kind,
-            params,
-            ret,
-            ret_range,
-            ret_from,
-            has_body,
-            origin,
-            fails,
-            fails_range,
-            effects,
-            track_caller,
-            control,
-            defaults: Vec::new(),
+        RetSig {
+            ty,
+            range,
             opaque,
             opaque_fn,
-            selectable,
-            kernel,
-            foreign,
-            export,
-            export_status,
-            py_export,
-            default_arg: false,
-            intrinsic,
-            is_const,
-            const_item: false,
-            refine: None,
-            vis: match (src, container) {
-                (Src::File(_), Container::Free | Container::Impl(_)) => super::vis_of(node),
-                _ => crate::items::Vis::Pub,
-            },
-            module: self.module,
-            deriver: None,
-            template: self.template.clone(),
+        }
+    }
+
+    /// C functions and exports: C's types only, and nothing C cannot do (`ffi.types.1`).
+    fn check_c_boundary(&self, sig: &CSig<'_>, attrs: &FnAttrs, ds: &mut Vec<Diagnostic>) {
+        let (foreign, name_range) = (sig.foreign, sig.name_range);
+        let what = if foreign {
+            "a C function"
+        } else {
+            "an `#[export]` function"
+        };
+        let at = attrs.export_at.unwrap_or(name_range);
+        for p in sig.params {
+            if !self.tree.is_c_type(&p.ty) {
+                ds.push(Diagnostic::error(
+                    Code::E0222,
+                    p.range,
+                    format!(
+                        "{what}'s parameters have C's types: sized numbers, `int`, `bool`, raw \
+                         pointers, `fn` types and `#[repr(C)]` structs of those, not `{}`",
+                        p.ty
+                    ),
+                ));
+            }
+        }
+        let ret = &sig.ret.ty;
+        if *ret != Ty::Unit && !self.tree.is_c_type(ret) {
+            ds.push(Diagnostic::error(
+                Code::E0222,
+                sig.ret.range.unwrap_or(name_range),
+                format!("{what} gives a C type or nothing, not `{ret}`"),
+            ));
+        }
+        if !sig.effects.is_none() {
+            ds.push(Diagnostic::error(
+                Code::E0222,
+                at,
+                format!("{what} needs no handlers, cannot fail, and does not suspend or spawn"),
+            ));
+        }
+        if foreign {
+            if sig.has_body {
+                ds.push(Diagnostic::error(
+                    Code::E0222,
+                    name_range,
+                    "a C function in an `extern \"C\"` block is a signature: `fn f(…) -> T;`",
+                ));
+            }
+            let unsafe_ok = self
+                .tree
+                .mods
+                .get(self.tree.mod_of(self.module) as usize)
+                .is_none_or(|m| m.unsafe_ok);
+            if !unsafe_ok {
+                ds.push(Diagnostic::error(
+                    Code::E0219,
+                    name_range,
+                    "C functions are declared only in a mod whose manifest lists the `unsafe` \
+                     capability: `capabilities = [\"unsafe\"]` under `[mod]`",
+                ));
+            }
+        }
+        if attrs.export
+            && (!matches!(sig.container, Container::Free)
+                || !sig.params.iter().all(|p| p.name.is_some()))
+        {
+            ds.push(Diagnostic::error(
+                Code::E0222,
+                at,
+                "an `#[export]` function is a free function with named parameters",
+            ));
         }
     }
 
@@ -694,6 +508,347 @@ impl Collector<'_> {
             );
         }
         sig
+    }
+}
+
+/// What a function's attributes say.
+#[derive(Default)]
+struct FnAttrs {
+    /// `#[track_caller]` (`attr.track-caller.1`).
+    track_caller: bool,
+    /// Each `#[around(w)]` (`attr.around.1`).
+    around: Vec<TextRange>,
+    /// `#[intrinsic]`, in the prelude only.
+    intrinsic: bool,
+    /// Where `#[selectable]` is written (`task.select.3`).
+    selectable_at: Option<TextRange>,
+    /// Where `#[kernel]` is written (`gpu.kernel.1`).
+    kernel_at: Option<TextRange>,
+    /// `#[export]` or `#[export(status)]`, for C.
+    export: bool,
+    export_status: bool,
+    /// `#[export(python)]`.
+    py_export: bool,
+    /// Where `#[export…]` is written.
+    export_at: Option<TextRange>,
+}
+
+/// A function's attributes. Those not listed in [`FnAttrs`] wait.
+fn fn_attrs(node: &SyntaxNode, src: Src, ds: &mut Vec<Diagnostic>) -> FnAttrs {
+    let mut a = FnAttrs::default();
+    for attr in node
+        .children()
+        .filter(|c| c.kind() == K::OUTER_ATTR && !crate::is_doc(c))
+    {
+        let path = attr
+            .child(K::ATTR)
+            .and_then(|a| a.child(K::PATH))
+            .and_then(ast::Path::cast)
+            .map(|p| p.segments())
+            .unwrap_or_default();
+        let input = attr.child(K::ATTR).and_then(|a| a.child(K::ATTR_INPUT));
+        if path == ["track_caller"] && input.is_none() {
+            a.track_caller = true;
+        } else if path == ["selectable"] && input.is_none() {
+            a.selectable_at = Some(attr.text_range());
+        } else if path == ["kernel"] && input.is_none() {
+            a.kernel_at = Some(attr.text_range());
+        } else if path == ["export"] && src.is_file() {
+            let how = input
+                .as_ref()
+                .map(|i| i.text().replace(char::is_whitespace, ""));
+            match how.as_deref() {
+                None => a.export = true,
+                Some("(status)") => {
+                    a.export = true;
+                    a.export_status = true;
+                }
+                Some("(python)") => a.py_export = true,
+                Some(_) => ds.push(Diagnostic::error(
+                    Code::E0222,
+                    attr.text_range(),
+                    "`#[export]` is for C, `#[export(python)]` for Python",
+                )),
+            }
+            a.export_at = Some(attr.text_range());
+        } else if path == ["around"] && src.is_file() {
+            if input.is_none() {
+                ds.push(Diagnostic::error(
+                    Code::E1005,
+                    attr.text_range(),
+                    "`#[around(w)]` names the function that wraps this one",
+                ));
+            }
+            a.around.push(attr.text_range());
+        } else if path == ["intrinsic"] && input.is_none() && src == Src::Prelude {
+            a.intrinsic = true;
+        } else {
+            ds.push(Diagnostic::unsupported(attr.text_range(), "this attribute"));
+        }
+    }
+    a
+}
+
+/// A wrapped function is free, not `const`, and has plain parameters, for now.
+fn wrapper_unsupported(
+    node: &SyntaxNode,
+    container: Container,
+    around: &[TextRange],
+    ds: &mut Vec<Diagnostic>,
+) {
+    let Some(&at) = around.first() else {
+        return;
+    };
+    let what = if !matches!(container, Container::Free) {
+        Some("a wrapper on a method")
+    } else if node
+        .child_tokens()
+        .take_while(|t| t.kind() != K::FN_KW)
+        .any(|t| t.kind() == K::CONST_KW)
+    {
+        Some("a wrapper on a `const fn`")
+    } else if crate::wrap::params(node).is_none() {
+        Some("a wrapper on a function with a parameter written as a pattern")
+    } else {
+        None
+    };
+    if let Some(what) = what {
+        ds.push(Diagnostic::unsupported(at, what));
+    }
+}
+
+/// Whether the function is a `const fn` (`comptime.const-fn.1`); other keywords before `fn`
+/// wait.
+fn const_and_modifiers(node: &SyntaxNode, ds: &mut Vec<Diagnostic>) -> bool {
+    let mut is_const = false;
+    for t in node.child_tokens() {
+        if t.kind() == K::FN_KW {
+            break;
+        }
+        if t.kind() == K::CONST_KW {
+            is_const = true;
+            continue;
+        }
+        if t.kind().is_keyword() && !matches!(t.kind(), K::PUB_KW | K::MOD_KW | K::DEFAULT_KW) {
+            ds.push(Diagnostic::unsupported(
+                t.text_range(),
+                &format!("`{}` on a function", t.text()),
+            ));
+        }
+    }
+    is_const
+}
+
+/// A parameter of type `impl Fn(A) -> R` has a type parameter of its own, bounded by it
+/// (`expr.closure.param.1`): each is added to `params` and `bounded`, and its range and index
+/// returned.
+fn impl_params(
+    f: &ast::FnItem,
+    params: &mut Vec<crate::items::GenericParam>,
+    bounded: &mut Vec<(usize, SyntaxNode)>,
+) -> Vec<(TextRange, usize)> {
+    let mut impls = Vec::new();
+    let Some(list) = f.params() else {
+        return impls;
+    };
+    for p in list.params() {
+        // `impl Fn() with E`: the bound's effects are the type's (`expr.closure.effects.2`).
+        let written = p.ty();
+        let ty = match &written {
+            Some(ast::Type::Effect(e)) => e.children().find_map(ast::Type::cast),
+            t => t.clone(),
+        };
+        if let Some(t @ ast::Type::Impl(_)) = ty {
+            let range = t.syntax().text_range();
+            let name = written.map_or_else(
+                || t.syntax().text().to_string(),
+                |w| w.syntax().text().to_string(),
+            );
+            impls.push((range, params.len()));
+            bounded.push((params.len(), t.syntax().clone()));
+            params.push(crate::items::GenericParam {
+                name,
+                range,
+                konst: false,
+            });
+        }
+    }
+    impls
+}
+
+/// The value parameters, `self` among them, with `self`'s kind and where each name is declared.
+fn value_params(
+    f: &ast::FnItem,
+    scope: &Scope,
+    self_ty: Option<&Ty>,
+    ds: &mut Vec<Diagnostic>,
+) -> (Vec<ParamSig>, Option<SelfKind>, HashMap<String, TextRange>) {
+    let mut params = Vec::new();
+    let mut self_kind = None;
+    let mut names: HashMap<String, TextRange> = HashMap::new();
+    let Some(list) = f.params() else {
+        return (params, self_kind, names);
+    };
+    for c in list.syntax().children() {
+        match c.kind() {
+            K::PARAM => {
+                let p = ast::Param::cast(c).expect("a PARAM");
+                let sig = param_sig(&p, scope, ds);
+                if let Some(n) = &sig.name {
+                    if let Some(first) = names.get(n) {
+                        ds.push(
+                            Diagnostic::error(
+                                Code::E0104,
+                                sig.range,
+                                format!("the parameter `{n}` is declared twice"),
+                            )
+                            .with_label(*first, "first declared here"),
+                        );
+                    } else {
+                        names.insert(n.clone(), sig.range);
+                    }
+                }
+                params.push(sig);
+            }
+            K::SELF_PARAM => {
+                let Some(st) = self_ty else {
+                    ds.push(Diagnostic::error(
+                        Code::E0102,
+                        c.text_range(),
+                        "only a method of an impl or trait takes `self`",
+                    ));
+                    continue;
+                };
+                if !params.is_empty() {
+                    ds.push(Diagnostic::error(
+                        Code::E0001,
+                        c.text_range(),
+                        "`self` must be the first parameter",
+                    ));
+                    continue;
+                }
+                if c.children().any(|x| ast::Type::can_cast(x.kind())) {
+                    ds.push(Diagnostic::unsupported(
+                        c.text_range(),
+                        "a `self` parameter with a type",
+                    ));
+                }
+                let borrowed = c.token(K::AMP).is_some();
+                let mutable = c.token(K::MUT_KW).is_some();
+                let (kind, ty) = match (borrowed, mutable) {
+                    (true, true) => (SelfKind::RefMut, Ty::reference(true, st.clone())),
+                    (true, false) => (SelfKind::Ref, Ty::reference(false, st.clone())),
+                    (false, _) => (SelfKind::Value, st.clone()),
+                };
+                self_kind = Some(kind);
+                names.insert("self".to_string(), c.text_range());
+                params.push(ParamSig {
+                    name: Some("self".to_string()),
+                    mutable: mutable && !borrowed,
+                    range: c.text_range(),
+                    ty,
+                    destructures: false,
+                });
+            }
+            K::NAMED_ONLY_MARKER => ds.push(Diagnostic::unsupported(
+                c.text_range(),
+                "a name-only parameter marker",
+            )),
+            _ => {}
+        }
+    }
+    (params, self_kind, names)
+}
+
+/// A function's return type, where it is written, and for `-> impl Trait` its bounds and, for a
+/// closure, its `dyn` type.
+struct RetSig {
+    ty: Ty,
+    range: Option<TextRange>,
+    opaque: Vec<crate::items::Pred>,
+    opaque_fn: Option<Ty>,
+}
+
+/// What a function's effect clause lists ([`effect_clause`]).
+struct Effects {
+    fails: Ty,
+    fails_range: Option<TextRange>,
+    effects: Vec<EffectSig>,
+    control: crate::items::Control,
+}
+
+impl Effects {
+    /// Whether the function needs no handlers, cannot fail, and does not suspend or spawn.
+    fn is_none(&self) -> bool {
+        self.effects.is_empty() && self.control == 0 && self.fails == Ty::Never
+    }
+}
+
+/// What [`Collector::check_c_boundary`] checks of a C function or an `#[export]`.
+struct CSig<'a> {
+    foreign: bool,
+    has_body: bool,
+    name_range: TextRange,
+    container: Container,
+    params: &'a [ParamSig],
+    ret: &'a RetSig,
+    effects: &'a Effects,
+}
+
+/// A kernel: a free function taking its parameters, `&P`, then its tile, `&mut Tile`, giving
+/// nothing and listing no effects (`gpu.kernel.1`).
+fn check_kernel(
+    at: TextRange,
+    container: Container,
+    params: &[ParamSig],
+    ret: &Ty,
+    effects: &Effects,
+    ds: &mut Vec<Diagnostic>,
+) {
+    let tile = |t: &Ty| matches!(t, Ty::Ref(true, inner) if matches!(&**inner, Ty::Adt(_, n, _) if &**n == "Tile"));
+    let shape = matches!(container, Container::Free)
+        && params.len() == 2
+        && matches!(params[0].ty, Ty::Ref(false, _))
+        && tile(&params[1].ty)
+        && *ret == Ty::Unit;
+    if !shape {
+        ds.push(Diagnostic::error(
+            Code::E0221,
+            at,
+            "a `#[kernel]` is a free function `fn k(params: &P, out: &mut Tile)`, giving \
+             nothing",
+        ));
+    } else if !effects.is_none() {
+        ds.push(Diagnostic::error(
+            Code::E0221,
+            at,
+            "a `#[kernel]` needs no handlers, cannot fail, and does not suspend or spawn \
+             (the kernel effect set)",
+        ));
+    }
+}
+
+/// An effect's name is not a parameter's too (E0104).
+fn effect_names(
+    effects: &[EffectSig],
+    names: &mut HashMap<String, TextRange>,
+    ds: &mut Vec<Diagnostic>,
+) {
+    for e in effects {
+        if let Some(n) = &e.name {
+            if let Some(first) = names.get(n) {
+                ds.push(
+                    Diagnostic::error(
+                        Code::E0104,
+                        e.range,
+                        format!("`{n}` is already a parameter"),
+                    )
+                    .with_label(*first, "first declared here"),
+                );
+            } else {
+                names.insert(n.clone(), e.range);
+            }
+        }
     }
 }
 
