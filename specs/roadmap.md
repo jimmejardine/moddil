@@ -1053,7 +1053,9 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
           prelude's `Box`).
         - **Binding through a view's borrow field:** in `match w.at { Node::Leaf(x) => *x }`, with
           `w` a view whose `at` is a `&Node`, `x` is typed `int`, not `&int` as it is when the
-          scrutinee is a local borrow, so `*x` is E0205.
+          scrutinee is a local borrow, so `*x` is E0205. Not reproducible since (November 2026): in
+          every shape tried it binds through the borrow, as `pat.mode.1` says; the shapes are now
+          checked on every runner (`conformance/2027/views/borrow-fields.moddil`).
         - **Fixed in this slice:** assigning a borrow while borrows made through it are live
           (`at = &at.children[0]`, walking a tree or a list) was E0306; it is now allowed
           (`borrow.reassign.1`), and a borrow made through `r` still lends what `r` borrowed.
