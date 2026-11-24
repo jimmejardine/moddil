@@ -1086,8 +1086,14 @@ impl Machine<'_> {
             .unwrap_or_default();
         // A reflected variant's `is(x)` and `make()` (`comptime.template.variant.1`).
         if let Some((key, i)) = self.reflected_variant(receiver.syntax()) {
-            let variant = self.program.adts[&key].variants[i].name.clone();
+            let info = &self.program.adts[&key].variants[i];
+            let variant = info.name.clone();
             return match name.as_str() {
+                // Its shape, in `if const` (`comptime.template.if.1`).
+                "is_unit" => Ok(Value::Bool(info.fields.is_empty())),
+                "is_positional" => Ok(Value::Bool(
+                    !info.fields.is_empty() && info.shape != crate::program::Shape::Named,
+                )),
                 "make" => Ok(Value::Adt {
                     ty: key,
                     variant,
@@ -1104,13 +1110,24 @@ impl Machine<'_> {
                 }
             };
         }
-        // `t.is_enum()` in a template (`comptime.template.if.1`): whether `t` is an enum.
-        if name == "is_enum"
-            && let [one] = segments(receiver.syntax()).as_slice()
-            && let Some(head) = self.memory.type_of(one)
+        // `t.is_enum()`, `t.is_unit()` and `t.is_positional()` in a template
+        // (`comptime.template.if.1`): what kind of type `t` is.
+        if matches!(name.as_str(), "is_enum" | "is_unit" | "is_positional")
+            && let Some(head) = self.template_type(receiver)
         {
-            let is_enum = matches!(&head, Head::Adt(k) if self.program.adts.get(k).is_some_and(|a| a.is_enum));
-            return Ok(Value::Bool(is_enum));
+            let adt = match &head {
+                Head::Adt(k) => self.program.adts.get(k),
+                _ => None,
+            };
+            let first = adt.filter(|a| !a.is_enum).map(|a| &a.variants[0]);
+            let answer = match name.as_str() {
+                "is_enum" => adt.is_some_and(|a| a.is_enum),
+                "is_unit" => first.is_some_and(|v| v.fields.is_empty()),
+                _ => first.is_some_and(|v| {
+                    !v.fields.is_empty() && v.shape != crate::program::Shape::Named
+                }),
+            };
+            return Ok(Value::Bool(answer));
         }
         // A reflected field's `is_refined()` and `new(e)` (`comptime.template.field.1`).
         if let Some((key, i)) = self.reflected(receiver.syntax()) {

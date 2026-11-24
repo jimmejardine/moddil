@@ -1,0 +1,163 @@
+// covers: comptime.template.variant.1, comptime.template.if.1
+
+/// A copy, a comparison and a description, each written once for structs and enums.
+#[derive_by(copied)]
+trait Copied {
+    fn copied(&self) -> Self;
+}
+
+const fn copied(t: type) -> Impl<Copied> {
+    impl Copied for t {
+        fn copied(&self) -> Self {
+            if const t.is_enum() {
+                inline for v in variants(t) {
+                    if v.is(self) {
+                        return v {
+                            inline for f in fields(v) {
+                                [f]: self.[f].copied(),
+                            }
+                        };
+                    }
+                }
+                loop {}
+            } else {
+                t {
+                    inline for f in fields(t) {
+                        [f]: self.[f].copied(),
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive_by(same)]
+trait Same {
+    fn same(&self, other: &Self) -> bool;
+}
+
+const fn same(t: type) -> Impl<Same> {
+    impl Same for t {
+        fn same(&self, other: &Self) -> bool {
+            inline for v in variants(t) {
+                if v.is(self) && v.is(other) {
+                    let mut all = true;
+                    inline for f in fields(v) {
+                        all = all && self.[f].same(&other.[f]);
+                    }
+                    return all;
+                }
+            }
+            false
+        }
+    }
+}
+
+#[derive_by(described)]
+trait Described {
+    fn described(&self) -> String;
+}
+
+const fn described(t: type) -> Impl<Described> {
+    impl Described for t {
+        fn described(&self) -> String {
+            let mut out = String::new();
+            out.push_str(t.name);
+            inline for v in variants(t) {
+                if v.is(self) {
+                    out.push_str("::");
+                    out.push_str(v.name);
+                    out.push_str(&fmt"#{v.index}");
+                    if const v.is_positional() {
+                        out.push_str("(");
+                        inline for f in fields(v) {
+                            if const f.name != "0" {
+                                out.push_str(", ");
+                            }
+                            out.push_str(&self.[f].described());
+                        }
+                        out.push_str(")");
+                    } else if const v.is_unit() {
+                    } else {
+                        out.push_str(" {");
+                        inline for f in fields(v) {
+                            out.push_str(" ");
+                            out.push_str(f.name);
+                            out.push_str(": ");
+                            out.push_str(&self.[f].described());
+                        }
+                        out.push_str(" }");
+                    }
+                }
+            }
+            out
+        }
+    }
+}
+
+#[derive(Copied, Same, Described, Debug, Clone, PartialEq)]
+enum Shape {
+    Dot,
+    Circle(int),
+    Rect { w: int, label: String },
+}
+
+#[derive(Copied, Same, Described)]
+enum Maybe<T> {
+    Nothing,
+    Just(T),
+}
+
+impl Same for int {
+    fn same(&self, other: &int) -> bool { *self == *other }
+}
+impl Copied for int {
+    fn copied(&self) -> int { *self }
+}
+impl Described for int {
+    fn described(&self) -> String { fmt"{self}" }
+}
+impl Same for String {
+    fn same(&self, other: &String) -> bool { *self == *other }
+}
+impl Copied for String {
+    fn copied(&self) -> String { self.clone() }
+}
+impl Described for String {
+    fn described(&self) -> String { fmt"{self:?}" }
+}
+
+#[derive(Copied)]
+struct Pair { a: String, b: int }
+
+test "a template reflects on a variant's fields" {
+    let r = Shape::Rect { w: 3, label: "box".to_string() };
+    r.copied() == r                                        // => true
+    ;
+    Shape::Circle(2).copied() == Shape::Circle(2)          // => true
+    ;
+    Shape::Dot.copied() == Shape::Dot                      // => true
+    ;
+    r.same(&Shape::Rect { w: 3, label: "box".to_string() })    // => true
+    ;
+    r.same(&Shape::Rect { w: 4, label: "box".to_string() })    // => false
+    ;
+    Shape::Circle(1).same(&Shape::Dot)                     // => false
+    ;
+    r.described()                                          // => "Shape::Rect#2 { w: 3 label: \"box\" }"
+    ;
+    Shape::Circle(5).described()                           // => "Shape::Circle#1(5)"
+    ;
+    Shape::Dot.described()                                 // => "Shape::Dot#0"
+    ;
+    let m: Maybe<int> = Maybe::Just(4);
+    m.same(&Maybe::Just(4))                                // => true
+    ;
+    m.copied().same(&m)                                    // => true
+    ;
+    m.described()                                          // => "Maybe::Just#1(4)"
+    ;
+    let p = Pair { a: "x".to_string(), b: 1 };
+    p.copied().b                                           // => 1
+    ;
+}

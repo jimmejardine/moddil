@@ -156,11 +156,6 @@ fn beyond_s0_is_not_supported_yet() {
     err("#[root_capability] struct S { h: int }", &[("I0001", 1)]);
     err("trait T { const N: int = 1; }", &[("I0001", 1)]);
     err("fn f() { let s = b\"x\"; }", &[("I0001", 1)]);
-    // A template's derive for an enum whose variants have fields (`comptime.template.variant.1`).
-    err(
-        "#[derive_by(f)]\ntrait T { fn t(&self) -> int; }\nconst fn f(t: type) -> Impl<T> { impl T for t { fn t(&self) -> int { 1 } } }\n#[derive(T)]\nenum E { A(int), B }",
-        &[("E0407", 4), ("I0001", 4)],
-    );
     // `#[derive_for]` outside the prelude (`comptime.derive.for.1`).
     err(
         "trait T { fn t(&self) -> int; }\n#[derive_for(i8)]\nconst fn f(t: type) -> Impl<T> { impl T for t { fn t(&self) -> int { 1 } } }",

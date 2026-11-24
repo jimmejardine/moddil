@@ -335,7 +335,9 @@ impl Lowerer<'_> {
                 .and_then(ast::Path::cast)
                 .is_some_and(|p| p.segments() == [t.var.clone()])
         });
-        let resolved = if names_template {
+        // A reflected variant names its own value, of any shape (`v { [f]: e, … }`).
+        let variant_lit = self.variant_literal(node);
+        let resolved = if names_template || variant_lit.is_some() {
             None
         } else {
             self.resolve(node)
@@ -368,7 +370,17 @@ impl Lowerer<'_> {
             };
         }
         let target = match resolved {
+            _ if variant_lit.is_some() => variant_lit,
             _ if names_template => match self.template.and_then(|t| t.adt) {
+                Some(adt) if self.items.adts[adt as usize].is_enum => {
+                    self.report(
+                        Code::E1007,
+                        range,
+                        "an enum's value is one of its variants: `v { … }` for a variant `v` \
+                         (`comptime.template.variant.1`)",
+                    );
+                    None
+                }
                 Some(adt) => Some((adt, 0)),
                 None => {
                     self.report(
@@ -556,6 +568,15 @@ impl Lowerer<'_> {
         {
             let member = ast::member_name(node).map(|t| t.text().to_string());
             return self.variant_member(k, &member.unwrap_or_default(), range);
+        }
+        // `t.name`: the name of the type a template is instantiated for.
+        if ast::member_name(node).is_some_and(|m| m.text() == "name")
+            && let Some(name) = e
+                .sub_exprs()
+                .first()
+                .and_then(|b| self.template_name(b.syntax()))
+        {
+            return self.alloc(ExprKind::Str(name), range);
         }
         let base = e.sub_exprs().into_iter().next();
         let base = self.expr_or_missing(base, range);

@@ -9,13 +9,26 @@ use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode, TextRange};
 
 use super::Lowerer;
-use crate::hir::{ExprId, ExprKind, Stmt};
+use crate::hir::{Arm, ExprId, ExprKind, Local, PatKind, Stmt};
 use crate::{Code, Ty};
 
+/// A field: of variant `variant` (0 for a struct or a tuple), the `k`th.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct FieldRef {
+    pub(super) variant: u32,
+    pub(super) k: u32,
+}
+
+/// What a name an `inline for` binds reflects: a field, or an enum's variant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Reflect {
+    Field(FieldRef),
+    Variant(u32),
+}
+
 impl Lowerer<'_> {
-    /// What a reflected name `node` (a path of one name) stands for, if it is one: its index,
-    /// and whether it is a variant.
-    fn reflected_any(&self, node: &SyntaxNode) -> Option<(u32, bool)> {
+    /// What a reflected name `node` (a path of one name) stands for, if it is one.
+    fn reflected_any(&self, node: &SyntaxNode) -> Option<Reflect> {
         if node.kind() != K::PATH_EXPR {
             return None;
         }
@@ -27,21 +40,64 @@ impl Lowerer<'_> {
         self.reflected
             .iter()
             .rev()
-            .find(|(n, ..)| n == name)
-            .map(|(_, k, v)| (*k, *v))
+            .find(|(n, _)| n == name)
+            .map(|(_, r)| *r)
     }
 
     /// The field a reflected name `node` stands for, if it names a field.
-    pub(super) fn reflected(&self, node: &SyntaxNode) -> Option<u32> {
-        self.reflected_any(node)
-            .and_then(|(k, variant)| (!variant).then_some(k))
+    pub(super) fn reflected(&self, node: &SyntaxNode) -> Option<FieldRef> {
+        match self.reflected_any(node)? {
+            Reflect::Field(f) => Some(f),
+            Reflect::Variant(_) => None,
+        }
     }
 
     /// The variant a reflected name `node` stands for, if it names a variant
     /// (`comptime.template.variant.1`).
     pub(super) fn reflected_variant(&self, node: &SyntaxNode) -> Option<u32> {
-        self.reflected_any(node)
-            .and_then(|(k, variant)| variant.then_some(k))
+        match self.reflected_any(node)? {
+            Reflect::Variant(v) => Some(v),
+            Reflect::Field(_) => None,
+        }
+    }
+
+    /// For a struct literal `node` whose path is a reflected variant (`v { [f]: e, … }`): the
+    /// template's enum and that variant (`comptime.template.variant.1`).
+    pub(super) fn variant_literal(&self, node: &SyntaxNode) -> Option<(u32, u32)> {
+        let path = node.child(K::PATH).and_then(ast::Path::cast)?;
+        let segs = path.segments();
+        let [one] = segs.as_slice() else {
+            return None;
+        };
+        let v = self
+            .reflected
+            .iter()
+            .rev()
+            .find(|(n, _)| n == one)
+            .and_then(|(_, r)| match r {
+                Reflect::Variant(v) => Some(*v),
+                Reflect::Field(_) => None,
+            })?;
+        Some((self.template_enum()?, v))
+    }
+
+    /// `t.name`, for `base` the template's parameter: the name of the type it is instantiated
+    /// for, as written in its declaration, without type arguments (`comptime.template.1`).
+    pub(super) fn template_name(&self, base: &SyntaxNode) -> Option<String> {
+        if !self.names_template(base) {
+            return None;
+        }
+        let t = self.template?;
+        Some(match t.adt {
+            Some(adt) => self.items.adts[adt as usize].name.clone(),
+            None => t.ty.to_string(),
+        })
+    }
+
+    /// Whether `node` is the template's parameter, `t`.
+    fn names_template(&self, node: &SyntaxNode) -> bool {
+        self.template
+            .is_some_and(|t| node.kind() == K::PATH_EXPR && node.text().trim() == t.var)
     }
 
     /// The enum the template is instantiated for, if it is one.
@@ -64,8 +120,10 @@ impl Lowerer<'_> {
         }
     }
 
-    /// The template's field `k`: its name and its type. A tuple's elements are named `0`, `1`, …
-    fn field_of(&self, k: u32) -> (String, Ty) {
+    /// Field `f` of the template's type (of its variant, for an enum): its name and its type. A
+    /// tuple's elements are named `0`, `1`, …
+    pub(super) fn field_of(&self, f: FieldRef) -> (String, Ty) {
+        let FieldRef { variant, k } = f;
         if let Some(t) = self.template
             && t.adt.is_none()
             && let Ty::Tuple(elems) = &t.ty
@@ -78,24 +136,25 @@ impl Lowerer<'_> {
         };
         let name = self
             .items
-            .variant(adt, 0)
+            .variant(adt, variant)
             .fields
             .get(k as usize)
             .map(|f| f.name.clone())
             .unwrap_or_default();
         let ty = self
             .items
-            .field_types(&t.ty, 0)
+            .field_types(&t.ty, variant)
             .get(k as usize)
             .cloned()
             .unwrap_or(Ty::Error);
         (name, ty)
     }
 
-    /// What `inline for`'s head ranges over, and the name it binds: `inline for f in fields(t)`
-    /// or, for an enum, `inline for v in variants(t)`, with `t` the template's parameter. The
-    /// name, how many, and whether they are variants. E1007 otherwise.
-    fn inline_head(&mut self, node: &SyntaxNode) -> Option<(String, u32, bool)> {
+    /// What `inline for`'s head ranges over, and the name it binds: `inline for f in fields(t)`;
+    /// for an enum, `inline for v in variants(t)`, and in one, `inline for f in fields(v)`
+    /// (`comptime.template.variant.1`). The name, and what it reflects each time. E1007
+    /// otherwise.
+    fn inline_head(&mut self, node: &SyntaxNode) -> Option<(String, Vec<Reflect>)> {
         let range = node.text_range();
         let Some(t) = self.template else {
             self.report(
@@ -124,6 +183,27 @@ impl Lowerer<'_> {
             .unwrap_or_default();
         let fields_of_t = head == format!("fields({})", t.var);
         let variants_of_t = head == format!("variants({})", t.var);
+        // `fields(v)`, for a reflected variant `v`: that variant's fields.
+        let of_variant = head
+            .strip_prefix("fields(")
+            .and_then(|r| r.strip_suffix(')'))
+            .and_then(|v| {
+                self.reflected
+                    .iter()
+                    .rev()
+                    .find(|(n, _)| n == v)
+                    .and_then(|(_, r)| match r {
+                        Reflect::Variant(k) => Some(*k),
+                        Reflect::Field(_) => None,
+                    })
+            });
+        if let (Some(n), Some(v), Some(adt)) = (&name, of_variant, self.template_enum()) {
+            let count = self.items.variant(adt, v).fields.len() as u32;
+            let each = (0..count)
+                .map(|k| Reflect::Field(FieldRef { variant: v, k }))
+                .collect();
+            return Some((n.clone(), each));
+        }
         match name {
             Some(n) if fields_of_t => {
                 let Some(count) = self.field_count() else {
@@ -141,7 +221,10 @@ impl Lowerer<'_> {
                     self.report(Code::E1007, range, why);
                     return None;
                 };
-                Some((n, count, false))
+                let each = (0..count)
+                    .map(|k| Reflect::Field(FieldRef { variant: 0, k }))
+                    .collect();
+                Some((n, each))
             }
             Some(n) if variants_of_t => {
                 let Some(adt) = self.template_enum() else {
@@ -153,7 +236,7 @@ impl Lowerer<'_> {
                     return None;
                 };
                 let count = self.items.adts[adt as usize].variants.len() as u32;
-                Some((n, count, true))
+                Some((n, (0..count).map(Reflect::Variant).collect()))
             }
             _ => {
                 self.report(
@@ -174,15 +257,15 @@ impl Lowerer<'_> {
     /// of those blocks.
     pub(super) fn inline_for(&mut self, node: &SyntaxNode) -> ExprId {
         let range = node.text_range();
-        let Some((name, count, variants)) = self.inline_head(node) else {
+        let Some((name, each)) = self.inline_head(node) else {
             return self.missing(range);
         };
         let Some(block) = node.child(K::BLOCK).and_then(ast::Block::cast) else {
             return self.missing(range);
         };
         let mut stmts = Vec::new();
-        for k in 0..count {
-            self.reflected.push((name.clone(), k, variants));
+        for r in each {
+            self.reflected.push((name.clone(), r));
             let expr = self.block(&block);
             self.reflected.pop();
             stmts.push(Stmt::Expr {
@@ -257,19 +340,20 @@ impl Lowerer<'_> {
                     }
                 }
                 K::INLINE_FOR_FIELDS => {
-                    let Some((name, count, variants)) = self.inline_head(&init) else {
+                    let Some((name, each)) = self.inline_head(&init) else {
                         continue;
                     };
-                    if variants {
+                    if each.iter().any(|r| matches!(r, Reflect::Variant(_))) {
                         self.report(
                             Code::E1007,
                             init_range,
-                            "a struct literal's `inline for` unrolls over `fields(t)`",
+                            "a struct literal's `inline for` unrolls over fields: `fields(t)`, \
+                             or `fields(v)` for a variant `v`",
                         );
                         continue;
                     }
-                    for k in 0..count {
-                        self.reflected.push((name.clone(), k, false));
+                    for r in each {
+                        self.reflected.push((name.clone(), r));
                         let inner = self.struct_inits(&init);
                         self.reflected.pop();
                         out.extend(inner);
@@ -296,6 +380,10 @@ impl Lowerer<'_> {
             None => self.missing(range),
         };
         match exprs.get(1).and_then(|f| self.reflected(f.syntax())) {
+            // A variant's field: `x` is a borrow of an enum value, and the field is reached
+            // through a match (`comptime.template.variant.1`). If `x` is another variant, it
+            // traps.
+            Some(f) if self.template_enum().is_some() => self.variant_field(base, f, range),
             Some(k) => {
                 let (name, _) = self.field_of(k);
                 self.alloc(
@@ -318,8 +406,81 @@ impl Lowerer<'_> {
         }
     }
 
+    /// Field `f` of `base`, a borrow of a value of the template's enum that is `f`'s variant:
+    /// `*match base { V { k: x, .. } => x, _ => { assert(false); loop {} } }`, a place of the
+    /// field's type.
+    fn variant_field(&mut self, base: ExprId, f: FieldRef, range: TextRange) -> ExprId {
+        let Some(adt) = self.template_enum() else {
+            return self.missing(range);
+        };
+        let local = self.out.body.locals.alloc(Local {
+            name: "{field}".to_string(),
+            mutable: false,
+            range,
+            closure: self.closure,
+        });
+        let bind = self.alloc_pat(PatKind::Bind { local, sub: None }, range);
+        let pat = self.alloc_pat(
+            PatKind::Adt {
+                adt,
+                variant: f.variant,
+                fields: vec![(f.k, bind)],
+            },
+            range,
+        );
+        let wild = self.alloc_pat(PatKind::Wild, range);
+        let value = self.alloc(ExprKind::Local(local), range);
+        let no = self.alloc(ExprKind::Bool(false), range);
+        let assert = self.alloc(ExprKind::Assert(no), range);
+        let empty = self.alloc(
+            ExprKind::Block {
+                stmts: Vec::new(),
+                tail: None,
+                observe_tail: false,
+            },
+            range,
+        );
+        let never = self.alloc(ExprKind::Loop { body: empty }, range);
+        let trap = self.alloc(
+            ExprKind::Block {
+                stmts: vec![Stmt::Expr {
+                    expr: assert,
+                    semi: true,
+                    observe: false,
+                }],
+                tail: Some(never),
+                observe_tail: false,
+            },
+            range,
+        );
+        let projected = self.alloc(
+            ExprKind::Match {
+                scrutinee: base,
+                arms: vec![
+                    Arm {
+                        pat,
+                        guard: None,
+                        body: value,
+                    },
+                    Arm {
+                        pat: wild,
+                        guard: None,
+                        body: trap,
+                    },
+                ],
+            },
+            range,
+        );
+        self.alloc(ExprKind::Deref(projected), range)
+    }
+
     /// `f.name` of reflected field `k`: its name, as text.
-    pub(super) fn reflected_member(&mut self, k: u32, member: &str, range: TextRange) -> ExprId {
+    pub(super) fn reflected_member(
+        &mut self,
+        k: FieldRef,
+        member: &str,
+        range: TextRange,
+    ) -> ExprId {
         if member == "name" {
             let (name, _) = self.field_of(k);
             return self.alloc(ExprKind::Str(name), range);
@@ -340,10 +501,16 @@ impl Lowerer<'_> {
             let name = self.items.variant(adt, k).name.clone();
             return self.alloc(ExprKind::Str(name), range);
         }
+        // `v.index`: the variant's place in the enum's order, from 0, as an `int`.
+        if member == "index" {
+            return self.alloc(ExprKind::Int(i128::from(k).into()), range);
+        }
         self.report(
             Code::E1007,
             range,
-            format!("a reflected variant has `name`, `is(x)` and `make()`, not `{member}`"),
+            format!(
+                "a reflected variant has `name`, `index`, `is(x)` and `make()`, not `{member}`"
+            ),
         );
         self.missing(range)
     }
@@ -365,6 +532,15 @@ impl Lowerer<'_> {
             _ => Vec::new(),
         };
         match (method, args) {
+            ("make", []) if !self.items.variant(adt, k).fields.is_empty() => {
+                self.report(
+                    Code::E1007,
+                    range,
+                    "`v.make()` makes a unit variant; this one has fields, so it is written \
+                     `v { inline for f in fields(v) { [f]: e, } }`",
+                );
+                self.missing(range)
+            }
             ("make", []) => self.alloc(
                 ExprKind::Adt {
                     adt,
@@ -377,26 +553,26 @@ impl Lowerer<'_> {
             ("is", [x]) => {
                 let scrutinee = self.expr(x);
                 let pat = self.alloc_pat(
-                    crate::hir::PatKind::Adt {
+                    PatKind::Adt {
                         adt,
                         variant: k,
                         fields: Vec::new(),
                     },
                     range,
                 );
-                let wild = self.alloc_pat(crate::hir::PatKind::Wild, range);
+                let wild = self.alloc_pat(PatKind::Wild, range);
                 let yes = self.alloc(ExprKind::Bool(true), range);
                 let no = self.alloc(ExprKind::Bool(false), range);
                 self.alloc(
                     ExprKind::Match {
                         scrutinee,
                         arms: vec![
-                            crate::hir::Arm {
+                            Arm {
                                 pat,
                                 guard: None,
                                 body: yes,
                             },
-                            crate::hir::Arm {
+                            Arm {
                                 pat: wild,
                                 guard: None,
                                 body: no,
@@ -420,7 +596,7 @@ impl Lowerer<'_> {
     /// `f.is_refined()` and `f.new(e)` of reflected field `k`.
     pub(super) fn reflected_call(
         &mut self,
-        k: u32,
+        k: FieldRef,
         method: &str,
         args: &[ast::Expr],
         range: TextRange,
@@ -513,13 +689,28 @@ impl Lowerer<'_> {
             ast::Expr::MethodCall(_) => {
                 let method = ast::member_name(node)?.text().to_string();
                 let receiver = subs.first()?;
-                // `t.is_enum()`: whether the template is instantiated for an enum.
-                let names_t = self.template.is_some_and(|t| {
-                    receiver.syntax().kind() == K::PATH_EXPR
-                        && receiver.syntax().text().trim() == t.var
-                });
-                if names_t {
-                    (method == "is_enum").then_some(self.template_enum().is_some())
+                // `t.is_enum()`: whether the template is instantiated for an enum; and the
+                // shape of a struct `t` or a variant `v` (`comptime.template.variant.1`).
+                let shape = |this: &Self, adt: u32, variant: u32| {
+                    let def = this.items.variant(adt, variant);
+                    match method.as_str() {
+                        "is_unit" => Some(def.fields.is_empty()),
+                        "is_positional" => {
+                            Some(!def.fields.is_empty() && def.shape != crate::items::Shape::Named)
+                        }
+                        _ => None,
+                    }
+                };
+                if self.names_template(receiver.syntax()) {
+                    match method.as_str() {
+                        "is_enum" => Some(self.template_enum().is_some()),
+                        _ => match self.template.and_then(|t| t.adt) {
+                            Some(adt) if self.template_enum().is_none() => shape(self, adt, 0),
+                            _ => None,
+                        },
+                    }
+                } else if let Some(v) = self.reflected_variant(receiver.syntax()) {
+                    shape(self, self.template_enum()?, v)
                 } else {
                     let k = self.reflected(receiver.syntax())?;
                     let (_, ty) = self.field_of(k);
@@ -533,7 +724,8 @@ impl Lowerer<'_> {
                 Code::E1007,
                 node.text_range(),
                 "`if const` decides by reflection: `f.is_refined()`, `f.name == \"…\"`, \
-                 `t.is_enum()`, `true` and `false`, with `!`, `&&` and `||`",
+                 `t.is_enum()`, `is_unit()` and `is_positional()` of `t` or a variant `v`, \
+                 `true` and `false`, with `!`, `&&` and `||`",
             );
         }
         value

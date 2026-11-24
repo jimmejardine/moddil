@@ -89,25 +89,43 @@ impl Machine<'_> {
                 let (p, indirect) = self.place_of(e)?.expect("an element is a place");
                 Ok(self.take(&p, indirect))
             }
-            // `v.name`: a reflected variant's name (`comptime.template.variant.1`).
+            // `v.name` and `v.index`: a reflected variant's name and place in its enum
+            // (`comptime.template.variant.1`).
             ast::Expr::Field(_) if self.reflected_variant(e.sub_exprs()[0].syntax()).is_some() => {
                 let (key, i) = self
                     .reflected_variant(e.sub_exprs()[0].syntax())
                     .expect("a reflected variant");
+                if member_name(e.syntax()) == "index" {
+                    return Ok(Value::Int(i as i64));
+                }
                 Ok(Value::Str(
                     self.program.adts[&key].variants[i].name.clone().into(),
                 ))
             }
+            // `t.name`: the name of the type a template is instantiated for.
+            ast::Expr::Field(_)
+                if member_name(e.syntax()) == "name"
+                    && self.template_type(&e.sub_exprs()[0]).is_some() =>
+            {
+                let head = self
+                    .template_type(&e.sub_exprs()[0])
+                    .expect("a template's type");
+                let name = match &head {
+                    Head::Adt(k) => self.program.adts[k].name.clone(),
+                    other => format!("{other:?}"),
+                };
+                Ok(Value::Str(name.into()))
+            }
             // `f.name`: a reflected field's name (`comptime.template.field.1`).
             ast::Expr::Field(_) if self.reflected(e.sub_exprs()[0].syntax()).is_some() => {
-                let (key, i) = self
-                    .reflected(e.sub_exprs()[0].syntax())
+                let (key, v, i) = self
+                    .reflected_of(e.sub_exprs()[0].syntax())
                     .expect("a reflected field");
                 if key.is_empty() {
                     return Ok(Value::Str(i.to_string().into()));
                 }
                 Ok(Value::Str(
-                    self.program.adts[&key].variants[0].fields[i].clone().into(),
+                    self.program.adts[&key].variants[v].fields[i].clone().into(),
                 ))
             }
             ast::Expr::InlineFor(_) => self.inline_for(node),
@@ -304,6 +322,19 @@ impl Machine<'_> {
             self.struct_fields(node, &info, &mut fields)?;
             return Ok(Value::Tuple(fields));
         }
+        // `v { [f]: e, … }` for a reflected variant `v` (`comptime.template.variant.1`).
+        if let [one] = segments.as_slice()
+            && let Some((_, key, v, None)) = self.reflected.iter().rev().find(|(n, ..)| n == one)
+        {
+            let (key, info) = (key.clone(), self.program.adts[key].variants[*v].clone());
+            let mut fields = vec![Value::Unit; info.fields.len()];
+            self.struct_fields(node, &info, &mut fields)?;
+            return Ok(Value::Adt {
+                ty: key,
+                variant: info.name,
+                fields,
+            });
+        }
         let (ty, info) = self.ctor(&segments).expect("a checked struct");
         let info = info.clone();
         let mut fields = vec![Value::Unit; info.fields.len()];
@@ -399,9 +430,9 @@ impl Machine<'_> {
                     fields[i] = self.typed(v, info.types.get(i).and_then(Option::as_ref));
                 }
                 K::INLINE_FOR_FIELDS => {
-                    let (name, key, n, _) = self.inline_head(&init);
+                    let (name, key, n, of) = self.inline_head(&init);
                     for i in 0..n {
-                        self.reflected.push((name.clone(), key.clone(), i, false));
+                        self.reflected.push((name.clone(), key.clone(), i, of));
                         let r = self.struct_fields(&init, info, fields);
                         self.reflected.pop();
                         r?;
@@ -414,9 +445,10 @@ impl Machine<'_> {
     }
 
     /// `inline for f in fields(t)`'s head: the name it binds, the struct `t` names (by key),
-    /// how many fields it has, and false; or for `inline for v in variants(t)`, the enum's
-    /// variants, and true (`comptime.template.variant.1`).
-    fn inline_head(&self, node: &SyntaxNode) -> (String, String, usize, bool) {
+    /// how many fields it has, and `Some(0)`; for `inline for v in variants(t)`, the enum's
+    /// variants, and `None`; for `inline for f in fields(v)`, variant `v`'s fields, and
+    /// `Some(v)` (`comptime.template.variant.1`).
+    fn inline_head(&self, node: &SyntaxNode) -> (String, String, usize, Option<usize>) {
         let name = node
             .children()
             .find_map(ast::Pat::cast)
@@ -440,30 +472,33 @@ impl Machine<'_> {
                 unreachable!("a checked template")
             };
             let n = self.program.adts[&key].variants.len();
-            return (name, key, n, true);
+            return (name, key, n, None);
+        }
+        if let Some((_, key, v, None)) = self.reflected.iter().rev().find(|(n, ..)| *n == var) {
+            let n = self.program.adts[key].variants[*v].fields.len();
+            return (name, key.clone(), n, Some(*v));
         }
         // A tuple's elements, from `#[derive_for]` (`comptime.derive.for.1`): the key is
         // empty, and element `i` is named `i`.
         match self.memory.type_of(&var) {
             Some(Head::Adt(key)) => {
                 let n = self.program.adts[&key].variants[0].fields.len();
-                (name, key, n, false)
+                (name, key, n, Some(0))
             }
-            Some(Head::Tuple(n)) => (name, String::new(), n, false),
+            Some(Head::Tuple(n)) => (name, String::new(), n, Some(0)),
             _ => unreachable!("a checked template"),
         }
     }
 
     /// `inline for f in fields(t) { … }`: its block once for each of the struct's fields.
     fn inline_for(&mut self, node: &SyntaxNode) -> Eval {
-        let (name, key, n, variants) = self.inline_head(node);
+        let (name, key, n, of) = self.inline_head(node);
         let block = node
             .child(K::BLOCK)
             .and_then(ast::Block::cast)
             .expect("a block");
         for i in 0..n {
-            self.reflected
-                .push((name.clone(), key.clone(), i, variants));
+            self.reflected.push((name.clone(), key.clone(), i, of));
             let r = self.block(&block);
             self.reflected.pop();
             r?;

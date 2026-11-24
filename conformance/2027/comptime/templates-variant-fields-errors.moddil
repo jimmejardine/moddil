@@ -1,0 +1,20 @@
+// covers: comptime.template.variant.1
+// A variant with fields is written `v { … }`, not `v.make()`; an enum's value is one of its
+// variants, not `t { … }`.
+
+#[derive_by(fresh)]
+trait Fresh { fn fresh() -> Self; }
+
+const fn fresh(t: type) -> Impl<Fresh> {
+    impl Fresh for t {
+        fn fresh() -> Self {
+            inline for v in variants(t) {
+                return v.make();                        //~ E1007
+            }
+            t { }                                       //~ E1007
+        }
+    }
+}
+
+#[derive(Fresh)]
+enum Token { Word(String) }

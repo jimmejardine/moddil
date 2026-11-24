@@ -345,8 +345,8 @@ struct Lowerer<'a> {
     /// In a method instantiated from a derive's template: what the template's parameter is.
     template: Option<&'a crate::items::Template>,
     /// The reflected fields and variants `inline for` names in scope, innermost last: each
-    /// name, the field's or variant's index, and whether it is a variant (`variants(t)`).
-    reflected: Vec<(String, u32, bool)>,
+    /// name and what it reflects.
+    reflected: Vec<(String, templates::Reflect)>,
     /// How many `unsafe` blocks the expression being lowered is in (`expr.unsafe.1`).
     unsafe_depth: u32,
     /// While a selectable function's rest is lowered: where its receive is, and the local that

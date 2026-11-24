@@ -231,22 +231,6 @@ impl Collector<'_> {
                 return;
             }
         };
-        // An enum's variants reflect only as names and values for now: each must be a unit
-        // variant (`comptime.template.variant.1`).
-        if let Some(adt) = adt
-            && self.tree.adts[adt as usize].is_enum
-            && self.tree.adts[adt as usize]
-                .variants
-                .iter()
-                .any(|v| !v.fields.is_empty())
-        {
-            let d = Diagnostic::unsupported(
-                origin.unwrap_or_default(),
-                "deriving with a template for an enum whose variants have fields",
-            );
-            self.reporter.report(Src::Derived, origin, vec![d]);
-            return;
-        }
         let (old_module, old_first) = (self.module, self.prelude_first);
         self.module = module;
         self.prelude_first = false;

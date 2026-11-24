@@ -50,8 +50,8 @@ impl the template is, with these rules:
 
 For a generic struct, the impl bounds each of its type parameters by the trait (`impl<T: Tr> Tr for
 S<T>`), as the built-in derives do, so it applies only where every type argument implements the
-trait. An enum is reflected by its variants (**comptime.template.variant.1**); for now an enum
-with a variant that has fields, deriving with a template, is not supported yet (I0001).
+trait. An enum is reflected by its variants (**comptime.template.variant.1**). In a template, `t.name`
+is the name of the type it is instantiated for, as its declaration writes it, as text.
 
 **comptime.template.inline.1** In a template, `inline for f in fields(t) { … }` is its block once
 for each of `S`'s fields, in the order they are declared, with `f` naming that field. It is a
@@ -70,16 +70,27 @@ way, it is an error (E1007).
 **comptime.template.if.1** In a template, `if const c { a } else { b }` is `a` if `c` holds and `b`
 if not (`()` without `else`). Only the branch taken is part of the impl, so only it is checked. `c`
 is reflection: `f.is_refined()`, `f.name == "…"` or `!=`, `t.is_enum()` (whether the template is
-instantiated for an enum), `true` and `false`, joined by `!`, `&&` and `||` (E1007). Outside a
-template, `if const` is not supported yet (I0001).
+instantiated for an enum), `t.is_unit()` and `t.is_positional()` (whether a struct `t` has no
+fields, or positional ones), the same of a variant `v`, `true` and `false`, joined by `!`, `&&` and
+`||` (E1007). Outside a template, `if const` is not supported yet (I0001).
 
 **comptime.template.variant.1** In a template instantiated for an enum, `inline for v in
 variants(t) { … }` is its block once for each of the enum's variants, in the order they are
 declared, with `v` naming that variant. It is a statement. `v` is a reflected variant, used only
-these ways (E1007): `v.name` is the variant's name, as text; `v.is(x)`, for `x` a `t` or a borrow
-of one, says whether `x` is that variant; and `v.make()` is that variant's value. An enum has no
-`fields(t)`, and a struct, a tuple or a built-in type no `variants(t)` (E1007). For now every
-variant of the enum is a unit variant (**comptime.template.1**).
+these ways (E1007):
+
+- `v.name` is the variant's name, as text, and `v.index` its place in that order, from 0, as an
+  `int`;
+- `v.is(x)`, for `x` a `t` or a borrow of one, says whether `x` is that variant;
+- `inline for f in fields(v) { … }` is its block once for each of the variant's fields (named
+  `0`, `1`, … if they are positional), with `f` a reflected field (**comptime.template.field.1**);
+- `x.[f]`, for such an `f` and `x` a borrow of a `t`, is that field of the value `x` points to,
+  if it is variant `v`, and traps if it is another variant;
+- `v { inline for f in fields(v) { [f]: e, } }` is that variant's value, whatever its shape, and
+  `v.make()` the value of a unit variant (a variant with fields is E1007).
+
+An enum has no `fields(t)`, and `t { … }` is not one of its values; a struct, a tuple or a
+built-in type has no `variants(t)` (E1007).
 
 **comptime.derive.for.1** `#[derive_for(T1, T2, …)]` before a derive function instantiates its
 template once for each built-in type listed: an impl of the trait its `Impl<Tr>` names, for each

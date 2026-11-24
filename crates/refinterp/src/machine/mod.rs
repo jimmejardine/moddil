@@ -54,8 +54,9 @@ struct Machine<'p> {
     nodes: HashMap<crate::value::NodeRef, SyntaxNode>,
     /// The fields and variants `inline for` names (`comptime.template.inline.1`,
     /// `comptime.template.variant.1`), innermost last: each name, the type's key, the field's or
-    /// variant's index, and whether it is a variant.
-    reflected: Vec<(String, String, usize, bool)>,
+    /// variant's index, and for a field the variant it is of (0 for a struct), `None` for a
+    /// variant.
+    reflected: Vec<(String, String, usize, Option<usize>)>,
     /// While a `#[selectable]` function runs for a `select` (`task.select.4`): its receive, by
     /// range, and what was received in its place.
     received: Option<(TextRange, Value)>,
@@ -163,7 +164,24 @@ impl Machine<'_> {
             .iter()
             .rev()
             .find(|(n, ..)| n == name)
-            .and_then(|(_, k, i, variant)| (!variant).then(|| (k.clone(), *i)))
+            .and_then(|(_, k, i, of)| of.map(|_| (k.clone(), *i)))
+    }
+
+    /// The field a reflected name `node` stands for, with the variant it is of: the type's key,
+    /// the variant's index (0 for a struct) and the field's.
+    fn reflected_of(&self, node: &SyntaxNode) -> Option<(String, usize, usize)> {
+        if node.kind() != K::PATH_EXPR {
+            return None;
+        }
+        let segs = segments(node);
+        let [name] = segs.as_slice() else {
+            return None;
+        };
+        self.reflected
+            .iter()
+            .rev()
+            .find(|(n, ..)| n == name)
+            .and_then(|(_, k, i, of)| of.map(|v| (k.clone(), v, *i)))
     }
 
     /// The variant a reflected name `node` stands for (`comptime.template.variant.1`): the
@@ -180,7 +198,24 @@ impl Machine<'_> {
             .iter()
             .rev()
             .find(|(n, ..)| n == name)
-            .and_then(|(_, k, i, variant)| variant.then(|| (k.clone(), *i)))
+            .and_then(|(_, k, i, of)| of.is_none().then(|| (k.clone(), *i)))
+    }
+
+    /// For `e` the parameter of the template running (`t`): the type it names. A local of the
+    /// same name is not it.
+    pub(super) fn template_type(&self, e: &ast::Expr) -> Option<Head> {
+        let node = e.syntax();
+        if node.kind() != K::PATH_EXPR {
+            return None;
+        }
+        let segs = segments(node);
+        let [one] = segs.as_slice() else {
+            return None;
+        };
+        if self.memory.slot(one).is_some() {
+            return None;
+        }
+        self.memory.type_of(one)
     }
 
     /// The refinement field `i` of struct `key` is of, by its key, if it is one.
@@ -266,11 +301,26 @@ impl Machine<'_> {
                     indirect = true;
                 }
                 let i = match e {
-                    // `x.[f]`: the field `f` names (`comptime.template.field.1`).
+                    // `x.[f]`: the field `f` names (`comptime.template.field.1`). Of an enum's
+                    // variant, `x` must be that variant (`comptime.template.variant.1`).
                     ast::Expr::ReflectedField(_) => {
-                        self.reflected(e.sub_exprs()[1].syntax())
-                            .expect("a checked reflected field")
-                            .1
+                        let (key, v, i) = self
+                            .reflected_of(e.sub_exprs()[1].syntax())
+                            .expect("a checked reflected field");
+                        if self.program.adts.get(&key).is_some_and(|a| a.is_enum) {
+                            let want = &self.program.adts[&key].variants[v].name;
+                            let is = matches!(
+                                self.memory.load(&p),
+                                Value::Adt { ref variant, .. } if variant == want
+                            );
+                            if !is {
+                                return Err(crate::trap(
+                                    crate::TrapClass::Assertion,
+                                    e.syntax().text_range(),
+                                ));
+                            }
+                        }
+                        i
                     }
                     _ => self.field_index(&self.memory.load(&p), &member_name(e.syntax())),
                 };
