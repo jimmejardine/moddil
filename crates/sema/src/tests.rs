@@ -769,3 +769,29 @@ fn wrappers_not_supported_yet() {
         &[("I0001", 2)],
     );
 }
+
+/// The prelude is every file of `reference/2027/prelude/`, each once: one added there is not
+/// left out of the list in `collect`.
+#[test]
+fn the_prelude_is_every_file_of_its_directory() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../reference/2027/prelude");
+    let prelude = &collect::PRELUDE[..collect::CORE_START];
+    let mut total = 0;
+    for entry in std::fs::read_dir(&dir).expect("the prelude's directory") {
+        let path = entry.expect("an entry").path();
+        if path.extension().is_some_and(|e| e == "moddil") {
+            let text = std::fs::read_to_string(&path).expect("a prelude file");
+            assert!(
+                prelude.contains(&text),
+                "{} is not in the prelude",
+                path.display()
+            );
+            total += text.len();
+        }
+    }
+    assert_eq!(
+        total,
+        prelude.len(),
+        "the prelude is not its directory's files, each once"
+    );
+}

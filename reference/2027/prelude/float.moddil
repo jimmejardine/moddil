@@ -1,0 +1,198 @@
+// The float functions (`num.float.fn.1`): the same bits on every machine.
+impl f32 {
+    #[intrinsic]
+    fn sqrt(self) -> f32;
+    #[intrinsic]
+    fn sin(self) -> f32;
+    #[intrinsic]
+    fn cos(self) -> f32;
+    #[intrinsic]
+    fn tan(self) -> f32;
+    #[intrinsic]
+    fn asin(self) -> f32;
+    #[intrinsic]
+    fn acos(self) -> f32;
+    #[intrinsic]
+    fn atan(self) -> f32;
+    #[intrinsic]
+    fn exp(self) -> f32;
+    #[intrinsic]
+    fn ln(self) -> f32;
+    #[intrinsic]
+    fn log2(self) -> f32;
+    #[intrinsic]
+    fn log10(self) -> f32;
+    #[intrinsic]
+    fn abs(self) -> f32;
+    #[intrinsic]
+    fn floor(self) -> f32;
+    #[intrinsic]
+    fn ceil(self) -> f32;
+    #[intrinsic]
+    fn trunc(self) -> f32;
+    #[intrinsic]
+    fn atan2(self, x: f32) -> f32;
+    #[intrinsic]
+    fn powf(self, n: f32) -> f32;
+    #[intrinsic]
+    fn min(self, other: f32) -> f32;
+    #[intrinsic]
+    fn max(self, other: f32) -> f32;
+    #[intrinsic]
+    fn is_nan(self) -> bool;
+    #[intrinsic]
+    fn is_finite(self) -> bool;
+
+    // `self` raised to the whole number `n`.
+    fn powi(self, n: int) -> f32 {
+        let mut r: f32 = 1.0;
+        let mut k = if n < 0 { -n } else { n };
+        while k > 0 {
+            r = r * self;
+            k -= 1;
+        }
+        if n < 0 { 1.0 / r } else { r }
+    }
+
+    // The part after the point: `self - self.trunc()`.
+    fn fract(self) -> f32 {
+        self - self.trunc()
+    }
+
+    // The whole number `mode` rounds `self` to, as a `T`; NaN, an infinity, or a value
+    // outside `T`'s range fails with `RangeError` (`num.round.1`).
+    fn round<T: Number>(self, mode: Round) -> T with fail(RangeError) {
+        let t = self.trunc();
+        let f = self - t;
+        let away = if self < 0.0 { t - 1.0 } else { t + 1.0 };
+        let r = match mode {
+            Round::Down => self.floor(),
+            Round::Up => self.ceil(),
+            Round::TowardZero => t,
+            Round::NearestAway => if f.abs() >= 0.5 { away } else { t },
+            Round::NearestEven => {
+                if f.abs() > 0.5 {
+                    away
+                } else if f.abs() < 0.5 {
+                    t
+                } else if (t / 2.0).fract() == 0.0 {
+                    t
+                } else {
+                    away
+                }
+            }
+        };
+        r.to::<T>()?
+    }
+
+    // `self`, or `lo` if it is below, or `hi` if it is above.
+    fn clamp(self, lo: f32, hi: f32) -> f32 {
+        if self < lo {
+            lo
+        } else if self > hi {
+            hi
+        } else {
+            self
+        }
+    }
+}
+
+// The float functions (`num.float.fn.1`): the same bits on every machine.
+impl f64 {
+    #[intrinsic]
+    fn sqrt(self) -> f64;
+    #[intrinsic]
+    fn sin(self) -> f64;
+    #[intrinsic]
+    fn cos(self) -> f64;
+    #[intrinsic]
+    fn tan(self) -> f64;
+    #[intrinsic]
+    fn asin(self) -> f64;
+    #[intrinsic]
+    fn acos(self) -> f64;
+    #[intrinsic]
+    fn atan(self) -> f64;
+    #[intrinsic]
+    fn exp(self) -> f64;
+    #[intrinsic]
+    fn ln(self) -> f64;
+    #[intrinsic]
+    fn log2(self) -> f64;
+    #[intrinsic]
+    fn log10(self) -> f64;
+    #[intrinsic]
+    fn abs(self) -> f64;
+    #[intrinsic]
+    fn floor(self) -> f64;
+    #[intrinsic]
+    fn ceil(self) -> f64;
+    #[intrinsic]
+    fn trunc(self) -> f64;
+    #[intrinsic]
+    fn atan2(self, x: f64) -> f64;
+    #[intrinsic]
+    fn powf(self, n: f64) -> f64;
+    #[intrinsic]
+    fn min(self, other: f64) -> f64;
+    #[intrinsic]
+    fn max(self, other: f64) -> f64;
+    #[intrinsic]
+    fn is_nan(self) -> bool;
+    #[intrinsic]
+    fn is_finite(self) -> bool;
+
+    // `self` raised to the whole number `n`.
+    fn powi(self, n: int) -> f64 {
+        let mut r: f64 = 1.0;
+        let mut k = if n < 0 { -n } else { n };
+        while k > 0 {
+            r = r * self;
+            k -= 1;
+        }
+        if n < 0 { 1.0 / r } else { r }
+    }
+
+    // The part after the point: `self - self.trunc()`.
+    fn fract(self) -> f64 {
+        self - self.trunc()
+    }
+
+    // The whole number `mode` rounds `self` to, as a `T`; NaN, an infinity, or a value
+    // outside `T`'s range fails with `RangeError` (`num.round.1`).
+    fn round<T: Number>(self, mode: Round) -> T with fail(RangeError) {
+        let t = self.trunc();
+        let f = self - t;
+        let away = if self < 0.0 { t - 1.0 } else { t + 1.0 };
+        let r = match mode {
+            Round::Down => self.floor(),
+            Round::Up => self.ceil(),
+            Round::TowardZero => t,
+            Round::NearestAway => if f.abs() >= 0.5 { away } else { t },
+            Round::NearestEven => {
+                if f.abs() > 0.5 {
+                    away
+                } else if f.abs() < 0.5 {
+                    t
+                } else if (t / 2.0).fract() == 0.0 {
+                    t
+                } else {
+                    away
+                }
+            }
+        };
+        r.to::<T>()?
+    }
+
+    // `self`, or `lo` if it is below, or `hi` if it is above.
+    fn clamp(self, lo: f64, hi: f64) -> f64 {
+        if self < lo {
+            lo
+        } else if self > hi {
+            hi
+        } else {
+            self
+        }
+    }
+}
+

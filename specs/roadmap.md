@@ -95,7 +95,7 @@ something runs from the first slice.
   supertraits and associated types; inherent and trait impls, with one impl per trait and type;
   method calls; operators through the prelude's traits; `#[derive(Copy, Clone, PartialEq, Eq,
   PartialOrd, Ord)]`; destructors (`impl Drop`); and the prelude, written in Moddil
-  ([`reference/2027/prelude.moddil`](../reference/2027/prelude.moddil)). Specialisation, `dyn`,
+  ([`reference/2027/prelude/`](../reference/2027/prelude/)). Specialisation, `dyn`,
   GATs, const generics, default type parameters, `impl Trait`, inferred generic signatures and
   trait aliases come later.
 - **S3's interim rules**, until the features they wait for arrive:

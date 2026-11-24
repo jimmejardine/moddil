@@ -9,7 +9,7 @@ use crate::{Diagnostic, Ty};
 /// Where an item's source is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Src {
-    /// The prelude (`reference/2027/prelude.moddil`).
+    /// The prelude (`reference/2027/prelude/`).
     Prelude,
     /// A file of the program, by its index.
     File(u32),

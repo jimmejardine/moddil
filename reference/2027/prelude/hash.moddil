@@ -1,0 +1,138 @@
+// Hashing (`coll.hash.1`): a type says what it hashes, a `Hasher` how.
+trait Hasher {
+    fn write_int(&mut self, x: int);
+    fn finish(&self) -> int;
+}
+
+trait Hash {
+    fn hash<H: Hasher>(&self, state: &mut H);
+}
+
+impl Hash for int {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(*self);
+    }
+}
+
+// The sized integers hash their value (`coll.hash.1`): the 128-bit ones as two `int`s.
+impl Hash for i8 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.wrap::<int>());
+    }
+}
+
+impl Hash for i16 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.wrap::<int>());
+    }
+}
+
+impl Hash for i32 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.wrap::<int>());
+    }
+}
+
+impl Hash for u8 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.wrap::<int>());
+    }
+}
+
+impl Hash for u16 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.wrap::<int>());
+    }
+}
+
+impl Hash for u32 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.wrap::<int>());
+    }
+}
+
+impl Hash for u64 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.wrap::<int>());
+    }
+}
+
+impl Hash for i128 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.truncate::<int>());
+        state.write_int((*self >> 64).truncate::<int>());
+    }
+}
+
+impl Hash for u128 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.truncate::<int>());
+        state.write_int((*self >> 64).truncate::<int>());
+    }
+}
+
+impl Hash for bool {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        if *self {
+            state.write_int(1);
+        } else {
+            state.write_int(0);
+        }
+    }
+}
+
+impl Hash for char {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.code());
+    }
+}
+
+impl Hash for str {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for c in self.chars() {
+            state.write_int(c.code());
+        }
+        state.write_int(self.len());
+    }
+}
+
+impl Hash for String {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state);
+    }
+}
+
+impl<T: Hash> Hash for [T] {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_int(self.len());
+        for x in self {
+            x.hash(state);
+        }
+    }
+}
+
+impl<T: Hash> Hash for Vec<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_slice().hash(state);
+    }
+}
+
+impl<T: Hash> Hash for Option<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            None => state.write_int(0),
+            Some(x) => {
+                state.write_int(1);
+                x.hash(state);
+            }
+        }
+    }
+}
+
+impl<A: Hash, B: Hash> Hash for (A, B) {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+        self.1.hash(state);
+    }
+}
+

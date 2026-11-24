@@ -7,7 +7,7 @@
 //! compiler rejects has no meaning to run, so it does not repeat the checks and may panic on one.
 //!
 //! Slices S0 to S7a. A borrow is a pointer to a variable of some call and a path of fields in it.
-//! The prelude (`reference/2027/prelude.moddil`) is read with the program. Values carry enough
+//! The prelude (`reference/2027/prelude/`) is read with the program. Values carry enough
 //! of their type to choose a method: a trait's method is found from the type of the value it is
 //! called on, and a type parameter (for `T::f()`) is known from the values of the arguments
 //! given for it, or from type arguments written at the call. Moving a value out of a variable
@@ -27,8 +27,27 @@ mod value;
 use program::Program;
 use value::Value;
 
-/// The prelude's source.
-pub(crate) const PRELUDE: &str = include_str!("../../../reference/2027/prelude.moddil");
+/// The prelude's source: the files of `reference/2027/prelude/`, joined in this order (the
+/// compiler's order, in `moddil-sema`).
+pub(crate) const PRELUDE: &str = concat!(
+    include_str!("../../../reference/2027/prelude/core.moddil"),
+    include_str!("../../../reference/2027/prelude/int.moddil"),
+    include_str!("../../../reference/2027/prelude/numbers.moddil"),
+    include_str!("../../../reference/2027/prelude/convert.moddil"),
+    include_str!("../../../reference/2027/prelude/float.moddil"),
+    include_str!("../../../reference/2027/prelude/int-2.moddil"),
+    include_str!("../../../reference/2027/prelude/text.moddil"),
+    include_str!("../../../reference/2027/prelude/arrays.moddil"),
+    include_str!("../../../reference/2027/prelude/program.moddil"),
+    include_str!("../../../reference/2027/prelude/iter.moddil"),
+    include_str!("../../../reference/2027/prelude/pointers.moddil"),
+    include_str!("../../../reference/2027/prelude/collections.moddil"),
+    include_str!("../../../reference/2027/prelude/hash.moddil"),
+    include_str!("../../../reference/2027/prelude/text-2.moddil"),
+    include_str!("../../../reference/2027/prelude/fmt.moddil"),
+    include_str!("../../../reference/2027/prelude/program-2.moddil"),
+    include_str!("../../../reference/2027/prelude/concurrency.moddil"),
+);
 
 /// The built-in `core` mod's modules, which every mod depends on as `core`: each one's name and
 /// source.

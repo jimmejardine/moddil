@@ -1,7 +1,7 @@
 # Iteration and collections
 
 The prelude's `Iterator`, `IntoIterator`, `Buf` and `Vec`, and the built-in `core` mod's maps and
-sets. They are written in Moddil ([`prelude.moddil`](prelude.moddil),
+sets. They are written in Moddil ([`prelude/collections.moddil`](prelude/collections.moddil),
 [`core/collections.moddil`](core/collections.moddil)), but for the methods of `Buf`, which are
 built in.
 

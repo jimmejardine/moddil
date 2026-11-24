@@ -1,0 +1,584 @@
+// What a number converts to (`num.convert.1`): `int`, the sized integers and the floats.
+trait Number: Copy {}
+
+// How a float rounds to an integer (`num.round.1`): to the nearest, ties to the even one or
+// away from zero; or down, up, or toward zero.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Round {
+    NearestEven,
+    NearestAway,
+    Down,
+    Up,
+    TowardZero,
+}
+
+impl Number for int {}
+
+// A conversion that does not fit (`num.convert.1`).
+#[derive(Debug, Clone, PartialEq)]
+struct RangeError;
+
+impl Display for RangeError {
+    fn fmt(&self, out: &mut String) {
+        out.push_str("out of range");
+    }
+}
+
+impl int {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
+    // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
+    // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
+    #[intrinsic]
+    fn checked_to<T: Number>(self) -> Option<T>;
+
+    // The value as a `T`, failing with `RangeError` if it is not one exactly.
+    fn to<T: Number>(self) -> T with fail(RangeError) {
+        match self.checked_to::<T>() {
+            Some(v) => v,
+            None => fail(RangeError),
+        }
+    }
+
+    // The low bits of the value, as a `T` (an integer type).
+    #[intrinsic]
+    fn truncate<T: Number>(self) -> T;
+    // The value's bits read as a `T` of the same width, two's complement.
+    #[intrinsic]
+    fn wrap<T: Number>(self) -> T;
+    // The value, or the end of `T`'s range it is past.
+    #[intrinsic]
+    fn saturate<T: Number>(self) -> T;
+
+    // `self + other`, or `None` if that is not an `int` (`num.ops.1`).
+    fn checked_add(self, other: int) -> Option<int> {
+        let r = self +% other;
+        // It wrapped if the sum moved against `other`'s sign.
+        if (other >= 0) == (r >= self) { Some(r) } else { None }
+    }
+
+    // `self - other`, or `None` if that is not an `int`.
+    fn checked_sub(self, other: int) -> Option<int> {
+        let r = self -% other;
+        if (other >= 0) == (r <= self) { Some(r) } else { None }
+    }
+
+    // `self * other`, or `None` if that is not an `int`.
+    fn checked_mul(self, other: int) -> Option<int> {
+        let r = self *% other;
+        if self == 0 {
+            return Some(0);
+        }
+        if self == -1 {
+            // Only the least value is its own negation (besides 0), and it has no positive.
+            return if other != 0 && other == other *% -1 { None } else { Some(r) };
+        }
+        // Dividing back gives `other` exactly if nothing wrapped.
+        if r / self == other { Some(r) } else { None }
+    }
+}
+
+impl i8 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
+    // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
+    // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
+    #[intrinsic]
+    fn checked_to<T: Number>(self) -> Option<T>;
+
+    // The value as a `T`, failing with `RangeError` if it is not one exactly.
+    fn to<T: Number>(self) -> T with fail(RangeError) {
+        match self.checked_to::<T>() {
+            Some(v) => v,
+            None => fail(RangeError),
+        }
+    }
+
+    // The low bits of the value, as a `T` (an integer type).
+    #[intrinsic]
+    fn truncate<T: Number>(self) -> T;
+    // The value's bits read as a `T` of the same width, two's complement.
+    #[intrinsic]
+    fn wrap<T: Number>(self) -> T;
+    // The value, or the end of `T`'s range it is past.
+    #[intrinsic]
+    fn saturate<T: Number>(self) -> T;
+
+    // `self + other`, or `None` if that is not an `i8` (`num.ops.1`).
+    fn checked_add(self, other: i8) -> Option<i8> {
+        let r = self +% other;
+        // It wrapped if the sum moved against `other`'s sign.
+        if (other >= 0) == (r >= self) { Some(r) } else { None }
+    }
+
+    // `self - other`, or `None` if that is not an `i8`.
+    fn checked_sub(self, other: i8) -> Option<i8> {
+        let r = self -% other;
+        if (other >= 0) == (r <= self) { Some(r) } else { None }
+    }
+
+    // `self * other`, or `None` if that is not an `i8`.
+    fn checked_mul(self, other: i8) -> Option<i8> {
+        let r = self *% other;
+        if self == 0 {
+            return Some(0);
+        }
+        if self == -1 {
+            // Only the least value is its own negation (besides 0), and it has no positive.
+            return if other != 0 && other == other *% -1 { None } else { Some(r) };
+        }
+        // Dividing back gives `other` exactly if nothing wrapped.
+        if r / self == other { Some(r) } else { None }
+    }
+}
+
+impl i16 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
+    // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
+    // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
+    #[intrinsic]
+    fn checked_to<T: Number>(self) -> Option<T>;
+
+    // The value as a `T`, failing with `RangeError` if it is not one exactly.
+    fn to<T: Number>(self) -> T with fail(RangeError) {
+        match self.checked_to::<T>() {
+            Some(v) => v,
+            None => fail(RangeError),
+        }
+    }
+
+    // The low bits of the value, as a `T` (an integer type).
+    #[intrinsic]
+    fn truncate<T: Number>(self) -> T;
+    // The value's bits read as a `T` of the same width, two's complement.
+    #[intrinsic]
+    fn wrap<T: Number>(self) -> T;
+    // The value, or the end of `T`'s range it is past.
+    #[intrinsic]
+    fn saturate<T: Number>(self) -> T;
+
+    // `self + other`, or `None` if that is not an `i16` (`num.ops.1`).
+    fn checked_add(self, other: i16) -> Option<i16> {
+        let r = self +% other;
+        // It wrapped if the sum moved against `other`'s sign.
+        if (other >= 0) == (r >= self) { Some(r) } else { None }
+    }
+
+    // `self - other`, or `None` if that is not an `i16`.
+    fn checked_sub(self, other: i16) -> Option<i16> {
+        let r = self -% other;
+        if (other >= 0) == (r <= self) { Some(r) } else { None }
+    }
+
+    // `self * other`, or `None` if that is not an `i16`.
+    fn checked_mul(self, other: i16) -> Option<i16> {
+        let r = self *% other;
+        if self == 0 {
+            return Some(0);
+        }
+        if self == -1 {
+            // Only the least value is its own negation (besides 0), and it has no positive.
+            return if other != 0 && other == other *% -1 { None } else { Some(r) };
+        }
+        // Dividing back gives `other` exactly if nothing wrapped.
+        if r / self == other { Some(r) } else { None }
+    }
+}
+
+impl i32 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
+    // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
+    // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
+    #[intrinsic]
+    fn checked_to<T: Number>(self) -> Option<T>;
+
+    // The value as a `T`, failing with `RangeError` if it is not one exactly.
+    fn to<T: Number>(self) -> T with fail(RangeError) {
+        match self.checked_to::<T>() {
+            Some(v) => v,
+            None => fail(RangeError),
+        }
+    }
+
+    // The low bits of the value, as a `T` (an integer type).
+    #[intrinsic]
+    fn truncate<T: Number>(self) -> T;
+    // The value's bits read as a `T` of the same width, two's complement.
+    #[intrinsic]
+    fn wrap<T: Number>(self) -> T;
+    // The value, or the end of `T`'s range it is past.
+    #[intrinsic]
+    fn saturate<T: Number>(self) -> T;
+
+    // `self + other`, or `None` if that is not an `i32` (`num.ops.1`).
+    fn checked_add(self, other: i32) -> Option<i32> {
+        let r = self +% other;
+        // It wrapped if the sum moved against `other`'s sign.
+        if (other >= 0) == (r >= self) { Some(r) } else { None }
+    }
+
+    // `self - other`, or `None` if that is not an `i32`.
+    fn checked_sub(self, other: i32) -> Option<i32> {
+        let r = self -% other;
+        if (other >= 0) == (r <= self) { Some(r) } else { None }
+    }
+
+    // `self * other`, or `None` if that is not an `i32`.
+    fn checked_mul(self, other: i32) -> Option<i32> {
+        let r = self *% other;
+        if self == 0 {
+            return Some(0);
+        }
+        if self == -1 {
+            // Only the least value is its own negation (besides 0), and it has no positive.
+            return if other != 0 && other == other *% -1 { None } else { Some(r) };
+        }
+        // Dividing back gives `other` exactly if nothing wrapped.
+        if r / self == other { Some(r) } else { None }
+    }
+}
+
+impl i128 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
+    // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
+    // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
+    #[intrinsic]
+    fn checked_to<T: Number>(self) -> Option<T>;
+
+    // The value as a `T`, failing with `RangeError` if it is not one exactly.
+    fn to<T: Number>(self) -> T with fail(RangeError) {
+        match self.checked_to::<T>() {
+            Some(v) => v,
+            None => fail(RangeError),
+        }
+    }
+
+    // The low bits of the value, as a `T` (an integer type).
+    #[intrinsic]
+    fn truncate<T: Number>(self) -> T;
+    // The value's bits read as a `T` of the same width, two's complement.
+    #[intrinsic]
+    fn wrap<T: Number>(self) -> T;
+    // The value, or the end of `T`'s range it is past.
+    #[intrinsic]
+    fn saturate<T: Number>(self) -> T;
+
+    // `self + other`, or `None` if that is not an `i128` (`num.ops.1`).
+    fn checked_add(self, other: i128) -> Option<i128> {
+        let r = self +% other;
+        // It wrapped if the sum moved against `other`'s sign.
+        if (other >= 0) == (r >= self) { Some(r) } else { None }
+    }
+
+    // `self - other`, or `None` if that is not an `i128`.
+    fn checked_sub(self, other: i128) -> Option<i128> {
+        let r = self -% other;
+        if (other >= 0) == (r <= self) { Some(r) } else { None }
+    }
+
+    // `self * other`, or `None` if that is not an `i128`.
+    fn checked_mul(self, other: i128) -> Option<i128> {
+        let r = self *% other;
+        if self == 0 {
+            return Some(0);
+        }
+        if self == -1 {
+            // Only the least value is its own negation (besides 0), and it has no positive.
+            return if other != 0 && other == other *% -1 { None } else { Some(r) };
+        }
+        // Dividing back gives `other` exactly if nothing wrapped.
+        if r / self == other { Some(r) } else { None }
+    }
+}
+
+impl u8 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
+    // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
+    // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
+    #[intrinsic]
+    fn checked_to<T: Number>(self) -> Option<T>;
+
+    // The value as a `T`, failing with `RangeError` if it is not one exactly.
+    fn to<T: Number>(self) -> T with fail(RangeError) {
+        match self.checked_to::<T>() {
+            Some(v) => v,
+            None => fail(RangeError),
+        }
+    }
+
+    // The low bits of the value, as a `T` (an integer type).
+    #[intrinsic]
+    fn truncate<T: Number>(self) -> T;
+    // The value's bits read as a `T` of the same width, two's complement.
+    #[intrinsic]
+    fn wrap<T: Number>(self) -> T;
+    // The value, or the end of `T`'s range it is past.
+    #[intrinsic]
+    fn saturate<T: Number>(self) -> T;
+
+    // `self + other`, or `None` if that is not an `u8` (`num.ops.1`).
+    fn checked_add(self, other: u8) -> Option<u8> {
+        let r = self +% other;
+        // It wrapped if the sum moved against `other`'s sign.
+        if (other >= 0) == (r >= self) { Some(r) } else { None }
+    }
+
+    // `self - other`, or `None` if that is not an `u8`.
+    fn checked_sub(self, other: u8) -> Option<u8> {
+        let r = self -% other;
+        if (other >= 0) == (r <= self) { Some(r) } else { None }
+    }
+
+    // `self * other`, or `None` if that is not an `u8`.
+    fn checked_mul(self, other: u8) -> Option<u8> {
+        let r = self *% other;
+        if self == 0 || r / self == other { Some(r) } else { None }
+    }
+}
+
+impl u16 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
+    // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
+    // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
+    #[intrinsic]
+    fn checked_to<T: Number>(self) -> Option<T>;
+
+    // The value as a `T`, failing with `RangeError` if it is not one exactly.
+    fn to<T: Number>(self) -> T with fail(RangeError) {
+        match self.checked_to::<T>() {
+            Some(v) => v,
+            None => fail(RangeError),
+        }
+    }
+
+    // The low bits of the value, as a `T` (an integer type).
+    #[intrinsic]
+    fn truncate<T: Number>(self) -> T;
+    // The value's bits read as a `T` of the same width, two's complement.
+    #[intrinsic]
+    fn wrap<T: Number>(self) -> T;
+    // The value, or the end of `T`'s range it is past.
+    #[intrinsic]
+    fn saturate<T: Number>(self) -> T;
+
+    // `self + other`, or `None` if that is not an `u16` (`num.ops.1`).
+    fn checked_add(self, other: u16) -> Option<u16> {
+        let r = self +% other;
+        // It wrapped if the sum moved against `other`'s sign.
+        if (other >= 0) == (r >= self) { Some(r) } else { None }
+    }
+
+    // `self - other`, or `None` if that is not an `u16`.
+    fn checked_sub(self, other: u16) -> Option<u16> {
+        let r = self -% other;
+        if (other >= 0) == (r <= self) { Some(r) } else { None }
+    }
+
+    // `self * other`, or `None` if that is not an `u16`.
+    fn checked_mul(self, other: u16) -> Option<u16> {
+        let r = self *% other;
+        if self == 0 || r / self == other { Some(r) } else { None }
+    }
+}
+
+impl u32 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
+    // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
+    // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
+    #[intrinsic]
+    fn checked_to<T: Number>(self) -> Option<T>;
+
+    // The value as a `T`, failing with `RangeError` if it is not one exactly.
+    fn to<T: Number>(self) -> T with fail(RangeError) {
+        match self.checked_to::<T>() {
+            Some(v) => v,
+            None => fail(RangeError),
+        }
+    }
+
+    // The low bits of the value, as a `T` (an integer type).
+    #[intrinsic]
+    fn truncate<T: Number>(self) -> T;
+    // The value's bits read as a `T` of the same width, two's complement.
+    #[intrinsic]
+    fn wrap<T: Number>(self) -> T;
+    // The value, or the end of `T`'s range it is past.
+    #[intrinsic]
+    fn saturate<T: Number>(self) -> T;
+
+    // `self + other`, or `None` if that is not an `u32` (`num.ops.1`).
+    fn checked_add(self, other: u32) -> Option<u32> {
+        let r = self +% other;
+        // It wrapped if the sum moved against `other`'s sign.
+        if (other >= 0) == (r >= self) { Some(r) } else { None }
+    }
+
+    // `self - other`, or `None` if that is not an `u32`.
+    fn checked_sub(self, other: u32) -> Option<u32> {
+        let r = self -% other;
+        if (other >= 0) == (r <= self) { Some(r) } else { None }
+    }
+
+    // `self * other`, or `None` if that is not an `u32`.
+    fn checked_mul(self, other: u32) -> Option<u32> {
+        let r = self *% other;
+        if self == 0 || r / self == other { Some(r) } else { None }
+    }
+}
+
+impl u64 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
+    // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
+    // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
+    #[intrinsic]
+    fn checked_to<T: Number>(self) -> Option<T>;
+
+    // The value as a `T`, failing with `RangeError` if it is not one exactly.
+    fn to<T: Number>(self) -> T with fail(RangeError) {
+        match self.checked_to::<T>() {
+            Some(v) => v,
+            None => fail(RangeError),
+        }
+    }
+
+    // The low bits of the value, as a `T` (an integer type).
+    #[intrinsic]
+    fn truncate<T: Number>(self) -> T;
+    // The value's bits read as a `T` of the same width, two's complement.
+    #[intrinsic]
+    fn wrap<T: Number>(self) -> T;
+    // The value, or the end of `T`'s range it is past.
+    #[intrinsic]
+    fn saturate<T: Number>(self) -> T;
+
+    // `self + other`, or `None` if that is not an `u64` (`num.ops.1`).
+    fn checked_add(self, other: u64) -> Option<u64> {
+        let r = self +% other;
+        // It wrapped if the sum moved against `other`'s sign.
+        if (other >= 0) == (r >= self) { Some(r) } else { None }
+    }
+
+    // `self - other`, or `None` if that is not an `u64`.
+    fn checked_sub(self, other: u64) -> Option<u64> {
+        let r = self -% other;
+        if (other >= 0) == (r <= self) { Some(r) } else { None }
+    }
+
+    // `self * other`, or `None` if that is not an `u64`.
+    fn checked_mul(self, other: u64) -> Option<u64> {
+        let r = self *% other;
+        if self == 0 || r / self == other { Some(r) } else { None }
+    }
+}
+
+impl u128 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
+    // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
+    // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
+    #[intrinsic]
+    fn checked_to<T: Number>(self) -> Option<T>;
+
+    // The value as a `T`, failing with `RangeError` if it is not one exactly.
+    fn to<T: Number>(self) -> T with fail(RangeError) {
+        match self.checked_to::<T>() {
+            Some(v) => v,
+            None => fail(RangeError),
+        }
+    }
+
+    // The low bits of the value, as a `T` (an integer type).
+    #[intrinsic]
+    fn truncate<T: Number>(self) -> T;
+    // The value's bits read as a `T` of the same width, two's complement.
+    #[intrinsic]
+    fn wrap<T: Number>(self) -> T;
+    // The value, or the end of `T`'s range it is past.
+    #[intrinsic]
+    fn saturate<T: Number>(self) -> T;
+
+    // `self + other`, or `None` if that is not an `u128` (`num.ops.1`).
+    fn checked_add(self, other: u128) -> Option<u128> {
+        let r = self +% other;
+        // It wrapped if the sum moved against `other`'s sign.
+        if (other >= 0) == (r >= self) { Some(r) } else { None }
+    }
+
+    // `self - other`, or `None` if that is not an `u128`.
+    fn checked_sub(self, other: u128) -> Option<u128> {
+        let r = self -% other;
+        if (other >= 0) == (r <= self) { Some(r) } else { None }
+    }
+
+    // `self * other`, or `None` if that is not an `u128`.
+    fn checked_mul(self, other: u128) -> Option<u128> {
+        let r = self *% other;
+        if self == 0 || r / self == other { Some(r) } else { None }
+    }
+}
+
+impl f32 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
+    // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
+    // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
+    #[intrinsic]
+    fn checked_to<T: Number>(self) -> Option<T>;
+
+    // The value as a `T`, failing with `RangeError` if it is not one exactly.
+    fn to<T: Number>(self) -> T with fail(RangeError) {
+        match self.checked_to::<T>() {
+            Some(v) => v,
+            None => fail(RangeError),
+        }
+    }
+}
+
+impl f64 {
+    // The value as `Display` writes it.
+    #[intrinsic]
+    fn text(&self) -> &str;
+
+    // The value as a `T`, if it is one exactly: an integer in `T`'s range, or a float that is a
+    // whole number in it (for an integer `T`), or that `T` holds exactly (for a float `T`).
+    #[intrinsic]
+    fn checked_to<T: Number>(self) -> Option<T>;
+
+    // The value as a `T`, failing with `RangeError` if it is not one exactly.
+    fn to<T: Number>(self) -> T with fail(RangeError) {
+        match self.checked_to::<T>() {
+            Some(v) => v,
+            None => fail(RangeError),
+        }
+    }
+}
+

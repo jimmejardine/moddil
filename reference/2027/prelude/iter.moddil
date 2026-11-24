@@ -1,0 +1,253 @@
+// Iteration (`expr.for.1`): `for p in e` calls `IntoIterator::into_iter(e)`, then `next` until
+// it gives `None`.
+
+trait Iterator {
+    type Item;
+    // What `next` can fail with (`iter.fails.1`): nothing, unless the impl says.
+    type Fails = !;
+    fn next(&mut self) -> Option<Self::Item> with fail(Self::Fails);
+
+    // Whether `f` holds for every item left, stopping at the first it does not hold for.
+    fn all(self, f: impl FnMut(Self::Item) -> bool) -> bool with fail(Self::Fails) {
+        let mut it = self;
+        while let Some(x) = it.next() {
+            if !f(x) {
+                return false;
+            }
+        }
+        true
+    }
+
+    // Whether `f` holds for some item left, stopping at the first it holds for.
+    fn any(self, f: impl FnMut(Self::Item) -> bool) -> bool with fail(Self::Fails) {
+        let mut it = self;
+        while let Some(x) = it.next() {
+            if f(x) {
+                return true;
+            }
+        }
+        false
+    }
+
+    // How many items are left, using them up.
+    fn count(self) -> int with fail(Self::Fails) {
+        let mut it = self;
+        let mut n = 0;
+        while let Some(_) = it.next() {
+            n += 1;
+        }
+        n
+    }
+
+    // The items, each passed through `f` as it is asked for (`iter.adapt.1`): `f` runs in
+    // `next`, so its errors are the adapter's, not `map`'s, which names them (`E`) to say so.
+    fn map<B, F: FnMut(Self::Item) -> B with E, E>(self, f: F) -> Map<Self, F> {
+        Map { iter: self, f }
+    }
+
+    // The items `f` holds for, each found as it is asked for.
+    fn filter<F: FnMut(&Self::Item) -> bool with E, E>(self, f: F) -> Filter<Self, F> {
+        Filter { iter: self, f }
+    }
+
+    // The items left, gathered into a collection of the type the context names
+    // (`iter.collect.1`).
+    fn collect<C: FromIterator<Self::Item>>(self) -> C with fail(Self::Fails) {
+        C::from_iter(self)
+    }
+}
+
+// `it.map(f)` (`iter.adapt.1`): it holds the closure, so it is a view of what that borrows.
+struct Map<I, F> {
+    iter: I,
+    f: F,
+}
+
+impl<I: Iterator, B, F: FnMut(I::Item) -> B> Iterator for Map<I, F> {
+    type Item = B;
+    type Fails = I::Fails | F::Fails;
+    fn next(&mut self) -> Option<B> with fail(I::Fails | F::Fails) {
+        match self.iter.next() {
+            Some(x) => Some((self.f)(x)),
+            None => None,
+        }
+    }
+}
+
+// `it.filter(f)` (`iter.adapt.1`).
+struct Filter<I, F> {
+    iter: I,
+    f: F,
+}
+
+impl<I: Iterator, F: FnMut(&I::Item) -> bool> Iterator for Filter<I, F> {
+    type Item = I::Item;
+    type Fails = I::Fails | F::Fails;
+    fn next(&mut self) -> Option<I::Item> with fail(I::Fails | F::Fails) {
+        while let Some(x) = self.iter.next() {
+            if (self.f)(&x) {
+                return Some(x);
+            }
+        }
+        None
+    }
+}
+
+// A collection that can be made from the items of an iterator (`iter.collect.1`); it fails as
+// the iterator does.
+trait FromIterator<A> {
+    fn from_iter<I: Iterator<Item = A>>(iter: I) -> Self with fail(I::Fails);
+}
+
+trait IntoIterator {
+    type Item;
+    type IntoIter;
+    fn into_iter(self) -> Self::IntoIter;
+}
+
+// An iterator is one itself.
+impl<I: Iterator> IntoIterator for I {
+    type Item = <I as Iterator>::Item;
+    type IntoIter = I;
+    fn into_iter(self) -> I {
+        self
+    }
+}
+
+// `a..b`: the integers from `a` up to but not including `b`.
+struct Range {
+    start: int,
+    end: int,
+}
+
+impl Iterator for Range {
+    type Item = int;
+    fn next(&mut self) -> Option<int> {
+        if self.start < self.end {
+            let x = self.start;
+            self.start = x + 1;
+            Some(x)
+        } else {
+            None
+        }
+    }
+}
+
+// `a..=b`: the integers from `a` to `b`, both included.
+struct RangeInclusive {
+    start: int,
+    end: int,
+    done: bool,
+}
+
+impl Iterator for RangeInclusive {
+    type Item = int;
+    fn next(&mut self) -> Option<int> {
+        if self.done || self.start > self.end {
+            return None;
+        }
+        let x = self.start;
+        if x == self.end {
+            self.done = true;
+        } else {
+            self.start = x + 1;
+        }
+        Some(x)
+    }
+}
+
+// `a..`: the integers from `a` on.
+struct RangeFrom {
+    start: int,
+}
+
+impl Iterator for RangeFrom {
+    type Item = int;
+    fn next(&mut self) -> Option<int> {
+        let x = self.start;
+        self.start = x + 1;
+        Some(x)
+    }
+}
+
+// The elements of a slice, borrowed in order.
+view Iter<T> {
+    slice: &[T],
+    pos: int,
+}
+
+impl<T> Iterator for Iter<T> {
+    type Item = &T;
+    fn next(&mut self) -> Option<&T> {
+        if self.pos < self.slice.len() {
+            let x = &self.slice[self.pos];
+            self.pos += 1;
+            Some(x)
+        } else {
+            None
+        }
+    }
+}
+
+impl<T> [T] {
+    fn iter(&self) -> Iter<T> {
+        Iter { slice: self, pos: 0 }
+    }
+
+    // The elements before `at` and from `at` on (`expr.slice.1`); traps if `at` is past the end.
+    fn split_at(&self, at: int) -> (&[T], &[T]) {
+        (&self[..at], &self[at..])
+    }
+
+    // As `split_at`, each part borrowed with `&mut`.
+    fn split_at_mut(&mut self, at: int) -> (&mut [T], &mut [T]) {
+        let n = self.len();
+        let (a, b) = self.split_at_mut_unchecked(at, n);
+        (a, b)
+    }
+
+    // The two parts, disjoint, of an `&mut` borrow (`expr.slice.1`).
+    #[intrinsic]
+    fn split_at_mut_unchecked(&mut self, at: int, len: int) -> (&mut [T], &mut [T]);
+}
+
+impl<T, const N: int> [T; N] {
+    fn iter(&self) -> Iter<T> {
+        Iter { slice: self, pos: 0 }
+    }
+
+    fn split_at(&self, at: int) -> (&[T], &[T]) {
+        (&self[..at], &self[at..])
+    }
+
+    fn split_at_mut(&mut self, at: int) -> (&mut [T], &mut [T]) {
+        let all: &mut [T] = &mut self[..];
+        all.split_at_mut(at)
+    }
+}
+
+impl<T> IntoIterator for &[T] {
+    type Item = &T;
+    type IntoIter = Iter<T>;
+    fn into_iter(self) -> Iter<T> {
+        self.iter()
+    }
+}
+
+impl<T, const N: int> IntoIterator for &[T; N] {
+    type Item = &T;
+    type IntoIter = Iter<T>;
+    fn into_iter(self) -> Iter<T> {
+        self.iter()
+    }
+}
+
+// An array's elements, by value: they move into a buffer that gives them out in order.
+impl<T, const N: int> IntoIterator for [T; N] {
+    type Item = T;
+    type IntoIter = IntoIter<T>;
+    fn into_iter(self) -> IntoIter<T> {
+        IntoIter { buf: Buf::from_array(self) }
+    }
+}
+

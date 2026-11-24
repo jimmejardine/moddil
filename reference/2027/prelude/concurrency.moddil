@@ -1,0 +1,167 @@
+// Structured concurrency (`task.scope.1`): `scope` runs its body as its first task, with a handle
+// further tasks are spawned into, and ends once every one of them has. A task's errors go to its
+// `join`; one that fails with its `Task` dropped, or a failing body, fails the scope, whose other
+// tasks are then cancelled (`task.cancel.1`).
+
+// A scope's handle. It holds what its tasks borrow, until the scope ends.
+view Scope {
+    id: int,
+}
+
+// A task spawned into a scope, running closure `F`, which gives a `T`.
+view Task<F, T> {
+    id: int,
+}
+
+// With `isolate: true`, a trap in the scope cancels it, and it fails with `Trapped`
+// (`task.isolate.1`); otherwise a trap ends the program. Only an isolated scope's call can fail
+// with `Trapped`.
+fn scope<F: FnOnce(&mut Scope) -> R, R>(body: F, isolate: bool = false) -> R
+    with spawn, fail(Trapped)
+{
+    let mut s = Scope { id: __scope_open(isolate) };
+    __scope_run::<F, R>(&mut s, body)?
+}
+
+impl Scope {
+    // Starts a task running `f`, queued to run when the running task suspends.
+    #[intrinsic]
+    fn spawn<F: FnOnce() -> T, T>(&mut self, f: F) -> Task<F, T> from f with spawn;
+
+    // Asks the scope's tasks to stop, the scopes inside it first (`task.stop.1`).
+    #[intrinsic]
+    fn stop(&self);
+}
+
+impl<F: FnOnce() -> T, T> Task<F, T> {
+    // Waits for the task to end: its result, or its error.
+    #[intrinsic]
+    fn join(self) -> T with suspend, fail(F::Fails);
+}
+
+// A task given up without a `join`: an error it fails with fails its scope.
+impl<F, T> Drop for Task<F, T> {
+    #[intrinsic]
+    fn drop(self);
+}
+
+// Lets the other tasks that are ready run first.
+#[intrinsic]
+fn yield_now() with suspend;
+
+// Waits until the running task's scope, or one around it, has been asked to stop, once the
+// scopes inside its scope have ended (`task.stop.1`).
+#[intrinsic]
+fn stop_requested() with suspend;
+
+// What an isolated scope fails with when a trap ends it: the trap's kind (`overflow`) and where
+// it was, as `line:column` in its file.
+#[derive(Debug, Clone, PartialEq)]
+struct Trapped {
+    class: String,
+    at: String,
+}
+
+impl Display for Trapped {
+    fn fmt(&self, out: &mut String) {
+        out.push_str(&self.class);
+        out.push_str(" at ");
+        out.push_str(&self.at);
+    }
+}
+
+#[intrinsic]
+fn __scope_open(isolate: bool) -> int;
+
+// Waits until one of a `select`'s operations, described by `ops`, is ready, does it, and gives
+// its arm's index (`task.select.1`).
+#[intrinsic]
+fn __select<T>(ops: T) -> int with suspend;
+
+// Runs the body as the scope's first task, waits for every task of the scope, and gives the
+// body's value, or fails with the scope's failure.
+#[intrinsic]
+fn __scope_run<F: FnOnce(&mut Scope) -> R, R>(s: &mut Scope, body: F) -> R
+    with spawn, fail(Trapped);
+
+// Channels (`task.channel.1`): a bounded queue of values between tasks.
+
+// The error a `send` fails with once its channel's `Receiver` is gone.
+#[derive(Debug, Clone, PartialEq)]
+struct Closed;
+
+// The sending end of a channel; there may be several.
+struct Sender<T> {
+    id: int,
+}
+
+// The receiving end of a channel.
+struct Receiver<T> {
+    id: int,
+}
+
+// A channel holding up to `capacity` values; with capacity 0, a `send` waits until its value is
+// received.
+#[intrinsic]
+fn channel<T>(capacity: int) -> (Sender<T>, Receiver<T>);
+
+impl<T> Sender<T> {
+    // Puts `value` in the channel, waiting while it is full.
+    #[intrinsic]
+    fn send(&self, value: T) with suspend, fail(Closed);
+}
+
+impl<T> Receiver<T> {
+    // The next value, waiting while the channel is empty; `None` once every `Sender` is gone.
+    #[intrinsic]
+    fn recv(&self) -> Option<T> with suspend;
+}
+
+impl<T> Clone for Sender<T> {
+    #[intrinsic]
+    fn clone(&self) -> Sender<T>;
+}
+
+impl<T> Drop for Sender<T> {
+    #[intrinsic]
+    fn drop(self);
+}
+
+impl<T> Drop for Receiver<T> {
+    #[intrinsic]
+    fn drop(self);
+}
+
+// Time (`task.timer.1`): a run's time is virtual. It starts at zero and moves only when every
+// task waits, straight to the earliest timer.
+
+// A length of time, in nanoseconds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct Duration {
+    nanos: int,
+}
+
+impl Duration {
+    fn seconds(n: int) -> Duration {
+        Duration { nanos: n * 1000000000 }
+    }
+    fn millis(n: int) -> Duration {
+        Duration { nanos: n * 1000000 }
+    }
+    fn nanos(&self) -> int {
+        self.nanos
+    }
+}
+
+// A channel whose one value, `()`, arrives once `after` has passed; then it has no sender.
+fn timer(after: Duration) -> Receiver<()> {
+    __timer(after.nanos)
+}
+
+#[intrinsic]
+fn __timer(nanos: int) -> Receiver<()>;
+
+// Waits until `d` has passed.
+fn sleep(d: Duration) with suspend {
+    timer(d).recv();
+}

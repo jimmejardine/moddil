@@ -1,7 +1,7 @@
 # The prelude
 
 The prelude is the items every module can name without importing them. It is written in Moddil,
-in [`prelude.moddil`](prelude.moddil), which is part of this reference: its items and their
+in the files of [`prelude/`](prelude/), which are part of this reference: its items and their
 behaviour are as written there.
 
 **prelude.1** The prelude holds `assert` ([`assert`](expressions/assert.md)) and `discard`

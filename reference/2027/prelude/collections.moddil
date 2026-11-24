@@ -1,0 +1,285 @@
+// Collection literals (`expr.array.from.1`): `[a, b]` and `[x; n]` make the type the context
+// expects, if it implements this.
+trait FromArrayLiteral<T> {
+    fn from_array<const N: int>(items: [T; N]) -> Self;
+    fn from_repeat(x: T, n: int) -> Self where T: Clone;
+}
+
+// `Buf<T>`: built-in storage with a fixed capacity, of which a prefix holds elements. `Vec` is
+// written over it. Its elements are dropped with it, first to last.
+impl<T> Buf<T> {
+    // An empty buffer with room for `capacity` elements.
+    #[intrinsic]
+    fn with_capacity(capacity: int) -> Buf<T>;
+    // A full buffer of the array's elements.
+    #[intrinsic]
+    fn from_array<const N: int>(items: [T; N]) -> Buf<T>;
+    #[intrinsic]
+    fn len(&self) -> int;
+    #[intrinsic]
+    fn capacity(&self) -> int;
+    // Changes its capacity: to its length if given less.
+    #[intrinsic]
+    fn set_capacity(&mut self, capacity: int);
+    // Adds `x` at the end; traps if it is full.
+    #[intrinsic]
+    fn push(&mut self, x: T);
+    #[intrinsic]
+    fn pop(&mut self) -> Option<T>;
+    // Puts `x` at `i`, moving the elements from `i` on along; traps if it is full or `i` is past
+    // the end.
+    #[intrinsic]
+    fn insert(&mut self, i: int, x: T);
+    // Takes out the element at `i`, moving those after it back; traps if there is none.
+    #[intrinsic]
+    fn remove(&mut self, i: int) -> T;
+    #[intrinsic]
+    fn swap(&mut self, i: int, j: int);
+    #[intrinsic]
+    fn as_slice(&self) -> &[T];
+    #[intrinsic]
+    fn as_mut_slice(&mut self) -> &mut [T];
+}
+
+// `Vec<T>`: a growable array, written over `Buf`.
+struct Vec<T> {
+    buf: Buf<T>,
+}
+
+impl<T> Vec<T> {
+    fn new() -> Vec<T> {
+        Vec { buf: Buf::with_capacity(0) }
+    }
+
+    fn with_capacity(capacity: int) -> Vec<T> {
+        Vec { buf: Buf::with_capacity(capacity) }
+    }
+
+    fn len(&self) -> int {
+        self.buf.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.buf.len() == 0
+    }
+
+    fn capacity(&self) -> int {
+        self.buf.capacity()
+    }
+
+    // Makes room for `extra` more elements.
+    fn reserve(&mut self, extra: int) {
+        let want = self.buf.len() + extra;
+        if want > self.buf.capacity() {
+            let mut cap = self.buf.capacity() * 2;
+            if cap < want {
+                cap = want;
+            }
+            self.buf.set_capacity(cap);
+        }
+    }
+
+    fn push(&mut self, x: T) {
+        if self.buf.len() == self.buf.capacity() {
+            self.reserve(1);
+        }
+        self.buf.push(x);
+    }
+
+    fn pop(&mut self) -> Option<T> {
+        self.buf.pop()
+    }
+
+    #[track_caller]
+    fn insert(&mut self, i: int, x: T) {
+        if self.buf.len() == self.buf.capacity() {
+            self.reserve(1);
+        }
+        self.buf.insert(i, x);
+    }
+
+    #[track_caller]
+    fn remove(&mut self, i: int) -> T {
+        self.buf.remove(i)
+    }
+
+    #[track_caller]
+    fn swap(&mut self, i: int, j: int) {
+        self.buf.swap(i, j);
+    }
+
+    // Drops the elements from `len` on.
+    fn truncate(&mut self, len: int) {
+        while self.buf.len() > len {
+            self.buf.pop();
+        }
+    }
+
+    fn clear(&mut self) {
+        self.truncate(0);
+    }
+
+    fn get(&self, i: int) -> Option<&T> {
+        if 0 <= i && i < self.buf.len() {
+            Some(&self.buf.as_slice()[i])
+        } else {
+            None
+        }
+    }
+
+    fn get_mut(&mut self, i: int) -> Option<&mut T> {
+        if 0 <= i && i < self.buf.len() {
+            Some(&mut self.buf.as_mut_slice()[i])
+        } else {
+            None
+        }
+    }
+
+    fn first(&self) -> Option<&T> {
+        self.get(0)
+    }
+
+    fn last(&self) -> Option<&T> {
+        self.get(self.buf.len() - 1)
+    }
+
+    fn as_slice(&self) -> &[T] {
+        self.buf.as_slice()
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [T] {
+        self.buf.as_mut_slice()
+    }
+
+    fn iter(&self) -> Iter<T> {
+        self.buf.as_slice().iter()
+    }
+}
+
+impl<T: PartialEq> Vec<T> {
+    fn contains(&self, x: &T) -> bool {
+        for y in self.as_slice() {
+            if *y == *x {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+impl<T> Index for Vec<T> {
+    type Output = T;
+    #[track_caller]
+    fn index(&self, i: int) -> &T {
+        &self.buf.as_slice()[i]
+    }
+}
+
+impl<T> IndexMut for Vec<T> {
+    #[track_caller]
+    fn index_mut(&mut self, i: int) -> &mut T {
+        &mut self.buf.as_mut_slice()[i]
+    }
+}
+
+impl<T> FromArrayLiteral<T> for Vec<T> {
+    fn from_array<const N: int>(items: [T; N]) -> Vec<T> {
+        Vec { buf: Buf::from_array(items) }
+    }
+
+    fn from_repeat(x: T, n: int) -> Vec<T> where T: Clone {
+        let mut v = Vec::with_capacity(n);
+        if n > 0 {
+            let mut i = 1;
+            while i < n {
+                v.push(x.clone());
+                i += 1;
+            }
+            v.push(x);
+        }
+        v
+    }
+}
+
+impl<T> FromIterator<T> for Vec<T> {
+    fn from_iter<I: Iterator<Item = T>>(iter: I) -> Vec<T> with fail(I::Fails) {
+        let mut v = Vec::new();
+        let mut it = iter;
+        while let Some(x) = it.next() {
+            v.push(x);
+        }
+        v
+    }
+}
+
+impl<T: Clone> Clone for Vec<T> {
+    fn clone(&self) -> Vec<T> {
+        let mut v = Vec::with_capacity(self.len());
+        for x in self.as_slice() {
+            v.push(x.clone());
+        }
+        v
+    }
+}
+
+impl<T: PartialEq> PartialEq for Vec<T> {
+    fn eq(&self, other: &Vec<T>) -> bool {
+        self.as_slice() == other.as_slice()
+    }
+}
+
+impl<T: Eq> Eq for Vec<T> {}
+
+impl<T> IntoIterator for &Vec<T> {
+    type Item = &T;
+    type IntoIter = Iter<T>;
+    fn into_iter(self) -> Iter<T> {
+        self.iter()
+    }
+}
+
+// A `Vec`'s elements, by value: it is used up.
+struct IntoIter<T> {
+    buf: Buf<T>,
+}
+
+impl<T> Iterator for IntoIter<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        if self.buf.len() == 0 {
+            None
+        } else {
+            Some(self.buf.remove(0))
+        }
+    }
+}
+
+impl<T> IntoIterator for Vec<T> {
+    type Item = T;
+    type IntoIter = IntoIter<T>;
+    fn into_iter(self) -> IntoIter<T> {
+        IntoIter { buf: self.buf }
+    }
+}
+
+// `replace` puts `value` where `dest` points and gives back what was there; `swap` exchanges two
+// values. Both are built in.
+#[intrinsic]
+fn replace<T>(dest: &mut T, value: T) -> T;
+
+#[intrinsic]
+fn swap<T>(a: &mut T, b: &mut T);
+
+// Wrapping arithmetic on the bits of an `int`, until the wrapping operators (slice S10).
+impl int {
+    #[intrinsic]
+    fn wrapping_add(self, other: int) -> int;
+    #[intrinsic]
+    fn wrapping_sub(self, other: int) -> int;
+    #[intrinsic]
+    fn wrapping_mul(self, other: int) -> int;
+    // The 64 bits rotated left by `n` places (taken modulo 64).
+    #[intrinsic]
+    fn rotate_left(self, n: int) -> int;
+}
+

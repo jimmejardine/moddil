@@ -57,7 +57,7 @@ pub use ty::{AnonTy, AssocTy, ClosureKind, ClosureTy, Num, OpaqueTy, TraitRef, T
 
 use moddil_syntax::TextRange;
 
-/// The prelude's source (`reference/2027/prelude.moddil`).
+/// The prelude's source (`reference/2027/prelude/`), followed by the `core` mod's.
 pub const PRELUDE: &str = collect::PRELUDE;
 
 /// Every diagnostic for `program`, by file and then in source order. If a file has syntax errors,

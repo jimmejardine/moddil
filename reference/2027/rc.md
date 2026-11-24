@@ -3,7 +3,7 @@
 A value with more than one owner, by counting them ([`specs/memory.md`: Sharing:
 `.to_rc()`](../../specs/memory.md#sharing-to_rc), [`specs/values.md`: `.share()` for reference
 counts](../../specs/values.md#share-for-reference-counts)). `Rc` and `Weak` are the prelude's,
-written in Moddil over a raw pointer ([source](prelude.moddil)). Added after M3 slice M3a.
+written in Moddil over a raw pointer ([source](prelude/pointers.moddil)). Added after M3 slice M3a.
 
 **rc.1** `x.to_rc()`, on a value of any type, moves `x` into a new allocation and gives an
 `Rc<T>`, its first owner. `rc.share()` gives another owner of the same value, adding one to the

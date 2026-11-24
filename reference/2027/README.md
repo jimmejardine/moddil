@@ -42,7 +42,7 @@ Each page lists its diagnostics by code; the codes are in [Diagnostics](diagnost
 - [Attributes](attributes.md)
 - [Types](types.md), [Numbers](numbers.md), [Generics](generics.md), [Text](text.md),
   [Compile-time evaluation](comptime.md), [Refinements](refinements.md)
-- [The prelude](prelude.md) ([source](prelude.moddil))
+- [The prelude](prelude.md) ([source](prelude/))
 - [Statements](statements.md)
 - [Patterns](patterns.md)
 - [Ownership](ownership.md), [Borrows](borrows.md), [Views](views.md),

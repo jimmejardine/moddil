@@ -24,7 +24,7 @@ appends the text `t`, `s.push(c)` a character, `s.pop()` removes and returns the
 (`None` if there is none), `s.clear()` empties it, and `s.as_str()` borrows its text as a `&str`.
 
 **text.string.inline.1** `String` is the prelude's struct, written in Moddil over its UTF-8
-bytes ([`prelude.moddil`](prelude.moddil)): up to 23 bytes are held inside the `String` itself,
+bytes ([`prelude/text.moddil`](prelude/text.moddil)): up to 23 bytes are held inside the `String` itself,
 and more in a heap buffer, so `s.capacity()`, how many bytes it holds before it grows, is never
 below 23 (`String::new().capacity()` is 23). Past 23 bytes the text moves to the heap, and a full
 heap buffer doubles; `String::with_capacity(n)` reserves `n` bytes, on the heap if `n` is above

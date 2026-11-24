@@ -1,0 +1,52 @@
+// Arrays and slices.
+
+impl<T> [T] {
+    // How many elements it has.
+    #[intrinsic]
+    fn len(&self) -> int;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl<T, const N: int> [T; N] {
+    fn len(&self) -> int {
+        N
+    }
+
+    fn is_empty(&self) -> bool {
+        N == 0
+    }
+
+    fn as_slice(&self) -> &[T] {
+        self
+    }
+}
+
+impl<T: PartialEq> PartialEq for [T] {
+    fn eq(&self, other: &[T]) -> bool {
+        if self.len() != other.len() {
+            return false;
+        }
+        let mut i = 0;
+        while i < self.len() {
+            if self[i] != other[i] {
+                return false;
+            }
+            i += 1;
+        }
+        true
+    }
+}
+
+impl<T: Eq> Eq for [T] {}
+
+impl<T: PartialEq, const N: int> PartialEq for [T; N] {
+    fn eq(&self, other: &[T; N]) -> bool {
+        self.as_slice() == other.as_slice()
+    }
+}
+
+impl<T: Eq, const N: int> Eq for [T; N] {}
+

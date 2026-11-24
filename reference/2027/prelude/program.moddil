@@ -1,0 +1,87 @@
+// What `main` can give back (`main.exit.1`): each `sysexits.h` code by name, or another.
+#[derive(Debug, Clone, PartialEq)]
+enum ExitCode {
+    Ok,
+    Usage,
+    DataErr,
+    NoInput,
+    NoUser,
+    NoHost,
+    Unavailable,
+    Software,
+    OsErr,
+    OsFile,
+    CantCreate,
+    IoErr,
+    TempFail,
+    Protocol,
+    NoPerm,
+    Config,
+    Other(int),
+}
+
+impl ExitCode {
+    // The exit code `n`, by its name if it has one.
+    fn new(n: int) -> ExitCode {
+        match n {
+            0 => ExitCode::Ok,
+            64 => ExitCode::Usage,
+            65 => ExitCode::DataErr,
+            66 => ExitCode::NoInput,
+            67 => ExitCode::NoUser,
+            68 => ExitCode::NoHost,
+            69 => ExitCode::Unavailable,
+            70 => ExitCode::Software,
+            71 => ExitCode::OsErr,
+            72 => ExitCode::OsFile,
+            73 => ExitCode::CantCreate,
+            74 => ExitCode::IoErr,
+            75 => ExitCode::TempFail,
+            76 => ExitCode::Protocol,
+            77 => ExitCode::NoPerm,
+            78 => ExitCode::Config,
+            n => ExitCode::Other(n),
+        }
+    }
+
+    // The number the process exits with.
+    fn code(&self) -> int {
+        match self {
+            ExitCode::Ok => 0,
+            ExitCode::Usage => 64,
+            ExitCode::DataErr => 65,
+            ExitCode::NoInput => 66,
+            ExitCode::NoUser => 67,
+            ExitCode::NoHost => 68,
+            ExitCode::Unavailable => 69,
+            ExitCode::Software => 70,
+            ExitCode::OsErr => 71,
+            ExitCode::OsFile => 72,
+            ExitCode::CantCreate => 73,
+            ExitCode::IoErr => 74,
+            ExitCode::TempFail => 75,
+            ExitCode::Protocol => 76,
+            ExitCode::NoPerm => 77,
+            ExitCode::Config => 78,
+            ExitCode::Other(n) => *n,
+        }
+    }
+}
+
+// The ambient log (`obs.log.1`): write-only, so it needs no effect. For now the interpreters
+// print its events to standard error, with their level.
+struct Log;
+
+impl Log {
+    #[intrinsic]
+    fn debug(&self, msg: String);
+    #[intrinsic]
+    fn info(&self, msg: String);
+    #[intrinsic]
+    fn warn(&self, msg: String);
+    #[intrinsic]
+    fn error(&self, msg: String);
+}
+
+const log: Log = Log;
+
