@@ -110,6 +110,9 @@ pub(crate) struct ImplInfo {
     pub(crate) self_ty: ast::Type,
     pub(crate) params: Vec<String>,
     pub(crate) methods: HashMap<String, FnDef>,
+    /// Whether it is for every type: its self type is a type parameter of its own with no
+    /// bounds (`impl<T> ToRc for T`).
+    pub(crate) blanket: bool,
 }
 
 pub(crate) struct TraitInfo {
@@ -403,6 +406,7 @@ impl Program {
                     self_ty,
                     params: Vec::new(),
                     methods,
+                    blanket: false,
                 });
             }
         }
@@ -706,6 +710,7 @@ impl Program {
                     };
                     methods.insert(key, def);
                 }
+                let blanket = trait_path.is_some() && unbounded_self_param(&item, &self_ty);
                 self.impls.push(ImplInfo {
                     trait_: None,
                     head: Head::Unit,
@@ -714,6 +719,7 @@ impl Program {
                     self_ty,
                     params: generic_names(&item),
                     methods,
+                    blanket,
                 });
             }
             K::TEST_ITEM if user => {
@@ -928,6 +934,27 @@ impl Program {
             }
         }
     }
+}
+
+/// Whether impl `item`'s self type, `self_ty`, is one of its type parameters, with no bounds and
+/// no `where` clause: an impl for every type.
+fn unbounded_self_param(item: &SyntaxNode, self_ty: &ast::Type) -> bool {
+    // Only a bare path: `&[T]` and `Vec<T>` name `T` too.
+    if !matches!(self_ty, ast::Type::Path(_)) || self_ty.syntax().text().to_string().contains('<') {
+        return false;
+    }
+    let path = type_path(self_ty.syntax());
+    let [name] = path.as_slice() else {
+        return false;
+    };
+    item.child(K::WHERE_CLAUSE).is_none()
+        && item.child(K::GENERIC_PARAMS).is_some_and(|g| {
+            g.children().any(|p| {
+                p.kind() == K::TYPE_PARAM
+                    && name_of(&p) == *name
+                    && p.children().all(|c| c.kind() == K::NAME)
+            })
+        })
 }
 
 pub(crate) fn generic_names(node: &SyntaxNode) -> Vec<String> {

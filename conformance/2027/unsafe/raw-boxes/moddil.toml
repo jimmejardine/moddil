@@ -1,0 +1,4 @@
+[mod]
+name = "raw_boxes"
+edition = "2027"
+capabilities = ["unsafe"]

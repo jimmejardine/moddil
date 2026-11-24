@@ -1024,8 +1024,8 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
     - The tree is an AA tree whose nodes live in a `Vec`.
     - Since then, the insertion-ordered `OrderedMap` and `OrderedSet`, and `Interner` with
       typed `Symbol`s (`text.md`: Interning).
-    - `EnumSet` is still to come. So are the persistent collections, which wait for a shared,
-      reference-counted pointer: there is no `Rc` yet.
+    - `EnumSet` is still to come. So are the persistent collections, which waited for a shared,
+      reference-counted pointer: `Rc` has come since (below), so they are next.
   - **`crypto`:** SHA-256, SHA-512 and BLAKE3 (hash mode), with hex.
     - They are checked against the FIPS 180-4 vectors and the BLAKE3 reference's.
     - They are not constant-time.
@@ -1084,6 +1084,21 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
       `&mut` is now borrowed once the arguments are evaluated (`expr.method.twophase.1`), so they
       may read it.
     - **Borrows:** `let x;` without an initialiser is not supported yet.
+- **`Rc` and `Weak` (decided November 2026), after slice M3a.** The prelude's shared values
+  (`reference/2027/rc.md`): `x.to_rc()`, `rc.share()`, `rc.weak()` and `upgrade`, `Rc::ptr_eq`
+  and the counts, dropped with their last owner.
+  - **Written in Moddil**, over a raw pointer to an allocation holding the counts and the value.
+    The box goes to and from that pointer as `core::ffi`'s `into_raw` and `from_raw` do, which
+    the prelude, unable to name `core`, has as `RcBox`'s.
+  - **`.share()`, and `Clone` underneath** (`rc.clone.1`): `Rc` implements the `Clone` trait as
+    a share, so `Vec<Rc<T>>` and derives clone; `.clone()` written on an `Rc` is E0417.
+  - **Both interpreters keep a heap** for `into_raw`'s values, so `core::ffi`'s boxes and `Rc` run
+    on all four implementations; native code's and WASM's leak check catches a missed free.
+  - **The reference interpreter** runs an impl for every type (`impl<T> ToRc for T`).
+  - **Not yet:**
+    - `Rc<dyn Trait>`: coercing to `dyn` is built for `Box` only;
+    - reaching a field through an `Rc`, or a `Box`, without `*`: `(*rc).name`;
+    - biased counting, `AtomicRc`, and the cycle detector, which wait for a parallel runtime.
 - **Slice M2e (decided November 2026): the first GPU path, Mandelbulb flight in a browser.**
   `moddil build --wasm examples/mandelbulb/web` writes a page that flies through the fractal: the
   kernel is Moddil, lowered to WGSL, and runs on WebGPU.

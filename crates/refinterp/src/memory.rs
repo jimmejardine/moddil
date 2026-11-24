@@ -35,6 +35,10 @@ pub(crate) struct Store {
     /// The values of the const items used so far, by key: static data, which a [`Pointer`] with
     /// [`STATIC`] for its frame points into (`borrow.static.1`).
     statics: Vec<(String, Value)>,
+    /// The values `core::ffi::into_raw` keeps alive behind a raw pointer (`ffi.core.1`), which a
+    /// [`Pointer`] with [`HEAP`] for its frame points into, until `from_raw` takes them back.
+    heap: HashMap<usize, Value>,
+    next_heap: usize,
     /// The tasks and scopes.
     pub(crate) tasks: Tasks,
 }
@@ -51,6 +55,9 @@ pub(crate) struct Memory {
 /// The frame of a pointer to static data: its slot is the const's place among the statics.
 pub(crate) const STATIC: usize = usize::MAX;
 
+/// The frame of a raw pointer to a value on the heap: its slot is the heap's.
+pub(crate) const HEAP: usize = usize::MAX - 1;
+
 impl Memory {
     /// The memory of a test: one task, with one frame, running the code of `file`, in `module`.
     pub(crate) fn new(file: u32, module: usize) -> Memory {
@@ -63,6 +70,8 @@ impl Memory {
                 tracked: false,
             }]],
             statics: Vec::new(),
+            heap: HashMap::new(),
+            next_heap: 0,
             tasks: Tasks::new(),
         };
         Memory {
@@ -139,6 +148,33 @@ impl Memory {
             path: Vec::new(),
             span: None,
         }
+    }
+
+    /// Keeps `v` on the heap, and gives where it is (`ffi.core.1`).
+    pub(crate) fn alloc(&mut self, v: Value) -> Pointer {
+        let mut s = self.lock();
+        let slot = s.next_heap;
+        s.next_heap += 1;
+        s.heap.insert(slot, v);
+        Pointer {
+            task: 0,
+            frame: HEAP,
+            slot,
+            path: Vec::new(),
+            span: None,
+        }
+    }
+
+    /// The value at heap pointer `p`, taken off the heap.
+    pub(crate) fn free(&mut self, p: &Pointer) -> Value {
+        assert!(
+            p.frame == HEAP && p.path.is_empty(),
+            "`from_raw` of a pointer `into_raw` did not give"
+        );
+        self.lock()
+            .heap
+            .remove(&p.slot)
+            .expect("`from_raw` of a pointer already given back")
     }
 
     /// How many calls of this task are active.
@@ -285,6 +321,8 @@ impl Memory {
         let s = self.lock();
         let mut v = if ptr.frame == STATIC {
             &s.statics[ptr.slot].1
+        } else if ptr.frame == HEAP {
+            &s.heap[&ptr.slot]
         } else {
             &s.frames[ptr.task][ptr.frame].vars[ptr.slot].1
         };
@@ -313,6 +351,8 @@ impl Memory {
         // A static slot: a const's, or what a closure that outlives its scope captured.
         let mut v = if ptr.frame == STATIC {
             &mut s.statics[ptr.slot].1
+        } else if ptr.frame == HEAP {
+            s.heap.get_mut(&ptr.slot).expect("a live heap value")
         } else {
             &mut s.frames[ptr.task][ptr.frame].vars[ptr.slot].1
         };

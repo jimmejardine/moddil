@@ -196,6 +196,8 @@ codes! {
     E0415 = "unconstrained type parameter",
     /// `#[derive(Default)]` on an enum with no `#[default]` unit variant.
     E0416 = "no default variant",
+    /// `.clone()` written on an `Rc` or a `Weak`, which is `.share()` (`rc.clone.1`).
+    E0417 = "an rc cloned",
     /// An error with nowhere to go: a fallible call not marked with `?`, `?!` or `try`, or an
     /// error where nothing can fail (a function without `with fail`, `main`, a `defer` block, a
     /// destructor).

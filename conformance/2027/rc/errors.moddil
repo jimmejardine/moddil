@@ -1,0 +1,15 @@
+// covers: rc.clone.1, rc.immutable.1
+
+struct Counter { n: int }
+
+fn copies(a: &Rc<int>) -> Rc<int> {
+    a.clone()                                   //~ E0417
+}
+
+fn weak_copies(w: &Weak<int>) -> Weak<int> {
+    w.clone()                                   //~ E0417
+}
+
+fn changes(a: &mut Rc<Counter>) {
+    (**a).n = 2;                                //~ E0205
+}

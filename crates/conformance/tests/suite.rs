@@ -88,6 +88,7 @@ areas!(
     ownership,
     patterns,
     prelude,
+    rc,
     refinements,
     slices,
     statements,

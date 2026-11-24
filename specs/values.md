@@ -93,7 +93,12 @@ fn render(n: &Rc<Node>) { … }    // borrowing an Rc touches no count
 
 - `rc.share()` increments the count and returns another handle to **the same object**.
 - `Rc<T>` has **no `.clone()` method**, so reading code tells you the cost: `.share()` is cheap,
-  `.clone()` copies.
+  `.clone()` copies. Writing `rc.clone()` is an error that suggests `.share()` (decided November
+  2026).
+- `Rc<T>` still implements the `Clone` **trait**, as a share, so generic code bounded by `Clone`
+  takes it: a `Vec<Rc<T>>` clones, and a derived `Clone` shares `Rc` fields (below). This is sound
+  because rc contents are immutable, so sharing is observably the same as copying. Rust gets the
+  same split from Clippy's `clone_on_ref_ptr`; here it is the language's rule.
 - `Weak<T>` uses `.share()` too.
 
 ### Equality and ordering traits

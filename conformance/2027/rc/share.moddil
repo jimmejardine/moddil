@@ -1,0 +1,61 @@
+// covers: rc.1, rc.immutable.1
+
+use core::collections::HashMap;
+
+#[derive(Debug, PartialEq)]
+struct Node { name: String, size: int }
+
+test "to_rc moves a value into an rc, and share counts another owner" {
+    let a = Node { name: "root".to_string(), size: 3 }.to_rc();
+    Rc::strong_count(&a)                        // => 1
+    ;
+    let b = a.share();
+    Rc::strong_count(&a)                        // => 2
+    ;
+    drop(b);
+    Rc::strong_count(&a)                        // => 1
+}
+
+test "every owner reads the same value" {
+    let a = Node { name: "leaf".to_string(), size: 7 }.to_rc();
+    let b = a.share();
+    (*b).size + (*a).name.len()                 // => 11
+}
+
+test "ptr_eq tells shared values from equal ones" {
+    let a = 5.to_rc();
+    let b = a.share();
+    let c = 5.to_rc();
+    Rc::ptr_eq(&a, &b)                          // => true
+    ;
+    Rc::ptr_eq(&a, &c)                          // => false
+    ;
+    a == c                                      // => true
+}
+
+test "an rc compares, orders and shows as its value" {
+    let a = "apple".to_string().to_rc();
+    let b = "banana".to_string().to_rc();
+    a < b                                       // => true
+    ;
+    fmt"{a:?}"                                  // => "\"apple\""
+}
+
+test "an rc is a key of a map, hashed as its value" {
+    let mut m: HashMap<Rc<int>, String> = HashMap::new();
+    m.insert(1.to_rc(), "one".to_string());
+    m.get(&1.to_rc()) == Some(&"one".to_string())   // => true
+}
+
+test "a borrowed rc touches no count" {
+    let a = Node { name: "n".to_string(), size: 1 }.to_rc();
+    let size = |r: &Rc<Node>| -> int { (**r).size };
+    size(&a) + Rc::strong_count(&a)             // => 2
+}
+
+test "generic code bounded by Clone shares an rc" {
+    let a = 9.to_rc();
+    let v: Vec<Rc<int>> = [a.share(), a.share()];
+    let w = v.clone();
+    Rc::strong_count(&a) + w.len()              // => 7
+}

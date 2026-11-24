@@ -117,6 +117,25 @@ impl<'a> Natives<'a> {
                 Value::Ref(p, _) => Value::Ref(p.clone(), true),
                 other => unreachable!("a pointer: {other:?}"),
             },
+            // A box's value, kept on the heap behind a raw pointer, and taken back
+            // (`ffi.core.1`; an `Rc`'s allocation, `rc.1`).
+            (Ty::Unit | Ty::Adt(..), "into_raw") => match &args[0] {
+                Value::Adt { adt, fields, .. } if self.items.adts[*adt as usize].name == "Box" => {
+                    match &fields[..] {
+                        [Value::Buf(_, xs)] if xs.len() == 1 => stack.alloc(xs[0].clone()),
+                        other => unreachable!("a box's buffer: {other:?}"),
+                    }
+                }
+                other => unreachable!("a box: {other:?}"),
+            },
+            (Ty::Unit | Ty::Adt(..), "from_raw") => {
+                let v = stack.free(&pointer(&args[0]));
+                Value::Adt {
+                    adt: self.prelude_adt("Box"),
+                    variant: 0,
+                    fields: vec![Value::Buf(1, vec![v])],
+                }
+            }
             (Ty::Unit, "replace") => {
                 let p = pointer(&args[0]);
                 let old = stack.load(&p);

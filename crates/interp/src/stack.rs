@@ -99,10 +99,17 @@ pub(crate) struct Stack<'a> {
     /// The values of the const items borrowed so far: static data, which a [`Pointer`] with
     /// [`STATIC`] for its frame points into.
     statics: std::collections::HashMap<u32, Value>,
+    /// The values `core::ffi::into_raw` keeps alive behind a raw pointer (`ffi.core.1`), which a
+    /// [`Pointer`] with [`HEAP`] for its frame points into, until `from_raw` takes them back.
+    heap: std::collections::HashMap<u32, Value>,
+    next_heap: u32,
 }
 
 /// The frame of a pointer to static data: the const item is its local.
 pub(crate) const STATIC: usize = usize::MAX;
+
+/// The frame of a raw pointer to a value on the heap: its slot is its local.
+pub(crate) const HEAP: usize = usize::MAX - 1;
 
 impl<'a> Stack<'a> {
     pub(crate) fn new(first: Frame<'a>, items: &'a ItemTree) -> Self {
@@ -112,7 +119,37 @@ impl<'a> Stack<'a> {
             items,
             cmem: CMem::default(),
             statics: std::collections::HashMap::new(),
+            heap: std::collections::HashMap::new(),
+            next_heap: 0,
         }
+    }
+
+    /// Keeps `v` on the heap: a raw pointer to it (`ffi.core.1`).
+    pub(crate) fn alloc(&mut self, v: Value) -> Value {
+        let slot = self.next_heap;
+        self.next_heap += 1;
+        self.heap.insert(slot, v);
+        Value::Ref(
+            Pointer {
+                task: 0,
+                frame: HEAP,
+                local: slot,
+                path: Vec::new(),
+                span: None,
+            },
+            true,
+        )
+    }
+
+    /// The value at the heap pointer `p`, taken off the heap.
+    pub(crate) fn free(&mut self, p: &Pointer) -> Value {
+        assert!(
+            p.frame == HEAP && p.path.is_empty(),
+            "`from_raw` of a pointer `into_raw` did not give"
+        );
+        self.heap
+            .remove(&p.local)
+            .expect("`from_raw` of a pointer already given back")
     }
 
     /// The running task's frames.
@@ -435,6 +472,8 @@ impl<'a> Stack<'a> {
             self.cmem.copy(ptr.local)
         } else if ptr.frame == STATIC {
             &self.statics[&ptr.local]
+        } else if ptr.frame == HEAP {
+            &self.heap[&ptr.local]
         } else {
             &self.tasks[ptr.task][ptr.frame].locals[ptr.local as usize]
         };
@@ -465,7 +504,11 @@ impl<'a> Stack<'a> {
             self.cmem.store_at(self.items, ptr, &value);
             return;
         }
-        let mut v = &mut self.tasks[ptr.task][ptr.frame].locals[ptr.local as usize];
+        let mut v = if ptr.frame == HEAP {
+            self.heap.get_mut(&ptr.local).expect("a live heap value")
+        } else {
+            &mut self.tasks[ptr.task][ptr.frame].locals[ptr.local as usize]
+        };
         for &i in &ptr.path {
             v = match v {
                 Value::Tuple(xs)

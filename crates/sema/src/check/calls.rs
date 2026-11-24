@@ -6,7 +6,7 @@ use crate::hir::{ExprId, ExprKind};
 use crate::items::FnSig;
 use crate::traits::Answer;
 use crate::ty::TraitRef;
-use crate::{Code, Diagnostic, Ty};
+use crate::{Code, Diagnostic, Item, Ty};
 
 use super::{Checker, index};
 use crate::Callee;
@@ -421,6 +421,35 @@ impl Checker<'_> {
         };
         self.not_drop(pick.func, name_range);
         self.method_visible(pick.func, name_range);
+        // An `Rc` is shared, not cloned (`rc.clone.1`): its `Clone` is for generic code, and
+        // for derived and template code, which no one reads as written.
+        let written = match self.owner.owner() {
+            Item::Fn(i) => {
+                let sig = &self.items.fns[i as usize];
+                sig.src.is_file() && sig.origin.is_none() && sig.template.is_none()
+            }
+            _ => true,
+        };
+        if written
+            && name == "clone"
+            && pick
+                .trait_ref
+                .as_ref()
+                .is_some_and(|t| self.items.lang("Clone") == Some(t.trait_))
+            && let Some(a) = self.norm(r.strip_ref()).adt()
+            && self.items.adts[a as usize].src == crate::items::Src::Prelude
+            && matches!(self.items.adts[a as usize].name.as_str(), "Rc" | "Weak")
+        {
+            let ty = self.items.adts[a as usize].name.clone();
+            self.report(
+                Code::E0417,
+                name_range,
+                format!(
+                    "`{ty}` is shared, not cloned: write `.share()`, which gives another handle \
+                     to the same value"
+                ),
+            );
+        }
         let (params, ret) = self.instantiate_sig(pick.func, target.args(), range);
         // The receiver, adjusted to the method's `self`.
         let base = match (&r, pick.adjust.deref) {

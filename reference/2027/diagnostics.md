@@ -113,6 +113,7 @@ and a code never changes meaning.
 | E0704 | A manifest that is not as a manifest is, or names files that are not there | [mod.1](modules.md), [mod.tree.1](modules.md) |
 | E0705 | Mods that depend on each other in a cycle | [mod.dep.1](modules.md) |
 | E0416 | `#[derive(Default)]` on an enum without one `#[default]` unit variant | [attr.derive.default.1](attributes.md) |
+| E0417 | `.clone()` written on an `Rc` or a `Weak`, which is `.share()` | [rc.clone.1](rc.md) |
 | E0901 | `str` or a slice named where it would need a size | [text.str.2](text.md), [type.slice.1](types.md) |
 | E0902 | An invalid literal: a `fmt` hole without an expression, or a block literal's line indented wrongly | [expr.fmt.2](text.md), [text.lit.block.1](text.md) |
 | E1001 | Compile-time code calling a function that is not a `const fn` | [comptime.const-fn.2](comptime.md), [attr.around.args.1](attributes.md) |

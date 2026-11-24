@@ -3434,6 +3434,219 @@ impl<T> DerefMut for Box<T> {
     }
 }
 
+// `Rc<T>`: a value shared by counting its owners (`rc.1`). `x.to_rc()` moves `x` into an
+// allocation; `rc.share()` gives another owner of the same value; the value is dropped with its
+// last owner. What an `Rc` holds cannot be changed through it (`rc.immutable.1`). A `Weak<T>`
+// (`rc.weak.1`) keeps the allocation but not the value: `upgrade` gives an owner while there is
+// one. One task runs at a time (`task.sched.1`), so the counts are plain.
+
+// The allocation: the owners' count, the weak count (the owners together hold one), and the
+// value while an owner lives.
+struct RcBox<T> {
+    strong: int,
+    weak: int,
+    value: Option<T>,
+}
+
+// The allocation's box, to the raw pointer the handles hold and back: `core::ffi`'s `into_raw`
+// and `from_raw`, for the prelude, which cannot name `core`. Nothing outside the prelude can make
+// an `RcBox` or a pointer to one.
+impl<T> RcBox<T> {
+    #[intrinsic]
+    fn into_raw(b: Box<RcBox<T>>) -> *mut RcBox<T>;
+
+    #[intrinsic]
+    fn from_raw(p: *mut RcBox<T>) -> Box<RcBox<T>>;
+}
+
+struct Rc<T> {
+    p: *mut RcBox<T>,
+}
+
+struct Weak<T> {
+    p: *mut RcBox<T>,
+}
+
+// `.to_rc()`, on any value.
+trait ToRc {
+    fn to_rc(self) -> Rc<Self>;
+}
+
+impl<T> ToRc for T {
+    fn to_rc(self) -> Rc<T> {
+        let b = Box::new(RcBox { strong: 1, weak: 1, value: Some(self) });
+        Rc { p: RcBox::into_raw(b) }
+    }
+}
+
+impl<T> Rc<T> {
+    // Another owner of the same value: the count goes up by one, and nothing is copied.
+    fn share(&self) -> Rc<T> {
+        unsafe("p is a live allocation: this owner keeps it") {
+            (*self.p).strong += 1;
+        }
+        Rc { p: self.p }
+    }
+
+    // A weak handle to the value, which does not keep it alive.
+    fn weak(&self) -> Weak<T> {
+        unsafe("p is a live allocation: this owner keeps it") {
+            (*self.p).weak += 1;
+        }
+        Weak { p: self.p }
+    }
+
+    // Whether `a` and `b` share one value (`rc.1`): the only test of identity. A live
+    // allocation's count is never 0, so `b` sees 0 only if it is `a`'s.
+    fn ptr_eq(a: &Rc<T>, b: &Rc<T>) -> bool {
+        unsafe("a and b are live allocations; one task runs at a time") {
+            let n = (*a.p).strong;
+            (*a.p).strong = 0;
+            let same = (*b.p).strong == 0;
+            (*a.p).strong = n;
+            same
+        }
+    }
+
+    // How many owners the value has.
+    fn strong_count(rc: &Rc<T>) -> int {
+        unsafe("p is a live allocation: rc keeps it") { (*rc.p).strong }
+    }
+
+    // How many weak handles the value has.
+    fn weak_count(rc: &Rc<T>) -> int {
+        unsafe("p is a live allocation: rc keeps it") { (*rc.p).weak - 1 }
+    }
+}
+
+impl<T> Deref for Rc<T> {
+    type Output = T;
+    fn deref(&self) -> &T {
+        unsafe("p is a live allocation, and its value lives while an owner does") {
+            let v = match &(*self.p).value {
+                Some(v) => Some(v),
+                None => None,
+            };
+            v ?! "an owned rc has its value"
+        }
+    }
+}
+
+// The last owner drops the value; the allocation goes with the last weak handle.
+impl<T> Drop for Rc<T> {
+    fn drop(self) {
+        let p = self.p;
+        let last = unsafe("p is a live allocation: this owner keeps it") {
+            (*p).strong -= 1;
+            (*p).strong == 0
+        };
+        if last {
+            let value = unsafe("the last owner: nothing borrows the value") {
+                replace(&mut (*p).value, None)
+            };
+            drop(value);
+            rc_release(p);
+        }
+    }
+}
+
+// Lets go of one weak count of the allocation at `p`, freeing it with the last.
+fn rc_release<T>(p: *mut RcBox<T>) {
+    let last = unsafe("p is a live allocation: the caller holds a weak count") {
+        (*p).weak -= 1;
+        (*p).weak == 0
+    };
+    if last {
+        drop(unsafe("the last count: into_raw's pointer, given back once") {
+            RcBox::from_raw(p)
+        });
+    }
+}
+
+// A share, so that code generic over `Clone` takes an `Rc` (`rc.clone.1`); written `.clone()`
+// on an `Rc` it is refused, for `.share()`.
+impl<T> Clone for Rc<T> {
+    fn clone(&self) -> Rc<T> {
+        self.share()
+    }
+}
+
+impl<T> Weak<T> {
+    // Another weak handle to the same value.
+    fn share(&self) -> Weak<T> {
+        unsafe("p is a live allocation: this handle keeps it") {
+            (*self.p).weak += 1;
+        }
+        Weak { p: self.p }
+    }
+
+    // An owner of the value, if it still has one.
+    fn upgrade(&self) -> Option<Rc<T>> {
+        let alive = unsafe("p is a live allocation: this handle keeps it") {
+            (*self.p).strong > 0
+        };
+        if alive {
+            unsafe("p is a live allocation, and its value is alive") {
+                (*self.p).strong += 1;
+            }
+            Some(Rc { p: self.p })
+        } else {
+            None
+        }
+    }
+}
+
+impl<T> Drop for Weak<T> {
+    fn drop(self) {
+        rc_release(self.p);
+    }
+}
+
+impl<T> Clone for Weak<T> {
+    fn clone(&self) -> Weak<T> {
+        self.share()
+    }
+}
+
+// Compared, hashed and shown as the value.
+impl<T: PartialEq> PartialEq for Rc<T> {
+    fn eq(&self, other: &Rc<T>) -> bool {
+        PartialEq::eq(self.deref(), other.deref())
+    }
+}
+
+impl<T: Eq> Eq for Rc<T> {}
+
+impl<T: PartialOrd> PartialOrd for Rc<T> {
+    fn partial_cmp(&self, other: &Rc<T>) -> Option<Ordering> {
+        PartialOrd::partial_cmp(self.deref(), other.deref())
+    }
+}
+
+impl<T: Ord> Ord for Rc<T> {
+    fn cmp(&self, other: &Rc<T>) -> Ordering {
+        Ord::cmp(self.deref(), other.deref())
+    }
+}
+
+impl<T: Hash> Hash for Rc<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Hash::hash(self.deref(), state);
+    }
+}
+
+impl<T: Debug> Debug for Rc<T> {
+    fn fmt(&self, out: &mut String) {
+        Debug::fmt(self.deref(), out);
+    }
+}
+
+impl<T> Debug for Weak<T> {
+    fn fmt(&self, out: &mut String) {
+        out.push_str("(Weak)");
+    }
+}
+
 // Collection literals (`expr.array.from.1`): `[a, b]` and `[x; n]` make the type the context
 // expects, if it implements this.
 trait FromArrayLiteral<T> {

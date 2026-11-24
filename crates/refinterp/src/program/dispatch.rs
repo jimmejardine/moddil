@@ -17,7 +17,7 @@ impl Program {
         if self
             .impls
             .iter()
-            .any(|i| i.head == *head && i.trait_.as_deref() == Some(name))
+            .any(|i| (i.head == *head || i.blanket) && i.trait_.as_deref() == Some(name))
         {
             return true;
         }
@@ -60,7 +60,7 @@ impl Program {
         }
         for (k, i) in self.impls.iter().enumerate() {
             if i.trait_.is_some()
-                && i.head == *head
+                && (i.head == *head || i.blanket)
                 && let Some(f) = i.methods.get(name)
             {
                 out.push(Method::Code(f.clone(), Some(k)));
@@ -128,7 +128,7 @@ impl Program {
     fn trait_method_of(&self, tr: &str, head: &Head, name: &str) -> Option<Method> {
         for (k, i) in self.impls.iter().enumerate() {
             if i.trait_.as_deref() == Some(tr)
-                && i.head == *head
+                && (i.head == *head || i.blanket)
                 && let Some(f) = i.methods.get(name)
             {
                 return Some(Method::Code(f.clone(), Some(k)));
