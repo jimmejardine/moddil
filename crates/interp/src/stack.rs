@@ -5,7 +5,7 @@ use moddil_mir::{Body, Const, Local, Operand, Place, Projection, Statement, Term
 use moddil_sema::{ItemTree, Solver, Src, Ty};
 use moddil_syntax::TextRange;
 
-use crate::cmem::{CMEM, CMem, COPIES};
+use crate::cmem::{CMEM, CMem};
 use crate::value::{Pointer, Value};
 
 /// Where a call's result goes.
@@ -468,9 +468,7 @@ impl<'a> Stack<'a> {
         if ptr.frame == CMEM {
             return self.cmem.load_at(self.items, ptr);
         }
-        let mut v = if ptr.frame == COPIES {
-            self.cmem.copy(ptr.local)
-        } else if ptr.frame == STATIC {
+        let mut v = if ptr.frame == STATIC {
             &self.statics[&ptr.local]
         } else if ptr.frame == HEAP {
             &self.heap[&ptr.local]

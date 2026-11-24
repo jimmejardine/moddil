@@ -52,9 +52,9 @@ with the `unsafe` capability (E0219), makes borrows of what C gives and hands bo
 `slice(p, n)` and `slice_mut(p, n)` (the `n` values at `p`), `text(p, n)` (`n` bytes of UTF-8),
 `ptr_of(s)` and `text_ptr(s)` (where a slice's or a text's values are), and `into_raw(b)` and
 `from_raw(p)` (a box's value kept alive behind a raw pointer, and owned again). Nothing checks
-that a pointer and a length describe live memory. `into_raw` and `from_raw` run everywhere (the
-interpreters keep the value on a heap of their own); the others run in native code, and the
-interpreters trap.
+that a pointer and a length describe live memory. Native code and the MIR interpreter run them
+all, the interpreter as **ffi.native.2** says; the reference interpreter runs `into_raw` and
+`from_raw` (keeping the value on a heap of its own) and traps on the others.
 
 **ffi.core.2** `core::ffi` also has C's strings: `c_len(p)` (the bytes of the NUL-terminated
 string at `p` before its NUL), `c_text(p)` (that string as text, which traps if it is not UTF-8)

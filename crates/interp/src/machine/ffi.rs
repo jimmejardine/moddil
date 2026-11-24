@@ -197,16 +197,11 @@ impl Machine<'_> {
         let code = self.body(Item::Fn(f));
         self.stack
             .push(Frame::new(code, values, Vec::new(), Ret::Callback));
-        loop {
-            match self.step(&mut |_, _, _| {}) {
-                None => {}
-                Some(Ok(v)) => return Ok(v),
-                Some(Err(stop)) => {
-                    self.stack.unwind_to(depth);
-                    return Err(stop);
-                }
-            }
+        let r = self.run_to_end(&mut |_, _, _| {});
+        if r.is_err() {
+            self.stack.unwind_to(depth);
         }
+        r
     }
 
     /// The memory for a pointer `p` to a `ty`: the value it points to, and, if it points into

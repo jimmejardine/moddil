@@ -123,7 +123,10 @@ impl Natives<'_> {
                                 Err(_) => Err(TrapClass::Unimplemented),
                             }
                         } else {
-                            Ok(Value::Ref(stack.cmem().copy_of(Value::Array(xs)), false))
+                            match stack.alloc(Value::Array(xs)) {
+                                Value::Ref(p, _) => Ok(Value::Ref(p, false)),
+                                other => unreachable!("a heap pointer: {other:?}"),
+                            }
                         }
                     }
                     // Part of a Moddil array.

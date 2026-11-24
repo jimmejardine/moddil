@@ -71,21 +71,26 @@ pub(crate) fn run(
         },
         pending: std::collections::HashMap::new(),
     };
-    loop {
-        if let Some(f) = &mut m.fuel {
-            if *f == 0 {
-                let trap = m.trap(TrapClass::OutOfFuel, None, Vec::new());
-                return Err(Stop::Trap(trap));
-            }
-            *f -= 1;
-        }
-        if let Some(done) = m.step(observer) {
-            return done;
-        }
-    }
+    m.run_to_end(observer)
 }
 
 impl<'a> Machine<'a> {
+    /// Steps until the run (or the callback C made, `ffi.native.2`) ends, or the fuel runs out.
+    fn run_to_end(&mut self, observer: Observer<'_>) -> Result<Value, Stop> {
+        loop {
+            if let Some(f) = &mut self.fuel {
+                if *f == 0 {
+                    let trap = self.trap(TrapClass::OutOfFuel, None, Vec::new());
+                    return Err(Stop::Trap(trap));
+                }
+                *f -= 1;
+            }
+            if let Some(done) = self.step(observer) {
+                return done;
+            }
+        }
+    }
+
     /// The MIR of `item` of the program.
     fn body(&self, item: Item) -> &'a Body {
         body(self.db, Owner::new(self.db, self.program, item))

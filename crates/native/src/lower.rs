@@ -102,14 +102,19 @@ pub(crate) fn clif_type(ty: &Ty) -> Result<Option<ir::Type>, String> {
     }))
 }
 
-/// A slot of `size` bytes, 8-byte aligned: its address.
-fn scratch(b: &mut FunctionBuilder<'_>, size: u32) -> ir::Value {
+/// A stack slot of `size` bytes (at least one), aligned to `align` (at least 8): its address.
+fn stack_slot(b: &mut FunctionBuilder<'_>, size: u32, align: u32) -> ir::Value {
     let slot = b.create_sized_stack_slot(ir::StackSlotData::new(
         ir::StackSlotKind::ExplicitSlot,
-        size,
-        3,
+        size.max(1),
+        align.max(8).trailing_zeros() as u8,
     ));
     b.ins().stack_addr(types::I64, slot, 0)
+}
+
+/// A slot of `size` bytes, 8-byte aligned: its address.
+fn scratch(b: &mut FunctionBuilder<'_>, size: u32) -> ir::Value {
+    stack_slot(b, size, 8)
 }
 
 /// Copies `size` bytes from `src` to `dest`, reading none past them.
@@ -1442,20 +1447,7 @@ impl<M: Module> Compiler<'_, M> {
         let f = self.module.declare_func_in_func(body, b.func);
         let call = b.ins().call(f, &vals);
         let results = b.inst_results(call).to_vec();
-        let flags = ir::MemFlagsData::trusted();
-        match pass {
-            Pass::Scalar(_) => {
-                b.ins().store(flags, results[1], out, 0);
-            }
-            Pass::Words(ts) => {
-                let mut at = 0;
-                for (k, t) in ts.iter().enumerate() {
-                    b.ins().store(flags, results[1 + k], out, at);
-                    at += t.bytes() as i32;
-                }
-            }
-            Pass::Nothing | Pass::Indirect => {}
-        }
+        store_pass(&mut b, &pass, &results[1..], out);
         b.ins().return_(&[results[0]]);
         b.seal_all_blocks();
         b.finalize(self.module.target_config());
@@ -1556,18 +1548,7 @@ impl<M: Module> Compiler<'_, M> {
             }
         }
         let mut vals = vec![captures];
-        match &tuple_pass {
-            Pass::Nothing => {}
-            Pass::Scalar(t) => vals.push(b.ins().load(*t, flags, tuple, 0)),
-            Pass::Words(ts) => {
-                let mut o = 0;
-                for t in ts {
-                    vals.push(b.ins().load(*t, flags, tuple, o));
-                    o += t.bytes() as i32;
-                }
-            }
-            Pass::Indirect => vals.push(tuple),
-        }
+        vals.extend(load_pass(&mut b, &tuple_pass, tuple));
         // The result's place (if the caller gives one), then the error's: as the caller gave.
         if ret_pass == Pass::Indirect {
             vals.push(ps[ps.len() - 2]);
@@ -2004,20 +1985,7 @@ impl<M: Module> Compiler<'_, M> {
         vals.push(err);
         let call = b.ins().call(f, &vals);
         let results = b.inst_results(call).to_vec();
-        let flags = ir::MemFlagsData::trusted();
-        match pass {
-            Pass::Scalar(_) => {
-                b.ins().store(flags, results[1], out, 0);
-            }
-            Pass::Words(ts) => {
-                let mut at = 0;
-                for (k, t) in ts.iter().enumerate() {
-                    b.ins().store(flags, results[1 + k], out, at);
-                    at += t.bytes() as i32;
-                }
-            }
-            Pass::Nothing | Pass::Indirect => {}
-        }
+        store_pass(&mut b, &pass, &results[1..], out);
         b.ins().return_(&[results[0]]);
         b.seal_all_blocks();
         b.finalize(self.module.target_config());
@@ -2193,14 +2161,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
 
     /// A stack slot of layout `l`'s size, at least 8-byte aligned, and its address.
     fn slot(&mut self, l: &Layout) -> ir::Value {
-        let align = l.align.max(8);
-        let slot = self.b.create_sized_stack_slot(ir::StackSlotData::new(
-            ir::StackSlotKind::ExplicitSlot,
-            l.size.max(1),
-            align.trailing_zeros() as u8,
-        ));
-        let ptr = self.ptr();
-        self.b.ins().stack_addr(ptr, slot, 0)
+        stack_slot(&mut self.b, l.size, l.align)
     }
 
     /// The locals some `&` or `&mut` takes the address of (not through a borrow they hold).
@@ -2260,28 +2221,12 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 _ => {
                     let addr = self.slot(&layout);
                     if arg {
-                        match &pass {
-                            Pass::Scalar(_) => {
-                                self.b
-                                    .ins()
-                                    .store(ir::MemFlagsData::trusted(), params[k], addr, 0);
-                                k += 1;
-                            }
-                            Pass::Words(ts) => {
-                                let mut at = 0;
-                                for t in ts {
-                                    self.b.ins().store(
-                                        ir::MemFlagsData::trusted(),
-                                        params[k],
-                                        addr,
-                                        at,
-                                    );
-                                    at += t.bytes() as i32;
-                                    k += 1;
-                                }
-                            }
-                            Pass::Nothing | Pass::Indirect => {}
-                        }
+                        store_pass(&mut self.b, &pass, &params[k..], addr);
+                        k += match &pass {
+                            Pass::Scalar(_) => 1,
+                            Pass::Words(ts) => ts.len(),
+                            Pass::Nothing | Pass::Indirect => 0,
+                        };
                     }
                     Loc::Mem(addr)
                 }
@@ -2682,20 +2627,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
 
     /// Copies `size` bytes from `src` to `dest`, which do not overlap.
     fn copy(&mut self, dest: ir::Value, src: ir::Value, size: u32) {
-        let mut at = 0u32;
-        let flags = ir::MemFlagsData::trusted();
-        for (n, t) in [
-            (8, types::I64),
-            (4, types::I32),
-            (2, types::I16),
-            (1, types::I8),
-        ] {
-            while size - at >= n {
-                let v = self.b.ins().load(t, flags, src, at as i32);
-                self.b.ins().store(flags, v, dest, at as i32);
-                at += n;
-            }
-        }
+        copy_bytes(&mut self.b, dest, src, size);
     }
 
     // ----- operands --------------------------------------------------------------------------
@@ -3987,7 +3919,6 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             }
         };
         vals.push(err);
-        let flags = ir::MemFlagsData::trusted();
         // Count the frame, so that recursion without end traps.
         let site = self.site(Site::Call(self.file, range, self.tracked));
         let tracked = self.b.ins().iconst(types::I8, i64::from(self.tracked));
@@ -4044,13 +3975,9 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         };
         match pass {
             Pass::Scalar(_) => self.write(d, Val::Scalar(results[1]))?,
-            Pass::Words(ts) => {
+            Pass::Words(_) => {
                 let a = self.addr_of(d)?;
-                let mut at = 0;
-                for (k, t) in ts.iter().enumerate() {
-                    self.b.ins().store(flags, results[1 + k], a, at);
-                    at += t.bytes() as i32;
-                }
+                store_pass(&mut self.b, &pass, &results[1..], a);
             }
             Pass::Nothing | Pass::Indirect => {}
         }

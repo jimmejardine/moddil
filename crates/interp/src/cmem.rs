@@ -27,10 +27,6 @@ use crate::value::{Pointer, Value};
 /// The frame of a pointer into C's memory: its local is the place's index in [`CMem`].
 pub(crate) const CMEM: usize = usize::MAX - 2;
 
-/// The frame of a pointer to a copy of C's values the run keeps (`ffi.native.2`): its local is
-/// the copy's index in [`CMem`].
-pub(crate) const COPIES: usize = usize::MAX - 3;
-
 /// Where handles start: above every address user code can have on the targets there are.
 const HANDLE_BASE: u64 = 0xFFF0_0000_0000_0000;
 
@@ -41,9 +37,6 @@ pub(crate) struct CMem {
     handles: Vec<Value>,
     /// The copies made for C that last the run, as words (so that any alignment up to 8 holds).
     kept: Vec<Box<[u64]>>,
-    /// The copies of C's values borrowed as Moddil values (`ffi::slice` of C's memory), kept
-    /// for the run.
-    copies: Vec<Value>,
     /// The callbacks given to C: their code's address, and the function it runs.
     callbacks: HashMap<u64, u32>,
     /// The places in C's memory pointers have reached (an address and a type), by index, and
@@ -399,23 +392,6 @@ impl CMem {
         let (addr, ty) = self.at(p);
         // SAFETY: as for `load_at`.
         unsafe { self.store(items, addr, &ty, v) }.unwrap_or_else(|e| unreachable!("{e}"));
-    }
-
-    /// Keeps `v`, a copy of C's values, for the rest of the run: a pointer to it.
-    pub(crate) fn copy_of(&mut self, v: Value) -> Pointer {
-        self.copies.push(v);
-        Pointer {
-            task: 0,
-            frame: COPIES,
-            local: (self.copies.len() - 1) as u32,
-            path: Vec::new(),
-            span: None,
-        }
-    }
-
-    /// The copy at `i`.
-    pub(crate) fn copy(&self, i: u32) -> &Value {
-        &self.copies[i as usize]
     }
 
     /// Keeps `bytes` for the rest of the run: their address.
