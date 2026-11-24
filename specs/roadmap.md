@@ -1083,7 +1083,9 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
     - **Fixed since:** `self.f(self.x)` with `&mut self` was refused. A receiver borrowed with
       `&mut` is now borrowed once the arguments are evaluated (`expr.method.twophase.1`), so they
       may read it.
-    - **Borrows:** `let x;` without an initialiser is not supported yet.
+    - **Fixed since:** `let x;` without a value was refused. It now declares the name, which an
+      assignment gives a value on every path before it is read (`stmt.let.uninit.1`); one not
+      declared `mut` is assigned once.
 - **`Rc` and `Weak` (decided November 2026), after slice M3a.** The prelude's shared values
   (`reference/2027/rc.md`): `x.to_rc()`, `rc.share()`, `rc.weak()` and `upgrade`, `Rc::ptr_eq`
   and the counts, dropped with their last owner.

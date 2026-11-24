@@ -146,8 +146,35 @@ struct Checker<'a> {
 /// until the body ends.
 type Holders = Vec<BTreeSet<usize>>;
 
-/// The places that may have been moved out of.
-type Moved = BTreeSet<PlaceKey>;
+/// The places that may have been moved out of, or have no value yet.
+#[derive(Clone, Default)]
+struct Moved {
+    places: BTreeSet<PlaceKey>,
+    /// The locals declared without a value (`let x;`) that may have been given one.
+    given: BTreeSet<u32>,
+}
+
+impl Moved {
+    /// On entry: the locals declared without a value have none yet (`stmt.let.uninit.1`).
+    fn entry(body: &Body) -> Moved {
+        Moved {
+            places: body
+                .late
+                .iter()
+                .map(|&(l, _)| PlaceKey::of(&Place::local(l)))
+                .collect(),
+            given: BTreeSet::new(),
+        }
+    }
+
+    /// Adds what `other` may have moved or given; whether that changed anything.
+    fn join(&mut self, other: &Moved) -> bool {
+        let before = (self.places.len(), self.given.len());
+        self.places.extend(other.places.iter().cloned());
+        self.given.extend(other.given.iter().copied());
+        before != (self.places.len(), self.given.len())
+    }
+}
 
 /// A place without `Deref`, ordered so it can live in a set.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -348,7 +375,7 @@ impl<'a> Checker<'a> {
             }
         }
         holders_in[0] = Some(entry);
-        moved_in[0] = Some(BTreeSet::new());
+        moved_in[0] = Some(Moved::entry(self.body));
         let mut work: Vec<usize> = vec![0];
         while let Some(b) = work.pop() {
             let (mut h, mut m) = (
@@ -370,9 +397,7 @@ impl<'a> Checker<'a> {
                             a.extend(b.iter().copied());
                             changed |= a.len() != before;
                         }
-                        let before = mi.len();
-                        mi.extend(m.iter().cloned());
-                        changed | (mi.len() != before)
+                        changed | mi.join(&m)
                     }
                     (hi, mi) => {
                         *hi = Some(h.clone());
@@ -420,7 +445,7 @@ impl<'a> Checker<'a> {
         // Use after move: anything touching a place that may have been moved out of.
         let key = PlaceKey::of(&direct(place));
         if kind != Access::Write || !place.projection.is_empty() {
-            let moved_part = m.iter().find(|mv| {
+            let moved_part = m.places.iter().find(|mv| {
                 if kind == Access::Write {
                     // Assigning a part of a moved value is an error; assigning all of it is not.
                     mv.contains(&key) && *mv != &key
@@ -428,14 +453,34 @@ impl<'a> Checker<'a> {
                     mv.overlaps(&key)
                 }
             });
-            if moved_part.is_some() {
+            if let Some(mv) = moved_part {
                 let what = self.name(&direct(place));
-                self.report(Diagnostic::error(
-                    Code::E0303,
-                    span,
-                    format!("{what} was moved out of earlier, so it cannot be used here"),
-                ));
+                // A local declared without a value that no path to here gives one.
+                let unset = mv.path.is_empty()
+                    && self.body.late.iter().any(|&(l, _)| l.0 == mv.local)
+                    && !m.given.contains(&mv.local);
+                let why = if unset {
+                    format!("{what} is used before it has a value: assign it first")
+                } else {
+                    format!("{what} was moved out of earlier, so it cannot be used here")
+                };
+                self.report(Diagnostic::error(Code::E0303, span, why));
             }
+        }
+        // A local declared without a value and not `mut` is given one once.
+        if kind == Access::Write
+            && place.projection.is_empty()
+            && m.given.contains(&place.local.0)
+            && self.body.late.contains(&(place.local, false))
+        {
+            let what = self.name(place);
+            self.report(Diagnostic::error(
+                Code::E0301,
+                span,
+                format!(
+                    "{what} may already have a value, and it is not declared `mut`, so it cannot                      be assigned again"
+                ),
+            ));
         }
         if kind == Access::Move
             && place
@@ -518,7 +563,7 @@ impl<'a> Checker<'a> {
                     self.move_out_of_drop(span, p);
                 }
                 if !p.is_indirect() {
-                    m.insert(PlaceKey::of(p));
+                    m.places.insert(PlaceKey::of(p));
                 }
             }
             Operand::Const(_) => {}
@@ -548,7 +593,10 @@ impl<'a> Checker<'a> {
         }
         if !dest.is_indirect() {
             let key = PlaceKey::of(dest);
-            m.retain(|mv| !key.contains(mv));
+            m.places.retain(|mv| !key.contains(mv));
+            if dest.projection.is_empty() && self.body.late.iter().any(|&(l, _)| l == dest.local) {
+                m.given.insert(dest.local.0);
+            }
         }
     }
 
@@ -633,7 +681,8 @@ impl<'a> Checker<'a> {
                     self.storage_dead(at, *l, h);
                 }
                 h[l.index()].clear();
-                m.retain(|mv| mv.local != l.0);
+                m.places.retain(|mv| mv.local != l.0);
+                m.given.remove(&l.0);
             }
         }
     }
@@ -687,7 +736,7 @@ impl<'a> Checker<'a> {
                     }
                 }
                 if !place.is_indirect() {
-                    m.insert(PlaceKey::of(place));
+                    m.places.insert(PlaceKey::of(place));
                 }
             }
             Terminator::Call {

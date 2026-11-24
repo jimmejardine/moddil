@@ -1327,6 +1327,7 @@ impl<M: Module> Compiler<'_, M> {
             strs: Vec::new(),
             cleanups: Vec::new(),
             cleanup_locals: 0,
+            late: Vec::new(),
         };
         let params = [Ty::reference(true, Ty::Unit)];
         let mut ctx = self.module.make_context();

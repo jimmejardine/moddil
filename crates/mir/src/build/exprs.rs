@@ -1018,6 +1018,16 @@ impl Builder<'_> {
             Stmt::Let {
                 pat, init, else_, ..
             } => {
+                let Some(init) = init else {
+                    // `let x;`: declared, and given its value by an assignment
+                    // (`stmt.let.uninit.1`).
+                    if let PatKind::Bind { local, sub: None } = self.hir.pats[pat].kind {
+                        let named = self.local(local);
+                        let mutable = self.hir.locals[local].mutable;
+                        self.cfg.late(named, mutable);
+                    }
+                    return;
+                };
                 if let PatKind::Bind { local, sub: None } = self.hir.pats[pat].kind {
                     // Declared after its initialiser is evaluated: `let x = x + 1` reads the
                     // outer `x`.

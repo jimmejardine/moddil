@@ -1,0 +1,28 @@
+// covers: stmt.let.uninit.1
+
+fn read_first() -> int {
+    let x: int;
+    x                           //~ E0303
+}
+
+fn one_path(c: bool) -> int {
+    let x;
+    if c {
+        x = 1;
+    }
+    x                           //~ E0303
+}
+
+fn twice() -> int {
+    let x;
+    x = 1;
+    x = 2;                      //~ E0301
+    x
+}
+
+fn in_a_loop() {
+    let x;
+    loop {
+        x = 1;                  //~ E0301
+    }
+}

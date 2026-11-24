@@ -57,9 +57,9 @@ and a code never changes meaning.
 | E0220 | `core::os` or `core::gpu` named in a mod without the `os` capability | [os.cap.1](os.md), [gpu.cap.1](gpu.md) |
 | E0221 | A `#[kernel]` that is not `fn k(params: &P, out: &mut Tile)`, or that needs handlers, can fail, suspends or spawns | [gpu.kernel.1](gpu.md) |
 | E0222 | A C or `#[export]` function with a type C does not have, or with effects, errors or suspension; an `extern` block that is not `extern "C"`; a C function with a body | [ffi.types.1](interop.md), [ffi.extern.1](interop.md), [ffi.export.1](interop.md) |
-| E0301 | Mutation of an immutable local (assigning, or borrowing with `&mut`) | [expr.assign.1](expressions/assignment.md), [borrow.mut.1](borrows.md) |
+| E0301 | Mutation of an immutable local (assigning, or borrowing with `&mut`; a `let x;` assigned again) | [expr.assign.1](expressions/assignment.md), [borrow.mut.1](borrows.md), [stmt.let.uninit.1](statements.md) |
 | E0302 | Mutation through a shared borrow | [borrow.mut.1](borrows.md) |
-| E0303 | Use of a moved value | [own.move.1](ownership.md), [own.move.partial.1](ownership.md) |
+| E0303 | Use of a moved value, or of a `let x;` not yet assigned | [own.move.1](ownership.md), [own.move.partial.1](ownership.md), [stmt.let.uninit.1](statements.md) |
 | E0304 | Move out of a borrow | [own.move.borrow.1](ownership.md), [pat.ref.1](patterns.md) |
 | E0305 | Conflicting borrows | [borrow.rules.1](borrows.md) |
 | E0306 | Assignment to or move of a borrowed value | [borrow.rules.1](borrows.md), [borrow.guard.1](borrows.md) |

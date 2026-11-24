@@ -220,7 +220,7 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
                             stmts: vec![Stmt::Let {
                                 pat: pair,
                                 ty: None,
-                                init: call,
+                                init: Some(call),
                                 else_: None,
                             }],
                             tail: Some(test),
@@ -520,10 +520,7 @@ impl Lowerer<'_> {
             self.out.diagnostics.extend(ds);
             ty
         });
-        let init = match l.init() {
-            Some(e) => self.expr(&e),
-            None => self.unsupported(node.text_range(), "`let` without an initialiser"),
-        };
+        let init = l.init().map(|e| self.expr(&e));
         // The `else` block does not see the pattern's names.
         let else_ = node
             .child(K::LET_ELSE)
@@ -533,6 +530,19 @@ impl Lowerer<'_> {
         let p = l.pat()?;
         let mut binds = Binds::default();
         let pat = self.pat(&p, &mut binds);
+        // Without a value, one name, given its value later (`stmt.let.uninit.1`).
+        if init.is_none()
+            && (else_.is_some()
+                || !matches!(
+                    self.out.body.pats[pat].kind,
+                    PatKind::Bind { sub: None, .. }
+                ))
+        {
+            self.error(Diagnostic::unsupported(
+                node.text_range(),
+                "a `let` without a value that is not a single name",
+            ));
+        }
         self.bring_into_scope(binds);
         Some(Stmt::Let {
             pat,

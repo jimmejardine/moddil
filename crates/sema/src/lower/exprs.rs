@@ -781,7 +781,7 @@ impl Lowerer<'_> {
                 stmts: vec![crate::hir::Stmt::Let {
                     pat: it_pat,
                     ty: None,
-                    init,
+                    init: Some(init),
                     else_: None,
                 }],
                 tail: Some(id),

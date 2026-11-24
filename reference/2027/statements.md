@@ -18,6 +18,17 @@ names are bound as for `let`; if not, the block runs. The block must not finish 
 is `!`, as when it ends in `return`, `break` or `continue` (E0210). The block does not see the
 pattern's names.
 
+**stmt.let.uninit.1** `let x;` and `let x: T;` declare a name without a value; an assignment
+`x = e` gives it one, and its type is the one written or the one its assignments give. Using `x`
+where some path to that point has not assigned it is an error (E0303), as is using a moved value. A
+name declared without `mut` may be assigned once on each path: assigning it where it may already have
+a value is E0301. Only a single name may be declared this way, not a pattern, and not with `else`.
+
+```rust
+let size;
+if wide { size = 80; } else { size = 40; }
+```
+
 **stmt.let.scope.1** A binding is in scope from the statement after its `let` to the end of the
 enclosing block, not in its own initialiser. A later `let` of the same name shadows it.
 

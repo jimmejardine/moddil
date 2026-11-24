@@ -386,6 +386,7 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         loops: Vec::new(),
         obligations: Obligations::default(),
         deferred: DeferredChecks::default(),
+        late: HashSet::new(),
         fail_cx: vec![fail_cx],
         marked: None,
         call_fails: None,
@@ -730,6 +731,9 @@ struct Checker<'a> {
     /// The integer literals, with their values, to check against the types they get
     /// (`num.lit.1`).
     literals: Vec<(ExprId, moddil_syntax::ast::IntValue)>,
+    /// The locals declared without a value (`let x;`), which `=` gives one even if they are not
+    /// `mut`: the borrow checker sees that it does so once (`stmt.let.uninit.1`).
+    late: HashSet<LocalId>,
     out: Inference,
 }
 

@@ -84,6 +84,9 @@ pub struct Body {
     pub cleanups: Vec<BlockId>,
     /// How many of the last locals only cleanup code uses (not shown when printed).
     pub cleanup_locals: usize,
+    /// The locals declared without a value (`let x;`, `stmt.let.uninit.1`), and whether each is
+    /// `mut`: one that is not is assigned at most once.
+    pub late: Vec<(Local, bool)>,
 }
 
 impl Body {

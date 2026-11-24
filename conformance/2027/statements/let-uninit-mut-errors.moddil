@@ -1,0 +1,14 @@
+// covers: stmt.let.uninit.1
+
+// Only `=` gives a value to a name declared without one and without `mut`.
+fn compound() -> int {
+    let x;
+    x = 1;
+    x += 1;                     //~ E0301
+    x
+}
+
+fn borrowed() {
+    let x: int;
+    let r = &mut x;             //~ E0301
+}

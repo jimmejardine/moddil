@@ -69,7 +69,8 @@ impl Builder<'_> {
             ExprKind::Block { stmts, tail, .. } => {
                 stmts.iter().any(|s| match *s {
                     Stmt::Let { init, else_, .. } => {
-                        self.assigns(init) || else_.is_some_and(|x| self.assigns(x))
+                        init.is_some_and(|x| self.assigns(x))
+                            || else_.is_some_and(|x| self.assigns(x))
                     }
                     Stmt::Expr { expr, .. } | Stmt::Defer(expr) | Stmt::ErrDefer(expr) => {
                         self.assigns(expr)

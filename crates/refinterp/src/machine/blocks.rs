@@ -119,7 +119,15 @@ impl Machine<'_> {
 
     /// `let p = e;` and `let p = e else { … };` (`stmt.let.1`, `stmt.let.else.1`).
     pub(super) fn let_stmt(&mut self, l: &ast::LetStmt) -> Eval<()> {
-        let init = l.init().expect("a checked `let` has a value");
+        let Some(init) = l.init() else {
+            // `let x;`: the name, with no value until it is assigned (`stmt.let.uninit.1`).
+            let pat = l.pat().expect("a checked `let` has a pattern");
+            let src = Src::Place(self.memory.temp(Value::Moved), false);
+            let mut binds = Vec::new();
+            self.matches(&pat, &src, &mut binds);
+            self.bind(binds);
+            return Ok(());
+        };
         // A literal takes the number type written (`num.lit.1`).
         let src = match l.ty() {
             Some(t)

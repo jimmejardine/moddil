@@ -361,7 +361,12 @@ impl Checker<'_> {
                     }
                     _ => self.infer(target),
                 };
-                self.check_mutable(target, "assigned to");
+                // A local declared without a value is given one by `=` (`stmt.let.uninit.1`).
+                let late = op.is_none()
+                    && matches!(self.body.exprs[target].kind, ExprKind::Local(l) if self.late.contains(&l));
+                if !late {
+                    self.check_mutable(target, "assigned to");
+                }
                 match op {
                     None => {
                         self.check(value, &lt);

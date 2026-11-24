@@ -409,14 +409,14 @@ pub struct SelectArm {
 /// A statement.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Stmt {
-    /// `let p = init;` or `let p = init else { … };`.
+    /// `let p = init;`, `let p = init else { … };`, or `let x;`, whose local is assigned later.
     Let {
         /// The pattern bound.
         pat: PatId,
         /// The declared type, if written.
         ty: Option<crate::Ty>,
-        /// The initialiser.
-        init: ExprId,
+        /// The initialiser, if there is one (`stmt.let.uninit.1`).
+        init: Option<ExprId>,
         /// The `else` block, which must not finish normally.
         else_: Option<ExprId>,
     },

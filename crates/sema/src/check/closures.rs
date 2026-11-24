@@ -831,7 +831,9 @@ impl Walk<'_, '_> {
     fn stmt(&mut self, s: &Stmt) {
         match *s {
             Stmt::Let { init, else_, .. } => {
-                self.expr(init, Use::Value);
+                if let Some(x) = init {
+                    self.expr(x, Use::Value);
+                }
                 if let Some(x) = else_ {
                     self.expr(x, Use::Value);
                 }

@@ -18,16 +18,27 @@ impl Checker<'_> {
                     init,
                     else_,
                 } => {
-                    let t = match ty {
-                        Some(ty) => {
+                    let t = match (ty, init) {
+                        (Some(ty), Some(init)) => {
                             let ty = self.instantiate(ty);
                             self.check(init, &ty);
                             ty
                         }
-                        None => {
+                        (None, Some(init)) => {
                             let t = self.infer(init);
                             self.unsized_value(init);
                             t
+                        }
+                        // `let x;`: the type written, or the one its assignments give
+                        // (`stmt.let.uninit.1`).
+                        (ty, None) => {
+                            if let PatKind::Bind { local, .. } = self.body.pats[pat].kind {
+                                self.late.insert(local);
+                            }
+                            match ty {
+                                Some(ty) => self.instantiate(ty),
+                                None => self.fresh(),
+                            }
                         }
                     };
                     diverges |= self.norm(&t) == Ty::Never;

@@ -138,6 +138,11 @@ impl Cfg {
         Local(self.body.locals.len() as u32 - 1)
     }
 
+    /// Records that `local` is declared without a value (`let x;`), and whether it is `mut`.
+    pub(super) fn late(&mut self, local: Local, mutable: bool) {
+        self.body.late.push((local, mutable));
+    }
+
     /// The declared type of `local`.
     pub(super) fn local_ty(&self, local: Local) -> Ty {
         self.body.locals[local.index()].ty.clone()
