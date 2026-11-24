@@ -2,9 +2,7 @@
 
 use std::fmt::Write as _;
 
-use moddil_sema::Ty;
-
-use crate::{Callable, Elem, Gen, PyTy};
+use crate::{Callable, Elem, Gen, PyTy, Recv, c_prefix};
 
 const PRELUDE: &str = r#"#define Py_LIMITED_API 0x030B0000
 #define PY_SSIZE_T_CLEAN
@@ -107,9 +105,114 @@ static int get_buf(PyObject *o, Py_buffer *b, char kind, Py_ssize_t size, int wr
 }
 "#;
 
+/// `name.Array`, made only where a `Vec` of numbers other than bytes crosses.
+const ARRAY: &str = r#"
+/* A `Vec` of numbers Moddil gave: a read-only sequence and buffer over its elements, without a
+ * copy, which frees the `Vec` when it goes. */
+typedef struct {
+    PyObject_HEAD void *h;
+    int32_t (*free)(void *);
+    PyObject *(*item)(const void *, Py_ssize_t);
+    const void *p;
+    Py_ssize_t n, size;
+    const char *format;
+} Arr;
+static PyTypeObject *type_Array;
+
+static PyObject *array_of(void *h, int32_t (*free)(void *), PyObject *(*item)(const void *, Py_ssize_t),
+                          const void *p, int64_t n, Py_ssize_t size, const char *format) {
+    allocfunc alloc = (allocfunc)PyType_GetSlot(type_Array, Py_tp_alloc);
+    Arr *a = (Arr *)alloc(type_Array, 0);
+    int32_t st;
+    if (a == NULL) { LOCKED(st, free(h)); (void)st; return NULL; }
+    a->h = h;
+    a->free = free;
+    a->item = item;
+    a->p = p;
+    a->n = (Py_ssize_t)n;
+    a->size = size;
+    a->format = format;
+    return (PyObject *)a;
+}
+
+static void array_dealloc(PyObject *self) {
+    Arr *a = (Arr *)self;
+    int32_t st;
+    if (a->h) { LOCKED(st, a->free(a->h)); (void)st; }
+    PyTypeObject *tp = Py_TYPE(self);
+    freefunc f = (freefunc)PyType_GetSlot(tp, Py_tp_free);
+    f(self);
+    Py_DECREF(tp);
+}
+
+static Py_ssize_t array_len(PyObject *self) { return ((Arr *)self)->n; }
+
+static PyObject *array_item(PyObject *self, Py_ssize_t i) {
+    Arr *a = (Arr *)self;
+    if (a->h == NULL || i < 0 || i >= a->n) {
+        PyErr_SetString(PyExc_IndexError, "Array index out of range");
+        return NULL;
+    }
+    return a->item(a->p, i);
+}
+
+static int array_getbuffer(PyObject *self, Py_buffer *v, int flags) {
+    Arr *a = (Arr *)self;
+    if (flags & PyBUF_WRITABLE) {
+        PyErr_SetString(PyExc_BufferError, "an Array is read-only");
+        return -1;
+    }
+    v->buf = a->p ? (void *)a->p : (void *)&a->n;
+    v->obj = self;
+    Py_INCREF(self);
+    v->len = a->n * a->size;
+    v->itemsize = a->size;
+    v->readonly = 1;
+    v->ndim = 1;
+    v->format = (flags & PyBUF_FORMAT) ? (char *)(a->format ? a->format : "B") : NULL;
+    v->shape = (flags & PyBUF_ND) ? &a->n : NULL;
+    v->strides = (flags & PyBUF_STRIDES) == PyBUF_STRIDES ? &a->size : NULL;
+    v->suboffsets = NULL;
+    v->internal = NULL;
+    return 0;
+}
+
+static PyObject *array_tolist(PyObject *self, PyObject *unused) {
+    (void)unused;
+    return PySequence_List(self);
+}
+
+static PyObject *array_repr(PyObject *self) {
+    PyObject *l = PySequence_List(self);
+    if (l == NULL) return NULL;
+    PyObject *r = PyUnicode_FromFormat("Array(%R)", l);
+    Py_DECREF(l);
+    return r;
+}
+
+static PyMethodDef methods_Array[] = {
+    {"tolist", (PyCFunction)array_tolist, METH_NOARGS, NULL},
+    {NULL, NULL, 0, NULL},
+};
+
+static PyType_Slot slots_Array[] = {
+    {Py_tp_dealloc, (void *)array_dealloc},
+    {Py_tp_repr, (void *)array_repr},
+    {Py_tp_methods, methods_Array},
+    {Py_sq_length, (void *)array_len},
+    {Py_sq_item, (void *)array_item},
+    {Py_bf_getbuffer, (void *)array_getbuffer},
+    {0, NULL},
+};
+"#;
+
+/// The message for an instance whose value is gone, or was never made.
+fn no_value(s: &str) -> String {
+    format!("the {s} has no value: it was never made, or a method taking it by value took it")
+}
+
 /// The C type of a shim's parameter or out-parameter.
-fn c_param(g: &Gen<'_>, t: &PyTy) -> Vec<String> {
-    let _ = g;
+fn c_param(t: &PyTy) -> Vec<String> {
     match t {
         PyTy::Bool => vec!["bool".to_string()],
         PyTy::Int(_, c, _) | PyTy::Float(_, c) => vec![(*c).to_string()],
@@ -154,6 +257,22 @@ fn range(m: &str) -> (&'static str, &'static str, bool) {
 
 fn vec_tag(e: &Elem) -> String {
     format!("vec_{}", e.moddil)
+}
+
+/// An element's format in Python's `struct` notation, as a buffer gives it.
+fn format(e: &Elem) -> &'static str {
+    match (e.kind, e.size) {
+        ('f', 4) => "f",
+        ('f', _) => "d",
+        ('i', 1) => "b",
+        ('i', 2) => "h",
+        ('i', 4) => "i",
+        ('i', _) => "q",
+        (_, 1) => "B",
+        (_, 2) => "H",
+        (_, 4) => "I",
+        _ => "Q",
+    }
 }
 
 /// The C statements converting Python object `o` into the C pieces named `n`, or failing to
@@ -215,10 +334,11 @@ fn convert_in(
             ]
         }
         PyTy::Struct(a, _) => {
-            let sn = g.sname(*a);
+            let (sn, cn) = (g.sname(*a), g.cname(*a));
             let _ = writeln!(
                 s,
-                "    if (!PyObject_IsInstance({o}, (PyObject *)type_{sn})) {{\n        PyErr_SetString(PyExc_TypeError, \"{what}: a {sn} was expected\");\n        {fail}\n    }}\n    void *{n} = ((Obj *){o})->h;\n    if ({n} == NULL) {{\n        PyErr_SetString(PyExc_ValueError, \"{what}: the {sn} was never made\");\n        {fail}\n    }}"
+                "    if (!PyObject_IsInstance({o}, (PyObject *)type_{cn})) {{\n        PyErr_SetString(PyExc_TypeError, \"{what}: a {sn} was expected\");\n        {fail}\n    }}\n    void *{n} = ((Obj *){o})->h;\n    if ({n} == NULL) {{\n        PyErr_SetString(PyExc_ValueError, \"{what}: {}\");\n        {fail}\n    }}",
+                no_value(&sn)
             );
             vec![n.to_string()]
         }
@@ -242,7 +362,7 @@ fn convert_out(g: &Gen<'_>, t: &PyTy, out: &str) -> String {
         PyTy::Float(..) => format!("PyFloat_FromDouble((double){out})"),
         PyTy::String => format!("string_result({out})"),
         PyTy::Vec(e) => format!("{}_result({out})", vec_tag(e)),
-        PyTy::Struct(a, _) => format!("wrap_{}({out})", g.sname(*a)),
+        PyTy::Struct(a, _) => format!("wrap_{}({out})", g.cname(*a)),
         PyTy::Option(inner) => format!(
             "({out}_has ? {} : (Py_INCREF(Py_None), Py_None))",
             convert_out(g, inner, out)
@@ -272,8 +392,9 @@ fn out_decls(t: &PyTy) -> (String, Vec<String>) {
     }
 }
 
-/// The body of a C function calling callable `c`: `self_h` is the receiver's handle (a method),
-/// `fail` what ends the function with an error, `done` how it gives `result`.
+/// The body of a C function calling callable `c`, its Python arguments in `args` and `kwds`:
+/// `self_h` is the receiver's handle (a method), `fail_value` what the function gives on an
+/// error.
 fn call_body(g: &Gen<'_>, c: &Callable, self_h: Option<&str>, fail_value: &str) -> String {
     let n = c.params.len();
     let mut s = String::new();
@@ -286,11 +407,28 @@ fn call_body(g: &Gen<'_>, c: &Callable, self_h: Option<&str>, fail_value: &str) 
             let _ = writeln!(s, "    Py_buffer a{i}_b;\n    int a{i}_held = 0;");
         }
     }
+    // By keyword too, but `_` only by position (and so each parameter before it).
+    let last_positional = c.params.iter().rposition(|(p, _)| p == "_");
+    let mut kw: Vec<String> = c
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, (p, _))| {
+            if last_positional.is_some_and(|l| i <= l) {
+                "\"\"".to_string()
+            } else {
+                format!("\"{p}\"")
+            }
+        })
+        .collect();
+    kw.push("NULL".to_string());
     let unpack: Vec<String> = (0..n).map(|i| format!("&o{i}")).collect();
     let pyname = &g.items.fns[c.f as usize].name;
     let _ = writeln!(
         s,
-        "    if (!PyArg_UnpackTuple(args, \"{pyname}\", {n}, {n}{}{})) return {fail_value};",
+        "    static char *kw[] = {{{}}};\n    if (!PyArg_ParseTupleAndKeywords(args, kwds, \"{}:{pyname}\", kw{}{})) return {fail_value};",
+        kw.join(", "),
+        "O".repeat(n),
         if n > 0 { ", " } else { "" },
         unpack.join(", ")
     );
@@ -316,6 +454,10 @@ fn call_body(g: &Gen<'_>, c: &Callable, self_h: Option<&str>, fail_value: &str) 
         c.shim,
         cargs.join(", ")
     );
+    if c.receiver == Some(Recv::Value) {
+        // The call took the value: the instance has none now.
+        s.push_str("    ((Obj *)self)->h = NULL;\n");
+    }
     for (i, (_, t)) in c.params.iter().enumerate() {
         if matches!(t, PyTy::Slice(..)) {
             let _ = writeln!(
@@ -324,10 +466,11 @@ fn call_body(g: &Gen<'_>, c: &Callable, self_h: Option<&str>, fail_value: &str) 
             );
         }
     }
-    if let Some(e) = &c.error {
+    if let Some(e) = c.error {
         let _ = writeln!(
             s,
-            "    if (st == 1) {{ raise_{e}(err); return {fail_value}; }}"
+            "    if (st == 1) {{ raise_{}(err); return {fail_value}; }}",
+            g.cname(e)
         );
     }
     let _ = writeln!(
@@ -349,11 +492,27 @@ fn fail_label(c: &Callable, fail_value: &str) -> String {
     s
 }
 
+/// A method table's entry for a C function taking arguments by position and keyword.
+fn def(pyname: &str, cfn: &str, flags: &str) -> String {
+    format!(
+        "    {{\"{pyname}\", (PyCFunction)(void (*)(void)){cfn}, METH_VARARGS | METH_KEYWORDS{flags}, NULL}},"
+    )
+}
+
+/// The C variable holding the Python module of `path` inside the mod.
+fn mod_var(path: &[String]) -> String {
+    if path.is_empty() {
+        "m".to_string()
+    } else {
+        format!("mod_{}", c_prefix(path))
+    }
+}
+
 pub(crate) fn write(
     g: &mut Gen<'_>,
     fns: &[Callable],
     methods: &[(u32, Vec<Callable>)],
-    errors: &[(String, Ty)],
+    errors: &[u32],
     handles: &[PyTy],
 ) {
     let name = g.name;
@@ -362,6 +521,12 @@ pub(crate) fn write(
         c,
         "/* Generated by `moddil build --wheel`: the Python module `{name}`. */\n{PRELUDE}"
     );
+    let arrays = handles
+        .iter()
+        .any(|h| matches!(h, PyTy::Vec(e) if e.moddil != "u8"));
+    if arrays {
+        c.push_str(ARRAY);
+    }
     // The shims' prototypes.
     let _ = writeln!(c, "/* The shims, in the Moddil library. */");
     let all: Vec<&Callable> = fns
@@ -374,7 +539,7 @@ pub(crate) fn write(
             ps.push("void *".to_string());
         }
         for (_, t) in &f.params {
-            ps.extend(c_param(g, t));
+            ps.extend(c_param(t));
         }
         ps.extend(c_outs(&f.ret));
         if f.error.is_some() {
@@ -402,22 +567,30 @@ pub(crate) fn write(
             "extern int32_t __py_{tag}_view(void *, const {elem} **, int64_t *);\nextern int32_t __py_{tag}_free(void *);"
         );
     }
-    for (e, _) in errors {
-        let _ = writeln!(c, "extern int32_t __py_err_{e}(void *, void **);");
+    let field_protos = |c: &mut String, prefix: &str, a: u32, setters: bool| {
+        for (f, t) in g.fields(a) {
+            let outs = c_outs(&t).join(", ");
+            let _ = writeln!(c, "extern int32_t {prefix}_get_{f}(void *, {outs});");
+            if !setters {
+                continue;
+            }
+            if let PyTy::Int(_, ct, _) | PyTy::Float(_, ct) = &t {
+                let _ = writeln!(c, "extern int32_t {prefix}_set_{f}(void *, {ct});");
+            } else if t == PyTy::Bool {
+                let _ = writeln!(c, "extern int32_t {prefix}_set_{f}(void *, bool);");
+            }
+        }
+    };
+    for &e in errors {
+        let ce = g.cname(e);
+        let _ = writeln!(c, "extern int32_t __py_err_{ce}(void *, void **);");
+        field_protos(&mut c, &format!("__py_errf_{ce}"), e, false);
     }
     let structs = g.structs.clone();
     for &a in &structs {
-        let s = g.sname(a);
+        let s = g.cname(a);
         let _ = writeln!(c, "extern int32_t __py_free_{s}(void *);");
-        for (f, t) in g.fields(a) {
-            let outs = c_outs(&t).join(", ");
-            let _ = writeln!(c, "extern int32_t __py_{s}_get_{f}(void *, {outs});");
-            if let PyTy::Int(_, ct, _) | PyTy::Float(_, ct) = &t {
-                let _ = writeln!(c, "extern int32_t __py_{s}_set_{f}(void *, {ct});");
-            } else if t == PyTy::Bool {
-                let _ = writeln!(c, "extern int32_t __py_{s}_set_{f}(void *, bool);");
-            }
-        }
+        field_protos(&mut c, &format!("__py_{s}"), a, true);
         let _ = writeln!(c, "static PyTypeObject *type_{s};");
     }
     // Results through handles.
@@ -429,59 +602,78 @@ pub(crate) fn write(
                     "\nstatic PyObject *string_result(void *h) {{\n    const uint8_t *p;\n    int64_t n;\n    int32_t st;\n    LOCKED(st, __py_string_view(h, &p, &n));\n    PyObject *r = PyUnicode_FromStringAndSize((const char *)p, (Py_ssize_t)n);\n    LOCKED(st, __py_string_free(h));\n    (void)st;\n    return r;\n}}"
                 );
             }
+            PyTy::Vec(e) if e.moddil == "u8" => {
+                let tag = vec_tag(e);
+                let _ = writeln!(
+                    c,
+                    "\nstatic PyObject *{tag}_result(void *h) {{\n    const uint8_t *p;\n    int64_t n;\n    int32_t st;\n    LOCKED(st, __py_{tag}_view(h, &p, &n));\n    PyObject *r = PyBytes_FromStringAndSize((const char *)p, (Py_ssize_t)n);\n    LOCKED(st, __py_{tag}_free(h));\n    (void)st;\n    return r;\n}}"
+                );
+            }
             PyTy::Vec(e) => {
                 let tag = vec_tag(e);
-                let body = if e.moddil == "u8" {
-                    "    PyObject *r = PyBytes_FromStringAndSize((const char *)p, (Py_ssize_t)n);\n"
-                        .to_string()
-                } else {
-                    let item = match e.kind {
-                        'f' => "PyFloat_FromDouble((double)p[i])",
-                        'u' => "PyLong_FromUnsignedLongLong((unsigned long long)p[i])",
-                        _ => "PyLong_FromLongLong((long long)p[i])",
-                    };
-                    format!(
-                        "    PyObject *r = PyList_New((Py_ssize_t)n);\n    for (int64_t i = 0; r != NULL && i < n; i++) PyList_SetItem(r, (Py_ssize_t)i, {item});\n"
-                    )
+                let item = match e.kind {
+                    'f' => "PyFloat_FromDouble((double)",
+                    'u' => "PyLong_FromUnsignedLongLong((unsigned long long)",
+                    _ => "PyLong_FromLongLong((long long)",
                 };
                 let _ = writeln!(
                     c,
-                    "\nstatic PyObject *{tag}_result(void *h) {{\n    const {} *p;\n    int64_t n;\n    int32_t st;\n    LOCKED(st, __py_{tag}_view(h, &p, &n));\n{body}    LOCKED(st, __py_{tag}_free(h));\n    (void)st;\n    return r;\n}}",
-                    e.c
+                    "\nstatic PyObject *item_{tag}(const void *p, Py_ssize_t i) {{\n    return {item}((const {ct} *)p)[i]);\n}}\n\nstatic PyObject *{tag}_result(void *h) {{\n    const {ct} *p;\n    int64_t n;\n    int32_t st;\n    LOCKED(st, __py_{tag}_view(h, &p, &n));\n    (void)st;\n    return array_of(h, __py_{tag}_free, item_{tag}, p, n, {}, \"{}\");\n}}",
+                    e.size,
+                    format(e),
+                    ct = e.c
                 );
             }
             _ => {}
         }
     }
-    // The exceptions.
-    for (e, _) in errors {
+    // The exceptions: an instance of the error's class, with its fields as attributes.
+    for &e in errors {
+        let ce = g.cname(e);
+        let mut fields = String::new();
+        let mut sets = String::new();
+        for (f, t) in g.fields(e) {
+            let (decls, outs) = out_decls(&t);
+            let res = convert_out(g, &t, "out");
+            let _ = writeln!(
+                fields,
+                "    PyObject *f_{f};\n    {{\n    {decls}    LOCKED(st, __py_errf_{ce}_get_{f}(err, {}));\n        f_{f} = {res};\n        if (f_{f} == NULL) PyErr_Clear();\n    }}",
+                outs.join(", ")
+            );
+            let _ = writeln!(
+                sets,
+                "        if (f_{f} != NULL && PyObject_SetAttrString(e, \"{f}\", f_{f}) < 0) PyErr_Clear();"
+            );
+            let _ = writeln!(sets, "        Py_XDECREF(f_{f});");
+        }
         let _ = writeln!(
             c,
-            "\nstatic PyObject *exc_{e};\nstatic void raise_{e}(void *err) {{\n    void *text = NULL;\n    int32_t st;\n    LOCKED(st, __py_err_{e}(err, &text));\n    (void)st;\n    PyObject *t = string_result(text);\n    PyErr_SetObject(exc_{e}, t);\n    Py_XDECREF(t);\n}}"
+            "\nstatic PyObject *exc_{ce};\nstatic void raise_{ce}(void *err) {{\n    int32_t st;\n{fields}    void *text = NULL;\n    LOCKED(st, __py_err_{ce}(err, &text));\n    (void)st;\n    PyObject *t = string_result(text);\n    PyObject *e = t ? PyObject_CallFunctionObjArgs(exc_{ce}, t, NULL) : NULL;\n    Py_XDECREF(t);\n    if (e != NULL) {{\n{sets}        PyErr_SetObject(exc_{ce}, e);\n        Py_DECREF(e);\n    }}\n}}"
         );
     }
     // The classes' instances, made from handles.
     for &a in &structs {
-        let s = g.sname(a);
+        let s = g.cname(a);
         let _ = writeln!(
             c,
             "\nstatic PyObject *wrap_{s}(void *h) {{\n    allocfunc alloc = (allocfunc)PyType_GetSlot(type_{s}, Py_tp_alloc);\n    PyObject *o = alloc(type_{s}, 0);\n    int32_t st;\n    if (o == NULL) {{ LOCKED(st, __py_free_{s}(h)); (void)st; return NULL; }}\n    ((Obj *)o)->h = h;\n    return o;\n}}\n\nstatic void dealloc_{s}(PyObject *self) {{\n    int32_t st;\n    if (((Obj *)self)->h) {{ LOCKED(st, __py_free_{s}(((Obj *)self)->h)); (void)st; }}\n    PyTypeObject *tp = Py_TYPE(self);\n    freefunc f = (freefunc)PyType_GetSlot(tp, Py_tp_free);\n    f(self);\n    Py_DECREF(tp);\n}}"
         );
     }
-    // The functions.
+    // The functions, by module.
+    let fn_c = |f: &Callable| format!("py_{}", f.shim.trim_start_matches("__py_"));
     for f in fns {
-        let fname = &g.items.fns[f.f as usize].name;
         let body = call_body(g, f, None, "NULL");
         let res = convert_out(g, &f.ret, "out");
         let _ = writeln!(
             c,
-            "\nstatic PyObject *py_{fname}(PyObject *self, PyObject *args) {{\n    (void)self;\n{body}    return {res};\n{}}}",
+            "\nstatic PyObject *{}(PyObject *self, PyObject *args, PyObject *kwds) {{\n    (void)self;\n{body}    return {res};\n{}}}",
+            fn_c(f),
             fail_label(f, "NULL")
         );
     }
     // The classes.
     for (a, ms) in methods {
-        let s = g.sname(*a);
+        let (s, cs) = (g.sname(*a), g.cname(*a));
         let mut defs = Vec::new();
         let mut init = None;
         for m in ms {
@@ -491,7 +683,7 @@ pub(crate) fn write(
                 let body = call_body(g, m, None, "-1");
                 let _ = writeln!(
                     c,
-                    "\nstatic int init_{s}(PyObject *self, PyObject *args, PyObject *kwds) {{\n    if (kwds != NULL && PyDict_Size(kwds) > 0) {{\n        PyErr_SetString(PyExc_TypeError, \"{s}() takes its arguments by position\");\n        return -1;\n    }}\n{body}    int32_t st2;\n    if (((Obj *)self)->h) {{ LOCKED(st2, __py_free_{s}(((Obj *)self)->h)); (void)st2; }}\n    ((Obj *)self)->h = out;\n    return 0;\n{}}}",
+                    "\nstatic int init_{cs}(PyObject *self, PyObject *args, PyObject *kwds) {{\n{body}    int32_t st2;\n    if (((Obj *)self)->h) {{ LOCKED(st2, __py_free_{cs}(((Obj *)self)->h)); (void)st2; }}\n    ((Obj *)self)->h = out;\n    return 0;\n{}}}",
                     fail_label(m, "-1")
                 );
                 init = Some(());
@@ -503,30 +695,27 @@ pub(crate) fn write(
                     let body = call_body(g, m, Some("h"), "NULL");
                     let _ = writeln!(
                         c,
-                        "\nstatic PyObject *{s}_{mname}(PyObject *self, PyObject *args) {{\n    void *h = ((Obj *)self)->h;\n    if (h == NULL) {{ PyErr_SetString(PyExc_ValueError, \"the {s} was never made\"); return NULL; }}\n{body}    return {res};\n{}}}",
+                        "\nstatic PyObject *{cs}_{mname}(PyObject *self, PyObject *args, PyObject *kwds) {{\n    void *h = ((Obj *)self)->h;\n    if (h == NULL) {{ PyErr_SetString(PyExc_ValueError, \"{}\"); return NULL; }}\n{body}    return {res};\n{}}}",
+                        no_value(&s),
                         fail_label(m, "NULL")
                     );
-                    defs.push(format!(
-                        "    {{\"{mname}\", (PyCFunction){s}_{mname}, METH_VARARGS, NULL}},"
-                    ));
+                    defs.push(def(&mname, &format!("{cs}_{mname}"), ""));
                 }
                 None => {
                     let body = call_body(g, m, None, "NULL");
                     let _ = writeln!(
                         c,
-                        "\nstatic PyObject *{s}_{mname}(PyObject *self, PyObject *args) {{\n    (void)self;\n{body}    return {res};\n{}}}",
+                        "\nstatic PyObject *{cs}_{mname}(PyObject *self, PyObject *args, PyObject *kwds) {{\n    (void)self;\n{body}    return {res};\n{}}}",
                         fail_label(m, "NULL")
                     );
-                    defs.push(format!(
-                        "    {{\"{mname}\", (PyCFunction){s}_{mname}, METH_VARARGS | METH_STATIC, NULL}},"
-                    ));
+                    defs.push(def(&mname, &format!("{cs}_{mname}"), " | METH_STATIC"));
                 }
             }
         }
         if init.is_none() {
             let _ = writeln!(
                 c,
-                "\nstatic int init_{s}(PyObject *self, PyObject *args, PyObject *kwds) {{\n    (void)self; (void)args; (void)kwds;\n    PyErr_SetString(PyExc_TypeError, \"a {s} is made by the module's functions, not directly\");\n    return -1;\n}}"
+                "\nstatic int init_{cs}(PyObject *self, PyObject *args, PyObject *kwds) {{\n    (void)self; (void)args; (void)kwds;\n    PyErr_SetString(PyExc_TypeError, \"a {s} is made by the module's functions, not directly\");\n    return -1;\n}}"
             );
         }
         // Properties.
@@ -536,55 +725,106 @@ pub(crate) fn write(
             let res = convert_out(g, &t, "out");
             let _ = writeln!(
                 c,
-                "\nstatic PyObject *{s}_get_{f}(PyObject *self, void *closure) {{\n    (void)closure;\n    void *h = ((Obj *)self)->h;\n    if (h == NULL) {{ PyErr_SetString(PyExc_ValueError, \"the {s} was never made\"); return NULL; }}\n{decls}    int32_t st;\n    LOCKED(st, __py_{s}_get_{f}(h, {}));\n    (void)st;\n    return {res};\n}}",
+                "\nstatic PyObject *{cs}_get_{f}(PyObject *self, void *closure) {{\n    (void)closure;\n    void *h = ((Obj *)self)->h;\n    if (h == NULL) {{ PyErr_SetString(PyExc_ValueError, \"{}\"); return NULL; }}\n{decls}    int32_t st;\n    LOCKED(st, __py_{cs}_get_{f}(h, {}));\n    (void)st;\n    return {res};\n}}",
+                no_value(&s),
                 outs.join(", ")
             );
             let setter = if matches!(t, PyTy::Int(..) | PyTy::Float(..) | PyTy::Bool) {
                 let (code, args) = convert_in(g, "value", "x", &t, &f, "return -1;");
                 let _ = writeln!(
                     c,
-                    "\nstatic int {s}_set_{f}(PyObject *self, PyObject *value, void *closure) {{\n    (void)closure;\n    void *h = ((Obj *)self)->h;\n    if (value == NULL || h == NULL) {{ PyErr_SetString(PyExc_TypeError, \"{f} cannot be deleted\"); return -1; }}\n{code}    int32_t st;\n    LOCKED(st, __py_{s}_set_{f}(h, {}));\n    (void)st;\n    return 0;\n}}",
+                    "\nstatic int {cs}_set_{f}(PyObject *self, PyObject *value, void *closure) {{\n    (void)closure;\n    void *h = ((Obj *)self)->h;\n    if (value == NULL || h == NULL) {{ PyErr_SetString(PyExc_TypeError, \"{f} cannot be deleted\"); return -1; }}\n{code}    int32_t st;\n    LOCKED(st, __py_{cs}_set_{f}(h, {}));\n    (void)st;\n    return 0;\n}}",
                     args.join(", ")
                 );
-                format!("(setter){s}_set_{f}")
+                format!("(setter){cs}_set_{f}")
             } else {
                 "NULL".to_string()
             };
             gets.push(format!(
-                "    {{\"{f}\", (getter){s}_get_{f}, {setter}, NULL, NULL}},"
+                "    {{\"{f}\", (getter){cs}_get_{f}, {setter}, NULL, NULL}},"
             ));
         }
+        let dotted: String = g.module_of(*a).iter().map(|p| format!("{p}.")).collect();
         let _ = writeln!(
             c,
-            "\nstatic PyMethodDef methods_{s}[] = {{\n{}\n    {{NULL, NULL, 0, NULL}},\n}};\n\nstatic PyGetSetDef getset_{s}[] = {{\n{}\n    {{NULL, NULL, NULL, NULL, NULL}},\n}};\n\nstatic PyType_Slot slots_{s}[] = {{\n    {{Py_tp_dealloc, (void *)dealloc_{s}}},\n    {{Py_tp_init, (void *)init_{s}}},\n    {{Py_tp_new, (void *)PyType_GenericNew}},\n    {{Py_tp_methods, methods_{s}}},\n    {{Py_tp_getset, getset_{s}}},\n    {{0, NULL}},\n}};\n\nstatic PyType_Spec spec_{s} = {{\"{name}.{s}\", sizeof(Obj), 0, Py_TPFLAGS_DEFAULT, slots_{s}}};",
+            "\nstatic PyMethodDef methods_{cs}[] = {{\n{}\n    {{NULL, NULL, 0, NULL}},\n}};\n\nstatic PyGetSetDef getset_{cs}[] = {{\n{}\n    {{NULL, NULL, NULL, NULL, NULL}},\n}};\n\nstatic PyType_Slot slots_{cs}[] = {{\n    {{Py_tp_dealloc, (void *)dealloc_{cs}}},\n    {{Py_tp_init, (void *)init_{cs}}},\n    {{Py_tp_new, (void *)PyType_GenericNew}},\n    {{Py_tp_methods, methods_{cs}}},\n    {{Py_tp_getset, getset_{cs}}},\n    {{0, NULL}},\n}};\n\nstatic PyType_Spec spec_{cs} = {{\"{name}.{dotted}{s}\", sizeof(Obj), 0, Py_TPFLAGS_DEFAULT, slots_{cs}}};",
             defs.join("\n"),
             gets.join("\n")
         );
     }
-    // The module.
-    let mut defs = Vec::new();
-    for f in fns {
-        let fname = &g.items.fns[f.f as usize].name;
-        defs.push(format!(
-            "    {{\"{fname}\", (PyCFunction)py_{fname}, METH_VARARGS, NULL}},"
-        ));
+    if arrays {
+        let _ = writeln!(
+            c,
+            "\nstatic PyType_Spec spec_Array = {{\"{name}.Array\", sizeof(Arr), 0, Py_TPFLAGS_DEFAULT, slots_Array}};"
+        );
+    }
+    // The modules: the root, and one for each module inside the mod that exports something.
+    let fn_path = |f: &Callable| {
+        g.items.modules[g.items.fns[f.f as usize].module as usize]
+            .path
+            .clone()
+    };
+    let mut paths: std::collections::BTreeSet<Vec<String>> = std::collections::BTreeSet::new();
+    for p in fns
+        .iter()
+        .map(fn_path)
+        .chain(structs.iter().map(|&a| g.module_of(a).to_vec()))
+    {
+        for k in 0..=p.len() {
+            paths.insert(p[..k].to_vec());
+        }
+    }
+    paths.insert(Vec::new());
+    for p in &paths {
+        let defs: Vec<String> = fns
+            .iter()
+            .filter(|f| fn_path(f) == *p)
+            .map(|f| def(&g.items.fns[f.f as usize].name, &fn_c(f), ""))
+            .collect();
+        let table = if p.is_empty() {
+            "methods".to_string()
+        } else {
+            format!("methods_{}", c_prefix(p))
+        };
+        let _ = writeln!(
+            c,
+            "\nstatic PyMethodDef {table}[] = {{\n{}\n    {{NULL, NULL, 0, NULL}},\n}};",
+            defs.join("\n")
+        );
     }
     let _ = writeln!(
         c,
-        "\nstatic PyMethodDef methods[] = {{\n{}\n    {{NULL, NULL, 0, NULL}},\n}};\n\nstatic struct PyModuleDef module = {{PyModuleDef_HEAD_INIT, \"{name}\", NULL, -1, methods, NULL, NULL, NULL, NULL}};\n\nstatic int add(PyObject *m, const char *n, PyObject *o) {{\n    if (o == NULL) return -1;\n    Py_INCREF(o);\n    if (PyModule_AddObject(m, n, o) < 0) {{ Py_DECREF(o); return -1; }}\n    return 0;\n}}\n\nPyMODINIT_FUNC PyInit_{name}(void) {{\n    PyObject *m = PyModule_Create(&module);\n    if (m == NULL) return NULL;\n    lock = PyThread_allocate_lock();\n    Error = PyErr_NewException(\"{name}.Error\", NULL, NULL);\n    Trap = PyErr_NewException(\"{name}.Trap\", NULL, NULL);\n    if (lock == NULL || add(m, \"Error\", Error) < 0 || add(m, \"Trap\", Trap) < 0) return NULL;",
-        defs.join("\n")
+        "\nstatic struct PyModuleDef module = {{PyModuleDef_HEAD_INIT, \"{name}\", NULL, -1, methods, NULL, NULL, NULL, NULL}};\n\nstatic int add(PyObject *m, const char *n, PyObject *o) {{\n    if (o == NULL) return -1;\n    Py_INCREF(o);\n    if (PyModule_AddObject(m, n, o) < 0) {{ Py_DECREF(o); return -1; }}\n    return 0;\n}}\n\nPyMODINIT_FUNC PyInit_{name}(void) {{\n    PyObject *m = PyModule_Create(&module);\n    if (m == NULL) return NULL;\n    lock = PyThread_allocate_lock();\n    Error = PyErr_NewException(\"{name}.Error\", NULL, NULL);\n    Trap = PyErr_NewException(\"{name}.Trap\", NULL, NULL);\n    if (lock == NULL || add(m, \"Error\", Error) < 0 || add(m, \"Trap\", Trap) < 0) return NULL;"
     );
-    for (e, _) in errors {
+    for p in paths.iter().filter(|p| !p.is_empty()) {
+        let (var, parent) = (mod_var(p), mod_var(&p[..p.len() - 1]));
+        let dotted = format!("{name}.{}", p.join("."));
         let _ = writeln!(
             c,
-            "    exc_{e} = PyErr_NewException(\"{name}.{e}\", Error, NULL);\n    if (add(m, \"{e}\", exc_{e}) < 0) return NULL;"
+            "    PyObject *{var} = PyModule_New(\"{dotted}\");\n    if ({var} == NULL || PyModule_AddFunctions({var}, methods_{}) < 0) return NULL;\n    if (add({parent}, \"{}\", {var}) < 0) return NULL;\n    if (PyDict_SetItemString(PyImport_GetModuleDict(), \"{dotted}\", {var}) < 0) return NULL;",
+            c_prefix(p),
+            p[p.len() - 1]
+        );
+    }
+    if arrays {
+        let _ = writeln!(
+            c,
+            "    type_Array = (PyTypeObject *)PyType_FromSpec(&spec_Array);\n    if (add(m, \"Array\", (PyObject *)type_Array) < 0) return NULL;"
+        );
+    }
+    for &e in errors {
+        let (s, ce) = (g.sname(e), g.cname(e));
+        let _ = writeln!(
+            c,
+            "    exc_{ce} = PyErr_NewException(\"{name}.{s}\", Error, NULL);\n    if (add(m, \"{s}\", exc_{ce}) < 0) return NULL;"
         );
     }
     for &a in &structs {
-        let s = g.sname(a);
+        let (s, cs) = (g.sname(a), g.cname(a));
         let _ = writeln!(
             c,
-            "    type_{s} = (PyTypeObject *)PyType_FromSpec(&spec_{s});\n    if (add(m, \"{s}\", (PyObject *)type_{s}) < 0) return NULL;"
+            "    type_{cs} = (PyTypeObject *)PyType_FromSpec(&spec_{cs});\n    if (add({}, \"{s}\", (PyObject *)type_{cs}) < 0) return NULL;",
+            mod_var(g.module_of(a))
         );
     }
     let _ = writeln!(c, "    return m;\n}}");

@@ -65,21 +65,28 @@ and `c_string(s)` (the bytes of `s` and a NUL, which traps if `s` holds a NUL).
 
 **ffi.python.1** `#[export(python)]` on a `pub fn` of a mod's root module makes it a function of
 the mod's Python module, which `moddil build --wheel` builds (with CPython's stable ABI, 3.11 and
-later) with its stubs (`name.pyi`) and a wheel. Its parameters and result cross as Python values:
-numbers as `int` and `float` (out of range is `OverflowError`), `bool`, `&str` and `String` as
-`str`, slices of numbers as any C-contiguous buffer of that type without a copy (`bytes`,
-`bytearray`, `array.array`, `memoryview`, numpy arrays; `&mut` ones changed in place), `Vec<u8>`
-as `bytes` and other `Vec`s of numbers as `list`s, `Option` (a result) as the value or `None`,
-and `()` as `None`. A `fail` error is raised as an exception of its type's name, a subclass of
-`name.Error`, carrying its `Debug` text; a trap is raised as `name.Trap`. A function that needs
-handlers or suspends is not yet carried. Calls release the GIL, and run one at a time.
+later) with its stubs (`name.pyi`) and a wheel; on a `pub fn` of a module inside the mod, a
+function of the Python submodule of that module's path (`name.geo`, also importable as `import
+name.geo`). Its arguments are given by position or by keyword (a parameter named `_` by position
+only, and so each before it). Its parameters and result cross as Python values: numbers as `int`
+and `float` (out of range is `OverflowError`), `bool`, `&str` and `String` as `str`, slices of
+numbers as any C-contiguous buffer of that type without a copy (`bytes`, `bytearray`,
+`array.array`, `memoryview`, numpy arrays; `&mut` ones changed in place), `Vec<u8>` as `bytes`
+and other `Vec`s of numbers as `name.Array`, `Option` (a result) as the value or `None`, and `()`
+as `None`. A `name.Array` owns the `Vec`: a read-only sequence (`len`, indexing, iteration,
+`tolist()`) and buffer of the element's format, so `memoryview` and numpy read it without a
+copy. A `fail` error is raised as an exception of its type's name, a subclass of `name.Error`,
+carrying its `Debug` text and, for a struct, its `pub` fields of the types above as attributes; a
+trap is raised as `name.Trap`. A function that needs handlers or suspends is not yet carried.
+Calls release the GIL, and run one at a time.
 
-**ffi.python.2** `#[export(python)]` on a `pub struct` makes it a class of the module: an
-instance owns a value of it. Its inherent `pub fn`s are the class's: `new` (giving the struct) its
-constructor, the others taking `&self` or `&mut self` its methods, and those without `self` its
-static methods; its `pub` fields of the types above are properties, which can be set if they are
-numbers or `bool`. A method taking `self` by value is not carried (an error at `moddil build
---wheel`). Structs cross to and from functions by `&`, `&mut`, or by value (cloned).
+**ffi.python.2** `#[export(python)]` on a `pub struct` makes it a class of the module (or of the
+submodule of its module's path): an instance owns a value of it. Its inherent `pub fn`s are the
+class's: `new` (giving the struct) its constructor, the others taking `self` its methods, and
+those without `self` its static methods; its `pub` fields of the types above are properties,
+which can be set if they are numbers or `bool`. A method taking `self` by value takes the
+instance's value, as a move does: the instance has none after the call, and using it is
+`ValueError`. Structs cross to and from functions by `&`, `&mut`, or by value (cloned).
 
 **ffi.c.1** A mod's manifest may have a `[c]` table, the C code compiled with it by the system's
 C compiler: `sources` (files, or `dir/*.c` for every `.c` file in `dir`), `include` (header

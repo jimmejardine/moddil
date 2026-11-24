@@ -1,11 +1,13 @@
 //! A Python module written in Moddil (`ffi.python.1`): numbers in and out, buffers without a
 //! copy (any `bytes`, `bytearray`, `array.array`, `memoryview` or numpy array of the right
-//! type), text, a `fail` error as a Python exception, and a class.
+//! type), `Vec` results as `stats.Array`, text, a `fail` error as a Python exception with its
+//! fields, a class, and a submodule (`geo`).
 
 /// What a statistic cannot be computed for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StatsError {
     pub reason: String,
+    pub window: int,
 }
 
 /// The mean of `xs`; 0 for none.
@@ -25,7 +27,7 @@ pub fn mean(xs: &[f64]) -> f64 {
 #[export(python)]
 pub fn rolling_mean(xs: &[f64], window: int) -> Vec<f64> with fail(StatsError) {
     if window < 1 || window > xs.len() {
-        fail(StatsError { reason: fmt"a window of {window} over {xs.len()} values" });
+        fail(StatsError { reason: fmt"a window of {window} over {xs.len()} values", window });
     }
     let mut out = Vec::new();
     let mut i = 0;
@@ -128,6 +130,23 @@ impl Counter {
     pub fn zero() -> Counter {
         Counter::new(0)
     }
+
+    /// The counter's label, the counter used up: it takes `self` by value.
+    pub fn finish(self) -> String {
+        fmt"{self.label} at {self.count}"
+    }
+}
+
+/// `n` values from `start`, by `step`: a `Vec<int>` as `stats.Array`.
+#[export(python)]
+pub fn steps(start: int, n: int, step: int) -> Vec<int> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < n {
+        out.push(start + i * step);
+        i += 1;
+    }
+    out
 }
 
 test "the functions, in Moddil" {

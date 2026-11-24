@@ -96,12 +96,10 @@ decision first, and ending with conformance tests on every runner (M: a few hour
 more). Packages are independent unless one says otherwise. When a package is done, remove it;
 when part of one is, remove that part.
 
-**P1. Python bindings, the next steps** (`crates/py`, `examples/python`; L)
-- Methods taking `self` by value (refused at `--wheel` today).
-- Keyword arguments.
-- `Vec` results as a small `name.Array` class with the buffer protocol (decided), not lists.
-- An error's fields as the exception's attributes, not only its type and `Debug` text.
-- Nested modules.
+**P1. Python bindings, the next steps** (`crates/py`, `examples/python`; M)
+- An enum error's variant and its fields as the exception's attributes (a struct error's fields
+  are).
+- Two error types of the same name in different modules (both would be `name.E`).
 
 **P2. A static library** (`crates/moddil` `link.rs`, `crates/ffi`; M)
 - `moddil build --lib --static`: the object and the runtime's static library merged (`lib.exe`

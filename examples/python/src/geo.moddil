@@ -1,0 +1,26 @@
+//! Shapes: a Python submodule, `stats.geo`, with a function and a class of its own.
+
+/// The area of a `w` by `h` rectangle.
+#[export(python)]
+pub fn area(w: f64, h: f64) -> f64 {
+    w * h
+}
+
+/// A rectangle: `stats.geo.Rect(w, h)`.
+#[export(python)]
+#[derive(Clone, Debug)]
+pub struct Rect {
+    pub w: f64,
+    pub h: f64,
+}
+
+impl Rect {
+    pub fn new(w: f64, h: f64) -> Rect {
+        Rect { w, h }
+    }
+
+    /// The rectangle turned a quarter: it takes the rectangle by value.
+    pub fn turned(self) -> Rect {
+        Rect { w: self.h, h: self.w }
+    }
+}

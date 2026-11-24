@@ -1,5 +1,6 @@
 //! Python bindings for a Moddil mod (`moddil build --wheel`, `reference/2027/interop.md`): from
-//! its `#[export(python)]` functions and structs, three generated texts.
+//! its `#[export(python)]` functions and structs, three generated texts. Those of a module inside
+//! the mod are in a Python submodule of the same path.
 //!
 //! - **Moddil shims**, a mod of their own over the user's: an `#[export(status)]` C function for
 //!   each Python function, method, property and value conversion, taking C pieces (scalars,
@@ -137,6 +138,15 @@ fn classify(items: &ItemTree, t: &Ty, result: bool) -> Option<PyTy> {
     })
 }
 
+/// How a method takes `self`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Recv {
+    Ref,
+    Mut,
+    /// By value: the Python object gives its value up to the call.
+    Value,
+}
+
 /// A callable: a free function, a method, or an associated function.
 struct Callable {
     f: u32,
@@ -144,12 +154,22 @@ struct Callable {
     shim: String,
     /// How Moddil calls it: `stats::mean`, `stats::Counter::new`, or a method's name.
     path: String,
-    /// The receiver, for a method: by `&` (false) or `&mut` (true).
-    receiver: Option<bool>,
+    /// The receiver, for a method.
+    receiver: Option<Recv>,
     params: Vec<(String, PyTy)>,
     ret: PyTy,
-    /// The error type's name, if it can fail.
-    error: Option<String>,
+    /// The error type (a struct or enum), if it can fail.
+    error: Option<u32>,
+}
+
+/// The `::`-ended Moddil path of a module inside the mod (`geo::`), or nothing for the root.
+fn mod_path(path: &[String]) -> String {
+    path.iter().map(|p| format!("{p}::")).collect()
+}
+
+/// The C identifier prefix of a module inside the mod (`geo__`), or nothing for the root.
+fn c_prefix(path: &[String]) -> String {
+    path.iter().map(|p| format!("{p}__")).collect()
 }
 
 /// The Python bindings of the functions and structs of the user's mod `name` marked
@@ -160,15 +180,13 @@ struct Callable {
 /// Each function or struct whose signature Python cannot carry, and why.
 pub fn generate(items: &ItemTree, name: &str, root_mod: u32) -> Result<Bindings, Vec<String>> {
     let mut problems = Vec::new();
-    let in_root = |module: u32| {
-        items.mod_of(module) == root_mod && items.modules[module as usize].path.is_empty()
-    };
+    let in_mod = |module: u32| items.mod_of(module) == root_mod;
     let structs: Vec<u32> = (0..items.adts.len() as u32)
-        .filter(|&a| items.adts[a as usize].py_export && in_root(items.adts[a as usize].module))
+        .filter(|&a| items.adts[a as usize].py_export && in_mod(items.adts[a as usize].module))
         .collect();
-    let mut errors: Vec<(String, Ty)> = Vec::new();
+    let mut errors: Vec<u32> = Vec::new();
     let mut callable = |f: u32,
-                        receiver: Option<bool>,
+                        receiver: Option<Recv>,
                         path: String,
                         shim: String,
                         problems: &mut Vec<String>|
@@ -209,11 +227,10 @@ pub fn generate(items: &ItemTree, name: &str, root_mod: u32) -> Result<Bindings,
         let error = match &sig.fails {
             Ty::Never => None,
             Ty::Adt(a, ..) => {
-                let n = items.adts[*a as usize].name.clone();
-                if !errors.iter().any(|(e, _)| *e == n) {
-                    errors.push((n.clone(), sig.fails.clone()));
+                if !errors.contains(a) {
+                    errors.push(*a);
                 }
-                Some(n)
+                Some(*a)
             }
             t => {
                 problems.push(format!(
@@ -235,14 +252,15 @@ pub fn generate(items: &ItemTree, name: &str, root_mod: u32) -> Result<Bindings,
     };
     let mut fns = Vec::new();
     for (f, sig) in items.fns.iter().enumerate() {
+        let path = &items.modules[sig.module as usize].path;
         if sig.py_export
             && matches!(sig.container, Container::Free)
-            && in_root(sig.module)
+            && in_mod(sig.module)
             && let Some(c) = callable(
                 f as u32,
                 None,
-                format!("{name}::{}", sig.name),
-                format!("__py_{}", sig.name),
+                format!("{name}::{}{}", mod_path(path), sig.name),
+                format!("__py_{}{}", c_prefix(path), sig.name),
                 &mut problems,
             )
         {
@@ -253,6 +271,11 @@ pub fn generate(items: &ItemTree, name: &str, root_mod: u32) -> Result<Bindings,
     let mut methods: Vec<(u32, Vec<Callable>)> = Vec::new();
     for &a in &structs {
         let sname = items.adts[a as usize].name.clone();
+        let spath = &items.modules[items.adts[a as usize].module as usize].path;
+        let (moddil, cname) = (
+            format!("{name}::{}{sname}", mod_path(spath)),
+            format!("{}{sname}", c_prefix(spath)),
+        );
         let mut ms = Vec::new();
         for imp in &items.impls {
             if imp.trait_ref.is_some() || !matches!(&imp.self_ty, Ty::Adt(b, ..) if *b == a) {
@@ -263,25 +286,21 @@ pub fn generate(items: &ItemTree, name: &str, root_mod: u32) -> Result<Bindings,
                 if sig.vis != Vis::Pub {
                     continue;
                 }
-                let receiver = match sig.self_kind {
-                    None => None,
-                    Some(SelfKind::Ref) => Some(false),
-                    Some(SelfKind::RefMut) => Some(true),
-                    Some(SelfKind::Value) => {
-                        problems.push(format!("`{sname}::{}` takes `self` by value, which Python objects do not give up", sig.name));
-                        continue;
-                    }
-                };
+                let receiver = sig.self_kind.map(|k| match k {
+                    SelfKind::Ref => Recv::Ref,
+                    SelfKind::RefMut => Recv::Mut,
+                    SelfKind::Value => Recv::Value,
+                });
                 let path = if receiver.is_some() {
                     sig.name.clone()
                 } else {
-                    format!("{name}::{sname}::{}", sig.name)
+                    format!("{moddil}::{}", sig.name)
                 };
                 if let Some(c) = callable(
                     m,
                     receiver,
                     path,
-                    format!("__py_{sname}_{}", sig.name),
+                    format!("__py_{cname}_{}", sig.name),
                     &mut problems,
                 ) {
                     ms.push(c);
@@ -289,6 +308,18 @@ pub fn generate(items: &ItemTree, name: &str, root_mod: u32) -> Result<Bindings,
             }
         }
         methods.push((a, ms));
+    }
+    // An exception is an attribute of the module's root, by its type's name.
+    for (i, &e) in errors.iter().enumerate() {
+        let n = &items.adts[e as usize].name;
+        if errors[..i]
+            .iter()
+            .any(|&d| items.adts[d as usize].name == *n)
+        {
+            problems.push(format!(
+                "two error types named `{n}` cross to Python, as `{name}.{n}`"
+            ));
+        }
     }
     if !problems.is_empty() {
         return Err(problems);
@@ -322,8 +353,29 @@ struct Gen<'a> {
 const WHY: &str = "the generated C glue passes live Python buffers and handles this mod made";
 
 impl Gen<'_> {
+    /// A struct's or error's name, as Python sees it.
     fn sname(&self, a: u32) -> String {
         self.items.adts[a as usize].name.clone()
+    }
+
+    /// The path of the module inside the mod that declares `a`.
+    fn module_of(&self, a: u32) -> &[String] {
+        &self.items.modules[self.items.adts[a as usize].module as usize].path
+    }
+
+    /// Its C identifier: its name, after its module's path.
+    fn cname(&self, a: u32) -> String {
+        format!("{}{}", c_prefix(self.module_of(a)), self.sname(a))
+    }
+
+    /// Its path in Moddil.
+    fn mpath(&self, a: u32) -> String {
+        format!(
+            "{}::{}{}",
+            self.name,
+            mod_path(self.module_of(a)),
+            self.sname(a)
+        )
     }
 
     /// The Moddil type of a handle's value.
@@ -331,7 +383,7 @@ impl Gen<'_> {
         match t {
             PyTy::String => "String".to_string(),
             PyTy::Vec(e) => format!("Vec<{}>", e.moddil),
-            PyTy::Struct(a, _) => format!("{}::{}", self.name, self.sname(*a)),
+            PyTy::Struct(a, _) => self.mpath(*a),
             _ => unreachable!("a handle's type"),
         }
     }
@@ -351,7 +403,7 @@ impl Gen<'_> {
                 format!("{n}_p: *{} {}", if *m { "mut" } else { "const" }, e.moddil),
                 format!("{n}_n: int"),
             ],
-            PyTy::Struct(a, _) => vec![format!("{n}: *mut {}::{}", self.name, self.sname(*a))],
+            PyTy::Struct(a, _) => vec![format!("{n}: *mut {}", self.mpath(*a))],
             PyTy::Unit | PyTy::Vec(_) | PyTy::Option(_) => unreachable!("not a parameter"),
         }
     }
@@ -417,19 +469,26 @@ impl Gen<'_> {
                 },
                 _ => unreachable!("a method"),
             };
-            params.push(format!("this: *mut {}::{}", self.name, self.sname(a)));
+            params.push(format!("this: *mut {}", self.mpath(a)));
         }
         for (i, (_, t)) in c.params.iter().enumerate() {
             params.extend(self.shim_params(&format!("a{i}"), t));
         }
         params.extend(self.shim_outs(&c.ret));
-        if let Some(e) = &c.error {
-            params.push(format!("err: *mut *mut {}::{e}", self.name));
+        if let Some(e) = c.error {
+            params.push(format!("err: *mut *mut {}", self.mpath(e)));
         }
         let mut body = String::new();
         if let Some(m) = c.receiver {
-            let r = if m { "&mut *this" } else { "&*this" };
-            let _ = writeln!(body, "    let this = unsafe(\"{WHY}\") {{ {r} }};");
+            // By value, the handle's box is taken apart: the glue forgets the handle.
+            let line = match m {
+                Recv::Ref => format!("let this = unsafe(\"{WHY}\") {{ &*this }};"),
+                Recv::Mut => format!("let this = unsafe(\"{WHY}\") {{ &mut *this }};"),
+                Recv::Value => {
+                    format!("let this = unsafe(\"{WHY}\") {{ ffi::from_raw(this) }}.into_inner();")
+                }
+            };
+            let _ = writeln!(body, "    {line}");
         }
         for (i, (_, t)) in c.params.iter().enumerate() {
             if let Some(s) = self.shim_convert(&format!("a{i}"), t) {
@@ -464,12 +523,40 @@ impl Gen<'_> {
         );
     }
 
-    fn write(
-        &mut self,
-        fns: &[Callable],
-        methods: &[(u32, Vec<Callable>)],
-        errors: &[(String, Ty)],
-    ) {
+    /// The getters (and, with `setters`, the setters of numbers and `bool`s) of struct `a`'s
+    /// properties, as shims named `{prefix}_get_{field}` and `{prefix}_set_{field}`.
+    fn field_shims(&mut self, prefix: &str, a: u32, setters: bool) {
+        let ty = self.mpath(a);
+        for (fname, t) in self.fields(a) {
+            let outs = self.shim_outs(&t).join(", ");
+            let store = self.shim_store(&format!("v.{fname}"), &t);
+            let store = if Self::is_handle(&t) {
+                store.replace(
+                    &format!("Box::new(v.{fname})"),
+                    &format!("Box::new(v.{fname}.clone())"),
+                )
+            } else {
+                store
+            };
+            let _ = writeln!(
+                self.shims,
+                "#[export(status)]\npub fn {prefix}_get_{fname}(h: *mut {ty}, {outs}) -> i32 {{\n    let v = unsafe(\"{WHY}\") {{ &*h }};\n    {store}\n    0\n}}\n"
+            );
+            let set = match &t {
+                PyTy::Int(m, ..) | PyTy::Float(m, _) => Some(*m),
+                PyTy::Bool => Some("bool"),
+                _ => None,
+            };
+            if setters && let Some(m) = set {
+                let _ = writeln!(
+                    self.shims,
+                    "#[export(status)]\npub fn {prefix}_set_{fname}(h: *mut {ty}, x: {m}) -> i32 {{\n    let v = unsafe(\"{WHY}\") {{ &mut *h }};\n    v.{fname} = x;\n    0\n}}\n"
+                );
+            }
+        }
+    }
+
+    fn write(&mut self, fns: &[Callable], methods: &[(u32, Vec<Callable>)], errors: &[u32]) {
         let name = self.name;
         let _ = writeln!(
             self.shims,
@@ -488,6 +575,11 @@ impl Gen<'_> {
         };
         for c in fns.iter().chain(methods.iter().flat_map(|(_, m)| m)) {
             note(&c.ret, &mut handles);
+        }
+        for &a in self.structs.iter().chain(errors) {
+            for (_, t) in self.fields(a) {
+                note(&t, &mut handles);
+            }
         }
         for h in &handles {
             let (tag, ty) = match h {
@@ -508,57 +600,36 @@ impl Gen<'_> {
                 "#[export(status)]\npub fn __py_{tag}_view(h: *mut {ty}, p: *mut *const {elem}, n: *mut int) -> i32 {{\n    let v = unsafe(\"{WHY}\") {{ &*h }};\n    {view}\n    unsafe(\"{WHY}\") {{\n        *p = {ptr};\n        *n = t.len();\n    }}\n    0\n}}\n\n#[export(status)]\npub fn __py_{tag}_free(h: *mut {ty}) -> i32 {{\n    let b = unsafe(\"{WHY}\") {{ ffi::from_raw(h) }};\n    0\n}}\n"
             );
         }
-        for (e, _) in errors {
+        for &e in errors {
+            let (c, ty) = (self.cname(e), self.mpath(e));
             let _ = writeln!(
                 self.shims,
-                "#[export(status)]\npub fn __py_err_{e}(h: *mut {name}::{e}, out: *mut *mut String) -> i32 {{\n    let b = unsafe(\"{WHY}\") {{ ffi::from_raw(h) }};\n    let e = b.into_inner();\n    let t: String = fmt\"{{e:?}}\";\n    unsafe(\"{WHY}\") {{ *out = ffi::into_raw(Box::new(t)); }}\n    0\n}}\n"
+                "#[export(status)]\npub fn __py_err_{c}(h: *mut {ty}, out: *mut *mut String) -> i32 {{\n    let b = unsafe(\"{WHY}\") {{ ffi::from_raw(h) }};\n    let e = b.into_inner();\n    let t: String = fmt\"{{e:?}}\";\n    unsafe(\"{WHY}\") {{ *out = ffi::into_raw(Box::new(t)); }}\n    0\n}}\n"
             );
+            self.field_shims(&format!("__py_errf_{c}"), e, false);
         }
         for &a in &self.structs.clone() {
-            let s = self.sname(a);
+            let (c, ty) = (self.cname(a), self.mpath(a));
             let _ = writeln!(
                 self.shims,
-                "#[export(status)]\npub fn __py_free_{s}(h: *mut {name}::{s}) -> i32 {{\n    let b = unsafe(\"{WHY}\") {{ ffi::from_raw(h) }};\n    0\n}}\n"
+                "#[export(status)]\npub fn __py_free_{c}(h: *mut {ty}) -> i32 {{\n    let b = unsafe(\"{WHY}\") {{ ffi::from_raw(h) }};\n    0\n}}\n"
             );
-            for f in self.fields(a) {
-                let (fname, t) = f;
-                let outs = self.shim_outs(&t).join(", ");
-                let store = self.shim_store(&format!("v.{fname}"), &t);
-                let store = if Self::is_handle(&t) {
-                    store.replace(
-                        &format!("Box::new(v.{fname})"),
-                        &format!("Box::new(v.{fname}.clone())"),
-                    )
-                } else {
-                    store
-                };
-                let _ = writeln!(
-                    self.shims,
-                    "#[export(status)]\npub fn __py_{s}_get_{fname}(h: *mut {name}::{s}, {outs}) -> i32 {{\n    let v = unsafe(\"{WHY}\") {{ &*h }};\n    {store}\n    0\n}}\n"
-                );
-                if let PyTy::Int(m, ..) | PyTy::Float(m, _) = &t {
-                    let _ = writeln!(
-                        self.shims,
-                        "#[export(status)]\npub fn __py_{s}_set_{fname}(h: *mut {name}::{s}, x: {m}) -> i32 {{\n    let v = unsafe(\"{WHY}\") {{ &mut *h }};\n    v.{fname} = x;\n    0\n}}\n"
-                    );
-                } else if t == PyTy::Bool {
-                    let _ = writeln!(
-                        self.shims,
-                        "#[export(status)]\npub fn __py_{s}_set_{fname}(h: *mut {name}::{s}, x: bool) -> i32 {{\n    let v = unsafe(\"{WHY}\") {{ &mut *h }};\n    v.{fname} = x;\n    0\n}}\n"
-                    );
-                }
-            }
+            self.field_shims(&format!("__py_{c}"), a, true);
         }
         for c in fns.iter().chain(methods.iter().flat_map(|(_, m)| m)) {
             self.shim(c);
         }
         glue::write(self, fns, methods, errors, &handles);
-        pyi::write(self, fns, methods);
+        pyi::write(self, fns, methods, errors);
     }
 
-    /// Struct `a`'s `pub` fields Python sees, as properties: name and type.
+    /// Struct `a`'s `pub` fields Python sees, as properties (or an error's, as its exception's
+    /// attributes): name and type. An enum has none.
     fn fields(&self, a: u32) -> Vec<(String, PyTy)> {
         let adt = &self.items.adts[a as usize];
+        if adt.is_enum {
+            return Vec::new();
+        }
         adt.variants[0]
             .fields
             .iter()
