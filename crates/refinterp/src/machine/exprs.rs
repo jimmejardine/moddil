@@ -411,7 +411,14 @@ impl Machine<'_> {
                         .position(|f| *f == name)
                         .expect("a checked field");
                     let v = match init.children().find_map(ast::Expr::cast) {
-                        Some(x) => self.eval_as(&x, info.types.get(i).and_then(Option::as_ref))?,
+                        Some(x) => {
+                            let v = self.eval_as(&x, info.types.get(i).and_then(Option::as_ref))?;
+                            self.deref_coerced(
+                                v,
+                                info.types.get(i).and_then(Option::as_ref),
+                                x.syntax().text_range(),
+                            )?
+                        }
                         None => {
                             let s = self.memory.slot(&name).expect("a checked shorthand");
                             let p = self.memory.here(s);

@@ -480,6 +480,58 @@ impl Machine<'_> {
     }
 
     /// Where what the value at `p` dereferences to is, through its `Deref`, if it has one.
+    /// `v`, where a value of type `ty` is expected: a borrow of a value that dereferences to
+    /// the type `ty` borrows is converted to a borrow of what it dereferences to, through
+    /// `deref` (or `deref_mut` for a `&mut`), one step (`type.deref.coerce.1`). Anything else
+    /// is `v` as it is.
+    pub(super) fn deref_coerced(
+        &mut self,
+        v: Value,
+        ty: Option<&ast::Type>,
+        range: TextRange,
+    ) -> Eval<Value> {
+        let Some(ast::Type::Ref(r)) = ty else {
+            return Ok(v);
+        };
+        let Value::Ref(p, _) = &v else {
+            return Ok(v);
+        };
+        let Some(inner) = r.children().find_map(ast::Type::cast) else {
+            return Ok(v);
+        };
+        if !matches!(inner, ast::Type::Path(_)) {
+            return Ok(v);
+        }
+        let target = self.memory.load(p);
+        let Value::Adt { ty: key, .. } = &target else {
+            return Ok(v);
+        };
+        let want = self.type_head(&crate::program::type_path(inner.syntax()));
+        // Only where the type expected is known, and is not already the value's: a type
+        // parameter not bound here names no type, and `&str` is the text's own conversion
+        // (`text.coerce.1`).
+        let known = match &want {
+            Head::Adt(k) => self.program.adts.contains_key(k),
+            Head::Str => false,
+            _ => true,
+        };
+        if !known || want == Head::Adt(key.clone()) {
+            return Ok(v);
+        }
+        let mutable = r.token(K::MUT_KW).is_some();
+        let head = target.head();
+        let (tr, method) = if mutable {
+            ("DerefMut", "deref_mut")
+        } else {
+            ("Deref", "deref")
+        };
+        let Some(m) = self.program.trait_method(tr, &head, method) else {
+            return Ok(v);
+        };
+        let p = p.clone();
+        self.run_method(m, &head, vec![Value::Ref(p, mutable)], range)
+    }
+
     pub(super) fn deref_place(&mut self, p: Pointer, range: TextRange) -> Eval<Option<Pointer>> {
         let head = self.memory.load(&p).head();
         let Some(m) = self.program.trait_method("Deref", &head, "deref") else {

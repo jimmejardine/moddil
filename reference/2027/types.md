@@ -37,9 +37,19 @@ fields are different types.
 
 **type.match.1** Where an expression of one type is expected, an expression of another type is an
 error (E0201); `!` fits everywhere, and a refined value fits where its base is expected
-([Refinements](refinements.md)). No other conversions are implicit but four of borrows: `&mut T` to
+([Refinements](refinements.md)). No other conversions are implicit but five of borrows: `&mut T` to
 `&T` ([Borrows](borrows.md)), a borrow to a `dyn` borrow (**type.dyn.coerce.1**), `&String` to
-`&str` ([Text](text.md)), and an array borrow to a slice borrow (**type.slice.coerce.1**).
+`&str` ([Text](text.md)), an array borrow to a slice borrow (**type.slice.coerce.1**), and a
+borrow to a borrow of what it dereferences to (**type.deref.coerce.1**).
+
+**type.deref.coerce.1** Where a `&B` is expected, a `&A` or a `&mut A` is converted to a `&B` if
+`A` implements the prelude's `Deref` with `Output = B`, as `a.deref()` gives it: a `&Box<T>` or a
+`&Rc<T>` is a `&T` there. Where a `&mut B` is expected, a `&mut A` is converted through `DerefMut`,
+as `a.deref_mut()`, if `A` implements it. It looks through one `Deref`, as a field and a method
+do ([Fields](expressions/fields.md), [Methods](expressions/methods.md)): a `&Rc<Box<T>>` is not a
+`&T` (E0201). It does not apply where `A` is already what is expected, where `B` is a `dyn` type,
+or where the type expected is still being inferred: given `fn f<T>(x: &T)`, `f(&b)` with `b` a
+`Box<int>` makes `T` a `Box<int>`.
 
 **type.dyn.1** `dyn Trait` is the type of a value of some type that implements `Trait`, known only
 through it. It has no size of its own, so it is written behind a borrow, `&dyn Trait` or

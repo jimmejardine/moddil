@@ -471,7 +471,7 @@ impl Checker<'_> {
             return true;
         }
         let Ty::Dyn(tr, _) = self.norm(b) else {
-            return false;
+            return self.deref_coerce(e, a, b, *m1, *m2);
         };
         let a = self.norm(a);
         match &a {
@@ -493,6 +493,54 @@ impl Checker<'_> {
         }
         self.require(a, tr.clone(), range);
         self.out.dyn_coercions.insert(e, x.clone());
+        true
+    }
+
+    /// `&A` (or `&mut A`) where `&B` is expected, `A` implementing `Deref` with `Output = B`;
+    /// or `&mut A` where `&mut B` is, through `DerefMut` (`type.deref.coerce.1`). One step, and
+    /// not where `A` already fits or `B` is still being inferred. Records the conversion of `e`
+    /// and says whether it is one.
+    fn deref_coerce(&mut self, e: ExprId, a: &Ty, b: &Ty, m1: bool, m2: bool) -> bool {
+        if m2 && !m1 {
+            return false;
+        }
+        let (a, b) = (self.norm(a), self.norm(b));
+        if matches!(b, Ty::Infer(_) | Ty::Error | Ty::Never | Ty::Dyn(..))
+            || matches!(a, Ty::Infer(_) | Ty::Error | Ty::Never)
+            || self.solver.can_unify(&a, &b)
+        {
+            return false;
+        }
+        let Some((base, target)) = self.deref_target(&a) else {
+            return false;
+        };
+        if !self.solver.can_unify(&target, &b) {
+            return false;
+        }
+        let (tr, method) = if m2 {
+            ("DerefMut", "deref_mut")
+        } else {
+            ("Deref", "deref")
+        };
+        let Some((trait_ref, func)) = self.op_trait(tr, method) else {
+            return false;
+        };
+        if m2 && self.solver.implements(&base, &trait_ref) == crate::traits::Answer::No {
+            return false;
+        }
+        self.solver.unify(&target, &b);
+        let range = self.range(e);
+        self.require(base.clone(), trait_ref, range);
+        self.out.deref_coercions.insert(
+            e,
+            (
+                crate::Callee::Trait {
+                    func,
+                    args: vec![base],
+                },
+                Ty::Ref(m2, std::sync::Arc::new(b)),
+            ),
+        );
         true
     }
 

@@ -544,6 +544,7 @@ impl Machine<'_> {
         }
         for (p, v) in params.iter().zip(args) {
             let pat = p.pat().expect("a parameter pattern");
+            let v = self.deref_coerced(v, p.ty().as_ref(), range)?;
             let v = self.typed(v, p.ty().as_ref());
             let slot = self.memory.temp(v);
             let mut binds = Vec::new();
@@ -626,6 +627,15 @@ impl Machine<'_> {
                 fields: Vec::new(),
             }),
             Err(f) => Err(f),
+        };
+        // The result, where the function's type is a borrow of what it dereferences to
+        // (`type.deref.coerce.1`).
+        let result = match result {
+            Ok(v) => {
+                let ret = f.node.ret_type().and_then(|r| r.ty());
+                self.deref_coerced(v, ret.as_ref(), range)
+            }
+            r => r,
         };
         // The postconditions, with `result` the value returned.
         let result = match result {
@@ -993,7 +1003,7 @@ impl Machine<'_> {
     }
 
     /// The kind of value the type path `ty` names (`int`, `Vec`, a type parameter).
-    fn type_head(&self, ty: &[String]) -> Head {
+    pub(super) fn type_head(&self, ty: &[String]) -> Head {
         match ty {
             [t] if t == "int" || t == "i64" => Head::Int,
             [t] if crate::num::Kind::named(t).is_some() => {

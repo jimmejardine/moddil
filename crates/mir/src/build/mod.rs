@@ -391,6 +391,11 @@ impl Builder<'_> {
     /// The type of the value `e` gives where it is used: its own, or the `dyn` borrow it is
     /// converted to.
     fn value_ty(&self, e: ExprId) -> Ty {
+        if self.uncoerced != Some(e)
+            && let Some((_, to)) = self.types.deref_coercion(e)
+        {
+            return to.clone();
+        }
         self.coercion(e).unwrap_or_else(|| self.types.expr(e))
     }
 }

@@ -140,6 +140,12 @@ impl Machine<'_> {
                 let v = self.eval_as(&init, Some(&t))?;
                 Src::Place(self.memory.temp(self.typed(v, Some(&t))), false)
             }
+            // A borrow, which may be converted (`type.deref.coerce.1`).
+            Some(t @ ast::Type::Ref(_)) => {
+                let v = self.eval(&init)?;
+                let v = self.deref_coerced(v, Some(&t), init.syntax().text_range())?;
+                Src::Place(self.memory.temp(self.typed(v, Some(&t))), false)
+            }
             _ => self.scrutinee(&init)?,
         };
         let pat = l.pat().expect("a checked `let` has a pattern");

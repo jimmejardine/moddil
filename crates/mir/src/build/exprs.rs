@@ -22,6 +22,38 @@ impl Builder<'_> {
             self.cfg.assign(dest, Rvalue::FnPtr(f));
             return;
         }
+        // A borrow used as a borrow of what it dereferences to: through `deref` or `deref_mut`
+        // (`type.deref.coerce.1`).
+        if self.uncoerced != Some(e)
+            && let Some((callee, _)) = self.types.deref_coercion(e).cloned()
+        {
+            let ty = self.ty(e);
+            let t = self.cfg.new_local(ty.clone(), None);
+            let outer = self.uncoerced.replace(e);
+            self.eval_dyn_part(t, e);
+            self.uncoerced = outer;
+            let mutable = self
+                .items
+                .fns
+                .get(callee.func() as usize)
+                .is_some_and(|f| f.name == "deref_mut");
+            let pointee = match &ty {
+                Ty::Ref(_, inner) => (**inner).clone(),
+                other => other.clone(),
+            };
+            let b = self.temp(Ty::reference(mutable, pointee));
+            self.cfg
+                .assign(b, Rvalue::Ref(mutable, Place::local(t).deref()));
+            let range = self.range(e);
+            self.call_into(
+                None,
+                callee,
+                Place::local(dest),
+                vec![Operand::Move(Place::local(b))],
+                range,
+            );
+            return;
+        }
         // A borrow used as a `dyn` borrow is converted.
         if let Some(target) = self.coercion(e) {
             let ty = self.ty(e);

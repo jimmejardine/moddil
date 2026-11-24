@@ -119,6 +119,10 @@ pub struct Inference {
     /// For a method call through `Deref` (`expr.method.deref.1`): the `deref` or `deref_mut`
     /// that gives its receiver.
     method_derefs: HashMap<ExprId, Callee>,
+    /// For a borrow used where a borrow of what it dereferences to is expected
+    /// (`type.deref.coerce.1`): the `deref` or `deref_mut` that converts it, and the borrow
+    /// type it gives.
+    deref_coercions: HashMap<ExprId, (Callee, Ty)>,
     /// For a field reached through `Deref` (`expr.field.deref.1`): the `deref` or `deref_mut`
     /// that gives the struct, and the struct's type.
     field_through: HashMap<ExprId, (Callee, Ty)>,
@@ -260,6 +264,13 @@ impl Inference {
         self.method_derefs.get(&e)
     }
 
+    /// For an expression, a borrow, converted to a borrow of what it dereferences to
+    /// (`type.deref.coerce.1`): the `deref` (or `deref_mut`) that converts it, and the borrow
+    /// type it gives.
+    pub fn deref_coercion(&self, e: ExprId) -> Option<&(Callee, Ty)> {
+        self.deref_coercions.get(&e)
+    }
+
     /// For a field expression whose struct is reached through `Deref` (`expr.field.deref.1`):
     /// the `deref` (or `deref_mut`) that gives it, and its type.
     pub fn field_deref(&self, e: ExprId) -> Option<&(Callee, Ty)> {
@@ -290,6 +301,7 @@ impl Inference {
             .chain(out.try_errors.values_mut())
             .chain(out.dyn_coercions.values_mut())
             .chain(out.field_through.values_mut().map(|(_, t)| t))
+            .chain(out.deref_coercions.values_mut().map(|(_, t)| t))
         {
             *t = f(t);
         }
@@ -300,6 +312,7 @@ impl Inference {
             .chain(out.fmt_calls.values_mut())
             .chain(out.index_calls.values_mut())
             .chain(out.method_derefs.values_mut())
+            .chain(out.deref_coercions.values_mut().map(|(c, _)| c))
             .chain(out.field_through.values_mut().map(|(c, _)| c))
             .chain(out.literal_calls.values_mut())
         {

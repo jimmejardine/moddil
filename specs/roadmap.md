@@ -95,9 +95,6 @@ What was left out of something built, until another feature exists or a decision
 is still open; when one is done, it is removed from this list.
 
 **Decisions to make first**
-- **Deref coercion:** a `&Rc<T>` or `&Box<T>` is not accepted where a `&T` is expected (`&**n`
-  is written instead). Whether Moddil adopts it, and where (arguments, a `let` with a type, method
-  receivers, which already look through `Deref`).
 - **A `for` over an iterator that can fail** with known errors is E0501 (write
   `while let Some(x) = it.next()? { … }`), until it is decided how `for` marks it.
 - **How a type-erased `Box<dyn Fn …>` that holds a handler borrow is tracked:** likely its

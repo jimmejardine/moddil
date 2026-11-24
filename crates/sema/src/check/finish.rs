@@ -231,7 +231,11 @@ impl Inference {
         {
             *c = c.map(&mut |t| erase(&solver.deep(t)));
         }
-        for (c, t) in self.field_through.values_mut() {
+        for (c, t) in self
+            .field_through
+            .values_mut()
+            .chain(self.deref_coercions.values_mut())
+        {
             *c = c.map(&mut |t| erase(&solver.deep(t)));
             *t = erase(&solver.deep(t));
         }
