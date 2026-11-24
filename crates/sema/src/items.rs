@@ -965,16 +965,33 @@ impl ItemTree {
         self.size_of_depth(ty, 0)
     }
 
+    /// The offset of field `i` of struct `ty`, laid out as [`ItemTree::size_of`] lays it out:
+    /// as C lays out a `#[repr(C)]` struct (`ffi.repr.1`).
+    pub fn field_offset(&self, ty: &Ty, i: u32) -> u64 {
+        let (_, _, offsets) = self.fields_layout(&self.field_types(ty, 0), 0);
+        offsets.get(i as usize).copied().unwrap_or(0)
+    }
+
+    /// The size and alignment of fields laid out in order, each at a multiple of its alignment,
+    /// rounded up to the largest; and each one's offset.
+    fn fields_layout(&self, fields: &[Ty], depth: u32) -> (u64, u64, Vec<u64>) {
+        let mut size: u64 = 0;
+        let mut align: u64 = 1;
+        let mut offsets = Vec::with_capacity(fields.len());
+        for f in fields {
+            let (s, a) = self.size_of_depth(f, depth + 1);
+            size = size.div_ceil(a) * a;
+            offsets.push(size);
+            size += s;
+            align = align.max(a);
+        }
+        (size.div_ceil(align) * align, align, offsets)
+    }
+
     fn size_of_depth(&self, ty: &Ty, depth: u32) -> (u64, u64) {
         let layout = |fields: &[Ty]| -> (u64, u64) {
-            let mut size: u64 = 0;
-            let mut align: u64 = 1;
-            for f in fields {
-                let (s, a) = self.size_of_depth(f, depth + 1);
-                size = size.div_ceil(a) * a + s;
-                align = align.max(a);
-            }
-            (size.div_ceil(align) * align, align)
+            let (size, align, _) = self.fields_layout(fields, depth);
+            (size, align)
         };
         if depth > 32 {
             return (0, 1);

@@ -39,7 +39,7 @@ use moddil_sema::{
 use moddil_syntax::TextRange;
 
 use moddil_ffi::CType;
-use moddil_ffi::abi::{CLayout, Scalar as CScalar};
+use moddil_ffi::abi::{CLayout, Part, Scalar as CScalar};
 
 use crate::layout::{Layout, Layouts, Shape, Tag};
 
@@ -988,33 +988,15 @@ impl<M: Module> Compiler<'_, M> {
     /// The C layout of `#[repr(C)]` struct type `ty`: its scalars by offset, nested structs
     /// flattened.
     fn c_layout(&mut self, ty: &Ty) -> Result<CLayout, String> {
-        fn flatten<M: Module>(
-            c: &mut Compiler<'_, M>,
-            ty: &Ty,
-            at: u32,
-            out: &mut Vec<(u32, CScalar)>,
-        ) -> Result<(), String> {
-            let l = c.layouts.of(ty)?;
-            match &l.shape {
-                Shape::Fields(fs) => {
-                    for (o, t) in fs.clone() {
-                        flatten(c, &t, at + o, out)?;
-                    }
-                }
-                Shape::Scalar(t) if *t == types::F32 => out.push((at, CScalar::F32)),
-                Shape::Scalar(t) if *t == types::F64 => out.push((at, CScalar::F64)),
-                Shape::Scalar(t) => out.push((at, CScalar::Int(t.bytes() as u8))),
-                _ => return Err(format!("a `{ty}` in a struct given to C by value")),
-            }
-            Ok(())
-        }
         let l = self.layouts.of(ty)?;
-        let mut fields = Vec::new();
-        flatten(self, ty, 0, &mut fields)?;
-        Ok(CLayout {
-            size: l.size,
-            align: l.align,
-            fields,
+        CLayout::flatten(l.size, l.align, ty, |t| {
+            Ok(match &self.layouts.of(t)?.shape {
+                Shape::Fields(fs) => Part::Fields(fs.clone()),
+                Shape::Scalar(c) if *c == types::F32 => Part::Scalar(CScalar::F32),
+                Shape::Scalar(c) if *c == types::F64 => Part::Scalar(CScalar::F64),
+                Shape::Scalar(c) => Part::Scalar(CScalar::Int(c.bytes() as u8)),
+                _ => return Err(format!("a `{ty}` in a struct given to C by value")),
+            })
         })
     }
 

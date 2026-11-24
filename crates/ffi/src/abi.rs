@@ -32,10 +32,56 @@ pub struct CLayout {
     pub fields: Vec<(u32, Scalar)>,
 }
 
+/// What C makes of a value of a type `T`, as [`CLayout::flatten`] asks of it: a scalar, or a
+/// struct's fields at their offsets.
+pub enum Part<T> {
+    /// One scalar.
+    Scalar(Scalar),
+    /// A struct: each field's offset and type.
+    Fields(Vec<(u32, T)>),
+}
+
 impl CLayout {
     /// Its size rounded up to a multiple of 8: the room its padded copy takes.
     pub fn padded(&self) -> u32 {
         self.size.div_ceil(8) * 8
+    }
+
+    /// The layout of struct `ty`, of `size` bytes aligned to `align`: its scalars by offset,
+    /// nested structs flattened. `part` says what each type is, as the caller lays types out.
+    ///
+    /// # Errors
+    ///
+    /// What `part` gives for a type it cannot say.
+    pub fn flatten<T>(
+        size: u32,
+        align: u32,
+        ty: &T,
+        mut part: impl FnMut(&T) -> Result<Part<T>, String>,
+    ) -> Result<CLayout, String> {
+        fn walk<T>(
+            ty: &T,
+            at: u32,
+            part: &mut impl FnMut(&T) -> Result<Part<T>, String>,
+            out: &mut Vec<(u32, Scalar)>,
+        ) -> Result<(), String> {
+            match part(ty)? {
+                Part::Scalar(s) => out.push((at, s)),
+                Part::Fields(fs) => {
+                    for (off, t) in &fs {
+                        walk(t, at + off, part, out)?;
+                    }
+                }
+            }
+            Ok(())
+        }
+        let mut fields = Vec::new();
+        walk(ty, 0, &mut part, &mut fields)?;
+        Ok(CLayout {
+            size,
+            align,
+            fields,
+        })
     }
 }
 
@@ -169,6 +215,40 @@ mod tests {
             align: 8,
             fields: fields.to_vec(),
         }
+    }
+
+    #[test]
+    fn nested_structs_flatten_to_their_scalars() {
+        // `struct In { a: u8, b: f32 }` at 4 of `struct Out { n: i32, i: In, d: f64 }`.
+        enum T {
+            Out,
+            In,
+            I32,
+            U8,
+            F32,
+            F64,
+        }
+        let l = CLayout::flatten(24, 8, &T::Out, |t| {
+            Ok(match t {
+                T::Out => Part::Fields(vec![(0, T::I32), (4, T::In), (16, T::F64)]),
+                T::In => Part::Fields(vec![(0, T::U8), (4, T::F32)]),
+                T::I32 => Part::Scalar(Scalar::Int(4)),
+                T::U8 => Part::Scalar(Scalar::Int(1)),
+                T::F32 => Part::Scalar(Scalar::F32),
+                T::F64 => Part::Scalar(Scalar::F64),
+            })
+        })
+        .expect("a layout");
+        assert_eq!(
+            l.fields,
+            vec![
+                (0, Scalar::Int(4)),
+                (4, Scalar::Int(1)),
+                (8, Scalar::F32),
+                (16, Scalar::F64)
+            ]
+        );
+        assert_eq!((l.size, l.align), (24, 8));
     }
 
     #[test]

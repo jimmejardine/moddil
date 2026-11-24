@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use moddil_ffi::CType;
-use moddil_ffi::abi::{CLayout, Scalar};
+use moddil_ffi::abi::{CLayout, Part, Scalar};
 use moddil_sema::{ItemTree, Num, Ty};
 
 use crate::value::{Pointer, Value};
@@ -47,86 +47,54 @@ pub(crate) struct CMem {
 /// C places by index, and each one's index.
 type Places = (Vec<(u64, Ty)>, HashMap<(u64, Ty), u32>);
 
-/// C's size and alignment of a value of `ty`.
+/// C's size and alignment of a value of `ty`, as sema lays it out (`ffi.repr.1`).
 pub(crate) fn size_align(items: &ItemTree, ty: &Ty) -> Result<(usize, usize), String> {
-    Ok(match ty {
-        Ty::Unit => (0, 1),
-        Ty::Bool => (1, 1),
-        Ty::Int | Ty::Ptr(..) | Ty::FnPtr(..) => (8, 8),
-        Ty::Refined(..) => return size_align(items, &items.base(ty)),
-        Ty::Num(n) => {
-            let s = match n {
-                Num::I8 | Num::U8 => 1,
-                Num::I16 | Num::U16 => 2,
-                Num::I32 | Num::U32 | Num::F32 => 4,
-                Num::U64 | Num::F64 => 8,
-                Num::I128 | Num::U128 => return Err("a 128-bit integer given to C".to_string()),
-            };
-            (s, s)
-        }
+    let base = items.base(ty);
+    if matches!(base, Ty::Num(Num::I128 | Num::U128)) {
+        return Err("a 128-bit integer given to C".to_string());
+    }
+    match &base {
+        // A struct's fields are C's too.
         Ty::Adt(a, ..) if items.adts[*a as usize].repr_c => {
-            let mut off: usize = 0;
-            let mut align = 1;
             for f in &items.adts[*a as usize].variants[0].fields {
-                let (s, al) = size_align(items, &f.ty)?;
-                off = off.div_ceil(al) * al + s;
-                align = align.max(al);
+                size_align(items, &f.ty)?;
             }
-            (off.div_ceil(align) * align, align)
         }
-        t => return Err(format!("a `{t}` in C's memory")),
-    })
+        Ty::Unit => {}
+        t if items.is_c_scalar(t) => {}
+        _ => return Err(format!("a `{ty}` in C's memory")),
+    }
+    let (size, align) = items.size_of(&base);
+    Ok((size as usize, align as usize))
 }
 
 /// Field `i` of `#[repr(C)]` struct `adt`: its offset and its type.
 pub(crate) fn field(items: &ItemTree, adt: u32, i: u32) -> Result<(usize, Ty), String> {
-    let mut off: usize = 0;
-    for (k, f) in items.adts[adt as usize].variants[0]
+    let def = &items.adts[adt as usize];
+    let ty = Ty::Adt(adt, def.name.as_str().into(), Vec::new().into());
+    // Its fields are C's types, so sema's layout of it is C's.
+    size_align(items, &ty)?;
+    let f = def.variants[0]
         .fields
-        .iter()
-        .enumerate()
-    {
-        let (s, al) = size_align(items, &f.ty)?;
-        off = off.div_ceil(al) * al;
-        if k == i as usize {
-            return Ok((off, f.ty.clone()));
-        }
-        off += s;
-    }
-    Err("a field the struct does not have".to_string())
+        .get(i as usize)
+        .ok_or("a field the struct does not have")?;
+    Ok((items.field_offset(&ty, i) as usize, f.ty.clone()))
 }
 
 /// The layout of `#[repr(C)]` struct type `ty`, as `moddil-ffi` passes it by value.
 fn layout(items: &ItemTree, ty: &Ty) -> Result<CLayout, String> {
-    fn scalars(
-        items: &ItemTree,
-        ty: &Ty,
-        at: usize,
-        out: &mut Vec<(u32, Scalar)>,
-    ) -> Result<(), String> {
-        match ty {
-            Ty::Adt(a, ..) => {
-                for i in 0..items.adts[*a as usize].variants[0].fields.len() {
-                    let (off, t) = field(items, *a, i as u32)?;
-                    scalars(items, &t, at + off, out)?;
-                }
-            }
-            Ty::Num(Num::F32) => out.push((at as u32, Scalar::F32)),
-            Ty::Num(Num::F64) => out.push((at as u32, Scalar::F64)),
-            t => {
-                let (s, _) = size_align(items, t)?;
-                out.push((at as u32, Scalar::Int(s as u8)));
-            }
-        }
-        Ok(())
-    }
     let (size, align) = size_align(items, ty)?;
-    let mut fields = Vec::new();
-    scalars(items, ty, 0, &mut fields)?;
-    Ok(CLayout {
-        size: size as u32,
-        align: align as u32,
-        fields,
+    CLayout::flatten(size as u32, align as u32, ty, |t| {
+        Ok(match t {
+            Ty::Adt(a, ..) => Part::Fields(
+                (0..items.adts[*a as usize].variants[0].fields.len() as u32)
+                    .map(|i| field(items, *a, i).map(|(off, t)| (off as u32, t)))
+                    .collect::<Result<_, _>>()?,
+            ),
+            Ty::Num(Num::F32) => Part::Scalar(Scalar::F32),
+            Ty::Num(Num::F64) => Part::Scalar(Scalar::F64),
+            t => Part::Scalar(Scalar::Int(size_align(items, t)?.0 as u8)),
+        })
     })
 }
 
