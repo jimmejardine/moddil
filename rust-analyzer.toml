@@ -1,0 +1,6 @@
+# rust-analyzer's own settings for this workspace. CI does not use rust-analyzer.
+
+[cargo]
+# Build into target/rust-analyzer, so rust-analyzer's checks do not wait on the build lock of
+# the `cargo build` and `cargo test` runs that share target/.
+targetDir = true
