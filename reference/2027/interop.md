@@ -1,7 +1,7 @@
 # C interop
 
 Calling C from Moddil and Moddil from C, with the C ABI ([`specs/interop.md`](../../specs/interop.md)).
-Added in M3 slice M3a; header import (`#[c_import]`) comes later.
+Added in M3 slice M3a; Python in M3b; header import (`#[c_import]`) comes later.
 
 **ffi.extern.1** `extern "C" { fn name(params) -> T; … }` declares C functions: each is a free
 function without a body, named by its C symbol, called with the platform's C calling convention.
@@ -27,6 +27,34 @@ and the prototypes. The runtime starts with the first call. A trap in an exporte
 the process with exit code 70, as a built program's does: C has no way to be told. In Moddil an
 exported function is called as any other.
 
+**ffi.export.2** `#[export(status)]` is `#[export]` for generated bindings: the function gives
+an `i32` status, and a trap in it makes it give 2 instead of ending the process.
+
+**ffi.core.1** The `core` mod's `ffi` module ([source](core/ffi.moddil)), named only in a mod
+with the `unsafe` capability (E0219), makes borrows of what C gives and hands boxes to C:
+`slice(p, n)` and `slice_mut(p, n)` (the `n` values at `p`), `text(p, n)` (`n` bytes of UTF-8),
+`ptr_of(s)` and `text_ptr(s)` (where a slice's or a text's values are), and `into_raw(b)` and
+`from_raw(p)` (a box's value kept alive behind a raw pointer, and owned again). Nothing checks
+that a pointer and a length describe live memory. Native code runs them; the interpreters trap.
+
+**ffi.python.1** `#[export(python)]` on a `pub fn` of a mod's root module makes it a function of
+the mod's Python module, which `moddil build --wheel` builds (with CPython's stable ABI, 3.11 and
+later) with its stubs (`name.pyi`) and a wheel. Its parameters and result cross as Python values:
+numbers as `int` and `float` (out of range is `OverflowError`), `bool`, `&str` and `String` as
+`str`, slices of numbers as any C-contiguous buffer of that type without a copy (`bytes`,
+`bytearray`, `array.array`, `memoryview`, numpy arrays; `&mut` ones changed in place), `Vec<u8>`
+as `bytes` and other `Vec`s of numbers as `list`s, `Option` (a result) as the value or `None`,
+and `()` as `None`. A `fail` error is raised as an exception of its type's name, a subclass of
+`name.Error`, carrying its `Debug` text; a trap is raised as `name.Trap`. A function that needs
+handlers or suspends is not yet carried. Calls release the GIL, and run one at a time.
+
+**ffi.python.2** `#[export(python)]` on a `pub struct` makes it a class of the module: an
+instance owns a value of it. Its inherent `pub fn`s are the class's: `new` (giving the struct) its
+constructor, the others taking `&self` or `&mut self` its methods, and those without `self` its
+static methods; its `pub` fields of the types above are properties, which can be set if they are
+numbers or `bool`. A method taking `self` by value is not carried (an error at `moddil build
+--wheel`). Structs cross to and from functions by `&`, `&mut`, or by value (cloned).
+
 **ffi.c.1** A mod's manifest may have a `[c]` table, the C code compiled with it by the system's
 C compiler: `sources` (files, or `dir/*.c` for every `.c` file in `dir`), `include` (header
 directories), `defines` (`NAME` or `NAME=value`) and `libs` (system libraries, by name). Its paths
@@ -44,5 +72,5 @@ error, and the reference interpreter does not run it.
 | Code | Meaning |
 |---|---|
 | E0218 | A raw pointer dereferenced, or a C function called, outside an `unsafe` block |
-| E0219 | A C function declared in a mod without the `unsafe` capability |
+| E0219 | A C function declared, or `core::ffi` named, in a mod without the `unsafe` capability |
 | E0222 | A C or `#[export]` function with a type C does not have, or with effects, errors or suspension; an `extern` block that is not `extern "C"`; a C function with a body; an `#[export]` that is not a free function with named parameters |

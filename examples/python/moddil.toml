@@ -1,0 +1,5 @@
+# A Python module written in Moddil (`reference/2027/interop.md`): `moddil build --wheel` makes
+# the extension module `stats`, its stubs and a wheel; `py/check.py` uses them.
+[mod]
+name = "stats"
+edition = "2027"

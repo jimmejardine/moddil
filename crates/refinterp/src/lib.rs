@@ -32,7 +32,7 @@ pub(crate) const PRELUDE: &str = include_str!("../../../reference/2027/prelude.m
 
 /// The built-in `core` mod's modules, which every mod depends on as `core`: each one's name and
 /// source.
-pub(crate) const CORE_MODULES: [(&str, &str); 6] = [
+pub(crate) const CORE_MODULES: [(&str, &str); 7] = [
     (
         "collections",
         include_str!("../../../reference/2027/core/collections.moddil"),
@@ -53,6 +53,10 @@ pub(crate) const CORE_MODULES: [(&str, &str); 6] = [
     (
         "gpu",
         include_str!("../../../reference/2027/core/gpu.moddil"),
+    ),
+    (
+        "ffi",
+        include_str!("../../../reference/2027/core/ffi.moddil"),
     ),
 ];
 

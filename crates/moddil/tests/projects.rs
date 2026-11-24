@@ -124,6 +124,7 @@ projects! {
     cabi => "examples/cabi",
     mandelbulb => "examples/mandelbulb",
     mandelbulb_web => "examples/mandelbulb/web",
+    python => "examples/python",
     tour => "tour/shorty",
 }
 

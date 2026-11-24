@@ -1,4 +1,4 @@
-// covers: ffi.extern.1, ffi.types.1, ffi.repr.1, ffi.export.1, ffi.c.1
+// covers: ffi.extern.1, ffi.types.1, ffi.repr.1, ffi.export.1, ffi.c.1, ffi.export.2, ffi.python.2
 // native
 
 extern "C" {
@@ -48,6 +48,27 @@ test "a #[repr(C)] struct is laid out as C lays it out" {
     bytes[9]                                // => 1
 }
 
+/// For generated bindings: a trap gives 2 to C instead of ending the process.
+#[export(status)]
+pub fn status() -> i32 {
+    0
+}
+
+/// A Python class, and a Python function: in Moddil, a struct and a function as any other.
+#[export(python)]
+pub struct Tally {
+    pub n: int,
+}
+
+#[export(python)]
+pub fn tally(n: int) -> int {
+    n + 1
+}
+
 test "an export is a function as any other in Moddil" {
     twice(21)                               // => 42
+    ;
+    status()                                // => 0
+    ;
+    tally(Tally { n: 1 }.n)                 // => 2
 }

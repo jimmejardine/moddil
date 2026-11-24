@@ -57,6 +57,8 @@ impl Collector<'_> {
         let mut kernel = false;
         let mut kernel_at = None;
         let mut export = false;
+        let mut export_status = false;
+        let mut py_export = false;
         let mut export_at = None;
         let foreign = self.extern_fns.contains(&(src, node.text_range()));
         for attr in node
@@ -78,8 +80,23 @@ impl Collector<'_> {
             } else if path == ["kernel"] && input.is_none() {
                 kernel = true;
                 kernel_at = Some(attr.text_range());
-            } else if path == ["export"] && input.is_none() && src.is_file() {
-                export = true;
+            } else if path == ["export"] && src.is_file() {
+                let how = input
+                    .as_ref()
+                    .map(|i| i.text().replace(char::is_whitespace, ""));
+                match how.as_deref() {
+                    None => export = true,
+                    Some("(status)") => {
+                        export = true;
+                        export_status = true;
+                    }
+                    Some("(python)") => py_export = true,
+                    Some(_) => ds.push(Diagnostic::error(
+                        Code::E0222,
+                        attr.text_range(),
+                        "`#[export]` is for C, `#[export(python)]` for Python",
+                    )),
+                }
                 export_at = Some(attr.text_range());
             } else if path == ["around"] && src.is_file() {
                 if input.is_none() {
@@ -484,6 +501,8 @@ impl Collector<'_> {
             kernel,
             foreign,
             export,
+            export_status,
+            py_export,
             default_arg: false,
             intrinsic,
             is_const,
@@ -546,6 +565,8 @@ impl Collector<'_> {
             kernel: false,
             foreign: false,
             export: false,
+            export_status: false,
+            py_export: false,
             default_arg: false,
             intrinsic: false,
             is_const: true,

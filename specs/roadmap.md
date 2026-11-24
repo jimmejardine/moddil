@@ -1250,8 +1250,39 @@ M3a, M3b, …
       helpers the plan named were not needed yet;
     - an exported function's trap ends the process;
     - `moddil build --lib` makes a shared library only, not a static one.
-- **Next:** Python bindings on the exports (`#[export(python)]`, `moddil build --wheel`), or the
-  Hashiverse client's first pieces through the C ABI.
+- **Slice M3b (decided November 2026): Python bindings.** The user's choices: the glue as
+  generated C compiled with the system's compiler, and a scope of synchronous functions, buffers,
+  a wheel, and structs as classes.
+  - **`#[export(python)]`** on functions and structs (`ffi.python.1`, `ffi.python.2`), built by
+    `moddil build --wheel` into an extension module against CPython's stable ABI (3.11+), its
+    `.pyi` stubs, and a wheel (`cp311-abi3`).
+  - **Three generated layers** (the new `moddil-py` crate):
+    - **Moddil shims:** a mod over the user's, of `#[export(status)]` functions (`ffi.export.2`)
+      taking C pieces and giving a status (0, 1 a `fail` error, 2 a trap), results through
+      out-parameters and handles (a `Box`'s raw pointer) with view and free accessors.
+    - **C glue:** conversions, buffers by format without a copy, exception classes, heap types
+      for the classes with constructors, methods, static methods and properties, the GIL
+      released around each call, and one call in Moddil at a time.
+    - **Stubs** from the signatures.
+  - **`core::ffi`** (`ffi.core.1`), which the shims stand on: borrows from a pointer and a length,
+    a slice's or a text's pointer, and boxes to raw pointers and back (native code only).
+  - **The runtime** starts per thread on the first call, since its context is the thread's.
+  - **The wheel** is a stored zip with `METADATA`, `WHEEL` and a `RECORD` of SHA-256s (the
+    `sha2` crate).
+  - **`examples/python`**, the mod `stats`: buffers in place, text, `Option`, an error type, a
+    trap, and a `Counter` class.
+    - A CLI test builds the wheel, installs it with pip, and runs `py/check.py`.
+    - The Moddil tests run on every runtime.
+  - **Interim limits:**
+    - no `async` (functions that suspend) and no handlers;
+    - `Vec` results are lists, not arrays;
+    - no keyword arguments, and no nested modules;
+    - methods taking `self` by value are not carried;
+    - an error crosses as its type and `Debug` text, not its fields;
+    - the module calls into Moddil one call at a time.
+- **Next:** async in the Python bindings and numpy-friendly results; or the Hashiverse client's
+  first pieces through the C ABI; or the C ABI's own completions (pointer arithmetic, callbacks,
+  structs by value).
 
 ## Staging: distributed programs
 

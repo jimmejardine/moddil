@@ -141,6 +141,11 @@ smooth = rolling_mean(prices, window=50)  # numpy array in, no copy; list or arr
 - **Placement in the roadmap:** Python bindings ship at M3, with the first optimised native release
   ([`roadmap.md`: Milestones](roadmap.md#milestones)), before the Swift, Kotlin and TypeScript
   bindings.
+- **As built (M3b):** `#[export(python)]` functions and structs, `moddil build --wheel` (an abi3
+  extension module, `.pyi` stubs and a wheel), zero-copy buffers, `fail` errors as exception
+  classes, traps as `name.Trap`, and the GIL released during calls. Async (`asyncio` awaitables),
+  numpy arrays as results, and free-threaded CPython's separate pools come later
+  ([`roadmap.md`](roadmap.md), slice M3b).
 
 ## Migrating existing code
 

@@ -1,0 +1,142 @@
+//! A Python module written in Moddil (`ffi.python.1`): numbers in and out, buffers without a
+//! copy (any `bytes`, `bytearray`, `array.array`, `memoryview` or numpy array of the right
+//! type), text, a `fail` error as a Python exception, and a class.
+
+/// What a statistic cannot be computed for.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StatsError {
+    pub reason: String,
+}
+
+/// The mean of `xs`; 0 for none.
+#[export(python)]
+pub fn mean(xs: &[f64]) -> f64 {
+    if xs.is_empty() {
+        return 0.0;
+    }
+    let mut sum = 0.0;
+    for x in xs.iter() {
+        sum += *x;
+    }
+    sum / xs.len().to::<f64>() ?! "a slice is far shorter than 2^53"
+}
+
+/// The means of each `window` values of `xs` in a row.
+#[export(python)]
+pub fn rolling_mean(xs: &[f64], window: int) -> Vec<f64> with fail(StatsError) {
+    if window < 1 || window > xs.len() {
+        fail(StatsError { reason: fmt"a window of {window} over {xs.len()} values" });
+    }
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i + window <= xs.len() {
+        let mut sum = 0.0;
+        let mut k = 0;
+        while k < window {
+            sum += xs[i + k];
+            k += 1;
+        }
+        out.push(sum / window.to::<f64>() ?! "a window is far shorter than 2^53");
+        i += 1;
+    }
+    out
+}
+
+/// Multiplies each value of `xs` by `k`, in place: Python sees the change.
+#[export(python)]
+pub fn scale_in_place(xs: &mut [f64], k: f64) {
+    let mut i = 0;
+    while i < xs.len() {
+        xs[i] = xs[i] * k;
+        i += 1;
+    }
+}
+
+/// A greeting.
+#[export(python)]
+pub fn greet(name: &str) -> String {
+    fmt"hello, {name}, from Moddil"
+}
+
+/// A 32-bit checksum of `data` (Fletcher's).
+#[export(python)]
+pub fn checksum(data: &[u8]) -> u32 {
+    let mut a: u32 = 0;
+    let mut b: u32 = 0;
+    for x in data.iter() {
+        a = (a + x.to::<u32>() ?! "a byte") % 65535;
+        b = (b + a) % 65535;
+    }
+    (b << 16) | a
+}
+
+/// `s` as a whole number, if it is one.
+#[export(python)]
+pub fn parse(s: &str) -> Option<int> {
+    if s.is_empty() {
+        return None;
+    }
+    let mut n = 0;
+    let mut i = 0;
+    while i < s.len() {
+        let c = s.byte_at(i);
+        if c < 48 || c > 57 {
+            return None;
+        }
+        n = n * 10 + (c - 48).to::<int>() ?! "a digit";
+        i += 1;
+    }
+    Some(n)
+}
+
+/// Divides, trapping on a zero divisor: Python sees `stats.Trap`.
+#[export(python)]
+pub fn divide(a: int, b: int) -> int {
+    a / b
+}
+
+/// A counter, a Python class: `Counter(start)`, its methods, and `count` as a property.
+#[export(python)]
+#[derive(Clone, Debug)]
+pub struct Counter {
+    pub count: int,
+    pub label: String,
+}
+
+impl Counter {
+    /// `Counter(start)` in Python.
+    pub fn new(start: int) -> Counter {
+        Counter { count: start, label: "counter".to_string() }
+    }
+
+    /// Adds `n`.
+    pub fn add(&mut self, n: int) {
+        self.count += n;
+    }
+
+    /// The count, twice.
+    pub fn doubled(&self) -> int {
+        2 * self.count
+    }
+
+    /// A counter that starts where this one is, with another label.
+    pub fn fork(&self, label: &str) -> Counter {
+        Counter { count: self.count, label: label.to_string() }
+    }
+
+    /// A counter starting at 0: a static method in Python.
+    pub fn zero() -> Counter {
+        Counter::new(0)
+    }
+}
+
+test "the functions, in Moddil" {
+    let xs: Vec<f64> = [1.0, 2.0, 3.0, 4.0];
+    assert(mean(xs.as_slice()) == 2.5);
+    let r = try { rolling_mean(xs.as_slice(), 2)? } catch { _ => Vec::new() };
+    assert(r.len() == 3 && r[0] == 1.5);
+    assert(parse("123") == Some(123) && parse("1x") == None);
+    let mut c = Counter::new(5);
+    c.add(2);
+    assert(c.doubled() == 14);
+}

@@ -1,0 +1,15 @@
+[package]
+name = "moddil-py"
+description = "Python bindings for Moddil mods: the Moddil shims, the C glue and the stubs that `moddil build --wheel` builds."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+moddil-sema.workspace = true
+
+[lints]
+workspace = true

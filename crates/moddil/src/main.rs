@@ -2,6 +2,7 @@
 //! or on the MIR interpreter), and builds them into executables. See `crates/moddil/README.md`.
 
 mod link;
+mod wheel;
 
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
@@ -76,6 +77,11 @@ enum Command {
         /// here).
         #[arg(long, conflicts_with_all = ["wasm", "release"])]
         lib: bool,
+        /// Build the mod's `#[export(python)]` functions and structs as a Python extension
+        /// module instead (`ffi.python.1`): the module, its stubs and a wheel, in the directory
+        /// `-o` names (by default, here).
+        #[arg(long, conflicts_with_all = ["wasm", "release", "lib"])]
+        wheel: bool,
     },
     /// Runs the language server on standard input and output (LSP): diagnostics, hover, go to
     /// definition, inlay hints and completion, for an editor.
@@ -189,6 +195,11 @@ fn main() -> ExitCode {
             output, lib: true, ..
         } => build_lib(&db, program, &project, output.as_deref(), &c),
         Command::Build {
+            output,
+            wheel: true,
+            ..
+        } => build_wheel(&db, program, &project, output.as_deref(), &c),
+        Command::Build {
             output, release, ..
         } => build(&db, program, path, output.as_deref(), *release, &c),
         Command::NativeTest { index, .. } => native_test(&db, program, &files, *index),
@@ -224,6 +235,7 @@ fn c_code(
                 })
                 .collect(),
             libs: c.libs.clone(),
+            shared: true,
         };
         let name = if m.name.is_empty() { "c" } else { &m.name };
         let dir = std::env::temp_dir().join("moddil-c");
@@ -643,6 +655,136 @@ fn build(
             eprintln!("moddil: linking {}: {why}", out.display());
             ExitCode::FAILURE
         }
+    }
+}
+
+/// `moddil build --wheel` (`ffi.python.1`): the root mod's `#[export(python)]` functions and
+/// structs as a Python extension module, its stubs and a wheel, in `dir`.
+fn build_wheel(
+    db: &Database,
+    program: Program,
+    project: &moddil_project::Project,
+    dir: Option<&Path>,
+    c: &[moddil_ffi::Built],
+) -> ExitCode {
+    let fail = |why: String| {
+        eprintln!("moddil: {why}");
+        ExitCode::FAILURE
+    };
+    let items = moddil_sema::item_tree(db, program);
+    let name = project
+        .mods
+        .first()
+        .map_or("module", |m| m.name.as_str())
+        .to_string();
+    let bindings = match moddil_py::generate(items, &name, 0) {
+        Ok(b) => b,
+        Err(problems) => {
+            for p in &problems {
+                eprintln!("moddil: {p}");
+            }
+            return fail(format!("`{name}` cannot be built as a Python module yet"));
+        }
+    };
+    let python = match wheel::find_python() {
+        Ok(p) => p,
+        Err(why) => return fail(why),
+    };
+    // The program with the shims: a mod of their own, over the user's.
+    let shim_mod = project.mods.len() as u32;
+    let mut files: Vec<ProgramFile> = program.files(db).clone();
+    files.push(ProgramFile {
+        source: SourceFile::new(db, "<python shims>".to_string(), bindings.shims.clone()),
+        mod_: shim_mod,
+        module: Vec::new(),
+        exe: false,
+    });
+    let mut mods: Vec<ModInfo> = program.mods(db).clone();
+    mods.push(ModInfo {
+        name: "__python".to_string(),
+        deps: vec![(name.clone(), 0)],
+        stub: false,
+        unsafe_ok: true,
+        os_ok: false,
+    });
+    let with_shims = Program::new(db, files, mods);
+    let diagnostics = moddil_interp::diagnostics(db, with_shims);
+    if moddil_interp::has_errors(db, with_shims) {
+        let shim_file = with_shims.files(db).len() as u32 - 1;
+        for d in &diagnostics {
+            if d.file == shim_file {
+                report("<python shims>", &bindings.shims, d);
+            }
+        }
+        return fail(format!(
+            "the Python shims for `{name}` do not check (a bug in moddil)"
+        ));
+    }
+    let shim_items = moddil_sema::item_tree(db, with_shims);
+    let exports: Vec<u32> = (0..shim_items.fns.len() as u32)
+        .filter(|&f| {
+            let s = &shim_items.fns[f as usize];
+            s.export && shim_items.mod_of(s.module) == shim_mod
+        })
+        .collect();
+    let object = match moddil_native::build_library(db, with_shims, &exports) {
+        Ok(o) => o,
+        Err(moddil_native::Native::Unsupported(what)) => {
+            return fail(format!("`{name}` cannot be built yet: {what}"));
+        }
+        Err(_) => return ExitCode::FAILURE,
+    };
+    let dir = dir.map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    let build = dir.join("build");
+    if let Err(e) = std::fs::create_dir_all(&build) {
+        return fail(format!("creating {}: {e}", build.display()));
+    }
+    let glue_c = build.join(format!("{name}_glue.c"));
+    if let Err(e) = std::fs::write(&glue_c, &bindings.glue) {
+        return fail(format!("writing {}: {e}", glue_c.display()));
+    }
+    let spec = moddil_ffi::CSpec {
+        sources: vec![glue_c],
+        include: vec![python.include.clone()],
+        defines: Vec::new(),
+        libs: Vec::new(),
+        shared: false,
+    };
+    let glue = match moddil_ffi::build(&spec, &format!("{name}_glue"), &build, &[]) {
+        Ok(b) => b,
+        Err(why) => return fail(format!("compiling the Python glue: {why}")),
+    };
+    let module_name = if cfg!(windows) {
+        format!("{name}.pyd")
+    } else {
+        format!("{name}.abi3.so")
+    };
+    let module = dir.join(&module_name);
+    if let Err(why) = link::link_extension(
+        &object,
+        &module,
+        &name,
+        &glue.static_lib,
+        python.lib.as_deref(),
+        c,
+    ) {
+        return fail(format!("linking the Python module `{name}`: {why}"));
+    }
+    let pyi = dir.join(format!("{name}.pyi"));
+    if let Err(e) = std::fs::write(&pyi, &bindings.pyi) {
+        return fail(format!("writing {}: {e}", pyi.display()));
+    }
+    match wheel::write(&dir, &name, "0.1.0", &module, &module_name, &bindings.pyi) {
+        Ok(w) => {
+            eprintln!(
+                "moddil: wrote {} (for {}), and {} beside it",
+                w.display(),
+                python.exe,
+                module.display()
+            );
+            ExitCode::SUCCESS
+        }
+        Err(why) => fail(why),
     }
 }
 

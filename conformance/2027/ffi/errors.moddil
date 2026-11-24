@@ -1,4 +1,4 @@
-// covers: ffi.extern.1, ffi.native.1
+// covers: ffi.extern.1, ffi.native.1, ffi.core.1, ffi.python.1
 
 // A single file has no capabilities, so it declares no C functions.
 extern "C" {
@@ -8,3 +8,12 @@ extern "C" {
 // Only C's ABI is declared.
 extern "Rust" {                             //~ E0222
 }
+
+// `core::ffi` needs the `unsafe` capability too.
+fn pointer() -> *const u8 {
+    core::ffi::text_ptr("x")                //~ E0219
+}
+
+// `#[export]` is for C, `#[export(python)]` for Python.
+#[export(java)]                             //~ E0222
+pub fn java() {}

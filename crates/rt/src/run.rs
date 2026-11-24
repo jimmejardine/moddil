@@ -671,12 +671,13 @@ pub unsafe extern "C" fn gpu_show(p: *const u32, n: u64, width: u64, height: u64
     crate::os::gpu_show(pixels, width as i64, height as i64);
 }
 
-/// Starts the runtime for a Moddil function called from C (`ffi.export.1`): once, on the first
-/// call into the library.
+/// Starts the runtime for a Moddil function called from C (`ffi.export.1`): on each thread's
+/// first call into the library (the runtime's context is the thread's).
 #[unsafe(export_name = "moddil_rt_export_begin")]
 pub extern "C" fn export_begin() {
-    static BEGUN: std::sync::Once = std::sync::Once::new();
-    BEGUN.call_once(begin_run);
+    if CTX.with(|c| c.borrow().is_none()) {
+        begin_run();
+    }
 }
 
 /// A trap in a Moddil function called from C (`ffi.export.1`): C has no way to be told, so the

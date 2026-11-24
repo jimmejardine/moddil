@@ -68,6 +68,7 @@ impl Collector<'_> {
             module: self.module,
             root: false,
             repr_c: false,
+            py_export: false,
         });
     }
 
@@ -156,6 +157,12 @@ impl Collector<'_> {
             {
                 // C's layout (`ffi.repr.1`).
                 self.tree.adts[i].repr_c = true;
+            } else if path == ["export"]
+                && input.as_deref() == Some("(python)")
+                && node.kind() == K::STRUCT_ITEM
+            {
+                // A Python class (`ffi.python.2`).
+                self.tree.adts[i].py_export = true;
             } else if path != ["derive"] {
                 ds.push(Diagnostic::unsupported(attr.text_range(), "this attribute"));
             }

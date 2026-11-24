@@ -1673,9 +1673,15 @@ impl<M: Module> Compiler<'_, M> {
         let bad = b.create_block();
         b.ins().brif(results[0], bad, &[], ok, &[]);
         b.switch_to_block(bad);
-        let trapped = self.module.declare_func_in_func(trapped, b.func);
-        b.ins().call(trapped, &[]);
-        b.ins().trap(ir::TrapCode::unwrap_user(1));
+        if self.items.fns[f as usize].export_status {
+            // `#[export(status)]` (`ffi.export.2`): the caller is told, with 2.
+            let two = b.ins().iconst(types::I32, 2);
+            b.ins().return_(&[two]);
+        } else {
+            let trapped = self.module.declare_func_in_func(trapped, b.func);
+            b.ins().call(trapped, &[]);
+            b.ins().trap(ir::TrapCode::unwrap_user(1));
+        }
         b.switch_to_block(ok);
         match ret_t {
             Some(t) if wide(t) != t => {
@@ -5238,6 +5244,42 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         Ok(())
     }
 
+    /// A call of the `core` mod's `ffi` module, `name`, into `d` (`ffi.core.1`): a borrow made
+    /// of a pointer and a length, a borrow's pointer, and a box to its raw pointer and back. A
+    /// box is its `Buf`: its memory's address, its length and its capacity (both 1).
+    fn ffi(&mut self, name: &str, args: &[Operand], d: &PlaceRef) -> Result<(), String> {
+        let flags = ir::MemFlagsData::trusted();
+        match name {
+            "slice" | "slice_mut" | "text" => {
+                let p = self.value(&args[0])?;
+                let n = self.value(&args[1])?;
+                let w = self.wide(p, n);
+                self.write(d, Val::Mem(w))
+            }
+            "ptr_of" | "text_ptr" => {
+                let (p, _) = self.text(&args[0])?;
+                self.write(d, Val::Scalar(p))
+            }
+            "into_raw" => {
+                let Val::Mem(b) = self.operand(&args[0])? else {
+                    return Err("a box not in memory".to_string());
+                };
+                let p = self.b.ins().load(types::I64, flags, b, 0);
+                self.write(d, Val::Scalar(p))
+            }
+            "from_raw" => {
+                let p = self.value(&args[0])?;
+                let a = self.addr_of(d)?;
+                let one = self.b.ins().iconst(types::I64, 1);
+                self.b.ins().store(flags, p, a, 0);
+                self.b.ins().store(flags, one, a, 8);
+                self.b.ins().store(flags, one, a, 16);
+                Ok(())
+            }
+            _ => Err(format!("the built-in function `ffi::{name}`")),
+        }
+    }
+
     /// A call of the `core` mod's `gpu` module, `name`, into `d` (`gpu.1`): a kernel's WGSL
     /// (made here, kept as text), a value's bytes, and the runtime's dispatch and frame.
     fn gpu(
@@ -5411,6 +5453,9 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         let sig = &items.fns[f as usize];
         if sig.src == Src::Prelude && items.modules[sig.module as usize].path == ["gpu"] {
             return self.gpu(sig.name.as_str(), targs, args, d);
+        }
+        if sig.src == Src::Prelude && items.modules[sig.module as usize].path == ["ffi"] {
+            return self.ffi(sig.name.as_str(), args, d);
         }
         let sig = &items.fns[f as usize];
         let self_ty = match sig.container {

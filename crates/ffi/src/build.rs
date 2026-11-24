@@ -15,6 +15,9 @@ pub struct CSpec {
     pub defines: Vec<(String, Option<String>)>,
     /// The system libraries the code needs, linked by name (`m`, `pthread`).
     pub libs: Vec<String>,
+    /// Whether to make the shared library too (the JIT's and the interpreter's), not only the
+    /// static one.
+    pub shared: bool,
 }
 
 /// What [`build`] makes.
@@ -76,6 +79,7 @@ pub fn build(spec: &CSpec, name: &str, out: &Path, exports: &[String]) -> Result
     for e in exports {
         fnv(&mut h, e.as_bytes());
     }
+    fnv(&mut h, &[u8::from(spec.shared)]);
     let done = out.join(format!("{name}-{h:016x}"));
     // Built in a directory of this process's own, then moved into place: two runs building the
     // same code at once (tests do) do not write over each other.
@@ -93,7 +97,7 @@ pub fn build(spec: &CSpec, name: &str, out: &Path, exports: &[String]) -> Result
         shared_lib: done.join(&shared_name),
         libs: spec.libs.clone(),
     };
-    if built.static_lib.exists() && built.shared_lib.exists() {
+    if built.static_lib.exists() && (built.shared_lib.exists() || !spec.shared) {
         return Ok(built);
     }
     let _ = std::fs::remove_dir_all(&dir);
@@ -136,6 +140,12 @@ pub fn build(spec: &CSpec, name: &str, out: &Path, exports: &[String]) -> Result
             .arg(format!("/OUT:{}", dir.join(&static_name).display()))
             .args(&objects);
         run(c, "lib.exe")?;
+    } else {
+        let mut c = Command::new("ar");
+        c.arg("crs").arg(dir.join(&static_name)).args(&objects);
+        run(c, "ar")?;
+    }
+    if spec.shared && windows {
         let link = cc::windows_registry::find_tool(TARGET, "link.exe")
             .ok_or("MSVC's link.exe (install Visual Studio's C++ build tools)")?;
         let mut c = link.to_command();
@@ -155,10 +165,7 @@ pub fn build(spec: &CSpec, name: &str, out: &Path, exports: &[String]) -> Result
             c.arg(format!("{l}.lib"));
         }
         run(c, "link.exe")?;
-    } else {
-        let mut c = Command::new("ar");
-        c.arg("crs").arg(dir.join(&static_name)).args(&objects);
-        run(c, "ar")?;
+    } else if spec.shared {
         let mut c = tool.to_command();
         if TARGET.contains("apple") {
             c.args(["-dynamiclib", "-undefined", "dynamic_lookup"]);
@@ -174,7 +181,7 @@ pub fn build(spec: &CSpec, name: &str, out: &Path, exports: &[String]) -> Result
     // Into place; if another run got there first, its copy is the same, and is kept.
     if std::fs::rename(&dir, &done).is_err() {
         let _ = std::fs::remove_dir_all(&dir);
-        if !(built.static_lib.exists() && built.shared_lib.exists()) {
+        if !(built.static_lib.exists() && (built.shared_lib.exists() || !spec.shared)) {
             return Err(format!("moving the built C code to {}", done.display()));
         }
     }

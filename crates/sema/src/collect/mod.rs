@@ -40,10 +40,11 @@ pub(crate) const PRELUDE: &str = concat!(
     include_str!("../../../../reference/2027/core/atomic.moddil"),
     include_str!("../../../../reference/2027/core/os.moddil"),
     include_str!("../../../../reference/2027/core/gpu.moddil"),
+    include_str!("../../../../reference/2027/core/ffi.moddil"),
 );
 
 /// The `core` mod's modules, in [`PRELUDE`]'s order: each one's name and source.
-pub(crate) const CORE_MODULES: [(&str, &str); 6] = [
+pub(crate) const CORE_MODULES: [(&str, &str); 7] = [
     (
         "collections",
         include_str!("../../../../reference/2027/core/collections.moddil"),
@@ -67,6 +68,10 @@ pub(crate) const CORE_MODULES: [(&str, &str); 6] = [
     (
         "gpu",
         include_str!("../../../../reference/2027/core/gpu.moddil"),
+    ),
+    (
+        "ffi",
+        include_str!("../../../../reference/2027/core/ffi.moddil"),
     ),
 ];
 
@@ -972,6 +977,8 @@ impl Collector<'_> {
             kernel: false,
             foreign: false,
             export: false,
+            export_status: false,
+            py_export: false,
             default_arg: false,
             intrinsic: false,
             is_const: !is_new,
@@ -1117,6 +1124,8 @@ impl Collector<'_> {
                     kernel: false,
                     foreign: false,
                     export: false,
+                    export_status: false,
+                    py_export: false,
                     default_arg: true,
                     intrinsic: false,
                     is_const: true,

@@ -278,6 +278,29 @@ impl Lowerer<'_> {
     /// the `os` capability (`os.cap.1`).
     fn check_os(&mut self, func: u32, range: TextRange) {
         let m = &self.items.modules[self.items.fns[func as usize].module as usize];
+        // `core::ffi` only with the `unsafe` capability (`ffi.core.1`).
+        if m.path == ["ffi"]
+            && self
+                .items
+                .mods
+                .get(m.mod_ as usize)
+                .is_some_and(|d| d.name == "core")
+        {
+            let here = &self.items.modules[self.types.module as usize];
+            if !self
+                .items
+                .mods
+                .get(here.mod_ as usize)
+                .is_none_or(|d| d.unsafe_ok)
+            {
+                self.report(
+                    Code::E0219,
+                    range,
+                    "`core::ffi` is named only in a mod whose manifest lists the `unsafe`                      capability: `capabilities = [\"unsafe\"]` under `[mod]`",
+                );
+            }
+            return;
+        }
         let in_os = (m.path == ["os"] || m.path == ["gpu"])
             && self
                 .items

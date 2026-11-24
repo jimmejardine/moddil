@@ -1,0 +1,32 @@
+// The `core` mod's `ffi` module (`ffi.core.1`): borrows made from what C gives, and boxes handed
+// to C as raw pointers. Only a mod whose manifest lists the `unsafe` capability names it
+// (E0219), and it runs in native code only: nothing checks that a pointer and a length describe
+// live memory of the right type.
+
+// The `n` values at `p`, borrowed.
+#[intrinsic]
+pub fn slice<T>(p: *const T, n: int) -> &[T];
+
+// The `n` values at `p`, borrowed to change.
+#[intrinsic]
+pub fn slice_mut<T>(p: *mut T, n: int) -> &mut [T];
+
+// The `n` bytes of UTF-8 at `p`, as text.
+#[intrinsic]
+pub fn text(p: *const u8, n: int) -> &str;
+
+// Where the values of `s` are.
+#[intrinsic]
+pub fn ptr_of<T>(s: &[T]) -> *const T;
+
+// Where the bytes of `s` are.
+#[intrinsic]
+pub fn text_ptr(s: &str) -> *const u8;
+
+// The box's value, kept alive behind the pointer given, which only `from_raw` frees.
+#[intrinsic]
+pub fn into_raw<T>(b: Box<T>) -> *mut T;
+
+// The box `into_raw` gave the pointer for, owning its value again.
+#[intrinsic]
+pub fn from_raw<T>(p: *mut T) -> Box<T>;

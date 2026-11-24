@@ -284,6 +284,11 @@ pub struct FnSig {
     pub foreign: bool,
     /// Whether it is marked `#[export]`: callable from C under its own name (`ffi.export.1`).
     pub export: bool,
+    /// `#[export(status)]`: an export whose trap makes it give 2 rather than end the process
+    /// (`ffi.export.2`), for generated bindings.
+    pub export_status: bool,
+    /// `#[export(python)]`: a function of the mod's Python module (`ffi.python.1`).
+    pub py_export: bool,
     /// Whether it is such a hidden const, whose body is the default written at `node`.
     pub default_arg: bool,
     /// Whether it is the prelude's and built in (`#[intrinsic]`): it has no body, and the
@@ -388,6 +393,8 @@ impl FnSig {
             kernel: false,
             foreign: false,
             export: false,
+            export_status: false,
+            py_export: false,
             default_arg: false,
             intrinsic: false,
             is_const: false,
@@ -446,6 +453,8 @@ pub struct AdtDef {
     pub root: bool,
     /// Whether it is marked `#[repr(C)]`: laid out as C lays out its struct (`ffi.repr.1`).
     pub repr_c: bool,
+    /// `#[export(python)]`: a class of the mod's Python module (`ffi.python.2`).
+    pub py_export: bool,
 }
 
 /// A `type` item (`refine.1`): `type X = T;`, an alias, or `type X = T where p;`, a refinement.

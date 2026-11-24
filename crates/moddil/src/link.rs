@@ -174,6 +174,95 @@ pub(crate) fn link_library(
     Ok(out)
 }
 
+/// Links `object` (the Python shims' library) with the runtime, the C glue `glue` (a static
+/// library), the mods' C code and Python's stable ABI into the extension module `out`, which
+/// exports `PyInit_name` (`ffi.python.1`).
+pub(crate) fn link_extension(
+    object: &[u8],
+    out: &Path,
+    name: &str,
+    glue: &Path,
+    python_lib: Option<&Path>,
+    c: &[moddil_ffi::Built],
+) -> Result<(), String> {
+    let lib = library()?;
+    let dir = out.parent().ok_or("the module's directory")?;
+    let obj = dir.join(format!(
+        "{name}.{}",
+        if cfg!(windows) { "obj" } else { "o" }
+    ));
+    std::fs::write(&obj, object).map_err(|e| format!("writing {}: {e}", obj.display()))?;
+    let mut cmd;
+    if cfg!(windows) {
+        let target = format!("{}-pc-windows-msvc", std::env::consts::ARCH);
+        let tool = cc::windows_registry::find_tool(&target, "link.exe")
+            .ok_or("MSVC's link.exe (install Visual Studio's C++ build tools)")?;
+        cmd = tool.to_command();
+        cmd.arg("/NOLOGO")
+            .arg("/DLL")
+            .arg(format!("/OUT:{}", out.display()))
+            .arg(format!(
+                "/IMPLIB:{}",
+                dir.join(format!("{name}-module.lib")).display()
+            ))
+            .arg(format!("/EXPORT:PyInit_{name}"))
+            .arg(&obj)
+            .arg(glue)
+            .arg(&lib);
+        if let Some(p) = python_lib {
+            cmd.arg(p);
+        }
+        for l in WINDOWS_LIBS {
+            cmd.arg(l);
+        }
+    } else {
+        let mac = cfg!(target_os = "macos");
+        cmd = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
+        cmd.arg(if mac { "-dynamiclib" } else { "-shared" });
+        if mac {
+            // Python's symbols are the interpreter's, found when it loads the module.
+            cmd.args(["-undefined", "dynamic_lookup"]);
+        }
+        cmd.arg(&obj).arg(glue).arg(&lib).arg("-o").arg(out);
+        if mac {
+            cmd.args(["-lSystem", "-lobjc", "-lc", "-lm"]);
+        } else {
+            cmd.args([
+                "-lgcc_s",
+                "-lutil",
+                "-lrt",
+                "-lpthread",
+                "-lm",
+                "-ldl",
+                "-lc",
+            ]);
+        }
+    }
+    for b in c {
+        cmd.arg(&b.static_lib);
+        for l in &b.libs {
+            cmd.arg(if cfg!(windows) {
+                format!("{l}.lib")
+            } else {
+                format!("-l{l}")
+            });
+        }
+    }
+    let o = cmd
+        .output()
+        .map_err(|e| format!("running the linker: {e}"))?;
+    let _ = std::fs::remove_file(&obj);
+    if !o.status.success() {
+        return Err(format!(
+            "the linker failed ({}):\n{}{}",
+            o.status,
+            String::from_utf8_lossy(&o.stdout),
+            String::from_utf8_lossy(&o.stderr)
+        ));
+    }
+    Ok(())
+}
+
 /// Where the Rust toolchain's own tools are (`rust-lld`, `rust-objcopy`, the `gcc-ld` wrappers):
 /// its sysroot's `lib/rustlib/<host>/bin`.
 fn rust_tools() -> Result<PathBuf, String> {
