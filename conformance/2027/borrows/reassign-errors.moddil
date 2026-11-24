@@ -1,0 +1,13 @@
+// covers: borrow.reassign.1
+
+struct Pair { a: int, b: int }
+
+// A borrow made through `r` still borrows `x`.
+fn through_still_lends(x: &mut Pair, y: &mut Pair) -> int {
+    let mut r = &mut *x;
+    let s = &mut r.a;
+    r = y;
+    x.a = 5;                                    //~ E0306
+    *s = 1;
+    r.b
+}

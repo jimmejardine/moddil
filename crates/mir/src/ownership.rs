@@ -211,6 +211,15 @@ impl PlaceKey {
     fn contains(&self, other: &PlaceKey) -> bool {
         self.local == other.local && other.path.starts_with(&self.path)
     }
+
+    /// Whether `self` is reached through a dereference of `other`, as `(*r).x` is of `r`: it does
+    /// not live in `other`, so assigning `other` does not touch it.
+    fn through(&self, other: &PlaceKey) -> bool {
+        self.local == other.local
+            && self.path.len() > other.path.len()
+            && self.path.starts_with(&other.path)
+            && self.path[other.path.len()] == (2, 0)
+    }
 }
 
 /// The part of `p` before its first `Deref`: the local storage a use of `p` touches directly.
@@ -514,7 +523,13 @@ impl<'a> Checker<'a> {
                 continue;
             }
             let loan = &self.loans[li];
-            if loan.param.is_some() || !PlaceKey::of(&loan.place).overlaps(&full) {
+            let key = PlaceKey::of(&loan.place);
+            if loan.param.is_some() || !key.overlaps(&full) {
+                continue;
+            }
+            // Assigning a borrow ends the borrows made through it, which point past it:
+            // `at = &(*at).next` walks a list.
+            if kind == Access::Write && key.through(&full) {
                 continue;
             }
             let (code, message) = match kind {
@@ -593,6 +608,10 @@ impl<'a> Checker<'a> {
         }
         if !dest.is_indirect() {
             let key = PlaceKey::of(dest);
+            // The borrows made through what `dest` held end: they no longer depend on it.
+            for held in h.iter_mut() {
+                held.retain(|&li| !PlaceKey::of(&self.loans[li].place).through(&key));
+            }
             m.places.retain(|mv| !key.contains(mv));
             if dest.projection.is_empty() && self.body.late.iter().any(|&(l, _)| l == dest.local) {
                 m.given.insert(dest.local.0);

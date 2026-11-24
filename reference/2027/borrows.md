@@ -37,6 +37,11 @@ use, not at the end of its scope.
 **borrow.reborrow.1** Using a `&mut` borrow (passing it, assigning it) lends what it points to
 again, for as long as the new borrow is used, and leaves the original usable afterwards.
 
+**borrow.reassign.1** Assigning a variable that holds a borrow does not conflict with the borrows
+made through it, of places past what it points to, as `&(*r).next` is: those places are not in the
+variable. So `at = &at.children[0]` walks down a tree. A borrow made through `r` still borrows
+what `r` borrowed (**borrow.reborrow.1**), so that stays lent while it is used.
+
 **borrow.scope.1** A borrow may not be used after the variable it borrows goes out of scope
 (E0308).
 

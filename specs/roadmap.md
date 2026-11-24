@@ -1026,8 +1026,35 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
     - The tree is an AA tree whose nodes live in a `Vec`.
     - Since then, the insertion-ordered `OrderedMap` and `OrderedSet`, and `Interner` with
       typed `Symbol`s (`text.md`: Interning).
-    - `EnumSet` is still to come. So are the persistent collections, which waited for a shared,
-      reference-counted pointer: `Rc` has come since (below), so they are next.
+    - `EnumSet` is still to come.
+    - **The persistent collections (November 2026), over `Rc`:** `PersistentList` (a cons
+      list), `PersistentVec` (Clojure's 32-way trie with a tail), `PersistentMap` (a hash array
+      mapped trie, in hash order, with collision nodes) and `PersistentSet`. An update borrows the
+      collection and gives a new one, sharing every node it did not change; `.clone()` is O(1).
+      - **Not yet:** a sorted persistent map; Perceus-style reuse of a node no one else holds
+        (`types.md`: Functional programming); dropping a long `PersistentList` without recursing
+        once per cell, which needs an `Rc::try_unwrap`; the map's iterator walks from the root
+        for each entry, O(depth), because a view cannot hold a stack of borrows.
+      - **Shortcomings found writing them**, each worked around in the mod and still open unless
+        marked fixed:
+        - **No population count:** `int` has no `count_ones`, so the map counts a bitmap's bits
+          with a loop of its own (`ones`).
+        - **No deref coercion:** a `&Rc<Node>` or a `&Box<T>` is not accepted where a `&Node` or a
+          `&T` is expected, as Rust accepts it. The nodes' helpers take `&Rc<Node<T>>` and match
+          on `&**n`; `&**n` is written where a `&T` is wanted.
+        - **Tuples are `Clone` only when their elements are `Copy`.** `(String, int)` is not
+          `Clone`, and `.clone()` on a `&(K, V)` then clones the borrow, giving a `&(K, V)`, and
+          the error appears further on. The map's collision nodes hold its `Slot::Entry`s instead
+          of `(K, V)` pairs.
+        - **No `panic` or `unreachable` for a broken invariant** in library code: a `match` gives
+          an `Option` and `?!` traps on `None` (`values` and `children` in the vector, as in the
+          prelude's `Box`).
+        - **Binding through a view's borrow field:** in `match w.at { Node::Leaf(x) => *x }`, with
+          `w` a view whose `at` is a `&Node`, `x` is typed `int`, not `&int` as it is when the
+          scrutinee is a local borrow, so `*x` is E0205.
+        - **Fixed in this slice:** assigning a borrow while borrows made through it are live
+          (`at = &at.children[0]`, walking a tree or a list) was E0306; it is now allowed
+          (`borrow.reassign.1`), and a borrow made through `r` still lends what `r` borrowed.
   - **`crypto`:** SHA-256, SHA-512 and BLAKE3 (hash mode), with hex.
     - They are checked against the FIPS 180-4 vectors and the BLAKE3 reference's.
     - They are not constant-time.

@@ -1,0 +1,166 @@
+//! `PersistentList`: a list whose updates give a new list and leave the old one as it was
+//! (`stdlib.md`: Collections). It is a chain of shared cells: `push_front` makes one new cell
+//! that points at the old list, so the two lists share every cell but the first, and nothing is
+//! ever copied.
+
+/// A cell: `pub` only because `PersistentList` holds them (`mod.expose.1`); its fields are
+/// private.
+pub struct Cell<T> {
+    value: T,
+    next: Option<Rc<Cell<T>>>,
+}
+
+/// A list, first to last, whose updates leave it as it was.
+pub struct PersistentList<T> {
+    head: Option<Rc<Cell<T>>>,
+    len: int,
+}
+
+impl<T> PersistentList<T> {
+    pub fn new() -> PersistentList<T> {
+        PersistentList { head: None, len: 0 }
+    }
+
+    pub fn len(&self) -> int {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// The list with `x` in front of this one's values, which it shares.
+    pub fn push_front(&self, x: T) -> PersistentList<T> {
+        let next = match &self.head {
+            Some(c) => Some(c.share()),
+            None => None,
+        };
+        PersistentList { head: Some(Cell { value: x, next }.to_rc()), len: self.len + 1 }
+    }
+
+    /// The first value, if there is one.
+    pub fn first(&self) -> Option<&T> {
+        match &self.head {
+            Some(c) => Some(&c.value),
+            None => None,
+        }
+    }
+
+    /// The list after the first value: shared with this one, and empty if this one is.
+    pub fn rest(&self) -> PersistentList<T> {
+        match &self.head {
+            Some(c) => {
+                let next = match &c.next {
+                    Some(n) => Some(n.share()),
+                    None => None,
+                };
+                PersistentList { head: next, len: self.len - 1 }
+            }
+            None => PersistentList::new(),
+        }
+    }
+
+    /// The values, borrowed, first to last.
+    pub fn iter(&self) -> PersistentListIter<T> {
+        PersistentListIter { at: &self.head }
+    }
+}
+
+/// The values of a `PersistentList`, first to last.
+pub view PersistentListIter<T> {
+    at: &Option<Rc<Cell<T>>>,
+}
+
+impl<T> Iterator for PersistentListIter<T> {
+    type Item = &T;
+    fn next(&mut self) -> Option<&T> {
+        match self.at {
+            Some(c) => {
+                self.at = &c.next;
+                Some(&c.value)
+            }
+            None => None,
+        }
+    }
+}
+
+impl<T> IntoIterator for &PersistentList<T> {
+    type Item = &T;
+    type IntoIter = PersistentListIter<T>;
+    fn into_iter(self) -> PersistentListIter<T> {
+        self.iter()
+    }
+}
+
+// Another handle to the same cells: nothing is copied, and neither list can change them.
+impl<T> Clone for PersistentList<T> {
+    fn clone(&self) -> PersistentList<T> {
+        let head = match &self.head {
+            Some(c) => Some(c.share()),
+            None => None,
+        };
+        PersistentList { head, len: self.len }
+    }
+}
+
+impl<T: PartialEq> PartialEq for PersistentList<T> {
+    fn eq(&self, other: &PersistentList<T>) -> bool {
+        if self.len != other.len {
+            return false;
+        }
+        let mut b = other.iter();
+        for x in self.iter() {
+            match b.next() {
+                Some(y) if *x == *y => {}
+                _ => return false,
+            }
+        }
+        true
+    }
+}
+
+impl<T: Eq> Eq for PersistentList<T> {}
+
+// The values in the order written: `[a, b]` is a list whose first value is `a`.
+impl<T> FromArrayLiteral<T> for PersistentList<T> {
+    fn from_array<const N: int>(items: [T; N]) -> PersistentList<T> {
+        let mut values = Vec::new();
+        for x in items {
+            values.push(x);
+        }
+        let mut l = PersistentList::new();
+        while let Some(x) = values.pop() {
+            l = l.push_front(x);
+        }
+        l
+    }
+
+    fn from_repeat(x: T, n: int) -> PersistentList<T> where T: Clone {
+        let mut l = PersistentList::new();
+        for _ in 0..n {
+            l = l.push_front(x.clone());
+        }
+        l
+    }
+}
+
+impl<T> Default for PersistentList<T> {
+    fn default() -> PersistentList<T> {
+        PersistentList::new()
+    }
+}
+
+impl<T: Debug> Debug for PersistentList<T> {
+    fn fmt(&self, out: &mut String) {
+        out.push('[');
+        let mut first = true;
+        for x in self.iter() {
+            if !first {
+                out.push_str(", ");
+            }
+            first = false;
+            Debug::fmt(x, out);
+        }
+        out.push(']');
+    }
+}

@@ -1,0 +1,354 @@
+//! `PersistentVec`: a vector whose updates give a new vector and leave the old one as it was
+//! (`stdlib.md`: Collections).
+//!
+//! It is Clojure's bit-partitioned trie: the values are in leaves of up to 32, under branches of
+//! up to 32, so a value's index, five bits at a time from the top, is its path. The last values,
+//! up to 32, are in a leaf of their own, the tail, so most pushes copy only that. An update copies
+//! the path from the root to what it changes, at most a few nodes of 32, and shares the rest.
+
+/// The bits of an index each level of branches takes.
+const BITS: int = 5;
+
+/// How many children a branch has, and how many values a leaf has, at most.
+const WIDTH: int = 32;
+
+/// A node: `pub` only because `PersistentVec` holds them (`mod.expose.1`).
+pub enum Node<T> {
+    Branch(Vec<Rc<Node<T>>>),
+    Leaf(Vec<T>),
+}
+
+/// A vector whose updates leave it as it was.
+pub struct PersistentVec<T> {
+    len: int,
+    /// How far the root's index bits are shifted: `BITS` for a root whose children are leaves.
+    shift: int,
+    root: Rc<Node<T>>,
+    /// The last values, up to `WIDTH` of them: always a leaf.
+    tail: Rc<Node<T>>,
+}
+
+/// The values of a leaf.
+fn values<T>(n: &Rc<Node<T>>) -> &Vec<T> {
+    let xs = match &**n {
+        Node::Leaf(xs) => Some(xs),
+        Node::Branch(_) => None,
+    };
+    xs ?! "a leaf"
+}
+
+/// The children of a branch.
+fn children<T>(n: &Rc<Node<T>>) -> &Vec<Rc<Node<T>>> {
+    let cs = match &**n {
+        Node::Branch(cs) => Some(cs),
+        Node::Leaf(_) => None,
+    };
+    cs ?! "a branch"
+}
+
+/// Copies of `xs`' handles: the nodes they point to are shared.
+fn shared<T>(xs: &Vec<Rc<Node<T>>>) -> Vec<Rc<Node<T>>> {
+    let mut out = Vec::new();
+    for x in xs {
+        out.push(x.share());
+    }
+    out
+}
+
+/// `node` under `level` bits' worth of single-child branches.
+fn path_to<T>(level: int, node: Rc<Node<T>>) -> Rc<Node<T>> {
+    if level == 0 {
+        return node;
+    }
+    let mut cs = Vec::new();
+    cs.push(path_to(level - BITS, node));
+    Node::Branch(cs).to_rc()
+}
+
+impl<T> PersistentVec<T> {
+    pub fn new() -> PersistentVec<T> {
+        PersistentVec {
+            len: 0,
+            shift: BITS,
+            root: Node::Branch(Vec::new()).to_rc(),
+            tail: Node::Leaf(Vec::new()).to_rc(),
+        }
+    }
+
+    pub fn len(&self) -> int {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// The index of the tail's first value.
+    fn tail_start(&self) -> int {
+        if self.len < WIDTH { 0 } else { ((self.len - 1) >> BITS) << BITS }
+    }
+
+    /// The leaf holding index `i`, which is in range.
+    fn leaf(&self, i: int) -> &Rc<Node<T>> {
+        if i >= self.tail_start() {
+            return &self.tail;
+        }
+        let mut node = &self.root;
+        let mut level = self.shift;
+        while level > 0 {
+            node = &children(node)[(i >> level) & (WIDTH - 1)];
+            level -= BITS;
+        }
+        node
+    }
+
+    /// The value at index `i`, if there is one.
+    pub fn get(&self, i: int) -> Option<&T> {
+        if i < 0 || i >= self.len {
+            return None;
+        }
+        Some(&values(self.leaf(i))[i & (WIDTH - 1)])
+    }
+
+    /// The last value, if there is one.
+    pub fn last(&self) -> Option<&T> {
+        self.get(self.len - 1)
+    }
+
+    /// The values, borrowed, in order.
+    pub fn iter(&self) -> PersistentVecIter<T> {
+        PersistentVecIter { vec: self, at: 0 }
+    }
+}
+
+impl<T: Clone> PersistentVec<T> {
+    /// The vector with `x` after this one's values.
+    pub fn push(&self, x: T) -> PersistentVec<T> {
+        let in_tail = self.len - self.tail_start();
+        if in_tail < WIDTH {
+            let mut xs = values(&self.tail).clone();
+            xs.push(x);
+            return PersistentVec {
+                len: self.len + 1,
+                shift: self.shift,
+                root: self.root.share(),
+                tail: Node::Leaf(xs).to_rc(),
+            };
+        }
+        // The tail is full: it goes into the tree, under a new root if the tree is full too.
+        let full = self.tail.share();
+        let mut shift = self.shift;
+        let root = if (self.len >> BITS) > (1 << self.shift) {
+            let mut cs = Vec::new();
+            cs.push(self.root.share());
+            cs.push(path_to(self.shift, full));
+            shift += BITS;
+            Node::Branch(cs).to_rc()
+        } else {
+            self.push_leaf(self.shift, &self.root, full)
+        };
+        let mut xs = Vec::new();
+        xs.push(x);
+        PersistentVec { len: self.len + 1, shift, root, tail: Node::Leaf(xs).to_rc() }
+    }
+
+    /// A copy of the branch `node`, at `level`, with the full tail `leaf` added after its last
+    /// value.
+    fn push_leaf(&self, level: int, node: &Rc<Node<T>>, leaf: Rc<Node<T>>) -> Rc<Node<T>> {
+        let mut cs = shared(children(node));
+        let at = ((self.len - 1) >> level) & (WIDTH - 1);
+        let child = if level == BITS {
+            leaf
+        } else if at < cs.len() {
+            self.push_leaf(level - BITS, &cs[at], leaf)
+        } else {
+            path_to(level - BITS, leaf)
+        };
+        if at < cs.len() {
+            cs[at] = child;
+        } else {
+            cs.push(child);
+        }
+        Node::Branch(cs).to_rc()
+    }
+
+    /// The vector with `x` at index `i` instead. `i` must be in range.
+    pub fn set(&self, i: int, x: T) -> PersistentVec<T> {
+        assert(0 <= i && i < self.len);
+        if i >= self.tail_start() {
+            let mut xs = values(&self.tail).clone();
+            xs[i & (WIDTH - 1)] = x;
+            return PersistentVec {
+                len: self.len,
+                shift: self.shift,
+                root: self.root.share(),
+                tail: Node::Leaf(xs).to_rc(),
+            };
+        }
+        PersistentVec {
+            len: self.len,
+            shift: self.shift,
+            root: set_at(self.shift, &self.root, i, x),
+            tail: self.tail.share(),
+        }
+    }
+
+    /// The vector without its last value; an empty one stays empty.
+    pub fn pop(&self) -> PersistentVec<T> {
+        if self.len <= 1 {
+            return PersistentVec::new();
+        }
+        if self.len - self.tail_start() > 1 {
+            let mut xs = values(&self.tail).clone();
+            xs.pop();
+            return PersistentVec {
+                len: self.len - 1,
+                shift: self.shift,
+                root: self.root.share(),
+                tail: Node::Leaf(xs).to_rc(),
+            };
+        }
+        // The tail empties: the tree's last leaf becomes it.
+        let tail = self.leaf(self.len - 2).share();
+        let mut shift = self.shift;
+        let mut root = match self.pop_leaf(self.shift, &self.root) {
+            Some(r) => r,
+            None => Node::Branch(Vec::new()).to_rc(),
+        };
+        // A root with one child gives way to it.
+        if shift > BITS && children(&root).len() == 1 {
+            let only = children(&root)[0].share();
+            root = only;
+            shift -= BITS;
+        }
+        PersistentVec { len: self.len - 1, shift, root, tail }
+    }
+
+    /// A copy of the branch `node`, at `level`, without its last leaf; `None` if that leaves it
+    /// empty.
+    fn pop_leaf(&self, level: int, node: &Rc<Node<T>>) -> Option<Rc<Node<T>>> {
+        let at = ((self.len - 2) >> level) & (WIDTH - 1);
+        let mut cs = shared(children(node));
+        if level > BITS {
+            match self.pop_leaf(level - BITS, &cs[at]) {
+                Some(c) => cs[at] = c,
+                None if at == 0 => return None,
+                None => {
+                    cs.pop();
+                }
+            }
+        } else if at == 0 {
+            return None;
+        } else {
+            cs.pop();
+        }
+        Some(Node::Branch(cs).to_rc())
+    }
+}
+
+/// A copy of `node`, at `level`, with `x` at index `i`.
+fn set_at<T: Clone>(level: int, node: &Rc<Node<T>>, i: int, x: T) -> Rc<Node<T>> {
+    let at = (i >> level) & (WIDTH - 1);
+    if level == 0 {
+        let mut xs = values(node).clone();
+        xs[at] = x;
+        return Node::Leaf(xs).to_rc();
+    }
+    let mut cs = shared(children(node));
+    let child = set_at(level - BITS, &cs[at], i, x);
+    cs[at] = child;
+    Node::Branch(cs).to_rc()
+}
+
+/// The values of a `PersistentVec`, in order.
+pub view PersistentVecIter<T> {
+    vec: &PersistentVec<T>,
+    at: int,
+}
+
+impl<T> Iterator for PersistentVecIter<T> {
+    type Item = &T;
+    fn next(&mut self) -> Option<&T> {
+        let x = self.vec.get(self.at);
+        if x.is_some() {
+            self.at += 1;
+        }
+        x
+    }
+}
+
+impl<T> IntoIterator for &PersistentVec<T> {
+    type Item = &T;
+    type IntoIter = PersistentVecIter<T>;
+    fn into_iter(self) -> PersistentVecIter<T> {
+        self.iter()
+    }
+}
+
+// Another handle to the same nodes: nothing is copied, and neither vector can change them.
+impl<T> Clone for PersistentVec<T> {
+    fn clone(&self) -> PersistentVec<T> {
+        PersistentVec {
+            len: self.len,
+            shift: self.shift,
+            root: self.root.share(),
+            tail: self.tail.share(),
+        }
+    }
+}
+
+impl<T: PartialEq> PartialEq for PersistentVec<T> {
+    fn eq(&self, other: &PersistentVec<T>) -> bool {
+        if self.len != other.len {
+            return false;
+        }
+        for i in 0..self.len {
+            match (self.get(i), other.get(i)) {
+                (Some(a), Some(b)) if *a == *b => {}
+                _ => return false,
+            }
+        }
+        true
+    }
+}
+
+impl<T: Eq> Eq for PersistentVec<T> {}
+
+impl<T: Clone> FromArrayLiteral<T> for PersistentVec<T> {
+    fn from_array<const N: int>(items: [T; N]) -> PersistentVec<T> {
+        let mut v = PersistentVec::new();
+        for x in items {
+            v = v.push(x);
+        }
+        v
+    }
+
+    fn from_repeat(x: T, n: int) -> PersistentVec<T> where T: Clone {
+        let mut v = PersistentVec::new();
+        for _ in 0..n {
+            v = v.push(x.clone());
+        }
+        v
+    }
+}
+
+impl<T> Default for PersistentVec<T> {
+    fn default() -> PersistentVec<T> {
+        PersistentVec::new()
+    }
+}
+
+impl<T: Debug> Debug for PersistentVec<T> {
+    fn fmt(&self, out: &mut String) {
+        out.push('[');
+        let mut first = true;
+        for x in self.iter() {
+            if !first {
+                out.push_str(", ");
+            }
+            first = false;
+            Debug::fmt(x, out);
+        }
+        out.push(']');
+    }
+}

@@ -308,7 +308,7 @@ Rust's names and shapes, in `core-*` (with an allocator) and `moddil/collections
 | `OrderedMap<K, V>`, `OrderedSet<T>` | Insertion order |
 | `BinaryHeap<T>`, `RingBuffer<T>` | |
 | `EnumSet<E>` | A bit set over a fieldless enum, Jai's `enum_flags`: bit *i* is the variant with index *i*, stored in the smallest unsigned integer that fits; `#[repr(u8)]`-style layout is guaranteed, so it fits packed structs, register maps and wire formats (decided) |
-| Persistent collections | Structural sharing for immutable updates; standard, in `moddil/collections` (decided) |
+| `PersistentList<T>`, `PersistentVec<T>`, `PersistentMap<K, V>`, `PersistentSet<T>` | Persistent: an update (`v.push(x)`, `m.insert(k, v)`) borrows the collection and gives a new one, sharing every node it did not change, so the old one stays as it was; `.clone()` is O(1). A cons list, a 32-way trie with a tail (Clojure's vector) and a hash array mapped trie; in `moddil/collections` (decided) |
 
 - **Collection literals are typed by context (decided).** There is no `vec!`. `[a, b, c]` and
   `[x; n]` build whatever type the context expects, if it implements the prelude trait
