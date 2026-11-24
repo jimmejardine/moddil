@@ -74,11 +74,9 @@ READMEs describe what exists.
 **M3, the rest:**
 - **The Hashiverse CLI/native client** (phase A), through the C ABI: its first pieces next.
 - **The LLVM release backend**, beside Cranelift for release builds.
-- **Python, beyond the first bindings** (`moddil build --wheel` exists):
+- **Python, beyond the first bindings** (`moddil build --wheel` exists; the smaller steps are
+  work package P1 below):
   - `async` functions as `asyncio` awaitables, on Moddil's executor;
-  - `Vec` results as arrays, a small `name.Array` class with the buffer protocol (decided);
-  - keyword arguments, nested modules, methods taking `self` by value;
-  - an error's fields, not only its type and `Debug` text;
   - more than one call into Moddil at a time (free-threaded CPython's separate pools);
   - `moddil bind --lang python`, the command the milestone names.
 - **Talk**, the showcase ([`examples/talk.md`](examples/talk.md)): on the CPU pool first, then on
@@ -86,132 +84,198 @@ READMEs describe what exists.
 
 **M4 and M5** as the milestones above say; nothing of either is built yet.
 
-**Next:** async in the Python bindings and array results; or the Hashiverse client's first pieces
-through the C ABI; or the LLVM release backend.
+**Next:** any work package below (P1 and P2 are the ones the last review left); or async in the
+Python bindings; or the Hashiverse client's first pieces through the C ABI; or the LLVM release
+backend.
 
 ## Deferred from built work
 
-What was left out of something built, until another feature exists or a decision is made. Each
-is still open; when one is done, it is removed from this list.
+What was left out of something built, until another feature exists or a decision is made, as
+**work packages**: each one an agent can finish in one go, in a small set of crates, needing no
+decision first, and ending with conformance tests on every runner (M: a few hours; L: a day or
+more). Packages are independent unless one says otherwise. When a package is done, remove it;
+when part of one is, remove that part.
 
-**Decisions to make first**
-- **A `for` over an iterator that can fail** with known errors is E0501 (write
-  `while let Some(x) = it.next()? { … }`), until it is decided how `for` marks it.
-- **How a type-erased `Box<dyn Fn …>` that holds a handler borrow is tracked:** likely its
-  borrows flow with the value, as for any view.
+**P1. Python bindings, the next steps** (`crates/py`, `examples/python`; L)
+- Methods taking `self` by value (refused at `--wheel` today).
+- Keyword arguments.
+- `Vec` results as a small `name.Array` class with the buffer protocol (decided), not lists.
+- An error's fields as the exception's attributes, not only its type and `Debug` text.
+- Nested modules.
 
-**Types and traits**
-- Specialisation, generic associated types, default type parameters (so the operator traits take
-  `Self` on the right: `Add` has no `Rhs`), and trait aliases.
-- Associated consts; `type` items that are generic; a refinement with impls of its own, or whose
-  base holds a borrow.
-- Const arithmetic in types (`Fixed<{S + T}>`), and consts as array lengths; const parameters are
-  `int`s.
-- A borrow of a borrow, so `Hash` for `&T` and maps keyed by borrows (`HashMap<&str, V>`).
+**P2. A static library** (`crates/moddil` `link.rs`, `crates/ffi`; M)
+- `moddil build --lib --static`: the object and the runtime's static library merged (`lib.exe`
+  on Windows, `libtool` on macOS, an `ar` script on Linux), and `examples/cabi`'s C program
+  linked against it in its test.
+
+**P3. Formatting** (`crates/sema` holes, prelude `fmt` and `text`; L)
+- Format specs beyond those built: width, fill, alignment and precision (`{x:>8}`, `{f:.3}`).
+- Then `Display` and `Debug` over a `Write` sink, rather than `&mut String`.
+
+**P4. Text** (prelude `text`, `crates/sema`; M)
+- `char_indices`, and `RcStr` slices.
+- A text position used on other text refused when checking (as `text.md` says), not trapping
+  when it runs and comparing by text.
+- Tagged literals other than `fmt`, first `re"…"` compiled when compiling, with typed captures
+  (`mods/regex`, with P11).
+
+**P5. Numbers** (`crates/sema` `exhaust.rs`, prelude `int` and `numbers`; M)
+- Exhaustiveness on `i128` and `u128` counting their greatest value.
+- `Wrapping<T>`; `usize` and `isize`.
+
+**P6. Arrays and iteration** (prelude `arrays` and `iter`, `crates/sema`, the runners' clone glue;
+M)
+- `IterMut`.
+- `[x; n]`, and an array's `Clone`, for elements that are only `Clone`.
+- `Index` beyond `int` (ranges as `Index`).
+
+**P7. Shared and anonymous values** (`crates/sema`, prelude `rc` and `derives`; L)
+- `Rc<dyn Trait>`: coercing to `dyn` beyond `Box`.
+- `#[derive]` on a `view`.
+- Anonymous impls that implement the trait's supertraits, and methods taking `&mut self`.
+
+**P8. The trait system** (`crates/sema`, `crates/syntax` and the grammar, the prelude, both
+interpreters; L)
+- Associated consts.
+- Default type parameters, then the operator traits' `Rhs` (`Add<Rhs = Self>`).
+- Generic `type` aliases; a refinement with impls of its own, or whose base holds a borrow.
 - An `impl Trait` result in a trait's method, one whose hidden type holds a borrow or a closure,
   and recursion between functions that return one.
-- `Rc<dyn Trait>`: coercing to `dyn` is built for `Box` only.
-- An anonymous impl implements its trait only, not its supertraits, and its methods take `&self`.
-- `#[derive]` on a `view`.
-- Closures: a closure bound to a local before `Box::new` is checked as an ordinary one (only one
-  written where the box is expected meets its needs at the call); only a closure written as the
-  function's value, or after `return`, is taken as the one returned; closures are not `Copy`;
-  `escape` is not implemented.
-- `IterMut`; `Index` takes an `int`; `[x; n]` needs `Copy` elements, and an array is `Clone` only
-  when it is `Copy`.
+
+**P9. Closures** (`crates/sema` `check/closures.rs`, `crates/mir`; L)
+- A closure bound to a local before `Box::new` meeting its needs at the call (today only one
+  written where the box is expected does).
+- A returned closure bound to a local first (today only one written as the function's value,
+  or after `return`, is taken as the one returned).
+- `Copy` closures; `escape`.
+
+**P10. Borrow checking gaps** (`crates/mir` `ownership.rs`, `crates/sema`; M)
+- A borrow of a borrow, so `Hash` for `&T` and maps keyed by borrows (`HashMap<&str, V>`).
 - A view's method that returns, through a trait whose signature holds no borrow, a borrow of the
-  view's own field is not caught.
+  view's own field: caught.
 
-**Errors, effects and concurrency**
-- Inferred error tags (they wait for their syntax), and an error set written as a type.
-- A note after `?` is checked but not kept: error return traces, and suppressed errors.
-- A handler that holds another handler it captured.
-- Cancellation: a cancelled task's pending operation's value is dropped without its destructors;
-  a `send` in `select` does not wait for a rendezvous; a `join` of a cancelled task unwinds the
-  task that joins.
-- Shielded cleanup with deadlines, `checkpoint()`, grace periods, poisoning and `abandon`.
-- Only a literal `false` (or leaving `isolate` out) keeps `Trapped` out of a scope's errors.
-- A `select` arm on a `#[selectable]` function traps when it runs, until the runtimes wait on it.
-- `log` has no handlers; a test cannot be run for listed types or declare capabilities.
-- The allocator in scope: `with Alloc = …` and `Vec::new_in`.
-- Biased counting, `AtomicRc` and the cycle detector, which wait for a parallel runtime.
-- `panic`: only bugs trap (`unreachable`, `todo`, `assert`, `?!`).
+**P11. Compile-time evaluation** (`crates/sema`, `crates/mir`, the MIR interpreter as evaluator;
+L)
+- A `const { }` block evaluated once, not where it is each time; `#[fuel(…)]`.
+- Consts as array lengths and const arguments; const arithmetic in types (`Fixed<{S + T}>`);
+  const parameters of types other than `int`.
+- A const holding a borrow of static data beyond text.
 
-**Comptime and contracts**
-- `reflect(T)` in full, user-written derives beyond templates, and the typed construction API.
-- A `const { }` block is evaluated where it is, each time; `#[fuel(…)]`; a const holds no borrow
-  but of text.
-- Wrappers: methods (a field to hold `self`); wrapper arguments evaluated at each call;
-  `f::Args` cannot be named in code; `FnInfo` has no attributes or effects; `moddil explain` does
-  not print the expansion.
-- Contracts: `invariant`, `requires always`, contracts on trait methods, the `Contracts`
-  handler's policies; `old(e)` needs a `Copy` value.
-- Refinements: parenthesised refinements in types (`(u32 where self >= 1)`), niches and proofs;
-  a refinement pattern's base is `Copy`; an alias names only the aliases before it.
+**P12. Contracts and refinements** (`crates/sema`, `crates/mir`; M)
+- `invariant`; `requires always`; contracts on trait methods; `old(e)` of a value that is not
+  `Copy` (by clone).
+- Parenthesised refinements in types (`(u32 where self >= 1)`); a refinement pattern whose base
+  is not `Copy`; an alias naming an alias after it.
 
-**Text and numbers**
-- Format specs other than those built (`{x:>8}`), and `Display` and `Debug` over a `Write` sink.
-- Tagged literals other than `fmt`, such as `re"…"` compiled at compile time with typed captures.
-- A position used on other text traps when it runs, rather than failing to compile, and is
-  compared by text.
-- `char_indices`, `graphemes` and `RcStr` slices.
-- `f16`, `bf16`, arbitrary widths (`u3`), `usize` and `isize`, `Wrapping<T>`; exact decimal
-  literals (`let p: Fixed<2> = 0.10`).
+**P13. Wrappers** (`crates/sema` `wrap.rs`, `crates/moddil`; M)
+- Wrapping methods (a field to hold `self`).
+- Wrapper arguments evaluated once, not at each call; `f::Args` named in code.
+- `FnInfo` with attributes and effects; `moddil explain` printing the expansion.
+
+**P14. Cancellation, finished** (`crates/sched`, both runtimes, the reference interpreter; M)
+- A cancelled task's pending operation's value dropped with its destructors.
+- A `send` in `select` waiting for its rendezvous.
+- A `join` of a cancelled task not unwinding the task that joins.
+- `isolate:` from any `bool`, not only a literal `false` keeping `Trapped` out of the errors.
+
+**P15. Selectable functions in the runtimes** (`crates/sched`, `crates/interp`, `crates/rt`,
+`crates/native`; M)
+- A `select` arm on a `#[selectable]` function waits for it, rather than trapping when it runs.
+
+**P16. Errors and effects** (`crates/mir`, both runtimes, the CLI's reports; L)
+- Notes after `?` kept as an error return trace, shown with an error that escapes.
+- Suppressed errors: a scope's losing tasks' errors kept, not dropped.
+- An error set written as a type.
+- A handler that holds another handler it captured; `log` with handlers; a test run for listed
+  types, or declaring capabilities.
+
+**P17. Built programs' results** (`crates/native`, `crates/rt-main`; M)
+- A built program's `main` giving any type, printed as `moddil run` prints it, not only `()` or
+  `ExitCode`.
+
+**P18. The reference interpreter's differences** (`crates/refinterp`; M)
+- `?` on a call of a function whose signature lists `fail` but whose errors turn out to be `!`
+  (it takes the `?` as the call's).
+- A literal typed by a later use of an unannotated variable (it types a literal when it meets
+  one at run time).
+- A collection literal typed from every context, not only a `let`'s type, a parameter or a
+  result.
+
+**P19. Standard collections** (`mods/collections`, prelude `rc`, `core::collections`; L)
+- `EnumSet`; a sorted persistent map.
+- `Rc::try_unwrap`, and a long `PersistentList` dropped without recursing per cell.
+- The hasher keyed from `Rand`, with tests printing their seed, so map order differs per run.
+- Perceus-style reuse of a node no one else holds; the persistent map's iterator in O(1) per
+  entry (needs a view that holds a stack of borrows).
+
+**P20. Time** (`mods/time`, `core::os`, both runtimes; M)
+- Reading the clock, as a root capability; then time zones (they need the zone data).
+
+**P21. GPU kernels** (`crates/gpu`, `mods/gpu`, `core::gpu`; L)
+- Arrays and slices in a kernel (closures, `dyn` and text later).
+- A kernel's traps (overflow, a failed `?!`) checked on the GPU; `int` 64 bits there, not 32.
+- `Tile` recognised by its type, not its name (E0221), and generic over its pixel and size.
+- `scope`'s `s.launch`, so `launch` need not wait for the GPU.
+
+**P22. C interop, the next steps** (`crates/ffi`, `crates/native`, `crates/interp`; L)
+- Variadic C functions, in each platform's convention.
+- Struct values in callbacks.
+- On the MIR interpreter: `slice_mut` over C memory, borrows of it without copies, hooks C keeps
+  past the call (zlib's `zalloc`), and a trap in a callback raised where it happens.
+- An exported function's trap made a status C can check, beyond `#[export(status)]`.
+
+**P23. Documentation tooling** (`crates/syntax`, `crates/sema`, `crates/moddil`; L)
+- Doc comments read: `moddil doc`, doc links, and doc tests run by `moddil test`.
+
+**P24. The language server, next** (`crates/lsp`; M)
+- Names in types resolved by their full path, not by name in the file's module.
+- Completion offering exactly the locals in scope, not those bound before the cursor.
+- Incremental document sync, and analysis off the server's one thread; an editor extension.
+
+**P25. A trailing comma in `where`** (`reference/grammar`, `crates/syntax`, `crates/grammar`; M)
+- A trailing comma at the end of a `where` clause before a body, made unambiguous for
+  tree-sitter (a type can start with `{`).
+
+**P26. A line-by-line review of the checkers and the native lowering** (`crates/sema` `check/`,
+`crates/native` `lower.rs`; L)
+- The codebase review of November 2026 scanned these (repeated code, function lengths, markers,
+  panics on input) but did not read their bodies, about 30,000 lines. Read them crate by crate
+  for duplication, dead paths and limits missing from this list; fix what is small, and add the
+  rest here as packages.
+
+**Needs a decision first** (not packaged)
+- How a `for` over an iterator that can fail with known errors marks them (today E0501: write
+  `while let Some(x) = it.next()? { … }`).
+- How a type-erased `Box<dyn Fn …>` that holds a handler borrow is tracked (likely its borrows
+  flow with the value, as for any view).
+- The syntax of inferred error tags.
+- Specialisation, generic associated types and trait aliases: whether, and how far.
+- The allocator in scope (`with Alloc = …`, `Vec::new_in`).
+- Exact decimal literals (`let p: Fixed<2> = 0.10`), and `f16`, `bf16` and arbitrary widths
+  (`u3`).
+
+**Waits on bigger work** (not packaged)
+- The rest of M3 and M4 and M5 (above, "Still to build").
+- A parallel runtime: biased counting, `AtomicRc`, the cycle detector.
+- Packaging: registry dependencies, a lockfile, targets and profiles, executables with
+  dependencies of their own, `mod name;` with a generating attribute, and `String`, `Vec` and
+  `core` as `moddil/core-*` mods.
+- Header import through libclang (`#[c_import]`), with annotation overlays; C on WASM.
+- Graphemes (Unicode's data); the browser program as an exported `Flight` the page drives, in the
+  Svelte app.
+- Each for its own milestone: units, `Simd`, linear types, generators and coroutines,
+  distribution ([Staging](#staging-distributed-programs)), data contracts.
+
+**Known limits, with no package yet**
 - The float functions other than `sqrt` are `libm`'s, not yet correctly rounded.
-- Exhaustiveness on `i128` and `u128` leaves out their greatest value.
 - `String`'s inline size is 23 on every target (11 on 32-bit targets comes with them), and
   strings are byte by byte in Moddil, so slower in the interpreters.
-
-**Modules and tooling**
-- A manifest has no registry dependencies, lockfile, targets or profiles; executables have no
-  dependencies of their own; `mod name;` with a generating attribute.
-- `String`, `Vec` and `core` live in the prelude and the built-in `core` until packaging gives
-  them mods (`moddil/core-*`).
-- Doc comments are not read: `moddil doc`, doc links and doc tests.
-- A trailing comma at the end of a `where` clause before a body (ambiguous to tree-sitter).
-- The LSP: no editor extension; names in types resolved by name in the file's module; completion offers the locals bound
-  before the cursor; whole-document sync on one thread.
-
-**Standard mods**
-- `collections`: `EnumSet`; a sorted persistent map; Perceus-style reuse of a node no one else
-  holds; dropping a long `PersistentList` without recursing per cell (needs `Rc::try_unwrap`);
-  the persistent map's iterator is O(depth) per entry, as a view cannot hold a stack of borrows.
-- `time`: reading a clock (a root capability) and time zones.
-- `crypto`: not constant-time.
-- The hasher's key is fixed, so map order is the same on every run, until it is keyed from `Rand`.
-
-**GPU**
-- `int` is 32 bits on the GPU, and a kernel's traps (overflow, a failed `?!`) are not checked
-  there.
-- No arrays, slices, closures, `dyn` or text in a kernel.
-- `launch` returns once the GPU is done; `scope`'s `s.launch` comes later.
-- `Tile` is 8 x 8 `Rgba8`, not generic, and E0221 recognises it by its type's name.
-- The browser program is a `main` that awaits frames, not an exported `Flight` the page drives,
-  and the page is plain, not the Svelte app.
-
-**C interop**
-- Header import through libclang (`#[c_import]`), and annotation overlays.
-- Variadic C functions; struct values in callbacks.
+- `crypto` is not constant-time.
 - A trap in a Moddil function called through a `fn` value ends the process natively (it runs
   through its C-ABI wrapper), while the MIR interpreter traps as for any call.
-- An exported function's trap ends the process; `moddil build --lib` makes no static library.
-- On the MIR interpreter: borrows of C's memory are copies, `slice_mut` of it traps, a trap in a
-  callback is raised only when the C call returns, and C cannot keep hooks past the call (zlib's
-  `zalloc`).
 - AArch64's rule that a struct is not split between registers and the stack holds only as far as
   Cranelift assigns registers; the tests stay within them.
-- C on WASM.
-
-**Native code and runners**
-- A built program's `main` gives `()` or `ExitCode`.
-- The reference interpreter: `?` on a call of a function whose signature lists `fail` is taken as
-  the call's, so where its errors turn out to be `!` it differs from the compiler; it gives a
-  literal its type when it meets one at run time, so it can differ where an unannotated variable
-  takes its type from a later use; it types a collection literal by its context only where a
-  `let`'s type, a parameter or a result names it.
-
-**Deferred past M0, each for its own milestone:** units; `Simd`; linear types; generators and
-coroutines; distribution ([Staging](#staging-distributed-programs)); data contracts.
+- `panic`: only bugs trap (`unreachable`, `todo`, `assert`, `?!`), by design so far.
 
 ## Staging: distributed programs
 

@@ -16,8 +16,10 @@
 
 `specs/roadmap.md` lists only what is still to build, and what built work left for later. It is
 not a history: git keeps that.
-- When you build something the roadmap lists, remove it from the roadmap.
+- When you build something the roadmap lists, remove it from the roadmap: a whole work package
+  (`P1`, `P2`, …) once it is done, or the parts of one you finished.
 - When something you build leaves a part for later, add that part under "Deferred from built
-  work", in its area.
+  work": to the package it belongs to, or as a new package an agent can finish in one go (a
+  small set of crates, no decision needed first, tests on every runner).
 - Do not add an entry describing a slice you finished. The commit message, the reference and
   the crates' READMEs describe it.
