@@ -6,6 +6,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod runtime;
+
 /// A Python 3.11 or later: `MODDIL_PYTHON`, `python3` or `python`.
 fn python() -> Option<String> {
     let candidates = std::env::var("MODDIL_PYTHON")
@@ -35,6 +37,7 @@ fn the_example_builds_installs_and_runs_as_a_python_module() {
         eprintln!("skipped: no Python 3.11 or later");
         return;
     };
+    runtime::ensure();
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("python");
     let _ = std::fs::remove_dir_all(&dir);

@@ -5,6 +5,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod runtime;
+
 /// The target triple of the C compiler, as the `cc` crate names it.
 fn target() -> String {
     let arch = std::env::consts::ARCH;
@@ -29,6 +31,7 @@ fn c_calls_the_exports_in_a_static_library() {
 
 /// Builds `examples/cabi` as a library (shared, or static), and `main.c` against it, and runs it.
 fn c_calls_the_library(static_lib: bool) {
+    runtime::ensure();
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(if static_lib {
         "cabi-static"

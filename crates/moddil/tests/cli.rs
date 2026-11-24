@@ -3,6 +3,8 @@
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
+mod runtime;
+
 /// Writes `text` to a file named `name` in a fresh directory under the target directory.
 fn file(name: &str, text: &str) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("cli");
@@ -171,6 +173,7 @@ fn runs_on_the_interpreter_when_asked() {
 /// Builds `text` into an executable and runs it, if the runtime library is there to link with
 /// (`cargo build -p moddil-rt-main`): its output, or `None`.
 fn built(name: &str, text: &str) -> Option<Output> {
+    runtime::ensure();
     let path = file(&format!("{name}.moddil"), text);
     let exe = path.with_extension(std::env::consts::EXE_EXTENSION);
     let out = Command::new(env!("CARGO_BIN_EXE_moddil"))
@@ -223,6 +226,7 @@ fn run_exits_with_mains_exit_code() {
 /// system's, in each runner (`os.clock.1`).
 #[test]
 fn a_main_with_root_capabilities_runs_and_builds() {
+    runtime::ensure();
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../conformance/2027/main/roots");
     for how in [&["run"][..], &["run", "--interp"], &["run", "--wasm"]] {
         let out = moddil(how, &dir);
@@ -256,6 +260,7 @@ fn a_main_with_root_capabilities_runs_and_builds() {
 
 #[test]
 fn a_release_build_runs_and_splits_its_line_tables() {
+    runtime::ensure();
     let path = file(
         "release.moddil",
         "fn fib(n: int) -> int { if n < 2 { n } else { fib(n - 1) + fib(n - 2) } }
