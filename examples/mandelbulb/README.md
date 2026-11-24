@@ -22,7 +22,7 @@ A page's `?size=WxH` fixes the image's size, and `?frames=N` stops after N frame
 
 ## Status
 
-Since slice S10, numbers ([`specs/roadmap.md`](../../specs/roadmap.md#m0-the-v0-language-in-slices)),
+Since slice S10, numbers ([`specs/roadmap.md`](../../specs/roadmap.md#milestones)),
 the pure core in `src/` checks, its tests pass, and the CPU preview runs (it lights 302 pixels,
 the same on every platform); `python tools/ci.py examples` checks all three.
 

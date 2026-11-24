@@ -57,8 +57,8 @@ decided direction; none of it is a formal specification yet. Implemented so far:
   [conformance suite](conformance/README.md), whose tests cite the
   [2027 reference](reference/README.md).
 
-Code in the specs follows [`syntax.md`](specs/syntax.md) and the grammar, but beyond S11 none of it
-runs yet; the [M0 slices](specs/roadmap.md#m0-the-v0-language-in-slices) add the rest.
+Code in the specs follows [`syntax.md`](specs/syntax.md) and the grammar; not all of it runs yet,
+and the [roadmap](specs/roadmap.md#still-to-build) says what is still to build.
 
 ## Start here
 

@@ -145,7 +145,7 @@ Initial targets, to be refined:
 
 ## As built (M2e)
 
-The first build ([`roadmap.md`](../roadmap.md), slice M2e), `examples/mandelbulb/web`:
+The first build (slice M2e), `examples/mandelbulb/web`:
 - **The kernel, `render`, is Moddil**, lowered to WGSL, and drawn on WebGPU, a thread per pixel
   (`Tile::each`); the camera, the estimator and the shading are the pure `mandelbulb` mod, shared
   with the CPU preview.

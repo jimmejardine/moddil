@@ -8,7 +8,7 @@ core model (`model/`); any disagreement between them is a bug
 **Status:** the [grammar](grammar/README.md), and the [2027 edition](2027/README.md) up to slice S7a.
 The reference grows with the compiler: a feature is done only when it has reference paragraphs and
 conformance tests as well as an implementation
-([M0 slices](../specs/roadmap.md#m0-the-v0-language-in-slices)).
+([roadmap](../specs/roadmap.md#milestones)).
 
 ## What goes here
 

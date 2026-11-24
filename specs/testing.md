@@ -107,8 +107,8 @@ trap: assertion failed: fee(amount) + amount == 260
   as one, so the grammar has no `assert` keyword. `assert` is a **built-in in the prelude**: a name
   resolves to a local, then to an item of the mod, then to the prelude, so a local or item named
   `assert` shadows it. `assert` must be called with exactly one argument; it is not a value.
-- **A reason comes with strings:** `assert(cond, "reason")` adds a message; until strings arrive
-  ([M0 slices](roadmap.md#m0-the-v0-language-in-slices)), only the one-argument form exists.
+- **A reason comes with strings:** `assert(cond, "reason")` adds a message
+  ([`roadmap.md`](roadmap.md#milestones)).
 - **It always runs, in every build**, like overflow checks (D5 in
   [`error-handling.md`](error-handling.md#decisions-so-far)), and is never compiled out as C's
   `NDEBUG` does. Optimisation may remove one only when it is proven redundant

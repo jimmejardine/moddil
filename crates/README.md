@@ -4,9 +4,9 @@ The **Rust implementation** of Moddil: the stage-0 compiler and its tools, in on
 whose `Cargo.toml` sits at the repository root
 ([`specs/compiler.md`](../specs/compiler.md), [Repository layout](../specs/compiler.md#repository-layout)).
 
-**Status:** the grammar checker and the parser cover the whole grammar; names, types, MIR, the
-MIR interpreter, the reference interpreter, the `moddil` command and the conformance runner cover
-slices S0 to S7a ([M0 slices](../specs/roadmap.md#m0-the-v0-language-in-slices)).
+**Status:** the grammar checker and the parser cover the whole grammar; the rest covers M0 to M2
+and M3 so far, and what is still to build is in the
+[roadmap](../specs/roadmap.md#still-to-build).
 
 ## Building and checking
 

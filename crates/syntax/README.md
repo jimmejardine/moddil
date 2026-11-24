@@ -2,9 +2,8 @@
 
 Lexer, parser and syntax tree for Moddil source.
 
-**Status:** the lexer and the parser cover the **whole grammar**; the typed AST covers what slice S0
-needs and grows slice by slice
-([M0 slices](../../specs/roadmap.md#m0-the-v0-language-in-slices)).
+**Status:** the lexer and the parser cover the **whole grammar**; the typed AST covers what the
+compiler reads, and grows with it ([roadmap](../../specs/roadmap.md#milestones)).
 
 ```rust
 let parse = moddil_syntax::parse(text);

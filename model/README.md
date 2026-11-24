@@ -4,7 +4,7 @@ The **mechanised model of Moddil's core in Lean**: the source of truth for the c
 ([`specs/definition.md`: Three artefacts, one meaning](../specs/definition.md#three-artefacts-one-meaning)).
 
 **Status:** starts after slice S5, once ownership, traits, errors and effects have settled
-([M0 slices](../specs/roadmap.md#m0-the-v0-language-in-slices)).
+([roadmap](../specs/roadmap.md#milestones)).
 
 ## Covers
 

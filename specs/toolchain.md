@@ -85,7 +85,7 @@ human-oriented text.
   - a semantic diff view ([Diffs, code review and version control](semantic-vcs.md)).
 - **As built (M2f):** `moddil lsp` gives diagnostics, hover (types, signatures with effects,
   `suspend` and error sets), go to definition, inlay hints at suspension points, and completion
-  ([`roadmap.md`](roadmap.md), slice M2f). Units, capabilities and contracts on hover, the handler
+  (slice M2f). Units, capabilities and contracts on hover, the handler
   stack, `explain` and the semantic diff come later.
 - An official **tree-sitter grammar** for syntax highlighting elsewhere (GitHub, other editors and
   tools).

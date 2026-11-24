@@ -58,7 +58,7 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
   effect soundness, and borrows, in the style of RustBelt.
 - **When each starts (decided):** the reference and the conformance suite grow from the first M0
   slice; the reference interpreter from slice S1; work on the Lean model after slice S5, once the core
-  has settled ([`roadmap.md`: M0: the v0 language in slices](roadmap.md#m0-the-v0-language-in-slices)).
+  has settled ([`roadmap.md`: Milestones](roadmap.md#milestones)).
 
 ### The reference
 

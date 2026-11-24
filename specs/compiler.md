@@ -157,7 +157,7 @@ problem, which is exactly the supply-chain concern of [Package management and su
   refine, so the query structure is never retrofitted
   ([`crates/sema`](../crates/sema/README.md)).
 - **Vertical slices.** The language grows slice by slice, each running end to end
-  ([`roadmap.md`: M0: the v0 language in slices](roadmap.md#m0-the-v0-language-in-slices)).
+  ([`roadmap.md`: Milestones](roadmap.md#milestones)).
 - **Interpreter first.** Every slice runs on the MIR interpreter; no code-generation backend exists
   until M1.
 
@@ -174,8 +174,8 @@ problem, which is exactly the supply-chain concern of [Package management and su
   the MIR interpreter and compiled code; any difference in results is a bug in one of them.
 - The reference interpreter covers the safe language and the closed list of undefined behaviour
   ([`unsafe.md`](unsafe.md)); it does not need to be fast enough for real programs.
-- **Timing (decided):** the reference interpreter starts at slice S1 of M0 and follows every slice
-  after it ([`roadmap.md`: M0: the v0 language in slices](roadmap.md#m0-the-v0-language-in-slices)).
+- **Timing (decided):** the reference interpreter started at slice S1 of M0 and follows every
+  slice after it ([`roadmap.md`: Milestones](roadmap.md#milestones)).
 - **Independence (decided):** it shares only the parser and AST (`crates/syntax`, pinned down by the
   grammar's generated tests) with the compiler, and never depends on semantic analysis, MIR or the
   MIR interpreter ([Repository layout](#repository-layout)).

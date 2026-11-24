@@ -145,7 +145,7 @@ smooth = rolling_mean(prices, window=50)  # numpy array in, no copy; list or arr
   extension module, `.pyi` stubs and a wheel), zero-copy buffers, `fail` errors as exception
   classes, traps as `name.Trap`, and the GIL released during calls. Async (`asyncio` awaitables),
   numpy arrays as results, and free-threaded CPython's separate pools come later
-  ([`roadmap.md`](roadmap.md), slice M3b).
+  ([`roadmap.md`: Still to build](roadmap.md#still-to-build)).
 
 ## Migrating existing code
 

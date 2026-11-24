@@ -11,3 +11,13 @@
 - If the change touches the CLI (`crates/moddil`), `mods/`, `tour/` or `examples/`, run the
   `test` step while working too: `quick` does not exercise them.
 - Run the steps inside WSL (`--wsl`) only when the change has Linux-specific parts.
+
+## The roadmap
+
+`specs/roadmap.md` lists only what is still to build, and what built work left for later. It is
+not a history: git keeps that.
+- When you build something the roadmap lists, remove it from the roadmap.
+- When something you build leaves a part for later, add that part under "Deferred from built
+  work", in its area.
+- Do not add an entry describing a slice you finished. The commit message, the reference and
+  the crates' READMEs describe it.

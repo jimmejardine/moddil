@@ -352,8 +352,8 @@ with Alloc = &frame {
   ([`performance.md`: Hot-path guarantees](performance.md#hot-path-guarantees)); installing an
   arena does not make allocation allowed there.
 - Scratch arenas install themselves the same way
-  ([`stdlib.md`: Scratch arenas](stdlib.md#scratch-arenas)). It is implemented with `Vec` in slice
-  S7 ([`roadmap.md`](roadmap.md#m0-the-v0-language-in-slices)).
+  ([`stdlib.md`: Scratch arenas](stdlib.md#scratch-arenas)). Not built yet: `with Alloc = …` is
+  under [`roadmap.md`: Deferred from built work](roadmap.md#deferred-from-built-work).
 
 ## Open questions
 

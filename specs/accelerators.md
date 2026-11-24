@@ -249,7 +249,7 @@ fallback otherwise.
 
 ## As built (M2e)
 
-The first GPU path ([`roadmap.md`](roadmap.md), slice M2e; reference `gpu.md`), built for
+The first GPU path (slice M2e; reference `gpu.md`), built for
 [Mandelbulb flight](examples/mandelbulb.md). It is a small part of this design:
 - **Tile kernels only**, as `#[kernel] fn k(params: &P, out: &mut Tile)`, with the kernel effect
   set checked (E0221). The tile is a fixed 8 x 8 of RGBA8 pixels (`mods/gpu`), not a generic tile.

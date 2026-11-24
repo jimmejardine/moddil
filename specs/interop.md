@@ -165,7 +165,7 @@ let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → 
 
 ## As built (M3a)
 
-The first slice of the C ABI ([`roadmap.md`](roadmap.md), slice M3a; reference `interop.md`):
+The first slice of the C ABI (slice M3a; reference `interop.md`):
 - **Imports:** hand-written `extern "C" { … }` blocks, with C's scalar types and raw pointers,
   in mods with the `unsafe` capability, called in `unsafe` blocks. Header import through
   libclang (`#[c_import]`) and annotation overlays come later.
@@ -179,7 +179,7 @@ The first slice of the C ABI ([`roadmap.md`](roadmap.md), slice M3a; reference `
 
 ## As built (M3c)
 
-The C ABI's completions ([`roadmap.md`](roadmap.md), slice M3c; reference `interop.md`):
+The C ABI's completions (slice M3c; reference `interop.md`):
 - **Structs by value** (`ffi.types.2`): `#[repr(C)]` structs as C and `#[export]` functions'
   parameters and results, passed by each target's rules (Windows x64, SysV x86-64, AArch64
   including Apple's) from one classification, `moddil-ffi`'s `abi` module, which native code and
