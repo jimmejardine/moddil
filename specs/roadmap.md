@@ -95,11 +95,6 @@ decision first, and ending with conformance tests on every runner (M: a few hour
 more). Packages are independent unless one says otherwise. When a package is done, remove it;
 when part of one is, remove that part.
 
-**P1. Python bindings, the next steps** (`crates/py`, `examples/python`; M)
-- An enum error's variant and its fields as the exception's attributes (a struct error's fields
-  are).
-- Two error types of the same name in different modules (both would be `name.E`).
-
 **P4. Text** (prelude `text`, `crates/sema`; M)
 - `RcStr` slices.
 - A text position used on other text refused when checking (as `text.md` says), not trapping

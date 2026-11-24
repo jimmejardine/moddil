@@ -159,3 +159,34 @@ test "the functions, in Moddil" {
     c.add(2);
     assert(c.doubled() == 14);
 }
+
+/// Why text is not a strict number: an enum error, its variant and fields as the exception's
+/// attributes.
+#[derive(Debug, Clone, PartialEq)]
+pub enum NumberError {
+    Empty,
+    BadDigit { at: int, found: String },
+    TooLong(int),
+}
+
+/// `s` as a whole number of at most 18 digits.
+#[export(python)]
+pub fn strict(s: &str) -> int with fail(NumberError) {
+    if s.is_empty() {
+        fail(NumberError::Empty);
+    }
+    if s.len() > 18 {
+        fail(NumberError::TooLong(s.len()));
+    }
+    let mut n = 0;
+    let mut i = 0;
+    while i < s.len() {
+        let c = s.byte_at(i);
+        if c < 48 || c > 57 {
+            fail(NumberError::BadDigit { at: i, found: s.bytes_between(i, i + 1).to_string() });
+        }
+        n = n * 10 + (c - 48).to::<int>() ?! "a digit";
+        i += 1;
+    }
+    n
+}

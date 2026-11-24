@@ -309,18 +309,6 @@ pub fn generate(items: &ItemTree, name: &str, root_mod: u32) -> Result<Bindings,
         }
         methods.push((a, ms));
     }
-    // An exception is an attribute of the module's root, by its type's name.
-    for (i, &e) in errors.iter().enumerate() {
-        let n = &items.adts[e as usize].name;
-        if errors[..i]
-            .iter()
-            .any(|&d| items.adts[d as usize].name == *n)
-        {
-            problems.push(format!(
-                "two error types named `{n}` cross to Python, as `{name}.{n}`"
-            ));
-        }
-    }
     if !problems.is_empty() {
         return Err(problems);
     }
@@ -581,6 +569,13 @@ impl Gen<'_> {
                 note(&t, &mut handles);
             }
         }
+        for &e in errors {
+            for k in 0..self.items.adts[e as usize].variants.len() {
+                for (_, t) in self.variant_fields(e, k) {
+                    note(&t, &mut handles);
+                }
+            }
+        }
         for h in &handles {
             let (tag, ty) = match h {
                 PyTy::String => ("string".to_string(), "String".to_string()),
@@ -607,6 +602,9 @@ impl Gen<'_> {
                 "#[export(status)]\npub fn __py_err_{c}(h: *mut {ty}, out: *mut *mut String) -> i32 {{\n    let b = unsafe(\"{WHY}\") {{ ffi::from_raw(h) }};\n    let e = b.into_inner();\n    let t: String = fmt\"{{e:?}}\";\n    unsafe(\"{WHY}\") {{ *out = ffi::into_raw(Box::new(t)); }}\n    0\n}}\n"
             );
             self.field_shims(&format!("__py_errf_{c}"), e, false);
+            if self.items.adts[e as usize].is_enum {
+                self.variant_shims(e);
+            }
         }
         for &a in &self.structs.clone() {
             let (c, ty) = (self.cname(a), self.mpath(a));
@@ -621,6 +619,73 @@ impl Gen<'_> {
         }
         glue::write(self, fns, methods, errors, &handles);
         pyi::write(self, fns, methods, errors);
+    }
+
+    /// For an enum error `e`: a shim giving its variant's index, and one for each field of each
+    /// variant Python sees, which stores it if the error is that variant.
+    fn variant_shims(&mut self, e: u32) {
+        let (c, ty) = (self.cname(e), self.mpath(e));
+        let variants = self.items.adts[e as usize].variants.clone();
+        let several = variants.len() > 1;
+        let mut arms = String::new();
+        for (k, v) in variants.iter().enumerate() {
+            let rest = match v.shape {
+                moddil_sema::Shape::Named => " { .. }",
+                moddil_sema::Shape::Tuple => "(..)",
+                moddil_sema::Shape::Unit => "",
+            };
+            let _ = writeln!(arms, "        {ty}::{}{rest} => {k},", v.name);
+        }
+        let _ = writeln!(
+            self.shims,
+            "#[export(status)]\npub fn __py_errv_{c}(h: *mut {ty}, out: *mut int) -> i32 {{\n    let v = unsafe(\"{WHY}\") {{ &*h }};\n    let k = match v {{\n{arms}    }};\n    unsafe(\"{WHY}\") {{ *out = k; }}\n    0\n}}\n"
+        );
+        for (k, v) in variants.iter().enumerate() {
+            for (f, t) in self.variant_fields(e, k) {
+                let pat = match v.shape {
+                    moddil_sema::Shape::Named => format!("{ty}::{} {{ {f}: x, .. }}", v.name),
+                    _ => {
+                        let at: usize = f.parse().unwrap_or(0);
+                        let ps: Vec<&str> = (0..v.fields.len())
+                            .map(|i| if i == at { "x" } else { "_" })
+                            .collect();
+                        format!("{ty}::{}({})", v.name, ps.join(", "))
+                    }
+                };
+                let value = if Self::is_handle(&t) {
+                    "x.clone()"
+                } else {
+                    "*x"
+                };
+                let store = self.shim_store(value, &t);
+                let outs = self.shim_outs(&t).join(", ");
+                let other = if several { "\n        _ => {}" } else { "" };
+                let _ = writeln!(
+                    self.shims,
+                    "#[export(status)]\npub fn __py_errf_{c}_{k}_{f}(h: *mut {ty}, {outs}) -> i32 {{\n    let v = unsafe(\"{WHY}\") {{ &*h }};\n    match v {{\n        {pat} => {{\n            {store}\n        }}{other}\n    }}\n    0\n}}\n"
+                );
+            }
+        }
+    }
+
+    /// The fields of enum `a`'s variant `k` Python sees, as its exception's attributes: name (a
+    /// position for a tuple variant's) and type.
+    fn variant_fields(&self, a: u32, k: usize) -> Vec<(String, PyTy)> {
+        let adt = &self.items.adts[a as usize];
+        if !adt.is_enum {
+            return Vec::new();
+        }
+        adt.variants[k]
+            .fields
+            .iter()
+            .filter_map(|f| match classify(self.items, &f.ty, true) {
+                Some(
+                    t
+                    @ (PyTy::Bool | PyTy::Int(..) | PyTy::Float(..) | PyTy::String | PyTy::Vec(_)),
+                ) => Some((f.name.clone(), t)),
+                _ => None,
+            })
+            .collect()
     }
 
     /// Struct `a`'s `pub` fields Python sees, as properties (or an error's, as its exception's

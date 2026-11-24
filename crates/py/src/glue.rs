@@ -585,6 +585,15 @@ pub(crate) fn write(
         let ce = g.cname(e);
         let _ = writeln!(c, "extern int32_t __py_err_{ce}(void *, void **);");
         field_protos(&mut c, &format!("__py_errf_{ce}"), e, false);
+        if g.items.adts[e as usize].is_enum {
+            let _ = writeln!(c, "extern int32_t __py_errv_{ce}(void *, int64_t *);");
+            for k in 0..g.items.adts[e as usize].variants.len() {
+                for (f, t) in g.variant_fields(e, k) {
+                    let outs = c_outs(&t).join(", ");
+                    let _ = writeln!(c, "extern int32_t __py_errf_{ce}_{k}_{f}(void *, {outs});");
+                }
+            }
+        }
     }
     let structs = g.structs.clone();
     for &a in &structs {
@@ -627,11 +636,52 @@ pub(crate) fn write(
             _ => {}
         }
     }
-    // The exceptions: an instance of the error's class, with its fields as attributes.
+    // The exceptions: an instance of the error's class, with its fields as attributes; an
+    // enum's, its variant's name as `variant` and that variant's fields (a tuple variant's as
+    // `_0`, `_1`, …).
     for &e in errors {
         let ce = g.cname(e);
         let mut fields = String::new();
         let mut sets = String::new();
+        if g.items.adts[e as usize].is_enum {
+            let variants = g.items.adts[e as usize].variants.clone();
+            let most = 1
+                + (0..variants.len())
+                    .map(|k| g.variant_fields(e, k).len())
+                    .max()
+                    .unwrap_or(0);
+            let _ = writeln!(
+                fields,
+                "    const char *an[{most}];\n    PyObject *av[{most}];\n    int na = 0;\n    int64_t k = -1;\n    LOCKED(st, __py_errv_{ce}(err, &k));\n    switch (k) {{"
+            );
+            for (k, v) in variants.iter().enumerate() {
+                let _ = writeln!(
+                    fields,
+                    "    case {k}:\n        an[na] = \"variant\";\n        av[na++] = PyUnicode_FromString(\"{}\");",
+                    v.name
+                );
+                for (f, t) in g.variant_fields(e, k) {
+                    let (decls, outs) = out_decls(&t);
+                    let res = convert_out(g, &t, "out");
+                    let attr = if f.chars().all(|c| c.is_ascii_digit()) {
+                        format!("_{f}")
+                    } else {
+                        f.clone()
+                    };
+                    let _ = writeln!(
+                        fields,
+                        "        {{\n    {decls}        LOCKED(st, __py_errf_{ce}_{k}_{f}(err, {}));\n            an[na] = \"{attr}\";\n            av[na] = {res};\n            if (av[na] == NULL) PyErr_Clear();\n            na++;\n        }}",
+                        outs.join(", ")
+                    );
+                }
+                let _ = writeln!(fields, "        break;");
+            }
+            let _ = writeln!(fields, "    }}");
+            let _ = writeln!(
+                sets,
+                "        for (int i = 0; i < na; i++) {{\n            if (av[i] == NULL) continue;\n            if (PyObject_SetAttrString(e, an[i], av[i]) < 0) PyErr_Clear();\n            Py_DECREF(av[i]);\n        }}"
+            );
+        }
         for (f, t) in g.fields(e) {
             let (decls, outs) = out_decls(&t);
             let res = convert_out(g, &t, "out");
@@ -769,6 +819,7 @@ pub(crate) fn write(
         .iter()
         .map(fn_path)
         .chain(structs.iter().map(|&a| g.module_of(a).to_vec()))
+        .chain(errors.iter().map(|&e| g.module_of(e).to_vec()))
     {
         for k in 0..=p.len() {
             paths.insert(p[..k].to_vec());
@@ -812,11 +863,14 @@ pub(crate) fn write(
             "    type_Array = (PyTypeObject *)PyType_FromSpec(&spec_Array);\n    if (add(m, \"Array\", (PyObject *)type_Array) < 0) return NULL;"
         );
     }
+    // Each exception in the module of its error type's module.
     for &e in errors {
         let (s, ce) = (g.sname(e), g.cname(e));
+        let dotted: String = g.module_of(e).iter().map(|p| format!("{p}.")).collect();
         let _ = writeln!(
             c,
-            "    exc_{ce} = PyErr_NewException(\"{name}.{s}\", Error, NULL);\n    if (add(m, \"{s}\", exc_{ce}) < 0) return NULL;"
+            "    exc_{ce} = PyErr_NewException(\"{name}.{dotted}{s}\", Error, NULL);\n    if (add({}, \"{s}\", exc_{ce}) < 0) return NULL;",
+            mod_var(g.module_of(e))
         );
     }
     for &a in &structs {

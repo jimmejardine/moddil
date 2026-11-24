@@ -24,3 +24,19 @@ impl Rect {
         Rect { w: self.h, h: self.w }
     }
 }
+
+/// A shape that cannot be: an error named as the root module's is, kept apart as
+/// `stats.geo.StatsError`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StatsError {
+    pub side: f64,
+}
+
+/// The side of a square of area `a`.
+#[export(python)]
+pub fn side(a: f64) -> f64 with fail(StatsError) {
+    if a < 0.0 {
+        fail(StatsError { side: a });
+    }
+    a.sqrt()
+}

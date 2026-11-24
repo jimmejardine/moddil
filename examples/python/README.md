@@ -39,11 +39,12 @@ c = stats.Counter(5); c.add(2); c.count          # 7
 | `mean(xs: &[f64]) -> f64` | `mean(xs: Buffer) -> float` | a buffer of 8-byte floats, without a copy (numpy arrays too) |
 | `rolling_mean(xs: &[f64], window: int) -> Vec<f64> with fail(StatsError)` | a `stats.Array`, or `StatsError` | a `Vec` as a read-only buffer without a copy; a `fail` error as an exception, a subclass of `stats.Error`, its fields as attributes (`e.window`); keyword arguments (`window=2`) |
 | `steps(start: int, n: int, step: int) -> Vec<int>` | a `stats.Array` of `int`s | a `Vec<int>`, format `q` |
+| `strict(s: &str) -> int with fail(NumberError)` | `int`, or `stats.NumberError` | an enum error: `e.variant` (`"BadDigit"`) and its variant's fields (`e.at`, or `e._0` for a tuple variant) |
 | `scale_in_place(xs: &mut [f64], k: f64)` | changes the caller's buffer | a `&mut` slice, written in place |
 | `greet(name: &str) -> String`, `checksum(data: &[u8]) -> u32`, `parse(s: &str) -> Option<int>` | `str`, `int`, `int` or `None` | text, bytes, and `Option` |
 | `divide(a: int, b: int) -> int` | raises `stats.Trap` on 0 | a trap, after which the module keeps working |
 | `struct Counter` with `new`, `add`, `doubled`, `fork`, `zero`, `finish` | `class Counter` | a class: its constructor, methods, static methods and properties; `finish(self)` takes the instance's value |
-| `geo::area`, `geo::Rect` (in [`src/geo.moddil`](src/geo.moddil)) | `stats.geo.area`, `stats.geo.Rect` | a submodule, importable as `stats.geo` |
+| `geo::area`, `geo::Rect`, `geo::side` (in [`src/geo.moddil`](src/geo.moddil)) | `stats.geo.area`, `stats.geo.Rect`, `stats.geo.side` | a submodule, importable as `stats.geo`, with its own `stats.geo.StatsError` |
 
 ## How it fits together
 

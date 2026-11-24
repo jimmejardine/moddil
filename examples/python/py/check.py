@@ -75,11 +75,35 @@ try:
 except ValueError:
     pass
 
+# An enum error: its variant's name and that variant's fields.
+assert stats.strict("123") == 123
+for text, variant, attrs in [
+    ("", "Empty", {}),
+    ("12x4", "BadDigit", {"at": 2, "found": "x"}),
+    ("1" * 19, "TooLong", {"_0": 19}),
+]:
+    try:
+        stats.strict(text)
+        raise AssertionError(f"{text!r} is not a strict number")
+    except stats.NumberError as e:
+        assert isinstance(e, stats.Error) and e.variant == variant, (text, e.variant)
+        for k, v in attrs.items():
+            assert getattr(e, k) == v, (text, k, getattr(e, k, None))
+        assert not hasattr(e, "at") or variant == "BadDigit"
+
 # A submodule: `stats.geo`, importable by its dotted name too.
 import stats.geo
 from stats.geo import Rect
 
 assert stats.geo.area(2.0, 3.0) == 6.0 and stats.geo.area(h=1.0, w=4.0) == 4.0
+# An error of the same name in a submodule is its own: `stats.geo.StatsError`.
+assert stats.geo.side(9.0) == 3.0
+try:
+    stats.geo.side(-1.0)
+    raise AssertionError("a negative area is an error")
+except stats.geo.StatsError as e:
+    assert e.side == -1.0 and not isinstance(e, stats.StatsError) and isinstance(e, stats.Error)
+    assert type(e).__module__ == "stats.geo"
 t = Rect(2.0, 5.0).turned()
 assert (t.w, t.h) == (5.0, 2.0) and type(t).__module__ == "stats.geo"
 

@@ -79,8 +79,9 @@ and other `Vec`s of numbers as `name.Array`, `Option` (a result) as the value or
 as `None`. A `name.Array` owns the `Vec`: a read-only sequence (`len`, indexing, iteration,
 `tolist()`) and buffer of the element's format, so `memoryview` and numpy read it without a
 copy. A `fail` error is raised as an exception of its type's name, a subclass of `name.Error`,
-carrying its `Debug` text and, for a struct, its `pub` fields of the types above as attributes; a
-trap is raised as `name.Trap`. A function that needs handlers or suspends is not yet carried.
+in the Python module of its type's module (`name.geo.E`), carrying its `Debug` text and, as
+attributes, a struct's `pub` fields of the types above, or an enum's variant's name as `variant`
+and that variant's fields (a tuple variant's as `_0`, `_1`, …); a trap is raised as `name.Trap`. A function that needs handlers or suspends is not yet carried.
 Calls release the GIL, and run one at a time.
 
 **ffi.python.2** `#[export(python)]` on a `pub struct` makes it a class of the module (or of the
