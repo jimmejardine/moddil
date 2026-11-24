@@ -1093,11 +1093,41 @@ impl<M: Module> Compiler<'_, M> {
 
     /// The methods of `tr` and its supertraits, in vtable order, each with the trait (with
     /// `Self` as `self_ty`) it is declared in: each supertrait's first, depth first, then the
-    /// trait's own. So the vtable of a trait starts with that of its first supertrait, and a
-    /// `dyn` borrow of it is one of that supertrait as it is.
+    /// trait's own. So the vtable of a trait starts with the methods of its first supertrait;
+    /// its supertraits' own vtables follow the methods ([`Compiler::dyn_supertraits`]).
     fn dyn_methods(&self, self_ty: &Ty, tr: &TraitRef) -> Vec<(u32, TraitRef)> {
         let mut out = Vec::new();
         self.methods_into(self_ty, tr, &mut out, &mut HashSet::new());
+        out
+    }
+
+    /// The supertraits of `tr`, every level, in the order [`Compiler::dyn_methods`] meets them
+    /// (with `Self` as `self_ty`): after a vtable's methods, a word for each is the address of
+    /// the type's vtable for that supertrait, which a `dyn` borrow of `tr` becomes when it is
+    /// used as one of that supertrait (`type.dyn.coerce.1`).
+    fn dyn_supertraits(&self, self_ty: &Ty, tr: &TraitRef) -> Vec<TraitRef> {
+        fn walk(
+            items: &ItemTree,
+            self_ty: &Ty,
+            tr: &TraitRef,
+            out: &mut Vec<TraitRef>,
+            seen: &mut HashSet<u32>,
+        ) {
+            if !seen.insert(tr.trait_) {
+                return;
+            }
+            let mut args = vec![self_ty.clone()];
+            args.extend(tr.args.iter().cloned());
+            for sup in &items.traits[tr.trait_ as usize].supertraits {
+                let sup = sup.subst(&args);
+                walk(items, self_ty, &sup, out, seen);
+                if !out.contains(&sup) {
+                    out.push(sup);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(self.items, self_ty, tr, &mut out, &mut HashSet::new());
         out
     }
 
@@ -1124,7 +1154,8 @@ impl<M: Module> Compiler<'_, M> {
 
     /// The vtable of `ty` for `tr`: a header of [`VTABLE_HEADER`] words (its number in
     /// [`Compiled::dyn_types`], its drop glue, its size and its alignment), then each method's
-    /// address (null for one a `dyn` borrow cannot call). A closure's methods (`call`,
+    /// address (null for one a `dyn` borrow cannot call), then the address of `ty`'s vtable for
+    /// each supertrait ([`Compiler::dyn_supertraits`]). A closure's methods (`call`,
     /// `call_mut`, `call_once`) are all its body.
     fn vtable(&mut self, ty: &Ty, tr: &TraitRef) -> Result<DataId, String> {
         let key = (ty.clone(), tr.clone());
@@ -1132,6 +1163,7 @@ impl<M: Module> Compiler<'_, M> {
             return Ok(*d);
         }
         let methods = self.dyn_methods(ty, tr);
+        let supers = self.dyn_supertraits(ty, tr);
         let id = self
             .module
             .declare_anonymous_data(false, false)
@@ -1145,8 +1177,16 @@ impl<M: Module> Compiler<'_, M> {
         bytes.extend(0u64.to_le_bytes());
         bytes.extend(u64::from(l.size).to_le_bytes());
         bytes.extend(u64::from(l.align).to_le_bytes());
-        bytes.resize(8 * (VTABLE_HEADER + methods.len()), 0);
+        bytes.resize(8 * (VTABLE_HEADER + methods.len() + supers.len()), 0);
         desc.define(bytes.into_boxed_slice());
+        // The supertraits' vtables, for a `dyn` borrow used as one of them. Each is declared
+        // (and cached) before it is filled, so building them cannot loop.
+        for (k, sup) in supers.iter().enumerate() {
+            let vt = self.vtable(ty, sup)?;
+            let vref = self.module.declare_data_in_data(vt, &mut desc);
+            let at = 8 * (VTABLE_HEADER + methods.len() + k) as u32;
+            desc.write_data_addr(at, vref, 0);
+        }
         let glue = self.glue(ty)?;
         let gref = self.module.declare_func_in_data(glue, &mut desc);
         desc.write_function_addr(8, gref);
@@ -2987,8 +3027,8 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let from = self.c.concrete(from, self.targs);
                 let v = self.operand(o)?;
                 let thin = match (v, &from) {
-                    // Already a `dyn` borrow (of a subtrait): as it is, if the supertrait's
-                    // vtable is where the subtrait's starts.
+                    // Already a `dyn` borrow (of a subtrait): the value, with the supertrait's
+                    // vtable (`type.dyn.coerce.1`).
                     (Val::Mem(_), Ty::Dyn(sub, _)) => {
                         let Ty::Ref(_, to) = &dest.ty else {
                             return Err(format!("a `{from}` as a `{}`", dest.ty));
@@ -2996,15 +3036,25 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                         let Ty::Dyn(sup, _) = &**to else {
                             return Err(format!("a `{from}` as a `{}`", dest.ty));
                         };
-                        let ids = |ms: Vec<(u32, TraitRef)>| -> Vec<u32> {
-                            ms.into_iter().map(|(m, _)| m).collect()
-                        };
-                        let a = ids(self.c.dyn_methods(&from, sub));
-                        let b = ids(self.c.dyn_methods(&from, sup));
-                        if !a.starts_with(&b) {
+                        // The supertrait's own vtable, from the word after the methods that
+                        // holds it, with the same value. (Even the first supertrait's: its
+                        // methods are a prefix of the subtrait's, but its own supertraits'
+                        // words are not where they are in the subtrait's vtable.)
+                        let methods = self.c.dyn_methods(&from, sub).len();
+                        let supers = self.c.dyn_supertraits(&from, sub);
+                        let Some(k) = supers.iter().position(|t| t == sup) else {
                             return Err(format!("a `dyn {}` as a `dyn {}`", sub.name, sup.name));
-                        }
-                        return self.write(&dest, v);
+                        };
+                        let Val::Mem(w) = v else {
+                            unreachable!("matched above")
+                        };
+                        let flags = ir::MemFlagsData::trusted();
+                        let data = self.b.ins().load(types::I64, flags, w, 0);
+                        let old = self.b.ins().load(types::I64, flags, w, 8);
+                        let at = 8 * (VTABLE_HEADER + methods + k) as i32;
+                        let vt = self.b.ins().load(types::I64, flags, old, at);
+                        let wide = self.wide(data, vt);
+                        return self.write(&dest, Val::Mem(wide));
                     }
                     (Val::Scalar(p), _) => p,
                     _ => return Err(format!("a `{from}` as a `{}`", dest.ty)),

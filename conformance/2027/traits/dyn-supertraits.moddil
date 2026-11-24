@@ -1,0 +1,153 @@
+// covers: type.dyn.coerce.1
+
+// A `dyn` borrow of a subtrait is one of any of its supertraits, not only its first: the methods
+// called through it are those of the value's own type.
+
+trait A {
+    fn a(&self) -> int;
+}
+
+trait B {
+    fn b(&self) -> int;
+}
+
+trait E {
+    fn e(&self) -> int;
+}
+
+trait Get<T> {
+    fn get(&self) -> T;
+}
+
+trait C: A + B {}
+
+trait D: C + E {}
+
+trait G: A + Get<int> {}
+
+struct S {
+    n: int,
+}
+
+struct T {
+    n: int,
+}
+
+impl A for S {
+    fn a(&self) -> int {
+        self.n
+    }
+}
+
+impl B for S {
+    fn b(&self) -> int {
+        self.n * 10
+    }
+}
+
+impl E for S {
+    fn e(&self) -> int {
+        self.n * 100
+    }
+}
+
+impl Get<int> for S {
+    fn get(&self) -> int {
+        self.n + 1
+    }
+}
+
+impl C for S {}
+
+impl D for S {}
+
+impl G for S {}
+
+impl A for T {
+    fn a(&self) -> int {
+        -self.n
+    }
+}
+
+impl B for T {
+    fn b(&self) -> int {
+        -self.n * 10
+    }
+}
+
+impl C for T {}
+
+struct Counter {
+    n: int,
+}
+
+trait Bump {
+    fn bump(&mut self);
+}
+
+trait Show {
+    fn show(&self) -> int;
+}
+
+trait Both: Show + Bump {}
+
+impl Show for Counter {
+    fn show(&self) -> int {
+        self.n
+    }
+}
+
+impl Bump for Counter {
+    fn bump(&mut self) {
+        self.n += 1;
+    }
+}
+
+impl Both for Counter {}
+
+fn via_b(x: &dyn B) -> int {
+    x.b()
+}
+
+fn via_e(x: &dyn E) -> int {
+    x.e()
+}
+
+fn via_get(x: &dyn Get<int>) -> int {
+    x.get()
+}
+
+fn second_of_c(c: &dyn C) -> int {
+    via_b(c)
+}
+
+fn from_d(d: &dyn D) -> int {
+    let c: &dyn C = d;
+    via_e(d) + via_b(c)
+}
+
+fn bump_twice(x: &mut dyn Bump) {
+    x.bump();
+    x.bump();
+}
+
+fn through_both(b: &mut dyn Both) -> int {
+    bump_twice(b);
+    b.show()
+}
+
+test "a dyn borrow as a later supertrait's" {
+    let s = S { n: 2 };
+    let t = T { n: 3 };
+    second_of_c(&s)                     // => 20
+    ;
+    second_of_c(&t)                     // => -30
+    ;
+    from_d(&s)                          // => 220
+    ;
+    let g: &dyn G = &s;
+    via_get(g)                          // => 3
+    ;
+    let mut c = Counter { n: 0 };
+    through_both(&mut c)                // => 2
+}

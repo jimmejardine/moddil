@@ -308,8 +308,7 @@ fn run(
     }
 }
 
-/// `moddil run`: `main` compiled to native code and run; on the MIR interpreter instead, with a
-/// note, if it reaches something not compiled natively yet.
+/// `moddil run`: `main` compiled to native code and run.
 fn run_native(
     db: &Database,
     program: Program,
@@ -322,7 +321,7 @@ fn run_native(
         eprintln!("moddil: {name} has no `fn main()`");
         return ExitCode::FAILURE;
     };
-    match moddil_native::run_main_exit(db, program, main, argv.clone()) {
+    match moddil_native::run_main_exit(db, program, main, argv) {
         // An `ExitCode` (`main.exit.1`): the number it stands for.
         Ok((_, Some(code))) => ExitCode::from(code),
         Ok((v, None)) if v == "()" => ExitCode::SUCCESS,
@@ -335,9 +334,10 @@ fn run_native(
             report_native_trap(name, text, class, range, &parts);
             ExitCode::from(TRAPPED)
         }
+        // Native code compiles every checked program, so this is the compiler's own failure.
         Err(moddil_native::Native::Unsupported(what)) => {
-            eprintln!("moddil: running on the interpreter: {what} is not compiled natively yet");
-            run(db, program, files, name, argv)
+            eprintln!("moddil: native code cannot compile {what} (a bug in moddil)");
+            ExitCode::FAILURE
         }
         Err(moddil_native::Native::Leak(n)) => {
             eprintln!("moddil: native code leaked {n} allocations (a bug in the backend)");
@@ -522,8 +522,8 @@ impl TestRun {
 }
 
 /// Runs test `index` natively in a child process (so that a crash in compiled code fails it,
-/// not the run). `Err` with what it reaches if that is not compiled natively yet.
-fn native_child(path: &Path, index: u32, name: &str) -> Result<TestRun, String> {
+/// not the run).
+fn native_child(path: &Path, index: u32, name: &str) -> TestRun {
     let out = std::env::current_exe().and_then(|exe| {
         std::process::Command::new(exe)
             .arg("__native-test")
@@ -533,24 +533,31 @@ fn native_child(path: &Path, index: u32, name: &str) -> Result<TestRun, String> 
     });
     let Ok(out) = out else {
         let line = format!("test \"{name}\" ... could not start a process to run it in");
-        return Ok(TestRun::new(false, line));
+        return TestRun::new(false, line);
     };
     let stdout = String::from_utf8_lossy(&out.stdout);
     let status = stdout.lines().next().unwrap_or("");
     let (passed, line) = match status.split_once(' ').map_or(status, |(s, _)| s) {
-        "ok" => return Ok(TestRun::new(true, format!("test \"{name}\" ... ok"))),
-        "unsupported" => return Err(status["unsupported ".len()..].to_string()),
+        "ok" => return TestRun::new(true, format!("test \"{name}\" ... ok")),
+        // Native code compiles every checked program, so this is the compiler's own failure.
+        "unsupported" => (
+            false,
+            format!(
+                "test \"{name}\" ... native code cannot compile {} (a bug in moddil)",
+                &status["unsupported ".len()..]
+            ),
+        ),
         "trapped" | "failed" | "leaked" => (false, format!("test \"{name}\" ... {status}")),
         _ => (
             false,
             format!("test \"{name}\" ... crashed (a bug in the native backend)"),
         ),
     };
-    Ok(TestRun {
+    TestRun {
         passed,
         line,
         err: out.stderr,
-    })
+    }
 }
 
 /// `f` of each of `0..n`, in that order, worked out on a thread for each core. Each thread
@@ -919,8 +926,7 @@ fn parts_note(text: &str, parts: &[(TextRange, Option<String>)]) -> String {
 }
 
 /// `moddil test`: each test of the mod being built, compiled to native code (each in a process
-/// of its own) or, with `--interp`, on the MIR interpreter, as many at once as there are cores. A
-/// test native code does not compile yet runs on the interpreter, with a note.
+/// of its own) or, with `--interp`, on the MIR interpreter, as many at once as there are cores.
 fn test(
     db: &Database,
     program: Program,
@@ -940,21 +946,14 @@ fn test(
         |db, k| {
             let i = tests[k];
             if interp {
-                Ok(interp_test(db, program, files, i))
+                interp_test(db, program, files, i)
             } else {
                 native_child(path, i, &items.tests[i as usize].name)
             }
         },
     );
     let mut failed = 0;
-    for (&i, run) in tests.iter().zip(runs) {
-        let run = run.unwrap_or_else(|what| {
-            eprintln!(
-                "moddil: test \"{}\" runs on the interpreter: {what} is not compiled natively yet",
-                items.tests[i as usize].name
-            );
-            interp_test(db, program, files, i)
-        });
+    for run in runs {
         run.show();
         if !run.passed {
             failed += 1;

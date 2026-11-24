@@ -696,7 +696,8 @@ calls is a Rust crate, `moddil-rt`, for now.
     - no number conversions, `text`, the log, or `const` items;
     - no concurrency;
     - no anonymous impls;
-    - converting a `dyn` borrow to a supertrait that is not its first.
+    - converting a `dyn` borrow to a supertrait that is not its first (done since, November
+      2026).
 - **Slice C4 (decided November 2026): errors, conversions, text, `const` items and the log.**
   - **The error ABI:** every function takes an error pointer last (null where a call cannot
     fail). Status 2 means failed: the error is at the pointer.
@@ -724,7 +725,8 @@ calls is a Rust crate, `moddil-rt`, for now.
     - no concurrency (`spawn`, channels, scopes);
     - no anonymous impls;
     - not `upper_text`, `lower_text`, `trim` or `split_at_mut_unchecked`;
-    - converting a `dyn` borrow to a supertrait that is not its first.
+    - converting a `dyn` borrow to a supertrait that is not its first (done since, November
+      2026).
 - **Slice C5 (decided November 2026): concurrency, and the last built-ins.**
   - **Tasks are threads with a baton.** Each task is an OS thread, but only the one holding the
     baton runs. The scheduler is `moddil-interp`'s, ported to `moddil-rt` with values as bytes,
@@ -753,11 +755,14 @@ calls is a Rust crate, `moddil-rt`, for now.
     moves it between a set and its members (`Err(e)` in a `try` block).
   - **Checking:** all 119 conformance files the interpreters run also run natively (from 102),
     with no disagreements and no leaks.
-  - **Interim limit:** converting a `dyn` borrow to a supertrait that is not its first.
+  - **Interim limit:** converting a `dyn` borrow to a supertrait that is not its first (done since:
+    each vtable ends with its supertraits' vtables, November 2026).
 - **Slice C6 (decided November 2026): native by default, and `moddil build`.**
   - **Native by default:** `moddil run` and `moddil test` compile natively, and `--interp` uses
     the MIR interpreter.
-    - Code native compilation does not support runs on the interpreter instead, after a note.
+    - Code native compilation does not support runs on the interpreter instead, after a note
+      (removed since, November 2026: native code compiles every checked program, so a program it
+      cannot compile is reported as a bug in moddil).
     - Each native test runs in a process of its own, so a crash fails that test.
     - A failed `assert` natively shows its parts' values, as the interpreter's does.
   - **The runtime owns what the host did:**

@@ -168,21 +168,6 @@ fn runs_on_the_interpreter_when_asked() {
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "6765");
 }
 
-#[test]
-fn falls_back_to_the_interpreter_with_a_note() {
-    // A `dyn` borrow as a supertrait's that is not its first is not compiled natively yet.
-    let text = "trait A { fn a(&self) -> int; }  trait B { fn b(&self) -> int; }  trait C: A + B {}
-        struct S;  impl A for S { fn a(&self) -> int { 1 } }  impl B for S { fn b(&self) -> int { 2 } }
-        impl C for S {}
-        fn second(x: &dyn B) -> int { x.b() }  fn via(c: &dyn C) -> int { second(c) }
-        fn main() -> int { via(&S) }\n";
-    let out = moddil(&["run"], &file("fallback.moddil", text));
-    assert!(out.status.success());
-    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "2");
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("running on the interpreter"), "{stderr}");
-}
-
 /// Builds `text` into an executable and runs it, if the runtime library is there to link with
 /// (`cargo build -p moddil-rt-main`): its output, or `None`.
 fn built(name: &str, text: &str) -> Option<Output> {

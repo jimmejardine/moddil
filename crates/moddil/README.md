@@ -23,9 +23,10 @@ moddil lsp                         # the language server, on standard input and 
 moddil run --wasm file.moddil      # `main` as WebAssembly, in Node (and `test --wasm`)
 ```
 
-- **Native by default.** What native code does not compile yet runs on the MIR interpreter
-  instead, after a note saying what. Each native test runs in a process of its own, so a
-  crash in compiled code fails that test, reported as a bug in the backend.
+- **Native by default.** Native code compiles every checked program; one it could not would be
+  reported as a bug in moddil (it once ran on the MIR interpreter instead). Each native test runs
+  in a process of its own, so a crash in compiled code fails that test, reported as a bug in the
+  backend.
 - **`build`** links the program's object with the runtime library `moddil-rt-main`
   ([`link.rs`](src/link.rs)): with MSVC's `link.exe` on Windows, the system's `cc` elsewhere. The
   library is found beside the `moddil` executable (`cargo build -p moddil-rt-main` puts it

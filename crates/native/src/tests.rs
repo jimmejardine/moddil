@@ -119,14 +119,17 @@ fn loops() {
 }
 
 #[test]
-fn what_is_not_compiled_yet_says_so() {
-    assert!(matches!(
-        run("trait A { fn a(&self) -> int; }  trait B { fn b(&self) -> int; }  trait C: A + B {}
+fn a_dyn_borrow_becomes_one_of_a_later_supertrait() {
+    // Its vtable for `B` is the word after `C`'s methods (`type.dyn.coerce.1`).
+    assert_eq!(
+        value(
+            "trait A { fn a(&self) -> int; }  trait B { fn b(&self) -> int; }  trait C: A + B {}
              struct S;  impl A for S { fn a(&self) -> int { 1 } }  impl B for S { fn b(&self) -> int { 2 } }  impl C for S {}
              fn second(x: &dyn B) -> int { x.b() }  fn via(c: &dyn C) -> int { second(c) }
-             fn main() -> int { via(&S) }"),
-        Err(Native::Unsupported(_))
-    ));
+             fn main() -> int { via(&S) }"
+        ),
+        "2"
+    );
 }
 
 #[test]
