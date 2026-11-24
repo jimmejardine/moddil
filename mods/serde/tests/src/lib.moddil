@@ -47,3 +47,25 @@ test "a refined field that breaks its refinement is refused" {
     let r = try { let p: Pair = json::decode(r#"{"name": "abc", "ok": false}"#)?; p.n };
     assert(r.is_err());
 }
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+enum Size { Small, Large }
+
+#[derive(Serialize, Deserialize)]
+struct Order { item: String, size: Size }
+
+test "an enum of unit variants is its variant's name" {
+    let o: Order = json::decode(r#"{"item": "tea", "size": "Large"}"#)?;
+    assert(o.size == Size::Large);
+    let text = json::encode(&o);
+    let written: &str = &text;
+    assert(written == r#"{"item":"tea","size":"Large"}"#);
+}
+
+test "a name that is no variant is refused" {
+    let r = try { let o: Order = json::decode(r#"{"item": "tea", "size": "Huge"}"#)?; o.item };
+    match r {
+        Ok(_) => assert(false),
+        Err(e) => assert(e.reason().contains("Huge")),
+    }
+}

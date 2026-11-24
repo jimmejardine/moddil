@@ -2,7 +2,8 @@
 //!
 //! `Serialize` and `Deserialize` are derived by derive functions written here, in Moddil
 //! (`comptime.md`: Generation): each is a template, an impl for the type `t`, whose
-//! `inline for f in fields(t)` is written once for each of the struct's fields. Decoding is
+//! `inline for f in fields(t)` is written once for each of the struct's fields, and for an enum
+//! of unit variants `inline for v in variants(t)` once for each variant. Decoding is
 //! validation: a refined field's value is made with its refinement's `new`, and a value that
 //! breaks the refinement is a `DecodeError`, like any other bad input.
 
@@ -15,16 +16,25 @@ pub trait Serialize {
     fn serialize(&self, out: &mut Encoder);
 }
 
-/// `Serialize`'s derive: a struct as an object of its fields, by name, in declared order.
+/// `Serialize`'s derive: a struct as an object of its fields, by name, in declared order; an
+/// enum of unit variants as its variant's name.
 pub const fn serialize(t: type) -> Impl<Serialize> {
     impl Serialize for t {
         fn serialize(&self, out: &mut Encoder) {
-            out.begin_object();
-            inline for f in fields(t) {
-                out.key(f.name);
-                self.[f].serialize(out);
+            if const t.is_enum() {
+                inline for v in variants(t) {
+                    if v.is(self) {
+                        out.text(v.name);
+                    }
+                }
+            } else {
+                out.begin_object();
+                inline for f in fields(t) {
+                    out.key(f.name);
+                    self.[f].serialize(out);
+                }
+                out.end_object();
             }
-            out.end_object();
         }
     }
 }
@@ -37,18 +47,30 @@ pub trait Deserialize {
 }
 
 /// `Deserialize`'s derive: a struct from an object with a member for each field, by name. A
-/// refined field's value is made with its refinement's `new`: one that breaks it is refused.
+/// refined field's value is made with its refinement's `new`: one that breaks it is refused. An
+/// enum of unit variants from its variant's name: any other text is refused.
 pub const fn deserialize(t: type) -> Impl<Deserialize> {
     impl Deserialize for t {
         fn deserialize(d: Decoder) -> Self with fail(DecodeError) {
-            t {
-                inline for f in fields(t) {
-                    [f]: if const f.is_refined() {
-                        let value = d.field(f.name)?;
-                        try { f.new(value)? } catch { e => fail(DecodeError::refused(f.name, e)) }
-                    } else {
-                        d.field(f.name)?
-                    },
+            if const t.is_enum() {
+                let text = d.text()?;
+                let name: &str = &text;
+                inline for v in variants(t) {
+                    if name == v.name {
+                        return v.make();
+                    }
+                }
+                fail(DecodeError::unknown(name))
+            } else {
+                t {
+                    inline for f in fields(t) {
+                        [f]: if const f.is_refined() {
+                            let value = d.field(f.name)?;
+                            try { f.new(value)? } catch { e => fail(DecodeError::refused(f.name, e)) }
+                        } else {
+                            d.field(f.name)?
+                        },
+                    }
                 }
             }
         }
@@ -99,6 +121,11 @@ impl DecodeError {
     /// An error saying `reason`.
     pub fn new(reason: String) -> DecodeError {
         DecodeError { reason }
+    }
+
+    /// Text `name`, which names none of an enum's variants.
+    pub fn unknown(name: &str) -> DecodeError {
+        DecodeError { reason: fmt"`{name}` is not one of the variants" }
     }
 
     /// Field `field`'s value, which breaks its refinement.
