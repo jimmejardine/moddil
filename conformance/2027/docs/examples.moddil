@@ -1,0 +1,41 @@
+// covers: test.doc.1
+
+/// Doubles `x`. An example in a doc comment is a test: its lines are Moddil, each `// =>` its
+/// expected value, in the item's module.
+///
+/// # Example
+/// twice(2)                                // => 4
+/// twice(-3)                               // => -6
+fn twice(x: int) -> int {
+    x * 2
+}
+
+/// A counter.
+struct Counter {
+    n: int,
+}
+
+impl Counter {
+    /// One more. The section ends at the next heading.
+    ///
+    /// # Examples
+    /// let c = Counter { n: 1 };
+    /// c.next().n                            // => 2
+    /// c.n                                   // => 1
+    ///
+    /// # Note
+    /// This is not run.
+    fn next(&self) -> Counter {
+        Counter { n: self.n + 1 }
+    }
+}
+
+/// A private helper's example runs too, with the module's names in scope.
+///
+/// # Example
+/// ```
+/// secret() + twice(1)                     // => 44
+/// ```
+fn secret() -> int {
+    42
+}

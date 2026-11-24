@@ -216,7 +216,8 @@ L)
   past the call (zlib's `zalloc`), and a trap in a callback raised where it happens.
 
 **P23. Documentation tooling** (`crates/syntax`, `crates/sema`, `crates/moddil`; L)
-- Doc comments read: `moddil doc`, doc links, and doc tests run by `moddil test`.
+- `moddil doc`, and doc links (`[[Account::open]]`) checked against the code, as `docs.md` says.
+- An example's `// => fail(E)` and snapshot-style expected output (`testing.md`).
 
 **P24. The language server, next** (`crates/lsp`; M)
 - Incremental document sync, and analysis off the server's one thread; an editor extension.

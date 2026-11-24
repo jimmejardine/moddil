@@ -324,6 +324,38 @@ impl Program {
             for item in root.children() {
                 p.item(Some(f as u32), file_modules[f], item);
             }
+            // The examples in its doc comments, each a test (`test.doc.1`) whose code is where
+            // the example is.
+            let mut seen: Vec<String> = Vec::new();
+            for ex in moddil_syntax::doc_examples(&root, &file.text) {
+                let parse = moddil_syntax::parse(&ex.source);
+                let Some(t) = parse
+                    .syntax()
+                    .children()
+                    .filter_map(ast::TestItem::cast)
+                    .find(|t| t.syntax().text_range() == ex.range)
+                else {
+                    continue;
+                };
+                let mut name = if ex.item.is_empty() {
+                    "example".to_string()
+                } else {
+                    format!("example of {}", ex.item)
+                };
+                let n = seen.iter().filter(|x| **x == name).count();
+                seen.push(name.clone());
+                if n > 0 {
+                    name = format!("{name} {}", n + 1);
+                }
+                if let Some(body) = t.body() {
+                    p.tests.push(TestDef {
+                        name,
+                        body,
+                        file: f as u32,
+                        module: file_modules[f] as u32,
+                    });
+                }
+            }
             p.roots.push(root);
         }
         // Now every name is known: what each impl is for, and of which trait.

@@ -50,6 +50,21 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
         }
     };
     let (root, text) = source(db, program, src);
+    // An example in a doc comment (`test.doc.1`): its own source, whose ranges are the file's.
+    let example = match owner.item(db) {
+        Item::Test(i) if node_at(&root, K::TEST_ITEM, items.tests[i as usize].node).is_none() => {
+            let at = items.tests[i as usize].node;
+            moddil_syntax::doc_examples(&root, text)
+                .into_iter()
+                .find(|e| e.range == at)
+        }
+        _ => None,
+    };
+    let example_root = example
+        .as_ref()
+        .map(|e| moddil_syntax::parse(&e.source).syntax());
+    let root = example_root.unwrap_or(root);
+    let text = example.as_ref().map_or(text, |e| e.source.as_str());
     let mut cx = Lowerer {
         text,
         items,

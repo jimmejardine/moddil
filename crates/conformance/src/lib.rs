@@ -346,6 +346,19 @@ impl Implementation for ReferenceInterpreter {
 ///
 /// A message for a malformed expectation comment.
 pub fn read_expectations(file: &str, text: &str, e: &mut Expectations) -> Result<(), String> {
+    // The `// =>` lines of the examples in its doc comments, each in its own source, whose lines
+    // are the file's (`test.doc.1`).
+    let parse = moddil_syntax::parse(text);
+    for ex in moddil_syntax::doc_examples(&parse.syntax(), text) {
+        let mut values = Expectations::default();
+        read_comments(file, &ex.source, &mut values)?;
+        e.values.extend(values.values);
+    }
+    read_comments(file, text, e)
+}
+
+/// Reads the expectations in the comments of `text` into `e`, as [`read_expectations`].
+fn read_comments(file: &str, text: &str, e: &mut Expectations) -> Result<(), String> {
     let mut offset = 0u32;
     let at_line = |line: u32| (file.to_string(), line);
     for tok in moddil_syntax::lex(text).0 {

@@ -394,7 +394,13 @@ impl Collector<'_> {
         }
     }
 
-    pub(super) fn test_sig(&mut self, t: &ast::TestItem, file: u32) -> TestSig {
+    /// The signature of test `t` in `file`; `doc`, for an example in a doc comment, its name.
+    pub(super) fn test_sig(
+        &mut self,
+        t: &ast::TestItem,
+        file: u32,
+        doc: Option<String>,
+    ) -> TestSig {
         let node = t.syntax();
         let src = Src::File(file);
         self.unsupported_parts(src, node, false);
@@ -452,6 +458,7 @@ impl Collector<'_> {
                     node: node.text_range(),
                     module: self.module,
                     subject,
+                    doc: false,
                 }
             }
             None => TestSig {
@@ -461,8 +468,14 @@ impl Collector<'_> {
                 node: node.text_range(),
                 module: self.module,
                 subject,
+                doc: false,
             },
         };
+        let mut sig = sig;
+        if let Some(name) = doc {
+            sig.name = name;
+            sig.doc = true;
+        }
         // Tests are named once per module.
         if let Some(first) = self
             .tree

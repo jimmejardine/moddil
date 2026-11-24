@@ -1007,7 +1007,16 @@ fn wrong_values(
     t: &moddil_sema::TestSig,
     observed: &[(u32, TextRange, String)],
 ) -> Vec<(TextRange, String)> {
-    let text = &files[t.file as usize].1;
+    let file = &files[t.file as usize].1;
+    // An example in a doc comment: its expectations are in its source (`test.doc.1`).
+    let example = t.doc.then(|| {
+        let parse = moddil_syntax::parse(file);
+        moddil_syntax::doc_examples(&parse.syntax(), file)
+            .into_iter()
+            .find(|e| e.range == t.node)
+            .map(|e| e.source)
+    });
+    let text = example.as_ref().and_then(|e| e.as_deref()).unwrap_or(file);
     let mut wrong = Vec::new();
     let mut offset = 0u32;
     for tok in moddil_syntax::lex(text).0 {

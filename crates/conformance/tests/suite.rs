@@ -66,6 +66,7 @@ areas!(
     concurrency,
     contracts,
     derive,
+    docs,
     effects,
     enums,
     errors,

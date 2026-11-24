@@ -213,7 +213,9 @@ struct Nodes {
     traits: Vec<Site>,
     impls: Vec<Site>,
     fns: Vec<Site>,
-    tests: Vec<(u32, u32, SyntaxNode)>,
+    /// Each test: its file, its module, its node, and for an example in a doc comment
+    /// (`test.doc.1`), the test's name.
+    tests: Vec<(u32, u32, SyntaxNode, Option<String>)>,
 }
 
 struct Collector<'a> {
@@ -442,6 +444,40 @@ impl Collector<'_> {
     fn run(&mut self, sources: &[(Src, SyntaxNode)]) {
         let mut nodes = Nodes::default();
         for (src, root) in sources {
+            // The examples in its doc comments, each a test of its module (`test.doc.1`), its
+            // code where the example is.
+            if let Src::File(f) = src {
+                let text = root.text().to_string();
+                let mut seen: Vec<String> = Vec::new();
+                for ex in moddil_syntax::doc_examples(root, &text) {
+                    let parse = moddil_syntax::parse(&ex.source);
+                    let ds: Vec<Diagnostic> = parse
+                        .errors()
+                        .iter()
+                        .map(|e| Diagnostic::error(Code::E0001, e.range, e.message.clone()))
+                        .collect();
+                    if !ds.is_empty() {
+                        self.reporter.report(*src, None, ds);
+                        continue;
+                    }
+                    let Some(t) = node_at(&parse.syntax(), K::TEST_ITEM, ex.range) else {
+                        continue;
+                    };
+                    let mut name = if ex.item.is_empty() {
+                        "example".to_string()
+                    } else {
+                        format!("example of {}", ex.item)
+                    };
+                    let n = seen.iter().filter(|x| **x == name).count();
+                    seen.push(name.clone());
+                    if n > 0 {
+                        name = format!("{name} {}", n + 1);
+                    }
+                    nodes
+                        .tests
+                        .push((*f, self.file_modules[*f as usize], t, Some(name)));
+                }
+            }
             for node in root.children() {
                 let module = match src {
                     Src::Prelude => self.prelude_module_at(node.text_range().start as usize),
@@ -478,7 +514,9 @@ impl Collector<'_> {
                     }
                     K::TYPE_ITEM => nodes.types.push((*src, module, node)),
                     K::TEST_ITEM if src.is_file() => {
-                        nodes.tests.push((src.file().unwrap_or(0), module, node));
+                        nodes
+                            .tests
+                            .push((src.file().unwrap_or(0), module, node, None));
                     }
                     K::USE_ITEM if src.is_file() => {
                         self.enter(*src, module);
@@ -594,10 +632,10 @@ impl Collector<'_> {
         }
         self.defaults(sources);
         self.number_opaques();
-        for (file, module, node) in &nodes.tests {
+        for (file, module, node, doc) in &nodes.tests {
             self.enter(Src::File(*file), *module);
             if let Some(t) = ast::TestItem::cast(node.clone()) {
-                let sig = self.test_sig(&t, *file);
+                let sig = self.test_sig(&t, *file, doc.clone());
                 self.tree.tests.push(sig);
             }
         }

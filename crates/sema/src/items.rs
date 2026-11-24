@@ -597,6 +597,9 @@ pub struct TestSig {
     pub module: u32,
     /// The function it is for, if it names one (`test.for.1`).
     pub subject: Option<u32>,
+    /// Whether it is an example in a doc comment (`test.doc.1`), whose code is in the example's
+    /// source (`moddil_syntax::doc_examples`), not in the file's parse.
+    pub doc: bool,
 }
 
 impl VariantDef {
