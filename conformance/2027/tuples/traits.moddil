@@ -1,0 +1,48 @@
+// covers: type.tuple.traits.1
+
+use core::collections::hash_of;
+
+/// A copy made through a `Clone` bound.
+fn copied<T: Clone>(x: &T) -> T {
+    x.clone()
+}
+
+test "tuples of Clone elements clone" {
+    let a = ("ab".to_string(), 1);
+    let mut b = a.clone();
+    b.0.push('c');
+    b.1 = 2;
+    a                                               // => ("ab", 1)
+    ;
+    b                                               // => ("abc", 2)
+    ;
+    // Through a borrow, the tuple is cloned, not the borrow.
+    let r = &a;
+    let c: (String, int) = r.clone();
+    c.0.len()                                       // => 2
+    ;
+    let nested = (("x".to_string(), 1), "y".to_string(), true);
+    copied(&nested)                                 // => (("x", 1), "y", true)
+    ;
+    let twelve = (1, "2".to_string(), 3, 4, 5, 6, 7, 8, 9, 10, 11, "12".to_string());
+    copied(&twelve).11                              // => "12"
+    ;
+    // A tuple of `Copy` elements is cloned by copying, at any size.
+    let thirteen = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13);
+    copied(&thirteen).12                            // => 13
+}
+
+test "tuples show and hash as their elements" {
+    let three = (1, "a".to_string(), true);
+    fmt"{three:?}"                                  // => "(1, \"a\", true)"
+    ;
+    let twelve = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+    fmt"{twelve:?}"                                 // => "(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)"
+    ;
+    hash_of(&three) == hash_of(&(1, "a".to_string(), true))     // => true
+    ;
+    hash_of(&three) == hash_of(&(1, "b".to_string(), true))     // => false
+    ;
+    // A triple does not hash as the pair of its first two elements.
+    hash_of(&(1, 2, 3)) == hash_of(&(1, 2))         // => false
+}

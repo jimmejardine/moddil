@@ -14,6 +14,11 @@ expression of type `!` fits where any type is expected.
 **type.tuple.1** A tuple type `(T₁, …, Tₙ)` with `n ≥ 2`, or `(T,)` with one element, holds one
 value of each element type, in order. `()` is the tuple with no elements, and `(T)` is `T`.
 
+**type.tuple.traits.1** A tuple is `Copy`, and `Clone` by copying, if every element is `Copy`, at
+any size. A tuple of 2 to 12 elements is `Clone`, `Debug` and `Hash` if every element is, through
+the prelude's impls: each element in order. So `(String, int)` clones, and `.clone()` on a
+`&(String, int)` gives a `(String, int)`.
+
 **type.array.1** An array type `[T; N]` holds `N` values of type `T`, in order; `N` is a length
 known when compiling, an integer literal or a const parameter ([Generics](generics.md)). An array
 is `Copy` if `T` is and it is within the size cap ([Ownership](ownership.md)), and `Clone` then too.

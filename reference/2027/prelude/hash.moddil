@@ -138,3 +138,128 @@ impl<A: Hash, B: Hash> Hash for (A, B) {
     }
 }
 
+impl<A: Hash, B: Hash, C: Hash> Hash for (A, B, C) {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+        self.1.hash(state);
+        self.2.hash(state);
+    }
+}
+
+impl<A: Hash, B: Hash, C: Hash, D: Hash> Hash for (A, B, C, D) {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+        self.1.hash(state);
+        self.2.hash(state);
+        self.3.hash(state);
+    }
+}
+
+impl<A: Hash, B: Hash, C: Hash, D: Hash, E: Hash> Hash for (A, B, C, D, E) {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+        self.1.hash(state);
+        self.2.hash(state);
+        self.3.hash(state);
+        self.4.hash(state);
+    }
+}
+
+impl<A: Hash, B: Hash, C: Hash, D: Hash, E: Hash, F: Hash> Hash for (A, B, C, D, E, F) {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+        self.1.hash(state);
+        self.2.hash(state);
+        self.3.hash(state);
+        self.4.hash(state);
+        self.5.hash(state);
+    }
+}
+
+impl<A: Hash, B: Hash, C: Hash, D: Hash, E: Hash, F: Hash, G: Hash> Hash for (A, B, C, D, E, F, G) {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+        self.1.hash(state);
+        self.2.hash(state);
+        self.3.hash(state);
+        self.4.hash(state);
+        self.5.hash(state);
+        self.6.hash(state);
+    }
+}
+
+impl<A: Hash, B: Hash, C: Hash, D: Hash, E: Hash, F: Hash, G: Hash, H: Hash> Hash for (A, B, C, D, E, F, G, H) {
+    fn hash<S: Hasher>(&self, state: &mut S) {
+        self.0.hash(state);
+        self.1.hash(state);
+        self.2.hash(state);
+        self.3.hash(state);
+        self.4.hash(state);
+        self.5.hash(state);
+        self.6.hash(state);
+        self.7.hash(state);
+    }
+}
+
+impl<A: Hash, B: Hash, C: Hash, D: Hash, E: Hash, F: Hash, G: Hash, H: Hash, I: Hash> Hash for (A, B, C, D, E, F, G, H, I) {
+    fn hash<S: Hasher>(&self, state: &mut S) {
+        self.0.hash(state);
+        self.1.hash(state);
+        self.2.hash(state);
+        self.3.hash(state);
+        self.4.hash(state);
+        self.5.hash(state);
+        self.6.hash(state);
+        self.7.hash(state);
+        self.8.hash(state);
+    }
+}
+
+impl<A: Hash, B: Hash, C: Hash, D: Hash, E: Hash, F: Hash, G: Hash, H: Hash, I: Hash, J: Hash> Hash for (A, B, C, D, E, F, G, H, I, J) {
+    fn hash<S: Hasher>(&self, state: &mut S) {
+        self.0.hash(state);
+        self.1.hash(state);
+        self.2.hash(state);
+        self.3.hash(state);
+        self.4.hash(state);
+        self.5.hash(state);
+        self.6.hash(state);
+        self.7.hash(state);
+        self.8.hash(state);
+        self.9.hash(state);
+    }
+}
+
+impl<A: Hash, B: Hash, C: Hash, D: Hash, E: Hash, F: Hash, G: Hash, H: Hash, I: Hash, J: Hash, K: Hash> Hash for (A, B, C, D, E, F, G, H, I, J, K) {
+    fn hash<S: Hasher>(&self, state: &mut S) {
+        self.0.hash(state);
+        self.1.hash(state);
+        self.2.hash(state);
+        self.3.hash(state);
+        self.4.hash(state);
+        self.5.hash(state);
+        self.6.hash(state);
+        self.7.hash(state);
+        self.8.hash(state);
+        self.9.hash(state);
+        self.10.hash(state);
+    }
+}
+
+impl<A: Hash, B: Hash, C: Hash, D: Hash, E: Hash, F: Hash, G: Hash, H: Hash, I: Hash, J: Hash, K: Hash, L: Hash> Hash for (A, B, C, D, E, F, G, H, I, J, K, L) {
+    fn hash<S: Hasher>(&self, state: &mut S) {
+        self.0.hash(state);
+        self.1.hash(state);
+        self.2.hash(state);
+        self.3.hash(state);
+        self.4.hash(state);
+        self.5.hash(state);
+        self.6.hash(state);
+        self.7.hash(state);
+        self.8.hash(state);
+        self.9.hash(state);
+        self.10.hash(state);
+        self.11.hash(state);
+    }
+}
+

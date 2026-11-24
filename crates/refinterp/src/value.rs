@@ -90,7 +90,8 @@ pub(crate) enum Head {
     Char,
     Str,
     Unit,
-    Tuple,
+    /// A tuple of this many elements: an impl for pairs is not one for triples.
+    Tuple(usize),
     /// An array or a slice.
     Array,
     /// The argument of a const parameter: a length.
@@ -116,7 +117,7 @@ impl Value {
             Value::Str(_) => Head::Str,
             Value::Unit | Value::Moved | Value::Alias(_) => Head::Unit,
             Value::Closure(_) | Value::Anon(..) => Head::Closure,
-            Value::Tuple(_) => Head::Tuple,
+            Value::Tuple(xs) => Head::Tuple(xs.len()),
             Value::Array(_) => Head::Array,
             Value::Buf(..) => Head::Buf,
             Value::Ref(..) => Head::Ref,

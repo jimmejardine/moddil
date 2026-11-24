@@ -23,7 +23,9 @@ impl Program {
         }
         match head {
             Head::Adt(ty) => self.adts[ty].derives.iter().any(|d| d == name),
-            Head::Ref | Head::Tuple | Head::Unit | Head::Array => matches!(name, "Clone" | "Copy"),
+            Head::Ref | Head::Tuple(_) | Head::Unit | Head::Array => {
+                matches!(name, "Clone" | "Copy")
+            }
             _ => false,
         }
     }
@@ -83,7 +85,8 @@ impl Program {
                 }
             }
         }
-        if name == "clone" && matches!(head, Head::Ref | Head::Tuple | Head::Unit | Head::Array) {
+        if name == "clone" && matches!(head, Head::Ref | Head::Tuple(_) | Head::Unit | Head::Array)
+        {
             out.push(Method::Copy);
         }
         for (tname, t) in &self.traits {
@@ -149,7 +152,7 @@ impl Program {
         {
             return Some(Method::Derived(tr.to_string()));
         }
-        if tr == "Clone" && matches!(head, Head::Ref | Head::Tuple | Head::Unit) {
+        if tr == "Clone" && matches!(head, Head::Ref | Head::Tuple(_) | Head::Unit) {
             return Some(Method::Copy);
         }
         let f = self.traits.get(tr)?.methods.get(name)?;

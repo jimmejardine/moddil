@@ -515,7 +515,8 @@ impl<'a> Solver<'a> {
                 }
                 Ty::Ref(true, _) => return Answer::No,
                 // A tuple is `Copy` and `Clone` if its elements are `Copy`; it is then cloned by
-                // copying it.
+                // copying it. Otherwise it is `Clone` by the prelude's impls, if its elements are
+                // `Clone` (`type.tuple.traits.1`).
                 Ty::Tuple(ts) => {
                     let mut all = Answer::Yes(Source::Builtin);
                     let Some(copy) = self.tree.lang_ref("Copy") else {
@@ -524,11 +525,16 @@ impl<'a> Solver<'a> {
                     for t in ts.iter() {
                         match self.implements(t, &copy) {
                             Answer::Yes(_) => {}
-                            Answer::No => return Answer::No,
+                            Answer::No => {
+                                all = Answer::No;
+                                break;
+                            }
                             Answer::Maybe => all = Answer::Maybe,
                         }
                     }
-                    return all;
+                    if all != Answer::No || self.is_lang(tr, "Copy") {
+                        return all;
+                    }
                 }
                 // So is an array of `Copy` elements, within the size cap.
                 Ty::Array(t, _) => {

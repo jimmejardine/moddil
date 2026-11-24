@@ -515,7 +515,7 @@ impl Program {
     pub(crate) fn head_in(&self, module: usize, t: &ast::Type) -> Head {
         match t {
             ast::Type::Tuple(n) if n.children().next().is_none() => Head::Unit,
-            ast::Type::Tuple(_) => Head::Tuple,
+            ast::Type::Tuple(n) => Head::Tuple(n.children().filter_map(ast::Type::cast).count()),
             ast::Type::Array(_) | ast::Type::Slice(_) => Head::Array,
             // A `&str` is its text here, so an impl for `&str` is one for the text.
             ast::Type::Ref(r)

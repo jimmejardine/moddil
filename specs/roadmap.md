@@ -1043,10 +1043,11 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
         - **No deref coercion:** a `&Rc<Node>` or a `&Box<T>` is not accepted where a `&Node` or a
           `&T` is expected, as Rust accepts it. The nodes' helpers take `&Rc<Node<T>>` and match
           on `&**n`; `&**n` is written where a `&T` is wanted.
-        - **Tuples are `Clone` only when their elements are `Copy`.** `(String, int)` is not
-          `Clone`, and `.clone()` on a `&(K, V)` then clones the borrow, giving a `&(K, V)`, and
-          the error appears further on. The map's collision nodes hold its `Slot::Entry`s instead
-          of `(K, V)` pairs.
+        - **Fixed since: tuples were `Clone` only when their elements were `Copy`**, so
+          `.clone()` on a `&(K, V)` cloned the borrow. Tuples of 2 to 12 elements are now
+          `Clone`, `Debug` and `Hash` when their elements are (`type.tuple.traits.1`), and the
+          reference interpreter tells tuples of different sizes apart. The map's collision nodes
+          keep their `Slot::Entry`s, which let them share the iterator's code.
         - **No `panic` or `unreachable` for a broken invariant** in library code: a `match` gives
           an `Option` and `?!` traps on `None` (`values` and `children` in the vector, as in the
           prelude's `Box`).

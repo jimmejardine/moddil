@@ -1,0 +1,11 @@
+// covers: type.tuple.traits.1
+
+struct NoClone { n: int }
+
+fn copied<T: Clone>(x: &T) -> T {
+    x.clone()
+}
+
+fn not_clone(t: &(NoClone, int)) -> (NoClone, int) {
+    copied(t)                                   //~ E0402
+}
