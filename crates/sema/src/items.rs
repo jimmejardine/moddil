@@ -643,6 +643,7 @@ impl AdtDef {
 
 /// The traits, types and functions of the prelude the language itself refers to.
 const LANG: &[&str] = &[
+    "RadixText",
     "Option",
     "Result",
     "Ordering",

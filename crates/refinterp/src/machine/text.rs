@@ -236,7 +236,7 @@ impl Machine<'_> {
             },
         };
         let range = expr.syntax().text_range();
-        if spec.width.is_none() && spec.precision.is_none() {
+        if spec.width.is_none() && spec.precision.is_none() && !spec.plus && spec.radix.is_none() {
             self.call_trait(tr, "fmt", vec![this, Value::Ref(out.clone(), true)], range)?;
             return Ok(());
         }
@@ -244,8 +244,12 @@ impl Machine<'_> {
         let number = matches!(value, Value::Int(_) | Value::Num(..) | Value::FloatLit(_));
         let text_value =
             matches!(value, Value::Str(_)) || crate::value::string_text(&value).is_some();
-        // A float's fixed digits (`expr.fmt.spec.3`), or what its `fmt` writes.
+        // An integer's digits in a base (`expr.fmt.spec.4`), a float's fixed digits
+        // (`expr.fmt.spec.3`), or what its `fmt` writes.
         let written = match (&value, spec.precision) {
+            _ if spec.radix.is_some() => {
+                radix_text(&value, spec.radix.expect("a base"), spec.prefix)
+            }
             (Value::Num(k, bits), Some(digits)) if k.is_float() => {
                 let digits = digits as usize;
                 if *k == crate::num::Kind::F32 {
@@ -270,6 +274,12 @@ impl Machine<'_> {
                 )?;
                 crate::value::string_text(&self.memory.load(&piece)).expect("a `String`")
             }
+        };
+        // `+` before a number with no `-` (`expr.fmt.spec.4`).
+        let written = if spec.plus && !written.starts_with('-') {
+            format!("+{written}")
+        } else {
+            written
         };
         let keep = match spec.precision {
             Some(k) if text_value && !spec.debug => k as usize,
@@ -671,15 +681,47 @@ pub(super) fn ordered<T: Ord + ?Sized>(op: K, a: &T, b: &T) -> bool {
     }
 }
 
-/// A hole's format spec (`expr.fmt.spec.1`): `[[fill]align][0][width][.precision][?]`.
+/// A hole's format spec (`expr.fmt.spec.1`):
+/// `[[fill]align][+][#][0][width][.precision][type]`, the type `?`, `x`, `X`, `b` or `o`.
 #[derive(Default)]
 struct Spec {
     debug: bool,
     fill: char,
     align: Option<char>,
+    plus: bool,
+    prefix: bool,
     zero: bool,
     width: Option<u32>,
     precision: Option<u32>,
+    radix: Option<char>,
+}
+
+/// Integer `v`'s digits in the base of `radix` (`x`, `X`, `b` or `o`), its bits as its type holds
+/// them, after the base's prefix for `prefix` (`expr.fmt.spec.4`).
+fn radix_text(v: &Value, radix: char, prefix: bool) -> String {
+    let (bits, width) = match v {
+        Value::Int(i) => (u128::from(*i as u64), 64),
+        Value::Num(k, b) => (*b, k.width()),
+        Value::BigLit(i) => (*i as u128, 128),
+        Value::HugeLit(u) => (*u, 128),
+        _ => unreachable!("a checked integer"),
+    };
+    let bits = if width == 128 {
+        bits
+    } else {
+        bits & ((1u128 << width) - 1)
+    };
+    let (p, digits) = match radix {
+        'x' => ("0x", format!("{bits:x}")),
+        'X' => ("0x", format!("{bits:X}")),
+        'b' => ("0b", format!("{bits:b}")),
+        _ => ("0o", format!("{bits:o}")),
+    };
+    if prefix {
+        format!("{p}{digits}")
+    } else {
+        digits
+    }
 }
 
 /// Where a hole's spec starts: its first `:` outside brackets and strings, not in a `::`.
@@ -723,6 +765,14 @@ fn parse_spec(text: &str) -> Option<Spec> {
         spec.align = Some(cs[0]);
         i = 1;
     }
+    if cs.get(i) == Some(&'+') {
+        spec.plus = true;
+        i += 1;
+    }
+    if cs.get(i) == Some(&'#') {
+        spec.prefix = true;
+        i += 1;
+    }
     if cs.get(i) == Some(&'0') {
         spec.zero = true;
         i += 1;
@@ -739,11 +789,12 @@ fn parse_spec(text: &str) -> Option<Spec> {
         i += 1;
         spec.precision = Some(number(&mut i)?);
     }
-    if cs.get(i) == Some(&'?') {
-        spec.debug = true;
-        i += 1;
+    match cs.get(i) {
+        Some('?') => spec.debug = true,
+        Some(&c @ ('x' | 'X' | 'b' | 'o')) => spec.radix = Some(c),
+        _ => return (i == cs.len()).then_some(spec),
     }
-    (i == cs.len()).then_some(spec)
+    (i + 1 == cs.len()).then_some(spec)
 }
 
 /// `s` cut to its first `keep` characters, then filled with `fill` to `width` characters, to the
@@ -753,11 +804,12 @@ fn padded(s: &str, fill: char, align: char, width: usize, zero: bool, keep: usiz
     let kept: String = s.chars().take(keep).collect();
     let room = width.saturating_sub(kept.chars().count());
     if zero {
-        let (sign, rest) = match kept.strip_prefix(['-', '+']) {
-            Some(rest) => (&kept[..1], rest),
-            None => ("", kept.as_str()),
-        };
-        return format!("{sign}{}{rest}", "0".repeat(room));
+        // The zeros go after a sign and a base's prefix (`{n:#06x}` is `0x002a`).
+        let mut at = usize::from(kept.starts_with(['-', '+']));
+        if ["0x", "0b", "0o"].iter().any(|p| kept[at..].starts_with(p)) {
+            at += 2;
+        }
+        return format!("{}{}{}", &kept[..at], "0".repeat(room), &kept[at..]);
     }
     let before = match align {
         '<' => 0,

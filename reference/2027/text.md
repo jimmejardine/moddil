@@ -58,6 +58,9 @@ if `b` comes before `a`. An offset from outside the program becomes a position b
 the position where `part` first or last is, or `None`; `s.split_once(part)` the text before the
 first `part` and the text after it, or `None`. `String` has them too, its positions borrowing it.
 
+**text.find.2** `s.char_indices()`, for a `str` or `String`, is a view of type `CharIndices` that
+gives each character with its position, a `(StrPos, char)`, in order.
+
 **text.utf8.1** `str::from_utf8(bytes)`, for a `&[u8]`, is the bytes as text, failing with
 `Utf8Error { valid_up_to }`, how many of the bytes from the start are UTF-8, if they are not all
 (each character in its shortest encoding, and no surrogate). `String::from_utf8(bytes)`, for a
@@ -121,22 +124,32 @@ and characters in quotes and escaped, `[1, 2]`, `Some(x)`, `(a, b)`; `int`, `boo
 (E0402); for `{e:?}`, `Debug`. A hole holds one expression (E0902).
 
 **expr.fmt.spec.1** A hole's **format spec**, after a `:` that is not part of a path's `::`, is
-`[[fill]align][0][width][.precision][?]`, as Rust's: `{n:>6}`, `{s:*^9}`, `{f:8.2}`, `{x:>12?}`.
+`[[fill]align][+][#][0][width][.precision][type]`, as Rust's, the type `?` (**expr.fmt.debug.1**)
+or `x`, `X`, `b` or `o` (**expr.fmt.spec.4**): `{n:>6}`, `{s:*^9}`, `{f:8.2}`, `{x:>12?}`,
+`{n:#06x}`.
 With a width, what the hole writes is padded to that many characters (not bytes) with the fill,
 a space unless one is written: to its left for `>`, to its right for `<`, and on both sides for
 `^`, the extra one on the right. Without an alignment a number (`int`, a sized integer, a float)
 goes to the right and anything else to the left. Text longer than the width is written whole. A
-spec that is not of that form, or an alignment or `0` without a width, is an invalid literal
-(E0902).
+spec that is not of that form, an alignment or `0` without a width, or `#` without a base, is an
+invalid literal (E0902).
 
-**expr.fmt.spec.2** `0` before the width pads a number with `0`s after its sign, whatever the
-alignment: `{n:06}` of `-42` is `-00042`. On anything but a number it is E0902.
+**expr.fmt.spec.2** `0` before the width pads a number with `0`s after its sign and a base's
+prefix, whatever the alignment: `{n:06}` of `-42` is `-00042`, `{n:#06x}` of `42` is `0x002a`. On
+anything but a number it is E0902.
 
 **expr.fmt.spec.3** A precision is a float's digits after the point, rounded to the nearest
 (`{f:.3}` of `3.14159` is `3.142`; the float's `fixed_text(digits)` gives the same text), or the
 most characters of a `str` or `String` that `Display` writes (`{s:.2}` of `"abc"` is `ab`). On
 any other type, and on text with `?`, it is E0902. A width and a precision written as `name$`
 or `.*` wait.
+
+**expr.fmt.spec.4** `x`, `X`, `b` and `o` write an integer's digits in base 16 (with lower- or
+upper-case letters), 2 or 8: its bits as its type holds them, so a negative one in two's
+complement (`{n:x}` of `-1` as an `i8` is `ff`), and `#` puts the base's prefix before them
+(`0x`, `0b`, `0o`). `+` writes a number's sign when it has no `-` (`{n:+}` of `5` is `+5`). The
+prelude's `RadixText` writes the digits. A base on anything but an integer, or `+` on anything
+but a number, is E0902.
 
 ## Patterns
 

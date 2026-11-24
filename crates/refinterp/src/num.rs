@@ -58,7 +58,7 @@ impl Kind {
         matches!(self, Kind::I8 | Kind::I16 | Kind::I32 | Kind::I128)
     }
 
-    fn width(self) -> u32 {
+    pub(crate) fn width(self) -> u32 {
         match self {
             Kind::I8 | Kind::U8 => 8,
             Kind::I16 | Kind::U16 => 16,

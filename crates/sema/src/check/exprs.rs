@@ -39,8 +39,13 @@ impl Checker<'_> {
             let number = matches!(base, Ty::Int | Ty::Num(_));
             let float = matches!(base, Ty::Num(n) if n.is_float());
             let text = base == Ty::Str || base == self.items.string_ty();
+            let integer = matches!(base, Ty::Int) || (number && !float);
             let wrong = if spec.zero && !number {
                 Some("`0` pads a number with zeros")
+            } else if spec.plus && !number {
+                Some("`+` writes a number's sign")
+            } else if spec.radix.is_some() && !integer {
+                Some("`x`, `X`, `b` and `o` write an integer's digits in base 16, 2 or 8")
             } else if spec.precision.is_some() && !(float || text) {
                 Some("a precision is a float's digits or how much of a text is written")
             } else if spec.precision.is_some() && text && spec.debug {

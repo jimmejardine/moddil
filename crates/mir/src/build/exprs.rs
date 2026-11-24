@@ -1,7 +1,7 @@
 //! Expressions and statements: each HIR expression kind as blocks and statements.
 
 use moddil_sema::hir::{
-    Align, ExprId, ExprKind, FmtPiece, Halt, Handler, LogicOp, PatKind, Stmt, UnaryOp,
+    Align, ExprId, ExprKind, FmtPiece, Halt, Handler, LogicOp, PatKind, Radix, Stmt, UnaryOp,
 };
 use moddil_sema::{Callee, Ty};
 use moddil_syntax::TextRange;
@@ -991,7 +991,36 @@ impl Builder<'_> {
                             .map(|f| (f, digits)),
                         _ => None,
                     };
+                    let radix = spec.radix.and_then(|r| {
+                        let tr = self.items.lang("RadixText")?;
+                        let func = self.items.traits[tr as usize]
+                            .methods
+                            .iter()
+                            .copied()
+                            .find(|&m| self.items.fns[m as usize].name == "write_radix")?;
+                        Some((r, func))
+                    });
                     match fixed {
+                        _ if radix.is_some() => {
+                            // An integer's digits in base 2, 8 or 16 (`expr.fmt.spec.4`).
+                            let (r, func) = radix.expect("a base");
+                            let this = self.hole_ref(h);
+                            let out = self.temp(Ty::reference(true, self.items.string_ty()));
+                            self.cfg.assign(out, Rvalue::Ref(true, Place::local(piece)));
+                            let unit = self.temp(Ty::Unit);
+                            let callee = Callee::Trait {
+                                func,
+                                args: vec![base.clone()],
+                            };
+                            let args = vec![
+                                this,
+                                Operand::Move(Place::local(out)),
+                                Operand::Const(Const::Int(r.bits())),
+                                Operand::Const(Const::Bool(r == Radix::UpperHex)),
+                                Operand::Const(Const::Bool(spec.prefix)),
+                            ];
+                            self.call_into(None, callee, Place::local(unit), args, self.range(h));
+                        }
                         Some((func, digits)) => {
                             let this = self.hole_ref(h);
                             let s = self.temp(Ty::reference(false, Ty::Str));
@@ -1010,6 +1039,14 @@ impl Builder<'_> {
                             self.push_str(piece, Operand::Move(Place::local(s)), range);
                         }
                         None => self.write_hole(h, piece),
+                    }
+                    if spec.plus {
+                        let out = self.temp(Ty::reference(true, self.items.string_ty()));
+                        self.cfg.assign(out, Rvalue::Ref(true, Place::local(piece)));
+                        let unit = self.temp(Ty::Unit);
+                        let plus = self.string_method("sign_plus");
+                        let args = vec![Operand::Move(Place::local(out))];
+                        self.call_into(None, plus, Place::local(unit), args, range);
                     }
                     let align = match spec.align {
                         Some(Align::Center) => 1,

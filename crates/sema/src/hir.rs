@@ -396,12 +396,42 @@ pub struct Spec {
     pub width: Option<u32>,
     /// A float's digits after the point, or the most characters of text written.
     pub precision: Option<u32>,
+    /// `+`: a number's sign, `+` too.
+    pub plus: bool,
+    /// `#`: the base's prefix before an integer's digits (`0x`, `0b`, `0o`).
+    pub prefix: bool,
+    /// `x`, `X`, `b` or `o`: an integer's digits in base 16 (lower or upper case), 2 or 8.
+    pub radix: Option<Radix>,
 }
 
 impl Spec {
-    /// Whether the piece is written as it is, with nothing to pad or cut.
+    /// Whether the piece is written as it is, with nothing to pad, cut, sign or change base.
     pub fn is_plain(&self) -> bool {
-        self.width.is_none() && self.precision.is_none()
+        self.width.is_none() && self.precision.is_none() && !self.plus && self.radix.is_none()
+    }
+}
+
+/// The base an integer's digits are written in (`expr.fmt.spec.4`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Radix {
+    /// `x`.
+    Hex,
+    /// `X`.
+    UpperHex,
+    /// `b`.
+    Binary,
+    /// `o`.
+    Octal,
+}
+
+impl Radix {
+    /// The bits each digit holds.
+    pub fn bits(self) -> i64 {
+        match self {
+            Radix::Hex | Radix::UpperHex => 4,
+            Radix::Binary => 1,
+            Radix::Octal => 3,
+        }
     }
 }
 

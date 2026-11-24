@@ -5,7 +5,7 @@ use moddil_syntax::ast;
 use moddil_syntax::{SyntaxKind as K, SyntaxToken, TextRange};
 
 use super::Lowerer;
-use crate::hir::{Align, ExprId, ExprKind, FmtPiece, Spec};
+use crate::hir::{Align, ExprId, ExprKind, FmtPiece, Radix, Spec};
 use crate::{Code, Diagnostic};
 
 /// The text of a string literal token, or why it is not one.
@@ -367,10 +367,15 @@ fn spec_colon(hole: &str) -> Option<usize> {
     None
 }
 
-/// A format spec, `[[fill]align][0][width][.precision][?]` (`expr.fmt.spec.1`), or what is
-/// wrong with it.
+/// A format spec, `[[fill]align][+][#][0][width][.precision][type]` with `type` one of `?`, `x`,
+/// `X`, `b` and `o` (`expr.fmt.spec.1`), or what is wrong with it.
 fn parse_spec(text: &str) -> Result<Spec, String> {
-    let bad = || format!("`{text}` is not a format spec: `[[fill]align][0][width][.precision][?]`");
+    let bad = || {
+        format!(
+            "`{text}` is not a format spec: `[[fill]align][+][#][0][width][.precision][type]`, \
+             the type `?`, `x`, `X`, `b` or `o`"
+        )
+    };
     let align_of = |c: char| match c {
         '<' => Some(Align::Left),
         '^' => Some(Align::Center),
@@ -390,6 +395,14 @@ fn parse_spec(text: &str) -> Result<Spec, String> {
         spec.align = Some(a);
         i = 1;
     }
+    if cs.get(i) == Some(&'+') {
+        spec.plus = true;
+        i += 1;
+    }
+    if cs.get(i) == Some(&'#') {
+        spec.prefix = true;
+        i += 1;
+    }
     if cs.get(i) == Some(&'0') {
         spec.zero = true;
         i += 1;
@@ -406,12 +419,24 @@ fn parse_spec(text: &str) -> Result<Spec, String> {
         i += 1;
         spec.precision = Some(number(&mut i).ok_or_else(bad)?);
     }
-    if cs.get(i) == Some(&'?') {
-        spec.debug = true;
+    let ty = match cs.get(i) {
+        Some('?') => Some(None),
+        Some('x') => Some(Some(Radix::Hex)),
+        Some('X') => Some(Some(Radix::UpperHex)),
+        Some('b') => Some(Some(Radix::Binary)),
+        Some('o') => Some(Some(Radix::Octal)),
+        _ => None,
+    };
+    if let Some(radix) = ty {
+        spec.debug = radix.is_none();
+        spec.radix = radix;
         i += 1;
     }
-    // An alignment or `0` says how to fill a width, so it needs one.
-    if i != cs.len() || ((spec.align.is_some() || spec.zero) && spec.width.is_none()) {
+    // An alignment or `0` says how to fill a width, so it needs one; `#` is a base's prefix.
+    if i != cs.len()
+        || ((spec.align.is_some() || spec.zero) && spec.width.is_none())
+        || (spec.prefix && spec.radix.is_none())
+    {
         return Err(bad());
     }
     Ok(spec)

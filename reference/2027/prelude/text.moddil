@@ -354,7 +354,14 @@ impl String {
         }
         let room = if width > count { width - count } else { 0 };
         if zero {
-            let sign = if end > 0 && (s.byte_at(0) == 45 || s.byte_at(0) == 43) { 1 } else { 0 };
+            let mut sign = if end > 0 && (s.byte_at(0) == 45 || s.byte_at(0) == 43) { 1 } else { 0 };
+            // And a base's prefix (`{n:#06x}` is `0x002a`).
+            if sign + 1 < end && s.byte_at(sign) == 48 {
+                let p = s.byte_at(sign + 1);
+                if p == 120 || p == 111 || p == 98 {
+                    sign += 2;
+                }
+            }
             self.push_str(s.bytes_between(0, sign));
             for _ in 0..room {
                 self.push('0');
@@ -375,6 +382,15 @@ impl String {
         self.push_str(s.bytes_between(0, end));
         for _ in 0..room - before {
             self.push(fill);
+        }
+    }
+
+    // `+` before a number's text that has no `-` (`{x:+}`, `expr.fmt.spec.4`).
+    fn sign_plus(&mut self) {
+        if self.len() == 0 || self.as_str().byte_at(0) != 45 {
+            let digits = replace(self, String::new());
+            self.push('+');
+            self.push_str(digits.as_str());
         }
     }
 
@@ -564,6 +580,26 @@ impl Iterator for Chars {
     }
 }
 
+// The characters of text in order, each with its position (`text.find.2`).
+view CharIndices {
+    text: &str,
+    at: int,
+}
+
+impl Iterator for CharIndices {
+    type Item = (StrPos, char);
+    fn next(&mut self) -> Option<(StrPos, char)> {
+        match self.text.char_at_byte(self.at) {
+            Some(c) => {
+                let p = StrPos { text: self.text, at: self.at };
+                self.at += c.len_utf8();
+                Some((p, c))
+            }
+            None => None,
+        }
+    }
+}
+
 // A position in text (`text.pos.1`): a byte offset on a character boundary of the text it was
 // found in, which it borrows, so the text cannot change while it is live. Slicing other text with
 // it traps, for now.
@@ -695,6 +731,10 @@ impl str {
         Chars { text: self, at: 0 }
     }
 
+    fn char_indices(&self) -> CharIndices {
+        CharIndices { text: self, at: 0 }
+    }
+
     // The character that starts at byte `at`, if one does (for `Chars`).
     #[intrinsic]
     fn char_at_byte(&self, at: int) -> Option<char>;
@@ -703,6 +743,10 @@ impl str {
 impl String {
     fn chars(&self) -> Chars {
         self.as_str().chars()
+    }
+
+    fn char_indices(&self) -> CharIndices {
+        self.as_str().char_indices()
     }
 
     // As `str`'s (`text.pos.1`, `text.find.1`): the positions borrow the string.
