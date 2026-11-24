@@ -406,8 +406,8 @@ impl Machine<'_> {
                 Value::Ref(p, true)
             }
             // A box's value, kept on the heap behind a raw pointer, and taken back
-            // (`ffi.core.1`; an `Rc`'s allocation, `rc.1`).
-            (Head::Unit | Head::Adt(_), "into_raw") => match &args[0] {
+            // (`ffi.core.1`).
+            (Head::Unit, "into_raw") => match &args[0] {
                 Value::Adt { ty, fields, .. } if ty == "Box" => match &fields[..] {
                     [Value::Buf(_, xs)] if xs.len() == 1 => {
                         Value::Ref(self.memory.alloc(xs[0].clone()), true)
@@ -416,7 +416,7 @@ impl Machine<'_> {
                 },
                 _ => unreachable!("a box"),
             },
-            (Head::Unit | Head::Adt(_), "from_raw") => {
+            (Head::Unit, "from_raw") => {
                 let Value::Ref(p, _) = args[0].clone() else {
                     unreachable!("a pointer")
                 };

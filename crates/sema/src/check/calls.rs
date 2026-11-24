@@ -437,8 +437,7 @@ impl Checker<'_> {
                 .as_ref()
                 .is_some_and(|t| self.items.lang("Clone") == Some(t.trait_))
             && let Some(a) = self.norm(r.strip_ref()).adt()
-            && self.items.adts[a as usize].src == crate::items::Src::Prelude
-            && matches!(self.items.adts[a as usize].name.as_str(), "Rc" | "Weak")
+            && [self.items.lang("Rc"), self.items.lang("Weak")].contains(&Some(a))
         {
             let ty = self.items.adts[a as usize].name.clone();
             self.report(

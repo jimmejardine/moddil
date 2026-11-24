@@ -1088,8 +1088,8 @@ M2 grows the standard mods the tour's tests reach, written in Moddil, until thos
   (`reference/2027/rc.md`): `x.to_rc()`, `rc.share()`, `rc.weak()` and `upgrade`, `Rc::ptr_eq`
   and the counts, dropped with their last owner.
   - **Written in Moddil**, over a raw pointer to an allocation holding the counts and the value.
-    The box goes to and from that pointer as `core::ffi`'s `into_raw` and `from_raw` do, which
-    the prelude, unable to name `core`, has as `RcBox`'s.
+    The box goes to and from that pointer through `core::ffi`'s `into_raw` and `from_raw`, which
+    the prelude names as any mod does.
   - **`.share()`, and `Clone` underneath** (`rc.clone.1`): `Rc` implements the `Clone` trait as
     a share, so `Vec<Rc<T>>` and derives clone; `.clone()` written on an `Rc` is E0417.
   - **Both interpreters keep a heap** for `into_raw`'s values, so `core::ffi`'s boxes and `Rc` run

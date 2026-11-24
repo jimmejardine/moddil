@@ -670,6 +670,8 @@ const LANG: &[&str] = &[
     "Deref",
     "DerefMut",
     "Box",
+    "Rc",
+    "Weak",
     "StrPos",
     "FromArrayLiteral",
     "Debug",

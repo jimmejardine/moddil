@@ -5722,16 +5722,6 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         if sig.src == Src::Prelude && items.modules[sig.module as usize].path == ["ffi"] {
             return self.ffi(sig.name.as_str(), args, d);
         }
-        // An `Rc`'s allocation, to its raw pointer and back (`rc.1`): `core::ffi`'s.
-        if sig.src == Src::Prelude
-            && let moddil_sema::Container::Impl(k) = sig.container
-            && items.impls[k as usize]
-                .self_ty
-                .adt()
-                .is_some_and(|a| items.adts[a as usize].name == "RcBox")
-        {
-            return self.ffi(sig.name.as_str(), args, d);
-        }
         if sig.src == Src::Prelude
             && items.modules[sig.module as usize].path == ["ptr"]
             && sig.name != "cast_mut"

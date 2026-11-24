@@ -3448,17 +3448,6 @@ struct RcBox<T> {
     value: Option<T>,
 }
 
-// The allocation's box, to the raw pointer the handles hold and back: `core::ffi`'s `into_raw`
-// and `from_raw`, for the prelude, which cannot name `core`. Nothing outside the prelude can make
-// an `RcBox` or a pointer to one.
-impl<T> RcBox<T> {
-    #[intrinsic]
-    fn into_raw(b: Box<RcBox<T>>) -> *mut RcBox<T>;
-
-    #[intrinsic]
-    fn from_raw(p: *mut RcBox<T>) -> Box<RcBox<T>>;
-}
-
 struct Rc<T> {
     p: *mut RcBox<T>,
 }
@@ -3475,7 +3464,7 @@ trait ToRc {
 impl<T> ToRc for T {
     fn to_rc(self) -> Rc<T> {
         let b = Box::new(RcBox { strong: 1, weak: 1, value: Some(self) });
-        Rc { p: RcBox::into_raw(b) }
+        Rc { p: core::ffi::into_raw(b) }
     }
 }
 
@@ -3558,7 +3547,7 @@ fn rc_release<T>(p: *mut RcBox<T>) {
     };
     if last {
         drop(unsafe("the last count: into_raw's pointer, given back once") {
-            RcBox::from_raw(p)
+            core::ffi::from_raw(p)
         });
     }
 }

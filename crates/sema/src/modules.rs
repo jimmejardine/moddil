@@ -152,8 +152,17 @@ impl ItemTree {
             "self" => Def::Module(from),
             name => match self.lookup_depth(from, name, prelude_first, depth) {
                 Some(d) => d,
-                None => match mod_def.and_then(|m| m.deps.get(name)) {
-                    Some(&d) => Def::Module(self.mods[d as usize].root),
+                // The prelude belongs to no mod, and names `core` as every mod does.
+                None => match mod_def.map_or_else(
+                    || {
+                        self.mods
+                            .iter()
+                            .rev()
+                            .find(|m| m.name == "core" && name == "core")
+                    },
+                    |m| m.deps.get(name).map(|&d| &self.mods[d as usize]),
+                ) {
+                    Some(d) => Def::Module(d.root),
                     None => return Err(PathError::Unresolved(0)),
                 },
             },
