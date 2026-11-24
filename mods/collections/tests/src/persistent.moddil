@@ -159,27 +159,28 @@ test "a map's updates leave it as it was" {
 }
 
 test "a map of many keys" {
+    // Enough that the trie is three levels deep in places.
     let mut m: PersistentMap<int, int> = PersistentMap::new();
-    for i in 0..2000 {
+    for i in 0..600 {
         m = m.insert(i, i * i);
     }
     let all = m.clone();
-    m.len()                                         // => 2000
+    m.len()                                         // => 600
     ;
-    at(&m, 1234)                                    // => 1522756
+    at(&m, 123)                                     // => 15129
     ;
-    for i in 0..2000 {
+    for i in 0..600 {
         if i % 3 == 0 {
             m = m.remove(&i);
         }
     }
-    m.len()                                         // => 1333
+    m.len()                                         // => 400
     ;
-    at(&m, 999)                                     // => -1
+    at(&m, 297)                                     // => -1
     ;
-    at(&m, 1000)                                    // => 1000000
+    at(&m, 301)                                     // => 90601
     ;
-    at(&all, 999)                                   // => 998001
+    at(&all, 297)                                   // => 88209
     ;
     let mut count = 0;
     let mut sum = 0;
@@ -187,11 +188,11 @@ test "a map of many keys" {
         count += 1;
         sum += *v - *k * *k;
     }
-    count                                           // => 1333
+    count                                           // => 400
     ;
     sum                                             // => 0
     ;
-    for i in 0..2000 {
+    for i in 0..600 {
         m = m.remove(&i);
     }
     m.is_empty()                                    // => true

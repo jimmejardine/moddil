@@ -4,15 +4,16 @@
 mod link;
 mod wheel;
 
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use ariadne::{Config, IndexType, Label, Report, ReportKind, Source};
 use clap::{Parser, Subcommand};
 use moddil_interp::{Stop, Trap, Value};
 use moddil_sema::{
-    Database, Diagnostic, ItemTree, ModInfo, Program, ProgramFile, Severity, SourceFile,
+    Database, Db, Diagnostic, ItemTree, ModInfo, Program, ProgramFile, Severity, SourceFile,
 };
 use moddil_syntax::TextRange;
 
@@ -299,7 +300,7 @@ fn run(
         }
         Err(Stop::Trap(trap)) => {
             let (name, text) = &files[trap.file as usize];
-            report_trap(name, text, items, &trap);
+            report_trap(&mut std::io::stderr(), name, text, items, &trap);
             ExitCode::from(TRAPPED)
         }
         // `main` cannot fail (R3), so no error can escape it.
@@ -427,7 +428,7 @@ fn test_wasm(db: &Database, program: Program, files: &[(String, String)]) -> Exi
                 } else {
                     failed += 1;
                     println!("test \"{name}\" ... failed");
-                    report_wrong_values(files, t, &wrong);
+                    report_wrong_values(&mut std::io::stderr(), files, t, &wrong);
                 }
             }
             Err(moddil_wasm::Wasm::Trap(class, file, range, parts)) => {
@@ -474,7 +475,7 @@ fn native_test(
                 println!("ok");
             } else {
                 println!("failed");
-                report_wrong_values(files, t, &wrong);
+                report_wrong_values(&mut std::io::stderr(), files, t, &wrong);
             }
         }
         Err(moddil_native::Native::Trap(class, file, range, parts)) => {
@@ -496,17 +497,33 @@ fn native_test(
     ExitCode::SUCCESS
 }
 
-/// How one native test, run in a process of its own, went.
-enum Outcome {
-    Passed,
-    Failed,
-    /// It reaches something not compiled natively yet: what.
-    Unsupported(String),
+/// How one test went, and what to print for it: its line, and its reports.
+struct TestRun {
+    passed: bool,
+    line: String,
+    err: Vec<u8>,
+}
+
+impl TestRun {
+    fn new(passed: bool, line: String) -> TestRun {
+        TestRun {
+            passed,
+            line,
+            err: Vec::new(),
+        }
+    }
+
+    /// Prints the test's line and reports, as `moddil test` does.
+    fn show(&self) {
+        println!("{}", self.line);
+        let _ = std::io::stdout().flush();
+        let _ = std::io::stderr().write_all(&self.err);
+    }
 }
 
 /// Runs test `index` natively in a child process (so that a crash in compiled code fails it,
-/// not the run), printing its line and reports as `moddil test` does.
-fn native_child(path: &Path, index: u32, name: &str) -> Outcome {
+/// not the run). `Err` with what it reaches if that is not compiled natively yet.
+fn native_child(path: &Path, index: u32, name: &str) -> Result<TestRun, String> {
     let out = std::env::current_exe().and_then(|exe| {
         std::process::Command::new(exe)
             .arg("__native-test")
@@ -515,30 +532,67 @@ fn native_child(path: &Path, index: u32, name: &str) -> Outcome {
             .output()
     });
     let Ok(out) = out else {
-        println!("test \"{name}\" ... could not start a process to run it in");
-        return Outcome::Failed;
+        let line = format!("test \"{name}\" ... could not start a process to run it in");
+        return Ok(TestRun::new(false, line));
     };
     let stdout = String::from_utf8_lossy(&out.stdout);
     let status = stdout.lines().next().unwrap_or("");
-    let outcome = match status.split_once(' ').map_or(status, |(s, _)| s) {
-        "ok" => {
-            println!("test \"{name}\" ... ok");
-            return Outcome::Passed;
-        }
-        "unsupported" => {
-            return Outcome::Unsupported(status["unsupported ".len()..].to_string());
-        }
-        "trapped" | "failed" | "leaked" => {
-            println!("test \"{name}\" ... {status}");
-            Outcome::Failed
-        }
-        _ => {
-            println!("test \"{name}\" ... crashed (a bug in the native backend)");
-            Outcome::Failed
-        }
+    let (passed, line) = match status.split_once(' ').map_or(status, |(s, _)| s) {
+        "ok" => return Ok(TestRun::new(true, format!("test \"{name}\" ... ok"))),
+        "unsupported" => return Err(status["unsupported ".len()..].to_string()),
+        "trapped" | "failed" | "leaked" => (false, format!("test \"{name}\" ... {status}")),
+        _ => (
+            false,
+            format!("test \"{name}\" ... crashed (a bug in the native backend)"),
+        ),
     };
-    eprint!("{}", String::from_utf8_lossy(&out.stderr));
-    outcome
+    Ok(TestRun {
+        passed,
+        line,
+        err: out.stderr,
+    })
+}
+
+/// `f` of each of `0..n`, in that order, worked out on a thread for each core. Each thread
+/// starts with a value `start` makes, which `f` is given with each index.
+fn in_parallel<S: Send, T: Send>(
+    n: usize,
+    start: impl Fn() -> S,
+    f: impl Fn(&mut S, usize) -> T + Sync,
+) -> Vec<T> {
+    let next = AtomicUsize::new(0);
+    // What each thread borrows.
+    let (next, f) = (&next, &f);
+    let workers = std::thread::available_parallelism()
+        .map_or(1, |p| p.get())
+        .min(n);
+    let mut done: Vec<(usize, T)> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..workers)
+            .map(|_| {
+                let mut state = start();
+                std::thread::Builder::new()
+                    // The main thread's stack, which the interpreter is used to, is smaller.
+                    .stack_size(64 << 20)
+                    .spawn_scoped(scope, move || {
+                        let mut mine = Vec::new();
+                        loop {
+                            let i = next.fetch_add(1, Ordering::Relaxed);
+                            if i >= n {
+                                return mine;
+                            }
+                            mine.push((i, f(&mut state, i)));
+                        }
+                    })
+                    .expect("a thread to run tests on")
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e)))
+            .collect()
+    });
+    done.sort_by_key(|(i, _)| *i);
+    done.into_iter().map(|(_, t)| t).collect()
 }
 
 /// `moddil build --wasm`: `main` compiled to WebAssembly, written as the files that run it in a
@@ -865,8 +919,8 @@ fn parts_note(text: &str, parts: &[(TextRange, Option<String>)]) -> String {
 }
 
 /// `moddil test`: each test of the mod being built, compiled to native code (each in a process
-/// of its own) or, with `--interp`, on the MIR interpreter. A test native code does not compile
-/// yet runs on the interpreter, with a note.
+/// of its own) or, with `--interp`, on the MIR interpreter, as many at once as there are cores. A
+/// test native code does not compile yet runs on the interpreter, with a note.
 fn test(
     db: &Database,
     program: Program,
@@ -875,36 +929,38 @@ fn test(
     path: &Path,
 ) -> ExitCode {
     let items = moddil_sema::item_tree(db, program);
-    let mut failed = 0;
-    let mut run = 0;
-    for (i, t) in items.tests.iter().enumerate() {
-        // The tests of the mod being built, not of its dependencies.
-        if items.mod_of(t.module) != 0 {
-            continue;
-        }
-        run += 1;
-        let passed = if interp {
-            interp_test(db, program, files, i as u32)
-        } else {
-            match native_child(path, i as u32, &t.name) {
-                Outcome::Passed => true,
-                Outcome::Failed => false,
-                Outcome::Unsupported(what) => {
-                    eprintln!(
-                        "moddil: test \"{}\" runs on the interpreter: {what} is not compiled \
-                         natively yet",
-                        t.name
-                    );
-                    interp_test(db, program, files, i as u32)
-                }
+    // The tests of the mod being built, not of its dependencies.
+    let tests: Vec<u32> = (0..items.tests.len() as u32)
+        .filter(|&i| items.mod_of(items.tests[i as usize].module) == 0)
+        .collect();
+    // Each thread has its own handle to the database, which shares what is already worked out.
+    let runs = in_parallel(
+        tests.len(),
+        || db.clone(),
+        |db, k| {
+            let i = tests[k];
+            if interp {
+                Ok(interp_test(db, program, files, i))
+            } else {
+                native_child(path, i, &items.tests[i as usize].name)
             }
-        };
-        if !passed {
+        },
+    );
+    let mut failed = 0;
+    for (&i, run) in tests.iter().zip(runs) {
+        let run = run.unwrap_or_else(|what| {
+            eprintln!(
+                "moddil: test \"{}\" runs on the interpreter: {what} is not compiled natively yet",
+                items.tests[i as usize].name
+            );
+            interp_test(db, program, files, i)
+        });
+        run.show();
+        if !run.passed {
             failed += 1;
         }
     }
-    let passed = run - failed;
-    println!("{passed} passed, {failed} failed");
+    println!("{} passed, {failed} failed", tests.len() - failed);
     if failed == 0 {
         ExitCode::SUCCESS
     } else {
@@ -912,39 +968,38 @@ fn test(
     }
 }
 
-/// Test `index` on the MIR interpreter, printed as `moddil test` prints it: whether it passed.
-fn interp_test(db: &Database, program: Program, files: &[(String, String)], index: u32) -> bool {
+/// Test `index` on the MIR interpreter: whether it passed, and what `moddil test` prints for it.
+fn interp_test(db: &dyn Db, program: Program, files: &[(String, String)], index: u32) -> TestRun {
     let items = moddil_sema::item_tree(db, program);
     let t = &items.tests[index as usize];
     let mut observed = Vec::new();
     let result = moddil_interp::run_test(db, program, index, &mut |file, range, value| {
         observed.push((file, range, value.render(items)));
     });
-    match result {
+    let mut err = Vec::new();
+    let (passed, how) = match result {
         Ok(()) => {
             let wrong = wrong_values(files, t, &observed);
             if wrong.is_empty() {
-                println!("test \"{}\" ... ok", t.name);
-                true
+                (true, "ok")
             } else {
-                println!("test \"{}\" ... failed", t.name);
-                report_wrong_values(files, t, &wrong);
-                false
+                report_wrong_values(&mut err, files, t, &wrong);
+                (false, "failed")
             }
         }
         Err(Stop::Trap(trap)) => {
-            println!("test \"{}\" ... trapped", t.name);
             let (name, text) = &files[trap.file as usize];
-            report_trap(name, text, items, &trap);
-            false
+            report_trap(&mut err, name, text, items, &trap);
+            (false, "trapped")
         }
         Err(Stop::Failed { file, range, error }) => {
-            println!("test \"{}\" ... failed", t.name);
             let (name, text) = &files[file as usize];
-            report_error(name, text, items, range, &error);
-            false
+            report_error(&mut err, name, text, items, range, &error);
+            (false, "failed")
         }
-    }
+    };
+    let line = format!("test \"{}\" ... {how}", t.name);
+    TestRun { passed, line, err }
 }
 
 /// The `// =>` lines of test `t` (`testing.md`: Examples are tests) whose values were not what
@@ -995,6 +1050,7 @@ fn wrong_values(
 
 /// Reports the `// =>` lines [`wrong_values`] found.
 fn report_wrong_values(
+    w: &mut dyn Write,
     files: &[(String, String)],
     t: &moddil_sema::TestSig,
     wrong: &[(TextRange, String)],
@@ -1008,7 +1064,7 @@ fn report_wrong_values(
             .with_label(Label::new(span).with_message("this value"));
         let _ = report
             .finish()
-            .eprint((name.as_str(), Source::from(text.as_str())));
+            .write((name.as_str(), Source::from(text.as_str())), &mut *w);
     }
 }
 
@@ -1063,16 +1119,23 @@ fn report_native_error(name: &str, text: &str, range: TextRange, error: &str) {
     let _ = report.finish().eprint((name, Source::from(text)));
 }
 
-fn report_error(name: &str, text: &str, items: &ItemTree, range: TextRange, error: &Value) {
+fn report_error(
+    w: &mut dyn Write,
+    name: &str,
+    text: &str,
+    items: &ItemTree,
+    range: TextRange,
+    error: &Value,
+) {
     let span = (name, range.to_range());
     let report = Report::build(ReportKind::Error, span.clone())
         .with_config(config())
         .with_message(format!("error: {}", error.render(items)))
         .with_label(Label::new(span).with_message("the error leaves the test here"));
-    let _ = report.finish().eprint((name, Source::from(text)));
+    let _ = report.finish().write((name, Source::from(text)), w);
 }
 
-fn report_trap(name: &str, text: &str, items: &ItemTree, trap: &Trap) {
+fn report_trap(w: &mut dyn Write, name: &str, text: &str, items: &ItemTree, trap: &Trap) {
     let span = (name, trap.range.to_range());
     let message = match &trap.reason {
         Some(r) => format!("trap: {}: {r}", trap.class),
@@ -1105,5 +1168,5 @@ fn report_trap(name: &str, text: &str, items: &ItemTree, trap: &Trap) {
 ",
         ));
     }
-    let _ = report.finish().eprint((name, Source::from(text)));
+    let _ = report.finish().write((name, Source::from(text)), w);
 }
