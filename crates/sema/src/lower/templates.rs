@@ -19,6 +19,15 @@ pub(super) struct FieldRef {
     pub(super) k: u32,
 }
 
+/// In an arm of the match `inline for v in variants(t) { if v.is(x) { … } }` lowers to: `x` as
+/// written, the variant it is there, and the local each of its fields is bound to, once used.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Known {
+    base: String,
+    variant: u32,
+    locals: Vec<Option<crate::hir::LocalId>>,
+}
+
 /// What a name an `inline for` binds reflects: a field, or an enum's variant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Reflect {
@@ -263,6 +272,9 @@ impl Lowerer<'_> {
         let Some(block) = node.child(K::BLOCK).and_then(ast::Block::cast) else {
             return self.missing(range);
         };
+        if let Some((x, then)) = self.variant_switch(&block, &name, &each) {
+            return self.variant_match(range, &name, &each, &x, &then);
+        }
         let mut stmts = Vec::new();
         for r in each {
             self.reflected.push((name.clone(), r));
@@ -282,6 +294,211 @@ impl Lowerer<'_> {
             },
             range,
         )
+    }
+
+    /// For an `inline for v in variants(t)` whose block is only `if v.is(x) { … }`, with `x` a
+    /// name: `x`, and the `if`'s block.
+    fn variant_switch(
+        &self,
+        block: &ast::Block,
+        name: &str,
+        each: &[Reflect],
+    ) -> Option<(ast::Expr, ast::Expr)> {
+        if each.is_empty() || !each.iter().all(|r| matches!(r, Reflect::Variant(_))) {
+            return None;
+        }
+        if !block.stmts().is_empty() {
+            return None;
+        }
+        let tail = block.tail_expr()?;
+        let ast::Expr::If(_) = &tail else {
+            return None;
+        };
+        if tail.syntax().token(K::CONST_KW).is_some() {
+            return None;
+        }
+        let [cond, then] = tail.sub_exprs().try_into().ok()?;
+        let ast::Expr::MethodCall(_) = &cond else {
+            return None;
+        };
+        let receiver = cond.sub_exprs().into_iter().next()?;
+        let is_v = receiver.syntax().kind() == K::PATH_EXPR
+            && receiver.syntax().text().trim() == name
+            && ast::member_name(cond.syntax()).is_some_and(|m| m.text() == "is");
+        let args: Vec<ast::Expr> = cond
+            .syntax()
+            .child(K::ARG_LIST)
+            .and_then(ast::ArgList::cast)
+            .map(|l| l.args().filter_map(|a| a.expr()).collect())
+            .unwrap_or_default();
+        match args.as_slice() {
+            [x] if is_v && x.syntax().kind() == K::PATH_EXPR => Some((x.clone(), then)),
+            _ => None,
+        }
+    }
+
+    /// `inline for v in variants(t) { if v.is(x) { body } }` as one match on `x`: an arm for each
+    /// variant, binding the fields `x.[f]` reads in its body, which then reads those bindings.
+    fn variant_match(
+        &mut self,
+        range: TextRange,
+        name: &str,
+        each: &[Reflect],
+        x: &ast::Expr,
+        body: &ast::Expr,
+    ) -> ExprId {
+        let Some(adt) = self.template_enum() else {
+            return self.missing(range);
+        };
+        let scrutinee = self.expr(x);
+        let base = x.syntax().text().trim().to_string();
+        let mut arms = Vec::new();
+        for r in each {
+            let Reflect::Variant(k) = *r else {
+                continue;
+            };
+            let count = self.items.variant(adt, k).fields.len();
+            self.reflected.push((name.to_string(), *r));
+            self.known.push(Known {
+                base: base.clone(),
+                variant: k,
+                locals: vec![None; count],
+            });
+            let lowered = self.expr(body);
+            let known = self.known.pop().expect("pushed above");
+            self.reflected.pop();
+            let fields = known
+                .locals
+                .iter()
+                .enumerate()
+                .filter_map(|(i, l)| {
+                    l.map(|local| {
+                        let bind = self.alloc_pat(PatKind::Bind { local, sub: None }, range);
+                        (i as u32, bind)
+                    })
+                })
+                .collect();
+            let pat = self.alloc_pat(
+                PatKind::Adt {
+                    adt,
+                    variant: k,
+                    fields,
+                },
+                range,
+            );
+            arms.push(Arm {
+                pat,
+                guard: None,
+                body: lowered,
+            });
+        }
+        self.alloc(ExprKind::Match { scrutinee, arms }, range)
+    }
+
+    /// `if v.is(x) { a } else { b }`, for a reflected variant `v` and `x` a name, as
+    /// `match x { V { … } => a, _ => b }`: in `a`, `x.[f]` reads the arm's binding of the field.
+    /// `None` for any other `if`.
+    pub(super) fn variant_if(&mut self, node: &SyntaxNode, e: &ast::Expr) -> Option<ExprId> {
+        let range = node.text_range();
+        let adt = self.template_enum()?;
+        let subs = e.sub_exprs();
+        let (cond, then) = (subs.first()?, subs.get(1)?);
+        let ast::Expr::MethodCall(_) = cond else {
+            return None;
+        };
+        if !ast::member_name(cond.syntax()).is_some_and(|m| m.text() == "is") {
+            return None;
+        }
+        let v = self.reflected_variant(cond.sub_exprs().into_iter().next()?.syntax())?;
+        let args: Vec<ast::Expr> = cond
+            .syntax()
+            .child(K::ARG_LIST)
+            .and_then(ast::ArgList::cast)
+            .map(|l| l.args().filter_map(|a| a.expr()).collect())
+            .unwrap_or_default();
+        let [x] = args.as_slice() else {
+            return None;
+        };
+        if x.syntax().kind() != K::PATH_EXPR {
+            return None;
+        }
+        let scrutinee = self.expr(x);
+        let count = self.items.variant(adt, v).fields.len();
+        self.known.push(Known {
+            base: x.syntax().text().trim().to_string(),
+            variant: v,
+            locals: vec![None; count],
+        });
+        let yes = self.expr(then);
+        let known = self.known.pop().expect("pushed above");
+        let no = match subs.get(2) {
+            Some(other) => self.expr(other),
+            None => self.alloc(ExprKind::Unit, range),
+        };
+        let fields = known
+            .locals
+            .iter()
+            .enumerate()
+            .filter_map(|(i, l)| {
+                l.map(|local| {
+                    let bind = self.alloc_pat(PatKind::Bind { local, sub: None }, range);
+                    (i as u32, bind)
+                })
+            })
+            .collect();
+        let pat = self.alloc_pat(
+            PatKind::Adt {
+                adt,
+                variant: v,
+                fields,
+            },
+            range,
+        );
+        let wild = self.alloc_pat(PatKind::Wild, range);
+        Some(self.alloc(
+            ExprKind::Match {
+                scrutinee,
+                arms: vec![
+                    Arm {
+                        pat,
+                        guard: None,
+                        body: yes,
+                    },
+                    Arm {
+                        pat: wild,
+                        guard: None,
+                        body: no,
+                    },
+                ],
+            },
+            range,
+        ))
+    }
+
+    /// For `x.[f]` in an arm of such a match, where `x` is that arm's variant: the local field
+    /// `f` is bound to there, made on first use.
+    fn known_field(&mut self, base: &ast::Expr, f: FieldRef, range: TextRange) -> Option<ExprId> {
+        let text = base.syntax().text().trim().to_string();
+        let closure = self.closure;
+        let i = self
+            .known
+            .iter()
+            .rposition(|k| k.base == text && k.variant == f.variant)?;
+        let local = match self.known[i].locals.get(f.k as usize).copied().flatten() {
+            Some(l) => l,
+            None => {
+                let l = self.out.body.locals.alloc(Local {
+                    name: "{field}".to_string(),
+                    mutable: false,
+                    range,
+                    closure,
+                });
+                *self.known[i].locals.get_mut(f.k as usize)? = Some(l);
+                l
+            }
+        };
+        let value = self.alloc(ExprKind::Local(local), range);
+        Some(self.alloc(ExprKind::Deref(value), range))
     }
 
     /// A struct literal's fields, as names, where each name is, and values: `name: e` and
@@ -375,6 +592,15 @@ impl Lowerer<'_> {
     pub(super) fn reflected_field(&mut self, node: &SyntaxNode) -> ExprId {
         let range = node.text_range();
         let exprs: Vec<ast::Expr> = node.children().filter_map(ast::Expr::cast).collect();
+        // In an arm where `x` is known to be the field's variant: the arm's binding.
+        if let (Some(b), Some(f)) = (
+            exprs.first(),
+            exprs.get(1).and_then(|f| self.reflected(f.syntax())),
+        ) && self.template_enum().is_some()
+            && let Some(e) = self.known_field(b, f, range)
+        {
+            return e;
+        }
         let base = match exprs.first() {
             Some(b) => self.expr(b),
             None => self.missing(range),
@@ -743,6 +969,13 @@ impl Lowerer<'_> {
         let [a, b] = subs else {
             return None;
         };
+        // `v == w`: whether two reflected variants are the same one.
+        if let (Some(v), Some(w)) = (
+            self.reflected_variant(a.syntax()),
+            self.reflected_variant(b.syntax()),
+        ) {
+            return Some((v == w) == eq);
+        }
         let name = |this: &Self, x: &ast::Expr| -> Option<String> {
             if let ast::Expr::Field(_) = x {
                 let base = x.sub_exprs().into_iter().next()?;

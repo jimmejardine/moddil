@@ -207,9 +207,15 @@ struct Order {
   `prelude/derives.moddil`, named by `#[derive_by]` on each trait. That replaced the generators in
   `crates/sema/src/derive.rs`. `Copy`, `Eq` and a `Copy` type's `*self` clone stay built in. The
   reference interpreter keeps its structural derives, so the conformance suite compares the two.
-  Every field must still implement the trait, checked at the `#[derive]`. On a loop of derived
-  operations on an enum and a struct, the templates' if chains ran about 7% slower than the
-  generated matches.
+  Every field must still implement the trait, checked at the `#[derive]`.
+- **`if v.is(x)` compiles to a match (decided 24 November 2026).** In a template, `if v.is(x) {
+  a } else { b }` (`x` a name) lowers to `match x { V { … } => a, _ => b }`, and an `inline for v
+  in variants(t)` whose block is only such an `if` lowers to one match with an arm per variant.
+  In `a`, `x.[f]` reads the arm's binding, with no second match. With `if const v == w`, the
+  comparison derives match `self` and then `other`, as the generated code did. A loop of derived
+  `==`, `clone`, `cmp` and `hash` on an enum and a struct ran about 7% slower with if chains, and
+  about 3% slower (within the noise of the measurement) with these matches, than with the old
+  generators.
 - **Tuples in `#[derive_for]` (decided 24 November 2026).** `#[derive_for(tuples(2..=12))]`
   makes a template's impl for each size of tuple, with every element type bounded. A tuple's
   elements reflect as fields named `0`, `1`, …, so the prelude's `Clone`, `Debug` and `Hash` for

@@ -65,6 +65,7 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
         },
         template: None,
         reflected: Vec::new(),
+        known: Vec::new(),
         unsafe_depth: 0,
         received: None,
     };
@@ -347,6 +348,9 @@ struct Lowerer<'a> {
     /// The reflected fields and variants `inline for` names in scope, innermost last: each
     /// name and what it reflects.
     reflected: Vec<(String, templates::Reflect)>,
+    /// The arms of the matches `inline for v in variants(t) { if v.is(x) { … } }` lowers to,
+    /// innermost last: in each, which variant `x` is, and the locals its fields are bound to.
+    known: Vec<templates::Known>,
     /// How many `unsafe` blocks the expression being lowered is in (`expr.unsafe.1`).
     unsafe_depth: u32,
     /// While a selectable function's rest is lowered: where its receive is, and the local that

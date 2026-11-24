@@ -71,8 +71,9 @@ way, it is an error (E1007).
 if not (`()` without `else`). Only the branch taken is part of the impl, so only it is checked. `c`
 is reflection: `f.is_refined()`, `f.name == "…"` or `!=`, `t.is_enum()` (whether the template is
 instantiated for an enum), `t.is_unit()` and `t.is_positional()` (whether a struct `t` has no
-fields, or positional ones), the same of a variant `v`, `true` and `false`, joined by `!`, `&&` and
-`||` (E1007). Outside a template, `if const` is not supported yet (I0001).
+fields, or positional ones), the same of a variant `v`, `v.is_default()` (whether `v` is marked
+`#[default]`), `v == w` or `!=` of two reflected variants, `true` and `false`, joined by `!`, `&&`
+and `||` (E1007). Outside a template, `if const` is not supported yet (I0001).
 
 **comptime.template.variant.1** In a template instantiated for an enum, `inline for v in
 variants(t) { … }` is its block once for each of the enum's variants, in the order they are

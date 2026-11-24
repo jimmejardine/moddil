@@ -598,6 +598,10 @@ impl Lowerer<'_> {
         if node.token(K::CONST_KW).is_some() {
             return self.if_const(node, e);
         }
+        // `if v.is(x) { … }` in a template: a match on `x` (`comptime.template.variant.1`).
+        if let Some(m) = self.variant_if(node, e) {
+            return m;
+        }
         let mut subs = e.sub_exprs().into_iter();
         // Names bound by `let` conditions are in scope in the condition after them and in the
         // first block, not in the `else` branch.

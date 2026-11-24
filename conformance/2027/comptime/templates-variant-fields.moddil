@@ -161,3 +161,42 @@ test "a template reflects on a variant's fields" {
     p.copied().b                                           // => 1
     ;
 }
+
+/// Which comes first, by variant only: written with a match on each value.
+#[derive_by(rank)]
+trait Rank {
+    fn rank(&self, other: &Self) -> int;
+}
+
+const fn rank(t: type) -> Impl<Rank> {
+    impl Rank for t {
+        fn rank(&self, other: &Self) -> int {
+            inline for v in variants(t) {
+                if v.is(self) {
+                    inline for w in variants(t) {
+                        if w.is(other) {
+                            if const v == w {
+                                return 0;
+                            } else {
+                                return w.index - v.index;
+                            }
+                        }
+                    }
+                }
+            }
+            loop {}
+        }
+    }
+}
+
+#[derive(Rank)]
+enum Step { First, Second(int), Third { n: int } }
+
+test "if const compares reflected variants" {
+    Step::First.rank(&Step::Third { n: 1 })                  // => 2
+    ;
+    Step::Second(4).rank(&Step::Second(5))                    // => 0
+    ;
+    Step::Third { n: 1 }.rank(&Step::First)                   // => -2
+    ;
+}

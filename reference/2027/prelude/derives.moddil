@@ -39,15 +39,15 @@ const fn derive_partial_eq(t: type) -> Impl<PartialEq> {
             if const t.is_enum() {
                 inline for v in variants(t) {
                     if v.is(self) {
-                        if !v.is(other) {
-                            return false;
-                        }
-                        inline for f in fields(v) {
-                            if !(self.[f] == other.[f]) {
-                                return false;
+                        if v.is(other) {
+                            inline for f in fields(v) {
+                                if !(self.[f] == other.[f]) {
+                                    return false;
+                                }
                             }
+                            return true;
                         }
-                        return true;
+                        return false;
                     }
                 }
                 false
@@ -68,30 +68,26 @@ const fn derive_partial_ord(t: type) -> Impl<PartialOrd> {
     impl PartialOrd for t {
         fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
             if const t.is_enum() {
-                let mut a = 0;
-                let mut b = 0;
                 inline for v in variants(t) {
                     if v.is(self) {
-                        a = v.index;
-                    }
-                    if v.is(other) {
-                        b = v.index;
-                    }
-                }
-                if a != b {
-                    return Some(a.cmp(&b));
-                }
-                inline for v in variants(t) {
-                    if v.is(self) {
-                        inline for f in fields(v) {
-                            match self.[f].partial_cmp(&other.[f]) {
-                                Some(Ordering::Equal) => {}
-                                c => return c,
+                        inline for w in variants(t) {
+                            if w.is(other) {
+                                if const v == w {
+                                    inline for f in fields(v) {
+                                        match self.[f].partial_cmp(&other.[f]) {
+                                            Some(Ordering::Equal) => {}
+                                            c => return c,
+                                        }
+                                    }
+                                    return Some(Ordering::Equal);
+                                } else {
+                                    return Some(v.index.cmp(&w.index));
+                                }
                             }
                         }
                     }
                 }
-                Some(Ordering::Equal)
+                None
             } else {
                 inline for f in fields(t) {
                     match self.[f].partial_cmp(&other.[f]) {
@@ -110,30 +106,26 @@ const fn derive_ord(t: type) -> Impl<Ord> {
     impl Ord for t {
         fn cmp(&self, other: &Self) -> Ordering {
             if const t.is_enum() {
-                let mut a = 0;
-                let mut b = 0;
                 inline for v in variants(t) {
                     if v.is(self) {
-                        a = v.index;
-                    }
-                    if v.is(other) {
-                        b = v.index;
-                    }
-                }
-                if a != b {
-                    return a.cmp(&b);
-                }
-                inline for v in variants(t) {
-                    if v.is(self) {
-                        inline for f in fields(v) {
-                            match self.[f].cmp(&other.[f]) {
-                                Ordering::Equal => {}
-                                c => return c,
+                        inline for w in variants(t) {
+                            if w.is(other) {
+                                if const v == w {
+                                    inline for f in fields(v) {
+                                        match self.[f].cmp(&other.[f]) {
+                                            Ordering::Equal => {}
+                                            c => return c,
+                                        }
+                                    }
+                                    return Ordering::Equal;
+                                } else {
+                                    return v.index.cmp(&w.index);
+                                }
                             }
                         }
                     }
                 }
-                Ordering::Equal
+                loop {}
             } else {
                 inline for f in fields(t) {
                     match self.[f].cmp(&other.[f]) {

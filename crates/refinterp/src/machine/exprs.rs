@@ -937,6 +937,15 @@ impl Machine<'_> {
             .syntax()
             .parent()
             .map_or_else(|| first.syntax().text_range(), |p| p.text_range());
+        // `v == w` of two reflected variants, in `if const` (`comptime.template.if.1`).
+        if let [(op @ (K::EQ_EQ | K::BANG_EQ), x)] = rest
+            && let (Some((_, a)), Some((_, b))) = (
+                self.reflected_variant(first.syntax()),
+                self.reflected_variant(x.syntax()),
+            )
+        {
+            return Ok(Value::Bool((a == b) == (*op == K::EQ_EQ)));
+        }
         let mut prev = self.place(first)?;
         for (op, x) in rest {
             let cur = self.place(x)?;
