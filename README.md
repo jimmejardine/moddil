@@ -22,44 +22,6 @@ Its core idea is **semantics that are explicit and checked by machines**. Effect
 ownership and resources, and where code and data live all appear in the types and are checked by
 the compiler. That makes code easier for agents to write correctly and for humans to review.
 
-## Status
-
-Moddil is **early in M0**, the first milestone. The design in `specs/` ranges from brainstorm to
-decided direction; none of it is a formal specification yet. Implemented so far:
-
-- **The grammar** for all decided syntax, in
-  [`reference/grammar/moddil.ebnf`](reference/grammar/moddil.ebnf), checked LL(3). GBNF, Lark and
-  tree-sitter grammars are generated from it.
-- **A lexer and parser** for the whole grammar.
-- **Slices S0 to S11, end to end**: functions, `let`, `int` and `bool`, arithmetic with overflow
-  traps, `if`, blocks and calls (S0); tuples, structs, enums, exhaustive `match`, `if let`,
-  `let … else`, loops and `assert` (S1); moves, `Copy`, borrows checked on MIR, and `defer` (S2);
-  generics, traits, methods, operators through traits, derives, destructors and a prelude
-  written in Moddil (S3); errors with `fail`, `?`, `?!`, `try` and `catch`, `errdefer` and
-  `Result` (S4); effects: traits and context data after `with`, handlers, inference of a private
-  function's effects and errors, and `dyn` borrows (S5); several files and mods: the module tree,
-  visibility, `use`, the `moddil.toml` manifest and dependencies by path (S6); closures, the
-  closure traits, anonymous impls and `#[track_caller]` (S7a); text: `char`, `str` and `String`,
-  their literals, `Display` and `fmt"…"` (S7b); arrays, slices, views, `for` and iterators,
-  `Vec`, `HashMap` and `HashSet` written in Moddil, and collection literals (S7c); consts and
-  `const fn` evaluated when compiling, and `Debug` and `Default` (S8a); refinements and contracts
-  (S8b); function wrappers, `#[around]` (S8c); tasks and scopes under a deterministic scheduler
-  (S9a); named and default arguments, and cancellation with unwinding, isolated scopes, channels,
-  `select` and stop (S9b); functions as values, `impl Trait` results, `map`, `filter` and
-  `collect`, `test … for`, the ambient `log`, `main`'s root capabilities and `ExitCode`, and
-  `#[selectable]` (S9c); stub mods, doc comments, `Pattern` and bounds on a closure's errors, and
-  **the tour, [`tour/shorty`](tour/shorty/README.md), checked in CI**: M0's gate (S9d); numbers: the
-  sized integers, `f32` and `f64`, typed literals, conversions and the float methods, with the
-  [Mandelbulb](examples/mandelbulb/README.md) core checked and its preview run in CI (S10); `String`
-  written in Moddil, in the small-string form (S11).
-  They go through names and types, the MIR and the MIR interpreter, and run on the independent
-  reference interpreter too. Both are checked by the
-  [conformance suite](conformance/README.md), whose tests cite the
-  [2027 reference](reference/README.md).
-
-Code in the specs follows [`syntax.md`](specs/syntax.md) and the grammar; not all of it runs yet,
-and the [roadmap](specs/roadmap.md#still-to-build) says what is still to build.
-
 ## Start here
 
 Read [`specs/README.md`](specs/README.md) first. It is the **index**: every area with a status
@@ -68,15 +30,27 @@ the document that holds its detail. Then read [Why Moddil](specs/vision.md) for 
 [firm requirements](specs/requirements.md#firm-requirements-decided). People and agents editing
 the specs should follow [Working on these specs](specs/README.md#working-on-these-specs).
 
+The language itself is defined by the [2027 reference](reference/README.md) and its grammar,
+[`reference/grammar/moddil.ebnf`](reference/grammar/moddil.ebnf); the
+[conformance suite](conformance/README.md) checks every implementation against it. Code in the
+specs follows [`syntax.md`](specs/syntax.md) and the grammar, but not all of it runs yet: the
+[roadmap](specs/roadmap.md) has the milestones and what is still to build.
+
 ## Layout
 
 ```
 specs/        the design: one document per area, indexed by specs/README.md
 reference/    the normative reference, and the grammar (reference/grammar/moddil.ebnf)
 conformance/  the shared test suite every implementation must pass
-crates/       the Rust implementation: the stage-0 compiler and its tools
+crates/       the Rust implementation: the compiler, the MIR and reference interpreters, the
+              native and WASM backends, the C and Python bindings, and the language server
+mods/         the standard mods, written in Moddil
+tour/         the dogfood tour, the tour/shorty mod
+examples/     the reference examples as programs: Mandelbulb, zlib, a C ABI, a Python module
 editors/      editor support: the tree-sitter grammar
-tools/        helper scripts: the spec link checker, the grammar check and the CI script
+model/        the Lean model of the core
+bootstrap/    reserved for after self-hosting
+tools/        helper scripts: the CI script, the spec link checker and the grammar check
 ```
 
 The full layout, including the directories that fill up during M0, is in
@@ -85,11 +59,12 @@ The full layout, including the directories that fill up during M0, is in
 ## Building
 
 Needs [rustup](https://rustup.rs) and Python 3.8 or later. The pinned Rust toolchain installs
-itself on first use.
+itself on first use. Node (with JSPI) and Chrome are optional: without them the WASM and browser
+tests are skipped.
 
 ```
 cargo build --workspace
-python tools/ci.py        # fmt, clippy, deny, test, links, grammars: the same checks GitHub runs
+python tools/ci.py        # fmt, clippy, deny, test, tour, examples, links, grammars: as GitHub runs
 python tools/ci.py quick  # while working: fmt, and the library and conformance tests (~30 s)
 ```
 
@@ -114,6 +89,20 @@ cargo run -p moddil -- test hello.moddil    # test "add" ... ok
 A test checks values in two ways: `// =>` states the value of the expression before it, and
 `assert` checks a condition. When an `assert` fails, the trap shows the value of every part of
 the condition ([`specs/testing.md`: Assertions](specs/testing.md#assertions)).
+
+Each command takes a file, or a mod's directory (with a `moddil.toml`):
+
+```
+moddil check     reports the errors in a program
+moddil run       runs fn main(), compiled to native code (--interp: on the MIR interpreter;
+                 --wasm: as WebAssembly, in Node), and prints its result
+moddil test      runs the mod's tests, natively (--interp, --wasm as for run)
+moddil build     compiles fn main() into an executable (--release: a release build)
+  --wasm         WebAssembly and the JS glue that runs it in a browser or in Node
+  --lib          the mod's #[export] functions as a C library and its header (--static: static)
+  --wheel        the mod's #[export(python)] functions and structs as a Python module and wheel
+moddil lsp       the language server, for an editor
+```
 
 See [`crates/README.md`](crates/README.md) for more.
 
