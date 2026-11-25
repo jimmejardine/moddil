@@ -23,7 +23,7 @@ use lsp_types::request::{
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionOptions, CompletionParams, CompletionResponse,
     Diagnostic, DiagnosticSeverity, GotoDefinitionParams, GotoDefinitionResponse, Hover,
-    HoverContents, HoverParams, HoverProviderCapability, InlayHint, InlayHintLabel,
+    HoverContents, HoverParams, HoverProviderCapability, InlayHint, InlayHintKind, InlayHintLabel,
     InlayHintParams, Location, MarkupContent, MarkupKind, NumberOrString, OneOf, Position,
     PublishDiagnosticsParams, Range, ServerCapabilities, TextDocumentSyncCapability,
     TextDocumentSyncKind, Uri,
@@ -284,14 +284,21 @@ impl Server {
                         .into_iter()
                         .map(|h| {
                             let (line, character) = ix.position(h.offset);
+                            let (kind, left, right) = match h.kind {
+                                crate::HintKind::Type => (Some(InlayHintKind::TYPE), false, false),
+                                crate::HintKind::Parameter => {
+                                    (Some(InlayHintKind::PARAMETER), false, true)
+                                }
+                                crate::HintKind::Effect => (None, true, false),
+                            };
                             InlayHint {
                                 position: Position { line, character },
                                 label: InlayHintLabel::String(h.label),
-                                kind: None,
+                                kind,
                                 text_edits: None,
                                 tooltip: None,
-                                padding_left: Some(true),
-                                padding_right: None,
+                                padding_left: Some(left),
+                                padding_right: Some(right),
                                 data: None,
                             }
                         })

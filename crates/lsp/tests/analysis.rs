@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use moddil_lsp::{Analysis, CompletionKind};
+use moddil_lsp::{Analysis, CompletionKind, HintKind};
 
 const PROGRAM: &str = "\
 pub struct Point {
@@ -159,7 +159,63 @@ fn hints_mark_the_calls_that_suspend() {
         "{hints:?}"
     );
     // Only calls that may suspend.
-    assert!(hints.iter().all(|h| h.label == "suspends"), "{hints:?}");
+    assert!(
+        hints
+            .iter()
+            .filter(|h| h.kind == HintKind::Effect)
+            .all(|h| h.label == "suspends"),
+        "{hints:?}"
+    );
+}
+
+#[test]
+fn hints_show_inferred_types_and_parameter_names() {
+    let text = format!(
+        "{PROGRAM}
+         fn more(n: int) -> int {{
+             let a = twice(3);
+             let b: int = twice(n);
+             let p = Point {{ x: a, y: b }};
+             let add = |k| k + p.sum();
+             add(a)
+         }}
+"
+    );
+    let (mut a, path) = open("type-hints", &text);
+    let hints = a.hints(&path);
+    let has = |at: u32, label: &str, kind: HintKind| {
+        hints
+            .iter()
+            .any(|h| h.offset == at && h.label == label && h.kind == kind)
+    };
+    let none_at = |at: u32| !hints.iter().any(|h| h.offset == at);
+    // After each name bound with no type written: not `b`'s, written, nor a closure's.
+    assert!(
+        has(at(&text, "let a", 0, 5), ": int", HintKind::Type),
+        "{hints:?}"
+    );
+    assert!(
+        has(
+            at(&text, "let p = Point { x: a", 0, 5),
+            ": Point",
+            HintKind::Type
+        ),
+        "{hints:?}"
+    );
+    assert!(
+        has(at(&text, "|k|", 0, 2), ": int", HintKind::Type),
+        "{hints:?}"
+    );
+    assert!(none_at(at(&text, "let b", 0, 5)), "{hints:?}");
+    assert!(none_at(at(&text, "let add", 0, 7)), "{hints:?}");
+    // A parameter's name before an argument that does not say it: `twice(n: 3)`, not
+    // `twice(n)`, and none for a closure called through a local.
+    assert!(
+        has(at(&text, "twice(3)", 0, 6), "n:", HintKind::Parameter),
+        "{hints:?}"
+    );
+    assert!(none_at(at(&text, "twice(n)", 0, 6)), "{hints:?}");
+    assert!(none_at(at(&text, "add(a)", 0, 4)), "{hints:?}");
 }
 
 #[test]

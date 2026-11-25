@@ -1,5 +1,6 @@
 //! The Moddil language server (`moddil lsp`, `toolchain.md`: Editor support): live diagnostics,
-//! hover, go to definition, inlay hints at suspension points, completion, and formatting.
+//! hover, go to definition, inlay hints (inferred types, parameter names, and the calls that
+//! suspend or spawn), completion, and formatting.
 //!
 //! - [`Analysis`] answers by file and byte offset, over the same salsa queries `moddil check` uses,
 //!   so an edit recomputes only what depends on it. It is the testable part.
@@ -36,13 +37,26 @@ pub struct Problem {
     pub message: String,
 }
 
-/// An inlay hint: text shown after byte `offset`.
+/// An inlay hint: text shown at byte `offset`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Hint {
-    /// Where it goes.
+    /// Where it goes: after what it is about, or before it for a parameter's name.
     pub offset: u32,
-    /// What it says.
+    /// What it says, with its punctuation (`: int`, `n:`).
     pub label: String,
+    /// What kind of hint it is.
+    pub kind: HintKind,
+}
+
+/// What an inlay hint says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum HintKind {
+    /// A binding's inferred type, after it (`let x: int`).
+    Type,
+    /// The name of the parameter an argument is for, before it (`twice(n: 3)`).
+    Parameter,
+    /// That a call may suspend or spawn, after it.
+    Effect,
 }
 
 /// The programs being edited, each loaded from its mod (the nearest `moddil.toml` above a file)

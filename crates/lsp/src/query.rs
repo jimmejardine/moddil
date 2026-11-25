@@ -1,14 +1,14 @@
 //! Hover, go to definition and inlay hints: what is at an offset of a file, found in its body's
 //! HIR and types, or (in signatures, `use` lines and the like) by the name under the cursor.
 
-use moddil_sema::hir::{ExprId, ExprKind, PatKind};
+use moddil_sema::hir::{ExprId, ExprKind, PatKind, Stmt};
 use moddil_sema::{
     Callee, Container, Db, Def, Inference, Item, ItemTree, Lowered, Owner, Program, SPAWN, SUSPEND,
     SelfKind, Solver, Src, TraitRef, Ty,
 };
 use moddil_syntax::{SyntaxKind, TextRange};
 
-use crate::Hint;
+use crate::{Hint, HintKind};
 
 /// Queries about one file of a program.
 /// Where a definition is.
@@ -387,12 +387,120 @@ impl<'db> Query<'db> {
                 out.push(Hint {
                     offset: x.range.end,
                     label: label.to_string(),
+                    kind: HintKind::Effect,
+                });
+            }
+            self.type_hints(&b, &mut out);
+            self.parameter_hints(&b, &mut out);
+        }
+        out.sort_by_key(|h| (h.offset, h.kind));
+        out.dedup();
+        out
+    }
+
+    /// After each name a `let` or a closure's parameter binds with no type written, its
+    /// inferred type (`let x: int`).
+    fn type_hints(&self, b: &Body<'_>, out: &mut Vec<Hint>) {
+        let body = &b.lowered.body;
+        // The patterns whose names get their types shown.
+        let mut untyped = Vec::new();
+        for (_, x) in body.exprs.iter() {
+            match &x.kind {
+                ExprKind::Block { stmts, .. } => {
+                    for s in stmts {
+                        if let Stmt::Let { pat, ty: None, .. } = s {
+                            untyped.push(body.pats[*pat].range);
+                        }
+                    }
+                }
+                ExprKind::Closure { params, .. } => {
+                    for (pat, ty) in params {
+                        if ty.is_none() {
+                            untyped.push(body.pats[*pat].range);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for (_, p) in body.pats.iter() {
+            let PatKind::Bind { local, sub: None } = &p.kind else {
+                continue;
+            };
+            if p.range.is_empty()
+                || !untyped
+                    .iter()
+                    .any(|r| r.start <= p.range.start && p.range.end <= r.end)
+            {
+                continue;
+            }
+            let ty = b.types.local(*local);
+            // Nothing to say for a closure: its type is its code.
+            if ty.has_error() || ty.has_infer() || ty == Ty::Unit || matches!(ty, Ty::Closure(_)) {
+                continue;
+            }
+            out.push(Hint {
+                offset: p.range.end,
+                label: format!(": {ty}"),
+                kind: HintKind::Type,
+            });
+        }
+    }
+
+    /// Before each argument of a call of a named function, the name of its parameter
+    /// (`twice(n: 3)`), unless the argument says it already (`twice(n)`).
+    fn parameter_hints(&self, b: &Body<'_>, out: &mut Vec<Hint>) {
+        let body = &b.lowered.body;
+        for (e, x) in body.exprs.iter() {
+            let (args, method) = match &x.kind {
+                // A closure called through a local (`add(a)`) has no parameter names.
+                ExprKind::Call { callee, .. }
+                    if matches!(body.exprs[*callee].kind, ExprKind::Local(_)) =>
+                {
+                    continue;
+                }
+                ExprKind::Call { args, .. } => (args, false),
+                ExprKind::MethodCall { args, .. } => (args, true),
+                _ => continue,
+            };
+            let Some(c) = b.types.callee(e) else { continue };
+            let f = self.resolve(c);
+            let Some(sig) = self.items.fns.get(f as usize) else {
+                continue;
+            };
+            // A method call's receiver is its `self`, not one of its arguments.
+            let skip = usize::from(method && sig.self_kind.is_some());
+            let params = &sig.params[skip.min(sig.params.len())..];
+            // `set_len(n)`: the function's name says what its one parameter is.
+            if params.len() == 1
+                && params[0]
+                    .name
+                    .as_ref()
+                    .is_some_and(|n| sig.name.ends_with(n.as_str()))
+            {
+                continue;
+            }
+            for (arg, param) in args.iter().zip(params) {
+                let Some(name) = &param.name else { continue };
+                if name.starts_with('_') {
+                    continue;
+                }
+                let same = match &body.exprs[*arg].kind {
+                    ExprKind::Local(l) => body.locals[*l].name == *name,
+                    ExprKind::Field { name: field, .. } => field == name,
+                    _ => false,
+                };
+                let range = body.exprs[*arg].range;
+                if same || range.is_empty() {
+                    continue;
+                }
+                out.push(Hint {
+                    offset: range.start,
+                    label: format!("{name}:"),
+                    kind: HintKind::Parameter,
                 });
             }
         }
-        out.sort_by_key(|h| h.offset);
-        out.dedup();
-        out
     }
 }
 

@@ -48,7 +48,7 @@ python tools/ci.py --wsl       # the same steps in WSL (Linux); --all runs both
 | [`ffi/`](ffi/src/lib.rs) | `moddil-ffi` | C interop for the runtimes: a mod's `[c]` code compiled, C libraries loaded, and calls into C from the MIR interpreter (M3a) |
 | [`py/`](py/src/lib.rs) | `moddil-py` | Python bindings: the Moddil shims, the C glue and the stubs that `moddil build --wheel` builds (M3b) |
 | [`gpu/`](gpu/src/lib.rs) | `moddil-gpu` | Kernels (`#[kernel]`) to WGSL: their MIR built as naga IR, with structured control flow and a thread per pixel, validated by naga, and written out (M2e, M2g) |
-| [`lsp/`](lsp/src/lib.rs) | `moddil-lsp` | The language server (`moddil lsp`): diagnostics, hover, go to definition, inlay hints and completion over the compiler's salsa queries (M2f) |
+| [`lsp/`](lsp/src/lib.rs) | `moddil-lsp` | The language server (`moddil lsp`): diagnostics, hover, go to definition, inlay hints (types, parameter names, suspension points), completion and formatting over the compiler's salsa queries (M2f) |
 | [`sched/`](sched/src/lib.rs) | `moddil-sched` | The task scheduler the runtimes written in Rust share (the MIR interpreter's and `moddil-rt`'s, natively and in WebAssembly), generic over their values, traps, drop glue and OS, so a native run's task order is the interpreter's |
 | [`os/`](os/src/lib.rs) | `moddil-os` | The host's side of `core::os` for the runtimes written in Rust (the MIR interpreter, and moddil-rt natively): sockets, arguments, standard error, randomness and signals |
 | [`rt-wasm/`](rt-wasm/README.md) | `moddil-rt-wasm` | `moddil-rt` built for wasm32: the runtime a WASM module shares its memory with |

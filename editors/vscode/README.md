@@ -3,7 +3,10 @@
 A thin extension: colouring from a TextMate grammar
 ([`syntaxes/moddil.tmLanguage.json`](syntaxes/moddil.tmLanguage.json)), and everything else from
 the `moddil` language server ([`crates/lsp`](../../crates/lsp/src/lib.rs)), started as
-`moddil lsp`: diagnostics as you type, hover, go to definition, inlay hints and completion.
+`moddil lsp`: diagnostics as you type, hover, go to definition, completion, formatting
+(Format Document, or `"[moddil]": { "editor.formatOnSave": true }`), and inlay hints: each
+binding's inferred type, the parameter an argument is for, and the calls that suspend or spawn
+(`editor.inlayHints.enabled` turns them off).
 
 ## Using it
 
