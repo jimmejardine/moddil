@@ -1,0 +1,37 @@
+// covers: generic.const.3
+
+const SIZE: int = 4;
+const CELLS: int = SIZE * SIZE;
+const HALF: int = (CELLS - 2) / 2 + 1;
+
+struct Grid<const N: int> {
+    cells: [int; N],
+}
+
+fn count<const N: int>(g: &Grid<N>) -> int {
+    N
+}
+
+fn width<const N: int>() -> int {
+    N
+}
+
+test "a const item as an array's length" {
+    let a: [int; CELLS] = [0; CELLS];
+    a.len()                                 // => 16
+    ;
+    let b: [bool; HALF] = [true; HALF];
+    b.len()                                 // => 8
+    ;
+    let c: [int; SIZE + 1] = [1; SIZE + 1];
+    c.len()                                 // => 5
+}
+
+test "a const item as a const argument" {
+    let g: Grid<SIZE> = Grid { cells: [7; SIZE] };
+    count(&g)                               // => 4
+    ;
+    width::<CELLS>()                        // => 16
+    ;
+    width::<{SIZE * 3}>()                   // => 12
+}

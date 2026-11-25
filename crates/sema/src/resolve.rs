@@ -436,11 +436,53 @@ pub(crate) fn array_len(e: &ast::Expr, scope: &Scope, diags: &mut Vec<Diagnostic
         ));
         return Ty::Error;
     }
-    diags.push(Diagnostic::unsupported(
-        range,
-        "an array length other than a literal or a const parameter",
-    ));
-    Ty::Error
+    // A const item, or arithmetic on literals and const items (`generic.const.3`).
+    match crate::constfold::fold(e, &mut |segs| const_named(scope, segs)) {
+        Ok(v) => Ty::Len(v),
+        Err(why) => {
+            diags.push(Diagnostic::error(
+                Code::E0201,
+                range,
+                format!("an array's length is known when compiling: {why}"),
+            ));
+            Ty::Error
+        }
+    }
+}
+
+/// The value of the `int` const item path `segs` names in `scope`, if it names one
+/// (`generic.const.3`).
+pub(crate) fn const_named(scope: &Scope, segs: &[String]) -> Option<Result<i64, String>> {
+    let names: Vec<&str> = segs.iter().map(String::as_str).collect();
+    match scope.tree.path(scope.module, &names, scope.prelude_first) {
+        Ok((Def::Fn(f), n)) if n == segs.len() => scope.tree.const_values.get(&f).cloned(),
+        _ => None,
+    }
+}
+
+/// The const item a type argument names (`f::<LIMIT>()`, `Grid<SIZE>`), as a length, if it is one
+/// (`generic.const.3`).
+fn const_type_arg(t: &ast::Type, scope: &Scope) -> Option<Result<i64, String>> {
+    let ast::Type::Path(_) = t else {
+        return None;
+    };
+    let segs: Vec<String> = t
+        .syntax()
+        .descendants()
+        .into_iter()
+        .filter(|n| n.kind() == K::PATH_SEGMENT)
+        .map(|s| {
+            s.token(K::IDENT)
+                .map(|t| t.text().to_string())
+                .filter(|_| s.child(K::GENERIC_ARGS).is_none())
+        })
+        .collect::<Option<Vec<String>>>()?;
+    if let [one] = segs.as_slice()
+        && scope.params.iter().any(|p| p.name == *one)
+    {
+        return None;
+    }
+    const_named(scope, &segs)
 }
 
 /// Whether the type node `node` is what a borrow (`&T`) points to, or the type an impl is for:
@@ -484,6 +526,18 @@ pub(crate) fn generic_args(
                 {
                     types.push(dyn_type(d.syntax(), scope, diags));
                 }
+                // A const item's name as a const argument (`generic.const.3`).
+                Some(t) if let Some(v) = const_type_arg(&t, scope) => match v {
+                    Ok(v) => types.push(Ty::Len(v)),
+                    Err(why) => {
+                        diags.push(Diagnostic::error(
+                            Code::E0201,
+                            c.text_range(),
+                            format!("a const argument is known when compiling: {why}"),
+                        ));
+                        types.push(Ty::Error);
+                    }
+                },
                 Some(t) => types.push(resolve_type(&t, scope, diags)),
                 None => {
                     diags.push(Diagnostic::unsupported(c.text_range(), "a const argument"));
@@ -515,6 +569,20 @@ pub(crate) fn generic_args(
                             types.push(Ty::Error);
                         }
                     },
+                    // `{N * 2}` (`generic.const.3`).
+                    None if let Some(b) = c.child(K::BLOCK) => {
+                        match crate::constfold::fold_block(&b, &mut |segs| const_named(scope, segs))
+                        {
+                            Ok(v) => types.push(Ty::Len(v)),
+                            Err(why) => {
+                                diags.push(Diagnostic::unsupported(
+                                    c.text_range(),
+                                    &format!("this const argument ({why})"),
+                                ));
+                                types.push(Ty::Error);
+                            }
+                        }
+                    }
                     None => {
                         diags.push(Diagnostic::unsupported(
                             c.text_range(),

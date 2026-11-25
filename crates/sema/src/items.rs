@@ -38,6 +38,9 @@ impl Src {
 pub struct ItemTree {
     /// The functions, including methods of traits and impls, in source order.
     pub fns: Vec<FnSig>,
+    /// The value of each free `int` const item whose initialiser folds from its syntax, by its
+    /// function's index, or why it does not (`generic.const.3`): what types may name.
+    pub const_values: std::collections::BTreeMap<u32, Result<i64, String>>,
     /// The structs and enums.
     pub adts: Vec<AdtDef>,
     /// The `type` items: aliases and refinements.

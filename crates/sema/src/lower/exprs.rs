@@ -299,8 +299,12 @@ impl Lowerer<'_> {
             // made with `from_repeat`.
             let constant = match len {
                 ast::Expr::Literal(_) => true,
-                ast::Expr::Path(_) => self.const_param(len.syntax()).is_some(),
-                _ => false,
+                ast::Expr::Path(_) if self.const_param(len.syntax()).is_some() => true,
+                // An `int` const item, or arithmetic on them (`generic.const.3`).
+                _ => crate::constfold::fold(len, &mut |segs| {
+                    crate::resolve::const_named(&self.types, segs)
+                })
+                .is_ok(),
             };
             if !constant {
                 let n = self.expr(len);

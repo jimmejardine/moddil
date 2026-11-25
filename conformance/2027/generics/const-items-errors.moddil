@@ -1,0 +1,13 @@
+// covers: generic.const.3
+
+const fn four() -> int {
+    4
+}
+
+const SIZE: int = 4;
+const CALLED: int = four();
+
+fn arrays() {
+    let a: [int; SIZE / 0] = [0; 1];        //~ E0201
+    let b: [int; CALLED] = [0; 4];          //~ E0201
+}

@@ -47,4 +47,12 @@ types (`[T; N]`), and its value as an `int` where it is named in an expression.
 
 **generic.const.2** A const parameter is a length, not a type, and a type parameter a type, not a
 length: naming one where the other is expected is an error (E0102, E0201). For now a const
-parameter is an `int`, and a length is a literal or a const parameter, with no arithmetic.
+parameter is an `int`.
+
+**generic.const.3** A length (an array type's, `[x; n]`'s, or a const argument) is an integer
+literal, a const parameter, or a const expression: the name of a free `int` const item, or
+`+ - * / % << >> & | ^` on literals and such names, in parentheses or a block for a const
+argument (`[int; SIZE * 2]`, `Grid<SIZE>`, `f::<{SIZE + 1}>()`). The const items' initialisers
+are themselves such expressions, worked out when compiling, before the program is checked. A
+length that is not (one calling a `const fn`, overflowing, dividing by zero, or naming a const
+parameter in arithmetic) is an error (E0201).

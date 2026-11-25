@@ -32,17 +32,26 @@ impl Machine<'_> {
 
     /// The kinds the type parameters `names` get from the types written in `args`.
     pub(super) fn turbofish(
-        &self,
+        &mut self,
         args: Option<SyntaxNode>,
         names: &[String],
     ) -> HashMap<String, Head> {
         let mut out = HashMap::new();
         if let Some(a) = args {
-            let types = a
+            let args: Vec<SyntaxNode> = a
                 .children()
-                .filter(|c| c.kind() == K::TYPE_ARG)
-                .filter_map(|c| c.children().find_map(ast::Type::cast));
-            for (n, t) in names.iter().zip(types) {
+                .filter(|c| matches!(c.kind(), K::TYPE_ARG | K::CONST_ARG))
+                .collect();
+            for (n, arg) in names.iter().zip(args) {
+                // A length (`generic.const.1`, `generic.const.3`): an integer, `{e}`, or a const
+                // item's name.
+                if let Some(v) = self.const_arg(&arg) {
+                    out.insert(n.clone(), Head::Len(v));
+                    continue;
+                }
+                let Some(t) = arg.children().find_map(ast::Type::cast) else {
+                    continue;
+                };
                 out.insert(n.clone(), self.head_of(&t));
                 // A refinement named for a parameter is remembered beside its base's kind, for
                 // `T::refine` (`refine.trait.1`).
@@ -52,6 +61,29 @@ impl Machine<'_> {
             }
         }
         out
+    }
+
+    /// The value of const argument `arg` (a `TYPE_ARG` or `CONST_ARG`), if it is one: an integer,
+    /// `{e}`, or the name of an `int` const item.
+    fn const_arg(&mut self, arg: &SyntaxNode) -> Option<i64> {
+        if arg.kind() == K::CONST_ARG {
+            if let Some(b) = arg.child(K::BLOCK).and_then(ast::Block::cast)
+                && let Ok(Value::Int(v)) = self.block(&b)
+            {
+                return Some(v);
+            }
+            let lit = arg.child_tokens().find(|t| t.kind() == K::INTEGER)?;
+            let v = ast::int_value(lit.text()).and_then(|v| i64::try_from(v).ok())?;
+            return Some(if arg.token(K::MINUS).is_some() { -v } else { v });
+        }
+        let path = arg.children().find(|c| c.kind() == K::PATH_TYPE)?;
+        match self.const_place(&path) {
+            Ok(Some(at)) => match self.memory.load(&at) {
+                Value::Int(v) => Some(v),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 
     /// The refinement type `t` names, by key: written out, or a type parameter bound to one.

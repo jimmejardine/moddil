@@ -121,8 +121,9 @@ L)
 - A `const { }` block that is not `Copy`, used by value, evaluated once too (each use a clone of
   its static value, or a move out of a value made once); and one in a generic function, for
   each instance.
-- Consts as array lengths and const arguments; const arithmetic in types (`Fixed<{S + T}>`);
-  const parameters of types other than `int`.
+- Const arithmetic on const parameters in types (`Fixed<{S + T}>`, a normalised type form
+  compared by structure), and a length a `const fn` gives (sema folds lengths from the syntax,
+  and cannot run the interpreter); const parameters of types other than `int`.
 - A const holding a borrow of static data beyond text.
 - A generic const (a trait's associated const, a generic impl's) computed when compiling for
   each instance, as other consts are, not when it runs; and a const holding a function pointer

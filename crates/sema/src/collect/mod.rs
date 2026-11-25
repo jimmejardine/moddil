@@ -565,6 +565,7 @@ impl Collector<'_> {
             self.type_skeleton(*src, node);
         }
         let first_free = self.free_fns(&nodes.fns);
+        self.const_values(first_free, &nodes.fns);
         for (k, (src, module, node)) in nodes.fns.iter().enumerate() {
             if templates::is_deriver(node) {
                 self.derivers
@@ -707,6 +708,29 @@ impl Collector<'_> {
             self.tree.fns.push(FnSig::free(name, *src, *module, vis));
         }
         first
+    }
+
+    /// The value of each free `int` const item whose initialiser folds from its syntax
+    /// (`generic.const.3`), the first of `fns` being function `first`.
+    fn const_values(&mut self, first: usize, fns: &[Site]) {
+        let consts: HashMap<u32, (u32, SyntaxNode)> = fns
+            .iter()
+            .enumerate()
+            .filter(|(_, (src, _, node))| {
+                node.kind() == K::CONST_ITEM
+                    && src.is_file()
+                    && node
+                        .children()
+                        .find_map(ast::Type::cast)
+                        .is_some_and(|t| t.syntax().text() == "int")
+            })
+            .map(|(k, (_, module, node))| ((first + k) as u32, (*module, node.clone())))
+            .collect();
+        let mut done = std::collections::BTreeMap::new();
+        for &f in consts.keys() {
+            let _ = fold_const(&self.tree, &consts, &mut done, f, &mut Vec::new());
+        }
+        self.tree.const_values = done;
     }
 
     fn report_found(&mut self, found: Vec<validate::Found>) {
@@ -1186,4 +1210,40 @@ fn type_order(types: &[(Src, u32, SyntaxNode)]) -> Vec<usize> {
         visit(k, &deps, &mut seen, &mut order);
     }
     order
+}
+
+/// Const item `f`'s value, folded from its initialiser (`generic.const.3`), with the others it
+/// names first; `seen` are those being folded, so one naming itself is not followed forever.
+fn fold_const(
+    tree: &ItemTree,
+    consts: &HashMap<u32, (u32, SyntaxNode)>,
+    done: &mut std::collections::BTreeMap<u32, Result<i64, String>>,
+    f: u32,
+    seen: &mut Vec<u32>,
+) -> Result<i64, String> {
+    if let Some(v) = done.get(&f) {
+        return v.clone();
+    }
+    if seen.contains(&f) {
+        return Err("it is defined by itself".to_string());
+    }
+    let Some((module, node)) = consts.get(&f) else {
+        return Err("it is not an `int` const".to_string());
+    };
+    let Some(init) = node.children().find_map(ast::Expr::cast) else {
+        return Err("it has no value".to_string());
+    };
+    seen.push(f);
+    let v = crate::constfold::fold(&init, &mut |segs| {
+        let names: Vec<&str> = segs.iter().map(String::as_str).collect();
+        match tree.path(*module, &names, false) {
+            Ok((Def::Fn(g), n)) if n == segs.len() && consts.contains_key(&g) => {
+                Some(fold_const(tree, consts, done, g, seen))
+            }
+            _ => None,
+        }
+    });
+    seen.pop();
+    done.insert(f, v.clone());
+    v
 }

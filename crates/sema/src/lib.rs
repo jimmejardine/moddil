@@ -24,6 +24,7 @@
 
 mod check;
 mod collect;
+mod constfold;
 mod db;
 mod derive;
 mod diag;
