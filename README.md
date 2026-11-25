@@ -10,7 +10,7 @@
 [![Licence: MIT OR Apache-2.0](https://img.shields.io/badge/licence-MIT%20OR%20Apache--2.0-blue)](#licence)
 [![Rust 1.100.0](https://img.shields.io/badge/rust-1.100.0-orange)](rust-toolchain.toml)
 
-**Moddil: the programming language with rustic armour, not rusty baggage.**
+**Moddil: Rust's armour, without the baggage.**
 
 Moddil is a programming language being designed for three shifts happening at once:
 

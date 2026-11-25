@@ -7,7 +7,7 @@
 
 | Topic | Decision |
 |---|---|
-| **Pitch** | **"Moddil: the programming language with armour, not baggage."** Rust's safety without Rust's pain. The mascot is the **armadillo** ([Positioning: armour, not baggage](#positioning-armour-not-baggage)). |
+| **Pitch** | **"Moddil: Rust's armour, without the baggage."** Rust's safety without Rust's pain. The mascot is the **armadillo** ([Positioning: armour, not baggage](#positioning-armour-not-baggage)). |
 | **First audiences** | **Backend and infrastructure teams**, and **Python teams that need speed** ([First audiences](#first-audiences)). |
 | **Python** | `moddil bind --lang python` is the **first binding target, in v0**: native extension modules, `.pyi` stubs and wheels ([Python first](#python-first)). |
 | **Migration** | `moddil migrate rust` is an official, mechanical, test-verified translator for the common subset. TypeScript and other languages get an **agent-assisted** workflow ([Migrating existing code](#migrating-existing-code)). |
@@ -40,8 +40,9 @@ target domain, and tooling that delights from the first command.
 
 ## Positioning: armour, not baggage
 
-**Decision: the tagline is "Moddil: the programming language with armour, not baggage", and the
-mascot is the armadillo.** The pitch is **Rust's safety without Rust's pain**: Moddil keeps the armour
+**Decision: the tagline is "Moddil: Rust's armour, without the baggage", and the mascot is the
+armadillo** (the tagline named Rust from November 2026; it was "the programming language with
+armour, not baggage"). The pitch is **Rust's safety without Rust's pain**: Moddil keeps the armour
 and leaves the baggage behind.
 
 | Armour kept | Baggage dropped |
