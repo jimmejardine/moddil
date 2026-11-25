@@ -187,11 +187,13 @@ pub(crate) fn resolve_type(t: &ast::Type, scope: &Scope, diags: &mut Vec<Diagnos
                 Some(t) => resolve_type(&t, scope, diags),
                 None => Ty::Error,
             };
-            if inner.has_ref() {
+            // A shared borrow may point to a borrow; a `&mut` may not, so that nothing writes a
+            // borrow that lives less in its place (`borrow.type.1`).
+            if mutable && matches!(inner, Ty::Ref(..)) {
                 diags.push(Diagnostic::error(
                     Code::E0309,
                     range,
-                    "a borrow cannot point to a borrow",
+                    "a `&mut` cannot point to a borrow, only a shared `&` can",
                 ));
                 return Ty::Error;
             }

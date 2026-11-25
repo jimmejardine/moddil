@@ -15,8 +15,11 @@ exclusively. A borrow of any other expression borrows a temporary holding its va
 
 **borrow.type.1** Borrows are **second-class**: `&T` and `&mut T` are the types of parameters,
 variables and results, and of the parts of views ([Views](views.md)): a value holding a borrow is a
-view. A field of a struct or enum that is not a view cannot hold one, and a borrow cannot point to
-a borrow (E0309).
+view. A field of a struct or enum that is not a view cannot hold one (E0309). A shared borrow may
+point to a borrow (`&&str`, as a map keyed by `&str` gives); a `&mut` cannot (E0309), so nothing
+writes into a borrow one that lives less. A borrow of a borrow keeps alive what the inner one
+borrows. Borrows hash and compare (`eq`) as what they point to; `==` on them is still an error
+(E0205).
 
 **borrow.deref.1** `*e`, for a borrow `e`, is the place it points to, of type `T`. A field access
 looks through a borrow (`r.x` is `(*r).x`); operators and comparisons do not, so they need `*`: an

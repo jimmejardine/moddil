@@ -74,7 +74,8 @@ while the borrow is used (E0305). A `Vec` of borrows is a view, which keeps what
 
 **coll.hash.1** `Hash`, with `fn hash<H: Hasher>(&self, state: &mut H)`, says what a value hashes;
 a `Hasher`, with `fn write_int(&mut self, x: int)` and `fn finish(&self) -> int`, how. `int`,
-`bool`, `char`, `str`, `String`, slices, `Vec`, `Option` and pairs implement `Hash`.
+`bool`, `char`, `str`, `String`, slices, `Vec`, `Option` and pairs implement `Hash`, and a borrow
+`&T` hashes as `T` does, so a map can be keyed by borrows (`HashMap<&str, V>`).
 
 **coll.hash.derive.1** `#[derive(Hash)]` hashes an enum's variant's index, then each field in
 order ([Attributes](attributes.md)).

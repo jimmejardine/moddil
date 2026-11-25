@@ -168,12 +168,14 @@ impl Checker<'_> {
                     self.check_mutable(expr, "borrowed as `&mut`");
                 }
                 match self.norm(&t) {
-                    Ty::Ref(..) => {
+                    // A shared borrow may point to a borrow (`borrow.type.1`); a `&mut` may
+                    // not, so that nothing writes a borrow that lives less in its place.
+                    Ty::Ref(..) if mutable => {
                         self.report(
                             Code::E0309,
                             range,
-                            "a borrow cannot point to a borrow: to borrow what it points to, \
-                             write `&*r`",
+                            "a `&mut` cannot point to a borrow, only a shared `&` can: to borrow \
+                             what it points to, write `&mut *r`",
                         );
                         Ty::Error
                     }

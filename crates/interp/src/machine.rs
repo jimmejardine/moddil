@@ -411,20 +411,23 @@ impl<'a> Machine<'a> {
                 other => unreachable!("the discriminant of {other:?}"),
             },
             Rvalue::Ref(m, p) => {
-                let ptr = self.stack.resolve(p);
-                // A borrow of what a `dyn` borrow points to is one too.
-                let (Some(Projection::Deref), Some(base)) = (
-                    p.projection.last(),
-                    p.projection.len().checked_sub(1).map(|n| Place {
+                let base = match p.projection.last() {
+                    Some(Projection::Deref) => Some(Place {
                         local: p.local,
-                        projection: p.projection[..n].to_vec(),
+                        projection: p.projection[..p.projection.len() - 1].to_vec(),
                     }),
-                ) else {
-                    return Value::Ref(ptr, *m);
+                    _ => None,
+                };
+                let Some(base) = base else {
+                    return Value::Ref(self.stack.resolve(p), *m);
                 };
                 match self.stack.read(&base) {
-                    Value::Dyn(_, _, t) => Value::Dyn(ptr, *m, t),
-                    _ => Value::Ref(ptr, *m),
+                    // A text borrow is a value of its own, so a reborrow of it (`&*r`, reached
+                    // through a borrow of a borrow) is the same value.
+                    s @ Value::Str(_) => s,
+                    // A borrow of what a `dyn` borrow points to is one too.
+                    Value::Dyn(_, _, t) => Value::Dyn(self.stack.resolve(p), *m, t),
+                    _ => Value::Ref(self.stack.resolve(p), *m),
                 }
             }
             Rvalue::Repeat(a, n) => {

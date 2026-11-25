@@ -95,8 +95,27 @@ pub fn borrowck<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Vec<Diagnostic> {
         },
         _ => false,
     };
+    // An impl's method whose trait's declared result holds no borrow (`view.borrow.1`).
+    let returns_held = match owner.item(db) {
+        Item::Fn(i) => {
+            let sig = &items.fns[i as usize];
+            match sig.container {
+                Container::Impl(k) => items.impls[k as usize].trait_ref.as_ref().is_some_and(|t| {
+                    items.traits[t.trait_ as usize]
+                        .methods
+                        .iter()
+                        .find(|&&f| items.fns[f as usize].name == sig.name)
+                        .is_some_and(|&f| !items.is_view(&items.fns[f as usize].ret))
+                        && items.is_view(&sig.ret)
+                }),
+                _ => false,
+            }
+        }
+        _ => false,
+    };
     let mut cx = Checker::new(body, items, ret_from);
     cx.destructor = destructor;
+    cx.returns_held = returns_held;
     cx.run();
     cx.diagnostics
 }
@@ -137,6 +156,10 @@ struct Checker<'a> {
     live_out: Vec<Vec<HashSet<Local>>>,
     diagnostics: Vec<Diagnostic>,
     reported: HashSet<(Code, u32, u32)>,
+    /// Whether the body is an impl's method whose trait declares a result that holds no borrow
+    /// (`fn next(&mut self) -> Option<Self::Item>`): its callers take a borrow it returns as one
+    /// of what its arguments hold (`view.borrow.1`), so it may return only those.
+    returns_held: bool,
     /// Whether the body is a destructor, which may move fields out of its `self` (`_1`).
     destructor: bool,
 }
@@ -280,6 +303,7 @@ impl<'a> Checker<'a> {
             live_out,
             diagnostics: Vec::new(),
             reported: HashSet::new(),
+            returns_held: false,
             destructor: false,
         }
     }
@@ -677,8 +701,12 @@ impl<'a> Checker<'a> {
                             self.access((at, span), p, Access::Borrow(*mutable), h, m, Some(loan));
                         }
                         flowing.insert(loan);
-                        // A reborrow keeps the borrow it goes through alive.
-                        if p.is_indirect() {
+                        // A reborrow keeps the borrow it goes through alive, and so does a
+                        // borrow of a place that holds borrows (`&r`, `borrow.type.1`): what
+                        // it points to is reached through them.
+                        if p.is_indirect()
+                            || self.items.is_view(&self.type_upto(p, p.projection.len()))
+                        {
                             flowing.extend(h[p.local.index()].iter().copied());
                         }
                     }
@@ -795,7 +823,12 @@ impl<'a> Checker<'a> {
                             .is_some_and(|p| matches!(p.ty, Ty::Ref(..)));
                         for &li in f {
                             let loan = &self.loans[li];
-                            if by_ref && loan.param.is_none() && !loan.place.is_indirect() {
+                            // A view borrowed in place, or one a borrowed parameter points to
+                            // (`self.inner.next()`): what it holds, as the parameter holds it.
+                            if by_ref
+                                && loan.param.is_none()
+                                && (!loan.place.is_indirect() || self.of_borrowed_view(&loan.place))
+                            {
                                 flowing.extend(h[loan.place.local.index()].iter().copied());
                             } else {
                                 flowing.insert(li);
@@ -892,6 +925,21 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Whether `place` is part of a view a borrowed parameter points to, reached without going
+    /// through a borrow that view holds (`(*self).spare`, not `*(*self).xs`).
+    fn of_borrowed_view(&self, place: &Place) -> bool {
+        let l = place.local.index();
+        if l == 0 || l > self.body.arg_count {
+            return false;
+        }
+        let Ty::Ref(_, inner) = &self.body.locals[l].ty else {
+            return false;
+        };
+        self.items.is_view(inner)
+            && place.projection.first() == Some(&Projection::Deref)
+            && !place.projection[1..].contains(&Projection::Deref)
+    }
+
     /// A returned borrow must come from a parameter the signature allows.
     fn returned(&mut self, span: TextRange, h: &Holders) {
         let mut found = Vec::new();
@@ -900,6 +948,21 @@ impl<'a> Checker<'a> {
             // A borrow through a borrow borrows what that one points to, whose own loans are
             // checked with it.
             let from_param = loan.place.projection.first() == Some(&Projection::Deref);
+            // A borrow of the view a parameter borrows, not of what it holds: `&self.spare`
+            // where the trait's result holds no borrow (`view.borrow.1`).
+            if self.returns_held && loan.param.is_none() && self.of_borrowed_view(&loan.place) {
+                found.push(Diagnostic::error(
+                    Code::E0308,
+                    loan.span,
+                    format!(
+                        "this returns a borrow of the view {} points to, not of what it holds: \
+                         the trait's result holds no borrow, so callers take it as one the view \
+                         holds, and may drop the view while using it",
+                        self.name(&Place::local(loan.place.local))
+                    ),
+                ));
+                continue;
+            }
             match loan.param {
                 Some(p) if !self.ret_from.contains(&p) => found.push(Diagnostic::error(
                     Code::E0310,

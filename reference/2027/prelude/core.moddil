@@ -89,6 +89,16 @@ trait PartialEq {
 
 trait Eq: PartialEq {}
 
+// Borrows are equal when what they point to is (`borrow.type.1`): what a map keyed by borrows
+// compares. `==` on borrows is still an error (E0205): it would hide which is meant.
+impl<T: PartialEq> PartialEq for &T {
+    fn eq(&self, other: &&T) -> bool {
+        (**self).eq(*other)
+    }
+}
+
+impl<T: Eq> Eq for &T {}
+
 #[derive_by(derive_partial_ord)]
 trait PartialOrd: PartialEq {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering>;

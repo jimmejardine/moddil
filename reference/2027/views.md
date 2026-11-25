@@ -20,4 +20,7 @@ lends it the borrows it is built from, reading a field of one gives a borrow it 
 that changes a view through `&mut` (`v.push(&x)`) lends it what the call's other arguments borrow.
 A call whose result type, as the function declares it, holds no borrow, gives a result borrowing
 what its arguments hold, not the borrows passed for them: `it.next()` gives what the iterator
-borrows. The rules of [Borrows](borrows.md) apply to all of these (E0305 to E0308).
+borrows. The rules of [Borrows](borrows.md) apply to all of these (E0305 to E0308). So a method
+of an impl whose trait's result holds no borrow (`fn next(&mut self) -> Option<Self::Item>`)
+returns only borrows the view holds, not a borrow of the view itself or of its own fields
+(`&self.at`, E0308): its callers may drop the view while they use the result.

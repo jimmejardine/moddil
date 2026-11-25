@@ -39,3 +39,40 @@ fn lent() -> int {
     m[0] = 5;
     w.data[0]
 }
+
+// A method whose trait's result holds no borrow (`Option<Self::Item>`) returns only borrows the
+// view holds: its callers keep them past the view.
+view Cursor {
+    xs: &[int],
+    at: int,
+    spare: int,
+}
+
+impl Iterator for Cursor {
+    type Item = &int;
+    fn next(&mut self) -> Option<&int> {
+        if self.at < self.xs.len() {
+            self.at += 1;
+            Some(&self.spare)                               //~ E0308
+        } else {
+            None
+        }
+    }
+}
+
+view Steps {
+    xs: &[int],
+    at: int,
+}
+
+impl Iterator for Steps {
+    type Item = &int;
+    fn next(&mut self) -> Option<&int> {
+        if self.at < self.xs.len() {
+            self.at += 1;
+            Some(&self.xs[self.at - 1])
+        } else {
+            None
+        }
+    }
+}

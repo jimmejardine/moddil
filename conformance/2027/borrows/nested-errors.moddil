@@ -1,0 +1,13 @@
+// covers: borrow.type.1
+
+// A borrow of a borrow keeps alive what the inner one borrows.
+fn dangles() -> int {
+    let r: &int;
+    let rr: &&int;
+    {
+        let n = 1;
+        r = &n;                                             //~ E0308
+        rr = &r;
+    }
+    **rr
+}

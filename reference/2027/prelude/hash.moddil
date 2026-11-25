@@ -105,6 +105,13 @@ impl Hash for String {
     }
 }
 
+// A borrow hashes what it points to (`coll.hash.1`), so maps can be keyed by borrows.
+impl<T: Hash> Hash for &T {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (**self).hash(state);
+    }
+}
+
 impl<T: Hash> Hash for [T] {
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_int(self.len());

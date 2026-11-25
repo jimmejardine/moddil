@@ -64,8 +64,8 @@ and a code never changes meaning.
 | E0305 | Conflicting borrows | [borrow.rules.1](borrows.md) |
 | E0306 | Assignment to or move of a borrowed value | [borrow.rules.1](borrows.md), [borrow.guard.1](borrows.md) |
 | E0307 | Use of a value borrowed with `&mut` | [borrow.rules.1](borrows.md) |
-| E0308 | A borrow that outlives its value | [borrow.scope.1](borrows.md), [item.fn.ret-borrow.1](items/functions.md) |
-| E0309 | A borrow, closure or view stored in a field of a struct or enum that is not a view, or a borrow of a borrow | [borrow.type.1](borrows.md), [view.2](views.md), [expr.closure.capture.1](expressions/closures.md) |
+| E0308 | A borrow that outlives its value | [borrow.scope.1](borrows.md), [item.fn.ret-borrow.1](items/functions.md), [view.borrow.1](views.md) |
+| E0309 | A borrow, closure or view stored in a field of a struct or enum that is not a view, or a `&mut` of a borrow | [borrow.type.1](borrows.md), [view.2](views.md), [expr.closure.capture.1](expressions/closures.md) |
 | E0310 | A returned borrow from a parameter the signature does not allow | [item.fn.ret-borrow.1](items/functions.md) |
 | E0311 | A type that cannot be `Copy` | [own.copy.derive.1](ownership.md) |
 | E0312 | A `Copy` type over 64 bytes | [own.copy.derive.1](ownership.md) |

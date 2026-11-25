@@ -412,7 +412,7 @@ fn borrows_and_copy_3() {
     err("fn f(a: int) -> int { *a }", &[("E0205", 1)]);
     err("fn f(a: &int, b: &int) -> bool { a == b }", &[("E0205", 1)]);
     err("struct P { r: &int }", &[("E0309", 1)]);
-    err("fn f(a: &&int) {}", &[("E0309", 1)]);
+    err("fn f(a: &mut &int) {}", &[("E0309", 1)]);
     err("fn f() -> &int { 1 }", &[("E0201", 1)]);
     err(
         "fn f(a: int, b: &int) -> &int from a { b }",

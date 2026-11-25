@@ -108,8 +108,8 @@ runners; M)
   vtable, the pointer fat) through sema's layout, MIR and every runner; then the coercion, as
   `Box`'s.
 - Anonymous impls that implement the trait's supertraits, and methods taking `&mut self`.
-- `Debug` derived for a view with a borrow field: `&T` implements `Debug` once a borrow of a
-  borrow exists (P10).
+- `Debug` derived for a view with a borrow field: `&T` implementing `Debug`, as it now implements
+  `Hash` and `PartialEq`.
 
 **P8. The trait system** (`crates/sema`, `crates/syntax` and the grammar, the prelude, both
 interpreters; L)
@@ -125,11 +125,6 @@ interpreters; L)
 - A returned closure bound to a local first (today only one written as the function's value,
   or after `return`, is taken as the one returned).
 - `Copy` closures; `escape`.
-
-**P10. Borrow checking gaps** (`crates/mir` `ownership.rs`, `crates/sema`; M)
-- A borrow of a borrow, so `Hash` for `&T` and maps keyed by borrows (`HashMap<&str, V>`).
-- A view's method that returns, through a trait whose signature holds no borrow, a borrow of the
-  view's own field: caught.
 
 **P11. Compile-time evaluation** (`crates/sema`, `crates/mir`, the MIR interpreter as evaluator;
 L)
