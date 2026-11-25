@@ -106,7 +106,9 @@ beyond what [`accelerators.md`](../accelerators.md) already decides.
 
   The camera calls `distance(camera.position, …)` on the CPU to set its speed.
 - **Floats:** `f32` everywhere, with strict IEEE semantics, so the CPU and GPU agree where rounding
-  is specified ([`numerics.md`: Floats](../numerics.md#floats)).
+  is specified ([`numerics.md`: Floats](../numerics.md#floats)). Deep zoom uses camera-relative
+  coordinates in `f32`, with no emulated `f64` in the kernel (decided November 2026); a native
+  desktop window, which would need a windowing mod, is out of scope.
 - **A launch is a structured task:** the frame's scope lends `view` and the output texture to the
   launch, and its end is the fence before presenting
   ([`accelerators.md`: Launches are structured tasks](../accelerators.md#launches-are-structured-tasks)).
@@ -177,7 +179,4 @@ The first build (slice M2e), `examples/mandelbulb/web`:
 
 ## Open questions
 
-- **Deep zoom:** `f32` limits how close the camera can get to the surface. How far do
-  camera-relative coordinates go, and is emulated `f64` in the kernel worth its cost?
-- **Native desktop:** the same program in a native window through wgpu would need a windowing mod.
-  Is that in scope for this example?
+None at present: deep zoom and a native desktop window were decided in November 2026.

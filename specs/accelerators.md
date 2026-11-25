@@ -210,6 +210,28 @@ fallback otherwise.
   (decided): it derives `grad(f)` for any differentiable function, kernels and loops included, with
   no compiler change.
 
+### Loading model weights
+
+**Decided (November 2026): `moddil/tensor` reads safetensors itself.** [Talk](examples/talk.md)
+loads published weights in `f16` and `bf16`.
+- Files are **memory-mapped**, so loading is lazy and costs no copy on the CPU.
+- A tensor's **static shape is checked against the file at load time**; a mismatch fails with a
+  typed error, never a trap.
+- **Loading straight to device memory is a `Gpu` operation**, like any upload.
+- GGUF and quantised formats come later, in the same mod.
+
+## Kernels built at run time
+
+**Decided (November 2026): a shader builder in a mod.** Kernels are compile-time code, but
+[fumoca](examples/fumoca.md) compiles each user's workbook into its own kernel, as do database
+query engines and shader-graph editors. A mod generates WGSL or SPIR-V text and launches it through
+a `dyn_kernel` API whose **bindings are typed and checked at launch**. It is as fast as fumoca is
+today. The generated kernel itself is not checked by the compiler, which is the price of building
+it at run time.
+- **No interpreter kernel and no JIT:** an instruction-tape interpreter is slower than specialised
+  code, and shipping the compiler's kernel back end in a program makes it large and runs the
+  compiler at run time.
+
 ## Algorithm and schedule
 
 - A **schedule** (tile sizes, pipeline stages, vector widths, per-target variants) is comptime data
@@ -305,22 +327,8 @@ Following [`error-handling.md`](error-handling.md):
 
 ## Open questions
 
-- **Kernels that depend on run-time data.** Kernels are compile-time code, but
-  [fumoca](examples/fumoca.md) compiles each user's workbook into its own kernel, as do
-  database query engines and shader-graph editors. Options:
-  - **an interpreter kernel:** a fixed `#[kernel]` that runs a compact instruction tape built at
-    run time. It is safe and checked like any kernel, and needs no new feature, but is slower than
-    specialised code;
-  - **a shader builder in a mod:** the program generates WGSL or SPIR-V text and launches it
-    through a `dyn_kernel` API with typed bindings checked at launch. It is as fast as fumoca
-    today, but the kernel itself is not checked by the compiler;
-  - **a JIT:** the compiler's kernel back end shipped in the program. It is the fastest and is
-    checked, but it is large, and it runs the compiler at run time.
-- **Loading model weights.** [Talk](examples/talk.md) needs to load published weights:
-  safetensors files, memory-mapped, in `f16` and `bf16`, perhaps quantised. Open: whether
-  `moddil/tensor` reads safetensors (and GGUF) itself, how a tensor's static shape is checked
-  against a file read at run time, and whether loading straight to device memory is a `Gpu`
-  operation.
+None at present: the last (kernels built at run time, loading model weights) were decided in
+November 2026.
 
 ## Background
 

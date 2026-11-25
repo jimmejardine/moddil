@@ -1,6 +1,6 @@
 # Compiler and bootstrap
 
-> **Status:** decided direction, details open (walked through November 2026). Answers [`roadmap.md`](roadmap.md) Q6: how the compiler is built, structured and
+> **Status:** complete: decided, with no open questions (walked through November 2026). Answers [`roadmap.md`](roadmap.md) Q6: how the compiler is built, structured and
 > bootstrapped, and which backends it uses. Milestones are in [`roadmap.md`: Milestones](roadmap.md#milestones). WASM support facts verified November 2026 ([WASM support: verified status (November 2026)](#wasm-support-verified-status-november-2026) below).
 
 ## Answers in brief
@@ -33,7 +33,7 @@ lowering and is added for Wasmtime and other WASI hosts once it leaves Tier 3
 **Why Rust:**
 - **Ecosystem fit.** Most of the infrastructure Moddil needs already exists as Rust crates:
   - `cranelift`: fast code generation for debug builds.
-  - `wasmtime`: the WASM runtime ([Risks and open questions](#risks-and-open-questions)), embeddable in the compiler.
+  - `wasmtime`: the WASM runtime ([Risks](#risks)), embeddable in the compiler.
   - `wasm-encoder`, `wasmparser`, `wit-parser`, `wit-component`: WASM and Component Model (R1).
   - `naga`: shader translation between WGSL, SPIR-V, MSL and HLSL ([Concurrency across GPUs and accelerators](accelerators.md)).
   - `gimli`: DWARF debug info.
@@ -94,8 +94,8 @@ problem, which is exactly the supply-chain concern of [Package management and su
 - The WASM blob must be **reproducible**: anyone can rebuild it from source and get the same bytes.
 - Keep the **Rust stage 0 buildable** so the compiler can be built by two independent paths and the
   results compared (**diverse double-compiling**, David A. Wheeler).
-- Optional third path: a **C backend** (as Nim has and as Zig's CBE provides). It also helps port to
-  unusual platforms.
+- **No C backend** (decided November 2026), though Nim has one and Zig's CBE gives a third path:
+  self-hosting is deferred, and Cranelift, LLVM and WASM reach every target a C backend would.
 
 ## Compiler architecture
 
@@ -249,11 +249,11 @@ moddil/
                     ┌──────┐  Moddil mid-level IR (mir.md): ownership, linearity
                     │ MIR  │  and drops checked here; handlers, task scopes and
                     └──┬───┘  suspension points lowered here, per target
-     ┌─────────┬──────┼──────────┬───────────────┬──────────────┐
-     ▼         ▼      ▼          ▼               ▼              ▼
- interpreter Cranelift LLVM   own WASM       GPU: naga /     C (optional)
+     ┌─────────┬──────┼──────────┬───────────────┐
+     ▼         ▼      ▼          ▼               ▼
+ interpreter Cranelift LLVM   own WASM       GPU: naga /
  (comptime,  (debug)  (release, emitter      LLVM NVPTX /
-  tests)              all targets) (+ wasm-opt) AMDGPU; MLIR later
+  tests)              all targets) (+ wasm-opt) AMDGPU
 ```
 
 | Backend | Role | Own or reuse | Notes |
@@ -261,9 +261,9 @@ moddil/
 | **MIR + front end** | All Moddil-specific semantics | **Own** | This is where the language's value lies |
 | MIR interpreter | Compile-time evaluation, fast tests | **Own** | Needed anyway for [Metaprogramming](comptime.md) |
 | **Cranelift** | Debug/dev builds | Reuse | Fast compile; x86-64, AArch64, RISC-V 64, s390x |
-| **LLVM** | Release builds; iOS/Android/embedded; mature optimisation | Reuse | Pin one version; use via the C API / `inkwell` |
+| **LLVM** | Release builds; iOS/Android/embedded; mature optimisation | Reuse | Pin one major version, upgraded about once a year in one change with the full suite on every runner (decided November 2026); use via the C API / `inkwell` |
 | **WASM** | Browser, Node, WASI, components, bootstrap | **Own** emitter (`wasm-encoder`), translating the native lowering's Cranelift IR (one lowering for both), + Binaryen `wasm-opt` | WASM is simple; needs stack switching, JSPI glue, exnref, GC and Component Model earlier than LLVM provides them; binary size matters |
-| **GPU** | Kernels | Reuse | `naga` for WGSL/SPIR-V/MSL/HLSL; LLVM NVPTX/AMDGPU for CUDA/ROCm-class targets; MLIR later if tensor-level optimisation is needed |
+| **GPU** | Kernels | Reuse | `naga` for WGSL/SPIR-V/MSL/HLSL; LLVM NVPTX/AMDGPU for CUDA/ROCm-class targets. **No MLIR export** (decided November 2026): tensors go through `moddil/tensor`; revisit only if an NPU or vendor graph compiler target needs it |
 | **C** | Third bootstrap path, odd platforms | Own (optional) | Decide later |
 | Native backends of our own | Faster compiles, full control | **Not now** | Go and Zig did this at great cost; revisit only if Cranelift + LLVM block the build-time goals |
 
@@ -281,7 +281,7 @@ are target-independent. The backend chooses how to implement suspension:
 | 1 | Native stacks | Native targets | Always available |
 | 2 | **WASM + JSPI** | All major browsers, Node ≥ 26, every OS | **Built first (decided).** Each Moddil task is a separate `WebAssembly.promising` entry with its own suspended WASM stack; switching goes through a JS-side scheduler promise. Slower per switch, but works everywhere now. |
 | 3 | **WASM stack switching** (`cont.new` / `resume` / `suspend`) | Wasmtime (Tier 3, x86_64 Linux), Wasmer; browsers when shipped | **Preferred long-term** lowering; added for WASI hosts once Wasmtime's support leaves Tier 3 |
-| 4 | CPS / Asyncify-style transform | WASI runtimes without stack switching | **Open question.** Either require a capable runtime, or build this later. |
+| 4 | CPS / Asyncify-style transform | WASI runtimes without stack switching | **Not built (decided November 2026).** WASI concurrency waits for stack switching; MIR's explicit `Suspend` terminator keeps this lowering possible if a host never gets it. |
 
 The dependency on the stack-switching proposal stays isolated in the task/continuation runtime, so
 changes to the proposal stay local.
@@ -345,15 +345,19 @@ probes on Node v24.16.0 (V8 13.6).
 - The Component Model is only Phase 1 and absent from browsers, so emit core modules + JS glue for the
   web.
 
-## Risks and open questions
+## Risks
 
-- Stack switching may change shape before standardisation, or arrive late in Safari.
-- Should the MIR be designed so that MLIR can consume it later (GPU/tensor work)?
-- C backend: worth it for bootstrapping and portability?
-- Should WASI runtimes without stack switching be supported (lowering 4)?
-- LLVM version pinning and upgrade cadence.
-- Is Moddil-core (the stage 0 subset) small enough to build quickly, yet large enough to write a
-  pleasant compiler in? (Less pressing now that self-hosting is deferred.)
-- When should self-hosting be reconsidered after v1, and what would justify it?
-- JSPI's per-switch cost: is it acceptable for the game's client and the playground, or does the
-  browser need stack switching sooner?
+- Stack switching may change shape before standardisation, or arrive late in Safari. The
+  dependency stays isolated in the task runtime ([WASM concurrency lowering](#wasm-concurrency-lowering)).
+- **JSPI's per-switch cost** (decided November 2026: measured, not assumed): JSPI stays the
+  browser lowering until browsers ship stack switching, and its cost is measured on the game
+  client in M5, which is when it could matter.
+
+## Open questions
+
+None at present: the last were decided in November 2026.
+- MLIR, a C backend, the WASI lowering without stack switching and LLVM's version: decided
+  above.
+- Moddil-core (whether the stage 0 subset is right) and when to reconsider self-hosting belong to
+  the After v1 milestone ([`roadmap.md`: Milestones](roadmap.md#milestones)), where self-hosting
+  was deferred.

@@ -112,12 +112,14 @@ Details: [`determinism.md`](determinism.md).
 - Transparent remote calls.
 - **Production hot code upgrades (decided).** Live update is for debug builds; production uses
   rolling deploys with compiler-checked compatibility ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds)).
-- Runtime reflection / dynamic metaprogramming.
+- Runtime reflection / dynamic metaprogramming. (Opt-in `#[derive(Reflect)]`, static data generated
+  at compile time, is a standard mod: [`stdlib.md`: Runtime type information](stdlib.md#runtime-type-information).)
 - **A resilience mode for native binary libraries (decided).** The C ABI and WASM components are the
   stable binary boundaries; Moddil-to-Moddil linking is always from source or from artefacts built
   from it ([`syntax.md`: What Swift has that we lack](syntax.md#what-swift-has-that-we-lack)).
 
 ## Open questions
 
-- R1: should WASI runtimes without stack switching be supported, which would need the
-  CPS/Asyncify-style lowering? (Also in [`compiler.md`: Risks and open questions](compiler.md#risks-and-open-questions).)
+None at present. R1 on WASI runtimes without stack switching was decided in November 2026: they
+are not supported, and WASI concurrency waits for stack switching
+([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)).

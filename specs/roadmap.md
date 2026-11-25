@@ -1,6 +1,6 @@
 # Roadmap and cross-cutting questions
 
-> **Status:** minor questions. The single place for planning: strategic and technical questions that
+> **Status:** complete: no open questions. The single place for planning: strategic and technical questions that
 > span several areas, the milestones, what is still to build (and what built work deferred),
 > staging, and the order of the reference examples. What was built is in the git history.
 
@@ -57,8 +57,8 @@ removal.
 | **M2** | First standard mods written in Moddil; `moddil/runtime` and `moddil/runtime-sim`; LSP prototype. The tour's tests pass under `moddil/runtime-sim`. **The first GPU path:** kernel lowering through naga to WGSL, the `moddil/gpu` WebGPU handler and CPU simulator, and enough of `moddil/web` for a canvas and input; the **Mandelbulb flight** showcase runs in browsers as its test ([`examples/mandelbulb.md`](examples/mandelbulb.md)). | Done |
 | **M3** | **Hashiverse CLI/native client** (phase A). LLVM release backend. **Python bindings** (`moddil bind --lang python`, wheels), the first binding target ([`adoption.md`: Python first](adoption.md#python-first)), shown off by **Talk**, on the CPU pool first and then on WebGPU. | In progress: the C ABI and the first Python bindings are built |
 | **M4** | **A backend service**: the web store API with `sql`, HTTP and deterministic simulation; distributed v0 ([Staging: distributed programs](#staging-distributed-programs)). | To do |
-| **M5** | **Browser**: the Hashiverse web client, the game client and **fumoca's engine**; Swift, Kotlin and TypeScript bindings ([`ui.md`](ui.md)). WASI components with stack switching once Wasmtime's support leaves Tier 3. | To do |
-| **After v1** | Reconsider self-hosting ([`compiler.md`: Staged bootstrap](compiler.md#staged-bootstrap)). | To do |
+| **M5** | **Browser**: the Hashiverse web client, the game client and **fumoca's engine, simulation and GPU code**, replaced together; Swift, Kotlin and TypeScript bindings ([`ui.md`](ui.md)). WASI components with stack switching once Wasmtime's support leaves Tier 3. JSPI's per-switch cost measured on the game client. | To do |
+| **After v1** | Reconsider self-hosting ([`compiler.md`: Staged bootstrap](compiler.md#staged-bootstrap)): what would justify it, and whether Moddil-core (the stage 0 subset) is the right size to write a compiler in. | To do |
 
 The order puts the two first audiences, Python teams and backend teams, before the browser
 (decided November 2026).
@@ -229,19 +229,32 @@ L)
   for duplication, dead paths and limits missing from this list; fix what is small, and add the
   rest here as packages.
 
-**Needs a decision first** (not packaged)
-- How a `for` over an iterator that can fail with known errors marks them (today E0501: write
-  `while let Some(x) = it.next()? { … }`).
-- How a type-erased `Box<dyn Fn …>` that holds a handler borrow is tracked (likely its borrows
-  flow with the value, as for any view).
-- The syntax of inferred error tags.
-- Specialisation, generic associated types and trait aliases: whether, and how far.
-- The allocator in scope (`with Alloc = …`, `Vec::new_in`).
-- Exact decimal literals (`let p: Fixed<2> = 0.10`), and `f16`, `bf16` and arbitrary widths
-  (`u3`).
-- What a plain `#[export]` function gives C when it traps, instead of ending the process: a zero
-  value and a status C reads after the call (`moddil_trapped()`), or nothing (as now), with
-  `#[export(status)]` the way to get one.
+**P27. A `for` over a fallible iterator** (`crates/sema`, `crates/mir`, `crates/refinterp`; M)
+- `for x in it? { … }` (`error-handling.md` D22): the `?` marks every `next()`, and an error goes
+  on as from `?`. Without it, the loop stays E0501. Reference in `errors.md`.
+
+**P28. Boxed closures that hold handlers** (`crates/sema`, `crates/mir`; M)
+- A `Box<dyn Fn …>` carries the borrows of the handlers its closure captured (`closures.md`), so
+  it is a view of them and cannot outlive or leave their `with`. Lift today's E0802 refusal.
+
+**P29. The allocator in scope** (prelude, `crates/sema`, `crates/mir`, `crates/rt`; L)
+- `with Alloc = a { … }` (`memory.md`: The allocator in scope): `.to_rc()` and growing
+  collections allocate from the innermost installed allocator, the profile's default otherwise;
+  no `_in` constructors. `Scratch` in `moddil/alloc` installs itself the same way (`stdlib.md`).
+
+**P30. Exact decimal literals, `f16` and `bf16`** (`crates/sema`, `crates/mir`, the runners; L)
+- A decimal literal coerces to `Fixed<S>` exactly, or is an error (`numerics.md`: Exact literals).
+- `f16` and `bf16` as built-in floats, with conversions, on every runner.
+
+**P31. Arbitrary integer widths** (`crates/sema`, `crates/mir`, the runners; L)
+- `uN` and `iN` (`numerics.md`): stored in the next standard size, packed to their bits only in a
+  `#[repr(packed)]` struct, with overflow traps at the width, and a lint for an odd width outside
+  a packed struct.
+
+**P32. A trap in an exported function** (`crates/sema`, `crates/native`, `crates/rt`; M)
+- The call returns the zero value, or the `#[export(on_trap = …)]` sentinel, and C reads
+  `moddil_trapped()` after it; the process no longer ends (`interop.md`: Export). The generated
+  header declares `moddil_trapped`.
 
 **Waits on bigger work** (not packaged)
 - The rest of M3 and M4 and M5 (above, "Still to build").

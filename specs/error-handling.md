@@ -24,9 +24,11 @@
 | D15 | **In a task scope, the first error wins**: it cancels the sibling tasks and propagates with the scope's ordinary error type; errors that siblings raise before they finish are attached to it as suppressed (as D10). Cancelled siblings report `Cancelled`, which is not an error. Running every task to completion is a library choice (`parallel_map_all`), not a scope policy ([Tasks and concurrency](#tasks-and-concurrency)). |
 | D16 | **Context is a note after `?`**: `load(p)? fmt"loading config {p}"` attaches a note to the error without changing its type or variant; the note is built only on the error path ([Error types](#error-types)). |
 | D17 | **`?!` asserts that a call cannot fail**: `Code::new(s) ?! "built from ALPHABET"` traps (class 3) with the reason if it does; the reason is required ([This cannot fail here](#this-cannot-fail-here)). |
-| D18 | **`catch` arms name error types, then patterns**: `DecodeError(e)`, `LinkError::Taken(c)`, and inferred tags such as `Io(NotFound)`; no flattening ([Matching removes what it handles](#matching-removes-what-it-handles)). |
+| D18 | **`catch` arms name error types, then patterns**: `DecodeError(e)`, `LinkError::Taken(c)`, `IoError::NotFound`; no flattening ([Matching removes what it handles](#matching-removes-what-it-handles)). |
 | D19 | **No built-in resumable recovery**: "retry" or "use a default" decided by a caller is an ordinary effect trait, whose function-like handler resumes ([Results and effects](#results-and-effects)). |
-| D20 | **The model:** `fail(E)` is a non-resumable effect compiled to the return channel, with `Result` as its value form; error sets are inferred open unions with payloads, explicit on `pub` signatures; error return traces are on in debug builds ([Summary of the model](#summary-of-the-model)). |
+| D20 | **The model:** `fail(E)` is a non-resumable effect compiled to the return channel, with `Result` as its value form; error sets are inferred open unions of named error types, explicit on `pub` signatures; error return traces are on in debug builds ([Summary of the model](#summary-of-the-model)). |
+| D21 | **No inferred error tags** (decided November 2026): every error is a value of a named struct or enum, so it has one constructor syntax and can be found by name; only the *set* is inferred ([Error types](#error-types)). |
+| D22 | **A `for` over a fallible iterator is `for x in it? { … }`** (decided November 2026): the `?` marks every `next()`, so an error goes on as from `?` ([Loops over fallible iterators](#loops-over-fallible-iterators)). |
 
 ## Three outcome classes
 
@@ -137,35 +139,35 @@ receives a hidden handler argument (Koka). The happy path stays at Rust speed.
 
 ```
 fn load(path) -> Config {                     // error set inferred
-    let text = fs.read(path)?;                // + Io
-    let raw  = toml.parse(text)?;             // + Toml{line}
-    raw.validate()?                           // + Invalid{field}
+    let text = fs.read(path)?;                // + IoError
+    let raw  = toml.parse(text)?;             // + TomlError { line, … }
+    raw.validate()?                           // + Invalid { field }
 }
 ```
 
 The error set of `load` is inferred as the **union** of what each `?` can forward:
-`Io | Toml{line} | Invalid{field}`. Chains like `a()?.b()?.c()?` work the same way.
+`IoError | TomlError | Invalid`. Chains like `a()?.b()?.c()?` work the same way.
 
 ### Matching removes what it handles
 
 ```
 let config = try { load(p)? } catch {
-    Io(NotFound) => Config::default(),
-    // Toml and Invalid are not listed, so they keep propagating
+    IoError::NotFound => Config::default(),
+    // TomlError and Invalid are not listed, so they keep propagating
 };
 ```
 
 - A `catch` handles only the variants it lists. **The remaining variants propagate automatically.**
 - **How arms are named (D18).** A named error type is matched by its name: `DecodeError(e)` binds the
-  whole value, and `LinkError::Taken(c)` matches one variant through its enum path. Inferred tags
-  are matched by tag (`Io(NotFound)`, `Toml{line}`). Nothing is flattened, so two error enums that
+  whole value, and `LinkError::Taken(c)` matches one variant through its enum path. Nothing is
+  flattened, so two error enums that
   share a variant name never clash:
 
   ```rust
   try { create(req)? } catch {
       DecodeError(e)      => bad_request(e),
       LinkError::Taken(c) => conflict(c),
-      Io(NotFound)        => not_found(),
+      IoError::NotFound   => not_found(),
   }
   ```
 - The inferred error set after the catch is the original set **minus** the handled cases.
@@ -179,6 +181,23 @@ let config = try { load(p)? } catch {
 - `return` and `break` inside a try block leave the function or loop as usual; only `?` is scoped.
   The block's error type is always inferred, because unions are open (Rust's unstable
   `try_blocks` struggles here).
+
+### Loops over fallible iterators
+
+**Decided (D22, November 2026):** a `for` over an iterator whose `next()` can fail marks it with
+`?` after the iterator:
+
+```rust
+for line in file.lines()? {          // each next() can fail with IoError
+    count += 1;
+}
+```
+
+- It is shorthand for `while let Some(line) = file.lines().next()? { … }`, with the iterator
+  evaluated once: an error from any `next()` goes on as from `?`, to the innermost `try` or out of
+  the function.
+- Without the `?`, a `for` over a fallible iterator is an error (E0501), as any unmarked fallible
+  call is.
 
 ### This cannot fail here
 
@@ -243,16 +262,20 @@ as `discard(r, "best-effort cache warm")`, so it is visible in reviews and seman
 
 ## Error types
 
-**Inferred open unions with payloads** (Roc, OCaml polymorphic variants), combined with Zig-style
-inference:
-- No error enums to write for internal code; the compiler computes the set.
-- Unlike Zig, variants carry **payloads** (`Toml{line}`, `Io(kind, path)`).
+**Inferred open unions of named error types**, with Zig-style inference:
+- No error *sets* to write for internal code: the compiler computes the union of the types each
+  `?` and `fail` can raise.
+- Unlike Zig, errors carry **payloads**: each is a value of a struct or enum
+  (`TomlError { line }`, `IoError::NotFound(path)`).
+- **No inferred tags (D21, decided November 2026).** An error is never an anonymous tag raised
+  without a declaration (`fail(Toml{line})`, as in Roc). A named type has one constructor syntax,
+  can be found by name in code and review, and documents its payload; a one-off error costs a
+  one-line `struct`.
 - Unlike Rust, no `From` conversions are needed to combine errors from different sources; the sets
   simply union.
 - **Explicit at mod boundaries.** Public functions of a mod declare their error set (consistent with
   [Effects and capabilities as a unifying idea](effects-and-capabilities.md) and [LLMs as first-class programmers](agent-interface.md)). Inference stays local, which helps incremental builds ([Build times](build-times.md)) and makes
   semantic diffs meaningful ("`parse()` can now fail with `Io`", [Diffs, code review and version control](semantic-vcs.md)).
-- Named error types are still possible for documentation and reuse.
 
 **Context is a note after `?` (D16).** A string after `?` attaches a note to the error as it
 propagates:
@@ -263,13 +286,13 @@ fn start(p: Path) -> App {
     let db  = connect(&cfg.db)? fmt"connecting to {cfg.db}";
     …
 }
-// Io(NotFound) at /etc/app.toml
+// IoError::NotFound at /etc/app.toml
 //   while loading config /etc/app.toml
 //   while starting app
 ```
 
 - The note is **metadata**, like the error return trace and suppressed errors: the error's type
-  and variant do not change, so `catch Io(NotFound)` still matches. This is what `anyhow`'s
+  and variant do not change, so `catch IoError::NotFound` still matches. This is what `anyhow`'s
   `.context()` loses by wrapping.
 - The note is **built only on the error path**; the happy path pays one branch, as for any `?`.
 - Notes stack up the chain and appear in traces and in `Display`.
@@ -388,7 +411,8 @@ All decided:
 - `?` and `try {}`, with `catch` that handles listed variants and propagates the rest; context
   notes after `?`; `?!` for calls that cannot fail.
 - `fail(E)` as an effect underneath; `Result` as its value form.
-- Inferred open error unions with payloads; explicit sets at mod boundaries.
+- Inferred open unions of named error types (no anonymous tags); explicit sets at mod boundaries.
+- `for x in it? { … }` over a fallible iterator.
 - Non-resumable `fail`, compiled to the return channel; no unwinding for errors.
 - Error return traces (debug on, release configurable).
 - `errdefer`.
@@ -397,11 +421,8 @@ All decided:
 
 ## Open questions
 
-- **How an inferred tag is written.** Error sets hold named types and inferred tags such as
-  `Io(NotFound)` and `Toml{line}` ([Error types](#error-types)), but nothing yet says how a tag is
-  written where it is raised, how it differs from a call of a struct or variant of the same name,
-  or what type its payload has. Until this is settled, errors are named types only (slice S4,
-  [`roadmap.md`](roadmap.md)).
+None at present: the last (inferred tags, D21; fallible `for`, D22) were decided in November
+2026.
 
 ## Background
 

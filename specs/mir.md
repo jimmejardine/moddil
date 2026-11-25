@@ -1,6 +1,7 @@
 # MIR: the Mid-Level IR
 
-> **Status:** an outline: the shape is decided, most lowerings are proposed. Expands
+> **Status:** minor questions: the shape is decided and its open questions are answered; the
+> lowerings marked proposed are confirmed as they are built. Expands
 > [`compiler.md`: Backends](compiler.md#backends). Listed in the [index](README.md). Snippets are
 > **illustration only**; MIR has no committed textual syntax.
 
@@ -14,9 +15,9 @@
 | **Suspension** | `suspend` is an **explicit terminator in every body**, so every suspension point is visible to checks, lints and lowerings (decided) |
 | **Effects** | Handlers are hidden parameters (evidence passing); a pass turns statically known handlers into direct calls; `fail` is a second exit edge on calls (proposed) |
 | **Checks** | Overflow, bounds, refinements, `?!` and contracts are explicit `Assert` statements with a trap class and a source span (proposed) |
-| **Reference counting** | Explicit `dup`/`drop` after a Perceus-style pass, with reuse tokens (proposed) |
+| **Reference counting** | Explicit `dup`/`drop` after a Perceus-style pass, with reuse tokens (proposed); reuse analysis runs on MIR (decided) |
 | **Generics** | Bodies stay polymorphic with witness tables; monomorphisation is a pass (proposed) |
-| **Identity** | A canonical, deterministic text form and a hash per body; not a stable public format (proposed) |
+| **Identity** | A canonical, deterministic text form and a hash per body; never a stable public format (decided) |
 
 ## Problem
 
@@ -137,16 +138,20 @@ Proposed lowering of [`effects-and-capabilities.md`: Compilation](effects-and-ca
 - **Drop elaboration** happens in the same pass: drop flags where a value is moved on only some
   paths; `defer` and `errdefer` become cleanup blocks on the normal and error/cancellation edges
   ([`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)).
-- **Unwind edges exist only inside isolated scopes** (proposed). A trap elsewhere ends the process,
-  so ordinary code has no landing pads; inside `scope(…, isolate: true)` a trap unwinds, running
-  drops, poisoning held sync cells and calling `abandon` on linear values
+- **Unwind edges exist only inside isolated scopes** (decided November 2026). A trap elsewhere ends
+  the process, so ordinary code has no landing pads; inside `scope(…, isolate: true)` a trap
+  unwinds, running drops, poisoning held sync cells and calling `abandon` on linear values
   ([`lifecycle.md`: Traps](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)).
+  Unwinding is **table-based on every target**, with exnref on WASM, and a CI benchmark guards
+  the cost of isolated scopes.
 
 ### Reference counting
 
 - After ownership checking, a Perceus-style pass (proposed) inserts explicit **`dup` and `drop`**
   for `Rc` values, removes redundant pairs, and threads **reuse tokens** so a functional update
   becomes an in-place write when the old value is dead ([`memory.md`: Biased reference counting](memory.md#biased-reference-counting)).
+- **Reuse analysis runs on MIR** (decided November 2026), not in the backends: it is done once for
+  every runner, so its effect is the same everywhere and the MIR interpreter can test it.
 - Biased counting (owner task versus shared count) stays behind those two operations, in the
   runtime.
 
@@ -189,8 +194,9 @@ Proposed lowering of [`effects-and-capabilities.md`: Compilation](effects-and-ca
 
 ### Identity and stability
 
-- **A canonical text form** (proposed): deterministic numbering and printing, for snapshot tests,
-  `moddil explain --mir` and bug reports. It is **not** a stable public format.
+- **A canonical text form** (decided November 2026): deterministic numbering and printing, for
+  snapshot tests, `moddil explain --mir` and bug reports. It is **never** a stable public format:
+  tools use the compiler's queries and the language server instead.
 - **A hash per body** keys the build cache and live update
   ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds)): in debug builds
   functions are called through a patchable indirection.
@@ -208,14 +214,11 @@ Proposed lowering of [`effects-and-capabilities.md`: Compilation](effects-and-ca
 
 ## Open questions
 
-- **MLIR:** should the MIR be exportable to MLIR for GPU and tensor work (from
-  [`compiler.md`: Risks and open questions](compiler.md#risks-and-open-questions))?
-- **CPS lowering:** whether to build the state-machine lowering for WASI hosts without stack
-  switching; the explicit `Suspend` terminator keeps it possible.
-- **Text form:** whether the textual MIR should ever be stable enough for external tools.
-- **Where reuse analysis runs:** on MIR, or later in the backends.
-- **Landing pads:** whether isolated scopes are cheap enough with table-based unwinding on every
-  target, including WASM (exnref).
+None at present: the last were decided in November 2026.
+- **MLIR:** no export ([`compiler.md`: Backends](compiler.md#backends)).
+- **CPS lowering:** not built; WASI waits for stack switching, and the `Suspend` terminator keeps
+  it possible ([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)).
+- **Text form, reuse analysis and landing pads:** decided above.
 
 ## Prior art
 

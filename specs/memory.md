@@ -343,8 +343,9 @@ with Alloc = &frame {
   So allocation does not spread into every signature: a library that grows a `Vec` uses whatever
   allocator its caller installed.
 - **Installed like any handler.** `with Alloc = … { … }` takes a value or a borrow of an allocator,
-  and the innermost one wins. Explicit `_in(alloc)` constructors (`Vec::new_in(&tmp)`) remain for a
-  value that must use a particular allocator whatever is in scope.
+  and the innermost one wins. **There are no `_in(alloc)` constructors** (decided November 2026):
+  a value that must use a particular allocator is built inside its own `with Alloc = … { … }`
+  block, so there is one way to choose an allocator, and no API comes in two versions.
 - **Lifetimes are checked by the borrow rules.** A handler borrowed from an arena lives as long as
   the `with` block, and what is allocated in the arena is a view tied to it, so it cannot leave the
   block ([View types](#view-types)); as before, arena allocations cannot become `Rc`s.

@@ -48,6 +48,13 @@
 - `usize` and `isize` exist only for FFI and memory-level code (allocators, pointer arithmetic in
   `unsafe`), and a lint flags them in cross-target code ([`determinism.md`: Sources of nondeterminism](determinism.md#sources-of-nondeterminism)).
 - **Arbitrary widths** such as `u3` and `i24`, as in Zig ([`freestanding.md`: Hardware access](freestanding.md#hardware-access)).
+  They give exact ranges as types (a `u3` holds 0 to 7 and traps beyond it) and bit-packed
+  registers, packets and compact state without hand-written masks. Decided (November 2026):
+  - an odd width is **stored in the next standard size** (`u3` in a byte, `i24` in four), and
+    packed to its bits only in a `#[repr(packed)]` struct, so a typo never changes a layout
+    silently;
+  - each width is its own type, so a `u9` written for a `u8` is a type error where it meets one;
+  - a lint flags an odd width used outside a packed struct, where it is more likely a typo.
 
 ### Overflow traps
 

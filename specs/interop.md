@@ -98,6 +98,11 @@ and turn raw bindings into Moddil types:
 ## Export
 
 - Moddil functions and `#[repr(C)]` types can be **exported with the C ABI**, with a **generated header**.
+- **A trap in an exported function does not end the host** (decided November 2026): a library must
+  not kill the program that loaded it. The call returns the result type's zero value (0, `false`,
+  null, an all-zero struct), or the sentinel the function names with `#[export(on_trap = -1)]`,
+  and C reads `moddil_trapped()` after the call for the exact answer, since
+  a sentinel can also be a valid result. `#[export(status)]` keeps its `i32` status.
 - Moddil mods can also be exposed to Rust as a **generated crate** ([Rust: the generated bridge](#rust-the-generated-bridge), reverse direction).
 - This is the adoption path: Moddil can be introduced inside existing C, C++ or Rust projects one
   module at a time ([Open Questions and Next Steps for Moddil](roadmap.md)).

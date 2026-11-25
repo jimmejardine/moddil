@@ -161,10 +161,12 @@ Initial targets, to be refined:
   fumoca.com build. The core sees the model as data and never touches storage.
 - The `.fumoca` file format is unchanged, so files move freely between the TypeScript and Moddil
   builds during the migration.
+- **`engine`, `sim` and `gpu` are replaced at once** (decided November 2026), as the one Moddil core
+  they become: no generated bindings are written for an interim TypeScript `sim` and `gpu`.
+- **The UI libraries are fumoca's choice** (decided November 2026), not this example's. The grid
+  and the charts should draw to a canvas from the core's typed arrays, rather than through DOM
+  components, so large results need no copying into the DOM.
 
 ## Open questions
 
-- **Migration order:** replace `engine` first, keeping the TypeScript `sim` and `gpu` against
-  generated bindings, or replace all three at once?
-- **UI libraries:** which grid, docking and chart libraries; whether the grid and charts draw
-  to a canvas from the core's typed arrays rather than through DOM components.
+None at present: the migration order and the UI libraries were decided in November 2026.

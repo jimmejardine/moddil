@@ -1,7 +1,7 @@
 # The Website and Services: moddil.com
 
-> **Status:** minor questions: the principle, the services and the domain rules are decided;
-> hosting is a direction. Listed in the [index](README.md). What the project serves from
+> **Status:** complete: the principle, the services, the domain rules and hosting are decided, with
+> no open questions. Listed in the [index](README.md). What the project serves from
 > moddil.com, and what it deliberately does not.
 
 ## Summary
@@ -45,7 +45,7 @@
 
 | Service | Where | What | Source of truth | When |
 |---|---|---|---|---|
-| **Home** | `/` | The case for Moddil: the three shifts, armour not baggage, the tour's program with Run buttons, comparisons with Rust, Go and Python, and the status | [`vision.md`](vision.md), [`adoption.md`: Positioning](adoption.md#positioning-armour-not-baggage) | A placeholder now; the full page at M1 |
+| **Home** | `/` | The case for Moddil: the three shifts, armour not baggage, the tour's program with Run buttons, comparisons with Rust, Go and Python, and the status | [`vision.md`](vision.md), [`adoption.md`: Positioning](adoption.md#positioning-armour-not-baggage) | Goes up with the playground, once `/play` runs real programs ([Hosting](#hosting)) |
 | **Install and toolchains** | `/install`, `/toolchains` | An install script (`curl … \| sh`, and one for PowerShell), signed release archives per host, and the channel manifest that a manifest's pinned toolchain is fetched through; mirrored to GitHub Releases | Release CI | M1 |
 | **Standard mod names** | `/<mod>`, such as `moddil.com/net` | The HTTPS `<meta>` redirect from a mod's name to its repository, as Go's `go-import` | The standard mods' repositories | When standard mods are fetched rather than built in-tree |
 | **Learning** | `/learn` | The book, the tour, *Moddil for Rust developers*, *Moddil for Python developers*, and the reference examples as tutorials; every example runs in the playground | [`adoption.md`: Learning materials](adoption.md#learning-materials) | M1, growing to M2 |
@@ -99,21 +99,27 @@ New users are not, so the domain is guarded like a signing key:
 
 ## Hosting
 
-**Direction:**
+**Decided (November 2026):**
 
 - **One origin, built by CI** from this repository and the repositories it renders (advisories,
   proposals), and deployed as a static site.
-- **The host must support headers per path** (COOP and COEP on `/play`) and redirects. Cloudflare
-  Pages and Netlify do; GitHub Pages does not set custom headers.
+- **Cloudflare Pages.** The host must support headers per path (COOP and COEP on `/play`) and
+  redirects; Cloudflare Pages reads them from `_headers` and `_redirects` files, has a global CDN
+  and no bandwidth limit on its free tier. (Netlify works the same way; GitHub Pages does not set
+  custom headers.)
+- **Astro (Starlight) generates the site**: layout, navigation, search and the Markdown pages.
+  `moddil doc`, once built, emits what only Moddil's own tool can: the mods' API pages, and code
+  blocks that are type-checked (a broken example fails CI), linked to their definitions and given
+  Run buttons into `/play`. Astro includes those fragments, so Moddil never rebuilds a generic site
+  generator.
+- **The site goes up with the playground**, once `/play` runs real programs: the first thing a
+  visitor can do is run Moddil, rather than read a placeholder.
 - **The release archives are mirrored** to GitHub Releases, so an install never depends on one host.
 
 ## Open questions
 
-- **Which host**, within the constraints above.
-- **The static site generator:** an existing one at first; later, perhaps `moddil doc` itself,
-  which already renders mods, examples and Run buttons.
-- **When the placeholder goes up:** the home page could go up now, showing the status and the
-  roadmap, or wait until the playground runs real programs.
+None at present: the host, the site generator and when the site goes up were decided in November
+2026.
 
 ## Prior art
 

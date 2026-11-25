@@ -2,7 +2,8 @@
 
 ## Overview
 
-**Talk** (a working name) is a Python package that speaks. It runs
+**Talk** is a Python package that speaks, published on PyPI as `moddil-talk` and imported as
+`talk`. It runs
 [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M), an open-weight text-to-speech model
 (Apache-2.0, 82 million parameters, 24 kHz output), written in Moddil and compiled to a native
 extension module. It runs on the GPU through WebGPU, so it works on NVIDIA, AMD, Intel and Apple
@@ -20,7 +21,7 @@ talk.say("Hello from Moddil")                          # speaks through the defa
 audio = talk.synthesize("Hello", voice="af_heart")     # numpy float32 array, 24 kHz
 ```
 
-- **`pip install talk`, and Python can speak.** There is no torch, no CUDA toolkit and no
+- **`pip install moddil-talk`, and Python can speak.** There is no torch, no CUDA toolkit and no
   multi-gigabyte download: one small wheel per platform, plus the model weights, fetched once.
 - **Any GPU.** WebGPU (through wgpu) reaches Vulkan, Metal and DX12, so one wheel serves every
   vendor. NVIDIA-only speed-ups are optional.
@@ -39,7 +40,7 @@ audio = talk.synthesize("Hello", voice="af_heart")     # numpy float32 array, 24
 
 | Stage | Where | Notes |
 |---|---|---|
-| G2P (grapheme to phoneme) | CPU | Lexicon lookup with a fallback for unknown words; per language |
+| G2P (grapheme to phoneme) | CPU | Lexicon lookup, with a small open-weights neural G2P model for unknown words; English only. No espeak-ng, which is GPL-3 and cannot ship in a permissive wheel |
 | Acoustic model | `moddil/tensor` graph, plus tile kernels where fusion matters | StyleTTS 2-style: text encoder, prosody and duration predictors, style vectors per voice |
 | Vocoder | Tile kernels | ISTFTNet: upsampling convolutions, then an inverse short-time Fourier transform |
 | Output | `Audio` | numpy array to Python; the platform's audio device for `say`; Web Audio in the browser |
@@ -100,21 +101,17 @@ Initial targets, to be refined:
 - Standard: `moddil/tensor`, `moddil/gpu`, `moddil/simd`, `moddil/fs`, `moddil/net` (download only),
   `moddil/crypto` (weight hashes), `moddil/text` (sentence breaks, normalisation), `moddil/web` and
   `moddil/runtime-wasm` (browser), `moddil/test`, `moddil/bench`.
-- New: `talk/g2p` (lexicons and fallback), `talk/kokoro` (the model), and audio output (see
-  [`stdlib.md`: Open questions](../stdlib.md#open-questions)).
+- Standard, new: `moddil/audio` for `say` ([`stdlib.md`: Audio](../stdlib.md#audio)).
+- Talk's own: `talk/g2p` (the lexicon and the neural fallback) and `talk/kokoro` (the model).
 
 ## Interop and non-Moddil parts
 
-- **Weights:** from Hugging Face, converted once to safetensors. How Moddil loads weight files is an
-  open question in [`accelerators.md`](../accelerators.md#open-questions).
+- **Weights:** from Hugging Face, converted once to safetensors, and loaded by `moddil/tensor`
+  ([`accelerators.md`: Loading model weights](../accelerators.md#loading-model-weights)).
 - **The Svelte 5 demo page** uses the generated TypeScript bindings through the Svelte adapter in
   `moddil/web` ([`ui.md`: The browser](../ui.md#the-browser)).
 - **Python:** only the binding layer that `moddil bind` generates; no hand-written C.
 
 ## Open questions
 
-- **Name:** "Talk" is a working name; `talk` on PyPI may be taken.
-- **G2P licence:** Kokoro's usual pipeline falls back to espeak-ng, which is GPL-3 and cannot ship
-  in a permissively licensed wheel. Options: a lexicon-only pipeline with a small rule-based
-  fallback, or a small neural G2P model with open weights.
-- **Languages:** English first; which others, given that each needs its own G2P?
+None at present: the name, the G2P model and the languages were decided in November 2026.

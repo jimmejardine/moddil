@@ -155,6 +155,8 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 | `moddil/log`, `moddil/trace` | Handlers for the write-only `log`/`span`/`metric` effects: pretty output, OTLP, Prometheus, flight recorder ([`observability.md`](observability.md)) | G H W X |
 | `moddil/web` | Bindings generated from WebIDL; the `Dom` effect and a simulated DOM; JS interop for `wasm32-browser` ([`ui.md`: The browser](ui.md#the-browser)) | G W X |
 | `moddil/storage` | Key-value storage: SQLite, IndexedDB, files | W X |
+| `moddil/audio` | The `Audio` effect: playing and capturing samples, with handlers for CoreAudio, WASAPI, ALSA/PipeWire and Web Audio, and a simulated handler that captures what is played for tests ([Audio](#audio)) | G, Talk |
+| `moddil/reflect` | `#[derive(Reflect)]`: opt-in runtime type information for editors and inspectors ([Runtime type information](#runtime-type-information)) | G |
 | `moddil/dht`, `moddil/pow` | Kademlia DHT, proof-of-work | X (probably community mods, not standard) |
 
 ## Distribution and versioning
@@ -346,9 +348,11 @@ scope**, as Jai's temporary storage and `reset_temporary_storage()`.
 let mut scratch = Scratch::with_capacity(4[MiB]);
 loop {
     scratch.scope(|tmp| {                              // tmp: &Arena, valid for this frame only
-        let mut visible = Vec::new_in(tmp);            // grows inside the arena
-        tick(&mut world, &mut visible);
-        render(&visible);
+        with Alloc = tmp {
+            let mut visible = Vec::new();              // grows inside the arena
+            tick(&mut world, &mut visible);
+            render(&visible);
+        }
     });                                                // O(1) reset; nothing is freed one by one
 }
 ```
@@ -363,8 +367,9 @@ loop {
   has its own.
 - Debug builds poison reset memory and report the high-water mark per scope, so the capacity
   can be tuned.
-- `Vec::new_in(tmp)` is explicit until [`memory.md`: Open questions](memory.md#open-questions)
-  decides whether an arena can also be put in scope.
+- The arena is put in scope as any allocator is, with `with Alloc = tmp`
+  ([`memory.md`: The allocator in scope](memory.md#the-allocator-in-scope)); there is no
+  `Vec::new_in`.
 
 ## I/O
 
@@ -513,17 +518,28 @@ http::serve(listener, app)?;
 | [Web store](examples/web-store.md) | HTTP, `sql`, `serde` JSON, `i18n`, `crypto` for sessions; streams of rows as ordinary iterators |
 | [Hashiverse](examples/hashiverse.md) | `crypto`, `net`, `storage`, simulation handlers; generators for protocol state machines |
 
+## Audio
+
+**Decided (November 2026): audio output is a standard mod, `moddil/audio`.** [Talk](examples/talk.md)'s
+`say` plays sound, and games need it too. An `Audio` effect plays and captures sample buffers;
+handlers cover CoreAudio, WASAPI, ALSA or PipeWire, and Web Audio. A **simulated handler** records
+what is played, so a test can check the samples without a sound card.
+
+## Runtime type information
+
+**Decided (November 2026): opt-in runtime type information is a standard mod, `moddil/reflect`.**
+`reflect(T)` exists only at compile time ([`comptime.md`: Static reflection](comptime.md#static-reflection)),
+but in-game editors, inspectors and generic debug UIs need a description of a value's fields at
+run time, as Jai's `Type_Info` gives. `#[derive(Reflect)]` emits a static `TypeInfo` and typed
+field accessors, paid for only by the types that opt in. It is generated at compile time, so it is
+not the dynamic metaprogramming the [non-goals](requirements.md#non-goals-draft) exclude.
+
+- **Visibility is respected:** a field is reflected only where it would be visible, so another mod
+  sees only `pub` fields.
+- **Read-only by default.** `#[reflect(mut)]` on the type lets an editor write fields through it;
+  a type with invariants simply does not opt in.
+
 ## Open questions
 
-- **Audio output.** [Talk](examples/talk.md)'s `say` plays sound. Is that a standard
-  `moddil/audio` mod, with an `Audio` effect and handlers for CoreAudio, WASAPI, ALSA or PipeWire,
-  and Web Audio, or a community mod? A simulated handler would let tests capture the samples.
-- **Opt-in runtime type information.** `reflect(T)` exists only at compile time
-  ([`comptime.md`: Static reflection](comptime.md#static-reflection)). In-game editors, inspectors and
-  generic debug UIs need a runtime description of a value's fields; Jai gives every type a
-  `Type_Info`. A `#[derive(Reflect)]` could emit a static `TypeInfo` and typed field accessors, paid
-  for only by the types that opt in. Still open:
-  - whether it is a standard mod or a community one;
-  - how it respects field visibility;
-  - whether an editor may mutate fields through it, or only read them.
+None at present: the last (audio output, runtime type information) were decided in November 2026.
 
