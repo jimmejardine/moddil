@@ -84,7 +84,9 @@ moddil test examples/cabi            # natively; --interp as well
   pointers.
 - **The rules for exports:** each export is a `pub` free function with named parameters and C's
   types. It can't need effect handlers, fail with an error, suspend or spawn (E0222). A trap in one
-  ends the process with exit code 70, since C has no way to be told (`ffi.export.1`).
+  doesn't end the program that loaded the library: C is given the result type's zero, or the
+  export's `#[export(on_trap = v)]` value, and `moddil_trapped()` says the call trapped
+  (`ffi.export.3`). `moddil_divide`, `moddil_third` and `moddil_along` show it.
 
 ## Moddil calling C back
 

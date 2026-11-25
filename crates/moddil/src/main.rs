@@ -859,9 +859,11 @@ fn build_lib(
     let object = native_object(&name, moddil_native::build_library(db, program, &exports))?;
     let dir = dir.map_or_else(|| PathBuf::from("."), Path::to_path_buf);
     std::fs::create_dir_all(&dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
+    // The exports, and `moddil_trapped`, which says whether the last call trapped (`ffi.export.3`).
     let symbols: Vec<String> = exports
         .iter()
         .map(|&f| items.fns[f as usize].name.clone())
+        .chain(["moddil_trapped".to_string()])
         .collect();
     let header = moddil_native::header(db, program, &exports, &name);
     let h = dir.join(format!("{name}.h"));

@@ -620,6 +620,10 @@ pub(crate) fn header(db: &dyn Db, program: Program, exports: &[u32], name: &str)
         };
         out.push_str(&format!("{}({params});\n", decl(&sig.ret, &sig.name)));
     }
+    out.push_str(
+        "\n/* 1 if the last call into this library on this thread trapped (it then gave C its \
+         result\n * type's zero, or its `on_trap` value), else 0. */\nint32_t moddil_trapped(void);\n",
+    );
     out.push_str(&format!("\n#endif /* {guard}_H */\n"));
     out
 }
@@ -1043,7 +1047,7 @@ impl<M: Module> Compiler<'_, M> {
         }
         let (target, params, ret) = self.declare_fn(f, &[])?;
         let name = format!("moddil_callback_{f}");
-        let id = self.c_wrapper(target, &params, &ret, &name, Linkage::Local, false)?;
+        let id = self.c_wrapper(target, &params, &ret, &name, Linkage::Local, OnTrap::End)?;
         self.callbacks.insert(f, id);
         Ok(id)
     }
@@ -1782,15 +1786,20 @@ impl<M: Module> Compiler<'_, M> {
         params: &[Ty],
         ret: &Ty,
     ) -> Result<FuncId, String> {
-        let name = self.items.fns[f as usize].name.clone();
-        let status = self.items.fns[f as usize].export_status;
-        self.c_wrapper(target, params, ret, &name, Linkage::Export, status)
+        let sig = &self.items.fns[f as usize];
+        let name = sig.name.clone();
+        let on_trap = if sig.export_status {
+            OnTrap::Status
+        } else {
+            OnTrap::Give(sig.export_on_trap)
+        };
+        self.c_wrapper(target, params, ret, &name, Linkage::Export, on_trap)
     }
 
     /// A C-ABI function `name` that calls Moddil function `target` (taking `params`, giving
     /// `ret`): C's types (8- and 16-bit integers as 32, as C passes them; structs as
     /// [`moddil_ffi::abi`] says) in the platform's C convention. It starts the runtime, calls
-    /// `target`, and if that traps, gives 2 (`status`, `ffi.export.2`) or ends the process.
+    /// `target`, and if that traps, does as `on_trap` says.
     fn c_wrapper(
         &mut self,
         target: FuncId,
@@ -1798,7 +1807,7 @@ impl<M: Module> Compiler<'_, M> {
         ret: &Ty,
         name: &str,
         linkage: Linkage,
-        status: bool,
+        on_trap: OnTrap,
     ) -> Result<FuncId, String> {
         let wide = |t: ir::Type| {
             if t == types::I8 || t == types::I16 {
@@ -1819,7 +1828,13 @@ impl<M: Module> Compiler<'_, M> {
                 .map_err(|e| e.to_string())
         };
         let begin = import(&mut self.module, "moddil_rt_export_begin")?;
-        let trapped = import(&mut self.module, "moddil_rt_export_trapped")?;
+        let trapped = import(
+            &mut self.module,
+            match on_trap {
+                OnTrap::End => "moddil_rt_callback_trapped",
+                _ => "moddil_rt_export_trapped",
+            },
+        )?;
         let ptr = self.module.target_config().pointer_type();
         // How each struct crosses, worked out before the builder borrows the context.
         let mut cparams = Vec::new();
@@ -1899,14 +1914,54 @@ impl<M: Module> Compiler<'_, M> {
             let bad = b.create_block();
             b.ins().brif(results[0], bad, &[], ok, &[]);
             b.switch_to_block(bad);
-            if status {
+            let trapped = this.module.declare_func_in_func(trapped, b.func);
+            match on_trap {
                 // `#[export(status)]` (`ffi.export.2`): the caller is told, with 2.
-                let two = b.ins().iconst(types::I32, 2);
-                b.ins().return_(&[two]);
-            } else {
-                let trapped = this.module.declare_func_in_func(trapped, b.func);
-                b.ins().call(trapped, &[]);
-                b.ins().trap(ir::TrapCode::unwrap_user(1));
+                OnTrap::Status => {
+                    let two = b.ins().iconst(types::I32, 2);
+                    b.ins().return_(&[two]);
+                }
+                // A function pointer's call has nothing to give (`type.fnptr.1`).
+                OnTrap::End => {
+                    b.ins().call(trapped, &[]);
+                    b.ins().trap(ir::TrapCode::unwrap_user(1));
+                }
+                // An export gives its result type's zero, or `on_trap` (`ffi.export.3`), and
+                // `moddil_trapped()` says it trapped.
+                OnTrap::Give(v) => {
+                    b.ins().call(trapped, &[]);
+                    match &cret {
+                        CType::Struct(l) => match moddil_ffi::abi::ret(on, l) {
+                            moddil_ffi::abi::Ret::Parts(parts) => {
+                                let out: Vec<ir::Value> =
+                                    parts.iter().map(|(_, t)| zero(b, *t)).collect();
+                                b.ins().return_(&out);
+                            }
+                            moddil_ffi::abi::Ret::Indirect => {
+                                let at = sret.ok_or("the hidden result pointer")?;
+                                let z = b.ins().iconst(types::I8, 0);
+                                for off in 0..l.size {
+                                    b.ins().store(flags, z, at, off as i32);
+                                }
+                                b.ins().return_(&[]);
+                            }
+                        },
+                        _ => match clif_type(ret)? {
+                            Some(t) => {
+                                let t = wide(t);
+                                let r = match v {
+                                    // In the result's bits: a `u64` past `i64::MAX` too.
+                                    Some(v) => b.ins().iconst(t, v as i64),
+                                    None => zero(b, t),
+                                };
+                                b.ins().return_(&[r]);
+                            }
+                            None => {
+                                b.ins().return_(&[]);
+                            }
+                        },
+                    }
+                }
             }
             b.switch_to_block(ok);
             if let (CType::Struct(l), Some(r)) = (&cret, rslot) {
@@ -6414,4 +6469,27 @@ impl<M: Module> Lower<'_, '_, '_, M> {
 /// A built-in function native code does not compile yet.
 fn unsupported<T>(name: &str) -> Result<T, String> {
     Err(format!("the built-in function `{name}`"))
+}
+
+/// What a C-ABI wrapper does when the Moddil function it calls traps.
+#[derive(Clone, Copy)]
+enum OnTrap {
+    /// Ends the process: a function pointer's call (`type.fnptr.1`).
+    End,
+    /// Gives 2: `#[export(status)]` (`ffi.export.2`).
+    Status,
+    /// Gives the result type's zero, or the value (`#[export(on_trap = v)]`), and records the
+    /// trap for `moddil_trapped()` (`ffi.export.3`).
+    Give(Option<i128>),
+}
+
+/// A zero of type `t`.
+fn zero(b: &mut FunctionBuilder, t: ir::Type) -> ir::Value {
+    if t == types::F32 {
+        b.ins().f32const(0.0)
+    } else if t == types::F64 {
+        b.ins().f64const(0.0)
+    } else {
+        b.ins().iconst(t, 0)
+    }
 }

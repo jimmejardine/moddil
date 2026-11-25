@@ -165,6 +165,7 @@ impl Collector<'_> {
             foreign,
             export: attrs.export,
             export_status: attrs.export_status,
+            export_on_trap: attrs.on_trap,
             py_export: attrs.py_export,
             default_arg: false,
             intrinsic: attrs.intrinsic,
@@ -290,6 +291,30 @@ impl Collector<'_> {
                 sig.ret.range.unwrap_or(name_range),
                 format!("{what} gives a C type or nothing, not `{ret}`"),
             ));
+        }
+        // `on_trap`'s value is one of the result's integer type (`ffi.export.3`).
+        if let Some(v) = attrs.on_trap {
+            let range = match ret {
+                Ty::Int => Some((i64::MIN.into(), i64::MAX.into())),
+                Ty::Num(n) if !n.is_float() => Some(n.int_range()),
+                _ => None,
+            };
+            match range {
+                None => ds.push(Diagnostic::error(
+                    Code::E0222,
+                    at,
+                    format!(
+                        "`on_trap` gives an integer, and this function gives `{ret}`: without it, \
+                         a trap gives C the zero value"
+                    ),
+                )),
+                Some((lo, hi)) if v < lo || v > hi => ds.push(Diagnostic::error(
+                    Code::E0222,
+                    at,
+                    format!("`on_trap = {v}` is not a `{ret}`"),
+                )),
+                Some(_) => {}
+            }
         }
         if !sig.effects.is_none() {
             ds.push(Diagnostic::error(
@@ -513,6 +538,8 @@ struct FnAttrs {
     /// `#[export]` or `#[export(status)]`, for C.
     export: bool,
     export_status: bool,
+    /// `#[export(on_trap = v)]`'s `v` (`ffi.export.3`).
+    on_trap: Option<i128>,
     /// `#[export(python)]`.
     py_export: bool,
     /// Where `#[export…]` is written.
@@ -550,10 +577,24 @@ fn fn_attrs(node: &SyntaxNode, src: Src, ds: &mut Vec<Diagnostic>) -> FnAttrs {
                     a.export_status = true;
                 }
                 Some("(python)") => a.py_export = true,
+                Some(s) if s.starts_with("(on_trap=") && s.ends_with(')') => {
+                    a.export = true;
+                    let v = &s["(on_trap=".len()..s.len() - 1];
+                    match v.replace('_', "").parse::<i128>() {
+                        Ok(v) => a.on_trap = Some(v),
+                        Err(_) => ds.push(Diagnostic::error(
+                            Code::E0222,
+                            attr.text_range(),
+                            "`on_trap` is an integer literal, the value C is given if the \
+                             function traps",
+                        )),
+                    }
+                }
                 Some(_) => ds.push(Diagnostic::error(
                     Code::E0222,
                     attr.text_range(),
-                    "`#[export]` is for C, `#[export(python)]` for Python",
+                    "`#[export]` is for C, `#[export(on_trap = v)]` gives `v` on a trap, \
+                     `#[export(python)]` is for Python",
                 )),
             }
             a.export_at = Some(attr.text_range());

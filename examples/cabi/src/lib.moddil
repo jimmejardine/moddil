@@ -113,6 +113,27 @@ pub fn moddil_halves(h: Halves) -> Halves {
     Halves { lo: h.hi, hi: h.lo }
 }
 
+/// `a / b`. Dividing by zero traps: C is given 0, the result type's zero, and
+/// `moddil_trapped()` says the call trapped (`ffi.export.3`).
+#[export]
+pub fn moddil_divide(a: int, b: int) -> int {
+    a / b
+}
+
+/// The `i`th of three numbers. Out of range, a trap gives C -1 instead of 0.
+#[export(on_trap = -1)]
+pub fn moddil_third(i: int) -> int {
+    let xs: [int; 3] = [10, 20, 30];
+    xs[i]
+}
+
+/// The point `len` along the x axis: a negative `len` traps, and C is given the zero `Point`.
+#[export]
+pub fn moddil_along(len: f64) -> Point {
+    assert(len >= 0.0);
+    Point { x: len, y: 0.0 }
+}
+
 extern "C" {
     fn shape_midpoint(a: Point, b: Point) -> Point;
     fn shape_swap(p: Pair) -> Pair;

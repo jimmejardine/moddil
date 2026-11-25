@@ -24,6 +24,16 @@ int main(void) {
     if (t.a != 2 || t.b != 3 || t.c != 1) return 8;
     Halves h = moddil_halves((Halves){1.5f, 2.5f});
     if (h.lo != 2.5f || h.hi != 1.5f) return 9;
+
+    /* A trap gives the result type's zero, or the function's `on_trap`, and moddil_trapped()
+     * says so until the next call. The library goes on working. */
+    if (moddil_divide(7, 2) != 3 || moddil_trapped()) return 10;
+    if (moddil_divide(7, 0) != 0 || !moddil_trapped()) return 11;
+    if (moddil_third(1) != 20 || moddil_trapped()) return 12;
+    if (moddil_third(5) != -1 || !moddil_trapped()) return 13;
+    Point z = moddil_along(-1.0);
+    if (z.x != 0.0 || z.y != 0.0 || !moddil_trapped()) return 14;
+    if (moddil_gcd(6, 4) != 2 || moddil_trapped()) return 15;
     puts("C called Moddil: every result is right");
     return 0;
 }

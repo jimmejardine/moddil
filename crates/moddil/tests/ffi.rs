@@ -72,6 +72,7 @@ fn c_calls_the_library(static_lib: bool) {
         header.contains("double moddil_distance(const Point *a, const Point *b);"),
         "{header}"
     );
+    assert!(header.contains("int32_t moddil_trapped(void);"), "{header}");
     // The C program, compiled and linked against the library.
     let t = target();
     let cc = cc::Build::new()

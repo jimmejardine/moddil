@@ -231,11 +231,6 @@ L)
   `#[repr(packed)]` struct, with overflow traps at the width, and a lint for an odd width outside
   a packed struct.
 
-**P32. A trap in an exported function** (`crates/sema`, `crates/native`, `crates/rt`; M)
-- The call returns the zero value, or the `#[export(on_trap = …)]` sentinel, and C reads
-  `moddil_trapped()` after it; the process no longer ends (`interop.md`: Export). The generated
-  header declares `moddil_trapped`.
-
 **P33. Runtime type information** (`mods/reflect`, `crates/sema` derives; M)
 - `#[derive(Reflect)]` (`stdlib.md`: Runtime type information): a static `TypeInfo` and typed
   field accessors; only fields visible where they are read; read-only unless the type has
@@ -248,7 +243,7 @@ L)
   - inside `scope(…, isolate: true)`, a trap unwinds through tables, with exnref on WASM,
     running drops and `abandon`.
 - Add a benchmark that guards the cost of isolated scopes.
-- Keep traps at the C ABI as they are now (P32).
+- Keep traps at the C ABI as they are now (`ffi.export.3`).
 
 **Waits on bigger work** (not packaged)
 - The rest of M3 and M4 and M5 (above, "Still to build").

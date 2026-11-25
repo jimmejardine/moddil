@@ -682,19 +682,43 @@ pub unsafe extern "C" fn gpu_show(p: *const u32, n: u64, width: u64, height: u64
     crate::os::gpu_show(pixels, width as i64, height as i64);
 }
 
+thread_local! {
+    /// Whether the last call from C into an `#[export]` function on this thread trapped
+    /// (`ffi.export.3`).
+    static EXPORT_TRAPPED: Cell<bool> = const { Cell::new(false) };
+}
+
 /// Starts the runtime for a Moddil function called from C (`ffi.export.1`): on each thread's
-/// first call into the library (the runtime's context is the thread's).
+/// first call into the library (the runtime's context is the thread's). It clears what
+/// [`trapped`] says, which is about the call it starts.
 #[unsafe(export_name = "moddil_rt_export_begin")]
 pub extern "C" fn export_begin() {
     if CTX.with(|c| c.borrow().is_none()) {
         begin_run();
     }
+    EXPORT_TRAPPED.with(|t| t.set(false));
 }
 
-/// A trap in a Moddil function called from C (`ffi.export.1`): C has no way to be told, so the
-/// process ends, as a built program's does (`EX_SOFTWARE`).
+/// A trap in an `#[export]` function called from C (`ffi.export.3`): the library does not end
+/// its host. The call gives C a value (the result type's zero, or its `on_trap`), and
+/// [`trapped`] says it trapped.
 #[unsafe(export_name = "moddil_rt_export_trapped")]
 pub extern "C" fn export_trapped() {
+    eprintln!("moddil: a trap in a Moddil function called from C; `moddil_trapped()` says so");
+    EXPORT_TRAPPED.with(|t| t.set(true));
+}
+
+/// `moddil_trapped()`, for C (`ffi.export.3`): 1 if the last call into an `#[export]` function
+/// on this thread trapped, else 0.
+#[unsafe(export_name = "moddil_trapped")]
+pub extern "C" fn trapped() -> i32 {
+    EXPORT_TRAPPED.with(|t| t.get()).into()
+}
+
+/// A trap in a Moddil function C calls through a function pointer (`type.fnptr.1`): it has no
+/// value to give C, so the process ends, as a built program's does (`EX_SOFTWARE`).
+#[unsafe(export_name = "moddil_rt_callback_trapped")]
+pub extern "C" fn callback_trapped() {
     eprintln!("moddil: a trap in a Moddil function called from C; the process ends");
     std::process::exit(70);
 }

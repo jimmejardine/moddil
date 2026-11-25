@@ -287,6 +287,9 @@ pub struct FnSig {
     /// `#[export(status)]`: an export whose trap makes it give 2 rather than end the process
     /// (`ffi.export.2`), for generated bindings.
     pub export_status: bool,
+    /// `#[export(on_trap = v)]`: the value an export gives C when it traps (`ffi.export.3`), not
+    /// its result type's zero.
+    pub export_on_trap: Option<i128>,
     /// `#[export(python)]`: a function of the mod's Python module (`ffi.python.1`).
     pub py_export: bool,
     /// Whether it is such a hidden const, whose body is the default written at `node`.
@@ -396,6 +399,7 @@ impl FnSig {
             foreign: false,
             export: false,
             export_status: false,
+            export_on_trap: None,
             py_export: false,
             default_arg: false,
             intrinsic: false,

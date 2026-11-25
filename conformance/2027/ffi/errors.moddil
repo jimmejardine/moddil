@@ -1,4 +1,4 @@
-// covers: ffi.extern.1, ffi.native.1, ffi.core.1, ffi.python.1, type.fnptr.1
+// covers: ffi.extern.1, ffi.native.1, ffi.core.1, ffi.python.1, type.fnptr.1, ffi.export.3
 
 // A single file has no capabilities, so it declares no C functions.
 extern "C" {
@@ -44,4 +44,23 @@ pub fn java() {}
 // A `fn` value is called only in `unsafe`, with as many arguments as its type takes.
 fn calls(f: fn(i32) -> i32) -> i32 {
     f(1)                                    //~ E0218
+}
+
+// `on_trap` is an integer of the result's type.
+#[export(on_trap = -1)]                     //~ E0222
+pub fn gives_nothing() {}
+
+#[export(on_trap = 1.5)]                    //~ E0222
+pub fn gives_a_float() -> f64 {
+    0.0
+}
+
+#[export(on_trap = 256)]                    //~ E0222
+pub fn gives_a_byte() -> u8 {
+    0
+}
+
+#[export(on_trap = -1)]
+pub fn gives_an_int() -> i32 {
+    0
 }

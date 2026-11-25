@@ -28,7 +28,8 @@ numbers, `int`, `bool`, raw pointers and `fn` types; E0222 otherwise), and no re
 Its values are C functions' addresses, and functions named where one is wanted: a free function,
 not generic, with the pointer's parameters and result, which needs no handlers, cannot fail and
 does not suspend or spawn (E0222 otherwise). C calls a Moddil function so given through a C-ABI
-wrapper, as an `#[export]`'s; a trap in it ends the process with exit code 70 (on the MIR
+wrapper, as an `#[export]`'s, but it has no value to give, so a trap in it ends the process with
+exit code 70 (on the MIR
 interpreter, see **ffi.native.2**). A `fn` value is kept in variables and `#[repr(C)]` fields,
 given to C, and called as a function, `f(x)`, but only in an `unsafe` block (E0218), with as many
 arguments as its type takes (E0202): nothing checks what it runs. Natively a Moddil function so
@@ -46,12 +47,18 @@ mod's exported functions, with the runtime, into a shared library, and writes it
 and the prototypes. With `--static` it builds a static library instead (`name.lib` on Windows,
 `libname.a` elsewhere) holding the functions, the runtime and the mods' C code, and writes
 `name.link`, the system libraries a program linking it needs too. The runtime starts with the
-first call. A trap in an exported function ends
-the process with exit code 70, as a built program's does: C has no way to be told. In Moddil an
-exported function is called as any other.
+first call. A trap in an exported function does not end the process (**ffi.export.3**). In
+Moddil an exported function is called as any other.
 
 **ffi.export.2** `#[export(status)]` is `#[export]` for generated bindings: the function gives
-an `i32` status, and a trap in it makes it give 2 instead of ending the process.
+an `i32` status, and a trap in it makes it give 2.
+
+**ffi.export.3** When an `#[export]` function called from C traps, the call gives C its result
+type's zero (0, `false`, a null pointer, a struct of zeros, or nothing), or, with
+`#[export(on_trap = v)]`, the integer `v`, which is a value of the result's integer type (E0222
+otherwise). The library's `moddil_trapped()`, declared in its header, then gives 1 until the next
+call into the library on that thread, which sets it to 0 again; the trap's message goes to
+standard error. The library goes on working: a value the trap left behind is not dropped.
 
 **ffi.core.1** The `core` mod's `ffi` module ([source](core/ffi.moddil)), named only in a mod
 with the `unsafe` capability (E0219), makes borrows of what C gives and hands boxes to C:
