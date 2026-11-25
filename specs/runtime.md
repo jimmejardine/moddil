@@ -11,7 +11,7 @@ runs it: runtimes, executors, the I/O reactor, and how they differ by target.
 | **Runtimes are handlers** | Scheduling, I/O and time are core effects; runtimes are mods that handle them, so every library works on every runtime ([Pluggable runtimes without ecosystem splits](#pluggable-runtimes-without-ecosystem-splits)). |
 | **Tasks, not threads** | Everything concurrent is a stackful task; threads are an execution resource with no user-facing API ([Tasks, threads and executors](#tasks-threads-and-executors)). |
 | **Executors** | One runtime per process with several executors: `default`, `blocking`, `pinned(cores)`, `affine(main)`. |
-| **One reactor** | A single I/O reactor (io_uring, epoll, kqueue, IOCP) shared by all executors; every operation is cancellable at the OS level. |
+| **A reactor per worker** | Each worker thread has its own I/O reactor (io_uring, epoll, kqueue, IOCP); every operation is cancellable at the OS level. |
 | **Obligations from the memory model** | Runtimes drain biased-RC merge queues, expose the task tree, and keep I/O cancel-safe ([Runtime contract](#runtime-contract)). |
 
 ## Problem
@@ -55,6 +55,61 @@ The same mechanism generalises the pluggable traits that real projects build by 
 for example, has `TransportFactory`, `TimeProvider`, `ClientStorage` and `KeyLockerManager` traits plus
 an in-memory transport for tests (see [`examples/hashiverse.md`](examples/hashiverse.md)). In
 Moddil these are effects, and the test versions are handlers.
+
+### Starting a program
+
+**Decided (November 2026):** a runtime is installed with `with Runtime = …`, as any handler is;
+executors are values built from the `Cpus` root capability; tasks within an executor are
+scheduled fairly, and priority belongs to executors.
+
+**On the deterministic runtime.** A test needs nothing: each runs under `runtime-sim` with its own
+seed, printed when it fails, so a failure replays exactly. A whole program can be run under it
+from `main`:
+
+```rust
+test "orders settle" {
+    scope(|s| {
+        s.spawn(|| book.submit(buy));
+        s.spawn(|| book.submit(sell));
+    });
+    book.trades().len()                 // => 1, in the same order on every run
+}
+
+fn main(args: Args, stdio: Stdio) -> ExitCode {
+    with Runtime = Sim::seeded(42) {    // one task at a time, seed-ordered, virtual time
+        app::run(&stdio)
+    }
+}
+```
+
+**On the parallel runtime.** Making OS threads, pinning them and setting their priority are OS
+privileges, so `main` takes a `Cpus` root capability, builds its executors as values from it, and
+installs the runtime as any handler is installed:
+
+```rust
+fn main(args: Args, stdio: Stdio, net: NetRoot, cpus: Cpus) -> ExitCode {
+    let hot   = pinned(&cpus, cores: 0..8, priority: Priority::RealTime, busy_poll: true);
+    let batch = pool(&cpus, cores: 8..120, priority: Priority::Low);
+    let io    = blocking(&cpus, max_threads: 64);
+    // `default` is a work-stealing pool over the cores left (120..128).
+    with Runtime = runtime::parallel(&cpus), Net = &net {
+        scope(|s| {
+            s.spawn(|| matcher.run(), on: hot);             // latency-critical; never migrates
+            for shard in shards {
+                s.spawn(|| analytics(shard), on: batch);    // thousands of tasks on 112 cores
+            }
+            s.spawn(|| api.serve());                        // inherits `default`
+            s.spawn(|| zlib.compress(buf), on: io);         // a blocking C call
+        })
+    }
+}
+```
+
+The same `matcher`, `analytics` and `api` run unchanged under `Sim::seeded` in tests: only `main`
+differs. Under `runtime-sim`, executor placement is recorded and simulated; under
+`runtime::parallel` it is real. So one program can keep 128 cores busy with varied work at
+varied priorities: priority is per executor, and tasks within one are scheduled fairly
+([Tasks, threads and executors](#tasks-threads-and-executors)).
 
 ## Runtime contract
 
@@ -101,7 +156,16 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](r
 | `pinned(cores)` | One thread per core, no stealing, optional busy-polling and real-time priority | HFT hot path; shard-per-core designs (Seastar, Glommio) |
 | `affine(main)` | One dedicated thread | Thread-affine resources: GUI main thread, GL contexts, C libraries with thread-local state |
 
-- Executors are configured in code or in the deployment manifest ([Distributed and multi-tier programs](distribution.md)).
+- **Executors are values (decided November 2026),** built in `main` from the `Cpus` root
+  capability, since making OS threads, pinning them and setting their priority are OS
+  privileges ([Starting a program](#starting-a-program)). The deployment manifest may retune
+  their core counts per deployment ([Distributed and multi-tier programs](distribution.md)).
+- **NUMA placement (decided November 2026):** an executor can be placed on a NUMA node
+  (`pool(&cpus, cores: node(1), …)`), and what its tasks allocate comes from that node's memory.
+- **Idle executors lend their threads (decided November 2026):** a worker of an executor with no
+  work may run another executor's ready tasks, at its own executor's priority, so no core sits
+  idle while work waits. `pinned` executors neither lend nor borrow, keeping their latency and
+  their caches.
 - **Placement:** a scope or spawn chooses its executor; children inherit their parent's executor
   unless they override it. This is the same placement idea as GPU devices and tiers, one level down
   (thread → core → GPU → machine).
@@ -111,9 +175,11 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](r
   s.spawn(|| legacy_c_lib.compress(buf), on: blocking);
   ```
 
-- **One I/O reactor** (io_uring, epoll, kqueue or IOCP) is shared by all executors. I/O is an effect,
-  so there are no runtime-specific I/O types (as tokio's `TcpStream` is), no "cannot start a runtime
-  from within a runtime", and no nested `block_on`.
+- **A reactor per worker (decided November 2026):** each worker thread has its own io_uring ring or
+  poller (epoll, kqueue, IOCP), so I/O does not contend on one shared reactor at many cores; a
+  task's operations complete on its worker's reactor, and one moved by stealing re-registers. I/O
+  is an effect, so there are no runtime-specific I/O types (as tokio's `TcpStream` is), no
+  "cannot start a runtime from within a runtime", and no nested `block_on`.
 
 **Where coroutines and threads genuinely differ:**
 
@@ -141,7 +207,7 @@ thread; executor placement is recorded and simulated ([`determinism.md`](determi
 
 | Target | Runtime |
 |---|---|
-| Native (Linux, macOS, Windows) | `moddil/runtime`: work-stealing executors, one reactor per process |
+| Native (Linux, macOS, Windows) | `moddil/runtime`: work-stealing executors, a reactor per worker |
 | WASM with stack switching (Wasmtime) | `moddil/runtime-wasm`; tasks are continuations ([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)) |
 | Browsers (JSPI) | `moddil/runtime-wasm`; each task is a promising entry; one thread unless cross-origin isolated |
 | Deterministic simulation | `moddil/runtime-sim`: one deterministic thread, virtual time ([`determinism.md`](determinism.md)) |

@@ -248,19 +248,84 @@ L)
      and a bound trait's method preferred over an inherent one of the same name in generic code;
      then the conformance suite's avoidance of these ends.
 
-**P37. The runtime chosen in `main`** (`crates/rt`, `crates/sched`, `mods/runtime`,
-`crates/moddil`; M)
-- Today's scheduler becomes `runtime-sim`, the default under tests and the conformance suite;
-  `main` installs a runtime (`runtime.md`: How a runtime is chosen), with the CLI's and the
-  manifest's wiring.
+The parallel runtime is four packages, done in this order: P37, then P40 and P41's logic
+half, then P38's stages, with P41's benchmarks as each lands (`runtime.md`).
 
-**P38. A parallel runtime** (`crates/rt`, `crates/sched`, `crates/native`, the prelude; L, after
-P37)
-- A stress and ThreadSanitizer harness first; then several tasks running at once, then M:N
-  user-space stacks on per-core workers with work stealing (`runtime.md`: Tasks, threads and
-  executors).
-- Biased counting, `AtomicRc` and the cycle detector; atomic sync cells; a thread-safe
-  allocator. WASM stays single-threaded.
+**P37. Choosing the runtime** (`crates/rt`, `crates/sched`, prelude, `mods/runtime`,
+`crates/moddil`; M). The apparatus, with only the deterministic runtime behind it.
+- The prelude's `Runtime` handler type; the `Cpus` root capability in `mods/runtime`; the
+  executor constructors `pool`, `pinned`, `blocking` and `affine` (cores, `node(n)`, priority,
+  busy-polling) as values (`runtime.md`: Starting a program).
+- `scope(…, on: e)` and `spawn(…, on: e)` in the checker and MIR, children inheriting their
+  executor.
+- `with Runtime = …` only in `main`, once (an error elsewhere, with its reference paragraphs).
+- Today's scheduler named `runtime-sim`, with `Sim::seeded(n)`; placement recorded and
+  simulated.
+- Each test under `runtime-sim` with its own seed, printed when it fails; `moddil test --seed n`
+  replays one.
+- `moddil run --runtime sim|parallel` and the manifest's runtime and core counts (`parallel`
+  refused with a message until P38).
+- Conformance on all four runners, which all run `runtime-sim` and so keep agreeing.
+
+**P40. Hardening the language for threads** (prelude `pointers`, `mods/sync`, `crates/rt`,
+`crates/native`, `crates/mir`; L, before P38 runs two tasks at once). Each item a commit, the
+single-threaded behaviour unchanged.
+- `Rc`: biased counting (`memory.md`: Biased reference counting). The owner task's count is
+  plain, the others' an atomic shared count, and a merge queue per task is drained by the
+  runtime when it resumes the task and at its end. `Weak` likewise. Today `RcBox` counts with a
+  plain `int`.
+- `AtomicRc<T>` for sync cells holding shared values; then the cycle detector.
+- `moddil/sync`: `Mutex` and `RwLock` parking through the scheduler's wait queues, not spinning
+  with yields as now; condition waits; priority inheritance across executors; the atomics'
+  orderings documented against the memory model (`unsafe.md`).
+- The runtime's state: `crates/rt`'s one mutex split, the scheduler state per worker; statics
+  and `const` values initialised once, atomically; the allocation count without the run's lock
+  on each allocation; a thread-safe allocator with per-thread caches.
+- Preemption safe points: a flag check at loop back-edges and function entries, in MIR and
+  native code, off in `#[bounded]` hot paths and on `pinned` executors (`runtime.md`); inert
+  under `runtime-sim`.
+- An audit of every `UnsafeCell`, raw pointer and `core::atomic` use in the prelude, `core` and
+  the mods: each made safe for threads or confined to one task, with the reason in the
+  reference.
+
+**P41. Testing the parallel runtime** (`crates/rt` tests and benches, `tools/ci.py`,
+`conformance`; L, its logic half before P38's first stage).
+- Logic: the conformance suite and every mod's tests also run natively under `parallel`
+  (`moddil test --runtime parallel`), their results matching `runtime-sim`'s; tests whose result
+  depends on interleaving are marked, and checked for a valid result rather than one result. A
+  stress suite of random task trees (channels, `select`, cancellation, isolated traps, scoped
+  borrows, `Rc`s shared across tasks), thousands of seeds per CI run. ThreadSanitizer builds of
+  `moddil-rt` on Linux. The scheduler's Rust core (deques, stealing, parking, merge queues)
+  model-checked with `loom` and randomised with `shuttle`.
+- Performance: benchmarks in `crates/rt/benches` and Moddil programs under `moddil bench`, each
+  with a budget: spawning, a task switch (tens of nanoseconds), channel ping-pong, `Mutex`
+  contention, shared and unshared `Rc` operations, reactor throughput, and scaling from 1 to N
+  cores on parallel map and tree work. CI runs the small budgets on every change; scaling to 64
+  and 128 cores runs on demand on a large machine.
+
+**P38. The parallel runtime** (`crates/rt`, `crates/sched`, `crates/native`; L, after P37 and
+P40, with P41's tests). In stages, each a commit with P41's suite green:
+1. Several tasks at once: the baton becomes N batons, still a thread per task, so the semantics
+   are proven before the mechanics change.
+2. User-space stacks: a context switch of its own per target (x86-64 SysV and Win64, AArch64);
+   stacks reserved large, committed lazily, with guard pages; tasks become coroutines on worker
+   threads (M:N).
+3. Workers and stealing: a worker per core with a Chase-Lev deque; stealing; parking and
+   unparking with an event count; a spawned task first on its spawner's worker.
+4. Preemption: a timer thread sets the safe-point flags (P40); no signals.
+5. Executors: `default` and `pool`, work-stealing; `pinned`, with core affinity, real-time
+   priority and optional busy-polling, never lending; `blocking`, growing on demand, with
+   `blocking` C functions routed to it; `affine`; `on:` placement; idle executors lending their
+   threads.
+6. A reactor per worker: io_uring on Linux (epoll as fallback), kqueue on macOS, IOCP on
+   Windows; a timer wheel per worker; OS-level cancellation; re-registration when a task is
+   stolen; the `core::os` calls moved onto it.
+7. NUMA: topology discovery (Linux sysfs, Windows `GetLogicalProcessorInformationEx`), executors
+   placed by node, node-local allocator arenas.
+8. Observability: the task tree and each task's blocked-on operation, for `Introspect` and spans
+   (`observability.md`).
+
+WASM stays single-threaded; Web Workers come later.
 
 **P39. Live update, the MVP** (`crates/native`, `crates/moddil`; L)
 - The first step of `build-times.md`'s staging: an indirection table in native debug builds,
