@@ -102,8 +102,26 @@ impl Freezer<'_, '_> {
                 variant: *variant,
                 fields: self.parts(fields)?,
             },
-            Value::Ref(p, _) if p.span.is_some() => {
-                return Err("a borrow of part of an array".to_string());
+            // A slice borrow: the elements it covers.
+            Value::Ref(p, _) if let Some((start, len)) = p.span => {
+                if let Some(&i) = self.seen.get(p) {
+                    return Ok(Frozen::Ptr(i));
+                }
+                let i = self.pointees.len();
+                self.seen.insert(p.clone(), i);
+                self.pointees.push(Frozen::Unit);
+                let mut whole = p.clone();
+                whole.span = None;
+                let xs = match self.stack.load(&whole) {
+                    Value::Array(xs) | Value::Buf(_, xs) => xs,
+                    other => return Err(format!("a borrow of part of {other:?}")),
+                };
+                let part = xs
+                    .get(start as usize..(start + len) as usize)
+                    .ok_or("a borrow past an array's end")?
+                    .to_vec();
+                self.pointees[i] = Frozen::Array(self.parts(&part)?);
+                Frozen::Ptr(i)
             }
             Value::Ref(p, _) => {
                 if let Some(&i) = self.seen.get(p) {

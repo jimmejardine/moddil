@@ -155,6 +155,23 @@ impl<M: Module> Compiler<'_, M> {
                 };
                 out.put(at, bits, t.bytes() as usize);
             }
+            // A slice borrow, `&[T]`: its elements' data, and how many.
+            (Shape::Wide, Frozen::Ptr(i)) => {
+                let Ty::Ref(_, inner) = ty else {
+                    return Err(unsupported());
+                };
+                let Ty::Slice(elem) = &**inner else {
+                    return Err(unsupported());
+                };
+                let n = match &w.value.pointees[*i] {
+                    Frozen::Array(xs) | Frozen::Buf(xs) => xs.len(),
+                    _ => return Err(unsupported()),
+                };
+                let array = Ty::array((**elem).clone(), Ty::Len(n as i64));
+                let d = self.pointee(w, *i, &array)?;
+                out.relocs.push((at, d));
+                out.put(at + 8, n as u128, 8);
+            }
             (Shape::Wide, Frozen::Str(s)) => {
                 let d = self.text_data(s)?;
                 out.relocs.push((at, d));

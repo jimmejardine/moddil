@@ -124,7 +124,6 @@ L)
 - Const arithmetic on const parameters in types (`Fixed<{S + T}>`, a normalised type form
   compared by structure), and a length a `const fn` gives (sema folds lengths from the syntax,
   and cannot run the interpreter); const parameters of types other than `int`.
-- A const holding a borrow of static data beyond text.
 - A generic const (a trait's associated const, a generic impl's) computed when compiling for
   each instance, as other consts are, not when it runs; and a const holding a function pointer
   or a borrow of part of an array frozen as data (E1008 now).

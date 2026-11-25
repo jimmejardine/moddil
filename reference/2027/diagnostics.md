@@ -119,7 +119,7 @@ and a code never changes meaning.
 | E0902 | An invalid literal: a `fmt` hole without an expression, or a block literal's line indented wrongly | [expr.fmt.2](text.md), [text.lit.block.1](text.md) |
 | E1001 | Compile-time code calling a function that is not a `const fn` | [comptime.const-fn.2](comptime.md), [attr.around.args.1](attributes.md) |
 | E1002 | Compile-time code with an effect or an error | [comptime.const-fn.2](comptime.md) |
-| E1003 | A const whose type holds a borrow that is not of text | [comptime.static.1](comptime.md) |
+| E1003 | A const whose type holds a `&mut` borrow, a view, or a borrow of a value holding one | [comptime.static.3](comptime.md) |
 | E1004 | Evaluating a const when compiling traps or runs out of steps | [comptime.eval.1](comptime.md) |
 | E1005 | `#[around]` without a wrapper, or with one that is not a function's path or a call of one | [attr.around.1](attributes.md) |
 | E1006 | A derive function not written as `const fn f(t: type) -> Impl<Tr>` with one `impl Tr for t` as its body, a `#[derive_by]` naming none, a derive function called, or `type` elsewhere | [comptime.derive.1](comptime.md) |

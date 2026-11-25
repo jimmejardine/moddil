@@ -1,0 +1,24 @@
+// covers: comptime.static.3
+
+#[derive(Debug)]
+struct Point { x: int, y: int }
+
+const DATA: [int; 3] = [1, 2, 3];
+const SLICE: &[int] = &DATA;
+const ORIGIN: Point = Point { x: 0, y: 7 };
+const AT: &Point = &ORIGIN;
+const LIT: &[int] = &[4, 5];
+
+fn tail() -> &[int] {
+    SLICE
+}
+
+test "a const may hold a shared borrow of static data" {
+    SLICE.len()                             // => 3
+    ;
+    tail()[2]                               // => 3
+    ;
+    AT.y                                    // => 7
+    ;
+    LIT[1] + LIT[0]                         // => 9
+}

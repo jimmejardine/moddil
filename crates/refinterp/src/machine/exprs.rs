@@ -857,8 +857,46 @@ impl Machine<'_> {
         self.memory
             .push_frame(std::collections::HashMap::new(), file, module, false);
         let v = self.eval(&init);
+        // What it borrows of its own frame (`&[4, 5]`) is static data too
+        // (`comptime.static.3`): moved to the heap before the frame goes.
+        let frame = self.memory.current_frame();
+        let v = v.map(|v| self.promoted(v, frame));
         self.memory.pop_frame();
         Ok(Some(self.memory.add_static(k, v?)))
+    }
+
+    /// `v` with each borrow of a place in `frame` (a task and its frame) pointing to a copy of
+    /// that place's value on the heap.
+    fn promoted(&mut self, v: Value, frame: (usize, usize)) -> Value {
+        match v {
+            Value::Ref(p, m) if (p.task, p.frame) == frame => {
+                let mut whole = p.clone();
+                whole.path.clear();
+                whole.span = None;
+                let target = self.memory.load(&whole);
+                let target = self.promoted(target, frame);
+                let mut q = self.memory.alloc(target);
+                q.path = p.path;
+                q.span = p.span;
+                Value::Ref(q, m)
+            }
+            Value::Tuple(xs) => {
+                Value::Tuple(xs.into_iter().map(|x| self.promoted(x, frame)).collect())
+            }
+            Value::Adt {
+                ty,
+                variant,
+                fields,
+            } => Value::Adt {
+                ty,
+                variant,
+                fields: fields
+                    .into_iter()
+                    .map(|x| self.promoted(x, frame))
+                    .collect(),
+            },
+            v => v,
+        }
     }
 
     /// `a..b`, `a..=b` and `a..` (`expr.range.1`): values of the prelude's range structs.

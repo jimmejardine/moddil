@@ -28,7 +28,7 @@ it gives is owned. A block that traps or runs out of steps when compiling is an 
 
 **comptime.static.1** A const's value is static data: `&NAME` borrows nothing and may be returned
 from a function with no borrowed parameter ([Borrows](borrows.md)). So a const's type holds no
-borrow other than of text (E1003). A const without type parameters (its own or its impl's, and
+borrow other than shared ones of static data (E1003, **comptime.static.3**). A const without type parameters (its own or its impl's, and
 not a trait's) is evaluated once, when compiling, and its value, with what its `Vec`s, `String`s,
 `Box`es and `Rc`s hold, is written into the program as data that is never freed: the code does
 not run its initialiser again.
@@ -39,6 +39,11 @@ is not `Copy` by value, `let v = NAME`, would move static data, and is an error 
 gives an owned copy. A value that cannot be data (one holding a closure, a `dyn` value, a C
 pointer or function pointer, or a borrow of part of an array) is an error at the const (E1008).
 An `Rc` in a const keeps its own count, so it is never freed.
+
+**comptime.static.3** A const's type may hold shared borrows (`&T`, `&[T]`), of values that hold
+no other borrows but such ones; what they borrow is static data with it: another const
+(`const SLICE: &[int] = &DATA;`), or a value its initialiser makes (`const LIT: &[int] =
+&[4, 5];`), which is kept rather than dropped. A `&mut`, or a view, is still an error (E1003).
 
 **comptime.eval.1** Evaluating a const when compiling that traps, or takes more than 10,000,000
 steps, is an error at the const (E1004).

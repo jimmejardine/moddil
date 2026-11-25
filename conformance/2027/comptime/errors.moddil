@@ -14,7 +14,7 @@ fn uses_block() -> int {
     const { plain(2) }                      //~ E1001
 }
 
-const LOCAL: &int = &1;                     //~ E1003
+const LOCAL: &mut int = &mut 1;             //~ E1003
 
 // A `const { }` block names no local of the body it is in.
 fn names_a_local() -> int {

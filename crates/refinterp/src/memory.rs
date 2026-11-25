@@ -271,6 +271,12 @@ impl Memory {
     }
 
     /// A pointer to the innermost call's variable `slot`.
+    /// The running task and its innermost frame.
+    pub(crate) fn current_frame(&self) -> (usize, usize) {
+        let task = self.task;
+        self.frames(|fs| (task, fs.len() - 1))
+    }
+
     pub(crate) fn here(&self, slot: usize) -> Pointer {
         let task = self.task;
         self.frames(|fs| {

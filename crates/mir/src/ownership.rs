@@ -118,6 +118,9 @@ pub fn borrowck<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Vec<Diagnostic> {
     let mut cx = Checker::new(body, items, ret_from);
     cx.destructor = destructor;
     cx.returns_held = returns_held;
+    // A const computed when compiling: what its value borrows is frozen with it, as static
+    // data (`comptime.static.3`).
+    cx.static_result = matches!(owner.item(db), Item::Fn(i) if items.is_frozen_const(i));
     if let Item::Fn(i) = owner.item(db) {
         cx.written_params = items.fns[i as usize].params.len() as u32;
     }
@@ -171,6 +174,9 @@ struct Checker<'a> {
     destructor: bool,
     /// The locals holding the address of a const item's static data (`comptime.static.1`).
     statics: HashSet<Local>,
+    /// Whether the body is a const's computed when compiling, whose result is frozen with what
+    /// it borrows (`comptime.static.3`).
+    static_result: bool,
 }
 
 /// The loans each local may hold.
@@ -315,6 +321,7 @@ impl<'a> Checker<'a> {
             returns_held: false,
             written_params: u32::MAX,
             destructor: false,
+            static_result: false,
             statics: body
                 .blocks
                 .iter()
@@ -1040,6 +1047,9 @@ impl<'a> Checker<'a> {
 
     /// A returned borrow must come from a parameter the signature allows.
     fn returned(&mut self, span: TextRange, h: &Holders) {
+        if self.static_result {
+            return;
+        }
         let mut found = Vec::new();
         for &li in &h[Local::RETURN.index()] {
             let loan = &self.loans[li];

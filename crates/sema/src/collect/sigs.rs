@@ -384,8 +384,9 @@ impl Collector<'_> {
             Some(t) => resolve_type(&t, &scope, &mut ds),
             None => Ty::Error,
         };
-        // Its value is static data, which holds no borrow but of text (`borrow.static.1`).
-        let text = matches!(&ret, Ty::Ref(false, t) if **t == Ty::Str);
+        // Its value is static data, which holds no borrow but shared ones of static data: text,
+        // or a const's value (`borrow.static.1`, `comptime.static.3`).
+        let text = static_borrows(&self.tree, &ret);
         if !text && self.tree.is_view(&ret) {
             ds.push(Diagnostic::error(
                 Code::E1003,
@@ -1133,5 +1134,23 @@ pub(super) fn param_sig(
         range,
         ty,
         destructures,
+    }
+}
+
+/// Whether every borrow type `t` holds is a shared one, of a value holding no other borrow but
+/// such ones (`&str`, `&[int]`, `&[&str]`, `&Point`): what a const may hold, as static data
+/// (`comptime.static.3`).
+fn static_borrows(tree: &crate::ItemTree, t: &Ty) -> bool {
+    match t {
+        Ty::Ref(false, inner) => match &**inner {
+            Ty::Str => true,
+            Ty::Slice(e) | Ty::Array(e, _) => static_borrows(tree, e) || !tree.is_view(e),
+            inner => !tree.is_view(inner) || static_borrows(tree, inner),
+        },
+        Ty::Array(e, _) | Ty::Slice(e) => static_borrows(tree, e),
+        Ty::Tuple(xs) => xs
+            .iter()
+            .all(|x| static_borrows(tree, x) || !tree.is_view(x)),
+        _ => false,
     }
 }
