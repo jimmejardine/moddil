@@ -46,8 +46,11 @@ pub struct Trap {
     /// For a failed `assert`: each part of the condition and its value, or `None` if it was not
     /// evaluated.
     pub parts: Vec<(TextRange, Option<Value>)>,
-    /// For a failed `?!`: its reason.
+    /// For a failed `?!`: its reason; for `compile_error`, its message.
     pub reason: Option<String>,
+    /// For `compile_error`: the bytes it names, of the text of the tagged literal being
+    /// evaluated (`comptime.error.1`).
+    pub at: Option<(i64, i64)>,
 }
 
 /// Why running a function or test stopped without a result.
@@ -205,6 +208,12 @@ pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
             eval_const(db, program, i as u32).map(|_| None)
         };
         let why = match result {
+            // `compile_error` (`comptime.error.1`), at the const.
+            Err(Stop::Trap(t)) if t.at.is_some() => {
+                let d = Diagnostic::error(Code::E1010, f.name_range, t.reason.unwrap_or_default());
+                out.extend(moddil_sema::in_file(items, Item::Fn(i as u32), &[d]));
+                continue;
+            }
             Ok(Some(Err(what))) => {
                 let d = Diagnostic::error(
                     Code::E1008,
@@ -249,6 +258,24 @@ pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
             };
             let d = match frozen_item(db, program, item) {
                 Ok(Ok(_)) => continue,
+                // `compile_error` (`comptime.error.1`): where it says, in a tagged literal's text.
+                Err(Stop::Trap(t)) if t.at.is_some() => {
+                    let (s, end) = t.at.unwrap_or_default();
+                    let at = match body.tagged.get(&e) {
+                        Some(&off) => {
+                            let from = x.range.start + off;
+                            let clamp = |v: i64| {
+                                u32::try_from(v.max(0))
+                                    .unwrap_or(0)
+                                    .saturating_add(from)
+                                    .min(x.range.end)
+                            };
+                            TextRange::new(clamp(s), clamp(end.max(s)))
+                        }
+                        None => x.range,
+                    };
+                    Diagnostic::error(Code::E1010, at, t.reason.unwrap_or_default())
+                }
                 Ok(Err(what)) => Diagnostic::error(
                     Code::E1008,
                     x.range,

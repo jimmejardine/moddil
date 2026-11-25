@@ -129,14 +129,14 @@ pub(crate) fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
         if whole
             && let Item::Fn(i) = item
             && let Some(effects) = fx.fns.get(i as usize)
-            && (!effects.needs.is_empty() || effects.fails != Ty::Never)
+            && !effects.needs.is_empty()
         {
             let sig = &items.fns[i as usize];
             ds.push(Diagnostic::error(
                 Code::E1002,
                 sig.name_range,
                 format!(
-                    "`{}` runs when compiling, so it can have no effect and no error",
+                    "`{}` runs when compiling, so it can have no effect (an error it fails with                      there is a compile error)",
                     sig.name
                 ),
             ));

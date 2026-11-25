@@ -72,7 +72,7 @@ struct Parser {
     names: Vec<(String, int)>,
 }
 
-pub fn parse(pattern: &str) -> Parsed with fail(RegexError) {
+pub const fn parse(pattern: &str) -> Parsed with fail(RegexError) {
     let mut chars: Vec<char> = Vec::new();
     for c in pattern.chars() {
         chars.push(c);
@@ -87,18 +87,18 @@ pub fn parse(pattern: &str) -> Parsed with fail(RegexError) {
 }
 
 impl Parser {
-    fn error(&self, reason: &str) -> RegexError {
+    const fn error(&self, reason: &str) -> RegexError {
         RegexError::new(self.at, reason)
     }
 
-    fn peek(&self) -> Option<char> {
+    const fn peek(&self) -> Option<char> {
         match self.chars.get(self.at) {
             Some(c) => Some(*c),
             None => None,
         }
     }
 
-    fn eat(&mut self, c: char) -> bool {
+    const fn eat(&mut self, c: char) -> bool {
         if self.peek() == Some(c) {
             self.at += 1;
             true
@@ -107,13 +107,13 @@ impl Parser {
         }
     }
 
-    fn add(&mut self, n: Node) -> int {
+    const fn add(&mut self, n: Node) -> int {
         self.nodes.push(n);
         self.nodes.len() - 1
     }
 
     /// `a|b|…`
-    fn alternation(&mut self) -> int with fail(RegexError) {
+    const fn alternation(&mut self) -> int with fail(RegexError) {
         let mut alts: Vec<int> = Vec::new();
         alts.push(self.concatenation()?);
         while self.eat('|') {
@@ -126,7 +126,7 @@ impl Parser {
     }
 
     /// Repeated atoms, up to a `|`, a `)` or the end.
-    fn concatenation(&mut self) -> int with fail(RegexError) {
+    const fn concatenation(&mut self) -> int with fail(RegexError) {
         let mut items: Vec<int> = Vec::new();
         loop {
             match self.peek() {
@@ -148,7 +148,7 @@ impl Parser {
     }
 
     /// `atom` with the quantifiers after it.
-    fn repetition(&mut self, atom: int) -> int with fail(RegexError) {
+    const fn repetition(&mut self, atom: int) -> int with fail(RegexError) {
         let mut node = atom;
         loop {
             let (min, max) = if self.eat('*') {
@@ -174,7 +174,7 @@ impl Parser {
     }
 
     /// `n}`, `n,}` or `n,m}`, after the `{`.
-    fn counts(&mut self) -> (int, int) with fail(RegexError) {
+    const fn counts(&mut self) -> (int, int) with fail(RegexError) {
         let min = self.number()?;
         let max = if self.eat(',') {
             if self.peek() == Some('}') { -1 } else { self.number()? }
@@ -190,7 +190,7 @@ impl Parser {
         (min, max)
     }
 
-    fn number(&mut self) -> int with fail(RegexError) {
+    const fn number(&mut self) -> int with fail(RegexError) {
         let mut n = 0;
         let mut digits = 0;
         while let Some(c) = self.peek() {
@@ -209,7 +209,7 @@ impl Parser {
         n
     }
 
-    fn atom(&mut self) -> int with fail(RegexError) {
+    const fn atom(&mut self) -> int with fail(RegexError) {
         let c = self.peek() ?! "an atom starts at a character";
         self.at += 1;
         match c {
@@ -228,7 +228,7 @@ impl Parser {
     }
 
     /// A group, after its `(`.
-    fn group(&mut self) -> int with fail(RegexError) {
+    const fn group(&mut self) -> int with fail(RegexError) {
         let mut capture = -1;
         if self.eat('?') {
             if self.eat(':') {
@@ -276,13 +276,13 @@ impl Parser {
     }
 
     /// An error for syntax only a backtracking engine can match.
-    fn backtracking(&self, what: &str) -> RegexError {
+    const fn backtracking(&self, what: &str) -> RegexError {
         let reason = fmt"{what} cannot be matched in linear time: use `moddil/regex-backtrack`";
         RegexError::new(self.at, &reason)
     }
 
     /// An escape, after its `\`: in a class (`in_class`) a class item, else a node.
-    fn escape(&mut self, in_class: bool) -> Node with fail(RegexError) {
+    const fn escape(&mut self, in_class: bool) -> Node with fail(RegexError) {
         let c = match self.peek() {
             Some(c) => c,
             None => fail(self.error("a `\\` at the end")),
@@ -311,7 +311,7 @@ impl Parser {
     }
 
     /// A class, after its `[`.
-    fn class(&mut self) -> int with fail(RegexError) {
+    const fn class(&mut self) -> int with fail(RegexError) {
         let negated = self.eat('^');
         let mut items: Vec<ClassItem> = Vec::new();
         let mut first = true;

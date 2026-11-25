@@ -156,6 +156,7 @@ impl Collector<'_> {
             fails_range: effects.fails_range,
             effects: effects.effects,
             track_caller: attrs.track_caller,
+            tag: attrs.tag,
             control: effects.control,
             defaults: Vec::new(),
             opaque: ret.opaque,
@@ -548,6 +549,8 @@ impl Collector<'_> {
 struct FnAttrs {
     /// `#[track_caller]` (`attr.track-caller.1`).
     track_caller: bool,
+    /// `#[tag]` (`comptime.tag.1`).
+    tag: bool,
     /// Each `#[around(w)]` (`attr.around.1`).
     around: Vec<TextRange>,
     /// `#[intrinsic]`, in the prelude only.
@@ -583,6 +586,8 @@ fn fn_attrs(node: &SyntaxNode, src: Src, ds: &mut Vec<Diagnostic>) -> FnAttrs {
         let input = attr.child(K::ATTR).and_then(|a| a.child(K::ATTR_INPUT));
         if path == ["track_caller"] && input.is_none() {
             a.track_caller = true;
+        } else if path == ["tag"] && input.is_none() {
+            a.tag = true;
         } else if path == ["selectable"] && input.is_none() {
             a.selectable_at = Some(attr.text_range());
         } else if path == ["kernel"] && input.is_none() {

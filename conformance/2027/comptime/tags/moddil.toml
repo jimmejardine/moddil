@@ -1,0 +1,6 @@
+[mod]
+name = "tags"
+edition = "2027"
+
+[dependencies]
+regex = { path = "../../../../mods/regex" }

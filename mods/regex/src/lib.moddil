@@ -11,7 +11,35 @@
 //! `+`, `?`, `{n}`, `{n,}`, `{n,m}`, each lazy with a `?` after it. Backreferences and lookaround
 //! cannot match in linear time, so a pattern using them is refused, naming `moddil/regex-backtrack`.
 //!
-//! Not here yet: `re"…"` literals compiled at compile time, with typed captures (`comptime.md`).
+//! `re"…"` is a tagged literal (`comptime.tag.1`): its pattern compiled when compiling, as static
+//! data, and a bad pattern an error at its place in the literal. Not here yet: typed captures, a
+//! field for each named group (`comptime.md`).
 
 pub use mod::matching::{Captures, Match};
 pub use mod::program::{Regex, RegexError};
+
+/// `re"…"` (`comptime.tag.1`): `pattern` compiled when compiling; a bad pattern is an error at the
+/// character where it goes wrong.
+#[tag]
+pub const fn re(pattern: &str) -> Regex {
+    try {
+        Regex::new(pattern)?
+    } catch {
+        e => {
+            let at = byte_at(pattern, e.at());
+            compile_error(e.reason(), at, at + 1)
+        }
+    }
+}
+
+/// Where character `chars` of `text` starts, in bytes (its length past the last).
+const fn byte_at(text: &str, chars: int) -> int {
+    let mut n = 0;
+    for (pos, _) in text.char_indices() {
+        if n == chars {
+            return pos.offset();
+        }
+        n += 1;
+    }
+    text.len()
+}

@@ -1,0 +1,7 @@
+// covers: comptime.error.1
+
+use regex::re;
+
+fn bad() -> bool {
+    re"(ab".is_match("ab")                  //~ E1010
+}

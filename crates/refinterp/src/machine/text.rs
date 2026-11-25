@@ -630,6 +630,10 @@ impl Machine<'_> {
                     fields: vec![Value::Buf(1, vec![self.memory.free(&p)])],
                 }
             }
+            // Compile-time code's error, reached when the program runs (`comptime.error.1`).
+            (Head::Unit, "compile_error") => {
+                return Err(crate::trap(crate::TrapClass::Unreachable, range));
+            }
             (Head::Unit, "replace") => {
                 let Value::Ref(p, _) = args[0].clone() else {
                     unreachable!("a borrow")

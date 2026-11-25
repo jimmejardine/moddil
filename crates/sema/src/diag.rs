@@ -270,6 +270,11 @@ codes! {
     E1008 = "const that cannot be static data",
     /// A const item that is not `Copy` used by value: it is static data, only borrowed.
     E1009 = "move of a const",
+    /// An error compile-time code reported with `compile_error`, where it said.
+    E1010 = "error from compile-time code",
+    /// A tagged literal whose tag is not a `#[tag]` function in scope, or a `#[tag]` that is not
+    /// a `const fn` taking one `&str`.
+    E1011 = "invalid tag",
     /// A literal that its refined type's predicate does not hold for.
     E1101 = "literal outside its refinement",
     /// A contract that is not pure: it has an effect, an error or an assignment.

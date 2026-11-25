@@ -361,6 +361,18 @@ impl<'a> Machine<'a> {
                 return None;
             }
             CallPlan::Intrinsic(f, values, type_args) => {
+                // Compile-time code's error (`comptime.error.1`): a trap that says where.
+                if self.dispatch.items().fns[f as usize].name == "compile_error"
+                    && self.dispatch.items().fns[f as usize].src == moddil_sema::Src::Prelude
+                {
+                    let mut t = self.trap(TrapClass::Unreachable, Some(range), Vec::new());
+                    t.reason = match self.stack.deref(&values[0]) {
+                        Value::Str(s) => Some(s.to_string()),
+                        _ => None,
+                    };
+                    t.at = Some((values[1].as_int(), values[2].as_int()));
+                    return Some(Stop::Trap(t));
+                }
                 if let Some(name) = self.task_native(f) {
                     return self.task_call(name, &[], &values, ret, range);
                 }
@@ -588,6 +600,7 @@ impl<'a> Machine<'a> {
             range,
             parts: if here { parts } else { Vec::new() },
             reason: None,
+            at: None,
         }
     }
 }

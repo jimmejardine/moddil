@@ -6246,6 +6246,16 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             }
             // The same pointer, to change through (`core.ptr.1`).
             "cast_mut" => self.operand(&args[0])?,
+            // Compile-time code's error, reached when the program runs: a trap
+            // (`comptime.error.1`).
+            "compile_error" => {
+                let span = self.span;
+                self.trap(TrapClass::Unreachable, span)?;
+                // What follows is never reached: in a block of its own.
+                let dead = self.b.create_block();
+                self.b.switch_to_block(dead);
+                Val::Unit
+            }
             "replace" => {
                 let Val::Scalar(p) = self.operand(&args[0])? else {
                     return unsupported(name);

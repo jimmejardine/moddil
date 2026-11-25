@@ -48,6 +48,19 @@ no other borrows but such ones; what they borrow is static data with it: another
 **comptime.eval.1** Evaluating a const when compiling that traps, or takes more than 10,000,000
 steps, is an error at the const (E1004).
 
+**comptime.tag.1** A **tagged literal** `name"…"` (or a `name"""` block) whose tag is not `fmt`
+calls `name`, a `const fn` marked `#[tag]` in scope taking a `&str`, with the literal's text as
+written: as a raw string's, its `\` kept (a block dedented as a raw block is), and with no holes.
+The call is a `const { }` block (**comptime.block.2**): computed when compiling, so its value is
+static data, and an error in it is a compile error. A tag that is not such a function in scope is
+an error (E1011). The `moddil/regex` mod's `re` is one: `re"^\d+$"` is a `Regex` compiled when
+compiling.
+
+**comptime.error.1** `compile_error(message, start, end)`, a prelude function, ends compile-time
+code with an error, reported when compiling with `message` (E1010): at bytes `start` to `end` of
+the text of the tagged literal being evaluated, or at the const or block. Called when the program
+runs, it traps (`unreachable`).
+
 **comptime.eval.2** `#[fuel(n)]` on a const item, or on a statement (a `let` or an expression
 statement), gives the const, or each `const { }` block in the statement, `n` steps in place of
 10,000,000: more for a costly table, fewer to bound one. An evaluation that runs out of them is

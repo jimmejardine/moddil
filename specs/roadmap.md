@@ -77,8 +77,11 @@ more). Packages are independent unless one says otherwise. When a package is don
 when part of one is, remove that part.
 
 **P4. Text** (prelude `text`, `crates/sema`; M)
-- Tagged literals other than `fmt`, first `re"…"` compiled when compiling, with typed captures
-  (`mods/regex`, with P11).
+- Typed captures for `re"…"`: a field for each named group, through a prelude `TagFields` trait
+  the tag's value implements, whose fields make a hidden struct (decided). Evaluating the tag
+  then happens while the program is collected, so it needs a sub-program of the tag's mod and its
+  dependencies, or an evaluator hook from the interpreter into sema.
+- Holes in tagged literals other than `fmt` (`sql"… {user} …"`), as typed parameters.
 - A `fmt"…"` hole with a spec (`{x:>8}`, `{n:#x}`) written into a sink without a `String` of its
   own for padding, so `w.write_fmt(fmt"…")` allocates nothing on freestanding targets.
 

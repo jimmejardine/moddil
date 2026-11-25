@@ -3,6 +3,7 @@
 use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxNode};
 
+use super::text::string;
 use crate::program::VariantInfo;
 use crate::value::{Head, Value};
 use crate::{Eval, Flow, TrapClass, trap};
@@ -20,7 +21,26 @@ impl Machine<'_> {
         match e {
             ast::Expr::Literal(_) => {
                 match node.child_tokens().find(|t| t.kind() == K::TAGGED_STRING) {
-                    Some(tok) => self.fmt(&tok),
+                    Some(tok) if tok.text().starts_with("fmt") => self.fmt(&tok),
+                    // `tag"…"` (`comptime.tag.1`): the `#[tag]` function called with the text.
+                    Some(tok) => {
+                        let text = tok.text();
+                        let at = text.find('"').unwrap_or(0);
+                        let (tag, lit) = text.split_at(at);
+                        let value = string(&format!("r{lit}"));
+                        let Some((crate::program::Def::Item(k), 1)) =
+                            self.resolve(&[tag.to_string()])
+                        else {
+                            unreachable!("a checked tag")
+                        };
+                        let f = self.program.fns[&k].clone();
+                        self.invoke(
+                            &f,
+                            vec![Value::Str(value.into())],
+                            std::collections::HashMap::new(),
+                            range,
+                        )
+                    }
                     None => Ok(literal(node, false)),
                 }
             }

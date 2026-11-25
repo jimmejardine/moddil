@@ -1,0 +1,26 @@
+// covers: comptime.tag.1
+
+use regex::re;
+
+/// A tag of this program's own: the text, counted when compiling.
+#[tag]
+const fn chars(text: &str) -> int {
+    text.chars().count()
+}
+
+test "a tagged literal calls its tag with the text, as written" {
+    chars"héllo"                            // => 5
+    ;
+    chars"a\nb"                             // => 4
+    ;
+    re"^\d+$".is_match("2027")              // => true
+    ;
+    re"^\d+$".is_match("20x7")              // => false
+}
+
+test "a tagged block is dedented as a block is" {
+    let r = re"""
+        ab+
+        """;
+    r.is_match("abbb\n")                    // => true
+}

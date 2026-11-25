@@ -29,6 +29,7 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<SyntaxError>) {
         pos: 0,
         tokens: Vec::new(),
         errors: Vec::new(),
+        as_written: false,
     };
     lexer.run();
     let Lexer {
@@ -70,6 +71,9 @@ struct Lexer<'t> {
     pos: usize,
     tokens: Vec<Token>,
     errors: Vec<SyntaxError>,
+    /// While a literal with a tag other than `fmt` is read: its text is taken as written, as a
+    /// raw string's, with no holes (`comptime.tag.1`).
+    as_written: bool,
 }
 
 impl Lexer<'_> {
@@ -253,7 +257,7 @@ impl Lexer<'_> {
     /// At `"`: a block string if `"""` and a newline follow, else a string.
     fn string(&mut self, start: usize, tagged: bool) -> SyntaxKind {
         if self.block_opener() {
-            self.block_body(start, false);
+            self.block_body(start, self.as_written);
             return if tagged {
                 SyntaxKind::TAGGED_STRING
             } else {
@@ -324,9 +328,15 @@ impl Lexer<'_> {
                 self.pos += 1;
                 return;
             }
-            if c == '\\' {
+            if c == '\\' && self.as_written {
+                // Kept as written: a `\` and what follows it.
+                self.pos += 1;
+                if let Some(next) = self.peek() {
+                    self.pos += next.len_utf8();
+                }
+            } else if c == '\\' {
                 self.escape();
-            } else if tagged && c == '{' {
+            } else if tagged && !self.as_written && c == '{' {
                 if self.rest().starts_with("{{") {
                     self.pos += 2;
                 } else {
@@ -546,7 +556,10 @@ impl Lexer<'_> {
                 return SyntaxKind::BYTE;
             }
             (_, Some('"')) if !matches!(word.as_str(), "r" | "br" | "b") => {
-                return self.string(start, true);
+                self.as_written = word != "fmt";
+                let kind = self.string(start, true);
+                self.as_written = false;
+                return kind;
             }
             // A tag before a raw string: `sqlr#"…"#` (a tag ending in `r` then a plain string is
             // read as that: `fmtr"…"` has the tag `fmtr`).

@@ -18,7 +18,7 @@ behaviour are as written there. The files are one source, joined in this order:
 | [`pointers.moddil`](prelude/pointers.moddil) | `Index`, `Deref`, `Box`, `Rc` |
 | [`collections.moddil`](prelude/collections.moddil) | collection literals, `Buf`, `Vec`, `replace` and `swap`, `int`'s `rotate_left`, `Wrapping` and `WrappingInt` (**num.wrap.2**) |
 | [`hash.moddil`](prelude/hash.moddil) | `Hash` and `Hasher` |
-| [`program.moddil`](prelude/program.moddil) | `ExitCode`, `Log`, `RefinementError` and `Refined`, `FnInfo` and `ParamInfo` |
+| [`program.moddil`](prelude/program.moddil) | `ExitCode`, `Log`, `RefinementError` and `Refined`, `FnInfo` and `ParamInfo`, `compile_error` |
 | [`concurrency.moddil`](prelude/concurrency.moddil) | scopes and tasks, channels, `Duration` and timers |
 | [`derives.moddil`](prelude/derives.moddil) | the templates `#[derive]` instantiates for `Clone`, `PartialEq`, `PartialOrd`, `Ord`, `Hash`, `Debug` and `Default` (**attr.derive.1**) |
 

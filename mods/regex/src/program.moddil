@@ -31,16 +31,16 @@ pub struct RegexError {
 }
 
 impl RegexError {
-    pub fn new(at: int, reason: &str) -> RegexError {
+    pub const fn new(at: int, reason: &str) -> RegexError {
         RegexError { at, reason: reason.to_string() }
     }
 
     /// Where in the pattern, in characters from its start.
-    pub fn at(&self) -> int {
+    pub const fn at(&self) -> int {
         self.at
     }
 
-    pub fn reason(&self) -> &str {
+    pub const fn reason(&self) -> &str {
         &self.reason
     }
 }
@@ -64,7 +64,7 @@ pub struct Regex {
 
 impl Regex {
     /// `pattern` compiled; fails if it is not one this engine matches.
-    pub fn new(pattern: &str) -> Regex with fail(RegexError) {
+    pub const fn new(pattern: &str) -> Regex with fail(RegexError) {
         let parsed = parse(pattern)?;
         let mut c = Compiler { prog: Vec::new() };
         c.emit(Inst::Save(0));
@@ -122,18 +122,18 @@ struct Compiler {
 }
 
 impl Compiler {
-    fn emit(&mut self, i: Inst) -> int {
+    const fn emit(&mut self, i: Inst) -> int {
         self.prog.push(i);
         self.prog.len() - 1
     }
 
-    fn here(&self) -> int {
+    const fn here(&self) -> int {
         self.prog.len()
     }
 
     /// Points the `Split` or `Jump` at `at` (made with a placeholder) to `to`, as its `which`th
     /// target.
-    fn patch(&mut self, at: int, which: int, to: int) {
+    const fn patch(&mut self, at: int, which: int, to: int) {
         let new = match &self.prog[at] {
             Inst::Split(a, b) => if which == 0 { Inst::Split(to, *b) } else { Inst::Split(*a, to) },
             _ => Inst::Jump(to),
@@ -141,7 +141,7 @@ impl Compiler {
         self.prog[at] = new;
     }
 
-    fn node(&mut self, p: &Parsed, n: int) {
+    const fn node(&mut self, p: &Parsed, n: int) {
         match p.nodes[n].clone() {
             Node::Empty => {}
             Node::Char(c) => {
@@ -229,7 +229,7 @@ impl Compiler {
     }
 
     /// Points `split` at `body` and `out`, preferring `body` if `greedy`.
-    fn optional(&mut self, split: int, body: int, out: int, greedy: bool) {
+    const fn optional(&mut self, split: int, body: int, out: int, greedy: bool) {
         self.prog[split] = if greedy { Inst::Split(body, out) } else { Inst::Split(out, body) };
     }
 }

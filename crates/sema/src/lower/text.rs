@@ -227,7 +227,7 @@ impl Lowerer<'_> {
         let (tag, lit) = text.split_at(tag_len);
         let lit = lit.to_string();
         if tag != "fmt" {
-            return self.unsupported(range, &format!("the tagged literal `{tag}\"…\"`"));
+            return self.tag_call(tag, &lit, range);
         }
         let start = range.start as usize + tag_len;
         let mut pieces = Vec::new();
@@ -285,6 +285,62 @@ impl Lowerer<'_> {
                 false
             }
         }
+    }
+
+    /// `tag"…"` for a tag other than `fmt` (`comptime.tag.1`): a call of the `#[tag]` function
+    /// `tag` in scope with the literal's text, in a `const { }` block, so it runs when
+    /// compiling.
+    fn tag_call(&mut self, tag: &str, lit: &str, range: TextRange) -> ExprId {
+        let f = match self
+            .types
+            .tree
+            .lookup(self.types.module, tag, self.types.prelude_first)
+        {
+            Some(crate::Def::Fn(f))
+                if self.items.fns[f as usize].tag && self.items.fns[f as usize].is_const =>
+            {
+                f
+            }
+            _ => {
+                self.report(
+                    Code::E1011,
+                    range,
+                    format!(
+                        "`{tag}` is not a `#[tag]` function in scope, so `{tag}\"…\"` means nothing"
+                    ),
+                );
+                return self.missing(range);
+            }
+        };
+        // As written, as a raw string's text (`comptime.tag.1`).
+        let text = match string_value(&format!("r{lit}")) {
+            Ok(t) => t,
+            Err(why) => {
+                self.report(Code::E0902, range, why);
+                return self.missing(range);
+            }
+        };
+        let s = self.alloc(ExprKind::Str(text), range);
+        let callee = self.alloc(
+            ExprKind::Fn {
+                func: f,
+                args: Vec::new(),
+            },
+            range,
+        );
+        let call = self.alloc(
+            ExprKind::Call {
+                callee,
+                args: vec![s],
+            },
+            range,
+        );
+        let block = self.alloc(ExprKind::ConstBlock(call), range);
+        // Where the text starts: after the tag and the opening quotes.
+        let quotes = if lit.starts_with("\"\"\"") { 3 } else { 1 };
+        let at = (tag.len() + quotes) as u32;
+        self.out.body.tagged.insert(block, at);
+        block
     }
 
     /// The text and holes of `inner`, which starts at byte `start` of the file, onto `pieces`,

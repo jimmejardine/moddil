@@ -1,0 +1,13 @@
+// covers: comptime.tag.1
+
+const fn plain(text: &str) -> int {
+    text.len()
+}
+
+fn unknown() -> int {
+    nope"text"                              //~ E1011
+}
+
+fn not_a_tag() -> int {
+    plain"text"                             //~ E1011
+}

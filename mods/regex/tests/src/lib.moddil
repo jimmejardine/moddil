@@ -1,15 +1,15 @@
 // Matches checked against Python's `re` (the same leftmost-first semantics for these patterns),
 // and Rust's `regex` for empty matches after a match.
 
-use regex::{Match, Regex, RegexError};
+use regex::{Match, Regex, RegexError, re};
 
-fn re(p: &str) -> Regex {
+fn compiled(p: &str) -> Regex {
     Regex::new(p) ?! "the test's patterns compile"
 }
 
 /// Checks the leftmost-first match of `p` in `text` spans bytes `start` to `end`.
 fn finds(p: &str, text: &str, start: int, end: int) {
-    match re(p).find(text) {
+    match compiled(p).find(text) {
         Some(m) => assert(m.start() == start && m.end() == end),
         None => assert(false),
     }
@@ -17,7 +17,7 @@ fn finds(p: &str, text: &str, start: int, end: int) {
 
 /// Checks group `g` of the match spans `start` to `end` (-1 for a group that did not take part).
 fn check_group(p: &str, text: &str, g: int, start: int, end: int) {
-    let caps = re(p).captures(text) ?! "a match";
+    let caps = compiled(p).captures(text) ?! "a match";
     match caps.get(g) {
         Some(m) => assert(m.start() == start && m.end() == end),
         None => assert(start == -1),
@@ -41,9 +41,9 @@ test "literals, repetition and alternation" {
     finds("x{2}", "axxxb", 1, 3);
     finds("x{2,}", "axxxxb", 1, 5);
     finds("cat|dog|bird", "a bird, a dog", 2, 6);
-    assert(re("^\\w+$").is_match("hello_1"));
-    assert(!re("^\\w+$").is_match("hello world"));
-    assert(re("").is_match("anything"));
+    assert(compiled("^\\w+$").is_match("hello_1"));
+    assert(!compiled("^\\w+$").is_match("hello world"));
+    assert(compiled("").is_match("anything"));
 }
 
 test "classes" {
@@ -57,7 +57,7 @@ test "classes" {
     // Characters, not bytes: `é` is two bytes.
     finds("é+", "café é", 3, 5);
     finds("caf.", "café", 0, 5);
-    assert(!re("a.b").is_match("a\nb"));
+    assert(!compiled("a.b").is_match("a\nb"));
 }
 
 test "groups" {
@@ -71,7 +71,7 @@ test "groups" {
     check_group("(a|ab)(c|bcd)(d*)", "abcd", 3, 4, 4);
     check_group("(a)|b", "b", 1, -1, -1);
     check_group("(?:ab)+(c)", "ababc", 1, 4, 5);
-    let r = re("(?P<k>\\w+)=(?<v>\\w*)");
+    let r = compiled("(?P<k>\\w+)=(?<v>\\w*)");
     let caps = r.captures("key=value;") ?! "a match";
     assert(r.group_count() == 3);
     let v = caps.get(r.group_named("v") ?! "named") ?! "taken part";
@@ -82,17 +82,17 @@ test "groups" {
 }
 
 test "every match, and replacing them" {
-    let ms = re("\\d+").find_all("a1b22c333");
+    let ms = compiled("\\d+").find_all("a1b22c333");
     assert(ms.len() == 3);
     assert(ms[0].start() == 1 && ms[1].start() == 3 && ms[2].start() == 6 && ms[2].end() == 9);
-    let empties = re("x*").find_all("axxb");
+    let empties = compiled("x*").find_all("axxb");
     assert(empties.len() == 3);
     assert(empties[0].is_empty() && empties[1].start() == 1 && empties[1].end() == 3);
     assert(empties[2].start() == 4 && empties[2].is_empty());
-    let out = re("\\d+").replace_all("a1b22c333", "#");
+    let out = compiled("\\d+").replace_all("a1b22c333", "#");
     let out: &str = &out;
     assert(out == "a#b#c#");
-    let out = re("x*").replace_all("axxb", "-");
+    let out = compiled("x*").replace_all("axxb", "-");
     let out: &str = &out;
     assert(out == "-a-b-");
 }
@@ -105,8 +105,8 @@ test "linear time: a pattern that makes a backtracker exponential" {
         text.push('a');
         i += 1;
     }
-    assert(!re("(a*)*b").is_match(&text));
-    assert(!re("(a|aa)+$b").is_match(&text));
+    assert(!compiled("(a*)*b").is_match(&text));
+    assert(!compiled("(a|aa)+$b").is_match(&text));
 }
 
 test "patterns this engine refuses" {
@@ -120,4 +120,16 @@ test "patterns this engine refuses" {
     refused("[ab", "`]`");
     refused("*a", "nothing to repeat");
     refused("\\q", "unknown escape");
+}
+
+test "a re literal is compiled when compiling" {
+    (re"[a-z]+(\d{2,3})".find("ab x123y") ?! "a match").start()   // => 3
+    ;
+    let date = re"(?<year>\d{4})-(?<month>\d{2})";
+    let text = "on 2026-11 at";
+    let found = date.captures(text) ?! "a date";
+    let year = date.group_named("year") ?! "a group";
+    (found.get(year) ?! "matched").text(text)                     // => "2026"
+    ;
+    re"^\w+$".is_match("plain_word")                               // => true
 }

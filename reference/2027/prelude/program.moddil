@@ -120,3 +120,8 @@ struct ParamInfo {
     ty: String,
 }
 
+// `compile_error(message, start, end)` (`comptime.error.1`): compile-time code's error, reported
+// when compiling with `message` at bytes `start` to `end` of the text of the tagged literal being
+// evaluated (or at the const or block). Run when the program runs, it traps.
+#[intrinsic]
+fn compile_error(message: &str, start: int, end: int) -> !;
