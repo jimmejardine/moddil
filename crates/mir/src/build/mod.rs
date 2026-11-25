@@ -581,17 +581,23 @@ impl Builder<'_> {
     /// (drops a local or temporary, runs a `defer` or `errdefer`) and goes on to its parent's;
     /// node 0's resumes unwinding in the caller.
     fn cleanups(&mut self) {
-        let nodes = self.scopes.nodes();
         let locals = self.cfg.local_count();
         self.cfg.cleanup = true;
         let resume = self.cfg.new_block();
         self.cfg.continue_in(resume);
         self.cfg.terminate(Terminator::Resume);
-        let mut blocks = vec![resume; nodes.len()];
-        for (n, (item, parent)) in nodes.iter().enumerate().skip(1) {
+        let mut blocks = vec![resume];
+        // A cleanup's own code may add nodes (a `defer`'s `let`), which get cleanups too.
+        let mut n = 1;
+        while n < self.scopes.node_count() {
+            let (item, parent) = self.scopes.node_at(n);
+            let parent = &parent;
             let start = self.cfg.new_block();
             self.cfg.continue_in(start);
-            self.cfg.node = 0;
+            // Unwinding from inside this cleanup (a `defer` joining a cancelled task) leaves it
+            // and goes on with the rest: its parent's (`task.cancel.2`).
+            self.scopes.set_base(*parent);
+            self.cfg.node = *parent;
             match item.expect("an item") {
                 ScopeItem::Local(l) | ScopeItem::Temp(l) => {
                     let ty = self.cfg.local_ty(l);
@@ -604,10 +610,12 @@ impl Builder<'_> {
                 }
                 ScopeItem::ErrDefer(body) => self.run_errdefer(body),
             }
+            self.scopes.end_base();
             // Parents come before their children, so the parent's block is known.
             self.cfg
                 .terminate(Terminator::Goto(blocks[*parent as usize]));
-            blocks[n] = start;
+            blocks.push(start);
+            n += 1;
         }
         self.cfg
             .set_cleanups(blocks, self.cfg.local_count() - locals);

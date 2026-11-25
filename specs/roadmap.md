@@ -236,6 +236,19 @@ L)
   runner shows the `//~` markers held.
 - Focused snapshot tests of each layout rule in `crates/fmt/tests/`, beside the corpus test.
 
+**P36. The reference interpreter's own type inference** (`crates/refinterp`; L, in stages)
+- Written from the reference's typing rules, not taken from `sema` (the reference interpreter
+  stays independent), so that it checks the checker too. One commit per stage:
+  1. Literals and collection literals typed locally, from expected types and later uses
+     (`let x = 250; let y: u8 = x;` makes `250` a `u8`), from every context, not only a
+     `let`'s type, a parameter or a result.
+  2. Associated types and error sets resolved from the impls (`I::Fails`), so `?` on a call
+     whose errors turn out to be `!` takes apart its `Option`.
+  3. Trait selection by type: a trait's function without `self` by the expected type
+     (`Zero::zero()`), impls of one trait for different arguments of a generic type told apart,
+     and a bound trait's method preferred over an inherent one of the same name in generic code;
+     then the conformance suite's avoidance of these ends.
+
 **Waits on bigger work** (not packaged)
 - The rest of M3 and M4 and M5 (above, "Still to build").
 - A parallel runtime: biased counting, `AtomicRc`, the cycle detector.
@@ -259,14 +272,6 @@ L)
   through its C-ABI wrapper), while the MIR interpreter traps as for any call.
 - AArch64's rule that a struct is not split between registers and the stack holds only as far as
   Cranelift assigns registers; the tests stay within them.
-- The reference interpreter infers no types (`crates/refinterp/README.md`), so it takes a `?`
-  on a call whose signature lists `fail` as the call's even when the errors turn out to be `!`;
-  types a literal where it meets it, not by a later use of an unannotated variable; and types a
-  collection literal only from a `let`'s type, a parameter or a result. Closing these needs
-  inference of its own, which is not decided.
-- A `join` of a cancelled task unwinds the task that joins, and cancels its scope
-  (`task.cancel.1`). Not unwinding it needs a decision first: how the join is told, since
-  `Cancelled` is not an error (`error-handling.md` D15).
 - `panic`: only bugs trap (`unreachable`, `todo`, `assert`, `?!`), by design so far.
 
 ## Staging: distributed programs

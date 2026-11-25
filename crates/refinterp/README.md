@@ -21,8 +21,9 @@ a trait's function without `self` called through the trait (`Zero::zero()`), whe
 expected type says which impl; two impls of a trait for different arguments of one generic type
 (`impl Tr for Wrap<int>` and `impl Tr for Wrap<bool>`), which it does not tell apart; and, in
 generic code, an inherent method that has the same name as the bound trait's method, which it
-prefers. Closing these needs type information the compiler has; whether the reference
-interpreter should get its own inference is an open question.
+prefers. Closing these needs type information; the reference interpreter is to get its own
+inference, written from the reference's typing rules rather than taken from the compiler, so
+that it checks the checker too (`specs/roadmap.md`, P36).
 
 ## Rules
 

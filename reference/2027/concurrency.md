@@ -50,10 +50,13 @@ it **unwinds** instead: it leaves every block it is in as an error would, runnin
 `errdefer`s and drops ([Statements](statements.md)), and ends; the value a `send` it waits in was
 to send is dropped. A task waiting at a scope's end
 waits for that scope's tasks first. A `join` of a cancelled task unwinds the joining task, whose
-scope is cancelled too.
+scope is cancelled too; so only a task that is unwinding already, in its cleanup, reaches one
+(**task.cancel.2**).
 
 **task.cancel.2** While a task unwinds, its cleanup is not cancelled again: its suspension points
-wait as they would. A trap while unwinding, or in a destructor, ends the program.
+wait as they would. A `join` of a cancelled task in its cleanup leaves the `defer` or `errdefer`
+block it is in, as unwinding leaves any block, and the unwinding goes on with the rest of the
+cleanup. A trap while unwinding, or in a destructor, ends the program.
 
 **task.isolate.1** `scope(body, isolate: true)` is **isolated**: a trap in one of its tasks, or in
 the tasks of the scopes inside it that are not isolated themselves, does not end the program but

@@ -149,3 +149,37 @@ test "a cancelled send's value is dropped" {
     };
     Rc::strong_count(&held)                 // => 1
 }
+
+// A join of a cancelled task is reached only by a task unwinding too, in its cleanup: it leaves
+// that cleanup, and the unwinding goes on with the rest.
+test "a cleanup that joins a cancelled task leaves that cleanup" {
+    let mut before = false;
+    let mut after = false;
+    let mut later = false;
+    let (tx, rx) = channel::<int>(1);
+    let (tx2, rx2) = channel::<int>(1);
+    let r = try {
+        scope(|s| {
+            let t = s.spawn(|| {
+                rx.recv();                  // waits: nothing is sent, so it is cancelled
+                1
+            });
+            defer {
+                later = true;
+            }
+            defer {
+                before = true;
+                let v = t.join();           // a cancelled task: this cleanup is left
+                after = true;
+            }
+            s.spawn(|| risky(2)?)?;
+            rx2.recv();                     // waits, and is cancelled by the failure
+            0
+        })?
+    };
+    before                                  // => true
+    ;
+    after                                   // => false
+    ;
+    later                                   // => true
+}

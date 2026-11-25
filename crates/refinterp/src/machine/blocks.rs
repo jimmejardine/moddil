@@ -41,6 +41,9 @@ impl Machine<'_> {
                     }
                     match self.block(d) {
                         Ok(_) | Err(Flow::Fail(..)) => {}
+                        // Unwinding from inside it (a join of a cancelled task) leaves it, and
+                        // goes on with the rest (`task.cancel.2`).
+                        Err(Flow::Unwind) => result = Err(Flow::Unwind),
                         Err(f) => {
                             result = Err(f);
                             break;
@@ -48,9 +51,13 @@ impl Machine<'_> {
                     }
                     continue;
                 }
-                if let Err(f) = self.block(d) {
-                    result = Err(f);
-                    break;
+                match self.block(d) {
+                    Ok(_) => {}
+                    Err(Flow::Unwind) => result = Err(Flow::Unwind),
+                    Err(f) => {
+                        result = Err(f);
+                        break;
+                    }
                 }
             }
         }

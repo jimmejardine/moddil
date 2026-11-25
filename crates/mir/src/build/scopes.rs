@@ -46,6 +46,10 @@ pub(super) struct Scopes {
     nodes: Vec<(Option<ScopeItem>, u32)>,
     /// The enclosing loops, innermost last.
     loops: Vec<LoopCx>,
+    /// While a cleanup block is built: the node whose cleanup it goes on to, and how many
+    /// scopes were open below the one opened for it. What is held there is that node, not the
+    /// body's items.
+    base: Option<(u32, usize)>,
 }
 
 impl Scopes {
@@ -56,6 +60,7 @@ impl Scopes {
             ids: vec![Vec::new()],
             nodes: vec![(None, 0)],
             loops: Vec::new(),
+            base: None,
         }
     }
 
@@ -73,16 +78,37 @@ impl Scopes {
 
     /// The node of what the open scopes hold now (`task.cancel.1`).
     pub(super) fn node(&self) -> u32 {
-        self.ids
+        let (base, below) = self.base.unwrap_or((0, 0));
+        self.ids[below..]
             .iter()
             .rev()
             .find_map(|s| s.last().copied())
-            .unwrap_or(0)
+            .unwrap_or(base)
     }
 
-    /// Every node: its item, and the node before it.
-    pub(super) fn nodes(&self) -> Vec<(Option<ScopeItem>, u32)> {
-        self.nodes.clone()
+    /// Node `n`: its item, and the node before it.
+    pub(super) fn node_at(&self, n: usize) -> (Option<ScopeItem>, u32) {
+        self.nodes[n]
+    }
+
+    /// How many nodes there are.
+    pub(super) fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// Opens a scope for a cleanup block that goes on to node `n`'s: what it holds, until
+    /// [`Scopes::end_base`], is `n` and what the cleanup's own code adds.
+    pub(super) fn set_base(&mut self, n: u32) {
+        self.base = Some((n, self.ids.len()));
+        self.open.push(Vec::new());
+        self.ids.push(Vec::new());
+    }
+
+    /// Closes the scope [`Scopes::set_base`] opened.
+    pub(super) fn end_base(&mut self) {
+        self.base = None;
+        self.open.pop();
+        self.ids.pop();
     }
 
     /// How many scopes are open.
