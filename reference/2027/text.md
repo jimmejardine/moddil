@@ -49,8 +49,11 @@ borrows, so the text cannot change while it is live (E0305). `s.start()` and `s.
 `p.offset()` the byte offset, and `p.after(part)` the position just past `part`, which traps if
 `part` is not at `p`. `&s[a..b]`, for a `str` or a `String` `s` and positions `a` and `b`, is the
 text between them (`&s[a..]`, `&s[..b]` and `&s[..]` too; an `int` end is an error, E0201, and so
-is `..=`); it traps if a position is not one of `s`'s, which for now is checked when it runs, or
-if `b` comes before `a`. An offset from outside the program becomes a position by
+is `..=`). A position slices only the text it was found in, that text and not other text with
+the same characters: where both are a local's (or the position is a local's and the text a
+parameter's), other text is an error (E0316); where the position or the text came from a
+parameter, or the text borrows nothing, it traps when it runs. It also traps if `b` comes before
+`a`. An offset from outside the program becomes a position by
 `s.pos_at(offset)`, and text by `s.slice_bytes(i..j)`, which fail with the prelude's
 `NotABoundary { offset }` if an offset is not a boundary of `s` (or they are out of order).
 

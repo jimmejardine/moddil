@@ -69,7 +69,7 @@ pub(crate) struct NodeRef {
 
 /// Where a borrow points: a task's call's frame, a variable in it, and a path of field
 /// positions.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Pointer {
     pub(crate) task: usize,
     pub(crate) frame: usize,

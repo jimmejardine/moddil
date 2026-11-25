@@ -105,8 +105,18 @@ impl Natives<'_> {
                         other => unreachable!("a byte: {other:?}"),
                     })
                     .collect();
-                str_of(String::from_utf8(bytes).expect("a `String` holds UTF-8"))
+                let text = String::from_utf8(bytes).expect("a `String` holds UTF-8");
+                // The same bytes give the same text while they hold it (`text.pos.1`).
+                match &args[0] {
+                    Value::Ref(at, _) => Value::Str(stack.texts.view(at.clone(), text)),
+                    _ => str_of(text),
+                }
             }
+            // Whether two texts are the same text, not only the same characters (`text.pos.1`).
+            (Ty::Str, "same_text") => match (arg(stack, 0), arg(stack, 1)) {
+                (Value::Str(a), Value::Str(b)) => Value::Bool(crate::texts::same(&a, &b)),
+                other => unreachable!("texts: {other:?}"),
+            },
             (Ty::Slice(_), "len") => match arg(stack, 0) {
                 Value::Array(xs) | Value::Buf(_, xs) => Value::Int(xs.len() as i64),
                 other => unreachable!("a slice: {other:?}"),

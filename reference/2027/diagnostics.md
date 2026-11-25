@@ -72,6 +72,7 @@ and a code never changes meaning.
 | E0313 | `return`, `break` or `continue` out of a `defer` block | [stmt.defer.1](statements.md) |
 | E0314 | A field moved out of a value whose type has a destructor | [own.drop.partial.1](ownership.md) |
 | E0315 | An element moved out of an array or slice | [expr.index.move.1](expressions/arrays.md) |
+| E0316 | Text sliced with a position found in other text | [text.pos.1](text.md) |
 | E0401 | A name used as a trait that is not one | [item.trait.1](items/traits.md) |
 | E0402 | A type that does not implement a trait it must | [generic.bound.1](generics.md), [item.trait.super.1](items/traits.md), [attr.derive.1](attributes.md), [type.dyn.coerce.1](types.md), [eff.with.1](effects.md), [expr.fmt.2](text.md) |
 | E0403 | A method or function that the type does not have | [expr.method.1](expressions/methods.md), [expr.path.assoc.1](expressions/methods.md), [generic.bound.1](generics.md) |

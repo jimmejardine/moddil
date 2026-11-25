@@ -5819,6 +5819,14 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let i = self.value(&args[1])?;
                 Val::Scalar(self.rt_call(self.c.rt.char_at_byte, &[p, n, i]))
             }
+            // Whether two texts are the same text: where they are, and how long (`text.pos.1`).
+            "same_text" => {
+                let (p, n) = self.text(&args[0])?;
+                let (q, m) = self.text(&args[1])?;
+                let at = self.b.ins().icmp(IntCC::Equal, p, q);
+                let len = self.b.ins().icmp(IntCC::Equal, n, m);
+                Val::Scalar(self.b.ins().band(at, len))
+            }
             // The text between two byte offsets (`text.pos.1`).
             "bytes_between" => {
                 let (p, n) = self.text(&args[0])?;

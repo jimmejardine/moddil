@@ -21,7 +21,9 @@
 
 use std::collections::{BTreeSet, HashSet};
 
-use moddil_sema::{Code, Container, Db, Diagnostic, Item, ItemTree, Owner, Program, Severity, Ty};
+use moddil_sema::{
+    Code, Container, Db, Diagnostic, Item, ItemTree, Owner, Program, Severity, Src, Ty,
+};
 use moddil_syntax::TextRange;
 
 use crate::{Body, Local, Operand, Place, Projection, Rvalue, Statement, Terminator, mir};
@@ -895,6 +897,9 @@ impl<'a> Checker<'a> {
                         }
                     }
                 }
+                if check && self.is_text_between(callee.func()) {
+                    self.positions_of(span, &flows);
+                }
                 for a in args {
                     self.operand(at, span, a, h, m, check);
                 }
@@ -944,6 +949,51 @@ impl<'a> Checker<'a> {
             | Terminator::Resume
             | Terminator::Unreachable
             | Terminator::Trap(..) => {}
+        }
+    }
+
+    /// Whether `func` is the prelude's `str::between`, which `&s[a..b]` calls (`text.pos.1`).
+    fn is_text_between(&self, func: u32) -> bool {
+        let sig = &self.items.fns[func as usize];
+        sig.name == "between"
+            && matches!(sig.container, Container::Impl(k) if {
+                let i = &self.items.impls[k as usize];
+                i.src == Src::Prelude && i.trait_ref.is_none() && i.self_ty == Ty::Str
+            })
+    }
+
+    /// `&s[a..b]`, whose arguments' loans are `flows` (the text, then the positions): a position
+    /// found in other text than `s` is an error (E0316, `text.pos.1`), where both are known to be
+    /// a local's. A position or text given as a parameter, or text that borrows nothing (a
+    /// literal), is checked when it runs.
+    fn positions_of(&mut self, span: TextRange, flows: &[BTreeSet<usize>]) {
+        let [text, ends @ ..] = flows else {
+            return;
+        };
+        if text.is_empty() {
+            return;
+        }
+        for end in ends {
+            if end.is_empty() || end.iter().any(|&l| self.loans[l].param.is_some()) {
+                continue;
+            }
+            let same = end.iter().any(|&e| {
+                text.iter().any(|&t| {
+                    PlaceKey::of(&self.loans[e].place).overlaps(&PlaceKey::of(&self.loans[t].place))
+                })
+            });
+            if !same {
+                let found = end
+                    .iter()
+                    .next()
+                    .map(|&e| self.name(&self.loans[e].place.clone()));
+                let found = found.unwrap_or_else(|| "other text".to_string());
+                self.report(Diagnostic::error(
+                    Code::E0316,
+                    span,
+                    format!("this slices text with a position in {found}, other text"),
+                ));
+            }
         }
     }
 

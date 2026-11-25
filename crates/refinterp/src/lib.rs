@@ -22,6 +22,7 @@ mod machine;
 mod memory;
 mod num;
 mod program;
+mod texts;
 mod value;
 
 use program::Program;

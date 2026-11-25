@@ -138,13 +138,19 @@ impl Machine<'_> {
                 } =>
             {
                 let v = self.eval_as(&init, Some(&t))?;
-                Src::Place(self.memory.temp(self.typed(v, Some(&t))), false)
+                {
+                    let v = self.typed(v, Some(&t));
+                    Src::Place(self.memory.temp(v), false)
+                }
             }
             // A borrow, which may be converted (`type.deref.coerce.1`).
             Some(t @ ast::Type::Ref(_)) => {
                 let v = self.eval(&init)?;
                 let v = self.deref_coerced(v, Some(&t), init.syntax().text_range())?;
-                Src::Place(self.memory.temp(self.typed(v, Some(&t))), false)
+                {
+                    let v = self.typed(v, Some(&t));
+                    Src::Place(self.memory.temp(v), false)
+                }
             }
             // A tuple: each element takes its own type (`let (x, y): (u8, u8) = (250, 10)`).
             Some(t @ ast::Type::Tuple(_)) => {

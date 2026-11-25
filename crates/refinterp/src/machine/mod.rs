@@ -60,6 +60,8 @@ struct Machine<'p> {
     /// While a `#[selectable]` function runs for a `select` (`task.select.4`): its receive, by
     /// range, and what was received in its place.
     received: Option<(TextRange, Value)>,
+    /// Where each text is, so a position's text is told from other text (`text.pos.1`).
+    texts: crate::texts::Texts<Pointer>,
     /// For a conversion being run (`num.convert.1`): the type it converts to.
     convert_to: Option<Head>,
 }
@@ -114,6 +116,7 @@ impl<'p> Machine<'p> {
             nodes: HashMap::new(),
             reflected: Vec::new(),
             received: None,
+            texts: crate::texts::Texts::default(),
             convert_to: None,
         }
     }

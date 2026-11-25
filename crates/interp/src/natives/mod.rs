@@ -153,8 +153,8 @@ impl<'a> Natives<'a> {
                 return usize::try_from(a)
                     .ok()
                     .zip(usize::try_from(b).ok())
-                    .and_then(|(a, b)| s.get(a..b))
-                    .map(|t| Value::Str(t.into()))
+                    .and_then(|(a, b)| stack.texts.slice(&s, a, b))
+                    .map(Value::Str)
                     .ok_or(TrapClass::IndexOutOfBounds);
             }
             // The two parts of an `&mut` slice borrow, disjoint (`expr.slice.1`).

@@ -56,3 +56,25 @@ test "a position of other text traps" {
     let p = a.find(' ') ?! "found";
     &b[..p]                                     //~ trap
 }
+
+/// Text before a position its caller found: which text the position is in is not known here, so
+/// it is checked when it runs.
+fn before(s: &str, at: StrPos) -> int {
+    let part = &s[..at];                        //~ trap
+    part.len()
+}
+
+test "a position given to a function is checked when it runs" {
+    let a = String::from_str("one two");
+    let b = String::from_str("one two");
+    let p = a.find(' ') ?! "found";
+    before(&a, p)                               // => 3
+    ;
+    before(&b, p)
+}
+
+test "a slice of the same text, made again, is that text" {
+    let r = "one two".to_string().to_rcstr();
+    let p = r.as_str().find(' ') ?! "found";
+    r.slice(r.as_str().start(), p).to_string()  // => "one"
+}

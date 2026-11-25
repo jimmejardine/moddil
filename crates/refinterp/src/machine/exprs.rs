@@ -308,7 +308,11 @@ impl Machine<'_> {
         let text = match v {
             Value::Str(s) => Value::Str(s),
             v @ Value::Adt { .. } if crate::value::string_text(&v).is_some() => {
-                Value::Str(crate::value::string_text(&v).expect("text").into())
+                // As its `as_str` gives it, so its positions' text is the same text.
+                match self.string_str(Value::Ref(p, false)) {
+                    Some(s) => s,
+                    None => return Ok(None),
+                }
             }
             _ => return Ok(None),
         };

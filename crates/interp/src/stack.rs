@@ -103,6 +103,8 @@ pub(crate) struct Stack<'a> {
     /// [`Pointer`] with [`HEAP`] for its frame points into, until `from_raw` takes them back.
     heap: std::collections::HashMap<u32, Value>,
     next_heap: u32,
+    /// Where each text is, so a position's text is told from other text (`text.pos.1`).
+    pub(crate) texts: crate::texts::Texts<Pointer>,
 }
 
 /// The frame of a pointer to static data: the const item is its local.
@@ -121,6 +123,7 @@ impl<'a> Stack<'a> {
             statics: std::collections::HashMap::new(),
             heap: std::collections::HashMap::new(),
             next_heap: 0,
+            texts: crate::texts::Texts::default(),
         }
     }
 

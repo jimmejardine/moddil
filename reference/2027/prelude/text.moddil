@@ -602,7 +602,7 @@ impl Iterator for CharIndices {
 
 // A position in text (`text.pos.1`): a byte offset on a character boundary of the text it was
 // found in, which it borrows, so the text cannot change while it is live. Slicing other text with
-// it traps, for now.
+// it is an error where the check sees both texts (E0316), and traps where it does not.
 view StrPos {
     text: &str,
     at: int,
@@ -708,11 +708,15 @@ impl str {
     }
 
     // `&s[a..b]` (`text.pos.1`): the text between two of its positions; traps if one is not
-    // this text's, or they are out of order.
+    // this text's (the same text, not only the same characters), or they are out of order.
     fn between(&self, a: StrPos, b: StrPos) -> &str {
-        assert(a.text == self && b.text == self && a.at <= b.at);
+        assert(a.text.same_text(self) && b.text.same_text(self) && a.at <= b.at);
         self.bytes_between(a.at, b.at)
     }
+
+    // Whether `other` is this text, where it is: not only the same characters.
+    #[intrinsic]
+    fn same_text(&self, other: &str) -> bool;
 
     // The text between two byte offsets that are boundaries.
     #[intrinsic]

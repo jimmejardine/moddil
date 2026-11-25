@@ -163,6 +163,8 @@ codes! {
     E0314 = "move out of a type with a destructor",
     /// Moving a value that is not `Copy` out of an element of an array or slice.
     E0315 = "move out of an element",
+    /// Text sliced with a position found in other text (`&b[a.find(' ')?..]`).
+    E0316 = "position of other text",
     /// A name used as a trait that is not one.
     E0401 = "not a trait",
     /// A type that does not implement a trait it must.

@@ -109,15 +109,31 @@ impl Machine<'_> {
     /// `v` stored where type `ty` is written: a literal takes a number type
     /// (`num.lit.1`), and a `&String` where a `&str` is written is its text
     /// (`text.coerce.1`), as the prelude's `as_str` gives it.
-    pub(super) fn typed(&self, v: Value, ty: Option<&ast::Type>) -> Value {
+    pub(super) fn typed(&mut self, v: Value, ty: Option<&ast::Type>) -> Value {
         if let Some(t) = ty
             && t.syntax().text() == "&str"
             && let Value::Ref(..) = v
-            && let Some(s) = crate::value::string_text(&self.target(v.clone()))
+            && let Some(s) = self.string_str(v.clone())
         {
-            return Value::Str(s.into());
+            return s;
         }
         crate::num::typed(v, ty)
+    }
+
+    /// The text of the `String` `v` points to (through any borrows), as its `as_str` gives it,
+    /// so it is the same text each time (`text.pos.1`); `None` if it is not a `String`.
+    pub(super) fn string_str(&mut self, v: Value) -> Option<Value> {
+        let mut at = None;
+        let mut v = v;
+        while let Value::Ref(q, _) = v {
+            v = self.memory.load(&q);
+            at = Some(q);
+        }
+        crate::value::string_text(&v)?;
+        let at = at?;
+        let range = moddil_syntax::TextRange::default();
+        self.string_call("as_str", vec![Value::Ref(at, false)], range)
+            .ok()
     }
 
     /// `fmt"…"` (`expr.fmt.1`): the text, and each hole's value written by its `Display`.
@@ -467,11 +483,26 @@ impl Machine<'_> {
                         other => unreachable!("a byte: {other:?}"),
                     })
                     .collect();
-                Value::Str(String::from_utf8(bytes).expect("UTF-8").into())
+                let text = String::from_utf8(bytes).expect("UTF-8");
+                // The same bytes give the same text while they hold it (`text.pos.1`).
+                match &args[0] {
+                    Value::Ref(at, _) => Value::Str(self.texts.view(at.clone(), text)),
+                    _ => Value::Str(text.into()),
+                }
+            }
+            // Whether two texts are the same text, not only the same characters (`text.pos.1`).
+            (Head::Str, "same_text") => {
+                match (self.target(args[0].clone()), self.target(args[1].clone())) {
+                    (Value::Str(a), Value::Str(b)) => Value::Bool(crate::texts::same(&a, &b)),
+                    other => unreachable!("texts: {other:?}"),
+                }
             }
             // The text between two byte offsets (`text.pos.1`).
             (Head::Str, "bytes_between") => {
-                let t = text(self, 0);
+                let t = match self.target(args[0].clone()) {
+                    Value::Str(t) => t,
+                    _ => text(self, 0).into(),
+                };
                 let (Value::Int(a), Value::Int(b)) =
                     (self.target(args[1].clone()), self.target(args[2].clone()))
                 else {
@@ -480,9 +511,9 @@ impl Machine<'_> {
                 match usize::try_from(a)
                     .ok()
                     .zip(usize::try_from(b).ok())
-                    .and_then(|(a, b)| t.get(a..b))
+                    .and_then(|(a, b)| self.texts.slice(&t, a, b))
                 {
-                    Some(part) => Value::Str(part.into()),
+                    Some(part) => Value::Str(part),
                     None => return Err(crate::trap(crate::TrapClass::IndexOutOfBounds, range)),
                 }
             }

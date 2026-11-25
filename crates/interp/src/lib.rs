@@ -21,6 +21,7 @@ mod num;
 mod ops;
 mod sched;
 mod stack;
+mod texts;
 mod value;
 
 use moddil_mir::TrapClass;

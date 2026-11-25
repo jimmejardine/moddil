@@ -1,0 +1,20 @@
+// covers: text.pos.1
+
+// A position slices only the text it was found in: where the check sees both, other text is an
+// error, even with the same characters.
+fn main() {
+    let name = String::from_str("Ada Lovelace");
+    let other = String::from_str("Ada Lovelace");
+    let at = name.find(' ') ?! "a space";
+    let first = &name[name.start()..at];
+    let x = &other[at..other.end()];            //~ E0316
+    first.len();
+    x.len();
+}
+
+fn of_a_parameter(s: &str) -> int {
+    let t = String::from_str("a b");
+    let at = t.find(' ') ?! "a space";
+    let x = &s[..at];                           //~ E0316
+    x.len()
+}
