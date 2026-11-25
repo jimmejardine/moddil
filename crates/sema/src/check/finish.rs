@@ -231,6 +231,9 @@ impl Inference {
         {
             *c = c.map(&mut |t| erase(&solver.deep(t)));
         }
+        for t in self.wrapped.values_mut() {
+            *t = erase(&solver.deep(t));
+        }
         for (c, t) in self
             .field_through
             .values_mut()

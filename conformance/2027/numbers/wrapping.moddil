@@ -1,4 +1,4 @@
-// covers: num.wrap.2
+// covers: num.wrap.2, num.wrap.3, expr.assign.compound.2
 // Each literal is typed where it is bound: the reference interpreter types a literal by its own
 // context only.
 
@@ -49,4 +49,37 @@ test "a Wrapping integer compares and prints as its value does" {
     let two: u8 = 2;
     let w = Wrapping(c);
     fmt"{w + Wrapping(two)} {w:?}"          // => "1 Wrapping(255)"
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Meters { m: int }
+
+impl Add for Meters {
+    type Output = Meters;
+    fn add(self, rhs: Meters) -> Meters {
+        Meters { m: self.m + rhs.m }
+    }
+}
+
+test "a literal where a Wrapping is expected" {
+    let max: u32 = 4294967295;
+    let last = Wrapping(max);
+    let seq: Wrapping<u32> = last + 1;
+    seq.0                                   // => 0
+    ;
+    let start: Wrapping<u8> = 250;
+    (start + 10).0                          // => 4
+}
+
+test "+= through an operator trait" {
+    let mut w: Wrapping<u8> = 200;
+    w += Wrapping(100);
+    w.0                                     // => 44
+    ;
+    w += 1;
+    w.0                                     // => 45
+    ;
+    let mut d = Meters { m: 2 };
+    d += Meters { m: 3 };
+    d.m                                     // => 5
 }

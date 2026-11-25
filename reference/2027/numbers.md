@@ -43,8 +43,12 @@ the type's width instead of trapping: the result is the exact one modulo 2ⁿ, a
 hashes, checksums and sequence numbers: `Wrapping(x)`, its value `.0`, for `T` any integer type
 (the prelude's trait `WrappingInt`). It compares, hashes and prints as its value does (`Debug`
 shows `Wrapping(1)`). `WrappingInt`'s methods, `wrapping_add`, `wrapping_sub` and
-`wrapping_mul`, are each integer's `+%`, `-%` and `*%`. Its operands are both `Wrapping`s: `h * Wrapping(31)`, and
-`x = x + Wrapping(1)`, as `+=` is defined only for `int` and `bool`.
+`wrapping_mul`, are each integer's `+%`, `-%` and `*%`. Its operands are both `Wrapping`s:
+`h * Wrapping(31)`, `x += Wrapping(1)`.
+
+**num.wrap.3** An integer literal where a `Wrapping<T>` is expected is that `T`, wrapped:
+`let seq: Wrapping<u32> = last + 1;`, `let start: Wrapping<u8> = 250;`, `w += 1`. It must fit
+`T` (E0204).
 
 **num.checked.1** On every integer type, `a.checked_add(b)`, `a.checked_sub(b)` and
 `a.checked_mul(b)` are `Some` of the result, or `None` where the operator would trap on

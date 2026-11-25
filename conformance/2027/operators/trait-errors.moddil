@@ -11,6 +11,6 @@ fn add_labels(a: Label, b: Label) { let c = a + b; }           //~ E0205
 fn compare_labels(a: Label, b: Label) -> bool { a == b }       //~ E0205
 fn order_labels(a: Label, b: Label) -> bool { a < b }          //~ E0205
 fn tuples(a: (int, int)) -> bool { a == (1, 2) }               //~ E0205
-fn compound(mut a: V, b: V) { a += b; }                        //~ E0205
+fn compound(mut a: Label, b: Label) { a += b; }                //~ E0205
 fn wrong_rhs(a: V) -> V { a + 1 }                              //~ E0201
 fn negate(a: V) -> V { -a }                                    //~ E0205

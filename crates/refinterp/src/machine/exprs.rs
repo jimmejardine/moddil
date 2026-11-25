@@ -1149,6 +1149,17 @@ impl Machine<'_> {
             let new = if crate::num::is_num(&old, &v) {
                 let sym = op.text();
                 crate::num::arith(&sym[..sym.len() - 1], old, v, range)?
+            } else if let Value::Adt { .. } = old {
+                // Through its operator trait (`expr.assign.compound.2`): `x = x + y`.
+                let (tr, method) = match compound(op.kind()) {
+                    K::PLUS => ("Add", "add"),
+                    K::MINUS => ("Sub", "sub"),
+                    K::STAR => ("Mul", "mul"),
+                    K::SLASH => ("Div", "div"),
+                    K::PERCENT => ("Rem", "rem"),
+                    _ => unreachable!("a checked operator"),
+                };
+                self.call_trait(tr, method, vec![old, v], range)?
             } else {
                 arith(compound(op.kind()), old, v, range)?
             };

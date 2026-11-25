@@ -17,6 +17,28 @@ impl Builder<'_> {
     /// Evaluates `e` and stores its value in `dest`. A part of an `assert`'s condition is
     /// evaluated into its own local first, and marked as evaluated.
     pub(super) fn eval_into(&mut self, dest: Local, e: ExprId) {
+        // An integer literal taken as a `Wrapping<T>` (`num.wrap.3`): the `T`, wrapped.
+        if self.uncoerced != Some(e)
+            && let Some(Ty::Adt(adt, ..)) = self.types.wrapped(e).cloned()
+        {
+            let t = self.temp(self.ty(e));
+            let outer = self.uncoerced.replace(e);
+            self.eval_into(t, e);
+            self.uncoerced = outer;
+            let path = self.items.adts[adt as usize].path(0);
+            self.cfg.assign(
+                dest,
+                Rvalue::Aggregate(
+                    AggregateKind::Adt {
+                        adt,
+                        variant: 0,
+                        path,
+                    },
+                    vec![Operand::Move(Place::local(t))],
+                ),
+            );
+            return;
+        }
         // A function named where a C function pointer is wanted: its address, not a closure.
         if let Some(f) = self.types.fn_ptr(e) {
             self.cfg.assign(dest, Rvalue::FnPtr(f));
@@ -624,6 +646,16 @@ impl Builder<'_> {
                         let place = self.place(target);
                         // The old value is dropped before the new one is stored.
                         self.drop_place(place.clone(), &ty, false);
+                        let op = self.use_place(Place::local(t), &ty);
+                        self.cfg.assign(place, Rvalue::Use(op));
+                    }
+                    // Through its operator trait (`expr.assign.compound.2`): `x = x + y`.
+                    Some(_) if self.types.callee(e).is_some() => {
+                        let place = self.place(target);
+                        let b = self.operand(value, &[]);
+                        let a = self.use_place(place.clone(), &ty);
+                        let t = self.temp(ty.clone());
+                        self.call(e, t, vec![a, b]);
                         let op = self.use_place(Place::local(t), &ty);
                         self.cfg.assign(place, Rvalue::Use(op));
                     }

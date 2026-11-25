@@ -128,6 +128,9 @@ pub struct Inference {
     field_through: HashMap<ExprId, (Callee, Ty)>,
     literal_calls: HashMap<ExprId, Callee>,
     refined_literals: Vec<(ExprId, u32)>,
+    /// The integer literals taken as a `Wrapping<T>` (`num.wrap.3`), each with that type: the
+    /// literal is a `T`, wrapped where it is used.
+    wrapped: HashMap<ExprId, Ty>,
     adjusts: HashMap<ExprId, Adjust>,
     propagated: HashMap<ExprId, Propagated>,
     arg_order: HashMap<ExprId, Vec<ArgSlot>>,
@@ -219,6 +222,12 @@ impl Inference {
         &self.refined_literals
     }
 
+    /// The `Wrapping<T>` integer literal `e` is taken as, if it is one (`num.wrap.3`): `e`
+    /// itself is a `T`.
+    pub fn wrapped(&self, e: ExprId) -> Option<&Ty> {
+        self.wrapped.get(&e)
+    }
+
     /// For a hole of `fmt"…"`: the `Display::fmt` it calls.
     pub fn fmt_callee(&self, hole: ExprId) -> Option<&Callee> {
         self.fmt_calls.get(&hole)
@@ -302,6 +311,7 @@ impl Inference {
             .chain(out.dyn_coercions.values_mut())
             .chain(out.field_through.values_mut().map(|(_, t)| t))
             .chain(out.deref_coercions.values_mut().map(|(_, t)| t))
+            .chain(out.wrapped.values_mut())
         {
             *t = f(t);
         }
@@ -938,6 +948,9 @@ impl Checker<'_> {
             return t;
         }
         if let Some(t) = self.refined_literal(e, expected) {
+            return t;
+        }
+        if let Some(t) = self.wrapped_literal(e, expected) {
             return t;
         }
         let t = self.infer(e);

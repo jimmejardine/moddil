@@ -16,8 +16,9 @@ result is.
 **expr.arith.types.1** Both operands of an arithmetic operator on `int`s are `int`s: a right
 operand of another type is a mismatch (E0201). For a left operand of another type, the operator
 calls its trait (**expr.op.trait.1**), and is not defined if the type does not implement it
-(E0205). A compound assignment (`a += b`) is defined only for `int`s, and for `bool`s with `&=`,
-`|=` and `^=` (E0205).
+(E0205). A compound assignment (`a += b`) is defined for the numbers, for `bool`s with `&=`,
+`|=` and `^=`, and for a type whose operator trait gives that type again (`+=` through `Add`,
+**expr.assign.compound.2**); otherwise it is E0205.
 
 **expr.op.trait.1** On a type other than `int` (and `bool` for `!`), an operator calls a method of
 a prelude trait ([Prelude](../prelude.md)): `a + b` is `Add::add(a, b)`, and likewise `-` `Sub::sub`,

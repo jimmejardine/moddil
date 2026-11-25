@@ -414,6 +414,13 @@ impl Builder<'_> {
     /// `e` as an operand. If an expression evaluated later (`later`) may assign to a local, a
     /// place's value is taken into a temporary first, so the operand keeps the value it had here.
     pub(super) fn operand(&mut self, e: ExprId, later: &[ExprId]) -> Operand {
+        if self.uncoerced != Some(e)
+            && let Some(w) = self.types.wrapped(e).cloned()
+        {
+            let t = self.temp(w);
+            self.eval_into(t, e);
+            return Operand::Move(Place::local(t));
+        }
         if let Some(target) = self.coercion(e) {
             let shared = matches!(target, Ty::Ref(false, _));
             let t = self.temp(target);

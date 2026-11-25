@@ -419,6 +419,31 @@ impl Checker<'_> {
                             Ty::Int | Ty::Num(_) | Ty::Bool | Ty::Error | Ty::Never => {
                                 self.binary(e, range, op, &lt, value);
                             }
+                            // Through its operator trait (`expr.assign.compound.2`): `x = x + y`.
+                            Ty::Adt(..)
+                                if matches!(
+                                    op,
+                                    crate::hir::BinaryOp::Add
+                                        | crate::hir::BinaryOp::Sub
+                                        | crate::hir::BinaryOp::Mul
+                                        | crate::hir::BinaryOp::Div
+                                        | crate::hir::BinaryOp::Rem
+                                ) =>
+                            {
+                                let t = self.binary(e, range, op, &lt, value);
+                                if t != Ty::Error && !self.coerce(&t, &lt) {
+                                    let (want, got) = (self.show(&lt), self.show(&t));
+                                    self.report(
+                                        Code::E0201,
+                                        range,
+                                        format!(
+                                            "`{}=` gives a `{got}`, which cannot be stored in a \
+                                             `{want}`",
+                                            op.symbol()
+                                        ),
+                                    );
+                                }
+                            }
                             Ty::Infer(_) if self.solver.table.lit_kind(&lt).is_some() => {
                                 self.binary(e, range, op, &lt, value);
                             }
@@ -697,6 +722,32 @@ impl Checker<'_> {
 
     /// A literal where a refined type is expected (`refine.lit.1`): a value of the refinement,
     /// which compiling checks.
+    /// An integer literal where a `Wrapping<T>` is expected (`num.wrap.3`): a `T`, wrapped.
+    pub(super) fn wrapped_literal(&mut self, e: ExprId, expected: &Ty) -> Option<Ty> {
+        let target = self.norm(expected);
+        let Ty::Adt(a, _, args) = &target else {
+            return None;
+        };
+        let def = &self.items.adts[*a as usize];
+        if def.name != "Wrapping" || def.src != crate::Src::Prelude {
+            return None;
+        }
+        let literal = match &self.body.exprs[e].kind {
+            ExprKind::Int(_) => true,
+            ExprKind::Unary(crate::hir::UnaryOp::Neg, x) => {
+                matches!(self.body.exprs[*x].kind, ExprKind::Int(_))
+            }
+            _ => false,
+        };
+        if !literal {
+            return None;
+        }
+        let inner = args.first()?.clone();
+        self.check(e, &inner);
+        self.out.wrapped.insert(e, target.clone());
+        Some(target)
+    }
+
     pub(super) fn refined_literal(&mut self, e: ExprId, expected: &Ty) -> Option<Ty> {
         let target = self.norm(expected);
         let Ty::Refined(t, _) = &target else {

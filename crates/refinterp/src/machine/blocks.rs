@@ -179,6 +179,12 @@ impl Machine<'_> {
                 };
                 Src::Place(self.memory.temp(v), false)
             }
+            // A number where a `Wrapping<T>` is written, wrapped (`num.wrap.3`).
+            Some(t) if t.syntax().text().to_string().starts_with("Wrapping<") => {
+                let v = self.eval(&init)?;
+                let v = self.typed(v, Some(&t));
+                Src::Place(self.memory.temp(v), false)
+            }
             _ => self.scrutinee(&init)?,
         };
         let pat = l.pat().expect("a checked `let` has a pattern");

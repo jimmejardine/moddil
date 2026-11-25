@@ -146,6 +146,33 @@ impl Machine<'_> {
         {
             return s;
         }
+        // A number where a `Wrapping<T>` is written (`num.wrap.3`): the number, wrapped.
+        if let Some(t) = ty
+            && let Some(inner) = t
+                .syntax()
+                .text()
+                .to_string()
+                .strip_prefix("Wrapping<")
+                .and_then(|s| s.strip_suffix('>'))
+                .map(str::to_string)
+            && matches!(v, Value::Int(_) | Value::Num(..))
+        {
+            let inner_ty = t
+                .syntax()
+                .descendants()
+                .into_iter()
+                .skip(1)
+                .find_map(ast::Type::cast);
+            let v = match inner_ty {
+                Some(it) if it.syntax().text() == inner.as_str() => crate::num::typed(v, Some(&it)),
+                _ => v,
+            };
+            return Value::Adt {
+                ty: "Wrapping".to_string(),
+                variant: "Wrapping".to_string(),
+                fields: vec![v],
+            };
+        }
         crate::num::typed(v, ty)
     }
 
