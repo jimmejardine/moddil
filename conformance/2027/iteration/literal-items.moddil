@@ -27,14 +27,14 @@ impl<T: Clone> Once<T> {
 
 test "an iterator over a literal's value" {
     let mut o = Once { v: 3, done: false };
-    o.peek()                                // => 3
+    o.peek()  // => 3
     ;
-    o.next()                                // => Some(3)
+    o.next()  // => Some(3)
     ;
-    o.next()                                // => None
+    o.next()  // => None
     ;
     let mut f = Once { v: 1.5, done: false };
-    f.next()                                // => Some(1.5)
+    f.next()  // => Some(1.5)
 }
 
 // An impl whose bound the literal's type is still open for (`T: Add<Output = T>`): it is still
@@ -52,5 +52,5 @@ impl<T: Copy + Add<Output = T>> Iterator for Twice<T> {
 
 test "an iterator whose impl's bound waits on a literal" {
     let mut t = Twice { v: 3 };
-    t.next()                                // => Some(6)
+    t.next()  // => Some(6)
 }

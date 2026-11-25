@@ -2,13 +2,17 @@
 
 struct S;
 
-impl Refined for S {                            //~ E0406
+impl Refined for S {  //~ E0406
     type Base = int;
-    fn refine(v: int) -> S with fail(RefinementError) { S }
+    fn refine(v: int) -> S with fail(RefinementError) {
+        S
+    }
 }
 
-fn needs<T: Refined>() -> Option<T> { None }
+fn needs<T: Refined>() -> Option<T> {
+    None
+}
 
 fn plain() -> Option<int> {
-    needs::<int>()                              //~ E0402
+    needs::<int>()  //~ E0402
 }

@@ -1,6 +1,14 @@
 // covers: expr.assert.1, expr.assert.name.1
 
-fn not_bool() { assert(1); }                        //~ E0201
-fn two() { assert(true, true); }                    //~ E0202
-fn none() { assert(); }                             //~ E0202
-fn value() { let a = assert; }                      //~ E0112
+fn not_bool() {
+    assert(1);  //~ E0201
+}
+fn two() {
+    assert(true, true);  //~ E0202
+}
+fn none() {
+    assert();  //~ E0202
+}
+fn value() {
+    let a = assert;  //~ E0112
+}

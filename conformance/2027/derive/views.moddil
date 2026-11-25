@@ -19,16 +19,16 @@ test "a view derives Clone, Copy and PartialEq" {
     let a = Span { text: s, at: 1 };
     let b = a;
     let c = a.clone();
-    a == b && c == a                        // => true
+    a == b && c == a  // => true
     ;
-    a == Span { text: "x", at: 1 }          // => false
+    a == Span { text: "x", at: 1 }  // => false
 }
 
 test "a view derives Debug, PartialOrd and Hash" {
     let k = Count { n: 2, name: "two".to_string() };
-    fmt"{k:?}"                              // => "Count { n: 2, name: \"two\" }"
+    fmt"{k:?}"  // => "Count { n: 2, name: \"two\" }"
     ;
-    k.clone() == k                          // => true
+    k.clone() == k  // => true
     ;
-    k < Count { n: 3, name: "a".to_string() } // => true
+    k < Count { n: 3, name: "a".to_string() }  // => true
 }

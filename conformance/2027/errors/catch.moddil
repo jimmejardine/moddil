@@ -1,16 +1,27 @@
 // covers: err.try.1, err.catch.1, err.bang.1, err.discard.1
 
-struct TooBig { n: int }
-enum Parse { Empty, Bad(int) }
+struct TooBig {
+    n: int,
+}
+enum Parse {
+    Empty,
+    Bad(int),
+}
 
 fn check(n: int) -> int with fail(TooBig) {
-    if n > 9 { fail(TooBig { n }); }
+    if n > 9 {
+        fail(TooBig { n });
+    }
     n
 }
 
 fn parse(n: int) -> int with fail(Parse) {
-    if n == 0 { fail(Parse::Empty); }
-    if n < 0 { fail(Parse::Bad(n)); }
+    if n == 0 {
+        fail(Parse::Empty);
+    }
+    if n < 0 {
+        fail(Parse::Bad(n));
+    }
     n
 }
 
@@ -20,8 +31,8 @@ fn both(n: int) -> int with fail(TooBig | Parse) {
 
 fn handled(n: int) -> int {
     try { both(n)? } catch {
-        TooBig(t) => t.n * 100,
-        Parse::Empty => -1,
+        TooBig(t)     => t.n * 100,
+        Parse::Empty  => -1,
         Parse::Bad(b) => b * 10,
     }
 }
@@ -35,37 +46,37 @@ fn partly(n: int) -> int with fail(Parse) {
 fn guarded(n: int) -> int {
     try { both(n)? } catch {
         TooBig(t) if t.n > 20 => 2,
-        TooBig(_) => 1,
-        _ => 0,
+        TooBig(_)             => 1,
+        _                     => 0,
     }
 }
 
 test "catch handles what its arms match" {
-    handled(5)                              // => 5
+    handled(5)  // => 5
     ;
-    handled(12)                             // => 1200
+    handled(12)  // => 1200
     ;
-    handled(0)                              // => -1
+    handled(0)  // => -1
     ;
-    handled(-3)                             // => -30
+    handled(-3)  // => -30
     ;
-    partly(15)?                             // => 0
+    partly(15)?  // => 0
     ;
-    try { partly(-1)? }                     // => Err(Parse::Bad(-1))
+    try { partly(-1)? }  // => Err(Parse::Bad(-1))
     ;
-    guarded(30)                             // => 2
+    guarded(30)  // => 2
     ;
-    guarded(11)                             // => 1
+    guarded(11)  // => 1
     ;
-    guarded(0)                              // => 0
+    guarded(0)  // => 0
 }
 
 test "?! says an error cannot happen" {
-    check(3) ?! "3 is small"                // => 3
+    check(3) ?! "3 is small"  // => 3
     ;
     let r: Result<int, TooBig> = Ok(1);
-    r ?! "built as Ok"                      // => 1
+    r ?! "built as Ok"  // => 1
     ;
     discard(try { check(20)? }, "only checking");
-    check(30) ?! "wrong";                   //~ trap
+    check(30) ?! "wrong";  //~ trap
 }

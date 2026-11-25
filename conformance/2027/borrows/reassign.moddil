@@ -1,21 +1,29 @@
 // covers: borrow.reassign.1
 
-enum Tree { Leaf(int), Branch(Vec<Tree>) }
+enum Tree {
+    Leaf(int),
+    Branch(Vec<Tree>),
+}
 
 // Down the first branch to its leaf.
 fn leftmost(t: &Tree) -> int {
     let mut at = t;
     loop {
         match at {
-            Tree::Leaf(x) => return *x,
+            Tree::Leaf(x)    => return *x,
             Tree::Branch(ts) => at = &ts[0],
         }
     }
 }
 
-struct Cell { value: int, next: Option<Box<Cell>> }
+struct Cell {
+    value: int,
+    next: Option<Box<Cell>>,
+}
 
-view Cursor { at: &Cell }
+view Cursor {
+    at: &Cell,
+}
 
 impl Cursor {
     // Moves to the next cell, giving whether there was one.
@@ -32,7 +40,7 @@ impl Cursor {
 
 test "walking down through borrows" {
     let t = Tree::Branch([Tree::Branch([Tree::Leaf(7), Tree::Leaf(8)]), Tree::Leaf(9)]);
-    leftmost(&t)                                    // => 7
+    leftmost(&t)  // => 7
     ;
     let list = Cell { value: 1, next: Some(Box::new(Cell { value: 2, next: None })) };
     let mut c = Cursor { at: &list };
@@ -40,5 +48,5 @@ test "walking down through borrows" {
     while c.advance() {
         total += c.at.value;
     }
-    total                                           // => 3
+    total  // => 3
 }

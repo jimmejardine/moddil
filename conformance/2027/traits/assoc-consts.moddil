@@ -6,21 +6,33 @@ trait Shape {
     fn area(&self) -> int;
 }
 
-struct Square { s: int }
-struct Tri { b: int, h: int }
+struct Square {
+    s: int,
+}
+struct Tri {
+    b: int,
+    h: int,
+}
 
 impl Shape for Square {
     const SIDES: int = 4;
-    fn area(&self) -> int { self.s * self.s }
+    fn area(&self) -> int {
+        self.s * self.s
+    }
 }
 
 impl Shape for Tri {
     const SIDES: int = 3;
     const NAME_LEN: int = 3;
-    fn area(&self) -> int { self.b * self.h / 2 }
+    fn area(&self) -> int {
+        self.b * self.h / 2
+    }
 }
 
-struct Point { x: int, y: int }
+struct Point {
+    x: int,
+    y: int,
+}
 
 impl Point {
     const ORIGIN: Point = Point { x: 0, y: 0 };
@@ -36,15 +48,15 @@ fn sides<S: Shape>(s: &S) -> int {
 }
 
 test "associated consts" {
-    Point::DIM                              // => 2
+    Point::DIM  // => 2
     ;
-    Point::ORIGIN.x                         // => 0
+    Point::ORIGIN.x  // => 0
     ;
-    Point { x: 1, y: 1 }.dims()             // => 2
+    Point { x: 1, y: 1 }.dims()  // => 2
     ;
-    Square::SIDES                           // => 4
+    Square::SIDES  // => 4
     ;
-    sides(&Square { s: 2 })                 // => 45
+    sides(&Square { s: 2 })  // => 45
     ;
-    sides(&Tri { b: 2, h: 3 })              // => 33
+    sides(&Tri { b: 2, h: 3 })  // => 33
 }

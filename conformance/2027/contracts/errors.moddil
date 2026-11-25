@@ -1,7 +1,9 @@
 // covers: contract.1, contract.2, contract.old.1
 
 struct Oops {}
-trait Time { fn now(&self) -> int; }
+trait Time {
+    fn now(&self) -> int;
+}
 
 fn risky(x: int) -> bool with fail(Oops) {
     x > 0
@@ -12,33 +14,38 @@ fn timed() -> int with t: Time {
 }
 
 fn not_bool(x: int) -> int
-    requires x                              //~ E0201
+    requires x  //~ E0201
 {
     x
 }
 
 fn fails_in_contract(x: int) -> int
-    requires risky(x) ?! "never"            //~ E1102
+    requires risky(x) ?! "never"  //~ E1102
 {
     x
 }
 
 fn effect_in_contract() -> int with t: Time
-    ensures result == timed()               //~ E1102
+    ensures result == timed()  //~ E1102
 {
     0
 }
 
-struct Token { n: int }
+struct Token {
+    n: int,
+}
 
 fn old_of_what_cannot_be_cloned(t: &mut Token)
-    ensures t.n > old(*t).n                 //~ E1103
+    ensures t.n > old(*t).n  //~ E1103
 {
     t.n += 1;
 }
 
 fn assigns(mut x: int) -> int
-    requires ({ x = 2; true })              //~ E1102
+    requires ({
+        x = 2;  //~ E1102
+        true
+    })
 {
     x
 }

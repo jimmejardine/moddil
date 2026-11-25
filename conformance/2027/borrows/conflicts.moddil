@@ -1,11 +1,13 @@
 // covers: borrow.rules.1, borrow.scope.1, borrow.guard.1, generic.borrow.1
 
-struct Label { id: int }
+struct Label {
+    id: int,
+}
 
 fn read_while_mut() -> int {
     let mut x = 1;
     let r = &mut x;
-    let y = x;                  //~ E0307
+    let y = x;  //~ E0307
     *r += 1;
     y
 }
@@ -13,28 +15,28 @@ fn read_while_mut() -> int {
 fn assign_while_shared() -> int {
     let mut x = 1;
     let r = &x;
-    x = 2;                      //~ E0306
+    x = 2;  //~ E0306
     *r
 }
 
 fn two_mut() {
     let mut x = 1;
     let a = &mut x;
-    let b = &mut x;             //~ E0305
+    let b = &mut x;  //~ E0305
     *a += 1;
 }
 
 fn mut_while_shared() -> int {
     let mut x = 1;
     let a = &x;
-    let b = &mut x;             //~ E0305
+    let b = &mut x;  //~ E0305
     *a
 }
 
 fn move_while_borrowed() -> int {
     let l = Label { id: 1 };
     let r = &l;
-    let m = l;                  //~ E0306
+    let m = l;  //~ E0306
     r.id
 }
 
@@ -42,7 +44,7 @@ fn outlives() -> int {
     let mut r = &0;
     {
         let x = 1;
-        r = &x;                 //~ E0308
+        r = &x;  //~ E0308
     }
     *r
 }
@@ -50,17 +52,22 @@ fn outlives() -> int {
 fn guard(n: int) -> int {
     let mut x = n;
     match x {
-        y if { x = 0; y > 0 } => y, //~ E0306
+        y if {
+            x = 0;  //~ E0306
+            y > 0
+        } => y,
         _ => 0,
     }
 }
 
-fn id<T>(x: T) -> T { x }
+fn id<T>(x: T) -> T {
+    x
+}
 
 // A borrow passed for a type parameter can come back: the result keeps `x` borrowed.
 fn through_a_type_parameter() -> int {
     let mut x = 1;
     let r = id(&x);
-    x = 2;                      //~ E0306
+    x = 2;  //~ E0306
     *r
 }

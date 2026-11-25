@@ -98,7 +98,7 @@ pub(mod) fn find(re: &Regex, text: &str) -> Option<Match> {
     let t = decode(text);
     match run(re, &t, 0) {
         Some(caps) => Some(Match { start: t.offsets[caps[0]], end: t.offsets[caps[1]] }),
-        None => None,
+        None       => None,
     }
 }
 
@@ -113,7 +113,7 @@ pub(mod) fn find_all(re: &Regex, text: &str) -> Vec<Match> {
     while start_at <= t.chars.len() {
         let caps = match run(re, &t, start_at) {
             Some(c) => c,
-            None => break,
+            None    => break,
         };
         let empty = caps[1] == caps[0];
         if !(empty && caps[0] == last_end) {
@@ -130,7 +130,7 @@ pub(mod) fn captures(re: &Regex, text: &str) -> Option<Captures> {
     let t = decode(text);
     let caps = match run(re, &t, 0) {
         Some(c) => c,
-        None => return None,
+        None    => return None,
     };
     let mut slots: Vec<int> = Vec::new();
     for c in caps.iter() {
@@ -178,10 +178,10 @@ fn run(re: &Regex, t: &Text, start_at: int) -> Option<Vec<int>> {
         while k < current.len() {
             let pc = current[k].pc;
             let step = match &re.prog[pc] {
-                Inst::Char(c) => i < n && t.chars[i] == *c,
-                Inst::Any => i < n && t.chars[i] != '\n',
+                Inst::Char(c)               => i < n && t.chars[i] == *c,
+                Inst::Any                   => i < n && t.chars[i] != '\n',
                 Inst::Class(items, negated) => i < n && in_class(items.as_slice(), *negated, t.chars[i]),
-                Inst::Match => {
+                Inst::Match                 => {
                     // The threads after this one are less preferred: they stop here.
                     matched = Some(current[k].caps.clone());
                     break;
@@ -215,7 +215,7 @@ fn add(re: &Regex, list: &mut Vec<Thread>, mark: &mut Vec<int>, pc: int, caps: V
         }
         mark[pc] = pos;
         match &re.prog[pc] {
-            Inst::Jump(to) => stack.push((*to, caps)),
+            Inst::Jump(to)    => stack.push((*to, caps)),
             Inst::Split(a, b) => {
                 stack.push((*b, caps.clone()));
                 stack.push((*a, caps));

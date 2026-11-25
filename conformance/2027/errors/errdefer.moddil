@@ -3,31 +3,41 @@
 struct Fail;
 
 fn step(ok: bool) -> int with fail(Fail) {
-    if !ok { fail(Fail); }
+    if !ok {
+        fail(Fail);
+    }
     1
 }
 
 fn run(ok: bool, log: &mut int) -> int with fail(Fail) {
-    defer { *log = *log * 10 + 1; }
-    errdefer { *log = *log * 10 + 2; }
+    defer {
+        *log = *log * 10 + 1;
+    }
+    errdefer {
+        *log = *log * 10 + 2;
+    }
     step(ok)?;
-    errdefer { *log = *log * 10 + 3; }
+    errdefer {
+        *log = *log * 10 + 3;
+    }
     0
 }
 
 fn cleanup_fails() -> int with fail(Fail) {
-    errdefer { step(false)?; }
+    errdefer {
+        step(false)?;
+    }
     step(false)?
 }
 
 test "errdefer runs only when the block is left with an error" {
     let mut a = 0;
     discard(try { run(true, &mut a)? }, "the log is checked");
-    a                                       // => 1
+    a  // => 1
     ;
     let mut b = 0;
     discard(try { run(false, &mut b)? }, "the log is checked");
-    b                                       // => 21
+    b  // => 21
     ;
-    try { cleanup_fails()? }                // => Err(Fail)
+    try { cleanup_fails()? }  // => Err(Fail)
 }

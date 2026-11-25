@@ -1,0 +1,10 @@
+---
+source: crates/fmt/tests/rules.rs
+expression: "fmt(\"fn f() -> int {\\n// own line\\nlet a = 1; // one\\nlet bbbb = 2; // two\\na + bbbb\\n}\")"
+---
+fn f() -> int {
+    // own line
+    let a = 1;     // one
+    let bbbb = 2;  // two
+    a + bbbb
+}

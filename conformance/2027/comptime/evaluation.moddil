@@ -12,6 +12,6 @@ const fn spin() -> int {
     i
 }
 
-const BROKEN: int = 1 / 0;                  //~ E1004
-const TOO_DEEP: int = deep(100000);         //~ E1004
-const ENDLESS: int = spin();                //~ E1004
+const BROKEN: int = 1 / 0;           //~ E1004
+const TOO_DEEP: int = deep(100000);  //~ E1004
+const ENDLESS: int = spin();         //~ E1004

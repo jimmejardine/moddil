@@ -1,6 +1,6 @@
 // covers: obs.log.1
 
-fn total(xs: &Vec<int>) -> int {           // no effect to list for the log
+fn total(xs: &Vec<int>) -> int {  // no effect to list for the log
     let mut n = 0;
     for x in xs {
         n += *x;
@@ -18,10 +18,10 @@ fn total(xs: &Vec<int>) -> int {           // no effect to list for the log
 
 test "the log is ambient and changes nothing" {
     let xs: Vec<int> = [1, 2, 3];
-    total(&xs)                              // => 6
+    total(&xs)  // => 6
 }
 
 test "a local called log comes first" {
     let log = 5;
-    log + 1                                 // => 6
+    log + 1  // => 6
 }

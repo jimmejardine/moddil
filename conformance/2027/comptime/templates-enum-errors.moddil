@@ -3,19 +3,21 @@
 // variant is used as `v.name`, `v.is(x)` or `v.make()`.
 
 #[derive_by(listed)]
-trait Listed { fn listed(&self) -> int; }
+trait Listed {
+    fn listed(&self) -> int;
+}
 
 const fn listed(t: type) -> Impl<Listed> {
     impl Listed for t {
         fn listed(&self) -> int {
             let mut n = 0;
-            inline for f in fields(t) {                 //~ E1007
+            inline for f in fields(t) {  //~ E1007
                 n += 1;
             }
             inline for v in variants(t) {
-                let x = v;                              //~ E1007
-                let y = self.[v];                       //~ E1007
-                v.index();                              //~ E1007
+                let x = v;         //~ E1007
+                let y = self.[v];  //~ E1007
+                v.index();         //~ E1007
             }
             n
         }
@@ -23,15 +25,20 @@ const fn listed(t: type) -> Impl<Listed> {
 }
 
 #[derive(Listed)]
-enum Light { On, Off }
+enum Light {
+    On,
+    Off,
+}
 
 #[derive_by(counted)]
-trait Counted { fn counted(&self) -> int; }
+trait Counted {
+    fn counted(&self) -> int;
+}
 
 const fn counted(t: type) -> Impl<Counted> {
     impl Counted for t {
         fn counted(&self) -> int {
-            inline for v in variants(t) {               //~ E1007
+            inline for v in variants(t) {  //~ E1007
             }
             0
         }
@@ -39,4 +46,6 @@ const fn counted(t: type) -> Impl<Counted> {
 }
 
 #[derive(Counted)]
-struct Spot { x: int }
+struct Spot {
+    x: int,
+}

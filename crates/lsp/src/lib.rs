@@ -1,5 +1,5 @@
 //! The Moddil language server (`moddil lsp`, `toolchain.md`: Editor support): live diagnostics,
-//! hover, go to definition, inlay hints at suspension points, and completion.
+//! hover, go to definition, inlay hints at suspension points, completion, and formatting.
 //!
 //! - [`Analysis`] answers by file and byte offset, over the same salsa queries `moddil check` uses,
 //!   so an edit recomputes only what depends on it. It is the testable part.

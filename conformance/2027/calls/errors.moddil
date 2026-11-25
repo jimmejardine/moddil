@@ -1,15 +1,17 @@
 // covers: expr.call.1, expr.return.1
 
-fn one(a: int) -> int { a }
+fn one(a: int) -> int {
+    a
+}
 
 fn f(x: int) -> int {
-    let a = one();            //~ E0202
-    let b = one(1, 2);        //~ E0202
-    let c = one(true);        //~ E0201
-    let d = x(1);             //~ E0203
-    return true;              //~ E0201
+    let a = one();      //~ E0202
+    let b = one(1, 2);  //~ E0202
+    let c = one(true);  //~ E0201
+    let d = x(1);       //~ E0203
+    return true;        //~ E0201
 }
 
 fn g() -> int {
-    return;                   //~ E0201
+    return;  //~ E0201
 }

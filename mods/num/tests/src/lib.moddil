@@ -104,7 +104,9 @@ test "division undoes multiplication, whatever the limbs" {
         }
         if !b.is_zero() {
             let (q, r) = a.div_rem(&b);
-            assert(q.times(&b).plus(&r) == a);
+            assert(q
+                .times(&b)
+                .plus(&r) == a);
             assert(r.abs() < b.abs());
         }
         trials += 1;

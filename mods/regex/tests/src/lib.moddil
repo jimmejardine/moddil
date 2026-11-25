@@ -11,7 +11,7 @@ fn compiled(p: &str) -> Regex {
 fn finds(p: &str, text: &str, start: int, end: int) {
     match compiled(p).find(text) {
         Some(m) => assert(m.start() == start && m.end() == end),
-        None => assert(false),
+        None    => assert(false),
     }
 }
 
@@ -20,7 +20,7 @@ fn check_group(p: &str, text: &str, g: int, start: int, end: int) {
     let caps = compiled(p).captures(text) ?! "a match";
     match caps.get(g) {
         Some(m) => assert(m.start() == start && m.end() == end),
-        None => assert(start == -1),
+        None    => assert(start == -1),
     }
 }
 
@@ -28,7 +28,7 @@ fn check_group(p: &str, text: &str, g: int, start: int, end: int) {
 fn refused(p: &str, why: &str) {
     let r = try { Regex::new(p)? };
     match r {
-        Ok(_) => assert(false),
+        Ok(_)  => assert(false),
         Err(e) => assert(e.reason().contains(why)),
     }
 }
@@ -123,13 +123,13 @@ test "patterns this engine refuses" {
 }
 
 test "a re literal is compiled when compiling" {
-    (re"[a-z]+(\d{2,3})".find("ab x123y") ?! "a match").start()   // => 3
+    (re"[a-z]+(\d{2,3})".find("ab x123y") ?! "a match").start()  // => 3
     ;
     let date = re"(?<year>\d{4})-(?<month>\d{2})";
     let text = "on 2026-11 at";
     let found = date.captures(text) ?! "a date";
     let year = date.group_named("year") ?! "a group";
-    (found.get(year) ?! "matched").text(text)                     // => "2026"
+    (found.get(year) ?! "matched").text(text)  // => "2026"
     ;
-    re"^\w+$".is_match("plain_word")                               // => true
+    re"^\w+$".is_match("plain_word")  // => true
 }

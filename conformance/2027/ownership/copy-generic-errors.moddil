@@ -1,24 +1,28 @@
 // covers: own.copy.1, own.copy.derive.1, own.move.1
 
 #[derive(Copy, Clone)]
-struct Wrap<T> { x: T }
-struct Label { id: int }
+struct Wrap<T> {
+    x: T,
+}
+struct Label {
+    id: int,
+}
 
 fn reuse<T>(x: T) -> T {
     let y = x;
-    x                                       //~ E0303
+    x  //~ E0303
 }
 
 fn not_copy() {
     let w = Wrap { x: Label { id: 1 } };
     let v = w;
-    w;                                      //~ E0303
+    w;  //~ E0303
 }
 
 // A generic type declared `Copy` is not `Copy` for type arguments that make it larger than 64 bytes.
 fn too_big(w: Wrap<(int, int, int, int, int, int, int, int, int)>) {
     let a = w;
-    let b = w;                              //~ E0303
+    let b = w;  //~ E0303
 }
 
 fn fits(w: Wrap<(int, int)>) {

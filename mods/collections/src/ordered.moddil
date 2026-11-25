@@ -51,7 +51,7 @@ impl<K: Hash + Eq, V> OrderedMap<K, V> {
         }
         match &self.entries[p] {
             Some((_, v)) => Some(v),
-            None => None,
+            None         => None,
         }
     }
 
@@ -62,7 +62,7 @@ impl<K: Hash + Eq, V> OrderedMap<K, V> {
         }
         match &mut self.entries[p] {
             Some((_, v)) => Some(v),
-            None => None,
+            None         => None,
         }
     }
 
@@ -77,7 +77,7 @@ impl<K: Hash + Eq, V> OrderedMap<K, V> {
         if p >= 0 {
             return match &mut self.entries[p] {
                 Some((_, v)) => Some(replace(v, value)),
-                None => None,
+                None         => None,
             };
         }
         let h = hash_of(&key);
@@ -85,7 +85,7 @@ impl<K: Hash + Eq, V> OrderedMap<K, V> {
         self.entries.push(Some((key, value)));
         match self.index.get_mut(&h) {
             Some(positions) => positions.push(at),
-            None => {
+            None            => {
                 let mut positions: Vec<int> = Vec::new();
                 positions.push(at);
                 self.index.insert(h, positions);
@@ -122,7 +122,7 @@ impl<K: Hash + Eq, V> OrderedMap<K, V> {
         }
         match taken {
             Some((_, v)) => Some(v),
-            None => None,
+            None         => None,
         }
     }
 
@@ -138,7 +138,7 @@ impl<K: Hash + Eq, V> OrderedMap<K, V> {
                     self.entries.push(Some((k, v)));
                     match self.index.get_mut(&h) {
                         Some(positions) => positions.push(at),
-                        None => {
+                        None            => {
                             let mut positions: Vec<int> = Vec::new();
                             positions.push(at);
                             self.index.insert(h, positions);
@@ -175,7 +175,7 @@ impl<K, V> Iterator for OrderedIter<K, V> {
             self.at += 1;
             match e {
                 Some((k, v)) => return Some((k, v)),
-                None => {}
+                None         => {}
             }
         }
         None
@@ -218,7 +218,9 @@ impl<K: Hash + Eq, V> FromArrayLiteral<(K, V)> for OrderedMap<K, V> {
         m
     }
 
-    fn from_repeat(x: (K, V), n: int) -> OrderedMap<K, V> where (K, V): Clone {
+    fn from_repeat(x: (K, V), n: int) -> OrderedMap<K, V>
+        where (K, V): Clone
+    {
         let mut m = OrderedMap::new();
         if n > 0 {
             let (k, v) = x;
@@ -300,7 +302,7 @@ impl<T> Iterator for OrderedSetIter<T> {
     fn next(&mut self) -> Option<&T> {
         match self.inner.next() {
             Some((x, _)) => Some(x),
-            None => None,
+            None         => None,
         }
     }
 }
@@ -322,7 +324,9 @@ impl<T: Hash + Eq> FromArrayLiteral<T> for OrderedSet<T> {
         s
     }
 
-    fn from_repeat(x: T, n: int) -> OrderedSet<T> where T: Clone {
+    fn from_repeat(x: T, n: int) -> OrderedSet<T>
+        where T: Clone
+    {
         let mut s = OrderedSet::new();
         if n > 0 {
             s.insert(x);

@@ -1,0 +1,21 @@
+---
+source: crates/fmt/tests/rules.rs
+expression: "fmt(\"struct P { x: int, y: int } enum E { A, B(int) } impl P { fn a(&self) -> int { self.x } \\\n         fn b(&self) -> int { let s = self.x; s + self.y } }\")"
+---
+struct P {
+    x: int,
+    y: int,
+}
+enum E {
+    A,
+    B(int),
+}
+impl P {
+    fn a(&self) -> int {
+        self.x
+    }
+    fn b(&self) -> int {
+        let s = self.x;
+        s + self.y
+    }
+}

@@ -33,7 +33,7 @@ impl<T> PersistentList<T> {
     pub fn push_front(&self, x: T) -> PersistentList<T> {
         let next = match &self.head {
             Some(c) => Some(c.share()),
-            None => None,
+            None    => None,
         };
         PersistentList { head: Some(Cell { value: x, next }.to_rc()), len: self.len + 1 }
     }
@@ -42,7 +42,7 @@ impl<T> PersistentList<T> {
     pub fn first(&self) -> Option<&T> {
         match &self.head {
             Some(c) => Some(&c.value),
-            None => None,
+            None    => None,
         }
     }
 
@@ -52,7 +52,7 @@ impl<T> PersistentList<T> {
             Some(c) => {
                 let next = match &c.next {
                     Some(n) => Some(n.share()),
-                    None => None,
+                    None    => None,
                 };
                 PersistentList { head: next, len: self.len - 1 }
             }
@@ -100,7 +100,7 @@ impl<T> Drop for PersistentList<T> {
         let mut cell = self.head;
         while let Some(rc) = cell {
             match Rc::try_unwrap(rc) {
-                Ok(c) => cell = c.next,
+                Ok(c)  => cell = c.next,
                 Err(_) => break,
             }
         }
@@ -111,7 +111,7 @@ impl<T> Clone for PersistentList<T> {
     fn clone(&self) -> PersistentList<T> {
         let head = match &self.head {
             Some(c) => Some(c.share()),
-            None => None,
+            None    => None,
         };
         PersistentList { head, len: self.len }
     }
@@ -126,7 +126,7 @@ impl<T: PartialEq> PartialEq for PersistentList<T> {
         for x in self.iter() {
             match b.next() {
                 Some(y) if *x == *y => {}
-                _ => return false,
+                _                   => return false,
             }
         }
         true
@@ -149,7 +149,9 @@ impl<T> FromArrayLiteral<T> for PersistentList<T> {
         l
     }
 
-    fn from_repeat(x: T, n: int) -> PersistentList<T> where T: Clone {
+    fn from_repeat(x: T, n: int) -> PersistentList<T>
+        where T: Clone
+    {
         let mut l = PersistentList::new();
         for _ in 0..n {
             l = l.push_front(x.clone());

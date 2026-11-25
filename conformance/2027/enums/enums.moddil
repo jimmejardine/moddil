@@ -8,20 +8,20 @@ enum Shape {
 
 fn grow(s: Shape) -> Shape {
     match s {
-        Shape::Dot => Shape::Circle(1),
-        Shape::Circle(r) => Shape::Circle(r + 1),
+        Shape::Dot           => Shape::Circle(1),
+        Shape::Circle(r)     => Shape::Circle(r + 1),
         Shape::Rect { w, h } => Shape::Rect { w: w + 1, h: h + 1 },
     }
 }
 
 test "variants and their fields" {
-    Shape::Dot                  // => Shape::Dot
+    Shape::Dot  // => Shape::Dot
     ;
-    Shape::Circle(3)            // => Shape::Circle(3)
+    Shape::Circle(3)  // => Shape::Circle(3)
     ;
     Shape::Rect { h: 2, w: 1 }  // => Shape::Rect { w: 1, h: 2 }
     ;
-    grow(grow(Shape::Dot))      // => Shape::Circle(2)
+    grow(grow(Shape::Dot))  // => Shape::Circle(2)
     ;
-    grow(Shape::Rect { w: 1, h: 1 }) // => Shape::Rect { w: 2, h: 2 }
+    grow(Shape::Rect { w: 1, h: 1 })  // => Shape::Rect { w: 2, h: 2 }
 }

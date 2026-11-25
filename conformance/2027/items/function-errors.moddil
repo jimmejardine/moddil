@@ -1,7 +1,7 @@
 // covers: item.fn.body.1, type.match.1
 
 fn wrong() -> int {
-    true                      //~ E0201
+    true  //~ E0201
 }
 
-fn empty() -> bool { }        //~ E0201
+fn empty() -> bool {}  //~ E0201

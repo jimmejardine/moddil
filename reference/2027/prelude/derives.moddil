@@ -13,20 +13,12 @@ const fn derive_clone(t: type) -> Impl<Clone> {
             if const t.is_enum() {
                 inline for v in variants(t) {
                     if v.is(self) {
-                        return v {
-                            inline for f in fields(v) {
-                                [f]: self.[f].clone(),
-                            }
-                        };
+                        return v { inline for f in fields(v) { [f]: self.[f].clone(), } };
                     }
                 }
                 loop {}
             } else {
-                t {
-                    inline for f in fields(t) {
-                        [f]: self.[f].clone(),
-                    }
-                }
+                t { inline for f in fields(t) { [f]: self.[f].clone(), } }
             }
         }
     }
@@ -76,7 +68,7 @@ const fn derive_partial_ord(t: type) -> Impl<PartialOrd> {
                                     inline for f in fields(v) {
                                         match self.[f].partial_cmp(&other.[f]) {
                                             Some(Ordering::Equal) => {}
-                                            c => return c,
+                                            c                     => return c,
                                         }
                                     }
                                     return Some(Ordering::Equal);
@@ -92,7 +84,7 @@ const fn derive_partial_ord(t: type) -> Impl<PartialOrd> {
                 inline for f in fields(t) {
                     match self.[f].partial_cmp(&other.[f]) {
                         Some(Ordering::Equal) => {}
-                        c => return c,
+                        c                     => return c,
                     }
                 }
                 Some(Ordering::Equal)
@@ -114,7 +106,7 @@ const fn derive_ord(t: type) -> Impl<Ord> {
                                     inline for f in fields(v) {
                                         match self.[f].cmp(&other.[f]) {
                                             Ordering::Equal => {}
-                                            c => return c,
+                                            c               => return c,
                                         }
                                     }
                                     return Ordering::Equal;
@@ -130,7 +122,7 @@ const fn derive_ord(t: type) -> Impl<Ord> {
                 inline for f in fields(t) {
                     match self.[f].cmp(&other.[f]) {
                         Ordering::Equal => {}
-                        c => return c,
+                        c               => return c,
                     }
                 }
                 Ordering::Equal
@@ -172,8 +164,7 @@ const fn derive_debug(t: type) -> Impl<Debug> {
                     if v.is(self) {
                         out.write_str("::");
                         out.write_str(v.name);
-                        if const v.is_unit() {
-                        } else {
+                        if const v.is_unit() {} else {
                             if const v.is_positional() {
                                 out.write_char('(');
                                 inline for f in fields(v) {
@@ -201,8 +192,7 @@ const fn derive_debug(t: type) -> Impl<Debug> {
                     }
                 }
             } else {
-                if const t.is_unit() {
-                } else {
+                if const t.is_unit() {} else {
                     if const t.is_positional() {
                         out.write_char('(');
                         inline for f in fields(t) {
@@ -245,11 +235,7 @@ const fn derive_default(t: type) -> Impl<Default> {
                 }
                 loop {}
             } else {
-                t {
-                    inline for f in fields(t) {
-                        [f]: Default::default(),
-                    }
-                }
+                t { inline for f in fields(t) { [f]: Default::default (), } }
             }
         }
     }

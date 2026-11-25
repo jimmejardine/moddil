@@ -3,19 +3,19 @@
 use core::os;
 
 test "a test has no OS" {
-    os::arg_count()                         // => 0
+    os::arg_count()  // => 0
     ;
-    os::listen(80)                          // => -1
+    os::listen(80)  // => -1
     ;
-    os::connect("localhost", 80)            // => -1
+    os::connect("localhost", 80)  // => -1
     ;
-    os::random() > 0                        // => true
+    os::random() > 0  // => true
     ;
-    os::wall_clock()                        // => 0
+    os::wall_clock()  // => 0
     ;
-    os::incoming(0).recv().is_none()        // => true
+    os::incoming(0).recv().is_none()  // => true
     ;
-    os::arrivals(0).recv().is_none()        // => true
+    os::arrivals(0).recv().is_none()  // => true
 }
 
 test "a timeout outlasts the signals that never come" {
@@ -23,5 +23,5 @@ test "a timeout outlasts the signals that never come" {
     select {
         n = s.recv() => n.unwrap_or(-1),
         _ = timer(Duration::seconds(1)).recv() => 0,
-    }                                       // => 0
+    }  // => 0
 }

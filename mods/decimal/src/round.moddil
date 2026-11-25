@@ -20,17 +20,17 @@ pub fn pow10_i128(e: int) -> i128 {
 /// size with the divisor's (`Less`: below a half, `Equal`: exactly a half).
 fn away(mode: Round, negative: bool, half: Ordering, q_is_odd: bool) -> bool {
     match mode {
-        Round::TowardZero => false,
-        Round::Down => negative,
-        Round::Up => !negative,
+        Round::TowardZero  => false,
+        Round::Down        => negative,
+        Round::Up          => !negative,
         Round::NearestAway => match half {
             Ordering::Less => false,
-            _ => true,
+            _              => true,
         },
         Round::NearestEven => match half {
-            Ordering::Less => false,
+            Ordering::Less    => false,
             Ordering::Greater => true,
-            Ordering::Equal => q_is_odd,
+            Ordering::Equal   => q_is_odd,
         },
     }
 }
@@ -46,18 +46,8 @@ pub fn div_round_i128(n: i128, d: i128, mode: Round) -> i128 {
     let r = if r < 0 { -r } else { r };
     let d = if d < 0 { -d } else { d };
     // Twice the remainder against the divisor, without doubling past `i128`.
-    let half = if r > d - r {
-        Ordering::Greater
-    } else if r == d - r {
-        Ordering::Equal
-    } else {
-        Ordering::Less
-    };
-    if away(mode, negative, half, q % 2 != 0) {
-        if negative { q - 1 } else { q + 1 }
-    } else {
-        q
-    }
+    let half = if r > d - r { Ordering::Greater } else if r == d - r { Ordering::Equal } else { Ordering::Less };
+    if away(mode, negative, half, q % 2 != 0) { if negative { q - 1 } else { q + 1 } } else { q }
 }
 
 /// `n / d` rounded by `mode`, for `BigInt`s; traps if `d` is zero.
@@ -69,9 +59,5 @@ pub fn div_round_big(n: &BigInt, d: &BigInt, mode: Round) -> BigInt {
     let negative = n.is_negative() != d.is_negative();
     let twice = r.abs().times(&BigInt::from_int(2));
     let half = twice.cmp(&d.abs());
-    if away(mode, negative, half, !q.is_even()) {
-        if negative { q.minus(&BigInt::one()) } else { q.plus(&BigInt::one()) }
-    } else {
-        q
-    }
+    if away(mode, negative, half, !q.is_even()) { if negative { q.minus(&BigInt::one()) } else { q.plus(&BigInt::one()) } } else { q }
 }

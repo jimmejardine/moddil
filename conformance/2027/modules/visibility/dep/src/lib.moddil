@@ -1,2 +1,6 @@
-pub(mod) fn internal() -> int { 1 }
-pub fn shown() -> int { internal() }
+pub(mod) fn internal() -> int {
+    1
+}
+pub fn shown() -> int {
+    internal()
+}

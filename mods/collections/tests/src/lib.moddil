@@ -4,7 +4,7 @@ use collections::{BinaryHeap, Deque, Interner, Map, OrderedMap, OrderedSet, Ring
 fn val(x: Option<&int>) -> int {
     match x {
         Some(v) => *v,
-        None => -1000,
+        None    => -1000,
     }
 }
 
@@ -21,13 +21,16 @@ test "a map keeps what is put in it" {
     m.insert("a".to_string(), 1);
     m.insert("b".to_string(), 2);
     m.insert("a".to_string(), 3);
-    m.len()                                         // => 2
+    m.len()  // => 2
     ;
-    m.get(&"a".to_string()).map(|x| *x).unwrap_or(0)   // => 3
+    m
+        .get(&"a".to_string())
+        .map(|x| *x)
+        .unwrap_or(0)  // => 3
     ;
-    m.contains_key(&"c".to_string())                // => false
+    m.contains_key(&"c".to_string())  // => false
     ;
-    m.remove(&"b".to_string())                      // => Some(2)
+    m.remove(&"b".to_string())  // => Some(2)
 }
 
 test "a set keeps one of each" {
@@ -116,11 +119,11 @@ test "a tree map keeps its keys in order" {
     assert(shows(&m, r#"{1: "1", 2: "2", 3: "3", 5: "five", 8: "8", 9: "9"}"#));
     match m.first() {
         Some((k, _)) => assert(*k == 1),
-        None => assert(false),
+        None         => assert(false),
     }
     match m.last() {
         Some((k, _)) => assert(*k == 9),
-        None => assert(false),
+        None         => assert(false),
     }
     let mut keys: Vec<int> = Vec::new();
     for (k, _) in m.range(&2, &8) {

@@ -2,24 +2,24 @@
 
 fn hold(v: &mut Vec<int>) {
     let first = &v[0];
-    v.push(1);                              //~ E0305
+    v.push(1);  //~ E0305
     first;
 }
 
 fn keep_a_local(out: &mut Vec<&int>) {
     let x = 1;
-    out.push(&x);                           //~ E0308
+    out.push(&x);  //~ E0308
 }
 
 fn dangling() -> int {
     let mut refs = Vec::new();
     {
         let x = 1;
-        refs.push(&x);                      //~ E0308
+        refs.push(&x);  //~ E0308
     }
     refs.len()
 }
 
 fn moved_out(v: Vec<String>) -> String {
-    v[0]                                    //~ E0304
+    v[0]  //~ E0304
 }

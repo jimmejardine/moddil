@@ -1,18 +1,24 @@
 // covers: item.impl.same-name.1
 
-pub struct Response { code: int }
+pub struct Response {
+    code: int,
+}
 
 impl Response {
     /// A response with this status.
-    pub fn status(code: int) -> Response { Response { code } }
+    pub fn status(code: int) -> Response {
+        Response { code }
+    }
     /// Its status.
-    pub fn status(&self) -> int { self.code }
+    pub fn status(&self) -> int {
+        self.code
+    }
 }
 
 test "a function and a method may share a name" {
     let r = Response::status(404);
-    r.status()                       // => 404
+    r.status()  // => 404
     ;
     let make = Response::status;
-    make(200).status()               // => 200
+    make(200).status()  // => 200
 }

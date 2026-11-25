@@ -2,28 +2,32 @@
 // A type with const parameters derives as any other: the impl declares them as they are.
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
-struct Fixed<const S: int> { units: int }
+struct Fixed<const S: int> {
+    units: int,
+}
 
 #[derive(Clone, PartialEq, Debug)]
-struct Tagged<T, const N: int> { items: Vec<T> }
+struct Tagged<T, const N: int> {
+    items: Vec<T>,
+}
 
 test "a struct with a const parameter derives every trait" {
     let a: Fixed<2> = Fixed { units: 150 };
     let b = a;
-    a == b                                  // => true
+    a == b  // => true
     ;
-    a < Fixed { units: 151 }                // => true
+    a < Fixed { units: 151 }  // => true
     ;
-    let d: Fixed<4> = Default::default();
-    d.units                                 // => 0
+    let d: Fixed<4> = Default::default ();
+    d.units  // => 0
     ;
-    a                                       // => Fixed { units: 150 }
+    a  // => Fixed { units: 150 }
 }
 
 test "with a type parameter beside it" {
     // An array literal is a `Vec` where the field's type says so.
     let t: Tagged<int, 3> = Tagged { items: [1, 2] };
-    t.clone() == t                          // => true
+    t.clone() == t  // => true
     ;
-    t                                       // => Tagged { items: [1, 2] }
+    t  // => Tagged { items: [1, 2] }
 }

@@ -73,21 +73,21 @@ struct Point {
 }
 
 test "a template reflects on an enum's variants" {
-    Colour::Green.named()                  // => "Green"
+    Colour::Green.named()  // => "Green"
     ;
-    Colour::from_name("Blue") == Some(Colour::Blue)        // => true
+    Colour::from_name("Blue") == Some(Colour::Blue)  // => true
     ;
-    Colour::from_name("Pink").is_none()    // => true
+    Colour::from_name("Pink").is_none()  // => true
     ;
-    Colour::count()                        // => 3
+    Colour::count()  // => 3
     ;
     let t: Tag<Colour> = Tag::Full;
-    t.named()                              // => "Full"
+    t.named()  // => "Full"
     ;
-    Tag::<Colour>::count()                 // => 2
+    Tag::<Colour>::count()  // => 2
     ;
-    Point { x: 1, y: 2 }.named()           // => "a struct"
+    Point { x: 1, y: 2 }.named()  // => "a struct"
     ;
-    Point::count()                         // => 2
+    Point::count()  // => 2
     ;
 }

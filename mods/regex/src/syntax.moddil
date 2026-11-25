@@ -18,9 +18,9 @@ pub fn in_class(items: &[ClassItem], negated: bool, c: char) -> bool {
     for item in items {
         let hit = match *item {
             ClassItem::Range(lo, hi) => c.code() >= lo.code() && c.code() <= hi.code(),
-            ClassItem::Digit(neg) => c.is_numeric() != neg,
-            ClassItem::Word(neg) => (c.is_alphabetic() || c.is_numeric() || c == '_') != neg,
-            ClassItem::Space(neg) => c.is_whitespace() != neg,
+            ClassItem::Digit(neg)    => c.is_numeric() != neg,
+            ClassItem::Word(neg)     => (c.is_alphabetic() || c.is_numeric() || c == '_') != neg,
+            ClassItem::Space(neg)    => c.is_whitespace() != neg,
         };
         if hit {
             found = true;
@@ -94,7 +94,7 @@ impl Parser {
     const fn peek(&self) -> Option<char> {
         match self.chars.get(self.at) {
             Some(c) => Some(*c),
-            None => None,
+            None    => None,
         }
     }
 
@@ -130,7 +130,7 @@ impl Parser {
         let mut items: Vec<int> = Vec::new();
         loop {
             match self.peek() {
-                None => break,
+                None    => break,
                 Some(c) => {
                     if c == '|' || c == ')' {
                         break;
@@ -165,7 +165,7 @@ impl Parser {
             };
             match &self.nodes[node] {
                 Node::Start | Node::End | Node::Empty => fail(self.error("nothing to repeat")),
-                _ => {}
+                _                                     => {}
             }
             let greedy = !self.eat('?');
             node = self.add(Node::Repeat(node, min, max, greedy));
@@ -176,11 +176,7 @@ impl Parser {
     /// `n}`, `n,}` or `n,m}`, after the `{`.
     const fn counts(&mut self) -> (int, int) with fail(RegexError) {
         let min = self.number()?;
-        let max = if self.eat(',') {
-            if self.peek() == Some('}') { -1 } else { self.number()? }
-        } else {
-            min
-        };
+        let max = if self.eat(',') { if self.peek() == Some('}') { -1 } else { self.number()? } } else { min };
         if !self.eat('}') {
             fail(self.error("a `{` repetition without its `}`"));
         }
@@ -213,17 +209,17 @@ impl Parser {
         let c = self.peek() ?! "an atom starts at a character";
         self.at += 1;
         match c {
-            '.' => self.add(Node::Any),
-            '^' => self.add(Node::Start),
-            '$' => self.add(Node::End),
-            '[' => self.class()?,
-            '(' => self.group()?,
+            '.'  => self.add(Node::Any),
+            '^'  => self.add(Node::Start),
+            '$'  => self.add(Node::End),
+            '['  => self.class()?,
+            '('  => self.group ()?,
             '\\' => {
                 let node = self.escape(false)?;
                 self.add(node)
             }
             '*' | '+' | '?' | '{' => fail(self.error("nothing to repeat")),
-            c => self.add(Node::Char(c)),
+            c                     => self.add(Node::Char(c)),
         }
     }
 
@@ -285,23 +281,21 @@ impl Parser {
     const fn escape(&mut self, in_class: bool) -> Node with fail(RegexError) {
         let c = match self.peek() {
             Some(c) => c,
-            None => fail(self.error("a `\\` at the end")),
+            None    => fail(self.error("a `\\` at the end")),
         };
         self.at += 1;
         match c {
-            'd' => Node::Class([ClassItem::Digit(false)], false),
-            'D' => Node::Class([ClassItem::Digit(true)], false),
-            'w' => Node::Class([ClassItem::Word(false)], false),
-            'W' => Node::Class([ClassItem::Word(true)], false),
-            's' => Node::Class([ClassItem::Space(false)], false),
-            'S' => Node::Class([ClassItem::Space(true)], false),
-            'n' => Node::Char('\n'),
-            't' => Node::Char('\t'),
-            'r' => Node::Char('\r'),
-            '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' if !in_class => {
-                fail(self.backtracking("a backreference"))
-            }
-            c => {
+            'd'                                                              => Node::Class([ClassItem::Digit(false)], false),
+            'D'                                                              => Node::Class([ClassItem::Digit(true)], false),
+            'w'                                                              => Node::Class([ClassItem::Word(false)], false),
+            'W'                                                              => Node::Class([ClassItem::Word(true)], false),
+            's'                                                              => Node::Class([ClassItem::Space(false)], false),
+            'S'                                                              => Node::Class([ClassItem::Space(true)], false),
+            'n'                                                              => Node::Char('\n'),
+            't'                                                              => Node::Char('\t'),
+            'r'                                                              => Node::Char('\r'),
+            '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' if !in_class => { fail(self.backtracking("a backreference")) }
+            c                                                                => {
                 if c.is_alphabetic() || c.is_numeric() {
                     fail(self.error("an unknown escape"));
                 }
@@ -318,7 +312,7 @@ impl Parser {
         loop {
             let c = match self.peek() {
                 Some(c) => c,
-                None => fail(self.error("a `[` with no `]`")),
+                None    => fail(self.error("a `[` with no `]`")),
             };
             if c == ']' && !first {
                 self.at += 1;
@@ -328,7 +322,7 @@ impl Parser {
             self.at += 1;
             let lo = if c == '\\' {
                 match self.escape(true)? {
-                    Node::Char(x) => x,
+                    Node::Char(x)         => x,
                     Node::Class(inner, _) => {
                         for item in inner.iter() {
                             items.push(*item);
@@ -341,16 +335,14 @@ impl Parser {
                 c
             };
             // A range, unless the `-` is last.
-            if self.peek() == Some('-') && self.chars.get(self.at + 1).is_some()
-                && self.chars[self.at + 1] != ']'
-            {
+            if self.peek() == Some('-') && self.chars.get(self.at + 1).is_some() && self.chars[self.at + 1] != ']' {
                 self.at += 1;
                 let h = self.peek() ?! "checked";
                 self.at += 1;
                 let hi = if h == '\\' {
                     match self.escape(true)? {
                         Node::Char(x) => x,
-                        _ => fail(self.error("a range ending in a class")),
+                        _             => fail(self.error("a range ending in a class")),
                     }
                 } else {
                     h

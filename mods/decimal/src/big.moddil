@@ -46,7 +46,9 @@ impl BigDecimal {
             if c == 46 && scale < 0 {
                 scale = 0;
             } else if c >= 48 && c <= 57 {
-                unscaled = unscaled.times(&ten).plus(&BigInt::from_int(c - 48));
+                unscaled = unscaled
+                    .times(&ten)
+                    .plus(&BigInt::from_int(c - 48));
                 if scale >= 0 {
                     scale += 1;
                 }
@@ -86,20 +88,21 @@ impl BigDecimal {
 
     pub fn plus(&self, other: &BigDecimal) -> BigDecimal {
         let s = if self.scale > other.scale { self.scale } else { other.scale };
-        BigDecimal { unscaled: self.widened(s).plus(&other.widened(s)), scale: s }
+        BigDecimal { unscaled: self
+            .widened(s)
+            .plus(&other.widened(s)), scale: s }
     }
 
     pub fn minus(&self, other: &BigDecimal) -> BigDecimal {
         let s = if self.scale > other.scale { self.scale } else { other.scale };
-        BigDecimal { unscaled: self.widened(s).minus(&other.widened(s)), scale: s }
+        BigDecimal { unscaled: self
+            .widened(s)
+            .minus(&other.widened(s)), scale: s }
     }
 
     /// The exact product, at the sum of the scales.
     pub fn times(&self, other: &BigDecimal) -> BigDecimal {
-        BigDecimal {
-            unscaled: self.unscaled.times(&other.unscaled),
-            scale: self.scale + other.scale,
-        }
+        BigDecimal { unscaled: self.unscaled.times(&other.unscaled), scale: self.scale + other.scale }
     }
 
     pub fn negated(&self) -> BigDecimal {
@@ -111,11 +114,7 @@ impl BigDecimal {
         assert(scale >= 0 && !other.is_zero());
         // (a / 10^sa) / (b / 10^sb) in units of 10^-scale is a × 10^(scale - sa + sb) / b.
         let e = scale - self.scale + other.scale;
-        let unscaled = if e >= 0 {
-            div_round_big(&self.unscaled.times(&pow10(e)), &other.unscaled, mode)
-        } else {
-            div_round_big(&self.unscaled, &other.unscaled.times(&pow10(-e)), mode)
-        };
+        let unscaled = if e >= 0 { div_round_big(&self.unscaled.times(&pow10(e)), &other.unscaled, mode) } else { div_round_big(&self.unscaled, &other.unscaled.times(&pow10(-e)), mode) };
         BigDecimal { unscaled, scale }
     }
 
@@ -178,7 +177,7 @@ impl PartialEq for BigDecimal {
     fn eq(&self, other: &BigDecimal) -> bool {
         match self.cmp(other) {
             Ordering::Equal => true,
-            _ => false,
+            _               => false,
         }
     }
 }
@@ -194,7 +193,9 @@ impl PartialOrd for BigDecimal {
 impl Ord for BigDecimal {
     fn cmp(&self, other: &BigDecimal) -> Ordering {
         let s = if self.scale > other.scale { self.scale } else { other.scale };
-        self.widened(s).cmp(&other.widened(s))
+        self
+            .widened(s)
+            .cmp(&other.widened(s))
     }
 }
 

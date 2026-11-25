@@ -4,10 +4,20 @@ pub struct Point {
 }
 
 impl Point {
-    pub fn new(x: int, y: int) -> Point { Point { x: x, y: y } }
-    pub fn y(&self) -> int { self.y }
-    fn secret(&self) -> int { self.y * 2 }
-    fn hidden() -> int { 0 }
+    pub fn new(x: int, y: int) -> Point {
+        Point { x: x, y: y }
+    }
+    pub fn y(&self) -> int {
+        self.y
+    }
+    fn secret(&self) -> int {
+        self.y * 2
+    }
+    fn hidden() -> int {
+        0
+    }
 }
 
-pub(mod) struct Shared { pub(mod) n: int }
+pub(mod) struct Shared {
+    pub(mod) n: int,
+}

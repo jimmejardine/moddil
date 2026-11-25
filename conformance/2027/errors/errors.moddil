@@ -1,28 +1,81 @@
 // covers: err.fail.1, err.set.1, err.question.1, err.try.1, err.catch.1, err.bang.1, err.entry.1, err.unused.1, stmt.defer.1
 
-pub struct A { n: int }
-pub struct W<T> { x: T }
-pub enum B { X, Y(int) }
+pub struct A {
+    n: int,
+}
+pub struct W<T> {
+    x: T,
+}
+pub enum B {
+    X,
+    Y(int),
+}
 struct G;
-impl Drop for G { fn drop(self) { fail(A { n: 0 }); } }        //~ E0501
+impl Drop for G {
+    fn drop(self) {
+        fail(A { n: 0 });  //~ E0501
+    }
+}
 
-fn a() -> int with fail(A) { 1 }
-fn ab() -> int with fail(A | B) { 1 }
+fn a() -> int with fail(A) {
+    1
+}
+fn ab() -> int with fail(A | B) {
+    1
+}
 
-fn unmarked() -> int with fail(A) { a() }                      //~ E0501
-pub fn cannot_fail() -> int { a()? }                           //~ E0501
-pub fn not_listed() -> int with fail(A) { ab()? }              //~ E0502
-fn nothing_to_propagate() -> int { 1? }                        //~ E0504
-pub fn not_caught() -> int { try { a()? } catch { B::X => 0 } } //~ E0505 E0501
-fn nothing_to_catch() -> int { try { 1 } catch { A(_) => 0 } } //~ E0505
-fn absent(o: Option<int>) -> int { o? }                        //~ E0506
-fn mixed(o: Option<int>) -> bool { let r = try { o? + a()? }; true } //~ E0506
-fn main() with fail(A) {}                                      //~ E0507
-fn not_an_error() with fail(int) {}                            //~ E0508
-fn dropped(r: Result<int, A>) { r; }                           //~ E0503
-fn dropped_let(r: Result<int, A>) { let _ = r; }               //~ E0503
-fn in_defer() -> int with fail(A) { defer { a()?; } 1 }        //~ E0501
-fn fail_int() -> int with fail(A) { fail(1) }                  //~ E0508
-fn discarded(r: Result<int, A>) { discard(r, "why"); }
-fn arm_type() -> int { try { a()? } catch { A(_) => true } }   //~ E0201
-fn two_instances() with fail(W<int> | W<bool>) {}               //~ E0508
+fn unmarked() -> int with fail(A) {
+    a()  //~ E0501
+}
+pub fn cannot_fail() -> int {
+    a()?  //~ E0501
+}
+pub fn not_listed() -> int with fail(A) {
+    ab()?  //~ E0502
+}
+fn nothing_to_propagate() -> int {
+    1?  //~ E0504
+}
+pub fn not_caught() -> int {
+    try { a()? } catch {  //~ E0501
+        B::X => 0,  //~ E0505
+    }
+}
+fn nothing_to_catch() -> int {
+    try { 1 } catch {  //~ E0505
+        A(_) => 0,  //~ E0505
+    }
+}
+fn absent(o: Option<int>) -> int {
+    o?  //~ E0506
+}
+fn mixed(o: Option<int>) -> bool {
+    let r = try { o? + a()? };  //~ E0506
+    true
+}
+fn main() with fail(A) {}            //~ E0507
+fn not_an_error() with fail(int) {}  //~ E0508
+fn dropped(r: Result<int, A>) {
+    r;  //~ E0503
+}
+fn dropped_let(r: Result<int, A>) {
+    let _ = r;  //~ E0503
+}
+fn in_defer() -> int with fail(A) {
+    defer {
+        a()?;  //~ E0501
+    }
+    1
+}
+fn fail_int() -> int with fail(A) {
+    fail(1)  //~ E0508
+}
+fn discarded(r: Result<int, A>) {
+    discard(r, "why");
+}
+fn arm_type() -> int {
+    try { a()? } catch {
+        A(_) => true,  //~ E0201
+    }
+}
+fn two_instances() with fail(W<int> | W<bool>) {}  //~ E0508

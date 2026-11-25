@@ -1,7 +1,10 @@
 // covers: expr.fmt.debug.1
 
 #[derive(Debug)]
-struct Point { x: int, y: int }
+struct Point {
+    x: int,
+    y: int,
+}
 
 /// A view with borrow fields.
 #[derive(Debug)]
@@ -14,8 +17,8 @@ test "a view with borrow fields derives Debug" {
     let p = Point { x: 1, y: 2 };
     let n = 3;
     let v = Pair { left: &p, count: &n };
-    fmt"{v:?}"                              // => "Pair { left: Point { x: 1, y: 2 }, count: 3 }"
+    fmt"{v:?}"  // => "Pair { left: Point { x: 1, y: 2 }, count: 3 }"
     ;
     let r = &p;
-    fmt"{r:?}"                              // => "Point { x: 1, y: 2 }"
+    fmt"{r:?}"  // => "Point { x: 1, y: 2 }"
 }

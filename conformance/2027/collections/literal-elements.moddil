@@ -12,13 +12,13 @@ fn total(v: Vec<u8>) -> int {
 
 test "elements of a sized type" {
     let bytes: Vec<u8> = [1, 2, 255];
-    bytes.len()                             // => 3
+    bytes.len()  // => 3
     ;
-    total([7, 8])                           // => 15
+    total([7, 8])  // => 15
     ;
     let wide: Vec<u128> = [340282366920938463463374607431768211455];
-    wide.len()                              // => 1
+    wide.len()  // => 1
     ;
     let halves: Vec<f32> = [0.5, 1];
-    halves.len()                            // => 2
+    halves.len()  // => 2
 }

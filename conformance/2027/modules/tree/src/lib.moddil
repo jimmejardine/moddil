@@ -4,19 +4,21 @@ use mod::shapes::{Shape, area};
 use mod::shapes::circle::Circle as Round;
 
 // The shapes module calls this, and this module calls it: modules may name each other in cycles.
-pub(mod) fn double(n: int) -> int { n * 2 }
+pub(mod) fn double(n: int) -> int {
+    n * 2
+}
 
 test "modules name each other by path" {
-    area(Shape::Square(3))                  // => 9
+    area(Shape::Square(3))  // => 9
     ;
-    mod::shapes::area(Shape::Square(2))   // => 4
+    mod::shapes::area(Shape::Square(2))  // => 4
     ;
-    shapes::perimeter(Shape::Square(1))     // => 4
+    shapes::perimeter(Shape::Square(1))  // => 4
     ;
     let r = Round { r: 2 };
-    r.area()                                // => 12
+    r.area()  // => 12
     ;
-    shapes::circle::one().r                // => 1
+    shapes::circle::one().r  // => 1
     ;
-    shapes::single().r                      // => 1
+    shapes::single().r  // => 1
 }

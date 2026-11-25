@@ -45,7 +45,7 @@ fn notify(client: &Connection, method: &str, params: Value) {
 }
 
 #[test]
-fn edits_are_applied_in_turn_and_problems_published() {
+fn edits_are_applied_in_turn_problems_published_and_documents_formatted() {
     let (server, client) = Connection::memory();
     let thread = std::thread::spawn(move || moddil_lsp::serve(&server));
     client
@@ -94,6 +94,44 @@ fn edits_are_applied_in_turn_and_problems_published() {
     notify(&client, "textDocument/didChange", edit(4, 1, 4, 5, "3"));
     // The last publish is of the text after both edits: no problem.
     assert_eq!(next_codes(&client), Vec::<String>::new());
+
+    // Formatting: the whole document, in `moddil fmt`'s layout.
+    notify(
+        &client,
+        "textDocument/didChange",
+        json!({
+        "textDocument": { "uri": uri, "version": 5 },
+        "contentChanges": [{ "text": "fn f()->int{3}
+" }] }),
+    );
+    client
+        .sender
+        .send(Message::Request(Request::new(
+            RequestId::from(3),
+            "textDocument/formatting".to_string(),
+            json!({ "textDocument": { "uri": uri }, "options": { "tabSize": 4, "insertSpaces": true } }),
+        )))
+        .expect("sent");
+    let edits = loop {
+        match client
+            .receiver
+            .recv_timeout(Duration::from_secs(60))
+            .expect("the reply")
+        {
+            Message::Response(r) if r.id == RequestId::from(3) => {
+                break r.response_result.expect("edits");
+            }
+            _ => {}
+        }
+    };
+    assert_eq!(
+        edits[0]["newText"],
+        "fn f() -> int {
+    3
+}
+"
+    );
+    assert_eq!(edits[0]["range"]["end"]["line"], 1);
 
     client
         .sender

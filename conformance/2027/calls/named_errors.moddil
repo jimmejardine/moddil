@@ -11,21 +11,23 @@ trait T {
 struct S {}
 
 impl T for S {
-    fn f(&self, x: int = 2) -> int {        //~ E0216
+    fn f(&self, x: int = 2) -> int {  //~ E0216
         x
     }
 }
 
 fn calls() {
-    connect(1, size: 2);                    //~ E0215
-    connect(1, port: 2, port: 3);           //~ E0215
-    connect(port: 2, 1);                    //~ E0215
-    connect(port: 2);                       //~ E0202
+    connect(1, size: 2);           //~ E0215
+    connect(1, port: 2, port: 3);  //~ E0215
+    connect(port: 2, 1);           //~ E0215
+    connect(port: 2);              //~ E0202
 }
 
 fn closure() -> int {
     let f = |x: int| x;
-    f(x: 1)                                 //~ E0215
+    f(x: 1)  //~ E0215
 }
 
-fn names_a_parameter(a: int, b: int = a) -> int { b } //~ E0101
+fn names_a_parameter(a: int, b: int = a) -> int {  //~ E0101
+    b
+}

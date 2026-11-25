@@ -1,11 +1,11 @@
 // covers: expr.for.2, expr.for.3, iter.fails.1
 
 fn not_iterable(n: int) {
-    for x in n {}                           //~ E0402
+    for x in n {}  //~ E0402
 }
 
 fn refutable(xs: &[int]) {
-    for 1 in xs {}                          //~ E0208
+    for 1 in xs {}  //~ E0208
 }
 
 struct Odd;
@@ -16,7 +16,7 @@ fn even(x: int) -> int with fail(Odd) {
 
 fn failing_loop() -> int with fail(Odd) {
     let mut sum = 0;
-    for x in (0..4).map(|x| even(x)?) {                 //~ E0501
+    for x in (0..4).map(|x| even(x)?) {  //~ E0501
         sum += x;
     }
     sum
@@ -25,7 +25,7 @@ fn failing_loop() -> int with fail(Odd) {
 /// A generic function's errors include its iterator's.
 pub fn total<I: Iterator<Item = int>>(it: I) -> int {
     let mut sum = 0;
-    for x in it {                                       //~ E0501
+    for x in it {  //~ E0501
         sum += x;
     }
     sum
@@ -33,7 +33,7 @@ pub fn total<I: Iterator<Item = int>>(it: I) -> int {
 
 fn marked_but_cannot_fail(xs: &[int]) -> int {
     let mut sum = 0;
-    for x in xs? {                                      //~ E0504
+    for x in xs? {  //~ E0504
         sum += *x;
     }
     sum

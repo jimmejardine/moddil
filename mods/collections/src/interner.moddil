@@ -99,13 +99,13 @@ impl<T: Hash + Eq> Interner<T> {
     pub fn intern(&mut self, x: T) -> Symbol<T> {
         match self.get(&x) {
             Some(s) => s,
-            None => {
+            None    => {
                 let id = self.values.len();
                 let h = hash_of(&x);
                 self.values.push(x);
                 match self.index.get_mut(&h) {
                     Some(ids) => ids.push(id),
-                    None => {
+                    None      => {
                         let mut ids: Vec<int> = Vec::new();
                         ids.push(id);
                         self.index.insert(h, ids);

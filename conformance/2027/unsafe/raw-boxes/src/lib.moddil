@@ -2,13 +2,20 @@
 
 use core::ffi::{from_raw, into_raw};
 
-struct Pair { a: int, b: String }
+struct Pair {
+    a: int,
+    b: String,
+}
 
 test "a box's value lives behind its raw pointer until it is taken back" {
     let p = into_raw(Box::new(41));
-    unsafe("p is into_raw's, and nothing else reaches it") { *p += 1; }
-    let b = unsafe("p is into_raw's, given back once") { from_raw(p) };
-    *b                                          // => 42
+    unsafe("p is into_raw's, and nothing else reaches it") {
+        *p += 1;
+    }
+    let b = unsafe("p is into_raw's, given back once") {
+        from_raw(p)
+    };
+    *b  // => 42
 }
 
 test "a field is changed through the raw pointer" {
@@ -17,26 +24,38 @@ test "a field is changed through the raw pointer" {
         (*p).a = (*p).a + 9;
         (*p).b.push_str("yz");
     }
-    let pair = unsafe("p is into_raw's, given back once") { from_raw(p) }.into_inner();
-    pair.a                                      // => 10
+    let pair = unsafe("p is into_raw's, given back once") {
+        from_raw(p)
+    }.into_inner();
+    pair.a  // => 10
     ;
-    pair.b                                      // => "xyz"
+    pair.b  // => "xyz"
 }
 
 test "a borrow is made through the raw pointer" {
     let p = into_raw(Box::new("ab".to_string()));
-    let n = unsafe("p is into_raw's, and the borrow ends before from_raw") { (&*p).len() };
-    let s = unsafe("p is into_raw's, given back once") { from_raw(p) }.into_inner();
-    n                                           // => 2
+    let n = unsafe("p is into_raw's, and the borrow ends before from_raw") {
+        (&*p).len()
+    };
+    let s = unsafe("p is into_raw's, given back once") {
+        from_raw(p)
+    }.into_inner();
+    n  // => 2
     ;
-    s                                           // => "ab"
+    s  // => "ab"
 }
 
 test "two boxes stay apart" {
     let p = into_raw(Box::new(1));
     let q = into_raw(Box::new(2));
-    unsafe("p and q are into_raw's, and distinct") { *q = *q + *p * 10; }
-    let a = unsafe("given back once") { from_raw(p) }.into_inner();
-    let b = unsafe("given back once") { from_raw(q) }.into_inner();
-    (a, b)                                      // => (1, 12)
+    unsafe("p and q are into_raw's, and distinct") {
+        *q = *q + *p * 10;
+    }
+    let a = unsafe("given back once") {
+        from_raw(p)
+    }.into_inner();
+    let b = unsafe("given back once") {
+        from_raw(q)
+    }.into_inner();
+    (a, b)  // => (1, 12)
 }

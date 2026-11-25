@@ -2,13 +2,13 @@
 
 fn local(a: &int) -> &int {
     let x = 1;
-    &x                          //~ E0308
+    &x  //~ E0308
 }
 
 fn by_value(a: int, b: &int) -> &int {
-    &a                          //~ E0308
+    &a  //~ E0308
 }
 
 fn wrong_source(a: &int, b: &int) -> &int from a {
-    b                           //~ E0310
+    b  //~ E0310
 }

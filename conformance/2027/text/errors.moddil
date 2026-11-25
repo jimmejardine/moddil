@@ -2,32 +2,32 @@
 
 struct Opaque {}
 
-fn by_value(s: str) {}                      //~ E0901
+fn by_value(s: str) {}  //~ E0901
 
 fn no_display() -> String {
     let o = Opaque {};
-    fmt"{o}"                                //~ E0402
+    fmt"{o}"  //~ E0402
 }
 
 fn empty_hole() -> String {
-    fmt"{}"                                 //~ E0902
+    fmt"{}"  //~ E0902
 }
 
 fn not_exhaustive(s: &str) -> int {
-    match s {                               //~ E0208
+    match s {  //~ E0208
         "a" => 1,
     }
 }
 
 fn chars_not_exhaustive(c: char) -> int {
-    match c {                               //~ E0208
+    match c {  //~ E0208
         '\0'..='z' => 1,
     }
 }
 
 fn not_a_string(n: int) -> int {
     match n {
-        "a" => 1,                           //~ E0201
-        _ => 0,
+        "a" => 1,  //~ E0201
+        _   => 0,
     }
 }

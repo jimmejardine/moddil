@@ -1,7 +1,9 @@
 // covers: attr.around.1, attr.around.args.1, attr.around.body.1
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Denied { No }
+pub enum Denied {
+    No,
+}
 
 struct Opaque {}
 
@@ -10,9 +12,7 @@ fn shown<A: Debug, R>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> R) -> R {
 }
 
 fn gate<A, R>(open: bool, f: &FnInfo, args: A, inner: impl FnOnce(A) -> R) -> R with fail(Denied) {
-    if !open {
-        fail(Denied::No)
-    }
+    if !open { fail(Denied::No) }
     inner(args)
 }
 
@@ -25,53 +25,55 @@ fn level() -> bool {
 }
 
 // `A: Debug` does not hold: `Opaque` is not `Debug`.
-#[around(shown)]                            //~ E0402
+#[around(shown)]  //~ E0402
 fn hidden(o: Opaque) -> int {
     1
 }
 
 // A `pub` function lists the errors its wrappers fail with.
-#[around(gate(true))]                       //~ E0501
+#[around(gate(true))]  //~ E0501
 pub fn listed() -> int {
     1
 }
 
 // A wrapper's arguments are compile-time code.
-#[around(gate(level()))]                    //~ E1001
+#[around(gate(level()))]  //~ E1001
 fn runtime() -> int {
     1
 }
 
 // They cannot name the parameters.
-#[around(gate(x > 0))]                      //~ E0101
+#[around(gate(x > 0))]  //~ E0101
 fn named(x: int) -> int {
     x
 }
 
-#[around(1 + 2)]                            //~ E1005
+#[around(1 + 2)]  //~ E1005
 fn not_a_function() -> int {
     1
 }
 
-#[around]                                   //~ E1005
+#[around]  //~ E1005
 fn no_wrapper() -> int {
     1
 }
 
 // The wrapper's own signature must fit.
-#[around(two)]                              //~ E0202
+#[around(two)]  //~ E0202
 fn misfit() -> int {
     1
 }
 
 // A wrapper's effects are the function's: a `pub` function lists them.
-pub struct Role { admin: bool }
+pub struct Role {
+    admin: bool,
+}
 
 fn admin_only<A>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> int) -> int with role: &Role {
     if role.admin { inner(args) } else { 0 }
 }
 
-#[around(admin_only)]                       //~ E0603
+#[around(admin_only)]  //~ E0603
 pub fn secret(x: int) -> int {
     x
 }
@@ -81,6 +83,6 @@ fn unwrapped(x: int) -> int {
     x
 }
 
-fn takes(a: unwrapped::Args) -> int {      //~ E0102
+fn takes(a: unwrapped::Args) -> int {  //~ E0102
     0
 }

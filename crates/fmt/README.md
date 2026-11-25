@@ -2,9 +2,9 @@
 
 The canonical formatter for Moddil source ([`specs/toolchain.md`: Formatter](../../specs/toolchain.md#formatter)).
 
-**Status:** the formatter, run by `moddil fmt [--check]`. Formatting in the language server, and
-reformatting the repository's own sources, are work package P35 of the
-[roadmap](../../specs/roadmap.md#deferred-from-built-work).
+**Status:** the formatter, run by `moddil fmt [--check]` and by the language server's document
+formatting (`moddil lsp`). The repository's own Moddil sources are kept in its layout:
+`tools/ci.py`'s `fmt` step checks them with `moddil fmt --check`.
 
 ```rust
 let text = moddil_fmt::format(source)?;   // canonical, with `\n` line endings
@@ -64,9 +64,11 @@ the source is left alone.
 
 ## Tests
 
-`tests/corpus.rs` formats every case of the grammar's corpus (which together use every
-production) and its samples, and every `.moddil` file of the prelude, the mods, the tour, the
-examples and the conformance suite. Each one formats, and formatting it again changes nothing.
+- `tests/rules.rs` has a snapshot for each rule of the layout above, on a small input written
+  against it.
+- `tests/corpus.rs` formats every case of the grammar's corpus (which together use every
+  production) and its samples, and every `.moddil` file of the prelude, the mods, the tour, the
+  examples and the conformance suite. Each one formats, and formatting it again changes nothing.
 
 ## Design
 

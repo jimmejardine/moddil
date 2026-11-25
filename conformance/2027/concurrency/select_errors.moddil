@@ -6,24 +6,30 @@ fn f() -> int {
 
 fn bad() -> int {
     select {
-        x = f() => x,                       //~ E0217
+        x = f() => x,  //~ E0217
     }
 }
 
-#[selectable]                               //~ E0217
-fn no_wait() -> int { 1 }
+#[selectable]  //~ E0217
+fn no_wait() -> int {
+    1
+}
 
-struct Holder { rx: Receiver<int> }
+struct Holder {
+    rx: Receiver<int>,
+}
 
 #[selectable]
-fn not_first(h: &Holder) -> int with suspend {   //~ E0217
+fn not_first(h: &Holder) -> int with suspend {  //~ E0217
     yield_now();
     h.rx.recv().unwrap_or(0)
 }
 
-trait Clock { fn now(&self) -> int; }
+trait Clock {
+    fn now(&self) -> int;
+}
 
 #[selectable]
 fn uses_a_handler(h: &Holder) -> int with clock: Clock, suspend {
-    h.rx.recv().unwrap_or(0) + clock.now()      //~ E0217
+    h.rx.recv().unwrap_or(0) + clock.now()  //~ E0217
 }

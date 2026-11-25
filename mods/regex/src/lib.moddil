@@ -22,9 +22,7 @@ pub use mod::program::{Regex, RegexError};
 /// character where it goes wrong.
 #[tag]
 pub const fn re(pattern: &str) -> Regex {
-    try {
-        Regex::new(pattern)?
-    } catch {
+    try { Regex::new(pattern)? } catch {
         e => {
             let at = byte_at(pattern, e.at());
             compile_error(e.reason(), at, at + 1)

@@ -17,42 +17,44 @@ fn fnv(bytes: &[u8]) -> Wrapping<u64> {
 test "a Wrapping integer wraps at its type's width" {
     let x: u8 = 250;
     let y: u8 = 10;
-    (Wrapping(x) + Wrapping(y)).0           // => 4
+    (Wrapping(x) + Wrapping(y)).0  // => 4
     ;
-    x +% y                                  // => 4
+    x +% y  // => 4
     ;
-    x.wrapping_add(y)                       // => 4
+    x.wrapping_add(y)  // => 4
     ;
     let big: int = 9223372036854775807;
-    big.wrapping_add(1)                     // => -9223372036854775808
+    big.wrapping_add(1)  // => -9223372036854775808
     ;
     let z: u32 = 0;
     let one: u32 = 1;
-    (Wrapping(z) - Wrapping(one)).0         // => 4294967295
+    (Wrapping(z) - Wrapping(one)).0  // => 4294967295
     ;
     let i = Wrapping(9223372036854775807) + Wrapping(1);
-    i.0                                     // => -9223372036854775808
+    i.0  // => -9223372036854775808
     ;
     let n: i8 = -128;
     let m: i8 = -1;
-    (Wrapping(n) * Wrapping(m)).0           // => -128
+    (Wrapping(n) * Wrapping(m)).0  // => -128
     ;
-    fnv("hello".as_bytes()).0               // => 11831194018420276491
+    fnv("hello".as_bytes()).0  // => 11831194018420276491
 }
 
 test "a Wrapping integer compares and prints as its value does" {
     let a: i16 = 3;
     let b: i16 = 4;
-    Wrapping(a) < Wrapping(b)               // => true
+    Wrapping(a) < Wrapping(b)  // => true
     ;
     let c: u8 = 255;
     let two: u8 = 2;
     let w = Wrapping(c);
-    fmt"{w + Wrapping(two)} {w:?}"          // => "1 Wrapping(255)"
+    fmt"{w + Wrapping(two)} {w:?}"  // => "1 Wrapping(255)"
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct Meters { m: int }
+struct Meters {
+    m: int,
+}
 
 impl Add for Meters {
     type Output = Meters;
@@ -65,21 +67,21 @@ test "a literal where a Wrapping is expected" {
     let max: u32 = 4294967295;
     let last = Wrapping(max);
     let seq: Wrapping<u32> = last + 1;
-    seq.0                                   // => 0
+    seq.0  // => 0
     ;
     let start: Wrapping<u8> = 250;
-    (start + 10).0                          // => 4
+    (start + 10).0  // => 4
 }
 
 test "+= through an operator trait" {
     let mut w: Wrapping<u8> = 200;
     w += Wrapping(100);
-    w.0                                     // => 44
+    w.0  // => 44
     ;
     w += 1;
-    w.0                                     // => 45
+    w.0  // => 45
     ;
     let mut d = Meters { m: 2 };
     d += Meters { m: 3 };
-    d.m                                     // => 5
+    d.m  // => 5
 }

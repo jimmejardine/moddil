@@ -91,7 +91,7 @@ impl<T> Deque<T> {
         }
         match &self.slots[self.slot(i)] {
             Some(x) => Some(x),
-            None => None,
+            None    => None,
         }
     }
 
@@ -102,7 +102,7 @@ impl<T> Deque<T> {
         let at = self.slot(i);
         match &mut self.slots[at] {
             Some(x) => Some(x),
-            None => None,
+            None    => None,
         }
     }
 
@@ -167,7 +167,9 @@ impl<T> FromArrayLiteral<T> for Deque<T> {
         d
     }
 
-    fn from_repeat(x: T, n: int) -> Deque<T> where T: Clone {
+    fn from_repeat(x: T, n: int) -> Deque<T>
+        where T: Clone
+    {
         let mut d = Deque::new();
         let mut i = 0;
         while i < n {

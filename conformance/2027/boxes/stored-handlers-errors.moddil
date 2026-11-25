@@ -1,14 +1,24 @@
 // covers: expr.closure.stored.1
 
-trait Clock { fn now(&self) -> int; }
-fn now() -> int with clock: Clock { clock.now() }
+trait Clock {
+    fn now(&self) -> int;
+}
+fn now() -> int with clock: Clock {
+    clock.now()
+}
 
-struct Fixed { t: int }
-impl Clock for Fixed { fn now(&self) -> int { self.t } }
+struct Fixed {
+    t: int,
+}
+impl Clock for Fixed {
+    fn now(&self) -> int {
+        self.t
+    }
+}
 
 // A box that borrows a handler does not leave its `with`.
 fn escapes() -> int {
-    let f: Box<dyn Fn() -> int> = with Clock = (Fixed { t: 1 }) {   //~ E0308
+    let f: Box<dyn Fn() -> int> = with Clock = (Fixed { t: 1 }) {  //~ E0308
         Box::new(|| now())
     };
     f()
@@ -16,5 +26,5 @@ fn escapes() -> int {
 
 // Nor the function it was given to.
 fn returned() -> Box<dyn Fn() -> int> with Clock {
-    Box::new(|| now())                                              //~ E0310
+    Box::new(|| now())  //~ E0310
 }

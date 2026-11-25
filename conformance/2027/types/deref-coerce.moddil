@@ -1,39 +1,53 @@
 // covers: type.deref.coerce.1
 
-struct Point { x: int, y: int }
+struct Point {
+    x: int,
+    y: int,
+}
 
-fn sum(p: &Point) -> int { p.x + p.y }
-fn read(n: &int) -> int { *n }
-fn bump(n: &mut int) { *n += 1; }
+fn sum(p: &Point) -> int {
+    p.x + p.y
+}
+fn read(n: &int) -> int {
+    *n
+}
+fn bump(n: &mut int) {
+    *n += 1;
+}
 
-
-fn inner(b: &Box<int>) -> &int { b }
+fn inner(b: &Box<int>) -> &int {
+    b
+}
 
 /// A user type that dereferences to its value.
-struct Wrap { value: Point }
+struct Wrap {
+    value: Point,
+}
 
 impl Deref for Wrap {
     type Output = Point;
-    fn deref(&self) -> &Point { &self.value }
+    fn deref(&self) -> &Point {
+        &self.value
+    }
 }
 
 test "a borrow converts to a borrow of what it dereferences to" {
     let b = Box::new(5);
-    read(&b)                                  // => 5
+    read(&b)  // => 5
     ;
     let r = Point { x: 1, y: 2 }.to_rc();
-    sum(&r)                                   // => 3
+    sum(&r)  // => 3
     ;
     let x: &int = &b;
-    *x                                        // => 5
+    *x  // => 5
     ;
-    *inner(&b)                                // => 5
+    *inner(&b)  // => 5
     ;
     let mut m = Box::new(1);
     bump(&mut m);
-    *m                                        // => 2
+    *m  // => 2
     ;
     let w = Wrap { value: Point { x: 3, y: 4 } };
-    sum(&w)                                   // => 7
+    sum(&w)  // => 7
     ;
 }

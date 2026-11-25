@@ -9,13 +9,7 @@ extern "C" {
     fn strlen(s: *const u8) -> u64;
     fn memcpy(dst: *mut u8, src: *const Pair, n: u64) -> *mut u8;
     fn qsort(base: *mut (), n: u64, size: u64, cmp: fn(*const (), *const ()) -> i32);
-    fn bsearch(
-        key: *const (),
-        base: *const (),
-        n: u64,
-        size: u64,
-        cmp: fn(*const (), *const ()) -> i32,
-    ) -> *const ();
+    fn bsearch(key: *const (), base: *const (), n: u64, size: u64, cmp: fn(*const (), *const ()) -> i32) -> *const ();
     fn div(numer: i32, denom: i32) -> Div;
     fn lldiv(numer: int, denom: int) -> LongDiv;
     fn getenv(name: *const u8) -> *const u8;
@@ -41,13 +35,7 @@ fn by_value(a: *const (), b: *const ()) -> i32 {
     unsafe("qsort and bsearch pass pointers to two of the `i32`s") {
         let x: *const i32 = core::ptr::cast(a);
         let y: *const i32 = core::ptr::cast(b);
-        if *x < *y {
-            -1
-        } else if *x > *y {
-            1
-        } else {
-            0
-        }
+        if *x < *y { -1 } else if *x > *y { 1 } else { 0 }
     }
 }
 
@@ -59,54 +47,58 @@ test "C calls a Moddil function back" {
         qsort(core::ptr::cast_mut_to(&mut xs[0]), 6, 4, by_value);
         let found = bsearch(core::ptr::cast(&key), core::ptr::cast(&xs[0]), 6, 4, by_value);
         let lost = bsearch(core::ptr::cast(&missing), core::ptr::cast(&xs[0]), 6, 4, by_value);
-        core::ptr::is_null(found)           // => false
+        core::ptr::is_null(found)  // => false
         ;
-        core::ptr::is_null(lost)            // => true
+        core::ptr::is_null(lost)  // => true
         ;
     }
-    xs                                      // => [1, 2, 3, 4, 5, 6]
+    xs  // => [1, 2, 3, 4, 5, 6]
 }
 
 test "structs come back from C by value" {
-    let d = unsafe("div of two `int`s") { div(17, 5) };
-    d.quot                                  // => 3
+    let d = unsafe("div of two `int`s") {
+        div(17, 5)
+    };
+    d.quot  // => 3
     ;
-    d.rem                                   // => 2
+    d.rem  // => 2
     ;
-    let l = unsafe("lldiv of two `long long`s") { lldiv(-17, 5) };
-    l.quot                                  // => -3
+    let l = unsafe("lldiv of two `long long`s") {
+        lldiv(-17, 5)
+    };
+    l.quot  // => -3
     ;
-    l.rem                                   // => -2
+    l.rem  // => -2
 }
 
 test "pointers walk an array, and null points to nothing" {
     let xs: [i32; 4] = [10, 20, 30, 40];
     let p: *const i32 = &xs[0];
     unsafe("`p` and the two values after it are in `xs`") {
-        *core::ptr::add(p, 2)               // => 30
+        *core::ptr::add(p, 2)  // => 30
         ;
     }
-    core::ptr::is_null(p)                   // => false
+    core::ptr::is_null(p)  // => false
     ;
     let none: *const i32 = core::ptr::null();
-    core::ptr::is_null(none)                // => true
+    core::ptr::is_null(none)  // => true
 }
 
 test "C strings, both ways" {
     let name = core::ffi::c_string("PATH");
-    name.len()                              // => 5
+    name.len()  // => 5
     ;
     let at = core::ffi::ptr_of(name.as_slice());
-    core::ffi::c_len(at)                    // => 4
+    core::ffi::c_len(at)  // => 4
     ;
     unsafe("getenv and strerror give NUL-terminated strings, and PATH is set") {
         let path = getenv(at);
-        core::ptr::is_null(path)            // => false
+        core::ptr::is_null(path)  // => false
         ;
-        core::ffi::c_len(path) > 0          // => true
+        core::ffi::c_len(path) > 0  // => true
         ;
         let why = core::ffi::c_text(strerror(2));
-        why.len() > 0                       // => true
+        why.len() > 0  // => true
         ;
     }
 }
@@ -126,13 +118,13 @@ pub fn twice(x: int) -> int {
 test "the C runtime's functions" {
     let text: [u8; 4] = [67, 65, 66, 0];
     unsafe("the C runtime's functions, with a NUL-terminated string") {
-        abs(-7)                             // => 7
+        abs(-7)  // => 7
         ;
-        llabs(-40000000000)                 // => 40000000000
+        llabs(-40000000000)  // => 40000000000
         ;
-        fabs(-2.5)                          // => 2.5
+        fabs(-2.5)  // => 2.5
         ;
-        strlen(&text[0])                    // => 3
+        strlen(&text[0])  // => 3
         ;
     }
 }
@@ -143,11 +135,11 @@ test "a #[repr(C)] struct is laid out as C lays it out" {
     unsafe("memcpy copies the 16 bytes of the pair into the 16 of the array") {
         memcpy(&mut bytes[0], &p, 16);
     }
-    bytes[0]                                // => 1
+    bytes[0]  // => 1
     ;
-    bytes[8]                                // => 2
+    bytes[8]  // => 2
     ;
-    bytes[9]                                // => 1
+    bytes[9]  // => 1
 }
 
 /// For generated bindings: a trap gives 2 to C instead of ending the process.
@@ -168,11 +160,11 @@ pub fn tally(n: int) -> int {
 }
 
 test "an export is a function as any other in Moddil" {
-    twice(21)                               // => 42
+    twice(21)  // => 42
     ;
-    status()                                // => 0
+    status()  // => 0
     ;
-    tally(Tally { n: 1 }.n)                 // => 2
+    tally(Tally { n: 1 }.n)  // => 2
 }
 
 /// Two `fn` values to choose from, as a C table of callbacks is.
@@ -191,22 +183,24 @@ fn add(a: int, b: int) -> int {
 }
 
 fn run(f: fn(i32) -> i32, x: i32) -> i32 {
-    unsafe("`f` is `negate` or C's `abs`, which take any `i32`") { f(x) }
+    unsafe("`f` is `negate` or C's `abs`, which take any `i32`") {
+        f(x)
+    }
 }
 
 test "Moddil calls fn values" {
-    run(negate, 5)                          // => -5
+    run(negate, 5)  // => -5
     ;
     let c_abs: fn(i32) -> i32 = abs;
-    run(c_abs, -7)                          // => 7
+    run(c_abs, -7)  // => 7
     ;
     let ops = Ops { first: negate, second: abs };
     unsafe("the table holds `negate` and C's `abs`") {
-        (ops.second)((ops.first)(4))        // => 4
+        (ops.second)((ops.first)(4))  // => 4
         ;
     }
     let sum: fn(int, int) -> int = add;
     unsafe("`add` takes any two `int`s") {
-        sum(40, 2)                          // => 42
+        sum(40, 2)  // => 42
     }
 }

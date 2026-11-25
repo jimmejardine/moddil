@@ -2,25 +2,30 @@
 
 test "map and collect into a Vec" {
     let v: Vec<int> = (0..4).map(|i| i * i).collect();
-    v                                       // => [0, 1, 4, 9]
+    v  // => [0, 1, 4, 9]
 }
 
 test "filter keeps the items its closure holds for" {
     let v: Vec<int> = (0..10).filter(|x| *x % 3 == 0).collect();
-    v                                       // => [0, 3, 6, 9]
+    v  // => [0, 3, 6, 9]
 }
 
 test "collect into a String" {
     let s: String = "abc".chars().map(|c| if c == 'b' { 'x' } else { c }).collect();
-    s                                       // => "axc"
+    s  // => "axc"
 }
 
 test "adapters chain" {
-    let n = (1..=5).map(|i| i * 2).filter(|x| *x > 4).count();
-    n                                       // => 3
+    let n = (1..=5)
+        .map(|i| i * 2)
+        .filter(|x| *x > 4)
+        .count();
+    n  // => 3
 }
 
-struct Odd { n: int }
+struct Odd {
+    n: int,
+}
 
 fn even(x: int) -> int with fail(Odd) {
     if x % 2 == 1 { fail(Odd { n: x }) }
@@ -34,27 +39,35 @@ test "a closure's error passes on through map, when an item is asked for" {
     } catch {
         Odd { n } => n * 100,
     };
-    r                                       // => 100
+    r  // => 100
 }
 
 test "adapters run as their items are asked for" {
     let mut seen = 0;
-    let first = (0..).map(|x| { seen += 1; x * 10 }).filter(|x| *x > 20).next();
-    first                                   // => Some(30)
+    let first = (0..)
+        .map(|x| {
+            seen += 1;
+            x * 10
+        })
+        .filter(|x| *x > 20)
+        .next();
+    first  // => Some(30)
     ;
-    seen                                    // => 4
+    seen  // => 4
 }
 
 test "a failing iterator's errors pass on through generic code" {
-    let n = try { (0..4).map(|x| even(x)?).count()? } catch { Odd { n } => -n };
-    n                                       // => -1
+    let n = try { (0..4).map(|x| even(x)?).count()? } catch {
+        Odd { n } => -n,
+    };
+    n  // => -1
     ;
     let mut it = (0..3).map(|x| even(x * 2)?);
     let mut sum = 0;
     while let Some(x) = it.next()? {
         sum += x;
     }
-    sum                                     // => 6
+    sum  // => 6
 }
 
 /// A generic function passes its iterator's errors on.
@@ -67,7 +80,9 @@ pub fn total<I: Iterator<Item = int>>(it: I) -> int with fail(I::Fails) {
 }
 
 test "a for loop passes a type parameter's errors on" {
-    total(0..4)                             // => 6
+    total(0..4)  // => 6
     ;
-    try { total((0..4).map(|x| even(x)?))? } catch { Odd { n } => n }   // => 1
+    try { total((0..4).map(|x| even(x)?))? } catch {
+        Odd { n } => n,
+    }  // => 1
 }

@@ -1,17 +1,21 @@
 // covers: task.select.3, task.select.4
 
-struct Conn { id: int }
+struct Conn {
+    id: int,
+}
 struct Gone;
 
 /// Connections arrive on a channel; `accept` receives one, then makes it a `Conn`.
-struct Listener { incoming: Receiver<int> }
+struct Listener {
+    incoming: Receiver<int>,
+}
 
 impl Listener {
     #[selectable]
     fn accept(&self) -> Conn with suspend, fail(Gone) {
         match self.incoming.recv() {
             Some(id) => Conn { id },
-            None => fail(Gone),
+            None     => fail(Gone),
         }
     }
 }
@@ -26,7 +30,7 @@ test "a selectable function called as any other" {
     let (tx, rx) = channel(4);
     let l = Listener { incoming: rx };
     tx.send(3)?;
-    l.accept()?.id                          // => 3
+    l.accept()?.id  // => 3
 }
 
 test "a select waits on it, then does the rest" {
@@ -37,13 +41,13 @@ test "a select waits on it, then does the rest" {
         c = l.accept()? => c.id,
         _ = stop_requested() => 0,
     };
-    n                                       // => 7
+    n  // => 7
     ;
     tx.send(2)?;
     select {
         x = next(&l) => x,
         _ = stop_requested() => 0,
-    }                                       // => 20
+    }  // => 20
 }
 
 test "the rest's error passes on" {
@@ -56,5 +60,5 @@ test "the rest's error passes on" {
         }
     } catch {
         Gone => -1,
-    }                                       // => -1
+    }  // => -1
 }

@@ -1,37 +1,49 @@
 // covers: comptime.type.1, comptime.derive.1, comptime.template.inline.1, comptime.template.field.1, comptime.template.if.1, attr.derive-by.1
 
-#[derive_by(missing)]                       //~ E1006
-trait A { fn a(&self) -> int; }
+#[derive_by(missing)]  //~ E1006
+trait A {
+    fn a(&self) -> int;
+}
 
 #[derive_by(shapeless)]
-trait B { fn b(&self) -> int; }
+trait B {
+    fn b(&self) -> int;
+}
 
-fn shapeless(t: type) -> int { 0 }          //~ E1006
+fn shapeless(t: type) -> int {  //~ E1006
+    0
+}
 
 #[derive_by(fine)]
-trait C { fn c(&self) -> int; }
+trait C {
+    fn c(&self) -> int;
+}
 
 const fn fine(t: type) -> Impl<C> {
     impl C for t {
         fn c(&self) -> int {
-            inline for f in t {             //~ E1007
+            inline for f in t {  //~ E1007
             }
-            if const f.name == "x" { 1 } else { 2 }   //~ E1007
+            if const f.name == "x" { 1 } else { 2 }  //~ E1007
         }
     }
 }
 
 #[derive_by(odd)]
-trait D { fn d(&self) -> int; }
+trait D {
+    fn d(&self) -> int;
+}
 
 const fn odd(t: type) -> Impl<D> {
     impl D for t {
         fn d(&self) -> int {
             let mut k = 0;
             inline for f in fields(t) {
-                let g = f;                  //~ E1007
-                k += f.size;                //~ E1007
-                if const f.size > 1 { k += 1; }   //~ E1007
+                let g = f;             //~ E1007
+                k += f.size;           //~ E1007
+                if const f.size > 1 {  //~ E1007
+                    k += 1;
+                }
             }
             k
         }
@@ -39,16 +51,20 @@ const fn odd(t: type) -> Impl<D> {
 }
 
 #[derive(C, D)]
-struct S { x: int }
+struct S {
+    x: int,
+}
 
 fn calls() -> int {
-    fine(1)                                 //~ E1006
+    fine(1)  //~ E1006
 }
 
 fn outside() -> int {
-    inline for f in fields(S) {             //~ E1007
+    inline for f in fields(S) {  //~ E1007
     }
     0
 }
 
-fn kind(x: type) -> int { 0 }               //~ E1006
+fn kind(x: type) -> int {  //~ E1006
+    0
+}

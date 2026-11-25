@@ -1,26 +1,26 @@
 // covers: expr.bit.ops.1
 
 test "on int" {
-    12 & 10                   // => 8
+    12 & 10  // => 8
     ;
-    12 | 10                   // => 14
+    12 | 10  // => 14
     ;
-    12 ^ 10                   // => 6
+    12 ^ 10  // => 6
     ;
-    !0                        // => -1
+    !0  // => -1
     ;
-    -1 & 0xff                 // => 255
+    -1 & 0xff  // => 255
 }
 
 test "on bool" {
-    true & false              // => false
+    true & false  // => false
     ;
-    true | false              // => true
+    true | false  // => true
     ;
-    true ^ true               // => false
+    true ^ true  // => false
     ;
-    !true                     // => false
+    !true  // => false
     ;
     // `&` evaluates both operands.
-    false & (1 / 0 == 0);     //~ trap
+    false & (1 / 0 == 0);  //~ trap
 }

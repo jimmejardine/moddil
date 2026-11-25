@@ -1,13 +1,13 @@
 // covers: expr.arith.types.1
 
 fn f() {
-    let a = true + 1;         //~ E0205
-    let b = 1 + true;         //~ E0201
-    let c = -false;           //~ E0205
-    let d = () * 2;           //~ E0205
+    let a = true + 1;  //~ E0205
+    let b = 1 + true;  //~ E0201
+    let c = -false;    //~ E0205
+    let d = () * 2;    //~ E0205
 }
 
 fn compound() {
     let mut b = true;
-    b += 1;                   //~ E0205
+    b += 1;  //~ E0205
 }

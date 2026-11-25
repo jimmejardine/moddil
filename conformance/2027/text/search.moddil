@@ -1,17 +1,17 @@
 // covers: text.pattern.1
 
 test "contains takes text or a character" {
-    "shorty".contains("ort")                // => true
+    "shorty".contains("ort")  // => true
     ;
-    "shorty".contains('z')                  // => false
+    "shorty".contains('z')  // => false
     ;
-    "shorty".starts_with('s')               // => true
+    "shorty".starts_with('s')  // => true
     ;
     let mut tail = String::new();
     tail.push_str("ty");
-    "shorty".ends_with(&tail)               // => true
+    "shorty".ends_with(&tail)  // => true
     ;
-    tail.contains('y')                      // => true
+    tail.contains('y')  // => true
 }
 
 const ALPHABET: &str = "abc";
@@ -21,5 +21,5 @@ test "in a refinement" {
     let mut s = String::new();
     s.push_str("cab");
     let c = Code::new(s) ?! "from the alphabet";
-    c.len()                                 // => 3
+    c.len()  // => 3
 }

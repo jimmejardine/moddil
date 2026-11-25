@@ -1,0 +1,10 @@
+---
+source: crates/fmt/tests/rules.rs
+expression: "fmt(\"fn f(o: Option<int>) -> int { match o { Some(n) => n, None => { 0 } } }\")"
+---
+fn f(o: Option<int>) -> int {
+    match o {
+        Some(n) => n,
+        None    => { 0 }
+    }
+}

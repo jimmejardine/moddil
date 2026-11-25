@@ -55,7 +55,7 @@ impl Url {
         let text: &str = &self.text;
         match text.split_once(":") {
             Some((scheme, _)) => scheme,
-            None => "",
+            None              => "",
         }
     }
 
@@ -103,10 +103,7 @@ impl Conn {
     pub fn pair() -> (Conn, Conn) {
         let (a_out, b_in) = channel(64);
         let (b_out, a_in) = channel(64);
-        (
-            Conn { link: Link::Sim { out: a_out, incoming: a_in }, keep: None },
-            Conn { link: Link::Sim { out: b_out, incoming: b_in }, keep: None },
-        )
+        (Conn { link: Link::Sim { out: a_out, incoming: a_in }, keep: None }, Conn { link: Link::Sim { out: b_out, incoming: b_in }, keep: None })
     }
 
     /// The OS's connection `id`.
@@ -123,7 +120,7 @@ impl Conn {
     pub fn write(&self, bytes: &[u8]) with suspend, fail(NetError) {
         let lost = match &self.keep {
             Some(keep) => !(**keep)(),
-            None => false,
+            None       => false,
         };
         if lost {
             return;
@@ -134,11 +131,7 @@ impl Conn {
                     Closed => fail(NetError::new("the connection is closed")),
                 }
             }
-            Link::Os { id, .. } => {
-                if !os::send(*id, bytes) {
-                    fail(NetError::new("the connection is closed"))
-                }
-            }
+            Link::Os { id, .. } => { if !os::send(*id, bytes) { fail(NetError::new("the connection is closed")) } }
         }
     }
 
@@ -151,9 +144,9 @@ impl Conn {
     pub fn read(&self) -> Option<Vec<u8>> with suspend {
         match &self.link {
             Link::Sim { incoming, .. } => incoming.recv(),
-            Link::Os { id, arrivals } => match arrivals.recv() {
+            Link::Os { id, arrivals }  => match arrivals.recv() {
                 Some(n) => Some(taken(*id, n)),
-                None => None,
+                None    => None,
             },
         }
     }
@@ -168,7 +161,7 @@ impl Conn {
             Link::Os { id, arrivals } => select {
                 n = arrivals.recv() => match n {
                     Some(n) => Some(taken(*id, n)),
-                    None => None,
+                    None    => None,
                 },
                 _ = timer(d).recv() => None,
             },
@@ -240,9 +233,7 @@ impl Listener {
     /// Listens on `port` of the local machine, through the OS.
     pub fn os(port: Port) -> Listener with fail(NetError) {
         let id = os::listen(port);
-        if id < 0 {
-            fail(NetError::new("the port cannot be listened on"))
-        }
+        if id < 0 { fail(NetError::new("the port cannot be listened on")) }
         Listener { incoming: os::incoming(id), conns: None, id }
     }
 
@@ -252,7 +243,7 @@ impl Listener {
         match self.incoming.recv() {
             Some(id) => match &self.conns {
                 Some(conns) => conns.recv() ?! "a simulated connection comes with its number",
-                None => Conn::os(id),
+                None        => Conn::os(id),
             },
             None => Conn::pair().0,
         }

@@ -8,78 +8,78 @@ fn of(text: &str) -> String {
 
 test "an empty String holds 23 bytes inline" {
     let s = String::new();
-    s.capacity()                            // => 23
+    s.capacity()  // => 23
     ;
-    s.len()                                 // => 0
+    s.len()  // => 0
 }
 
 test "up to 23 bytes stay inline" {
     let s = of("abcdefghijklmnopqrstuvw");
-    s.len()                                 // => 23
+    s.len()  // => 23
     ;
-    s.capacity()                            // => 23
+    s.capacity()  // => 23
 }
 
 test "the 24th byte moves the text to the heap" {
     let mut s = of("abcdefghijklmnopqrstuvw");
     s.push('x');
-    s.len()                                 // => 24
+    s.len()  // => 24
     ;
-    s.capacity() >= 24                      // => true
+    s.capacity() >= 24  // => true
     ;
-    s                                       // => "abcdefghijklmnopqrstuvwx"
+    s  // => "abcdefghijklmnopqrstuvwx"
 }
 
 test "push_str past the edge" {
     let mut s = of("0123456789");
     s.push_str("0123456789");
     s.push_str("0123456789");
-    s.len()                                 // => 30
+    s.len()  // => 30
     ;
-    s.ends_with("789")                      // => true
+    s.ends_with("789")  // => true
 }
 
 test "a character of several bytes across the edge" {
     let mut s = of("abcdefghijklmnopqrstuv");
     s.push('é');
-    s.len()                                 // => 24
+    s.len()  // => 24
     ;
-    s.pop()                                 // => Some('é')
+    s.pop()  // => Some('é')
     ;
-    s.len()                                 // => 22
+    s.len()  // => 22
 }
 
 test "pop takes the last character, whatever its bytes" {
     let mut s = of("a€");
-    s.pop()                                 // => Some('€')
+    s.pop()  // => Some('€')
     ;
-    s.pop()                                 // => Some('a')
+    s.pop()  // => Some('a')
     ;
-    s.pop()                                 // => None
+    s.pop()  // => None
 }
 
 test "with_capacity" {
-    String::with_capacity(5).capacity()     // => 23
+    String::with_capacity(5).capacity()  // => 23
     ;
-    String::with_capacity(100).capacity()   // => 100
+    String::with_capacity(100).capacity()  // => 100
 }
 
 test "clones and equality do not depend on where the bytes are" {
     let short = of("hello");
     let mut long = String::with_capacity(100);
     long.push_str("hello");
-    short == long                           // => true
+    short == long  // => true
     ;
-    long.clone() == short.clone()           // => true
+    long.clone() == short.clone()  // => true
     ;
     let big = of("this text is longer than twenty-three bytes");
-    big.clone()                             // => "this text is longer than twenty-three bytes"
+    big.clone()  // => "this text is longer than twenty-three bytes"
 }
 
 test "clear" {
     let mut s = of("this text is longer than twenty-three bytes");
     s.clear();
-    s.len()                                 // => 0
+    s.len()  // => 0
     ;
-    s.is_empty()                            // => true
+    s.is_empty()  // => true
 }

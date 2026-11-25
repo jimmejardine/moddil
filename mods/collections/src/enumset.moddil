@@ -205,7 +205,9 @@ impl<T: Variant> FromArrayLiteral<T> for EnumSet<T> {
         s
     }
 
-    fn from_repeat(x: T, n: int) -> EnumSet<T> where T: Clone {
+    fn from_repeat(x: T, n: int) -> EnumSet<T>
+        where T: Clone
+    {
         let mut s = EnumSet::new();
         if n > 0 {
             s.insert(x);

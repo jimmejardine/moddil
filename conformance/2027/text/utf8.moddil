@@ -2,39 +2,49 @@
 
 test "bytes that are UTF-8 become text" {
     let bytes: [u8; 6] = [104, 195, 169, 108, 108, 111];
-    str::from_utf8(&bytes)?                         // => "héllo"
+    str::from_utf8(&bytes)?  // => "héllo"
     ;
     let a: [u8; 2] = [111, 107];
     let v = Vec::from_array(a);
-    String::from_utf8(v)?                           // => "ok"
+    String::from_utf8(v)?  // => "ok"
 }
 
 test "bytes that are not UTF-8 are an error that says where" {
     let bad: [u8; 4] = [97, 98, 255, 99];
-    try { str::from_utf8(&bad)?.len() } catch { Utf8Error { valid_up_to } => -valid_up_to }   // => -2
+    try { str::from_utf8(&bad)?.len() } catch {
+        Utf8Error { valid_up_to } => -valid_up_to,
+    }  // => -2
     ;
     let surrogate: [u8; 3] = [237, 160, 128];
-    try { str::from_utf8(&surrogate)?.len() } catch { Utf8Error { valid_up_to } => -valid_up_to }   // => 0
+    try { str::from_utf8(&surrogate)?.len() } catch {
+        Utf8Error { valid_up_to } => -valid_up_to,
+    }  // => 0
     ;
     let overlong: [u8; 2] = [192, 175];
-    try { str::from_utf8(&overlong)?.len() } catch { Utf8Error { valid_up_to } => -valid_up_to }   // => 0
+    try { str::from_utf8(&overlong)?.len() } catch {
+        Utf8Error { valid_up_to } => -valid_up_to,
+    }  // => 0
     ;
     let cut: [u8; 2] = [97, 226];
-    try { str::from_utf8(&cut)?.len() } catch { Utf8Error { valid_up_to } => -valid_up_to }   // => -1
+    try { str::from_utf8(&cut)?.len() } catch {
+        Utf8Error { valid_up_to } => -valid_up_to,
+    }  // => -1
     ;
     let a: [u8; 2] = [65, 128];
     let v = Vec::from_array(a);
-    let back = try { String::from_utf8(v)?.len() } catch { FromUtf8Error { bytes, valid_up_to } => bytes.len() * 10 + valid_up_to };
-    back                                            // => 21
+    let back = try { String::from_utf8(v)?.len() } catch {
+        FromUtf8Error { bytes, valid_up_to } => bytes.len() * 10 + valid_up_to,
+    };
+    back  // => 21
 }
 
 test "text's bytes are its UTF-8" {
-    "hé".as_bytes().len()                   // => 3
+    "hé".as_bytes().len()  // => 3
     ;
-    "hé".as_bytes()[1]                      // => 195
+    "hé".as_bytes()[1]  // => 195
     ;
     let s = "abc".to_string();
-    s.as_bytes()[2]                         // => 99
+    s.as_bytes()[2]  // => 99
     ;
-    str::from_utf8(s.as_bytes())?           // => "abc"
+    str::from_utf8(s.as_bytes())?  // => "abc"
 }

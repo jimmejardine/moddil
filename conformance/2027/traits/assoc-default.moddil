@@ -5,15 +5,23 @@ trait Shape {
     fn size(&self) -> Self::Unit;
 }
 
-struct Square { side: int }
+struct Square {
+    side: int,
+}
 impl Shape for Square {
-    fn size(&self) -> int { self.side * self.side }
+    fn size(&self) -> int {
+        self.side * self.side
+    }
 }
 
-struct Named { name: String }
+struct Named {
+    name: String,
+}
 impl Shape for Named {
     type Unit = String;
-    fn size(&self) -> String { self.name.clone() }
+    fn size(&self) -> String {
+        self.name.clone()
+    }
 }
 
 struct Odd;
@@ -37,17 +45,25 @@ impl Check for Strict {
 
 struct Lax;
 impl Check for Lax {
-    fn check(&self, x: int) -> int { x }
+    fn check(&self, x: int) -> int {
+        x
+    }
 }
 
 test "an impl takes the trait's default for an associated type" {
-    Square { side: 3 }.size()                       // => 9
+    Square { side: 3 }.size()  // => 9
     ;
-    Named { name: "n".to_string() }.size()          // => "n"
+    Named { name: "n".to_string() }.size()  // => "n"
     ;
-    Lax.check(3)                                    // => 3
+    Lax.check(3)  // => 3
     ;
-    try { Strict.check(3)? } catch { Odd => -1, Big => -2 }     // => -1
+    try { Strict.check(3)? } catch {
+        Odd => -1,
+        Big => -2,
+    }  // => -1
     ;
-    try { Strict.check(200)? } catch { Odd => -1, Big => -2 }   // => -2
+    try { Strict.check(200)? } catch {
+        Odd => -1,
+        Big => -2,
+    }  // => -2
 }

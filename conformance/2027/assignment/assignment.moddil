@@ -3,36 +3,36 @@
 test "assignment" {
     let mut x = 1;
     x = 5;
-    x                         // => 5
+    x  // => 5
     ;
-    x = 1                     // => ()
+    x = 1  // => ()
     ;
     x += 2;
     x *= 10;
     x -= 1;
     x /= 2;
     x %= 5;
-    x                         // => 4
+    x  // => 4
     ;
     x <<= 4;
     x >>= 1;
     x |= 1;
     x &= 0b1101;
     x ^= 2;
-    x                         // => 3
+    x  // => 3
 }
 
 test "on bools, only &=, |= and ^=" {
     let mut b = true;
     b &= false;
-    b                         // => false
+    b  // => false
     ;
     b |= true;
     b ^= true;
-    b                         // => false
+    b  // => false
 }
 
 test "compound assignment traps like its operator" {
     let mut x = 9223372036854775807;
-    x += 1;                   //~ trap
+    x += 1;  //~ trap
 }

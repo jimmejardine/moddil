@@ -1,17 +1,20 @@
 // covers: expr.match.unreachable.1
 
-enum Shape { Dot, Circle(int) }
+enum Shape {
+    Dot,
+    Circle(int),
+}
 
 fn after_wildcard(n: int) -> int {
     match n {
         _ => 0,
-        1 => 1,                 //~ W0201
+        1 => 1,  //~ W0201
     }
 }
 
 fn covered(s: Shape) -> int {
     match s {
-        Shape::Dot => 0,
+        Shape::Dot       => 0,
         Shape::Circle(_) => 1,
         Shape::Circle(5) => 2,  //~ W0201
     }
@@ -20,7 +23,7 @@ fn covered(s: Shape) -> int {
 fn ranges(n: int) -> int {
     match n {
         0..=10 => 0,
-        3..=5 => 1,             //~ W0201
-        _ => 2,
+        3..=5  => 1,  //~ W0201
+        _      => 2,
     }
 }

@@ -10,10 +10,10 @@ fn name_or(found: bool, name: &str) -> &str {
 
 test "static data borrows nothing" {
     let g = greeting();
-    g                                       // => "hi"
+    g  // => "hi"
     ;
     let s = String::new();
-    name_or(false, s.as_str())              // => "anonymous"
+    name_or(false, s.as_str())  // => "anonymous"
     ;
-    g.len()                                 // => 2
+    g.len()  // => 2
 }

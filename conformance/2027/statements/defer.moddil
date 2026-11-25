@@ -3,17 +3,23 @@
 fn log(stop: bool) -> int {
     let mut log = 0;
     {
-        defer { log = log * 10 + 1; }
-        defer { log = log * 10 + 2; }
-        if stop { return log; }
+        defer {
+            log = log * 10 + 1;
+        }
+        defer {
+            log = log * 10 + 2;
+        }
+        if stop {
+            return log;
+        }
     }
     log
 }
 
 test "defer blocks run last first, after the return value" {
-    log(false)                  // => 21
+    log(false)  // => 21
     ;
-    log(true)                   // => 0
+    log(true)  // => 0
 }
 
 test "defer runs on break and continue" {
@@ -21,9 +27,15 @@ test "defer runs on break and continue" {
     let mut i = 0;
     while i < 3 {
         i += 1;
-        defer { runs += 1; }
-        if i == 2 { continue; }
-        if i == 3 { break; }
+        defer {
+            runs += 1;
+        }
+        if i == 2 {
+            continue;
+        }
+        if i == 3 {
+            break;
+        }
     }
-    runs                        // => 3
+    runs  // => 3
 }

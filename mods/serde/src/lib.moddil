@@ -62,16 +62,14 @@ pub const fn deserialize(t: type) -> Impl<Deserialize> {
                 }
                 fail(DecodeError::unknown(name))
             } else {
-                t {
-                    inline for f in fields(t) {
-                        [f]: if const f.is_refined() {
-                            let value = d.field(f.name)?;
-                            try { f.new(value)? } catch { e => fail(DecodeError::refused(f.name, e)) }
-                        } else {
-                            d.field(f.name)?
-                        },
+                t { inline for f in fields(t) { [f]: if const f.is_refined() {
+                    let value = d.field(f.name)?;
+                    try { f.new(value)? } catch {
+                        e => fail(DecodeError::refused(f.name, e)),
                     }
-                }
+                } else {
+                    d.field(f.name)?
+                }, } }
             }
         }
     }
@@ -115,7 +113,9 @@ impl Deserialize for bool {
 
 /// Why decoding failed.
 #[derive(Debug)]
-pub struct DecodeError { reason: String }
+pub struct DecodeError {
+    reason: String,
+}
 
 impl DecodeError {
     /// An error saying `reason`.

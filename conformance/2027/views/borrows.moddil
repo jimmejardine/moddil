@@ -1,41 +1,45 @@
 // covers: view.borrow.1
 
-view Window { data: &[int] }
+view Window {
+    data: &[int],
+}
 
-struct Wrap<T> { x: T }
+struct Wrap<T> {
+    x: T,
+}
 
 fn no_source() -> Window {
     let a = [1];
-    Window { data: &a }                     //~ E0308
+    Window { data: &a }  //~ E0308
 }
 
 fn escapes(d: &[int]) -> Window {
     let a = [1];
-    Window { data: &a }                     //~ E0308
+    Window { data: &a }  //~ E0308
 }
 
 fn frozen() -> int {
     let mut a = [1, 2];
     let w = Window { data: &a };
-    a[0] = 5;                               //~ E0306
+    a[0] = 5;  //~ E0306
     w.data[0]
 }
 
 fn option_escapes(d: &int) -> Option<&int> {
     let x = 1;
-    Some(&x)                                //~ E0308
+    Some(&x)  //~ E0308
 }
 
 fn wrapped_escapes(d: &int) -> Wrap<&int> {
     let x = 1;
-    Wrap { x: &x }                          //~ E0308
+    Wrap { x: &x }  //~ E0308
 }
 
 // Building a view lends it the borrow, so `a` cannot be lent with `&mut` while `w` is used.
 fn lent() -> int {
     let mut a = [1, 2];
     let w = Window { data: &a };
-    let m = &mut a;                         //~ E0305
+    let m = &mut a;  //~ E0305
     m[0] = 5;
     w.data[0]
 }
@@ -53,7 +57,7 @@ impl Iterator for Cursor {
     fn next(&mut self) -> Option<&int> {
         if self.at < self.xs.len() {
             self.at += 1;
-            Some(&self.spare)                               //~ E0308
+            Some(&self.spare)  //~ E0308
         } else {
             None
         }

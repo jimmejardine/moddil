@@ -19,13 +19,7 @@ fn pixels(n: int) -> f32 {
 
 /// The keys and mouse of `f` as the camera's input.
 fn input(f: Frame) -> Input {
-    Input {
-        forward: axis(&f, KEY_W, KEY_S),
-        strafe: axis(&f, KEY_D, KEY_A),
-        look_yaw: pixels(f.mouse_x) * 0.003,
-        look_pitch: -pixels(f.mouse_y) * 0.003,
-        speed: 1.0 + pixels(f.wheel) * 0.01,
-    }
+    Input { forward: axis(&f, KEY_W, KEY_S), strafe: axis(&f, KEY_D, KEY_A), look_yaw: pixels(f.mouse_x) * 0.003, look_pitch: -pixels(f.mouse_y) * 0.003, speed: 1.0 + pixels(f.wheel) * 0.01 }
 }
 
 fn main(gpu: GpuRoot, window: Window) {

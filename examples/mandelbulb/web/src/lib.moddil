@@ -27,15 +27,7 @@ pub struct Scene {
 impl Scene {
     /// The scene the flight starts with, drawn `width` x `height`.
     pub fn start(width: int, height: int) -> Scene {
-        Scene {
-            camera: Camera::start(),
-            params: Params::classic(),
-            quality: Quality::standard(),
-            light: Vec3::new(-0.5, 0.7, -0.5).normalized(),
-            width,
-            height,
-            scale: 1.0,
-        }
+        Scene { camera: Camera::start(), params: Params::classic(), quality: Quality::standard(), light: Vec3::new(-0.5, 0.7, -0.5).normalized(), width, height, scale: 1.0 }
     }
 }
 

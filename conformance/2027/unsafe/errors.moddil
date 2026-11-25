@@ -3,17 +3,21 @@
 use core::cell::UnsafeCell;
 
 fn outside(p: *mut int) -> int {
-    *p                                          //~ E0218
+    *p  //~ E0218
 }
 
 fn without_the_capability(p: *mut int) -> int {
-    unsafe("p points to an int") { *p }         //~ E0219
+    unsafe("p points to an int") {  //~ E0219
+        *p
+    }
 }
 
 fn through_const(p: *const int) {
-    unsafe("p points to an int") { *p = 1; }    //~ E0219 E0302
+    unsafe("p points to an int") {  //~ E0219
+        *p = 1;  //~ E0302
+    }
 }
 
 fn shared_is_not_mut(x: &int) -> *mut int {
-    x                                           //~ E0201
+    x  //~ E0201
 }

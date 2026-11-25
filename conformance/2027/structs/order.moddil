@@ -1,13 +1,20 @@
 // covers: expr.struct.order.1
 
-struct Point { x: int, y: int }
+struct Point {
+    x: int,
+    y: int,
+}
 
-fn zero() -> int { 0 }
-fn max() -> int { 9223372036854775807 }
+fn zero() -> int {
+    0
+}
+fn max() -> int {
+    9223372036854775807
+}
 
 test "field values are evaluated in the order written" {
     Point {
-        y: 1 / zero(),          //~ trap
+        y: 1 / zero(),  //~ trap
         x: max() + 1,
     };
 }

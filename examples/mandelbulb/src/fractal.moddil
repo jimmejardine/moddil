@@ -109,10 +109,7 @@ pub fn normal(p: Vec3, params: Params, eps: f32) -> Vec3 {
     let b = Vec3::new(-1.0, -1.0, 1.0);
     let c = Vec3::new(-1.0, 1.0, -1.0);
     let d = Vec3::new(1.0, 1.0, 1.0);
-    let g = a.scale(distance(p + a.scale(eps), params))
-        + b.scale(distance(p + b.scale(eps), params))
-        + c.scale(distance(p + c.scale(eps), params))
-        + d.scale(distance(p + d.scale(eps), params));
+    let g = a.scale(distance(p + a.scale(eps), params)) + b.scale(distance(p + b.scale(eps), params)) + c.scale(distance(p + c.scale(eps), params)) + d.scale(distance(p + d.scale(eps), params));
     g.normalized()
 }
 

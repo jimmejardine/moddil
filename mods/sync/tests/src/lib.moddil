@@ -4,15 +4,22 @@ test "a mutex changes behind a shared borrow" {
     let m = Mutex::new(Vec::new());
     let r = &m;
     r.lock().push(1);
-    r.with(|v| v.push(2));
-    m.lock().len()                                  // => 2
+    r.with (|v| v.push(2));
+    m.lock().len()  // => 2
 }
 
 test "tasks take turns at the lock" {
     let m = Mutex::new(0);
     scope(|s| {
-        s.spawn(|| { let mut g = m.lock(); yield_now(); *g += 1; });
-        s.spawn(|| { let mut g = m.lock(); *g += 10; });
+        s.spawn (|| {
+            let mut g = m.lock();
+            yield_now();
+            *g += 1;
+        });
+        s.spawn (|| {
+            let mut g = m.lock();
+            *g += 10;
+        });
     });
-    m.into_inner()                                  // => 11
+    m.into_inner()  // => 11
 }

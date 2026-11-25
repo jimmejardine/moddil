@@ -1,9 +1,7 @@
 //! BLAKE3's hash mode, after the specification's reference implementation (O'Connor, Aumasson,
 //! Neves and Wilcox-O'Hearn, 2020). The keyed and key-derivation modes are not here yet.
 
-const IV: [u32; 8] = [
-    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
-];
+const IV: [u32; 8] = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
 
 /// The order a round's message words are taken in by the next round.
 const PERMUTATION: [int; 16] = [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8];
@@ -48,11 +46,7 @@ fn round(s: &mut [u32; 16], m: &[u32; 16]) {
 /// The compression function: a block of 16 words into the chaining value `cv`, giving all 16
 /// words of the output (the first 8 are the next chaining value).
 fn compress(cv: &[u32; 8], block: &[u32; 16], counter: u64, block_len: u32, flags: u32) -> [u32; 16] {
-    let mut s: [u32; 16] = [
-        cv[0], cv[1], cv[2], cv[3], cv[4], cv[5], cv[6], cv[7],
-        IV[0], IV[1], IV[2], IV[3],
-        counter.truncate::<u32>(), (counter >> 32).truncate::<u32>(), block_len, flags,
-    ];
+    let mut s: [u32; 16] = [cv[0], cv[1], cv[2], cv[3], cv[4], cv[5], cv[6], cv[7], IV[0], IV[1], IV[2], IV[3], counter.truncate::<u32>(), (counter >> 32).truncate::<u32>(), block_len, flags];
     let mut m = *block;
     let mut r = 0;
     while r < 7 {
@@ -175,13 +169,7 @@ impl Chunk {
     }
 
     fn output(&self) -> Output {
-        Output {
-            cv: self.cv,
-            block: words(&self.block),
-            counter: self.counter,
-            block_len: self.block_len.wrap::<u32>(),
-            flags: self.start_flag() | CHUNK_END,
-        }
+        Output { cv: self.cv, block: words(&self.block), counter: self.counter, block_len: self.block_len.wrap::<u32>(), flags: self.start_flag() | CHUNK_END }
     }
 }
 

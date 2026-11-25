@@ -5,10 +5,14 @@ pub trait Log {
 }
 struct Doubling;
 impl Log for Doubling {
-    fn line(&self, n: int) -> int { n * 2 }
+    fn line(&self, n: int) -> int {
+        n * 2
+    }
 }
 
-fn emit(n: int) -> int with log: Log { log.line(n) }
+fn emit(n: int) -> int with log: Log {
+    log.line(n)
+}
 
 // Private functions need what they reach, without saying so, through recursion too.
 fn countdown(n: int) -> int {
@@ -22,42 +26,57 @@ fn odd(n: int) -> int {
 }
 
 // A method of an inherent impl is inferred too.
-struct Counter { start: int }
+struct Counter {
+    start: int,
+}
 impl Counter {
-    fn run(&self) -> int { countdown(self.start) }
+    fn run(&self) -> int {
+        countdown(self.start)
+    }
 }
 
 test "private functions infer their effects" {
     with Log = Doubling {
-        countdown(3)                        // => 5
+        countdown(3)  // => 5
         ;
-        even(4)                             // => 20
+        even(4)  // => 20
         ;
-        Counter { start: 2 }.run()          // => 4
+        Counter { start: 2 }.run()  // => 4
     }
 }
 
 // A private function's errors are inferred, and its callers mark its calls.
-pub struct TooBig { n: int }
+pub struct TooBig {
+    n: int,
+}
 pub struct Negative;
 
 fn check(n: int) -> int {
-    if n > 9 { fail(TooBig { n }); }
-    if n < 0 { fail(Negative); }
+    if n > 9 {
+        fail(TooBig { n });
+    }
+    if n < 0 {
+        fail(Negative);
+    }
     n
 }
-fn twice(n: int) -> int { check(n)? * 2 }
+fn twice(n: int) -> int {
+    check(n)? * 2
+}
 
 test "private functions infer their errors" {
-    try { twice(3)? }                       // => Ok(6)
+    try { twice(3)? }  // => Ok(6)
     ;
     let r = try { twice(12)? } catch {
         TooBig(t) => t.n,
-        Negative => -1,
+        Negative  => -1,
     };
-    r                                       // => 12
+    r  // => 12
     ;
-    try { twice(-5)? } catch { TooBig(_) => 0, Negative => -1 } // => -1
+    try { twice(-5)? } catch {
+        TooBig(_) => 0,
+        Negative  => -1,
+    }  // => -1
 }
 
 // A handler whose methods fail, used by a private function, adds its errors to the function's.
@@ -65,10 +84,14 @@ struct Full;
 trait Sink {
     fn put(&self, n: int) with fail(Full);
 }
-struct Small { cap: int }
+struct Small {
+    cap: int,
+}
 impl Sink for Small {
     fn put(&self, n: int) with fail(Full) {
-        if n > self.cap { fail(Full); }
+        if n > self.cap {
+            fail(Full);
+        }
     }
 }
 fn fill(n: int) -> int with sink: Sink {
@@ -79,8 +102,8 @@ fn fill(n: int) -> int with sink: Sink {
 test "errors and effects are inferred together" {
     let s = Small { cap: 4 };
     with Sink = &s {
-        try { fill(3)? }                    // => Ok(3)
+        try { fill(3)? }  // => Ok(3)
         ;
-        try { fill(9)? }                    // => Err(Full)
+        try { fill(9)? }  // => Err(Full)
     }
 }

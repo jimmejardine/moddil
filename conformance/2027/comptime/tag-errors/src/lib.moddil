@@ -3,5 +3,5 @@
 use regex::re;
 
 fn bad() -> bool {
-    re"(ab".is_match("ab")                  //~ E1010
+    re"(ab".is_match("ab")  //~ E1010
 }

@@ -41,12 +41,12 @@ struct Labelled<T, const N: int> {
 
 test "a template derives for a generic struct, its parameter bounded by the trait" {
     let p = Pair { a: 1, b: 2 };
-    p.describe()                           // => "a=1;b=2;"
+    p.describe()  // => "a=1;b=2;"
     ;
     let q = Pair { a: Pair { a: 3, b: 4 }, b: Pair { a: 5, b: 6 } };
-    q.describe()                           // => "a=a=3;b=4;;b=a=5;b=6;;"
+    q.describe()  // => "a=a=3;b=4;;b=a=5;b=6;;"
     ;
     let l: Labelled<int, 2> = Labelled { value: 7, count: 2 };
-    l.describe()                           // => "value=7;count=2;"
+    l.describe()  // => "value=7;count=2;"
     ;
 }

@@ -2,10 +2,14 @@
 
 pub trait Time {
     fn now(&self) -> int;
-    fn later(&self, by: int) -> int { self.now() + by }
+    fn later(&self, by: int) -> int {
+        self.now() + by
+    }
 }
 
-fn run_once() -> int with time: Time { time.now() + time.later(1) }
+fn run_once() -> int with time: Time {
+    time.now() + time.later(1)
+}
 
 test "a handler written where it is installed" {
     let t0 = 100;
@@ -15,15 +19,15 @@ test "a handler written where it is installed" {
             calls += 1;
             t0
         }
-    } {
-        run_once()
-    };
-    n                                       // => 201
+    } { run_once() };
+    n  // => 201
     ;
-    calls                                   // => 2
+    calls  // => 2
 }
 
-struct Found { id: int }
+struct Found {
+    id: int,
+}
 
 trait Visitor {
     fn visit(&self, n: int) with fail(Found);
@@ -43,24 +47,28 @@ test "a handler that ends its block early by failing" {
     let found = try {
         with Visitor = impl Visitor {
             fn visit(&self, n: int) with fail(Found) {
-                if n == target { fail(Found { id: n * 10 }); }
+                if n == target {
+                    fail(Found { id: n * 10 });
+                }
             }
-        } {
-            walk(10)?
-        }
+        } { walk(10)? }
     } catch {
         Found(f) => f.id,
     };
-    found                                   // => 30
+    found  // => 30
 }
 
-fn through(t: &dyn Time) -> int { t.later(5) }
+fn through(t: &dyn Time) -> int {
+    t.later(5)
+}
 
 test "an anonymous impl is a value of its trait" {
     let fixed = impl Time {
-        fn now(&self) -> int { 7 }
+        fn now(&self) -> int {
+            7
+        }
     };
-    through(&fixed)                         // => 12
+    through(&fixed)  // => 12
     ;
-    fixed.now()                             // => 7
+    fixed.now()  // => 7
 }

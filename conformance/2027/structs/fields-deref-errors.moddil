@@ -1,24 +1,26 @@
 // covers: expr.field.deref.1
 
-struct Counter { n: int }
+struct Counter {
+    n: int,
+}
 
 fn changes(a: Rc<Counter>) {
-    a.n = 2;                                    //~ E0205
+    a.n = 2;  //~ E0205
 }
 
 fn borrows(a: &Rc<Counter>) -> &mut int {
-    &mut a.n                                    //~ E0205
+    &mut a.n  //~ E0205
 }
 
 fn behind_a_borrow(b: &Box<Counter>) {
-    b.n = 1;                                    //~ E0302
+    b.n = 1;  //~ E0302
 }
 
 fn not_mut() {
     let b = Box::new(Counter { n: 0 });
-    b.n = 1;                                    //~ E0301
+    b.n = 1;  //~ E0301
 }
 
 fn no_such_field(b: Box<Counter>) -> int {
-    b.m                                         //~ E0107
+    b.m  //~ E0107
 }

@@ -8,9 +8,9 @@ test "each character with its position, by bytes on character boundaries" {
         offsets.push(p.offset());
         chars.push(c);
     }
-    offsets                                 // => [0, 1, 3, 7]
+    offsets  // => [0, 1, 3, 7]
     ;
-    chars                                   // => ['a', 'é', '😀', 'b']
+    chars  // => ['a', 'é', '😀', 'b']
 }
 
 test "a String's positions slice it" {
@@ -21,5 +21,5 @@ test "a String's positions slice it" {
             eq = p;
         }
     }
-    &t[..eq]                                // => "key"
+    &t[..eq]  // => "key"
 }

@@ -152,7 +152,9 @@ pub fn steps(start: int, n: int, step: int) -> Vec<int> {
 test "the functions, in Moddil" {
     let xs: Vec<f64> = [1.0, 2.0, 3.0, 4.0];
     assert(mean(xs.as_slice()) == 2.5);
-    let r = try { rolling_mean(xs.as_slice(), 2)? } catch { _ => Vec::new() };
+    let r = try { rolling_mean(xs.as_slice(), 2)? } catch {
+        _ => Vec::new(),
+    };
     assert(r.len() == 3 && r[0] == 1.5);
     assert(parse("123") == Some(123) && parse("1x") == None);
     let mut c = Counter::new(5);

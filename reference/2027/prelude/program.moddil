@@ -27,7 +27,7 @@ impl ExitCode {
     // The exit code `n`, by its name if it has one.
     fn new(n: int) -> ExitCode {
         match n {
-            0 => ExitCode::Ok,
+            0  => ExitCode::Ok,
             64 => ExitCode::Usage,
             65 => ExitCode::DataErr,
             66 => ExitCode::NoInput,
@@ -43,30 +43,30 @@ impl ExitCode {
             76 => ExitCode::Protocol,
             77 => ExitCode::NoPerm,
             78 => ExitCode::Config,
-            n => ExitCode::Other(n),
+            n  => ExitCode::Other(n),
         }
     }
 
     // The number the process exits with.
     fn code(&self) -> int {
         match self {
-            ExitCode::Ok => 0,
-            ExitCode::Usage => 64,
-            ExitCode::DataErr => 65,
-            ExitCode::NoInput => 66,
-            ExitCode::NoUser => 67,
-            ExitCode::NoHost => 68,
+            ExitCode::Ok          => 0,
+            ExitCode::Usage       => 64,
+            ExitCode::DataErr     => 65,
+            ExitCode::NoInput     => 66,
+            ExitCode::NoUser      => 67,
+            ExitCode::NoHost      => 68,
             ExitCode::Unavailable => 69,
-            ExitCode::Software => 70,
-            ExitCode::OsErr => 71,
-            ExitCode::OsFile => 72,
-            ExitCode::CantCreate => 73,
-            ExitCode::IoErr => 74,
-            ExitCode::TempFail => 75,
-            ExitCode::Protocol => 76,
-            ExitCode::NoPerm => 77,
-            ExitCode::Config => 78,
-            ExitCode::Other(n) => *n,
+            ExitCode::Software    => 70,
+            ExitCode::OsErr       => 71,
+            ExitCode::OsFile      => 72,
+            ExitCode::CantCreate  => 73,
+            ExitCode::IoErr       => 74,
+            ExitCode::TempFail    => 75,
+            ExitCode::Protocol    => 76,
+            ExitCode::NoPerm      => 77,
+            ExitCode::Config      => 78,
+            ExitCode::Other(n)    => *n,
         }
     }
 }

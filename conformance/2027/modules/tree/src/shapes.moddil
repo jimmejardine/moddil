@@ -1,23 +1,31 @@
-pub(mod) enum Shape { Square(int) }
+pub(mod) enum Shape {
+    Square(int),
+}
 
 pub(mod) fn area(s: Shape) -> int {
-    match s { Shape::Square(n) => n * n }
+    match s {
+        Shape::Square(n) => n * n,
+    }
 }
 
 // A re-export: `circle`'s item, named through this module too.
 pub(mod) use circle::one as single;
 
 pub(mod) fn perimeter(s: Shape) -> int {
-    match s { Shape::Square(n) => mod::double(mod::double(n)) }
+    match s {
+        Shape::Square(n) => mod::double(mod::double(n)),
+    }
 }
 
 // A private item is named only by its own module.
 fn side(s: Shape) -> int {
-    match s { Shape::Square(n) => n }
+    match s {
+        Shape::Square(n) => n,
+    }
 }
 
 test "a module's tests use its private items" {
-    side(Shape::Square(5))                  // => 5
+    side(Shape::Square(5))  // => 5
     ;
-    self::side(Shape::Square(6))            // => 6
+    self::side(Shape::Square(6))  // => 6
 }

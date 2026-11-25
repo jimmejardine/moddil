@@ -35,10 +35,16 @@ pub enum Json {
 
 /// A member of an object: its name and its value.
 #[derive(Clone, Debug)]
-pub struct Member { name: String, value: Json }
+pub struct Member {
+    name: String,
+    value: Json,
+}
 
 /// Writes JSON text.
-pub struct Encoder { text: String, fresh: bool }
+pub struct Encoder {
+    text: String,
+    fresh: bool,
+}
 
 impl Encoder {
     /// Starts an object.
@@ -98,7 +104,9 @@ impl Encoder {
 }
 
 /// Reads a JSON value: the value a type decodes itself from.
-pub struct Decoder { value: Json }
+pub struct Decoder {
+    value: Json,
+}
 
 impl Decoder {
     /// The member `name` of the object, decoded as a `T`.
@@ -121,7 +129,7 @@ impl Decoder {
     pub fn text(&self) -> String with fail(DecodeError) {
         match &self.value {
             Json::Text(s) => s.clone(),
-            _ => fail(DecodeError::new(String::from_str("expected a string"))),
+            _             => fail(DecodeError::new(String::from_str("expected a string"))),
         }
     }
 
@@ -129,7 +137,7 @@ impl Decoder {
     pub fn number(&self) -> int with fail(DecodeError) {
         match &self.value {
             Json::Number(n) => *n,
-            _ => fail(DecodeError::new(String::from_str("expected a number"))),
+            _               => fail(DecodeError::new(String::from_str("expected a number"))),
         }
     }
 
@@ -137,13 +145,16 @@ impl Decoder {
     pub fn boolean(&self) -> bool with fail(DecodeError) {
         match &self.value {
             Json::Bool(b) => *b,
-            _ => fail(DecodeError::new(String::from_str("expected `true` or `false`"))),
+            _             => fail(DecodeError::new(String::from_str("expected `true` or `false`"))),
         }
     }
 }
 
 /// Parses JSON text: `at` is the next byte's offset.
-struct Parser { text: String, at: int }
+struct Parser {
+    text: String,
+    at: int,
+}
 
 impl Parser {
     fn error(&self, what: &str) -> DecodeError {
@@ -153,11 +164,7 @@ impl Parser {
     /// The next byte, if there is one.
     fn peek(&self) -> Option<u8> {
         let text: &str = &self.text;
-        if self.at < text.len() {
-            Some(text.byte_at(self.at))
-        } else {
-            None
-        }
+        if self.at < text.len() { Some(text.byte_at(self.at)) } else { None }
     }
 
     /// Skips white space.
@@ -165,7 +172,7 @@ impl Parser {
         loop {
             match self.peek() {
                 Some(b) if b == 32 || b == 9 || b == 10 || b == 13 => self.at += 1,
-                _ => break,
+                _                                                  => break,
             }
         }
     }
@@ -201,15 +208,15 @@ impl Parser {
     fn value(&mut self) -> Json with fail(DecodeError) {
         self.space();
         match self.peek() {
-            None => fail(self.error("expected a value")),
-            Some(b) if b == 123 => self.object()?,
-            Some(b) if b == 91 => self.list()?,
-            Some(b) if b == 34 => Json::Text(self.string()?),
+            None                                       => fail(self.error("expected a value")),
+            Some(b) if b == 123                        => self.object()?,
+            Some(b) if b == 91                         => self.list()?,
+            Some(b) if b == 34                         => Json::Text(self.string()?),
             Some(b) if b == 45 || (b >= 48 && b <= 57) => Json::Number(self.number()?),
-            Some(_) if self.word("true") => Json::Bool(true),
-            Some(_) if self.word("false") => Json::Bool(false),
-            Some(_) if self.word("null") => Json::Null,
-            Some(_) => fail(self.error("expected a value")),
+            Some(_) if self.word("true")               => Json::Bool(true),
+            Some(_) if self.word("false")              => Json::Bool(false),
+            Some(_) if self.word("null")               => Json::Null,
+            Some(_)                                    => fail(self.error("expected a value")),
         }
     }
 

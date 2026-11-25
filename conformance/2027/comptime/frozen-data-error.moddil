@@ -1,4 +1,4 @@
 // covers: comptime.static.2
 
 // A closure is code, not data: a const cannot hold one.
-const ADD: Box<dyn Fn(int) -> int> = Box::new(|x: int| x + 1);    //~ E1008
+const ADD: Box<dyn Fn(int) -> int> = Box::new(|x: int| x + 1);  //~ E1008

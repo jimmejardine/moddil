@@ -1,7 +1,9 @@
 // covers: attr.around.info.1, attr.around.args.1
 
 #[derive(Debug, Clone, PartialEq)]
-enum Late { Yes }
+enum Late {
+    Yes,
+}
 
 // What the wrapper is told: the function's attributes and effects, as written, after its result.
 fn told<A, E>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> String with E) -> String with E {
@@ -24,9 +26,11 @@ fn checked(n: int) -> String with fail(Late) {
 }
 
 test "FnInfo gives a function's attributes and effects" {
-    plain(1)                                // => "2 [\"track_caller\", \"around(told)\"] []"
+    plain(1)  // => "2 [\"track_caller\", \"around(told)\"] []"
     ;
-    try { checked(3)? } catch { _ => "late".to_string() }   // => "3 [\"around(told)\"] [\"fail(Late)\"]"
+    try { checked(3)? } catch {
+        _ => "late".to_string(),
+    }  // => "3 [\"around(told)\"] [\"fail(Late)\"]"
 }
 
 // `f::Args` names the arguments' struct, as a type.
@@ -48,5 +52,5 @@ fn made(args: counted::Args) -> counted::Args {
 }
 
 test "f::Args is a type in code" {
-    counted(5, true)                        // => 5
+    counted(5, true)  // => 5
 }

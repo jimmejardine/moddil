@@ -49,15 +49,6 @@ impl Window {
         let mut words = [0; 8];
         sys::frame(&mut words);
         let micros = words[0].to::<f32>() ?! "a frame is far shorter than 2^24 microseconds";
-        Frame {
-            dt: micros / 1000000.0,
-            width: words[1],
-            height: words[2],
-            keys: words[3],
-            mouse_x: words[4],
-            mouse_y: words[5],
-            wheel: words[6],
-            stop: words[7] != 0,
-        }
+        Frame { dt: micros / 1000000.0, width: words[1], height: words[2], keys: words[3], mouse_x: words[4], mouse_y: words[5], wheel: words[6], stop: words[7] != 0 }
     }
 }

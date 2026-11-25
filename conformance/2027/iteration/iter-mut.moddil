@@ -8,7 +8,7 @@ test "each element of a Vec, an array and a slice, borrowed with &mut" {
     for x in v.iter_mut() {
         *x += 1;
     }
-    v                                       // => [11, 21, 31]
+    v  // => [11, 21, 31]
     ;
     let mut a: [int; 3] = [1, 2, 3];
     for x in &mut a {
@@ -18,7 +18,7 @@ test "each element of a Vec, an array and a slice, borrowed with &mut" {
     for x in s {
         *x = 0;
     }
-    a                                       // => [-1, 0, 0]
+    a  // => [-1, 0, 0]
 }
 
 test "the borrows are of different elements, so they live together" {
@@ -32,7 +32,7 @@ test "the borrows are of different elements, so they live together" {
         }
         _ => {}
     }
-    v                                       // => [5, 6, 3]
+    v  // => [5, 6, 3]
 }
 
 test "elements that own memory" {
@@ -40,5 +40,5 @@ test "elements that own memory" {
     for n in &mut names {
         n.push_str("!");
     }
-    names                                   // => ["a!", "b!"]
+    names  // => ["a!", "b!"]
 }

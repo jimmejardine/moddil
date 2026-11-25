@@ -5,15 +5,15 @@ test "a borrow ends at its last use" {
     let r = &mut x;
     *r += 1;
     let y = x;
-    y                           // => 2
+    y  // => 2
 }
 
 test "any number of shared borrows" {
     let mut v = 10;
     let a = &v;
     let b = &v;
-    *a + *b                     // => 20
+    *a + *b  // => 20
     ;
     v = 11;
-    v                           // => 11
+    v  // => 11
 }

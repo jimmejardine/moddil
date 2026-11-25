@@ -3,62 +3,70 @@
 test "to: checked" {
     let a: int = 250;
     let b = a.to::<u8>() ?! "it fits";
-    b                                       // => 250
+    b  // => 250
     ;
-    let r = try { a.to::<i8>()? } catch { RangeError => 0 };
-    r                                       // => 0
+    let r = try { a.to::<i8>()? } catch {
+        RangeError => 0,
+    };
+    r  // => 0
     ;
     let f = a.to::<f32>() ?! "exact";
-    f                                       // => 250.0
+    f  // => 250.0
     ;
     let h: f64 = 2.5;
-    let w = try { h.to::<int>()? } catch { RangeError => -1 };
-    w                                       // => -1
+    let w = try { h.to::<int>()? } catch {
+        RangeError => -1,
+    };
+    w  // => -1
     ;
     let whole: f64 = 3.0;
-    whole.to::<int>() ?! "a whole number"   // => 3
+    whole.to::<int>() ?! "a whole number"  // => 3
 }
 
 test "truncate, wrap and saturate" {
     let a: int = 300;
-    a.truncate::<u8>()                      // => 44
+    a.truncate::<u8>()  // => 44
     ;
     let b: u8 = 255;
-    b.wrap::<i8>()                          // => -1
+    b.wrap::<i8>()  // => -1
     ;
-    a.saturate::<u8>()                      // => 255
+    a.saturate::<u8>()  // => 255
     ;
     let c: int = -5;
-    c.saturate::<u16>()                     // => 0
+    c.saturate::<u16>()  // => 0
 }
 
 test "round, by its mode" {
     let a: f64 = 2.5;
-    a.round::<int>(Round::NearestEven) ?! "fits"   // => 2
+    a.round::<int>(Round::NearestEven) ?! "fits"  // => 2
     ;
-    a.round::<int>(Round::NearestAway) ?! "fits"   // => 3
+    a.round::<int>(Round::NearestAway) ?! "fits"  // => 3
     ;
     let b: f64 = -2.5;
-    b.round::<int>(Round::NearestEven) ?! "fits"   // => -2
+    b.round::<int>(Round::NearestEven) ?! "fits"  // => -2
     ;
-    b.round::<int>(Round::NearestAway) ?! "fits"   // => -3
+    b.round::<int>(Round::NearestAway) ?! "fits"  // => -3
     ;
     let c: f32 = 1.7;
-    c.round::<u8>(Round::Down) ?! "fits"           // => 1
+    c.round::<u8>(Round::Down) ?! "fits"  // => 1
     ;
-    c.round::<u8>(Round::Up) ?! "fits"             // => 2
+    c.round::<u8>(Round::Up) ?! "fits"  // => 2
     ;
     let d: f64 = -1.7;
-    d.round::<i8>(Round::TowardZero) ?! "fits"     // => -1
+    d.round::<i8>(Round::TowardZero) ?! "fits"  // => -1
 }
 
 test "round fails out of range, and on NaN" {
     let big: f64 = 300.0;
-    let r = try { big.round::<u8>(Round::Down)? } catch { RangeError => 0 };
-    r                                              // => 0
+    let r = try { big.round::<u8>(Round::Down)? } catch {
+        RangeError => 0,
+    };
+    r  // => 0
     ;
     let z: f64 = 0.0;
     let n = z / z;
-    let s = try { n.round::<int>(Round::Down)? } catch { RangeError => -1 };
-    s                                              // => -1
+    let s = try { n.round::<int>(Round::Down)? } catch {
+        RangeError => -1,
+    };
+    s  // => -1
 }

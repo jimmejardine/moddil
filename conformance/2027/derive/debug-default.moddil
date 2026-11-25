@@ -1,7 +1,10 @@
 // covers: attr.derive.debug.1, attr.derive.default.1, expr.fmt.debug.1
 
 #[derive(Debug, Default)]
-struct Point { x: int, y: int }
+struct Point {
+    x: int,
+    y: int,
+}
 
 #[derive(Debug)]
 struct Pair(int, bool);
@@ -22,29 +25,29 @@ struct Config {
 }
 
 fn fresh() -> Config {
-    Default::default()
+    Default::default ()
 }
 
 test "Debug writes a value as source does" {
     let p = Point { x: 1, y: -2 };
-    fmt"{p:?}"                              // => "Point { x: 1, y: -2 }"
+    fmt"{p:?}"  // => "Point { x: 1, y: -2 }"
     ;
-    fmt"{Pair(3, true):?}"                  // => "Pair(3, true)"
+    fmt"{Pair(3, true):?}"  // => "Pair(3, true)"
     ;
-    fmt"{Mode::On(4):?} {Mode::Off:?}"      // => "Mode::On(4) Mode::Off"
+    fmt"{Mode::On(4):?} {Mode::Off:?}"  // => "Mode::On(4) Mode::Off"
     ;
     let v: Vec<int> = [1, 2];
-    fmt"{v:?} {Some('x'):?}"                // => "[1, 2] Some('x')"
+    fmt"{v:?} {Some('x'):?}"  // => "[1, 2] Some('x')"
     ;
     let mut s = String::new();
     s.push_str("a\"b");
-    fmt"{s:?} and {s}"                      // => "\"a\\\"b\" and a\"b"
+    fmt"{s:?} and {s}"  // => "\"a\\\"b\" and a\"b"
 }
 
 test "Default gives each field its default" {
-    let p: Point = Default::default();
-    p.x + p.y                               // => 0
+    let p: Point = Default::default ();
+    p.x + p.y  // => 0
     ;
     let c = fresh();
-    fmt"{c:?}"                              // => "Config { name: \"\", tags: [], mode: Mode::Off, limit: None }"
+    fmt"{c:?}"  // => "Config { name: \"\", tags: [], mode: Mode::Off, limit: None }"
 }

@@ -43,9 +43,9 @@ impl<K: Ord, V> TreeMap<K, V> {
         let mut t = self.root;
         while t != NIL {
             match key.cmp(&self.nodes[t].key) {
-                Ordering::Less => t = self.nodes[t].left,
+                Ordering::Less    => t = self.nodes[t].left,
                 Ordering::Greater => t = self.nodes[t].right,
-                Ordering::Equal => return t,
+                Ordering::Equal   => return t,
             }
         }
         NIL
@@ -124,7 +124,7 @@ impl<K: Ord, V> TreeMap<K, V> {
         while t != NIL {
             match self.nodes[t].key.cmp(lo) {
                 Ordering::Less => t = self.nodes[t].right,
-                _ => {
+                _              => {
                     it.stack.push(t);
                     t = self.nodes[t].left;
                 }
@@ -306,7 +306,7 @@ impl<K: Ord, V> TreeMap<K, V> {
                 loop {
                     let next = match self.nodes[last].key.cmp(&self.nodes[t].key) {
                         Ordering::Less => self.nodes[t].left,
-                        _ => self.nodes[t].right,
+                        _              => self.nodes[t].right,
                     };
                     if next == last {
                         if self.nodes[t].left == last {
@@ -349,12 +349,12 @@ impl<K: Ord, V> Iterator for TreeIter<K, V> {
     fn next(&mut self) -> Option<(&K, &V)> {
         let t = match self.stack.pop() {
             Some(t) => t,
-            None => return None,
+            None    => return None,
         };
         if let Some(until) = self.until {
             match self.map.nodes[t].key.cmp(until) {
                 Ordering::Less => {}
-                _ => {
+                _              => {
                     self.stack.clear();
                     return None;
                 }
@@ -403,7 +403,9 @@ impl<K: Ord, V> FromArrayLiteral<(K, V)> for TreeMap<K, V> {
         m
     }
 
-    fn from_repeat(x: (K, V), n: int) -> TreeMap<K, V> where (K, V): Clone {
+    fn from_repeat(x: (K, V), n: int) -> TreeMap<K, V>
+        where (K, V): Clone
+    {
         let mut m = TreeMap::new();
         if n > 0 {
             let (k, v) = x;
@@ -472,14 +474,14 @@ impl<T: Ord> TreeSet<T> {
     pub fn first(&self) -> Option<&T> {
         match self.map.first() {
             Some((x, _)) => Some(x),
-            None => None,
+            None         => None,
         }
     }
 
     pub fn last(&self) -> Option<&T> {
         match self.map.last() {
             Some((x, _)) => Some(x),
-            None => None,
+            None         => None,
         }
     }
 
@@ -504,7 +506,7 @@ impl<T: Ord> Iterator for TreeSetIter<T> {
     fn next(&mut self) -> Option<&T> {
         match self.inner.next() {
             Some((x, _)) => Some(x),
-            None => None,
+            None         => None,
         }
     }
 }
@@ -544,7 +546,9 @@ impl<T: Ord> FromArrayLiteral<T> for TreeSet<T> {
         s
     }
 
-    fn from_repeat(x: T, n: int) -> TreeSet<T> where T: Clone {
+    fn from_repeat(x: T, n: int) -> TreeSet<T>
+        where T: Clone
+    {
         let mut s = TreeSet::new();
         if n > 0 {
             s.insert(x);

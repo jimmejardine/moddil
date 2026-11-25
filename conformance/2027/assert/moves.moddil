@@ -2,17 +2,25 @@
 // A part of the condition that is moved away (to a function taking it by value) is given away
 // once: it is not dropped again after the `assert`, holding or failing.
 
-fn has(v: Vec<int>, n: int) -> bool { v.len() == n }
+fn has(v: Vec<int>, n: int) -> bool {
+    v.len() == n
+}
 
-struct Pair { a: Vec<int> }
+struct Pair {
+    a: Vec<int>,
+}
 
 impl Sub for Pair {
     type Output = Pair;
-    fn sub(self, rhs: Pair) -> Pair { Pair { a: rhs.a } }
+    fn sub(self, rhs: Pair) -> Pair {
+        Pair { a: rhs.a }
+    }
 }
 
 impl Pair {
-    fn size(&self) -> int { self.a.len() }
+    fn size(&self) -> int {
+        self.a.len()
+    }
 }
 
 test "a value moved into a call in an assert" {
@@ -28,5 +36,5 @@ test "values moved into an operator in an assert" {
 
 test "a failing assert that moved a value traps" {
     let v: Vec<int> = [1, 2, 3];
-    assert(has(v, 4));                  //~ trap
+    assert(has(v, 4));  //~ trap
 }

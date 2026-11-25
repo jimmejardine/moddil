@@ -3,9 +3,9 @@
 const ISOLATED: bool = !false;
 
 fn chosen(x: bool) -> int with spawn {
-    scope(|s| s.spawn(|| 1).join(), isolate: x)      //~ E0501
+    scope(|s| s.spawn (|| 1).join(), isolate: x)  //~ E0501
 }
 
 fn known_true() -> int with spawn {
-    scope(|s| s.spawn(|| 1).join(), isolate: ISOLATED)   //~ E0501
+    scope(|s| s.spawn (|| 1).join(), isolate: ISOLATED)  //~ E0501
 }

@@ -5,7 +5,7 @@ use mod::geometry::{self as g};
 
 test "self in a group imports the module" {
     let s = Square { side: 3 };
-    geometry::area(&s)                      // => 9
+    geometry::area(&s)  // => 9
     ;
-    g::area(&s)                             // => 9
+    g::area(&s)  // => 9
 }

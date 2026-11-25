@@ -28,11 +28,7 @@ impl Node {
 
 impl Sim {
     pub fn new(seed: int) -> Sim {
-        Sim {
-            seed,
-            nodes: UnsafeCell::new(0),
-            net: SimNet { listening: UnsafeCell::new(Vec::new()), seed },
-        }
+        Sim { seed, nodes: UnsafeCell::new(0), net: SimNet { listening: UnsafeCell::new(Vec::new()), seed } }
     }
 
     /// A new node.
@@ -80,11 +76,7 @@ impl Endpoint {
         let (conns, conn_rx) = channel(16);
         let all = self.net.listening.get();
         unsafe("one task runs at a time, and nothing else borrows the listeners") {
-            for (a, p, _, _) in &*all {
-                if *a == self.addr && *p == port {
-                    fail(NetError::new("the port is taken"))
-                }
-            }
+            for (a, p, _, _) in &*all { if *a == self.addr && *p == port { fail(NetError::new("the port is taken")) } }
             (*all).push((self.addr.clone(), port, ids, conns));
         }
         Listener::simulated(id_rx, conn_rx)

@@ -54,17 +54,15 @@ impl Rational {
     }
 
     pub fn plus(&self, other: &Rational) -> Rational {
-        Rational::new(
-            self.num.times(&other.den).plus(&other.num.times(&self.den)),
-            self.den.times(&other.den),
-        )
+        Rational::new(self.num
+            .times(&other.den)
+            .plus(&other.num.times(&self.den)), self.den.times(&other.den))
     }
 
     pub fn minus(&self, other: &Rational) -> Rational {
-        Rational::new(
-            self.num.times(&other.den).minus(&other.num.times(&self.den)),
-            self.den.times(&other.den),
-        )
+        Rational::new(self.num
+            .times(&other.den)
+            .minus(&other.num.times(&self.den)), self.den.times(&other.den))
     }
 
     pub fn times(&self, other: &Rational) -> Rational {
@@ -136,7 +134,9 @@ impl PartialOrd for Rational {
 impl Ord for Rational {
     // The denominators are positive, so cross-multiplying keeps the order.
     fn cmp(&self, other: &Rational) -> Ordering {
-        self.num.times(&other.den).cmp(&other.num.times(&self.den))
+        self.num
+            .times(&other.den)
+            .cmp(&other.num.times(&self.den))
     }
 }
 

@@ -15,7 +15,7 @@ impl<T> Option<T> {
     fn is_some(&self) -> bool {
         match self {
             Some(_) => true,
-            None => false,
+            None    => false,
         }
     }
 
@@ -26,7 +26,7 @@ impl<T> Option<T> {
     fn unwrap_or(self, fallback: T) -> T {
         match self {
             Some(x) => x,
-            None => fallback,
+            None    => fallback,
         }
     }
 
@@ -34,7 +34,7 @@ impl<T> Option<T> {
     fn map<B, F: FnOnce(T) -> B>(self, f: F) -> Option<B> {
         match self {
             Some(x) => Some(f(x)),
-            None => None,
+            None    => None,
         }
     }
 }
@@ -50,7 +50,7 @@ enum Result<T, E> {
 impl<T, E> Result<T, E> {
     fn is_ok(&self) -> bool {
         match self {
-            Ok(_) => true,
+            Ok(_)  => true,
             Err(_) => false,
         }
     }
@@ -92,7 +92,7 @@ trait Eq: PartialEq {}
 // Borrows are equal when what they point to is (`borrow.type.1`): what a map keyed by borrows
 // compares. `==` on borrows is still an error (E0205): it would hide which is meant.
 impl<T: PartialEq> PartialEq for &T {
-    fn eq(&self, other: &&T) -> bool {
+    fn eq(&self, other: & &T) -> bool {
         (**self).eq(*other)
     }
 }
@@ -106,28 +106,28 @@ trait PartialOrd: PartialEq {
     fn lt(&self, other: &Self) -> bool {
         match self.partial_cmp(other) {
             Some(Ordering::Less) => true,
-            _ => false,
+            _                    => false,
         }
     }
 
     fn le(&self, other: &Self) -> bool {
         match self.partial_cmp(other) {
             Some(Ordering::Less) | Some(Ordering::Equal) => true,
-            _ => false,
+            _                                            => false,
         }
     }
 
     fn gt(&self, other: &Self) -> bool {
         match self.partial_cmp(other) {
             Some(Ordering::Greater) => true,
-            _ => false,
+            _                       => false,
         }
     }
 
     fn ge(&self, other: &Self) -> bool {
         match self.partial_cmp(other) {
             Some(Ordering::Greater) | Some(Ordering::Equal) => true,
-            _ => false,
+            _                                               => false,
         }
     }
 }
@@ -201,4 +201,3 @@ trait FnMut<Args>: FnOnce<Args> {
 trait Fn<Args>: FnMut<Args> {
     fn call(&self, args: Args) -> Self::Output with fail(Self::Fails);
 }
-

@@ -1,0 +1,13 @@
+---
+source: crates/fmt/tests/rules.rs
+expression: "fmt(\"fn f() -> int { g(1, // one\\n2, 3) }\\nfn g(a: int, b: int, c: int) -> int { a + b + c }\")"
+---
+fn f() -> int {
+    g(
+        1,  // one
+        2, 3,
+    )
+}
+fn g(a: int, b: int, c: int) -> int {
+    a + b + c
+}

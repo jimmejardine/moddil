@@ -1,22 +1,25 @@
 // covers: rc.clone.1
 
 #[derive(Clone)]
-struct Doc { title: String, body: Rc<String> }
+struct Doc {
+    title: String,
+    body: Rc<String>,
+}
 
 test "a derived clone copies what it owns and shares its rcs" {
     let a = Doc { title: "a".to_string(), body: "the text".to_string().to_rc() };
     let mut b = a.clone();
     b.title.push_str("b");
-    Rc::ptr_eq(&a.body, &b.body)                // => true
+    Rc::ptr_eq(&a.body, &b.body)  // => true
     ;
-    Rc::strong_count(&a.body)                   // => 2
+    Rc::strong_count(&a.body)  // => 2
     ;
-    (a.title, b.title)                          // => ("a", "ab")
+    (a.title, b.title)  // => ("a", "ab")
 }
 
 test "a weak handle is cloned by a share too" {
     let a = 1.to_rc();
     let ws: Vec<Weak<int>> = [a.weak()];
     let more = ws.clone();
-    Rc::weak_count(&a) + more.len()             // => 3
+    Rc::weak_count(&a) + more.len()  // => 3
 }

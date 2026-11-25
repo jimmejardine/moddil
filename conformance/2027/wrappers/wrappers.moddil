@@ -1,7 +1,9 @@
 // covers: attr.around.1, attr.around.args.1, attr.around.info.1, attr.around.order.1, attr.around.body.1, attr.around.contracts.1, attr.around.limits.1
 
 #[derive(Debug, Clone, PartialEq)]
-enum Denied { No }
+enum Denied {
+    No,
+}
 
 // Describes the call: the function's path, its arguments, and what it returned.
 fn describe<A: Debug>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> String) -> String {
@@ -22,9 +24,7 @@ fn twice<A: Clone>(f: &FnInfo, args: A, inner: impl Fn(A) -> int) -> int {
 
 // Refuses unless `open`.
 fn gate<A, R>(open: bool, f: &FnInfo, args: A, inner: impl FnOnce(A) -> R) -> R with fail(Denied) {
-    if !open {
-        fail(Denied::No)
-    }
+    if !open { fail(Denied::No) }
     inner(args)
 }
 
@@ -48,7 +48,9 @@ fn params<A>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> String) -> String {
 }
 
 // Reads context data, which the wrapped function then needs too.
-struct Role { admin: bool }
+struct Role {
+    admin: bool,
+}
 
 fn admin_only<A>(f: &FnInfo, args: A, inner: impl FnOnce(A) -> int) -> int with role: &Role {
     if role.admin { inner(args) } else { 0 }
@@ -123,9 +125,7 @@ fn checked(x: int) -> int
 
 #[around(plain)]
 fn denies(x: int) -> int with fail(Denied) {
-    if x < 0 {
-        fail(Denied::No)
-    }
+    if x < 0 { fail(Denied::No) }
     x
 }
 
@@ -136,59 +136,58 @@ fn none_early(x: int) -> Option<int> {
 }
 
 test "a wrapper sees the description and the arguments" {
-    greet(fmt"bob", 3)                      // => "greet greet::Args { name: \"bob\", n: 3 } = hello bob 3"
+    greet(fmt"bob", 3)  // => "greet greet::Args { name: \"bob\", n: 3 } = hello bob 3"
     ;
-    three(1, &[true], [])                   // => "a: int; b: &[bool]; c: Vec<String>; "
+    three(1, &[true], [])  // => "a: int; b: &[bool]; c: Vec<String>; "
 }
 
 test "a wrapper calls the body once, twice or never" {
-    add(1, 2)                               // => 6
+    add(1, 2)  // => 6
     ;
     let r = try { closed()? };
-    r                                       // => Err(Denied::No)
+    r  // => Err(Denied::No)
     ;
     let s = try { opened(4)? };
-    s                                       // => Ok(4)
+    s  // => Ok(4)
 }
 
 test "a wrapper's effects are the function's" {
     with Role = (Role { admin: true }) {
-        secret(4)                           // => 8
-    }
-    ;
+        secret(4)  // => 8
+    };
     with Role = (Role { admin: false }) {
-        secret(4)                           // => 0
+        secret(4)  // => 0
     }
 }
 
 test "wrappers apply in order, the first outermost" {
-    ordered(2)                              // => 21
+    ordered(2)  // => 21
 }
 
 test "the body as written" {
-    early(5)                                // => 7
+    early(5)  // => 7
     ;
-    early(-1)                               // => -1
+    early(-1)  // => -1
     ;
-    borrowed(&[1, 2, 3])                    // => 3
+    borrowed(&[1, 2, 3])  // => 3
     ;
     let mut v: Vec<int> = [];
     bump(&mut v);
     bump(&mut v);
-    v.len()                                 // => 2
+    v.len()  // => 2
     ;
-    id(true)                                // => true
+    id(true)  // => true
     ;
     let e = try { denies(-1)? };
-    e                                       // => Err(Denied::No)
+    e  // => Err(Denied::No)
     ;
-    none_early(0)                           // => None
+    none_early(0)  // => None
     ;
-    none_early(2)                           // => Some(4)
+    none_early(2)  // => Some(4)
 }
 
 test "contracts are the function's, around its wrappers" {
-    checked(2)                              // => 3
+    checked(2)  // => 3
     ;
-    checked(0);                             //~ trap
+    checked(0);  //~ trap
 }

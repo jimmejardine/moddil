@@ -1,0 +1,14 @@
+---
+source: crates/fmt/tests/rules.rs
+expression: "fmt(\"fn f(c: bool) -> int { let a = if c { 1 } else { 2 }; let b = if c { let x = 1; x } \\\n         else { 2 }; a + b }\")"
+---
+fn f(c: bool) -> int {
+    let a = if c { 1 } else { 2 };
+    let b = if c {
+        let x = 1;
+        x
+    } else {
+        2
+    };
+    a + b
+}

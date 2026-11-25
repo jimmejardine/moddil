@@ -6,21 +6,21 @@ fn risky() -> int with fail(Oops) {
     fail(Oops {})
 }
 
-fn twice() with suspend, suspend {}         //~ E0606
+fn twice() with suspend, suspend {}  //~ E0606
 
-fn named() with s: suspend {}               //~ E0601
+fn named() with s: suspend {}  //~ E0601
 
 pub fn no_spawn() -> int {
-    scope(|s| s.spawn(|| 1).join())         //~ E0603 E0603 E0603
+    scope(|s| s.spawn (|| 1).join())  //~ E0603 E0603 E0603
 }
 
 pub fn no_suspend() -> int with spawn {
-    scope(|s| s.spawn(|| 1).join())         //~ E0603
+    scope(|s| s.spawn (|| 1).join())  //~ E0603
 }
 
 fn unmarked() -> int {
     scope(|s| {
-        s.spawn(|| risky()?);               //~ E0501
+        s.spawn (|| risky()?);  //~ E0501
         0
     })
 }

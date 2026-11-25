@@ -1,6 +1,8 @@
 // covers: expr.for.3, iter.fails.1
 
-struct Odd { n: int }
+struct Odd {
+    n: int,
+}
 
 fn even(x: int) -> int with fail(Odd) {
     if x % 2 == 1 { fail(Odd { n: x }) }
@@ -33,7 +35,7 @@ fn sum_evens(n: int) -> int with fail(Odd) {
 }
 
 test "for marks a failing iterator's next with ?" {
-    sum_evens(4)?                           // => 12
+    sum_evens(4)?  // => 12
 }
 
 test "an error from next leaves the loop" {
@@ -46,9 +48,9 @@ test "an error from next leaves the loop" {
     } catch {
         Odd { n } => n,
     };
-    r                                       // => 1
+    r  // => 1
     ;
-    seen                                    // => 1
+    seen  // => 1
 }
 
 test "the iterator is evaluated once, unmarked" {
@@ -61,22 +63,26 @@ test "the iterator is evaluated once, unmarked" {
     } catch {
         Odd { n } => n * 10,
     };
-    r                                       // => 10
+    r  // => 10
     ;
-    seen                                    // => [2]
+    seen  // => [2]
 }
 
 test "break and continue work in a marked loop" {
     let r = try {
         let mut sum = 0;
         for x in (0..10).map(|x| even(x * 2)?)? {
-            if x == 2 { continue; }
-            if x > 6 { break; }
+            if x == 2 {
+                continue;
+            }
+            if x > 6 {
+                break;
+            }
             sum += x;
         }
         sum
     } catch {
         Odd { n } => -n,
     };
-    r                                       // => 10
+    r  // => 10
 }

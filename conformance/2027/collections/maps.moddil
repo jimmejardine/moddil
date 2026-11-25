@@ -3,10 +3,16 @@
 use core::collections::{HashMap, HashSet, Map, Set, hash_of};
 
 #[derive(PartialEq, Eq, Hash)]
-enum Key { A(int), B }
+enum Key {
+    A(int),
+    B,
+}
 
 #[derive(PartialEq, Eq, Hash)]
-struct Point { x: int, y: int }
+struct Point {
+    x: int,
+    y: int,
+}
 
 fn total(m: &HashMap<int, int>) -> int {
     let mut t = 0;
@@ -25,7 +31,9 @@ fn has<S: Set<int>>(s: &S, x: int) -> bool {
 }
 
 // A hash of one's own: what it writes to the hasher is what it hashes.
-struct Even { n: int }
+struct Even {
+    n: int,
+}
 impl Hash for Even {
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_int(self.n % 2);
@@ -34,24 +42,24 @@ impl Hash for Even {
 
 test "inserting and finding" {
     let mut m = HashMap::new();
-    m.is_empty()                            // => true
+    m.is_empty()  // => true
     ;
-    m.insert(1, 10)                         // => None
+    m.insert(1, 10)  // => None
     ;
     m.insert(2, 20);
-    m.insert(1, 11)                         // => Some(10)
+    m.insert(1, 11)  // => Some(10)
     ;
-    m.get(&1)                               // => Some(&11)
+    m.get(&1)  // => Some(&11)
     ;
-    m.get(&3)                               // => None
+    m.get(&3)  // => None
     ;
-    m.contains_key(&2)                      // => true
+    m.contains_key(&2)  // => true
     ;
-    m.len()                                 // => 2
+    m.len()  // => 2
     ;
-    total(&m)                               // => 51
+    total(&m)  // => 51
     ;
-    size(&m)                                // => 2
+    size(&m)  // => 2
 }
 
 test "changing and removing" {
@@ -59,15 +67,15 @@ test "changing and removing" {
     m.insert(7, 1);
     match m.get_mut(&7) {
         Some(v) => *v += 1,
-        None => {}
+        None    => {}
     }
-    m.get(&7)                               // => Some(&2)
+    m.get(&7)  // => Some(&2)
     ;
-    m.remove(&7)                            // => Some(2)
+    m.remove(&7)  // => Some(2)
     ;
-    m.remove(&7)                            // => None
+    m.remove(&7)  // => None
     ;
-    m.len()                                 // => 0
+    m.len()  // => 0
 }
 
 test "it grows" {
@@ -75,32 +83,32 @@ test "it grows" {
     for i in 0..100 {
         m.insert(i, i * i);
     }
-    m.len()                                 // => 100
+    m.len()  // => 100
     ;
-    m.get(&99)                              // => Some(&9801)
+    m.get(&99)  // => Some(&9801)
     ;
     let mut t = 0;
     for (_, v) in &m {
         t += *v;
     }
-    t                                       // => 328350
+    t  // => 328350
 }
 
 test "keys of one's own" {
     let mut s = HashSet::new();
-    s.insert(Key::A(1))                     // => true
+    s.insert(Key::A(1))  // => true
     ;
-    s.insert(Key::A(1))                     // => false
+    s.insert(Key::A(1))  // => false
     ;
-    s.insert(Key::B)                        // => true
+    s.insert(Key::B)  // => true
     ;
-    s.contains(&Key::A(2))                  // => false
+    s.contains(&Key::A(2))  // => false
     ;
-    s.len()                                 // => 2
+    s.len()  // => 2
     ;
     let mut p = HashMap::new();
     p.insert(Point { x: 1, y: 2 }, "a");
-    p.get(&Point { x: 1, y: 2 })            // => Some(&"a")
+    p.get(&Point { x: 1, y: 2 })  // => Some(&"a")
 }
 
 test "text keys" {
@@ -108,23 +116,23 @@ test "text keys" {
     let mut k = String::new();
     k.push_str("ada");
     m.insert(k.clone(), 36);
-    m.get(&k)                               // => Some(&36)
+    m.get(&k)  // => Some(&36)
 }
 
 test "literals" {
     let m: HashMap<int, bool> = [(1, true), (2, false), (1, false)];
-    m.len()                                 // => 2
+    m.len()  // => 2
     ;
-    m.get(&1)                               // => Some(&false)
+    m.get(&1)  // => Some(&false)
     ;
     let s: HashSet<int> = [3, 1, 3];
-    s.len()                                 // => 2
+    s.len()  // => 2
 }
 
 test "the hash is the same on every run" {
-    hash_of(&0) == hash_of(&0)              // => true
+    hash_of(&0) == hash_of(&0)  // => true
     ;
-    hash_of(&1) == hash_of(&2)              // => false
+    hash_of(&1) == hash_of(&2)  // => false
     ;
     // Hash order under the fixed key: the same on every run and implementation.
     let mut order = 0;
@@ -132,26 +140,26 @@ test "the hash is the same on every run" {
     for x in &s {
         order = order * 10 + *x;
     }
-    order                                   // => 4213
+    order  // => 4213
 }
 
 test "sets remove and iterate" {
     let mut s: HashSet<int> = [1, 2, 3];
-    s.remove(&2)                            // => true
+    s.remove(&2)  // => true
     ;
-    s.remove(&2)                            // => false
+    s.remove(&2)  // => false
     ;
-    has(&s, 3)                              // => true
+    has(&s, 3)  // => true
     ;
     let mut t = 0;
     for x in s.iter() {
         t += *x;
     }
-    t                                       // => 4
+    t  // => 4
     ;
     s.remove(&1);
     s.remove(&3);
-    s.is_empty()                            // => true
+    s.is_empty()  // => true
 }
 
 test "a map's entries by iter" {
@@ -160,24 +168,24 @@ test "a map's entries by iter" {
     for (k, v) in m.iter() {
         t += *k + *v;
     }
-    t                                       // => 33
+    t  // => 33
 }
 
 test "what hashes, and how" {
-    hash_of(&Even { n: 2 }) == hash_of(&Even { n: 4 }) // => true
+    hash_of(&Even { n: 2 }) == hash_of(&Even { n: 4 })  // => true
     ;
     hash_of(&Even { n: 2 }) == hash_of(&0)  // => true
     ;
-    hash_of(&true) == hash_of(&false)       // => false
+    hash_of(&true) == hash_of(&false)  // => false
     ;
-    hash_of(&'a') == hash_of(&'b')          // => false
+    hash_of(&'a') == hash_of(&'b')  // => false
     ;
-    hash_of(&Some(1)) == hash_of(&None::<int>) // => false
+    hash_of(&Some(1)) == hash_of(&None::<int>)  // => false
     ;
-    hash_of(&(1, 2)) == hash_of(&(2, 1))    // => false
+    hash_of(&(1, 2)) == hash_of(&(2, 1))  // => false
     ;
     // A derive hashes the variant's index, then each field in order.
-    hash_of(&Point { x: 1, y: 2 }) == hash_of(&Point { x: 2, y: 1 }) // => false
+    hash_of(&Point { x: 1, y: 2 }) == hash_of(&Point { x: 2, y: 1 })  // => false
     ;
-    hash_of(&Key::A(0)) == hash_of(&Key::B) // => false
+    hash_of(&Key::A(0)) == hash_of(&Key::B)  // => false
 }

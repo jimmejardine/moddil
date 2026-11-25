@@ -220,14 +220,6 @@ L)
 - Add a benchmark that guards the cost of isolated scopes.
 - Keep traps at the C ABI as they are now (`ffi.export.3`).
 
-**P35. The formatter, next** (`crates/lsp`, `tools/ci.py`, the repository's sources; M)
-- Formatting in the language server (`documentFormattingProvider`), so editors format on save.
-- `moddil fmt` over the prelude, `mods/`, `tour/`, `examples/` and `conformance/`, with
-  `reference/grammar/tests/` left as it is, and `moddil fmt --check` on those in `tools/ci.py`'s
-  `fmt` step. Done in one go, as other work edits those files; the conformance suite on every
-  runner shows the `//~` markers held.
-- Focused snapshot tests of each layout rule in `crates/fmt/tests/`, beside the corpus test.
-
 **P36. The reference interpreter's own type inference** (`crates/refinterp`; L, in stages)
 - Written from the reference's typing rules, not taken from `sema` (the reference interpreter
   stays independent), so that it checks the checker too. One commit per stage:

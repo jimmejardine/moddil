@@ -136,14 +136,14 @@ impl Compiler {
     const fn patch(&mut self, at: int, which: int, to: int) {
         let new = match &self.prog[at] {
             Inst::Split(a, b) => if which == 0 { Inst::Split(to, *b) } else { Inst::Split(*a, to) },
-            _ => Inst::Jump(to),
+            _                 => Inst::Jump(to),
         };
         self.prog[at] = new;
     }
 
     const fn node(&mut self, p: &Parsed, n: int) {
         match p.nodes[n].clone() {
-            Node::Empty => {}
+            Node::Empty   => {}
             Node::Char(c) => {
                 self.emit(Inst::Char(c));
             }

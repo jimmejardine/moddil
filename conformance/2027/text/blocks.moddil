@@ -4,14 +4,14 @@ test "a raw block has no escapes" {
     let text = r"""
         a\tb
         """;
-    text                                    // => "a\\tb\n"
+    text  // => "a\\tb\n"
 }
 
 test "\s keeps a space at the end of a line" {
     let text = """
         end\s
         """;
-    text                                    // => "end \n"
+    text  // => "end \n"
 }
 
 test "a fmt block is dedented as a block is, with its holes" {
@@ -22,5 +22,5 @@ test "a fmt block is dedented as a block is, with its holes" {
 
           you have {n:>2} messages. {{ok}}
         """;
-    text                                    // => "Dear Ada,\n\n  you have  3 messages. {ok}\n"
+    text  // => "Dear Ada,\n\n  you have  3 messages. {ok}\n"
 }

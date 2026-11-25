@@ -1,59 +1,62 @@
 // covers: expr.fmt.spec.1, expr.fmt.spec.2, expr.fmt.spec.3
 
 #[derive(Debug)]
-struct Pair { a: int, b: int }
+struct Pair {
+    a: int,
+    b: int,
+}
 
 test "a width, filled and aligned" {
     let n = 42;
     let s = "ab";
-    fmt"[{n:>6}]"                           // => "[    42]"
+    fmt"[{n:>6}]"  // => "[    42]"
     ;
-    fmt"[{s:<6}]"                           // => "[ab    ]"
+    fmt"[{s:<6}]"  // => "[ab    ]"
     ;
-    fmt"[{s:^7}]"                           // => "[  ab   ]"
+    fmt"[{s:^7}]"  // => "[  ab   ]"
     ;
-    fmt"[{s:*^7}]"                          // => "[**ab***]"
+    fmt"[{s:*^7}]"  // => "[**ab***]"
     ;
-    fmt"[{n:-<5}]"                          // => "[42---]"
+    fmt"[{n:-<5}]"  // => "[42---]"
 }
 
 test "numbers to the right, the rest to the left" {
     let n = 42;
     let s = "ab";
-    fmt"[{n:5}|{s:5}|{true:6}]"             // => "[   42|ab   |true  ]"
+    fmt"[{n:5}|{s:5}|{true:6}]"  // => "[   42|ab   |true  ]"
 }
 
 test "a width shorter than the text leaves it as it is" {
-    fmt"[{"abcdef":3}]"                     // => "[abcdef]"
+    fmt"[{"abcdef":3}]"  // => "[abcdef]"
 }
 
 test "characters are counted, not bytes" {
-    fmt"[{"héé":>5}]"                       // => "[  héé]"
+    fmt"[{"héé":>5}]"  // => "[  héé]"
 }
 
 test "zeros after the sign" {
     let neg = -42;
     let n = 7;
-    fmt"[{neg:06}|{n:03}]"                  // => "[-00042|007]"
+    fmt"[{neg:06}|{n:03}]"  // => "[-00042|007]"
 }
 
 test "a float's digits" {
     let f = 3.14159;
     let x: f32 = 2.5;
-    fmt"[{f:.3}|{f:8.2}|{x:.1}]"            // => "[3.142|    3.14|2.5]"
+    fmt"[{f:.3}|{f:8.2}|{x:.1}]"  // => "[3.142|    3.14|2.5]"
     ;
-    fmt"[{1.0:.0}|{0.125:.2}]"              // => "[1|0.12]"
+    fmt"[{1.0:.0}|{0.125:.2}]"  // => "[1|0.12]"
 }
 
 test "how much of a text" {
     let s = "abcdef";
-    fmt"[{s:.2}|{s:>5.3}]"                  // => "[ab|  abc]"
+    fmt"[{s:.2}|{s:>5.3}]"  // => "[ab|  abc]"
 }
 
 test "a Debug hole with a width" {
     let s = "ab";
     let p = Pair { a: 1, b: 2 };
-    fmt"[{s:>6?}]"                          // => "[  \"ab\"]"
+    fmt"[{s:>6?}]"  // => "[  \"ab\"]"
     ;
-    fmt"[{p:<22?}]"                         // => "[Pair { a: 1, b: 2 }   ]"
+    fmt"[{p:<22?}]"  // => "[Pair { a: 1, b: 2 }   ]"
 }

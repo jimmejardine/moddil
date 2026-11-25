@@ -1,10 +1,12 @@
 // covers: expr.closure.result.1
 
 // A returned `impl FnOnce` is moved by its call.
-fn twice() -> impl FnOnce() -> int { || 1 }
+fn twice() -> impl FnOnce() -> int {
+    || 1
+}
 
 fn main() {
     let f = twice();
     f();
-    f();                                            //~ E0303
+    f();  //~ E0303
 }

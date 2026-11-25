@@ -122,12 +122,16 @@ impl<T> Rc<T> {
 
     // How many owners the value has.
     fn strong_count(rc: &Rc<T>) -> int {
-        unsafe("p is a live allocation: rc keeps it") { (*rc.p).strong }
+        unsafe("p is a live allocation: rc keeps it") {
+            (*rc.p).strong
+        }
     }
 
     // How many weak handles the value has.
     fn weak_count(rc: &Rc<T>) -> int {
-        unsafe("p is a live allocation: rc keeps it") { (*rc.p).weak - 1 }
+        unsafe("p is a live allocation: rc keeps it") {
+            (*rc.p).weak - 1
+        }
     }
 
     // The value, if `rc` is its only owner (`rc.unwrap.1`); otherwise `rc` back. Its weak
@@ -151,7 +155,7 @@ impl<T> Deref for Rc<T> {
         unsafe("p is a live allocation, and its value lives while an owner does") {
             let v = match &(*self.p).value {
                 Some(v) => Some(v),
-                None => None,
+                None    => None,
             };
             v ?! "an owned rc has its value"
         }
@@ -272,4 +276,3 @@ impl<T> Debug for Weak<T> {
         out.write_str("(Weak)");
     }
 }
-

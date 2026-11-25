@@ -1,3 +1,5 @@
 // covers: item.fn.ret-borrow.1
 
-fn not_borrowed(a: int, b: &int) -> &int from a { b }       //~ E0310
+fn not_borrowed(a: int, b: &int) -> &int from a {  //~ E0310
+    b
+}

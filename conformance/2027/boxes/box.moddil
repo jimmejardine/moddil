@@ -1,6 +1,9 @@
 // covers: type.box.1
 
-struct Point { x: int, y: int }
+struct Point {
+    x: int,
+    y: int,
+}
 
 enum List {
     Cons(int, Box<List>),
@@ -10,33 +13,37 @@ enum List {
 fn sum(l: &List) -> int {
     match l {
         List::Cons(x, rest) => *x + sum(&**rest),
-        List::Nil => 0,
+        List::Nil           => 0,
     }
 }
 
-struct Loud { n: int }
+struct Loud {
+    n: int,
+}
 impl Drop for Loud {
-    fn drop(self) { log.info(fmt"dropped {self.n}"); }
+    fn drop(self) {
+        log.info(fmt"dropped {self.n}");
+    }
 }
 
 test "a box owns one value" {
     let b = Box::new(41);
-    *b + 1                                          // => 42
+    *b + 1  // => 42
     ;
     let mut p = Box::new(Point { x: 1, y: 2 });
     (*p).x = 10;
-    (*p).x + (*p).y                                 // => 12
+    (*p).x + (*p).y  // => 12
     ;
     *p = Point { x: 3, y: 4 };
-    p.into_inner().x                                // => 3
+    p.into_inner().x  // => 3
 }
 
 test "a box breaks a recursive type's cycle" {
     let l = List::Cons(1, Box::new(List::Cons(2, Box::new(List::Cons(3, Box::new(List::Nil))))));
-    sum(&l)                                         // => 6
+    sum(&l)  // => 6
 }
 
 test "a box's value is dropped with it" {
     let b = Box::new(Loud { n: 7 });
-    (*b).n                                          // => 7
+    (*b).n  // => 7
 }

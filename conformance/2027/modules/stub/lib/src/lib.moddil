@@ -1,7 +1,9 @@
 //! A stub mod: signatures only.
 
 /// Something to look up.
-pub struct Table { handle: int }
+pub struct Table {
+    handle: int,
+}
 
 impl Table {
     pub fn new() -> Table;
@@ -18,4 +20,6 @@ impl Encode for int {}
 
 /// A root capability.
 #[root_capability]
-pub struct Console { handle: int }
+pub struct Console {
+    handle: int,
+}

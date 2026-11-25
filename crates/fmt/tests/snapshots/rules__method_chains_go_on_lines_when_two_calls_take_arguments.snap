@@ -1,0 +1,11 @@
+---
+source: crates/fmt/tests/rules.rs
+expression: "fmt(\"fn f(v: Vec<int>) -> int { let n = v.len(); v.iter().map(|x| x * 2).filter(|x| *x > 1)\\\n         .count() + n }\")"
+---
+fn f(v: Vec<int>) -> int {
+    let n = v.len();
+    v.iter()
+        .map(|x| x * 2)
+        .filter(|x| *x > 1)
+        .count() + n
+}

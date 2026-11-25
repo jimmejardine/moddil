@@ -1,16 +1,35 @@
 // covers: own.drop.partial.1, own.drop.1
 
-struct Guard { armed: bool }
-impl Drop for Guard { fn drop(self) { assert(!self.armed); } }
+struct Guard {
+    armed: bool,
+}
+impl Drop for Guard {
+    fn drop(self) {
+        assert(!self.armed);
+    }
+}
 
-struct Holder { g: Guard, n: int }
-impl Drop for Holder { fn drop(self) { let Holder { g, n } = self; } }
+struct Holder {
+    g: Guard,
+    n: int,
+}
+impl Drop for Holder {
+    fn drop(self) {
+        let Holder { g, n } = self;
+    }
+}
 
-fn field(h: Holder) -> Guard { h.g }                            //~ E0314
-fn pattern(h: Holder) { let Holder { g, n } = h; }              //~ E0314
-fn copy_field(h: Holder) -> int { h.n }
+fn field(h: Holder) -> Guard {
+    h.g  //~ E0314
+}
+fn pattern(h: Holder) {  //~ E0314
+    let Holder { g, n } = h;
+}
+fn copy_field(h: Holder) -> int {
+    h.n
+}
 
 fn temporary() -> bool {
-    let r = &Guard { armed: false };                            //~ E0308
+    let r = &Guard { armed: false };  //~ E0308
     r.armed
 }

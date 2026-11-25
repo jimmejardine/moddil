@@ -66,7 +66,7 @@ impl<T: Ord> BinaryHeap<T> {
     fn greater(&self, i: int, j: int) -> bool {
         match self.values[i].cmp(&self.values[j]) {
             Ordering::Greater => true,
-            _ => false,
+            _                 => false,
         }
     }
 
@@ -101,7 +101,9 @@ impl<T: Ord> FromArrayLiteral<T> for BinaryHeap<T> {
         h
     }
 
-    fn from_repeat(x: T, n: int) -> BinaryHeap<T> where T: Clone {
+    fn from_repeat(x: T, n: int) -> BinaryHeap<T>
+        where T: Clone
+    {
         let mut h = BinaryHeap::new();
         let mut i = 0;
         while i < n {

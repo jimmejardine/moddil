@@ -1,3 +1,5 @@
 // covers: mod.tree.1
 
-pub fn a() -> int { 1 }
+pub fn a() -> int {
+    1
+}

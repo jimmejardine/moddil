@@ -2,7 +2,9 @@
 
 struct Missing;
 struct Bad;
-trait Time { fn now(&self) -> int; }
+trait Time {
+    fn now(&self) -> int;
+}
 
 fn lookup(x: int) -> int with fail(Missing | Bad) {
     if x == 0 { fail(Missing) }
@@ -10,23 +12,29 @@ fn lookup(x: int) -> int with fail(Missing | Bad) {
     x
 }
 
-fn tolerant<F>(f: F, x: int) -> int where F: Fn(int) -> int with fail(Missing) {
-    try { f(x)? } catch { Missing => -1 }
+fn tolerant<F>(f: F, x: int) -> int
+    where F: Fn(int) -> int with fail(Missing)
+{
+    try { f(x)? } catch {
+        Missing => -1,
+    }
 }
 
 /// It names the closure's errors but does not list them, so it must handle them (a private
 /// function would infer them).
 pub fn named<F: Fn(int) -> int with E, E>(f: F) -> int {
-    f(1)                                             //~ E0501
+    f(1)  //~ E0501
 }
 
-fn timed(f: impl Fn() -> int with Time) -> int {    //~ E0609
+fn timed(f: impl Fn() -> int with Time) -> int {  //~ E0609
     f()
 }
 
-fn pure<F: Fn(int) -> int with suspend>(f: F, x: int) -> int { f(x) }
+fn pure<F: Fn(int) -> int with suspend>(f: F, x: int) -> int {
+    f(x)
+}
 
 fn main() {
-    tolerant(|x| lookup(x)?, 0);                     //~ E0502
-    pure(|x| lookup(x)?, 1);                         //~ E0502
+    tolerant(|x| lookup(x)?, 0);  //~ E0502
+    pure(|x| lookup(x)?, 1);      //~ E0502
 }

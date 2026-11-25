@@ -2,22 +2,28 @@
 // One `Deref` step, and a `&mut` only through `DerefMut`; a borrow passed where the type is
 // still being inferred is not converted.
 
-fn read(n: &int) -> int { *n }
-fn bump(n: &mut int) { *n += 1; }
-fn same<T>(x: &T) -> &T { x }
+fn read(n: &int) -> int {
+    *n
+}
+fn bump(n: &mut int) {
+    *n += 1;
+}
+fn same<T>(x: &T) -> &T {
+    x
+}
 
 fn two_steps() -> int {
     let b = Box::new(Box::new(1));
-    read(&b)                                    //~ E0201
+    read(&b)  //~ E0201
 }
 
 fn no_deref_mut() {
     let mut r = 1.to_rc();
-    bump(&mut r);                               //~ E0201
+    bump(&mut r);  //~ E0201
 }
 
 fn inferred() -> int {
     let b = Box::new(1);
-    let x: int = *same(&b);                     //~ E0201
+    let x: int = *same(&b);  //~ E0201
     x
 }

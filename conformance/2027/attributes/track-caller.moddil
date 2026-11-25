@@ -7,21 +7,23 @@ fn positive(n: int) -> int {
 }
 
 #[track_caller]
-fn twice(n: int) -> int { positive(n) * 2 }
+fn twice(n: int) -> int {
+    positive(n) * 2
+}
 
 fn plain(n: int) -> int {
-    assert(n > 0);                          //~ trap
+    assert(n > 0);  //~ trap
     n
 }
 
 test "a tracked function's trap is reported where it is called" {
-    positive(3)                             // => 3
+    positive(3)  // => 3
     ;
-    positive(-1);                           //~ trap
+    positive(-1);  //~ trap
 }
 
 test "through tracked callers, to the first untracked one" {
-    twice(-1);                              //~ trap
+    twice(-1);  //~ trap
 }
 
 test "an untracked function's trap is reported in it" {
@@ -29,6 +31,5 @@ test "an untracked function's trap is reported in it" {
 }
 
 test "the prelude's arithmetic is tracked" {
-    Add::add(9223372036854775807, 1);       //~ trap
+    Add::add(9223372036854775807, 1);  //~ trap
 }
-

@@ -1,19 +1,19 @@
 // covers: expr.cmp.eq.1, expr.cmp.order.1
 
 test "comparisons" {
-    1 == 1                    // => true
+    1 == 1  // => true
     ;
-    1 != 1                    // => false
+    1 != 1  // => false
     ;
-    true == false             // => false
+    true == false  // => false
     ;
-    () == ()                  // => true
+    () == ()  // => true
     ;
-    -1 < 0                    // => true
+    -1 < 0  // => true
     ;
-    2 <= 2                    // => true
+    2 <= 2  // => true
     ;
-    2 > 3                     // => false
+    2 > 3  // => false
     ;
-    3 >= 4                    // => false
+    3 >= 4  // => false
 }

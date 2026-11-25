@@ -3,7 +3,7 @@
 fn refutable() -> int {
     let (tx, rx) = channel::<int>(1);
     select {
-        Some(x) = rx.recv() => x,           //~ E0209
+        Some(x) = rx.recv() => x,  //~ E0209
     }
 }
 
@@ -12,6 +12,6 @@ fn arms_differ() -> int {
     let (utx, urx) = channel::<int>(1);
     select {
         x = rx.recv() => 1,
-        y = urx.recv() => true,             //~ E0201
+        y = urx.recv() => true,  //~ E0201
     }
 }

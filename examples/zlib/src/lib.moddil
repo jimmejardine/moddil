@@ -30,12 +30,7 @@ extern "C" {
     fn moddil_zlib_deflate(s: *mut ZStream, input: *const u8, in_len: u64, out: *mut u8, out_cap: u64, out_len: *mut u64, finish: i32) -> i32;
     fn moddil_zlib_deflater_stats(s: *mut ZStream) -> Stats;
     fn moddil_zlib_deflater_end(s: *mut ZStream);
-    fn moddil_zlib_inflate_back(
-        input: fn(*mut (), *mut *const u8) -> u32,
-        in_desc: *mut (),
-        output: fn(*mut (), *mut u8, u32) -> i32,
-        out_desc: *mut (),
-    ) -> i32;
+    fn moddil_zlib_inflate_back(input: fn(*mut (), *mut *const u8) -> u32, in_desc: *mut (), output: fn(*mut (), *mut u8, u32) -> i32, out_desc: *mut ()) -> i32;
     // zlib's own, whose types are the same everywhere: C strings, and its CRC table.
     fn zlibVersion() -> *const u8;
     fn zError(code: i32) -> *const u8;
@@ -86,7 +81,9 @@ fn zeros(n: int) -> Vec<u8> {
 
 /// The most bytes compressing `n` bytes can give.
 pub fn bound(n: int) -> int {
-    count(unsafe("zlib's compressBound reads nothing") { moddil_zlib_bound(len(n)) })
+    count(unsafe("zlib's compressBound reads nothing") {
+        moddil_zlib_bound(len(n))
+    })
 }
 
 /// `data`, compressed at `level` (0 to 9; 6 is zlib's default).
@@ -135,7 +132,9 @@ pub fn crc32(data: &[u8]) -> u32 {
 /// The CRC-32 of `data` as `crc32` gives it, worked out here from zlib's table of 256 values:
 /// a C array, walked through its pointer.
 pub fn crc32_by_table(data: &[u8]) -> u32 {
-    let table = unsafe("get_crc_table gives zlib's table, which it keeps") { get_crc_table() };
+    let table = unsafe("get_crc_table gives zlib's table, which it keeps") {
+        get_crc_table()
+    };
     let all: u32 = 4294967295;
     let mut crc = all;
     for b in data.iter() {
@@ -196,12 +195,7 @@ pub fn uncompress_through_callbacks(data: &[u8]) -> Vec<u8> with fail(ZlibError)
     let mut source = Source { at: core::ffi::ptr_of(raw), len: n, given: 0 };
     let mut sink: Vec<u8> = Vec::new();
     let code = unsafe("inflateBack calls pull and push with these pointers, during the call only") {
-        moddil_zlib_inflate_back(
-            pull,
-            core::ptr::cast_mut_to(&mut source),
-            push,
-            core::ptr::cast_mut_to(&mut sink),
-        )
+        moddil_zlib_inflate_back(pull, core::ptr::cast_mut_to(&mut source), push, core::ptr::cast_mut_to(&mut sink))
     };
     if code != 1 {
         fail(error(code));
@@ -292,9 +286,13 @@ fn bytes(s: &str) -> Vec<u8> {
 
 test "a text compresses and comes back" {
     let text = bytes("the quick brown fox jumps over the lazy dog, the quick brown fox again");
-    let packed = try { compress(text.as_slice(), 9)? } catch { _ => Vec::new() };
+    let packed = try { compress(text.as_slice(), 9)? } catch {
+        _ => Vec::new(),
+    };
     assert(packed.len() > 0 && packed.len() < text.len());
-    let back = try { uncompress(packed.as_slice(), text.len())? } catch { _ => Vec::new() };
+    let back = try { uncompress(packed.as_slice(), text.len())? } catch {
+        _ => Vec::new(),
+    };
     assert(back == text);
 }
 
@@ -307,8 +305,12 @@ test "the checksums are the known ones" {
 
 test "zlib's callbacks into Moddil inflate the stream" {
     let text = bytes("the quick brown fox jumps over the lazy dog, the quick brown fox again");
-    let packed = try { compress(text.as_slice(), 9)? } catch { _ => Vec::new() };
-    let back = try { uncompress_through_callbacks(packed.as_slice())? } catch { _ => Vec::new() };
+    let packed = try { compress(text.as_slice(), 9)? } catch {
+        _ => Vec::new(),
+    };
+    let back = try { uncompress_through_callbacks(packed.as_slice())? } catch {
+        _ => Vec::new(),
+    };
     assert(back == text);
 }
 
@@ -321,7 +323,12 @@ test "zlib's strings and table, read through its pointers" {
 
 test "corrupt data is an error" {
     let junk = bytes("this is not a zlib stream");
-    let code = try { uncompress(junk.as_slice(), 100)?; 0 } catch { e => e.code };
+    let code = try {
+        uncompress(junk.as_slice(), 100)?;
+        0
+    } catch {
+        e => e.code,
+    };
     assert(code == -3);
 }
 
@@ -347,8 +354,10 @@ test "a stream in pieces uncompresses to the whole" {
         assert(s.total_in == 28 && s.total_out == len(out.len()) && s.adler == adler32(whole.as_slice()));
         out
     } catch {
-        _ => Vec::new()
+        _ => Vec::new(),
     };
-    let back = try { uncompress(packed.as_slice(), whole.len())? } catch { _ => Vec::new() };
+    let back = try { uncompress(packed.as_slice(), whole.len())? } catch {
+        _ => Vec::new(),
+    };
     assert(back == whole);
 }

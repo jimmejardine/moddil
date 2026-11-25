@@ -5,22 +5,22 @@
 fn lent_mutably() {
     let mut v: Vec<int> = [];
     scope(|s| {
-        s.spawn(|| v.push(1));
-        v.push(2);                          //~ E0305
+        s.spawn (|| v.push(1));
+        v.push(2);  //~ E0305
     });
 }
 
 fn body_local() {
     scope(|s| {
         let x = 5;
-        s.spawn(|| x + 1);                  //~ E0308
+        s.spawn (|| x + 1);  //~ E0308
     });
 }
 
 fn changed_while_borrowed() {
     let mut n = 1;
     scope(|s| {
-        s.spawn(|| n + 1);
-        n = 2;                              //~ E0306
+        s.spawn (|| n + 1);
+        n = 2;  //~ E0306
     });
 }

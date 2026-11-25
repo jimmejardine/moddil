@@ -7,4 +7,4 @@ trait Shape {
 struct Blob;
 
 // Each impl gives the consts the trait leaves without a value.
-impl Shape for Blob {}                      //~ E0407
+impl Shape for Blob {}  //~ E0407

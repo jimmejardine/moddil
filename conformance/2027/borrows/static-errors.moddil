@@ -2,11 +2,11 @@
 
 fn local() -> &int {
     let x = 1;
-    &x                                      //~ E0308
+    &x  //~ E0308
 }
 
 fn temporary() -> &int {
-    &1                                      //~ E0308
+    &1  //~ E0308
 }
 
 fn name_or(found: bool, name: &str) -> &str {
@@ -17,6 +17,6 @@ fn name_or(found: bool, name: &str) -> &str {
 fn kept() -> int {
     let s = String::new();
     let n = name_or(false, s.as_str());
-    drop(s);                                //~ E0306
+    drop(s);  //~ E0306
     n.len()
 }

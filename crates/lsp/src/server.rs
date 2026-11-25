@@ -17,7 +17,8 @@ use lsp_types::notification::{
     DidSaveTextDocument, Notification as _, PublishDiagnostics,
 };
 use lsp_types::request::{
-    Completion as CompletionRequest, GotoDefinition, HoverRequest, InlayHintRequest, Request as _,
+    Completion as CompletionRequest, Formatting, GotoDefinition, HoverRequest, InlayHintRequest,
+    Request as _,
 };
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionOptions, CompletionParams, CompletionResponse,
@@ -62,6 +63,7 @@ pub fn serve(conn: &Connection) -> Result<(), String> {
         hover_provider: Some(HoverProviderCapability::Simple(true)),
         definition_provider: Some(OneOf::Left(true)),
         inlay_hint_provider: Some(OneOf::Left(true)),
+        document_formatting_provider: Some(OneOf::Left(true)),
         completion_provider: Some(CompletionOptions {
             trigger_characters: Some(vec![".".to_string(), ":".to_string()]),
             ..CompletionOptions::default()
@@ -296,6 +298,24 @@ impl Server {
                         .collect::<Vec<_>>()
                 });
                 serde_json::to_value(hints)
+            }
+            // `moddil fmt`'s layout (`crates/fmt`): the whole document replaced, if it changes.
+            // A file that does not parse is left as it is.
+            Formatting::METHOD => {
+                let p: lsp_types::DocumentFormattingParams = from(req.params)?;
+                let edits = path_of(&p.text_document.uri).and_then(|path| {
+                    let text = self.analysis.text(&path)?;
+                    let formatted = moddil_fmt::format(&text).ok()?;
+                    if formatted == text {
+                        return Some(Vec::new());
+                    }
+                    let ix = LineIndex::new(&text);
+                    Some(vec![lsp_types::TextEdit {
+                        range: range(&ix, 0, text.len() as u32),
+                        new_text: formatted,
+                    }])
+                });
+                serde_json::to_value(edits)
             }
             CompletionRequest::METHOD => {
                 let p: CompletionParams = from(req.params)?;

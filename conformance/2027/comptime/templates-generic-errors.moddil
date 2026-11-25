@@ -3,24 +3,32 @@
 // trait.
 
 #[derive_by(shown)]
-trait Shown { fn shown(&self) -> int; }
+trait Shown {
+    fn shown(&self) -> int;
+}
 
 const fn shown(t: type) -> Impl<Shown> {
     impl Shown for t {
-        fn shown(&self) -> int { 0 }
+        fn shown(&self) -> int {
+            0
+        }
     }
 }
 
 #[derive(Shown)]
-struct Holder<T> { x: T }
+struct Holder<T> {
+    x: T,
+}
 
 fn holder_of_bool() -> int {
     let h = Holder { x: true };
-    h.shown()                                   //~ E0403
+    h.shown()  //~ E0403
 }
 
-fn generic<T: Shown>(x: T) -> int { x.shown() }
+fn generic<T: Shown>(x: T) -> int {
+    x.shown()
+}
 
 fn bool_holder() -> int {
-    generic(Holder { x: false })                //~ E0402
+    generic(Holder { x: false })  //~ E0402
 }

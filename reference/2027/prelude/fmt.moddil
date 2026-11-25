@@ -81,7 +81,7 @@ impl<T: Debug> Debug for Vec<T> {
 impl<T: Debug> Debug for Option<T> {
     fn fmt(&self, out: &mut dyn TextWrite) {
         match self {
-            None => out.write_str("None"),
+            None    => out.write_str("None"),
             Some(x) => {
                 out.write_str("Some(");
                 Debug::fmt(x, out);
@@ -192,15 +192,7 @@ impl<T> Default for Option<T> {
 
 // `{x:#?}` (`expr.fmt.debug.2`): `x`'s `Debug` written across lines, as `PrettyWrite` makes it.
 fn debug_pretty<T: Debug>(x: &T, out: &mut dyn TextWrite) {
-    let mut p = PrettyWrite {
-        out,
-        depth: 0,
-        open: false,
-        space: false,
-        skip: false,
-        quote: '\0',
-        escaped: false,
-    };
+    let mut p = PrettyWrite { out, depth: 0, open: false, space: false, skip: false, quote: '\0', escaped: false };
     Debug::fmt(x, &mut p);
 }
 

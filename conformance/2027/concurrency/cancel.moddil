@@ -1,19 +1,18 @@
 // covers: task.cancel.1, task.cancel.2, task.error.1
 
 #[derive(Debug, Clone, PartialEq)]
-struct Oops { n: int }
+struct Oops {
+    n: int,
+}
 
 fn risky(x: int) -> int with fail(Oops) {
-    if x > 0 {
-        fail(Oops { n: x })
-    }
+    if x > 0 { fail(Oops { n: x }) }
     x
 }
 
-
 fn shown(r: Result<int, Oops>) -> int {
     match r {
-        Ok(v) => v,
+        Ok(v)           => v,
         Err(Oops { n }) => -n,
     }
 }
@@ -24,29 +23,29 @@ test "a failing task given up cancels the others where they wait" {
     let (tx, rx) = channel::<int>(1);
     let r = try {
         scope(|s| {
-            s.spawn(|| {
+            s.spawn (|| {
                 defer {
                     cleaned = true;
                 }
-                rx.recv();                  // waits: nothing is ever sent
+                rx.recv();  // waits: nothing is ever sent
                 reached = true;
             });
-            s.spawn(|| risky(4)?)?;
+            s.spawn (|| risky(4)?)?;
             0
         })?
     };
-    shown(r)                                // => -4
+    shown(r)  // => -4
     ;
-    cleaned                                 // => true
+    cleaned  // => true
     ;
-    reached                                 // => false
+    reached  // => false
 }
 
 test "a failing body cancels its tasks" {
     let mut cleaned = 0;
     let r = try {
         scope(|s| {
-            s.spawn(|| {
+            s.spawn (|| {
                 defer {
                     cleaned += 1;
                 }
@@ -57,20 +56,20 @@ test "a failing body cancels its tasks" {
             risky(2)?
         })?
     };
-    shown(r)                                // => -2
+    shown(r)  // => -2
     ;
-    cleaned                                 // => 1
+    cleaned  // => 1
 }
 
 test "a task still held keeps its error for its join" {
     let r = try {
         scope(|s| {
-            let t = s.spawn(|| risky(5)?)?;
+            let t = s.spawn (|| risky(5)?)?;
             yield_now();
             shown(try { t.join()? })
         })?
     };
-    shown(r)                                // => -5
+    shown(r)  // => -5
 }
 
 // A cancelled task's cleanup is not cancelled again: its `defer` waits, and then finishes.
@@ -79,7 +78,7 @@ test "cleanup runs to its end, even when it waits" {
     let (tx, rx) = channel::<int>(1);
     let r = try {
         scope(|s| {
-            s.spawn(|| {
+            s.spawn (|| {
                 defer {
                     yield_now();
                     cleaned = 2;
@@ -90,18 +89,18 @@ test "cleanup runs to its end, even when it waits" {
             risky(1)?
         })?
     };
-    shown(r)                                // => -1
+    shown(r)  // => -1
     ;
-    cleaned                                 // => 2
+    cleaned  // => 2
 }
 
 // Not even an isolated scope catches a trap while unwinding: it ends the program.
 test "a trap while unwinding ends the program" {
     let r = try {
         scope(|s| {
-            s.spawn(|| {
+            s.spawn (|| {
                 defer {
-                    assert(false);          //~ trap
+                    assert(false);  //~ trap
                 }
                 yield_now();
             });
@@ -115,8 +114,8 @@ test "cancellation reaches the scopes inside" {
     let mut inner = false;
     let r = try {
         scope(|s| {
-            s.spawn(|| scope(|t| {
-                t.spawn(|| {
+            s.spawn (|| scope(|t| {
+                t.spawn (|| {
                     defer {
                         inner = true;
                     }
@@ -128,26 +127,26 @@ test "cancellation reaches the scopes inside" {
             risky(9)?
         })?
     };
-    shown(r)                                // => -9
+    shown(r)  // => -9
     ;
-    inner                                   // => true
+    inner  // => true
 }
 
 test "a cancelled send's value is dropped" {
     let held = 1.to_rc();
     let (tx, rx) = channel::<Rc<int>>(1);
     let r = try {
-        tx.send(0.to_rc())?;                // the channel is full
+        tx.send(0.to_rc())?;  // the channel is full
         scope(|s| {
             let v = held.share();
-            s.spawn(|| {
-                tx.send(v)?;                // waits for room, and is cancelled
+            s.spawn (|| {
+                tx.send(v)?;  // waits for room, and is cancelled
             })?;
             yield_now();
             risky(3)?
         })?
     };
-    Rc::strong_count(&held)                 // => 1
+    Rc::strong_count(&held)  // => 1
 }
 
 // A join of a cancelled task is reached only by a task unwinding too, in its cleanup: it leaves
@@ -160,8 +159,8 @@ test "a cleanup that joins a cancelled task leaves that cleanup" {
     let (tx2, rx2) = channel::<int>(1);
     let r = try {
         scope(|s| {
-            let t = s.spawn(|| {
-                rx.recv();                  // waits: nothing is sent, so it is cancelled
+            let t = s.spawn (|| {
+                rx.recv();  // waits: nothing is sent, so it is cancelled
                 1
             });
             defer {
@@ -169,17 +168,17 @@ test "a cleanup that joins a cancelled task leaves that cleanup" {
             }
             defer {
                 before = true;
-                let v = t.join();           // a cancelled task: this cleanup is left
+                let v = t.join();  // a cancelled task: this cleanup is left
                 after = true;
             }
-            s.spawn(|| risky(2)?)?;
-            rx2.recv();                     // waits, and is cancelled by the failure
+            s.spawn (|| risky(2)?)?;
+            rx2.recv();  // waits, and is cancelled by the failure
             0
         })?
     };
-    before                                  // => true
+    before  // => true
     ;
-    after                                   // => false
+    after  // => false
     ;
-    later                                   // => true
+    later  // => true
 }

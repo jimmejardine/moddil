@@ -2,20 +2,20 @@
 
 // A single file has no capabilities, so it declares no C functions.
 extern "C" {
-    fn abs(x: i32) -> i32;                  //~ E0219
+    fn abs(x: i32) -> i32;  //~ E0219
 }
 
 // Only C's ABI is declared.
-extern "Rust" {                             //~ E0222
+extern "Rust" {  //~ E0222
 }
 
 // `core::ffi` needs the `unsafe` capability too.
 fn pointer() -> *const u8 {
-    core::ffi::text_ptr("x")                //~ E0219
+    core::ffi::text_ptr("x")  //~ E0219
 }
 
 // A `fn` type is a C function pointer: C's scalar types only.
-fn takes(f: fn(&str) -> int) {}             //~ E0222
+fn takes(f: fn(&str) -> int) {}  //~ E0222
 
 // What is given as one is a free function, not generic, of its signature, that cannot fail.
 struct Oops {}
@@ -33,34 +33,34 @@ fn run(f: fn(i32) -> i32) -> i32 {
 }
 
 fn given() -> i32 {
-    run(may_fail);                          //~ E0222
-    run(wider)                              //~ E0222
+    run(may_fail);  //~ E0222
+    run(wider)      //~ E0222
 }
 
 // `#[export]` is for C, `#[export(python)]` for Python.
-#[export(java)]                             //~ E0222
+#[export(java)]  //~ E0222
 pub fn java() {}
 
 // A `fn` value is called only in `unsafe`, with as many arguments as its type takes.
 fn calls(f: fn(i32) -> i32) -> i32 {
-    f(1)                                    //~ E0218
+    f(1)  //~ E0218
 }
 
 // `on_trap` is an integer of the result's type.
-#[export(on_trap = -1)]                     //~ E0222
+#[export(on_trap = - 1)]  //~ E0222
 pub fn gives_nothing() {}
 
-#[export(on_trap = 1.5)]                    //~ E0222
+#[export(on_trap = 1.5)]  //~ E0222
 pub fn gives_a_float() -> f64 {
     0.0
 }
 
-#[export(on_trap = 256)]                    //~ E0222
+#[export(on_trap = 256)]  //~ E0222
 pub fn gives_a_byte() -> u8 {
     0
 }
 
-#[export(on_trap = -1)]
+#[export(on_trap = - 1)]
 pub fn gives_an_int() -> i32 {
     0
 }

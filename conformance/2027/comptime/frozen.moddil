@@ -32,7 +32,11 @@ const NONE: Option<char> = None;
 const SHARED: Rc<int> = 41.to_rc();
 
 #[derive(Debug, Clone, PartialEq)]
-enum Shape { Dot, Circle(int), Rect { w: int, h: int } }
+enum Shape {
+    Dot,
+    Circle(int),
+    Rect { w: int, h: int },
+}
 
 const SHAPES: [Shape; 3] = [Shape::Dot, Shape::Circle(2), Shape::Rect { w: 3, h: 4 }];
 
@@ -45,35 +49,35 @@ fn crc(bytes: &[u8]) -> u32 {
 }
 
 test "a table computed when compiling" {
-    CRC_TABLE[1]                            // => 1996959894
+    CRC_TABLE[1]  // => 1996959894
     ;
-    crc("hello".as_bytes())                 // => 907060870
+    crc("hello".as_bytes())  // => 907060870
 }
 
 test "a const that owns memory is borrowed" {
-    WORDS.len()                             // => 2
+    WORDS.len()  // => 2
     ;
-    WORDS[1].len()                          // => 30
+    WORDS[1].len()  // => 30
     ;
-    WORDS[0].as_str()                       // => "alpha"
+    WORDS[0].as_str()  // => "alpha"
     ;
     let copy = WORDS.clone();
-    copy.len()                              // => 2
+    copy.len()  // => 2
 }
 
 test "enums and options, by value when Copy" {
-    MAYBE                                   // => Some('x')
+    MAYBE  // => Some('x')
     ;
-    NONE.is_none()                          // => true
+    NONE.is_none()  // => true
 }
 
 test "an Rc in a const is never freed" {
     let a = SHARED.share();
-    *a + 1                                  // => 42
+    *a + 1  // => 42
     ;
-    Rc::strong_count(&SHARED)               // => 2
+    Rc::strong_count(&SHARED)  // => 2
 }
 
 test "an array of enums" {
-    fmt"{SHAPES:?}"                         // => "[Shape::Dot, Shape::Circle(2), Shape::Rect { w: 3, h: 4 }]"
+    fmt"{SHAPES:?}"  // => "[Shape::Dot, Shape::Circle(2), Shape::Rect { w: 3, h: 4 }]"
 }

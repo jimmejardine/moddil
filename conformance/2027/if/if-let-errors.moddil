@@ -1,7 +1,10 @@
 // covers: expr.if.let.1
 
-enum Shape { Dot, Circle(int) }
+enum Shape {
+    Dot,
+    Circle(int),
+}
 
 fn not_in_else(s: Shape) -> int {
-    if let Shape::Circle(r) = s { r } else { r }    //~ E0101
+    if let Shape::Circle(r) = s { r } else { r }  //~ E0101
 }

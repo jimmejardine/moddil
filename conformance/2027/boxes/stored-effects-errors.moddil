@@ -1,9 +1,13 @@
 // covers: expr.closure.stored.1
 
-trait Clock { fn now(&self) -> int; }
-fn now() -> int with clock: Clock { clock.now() }
+trait Clock {
+    fn now(&self) -> int;
+}
+fn now() -> int with clock: Clock {
+    clock.now()
+}
 
 /// A stored closure's type lists no handler: it owns what it captures.
 fn listed() {
-    let f: Box<dyn Fn() -> int with Clock> = Box::new(|| 1);    //~ E0609
+    let f: Box<dyn Fn() -> int with Clock> = Box::new(|| 1);  //~ E0609
 }

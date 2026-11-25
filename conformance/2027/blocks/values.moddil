@@ -1,13 +1,20 @@
 // covers: expr.block.1
 
 fn diverges() -> int {
-    { return 7; }
+    {
+        return 7;
+    }
 }
 
 test "blocks" {
-    { 1; 2 }                  // => 2
+    {
+        1;
+        2
+    }  // => 2
     ;
-    { 1; }                    // => ()
+    {
+        1;
+    }  // => ()
     ;
-    diverges()                // => 7
+    diverges()  // => 7
 }

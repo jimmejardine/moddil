@@ -25,69 +25,74 @@ fn bump(xs: &mut [int]) {
 test "array literals and indexing" {
     let mut a = [1, 2, 3];
     a[1] = 20;
-    a                                       // => [1, 20, 3]
+    a  // => [1, 20, 3]
     ;
-    a[2]                                    // => 3
+    a[2]  // => 3
     ;
     let z = [0; 4];
-    z                                       // => [0, 0, 0, 0]
+    z  // => [0, 0, 0, 0]
     ;
-    z.len()                                 // => 4
+    z.len()  // => 4
     ;
     let nested = [[1, 2], [3, 4]];
-    nested[1][0]                            // => 3
+    nested[1][0]  // => 3
 }
 
 test "slices" {
     let mut a = [1, 2, 3];
-    sum(&a)                                 // => 6
+    sum(&a)  // => 6
     ;
     bump(&mut a);
-    a                                       // => [101, 2, 3]
+    a  // => [101, 2, 3]
     ;
-    a.as_slice().is_empty()                 // => false
+    a.as_slice().is_empty()  // => false
 }
 
 test "const parameters" {
     let a = [true, false];
-    first(a)                                // => true
+    first(a)  // => true
     ;
-    size(&[1, 2, 3, 4, 5])                  // => 5
+    size(&[1, 2, 3, 4, 5])  // => 5
 }
 
 test "comparing arrays" {
     let a = [1, 2, 3];
-    a == [1, 2, 3]                          // => true
+    a == [1, 2, 3]  // => true
     ;
-    a != [1, 2, 4]                          // => true
+    a != [1, 2, 4]  // => true
     ;
-    a.as_slice() == [1, 2].as_slice()       // => false
+    a.as_slice() == [1, 2].as_slice()  // => false
 }
 
 test "the repeated value is evaluated once" {
     let mut n = 0;
-    let a = [{ n += 1; n }; 3];
-    a                                       // => [1, 1, 1]
+    let a = [{
+        n += 1;
+        n
+    }; 3];
+    a  // => [1, 1, 1]
     ;
-    n                                       // => 1
+    n  // => 1
 }
 
-struct Name { n: int }
+struct Name {
+    n: int,
+}
 
 test "an element that is not Copy is replaced, not moved out" {
     let mut names = [Name { n: 1 }, Name { n: 2 }];
     let old = replace(&mut names[0], Name { n: 3 });
-    old.n * 10 + names[0].n                 // => 13
+    old.n * 10 + names[0].n  // => 13
 }
 
 test "an index past the end traps" {
     let a = [1, 2];
     let i = 2;
-    a[i];                                   //~ trap
+    a[i];  //~ trap
 }
 
 test "a negative index traps" {
     let a = [1, 2];
     let i = 0 - 1;
-    a[i];                                   //~ trap
+    a[i];  //~ trap
 }

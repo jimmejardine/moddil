@@ -1,27 +1,40 @@
 // covers: item.fn.ret-borrow.1
 
-struct Pair { a: int, b: int }
+struct Pair {
+    a: int,
+    b: int,
+}
 
-fn first(p: &Pair) -> &int { &p.a }
-fn pick(a: &int, b: &int) -> &int from a { a }
-fn larger(a: &int, b: &int) -> &int { if *a > *b { a } else { b } }
+fn first(p: &Pair) -> &int {
+    &p.a
+}
+fn pick(a: &int, b: &int) -> &int from a {
+    a
+}
+fn larger(a: &int, b: &int) -> &int {
+    if *a > *b { a } else { b }
+}
 // A parameter of a type parameter may be where the result comes from: `a` may be a borrow.
-fn leftmost<T>(a: T, b: &int) -> T from a { a }
-fn biggest(p: &mut Pair) -> &mut int { if p.a > p.b { &mut p.a } else { &mut p.b } }
+fn leftmost<T>(a: T, b: &int) -> T from a {
+    a
+}
+fn biggest(p: &mut Pair) -> &mut int {
+    if p.a > p.b { &mut p.a } else { &mut p.b }
+}
 
 test "returning borrows" {
     let p = Pair { a: 1, b: 2 };
-    *first(&p)                  // => 1
+    *first(&p)  // => 1
     ;
     let x = 3;
     let y = 4;
-    *pick(&x, &y)               // => 3
+    *pick(&x, &y)  // => 3
     ;
-    *larger(&x, &y)             // => 4
+    *larger(&x, &y)  // => 4
     ;
     let mut q = Pair { a: 5, b: 9 };
-    *leftmost(&x, &y)           // => 3
+    *leftmost(&x, &y)  // => 3
     ;
     *biggest(&mut q) += 1;
-    q                           // => Pair { a: 5, b: 10 }
+    q  // => Pair { a: 5, b: 10 }
 }

@@ -1,2 +1,4 @@
 // covers: mod.dep.1
-pub fn a() -> int { 1 }
+pub fn a() -> int {
+    1
+}

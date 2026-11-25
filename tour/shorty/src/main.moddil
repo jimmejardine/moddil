@@ -23,12 +23,18 @@ use mod::serve::serve;
 fn main(args: Args, stdio: Stdio, net: NetRoot, entropy: Entropy) -> ExitCode {
     with Stderr = stdio.err {
         let port = try { args.value::<Port>("port", fallback: 8080)? } catch {
-            e => { eprintln(fmt"bad --port: {e}"); return ExitCode::Usage }
+            e => {
+                eprintln(fmt"bad --port: {e}");
+                return ExitCode::Usage
+            }
         };
         // A handler installed from a borrow leaves `net` usable inside the block.
         with Net = &net, Rand = entropy, Links = MemoryLinks::new() {
             let listener = try { net.listen(port)? } catch {
-                e => { eprintln(fmt"cannot listen on {port}: {e}"); return ExitCode::Unavailable }
+                e => {
+                    eprintln(fmt"cannot listen on {port}: {e}");
+                    return ExitCode::Unavailable
+                }
             };
             runtime::serve_until_stopped(|| serve(&listener), signals: [Signal::Int, Signal::Term], grace: Duration::seconds(10));
         }

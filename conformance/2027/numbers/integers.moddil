@@ -1,100 +1,106 @@
 // covers: num.types.1, num.lit.1, num.ops.1, num.wrap.1, num.widen.1
 
-fn add(a: u8, b: u8) -> u8 { a + b }
+fn add(a: u8, b: u8) -> u8 {
+    a + b
+}
 
 test "sized integers" {
     let a: u8 = 250;
-    a + 5                                   // => 255
+    a + 5  // => 255
     ;
     let b: i8 = -100;
-    b - 28                                  // => -128
+    b - 28  // => -128
     ;
     let big: u64 = 18446744073709551615;
-    big                                     // => 18446744073709551615
+    big  // => 18446744073709551615
     ;
     let huge: i128 = 170141183460469231731687303715884105727;
-    huge                                    // => 170141183460469231731687303715884105727
+    huge  // => 170141183460469231731687303715884105727
     ;
     let x: i64 = 3;
-    x * 2                                   // => 6
+    x * 2  // => 6
 }
 
 test "a literal takes the type it meets" {
-    add(200, 55)                            // => 255
+    add(200, 55)  // => 255
     ;
     let a: u16 = 1000;
-    a * 60                                  // => 60000
+    a * 60  // => 60000
 }
 
 test "overflow traps at the type's width" {
     let a: u8 = 250;
-    a + 10;                                 //~ trap
+    a + 10;  //~ trap
 }
 
 test "negating the least value traps" {
     let b: i8 = -128;
-    -b;                                     //~ trap
+    -b;  //~ trap
 }
 
 test "an unsigned type is never negative" {
     let a: u32 = 3;
-    a - 4;                                  //~ trap
+    a - 4;  //~ trap
 }
 
 test "division by zero traps" {
     let a: u16 = 7;
-    a / 0;                                  //~ trap
+    a / 0;  //~ trap
 }
 
 test "shifts and bits" {
     let a: u8 = 1;
-    a << 7                                  // => 128
+    a << 7  // => 128
     ;
     let m: u8 = 0b1010;
-    m & 0b0110                              // => 2
+    m & 0b0110  // => 2
     ;
-    !m                                      // => 245
+    !m  // => 245
 }
 
 test "a shift that loses bits traps" {
     let a: u8 = 3;
-    a << 7;                                 //~ trap
+    a << 7;  //~ trap
 }
 
 test "the wrapping operators" {
     let a: u8 = 250;
-    a +% 10                                 // => 4
+    a +% 10  // => 4
     ;
     let b: u8 = 3;
-    b -% 4                                  // => 255
+    b -% 4  // => 255
     ;
     let mut h: u32 = 4000000000;
     h *%= 2;
-    h                                       // => 3705032704
+    h  // => 3705032704
     ;
     let i: int = 9223372036854775807;
-    i +% 1                                  // => -9223372036854775808
+    i +% 1  // => -9223372036854775808
 }
 
-fn twice(x: int) -> int { x * 2 }
-fn wide(x: u64) -> u64 { x }
+fn twice(x: int) -> int {
+    x * 2
+}
+fn wide(x: u64) -> u64 {
+    x
+}
 
 test "a narrower integer converts where a wider one is wanted" {
     let a: i32 = -7;
-    twice(a)                                // => -14
+    twice(a)  // => -14
     ;
     let b: u8 = 200;
-    twice(b)                                // => 400
+    twice(b)  // => 400
     ;
     let c: u32 = 4000000000;
-    wide(c)                                 // => 4000000000
+    wide(c)  // => 4000000000
 }
 
 test "comparisons by the type's order" {
     let a: u64 = 18446744073709551615;
     let b: u64 = 1;
-    a > b                                   // => true
+    a > b  // => true
     ;
     let c: i8 = -1;
-    c < 0                                   // => true
+    c < 0  // => true
 }

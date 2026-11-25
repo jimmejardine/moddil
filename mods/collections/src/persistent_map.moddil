@@ -35,7 +35,7 @@ impl<K: Clone, V: Clone> Clone for Slot<K, V> {
     fn clone(&self) -> Slot<K, V> {
         match self {
             Slot::Entry(h, k, v) => Slot::Entry(*h, k.clone(), v.clone()),
-            Slot::Child(c) => Slot::Child(c.share()),
+            Slot::Child(c)       => Slot::Child(c.share()),
         }
     }
 }
@@ -93,9 +93,7 @@ impl<K: Hash + Eq, V> PersistentMap<K, V> {
                 }
                 MapNode::Collision(_, entries) => {
                     for e in entries {
-                        if let Slot::Entry(_, k, v) = e
-                            && *k == *key
-                        {
+                        if let Slot::Entry(_, k, v) = e && *k == *key {
                             return Some(v);
                         }
                     }
@@ -129,17 +127,14 @@ impl<K: Hash + Eq + Clone, V: Clone> PersistentMap<K, V> {
     pub fn remove(&self, key: &K) -> PersistentMap<K, V> {
         let h = hash_of(key);
         match remove_at(&self.root, 0, h, key) {
-            Removed::Absent => self.clone(),
-            Removed::Empty => PersistentMap::new(),
-            Removed::Node(root) => PersistentMap { root, len: self.len - 1 },
+            Removed::Absent          => self.clone(),
+            Removed::Empty           => PersistentMap::new(),
+            Removed::Node(root)      => PersistentMap { root, len: self.len - 1 },
             Removed::Entry(eh, k, v) => {
                 // The root holds the one entry left.
                 let mut slots = Vec::new();
                 slots.push(Slot::Entry(eh, k, v));
-                PersistentMap {
-                    root: MapNode::Bitmap(bit(eh, 0), slots).to_rc(),
-                    len: self.len - 1,
-                }
+                PersistentMap { root: MapNode::Bitmap(bit(eh, 0), slots).to_rc(), len: self.len - 1 }
             }
         }
     }
@@ -147,13 +142,7 @@ impl<K: Hash + Eq + Clone, V: Clone> PersistentMap<K, V> {
 
 /// A copy of `node`, at shift `shift`, with `v` under `k` (whose hash is `h`), and whether that
 /// added an entry rather than replacing one.
-fn insert_at<K: Eq + Clone, V: Clone>(
-    node: &Rc<MapNode<K, V>>,
-    shift: int,
-    h: int,
-    k: K,
-    v: V,
-) -> (Rc<MapNode<K, V>>, bool) {
+fn insert_at<K: Eq + Clone, V: Clone>(node: &Rc<MapNode<K, V>>, shift: int, h: int, k: K, v: V) -> (Rc<MapNode<K, V>>, bool) {
     match &**node {
         MapNode::Bitmap(bits, slots) => {
             let b = bit(h, shift);
@@ -190,9 +179,7 @@ fn insert_at<K: Eq + Clone, V: Clone>(
             }
             let mut entries = entries.clone();
             for i in 0..entries.len() {
-                if let Slot::Entry(_, ek, _) = &entries[i]
-                    && *ek == k
-                {
+                if let Slot::Entry(_, ek, _) = &entries[i] && *ek == k {
                     entries[i] = Slot::Entry(h, k, v);
                     return (MapNode::Collision(h, entries).to_rc(), false);
                 }
@@ -237,12 +224,7 @@ enum Removed<K, V> {
 }
 
 /// `node`, at shift `shift`, without the entry for `k` (whose hash is `h`).
-fn remove_at<K: Eq + Clone, V: Clone>(
-    node: &Rc<MapNode<K, V>>,
-    shift: int,
-    h: int,
-    k: &K,
-) -> Removed<K, V> {
+fn remove_at<K: Eq + Clone, V: Clone>(node: &Rc<MapNode<K, V>>, shift: int, h: int, k: &K) -> Removed<K, V> {
     match &**node {
         MapNode::Bitmap(bits, slots) => {
             let b = bit(h, shift);
@@ -258,10 +240,10 @@ fn remove_at<K: Eq + Clone, V: Clone>(
                     None
                 }
                 Slot::Child(c) => match remove_at(c, shift + BITS, h, k) {
-                    Removed::Absent => return Removed::Absent,
-                    Removed::Empty => None,
+                    Removed::Absent            => return Removed::Absent,
+                    Removed::Empty             => None,
                     Removed::Entry(eh, ek, ev) => Some(Slot::Entry(eh, ek, ev)),
-                    Removed::Node(c) => Some(Slot::Child(c)),
+                    Removed::Node(c)           => Some(Slot::Child(c)),
                 },
             };
             let mut slots = slots.clone();
@@ -292,15 +274,13 @@ fn remove_at<K: Eq + Clone, V: Clone>(
             for e in entries {
                 match e {
                     Slot::Entry(_, ek, _) if *ek == *k => found = true,
-                    _ => rest.push(e.clone()),
+                    _                                  => rest.push(e.clone()),
                 }
             }
             if !found {
                 return Removed::Absent;
             }
-            if rest.len() == 1
-                && let Some(Slot::Entry(eh, ek, ev)) = rest.pop()
-            {
+            if rest.len() == 1 && let Some(Slot::Entry(eh, ek, ev)) = rest.pop() {
                 return Removed::Entry(eh, ek, ev);
             }
             Removed::Node(MapNode::Collision(*ch, rest).to_rc())
@@ -319,9 +299,7 @@ pub view PersistentMapIter<K, V> {
 fn node_at<K, V>(map: &PersistentMap<K, V>, path: &Vec<int>) -> &Rc<MapNode<K, V>> from map {
     let mut node = &map.root;
     for d in 0..path.len() - 1 {
-        if let MapNode::Bitmap(_, slots) = &**node
-            && let Slot::Child(c) = &slots[path[d]]
-        {
+        if let MapNode::Bitmap(_, slots) = &**node && let Slot::Child(c) = &slots[path[d]] {
             node = c;
         }
     }
@@ -343,7 +321,7 @@ impl<K, V> Iterator for PersistentMapIter<K, V> {
             } else {
                 match &slots[at] {
                     Slot::Entry(_, k, v) => Some(Some((k, v))),
-                    Slot::Child(_) => Some(None),
+                    Slot::Child(_)       => Some(None),
                 }
             };
             match entry {
@@ -392,7 +370,7 @@ impl<K: Hash + Eq, V: PartialEq> PartialEq for PersistentMap<K, V> {
         for (k, v) in self.iter() {
             match other.get(k) {
                 Some(w) if *v == *w => {}
-                _ => return false,
+                _                   => return false,
             }
         }
         true
@@ -411,7 +389,9 @@ impl<K: Hash + Eq + Clone, V: Clone> FromArrayLiteral<(K, V)> for PersistentMap<
         m
     }
 
-    fn from_repeat(x: (K, V), n: int) -> PersistentMap<K, V> where (K, V): Clone {
+    fn from_repeat(x: (K, V), n: int) -> PersistentMap<K, V>
+        where (K, V): Clone
+    {
         let m = PersistentMap::new();
         if n > 0 { m.insert(x.0, x.1) } else { m }
     }
@@ -491,7 +471,7 @@ impl<T> Iterator for PersistentSetIter<T> {
     fn next(&mut self) -> Option<&T> {
         match self.inner.next() {
             Some((x, _)) => Some(x),
-            None => None,
+            None         => None,
         }
     }
 }
@@ -527,7 +507,9 @@ impl<T: Hash + Eq + Clone> FromArrayLiteral<T> for PersistentSet<T> {
         s
     }
 
-    fn from_repeat(x: T, n: int) -> PersistentSet<T> where T: Clone {
+    fn from_repeat(x: T, n: int) -> PersistentSet<T>
+        where T: Clone
+    {
         let s = PersistentSet::new();
         if n > 0 { s.insert(x) } else { s }
     }

@@ -17,13 +17,13 @@ impl Weekday {
     /// 1 for Monday to 7 for Sunday (ISO 8601).
     pub fn number(self) -> int {
         match self {
-            Weekday::Monday => 1,
-            Weekday::Tuesday => 2,
+            Weekday::Monday    => 1,
+            Weekday::Tuesday   => 2,
             Weekday::Wednesday => 3,
-            Weekday::Thursday => 4,
-            Weekday::Friday => 5,
-            Weekday::Saturday => 6,
-            Weekday::Sunday => 7,
+            Weekday::Thursday  => 4,
+            Weekday::Friday    => 5,
+            Weekday::Saturday  => 6,
+            Weekday::Sunday    => 7,
         }
     }
 
@@ -43,13 +43,13 @@ impl Weekday {
 impl Display for Weekday {
     fn fmt(&self, out: &mut dyn TextWrite) {
         out.write_str(match self {
-            Weekday::Monday => "Monday",
-            Weekday::Tuesday => "Tuesday",
+            Weekday::Monday    => "Monday",
+            Weekday::Tuesday   => "Tuesday",
             Weekday::Wednesday => "Wednesday",
-            Weekday::Thursday => "Thursday",
-            Weekday::Friday => "Friday",
-            Weekday::Saturday => "Saturday",
-            Weekday::Sunday => "Sunday",
+            Weekday::Thursday  => "Thursday",
+            Weekday::Friday    => "Friday",
+            Weekday::Saturday  => "Saturday",
+            Weekday::Sunday    => "Sunday",
         });
     }
 }
@@ -62,9 +62,9 @@ pub fn is_leap_year(year: int) -> bool {
 /// The days in month `month` (1 to 12) of `year`.
 pub fn days_in_month(year: int, month: int) -> int {
     match month {
-        2 => if is_leap_year(year) { 29 } else { 28 },
+        2              => if is_leap_year(year) { 29 } else { 28 },
         4 | 6 | 9 | 11 => 30,
-        _ => 31,
+        _              => 31,
     }
 }
 

@@ -1,5 +1,5 @@
 // covers: expr.logic.1
 
 fn f() {
-    let a = 1 && true;        //~ E0201
+    let a = 1 && true;  //~ E0201
 }

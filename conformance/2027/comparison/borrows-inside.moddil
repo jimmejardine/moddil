@@ -3,17 +3,17 @@
 
 test "an Option of a borrow" {
     let v: Vec<int> = [1, 2, 3];
-    v.first() == Some(&1)                   // => true
+    v.first() == Some(&1)  // => true
     ;
-    v.last() == Some(&2)                    // => false
+    v.last() == Some(&2)  // => false
     ;
-    v.get(9) == None                        // => true
+    v.get(9) == None  // => true
     ;
-    v.first() < v.last()                    // => true
+    v.first() < v.last()  // => true
 }
 
 test "an Option of text" {
     let s = "abc";
     let o: Option<&str> = Some(s);
-    o == Some("abc")                        // => true
+    o == Some("abc")  // => true
 }

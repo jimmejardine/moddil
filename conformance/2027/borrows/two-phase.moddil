@@ -1,7 +1,10 @@
 // covers: expr.method.twophase.1
 // A receiver borrowed with `&mut` is borrowed once the arguments are evaluated.
 
-struct Counter { n: int, step: int }
+struct Counter {
+    n: int,
+    step: int,
+}
 
 impl Counter {
     fn add(&mut self, by: int) {
@@ -15,10 +18,10 @@ impl Counter {
 test "arguments read the receiver" {
     let mut v: Vec<int> = [1, 2];
     v.push(v.len());
-    v[2]                                    // => 2
+    v[2]  // => 2
     ;
     let mut c = Counter { n: 0, step: 5 };
     c.bump();
     c.add(c.n);
-    c.n                                     // => 10
+    c.n  // => 10
 }

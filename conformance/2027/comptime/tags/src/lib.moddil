@@ -9,18 +9,18 @@ const fn chars(text: &str) -> int {
 }
 
 test "a tagged literal calls its tag with the text, as written" {
-    chars"héllo"                            // => 5
+    chars"héllo"  // => 5
     ;
-    chars"a\nb"                             // => 4
+    chars"a\nb"  // => 4
     ;
-    re"^\d+$".is_match("2027")              // => true
+    re"^\d+$".is_match("2027")  // => true
     ;
-    re"^\d+$".is_match("20x7")              // => false
+    re"^\d+$".is_match("20x7")  // => false
 }
 
 test "a tagged block is dedented as a block is" {
     let r = re"""
         ab+
         """;
-    r.is_match("abbb\n")                    // => true
+    r.is_match("abbb\n")  // => true
 }

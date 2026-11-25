@@ -45,11 +45,15 @@ const fn counting(t: type) -> Impl<Counting> {
     impl Counting for t {
         fn counting(start: int) -> Self {
             let mut n = start;
-            t {
-                inline for f in fields(t) {
-                    [f]: if const f.is_refined() { f.new({ n += 1; n }) ?! "small" } else { n += 1; n },
-                }
-            }
+            t { inline for f in fields(t) { [f]: if const f.is_refined() {
+                f.new({
+                    n += 1;
+                    n
+                }) ?! "small"
+            } else {
+                n += 1;
+                n
+            }, } }
         }
     }
 }
@@ -57,20 +61,24 @@ const fn counting(t: type) -> Impl<Counting> {
 type Small = int where self < 100;
 
 #[derive(Listing, Counting, Debug)]
-struct Point { x: int, y: Small, secret: int }
+struct Point {
+    x: int,
+    y: Small,
+    secret: int,
+}
 
 #[derive(Listing)]
 struct Empty {}
 
 test "a template's impl is written once for each field" {
     let p = Point { x: 1, y: Small::new(2) ?! "small", secret: 3 };
-    p.listing()                             // => "x=1;y=2!;secret=3;"
+    p.listing()  // => "x=1;y=2!;secret=3;"
     ;
-    Point::names()                          // => "x y "
+    Point::names()  // => "x y "
     ;
-    Empty {}.listing()                      // => ""
+    Empty {}.listing()  // => ""
 }
 
 test "a struct literal takes a field for each" {
-    Point::counting(10)                     // => Point { x: 11, y: 12, secret: 13 }
+    Point::counting(10)  // => Point { x: 11, y: 12, secret: 13 }
 }

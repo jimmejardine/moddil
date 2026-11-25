@@ -2,7 +2,9 @@
 // An impl applies only where its bounds hold: a borrowed collection gets its own
 // `IntoIterator` beside the prelude's for every `Iterator`.
 
-struct Bag { items: Vec<int> }
+struct Bag {
+    items: Vec<int>,
+}
 
 view BagIter {
     bag: &Bag,
@@ -16,7 +18,7 @@ impl Iterator for BagIter {
         self.at += 1;
         match x {
             Some(v) => Some(*v),
-            None => None,
+            None    => None,
         }
     }
 }
@@ -35,5 +37,5 @@ test "a for loop over a borrowed bag" {
     for x in &b {
         total += x;
     }
-    total                                   // => 12
+    total  // => 12
 }

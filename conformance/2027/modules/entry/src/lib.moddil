@@ -4,11 +4,15 @@ pub trait Time {
     fn now(&self) -> int;
 }
 
-pub(mod) fn uses() -> int with time: Time { time.now() }
+pub(mod) fn uses() -> int with time: Time {
+    time.now()
+}
 
 // A `main` outside the root module and the executables' main modules is an ordinary function.
-pub(mod) fn helpers() -> int { other::main() }
+pub(mod) fn helpers() -> int {
+    other::main()
+}
 
 fn main() -> int {
-    uses()                                      //~ E0602
+    uses()  //~ E0602
 }

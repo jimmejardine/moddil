@@ -155,10 +155,8 @@ impl BigInt {
             return BigInt::make(self.neg, mag::add(self.mag.as_slice(), other.mag.as_slice()));
         }
         match mag::cmp(self.mag.as_slice(), other.mag.as_slice()) {
-            Ordering::Less => {
-                BigInt::make(other.neg, mag::sub(other.mag.as_slice(), self.mag.as_slice()))
-            }
-            _ => BigInt::make(self.neg, mag::sub(self.mag.as_slice(), other.mag.as_slice())),
+            Ordering::Less => { BigInt::make(other.neg, mag::sub(other.mag.as_slice(), self.mag.as_slice())) }
+            _              => BigInt::make(self.neg, mag::sub(self.mag.as_slice(), other.mag.as_slice())),
         }
     }
 
@@ -267,10 +265,10 @@ impl PartialOrd for BigInt {
 impl Ord for BigInt {
     fn cmp(&self, other: &BigInt) -> Ordering {
         match (self.neg, other.neg) {
-            (false, true) => Ordering::Greater,
-            (true, false) => Ordering::Less,
+            (false, true)  => Ordering::Greater,
+            (true, false)  => Ordering::Less,
             (false, false) => mag::cmp(self.mag.as_slice(), other.mag.as_slice()),
-            (true, true) => mag::cmp(other.mag.as_slice(), self.mag.as_slice()),
+            (true, true)   => mag::cmp(other.mag.as_slice(), self.mag.as_slice()),
         }
     }
 }

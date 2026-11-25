@@ -1,5 +1,11 @@
 // covers: type.tuple.1
 
-fn wrong_size() -> (int, int) { (1, 2, 3) }         //~ E0201
-fn wrong_element() -> (int, bool) { (1, 2) }        //~ E0201
-fn not_one() -> (int,) { (1) }                      //~ E0201
+fn wrong_size() -> (int, int) {
+    (1, 2, 3)  //~ E0201
+}
+fn wrong_element() -> (int, bool) {
+    (1, 2)  //~ E0201
+}
+fn not_one() -> (int,) {
+    (1)  //~ E0201
+}

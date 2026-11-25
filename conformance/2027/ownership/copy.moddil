@@ -1,28 +1,39 @@
 // covers: own.copy.derive.1, own.copy.1
 
 #[derive(Copy, Clone)]
-struct Point { x: int, y: int }
+struct Point {
+    x: int,
+    y: int,
+}
 
 #[derive(Copy, Clone)]
-enum Dir { Left, Right(int) }
+enum Dir {
+    Left,
+    Right(int),
+}
 
 #[derive(Copy, Clone)]
-struct Fits { a: (int, int, int, int), b: (int, int, int, int) }
+struct Fits {
+    a: (int, int, int, int),
+    b: (int, int, int, int),
+}
 
-fn twice(p: Point) -> (Point, Point) { (p, p) }
+fn twice(p: Point) -> (Point, Point) {
+    (p, p)
+}
 
 test "derived Copy types are copied" {
     let p = Point { x: 1, y: 2 };
     let q = p;
-    p.x + q.y                   // => 3
+    p.x + q.y  // => 3
     ;
-    twice(p).1                  // => Point { x: 1, y: 2 }
+    twice(p).1  // => Point { x: 1, y: 2 }
     ;
     let d = Dir::Right(3);
     let e = d;
-    (d, e)                      // => (Dir::Right(3), Dir::Right(3))
+    (d, e)  // => (Dir::Right(3), Dir::Right(3))
     ;
     let f = Fits { a: (1, 2, 3, 4), b: (5, 6, 7, 8) };
     let g = f;
-    f.a.0 + g.b.3               // => 9
+    f.a.0 + g.b.3  // => 9
 }

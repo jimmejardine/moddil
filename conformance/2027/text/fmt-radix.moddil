@@ -4,41 +4,41 @@
 
 test "an integer's digits in base 16, 2 and 8" {
     let c: int = 255;
-    fmt"{c:x} {c:X} {c:b} {c:o}"            // => "ff FF 11111111 377"
+    fmt"{c:x} {c:X} {c:b} {c:o}"  // => "ff FF 11111111 377"
     ;
     let z: u8 = 0;
-    fmt"{z:x} {z:b}"                        // => "0 0"
+    fmt"{z:x} {z:b}"  // => "0 0"
 }
 
 test "the bits as the type holds them: a negative one in two's complement" {
     let a: i8 = -1;
     let n: int = -2;
-    fmt"{a:x} {a:o} {n:X}"                  // => "ff 377 FFFFFFFFFFFFFFFE"
+    fmt"{a:x} {a:o} {n:X}"  // => "ff 377 FFFFFFFFFFFFFFFE"
     ;
     let wide: u128 = 340282366920938463463374607431768211455;
-    fmt"{wide:x}"                           // => "ffffffffffffffffffffffffffffffff"
+    fmt"{wide:x}"  // => "ffffffffffffffffffffffffffffffff"
     ;
     let low: i128 = -170141183460469231731687303715884105728;
-    fmt"{low:x}"                            // => "80000000000000000000000000000000"
+    fmt"{low:x}"  // => "80000000000000000000000000000000"
 }
 
 test "# writes the base's prefix, and 0 pads after it" {
     let b: u16 = 42;
-    fmt"{b:#x} {b:#b} {b:#o}"               // => "0x2a 0b101010 0o52"
+    fmt"{b:#x} {b:#b} {b:#o}"  // => "0x2a 0b101010 0o52"
     ;
-    fmt"{b:#06x} {b:#010b}"                 // => "0x002a 0b00101010"
+    fmt"{b:#06x} {b:#010b}"  // => "0x002a 0b00101010"
     ;
-    fmt"[{b:>8x}] [{b:<#8x}]"               // => "[      2a] [0x2a    ]"
+    fmt"[{b:>8x}] [{b:<#8x}]"  // => "[      2a] [0x2a    ]"
 }
 
 test "+ writes a number's sign" {
     let p: int = 255;
     let m: int = -42;
     let f: f64 = 1.5;
-    fmt"{p:+} {m:+} {f:+} {f:+.2}"          // => "+255 -42 +1.5 +1.50"
+    fmt"{p:+} {m:+} {f:+} {f:+.2}"  // => "+255 -42 +1.5 +1.50"
     ;
-    fmt"[{p:<+6}] [{p:+06}]"                // => "[+255  ] [+00255]"
+    fmt"[{p:<+6}] [{p:+06}]"  // => "[+255  ] [+00255]"
     ;
     let z: int = 0;
-    fmt"{z:+}"                              // => "+0"
+    fmt"{z:+}"  // => "+0"
 }

@@ -1,1 +1,3 @@
-pub fn b() -> int { 2 }
+pub fn b() -> int {
+    2
+}

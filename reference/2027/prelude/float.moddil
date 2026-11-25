@@ -68,34 +68,18 @@ impl f32 {
         let f = self - t;
         let away = if self < 0.0 { t - 1.0 } else { t + 1.0 };
         let r = match mode {
-            Round::Down => self.floor(),
-            Round::Up => self.ceil(),
-            Round::TowardZero => t,
+            Round::Down        => self.floor(),
+            Round::Up          => self.ceil(),
+            Round::TowardZero  => t,
             Round::NearestAway => if f.abs() >= 0.5 { away } else { t },
-            Round::NearestEven => {
-                if f.abs() > 0.5 {
-                    away
-                } else if f.abs() < 0.5 {
-                    t
-                } else if (t / 2.0).fract() == 0.0 {
-                    t
-                } else {
-                    away
-                }
-            }
+            Round::NearestEven => { if f.abs() > 0.5 { away } else if f.abs() < 0.5 { t } else if (t / 2.0).fract() == 0.0 { t } else { away } }
         };
         r.to::<T>()?
     }
 
     // `self`, or `lo` if it is below, or `hi` if it is above.
     fn clamp(self, lo: f32, hi: f32) -> f32 {
-        if self < lo {
-            lo
-        } else if self > hi {
-            hi
-        } else {
-            self
-        }
+        if self < lo { lo } else if self > hi { hi } else { self }
     }
 }
 
@@ -167,34 +151,17 @@ impl f64 {
         let f = self - t;
         let away = if self < 0.0 { t - 1.0 } else { t + 1.0 };
         let r = match mode {
-            Round::Down => self.floor(),
-            Round::Up => self.ceil(),
-            Round::TowardZero => t,
+            Round::Down        => self.floor(),
+            Round::Up          => self.ceil(),
+            Round::TowardZero  => t,
             Round::NearestAway => if f.abs() >= 0.5 { away } else { t },
-            Round::NearestEven => {
-                if f.abs() > 0.5 {
-                    away
-                } else if f.abs() < 0.5 {
-                    t
-                } else if (t / 2.0).fract() == 0.0 {
-                    t
-                } else {
-                    away
-                }
-            }
+            Round::NearestEven => { if f.abs() > 0.5 { away } else if f.abs() < 0.5 { t } else if (t / 2.0).fract() == 0.0 { t } else { away } }
         };
         r.to::<T>()?
     }
 
     // `self`, or `lo` if it is below, or `hi` if it is above.
     fn clamp(self, lo: f64, hi: f64) -> f64 {
-        if self < lo {
-            lo
-        } else if self > hi {
-            hi
-        } else {
-            self
-        }
+        if self < lo { lo } else if self > hi { hi } else { self }
     }
 }
-

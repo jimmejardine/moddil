@@ -2,16 +2,17 @@
 
 use moddil::root::Args;
 
-struct Forged { handle: int }
+struct Forged {
+    handle: int,
+}
 
 fn main(
-    args: Args,
-    port: int,                              //~ E0608
-    again: Args,                            //~ E0608
-    fake: Forged,                           //~ E0608
+    args: Args, port: int,  //~ E0608
+    again: Args,            //~ E0608
+    fake: Forged,           //~ E0608
 ) {}
 
 // A root capability's fields are private to its module, so a program cannot make one.
 fn forged() -> Args {
-    Args { handle: 0 }                      //~ E0701
+    Args { handle: 0 }  //~ E0701
 }

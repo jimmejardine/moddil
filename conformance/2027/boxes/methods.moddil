@@ -1,45 +1,63 @@
 // covers: expr.method.deref.1
 
-trait Shape { fn area(&self) -> int; }
-struct Square { side: int }
-impl Shape for Square { fn area(&self) -> int { self.side * self.side } }
+trait Shape {
+    fn area(&self) -> int;
+}
+struct Square {
+    side: int,
+}
+impl Shape for Square {
+    fn area(&self) -> int {
+        self.side * self.side
+    }
+}
 
-struct Counter { n: int }
+struct Counter {
+    n: int,
+}
 impl Counter {
     fn bump(&mut self) -> int {
         self.n += 1;
         self.n
     }
-    fn get(&self) -> int { self.n }
+    fn get(&self) -> int {
+        self.n
+    }
 }
 
 /// A guard-like type: it reaches its value through `Deref` and `DerefMut`.
-struct Guard { value: Counter }
+struct Guard {
+    value: Counter,
+}
 impl Deref for Guard {
     type Output = Counter;
-    fn deref(&self) -> &Counter { &self.value }
+    fn deref(&self) -> &Counter {
+        &self.value
+    }
 }
 impl DerefMut for Guard {
-    fn deref_mut(&mut self) -> &mut Counter { &mut self.value }
+    fn deref_mut(&mut self) -> &mut Counter {
+        &mut self.value
+    }
 }
 
 test "a method of what a box holds is called through it" {
     let b = Box::new(Square { side: 3 });
-    b.area()                                         // => 9
+    b.area()  // => 9
     ;
     let d: Box<dyn Shape> = Box::new(Square { side: 2 });
-    d.area()                                         // => 4
+    d.area()  // => 4
     ;
     let mut c = Box::new(Counter { n: 0 });
     c.bump();
-    c.bump()                                         // => 2
+    c.bump()  // => 2
 }
 
 test "through a type's own Deref and DerefMut" {
     let mut g = Guard { value: Counter { n: 5 } };
     g.bump();
-    g.get()                                          // => 6
+    g.get()  // => 6
     ;
     let r = &g;
-    r.get()                                          // => 6
+    r.get()  // => 6
 }

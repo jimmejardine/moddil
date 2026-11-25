@@ -3,8 +3,11 @@
 use mod::codec::Encode;
 
 #[derive(Encode)]
-pub struct Account { pub id: int, balance: int }
+pub struct Account {
+    pub id: int,
+    balance: int,
+}
 
 test "a derive from another module reads private fields, with its own names" {
-    Account { id: 7, balance: 40 }.encode()     // => "<id:7><balance:40>"
+    Account { id: 7, balance: 40 }.encode()  // => "<id:7><balance:40>"
 }

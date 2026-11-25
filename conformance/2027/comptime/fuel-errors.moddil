@@ -9,16 +9,16 @@ const fn count(n: int) -> int {
 }
 
 #[fuel(100)]
-const FEW: int = count(1000);               //~ E1004
+const FEW: int = count(1000);  //~ E1004
 
 const ENOUGH: int = count(1000);
 
 fn block() -> int {
     #[fuel(100)]
-    let n = const { count(1000) };          //~ E1004
+    let n = const { count(1000) };  //~ E1004
     n + ENOUGH
 }
 
 fn traps() -> int {
-    const { 1 / 0 }                         //~ E1004
+    const { 1 / 0 }  //~ E1004
 }

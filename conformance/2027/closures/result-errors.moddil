@@ -6,16 +6,20 @@ fn lookup(x: int) -> int with fail(Missing) {
     x
 }
 
-fn unlisted() -> impl Fn(int) -> int {             //~ E0502
+fn unlisted() -> impl Fn(int) -> int {  //~ E0502
     |x| lookup(x)?
 }
 
 fn borrowed(v: &Vec<int>) -> impl Fn() -> int {
-    || v.len()                                      //~ E0802
+    || v.len()  //~ E0802
 }
 
-trait Clock { fn now(&self) -> int; }
-fn now() -> int with clock: Clock { clock.now() }
+trait Clock {
+    fn now(&self) -> int;
+}
+fn now() -> int with clock: Clock {
+    clock.now()
+}
 
 /// A returned closure owns what it captures, so it uses no handler: its type cannot list one.
 fn stamped() -> (impl Fn(int) -> int with Clock) {  //~ E0609

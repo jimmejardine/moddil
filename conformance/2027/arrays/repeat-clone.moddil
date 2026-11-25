@@ -1,7 +1,9 @@
 // covers: expr.array.repeat.1
 
 /// Each clone is one more than what it was cloned from.
-struct Tag { n: int }
+struct Tag {
+    n: int,
+}
 
 impl Clone for Tag {
     fn clone(&self) -> Tag {
@@ -11,21 +13,21 @@ impl Clone for Tag {
 
 test "[x; n] of a value that is only Clone: clones, then the value" {
     let xs: [Tag; 3] = [Tag { n: 0 }; 3];
-    xs[0].n                                 // => 1
+    xs[0].n  // => 1
     ;
-    xs[1].n                                 // => 1
+    xs[1].n  // => 1
     ;
-    xs[2].n                                 // => 0
+    xs[2].n  // => 0
 }
 
 test "[x; n] of strings" {
     let words: [String; 2] = [String::from_str("hi"); 2];
-    words[0].len() + words[1].len()         // => 4
+    words[0].len() + words[1].len()  // => 4
 }
 
 test "[x; 0] makes no element" {
     let none: [String; 0] = [String::from_str("gone"); 0];
-    none.len()                              // => 0
+    none.len()  // => 0
 }
 
 fn filled<T: Clone>(x: T) -> [T; 2] {
@@ -34,15 +36,15 @@ fn filled<T: Clone>(x: T) -> [T; 2] {
 
 test "[x; n] in generic code" {
     let pair = filled(Tag { n: 5 });
-    pair[0].n + pair[1].n                   // => 11
+    pair[0].n + pair[1].n  // => 11
 }
 
 test "an array of values that are only Clone clones each" {
     let xs: [Tag; 2] = [Tag { n: 0 }, Tag { n: 10 }];
     let ys = xs.clone();
-    ys[0].n + ys[1].n                       // => 12
+    ys[0].n + ys[1].n  // => 12
     ;
     let names: [String; 2] = [String::from_str("a"), String::from_str("bc")];
     let copy = names.clone();
-    copy[1].len()                           // => 2
+    copy[1].len()  // => 2
 }

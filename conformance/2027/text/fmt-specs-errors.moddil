@@ -1,49 +1,49 @@
 // covers: expr.fmt.spec.1, expr.fmt.spec.2, expr.fmt.spec.3
 
 fn no_width(n: int) -> String {
-    fmt"{n:>}"                              //~ E0902
+    fmt"{n:>}"  //~ E0902
 }
 
 fn not_a_spec(n: int) -> String {
-    fmt"{n:abc}"                            //~ E0902
+    fmt"{n:abc}"  //~ E0902
 }
 
 fn an_int_has_no_digits(n: int) -> String {
-    fmt"{n:.2}"                             //~ E0902
+    fmt"{n:.2}"  //~ E0902
 }
 
 fn zeros_are_for_numbers(s: &str) -> String {
-    fmt"{s:08}"                             //~ E0902
+    fmt"{s:08}"  //~ E0902
 }
 
 fn debug_text_is_not_cut(s: &str) -> String {
-    fmt"{s:.2?}"                            //~ E0902
+    fmt"{s:.2?}"  //~ E0902
 }
 
 fn a_base_is_for_integers(f: f64) -> String {
-    fmt"{f:x}"                              //~ E0902
+    fmt"{f:x}"  //~ E0902
 }
 
 fn a_base_is_not_for_text(s: &str) -> String {
-    fmt"{s:b}"                              //~ E0902
+    fmt"{s:b}"  //~ E0902
 }
 
 fn a_sign_is_for_numbers(s: &str) -> String {
-    fmt"{s:+}"                              //~ E0902
+    fmt"{s:+}"  //~ E0902
 }
 
 fn a_prefix_needs_a_base(n: int) -> String {
-    fmt"{n:#}"                              //~ E0902
+    fmt"{n:#}"  //~ E0902
 }
 
 fn one_type_only(n: int) -> String {
-    fmt"{n:x?}"                             //~ E0902
+    fmt"{n:x?}"  //~ E0902
 }
 
 fn an_exponent_is_for_floats(n: int) -> String {
-    fmt"{n:e}"                              //~ E0902
+    fmt"{n:e}"  //~ E0902
 }
 
 fn a_named_width_is_an_int(f: f64, w: bool) -> String {
-    fmt"{f:w$}"                             //~ E0201
+    fmt"{f:w$}"  //~ E0201
 }

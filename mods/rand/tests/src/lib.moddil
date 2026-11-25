@@ -3,8 +3,8 @@ use rand::{Rand, seeded};
 test "a seed gives the same choices" {
     let a = seeded(7);
     let b = seeded(7);
-    a.below(1000) == b.below(1000)                  // => true
+    a.below(1000) == b.below(1000)  // => true
     ;
     let c = seeded(1).pick("xyz");
-    "xyz".contains(c)                               // => true
+    "xyz".contains(c)  // => true
 }

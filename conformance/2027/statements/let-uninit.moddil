@@ -1,6 +1,9 @@
 // covers: stmt.let.uninit.1
 
-struct Point { x: int, y: int }
+struct Point {
+    x: int,
+    y: int,
+}
 
 fn size(wide: bool) -> int {
     let size;
@@ -34,17 +37,17 @@ fn maybe(c: bool) -> int {
 }
 
 test "let without a value" {
-    maybe(true)                 // => 1
+    maybe(true)  // => 1
     ;
-    maybe(false)                // => 1
+    maybe(false)  // => 1
     ;
-    size(true)                  // => 80
+    size(true)  // => 80
     ;
-    size(false)                 // => 40
+    size(false)  // => 40
     ;
-    label(0)                    // => "none"
+    label(0)  // => "none"
     ;
-    label(3)                    // => "3"
+    label(3)  // => "3"
     ;
     let mut total = 0;
     for i in 0..3 {
@@ -52,12 +55,12 @@ test "let without a value" {
         x = i * 2;
         total += x;
     }
-    total                       // => 6
+    total  // => 6
     ;
     let mut again;
     again = 1;
     again = again + 1;
-    again                       // => 2
+    again  // => 2
     ;
     let mut names: Vec<String> = Vec::new();
     for i in 0..2 {
@@ -65,9 +68,9 @@ test "let without a value" {
         name = fmt"n{i}";
         names.push(name);
     }
-    names.len()                 // => 2
+    names.len()  // => 2
     ;
     let p;
     p = Point { x: 5, y: 1 };
-    p.x + p.y                   // => 6
+    p.x + p.y  // => 6
 }

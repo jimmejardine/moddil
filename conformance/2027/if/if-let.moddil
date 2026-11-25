@@ -1,16 +1,19 @@
 // covers: expr.if.let.1
 
-enum Shape { Dot, Circle(int) }
+enum Shape {
+    Dot,
+    Circle(int),
+}
 
 fn big(s: Shape) -> int {
     if let Shape::Circle(r) = s && r > 5 { r } else { 0 }
 }
 
 test "if let" {
-    (big(Shape::Circle(9)), big(Shape::Circle(2)), big(Shape::Dot)) // => (9, 0, 0)
+    (big(Shape::Circle(9)), big(Shape::Circle(2)), big(Shape::Dot))  // => (9, 0, 0)
     ;
-    if let (a, true) = (1, false) { a } else { 2 } // => 2
+    if let (a, true) = (1, false) { a } else { 2 }  // => 2
     ;
     let (one, two) = (Shape::Circle(1), Shape::Circle(2));
-    if let Shape::Circle(a) = one && let Shape::Circle(b) = two { a + b } else { 0 } // => 3
+    if let Shape::Circle(a) = one && let Shape::Circle(b) = two { a + b } else { 0 }  // => 3
 }

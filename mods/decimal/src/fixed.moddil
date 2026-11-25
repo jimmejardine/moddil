@@ -83,18 +83,14 @@ impl<const S: int> Fixed<S> {
         let scaled = units * pow10_i128(S - have);
         match (if neg { -scaled } else { scaled }).checked_to::<int>() {
             Some(u) => Some(Fixed { units: u }),
-            None => None,
+            None    => None,
         }
     }
 
     /// The value at scale `R`, rounded by `mode` if `R` is less than `S`.
     pub fn rescale<const R: int>(self, mode: Round) -> Fixed<R> {
         let u: i128 = self.units;
-        let units = if R >= S {
-            u * pow10_i128(R - S)
-        } else {
-            div_round_i128(u, pow10_i128(S - R), mode)
-        };
+        let units = if R >= S { u * pow10_i128(R - S) } else { div_round_i128(u, pow10_i128(S - R), mode) };
         Fixed { units: narrow(units) }
     }
 
@@ -103,11 +99,7 @@ impl<const S: int> Fixed<S> {
         let a: i128 = self.units;
         let b: i128 = other.units();
         let exact = a * b;
-        let units = if R >= S + T {
-            exact * pow10_i128(R - S - T)
-        } else {
-            div_round_i128(exact, pow10_i128(S + T - R), mode)
-        };
+        let units = if R >= S + T { exact * pow10_i128(R - S - T) } else { div_round_i128(exact, pow10_i128(S + T - R), mode) };
         Fixed { units: narrow(units) }
     }
 
@@ -118,11 +110,7 @@ impl<const S: int> Fixed<S> {
         let b: i128 = other.units();
         // (a / 10^S) / (b / 10^T) in units of 10^-R is a × 10^(R - S + T) / b.
         let e = R - S + T;
-        let units = if e >= 0 {
-            div_round_i128(a * pow10_i128(e), b, mode)
-        } else {
-            div_round_i128(a, b * pow10_i128(-e), mode)
-        };
+        let units = if e >= 0 { div_round_i128(a * pow10_i128(e), b, mode) } else { div_round_i128(a, b * pow10_i128(-e), mode) };
         Fixed { units: narrow(units) }
     }
 
@@ -205,4 +193,3 @@ impl<const S: int> Debug for Fixed<S> {
         Display::fmt(self, out);
     }
 }
-

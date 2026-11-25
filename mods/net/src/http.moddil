@@ -24,23 +24,23 @@ pub enum Status {
 impl Status {
     pub fn code(&self) -> int {
         match self {
-            Status::Ok => 200,
-            Status::Created => 201,
+            Status::Ok                => 200,
+            Status::Created           => 201,
             Status::PermanentRedirect => 308,
-            Status::BadRequest => 400,
-            Status::NotFound => 404,
-            Status::Conflict => 409,
+            Status::BadRequest        => 400,
+            Status::NotFound          => 404,
+            Status::Conflict          => 409,
         }
     }
 
     fn reason(&self) -> &str {
         match self {
-            Status::Ok => "OK",
-            Status::Created => "Created",
+            Status::Ok                => "OK",
+            Status::Created           => "Created",
             Status::PermanentRedirect => "Permanent Redirect",
-            Status::BadRequest => "Bad Request",
-            Status::NotFound => "Not Found",
-            Status::Conflict => "Conflict",
+            Status::BadRequest        => "Bad Request",
+            Status::NotFound          => "Not Found",
+            Status::Conflict          => "Conflict",
         }
     }
 
@@ -52,7 +52,7 @@ impl Status {
             "400" => Some(Status::BadRequest),
             "404" => Some(Status::NotFound),
             "409" => Some(Status::Conflict),
-            _ => None,
+            _     => None,
         }
     }
 }
@@ -89,11 +89,7 @@ impl Request {
         let mut parts = m.start.split_once(" ")?;
         let method = parts.0;
         let (path, _) = parts.1.split_once(" ")?;
-        Some(Request {
-            method: method.to_string(),
-            path: path.to_string(),
-            body: m.body.clone(),
-        })
+        Some(Request { method: method.to_string(), path: path.to_string(), body: m.body.clone() })
     }
 }
 
@@ -121,18 +117,14 @@ impl Response {
 
     /// A redirect to `to`: its `Location`, and its body.
     pub fn redirect(status: Status, to: &Url) -> Response {
-        Response {
-            status,
-            body: to.as_str().to_string(),
-            location: Some(to.as_str().to_string()),
-        }
+        Response { status, body: to.as_str().to_string(), location: Some(to.as_str().to_string()) }
     }
 
     /// Where a redirect goes.
     pub fn location(&self) -> Option<&str> {
         match &self.location {
             Some(l) => Some(l.as_str()),
-            None => None,
+            None    => None,
         }
     }
 
@@ -158,13 +150,9 @@ impl Response {
         let (_, rest) = m.start.split_once(" ")?;
         let code = match rest.split_once(" ") {
             Some((code, _)) => code,
-            None => rest,
+            None            => rest,
         };
-        Some(Response {
-            status: Status::from_code(code)?,
-            body: m.body.clone(),
-            location: m.header("location"),
-        })
+        Some(Response { status: Status::from_code(code)?, body: m.body.clone(), location: m.header("location") })
     }
 }
 
@@ -206,59 +194,33 @@ impl Router {
 
     /// Routes `POST path` to `handler`, which `handle` calls, so it may suspend. Every error it
     /// can fail with becomes a response, so none passes on (`expr.closure.fails.2`).
-    pub fn post<F: Fn(&Request) -> Response with (suspend, E), E: IntoResponse>(
-        self,
-        path: &str,
-        handler: F,
-    ) -> Post<Router, F, E> {
+    pub fn post<F: Fn(&Request) -> Response with (suspend, E), E: IntoResponse>(self, path: &str, handler: F) -> Post<Router, F, E> {
         Post { path: path.to_string(), handler, rest: self, errors: None }
     }
 
     /// Routes `GET path` to `handler`, which takes the path's parameter: the text after `{`
     /// becomes a `P` through its refinement, or the request is answered `404`.
-    pub fn get<P: Refined<Base = String>, F: Fn(P) -> Response with (suspend, E), E: IntoResponse>(
-        self,
-        path: &str,
-        handler: F,
-    ) -> Get<Router, F, P, E> {
+    pub fn get<P: Refined<Base = String>, F: Fn(P) -> Response with (suspend, E), E: IntoResponse>(self, path: &str, handler: F) -> Get<Router, F, P, E> {
         Get { prefix: prefix_of(path), handler, rest: self, param: None, errors: None }
     }
 }
 
 impl<R: Handler, F: Fn(&Request) -> Response with (suspend, E), E: IntoResponse> Post<R, F, E> {
-    pub fn post<G: Fn(&Request) -> Response with (suspend, X), X: IntoResponse>(
-        self,
-        path: &str,
-        handler: G,
-    ) -> Post<Post<R, F, E>, G, X> {
+    pub fn post<G: Fn(&Request) -> Response with (suspend, X), X: IntoResponse>(self, path: &str, handler: G) -> Post<Post<R, F, E>, G, X> {
         Post { path: path.to_string(), handler, rest: self, errors: None }
     }
 
-    pub fn get<P: Refined<Base = String>, G: Fn(P) -> Response with (suspend, X), X: IntoResponse>(
-        self,
-        path: &str,
-        handler: G,
-    ) -> Get<Post<R, F, E>, G, P, X> {
+    pub fn get<P: Refined<Base = String>, G: Fn(P) -> Response with (suspend, X), X: IntoResponse>(self, path: &str, handler: G) -> Get<Post<R, F, E>, G, P, X> {
         Get { prefix: prefix_of(path), handler, rest: self, param: None, errors: None }
     }
 }
 
-impl<R: Handler, F: Fn(Q) -> Response with (suspend, E), Q: Refined<Base = String>, E: IntoResponse>
-    Get<R, F, Q, E>
-{
-    pub fn post<G: Fn(&Request) -> Response with (suspend, X), X: IntoResponse>(
-        self,
-        path: &str,
-        handler: G,
-    ) -> Post<Get<R, F, Q, E>, G, X> {
+impl<R: Handler, F: Fn(Q) -> Response with (suspend, E), Q: Refined<Base = String>, E: IntoResponse> Get<R, F, Q, E> {
+    pub fn post<G: Fn(&Request) -> Response with (suspend, X), X: IntoResponse>(self, path: &str, handler: G) -> Post<Get<R, F, Q, E>, G, X> {
         Post { path: path.to_string(), handler, rest: self, errors: None }
     }
 
-    pub fn get<P: Refined<Base = String>, G: Fn(P) -> Response with (suspend, X), X: IntoResponse>(
-        self,
-        path: &str,
-        handler: G,
-    ) -> Get<Get<R, F, Q, E>, G, P, X> {
+    pub fn get<P: Refined<Base = String>, G: Fn(P) -> Response with (suspend, X), X: IntoResponse>(self, path: &str, handler: G) -> Get<Get<R, F, Q, E>, G, P, X> {
         Get { prefix: prefix_of(path), handler, rest: self, param: None, errors: None }
     }
 }
@@ -267,7 +229,7 @@ impl<R: Handler, F: Fn(Q) -> Response with (suspend, E), Q: Refined<Base = Strin
 fn prefix_of(path: &str) -> String {
     match path.split_once("{") {
         Some((prefix, _)) => prefix.to_string(),
-        None => path.to_string(),
+        None              => path.to_string(),
     }
 }
 
@@ -277,9 +239,7 @@ impl Handler for Router {
     }
 }
 
-impl<R: Handler, F: Fn(&Request) -> Response with (suspend, E), E: IntoResponse> Handler
-    for Post<R, F, E>
-{
+impl<R: Handler, F: Fn(&Request) -> Response with (suspend, E), E: IntoResponse> Handler for Post<R, F, E> {
     fn handle(&self, req: &Request) -> Response with suspend {
         if req.method.as_str() == "POST" && req.path == self.path {
             try { (self.handler)(req)? } catch {
@@ -291,9 +251,7 @@ impl<R: Handler, F: Fn(&Request) -> Response with (suspend, E), E: IntoResponse>
     }
 }
 
-impl<R: Handler, F: Fn(P) -> Response with (suspend, E), P: Refined<Base = String>, E: IntoResponse>
-    Handler for Get<R, F, P, E>
-{
+impl<R: Handler, F: Fn(P) -> Response with (suspend, E), P: Refined<Base = String>, E: IntoResponse> Handler for Get<R, F, P, E> {
     fn handle(&self, req: &Request) -> Response with suspend {
         let path: &str = &req.path;
         if req.method.as_str() == "GET" && path.starts_with(self.prefix.as_str()) {
@@ -382,14 +340,14 @@ fn read_message(conn: &Conn, patience: Option<Duration>) -> Option<Message> with
             let head = text_of(&got, 0, end - 4)?;
             let (start, rest) = match head.split_once("\r\n") {
                 Some((s, r)) => (s.to_string(), r.to_string()),
-                None => (head.clone(), String::new()),
+                None         => (head.clone(), String::new()),
             };
             let mut headers = Vec::new();
             let mut lines: &str = &rest;
             while lines.len() > 0 {
                 let (line, after) = match lines.split_once("\r\n") {
                     Some((l, a)) => (l, a),
-                    None => (lines, ""),
+                    None         => (lines, ""),
                 };
                 if let Some((k, v)) = line.split_once(":") {
                     headers.push((k.trim().to_string(), v.trim().to_string()));
@@ -399,7 +357,7 @@ fn read_message(conn: &Conn, patience: Option<Duration>) -> Option<Message> with
             let m = Message { start, headers, body: String::new() };
             let want = match m.header("content-length") {
                 Some(n) => number(&n)?,
-                None => 0,
+                None    => 0,
             };
             if got.len() - end >= want {
                 let body = text_of(&got, end, end + want)?;
@@ -408,7 +366,7 @@ fn read_message(conn: &Conn, patience: Option<Duration>) -> Option<Message> with
         }
         let more = match patience {
             Some(d) => conn.read_within(d)?,
-            None => conn.read()?,
+            None    => conn.read()?,
         };
         for b in more {
             got.push(b);
@@ -424,9 +382,17 @@ fn number(text: &str) -> Option<int> {
     }
     for c in text.chars() {
         let d = match c {
-            '0' => 0, '1' => 1, '2' => 2, '3' => 3, '4' => 4,
-            '5' => 5, '6' => 6, '7' => 7, '8' => 8, '9' => 9,
-            _ => return None,
+            '0' => 0,
+            '1' => 1,
+            '2' => 2,
+            '3' => 3,
+            '4' => 4,
+            '5' => 5,
+            '6' => 6,
+            '7' => 7,
+            '8' => 8,
+            '9' => 9,
+            _   => return None,
         };
         n = n * 10 + d;
     }
@@ -437,11 +403,11 @@ fn number(text: &str) -> Option<int> {
 pub fn serve_connection<H: Handler>(conn: Conn, app: &H) with suspend, fail(HttpError) {
     let m = match read_message(&conn, None) {
         Some(m) => m,
-        None => fail(HttpError::new("the connection closed before a request")),
+        None    => fail(HttpError::new("the connection closed before a request")),
     };
     let req = match Request::parse(&m) {
         Some(r) => r,
-        None => fail(HttpError::new("a request that does not parse")),
+        None    => fail(HttpError::new("a request that does not parse")),
     };
     let resp = app.handle(&req);
     try { conn.write_text(&resp.to_text())? } catch {
@@ -457,16 +423,16 @@ const PATIENCE: int = 1000;
 pub fn post(url: String, body: &str, retries: int) -> Response with net: Net, suspend, fail(HttpError) {
     let rest = match url.split_once("http://") {
         Some((_, rest)) => rest,
-        None => fail(HttpError::new("only http:// URLs are supported")),
+        None            => fail(HttpError::new("only http:// URLs are supported")),
     };
     let (authority, path) = match rest.find("/") {
         Some(at) => (rest.between(rest.start(), at), rest.between(at, rest.end())),
-        None => (rest, "/"),
+        None     => (rest, "/"),
     };
     let (host, port) = match authority.split_once(":") {
         Some((h, p)) => match number(p) {
             Some(p) => (h, p),
-            None => fail(HttpError::new("a port that is not a number")),
+            None    => fail(HttpError::new("a port that is not a number")),
         },
         None => (authority, 80),
     };
@@ -482,12 +448,10 @@ pub fn post(url: String, body: &str, retries: int) -> Response with net: Net, su
         if let Some(m) = read_message(&conn, Some(Duration::millis(PATIENCE))) {
             return match Response::parse(&m) {
                 Some(r) => r,
-                None => fail(HttpError::new("a response that does not parse")),
+                None    => fail(HttpError::new("a response that does not parse")),
             };
         }
         tries += 1;
-        if tries > retries {
-            fail(HttpError::new("no answer"))
-        }
+        if tries > retries { fail(HttpError::new("no answer")) }
     }
 }

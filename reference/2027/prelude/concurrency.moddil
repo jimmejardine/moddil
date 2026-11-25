@@ -18,9 +18,7 @@ view Task<F, T> {
 // With `isolate: true`, a trap in the scope cancels it, and it fails with `Trapped`
 // (`task.isolate.1`); otherwise a trap ends the program. Only an isolated scope's call can fail
 // with `Trapped`.
-fn scope<F: FnOnce(&mut Scope) -> R, R>(body: F, isolate: bool = false) -> R
-    with spawn, fail(Trapped)
-{
+fn scope<F: FnOnce(&mut Scope) -> R, R>(body: F, isolate: bool = false) -> R with spawn, fail(Trapped) {
     let mut s = Scope { id: __scope_open(isolate) };
     __scope_run::<F, R>(&mut s, body)?
 }
@@ -83,8 +81,7 @@ fn __select<T>(ops: T) -> int with suspend;
 // Runs the body as the scope's first task, waits for every task of the scope, and gives the
 // body's value, or fails with the scope's failure.
 #[intrinsic]
-fn __scope_run<F: FnOnce(&mut Scope) -> R, R>(s: &mut Scope, body: F) -> R
-    with spawn, fail(Trapped);
+fn __scope_run<F: FnOnce(&mut Scope) -> R, R>(s: &mut Scope, body: F) -> R with spawn, fail(Trapped);
 
 // Channels (`task.channel.1`): a bounded queue of values between tasks.
 

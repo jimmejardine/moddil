@@ -4,11 +4,11 @@
 fn compound() -> int {
     let x;
     x = 1;
-    x += 1;                     //~ E0301
+    x += 1;  //~ E0301
     x
 }
 
 fn borrowed() {
     let x: int;
-    let r = &mut x;             //~ E0301
+    let r = &mut x;  //~ E0301
 }

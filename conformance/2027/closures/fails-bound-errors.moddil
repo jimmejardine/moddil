@@ -1,34 +1,51 @@
 // covers: expr.closure.fails.2
 
-trait Answer { fn answer(self) -> int; }
+trait Answer {
+    fn answer(self) -> int;
+}
 
 struct Missing;
-impl Answer for Missing { fn answer(self) -> int { 404 } }
+impl Answer for Missing {
+    fn answer(self) -> int {
+        404
+    }
+}
 
 struct Bad;
-impl Answer for Bad { fn answer(self) -> int { 400 } }
+impl Answer for Bad {
+    fn answer(self) -> int {
+        400
+    }
+}
 
 struct Unhandled;
 
 /// Runs `f`, turning each error it can fail with into an answer: none passes on.
 fn serve<F: Fn(int) -> int>(f: F, x: int) -> int
-where
-    F::Fails: Answer
+    where F::Fails: Answer
 {
-    try { f(x)? } catch { e => e.answer() }
+    try { f(x)? } catch {
+        e => e.answer(),
+    }
 }
 
 // The bound takes `f`'s errors, so a call of `f` that lets them leave is an error, marked or not.
-fn passes_on<F: Fn(int) -> int>(f: F, x: int) -> int where F::Fails: Answer {
-    f(x)?                                   //~ E0502
+fn passes_on<F: Fn(int) -> int>(f: F, x: int) -> int
+    where F::Fails: Answer
+{
+    f(x)?  //~ E0502
 }
 
-fn unmarked<F: Fn(int) -> int>(f: F, x: int) -> int where F::Fails: Answer {
-    f(x)                                    //~ E0502
+fn unmarked<F: Fn(int) -> int>(f: F, x: int) -> int
+    where F::Fails: Answer
+{
+    f(x)  //~ E0502
 }
 
-fn strict(x: int) -> int with fail(Unhandled) { fail(Unhandled) }
+fn strict(x: int) -> int with fail(Unhandled) {
+    fail(Unhandled)
+}
 
 fn wrong() -> int {
-    serve(strict, 1)                        //~ E0402
+    serve(strict, 1)  //~ E0402
 }

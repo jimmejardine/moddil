@@ -1,10 +1,18 @@
 // covers: generic.1, generic.infer.1, generic.bound.1, prelude.option.1
 
-struct Pair<A, B> { first: A, second: B }
+struct Pair<A, B> {
+    first: A,
+    second: B,
+}
 
-enum Tree<T> { Leaf, Node(T) }
+enum Tree<T> {
+    Leaf,
+    Node(T),
+}
 
-fn id<T>(x: T) -> T { x }
+fn id<T>(x: T) -> T {
+    x
+}
 
 fn swap<A, B>(p: Pair<A, B>) -> Pair<B, A> {
     Pair { first: p.second, second: p.first }
@@ -15,66 +23,85 @@ fn first<T>(xs: (T, T)) -> T {
     a
 }
 
-fn leaf<T>() -> Tree<T> { Tree::Leaf }
+fn leaf<T>() -> Tree<T> {
+    Tree::Leaf
+}
 
 test "type arguments are inferred" {
-    id(3)                                   // => 3
+    id(3)  // => 3
     ;
-    id(true)                                // => true
+    id(true)  // => true
     ;
     swap(Pair { first: 1, second: false })  // => Pair { first: false, second: 1 }
     ;
-    first((4, 5))                           // => 4
+    first((4, 5))  // => 4
     ;
     let t: Tree<int> = leaf();
-    t                                       // => Tree::Leaf
+    t  // => Tree::Leaf
     ;
-    Tree::Node(Pair { first: 1, second: 2 }) // => Tree::Node(Pair { first: 1, second: 2 })
+    Tree::Node(Pair { first: 1, second: 2 })  // => Tree::Node(Pair { first: 1, second: 2 })
 }
 
 test "type arguments can be written" {
-    id::<int>(7)                            // => 7
+    id::<int>(7)  // => 7
     ;
     let t = leaf::<bool>();
-    t                                       // => Tree::Leaf
+    t  // => Tree::Leaf
     ;
     let n = Tree::<int>::Leaf;
-    n                                       // => Tree::Leaf
+    n  // => Tree::Leaf
 }
 
 test "Option" {
     let a = Some(2);
     let b: Option<int> = None;
-    a                                       // => Some(2)
+    a  // => Some(2)
     ;
-    b                                       // => None
+    b  // => None
     ;
-    a.is_some()                             // => true
+    a.is_some()  // => true
     ;
-    b.is_none()                             // => true
+    b.is_none()  // => true
     ;
-    b.unwrap_or(9)                          // => 9
+    b.unwrap_or(9)  // => 9
     ;
-    match a { Some(n) => n + 1, None => 0 } // => 3
+    match a {
+        Some(n) => n + 1,
+        None    => 0,
+    }  // => 3
 }
 
 test "`_` in an annotation is a type to infer" {
     let v: Vec<_> = [1, 2];
-    v                                       // => [1, 2]
+    v  // => [1, 2]
     ;
     let o: Option<_> = Some(true);
-    o                                       // => Some(true)
+    o  // => Some(true)
 }
 
-trait Base { fn base(&self) -> int; }
-trait Sub: Base { fn sub(&self) -> int; }
+trait Base {
+    fn base(&self) -> int;
+}
+trait Sub: Base {
+    fn sub(&self) -> int;
+}
 struct Both;
-impl Base for Both { fn base(&self) -> int { 1 } }
-impl Sub for Both { fn sub(&self) -> int { 2 } }
+impl Base for Both {
+    fn base(&self) -> int {
+        1
+    }
+}
+impl Sub for Both {
+    fn sub(&self) -> int {
+        2
+    }
+}
 
 // A bound gives its trait's supertraits too.
-fn sum<T: Sub>(x: &T) -> int { x.base() + x.sub() }
+fn sum<T: Sub>(x: &T) -> int {
+    x.base() + x.sub()
+}
 
 test "a bound gives the supertraits" {
-    sum(&Both)                              // => 3
+    sum(&Both)  // => 3
 }

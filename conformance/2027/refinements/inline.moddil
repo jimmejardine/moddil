@@ -24,25 +24,25 @@ type Name = String where self.len() > 2;
 fn kind(s: String) -> String {
     match s {
         n: Name => fmt"name {n}",
-        other => fmt"short {other}",
+        other   => fmt"short {other}",
     }
 }
 
 test "a refinement in a type checks its literals" {
-    halve(10)                               // => 5
+    halve(10)  // => 5
     ;
     let c = Conf { workers: 8 };
-    c.workers + one()                       // => 9
+    c.workers + one()  // => 9
 }
 
 test "type items may name ones written after them" {
     let b: Big = Big::new(50) ?! "50 is past 10";
     let w: Wide = 3;
-    b + w                                   // => 53
+    b + w  // => 53
 }
 
 test "a refinement test of a String" {
-    kind("alice".to_string())               // => "name alice"
+    kind("alice".to_string())  // => "name alice"
     ;
-    kind("al".to_string())                  // => "short al"
+    kind("al".to_string())  // => "short al"
 }

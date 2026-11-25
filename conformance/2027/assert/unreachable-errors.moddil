@@ -1,8 +1,20 @@
 // covers: expr.unreachable.1, expr.todo.1
 
-fn none() { unreachable(); }                        //~ E0202
-fn two() { unreachable("a", "b"); }                 //~ E0202
-fn not_literal(why: String) { unreachable(why); }   //~ E0202
-fn todo_none() { todo(); }                          //~ E0202
-fn value() { let u = unreachable; }                 //~ E0112
-fn todo_value() { let t = todo; }                   //~ E0112
+fn none() {
+    unreachable();  //~ E0202
+}
+fn two() {
+    unreachable("a", "b");  //~ E0202
+}
+fn not_literal(why: String) {
+    unreachable(why);  //~ E0202
+}
+fn todo_none() {
+    todo();  //~ E0202
+}
+fn value() {
+    let u = unreachable;  //~ E0112
+}
+fn todo_value() {
+    let t = todo;  //~ E0112
+}

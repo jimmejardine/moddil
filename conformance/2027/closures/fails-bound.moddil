@@ -1,19 +1,30 @@
 // covers: expr.closure.fails.2
 
-trait Answer { fn answer(self) -> int; }
+trait Answer {
+    fn answer(self) -> int;
+}
 
 struct Missing;
-impl Answer for Missing { fn answer(self) -> int { 404 } }
+impl Answer for Missing {
+    fn answer(self) -> int {
+        404
+    }
+}
 
 struct Bad;
-impl Answer for Bad { fn answer(self) -> int { 400 } }
+impl Answer for Bad {
+    fn answer(self) -> int {
+        400
+    }
+}
 
 /// Runs `f`, turning each error it can fail with into an answer: none passes on.
 fn serve<F: Fn(int) -> int>(f: F, x: int) -> int
-where
-    F::Fails: Answer
+    where F::Fails: Answer
 {
-    try { f(x)? } catch { e => e.answer() }
+    try { f(x)? } catch {
+        e => e.answer(),
+    }
 }
 
 fn lookup(x: int) -> int with fail(Missing | Bad) {
@@ -22,16 +33,18 @@ fn lookup(x: int) -> int with fail(Missing | Bad) {
     x
 }
 
-fn plain(x: int) -> int { x }
+fn plain(x: int) -> int {
+    x
+}
 
 test "a bound on F::Fails takes the closure's errors" {
-    serve(lookup, 3)                        // => 3
+    serve(lookup, 3)  // => 3
     ;
-    serve(lookup, 0)                        // => 404
+    serve(lookup, 0)  // => 404
     ;
-    serve(lookup, -1)                       // => 400
+    serve(lookup, -1)  // => 400
     ;
-    serve(plain, 3)                         // => 3
+    serve(plain, 3)  // => 3
     ;
-    serve(|x| x * 2, 4)                     // => 8
+    serve(|x| x * 2, 4)  // => 8
 }

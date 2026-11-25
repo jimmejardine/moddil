@@ -11,6 +11,10 @@
 - If the change touches the CLI (`crates/moddil`), `mods/`, `tour/` or `examples/`, run the
   `test` step while working too: `quick` does not exercise them.
 - Run the steps inside WSL (`--wsl`) only when the change has Linux-specific parts.
+- The `fmt` step also checks the Moddil sources (the prelude, `mods/`, `tour/`, `examples/`,
+  `conformance/`) are in `moddil fmt`'s layout: format a `.moddil` file you write or change with
+  `cargo run -p moddil -- fmt <file>`. A conformance marker (`//~ E0201`, `// =>`) goes on the
+  line the diagnostic or value is reported at, as the layout breaks it.
 
 ## The roadmap
 

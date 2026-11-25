@@ -130,7 +130,7 @@ impl<T: Hash> Hash for Vec<T> {
 impl<T: Hash> Hash for Option<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            None => state.write_int(0),
+            None    => state.write_int(0),
             Some(x) => {
                 state.write_int(1);
                 x.hash(state);
@@ -149,4 +149,3 @@ const fn tuple_hash(t: type) -> Impl<Hash> {
         }
     }
 }
-

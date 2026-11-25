@@ -5,13 +5,19 @@ test "sleeps wake in time order" {
     let a = tx.clone();
     let b = tx.clone();
     scope(|s| {
-        s.spawn(|| { sleep(Duration::seconds(3)); a.send(3) ?! "open"; });
-        s.spawn(|| { sleep(Duration::seconds(1)); b.send(1) ?! "open"; });
+        s.spawn (|| {
+            sleep(Duration::seconds(3));
+            a.send(3) ?! "open";
+        });
+        s.spawn (|| {
+            sleep(Duration::seconds(1));
+            b.send(1) ?! "open";
+        });
     });
     drop(tx);
     let first = rx.recv().unwrap_or(0);
     let second = rx.recv().unwrap_or(0);
-    first * 10 + second                     // => 13
+    first * 10 + second  // => 13
 }
 
 test "a timer ends a select" {
@@ -19,5 +25,5 @@ test "a timer ends a select" {
     select {
         x = rx.recv() => x.unwrap_or(-1),
         _ = timer(Duration::millis(5)).recv() => 0,
-    }                                       // => 0
+    }  // => 0
 }

@@ -1,32 +1,44 @@
 // covers: mod.vis.1, mod.use.1, mod.expose.1, mod.names.1, mod.path.1, mod.dep.1, mod.tree.1
 
-use mod::inner::hidden;                       //~ E0701
-use mod::inner::missing;                      //~ E0702
-use mod::inner::*;                            //~ E0702
-use nowhere::thing;                             //~ E0702
-use dep::internal;                              //~ E0701
+use mod::inner::hidden;   //~ E0701
+use mod::inner::missing;  //~ E0702
+use mod::inner::*;        //~ E0702
+use nowhere::thing;       //~ E0702
+use dep::internal;        //~ E0701
 use mod::inner::Shared;
 use mod::inner::Open;
-mod generated;                                  //~ E0702
+mod generated;  //~ E0702
 
-struct Open;                                    //~ E0103
+struct Open;  //~ E0103
 fn twice() {}
-fn twice() {}                                   //~ E0103
+fn twice() {}  //~ E0103
 
-fn private_call() -> int { inner::hidden() }    //~ E0701
-fn private_type(p: inner::Secret) {}            //~ E0701
-fn no_such() -> int { inner::nothing() }        //~ E0101
-fn exported() -> int { dep::shown() }
+fn private_call() -> int {
+    inner::hidden()  //~ E0701
+}
+fn private_type(p: inner::Secret) {}  //~ E0701
+fn no_such() -> int {
+    inner::nothing()  //~ E0101
+}
+fn exported() -> int {
+    dep::shown()
+}
 
-pub fn leak(s: Shared) {}                       //~ E0703
-pub(mod) fn leak_private(s: Local) {}           //~ E0703
+pub fn leak(s: Shared) {}              //~ E0703
+pub(mod) fn leak_private(s: Local) {}  //~ E0703
 struct Local;
-pub struct Wraps { s: Shared }                  //~ E0703
+pub struct Wraps {  //~ E0703
+    s: Shared,
+}
 
 // Paths start at `mod`: `crate` is an ordinary name, and names nothing here.
-use crate::inner::Secret as Old;                //~ E0702
-fn rust_root() -> int { crate::exported() }     //~ E0101
+use crate::inner::Secret as Old;  //~ E0702
+fn rust_root() -> int {
+    crate::exported()  //~ E0101
+}
 
-fn through_a_path() -> int { dep::internal() }  //~ E0701
-fn no_type(x: mod::nothing::T) {}             //~ E0102
-fn no_trait<T: mod::Missing>(x: T) {}         //~ E0401
+fn through_a_path() -> int {
+    dep::internal()  //~ E0701
+}
+fn no_type(x: mod::nothing::T) {}      //~ E0102
+fn no_trait<T: mod::Missing>(x: T) {}  //~ E0401

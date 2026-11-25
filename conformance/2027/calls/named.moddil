@@ -8,7 +8,9 @@ fn label(name: String = fmt"anon") -> String {
     name
 }
 
-struct Counter { k: int }
+struct Counter {
+    k: int,
+}
 
 impl Counter {
     fn add(&self, a: int, b: int = 5) -> int {
@@ -27,30 +29,30 @@ impl Greet for Counter {
 }
 
 test "named arguments, in any order after the positional ones" {
-    connect(1, port: 8)                     // => 10090
+    connect(1, port: 8)  // => 10090
     ;
-    connect(1, timeout: 3, port: 2)         // => 10023
+    connect(1, timeout: 3, port: 2)  // => 10023
     ;
-    connect(host: 2, port: 1, timeout: 0)   // => 20010
+    connect(host: 2, port: 1, timeout: 0)  // => 20010
 }
 
 test "a left-out parameter gets its default" {
-    connect(1)                              // => 14440
+    connect(1)  // => 14440
     ;
-    connect(1, timeout: 0)                  // => 14430
+    connect(1, timeout: 0)  // => 14430
     ;
-    label()                                 // => "anon"
+    label()  // => "anon"
     ;
-    label(fmt"bob")                         // => "bob"
+    label(fmt"bob")  // => "bob"
 }
 
 test "methods take them too, and an impl inherits its trait's defaults" {
     let c = Counter { k: 100 };
-    c.add(1)                                // => 115
+    c.add(1)  // => 115
     ;
-    c.add(b: 2, a: 3)                       // => 132
+    c.add(b: 2, a: 3)  // => 132
     ;
-    c.greet()                               // => 200
+    c.greet()  // => 200
     ;
-    c.greet(times: 3)                       // => 300
+    c.greet(times: 3)  // => 300
 }

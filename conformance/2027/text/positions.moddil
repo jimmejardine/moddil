@@ -6,61 +6,74 @@ fn domain(email: &str) -> Option<&str> {
 }
 
 test "searches give positions, and slicing with them never traps" {
-    domain("ada@moddil.com")                    // => Some("moddil.com")
+    domain("ada@moddil.com")  // => Some("moddil.com")
     ;
-    domain("nobody")                            // => None
+    domain("nobody")  // => None
     ;
     let name = "Ada Lovelace";
     let space = name.find(' ') ?! "found";
-    &name[..space]                              // => "Ada"
+    &name[..space]  // => "Ada"
     ;
-    &name[space.after(' ')..]                   // => "Lovelace"
+    &name[space.after(' ')..]  // => "Lovelace"
     ;
-    space.offset()                              // => 3
+    space.offset()  // => 3
     ;
-    name.rfind('a').map(|p| p.offset())         // => Some(9)
+    name
+        .rfind('a')
+        .map(|p| p.offset())  // => Some(9)
     ;
-    &name[..]                                   // => "Ada Lovelace"
+    &name[..]  // => "Ada Lovelace"
 }
 
 test "positions in text with characters of several bytes" {
     let s = "naïve café";
     let e = s.rfind("é") ?! "found";
-    e.offset()                                  // => 10
+    e.offset()  // => 10
     ;
-    &s[s.start()..e]                            // => "naïve caf"
+    &s[s.start()..e]  // => "naïve caf"
     ;
-    s.split_once(' ')                           // => Some(("naïve", "café"))
+    s.split_once(' ')  // => Some(("naïve", "café"))
 }
 
 test "a String has the same searches" {
     let owned = String::from_str("key=value");
     let eq = owned.find('=') ?! "found";
-    &owned[eq.after('=')..]                     // => "value"
+    &owned[eq.after('=')..]  // => "value"
 }
 
 test "offsets from outside are checked" {
     let s = "naïve";
-    try { s.pos_at(2)?.offset() } catch { NotABoundary { offset } => -offset }      // => 2
+    try { s.pos_at(2)?.offset() } catch {
+        NotABoundary { offset } => -offset,
+    }  // => 2
     ;
-    try { s.slice_bytes(0..2)?; 0 } catch { NotABoundary { offset } => offset }   // => 0
+    try {
+        s.slice_bytes(0..2)?;
+        0
+    } catch {
+        NotABoundary { offset } => offset,
+    }  // => 0
     ;
-    try { s.pos_at(3)?.offset() } catch { NotABoundary { offset } => -offset }      // => -3
+    try { s.pos_at(3)?.offset() } catch {
+        NotABoundary { offset } => -offset,
+    }  // => -3
     ;
-    try { s.slice_bytes(4..6)? } catch { NotABoundary { .. } => "?" }               // => "ve"
+    try { s.slice_bytes(4..6)? } catch {
+        NotABoundary { .. } => "?",
+    }  // => "ve"
 }
 
 test "a position of other text traps" {
     let a = "one two";
     let b = "three";
     let p = a.find(' ') ?! "found";
-    &b[..p]                                     //~ trap
+    &b[..p]  //~ trap
 }
 
 /// Text before a position its caller found: which text the position is in is not known here, so
 /// it is checked when it runs.
 fn before(s: &str, at: StrPos) -> int {
-    let part = &s[..at];                        //~ trap
+    let part = &s[..at];  //~ trap
     part.len()
 }
 
@@ -68,7 +81,7 @@ test "a position given to a function is checked when it runs" {
     let a = String::from_str("one two");
     let b = String::from_str("one two");
     let p = a.find(' ') ?! "found";
-    before(&a, p)                               // => 3
+    before(&a, p)  // => 3
     ;
     before(&b, p)
 }

@@ -30,10 +30,10 @@ fn make_code() -> Code with rand: Rand {
 
 /// `POST /links`
 fn create(req: &Request) -> Response with links: Links, Rand, suspend, fail(LinkError | DecodeError) {
-    let new: NewLink = json::decode(req.body())?;      // untrusted bytes in, validated value out
+    let new: NewLink = json::decode(req.body())?;  // untrusted bytes in, validated value out
     let code = make_code();
     links.put(code.clone(), new.url)?;
-    log.info(fmt"created {code}");                     // log is ambient and write-only
+    log.info(fmt"created {code}");  // log is ambient and write-only
     Response::json(Status::Created, &Created { code })
 }
 
@@ -47,11 +47,15 @@ fn follow(code: Code) -> Response with links: Links, suspend {
 
 /// How each error becomes a response.
 impl IntoResponse for DecodeError {
-    fn into_response(self) -> Response { Response::text(Status::BadRequest, fmt"bad request: {self}") }
+    fn into_response(self) -> Response {
+        Response::text(Status::BadRequest, fmt"bad request: {self}")
+    }
 }
 impl IntoResponse for LinkError {
     fn into_response(self) -> Response {
-        match self { LinkError::Taken(_) => Response::status(Status::Conflict) }
+        match self {
+            LinkError::Taken(_) => Response::status(Status::Conflict),
+        }
     }
 }
 

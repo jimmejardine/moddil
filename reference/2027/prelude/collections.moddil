@@ -5,7 +5,8 @@
 // expects, if it implements this.
 trait FromArrayLiteral<T> {
     fn from_array<const N: int>(items: [T; N]) -> Self;
-    fn from_repeat(x: T, n: int) -> Self where T: Clone;
+    fn from_repeat(x: T, n: int) -> Self
+        where T: Clone;
 }
 
 // `Buf<T>`: built-in storage with a fixed capacity, of which a prefix holds elements. `Vec` is
@@ -126,19 +127,11 @@ impl<T> Vec<T> {
     }
 
     fn get(&self, i: int) -> Option<&T> {
-        if 0 <= i && i < self.buf.len() {
-            Some(&self.buf.as_slice()[i])
-        } else {
-            None
-        }
+        if 0 <= i && i < self.buf.len() { Some(&self.buf.as_slice()[i]) } else { None }
     }
 
     fn get_mut(&mut self, i: int) -> Option<&mut T> {
-        if 0 <= i && i < self.buf.len() {
-            Some(&mut self.buf.as_mut_slice()[i])
-        } else {
-            None
-        }
+        if 0 <= i && i < self.buf.len() { Some(&mut self.buf.as_mut_slice()[i]) } else { None }
     }
 
     fn first(&self) -> Option<&T> {
@@ -197,7 +190,9 @@ impl<T> FromArrayLiteral<T> for Vec<T> {
         Vec { buf: Buf::from_array(items) }
     }
 
-    fn from_repeat(x: T, n: int) -> Vec<T> where T: Clone {
+    fn from_repeat(x: T, n: int) -> Vec<T>
+        where T: Clone
+    {
         let mut v = Vec::with_capacity(n);
         if n > 0 {
             let mut i = 1;
@@ -264,11 +259,7 @@ struct IntoIter<T> {
 impl<T> Iterator for IntoIter<T> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
-        if self.buf.len() == 0 {
-            None
-        } else {
-            Some(self.buf.remove(0))
-        }
+        if self.buf.len() == 0 { None } else { Some(self.buf.remove(0)) }
     }
 }
 

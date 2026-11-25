@@ -1,8 +1,17 @@
 // covers: expr.field.deref.1
 
-struct Point { x: int, y: int }
-struct Line { from: Point, to: Point }
-struct Named { name: String, size: int }
+struct Point {
+    x: int,
+    y: int,
+}
+struct Line {
+    from: Point,
+    to: Point,
+}
+struct Named {
+    name: String,
+    size: int,
+}
 
 fn total(b: &Box<Point>) -> int {
     b.x + b.y
@@ -10,31 +19,31 @@ fn total(b: &Box<Point>) -> int {
 
 test "a box's fields" {
     let mut b = Box::new(Point { x: 1, y: 2 });
-    b.x                                             // => 1
+    b.x  // => 1
     ;
     b.x = 10;
     b.y += 5;
-    total(&b)                                       // => 17
+    total(&b)  // => 17
     ;
     let r = &mut b.x;
     *r = 3;
-    b.x                                             // => 3
+    b.x  // => 3
     ;
     let l = Box::new(Line { from: Point { x: 1, y: 1 }, to: Point { x: 4, y: 5 } });
-    l.to.x - l.from.x                               // => 3
+    l.to.x - l.from.x  // => 3
     ;
     let pair = Box::new((7, true));
-    pair.0                                          // => 7
+    pair.0  // => 7
 }
 
 test "an rc's fields" {
     let a = Named { name: "moddil".to_string(), size: 6 }.to_rc();
     let b = a.share();
-    b.size + a.name.len()                           // => 12
+    b.size + a.name.len()  // => 12
     ;
     let n = &b.name;
-    n.len()                                         // => 6
+    n.len()  // => 6
     ;
     let read = || a.size * 2;
-    read()                                          // => 12
+    read()  // => 12
 }

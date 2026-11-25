@@ -27,21 +27,21 @@ fn square_of(i: int) -> int {
 
 test "a const block's value is computed when compiling" {
     let n = const { sum_to(100) };
-    n                                       // => 5050
+    n  // => 5050
     ;
-    square_of(7)                            // => 49
+    square_of(7)  // => 49
     ;
-    (const { squares(4) }).len()            // => 4
+    (const { squares(4) }).len()  // => 4
 }
 
 test "one that is not Copy, used by value, is made where it is" {
     let mut v = const { squares(3) };
     v.push(9);
-    v.len()                                 // => 4
+    v.len()  // => 4
 }
 
 test "a fuel attribute gives a block more steps" {
     #[fuel(20_000_000)]
     let n = const { sum_to(1000) };
-    n                                       // => 500500
+    n  // => 500500
 }

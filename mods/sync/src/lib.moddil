@@ -20,14 +20,8 @@ impl<T> Mutex<T> {
     /// `DerefMut`, so its methods are called on the guard (`expr.method.deref.1`).
     pub fn lock(&self) -> Guard<T> with suspend {
         loop {
-            match atomic::compare_exchange(
-                self.locked.get(),
-                false,
-                true,
-                Ordering::Acquire,
-                Ordering::Relaxed,
-            ) {
-                Ok(_) => break,
+            match atomic::compare_exchange(self.locked.get(), false, true, Ordering::Acquire, Ordering::Relaxed) {
+                Ok(_)  => break,
                 Err(_) => yield_now(),
             }
         }

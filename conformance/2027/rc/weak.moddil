@@ -3,12 +3,12 @@
 test "a weak handle upgrades while an owner lives" {
     let a = "kept".to_string().to_rc();
     let w = a.weak();
-    Rc::weak_count(&a)                          // => 1
+    Rc::weak_count(&a)  // => 1
     ;
     match w.upgrade() {
         Some(r) => r.len() + Rc::strong_count(&a),
-        None => 0,
-    }                                           // => 6
+        None    => 0,
+    }  // => 6
 }
 
 test "a weak handle does not keep the value" {
@@ -16,7 +16,7 @@ test "a weak handle does not keep the value" {
     let w = a.weak();
     let w2 = w.share();
     drop(a);
-    w.upgrade().is_none() && w2.upgrade().is_none()   // => true
+    w.upgrade().is_none() && w2.upgrade().is_none()  // => true
 }
 
 test "a weak handle outlives the value, and the allocation goes with it" {
@@ -24,11 +24,14 @@ test "a weak handle outlives the value, and the allocation goes with it" {
         let a = 3.to_rc();
         a.weak()
     };
-    w.upgrade().is_some()                       // => false
+    w.upgrade().is_some()  // => false
 }
 
 /// A tree whose children point back at their parent weakly, so it is not a cycle.
-struct TreeNode { value: int, parent: Option<Weak<TreeNode>> }
+struct TreeNode {
+    value: int,
+    parent: Option<Weak<TreeNode>>,
+}
 
 test "a back-edge is weak" {
     let root = TreeNode { value: 1, parent: None }.to_rc();
@@ -36,9 +39,9 @@ test "a back-edge is weak" {
     let up = match &child.parent {
         Some(p) => match p.upgrade() {
             Some(r) => r.value,
-            None => 0,
+            None    => 0,
         },
         None => 0,
     };
-    up + child.value                            // => 3
+    up + child.value  // => 3
 }

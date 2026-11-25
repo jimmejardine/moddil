@@ -3,7 +3,7 @@
 type Port = int where self >= 1024;
 
 fn low() -> Port {
-    80                                      //~ E1101
+    80  //~ E1101
 }
 
 fn fine() -> Port {
@@ -11,7 +11,7 @@ fn fine() -> Port {
 }
 
 test "literals are checked when compiling" {
-    let p: Port = 70;                       //~ E1101
+    let p: Port = 70;  //~ E1101
 }
 
 // A refinement written in a type checks its literals the same way (`refine.inline.1`).
@@ -20,5 +20,5 @@ fn wants_two(x: (int where self >= 2)) -> int {
 }
 
 fn too_small() -> int {
-    wants_two(1)                            //~ E1101
+    wants_two(1)  //~ E1101
 }

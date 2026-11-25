@@ -5,9 +5,9 @@ const fn plain(text: &str) -> int {
 }
 
 fn unknown() -> int {
-    nope"text"                              //~ E1011
+    nope"text"  //~ E1011
 }
 
 fn not_a_tag() -> int {
-    plain"text"                             //~ E1011
+    plain"text"  //~ E1011
 }

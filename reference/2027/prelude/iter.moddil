@@ -72,7 +72,7 @@ impl<I: Iterator, B, F: FnMut(I::Item) -> B> Iterator for Map<I, F> {
     fn next(&mut self) -> Option<B> with fail(I::Fails | F::Fails) {
         match self.iter.next() {
             Some(x) => Some((self.f)(x)),
-            None => None,
+            None    => None,
         }
     }
 }
@@ -298,4 +298,3 @@ impl<T, const N: int> IntoIterator for [T; N] {
         IntoIter { buf: Buf::from_array(self) }
     }
 }
-

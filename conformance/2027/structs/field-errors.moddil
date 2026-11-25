@@ -1,14 +1,27 @@
 // covers: expr.field.1, expr.field.assign.1
 
-struct Point { x: int, y: int }
-enum Shape { Circle(int) }
+struct Point {
+    x: int,
+    y: int,
+}
+enum Shape {
+    Circle(int),
+}
 
-fn no_such_field(p: Point) -> int { p.z }          //~ E0107
-fn out_of_range(t: (int, int)) -> int { t.2 }      //~ E0107
-fn enum_field(s: Shape) -> int { s.0 }             //~ E0107
-fn scalar_field(n: int) -> int { n.x }             //~ E0107
+fn no_such_field(p: Point) -> int {
+    p.z  //~ E0107
+}
+fn out_of_range(t: (int, int)) -> int {
+    t.2  //~ E0107
+}
+fn enum_field(s: Shape) -> int {
+    s.0  //~ E0107
+}
+fn scalar_field(n: int) -> int {
+    n.x  //~ E0107
+}
 
 fn immutable() {
     let p = Point { x: 1, y: 2 };
-    p.x = 3;                                       //~ E0301
+    p.x = 3;  //~ E0301
 }

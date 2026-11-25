@@ -1,7 +1,20 @@
 // covers: pat.ref.1
 
-struct Label { id: int }
+struct Label {
+    id: int,
+}
 
-fn not_copy(r: &(Label, int)) -> int { let &(l, n) = r; n }   //~ E0304
-fn wrong_borrow(r: &int) -> int { match r { &mut n => n } }    //~ E0201
-fn not_a_borrow(n: int) -> int { match n { &m => m } }         //~ E0201
+fn not_copy(r: &(Label, int)) -> int {
+    let &(l, n) = r;  //~ E0304
+    n
+}
+fn wrong_borrow(r: &int) -> int {
+    match r {
+        &mut n => n,  //~ E0201
+    }
+}
+fn not_a_borrow(n: int) -> int {
+    match n {
+        &m => m,  //~ E0201
+    }
+}

@@ -7,7 +7,7 @@ fn main() {
     let other = String::from_str("Ada Lovelace");
     let at = name.find(' ') ?! "a space";
     let first = &name[name.start()..at];
-    let x = &other[at..other.end()];            //~ E0316
+    let x = &other[at..other.end()];  //~ E0316
     first.len();
     x.len();
 }
@@ -15,6 +15,6 @@ fn main() {
 fn of_a_parameter(s: &str) -> int {
     let t = String::from_str("a b");
     let at = t.find(' ') ?! "a space";
-    let x = &s[..at];                           //~ E0316
+    let x = &s[..at];  //~ E0316
     x.len()
 }

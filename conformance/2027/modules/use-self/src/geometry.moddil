@@ -1,3 +1,7 @@
-pub(mod) struct Square { pub(mod) side: int }
+pub(mod) struct Square {
+    pub(mod) side: int,
+}
 
-pub(mod) fn area(s: &Square) -> int { s.side * s.side }
+pub(mod) fn area(s: &Square) -> int {
+    s.side * s.side
+}

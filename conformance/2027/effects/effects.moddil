@@ -7,69 +7,85 @@ trait Marker {}
 trait Bump {
     fn bump(&mut self);
 }
-struct Clock { t: int }
-impl Time for Clock {
-    fn now(&self) -> int { self.t }
+struct Clock {
+    t: int,
 }
-struct Config { scale: int }
-struct Wrap<T> { x: T }
+impl Time for Clock {
+    fn now(&self) -> int {
+        self.t
+    }
+}
+struct Config {
+    scale: int,
+}
+struct Wrap<T> {
+    x: T,
+}
 
-fn uses() -> int with time: Time { time.now() }
+fn uses() -> int with time: Time {
+    time.now()
+}
 
-fn marker() with Marker {}                                      //~ E0601
-fn bump() with Bump {}                                          //~ E0601
-fn number() with int {}                                         //~ E0601
-fn generic_data() with Wrap<int> {}                             //~ E0601
-fn prelude_data() with Ordering {}                              //~ E0601
-fn borrowed_trait() with t: &Time {}                            //~ E0601
-fn owned_data() with c: Config {}                               //~ E0601
-fn twice() with Time, t: Time {}                                //~ E0606
-fn clash(time: int) with time: Time {}                          //~ E0104
+fn marker() with Marker {}              //~ E0601
+fn bump() with Bump {}                  //~ E0601
+fn number() with int {}                 //~ E0601
+fn generic_data() with Wrap<int> {}     //~ E0601
+fn prelude_data() with Ordering {}      //~ E0601
+fn borrowed_trait() with t: &Time {}    //~ E0601
+fn owned_data() with c: Config {}       //~ E0601
+fn twice() with Time, t: Time {}        //~ E0606
+fn clash(time: int) with time: Time {}  //~ E0104
 
 trait Task {
-    fn run(&self) -> int with Time;                             //~ E0604
+    fn run(&self) -> int with Time;  //~ E0604
 }
 struct Job;
 trait Plain {
     fn go(&self) -> int;
 }
 impl Plain for Job {
-    fn go(&self) -> int { uses() }                              //~ E0603
+    fn go(&self) -> int {
+        uses()  //~ E0603
+    }
 }
 struct Held;
 impl Drop for Held {
-    fn drop(self) { uses(); }                                   //~ E0603
+    fn drop(self) {
+        uses();  //~ E0603
+    }
 }
 
 fn wrong_handler() -> int {
-    with Time = 3 { uses() }                                    //~ E0402
+    with Time = 3 { uses() }  //~ E0402
 }
 fn wrong_data() -> int {
-    with Config = 3 { 0 }                                       //~ E0201
+    with Config = 3 { 0 }  //~ E0201
 }
 fn two_handlers(a: &Clock, b: &Clock) -> int {
-    with Time = a, Time = b { uses() }                          //~ E0606
+    with Time = a, Time = b { uses() }  //~ E0606
 }
 fn not_an_effect() {
-    with Marker = 1 {}                                          //~ E0601
+    with Marker = 1 {}  //~ E0601
 }
 
 fn main() -> int {
-    uses()                                                      //~ E0602
+    uses()  //~ E0602
 }
 
 test "an entry point installs what it needs" {
-    uses();                                                     //~ E0602
+    uses();  //~ E0602
 }
 
 // Lookup is by the exact effect: a handler of a subtrait does not meet a need of its supertrait.
 trait Steady: Time {}
-fn steady() -> int with s: Steady { s.now() }
+fn steady() -> int with s: Steady {
+    s.now()
+}
 impl Steady for Clock {}
 test "lookup is exact" {
     let c = Clock { t: 1 };
     with Steady = &c {
-        uses();                                                 //~ E0602
+        uses();  //~ E0602
         steady()
     };
 }

@@ -26,15 +26,21 @@ pub trait Links {
 }
 
 /// An in-memory handler for `Links`: used by `main` here, and by the tests.
-pub struct MemoryLinks { map: Mutex<Map<Code, Target>> }
+pub struct MemoryLinks {
+    map: Mutex<Map<Code, Target>>,
+}
 
 impl MemoryLinks {
-    pub fn new() -> MemoryLinks { MemoryLinks { map: Mutex::new(Map::new()) } }
+    pub fn new() -> MemoryLinks {
+        MemoryLinks { map: Mutex::new(Map::new()) }
+    }
 }
 
 impl Links for MemoryLinks {
     fn get(&self, code: &Code) -> Option<Target> with suspend {
-        self.map.lock().get(code).map(|t| t.clone())
+        self.map.lock()
+            .get(code)
+            .map(|t| t.clone())
     }
     fn put(&self, code: Code, target: Target) with suspend, fail(LinkError) {
         let mut map = self.map.lock();

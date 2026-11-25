@@ -7,25 +7,29 @@ test "a list's updates leave it as it was" {
     let a: PersistentList<int> = [1, 2, 3];
     let b = a.push_front(0);
     let c = a.rest();
-    a.len()                                         // => 3
+    a.len()  // => 3
     ;
-    b.len()                                         // => 4
+    b.len()  // => 4
     ;
-    c.first().map(|x| *x).unwrap_or(-1)             // => 2
+    c.first()
+        .map(|x| *x)
+        .unwrap_or(-1)  // => 2
     ;
-    a.first().map(|x| *x).unwrap_or(-1)             // => 1
+    a.first()
+        .map(|x| *x)
+        .unwrap_or(-1)  // => 1
     ;
     let mut total = 0;
     for x in &b {
         total = total * 10 + *x;
     }
-    total                                           // => 123
+    total  // => 123
     ;
-    a == b.rest()                                   // => true
+    a == b.rest()  // => true
     ;
-    a == c                                          // => false
+    a == c  // => false
     ;
-    fmt"{b:?}"                                      // => "[0, 1, 2, 3]"
+    fmt"{b:?}"  // => "[0, 1, 2, 3]"
 }
 
 test "a list of values that need dropping" {
@@ -34,12 +38,14 @@ test "a list of values that need dropping" {
     let c = b.clone();
     drop(a);
     drop(b);
-    c.len()                                         // => 3
+    c.len()  // => 3
     ;
-    c.rest().first().map(|s| s.len()).unwrap_or(0)  // => 1
+    c.rest().first()
+        .map(|s| s.len())
+        .unwrap_or(0)  // => 1
     ;
     let empty: PersistentList<String> = PersistentList::new();
-    empty.rest().is_empty()                         // => true
+    empty.rest().is_empty()  // => true
 }
 
 test "a long list is dropped cell by cell, and a shared tail stays" {
@@ -49,9 +55,11 @@ test "a long list is dropped cell by cell, and a shared tail stays" {
     }
     let tail = long.rest().rest();
     drop(long);
-    tail.len()                                      // => 299998
+    tail.len()  // => 299998
     ;
-    tail.first().map(|x| *x).unwrap_or(-1)          // => 299997
+    tail.first()
+        .map(|x| *x)
+        .unwrap_or(-1)  // => 299997
 }
 
 /// `0, 1, …, n - 1`, pushed one at a time.
@@ -70,7 +78,10 @@ fn counts(v: &PersistentVec<int>, n: int) -> bool {
     }
     let mut i = 0;
     for x in v {
-        if *x != i || v.get(i).map(|y| *y).unwrap_or(-1) != i {
+        if *x != i || v
+            .get(i)
+            .map(|y| *y)
+            .unwrap_or(-1) != i {
             return false;
         }
         i += 1;
@@ -83,16 +94,18 @@ test "a vector's updates leave it as it was" {
     let b = a.push(4);
     let c = a.set(0, 10);
     let d = a.pop();
-    fmt"{a:?} {b:?} {c:?} {d:?}"                    // => "[1, 2, 3] [1, 2, 3, 4] [10, 2, 3] [1, 2]"
+    fmt"{a:?} {b:?} {c:?} {d:?}"  // => "[1, 2, 3] [1, 2, 3, 4] [10, 2, 3] [1, 2]"
     ;
-    a.get(3).is_none()                              // => true
+    a.get(3).is_none()  // => true
     ;
-    a.last().map(|x| *x).unwrap_or(0)               // => 3
+    a.last()
+        .map(|x| *x)
+        .unwrap_or(0)  // => 3
     ;
-    a == d.push(3)                                  // => true
+    a == d.push(3)  // => true
     ;
     let e: PersistentVec<int> = PersistentVec::new();
-    e.pop().is_empty()                              // => true
+    e.pop().is_empty()  // => true
 }
 
 test "a vector grows to three levels and back" {
@@ -122,11 +135,20 @@ test "setting values deep in a vector" {
         w = w.set(i, -i);
     }
     assert(counts(&v, 1100));
-    w.get(500).map(|x| *x).unwrap_or(0)              // => -500
+    w
+        .get(500)
+        .map(|x| *x)
+        .unwrap_or(0)  // => -500
     ;
-    w.get(1099).map(|x| *x).unwrap_or(0)             // => -1099
+    w
+        .get(1099)
+        .map(|x| *x)
+        .unwrap_or(0)  // => -1099
     ;
-    w.get(501).map(|x| *x).unwrap_or(0)              // => 501
+    w
+        .get(501)
+        .map(|x| *x)
+        .unwrap_or(0)  // => 501
 }
 
 test "a vector of values that need dropping" {
@@ -136,14 +158,20 @@ test "a vector of values that need dropping" {
     }
     let w = v.set(3, "three".to_string()).pop();
     drop(v);
-    w.len()                                         // => 39
+    w.len()  // => 39
     ;
-    w.get(3).map(|s| s.len()).unwrap_or(0)          // => 5
+    w
+        .get(3)
+        .map(|s| s.len())
+        .unwrap_or(0)  // => 5
 }
 
 /// The value for `k`, or -1 for none.
 fn at(m: &PersistentMap<int, int>, k: int) -> int {
-    m.get(&k).map(|v| *v).unwrap_or(-1)
+    m
+        .get(&k)
+        .map(|v| *v)
+        .unwrap_or(-1)
 }
 
 test "a map's updates leave it as it was" {
@@ -151,23 +179,29 @@ test "a map's updates leave it as it was" {
     let b = a.insert("c".to_string(), 3);
     let c = a.insert("a".to_string(), 10);
     let d = a.remove(&"a".to_string());
-    a.len()                                         // => 2
+    a.len()  // => 2
     ;
-    b.len()                                         // => 3
+    b.len()  // => 3
     ;
-    c.get(&"a".to_string()).map(|v| *v).unwrap_or(0)   // => 10
+    c
+        .get(&"a".to_string())
+        .map(|v| *v)
+        .unwrap_or(0)  // => 10
     ;
-    a.get(&"a".to_string()).map(|v| *v).unwrap_or(0)   // => 1
+    a
+        .get(&"a".to_string())
+        .map(|v| *v)
+        .unwrap_or(0)  // => 1
     ;
-    d.contains_key(&"a".to_string())                // => false
+    d.contains_key(&"a".to_string())  // => false
     ;
-    d.len()                                         // => 1
+    d.len()  // => 1
     ;
-    a.remove(&"z".to_string()) == a                 // => true
+    a.remove(&"z".to_string()) == a  // => true
     ;
-    b.remove(&"c".to_string()) == a                 // => true
+    b.remove(&"c".to_string()) == a  // => true
     ;
-    c == a                                          // => false
+    c == a  // => false
 }
 
 test "a map of many keys" {
@@ -177,22 +211,22 @@ test "a map of many keys" {
         m = m.insert(i, i * i);
     }
     let all = m.clone();
-    m.len()                                         // => 600
+    m.len()  // => 600
     ;
-    at(&m, 123)                                     // => 15129
+    at(&m, 123)  // => 15129
     ;
     for i in 0..600 {
         if i % 3 == 0 {
             m = m.remove(&i);
         }
     }
-    m.len()                                         // => 400
+    m.len()  // => 400
     ;
-    at(&m, 297)                                     // => -1
+    at(&m, 297)  // => -1
     ;
-    at(&m, 301)                                     // => 90601
+    at(&m, 301)  // => 90601
     ;
-    at(&all, 297)                                   // => 88209
+    at(&all, 297)  // => 88209
     ;
     let mut count = 0;
     let mut sum = 0;
@@ -200,14 +234,14 @@ test "a map of many keys" {
         count += 1;
         sum += *v - *k * *k;
     }
-    count                                           // => 400
+    count  // => 400
     ;
-    sum                                             // => 0
+    sum  // => 0
     ;
     for i in 0..600 {
         m = m.remove(&i);
     }
-    m.is_empty()                                    // => true
+    m.is_empty()  // => true
 }
 
 /// A key whose every value has one hash, so they all collide.
@@ -225,26 +259,34 @@ test "keys whose hashes collide" {
     for i in 0..5 {
         m = m.insert(Same(i), i);
     }
-    let n = m.insert(Same(2), 20).remove(&Same(4));
-    m.len()                                         // => 5
+    let n = m
+        .insert(Same(2), 20)
+        .remove(&Same(4));
+    m.len()  // => 5
     ;
-    n.len()                                         // => 4
+    n.len()  // => 4
     ;
-    n.get(&Same(2)).map(|v| *v).unwrap_or(0)        // => 20
+    n
+        .get(&Same(2))
+        .map(|v| *v)
+        .unwrap_or(0)  // => 20
     ;
-    m.get(&Same(2)).map(|v| *v).unwrap_or(0)        // => 2
+    m
+        .get(&Same(2))
+        .map(|v| *v)
+        .unwrap_or(0)  // => 2
     ;
     let mut rest = n.clone();
     for i in 0..4 {
         rest = rest.remove(&Same(i));
     }
-    rest.is_empty()                                 // => true
+    rest.is_empty()  // => true
     ;
     let mut keys = 0;
     for (k, _) in &n {
         keys += k.0;
     }
-    keys                                            // => 6
+    keys  // => 6
 }
 
 test "a map of values that need dropping" {
@@ -252,32 +294,41 @@ test "a map of values that need dropping" {
     for i in 0..100 {
         m = m.insert(fmt"k{i}", fmt"v{i}");
     }
-    let n = m.remove(&"k5".to_string()).insert("k6".to_string(), "six".to_string());
+    let n = m
+        .remove(&"k5".to_string())
+        .insert("k6".to_string(), "six".to_string());
     drop(m);
-    n.len()                                         // => 99
+    n.len()  // => 99
     ;
-    n.get(&"k6".to_string()).map(|s| s.len()).unwrap_or(0)   // => 3
+    n
+        .get(&"k6".to_string())
+        .map(|s| s.len())
+        .unwrap_or(0)  // => 3
 }
 
 test "a set's updates leave it as it was" {
     let a: PersistentSet<int> = [3, 1, 3, 2];
-    let b = a.insert(4).remove(&1);
-    a.len()                                         // => 3
+    let b = a
+        .insert(4)
+        .remove(&1);
+    a.len()  // => 3
     ;
-    b.contains(&1)                                  // => false
+    b.contains(&1)  // => false
     ;
-    a.contains(&1)                                  // => true
+    a.contains(&1)  // => true
     ;
-    b.len()                                         // => 3
+    b.len()  // => 3
     ;
     let mut total = 0;
     for x in &b {
         total += *x;
     }
-    total                                           // => 9
+    total  // => 9
     ;
-    a == b.insert(1).remove(&4)                     // => true
+    a == b
+        .insert(1)
+        .remove(&4)  // => true
     ;
     let one: PersistentSet<int> = [5];
-    fmt"{one:?}"                                    // => "{5}"
+    fmt"{one:?}"  // => "{5}"
 }

@@ -1,0 +1,11 @@
+---
+source: crates/fmt/tests/rules.rs
+expression: "fmt(\"fn max<T>(a: T, b: T) -> T where T: Ord requires true ensures true { a }\")"
+---
+fn max<T>(a: T, b: T) -> T
+    where T: Ord
+    requires true
+    ensures true
+{
+    a
+}

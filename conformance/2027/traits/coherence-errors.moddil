@@ -1,11 +1,21 @@
 // covers: item.impl.coherence.1
 // Bounds that may hold still overlap.
 
-trait Shown { fn shown(&self) -> int; }
+trait Shown {
+    fn shown(&self) -> int;
+}
 trait Marked {}
 
-impl<T: Marked> Shown for T { fn shown(&self) -> int { 1 } }
+impl<T: Marked> Shown for T {
+    fn shown(&self) -> int {
+        1
+    }
+}
 
 struct Pin;
 impl Marked for Pin {}
-impl Shown for Pin { fn shown(&self) -> int { 2 } }                 //~ E0406
+impl Shown for Pin {  //~ E0406
+    fn shown(&self) -> int {
+        2
+    }
+}

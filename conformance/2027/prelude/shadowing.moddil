@@ -1,17 +1,28 @@
 // covers: prelude.1
 
 // A module's items shadow the prelude's names.
-struct Option { x: int }
-enum Ordering { Up, Down }
-fn drop(x: int) -> int { x + 1 }
-fn Some(n: int) -> int { n * 10 }
+struct Option {
+    x: int,
+}
+enum Ordering {
+    Up,
+    Down,
+}
+fn drop(x: int) -> int {
+    x + 1
+}
+fn Some(n: int) -> int {
+    n * 10
+}
 
-fn first(o: Option) -> int { o.x }
+fn first(o: Option) -> int {
+    o.x
+}
 
 test "a module's items shadow the prelude's names" {
-    first(Option { x: 1 })                  // => 1
+    first(Option { x: 1 })  // => 1
     ;
-    drop(2)                                 // => 3
+    drop(2)  // => 3
     ;
-    Some(4)                                 // => 40
+    Some(4)  // => 40
 }

@@ -139,15 +139,15 @@ fn through_both(b: &mut dyn Both) -> int {
 test "a dyn borrow as a later supertrait's" {
     let s = S { n: 2 };
     let t = T { n: 3 };
-    second_of_c(&s)                     // => 20
+    second_of_c(&s)  // => 20
     ;
-    second_of_c(&t)                     // => -30
+    second_of_c(&t)  // => -30
     ;
-    from_d(&s)                          // => 220
+    from_d(&s)  // => 220
     ;
     let g: &dyn G = &s;
-    via_get(g)                          // => 3
+    via_get(g)  // => 3
     ;
     let mut c = Counter { n: 0 };
-    through_both(&mut c)                // => 2
+    through_both(&mut c)  // => 2
 }

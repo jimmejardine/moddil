@@ -3,14 +3,15 @@
 // A `where` clause may end with a comma, before a body: a bound's type is never an anonymous
 // record, so the `{` is the body's.
 fn first<T>(x: T, y: T) -> T
-where
-    T: Clone,
+    where T: Clone,
 {
     let _ = y;
     x.clone()
 }
 
-fn both<T, U>(x: T, y: U) -> (T, U) where T: Clone, U: Copy, {
+fn both<T, U>(x: T, y: U) -> (T, U)
+    where T: Clone, U: Copy,
+{
     (x.clone(), y)
 }
 
@@ -25,9 +26,9 @@ impl<T> Holder<T> where T: Clone, {
 }
 
 test "a where clause with a trailing comma" {
-    first(1, 2)                             // => 1
+    first(1, 2)  // => 1
     ;
-    both("a", 3)                            // => ("a", 3)
+    both("a", 3)  // => ("a", 3)
     ;
-    Holder { v: 5 }.get()                   // => 5
+    Holder { v: 5 }.get()  // => 5
 }

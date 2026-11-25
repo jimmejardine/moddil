@@ -1,0 +1,9 @@
+---
+source: crates/fmt/tests/rules.rs
+expression: "fmt(\"fn f(a:int,b:int)->int{let x=a+b*2;let r=&x;-a+*r}\")"
+---
+fn f(a: int, b: int) -> int {
+    let x = a + b * 2;
+    let r = &x;
+    -a + *r
+}

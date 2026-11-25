@@ -6,7 +6,6 @@ fn lookup(x: int) -> int with fail(Missing) {
     x
 }
 
-
 fn adder(k: int) -> impl Fn(int) -> int {
     |x| x + k
 }
@@ -34,25 +33,29 @@ fn scaled<F: Fn(int) -> int with E, E>(f: F, k: int) -> (impl Fn(int) -> int wit
 
 test "a function returns a closure that owns what it captures" {
     let add2 = adder(2);
-    add2(3)                                         // => 5
+    add2(3)  // => 5
     ;
     let mut c = counter();
     c();
-    c()                                             // => 2
+    c()  // => 2
     ;
     let g = greeting("hi".to_string());
-    g()                                             // => "hi"
+    g()  // => "hi"
     ;
     let s = scaled(adder(1), 10);
-    s(4)                                            // => 50
+    s(4)  // => 50
 }
 
 test "a returned closure's type names its effects" {
     let f = checked();
-    f(5)?                                           // => 5
+    f(5)?  // => 5
     ;
-    try { f(0)? } catch { Missing => -1 }           // => -1
+    try { f(0)? } catch {
+        Missing => -1,
+    }  // => -1
     ;
     let g = scaled(|x| lookup(x)?, 3);
-    try { g(0)? } catch { Missing => -1 }           // => -1
+    try { g(0)? } catch {
+        Missing => -1,
+    }  // => -1
 }

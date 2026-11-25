@@ -1,16 +1,36 @@
 // covers: expr.op.trait.1, expr.cmp.trait.1
 
-struct Label { id: int }
-struct V { x: int }
+struct Label {
+    id: int,
+}
+struct V {
+    x: int,
+}
 impl Add for V {
     type Output = V;
-    fn add(self, rhs: V) -> V { V { x: self.x + rhs.x } }
+    fn add(self, rhs: V) -> V {
+        V { x: self.x + rhs.x }
+    }
 }
 
-fn add_labels(a: Label, b: Label) { let c = a + b; }           //~ E0205
-fn compare_labels(a: Label, b: Label) -> bool { a == b }       //~ E0205
-fn order_labels(a: Label, b: Label) -> bool { a < b }          //~ E0205
-fn tuples(a: (int, int)) -> bool { a == (1, 2) }               //~ E0205
-fn compound(mut a: Label, b: Label) { a += b; }                //~ E0205
-fn wrong_rhs(a: V) -> V { a + 1 }                              //~ E0201
-fn negate(a: V) -> V { -a }                                    //~ E0205
+fn add_labels(a: Label, b: Label) {
+    let c = a + b;  //~ E0205
+}
+fn compare_labels(a: Label, b: Label) -> bool {
+    a == b  //~ E0205
+}
+fn order_labels(a: Label, b: Label) -> bool {
+    a < b  //~ E0205
+}
+fn tuples(a: (int, int)) -> bool {
+    a == (1, 2)  //~ E0205
+}
+fn compound(mut a: Label, b: Label) {
+    a += b;  //~ E0205
+}
+fn wrong_rhs(a: V) -> V {
+    a + 1  //~ E0201
+}
+fn negate(a: V) -> V {
+    -a  //~ E0205
+}

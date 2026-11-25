@@ -1,24 +1,33 @@
 // covers: borrow.1, borrow.deref.1, borrow.mut.1, borrow.coerce.1, borrow.reborrow.1
 
-struct Point { x: int, y: int }
+struct Point {
+    x: int,
+    y: int,
+}
 
-fn bump(n: &mut int) { *n += 1; }
-fn sum(p: &Point) -> int { p.x + p.y }
-fn read(n: &int) -> int { *n }
+fn bump(n: &mut int) {
+    *n += 1;
+}
+fn sum(p: &Point) -> int {
+    p.x + p.y
+}
+fn read(n: &int) -> int {
+    *n
+}
 
 test "shared and exclusive borrows" {
     let mut count = 0;
     bump(&mut count);
     bump(&mut count);
-    count                       // => 2
+    count  // => 2
     ;
     let p = Point { x: 1, y: 2 };
-    sum(&p)                     // => 3
+    sum(&p)  // => 3
     ;
     let r = &p;
-    r.x                         // => 1
+    r.x  // => 1
     ;
-    r                           // => &Point { x: 1, y: 2 }
+    r  // => &Point { x: 1, y: 2 }
 }
 
 test "changing through a borrow" {
@@ -26,20 +35,20 @@ test "changing through a borrow" {
     let m = &mut q;
     m.x = 5;
     (*m).y = 6;
-    q                           // => Point { x: 5, y: 6 }
+    q  // => Point { x: 5, y: 6 }
 }
 
 test "a &mut borrow is lent again, not used up" {
     let mut k = 1;
     let w = &mut k;
-    read(w)                     // => 1
+    read(w)  // => 1
     ;
     bump(w);
     bump(w);
-    *w                          // => 3
+    *w  // => 3
 }
 
 test "a borrow of a temporary" {
     let t = &(1 + 2);
-    *t                          // => 3
+    *t  // => 3
 }

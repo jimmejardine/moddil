@@ -9,10 +9,10 @@ const fn words() -> Vec<int> {
 const WORDS: Vec<int> = words();
 
 fn take() -> Vec<int> {
-    WORDS                                   //~ E1009
+    WORDS  //~ E1009
 }
 
 fn moved() -> int {
-    let v = WORDS;                          //~ E1009
+    let v = WORDS;  //~ E1009
     v.len()
 }

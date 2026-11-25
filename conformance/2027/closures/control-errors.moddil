@@ -2,5 +2,5 @@
 
 /// Calling a closure whose bound lists `suspend` suspends.
 pub fn call_now<F: Fn() with suspend>(f: F) {
-    f()                                         //~ E0603
+    f()  //~ E0603
 }

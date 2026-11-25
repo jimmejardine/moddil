@@ -1,1 +1,3 @@
-pub(mod) fn b() -> int { 2 }                //~ E0704
+pub(mod) fn b() -> int {  //~ E0704
+    2
+}

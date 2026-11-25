@@ -80,4 +80,3 @@ impl<T: PartialEq, const N: int> PartialEq for [T; N] {
 }
 
 impl<T: Eq, const N: int> Eq for [T; N] {}
-

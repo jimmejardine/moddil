@@ -1,25 +1,25 @@
 // covers: text.char.1, text.str.1, text.lit.escape.1, text.lit.raw.1, text.lit.block.1
 
 test "characters" {
-    'a'                                     // => 'a'
+    'a'  // => 'a'
     ;
-    '\n'.code()                             // => 10
+    '\n'.code()  // => 10
     ;
-    '\u{1F600}'.len_utf8()                  // => 4
+    '\u{1F600}'.len_utf8()  // => 4
     ;
-    'é'.is_alphabetic()                     // => true
+    'é'.is_alphabetic()  // => true
 }
 
 test "string literals" {
-    "hello"                                 // => "hello"
+    "hello"  // => "hello"
     ;
-    "a\tb".len()                            // => 3
+    "a\tb".len()  // => 3
     ;
-    "caf\u{E9}".len()                       // => 5
+    "caf\u{E9}".len()  // => 5
     ;
-    r"C:\dir".len()                         // => 6
+    r"C:\dir".len()  // => 6
     ;
-    r#"say "hi""#                           // => "say \"hi\""
+    r#"say "hi""#  // => "say \"hi\""
 }
 
 test "a dedented block" {
@@ -27,5 +27,5 @@ test "a dedented block" {
         line one
           indented
         """;
-    text                                    // => "line one\n  indented\n"
+    text  // => "line one\n  indented\n"
 }

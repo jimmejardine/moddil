@@ -18,9 +18,15 @@ y");
 }
 
 test "bad input is a typed error" {
-    let r = try { let n: int = json::decode("[1")?; n };
+    let r = try {
+        let n: int = json::decode("[1")?;
+        n
+    };
     assert(r.is_err());
-    let r = try { let n: int = json::decode("\"text\"")?; n };
+    let r = try {
+        let n: int = json::decode("\"text\"")?;
+        n
+    };
     assert(r.is_err());
 }
 
@@ -28,7 +34,11 @@ test "bad input is a typed error" {
 type Short = String where self.len() <= 3;
 
 #[derive(Serialize, Deserialize)]
-struct Pair { name: Short, n: int, ok: bool }
+struct Pair {
+    name: Short,
+    n: int,
+    ok: bool,
+}
 
 test "a derived struct round trips, its fields by name" {
     let p: Pair = json::decode(r#"{"n": 7, "ok": true, "name": "abc"}"#)?;
@@ -39,20 +49,32 @@ test "a derived struct round trips, its fields by name" {
 }
 
 test "a refined field that breaks its refinement is refused" {
-    let r = try { let p: Pair = json::decode(r#"{"name": "abcd", "n": 1, "ok": false}"#)?; p.n };
+    let r = try {
+        let p: Pair = json::decode(r#"{"name": "abcd", "n": 1, "ok": false}"#)?;
+        p.n
+    };
     match r {
-        Ok(_) => assert(false),
+        Ok(_)  => assert(false),
         Err(e) => assert(e.reason().contains("name")),
     }
-    let r = try { let p: Pair = json::decode(r#"{"name": "abc", "ok": false}"#)?; p.n };
+    let r = try {
+        let p: Pair = json::decode(r#"{"name": "abc", "ok": false}"#)?;
+        p.n
+    };
     assert(r.is_err());
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-enum Size { Small, Large }
+enum Size {
+    Small,
+    Large,
+}
 
 #[derive(Serialize, Deserialize)]
-struct Order { item: String, size: Size }
+struct Order {
+    item: String,
+    size: Size,
+}
 
 test "an enum of unit variants is its variant's name" {
     let o: Order = json::decode(r#"{"item": "tea", "size": "Large"}"#)?;
@@ -63,9 +85,12 @@ test "an enum of unit variants is its variant's name" {
 }
 
 test "a name that is no variant is refused" {
-    let r = try { let o: Order = json::decode(r#"{"item": "tea", "size": "Huge"}"#)?; o.item };
+    let r = try {
+        let o: Order = json::decode(r#"{"item": "tea", "size": "Huge"}"#)?;
+        o.item
+    };
     match r {
-        Ok(_) => assert(false),
+        Ok(_)  => assert(false),
         Err(e) => assert(e.reason().contains("Huge")),
     }
 }

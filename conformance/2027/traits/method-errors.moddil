@@ -1,21 +1,57 @@
 // covers: expr.method.1, expr.method.ambiguous.1, expr.path.assoc.1
 
-struct Counter { n: int }
+struct Counter {
+    n: int,
+}
 impl Counter {
-    fn get(&self) -> int { self.n }
-    fn bump(&mut self) { self.n += 1; }
+    fn get(&self) -> int {
+        self.n
+    }
+    fn bump(&mut self) {
+        self.n += 1;
+    }
 }
 
-trait A { fn hello(&self) -> int; }
-trait B { fn hello(&self) -> int; }
-impl A for Counter { fn hello(&self) -> int { 1 } }
-impl B for Counter { fn hello(&self) -> int { 2 } }
+trait A {
+    fn hello(&self) -> int;
+}
+trait B {
+    fn hello(&self) -> int;
+}
+impl A for Counter {
+    fn hello(&self) -> int {
+        1
+    }
+}
+impl B for Counter {
+    fn hello(&self) -> int {
+        2
+    }
+}
 
-fn missing(c: Counter) -> int { c.size() }                     //~ E0403
-fn field(c: Counter) -> int { c.n() }                          //~ E0403
-fn no_function() -> Counter { Counter::make() }                //~ E0403
-fn immutable() { let c = Counter { n: 0 }; c.bump(); }         //~ E0301
-fn shared(c: &Counter) { c.bump(); }                           //~ E0302
-fn ambiguous(c: Counter) -> int { c.hello() }                  //~ E0410
-fn chosen(c: Counter) -> int { A::hello(&c) + B::hello(&c) }
-fn unknown_receiver() -> int { let x = None; x.get() }         //~ E0405
+fn missing(c: Counter) -> int {
+    c.size()  //~ E0403
+}
+fn field(c: Counter) -> int {
+    c.n()  //~ E0403
+}
+fn no_function() -> Counter {
+    Counter::make()  //~ E0403
+}
+fn immutable() {
+    let c = Counter { n: 0 };
+    c.bump();  //~ E0301
+}
+fn shared(c: &Counter) {
+    c.bump();  //~ E0302
+}
+fn ambiguous(c: Counter) -> int {
+    c.hello()  //~ E0410
+}
+fn chosen(c: Counter) -> int {
+    A::hello(&c) + B::hello(&c)
+}
+fn unknown_receiver() -> int {
+    let x = None;  //~ E0405
+    x.get()        //~ E0405
+}

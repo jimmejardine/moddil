@@ -105,7 +105,9 @@ impl<T: Hash + Eq> FromArrayLiteral<T> for Set<T> {
         s
     }
 
-    fn from_repeat(x: T, n: int) -> Set<T> where T: Clone {
+    fn from_repeat(x: T, n: int) -> Set<T>
+        where T: Clone
+    {
         let mut s = Set::new();
         if n > 0 {
             s.insert(x);

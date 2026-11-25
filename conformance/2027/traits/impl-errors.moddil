@@ -1,35 +1,84 @@
 // covers: item.trait.1, item.trait.super.1, item.impl.1, item.impl.trait.1, item.impl.coherence.1, generic.assoc.1
 
-trait Shape { fn area(&self) -> int; }
-trait Named: Shape { fn id(&self) -> int; }
-trait Unit { type Item; }
-struct Square { side: int }
-struct Wrap<T> { x: T }
+trait Shape {
+    fn area(&self) -> int;
+}
+trait Named: Shape {
+    fn id(&self) -> int;
+}
+trait Unit {
+    type Item;
+}
+struct Square {
+    side: int,
+}
+struct Wrap<T> {
+    x: T,
+}
 
-impl Shape for Square {}                                        //~ E0407
-impl Unit for Square {}                                         //~ E0407
-impl Named for Square { fn id(&self) -> int { 1 } }
-impl Shape for Wrap<int> { fn area(&self) -> int { 1 } fn size(&self) {} } //~ E0408
-impl Shape for Wrap<bool> { fn area(self) -> int { 1 } }        //~ E0409
-impl Shape for (int, int) { fn area(&self) -> bool { true } }   //~ E0409
-impl Named for (int, int) { fn id(&self) -> int { 2 } }
-impl Square for int {}                                          //~ E0401
-impl Clone for int { fn clone(&self) -> int { 1 } }             //~ E0406
-impl int { fn double(&self) -> int { 2 } }                      //~ E0414
-impl<T> Shape for bool { fn area(&self) -> int { 1 } }          //~ E0415
-fn assoc<T: Shape>(x: T) -> T::Item { x }                       //~ E0413
+impl Shape for Square {}  //~ E0407
+impl Unit for Square {}   //~ E0407
+impl Named for Square {
+    fn id(&self) -> int {
+        1
+    }
+}
+impl Shape for Wrap<int> {
+    fn area(&self) -> int {
+        1
+    }
+    fn size(&self) {}  //~ E0408
+}
+impl Shape for Wrap<bool> {
+    fn area(self) -> int {  //~ E0409
+        1
+    }
+}
+impl Shape for (int, int) {
+    fn area(&self) -> bool {  //~ E0409
+        true
+    }
+}
+impl Named for (int, int) {
+    fn id(&self) -> int {
+        2
+    }
+}
+impl Square for int {}  //~ E0401
+impl Clone for int {    //~ E0406
+    fn clone(&self) -> int {
+        1
+    }
+}
+impl int {  //~ E0414
+    fn double(&self) -> int {
+        2
+    }
+}
+impl<T> Shape for bool {  //~ E0415
+    fn area(&self) -> int {
+        1
+    }
+}
+fn assoc<T: Shape>(x: T) -> T::Item {  //~ E0413
+    x
+}
 
 // A subtrait needs its supertraits: `Circle` does not implement `Shape`.
 struct Circle;
-impl Named for Circle { fn id(&self) -> int { 3 } }             //~ E0402
+impl Named for Circle {  //~ E0402
+    fn id(&self) -> int {
+        3
+    }
+}
 
 trait Twice {
     fn a(&self);
-    fn a(&self);                                                //~ E0103
+    fn a(&self);  //~ E0103
 }
 
 struct Dup;
 impl Dup {
     fn f() {}
-    fn f() {}                                                   //~ E0103
+    fn f() {}  //~ E0103
 }

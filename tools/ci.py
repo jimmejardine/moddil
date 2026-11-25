@@ -46,8 +46,14 @@ def has_cargo_tool(name):
     return shutil.which("cargo-" + name) is not None
 
 
+# The repository's Moddil sources kept in `moddil fmt`'s layout. The grammar's corpus
+# (`reference/grammar/tests/`) is left as written: its cases are the grammar's, layout and all.
+MODDIL_SOURCES = ["reference/2027/prelude", "mods", "tour", "examples", "conformance"]
+
+
 def step_fmt():
-    return run("cargo", "fmt", "--all", "--check")
+    return run("cargo", "fmt", "--all", "--check") and run(
+        "cargo", "run", "-q", "-p", "moddil", "--", "fmt", "--check", *MODDIL_SOURCES)
 
 
 def step_clippy():

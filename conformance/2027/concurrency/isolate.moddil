@@ -8,60 +8,58 @@ test "a trap in an isolated scope fails it with `Trapped`" {
     let mut cleaned = false;
     let r = try {
         scope(|s| {
-            s.spawn(|| {
+            s.spawn (|| {
                 defer {
                     cleaned = true;
                 }
                 yield_now();
             });
-            s.spawn(|| overflow(2));
+            s.spawn (|| overflow(2));
             0
         }, isolate: true)?
     };
     let shown = match r {
-        Ok(v) => fmt"{v}",
+        Ok(v)  => fmt"{v}",
         Err(t) => fmt"{t}",
     };
-    shown                                   // => "overflow at conformance/2027/concurrency/isolate.moddil:4:5"
+    shown  // => "overflow at conformance/2027/concurrency/isolate.moddil:4:5"
     ;
-    cleaned                                 // => true
+    cleaned  // => true
 }
 
 test "a scope that is not isolated passes no `Trapped`" {
-    let r = scope(|s| s.spawn(|| 1).join(), isolate: false);
-    r                                       // => 1
+    let r = scope(|s| s.spawn (|| 1).join(), isolate: false);
+    r  // => 1
 }
 
 const SHARED: bool = false;
 const ALONE: bool = !SHARED && SHARED;
 
 test "an isolate known to be false when compiling passes no `Trapped` either" {
-    let a = scope(|s| s.spawn(|| 2).join(), isolate: SHARED);
-    let b = scope(|s| s.spawn(|| 3).join(), isolate: ALONE || !true);
-    a + b                                   // => 5
+    let a = scope(|s| s.spawn (|| 2).join(), isolate: SHARED);
+    let b = scope(|s| s.spawn (|| 3).join(), isolate: ALONE || !true);
+    a + b  // => 5
 }
 
 test "the body's trap is the scope's too" {
-    let r = try {
-        scope(|s| overflow(3), isolate: true)?
-    };
+    let r = try { scope(|s| overflow(3), isolate: true)? };
     match r {
-        Ok(_) => 0,
+        Ok(_)                      => 0,
         Err(Trapped { class, at }) => class.len(),
-    }                                       // => 8
+    }  // => 8
 }
 
 test "a trap in a scope inside that is not isolated fails the isolated one" {
     let r = try {
         scope(|s| {
-            s.spawn(|| scope(|t| {
-                t.spawn(|| overflow(2));
+            s.spawn (|| scope(|t| {
+                t.spawn (|| overflow(2));
             }));
             0
         }, isolate: true)?
     };
     match r {
-        Ok(_) => 0,
+        Ok(_)                      => 0,
         Err(Trapped { class, at }) => class.len(),
-    }                                       // => 8
+    }  // => 8
 }

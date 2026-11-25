@@ -1,2 +1,4 @@
 // Not an entry point: its effects are inferred like any function's.
-pub(mod) fn main() -> int { mod::uses() }
+pub(mod) fn main() -> int {
+    mod::uses()
+}

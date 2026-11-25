@@ -1,6 +1,8 @@
 // covers: contract.1, contract.requires.1, contract.ensures.1, contract.old.1, err.question.1
 
-struct Account { balance: int }
+struct Account {
+    balance: int,
+}
 
 fn withdraw(account: &mut Account, amount: int) -> int
     requires amount > 0
@@ -32,7 +34,7 @@ fn first(xs: &[int]) -> Option<int>
 }
 
 fn broken(x: int) -> int
-    ensures result > x                      //~ trap
+    ensures result > x  //~ trap
 {
     x
 }
@@ -43,46 +45,44 @@ struct Oops;
 fn refuses(x: int) -> int with fail(Oops)
     ensures result > 100
 {
-    if x < 0 {
-        fail(Oops)
-    }
+    if x < 0 { fail(Oops) }
     x
 }
 
 // Leaving by `?` on `None` is a return: its postcondition is checked.
 fn none_early(o: Option<int>) -> Option<int>
-    ensures result.is_some()                //~ trap
+    ensures result.is_some()  //~ trap
 {
     let n = o?;
     Some(n)
 }
 
 test "leaving with an error checks no postcondition" {
-    try { refuses(-1)? }                    // => Err(Oops)
+    try { refuses(-1)? }  // => Err(Oops)
 }
 
 test "leaving by `?` on `None` checks the postconditions" {
-    none_early(Some(1))                     // => Some(1)
+    none_early(Some(1))  // => Some(1)
     ;
     none_early(None);
 }
 
 test "contracts that hold" {
     let mut a = Account { balance: 10 };
-    withdraw(&mut a, 3)                     // => 3
+    withdraw(&mut a, 3)  // => 3
     ;
-    a.balance                               // => 7
+    a.balance  // => 7
     ;
-    abs(-4)                                 // => 4
+    abs(-4)  // => 4
     ;
-    abs(5)                                  // => 5
+    abs(5)  // => 5
     ;
-    first(&[9, 8])                          // => Some(9)
+    first(&[9, 8])  // => Some(9)
 }
 
 test "a broken precondition traps where it is called" {
     let mut a = Account { balance: 1 };
-    withdraw(&mut a, 5);                    //~ trap
+    withdraw(&mut a, 5);  //~ trap
 }
 
 test "a broken postcondition traps at its clause" {
@@ -106,11 +106,11 @@ fn grow(v: &mut Vec<int>, n: int)
 test "old of a cloned value" {
     let mut s = "ab".to_string();
     append(&mut s, 'é');
-    s                                       // => "abé"
+    s  // => "abé"
     ;
     let mut v: Vec<int> = [1, 2];
     grow(&mut v, 3);
-    v.len()                                 // => 3
+    v.len()  // => 3
 }
 
 /// A precondition no policy may switch off (`requires always`): checked as `requires` is.
@@ -122,7 +122,7 @@ fn take(buf: &[int], n: int) -> int
 
 test "requires always holds, or traps where it is called" {
     let xs: [int; 3] = [1, 2, 3];
-    take(&xs, 2)                            // => 2
+    take(&xs, 2)  // => 2
     ;
-    take(&xs, 4);                           //~ trap
+    take(&xs, 4);  //~ trap
 }

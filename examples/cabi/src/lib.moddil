@@ -35,7 +35,9 @@ pub fn moddil_is_even(n: u8) -> bool {
 /// How far apart the points at `a` and `b` are.
 #[export]
 pub fn moddil_distance(a: *const Point, b: *const Point) -> f64 {
-    let (p, q) = unsafe("C passes two points it holds") { (*a, *b) };
+    let (p, q) = unsafe("C passes two points it holds") {
+        (*a, *b)
+    };
     let dx = p.x - q.x;
     let dy = p.y - q.y;
     (dx * dx + dy * dy).sqrt()
@@ -121,7 +123,7 @@ pub fn moddil_divide(a: int, b: int) -> int {
 }
 
 /// The `i`th of three numbers. Out of range, a trap gives C -1 instead of 0.
-#[export(on_trap = -1)]
+#[export(on_trap = - 1)]
 pub fn moddil_third(i: int) -> int {
     let xs: [int; 3] = [10, 20, 30];
     xs[i]
@@ -178,7 +180,9 @@ test "Moddil calls C with structs by value" {
 
 test "C calls Moddil back" {
     let xs: [int; 4] = [1, 2, 3, 4];
-    let total = unsafe("shape_fold reads the four values") { shape_fold(&xs[0], 4, add, 10) };
+    let total = unsafe("shape_fold reads the four values") {
+        shape_fold(&xs[0], 4, add, 10)
+    };
     assert(total == 20);
     let mut t = Tally { count: 0, sum: 0 };
     unsafe("shape_each hands the tally back to `count`, and keeps it no longer") {

@@ -1,38 +1,48 @@
 // covers: item.struct.decl.1, expr.struct.1, expr.struct.tuple.1, expr.field.1, type.adt.1
 
-struct Point { x: int, y: int }
+struct Point {
+    x: int,
+    y: int,
+}
 struct Pair(int, bool);
 struct Marker;
-struct Size { x: int, y: int }
+struct Size {
+    x: int,
+    y: int,
+}
 
-fn origin() -> Point { Point { x: 0, y: 0 } }
-fn swap(p: Point) -> Point { Point { x: p.y, y: p.x } }
+fn origin() -> Point {
+    Point { x: 0, y: 0 }
+}
+fn swap(p: Point) -> Point {
+    Point { x: p.y, y: p.x }
+}
 
 test "named fields" {
-    Point { x: 1, y: 2 }        // => Point { x: 1, y: 2 }
+    Point { x: 1, y: 2 }  // => Point { x: 1, y: 2 }
     ;
-    Point { y: 2, x: 1 }        // => Point { x: 1, y: 2 }
+    Point { y: 2, x: 1 }  // => Point { x: 1, y: 2 }
     ;
     let x = 5;
-    Point { x, y: x + 1 }       // => Point { x: 5, y: 6 }
+    Point { x, y: x + 1 }  // => Point { x: 5, y: 6 }
     ;
-    swap(Point { x: 1, y: 2 }).x // => 2
+    swap(Point { x: 1, y: 2 }).x  // => 2
     ;
-    origin().y                  // => 0
+    origin().y  // => 0
 }
 
 test "positional fields and unit structs" {
     let p = Pair(7, true);
-    p                           // => Pair(7, true)
+    p  // => Pair(7, true)
     ;
-    p.0                         // => 7
+    p.0  // => 7
     ;
-    p.1                         // => true
+    p.1  // => true
     ;
-    Marker                      // => Marker
+    Marker  // => Marker
 }
 
 test "a struct of the same fields as another is built and read on its own" {
     let s = Size { x: 1, y: 2 };
-    s.x + origin().x            // => 1
+    s.x + origin().x  // => 1
 }

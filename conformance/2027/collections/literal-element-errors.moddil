@@ -1,5 +1,5 @@
 // covers: expr.array.from.1
 
 fn too_big() {
-    let bytes: Vec<u8> = [1, 256];          //~ E0204
+    let bytes: Vec<u8> = [1, 256];  //~ E0204
 }

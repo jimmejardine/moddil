@@ -5,18 +5,18 @@
 test "a stop reaches the inner scope's tasks first" {
     let (tx, rx) = channel::<int>(2);
     scope(|s| {
-        s.spawn(|| {
+        s.spawn (|| {
             yield_now();
             stop_requested();
-            tx.send(2)?!"the receiver is alive";
+            tx.send(2) ?! "the receiver is alive";
         });
-        s.spawn(|| scope(|inner| {
-            inner.spawn(|| {
+        s.spawn (|| scope(|inner| {
+            inner.spawn (|| {
                 stop_requested();
-                tx.send(1)?!"the receiver is alive";
+                tx.send(1) ?! "the receiver is alive";
             });
         }));
         s.stop();
     });
-    (rx.recv(), rx.recv())                  // => (Some(1), Some(2))
+    (rx.recv(), rx.recv())  // => (Some(1), Some(2))
 }

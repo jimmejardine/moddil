@@ -1,10 +1,20 @@
 // covers: expr.closure.stored.1, type.impl.ret.2
 
-trait Clock { fn now(&self) -> int; }
-fn now() -> int with clock: Clock { clock.now() }
+trait Clock {
+    fn now(&self) -> int;
+}
+fn now() -> int with clock: Clock {
+    clock.now()
+}
 
-struct Fixed { t: int }
-impl Clock for Fixed { fn now(&self) -> int { self.t } }
+struct Fixed {
+    t: int,
+}
+impl Clock for Fixed {
+    fn now(&self) -> int {
+        self.t
+    }
+}
 
 fn boxed() -> int with Clock {
     let f: Box<dyn Fn() -> int> = Box::new(|| now() + 1);
@@ -17,19 +27,18 @@ fn stamped() -> (impl Fn(int) -> int) with Clock {
 
 test "a box borrows the handlers its closure uses, inside their with" {
     with Clock = (Fixed { t: 41 }) {
-        boxed()                             // => 42
-    }
-    ;
+        boxed()  // => 42
+    };
     let n = with Clock = (Fixed { t: 9 }) {
         let f: Box<dyn Fn() -> int> = Box::new(|| now() * 2);
         f() + f()
     };
-    n                                       // => 36
+    n  // => 36
 }
 
 test "a returned closure keeps the handlers it was given" {
     with Clock = (Fixed { t: 100 }) {
         let f = stamped();
-        f(1)                                // => 101
+        f(1)  // => 101
     }
 }

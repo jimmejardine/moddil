@@ -1,14 +1,32 @@
 // covers: expr.break.1, expr.break.label.1, expr.break.value.1, expr.loop.1, expr.while.1
 
-fn outside() { break; }                             //~ E0109
-fn outside_continue() { continue; }                 //~ E0109
-fn no_label() { loop { break 'missing; } }          //~ E0110
-fn while_value() { while true { break 1; } }        //~ E0212
-fn values_differ() -> int {
+fn outside() {
+    break;  //~ E0109
+}
+fn outside_continue() {
+    continue;  //~ E0109
+}
+fn no_label() {
     loop {
-        if true { break 1; }
-        break false;                                //~ E0201
+        break 'missing;  //~ E0110
     }
 }
-fn condition() { while 1 { } }                      //~ E0201
-fn body_value() { loop { 1 } }                      //~ E0201
+fn while_value() {
+    while true {
+        break 1;  //~ E0212
+    }
+}
+fn values_differ() -> int {
+    loop {
+        if true {
+            break 1;
+        }
+        break false;  //~ E0201
+    }
+}
+fn condition() {
+    while 1 {}  //~ E0201
+}
+fn body_value() {
+    loop { 1 }  //~ E0201
+}

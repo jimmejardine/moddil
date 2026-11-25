@@ -12,20 +12,12 @@ const fn copied(t: type) -> Impl<Copied> {
             if const t.is_enum() {
                 inline for v in variants(t) {
                     if v.is(self) {
-                        return v {
-                            inline for f in fields(v) {
-                                [f]: self.[f].copied(),
-                            }
-                        };
+                        return v { inline for f in fields(v) { [f]: self.[f].copied(), } };
                     }
                 }
                 loop {}
             } else {
-                t {
-                    inline for f in fields(t) {
-                        [f]: self.[f].copied(),
-                    }
-                }
+                t { inline for f in fields(t) { [f]: self.[f].copied(), } }
             }
         }
     }
@@ -77,8 +69,7 @@ const fn described(t: type) -> Impl<Described> {
                             out.push_str(&self.[f].described());
                         }
                         out.push_str(")");
-                    } else if const v.is_unit() {
-                    } else {
+                    } else if const v.is_unit() {} else {
                         out.push_str(" {");
                         inline for f in fields(v) {
                             out.push_str(" ");
@@ -109,56 +100,71 @@ enum Maybe<T> {
 }
 
 impl Same for int {
-    fn same(&self, other: &int) -> bool { *self == *other }
+    fn same(&self, other: &int) -> bool {
+        *self == *other
+    }
 }
 impl Copied for int {
-    fn copied(&self) -> int { *self }
+    fn copied(&self) -> int {
+        *self
+    }
 }
 impl Described for int {
-    fn described(&self) -> String { fmt"{self}" }
+    fn described(&self) -> String {
+        fmt"{self}"
+    }
 }
 impl Same for String {
-    fn same(&self, other: &String) -> bool { *self == *other }
+    fn same(&self, other: &String) -> bool {
+        *self == *other
+    }
 }
 impl Copied for String {
-    fn copied(&self) -> String { self.clone() }
+    fn copied(&self) -> String {
+        self.clone()
+    }
 }
 impl Described for String {
-    fn described(&self) -> String { fmt"{self:?}" }
+    fn described(&self) -> String {
+        fmt"{self:?}"
+    }
 }
 
 #[derive(Copied)]
-struct Pair { a: String, b: int }
+struct Pair {
+    a: String,
+    b: int,
+}
 
 test "a template reflects on a variant's fields" {
     let r = Shape::Rect { w: 3, label: "box".to_string() };
-    r.copied() == r                                        // => true
+    r.copied() == r  // => true
     ;
-    Shape::Circle(2).copied() == Shape::Circle(2)          // => true
+    Shape::Circle(2).copied() == Shape::Circle(2)  // => true
     ;
-    Shape::Dot.copied() == Shape::Dot                      // => true
+    Shape::Dot.copied() == Shape::Dot  // => true
     ;
-    r.same(&Shape::Rect { w: 3, label: "box".to_string() })    // => true
+    r.same(&Shape::Rect { w: 3, label: "box".to_string() })  // => true
     ;
-    r.same(&Shape::Rect { w: 4, label: "box".to_string() })    // => false
+    r.same(&Shape::Rect { w: 4, label: "box".to_string() })  // => false
     ;
-    Shape::Circle(1).same(&Shape::Dot)                     // => false
+    Shape::Circle(1).same(&Shape::Dot)  // => false
     ;
-    r.described()                                          // => "Shape::Rect#2 { w: 3 label: \"box\" }"
+    r.described()  // => "Shape::Rect#2 { w: 3 label: \"box\" }"
     ;
-    Shape::Circle(5).described()                           // => "Shape::Circle#1(5)"
+    Shape::Circle(5).described()  // => "Shape::Circle#1(5)"
     ;
-    Shape::Dot.described()                                 // => "Shape::Dot#0"
+    Shape::Dot.described()  // => "Shape::Dot#0"
     ;
     let m: Maybe<int> = Maybe::Just(4);
-    m.same(&Maybe::Just(4))                                // => true
+    m.same(&Maybe::Just(4))  // => true
     ;
-    m.copied().same(&m)                                    // => true
+    m.copied().same(&m)  // => true
     ;
-    m.described()                                          // => "Maybe::Just#1(4)"
+    m.described()  // => "Maybe::Just#1(4)"
     ;
     let p = Pair { a: "x".to_string(), b: 1 };
-    p.copied().b                                           // => 1
+    p.copied().b  // => 1
     ;
 }
 
@@ -190,13 +196,17 @@ const fn rank(t: type) -> Impl<Rank> {
 }
 
 #[derive(Rank)]
-enum Step { First, Second(int), Third { n: int } }
+enum Step {
+    First,
+    Second(int),
+    Third { n: int },
+}
 
 test "if const compares reflected variants" {
-    Step::First.rank(&Step::Third { n: 1 })                  // => 2
+    Step::First.rank(&Step::Third { n: 1 })  // => 2
     ;
-    Step::Second(4).rank(&Step::Second(5))                    // => 0
+    Step::Second(4).rank(&Step::Second(5))  // => 0
     ;
-    Step::Third { n: 1 }.rank(&Step::First)                   // => -2
+    Step::Third { n: 1 }.rank(&Step::First)  // => -2
     ;
 }

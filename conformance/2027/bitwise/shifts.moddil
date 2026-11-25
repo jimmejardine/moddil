@@ -1,23 +1,25 @@
 // covers: expr.bit.shift.1
 
 test "shifts" {
-    1 << 62                   // => 4611686018427387904
+    1 << 62  // => 4611686018427387904
     ;
-    -1 << 63                  // => -9223372036854775808
+    -1 << 63  // => -9223372036854775808
     ;
-    -16 >> 2                  // => -4
+    -16 >> 2  // => -4
     ;
-    5 >> 63                   // => 0
+    5 >> 63  // => 0
 }
 
 test "too far" {
-    let one = 1; one << 64;   //~ trap
+    let one = 1;
+    one << 64;  //~ trap
 }
 
 test "negative amount" {
-    1 >> -1;                  //~ trap
+    1 >> -1;  //~ trap
 }
 
 test "bits lost" {
-    let three = 3; three << 62; //~ trap
+    let three = 3;
+    three << 62;  //~ trap
 }

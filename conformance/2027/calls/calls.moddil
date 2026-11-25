@@ -1,14 +1,20 @@
 // covers: expr.call.1, expr.return.1, expr.order.1
 
-fn add(a: int, b: int) -> int { a + b }
+fn add(a: int, b: int) -> int {
+    a + b
+}
 
 fn abs(x: int) -> int {
-    if x < 0 { return -x; }
+    if x < 0 {
+        return -x;
+    }
     x
 }
 
 fn nothing(x: int) {
-    if x > 0 { return; }
+    if x > 0 {
+        return;
+    }
 }
 
 fn fact(n: int) -> int {
@@ -17,22 +23,28 @@ fn fact(n: int) -> int {
 }
 
 test "calls" {
-    add(2, 3)                 // => 5
+    add(2, 3)  // => 5
     ;
-    abs(-4)                   // => 4
+    abs(-4)  // => 4
     ;
-    abs(4)                    // => 4
+    abs(4)  // => 4
     ;
-    nothing(1)                // => ()
+    nothing(1)  // => ()
     ;
-    fact(20)                  // => 2432902008176640000
+    fact(20)  // => 2432902008176640000
 }
 
 test "arguments run left to right" {
     let mut x = 1;
-    add({ x = x * 10; x }, { x = x + 1; x })  // => 21
+    add({
+        x = x * 10;
+        x
+    }, {
+        x = x + 1;
+        x
+    })  // => 21
 }
 
 test "a call that overflows" {
-    fact(21);                 // the trap is reported where it happens, inside `fact`
+    fact(21);  // the trap is reported where it happens, inside `fact`
 }

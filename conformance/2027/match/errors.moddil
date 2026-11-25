@@ -2,14 +2,14 @@
 
 fn arms_differ(b: bool) -> int {
     match b {
-        true => 1,
-        false => false,         //~ E0201
+        true  => 1,
+        false => false,  //~ E0201
     }
 }
 
 fn guard_type(n: int) -> int {
     match n {
-        x if x => 1,            //~ E0201
-        _ => 0,
+        x if x => 1,  //~ E0201
+        _      => 0,
     }
 }

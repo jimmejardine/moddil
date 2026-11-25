@@ -1,20 +1,35 @@
-pub struct Point { pub x: int, pub y: int }
+pub struct Point {
+    pub x: int,
+    pub y: int,
+}
 
-pub fn origin() -> Point { Point { x: 0, y: 0 } }
+pub fn origin() -> Point {
+    Point { x: 0, y: 0 }
+}
 
-pub fn norm(p: Point) -> int { abs(p.x) + abs(p.y) }
+pub fn norm(p: Point) -> int {
+    abs(p.x) + abs(p.y)
+}
 
-fn abs(n: int) -> int { if n < 0 { -n } else { n } }
+fn abs(n: int) -> int {
+    if n < 0 { -n } else { n }
+}
 
 pub trait Log {
     fn line(&self, n: int) -> int;
 }
 
 // Inside the mod, `emit`'s need is inferred; at the mod's boundary, `report` writes it out.
-fn emit(n: int) -> int with log: Log { log.line(n) }
-fn relay(n: int) -> int { emit(n) }
-pub fn report(n: int) -> int with Log { relay(n) }
+fn emit(n: int) -> int with log: Log {
+    log.line(n)
+}
+fn relay(n: int) -> int {
+    emit(n)
+}
+pub fn report(n: int) -> int with Log {
+    relay(n)
+}
 
 test "a dependency's tests run too" {
-    abs(-2)                                 // => 2
+    abs(-2)  // => 2
 }

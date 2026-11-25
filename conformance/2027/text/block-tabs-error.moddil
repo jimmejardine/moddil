@@ -3,6 +3,6 @@
 fn f() -> int {
     let text = """
 	        tabbed
-        """;                                //~ E0902
+        """;  //~ E0902
     1
 }

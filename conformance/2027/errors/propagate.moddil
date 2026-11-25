@@ -1,16 +1,27 @@
 // covers: err.fail.1, err.set.1, err.question.1, err.test.1, prelude.result.1
 
-struct TooBig { n: int }
-enum Parse { Empty, Bad(int) }
+struct TooBig {
+    n: int,
+}
+enum Parse {
+    Empty,
+    Bad(int),
+}
 
 fn check(n: int) -> int with fail(TooBig) {
-    if n > 9 { fail(TooBig { n }); }
+    if n > 9 {
+        fail(TooBig { n });
+    }
     n
 }
 
 fn parse(n: int) -> int with fail(Parse) {
-    if n == 0 { fail(Parse::Empty); }
-    if n < 0 { fail(Parse::Bad(n)); }
+    if n == 0 {
+        fail(Parse::Empty);
+    }
+    if n < 0 {
+        fail(Parse::Bad(n));
+    }
     n
 }
 
@@ -33,26 +44,26 @@ fn noted(n: int) -> int with fail(TooBig) {
 }
 
 test "errors propagate with ?" {
-    both(3)?                                // => 4
+    both(3)?  // => 4
     ;
-    reify(4)                                // => Ok(4)
+    reify(4)  // => Ok(4)
     ;
-    reify(12)                               // => Err(TooBig { n: 12 })
+    reify(12)  // => Err(TooBig { n: 12 })
     ;
     let r = try { both(0)? };
-    r                                       // => Err(Parse::Empty)
+    r  // => Err(Parse::Empty)
     ;
-    try { both(-2)? }                       // => Err(Parse::Bad(-2))
+    try { both(-2)? }  // => Err(Parse::Bad(-2))
     ;
-    try { both(50)? }                       // => Err(TooBig { n: 50 })
+    try { both(50)? }  // => Err(TooBig { n: 50 })
     ;
-    try { reflect(Ok(5))? }                 // => Ok(10)
+    try { reflect(Ok(5))? }  // => Ok(10)
     ;
-    reify(1).is_ok()                        // => true
+    reify(1).is_ok()  // => true
     ;
-    try { noted(3)? }                       // => Ok(4)
+    try { noted(3)? }  // => Ok(4)
     ;
-    try { noted(30)? }                      // => Err(TooBig { n: 30 })
+    try { noted(30)? }  // => Err(TooBig { n: 30 })
 }
 
 fn first(o: Option<int>) -> Option<int> {
@@ -61,18 +72,18 @@ fn first(o: Option<int>) -> Option<int> {
 }
 
 test "? on Option" {
-    first(Some(1))                          // => Some(2)
+    first(Some(1))  // => Some(2)
     ;
-    first(None)                             // => None
+    first(None)  // => None
     ;
     let x: Option<int> = None;
-    try { x? + 1 }                          // => None
+    try { x? + 1 }  // => None
     ;
-    try { Some(2)? * 3 }                    // => Some(6)
+    try { Some(2)? * 3 }  // => Some(6)
 }
 
 test "an error that escapes a test fails it" {
     check(5)?;
-    check(10)?;                             //~ error
+    check(10)?;  //~ error
     assert(false);
 }

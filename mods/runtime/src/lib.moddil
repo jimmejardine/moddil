@@ -16,7 +16,7 @@ pub enum Signal {
 impl Signal {
     fn number(&self) -> int {
         match self {
-            Signal::Int => 1,
+            Signal::Int  => 1,
             Signal::Term => 2,
         }
     }
@@ -35,14 +35,14 @@ pub fn serve_until_stopped<F: FnOnce() with (suspend, spawn)>(run: F, signals: V
     let arrived = os::signals();
     let ended = try {
         scope(|s| {
-            let t = s.spawn(run);
+            let t = s.spawn (run);
             loop {
                 select {
                     _ = t.join() => return,
                     n = arrived.recv() => match n {
                         Some(n) if wanted.contains(&n) => break,
-                        Some(_) => {}
-                        None => return,
+                        Some(_)                        => {}
+                        None                           => return,
                     },
                 }
             }

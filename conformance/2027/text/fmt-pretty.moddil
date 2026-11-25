@@ -1,40 +1,47 @@
 // covers: expr.fmt.debug.2
 
 #[derive(Debug)]
-struct Point { x: int, y: int }
+struct Point {
+    x: int,
+    y: int,
+}
 
 #[derive(Debug)]
-enum Shape { Dot, Line(Point, Point), Named { name: String, at: Point } }
+enum Shape {
+    Dot,
+    Line(Point, Point),
+    Named { name: String, at: Point },
+}
 
 test "a struct across lines" {
     let p = Point { x: 1, y: -2 };
-    fmt"{p:#?}"                             // => "Point {\n    x: 1,\n    y: -2,\n}"
+    fmt"{p:#?}"  // => "Point {\n    x: 1,\n    y: -2,\n}"
 }
 
 test "nested values, each a level further in" {
     let s = Shape::Line(Point { x: 0, y: 0 }, Point { x: 3, y: 4 });
-    fmt"{s:#?}"                             // => "Shape::Line(\n    Point {\n        x: 0,\n        y: 0,\n    },\n    Point {\n        x: 3,\n        y: 4,\n    },\n)"
+    fmt"{s:#?}"  // => "Shape::Line(\n    Point {\n        x: 0,\n        y: 0,\n    },\n    Point {\n        x: 3,\n        y: 4,\n    },\n)"
     ;
     let n = Shape::Named { name: "a, (b)".to_string(), at: Point { x: 1, y: 1 } };
-    fmt"{n:#?}"                             // => "Shape::Named {\n    name: \"a, (b)\",\n    at: Point {\n        x: 1,\n        y: 1,\n    },\n}"
+    fmt"{n:#?}"  // => "Shape::Named {\n    name: \"a, (b)\",\n    at: Point {\n        x: 1,\n        y: 1,\n    },\n}"
 }
 
 test "lists, options and tuples" {
     let v: Vec<int> = [1, 2];
-    fmt"{v:#?}"                             // => "[\n    1,\n    2,\n]"
+    fmt"{v:#?}"  // => "[\n    1,\n    2,\n]"
     ;
     let e: Vec<int> = [];
-    fmt"{e:#?}"                             // => "[]"
+    fmt"{e:#?}"  // => "[]"
     ;
     let o = Some('}');
-    fmt"{o:#?}"                             // => "Some(\n    '}',\n)"
+    fmt"{o:#?}"  // => "Some(\n    '}',\n)"
     ;
     let t = (1, 'x');
-    fmt"{t:#?}"                             // => "(\n    1,\n    'x',\n)"
+    fmt"{t:#?}"  // => "(\n    1,\n    'x',\n)"
 }
 
 test "what has no brackets is as on one line" {
     let d = Shape::Dot;
     let k = 3;
-    fmt"{d:#?} {k:#?}"                      // => "Shape::Dot 3"
+    fmt"{d:#?} {k:#?}"  // => "Shape::Dot 3"
 }

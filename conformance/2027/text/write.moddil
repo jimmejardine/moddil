@@ -1,7 +1,10 @@
 // covers: text.write.1, text.write.2, text.display.1, expr.fmt.debug.1
 
 /// A sink that keeps only how much was written to it.
-struct Count { chars: int, writes: int }
+struct Count {
+    chars: int,
+    writes: int,
+}
 
 impl TextWrite for Count {
     fn write_str(&mut self, s: &str) {
@@ -10,7 +13,10 @@ impl TextWrite for Count {
     }
 }
 
-struct Point { x: int, y: int }
+struct Point {
+    x: int,
+    y: int,
+}
 
 impl Display for Point {
     fn fmt(&self, out: &mut dyn TextWrite) {
@@ -23,39 +29,42 @@ impl Display for Point {
 }
 
 #[derive(Debug)]
-struct Tagged { name: String, n: int }
+struct Tagged {
+    name: String,
+    n: int,
+}
 
 test "a String is a sink" {
     let mut s = String::new();
     s.write_str("ab");
     s.write_char('c');
-    s                                       // => "abc"
+    s  // => "abc"
 }
 
 test "a type's own Display writes to any sink" {
     let p = Point { x: 1, y: -2 };
     let mut c = Count { chars: 0, writes: 0 };
     p.fmt(&mut c);
-    c.chars                                 // => 7
+    c.chars  // => 7
     ;
-    fmt"{p}"                                // => "(1, -2)"
+    fmt"{p}"  // => "(1, -2)"
     ;
-    p.to_string()                           // => "(1, -2)"
+    p.to_string()  // => "(1, -2)"
 }
 
 test "a derived Debug writes to any sink" {
     let t = Tagged { name: "a".to_string(), n: 3 };
     let mut c = Count { chars: 0, writes: 0 };
     Debug::fmt(&t, &mut c);
-    c.chars                                 // => 26
+    c.chars  // => 26
     ;
-    fmt"{t:?}"                              // => "Tagged { name: \"a\", n: 3 }"
+    fmt"{t:?}"  // => "Tagged { name: \"a\", n: 3 }"
 }
 
 test "a sink's write_char writes through its write_str" {
     let mut c = Count { chars: 0, writes: 0 };
     c.write_char('é');
-    c.chars                                 // => 1
+    c.chars  // => 1
 }
 
 fn log(out: &mut dyn TextWrite, n: int) {
@@ -66,26 +75,26 @@ test "fmt into a sink writes its parts straight to it" {
     let p = Point { x: 1, y: -2 };
     let mut c = Count { chars: 0, writes: 0 };
     c.write_fmt(fmt"at {p}!");
-    c.chars                                 // => 11
+    c.chars  // => 11
     ;
-    c.writes                                // => 7
+    c.writes  // => 7
     ;
     let mut s = String::new();
     s.write_fmt(fmt"{p} ");
     log(&mut s, 5);
-    s                                       // => "(1, -2) n=  5;"
+    s  // => "(1, -2) n=  5;"
     ;
     let mut d = Count { chars: 0, writes: 0 };
     log(&mut d, 42);
     // "n=", the fill, "42" and ";": the padded hole goes straight to the sink too.
-    d.writes                                // => 4
+    d.writes  // => 4
 }
 
 test "any other String is written as it is" {
     let mut c = Count { chars: 0, writes: 0 };
     let made = fmt"a{1}b";
     c.write_fmt(made);
-    c.writes                                // => 1
+    c.writes  // => 1
 }
 
 test "padded holes written straight into a sink" {
@@ -95,9 +104,9 @@ test "padded holes written straight into a sink" {
     let f = 3.14159;
     let w = 6;
     s.write_fmt(fmt"[{n:>5}|{n:<5}|{n:^6}|{x:05}|{n:+}|{n:#06x}|{f:.2}|{"abcdef":.3}|{n:w$}|{"é":*^5}]");
-    s                                       // => "[   42|42   |  42  |-0007|+42|0x002a|3.14|abc|    42|**é**]"
+    s  // => "[   42|42   |  42  |-0007|+42|0x002a|3.14|abc|    42|**é**]"
     ;
     let mut c = Count { chars: 0, writes: 0 };
     c.write_fmt(fmt"{n:>8}");
-    c.chars                                 // => 8
+    c.chars  // => 8
 }

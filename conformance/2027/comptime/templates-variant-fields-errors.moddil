@@ -3,18 +3,22 @@
 // variants, not `t { … }`.
 
 #[derive_by(fresh)]
-trait Fresh { fn fresh() -> Self; }
+trait Fresh {
+    fn fresh() -> Self;
+}
 
 const fn fresh(t: type) -> Impl<Fresh> {
     impl Fresh for t {
         fn fresh() -> Self {
             inline for v in variants(t) {
-                return v.make();                        //~ E1007
+                return v.make();  //~ E1007
             }
-            t { }                                       //~ E1007
+            t {}  //~ E1007
         }
     }
 }
 
 #[derive(Fresh)]
-enum Token { Word(String) }
+enum Token {
+    Word(String),
+}

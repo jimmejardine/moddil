@@ -3,39 +3,39 @@
 test "the first ready arm, in written order, runs" {
     let (atx, arx) = channel::<int>(1);
     let (btx, brx) = channel::<int>(1);
-    atx.send(1)?!"alive";
-    btx.send(2)?!"alive";
+    atx.send(1) ?! "alive";
+    btx.send(2) ?! "alive";
     let got = select {
         x = brx.recv() => x,
         y = arx.recv() => y,
     };
-    got                                     // => Some(2)
+    got  // => Some(2)
 }
 
 test "with none ready, it waits for one" {
     let (tx, rx) = channel::<int>(1);
     let mut got = 0;
     scope(|s| {
-        s.spawn(|| {
+        s.spawn (|| {
             let v = select {
                 v = rx.recv() => v,
             };
             got = v.unwrap_or(0);
         });
-        s.spawn(|| {
+        s.spawn (|| {
             let tx = tx;
             yield_now();
-            tx.send(7)?!"alive";
+            tx.send(7) ?! "alive";
         });
     });
-    got                                     // => 7
+    got  // => 7
 }
 
 test "a loop serves until it is asked to stop" {
     let (tx, rx) = channel::<int>(4);
     let mut served = 0;
     scope(|s| {
-        s.spawn(|| {
+        s.spawn (|| {
             loop {
                 select {
                     v = rx.recv() => {
@@ -45,27 +45,27 @@ test "a loop serves until it is asked to stop" {
                 }
             }
         });
-        tx.send(1)?!"alive";
-        tx.send(2)?!"alive";
+        tx.send(1) ?! "alive";
+        tx.send(2) ?! "alive";
         yield_now();
         s.stop();
     });
-    served                                  // => 3
+    served  // => 3
 }
 
 test "an arm not chosen sends nothing" {
     let (atx, arx) = channel::<int>(1);
     let (btx, brx) = channel::<int>(1);
-    atx.send(1)?!"alive";
+    atx.send(1) ?! "alive";
     // Both arms are ready; the first is chosen, and 5 is never sent.
     let got = select {
         x = arx.recv() => x,
         _ = btx.send(5)? => None,
     };
-    got                                     // => Some(1)
+    got  // => Some(1)
     ;
-    btx.send(6)?!"there is room, since 5 was not sent";
-    brx.recv()                              // => Some(6)
+    btx.send(6) ?! "there is room, since 5 was not sent";
+    brx.recv()  // => Some(6)
 }
 
 test "a send and a join can be arms, and an error passes on" {
@@ -76,15 +76,15 @@ test "a send and a join can be arms, and an error passes on" {
             _ = tx.send(1)? => 1,
         }
     };
-    r                                       // => Err(Closed)
+    r  // => Err(Closed)
     ;
     let v = scope(|s| {
-        let t = s.spawn(|| 5);
+        let t = s.spawn (|| 5);
         select {
             x = t.join() => x * 2,
         }
     });
-    v                                       // => 10
+    v  // => 10
 }
 
 // On a rendezvous channel, a send arm is done once its value is received.
@@ -92,7 +92,7 @@ test "a send arm waits for its rendezvous" {
     let (tx, rx) = channel::<int>(0);
     let (log, out) = channel::<int>(4);
     scope(|s| {
-        s.spawn(|| {
+        s.spawn (|| {
             log.send(1)?;
             rx.recv();
         })?;
@@ -100,7 +100,7 @@ test "a send arm waits for its rendezvous" {
             _ = tx.send(5)? => log.send(2)?,
         }
     })?;
-    out.recv()                              // => Some(1)
+    out.recv()  // => Some(1)
     ;
-    out.recv()                              // => Some(2)
+    out.recv()  // => Some(2)
 }

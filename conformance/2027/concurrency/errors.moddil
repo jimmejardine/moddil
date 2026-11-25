@@ -1,18 +1,18 @@
 // covers: task.error.1, task.join.1
 
 #[derive(Debug, Clone, PartialEq)]
-struct Oops { n: int }
+struct Oops {
+    n: int,
+}
 
 fn risky(x: int) -> int with fail(Oops) {
-    if x > 0 {
-        fail(Oops { n: x })
-    }
+    if x > 0 { fail(Oops { n: x }) }
     x
 }
 
 fn shown(r: Result<int, Oops>) -> int {
     match r {
-        Ok(v) => v,
+        Ok(v)           => v,
         Err(Oops { n }) => -n,
     }
 }
@@ -21,49 +21,49 @@ fn shown(r: Result<int, Oops>) -> int {
 test "a task's error goes to its join" {
     let r = try {
         scope(|s| {
-            let t = s.spawn(|| risky(5)?)?;
+            let t = s.spawn (|| risky(5)?)?;
             shown(try { t.join()? })
         })?
     };
-    r                                       // => Ok(-5)
+    r  // => Ok(-5)
 }
 
 test "a task never joined fails the scope" {
     let r = try {
         scope(|s| {
-            s.spawn(|| risky(7)?)?;
-            s.spawn(|| risky(0)?)?;
+            s.spawn (|| risky(7)?)?;
+            s.spawn (|| risky(0)?)?;
             1
         })?
     };
-    shown(r)                                // => -7
+    shown(r)  // => -7
 }
 
 test "the first to fail, by when it ends, wins" {
     let r = try {
         scope(|s| {
-            s.spawn(|| {
+            s.spawn (|| {
                 yield_now();
                 risky(1)?
             })?;
-            s.spawn(|| risky(2)?)?;
+            s.spawn (|| risky(2)?)?;
             0
         })?
     };
-    shown(r)                                // => -2
+    shown(r)  // => -2
 }
 
 test "a scope whose body fails waits for its tasks, then fails with the body's error" {
     let mut done = false;
     let r = try {
         scope(|s| {
-            s.spawn(|| {
+            s.spawn (|| {
                 done = true;
             });
             risky(3)?
         })?
     };
-    shown(r)                                // => -3
+    shown(r)  // => -3
     ;
-    done                                    // => true
+    done  // => true
 }

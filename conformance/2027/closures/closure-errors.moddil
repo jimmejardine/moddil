@@ -1,66 +1,93 @@
 // covers: expr.closure.1, expr.closure.capture.1, expr.closure.call.1, expr.closure.param.1, expr.anon-impl.1
 
-fn apply(f: impl Fn(int) -> int, x: int) -> int { f(x) }
-fn each(f: impl FnMut(int)) { f(1); }
-struct Wrap<T> { x: T }
+fn apply(f: impl Fn(int) -> int, x: int) -> int {
+    f(x)
+}
+fn each(f: impl FnMut(int)) {
+    f(1);
+}
+struct Wrap<T> {
+    x: T,
+}
 
 fn mutates() -> int {
     let mut n = 0;
-    apply(|x| { n += x; x }, 1)             //~ E0801
+    apply(|x| {  //~ E0801
+        n += x;
+        x
+    }, 1)
 }
 fn moves() {
     let w = Wrap { x: 1 };
-    each(|x| { let Wrap { x } = w; });      //~ E0801
+    each(|x| {  //~ E0801
+        let Wrap { x } = w;
+    });
 }
 fn arity() -> int {
     let f = |x: int| x;
-    f(1, 2)                                 //~ E0202
+    f(1, 2)  //~ E0202
 }
-fn bad_bound<F: Clone(int)>(f: F) {}        //~ E0401
+fn bad_bound<F: Clone(int)>(f: F) {}  //~ E0401
 fn not_a_closure() -> int {
     let n = 3;
-    n(1)                                    //~ E0203
+    n(1)  //~ E0203
 }
 trait Two {
     fn a(&self) -> int;
     fn b(&self) -> int;
 }
 fn missing() {
-    let x = impl Two {                      //~ E0407
-        fn a(&self) -> int { 1 }
+    let x = impl Two {  //~ E0407
+        fn a(&self) -> int {
+            1
+        }
     };
 }
 fn extra() {
     let x = impl Two {
-        fn a(&self) -> int { 1 }
-        fn b(&self) -> int { 2 }
-        fn c(&self) -> int { 3 }            //~ E0408
+        fn a(&self) -> int {
+            1
+        }
+        fn b(&self) -> int {
+            2
+        }
+        fn c(&self) -> int {  //~ E0408
+            3
+        }
     };
 }
 fn refutable() -> int {
-    apply(|1| 2, 1)                         //~ E0209
+    apply(|1| 2, 1)  //~ E0209
 }
 fn breaks_out() {
     loop {
-        let f = || { break; };              //~ E0109
+        let f = || {
+            break;  //~ E0109
+        };
         f();
     }
 }
 fn continues_out() {
     loop {
-        let f = || { continue; };           //~ E0109
+        let f = || {
+            continue;  //~ E0109
+        };
         f();
     }
 }
 fn wrong_argument() -> int {
     let f = |x: int| x;
-    f(true)                                 //~ E0201
+    f(true)  //~ E0201
 }
 struct Late;
 struct Other;
-trait Visit { fn visit(&self) with fail(Late); }
+trait Visit {
+    fn visit(&self) with fail(Late);
+}
 fn fails_unlisted() {
     let v = impl Visit {
-        fn visit(&self) with fail(Other) { fail(Other) } //~ E0502
+        fn visit(&self) with fail(Other) {  //~ E0502
+            fail(Other)
+        }
     };
 }

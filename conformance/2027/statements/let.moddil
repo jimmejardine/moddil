@@ -6,12 +6,12 @@ test "let" {
     let _ = b * 100;
     let mut c = b;
     c += a;
-    c                         // => 3
+    c  // => 3
 }
 
 test "statements" {
     let mut x = 0;
-    if true { x = 1 }         // a block-like statement of type () needs no `;`
+    if true { x = 1 }  // a block-like statement of type () needs no `;`
     x;
-    x                         // => 1
+    x  // => 1
 }

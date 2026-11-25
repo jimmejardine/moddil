@@ -3,11 +3,15 @@
 use core::cell::UnsafeCell;
 
 /// Counts how many times it is dropped, in a cell outside it.
-struct Noisy { drops: *mut int }
+struct Noisy {
+    drops: *mut int,
+}
 
 impl Drop for Noisy {
     fn drop(self) {
-        unsafe("drops points to a count that outlives the value") { *self.drops += 1; }
+        unsafe("drops points to a count that outlives the value") {
+            *self.drops += 1;
+        }
     }
 }
 
@@ -18,10 +22,14 @@ test "the value is dropped once, with its last owner" {
     let c = b.share();
     drop(a);
     drop(c);
-    unsafe("count outlives the rcs") { *count.get() }     // => 0
+    unsafe("count outlives the rcs") {
+        *count.get()
+    }  // => 0
     ;
     drop(b);
-    unsafe("count outlives the rcs") { *count.get() }     // => 1
+    unsafe("count outlives the rcs") {
+        *count.get()
+    }  // => 1
 }
 
 test "an rc of an rc drops both" {
@@ -29,10 +37,14 @@ test "an rc of an rc drops both" {
     let inner = Noisy { drops: count.get() }.to_rc();
     let outer = inner.share().to_rc();
     drop(inner);
-    unsafe("count outlives the rcs") { *count.get() }     // => 0
+    unsafe("count outlives the rcs") {
+        *count.get()
+    }  // => 0
     ;
     drop(outer);
-    unsafe("count outlives the rcs") { *count.get() }     // => 1
+    unsafe("count outlives the rcs") {
+        *count.get()
+    }  // => 1
 }
 
 test "an rc in a vector is dropped with it" {
@@ -41,5 +53,7 @@ test "an rc in a vector is dropped with it" {
     let v = [a.share(), a.share(), a.share()];
     drop(a);
     drop(v);
-    unsafe("count outlives the rcs") { *count.get() }     // => 1
+    unsafe("count outlives the rcs") {
+        *count.get()
+    }  // => 1
 }

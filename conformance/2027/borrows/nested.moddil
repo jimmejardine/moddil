@@ -2,30 +2,30 @@
 
 use core::collections::HashMap;
 
-fn len_of(r: &&str) -> int {
+fn len_of(r: & &str) -> int {
     r.len()
 }
 
-fn plus_one(r: &&int) -> int {
+fn plus_one(r: & &int) -> int {
     **r + 1
 }
 
 test "a shared borrow may point to a borrow" {
     let s = "hello";
     let rs = &s;
-    len_of(rs)                              // => 5
+    len_of(rs)  // => 5
     ;
     let n = 41;
     let r = &n;
-    plus_one(&r)                            // => 42
+    plus_one(&r)  // => 42
 }
 
 test "borrows compare and hash as what they point to" {
     let (a, b) = ("x", "x");
-    (&a).eq(&b)                             // => true
+    (&a).eq(&b)  // => true
     ;
     let (c, d) = ("x", "y");
-    (&c).eq(&d)                             // => false
+    (&c).eq(&d)  // => false
 }
 
 test "a map keyed by borrows" {
@@ -34,9 +34,9 @@ test "a map keyed by borrows" {
     ages.insert(ada, 36);
     ages.insert(alan, 41);
     ages.insert("grace", 85);
-    ages.len()                              // => 3
+    ages.len()  // => 3
     ;
-    ages.get(&"alan")                       // => Some(&41)
+    ages.get(&"alan")  // => Some(&41)
     ;
-    ages.get(&"bob")                        // => None
+    ages.get(&"bob")  // => None
 }

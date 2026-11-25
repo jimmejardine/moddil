@@ -6,19 +6,21 @@ pub struct Loose {
 }
 
 extern "C" {
-    fn takes_text(s: &str) -> i32;          //~ E0222
-    fn gives_vec() -> Vec<u8>;              //~ E0222
-    fn has_body(x: i32) -> i32 { x }        //~ E0222
-    fn by_value(l: Loose) -> i32;           //~ E0222
+    fn takes_text(s: &str) -> i32;  //~ E0222
+    fn gives_vec() -> Vec<u8>;      //~ E0222
+    fn has_body(x: i32) -> i32 {    //~ E0222
+        x
+    }
+    fn by_value(l: Loose) -> i32;  //~ E0222
     fn abs(x: i32) -> i32;
 }
 
 fn outside() -> i32 {
-    abs(-1)                                 //~ E0218
+    abs(-1)  //~ E0218
 }
 
-#[export]                                   //~ E0222
+#[export]  //~ E0222
 pub fn suspends() with suspend {}
 
 #[export]
-pub fn text(s: &str) {}                     //~ E0222
+pub fn text(s: &str) {}  //~ E0222

@@ -1,6 +1,8 @@
 // covers: expr.for.1, expr.for.2, expr.range.1, iter.1, iter.into.1, iter.slice.1
 
-struct Countdown { n: int }
+struct Countdown {
+    n: int,
+}
 
 impl Iterator for Countdown {
     type Item = int;
@@ -27,39 +29,39 @@ test "ranges" {
     for i in 0..4 {
         t += i;
     }
-    t                                       // => 6
+    t  // => 6
     ;
     let mut u = 0;
     for i in 1..=4 {
         u += i;
     }
-    u                                       // => 10
+    u  // => 10
     ;
-    (5..5).count()                          // => 0
+    (5..5).count()  // => 0
     ;
-    (3..=1).count()                         // => 0
+    (3..=1).count()  // => 0
     ;
     let mut r = 10..;
-    r.next()                                // => Some(10)
+    r.next()  // => Some(10)
     ;
-    r.next()                                // => Some(11)
+    r.next()  // => Some(11)
 }
 
 test "slices and arrays" {
     let a = [10, 20, 30];
-    total(&a)                               // => 60
+    total(&a)  // => 60
     ;
     let mut s = 0;
     for x in a.iter() {
         s += *x;
     }
-    s                                       // => 60
+    s  // => 60
     ;
     let mut u = 0;
     for x in a {
         u += x;
     }
-    u                                       // => 60
+    u  // => 60
 }
 
 test "an iterator of one's own" {
@@ -67,7 +69,7 @@ test "an iterator of one's own" {
     for n in (Countdown { n: 3 }) {
         seen = seen * 10 + n;
     }
-    seen                                    // => 321
+    seen  // => 321
 }
 
 test "break and continue" {
@@ -81,7 +83,7 @@ test "break and continue" {
         }
         t += i;
     }
-    t                                       // => 16
+    t  // => 16
     ;
     let mut pairs = 0;
     'outer: for i in 0..5 {
@@ -95,7 +97,7 @@ test "break and continue" {
             pairs += 1;
         }
     }
-    pairs                                   // => 10
+    pairs  // => 10
 }
 
 test "patterns in `for`" {
@@ -104,5 +106,5 @@ test "patterns in `for`" {
     for (a, b) in pts {
         t += a * b;
     }
-    t                                       // => 14
+    t  // => 14
 }

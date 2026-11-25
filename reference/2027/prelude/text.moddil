@@ -124,13 +124,7 @@ impl PartialOrd for char {
 
 impl Ord for char {
     fn cmp(&self, other: &char) -> Ordering {
-        if *self < *other {
-            Ordering::Less
-        } else if *self == *other {
-            Ordering::Equal
-        } else {
-            Ordering::Greater
-        }
+        if *self < *other { Ordering::Less } else if *self == *other { Ordering::Equal } else { Ordering::Greater }
     }
 }
 
@@ -243,20 +237,12 @@ enum StringRepr {
 
 impl String {
     fn new() -> String {
-        String {
-            repr: StringRepr::Inline([0; 23], 0),
-        }
+        String { repr: StringRepr::Inline([0; 23], 0) }
     }
 
     // Room for `capacity` bytes: on the heap if that is more than fit inline.
     fn with_capacity(capacity: int) -> String {
-        if capacity <= 23 {
-            String::new()
-        } else {
-            String {
-                repr: StringRepr::Heap(Buf::with_capacity(capacity)),
-            }
-        }
+        if capacity <= 23 { String::new() } else { String { repr: StringRepr::Heap(Buf::with_capacity(capacity)) } }
     }
 
     // A `String` of the text `s`.
@@ -270,7 +256,7 @@ impl String {
     fn capacity(&self) -> int {
         match &self.repr {
             StringRepr::Inline(_, _) => 23,
-            StringRepr::Heap(b) => b.capacity(),
+            StringRepr::Heap(b)      => b.capacity(),
         }
     }
 
@@ -289,7 +275,7 @@ impl String {
     fn byte(&self, i: int) -> u8 {
         match &self.repr {
             StringRepr::Inline(bytes, _) => bytes[i],
-            StringRepr::Heap(b) => b.as_slice()[i],
+            StringRepr::Heap(b)          => b.as_slice()[i],
         }
     }
 
@@ -302,9 +288,9 @@ impl String {
         match &self.repr {
             StringRepr::Inline(bytes, n) => {
                 let k: int = *n;
-                str::view(bytes, k)
+                str::view (bytes, k)
             }
-            StringRepr::Heap(b) => str::view(b.as_slice(), b.len()),
+            StringRepr::Heap(b) => str::view (b.as_slice(), b.len()),
         }
     }
 
@@ -376,13 +362,7 @@ impl String {
             self.push_str(s.bytes_between(sign, end));
             return;
         }
-        let before = if align == 0 {
-            0
-        } else if align == 1 {
-            room / 2
-        } else {
-            room
-        };
+        let before = if align == 0 { 0 } else if align == 1 { room / 2 } else { room };
         for _ in 0..before {
             self.push(fill);
         }
@@ -679,11 +659,8 @@ impl str {
     fn split_once<P: Pattern>(&self, part: P) -> Option<(&str, &str)> {
         let n = part.pattern_len();
         match self.find(part) {
-            Some(at) => Some((
-                self.bytes_between(0, at.at),
-                self.bytes_between(at.at + n, self.len()),
-            )),
-            None => None,
+            Some(at) => Some((self.bytes_between(0, at.at), self.bytes_between(at.at + n, self.len()))),
+            None     => None,
         }
     }
 
@@ -735,7 +712,7 @@ impl str {
         if n < bytes.len() {
             fail(Utf8Error { valid_up_to: n });
         }
-        str::view(bytes, n)
+        str::view (bytes, n)
     }
 
     fn chars(&self) -> Chars {
@@ -795,7 +772,7 @@ impl String {
         if n < bytes.len() {
             fail(FromUtf8Error { bytes, valid_up_to: n });
         }
-        String::from_str(str::view(bytes.as_slice(), n))
+        String::from_str(str::view (bytes.as_slice(), n))
     }
 }
 
@@ -852,7 +829,6 @@ fn utf8_valid_up_to(bytes: &[u8]) -> int {
     }
     n
 }
-
 
 // `RcStr` (`text.rcstr.1`): a slice of shared text, a reference-counted `String` and the byte
 // range of it the slice is. `s.to_rcstr()` moves a `String` into one; `r.slice(a, b)` and
@@ -1005,40 +981,17 @@ view Padded {
     fill: char,
 }
 
-fn padded_start(
-    out: &mut dyn TextWrite,
-    m: &Measure,
-    fill: char,
-    align: int,
-    width: int,
-    zero: bool,
-    keep: int,
-    plus: bool,
-) -> Padded {
+fn padded_start(out: &mut dyn TextWrite, m: &Measure, fill: char, align: int, width: int, zero: bool, keep: int, plus: bool) -> Padded {
     let plus = plus && m.first != '-';
     let total = m.chars + if plus { 1 } else { 0 };
     let shown = if keep >= 0 && keep < total { keep } else { total };
     let room = if width > shown { width - shown } else { 0 };
-    let mut p = Padded {
-        out,
-        at: 0,
-        keep,
-        zeros_at: 0,
-        zeros: 0,
-        after: 0,
-        fill,
-    };
+    let mut p = Padded { out, at: 0, keep, zeros_at: 0, zeros: 0, after: 0, fill };
     if zero {
         p.zeros_at = m.lead + if plus { 1 } else { 0 };
         p.zeros = room;
     } else {
-        let before = if align == 0 {
-            0
-        } else if align == 1 {
-            room / 2
-        } else {
-            room
-        };
+        let before = if align == 0 { 0 } else if align == 1 { room / 2 } else { room };
         let mut i = 0;
         while i < before {
             p.out.write_char(fill);

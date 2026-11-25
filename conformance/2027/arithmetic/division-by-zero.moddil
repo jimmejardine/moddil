@@ -1,15 +1,17 @@
 // covers: expr.arith.div-zero.1
 
-fn min() -> int { -9223372036854775807 - 1 }
+fn min() -> int {
+    -9223372036854775807 - 1
+}
 
 test "remainder of the minimum" {
-    min() % -1                // => 0
+    min() % -1  // => 0
 }
 
 test "division" {
-    1 / 0;                    //~ trap
+    1 / 0;  //~ trap
 }
 
 test "remainder" {
-    1 % 0;                    //~ trap
+    1 % 0;  //~ trap
 }

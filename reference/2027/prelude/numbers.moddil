@@ -34,15 +34,7 @@ const fn number_partial_eq(t: type) -> Impl<PartialEq> {
 const fn number_partial_ord(t: type) -> Impl<PartialOrd> {
     impl PartialOrd for t {
         fn partial_cmp(&self, other: &t) -> Option<Ordering> {
-            if *self < *other {
-                Some(Ordering::Less)
-            } else if *self == *other {
-                Some(Ordering::Equal)
-            } else if *self > *other {
-                Some(Ordering::Greater)
-            } else {
-                None
-            }
+            if *self < *other { Some(Ordering::Less) } else if *self == *other { Some(Ordering::Equal) } else if *self > *other { Some(Ordering::Greater) } else { None }
         }
 
         fn lt(&self, other: &t) -> bool {
@@ -72,13 +64,7 @@ const fn int_eq(t: type) -> Impl<Eq> {
 const fn int_ord(t: type) -> Impl<Ord> {
     impl Ord for t {
         fn cmp(&self, other: &t) -> Ordering {
-            if *self < *other {
-                Ordering::Less
-            } else if *self == *other {
-                Ordering::Equal
-            } else {
-                Ordering::Greater
-            }
+            if *self < *other { Ordering::Less } else if *self == *other { Ordering::Equal } else { Ordering::Greater }
         }
     }
 }

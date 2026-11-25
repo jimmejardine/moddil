@@ -1,14 +1,30 @@
 // covers: type.impl.ret.1
 
-trait Shape { fn area(&self) -> int; }
-struct Square { side: int }
-impl Shape for Square { fn area(&self) -> int { self.side * self.side } }
-impl Square { fn side(&self) -> int { self.side } }
-
-fn square() -> impl Shape { Square { side: 3 } }
-
-fn hidden() -> int {
-    square().side()                         //~ E0403
+trait Shape {
+    fn area(&self) -> int;
+}
+struct Square {
+    side: int,
+}
+impl Shape for Square {
+    fn area(&self) -> int {
+        self.side * self.side
+    }
+}
+impl Square {
+    fn side(&self) -> int {
+        self.side
+    }
 }
 
-fn wrong() -> impl Shape { 5 }              //~ E0402
+fn square() -> impl Shape {
+    Square { side: 3 }
+}
+
+fn hidden() -> int {
+    square().side()  //~ E0403
+}
+
+fn wrong() -> impl Shape {  //~ E0402
+    5
+}

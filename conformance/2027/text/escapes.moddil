@@ -1,22 +1,22 @@
 // covers: text.lit.escape.1
 
 test "every escape" {
-    "a\rb".len()                            // => 3
+    "a\rb".len()  // => 3
     ;
-    "\0".len()                              // => 1
+    "\0".len()  // => 1
     ;
-    "\\".len()                              // => 1
+    "\\".len()  // => 1
     ;
-    '\''                                    // => '\''
+    '\''  // => '\''
     ;
-    "a\sb"                                  // => "a b"
+    "a\sb"  // => "a b"
     ;
-    "\x41"                                  // => "A"
+    "\x41"  // => "A"
     ;
-    "\x7F".len()                            // => 1
+    "\x7F".len()  // => 1
     ;
-    "\u{1_F600}".len()                      // => 4
+    "\u{1_F600}".len()  // => 4
     ;
     "one \
-        two"                                // => "one two"
+        two"  // => "one two"
 }

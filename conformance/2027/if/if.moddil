@@ -9,15 +9,17 @@ fn first_positive(a: int, b: int) -> int {
 }
 
 test "if" {
-    sign(-5)                  // => -1
+    sign(-5)  // => -1
     ;
-    sign(0)                   // => 0
+    sign(0)  // => 0
     ;
-    sign(9)                   // => 1
+    sign(9)  // => 1
     ;
-    first_positive(0, 2)      // => 2
+    first_positive(0, 2)  // => 2
     ;
-    if false { 1; }           // => ()
+    if false {
+        1;
+    }  // => ()
 }
 
 test "only the branch taken runs" {

@@ -1,6 +1,8 @@
 // covers: coll.vec.1, coll.vec.2, coll.vec.index.1, expr.array.from.1, expr.index.trait.1
 
-struct Noisy { id: int }
+struct Noisy {
+    id: int,
+}
 
 fn sum(xs: &[int]) -> int {
     let mut t = 0;
@@ -22,97 +24,97 @@ fn evens(n: int) -> Vec<int> {
 
 test "pushing and popping" {
     let mut v = Vec::new();
-    v.is_empty()                            // => true
+    v.is_empty()  // => true
     ;
     v.push(1);
     v.push(2);
     v.push(3);
-    v                                       // => [1, 2, 3]
+    v  // => [1, 2, 3]
     ;
-    v.len()                                 // => 3
+    v.len()  // => 3
     ;
-    v.pop()                                 // => Some(3)
+    v.pop()  // => Some(3)
     ;
     v.insert(0, 9);
-    v                                       // => [9, 1, 2]
+    v  // => [9, 1, 2]
     ;
-    v.remove(1)                             // => 1
+    v.remove(1)  // => 1
     ;
     v.swap(0, 1);
-    v                                       // => [2, 9]
+    v  // => [2, 9]
     ;
     v.clear();
-    v.pop()                                 // => None
+    v.pop()  // => None
 }
 
 test "it grows" {
     let v = evens(20);
-    v.len()                                 // => 10
+    v.len()  // => 10
     ;
-    v.capacity() >= 10                      // => true
+    v.capacity() >= 10  // => true
     ;
-    sum(v.as_slice())                       // => 90
+    sum(v.as_slice())  // => 90
 }
 
 test "capacity, truncating and the ends" {
     let mut v: Vec<int> = Vec::with_capacity(2);
-    (v.len(), v.capacity())                 // => (0, 2)
+    (v.len(), v.capacity())  // => (0, 2)
     ;
     v.push(1);
     v.push(2);
     v.push(3);
     // A full `Vec` gets at least twice the room.
-    v.capacity() >= 4                       // => true
+    v.capacity() >= 4  // => true
     ;
     v.reserve(10);
-    v.capacity() >= 13                      // => true
+    v.capacity() >= 13  // => true
     ;
-    v.last()                                // => Some(&3)
+    v.last()  // => Some(&3)
     ;
     let s = v.as_mut_slice();
     s[2] = 30;
     v.truncate(5);
-    v                                       // => [1, 2, 30]
+    v  // => [1, 2, 30]
     ;
     v.truncate(1);
-    v                                       // => [1]
+    v  // => [1]
     ;
-    (v.first(), v.last())                   // => (Some(&1), Some(&1))
+    (v.first(), v.last())  // => (Some(&1), Some(&1))
 }
 
 test "indexing" {
     let mut v: Vec<int> = [10, 20, 30];
-    v[1]                                    // => 20
+    v[1]  // => 20
     ;
     v[1] = 21;
     v[1] += 1;
-    v                                       // => [10, 22, 30]
+    v  // => [10, 22, 30]
     ;
-    v.get(2)                                // => Some(&30)
+    v.get(2)  // => Some(&30)
     ;
-    v.get(3)                                // => None
+    v.get(3)  // => None
     ;
     match v.get_mut(0) {
         Some(x) => *x = 11,
-        None => {}
+        None    => {}
     }
-    v.first()                               // => Some(&11)
+    v.first()  // => Some(&11)
 }
 
 test "literals typed by context" {
     let a: Vec<int> = [1, 2, 3];
-    a                                       // => [1, 2, 3]
+    a  // => [1, 2, 3]
     ;
     let n = 4;
     let zeros: Vec<int> = [0; n];
-    zeros                                   // => [0, 0, 0, 0]
+    zeros  // => [0, 0, 0, 0]
     ;
     let none: Vec<bool> = [];
-    none.len()                              // => 0
+    none.len()  // => 0
     ;
     let mut names: Vec<String> = [String::new(); 2];
     names[0].push_str("ada");
-    names                                   // => ["ada", ""]
+    names  // => ["ada", ""]
 }
 
 test "iterating" {
@@ -121,41 +123,41 @@ test "iterating" {
     for x in &v {
         t += *x;
     }
-    t                                       // => 6
+    t  // => 6
     ;
     let mut u = 0;
     for x in v.iter() {
         u += *x;
     }
-    u                                       // => 6
+    u  // => 6
     ;
     let mut w = 0;
     for x in v {
         w = w * 10 + x;
     }
-    w                                       // => 123
+    w  // => 123
 }
 
 test "cloning and comparing" {
     let a: Vec<int> = [1, 2];
     let mut b = a.clone();
     b.push(3);
-    a                                       // => [1, 2]
+    a  // => [1, 2]
     ;
-    a == b                                  // => false
+    a == b  // => false
     ;
     b.pop();
-    a == b                                  // => true
+    a == b  // => true
     ;
-    a.contains(&2)                          // => true
+    a.contains(&2)  // => true
 }
 
 test "an index past the end traps" {
     let v: Vec<int> = [1];
-    v[1];                                   //~ trap
+    v[1];  //~ trap
 }
 
 test "removing past the end traps" {
     let mut v: Vec<int> = [1];
-    v.remove(5);                            //~ trap
+    v.remove(5);  //~ trap
 }

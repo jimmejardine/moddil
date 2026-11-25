@@ -19,50 +19,46 @@ view Outer {
 
 fn first(n: &Node) -> int {
     match n {
-        Node::Leaf(x) => *x,
+        Node::Leaf(x)    => *x,
         Node::Pair(a, _) => *a,
-        Node::Branch(_) => 0,
+        Node::Branch(_)  => 0,
     }
 }
 
 fn by_value(w: W) -> int {
     match w.at {
-        Node::Leaf(x) => *x,
+        Node::Leaf(x)    => *x,
         Node::Pair(a, _) => *a,
-        Node::Branch(_) => 0,
+        Node::Branch(_)  => 0,
     }
 }
 
 fn through_borrow(w: &W) -> int {
     match w.at {
-        Node::Leaf(x) => *x,
+        Node::Leaf(x)    => *x,
         Node::Pair(a, _) => *a,
-        Node::Branch(_) => 0,
+        Node::Branch(_)  => 0,
     }
 }
 
 fn nested(o: &Outer) -> int {
     match o.w.at {
-        Node::Leaf(x) => *x,
+        Node::Leaf(x)    => *x,
         Node::Pair(a, _) => *a,
-        Node::Branch(_) => 0,
+        Node::Branch(_)  => 0,
     }
 }
 
 fn if_let(w: &W) -> int {
-    if let Node::Pair(_, b) = w.at {
-        *b
-    } else {
-        0
-    }
+    if let Node::Pair(_, b) = w.at { *b } else { 0 }
 }
 
 impl W {
     fn get(&mut self) -> int {
         match self.at {
-            Node::Leaf(x) => *x,
+            Node::Leaf(x)    => *x,
             Node::Pair(a, _) => *a,
-            Node::Branch(_) => 0,
+            Node::Branch(_)  => 0,
         }
     }
 }
@@ -74,17 +70,17 @@ fn walk(n: &Node) -> int {
         w.at = &**b;
     }
     match w.at {
-        Node::Leaf(x) => *x,
+        Node::Leaf(x)    => *x,
         Node::Pair(a, _) => *a,
-        Node::Branch(_) => 0,
+        Node::Branch(_)  => 0,
     }
 }
 
 fn in_vec(ws: &Vec<W>) -> int {
     match ws[0].at {
-        Node::Leaf(x) => *x,
+        Node::Leaf(x)    => *x,
         Node::Pair(a, _) => *a,
-        Node::Branch(_) => 0,
+        Node::Branch(_)  => 0,
     }
 }
 
@@ -99,7 +95,7 @@ view At<T> {
 
 fn generic<T: Copy>(w: &At<T>) -> T {
     match w.at {
-        Tree::Leaf(x) => *x,
+        Tree::Leaf(x)    => *x,
         Tree::Pair(a, _) => *a,
     }
 }
@@ -107,26 +103,26 @@ fn generic<T: Copy>(w: &At<T>) -> T {
 test "a view's borrow field is matched through its borrow" {
     let leaf = Node::Leaf(7);
     let pair = Node::Pair(5, 6);
-    first(&leaf)                                        // => 7
+    first(&leaf)  // => 7
     ;
-    by_value(W { at: &leaf })                           // => 7
+    by_value(W { at: &leaf })  // => 7
     ;
-    through_borrow(&W { at: &pair })                    // => 5
+    through_borrow(&W { at: &pair })  // => 5
     ;
-    nested(&Outer { w: W { at: &pair } })               // => 5
+    nested(&Outer { w: W { at: &pair } })  // => 5
     ;
-    if_let(&W { at: &pair })                            // => 6
+    if_let(&W { at: &pair })  // => 6
     ;
     let mut w = W { at: &leaf };
-    w.get()                                             // => 7
+    w.get()  // => 7
     ;
     let deep = Node::Branch(Box::new(Node::Branch(Box::new(Node::Leaf(9)))));
-    walk(&deep)                                         // => 9
+    walk(&deep)  // => 9
     ;
     let mut ws: Vec<W> = Vec::new();
     ws.push(W { at: &pair });
-    in_vec(&ws)                                         // => 5
+    in_vec(&ws)  // => 5
     ;
     let t = Tree::Pair(3, 4);
-    generic(&At { at: &t })                             // => 3
+    generic(&At { at: &t })  // => 3
 }
