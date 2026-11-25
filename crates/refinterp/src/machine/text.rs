@@ -74,6 +74,33 @@ fn unescape(s: &str) -> String {
     out
 }
 
+/// A block literal's lines (from its opening quotes), as `block` takes them: for each, `None`
+/// if it is blank, or where its text starts in the literal and the text, less the closing
+/// line's indentation and trailing white space.
+fn block_lines(lit: &str) -> Vec<Option<(usize, &str)>> {
+    let body = &lit[3..lit.len() - 3];
+    let mut out = Vec::new();
+    let (Some(first), Some(last)) = (body.find('\n'), body.rfind('\n')) else {
+        return out;
+    };
+    let indent = body.len() - last - 1;
+    let mut at = first + 1;
+    if last < at {
+        return out;
+    }
+    for line in body[at..last].split('\n') {
+        let text = line.trim_end_matches('\r');
+        if text.chars().all(|c| c == ' ' || c == '\t') {
+            out.push(None);
+        } else {
+            let rest = text.get(indent..).unwrap_or("");
+            out.push(Some((3 + at + indent, rest.trim_end_matches([' ', '\t']))));
+        }
+        at += line.len() + 1;
+    }
+    out
+}
+
 /// A block's text: its lines after the opening quotes, less the closing line's indentation,
 /// with trailing white space removed and each line ended by a line break.
 fn block(body: &str, raw: bool) -> String {
@@ -140,14 +167,47 @@ impl Machine<'_> {
 
     /// `fmt"…"` (`expr.fmt.1`): the text, and each hole's value written by its `Display`.
     pub(super) fn fmt(&mut self, tok: &SyntaxToken) -> Eval {
-        let text = tok.text();
-        let open = text.find('"').expect("a tagged literal");
-        let inner: Vec<char> = text[open + 1..text.len() - 1].chars().collect();
-        // Where the literal's inside starts in the file, for the holes' ranges.
-        let mut at = tok.text_range().start as usize + open + 1;
         let empty = self.string_call("new", Vec::new(), tok.text_range())?;
         let out = self.memory.temp(empty);
+        self.fmt_into(tok, &out)?;
+        Ok(self.memory.load(&out))
+    }
+
+    /// `fmt"…"` written onto the sink at `out` (`text.write.2`): each run of its text through
+    /// the sink's `write_str`, and each hole as `fmt"…"` writes it.
+    pub(super) fn fmt_into(&mut self, tok: &SyntaxToken, out: &crate::value::Pointer) -> Eval<()> {
+        let text = tok.text();
+        let open = text.find('"').expect("a tagged literal");
+        let base = tok.text_range().start as usize + open;
         let mut lit = String::new();
+        // A block (`text.lit.block.1`): its lines dedented, each with its holes.
+        if text[open..].starts_with("\"\"\"") {
+            for line in block_lines(&text[open..]) {
+                if let Some((off, line)) = line {
+                    self.fmt_scan(line, base + off, out, &mut lit)?;
+                }
+                lit.push('\n');
+            }
+        } else {
+            // Where the literal's inside starts in the file, for the holes' ranges.
+            self.fmt_scan(&text[open + 1..text.len() - 1], base + 1, out, &mut lit)?;
+        }
+        self.push_text(out, &unescape(&lit.replace("{{", "{").replace("}}", "}")))?;
+        Ok(())
+    }
+
+    /// The text and holes of `inner`, which starts at byte `at` of the file, written onto the
+    /// sink at `out`, the text since the last hole kept in `lit`.
+    fn fmt_scan(
+        &mut self,
+        inner: &str,
+        at: usize,
+        out: &crate::value::Pointer,
+        lit: &mut String,
+    ) -> Eval<()> {
+        let out = out.clone();
+        let inner: Vec<char> = inner.chars().collect();
+        let mut at = at;
         let mut i = 0;
         while i < inner.len() {
             let c = inner[i];
@@ -182,8 +242,7 @@ impl Machine<'_> {
             at = start + hole.len() + 1;
             i = j + 1;
         }
-        self.push_text(&out, &unescape(&lit.replace("{{", "{").replace("}}", "}")))?;
-        Ok(self.memory.load(&out))
+        Ok(())
     }
 
     /// Writes `s` to the sink at `out`, a `String` or another `TextWrite` (`text.write.1`),

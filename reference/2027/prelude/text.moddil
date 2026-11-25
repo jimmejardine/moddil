@@ -8,6 +8,13 @@
 trait TextWrite {
     fn write_str(&mut self, s: &str);
 
+    // `w.write_fmt(fmt"…")` (`text.write.2`): the literal is written straight onto the sink,
+    // each part through `write_str`, with no `String` made for it; any other `String` is
+    // written as it is.
+    fn write_fmt(&mut self, text: String) {
+        self.write_str(text.as_str());
+    }
+
     fn write_char(&mut self, c: char) {
         let mut one = String::new();
         one.push(c);

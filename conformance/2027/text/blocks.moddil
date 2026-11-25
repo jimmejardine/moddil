@@ -13,3 +13,14 @@ test "\s keeps a space at the end of a line" {
         """;
     text                                    // => "end \n"
 }
+
+test "a fmt block is dedented as a block is, with its holes" {
+    let name = "Ada";
+    let n = 3;
+    let text = fmt"""
+        Dear {name},
+
+          you have {n:>2} messages. {{ok}}
+        """;
+    text                                    // => "Dear Ada,\n\n  you have  3 messages. {ok}\n"
+}

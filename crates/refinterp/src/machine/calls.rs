@@ -1135,6 +1135,29 @@ impl Machine<'_> {
             .and_then(ast::ArgList::cast)
             .map(|l| l.args().filter_map(|a| a.expr()).collect())
             .unwrap_or_default();
+        // `w.write_fmt(fmt"…")` (`text.write.2`): the literal written straight onto `w`.
+        if name == "write_fmt"
+            && let [arg] = args.as_slice()
+            && let ast::Expr::Literal(_) = arg
+            && let Some(tok) = arg
+                .syntax()
+                .child_tokens()
+                .find(|t| t.kind() == K::TAGGED_STRING)
+        {
+            let v = match self.place_of(receiver)? {
+                Some((p, _)) => Value::Ref(p, true),
+                None => self.eval(receiver)?,
+            };
+            let mut at = match v {
+                Value::Ref(p, _) => p,
+                other => self.memory.temp(other),
+            };
+            while let Value::Ref(q, _) = self.memory.load(&at) {
+                at = q;
+            }
+            self.fmt_into(&tok, &at)?;
+            return Ok(Value::Unit);
+        }
         // A reflected variant's `is(x)` and `make()` (`comptime.template.variant.1`).
         if let Some((key, i)) = self.reflected_variant(receiver.syntax()) {
             let info = &self.program.adts[&key].variants[i];

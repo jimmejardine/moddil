@@ -1,0 +1,8 @@
+// covers: text.lit.block.1
+
+fn f(n: int) -> String {
+    fmt"""
+        n is {n}
+      less
+        """                                 //~ E0902
+}

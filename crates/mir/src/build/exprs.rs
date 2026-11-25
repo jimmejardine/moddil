@@ -3,7 +3,7 @@
 use moddil_sema::hir::{
     Align, ExprId, ExprKind, FmtPiece, Halt, Handler, LogicOp, PatKind, Radix, Stmt, UnaryOp,
 };
-use moddil_sema::{Callee, Ty};
+use moddil_sema::{Callee, Container, Ty};
 use moddil_syntax::TextRange;
 
 use super::scopes::{LoopCx, ScopeItem};
@@ -706,6 +706,13 @@ impl Builder<'_> {
                 ops.extend(self.operands(&args));
                 self.call(e, dest, ops);
             }
+            ExprKind::MethodCall { receiver, .. } if self.fmt_sink(e).is_some() => {
+                let pieces = self.fmt_sink(e).expect("a `fmt` literal");
+                let sink = self.text_sink(receiver);
+                self.fmt_into(Sink::Dyn(sink), &pieces, range);
+                self.cfg
+                    .assign(dest, Rvalue::Use(Operand::Const(Const::Unit)));
+            }
             ExprKind::MethodCall { receiver, args, .. } => {
                 let adjust = self.types.adjust(e);
                 let recv = match adjust.autoref {
@@ -974,14 +981,126 @@ impl Builder<'_> {
     /// onto it (`expr.fmt.spec.1`).
     fn fmt(&mut self, dest: Local, pieces: &[FmtPiece], range: TextRange) {
         let new = self.string_method("new");
-        self.call_into(None, new.clone(), Place::local(dest), Vec::new(), range);
+        self.call_into(None, new, Place::local(dest), Vec::new(), range);
+        self.fmt_into(Sink::String(dest), pieces, range);
+    }
+
+    /// `w.write_fmt(fmt"…")`'s literal (`text.write.2`), if `e` is that call: its pieces, which
+    /// are written straight onto `w`.
+    fn fmt_sink(&self, e: ExprId) -> Option<Vec<FmtPiece>> {
+        let ExprKind::MethodCall { args, .. } = &self.hir.exprs[e].kind else {
+            return None;
+        };
+        let [arg] = args.as_slice() else {
+            return None;
+        };
+        let ExprKind::Fmt(pieces) = &self.hir.exprs[*arg].kind else {
+            return None;
+        };
+        let sig = &self.items.fns[self.types.callee(e)?.func() as usize];
+        let tw = self.items.lang("TextWrite")?;
+        let of_text_write = match sig.container {
+            Container::Trait(t) => t == tw,
+            Container::Impl(k) => self.items.impls[k as usize]
+                .trait_ref
+                .as_ref()
+                .is_some_and(|t| t.trait_ == tw),
+            _ => false,
+        };
+        (sig.name == "write_fmt" && of_text_write).then(|| pieces.clone())
+    }
+
+    /// The receiver of `w.write_fmt(…)`, `w` or a `&mut` borrow of one, as a local holding a
+    /// `&mut dyn TextWrite`.
+    fn text_sink(&mut self, receiver: ExprId) -> Local {
+        let (place, inner) = match self.ty(receiver) {
+            Ty::Ref(true, t) => (self.place(receiver).deref(), (*t).clone()),
+            t => (self.place(receiver), t),
+        };
+        let tw = self
+            .items
+            .lang_ref("TextWrite")
+            .expect("the prelude's `TextWrite`");
+        let r = self.temp(Ty::reference(true, inner.clone()));
+        self.cfg.assign(r, Rvalue::Ref(true, place));
+        if matches!(inner, Ty::Dyn(..)) {
+            return r;
+        }
+        let out = self.temp(Ty::reference(true, Ty::dyn_of(tw)));
+        self.cfg
+            .assign(out, Rvalue::Unsize(Operand::Move(Place::local(r)), inner));
+        out
+    }
+
+    /// A `&mut` borrow of what `sink` writes to, for one call: the `String`, or a reborrow
+    /// of the `&mut dyn TextWrite`.
+    fn sink_ref(&mut self, sink: Sink) -> Operand {
+        match sink {
+            Sink::String(s) => {
+                let string = self.items.string_ty();
+                let borrow = self.temp(Ty::reference(true, string.clone()));
+                self.cfg.assign(borrow, Rvalue::Ref(true, Place::local(s)));
+                let tw = self
+                    .items
+                    .lang_ref("TextWrite")
+                    .expect("the prelude's `TextWrite`");
+                let out = self.temp(Ty::reference(true, Ty::dyn_of(tw)));
+                self.cfg.assign(
+                    out,
+                    Rvalue::Unsize(Operand::Move(Place::local(borrow)), string),
+                );
+                Operand::Move(Place::local(out))
+            }
+            Sink::Dyn(d) => {
+                let tw = self
+                    .items
+                    .lang_ref("TextWrite")
+                    .expect("the prelude's `TextWrite`");
+                let out = self.temp(Ty::reference(true, Ty::dyn_of(tw)));
+                self.cfg
+                    .assign(out, Rvalue::Ref(true, Place::local(d).deref()));
+                Operand::Move(Place::local(out))
+            }
+        }
+    }
+
+    /// Text `s`, a `&str`, written onto `sink`: pushed onto the `String`, or through the
+    /// sink's `write_str`.
+    fn sink_str(&mut self, sink: Sink, s: Operand, range: TextRange) {
+        match sink {
+            Sink::String(dest) => self.push_str(dest, s, range),
+            Sink::Dyn(_) => {
+                let tw = self
+                    .items
+                    .lang_ref("TextWrite")
+                    .expect("the prelude's `TextWrite`");
+                let func = self.items.traits[tw.trait_ as usize]
+                    .methods
+                    .iter()
+                    .copied()
+                    .find(|&m| self.items.fns[m as usize].name == "write_str")
+                    .expect("`TextWrite::write_str`");
+                let out = self.sink_ref(sink);
+                let unit = self.temp(Ty::Unit);
+                let callee = Callee::Trait {
+                    func,
+                    args: vec![Ty::dyn_of(tw)],
+                };
+                self.call_into(None, callee, Place::local(unit), vec![out, s], range);
+            }
+        }
+    }
+
+    /// `fmt"…"`'s pieces written onto `sink` (`expr.fmt.1`, `text.write.2`).
+    fn fmt_into(&mut self, sink: Sink, pieces: &[FmtPiece], range: TextRange) {
+        let new = self.string_method("new");
         for p in pieces {
             match p {
                 FmtPiece::Lit(s) => {
                     let c = self.cfg.str_const(s);
-                    self.push_str(dest, Operand::Const(c), range);
+                    self.sink_str(sink, Operand::Const(c), range);
                 }
-                FmtPiece::Hole(h, spec) if spec.is_plain() => self.write_hole(*h, dest),
+                FmtPiece::Hole(h, spec) if spec.is_plain() => self.write_hole(*h, sink),
                 FmtPiece::Hole(h, spec) => {
                     let h = *h;
                     let piece = self.temp(self.items.string_ty());
@@ -1058,7 +1177,7 @@ impl Builder<'_> {
                             self.call_into(None, callee, Place::local(s), args, self.range(h));
                             self.push_str(piece, Operand::Move(Place::local(s)), range);
                         }
-                        None => self.write_hole(h, piece),
+                        None => self.write_hole(h, Sink::String(piece)),
                     }
                     if spec.plus {
                         let out = self.temp(Ty::reference(true, self.items.string_ty()));
@@ -1083,6 +1202,22 @@ impl Builder<'_> {
                         Some(x) => self.operand(x, &[]),
                         None => Operand::Const(Const::Int(spec.width.map_or(0, i64::from))),
                     };
+                    // Padded onto the `String`, or into one of its own that is then written
+                    // onto the sink.
+                    let (dest, padded_alone) = match sink {
+                        Sink::String(dest) => (dest, None),
+                        Sink::Dyn(_) => {
+                            let alone = self.temp(self.items.string_ty());
+                            self.call_into(
+                                None,
+                                new.clone(),
+                                Place::local(alone),
+                                Vec::new(),
+                                range,
+                            );
+                            (alone, Some(alone))
+                        }
+                    };
                     let out = self.temp(Ty::reference(true, self.items.string_ty()));
                     self.cfg.assign(out, Rvalue::Ref(true, Place::local(dest)));
                     let unit = self.temp(Ty::Unit);
@@ -1097,6 +1232,20 @@ impl Builder<'_> {
                     ];
                     let padded = self.string_method("push_padded");
                     self.call_into(None, padded, Place::local(unit), args, range);
+                    if let Some(alone) = padded_alone {
+                        let text = self.temp(Ty::reference(false, Ty::Str));
+                        let as_str = self.string_method("as_str");
+                        let s = self.temp(Ty::reference(false, self.items.string_ty()));
+                        self.cfg.assign(s, Rvalue::Ref(false, Place::local(alone)));
+                        self.call_into(
+                            None,
+                            as_str,
+                            Place::local(text),
+                            vec![Operand::Move(Place::local(s))],
+                            range,
+                        );
+                        self.sink_str(sink, Operand::Move(Place::local(text)), range);
+                    }
                 }
             }
         }
@@ -1143,23 +1292,11 @@ impl Builder<'_> {
         }
     }
 
-    /// Hole `h` written onto the `String` in `dest` by the `fmt` its check chose, which writes
-    /// to it as a `&mut dyn TextWrite` (`text.write.1`).
-    fn write_hole(&mut self, h: ExprId, dest: Local) {
+    /// Hole `h` written onto `sink` by the `fmt` its check chose, which writes to it as a
+    /// `&mut dyn TextWrite` (`text.write.1`).
+    fn write_hole(&mut self, h: ExprId, sink: Sink) {
         let this = self.hole_ref(h);
-        let string = self.items.string_ty();
-        let borrow = self.temp(Ty::reference(true, string.clone()));
-        self.cfg
-            .assign(borrow, Rvalue::Ref(true, Place::local(dest)));
-        let sink = self
-            .items
-            .lang_ref("TextWrite")
-            .expect("the prelude's `TextWrite`");
-        let out = self.temp(Ty::reference(true, Ty::dyn_of(sink)));
-        self.cfg.assign(
-            out,
-            Rvalue::Unsize(Operand::Move(Place::local(borrow)), string),
-        );
+        let out = self.sink_ref(sink);
         let unit = self.temp(Ty::Unit);
         let callee = self
             .types
@@ -1170,7 +1307,7 @@ impl Builder<'_> {
             None,
             callee,
             Place::local(unit),
-            vec![this, Operand::Move(Place::local(out))],
+            vec![this, out],
             self.range(h),
         );
     }
@@ -1283,4 +1420,12 @@ impl Builder<'_> {
             }
         }
     }
+}
+
+/// Where `fmt"…"` writes (`text.write.2`): the `String` it makes, or a local holding the
+/// `&mut dyn TextWrite` of `w.write_fmt(…)`.
+#[derive(Clone, Copy)]
+enum Sink {
+    String(Local),
+    Dyn(Local),
 }

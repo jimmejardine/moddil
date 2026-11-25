@@ -174,6 +174,35 @@ fn block_value(body: &str, raw: bool) -> Result<String, String> {
     Ok(out)
 }
 
+/// A `"""` block literal's lines (from its opening quotes), dedented as `block_value` does: for
+/// each, `None` if it is blank, or where its text starts in the literal and the text, without its
+/// indentation or trailing white space. The block's errors are `block_value`'s.
+fn block_lines(lit: &str) -> Result<Vec<Option<(usize, &str)>>, String> {
+    let body = &lit[3..lit.len() - 3];
+    block_value(body, true)?;
+    let last = body.rfind('\n').unwrap_or(0);
+    let indent = body[last + 1..].len();
+    let mut out = Vec::new();
+    // After the opening line, up to the closing one.
+    let mut at = 3 + body.find('\n').map_or(body.len(), |i| i + 1);
+    if last < at - 3 {
+        return Ok(out);
+    }
+    for line in body[at - 3..last].split('\n') {
+        let text = line.trim_end_matches('\r');
+        if text.chars().all(|c| c == ' ' || c == '\t') {
+            out.push(None);
+        } else {
+            out.push(Some((
+                at + indent,
+                text[indent..].trim_end_matches([' ', '\t']),
+            )));
+        }
+        at += line.len() + 1;
+    }
+    Ok(out)
+}
+
 impl Lowerer<'_> {
     /// A string, raw string or block literal: a `&str`.
     pub(super) fn string_lit(&mut self, tok: &SyntaxToken, range: TextRange) -> ExprId {
@@ -190,7 +219,8 @@ impl Lowerer<'_> {
         }
     }
 
-    /// `fmt"… {e} …"` (`expr.fmt.1`): the text, with each hole an expression of the body.
+    /// `fmt"… {e} …"` (`expr.fmt.1`): the text, with each hole an expression of the body; a
+    /// `fmt"""` block (`text.lit.block.1`) dedented as a block is, each hole on one line.
     pub(super) fn tagged(&mut self, tok: &SyntaxToken, range: TextRange) -> ExprId {
         let text = tok.text();
         let tag_len = text.find('"').unwrap_or(0);
@@ -199,32 +229,77 @@ impl Lowerer<'_> {
         if tag != "fmt" {
             return self.unsupported(range, &format!("the tagged literal `{tag}\"…\"`"));
         }
-        if lit.starts_with("\"\"\"") {
-            return self.unsupported(range, "a `fmt` block");
-        }
-        let start = range.start as usize + tag_len + 1;
-        let inner = &lit[1..lit.len() - 1];
+        let start = range.start as usize + tag_len;
         let mut pieces = Vec::new();
         let mut lit_buf = String::new();
+        if lit.starts_with("\"\"\"") {
+            let lines = match block_lines(&lit) {
+                Ok(lines) => lines,
+                Err(why) => {
+                    let at = match block_error_at(&lit) {
+                        Some((a, b)) => TextRange::new((start + a) as u32, (start + b) as u32),
+                        None => range,
+                    };
+                    self.report(Code::E0902, at, why);
+                    return self.missing(range);
+                }
+            };
+            for line in lines {
+                if let Some((off, text)) = line
+                    && !self.fmt_scan(text, start + off, range, &mut pieces, &mut lit_buf)
+                {
+                    return self.missing(range);
+                }
+                lit_buf.push('\n');
+            }
+        } else {
+            let inner = &lit[1..lit.len() - 1];
+            if !self.fmt_scan(inner, start + 1, range, &mut pieces, &mut lit_buf) {
+                return self.missing(range);
+            }
+        }
+        if !self.fmt_flush(&mut lit_buf, &mut pieces, range) {
+            return self.missing(range);
+        }
+        self.alloc(ExprKind::Fmt(pieces), range)
+    }
+
+    /// The text run in `buf`, unescaped, as a piece; false, with an error, if an escape is bad.
+    fn fmt_flush(
+        &mut self,
+        buf: &mut String,
+        pieces: &mut Vec<FmtPiece>,
+        range: TextRange,
+    ) -> bool {
+        if buf.is_empty() {
+            return true;
+        }
+        match unescape(buf) {
+            Ok(s) => {
+                pieces.push(FmtPiece::Lit(s));
+                buf.clear();
+                true
+            }
+            Err(why) => {
+                self.report(Code::E0902, range, why);
+                false
+            }
+        }
+    }
+
+    /// The text and holes of `inner`, which starts at byte `start` of the file, onto `pieces`,
+    /// the text run so far in `lit_buf`; false, with an error, if a hole is bad.
+    fn fmt_scan(
+        &mut self,
+        inner: &str,
+        start: usize,
+        range: TextRange,
+        pieces: &mut Vec<FmtPiece>,
+        lit_buf: &mut String,
+    ) -> bool {
         let bytes: Vec<char> = inner.chars().collect();
         let mut i = 0;
         let mut offset = 0;
-        let flush = |cx: &mut Self, buf: &mut String, pieces: &mut Vec<FmtPiece>| -> bool {
-            if buf.is_empty() {
-                return true;
-            }
-            match unescape(buf) {
-                Ok(s) => {
-                    pieces.push(FmtPiece::Lit(s));
-                    buf.clear();
-                    true
-                }
-                Err(why) => {
-                    cx.report(Code::E0902, range, why);
-                    false
-                }
-            }
-        };
         while i < bytes.len() {
             let c = bytes[i];
             match c {
@@ -239,8 +314,8 @@ impl Lowerer<'_> {
                     offset += 2;
                 }
                 '{' => {
-                    if !flush(self, &mut lit_buf, &mut pieces) {
-                        return self.missing(range);
+                    if !self.fmt_flush(lit_buf, pieces, range) {
+                        return false;
                     }
                     let end = hole_end(&bytes, i + 1);
                     let hole: String = bytes[i + 1..end].iter().collect();
@@ -253,7 +328,7 @@ impl Lowerer<'_> {
                             Ok((spec, names)) => (&hole[..k], spec, (k + 1, names)),
                             Err(why) => {
                                 self.report(Code::E0902, at, why);
-                                return self.missing(range);
+                                return false;
                             }
                         },
                         None => (hole.as_str(), Spec::default(), (0, [None, None])),
@@ -263,7 +338,7 @@ impl Lowerer<'_> {
                     for (named, slot) in [(width, 0), (precision, 1)] {
                         let Some((name, off)) = named else { continue };
                         let Some(x) = self.hole(&name, hole_start + from + off, at) else {
-                            return self.missing(range);
+                            return false;
                         };
                         if slot == 0 {
                             spec.width_arg = Some(x);
@@ -273,7 +348,7 @@ impl Lowerer<'_> {
                     }
                     match self.hole(expr_text, hole_start, at) {
                         Some(e) => pieces.push(FmtPiece::Hole(e, spec)),
-                        None => return self.missing(range),
+                        None => return false,
                     }
                     let taken: usize = bytes[i..=end.min(bytes.len() - 1)]
                         .iter()
@@ -289,10 +364,7 @@ impl Lowerer<'_> {
                 }
             }
         }
-        if !flush(self, &mut lit_buf, &mut pieces) {
-            return self.missing(range);
-        }
-        self.alloc(ExprKind::Fmt(pieces), range)
+        true
     }
 
     /// The expression of a `fmt` hole whose text starts at byte `at` of the file, parsed where it

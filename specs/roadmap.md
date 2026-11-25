@@ -79,7 +79,8 @@ when part of one is, remove that part.
 **P4. Text** (prelude `text`, `crates/sema`; M)
 - Tagged literals other than `fmt`, first `re"…"` compiled when compiling, with typed captures
   (`mods/regex`, with P11).
-- `fmt"…"` written straight into a `TextWrite` sink, not only as a new `String`.
+- A `fmt"…"` hole with a spec (`{x:>8}`, `{n:#x}`) written into a sink without a `String` of its
+  own for padding, so `w.write_fmt(fmt"…")` allocates nothing on freestanding targets.
 
 **P5. Numbers** (`crates/sema`, the prelude, every runner; L)
 - `usize` and `isize`, for FFI and memory-level code: a `Num` each, the width of a pointer on

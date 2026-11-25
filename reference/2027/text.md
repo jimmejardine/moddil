@@ -104,7 +104,8 @@ of only white space is an empty line, white space at the end of a line is left o
 space), and each line ends with a line break, `\n` whatever the source file uses. A line indented
 less than the closing quotes, or indentation that mixes tabs and spaces with the closing line's,
 is an invalid literal (E0902), reported at the closing quotes. A raw block (`r"""`) takes off
-indentation but has no escapes.
+indentation but has no escapes. A `fmt"""` block is a block in the same way, with holes
+(**expr.fmt.1**), each on one line.
 
 ## Formatting
 
@@ -113,6 +114,12 @@ indentation but has no escapes.
 character, through `write_str` unless the type gives its own. Writing to it cannot fail. `String`
 implements it, appending; a `&mut String` is used as a `&mut dyn TextWrite` as any borrow is
 (**type.dyn.coerce.1**).
+
+**text.write.2** `TextWrite` also has `fn write_fmt(&mut self, text: String)`, which writes
+`text` through `write_str`. Called with a `fmt"…"` literal, `w.write_fmt(fmt"…")` makes no
+`String` of it: each run of its text is written by `w`'s `write_str` and each hole by its `fmt`
+straight onto `w`, so what is written is the same and nothing is allocated for it (a hole with a
+width or another spec is still made in a `String` of its own first, to be padded).
 
 **text.display.1** The prelude's trait `Display` is how a value is written as text:
 `fn fmt(&self, out: &mut dyn TextWrite)` writes it to `out`, and `x.to_string()` is a new `String`
