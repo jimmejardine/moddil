@@ -154,7 +154,6 @@ fn beyond_s0_is_not_supported_yet() {
     err("fn f() -> int;", &[("I0001", 1)]);
     // `#[root_capability]` outside a stub mod.
     err("#[root_capability] struct S { h: int }", &[("I0001", 1)]);
-    err("trait T { const N: int = 1; }", &[("I0001", 1)]);
     err("fn f() { let s = b\"x\"; }", &[("I0001", 1)]);
     // `#[derive_for]` outside the prelude (`comptime.derive.for.1`).
     err(

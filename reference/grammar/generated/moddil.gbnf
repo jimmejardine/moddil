@@ -172,8 +172,9 @@ bounds-1-grp ::= "+" ws bound
 bounds-2-rep ::= ( bounds-1-grp bounds-2-rep )?
 trait-member-1-rep ::= ( outer-attr trait-member-1-rep )?
 trait-member-2-rep ::= ( note trait-member-2-rep )?
-trait-member-3-grp ::= fn-item | assoc-type | const-item
+trait-member-3-grp ::= fn-item | assoc-type | trait-const
 assoc-type ::= "type" ws tok-ident ws assoc-type-2-opt assoc-type-6-opt ";" ws
+trait-const ::= "const" ws tok-ident ws ":" ws type trait-const-2-opt ";" ws
 type-effects ::= "with" ws type-effects-1-grp
 type-1-opt ::= ( type-effects )?
 impl-member ::= impl-member-1-rep impl-member-2-rep impl-member-3-opt impl-member-4-opt impl-member-5-grp
@@ -253,6 +254,8 @@ assoc-type-3-grp ::= "=" ws type assoc-type-5-rep
 assoc-type-4-grp ::= "|" ws type
 assoc-type-5-rep ::= ( assoc-type-4-grp assoc-type-5-rep )?
 assoc-type-6-opt ::= ( assoc-type-3-grp )?
+trait-const-1-grp ::= "=" ws expr
+trait-const-2-opt ::= ( trait-const-1-grp )?
 type-effects-1-grp ::= effect-atom | "(" ws effect-atom type-effects-3-rep type-effects-4-opt ")" ws
 effect-atom ::= "suspend" ws | "spawn" ws | "nondet" ws | "fail" ws "(" ws error-types ")" ws | "&" ws type | path-type
 type-effects-2-grp ::= "," ws effect-atom

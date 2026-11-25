@@ -350,7 +350,7 @@ trait x x { note "s" type x ; }
 // ---
 trait x { fn x ( ) } ;
 // ---
-x { const x : ! = escape ; }
+trait x { const x ! ; }
 // ---
 impl impl ! with suspend { }
 // ---
@@ -478,45 +478,52 @@ x trait { type x = ! ; }
 // ---
 trait x { type x = ! | ! } ;
 // ---
-! with ( suspend ) { }
+trait x { const x : ! = ; }
 // ---
-fn x ( ) with ; spawn
+impl ! ( with suspend ) { }
 // ---
-fn x x ( ) with nondet ;
+fn x x ( ) with spawn ;
 // ---
-fn x ( ) with fail ! ) ;
+x ( ) with nondet ;
 // ---
-fn x ( ) with ! & ;
+fn x ( with ) fail ( ! ) ;
 // ---
-fn x ( ) with Self dimension ;
+fn dimension x ( ) with & ! ;
 // ---
-impl ! ! with ( suspend , suspend ) { }
+fn x ( ) with Self ; ;
 // ---
-impl ! with ( suspend , , ) { }
+impl ! with ( suspend , suspend ) { { }
 // ---
-impl ! { note "s" type x ; spawn }
+impl ! with suspend , ) { }
 // ---
-impl ! { default pub type x ; }
+impl ! spawn { /// doc
+type x ; }
 // ---
-impl ! { default type . x ; }
+impl default ! { note "s" type x ; }
 // ---
-impl ; ! { fn x ( ) ; }
+impl ! { pub type . x ; }
 // ---
-impl ! { const x -% : ! = escape ; }
+impl ! { default type ; x ; }
 // ---
-const x : ! escape escape ;
+impl ! { fn -% x ( ) ; }
 // ---
-const x : ! = yield escape ; ;
+impl ! { const x : ! escape ; }
 // ---
-const x : = return escape ;
+const x : ! = escape escape ; ;
 // ---
-const x : : ! = break 'a ;
+const x : = yield escape ;
 // ---
-const x : ! if = break escape ;
+const x : : ! = return escape ;
 // ---
-const x : ! = | | | escape ;
+const x : ! if = break 'a ;
 // ---
-?! const x : ! = | _ , _ | escape ;
+const const x : ! = continue 'a ;
+// ---
+const x ! : = | | escape ;
+// ---
+const x : ! = | _ | ;
+// ---
+const x : ! = | _ , _ | escape
 // ---
 const : x : ! = | _ , | escape ;
 // ---
@@ -609,9 +616,3 @@ unit x = 1 ^ ( 1 1 ) ;
 #![ x ( """
     text
     """ )
-// ---
-#![ ( fmt"{x.f("y")}" ) ]
-// ---
-#![ x 'c' ) ]
-// ---
-#![ \ x ( - ) ]

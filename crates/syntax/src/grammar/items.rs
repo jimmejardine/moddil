@@ -643,7 +643,7 @@ fn trait_item(p: &mut Parser, m: Marker) -> CompletedMarker {
     m.complete(p, K::TRAIT_ITEM)
 }
 
-/// `trait_member ::= outer_attr* note* ( fn_item | assoc_type | const_item )`, and with `impl`:
+/// `trait_member ::= outer_attr* note* ( fn_item | assoc_type | trait_const )`, and with `impl`:
 /// `impl_member ::= outer_attr* note* vis? 'default'? ( fn_item | assoc_type | const_item )`
 fn members(p: &mut Parser, is_impl: bool) {
     while !p.at(T!["}"]) && !p.at_eof() {
@@ -659,7 +659,11 @@ fn members(p: &mut Parser, is_impl: bool) {
                 assoc_type(p, m);
             }
             T![const] if p.nth_at(1, K::IDENT) => {
-                const_item(p, m);
+                if is_impl {
+                    const_item(p, m);
+                } else {
+                    trait_const(p, m);
+                }
             }
             T![fn] | T![const] | T![unsafe] | T![gen] => {
                 fn_item(p, m);
@@ -757,6 +761,20 @@ fn type_item(p: &mut Parser, m: Marker) -> CompletedMarker {
 }
 
 /// `const_item ::= 'const' IDENT ':' type '=' expr ';'`
+/// `trait_const ::= 'const' IDENT ':' type ( '=' expr )? ';'`: a trait's associated const, its
+/// value the default an impl may leave out.
+fn trait_const(p: &mut Parser, m: Marker) -> CompletedMarker {
+    p.bump(T![const]);
+    name(p, false);
+    p.expect(T![":"]);
+    type_(p);
+    if p.eat(T!["="]) {
+        expr(p);
+    }
+    p.expect(T![";"]);
+    m.complete(p, K::CONST_ITEM)
+}
+
 fn const_item(p: &mut Parser, m: Marker) -> CompletedMarker {
     p.bump(T![const]);
     name(p, false);

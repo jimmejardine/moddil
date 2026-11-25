@@ -1,0 +1,10 @@
+// covers: item.const.assoc.1
+
+trait Shape {
+    const SIDES: int;
+}
+
+struct Blob;
+
+// Each impl gives the consts the trait leaves without a value.
+impl Shape for Blob {}                      //~ E0407

@@ -169,8 +169,9 @@ bounds_1_grp: "+" bound
 bounds_2_rep: (bounds_1_grp bounds_2_rep)?
 trait_member_1_rep: (outer_attr trait_member_1_rep)?
 trait_member_2_rep: (note trait_member_2_rep)?
-trait_member_3_grp: fn_item | assoc_type | const_item
+trait_member_3_grp: fn_item | assoc_type | trait_const
 assoc_type: "type" IDENT assoc_type_2_opt assoc_type_6_opt ";"
+trait_const: "const" IDENT ":" type trait_const_2_opt ";"
 type_effects: "with" type_effects_1_grp
 type_1_opt: (type_effects)?
 impl_member: impl_member_1_rep impl_member_2_rep impl_member_3_opt impl_member_4_opt impl_member_5_grp
@@ -250,6 +251,8 @@ assoc_type_3_grp: "=" type assoc_type_5_rep
 assoc_type_4_grp: "|" type
 assoc_type_5_rep: (assoc_type_4_grp assoc_type_5_rep)?
 assoc_type_6_opt: (assoc_type_3_grp)?
+trait_const_1_grp: "=" expr
+trait_const_2_opt: (trait_const_1_grp)?
 type_effects_1_grp: effect_atom | "(" effect_atom type_effects_3_rep type_effects_4_opt ")"
 effect_atom: "suspend" | "spawn" | "nondet" | "fail" "(" error_types ")" | "&" type | path_type
 type_effects_2_grp: "," effect_atom

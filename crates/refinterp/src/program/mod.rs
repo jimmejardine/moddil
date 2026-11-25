@@ -114,6 +114,8 @@ pub(crate) struct ImplInfo {
     pub(crate) self_ty: ast::Type,
     pub(crate) params: Vec<String>,
     pub(crate) methods: HashMap<String, FnDef>,
+    /// Its consts' initialisers, by name (`item.const.assoc.1`).
+    pub(crate) consts: HashMap<String, ast::Expr>,
     /// Whether it is for every type: its self type is a type parameter of its own with no
     /// bounds (`impl<T> ToRc for T`).
     pub(crate) blanket: bool,
@@ -121,6 +123,8 @@ pub(crate) struct ImplInfo {
 
 pub(crate) struct TraitInfo {
     pub(crate) methods: HashMap<String, FnDef>,
+    /// The values its consts have by default, by name (`item.const.assoc.1`).
+    pub(crate) consts: HashMap<String, ast::Expr>,
     /// The derive function `#[derive_by(f)]` names (`attr.derive-by.1`), and the module to find
     /// it in.
     pub(crate) derive_by: Option<(String, usize)>,
@@ -701,7 +705,15 @@ impl Program {
                             .and_then(|r| r.strip_suffix(")]"))
                             .map(|f| (f.to_string(), module))
                     });
-                self.traits.insert(key, TraitInfo { methods, derive_by });
+                let consts = member_consts(item.child(K::TRAIT_BODY));
+                self.traits.insert(
+                    key,
+                    TraitInfo {
+                        methods,
+                        consts,
+                        derive_by,
+                    },
+                );
             }
             K::IMPL_ITEM => {
                 let types: Vec<ast::Type> = item.children().filter_map(ast::Type::cast).collect();
@@ -744,6 +756,7 @@ impl Program {
                     self_ty,
                     params: generic_names(&item),
                     methods,
+                    consts: member_consts(item.child(K::IMPL_BODY)),
                     blanket,
                 });
             }
@@ -1322,6 +1335,17 @@ fn template_impl(def: &FnDef, tr: String, head: Head) -> Option<ImplInfo> {
         self_ty,
         params: Vec::new(),
         methods,
+        consts: HashMap::new(),
         blanket: false,
     })
+}
+
+/// The consts in a trait's or an impl's body, by name, with their values (a trait's without one
+/// left out).
+fn member_consts(body: Option<SyntaxNode>) -> HashMap<String, ast::Expr> {
+    body.into_iter()
+        .flat_map(|b| b.children().collect::<Vec<_>>())
+        .filter(|c| c.kind() == K::CONST_ITEM)
+        .filter_map(|c| Some((name_of(&c), c.children().find_map(ast::Expr::cast)?)))
+        .collect()
 }

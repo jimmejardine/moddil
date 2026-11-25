@@ -294,6 +294,13 @@ impl Checker<'_> {
         };
         self.out.expr_types[index(callee)] = Ty::Unit;
         let func = target.func();
+        // A path to a type's item, not called, is a const's value (`item.const.assoc.1`).
+        if self.body.const_paths.contains(&e) && !self.items.fns[func as usize].const_item {
+            self.out
+                .diagnostics
+                .push(Diagnostic::unsupported(range, "a function used as a value"));
+            return Ty::Error;
+        }
         self.not_drop(func, range);
         // A C function is called only in an `unsafe` block (`ffi.extern.1`).
         if self.items.fns[func as usize].foreign && !self.body.in_unsafe.contains(&e) {

@@ -51,11 +51,6 @@ impl Collector<'_> {
                     );
                 }
                 assoc.push((n, r));
-            } else if m.kind() == K::CONST_ITEM {
-                ds.push(Diagnostic::unsupported(
-                    m.text_range(),
-                    "an associated const",
-                ));
             }
         }
         self.reporter.report(src, None, ds);
@@ -183,18 +178,28 @@ impl Collector<'_> {
             .into_iter()
             .flat_map(|b| b.children().collect::<Vec<_>>())
         {
-            let Some(f) = ast::FnItem::cast(m) else {
+            let self_ty = Ty::Param(0, "Self".into());
+            let sig = if m.kind() == K::CONST_ITEM {
+                self.const_sig_in(
+                    &m,
+                    src,
+                    Container::Trait(i as u32),
+                    &generics,
+                    Some(&self_ty),
+                )
+            } else if let Some(f) = ast::FnItem::cast(m) {
+                self.fn_sig(
+                    &f,
+                    src,
+                    Container::Trait(i as u32),
+                    &generics,
+                    Some(&self_ty),
+                    Some(i as u32),
+                    None,
+                )
+            } else {
                 continue;
             };
-            let sig = self.fn_sig(
-                &f,
-                src,
-                Container::Trait(i as u32),
-                &generics,
-                Some(&Ty::Param(0, "Self".into())),
-                Some(i as u32),
-                None,
-            );
             if let Some(first) = names.get(&sig.name) {
                 let d = Diagnostic::error(
                     Code::E0103,
@@ -368,56 +373,41 @@ impl Collector<'_> {
                     "specialisation (`default`)",
                 ));
             }
-            match m.kind() {
-                K::ASSOC_TYPE => {
-                    let (n, r) = name_of(m);
-                    let Some(tr) = &trait_ref else {
-                        ds.push(Diagnostic::unsupported(
-                            m.text_range(),
-                            "an associated type in an inherent impl",
-                        ));
-                        continue;
-                    };
-                    let tdef = &self.tree.traits[tr.trait_ as usize];
-                    let Some(k) = tdef.assoc.iter().position(|(x, _)| *x == n) else {
-                        ds.push(Diagnostic::error(
-                            Code::E0408,
-                            r,
-                            format!("`{}` has no associated type `{n}`", tdef.name),
-                        ));
-                        continue;
-                    };
-                    // One type, or an error set (`type Fails = I::Fails | F::Fails;`).
-                    let written: Vec<ast::Type> =
-                        m.children().filter_map(ast::Type::cast).collect();
-                    let ty = match written.as_slice() {
-                        [] => Ty::Error,
-                        [t] => resolve_type(t, &scope, &mut ds),
-                        ts => {
-                            let mut members = Vec::new();
-                            for t in ts {
-                                let ty = resolve_type(t, &scope, &mut ds);
-                                if super::error_type(
-                                    &ty,
-                                    t.syntax().text_range(),
-                                    &members,
-                                    &mut ds,
-                                ) {
-                                    members.push(ty);
-                                }
-                            }
-                            Ty::errors(members)
-                        }
-                    };
-                    assoc[k] = Some(ty);
-                }
-                K::CONST_ITEM => {
+            if m.kind() == K::ASSOC_TYPE {
+                let (n, r) = name_of(m);
+                let Some(tr) = &trait_ref else {
                     ds.push(Diagnostic::unsupported(
                         m.text_range(),
-                        "an associated const",
+                        "an associated type in an inherent impl",
                     ));
-                }
-                _ => {}
+                    continue;
+                };
+                let tdef = &self.tree.traits[tr.trait_ as usize];
+                let Some(k) = tdef.assoc.iter().position(|(x, _)| *x == n) else {
+                    ds.push(Diagnostic::error(
+                        Code::E0408,
+                        r,
+                        format!("`{}` has no associated type `{n}`", tdef.name),
+                    ));
+                    continue;
+                };
+                // One type, or an error set (`type Fails = I::Fails | F::Fails;`).
+                let written: Vec<ast::Type> = m.children().filter_map(ast::Type::cast).collect();
+                let ty = match written.as_slice() {
+                    [] => Ty::Error,
+                    [t] => resolve_type(t, &scope, &mut ds),
+                    ts => {
+                        let mut members = Vec::new();
+                        for t in ts {
+                            let ty = resolve_type(t, &scope, &mut ds);
+                            if super::error_type(&ty, t.syntax().text_range(), &members, &mut ds) {
+                                members.push(ty);
+                            }
+                        }
+                        Ty::errors(members)
+                    }
+                };
+                assoc[k] = Some(ty);
             }
         }
         for (k, d) in defaults.into_iter().enumerate() {
@@ -482,18 +472,21 @@ impl Collector<'_> {
         // (`item.impl.same-name.1`): two of one kind may not.
         let mut names: HashMap<(String, bool), TextRange> = HashMap::new();
         for m in members {
-            let Some(f) = ast::FnItem::cast(m) else {
+            let sig = if m.kind() == K::CONST_ITEM {
+                self.const_sig_in(&m, src, Container::Impl(index), &generics, Some(&self_ty))
+            } else if let Some(f) = ast::FnItem::cast(m) {
+                self.fn_sig(
+                    &f,
+                    src,
+                    Container::Impl(index),
+                    &generics,
+                    Some(&self_ty),
+                    None,
+                    trait_ref.clone().map(|t| (t, assoc.clone())),
+                )
+            } else {
                 continue;
             };
-            let sig = self.fn_sig(
-                &f,
-                src,
-                Container::Impl(index),
-                &generics,
-                Some(&self_ty),
-                None,
-                trait_ref.clone().map(|t| (t, assoc.clone())),
-            );
             let key = (sig.name.clone(), sig.self_kind.is_some());
             if let Some(first) = names.get(&key) {
                 let d = Diagnostic::error(

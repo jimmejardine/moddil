@@ -354,10 +354,34 @@ impl Collector<'_> {
     /// A const item, `const NAME: T = e;` (`comptime.const.1`), as a function of no parameters
     /// returning `T`.
     pub(super) fn const_sig(&mut self, node: &SyntaxNode, src: Src) -> FnSig {
+        self.const_sig_in(node, src, Container::Free, &Generics::default(), None)
+    }
+
+    /// A const item in `container`, a trait's or an impl's (`item.const.assoc.1`) with its
+    /// generics and its `Self`, or a free one. A trait's may have no value: each impl gives one.
+    pub(super) fn const_sig_in(
+        &mut self,
+        node: &SyntaxNode,
+        src: Src,
+        container: Container,
+        generics: &Generics,
+        self_ty: Option<&Ty>,
+    ) -> FnSig {
         let (name, name_range) = name_of(node);
         let mut ds = Vec::new();
+        let trait_ctx = match container {
+            Container::Trait(t) => Some(t),
+            _ => None,
+        };
+        let scope = Scope {
+            params: &generics.params,
+            preds: &generics.preds,
+            self_ty: self_ty.cloned(),
+            trait_ctx,
+            ..self.scope()
+        };
         let ret = match node.children().find_map(ast::Type::cast) {
-            Some(t) => resolve_type(&t, &self.scope(), &mut ds),
+            Some(t) => resolve_type(&t, &scope, &mut ds),
             None => Ty::Error,
         };
         // Its value is static data, which holds no borrow but of text (`borrow.static.1`).
@@ -380,10 +404,12 @@ impl Collector<'_> {
             name_range,
             node: node.text_range(),
             ret,
-            has_body: true,
+            has_body: node.children().any(|c| ast::Expr::can_cast(c.kind())),
             origin,
             is_const: true,
             const_item: true,
+            container,
+            generics: generics.clone(),
             ..FnSig::free(name, src, self.module, vis)
         }
     }

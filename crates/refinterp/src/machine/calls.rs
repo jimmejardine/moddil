@@ -479,6 +479,51 @@ impl Machine<'_> {
         }
     }
 
+    /// The value of the associated const `name` of the type `ty` names (`item.const.assoc.1`),
+    /// if it has one: its inherent impl's, else a trait impl's, else that trait's default. Its
+    /// value is computed in a call of its own, in the impl's (or trait's) module, with `Self` the
+    /// type.
+    pub(super) fn assoc_const(&mut self, ty: &[String], name: &str) -> Eval<Option<Value>> {
+        let head = self.type_head(ty);
+        let program = &self.program;
+        let mut found = None;
+        for inherent in [true, false] {
+            for i in &program.impls {
+                if i.head == head
+                    && i.trait_.is_none() == inherent
+                    && let Some(e) = i.consts.get(name)
+                {
+                    found = Some((e.clone(), i.module as usize));
+                    break;
+                }
+            }
+            if found.is_some() {
+                break;
+            }
+        }
+        if found.is_none() {
+            for i in &program.impls {
+                if i.head == head
+                    && let Some(t) = &i.trait_
+                    && let Some(e) = program.traits.get(t).and_then(|t| t.consts.get(name))
+                {
+                    found = Some((e.clone(), i.module as usize));
+                    break;
+                }
+            }
+        }
+        let Some((e, module)) = found else {
+            return Ok(None);
+        };
+        let file = self.memory.file();
+        let mut types = HashMap::new();
+        types.insert("Self".to_string(), head);
+        self.memory.push_frame(types, file, module, false);
+        let v = self.eval(&e);
+        self.memory.pop_frame();
+        v.map(Some)
+    }
+
     /// Runs function `f` with `args` and the kinds of its parent's type parameters `types`
     /// (`expr.call.1`). Its own type parameters' kinds come from the arguments.
     pub(super) fn invoke(
@@ -933,23 +978,7 @@ impl Machine<'_> {
                 {
                     return self.refine(&k, values.into_iter().next().expect("a value"), range);
                 }
-                let head = match ty {
-                    [t] if t == "int" || t == "i64" => Head::Int,
-                    [t] if crate::num::Kind::named(t).is_some() => {
-                        Head::Num(crate::num::Kind::named(t).expect("a number type"))
-                    }
-                    [t] if t == "bool" => Head::Bool,
-                    [t] if t == "char" => Head::Char,
-                    [t] if t == "str" => Head::Str,
-                    [t] if t == "Buf" => Head::Buf,
-                    [t] if self.memory.type_of(t).is_some() => {
-                        self.memory.type_of(t).expect("known").clone()
-                    }
-                    path => match self.resolve(path) {
-                        Some((Def::Item(k), _)) => Head::Adt(k),
-                        _ => Head::Adt(path.join("::")),
-                    },
-                };
+                let head = self.type_head(ty);
                 let m = self
                     .program
                     .type_fns(&head, name)

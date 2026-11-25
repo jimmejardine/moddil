@@ -50,6 +50,9 @@ pub struct Body {
     pub in_unsafe: std::collections::HashSet<ExprId>,
     /// Each `for` loop's call of `next` (`expr.for.3`), so its errors are reported as the loop's.
     pub for_nexts: std::collections::HashSet<ExprId>,
+    /// The calls a path to a type's item makes (`Point::N`), which must name a const
+    /// (`item.const.assoc.1`).
+    pub const_paths: std::collections::HashSet<ExprId>,
     /// For a `#[selectable]` function, its two parts (`task.select.4`).
     pub select: Option<SelectParts>,
 }

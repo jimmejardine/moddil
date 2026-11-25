@@ -78,7 +78,7 @@ and a code never changes meaning.
 | E0404 | Wrong number of type arguments | [generic.1](generics.md) |
 | E0405 | A type that cannot be inferred | [generic.infer.1](generics.md) |
 | E0406 | Two impls of a trait for the same type, or an impl of `Refined` | [item.impl.coherence.1](items/impls.md), [refine.trait.1](refinements.md) |
-| E0407 | An impl that leaves out a method or associated type of its trait | [item.impl.trait.1](items/impls.md), [expr.anon-impl.1](expressions/closures.md) |
+| E0407 | An impl that leaves out a method, associated type or const of its trait | [item.impl.trait.1](items/impls.md), [expr.anon-impl.1](expressions/closures.md), [item.const.assoc.1](items/traits.md) |
 | E0408 | An impl that defines something its trait does not declare | [item.impl.trait.1](items/impls.md), [expr.anon-impl.1](expressions/closures.md) |
 | E0409 | An impl's method whose signature differs from the trait's | [item.impl.trait.1](items/impls.md) |
 | E0410 | A method that more than one trait gives the type | [expr.method.ambiguous.1](expressions/methods.md) |

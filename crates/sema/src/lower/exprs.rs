@@ -70,9 +70,24 @@ impl Lowerer<'_> {
                     let callee = self.alloc(ExprKind::Fn { func, args }, range);
                     self.fn_value(callee, func, range)
                 }
+                // A trait's const (`T::N`, `item.const.assoc.1`): its value, a call of it.
+                Some(r @ Resolved::TraitFn(_, func, ..))
+                    if self.items.fns[func as usize].const_item =>
+                {
+                    let callee = self.resolved(r, range);
+                    self.const_use(callee, range)
+                }
                 Some(r @ Resolved::TraitFn(_, func, ..)) => {
                     let callee = self.resolved(r, range);
                     self.fn_value(callee, func, range)
+                }
+                Some(Resolved::AssocFn(ty, name, at, args))
+                    if self
+                        .inherent_fn(&ty, &name)
+                        .is_some_and(|f| self.items.fns[f as usize].const_item) =>
+                {
+                    let callee = self.resolved(Resolved::AssocFn(ty, name, at, args), range);
+                    self.const_use(callee, range)
                 }
                 // A type's function as a value (`Vec::new`, `Point::y`): its arity is the
                 // function's (`expr.fn-value.1`).
@@ -91,6 +106,14 @@ impl Lowerer<'_> {
                     self.value_closure(range, n, |this, args| {
                         this.ctor_call(range, adt, variant, ty_args, args)
                     })
+                }
+                // A type's const from a trait it implements (`Point::N`), known once the
+                // checker finds it; a function so named is not a value.
+                Some(r @ Resolved::AssocFn(..)) => {
+                    let callee = self.resolved(r, range);
+                    let call = self.const_use(callee, range);
+                    self.out.body.const_paths.insert(call);
+                    call
                 }
                 Some(r) => self.resolved(r, range),
                 None => self.missing(range),
@@ -1197,6 +1220,17 @@ impl Lowerer<'_> {
             }
         }
         self.alloc(ExprKind::Assign { target, op, value }, range)
+    }
+
+    /// The value of the const `callee` names: a call of it, with no arguments.
+    fn const_use(&mut self, callee: ExprId, range: TextRange) -> ExprId {
+        self.alloc(
+            ExprKind::Call {
+                callee,
+                args: Vec::new(),
+            },
+            range,
+        )
     }
 
     pub(super) fn call(&mut self, node: &SyntaxNode, e: &ast::Expr) -> ExprId {

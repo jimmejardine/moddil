@@ -184,7 +184,7 @@ variant        ::= outer_attr* IDENT ( struct_body | tuple_fields )? ( '=' expr 
 
 trait_item     ::= 'unsafe'? 'trait' IDENT generic_params? ( ':' bounds )? where_clause?
                    '{' trait_member* '}'
-trait_member   ::= outer_attr* note* ( fn_item | assoc_type | const_item )
+trait_member   ::= outer_attr* note* ( fn_item | assoc_type | trait_const )
 assoc_type     ::= 'type' IDENT ( ':' bounds )? ( '=' type ( '|' type )* )? ';'   # type Fails = I::Fails | F::Fails;
 
 impl_item      ::= 'unsafe'? 'impl' generic_params? type ( 'for' type )? where_clause? impl_body
@@ -193,6 +193,7 @@ impl_member    ::= outer_attr* note* vis? 'default'? ( fn_item | assoc_type | co
 
 type_item      ::= 'type' IDENT generic_params? '=' type ( 'where' expr )? ';'   # `where` here: a refinement
 const_item     ::= 'const' IDENT ':' type '=' expr ';'
+trait_const    ::= 'const' IDENT ':' type ( '=' expr )? ';'
 
 # ─── Modules ──────────────────────────────────────────────────────────────────
 use_item       ::= 'use' use_tree ';'

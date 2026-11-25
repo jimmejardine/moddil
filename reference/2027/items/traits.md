@@ -28,6 +28,13 @@ impl that does not define it takes `T` (`Iterator`'s `type Fails = !;`). An impl
 an associated type sees the impl's bounds (`type Fails = I::Fails | F::Fails;`), and may be an
 error set, its members separated by `|` (E0508 for a member that is not an error type).
 
+**item.const.assoc.1** `const NAME: T = e;` in an impl gives the type an **associated const**,
+named `Type::NAME` (or `Self::NAME` inside the impl): a const item ([Comptime](../comptime.md))
+of the type. In a trait, `const NAME: T;` declares one each impl defines (E0407 if one does not),
+and `const NAME: T = e;` gives it a default an impl may leave out; `T::NAME` for a type parameter
+`T` bound by the trait is the const of whatever type `T` is. Its value is computed with `Self` the
+implementing type.
+
 **item.trait.super.1** `trait Name: A + B` declares **supertraits**: a type implements `Name`
 only if it also implements `A` and `B` (E0402, at the impl), so code bounded by `T: Name` may also
 use `A`'s and `B`'s methods.

@@ -39,6 +39,13 @@ impl Machine<'_> {
                     return Ok(self.memory.load(&p));
                 }
                 let segments = segments(node);
+                // A type's associated const (`item.const.assoc.1`).
+                if let [ty @ .., name] = segments.as_slice()
+                    && !ty.is_empty()
+                    && let Some(v) = self.assoc_const(ty, name)?
+                {
+                    return Ok(v);
+                }
                 // A function used as a value (`expr.fn-value.1`): a closure calling it.
                 if self.fn_path(&segments) {
                     return Ok(self.closure_value(node));

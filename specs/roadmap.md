@@ -107,7 +107,6 @@ runners; M)
 
 **P8. The trait system** (`crates/sema`, `crates/syntax` and the grammar, the prelude, both
 interpreters; L)
-- Associated consts.
 - Default type parameters, then the operator traits' `Rhs` (`Add<Rhs = Self>`).
 - Generic `type` aliases; a refinement with impls of its own, or whose base holds a borrow.
 - An `impl Trait` result in a trait's method, one whose hidden type holds a borrow or a closure,

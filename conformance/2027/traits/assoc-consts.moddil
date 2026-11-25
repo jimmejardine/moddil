@@ -1,0 +1,50 @@
+// covers: item.const.assoc.1
+
+trait Shape {
+    const SIDES: int;
+    const NAME_LEN: int = 5;
+    fn area(&self) -> int;
+}
+
+struct Square { s: int }
+struct Tri { b: int, h: int }
+
+impl Shape for Square {
+    const SIDES: int = 4;
+    fn area(&self) -> int { self.s * self.s }
+}
+
+impl Shape for Tri {
+    const SIDES: int = 3;
+    const NAME_LEN: int = 3;
+    fn area(&self) -> int { self.b * self.h / 2 }
+}
+
+struct Point { x: int, y: int }
+
+impl Point {
+    const ORIGIN: Point = Point { x: 0, y: 0 };
+    const DIM: int = 2;
+
+    fn dims(&self) -> int {
+        Self::DIM
+    }
+}
+
+fn sides<S: Shape>(s: &S) -> int {
+    S::SIDES * 10 + S::NAME_LEN
+}
+
+test "associated consts" {
+    Point::DIM                              // => 2
+    ;
+    Point::ORIGIN.x                         // => 0
+    ;
+    Point { x: 1, y: 1 }.dims()             // => 2
+    ;
+    Square::SIDES                           // => 4
+    ;
+    sides(&Square { s: 2 })                 // => 45
+    ;
+    sides(&Tri { b: 2, h: 3 })              // => 33
+}
