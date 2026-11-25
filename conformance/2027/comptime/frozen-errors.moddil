@@ -1,0 +1,18 @@
+// covers: comptime.static.2
+
+const fn words() -> Vec<int> {
+    let mut v: Vec<int> = Vec::new();
+    v.push(1);
+    v
+}
+
+const WORDS: Vec<int> = words();
+
+fn take() -> Vec<int> {
+    WORDS                                   //~ E1009
+}
+
+fn moved() -> int {
+    let v = WORDS;                          //~ E1009
+    v.len()
+}

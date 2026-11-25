@@ -259,8 +259,12 @@ impl Machine<'_> {
             ast::Expr::Path(_) => {
                 let segs = segments(e.syntax());
                 match segs.as_slice() {
-                    [n] => self.memory.slot(n).map(|s| (self.memory.here(s), false)),
-                    _ => None,
+                    [n] if self.memory.slot(n).is_some() => {
+                        self.memory.slot(n).map(|s| (self.memory.here(s), false))
+                    }
+                    // A const item: its static value (`comptime.static.1`), which is borrowed or
+                    // copied, never moved.
+                    _ => self.const_place(e.syntax())?.map(|p| (p, true)),
                 }
             }
             ast::Expr::Paren(_) => self.place_of(&e.sub_exprs()[0])?,

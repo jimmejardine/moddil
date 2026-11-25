@@ -15,6 +15,7 @@
 mod calls;
 mod cmem;
 mod dispatch;
+mod frozen;
 mod machine;
 mod natives;
 mod num;
@@ -22,6 +23,8 @@ mod ops;
 mod sched;
 mod stack;
 mod texts;
+
+pub use frozen::{Frozen, FrozenValue};
 mod value;
 
 use moddil_mir::TrapClass;
@@ -136,8 +139,24 @@ pub fn eval_const(db: &dyn Db, program: Program, index: u32) -> Result<Value, St
     )
 }
 
+/// Evaluates const item `index` of `program` as compiling does (`comptime.static.1`), with
+/// [`FUEL`] steps at most, and freezes its value: what it is, and what its pointers point to.
+///
+/// # Errors
+///
+/// The trap, if it traps or runs out of fuel; or, inside, what in the value cannot be static
+/// data.
+pub fn frozen(
+    db: &dyn Db,
+    program: Program,
+    index: u32,
+) -> Result<Result<FrozenValue, String>, Stop> {
+    machine::run_frozen(db, program, Item::Fn(index), Some(FUEL))
+}
+
 /// Every diagnostic for `program`: the front end's and the ownership check's, then, if it has
-/// no errors, those of evaluating its const items when compiling (E1004).
+/// no errors, those of evaluating its const items when compiling (E1004), and of a value that
+/// cannot be static data (E1008).
 pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
     let mut out = moddil_mir::diagnostics(db, program).clone();
     if moddil_mir::has_errors(db, program) {
@@ -148,7 +167,21 @@ pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
         if !f.const_item || !f.src.is_file() {
             continue;
         }
-        let why = match eval_const(db, program, i as u32) {
+        let result = if items.is_frozen_const(i as u32) {
+            frozen(db, program, i as u32).map(Some)
+        } else {
+            eval_const(db, program, i as u32).map(|_| None)
+        };
+        let why = match result {
+            Ok(Some(Err(what))) => {
+                let d = Diagnostic::error(
+                    Code::E1008,
+                    f.name_range,
+                    format!("`{}` holds {what}, which cannot be static data", f.name),
+                );
+                out.extend(moddil_sema::in_file(items, Item::Fn(i as u32), &[d]));
+                continue;
+            }
             Ok(_) => continue,
             Err(Stop::Trap(t)) if t.class == TrapClass::OutOfFuel => format!(
                 "evaluating `{}` when compiling takes more than {FUEL} steps",

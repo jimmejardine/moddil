@@ -1014,6 +1014,7 @@ dependencies = [
  "gimli",
  "moddil-ffi",
  "moddil-gpu",
+ "moddil-interp",
  "moddil-mir",
  "moddil-project",
  "moddil-rt",

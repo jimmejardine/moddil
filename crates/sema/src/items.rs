@@ -854,6 +854,20 @@ impl ItemTree {
         }
     }
 
+    /// Whether function `f` is a const item computed once, when compiling, and frozen into
+    /// static data (`comptime.static.1`): one with no type parameters, its own or its impl's,
+    /// and not a trait's, whose `Self` is not known.
+    pub fn is_frozen_const(&self, f: u32) -> bool {
+        let sig = &self.fns[f as usize];
+        sig.const_item
+            && sig.generics.params.is_empty()
+            && match sig.container {
+                Container::Trait(_) => false,
+                Container::Impl(k) => self.impls[k as usize].generics.params.is_empty(),
+                _ => true,
+            }
+    }
+
     /// The prelude's free function `name`, which the compiler calls for some forms
     /// (`debug_pretty` for `{x:#?}`).
     pub fn prelude_fn(&self, name: &str) -> Option<u32> {

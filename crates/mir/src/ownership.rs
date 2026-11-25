@@ -169,6 +169,8 @@ struct Checker<'a> {
     written_params: u32,
     /// Whether the body is a destructor, which may move fields out of its `self` (`_1`).
     destructor: bool,
+    /// The locals holding the address of a const item's static data (`comptime.static.1`).
+    statics: HashSet<Local>,
 }
 
 /// The loans each local may hold.
@@ -313,6 +315,17 @@ impl<'a> Checker<'a> {
             returns_held: false,
             written_params: u32::MAX,
             destructor: false,
+            statics: body
+                .blocks
+                .iter()
+                .flat_map(|b| &b.statements)
+                .filter_map(|st| match st {
+                    Statement::Assign(p, Rvalue::StaticRef(_)) if p.projection.is_empty() => {
+                        Some(p.local)
+                    }
+                    _ => None,
+                })
+                .collect(),
         }
     }
 
@@ -536,6 +549,14 @@ impl<'a> Checker<'a> {
                 format!(
                     "{what} is an element of an array or slice, which cannot be moved out of                      (it is not `Copy`): swap or clone it instead"
                 ),
+            ));
+        } else if kind == Access::Move && place.is_indirect() && self.statics.contains(&place.local)
+        {
+            self.report(Diagnostic::error(
+                Code::E1009,
+                span,
+                "a const that is not `Copy` is static data, which is borrowed, not moved: \
+                 borrow it (`&NAME`), or clone it",
             ));
         } else if kind == Access::Move && place.is_indirect() {
             let what = self.name(place);

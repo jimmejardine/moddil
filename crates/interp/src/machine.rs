@@ -29,6 +29,9 @@ struct Machine<'a> {
     sched: Scheduler,
     /// For each suspended task: the call it is suspended in, and where its result goes.
     pending: std::collections::HashMap<usize, (tasks::Pending, Ret)>,
+    /// Whether the run's result is given as it is, its borrows not yet shown: for a const
+    /// frozen when compiling (`comptime.static.1`).
+    raw_result: bool,
 }
 
 mod ffi;
@@ -73,8 +76,39 @@ pub(crate) fn run(
             s
         },
         pending: std::collections::HashMap::new(),
+        raw_result: false,
     };
     m.run_to_end(observer)
+}
+
+/// Runs const item `item` as compiling does, and freezes its value (`comptime.static.1`): `Err`
+/// inside names what in it cannot be static data.
+pub(crate) fn run_frozen(
+    db: &dyn Db,
+    program: Program,
+    item: Item,
+    fuel: Option<u64>,
+) -> Result<Result<crate::FrozenValue, String>, Stop> {
+    let items = moddil_sema::item_tree(db, program);
+    let first = Frame::new(
+        body(db, Owner::new(db, program, item)),
+        Vec::new(),
+        Vec::new(),
+        Ret::Top,
+    );
+    let mut m = Machine {
+        db,
+        program,
+        stack: Stack::new(first, items),
+        dispatch: Dispatch::new(items),
+        natives: Natives::new(items),
+        fuel,
+        sched: Scheduler::new(),
+        pending: std::collections::HashMap::new(),
+        raw_result: true,
+    };
+    let v = m.run_to_end(&mut |_, _, _| {})?;
+    Ok(crate::frozen::freeze(&m.stack, &v))
 }
 
 impl<'a> Machine<'a> {
@@ -222,6 +256,10 @@ impl<'a> Machine<'a> {
                     return Some(Ok(value));
                 }
                 if self.stack.at_root() {
+                    // As it is, for freezing what it points to (`comptime.static.1`).
+                    if self.raw_result {
+                        return Some(Ok(value));
+                    }
                     // Show borrows while what they point to still exists.
                     return Some(Ok(self.stack.shown(value)));
                 }
@@ -365,6 +403,15 @@ impl<'a> Machine<'a> {
             Rvalue::StaticRef(f) => {
                 if let Some(r) = self.stack.static_ref(*f) {
                     return r;
+                }
+                // Frozen when compiling (`comptime.static.1`): the same value, and what it
+                // points to on the heap.
+                if self.dispatch.items().is_frozen_const(*f)
+                    && let Ok(Ok(fv)) = crate::frozen(self.db, self.program, *f)
+                {
+                    let v = crate::frozen::thaw(&mut self.stack, &fv);
+                    self.stack.set_static(*f, v);
+                    return self.stack.static_ref(*f).expect("set");
                 }
                 let v = run(
                     self.db,

@@ -634,6 +634,14 @@ impl Builder<'_> {
                 self.cfg
                     .assign(dest, Rvalue::Use(Operand::Const(Const::Unit)));
             }
+            // A const item computed when compiling (`comptime.static.1`): read from its static
+            // data, copied if it is `Copy` (a move of it is refused, E1009).
+            ExprKind::Call { .. } if self.frozen_const(e).is_some() => {
+                let p = self.place(e);
+                let ty = self.ty(e);
+                let op = self.use_place(p, &ty);
+                self.cfg.assign(dest, Rvalue::Use(op));
+            }
             ExprKind::Call { callee, args } => {
                 if let Some(func) = self.closure_call(e, callee) {
                     self.call_closure(e, func, dest, callee, &args);
@@ -934,6 +942,15 @@ impl Builder<'_> {
     /// A call; if its function can fail, its error edge goes where the `?` or `?!` around
     /// call `e` says.
     /// The const item whose value `e` is, if it is a use of one.
+    /// The const item `e` names, if it is one frozen when compiling (`comptime.static.1`):
+    /// without type arguments.
+    pub(super) fn frozen_const(&self, e: ExprId) -> Option<u32> {
+        let f = self.static_const(e)?;
+        let plain =
+            matches!(self.types.callee(e), Some(Callee::Fn { args, .. }) if args.is_empty());
+        (plain && self.items.is_frozen_const(f)).then_some(f)
+    }
+
     fn static_const(&self, e: ExprId) -> Option<u32> {
         let ExprKind::Call { args, .. } = &self.hir.exprs[e].kind else {
             return None;

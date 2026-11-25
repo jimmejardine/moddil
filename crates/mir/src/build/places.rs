@@ -201,6 +201,12 @@ impl Builder<'_> {
         if let Some(p) = self.place_of(e) {
             return p;
         }
+        // A const item computed when compiling: its static data (`comptime.static.1`).
+        if let Some(f) = self.frozen_const(e) {
+            let t = self.temp(Ty::reference(false, self.ty(e)));
+            self.cfg.assign(t, Rvalue::StaticRef(f));
+            return Place::local(t).deref();
+        }
         match self.hir.exprs[e].kind {
             ExprKind::Field { base, .. } => {
                 let i = self.types.field_index(e).expect("a checked field");

@@ -1,0 +1,79 @@
+// covers: comptime.static.1, comptime.static.2
+
+/// A table of 256 entries: computed once, when compiling, and kept as data.
+const fn crc_table(poly: u32) -> [u32; 256] {
+    let mut t: [u32; 256] = [0; 256];
+    let mut i = 0;
+    while i < 256 {
+        let mut c = i.truncate::<u32>();
+        let mut k = 0;
+        while k < 8 {
+            c = if c & 1 == 1 { poly ^ (c >> 1) } else { c >> 1 };
+            k += 1;
+        }
+        t[i] = c;
+        i += 1;
+    }
+    t
+}
+
+const CRC_TABLE: [u32; 256] = crc_table(0xEDB88320);
+
+const fn words() -> Vec<String> {
+    let mut v: Vec<String> = Vec::new();
+    v.push("alpha".to_string());
+    v.push("a longer word than fits inline".to_string());
+    v
+}
+
+const WORDS: Vec<String> = words();
+const MAYBE: Option<char> = Some('x');
+const NONE: Option<char> = None;
+const SHARED: Rc<int> = 41.to_rc();
+
+#[derive(Debug, Clone, PartialEq)]
+enum Shape { Dot, Circle(int), Rect { w: int, h: int } }
+
+const SHAPES: [Shape; 3] = [Shape::Dot, Shape::Circle(2), Shape::Rect { w: 3, h: 4 }];
+
+fn crc(bytes: &[u8]) -> u32 {
+    let mut c: u32 = 0xFFFFFFFF;
+    for b in bytes {
+        c = CRC_TABLE[((c ^ b.truncate::<u32>()) & 0xFF).truncate::<int>()] ^ (c >> 8);
+    }
+    c ^ 0xFFFFFFFF
+}
+
+test "a table computed when compiling" {
+    CRC_TABLE[1]                            // => 1996959894
+    ;
+    crc("hello".as_bytes())                 // => 907060870
+}
+
+test "a const that owns memory is borrowed" {
+    WORDS.len()                             // => 2
+    ;
+    WORDS[1].len()                          // => 30
+    ;
+    WORDS[0].as_str()                       // => "alpha"
+    ;
+    let copy = WORDS.clone();
+    copy.len()                              // => 2
+}
+
+test "enums and options, by value when Copy" {
+    MAYBE                                   // => Some('x')
+    ;
+    NONE.is_none()                          // => true
+}
+
+test "an Rc in a const is never freed" {
+    let a = SHARED.share();
+    *a + 1                                  // => 42
+    ;
+    Rc::strong_count(&SHARED)               // => 2
+}
+
+test "an array of enums" {
+    fmt"{SHAPES:?}"                         // => "[Shape::Dot, Shape::Circle(2), Shape::Rect { w: 3, h: 4 }]"
+}

@@ -19,6 +19,9 @@
 //! **Sites.** Each check that can fail and each `// =>` observation is numbered; the number is
 //! what the runtime is given, and [`Compiled::sites`] says what each one is.
 
+#[path = "frozen.rs"]
+mod frozen;
+
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -4184,6 +4187,13 @@ impl<M: Module> Lower<'_, '_, '_, M> {
 
     /// The address of `const` item `f`'s value, computed the first time it is asked for.
     fn static_ref(&mut self, f: u32) -> Result<ir::Value, String> {
+        // Computed when compiling, and written as data (`comptime.static.1`).
+        let ty = self.c.items.fns[f as usize].ret.clone();
+        if let Some(data) = self.c.frozen_static(f, &ty)? {
+            let gv = self.c.module.declare_data_in_func(data, self.b.func);
+            let ptr = self.ptr();
+            return Ok(self.b.ins().symbol_value(ptr, gv));
+        }
         let (id, _, ret) = self.c.declare_fn(f, &[])?;
         let l = self.layout(&ret)?;
         let data = match self.c.statics.get(&f) {

@@ -21,7 +21,17 @@ evaluated where it is, each time.
 
 **comptime.static.1** A const's value is static data: `&NAME` borrows nothing and may be returned
 from a function with no borrowed parameter ([Borrows](borrows.md)). So a const's type holds no
-borrow other than of text (E1003).
+borrow other than of text (E1003). A const without type parameters (its own or its impl's, and
+not a trait's) is evaluated once, when compiling, and its value, with what its `Vec`s, `String`s,
+`Box`es and `Rc`s hold, is written into the program as data that is never freed: the code does
+not run its initialiser again.
+
+**comptime.static.2** Such a const is borrowed, or copied if its type is `Copy`: `&NAME`,
+`NAME.method()` (borrowing it), `NAME[i]` and `NAME.field` read it in place. Using one whose type
+is not `Copy` by value, `let v = NAME`, would move static data, and is an error (E1009); `clone`
+gives an owned copy. A value that cannot be data (one holding a closure, a `dyn` value, a C
+pointer or function pointer, or a borrow of part of an array) is an error at the const (E1008).
+An `Rc` in a const keeps its own count, so it is never freed.
 
 **comptime.eval.1** Evaluating a const when compiling that traps, or takes more than 10,000,000
 steps, is an error at the const (E1004).
