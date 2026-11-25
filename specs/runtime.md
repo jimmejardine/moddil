@@ -41,6 +41,16 @@ Because libraries only use the *effects*, **every library works on every runtime
 runtime is a choice in `main` (or in the deployment manifest, [Distributed and multi-tier programs](distribution.md)), not a choice made by the whole
 dependency tree.
 
+**How a runtime is chosen (decided November 2026):**
+- **The effect is how a runtime is chosen, not how one is written.** A runtime's scheduler (stack
+  switching, moving tasks between threads, work stealing, atomics) is runtime code linked into
+  the program; the handler its mod provides is how `main`, or the manifest, picks it.
+- **One runtime per process,** installed once, beneath `suspend` and `spawn`, which stay as they
+  are in signatures. Libraries never install one.
+- **Under tests the default is `runtime-sim`:** the deterministic scheduler every implementation
+  shares (the two interpreters, native code and WASM), so a test's interleaving is the same on
+  all of them. The parallel runtime is `main`'s default, and is stress-tested on its own.
+
 The same mechanism generalises the pluggable traits that real projects build by hand. Hashiverse,
 for example, has `TransportFactory`, `TimeProvider`, `ClientStorage` and `KeyLockerManager` traits plus
 an in-memory transport for tests (see [`examples/hashiverse.md`](examples/hashiverse.md)). In
@@ -116,6 +126,11 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](r
 | Biased RC after migration | See the task-biased proposal in [`memory.md`: Biased reference counting](memory.md#biased-reference-counting): migration costs nothing. `pinned` executors never migrate anyway. |
 | Switch cost | Task switch: tens of nanoseconds. OS thread switch: microseconds. |
 | Priorities, real time | **Decided:** priority lives on executors only (OS thread priority per pool); tasks within an executor are scheduled fairly, so latency-critical work gets its own executor. Moddil's `Mutex` uses priority inheritance across executors where the OS supports it. Guarantees of `pinned`: [`performance.md`: Real-time guarantees](performance.md#real-time-guarantees). |
+
+**As built (November 2026):** the runtime is the single deterministic scheduler: one task runs at
+a time, in the interpreters' order. Natively each task is an OS thread that waits for the baton
+(`crates/rt`), and on WASM a JSPI call. The stackful coroutines on M:N workers described above
+come with the parallel runtime ([`roadmap.md`: Deferred from built work](roadmap.md#deferred-from-built-work)).
 
 **Targets:** on browser WASM without cross-origin isolation, all executors collapse onto one thread;
 with it, Web Workers add threads. GPU devices act as executors for kernel tasks

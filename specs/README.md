@@ -75,7 +75,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Adoption](adoption.md)                                            | 🟢 complete        | [`adoption.md`](adoption.md)                                                                                         |
 | [Governance](governance.md)                                        | 🟢 complete        | [`governance.md`](governance.md)                                                                                     |
 | **The project**                                                    |                    |                                                                                                                      |
-| [Compiler and bootstrap](compiler.md)                              | 🟢 complete        | [`compiler.md`](compiler.md) (R1)                                                                                    |
+| [Compiler and bootstrap](compiler.md)                              | 🟡 minor questions | [`compiler.md`](compiler.md) (R1)                                                                                    |
 | [MIR: the mid-level IR](mir.md)                                    | 🟡 minor questions | [`mir.md`](mir.md): pipeline, form, and how each feature lowers                                                      |
 | [The website and services: moddil.com](web.md)                     | 🟢 complete        | [`web.md`](web.md): what moddil.com serves, and what it deliberately does not                                        |
 | [Roadmap: milestones, what is still to build, staging](roadmap.md) | 🟢 complete        | [`roadmap.md`](roadmap.md)                                                                                           |

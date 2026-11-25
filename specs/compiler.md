@@ -354,3 +354,13 @@ probes on Node v24.16.0 (V8 13.6).
 - **JSPI's per-switch cost** (decided November 2026: measured, not assumed): JSPI stays the
   browser lowering until browsers ship stack switching, and its cost is measured on the game
   client in M5, which is when it could matter.
+
+## Open questions
+
+- **The LLVM route**, decided when the work starts. LLVM can be given either:
+  - LLVM IR translated from the Cranelift IR the native lowering already makes, as the WASM
+    emitter does: one lowering for every backend, about 1 to 2 weeks, but LLVM sees IR whose ABI
+    and stack slots are fixed, so it may optimise less well;
+  - or a second lowering straight from MIR, with the types and aliasing LLVM can use: the best
+    code, but about 3 to 6 weeks, and every later feature built twice.
+

@@ -29,7 +29,8 @@ READMEs describe what exists.
 
 **M3, the rest:**
 - **The Hashiverse CLI/native client** (phase A), through the C ABI: its first pieces next.
-- **The LLVM release backend**, beside Cranelift for release builds, on one pinned LLVM major
+- **The LLVM release backend**, beside Cranelift for release builds (its route, translating the
+  Cranelift IR or lowering from MIR, is open: [`compiler.md`: Open questions](compiler.md#open-questions)), on one pinned LLVM major
   version, upgraded about once a year in one change ([`compiler.md`: Backends](compiler.md#backends)).
 - **Python, beyond the first bindings** (`moddil build --wheel` exists; the smaller steps are
   work package P1 below):
@@ -247,9 +248,27 @@ L)
      and a bound trait's method preferred over an inherent one of the same name in generic code;
      then the conformance suite's avoidance of these ends.
 
+**P37. The runtime chosen in `main`** (`crates/rt`, `crates/sched`, `mods/runtime`,
+`crates/moddil`; M)
+- Today's scheduler becomes `runtime-sim`, the default under tests and the conformance suite;
+  `main` installs a runtime (`runtime.md`: How a runtime is chosen), with the CLI's and the
+  manifest's wiring.
+
+**P38. A parallel runtime** (`crates/rt`, `crates/sched`, `crates/native`, the prelude; L, after
+P37)
+- A stress and ThreadSanitizer harness first; then several tasks running at once, then M:N
+  user-space stacks on per-core workers with work stealing (`runtime.md`: Tasks, threads and
+  executors).
+- Biased counting, `AtomicRc` and the cycle detector; atomic sync cells; a thread-safe
+  allocator. WASM stays single-threaded.
+
+**P39. Live update, the MVP** (`crates/native`, `crates/moddil`; L)
+- The first step of `build-times.md`'s staging: an indirection table in native debug builds,
+  `moddil run --watch`, swaps of changed bodies at suspension points. Its later steps follow as
+  packages of their own.
+
 **Waits on bigger work** (not packaged)
 - The rest of M3 and M4 and M5 (above, "Still to build").
-- A parallel runtime: biased counting, `AtomicRc`, the cycle detector.
 - Packaging: registry dependencies, a lockfile, targets and profiles, executables with
   dependencies of their own, `mod name;` with a generating attribute, and `String`, `Vec` and
   `core` as `moddil/core-*` mods.

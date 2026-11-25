@@ -116,6 +116,17 @@ reports exactly where. Even layout changes then feel live in most development lo
 - WASM (browser and Wasmtime): calls go through a function table (`call_indirect`). New code is a new
   module instantiated against the same memory and table, then its entries are swapped in.
 
+**Staging (decided November 2026).** Built in this order, each step usable on its own:
+1. **The MVP:** native debug builds, single-threaded, changed bodies with the same signature:
+   the indirection table, `moddil run --watch` re-checking on save through the incremental
+   queries, swaps at suspension points, and running frames finishing on the old code.
+2. Signature changes (callers swapped in one batch) and new functions, types and modules.
+3. Automatic layout migration of live values.
+4. `migrate(old) -> new` hooks.
+5. Restart plus replay, once record and replay are built
+   ([`determinism.md`: Record and replay](determinism.md#record-and-replay)).
+6. WASM: a new module against the same memory and table.
+
 **Scope:** debug builds only. **Production hot upgrades are a non-goal**
 ([`requirements.md`: Non-goals (draft)](requirements.md#non-goals-draft)): production uses rolling
 deploys with compiler-checked compatibility between versions
