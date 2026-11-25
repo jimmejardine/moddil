@@ -45,8 +45,6 @@ READMEs describe what exists.
   - English G2P: a lexicon, with a small open-weights neural model for unknown words.
 
 **Decided, not yet built** (beyond the milestones):
-- **The formatter**, `moddil fmt`: source is always in canonical format, printed from the AST
-  ([`definition.md`: The reference](definition.md#the-reference)).
 - **The semantic diff** and per-definition content hashes, which give structured storage's
   benefits over plain text files ([`semantic-vcs.md`](semantic-vcs.md)).
 - **The generated Rust bridge** (a Moddil mod as a Rust crate, and Rust crates read from rustdoc's
@@ -224,6 +222,14 @@ L)
     running drops and `abandon`.
 - Add a benchmark that guards the cost of isolated scopes.
 - Keep traps at the C ABI as they are now (`ffi.export.3`).
+
+**P35. The formatter, next** (`crates/lsp`, `tools/ci.py`, the repository's sources; M)
+- Formatting in the language server (`documentFormattingProvider`), so editors format on save.
+- `moddil fmt` over the prelude, `mods/`, `tour/`, `examples/` and `conformance/`, with
+  `reference/grammar/tests/` left as it is, and `moddil fmt --check` on those in `tools/ci.py`'s
+  `fmt` step. Done in one go, as other work edits those files; the conformance suite on every
+  runner shows the `//~` markers held.
+- Focused snapshot tests of each layout rule in `crates/fmt/tests/`, beside the corpus test.
 
 **Waits on bigger work** (not packaged)
 - The rest of M3 and M4 and M5 (above, "Still to build").

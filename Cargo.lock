@@ -899,6 +899,7 @@ dependencies = [
  "cc",
  "clap",
  "moddil-ffi",
+ "moddil-fmt",
  "moddil-gpu",
  "moddil-interp",
  "moddil-lsp",

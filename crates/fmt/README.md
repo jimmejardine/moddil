@@ -2,8 +2,9 @@
 
 The canonical formatter for Moddil source ([`specs/toolchain.md`: Formatter](../../specs/toolchain.md#formatter)).
 
-**Status:** the formatter itself. The `moddil fmt` command, formatting in the language server,
-and reformatting the repository's own sources come next.
+**Status:** the formatter, run by `moddil fmt [--check]`. Formatting in the language server, and
+reformatting the repository's own sources, are work package P35 of the
+[roadmap](../../specs/roadmap.md#deferred-from-built-work).
 
 ```rust
 let text = moddil_fmt::format(source)?;   // canonical, with `\n` line endings

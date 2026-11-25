@@ -97,6 +97,7 @@ moddil check     reports the errors in a program
 moddil run       runs fn main(), compiled to native code (--interp: on the MIR interpreter;
                  --wasm: as WebAssembly, in Node), and prints its result
 moddil test      runs the mod's tests, natively (--interp, --wasm as for run)
+moddil fmt       rewrites source in canonical format (--check: lists what is not)
 moddil build     compiles fn main() into an executable (--release: a release build)
   --wasm         WebAssembly and the JS glue that runs it in a browser or in Node
   --lib          the mod's #[export] functions as a C library and its header (--static: static)

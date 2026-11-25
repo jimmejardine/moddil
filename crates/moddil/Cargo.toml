@@ -26,6 +26,7 @@ sha2.workspace = true
 moddil-project.workspace = true
 moddil-sema.workspace = true
 moddil-syntax.workspace = true
+moddil-fmt.workspace = true
 ariadne.workspace = true
 clap.workspace = true
 cc.workspace = true

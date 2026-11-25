@@ -50,9 +50,20 @@ human-oriented text.
   of the canonical AST ([LLMs as first-class programmers](agent-interface.md), [Diffs, code review and version control](semantic-vcs.md)), so formatting never appears in a diff.
 - Comments and blank-line grouping are part of the AST and are preserved.
 - `moddil fmt --check` runs in CI; editors format on save.
-- **One setting (decided):** a project-wide line width in the manifest (default 120). Teams
-  genuinely differ here (Hashiverse, for example, uses a 250-character width in rustfmt), and a width
-  changes no meaning. Everything else is fixed.
+- **No line width, and no setting (decided November 2026).** This replaces an earlier decision for
+  a line width in the manifest.
+  - Lines break where the structure says, never because a line is long; editors wrap long lines
+    for display, each as its user likes.
+  - So the layout depends on the code and its comments alone, and the same code always prints
+    the same way, whoever formats it.
+  - A trailing comment always stays on the line of the code it follows, which keeps line markers
+    such as the conformance suite's `//~` where they are.
+- **A line comment is how a writer breaks a line by choice:** inside an argument list, an array or
+  any other list, a comment (a bare `//` where there is nothing to say) ends its line, and nothing
+  else breaks.
+- **The layout** (a function's body always on lines of its own, `where` and contract clauses on
+  lines of their own, method chains and match arms, and the rest) is in
+  [`crates/fmt/README.md`](../crates/fmt/README.md).
 
 ## Linter
 
@@ -124,7 +135,7 @@ human-oriented text.
 ## Configuration
 
 - **One manifest file** per mod or workspace holds everything: dependencies, capabilities, targets,
-  profiles, lint levels, line width and toolchain version.
+  profiles, lint levels and toolchain version.
 - No tool-specific dotfiles (`.eslintrc`, `.prettierrc`, `rustfmt.toml`, `clippy.toml`).
 
 ## Extensibility without fragmentation

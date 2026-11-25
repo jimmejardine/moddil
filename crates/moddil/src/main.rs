@@ -1,6 +1,7 @@
 //! The `moddil` command: it checks programs, runs them and their tests (compiled to native code,
-//! or on the MIR interpreter), and builds them into executables. See `crates/moddil/README.md`.
+//! or on the MIR interpreter), builds them into executables, and formats them. See `crates/moddil/README.md`.
 
+mod fmt;
 mod link;
 mod wheel;
 
@@ -89,6 +90,15 @@ enum Command {
         #[arg(long, conflicts_with_all = ["wasm", "release", "lib"])]
         wheel: bool,
     },
+    /// Rewrites Moddil source in canonical format: the files named, and the `.moddil` files in
+    /// the directories named (by default, here).
+    Fmt {
+        /// Files and directories (by default, `.`).
+        paths: Vec<PathBuf>,
+        /// Rewrite nothing: list the files that are not formatted, and fail if there are any.
+        #[arg(long)]
+        check: bool,
+    },
     /// Runs the language server on standard input and output (LSP): diagnostics, hover, go to
     /// definition, inlay hints and completion, for an editor.
     Lsp,
@@ -111,8 +121,11 @@ fn main() -> ExitCode {
             }
         };
     }
+    if let Command::Fmt { paths, check } = &cli.command {
+        return fmt::run(paths, *check);
+    }
     let path = match &cli.command {
-        Command::Lsp => unreachable!("handled above"),
+        Command::Lsp | Command::Fmt { .. } => unreachable!("handled above"),
         Command::Check { file }
         | Command::Run { file, .. }
         | Command::Test { file, .. }
@@ -219,7 +232,7 @@ fn main() -> ExitCode {
             output, release, ..
         } => finish(build(&db, program, path, output.as_deref(), *release, &c)),
         Command::NativeTest { index, .. } => native_test(&db, program, &files, *index),
-        Command::Lsp => unreachable!("handled above"),
+        Command::Lsp | Command::Fmt { .. } => unreachable!("handled above"),
     }
 }
 

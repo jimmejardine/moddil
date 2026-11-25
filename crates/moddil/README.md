@@ -6,7 +6,7 @@ The **`moddil` command**: one tool for building, testing, formatting and everyth
 **Status:** M1. It checks programs (a file, or a mod's directory with a `moddil.toml`, read with
 [`moddil-project`](../project/README.md)), runs them and their tests compiled to native code
 ([`moddil-native`](../native/README.md)), and builds them into executables. A failed `assert`
-shows the value of each part of its condition. The rest of the command set (`fmt`, `diff`,
+shows the value of each part of its condition. The rest of the command set (`diff`,
 `audit`, `bind`, …) arrives over the milestones.
 
 ```
@@ -20,6 +20,8 @@ moddil build --wasm file.moddil    # name.mjs, name.wasm, moddil-rt.wasm, name.h
 moddil build --lib dir             # a mod's `#[export]` functions: a shared library and name.h
 moddil build --lib --static dir    # the same as a static library, with name.link for the link
 moddil build --wheel dir           # its `#[export(python)]` ones: a Python module, stubs, a wheel
+moddil fmt [paths]                 # rewrite .moddil files in canonical format (moddil-fmt)
+moddil fmt --check [paths]         # list the files that are not, and fail if any are
 moddil lsp                         # the language server, on standard input and output
 moddil run --wasm file.moddil      # `main` as WebAssembly, in Node (and `test --wasm`)
 ```

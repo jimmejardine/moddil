@@ -194,7 +194,8 @@ moddil/
 ├─ Cargo.toml             the Rust workspace root
 ├─ crates/                the Rust implementation
 │  ├─ grammar/            EBNF tool: LL(k) and ambiguity checks, generated tests and grammars
-│  ├─ syntax/             lexer, parser, AST; later the formatter
+│  ├─ syntax/             lexer, parser, AST
+│  ├─ fmt/                the canonical formatter (toolchain.md)
 │  ├─ sema/               names, types, effects; the typed HIR (split as it grows)
 │  ├─ mir/                the MIR, its phases and ownership checking (mir.md)
 │  ├─ interp/             the MIR interpreter

@@ -98,7 +98,8 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
   - the official **tree-sitter** grammar ([`toolchain.md`](toolchain.md));
   - **GBNF and Lark grammars** for constrained decoding by models
     ([`agent-interface.md`](agent-interface.md)).
-- The formatter's canonical output must parse back to the same AST, and the grammar tests check it.
+- The formatter's canonical output must parse back to the same AST: the formatter checks it on
+  every file it formats, and its tests run it over the grammar's whole corpus.
 - **The source (decided):** `reference/grammar/moddil.ebnf`, in a small EBNF dialect of our own. A
   Rust tool checks that it is LL(k) and unambiguous and generates the outputs above.
 - **Notation (decided):** W3C-style EBNF (`rule ::= a b? c* (d | e)+`), with quoted terminals and

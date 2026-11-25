@@ -39,6 +39,7 @@ todo = "warn"
 # Internal crates.
 moddil-grammar = { path = "crates/grammar", version = "0.0.0" }
 moddil-syntax = { path = "crates/syntax", version = "0.0.0" }
+moddil-fmt = { path = "crates/fmt", version = "0.0.0" }
 moddil-sema = { path = "crates/sema", version = "0.0.0" }
 moddil-mir = { path = "crates/mir", version = "0.0.0" }
 moddil-interp = { path = "crates/interp", version = "0.0.0" }

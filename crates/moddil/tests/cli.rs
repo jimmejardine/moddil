@@ -451,3 +451,52 @@ fn the_tour_serves_as_wasm() {
         the_tour_serves(&["--wasm"]);
     }
 }
+
+#[test]
+fn fmt_check_passes_formatted_source_and_fails_the_rest() {
+    let formatted = file(
+        "fmt-ok.moddil",
+        "fn add(a: int, b: int) -> int {\n    a + b\n}\n",
+    );
+    let out = moddil(&["fmt", "--check"], &formatted);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let messy = file("fmt-messy.moddil", "fn add(a:int,b:int)->int{a+b}\n");
+    let out = moddil(&["fmt", "--check"], &messy);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&out.stdout).contains("fmt-messy.moddil"));
+    // --check rewrites nothing.
+    assert_eq!(
+        std::fs::read_to_string(&messy).unwrap(),
+        "fn add(a:int,b:int)->int{a+b}\n"
+    );
+}
+
+#[test]
+fn fmt_rewrites_a_file_in_canonical_format() {
+    let path = file("fmt-rewrite.moddil", "fn add(a:int,b:int)->int{a+b}\n");
+    let out = moddil(&["fmt"], &path);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        "fn add(a: int, b: int) -> int {\n    a + b\n}\n"
+    );
+    let again = moddil(&["fmt", "--check"], &path);
+    assert!(again.status.success());
+}
+
+#[test]
+fn fmt_refuses_a_named_file_that_does_not_parse() {
+    let path = file("fmt-broken.moddil", "fn broken( {\n");
+    let out = moddil(&["fmt"], &path);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("does not parse"));
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "fn broken( {\n");
+}
