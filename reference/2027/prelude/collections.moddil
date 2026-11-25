@@ -42,6 +42,9 @@ impl<T> Buf<T> {
     fn as_slice(&self) -> &[T];
     #[intrinsic]
     fn as_mut_slice(&mut self) -> &mut [T];
+    // Its elements as an array, for the prelude's own use: it holds exactly `N` of them.
+    #[intrinsic]
+    fn into_array<const N: int>(self) -> [T; N];
 }
 
 // `Vec<T>`: a growable array, written over `Buf`.

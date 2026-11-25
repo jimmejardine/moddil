@@ -6,7 +6,9 @@ element type is inferred.
 
 **expr.array.repeat.1** `[x; n]` is an array of `n` copies of `x`, which is evaluated once. `n` is
 a length known when compiling: an integer literal or a const parameter ([Generics](../generics.md));
-`x`'s type is `Copy` (E0402). A length known only when the program runs is an error here (E0201),
+`x`'s type is `Clone` (E0402). If it is not `Copy`, the elements but the last are clones of `x`,
+made in order, and the last is `x` itself (with `n` of 0, `x` is dropped); a trap in a clone drops
+the elements made so far. A length known only when the program runs is an error here (E0201),
 but for a type made with `from_repeat` (**expr.array.from.1**).
 
 **expr.array.from.1** Where a type other than an array is expected (by a `let`'s type, a

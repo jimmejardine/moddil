@@ -6330,6 +6330,36 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             self.b.ins().store(flags, n, a, 16);
             return Ok(());
         }
+        // The buffer, given up, holds exactly its array's elements (`repeat_array`): they move
+        // into the array, and its storage is freed.
+        if name == "into_array" {
+            let Ty::Array(_, k) = &d.ty else {
+                return Err("`into_array` into something that is not an array".to_string());
+            };
+            let Ty::Len(k) = **k else {
+                return Err("an array of unknown length".to_string());
+            };
+            let Val::Mem(src) = self.operand(&args[0])? else {
+                return Err("a `Buf` not in memory".to_string());
+            };
+            let p = self.b.ins().load(types::I64, flags, src, 0);
+            let cap = self.b.ins().load(types::I64, flags, src, 16);
+            let a = self.addr_of(d)?;
+            let bytes = self.b.ins().iconst(types::I64, k * i64::from(stride));
+            let f = self
+                .c
+                .module
+                .declare_func_in_func(self.c.rt.memmove, self.b.func);
+            self.b.ins().call(f, &[a, p, bytes]);
+            let size = self.b.ins().imul_imm_s(cap, i64::from(stride));
+            let al = self.b.ins().iconst(types::I64, i64::from(align));
+            let f = self
+                .c
+                .module
+                .declare_func_in_func(self.c.rt.free, self.b.func);
+            self.b.ins().call(f, &[p, size, al]);
+            return Ok(());
+        }
         // The others take the `Buf` by borrow.
         let Val::Scalar(b) = self.operand(&args[0])? else {
             return Err("a `Buf` not by borrow".to_string());

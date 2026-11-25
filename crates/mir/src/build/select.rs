@@ -306,7 +306,7 @@ impl Builder<'_> {
     }
 
     /// The prelude's free function `name`.
-    fn prelude_fn(&self, name: &str) -> u32 {
+    pub(super) fn prelude_fn(&self, name: &str) -> u32 {
         self.items
             .fns
             .iter()

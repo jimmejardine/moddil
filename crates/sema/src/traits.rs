@@ -606,23 +606,25 @@ impl<'a> Solver<'a> {
                         return all;
                     }
                 }
-                // So is an array of `Copy` elements, within the size cap.
+                // So is an array of `Copy` elements, within the size cap. Otherwise it is
+                // `Clone` by the prelude's impl, if its elements are (`type.array.1`).
                 Ty::Array(t, _) => {
                     let Some(copy) = self.tree.lang_ref("Copy") else {
                         return Answer::No;
                     };
                     let t = (**t).clone();
-                    return match self.implements(&t, &copy) {
+                    match self.implements(&t, &copy) {
                         Answer::Yes(_)
                             if ty.has_infer()
                                 || ty.has_param()
                                 || self.tree.size_of(&ty).0 <= COPY_CAP =>
                         {
-                            Answer::Yes(Source::Builtin)
+                            return Answer::Yes(Source::Builtin);
                         }
-                        Answer::Yes(_) | Answer::No => Answer::No,
-                        Answer::Maybe => Answer::Maybe,
-                    };
+                        Answer::Maybe => return Answer::Maybe,
+                        _ if self.is_lang(tr, "Copy") => return Answer::No,
+                        _ => {}
+                    }
                 }
                 _ => {}
             }

@@ -25,6 +25,11 @@ impl Natives<'_> {
                 Value::Array(xs) => Value::Buf(xs.len(), xs),
                 other => unreachable!("an array: {other:?}"),
             },
+            // The buffer, given up, holds its array's elements (`repeat_array`).
+            "into_array" => match args[0].clone() {
+                Value::Buf(_, xs) => Value::Array(xs),
+                other => unreachable!("a `Buf`: {other:?}"),
+            },
             "len" => Value::Int(load(stack, &args[0]).1.len() as i64),
             "capacity" => Value::Int(load(stack, &args[0]).0 as i64),
             "as_slice" => Value::Ref(pointer(&args[0]), false),

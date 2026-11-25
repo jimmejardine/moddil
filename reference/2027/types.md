@@ -22,6 +22,7 @@ the prelude's impls: each element in order. So `(String, int)` clones, and `.clo
 **type.array.1** An array type `[T; N]` holds `N` values of type `T`, in order; `N` is a length
 known when compiling, an integer literal or a const parameter ([Generics](generics.md)). An array
 is `Copy` if `T` is and it is within the size cap ([Ownership](ownership.md)), and `Clone` then too.
+Otherwise it is `Clone` if `T` is, through the prelude's impl: each element cloned, in order.
 
 **type.slice.1** A slice type `[T]` is a run of values of type `T` whose length is known only when
 the program runs. It has no size of its own, so it is named only behind a borrow (`&[T]`,

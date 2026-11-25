@@ -26,6 +26,35 @@ impl<T, const N: int> [T; N] {
     }
 }
 
+// `[x; n]` for an `x` that is not `Copy` (`expr.array.repeat.1`): `n - 1` clones of `x`, then
+// `x` itself. A trap in a clone drops the elements made so far, which the buffer holds.
+fn repeat_array<T: Clone, const N: int>(x: T) -> [T; N] {
+    let mut b: Buf<T> = Buf::with_capacity(N);
+    if N > 0 {
+        let mut i = 1;
+        while i < N {
+            b.push(x.clone());
+            i += 1;
+        }
+        b.push(x);
+    }
+    b.into_array()
+}
+
+// An array of elements that are `Clone` but not `Copy` (or past the size `Copy` allows): each
+// element cloned, in order (`type.array.1`).
+impl<T: Clone, const N: int> Clone for [T; N] {
+    fn clone(&self) -> [T; N] {
+        let mut b: Buf<T> = Buf::with_capacity(N);
+        let mut i = 0;
+        while i < N {
+            b.push(self[i].clone());
+            i += 1;
+        }
+        b.into_array()
+    }
+}
+
 impl<T: PartialEq> PartialEq for [T] {
     fn eq(&self, other: &[T]) -> bool {
         if self.len() != other.len() {

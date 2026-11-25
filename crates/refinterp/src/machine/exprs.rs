@@ -82,7 +82,38 @@ impl Machine<'_> {
                 let Value::Int(n) = self.eval(&parts[1])? else {
                     unreachable!("a checked length")
                 };
-                Ok(Value::Array(vec![x; usize::try_from(n).unwrap_or(0)]))
+                let n = usize::try_from(n).unwrap_or(0);
+                // A value that is not `Copy` is cloned for each element but the last, which is
+                // the value itself.
+                let head = x.head();
+                let copy = !matches!(head, Head::Adt(_)) || self.program.implements(&head, "Copy");
+                if copy {
+                    return Ok(Value::Array(vec![x; n]));
+                }
+                if n == 0 {
+                    self.drop_value(x, true, range)?;
+                    return Ok(Value::Array(Vec::new()));
+                }
+                let at = self.memory.temp(x);
+                let mut xs = Vec::new();
+                for _ in 1..n {
+                    match self.call_trait(
+                        "Clone",
+                        "clone",
+                        vec![Value::Ref(at.clone(), false)],
+                        range,
+                    ) {
+                        Ok(v) => xs.push(v),
+                        Err(f) => {
+                            for v in xs {
+                                self.drop_value(v, true, range)?;
+                            }
+                            return Err(f);
+                        }
+                    }
+                }
+                xs.push(self.take(&at, false));
+                Ok(Value::Array(xs))
             }
             ast::Expr::Array(_) => Ok(Value::Array(self.eval_all(&e.sub_exprs())?)),
             ast::Expr::Index(_) => {

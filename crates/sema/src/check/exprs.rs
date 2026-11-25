@@ -109,9 +109,9 @@ impl Checker<'_> {
                 let (value, n) = (*value, n.clone());
                 let t = self.infer(value);
                 let t = self.norm(&t);
-                // Each element is a copy of the one value (`expr.array.repeat.1`).
-                if let Some(copy) = self.items.lang_ref("Copy") {
-                    self.require(t.clone(), copy, self.range(value));
+                // Each element is a copy of the one value, or a clone of it (`expr.array.repeat.1`).
+                if let Some(clone) = self.items.lang_ref("Clone") {
+                    self.require(t.clone(), clone, self.range(value));
                 }
                 Ty::array(t, n)
             }

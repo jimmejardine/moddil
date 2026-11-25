@@ -638,6 +638,12 @@ impl Machine<'_> {
                 };
                 return Ok(Value::Buf(xs.len(), xs));
             }
+            "into_array" => {
+                let Value::Buf(_, xs) = args[0].clone() else {
+                    unreachable!("a `Buf`")
+                };
+                return Ok(Value::Array(xs));
+            }
             "as_slice" => return Ok(Value::Ref(place(self, &args[0]), false)),
             "as_mut_slice" => return Ok(Value::Ref(place(self, &args[0]), true)),
             _ => {}

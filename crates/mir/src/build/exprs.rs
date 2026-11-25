@@ -238,8 +238,18 @@ impl Builder<'_> {
                     .assign(dest, Rvalue::Aggregate(AggregateKind::Array, ops));
             }
             ExprKind::Repeat(x, n) => {
+                let t = self.ty(x);
                 let op = self.operand(x, &[]);
-                self.cfg.assign(dest, Rvalue::Repeat(op, n));
+                if self.is_copy(&t) {
+                    self.cfg.assign(dest, Rvalue::Repeat(op, n));
+                } else {
+                    // Clones of a value that is not `Copy` (`expr.array.repeat.1`).
+                    let callee = Callee::Fn {
+                        func: self.prelude_fn("repeat_array"),
+                        args: vec![t, n],
+                    };
+                    self.call_into(Some(e), callee, Place::local(dest), vec![op], range);
+                }
             }
             ExprKind::RepeatN(..) => unreachable!("a checked `[x; n]` makes a value of a type"),
             ExprKind::ConstParam(i) => {

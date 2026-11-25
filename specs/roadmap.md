@@ -93,12 +93,8 @@ when part of one is, remove that part.
 
 **P6. Arrays and iteration** (prelude `arrays` and `iter`, `crates/sema`, `crates/mir`, the
 runners; M)
-- `[x; n]` for elements that are only `Clone`: a loop in MIR cloning the value into each
-  element but the last (a const parameter's length too), and a trap in a clone dropping the
-  elements made so far.
-- An array's `Clone` for elements that are only `Clone` (it is `Clone` only when `Copy`): the
-  same loop, or a `Buf` filled and turned into the array.
-- `Index` beyond `int` (ranges as `Index`).
+- `Index` beyond `int` (ranges as `Index`): `Index<Idx = int>`, with P8's default type
+  parameters.
 
 **P7. Shared and anonymous values** (`crates/sema`, the prelude's `pointers`; L)
 - `Rc<dyn Trait>`: `Rc` is the prelude's, over `*mut RcBox<T>` with `value: Option<T>`, so a
