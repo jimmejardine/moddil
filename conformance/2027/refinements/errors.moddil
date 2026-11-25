@@ -5,7 +5,7 @@ struct Opaque { x: int }
 type Port = int where self >= 1024;
 type Bad = Opaque where self.x > 0;         //~ E0402 E0402
 
-type Ref = &int where true;                 //~ E0309 E0402
+type Ref = &int where true;                 //~ E0309
 
 impl Port {                                 //~ E0414
     fn f(self) {}
