@@ -136,7 +136,8 @@ what it points to.
 prelude's `Debug`, `fn fmt(&self, out: &mut dyn TextWrite)`, writes a value as Moddil source does: text
 and characters in quotes and escaped, `[1, 2]`, `Some(x)`, `(a, b)`; `int`, `bool`, `char`, `str`,
 `String`, `()`, slices, arrays, `Vec`, `Option`, `Result`, pairs, and the core mod's maps
-(`{k: v}`) and sets implement it.
+(`{k: v}`) and sets implement it, and a borrow `&T` shows what it points to, so a view with
+borrow fields derives it.
 
 **expr.fmt.debug.2** A hole `{e:#?}` writes `e`'s `Debug` across lines, as Rust's `{:#?}` does:
 the prelude's `debug_pretty` passes `Debug::fmt` a sink (`PrettyWrite`) that starts a new line,

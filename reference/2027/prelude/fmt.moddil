@@ -7,6 +7,14 @@ trait Debug {
     fn fmt(&self, out: &mut dyn TextWrite);
 }
 
+// A borrow is shown as what it points to (`expr.fmt.debug.1`), so a view with a borrow field
+// derives `Debug` (`view.derive.1`).
+impl<T: Debug> Debug for &T {
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        Debug::fmt(*self, out);
+    }
+}
+
 impl Debug for int {
     fn fmt(&self, out: &mut dyn TextWrite) {
         Display::fmt(self, out);

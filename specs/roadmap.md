@@ -102,8 +102,6 @@ runners; M)
   vtable, the pointer fat) through sema's layout, MIR and every runner; then the coercion, as
   `Box`'s.
 - Anonymous impls that implement the trait's supertraits, and methods taking `&mut self`.
-- `Debug` derived for a view with a borrow field: `&T` implementing `Debug`, as it now implements
-  `Hash` and `PartialEq`.
 
 **P8. The trait system** (`crates/sema`, `crates/syntax` and the grammar, the prelude, both
 interpreters; L)
