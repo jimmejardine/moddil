@@ -403,7 +403,8 @@ pub struct Spec {
     pub precision: Option<u32>,
     /// `+`: a number's sign, `+` too.
     pub plus: bool,
-    /// `#`: the base's prefix before an integer's digits (`0x`, `0b`, `0o`).
+    /// `#`: the base's prefix before an integer's digits (`0x`, `0b`, `0o`); with `?`, `Debug`
+    /// across lines (`expr.fmt.debug.2`).
     pub prefix: bool,
     /// `x`, `X`, `b` or `o`: an integer's digits in base 16 (lower or upper case), 2 or 8.
     pub radix: Option<Radix>,

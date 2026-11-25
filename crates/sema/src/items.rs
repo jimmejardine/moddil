@@ -854,6 +854,21 @@ impl ItemTree {
         }
     }
 
+    /// The prelude's free function `name`, which the compiler calls for some forms
+    /// (`debug_pretty` for `{x:#?}`).
+    pub fn prelude_fn(&self, name: &str) -> Option<u32> {
+        match self
+            .modules
+            .get(PRELUDE_MODULE as usize)?
+            .items
+            .get(name)?
+            .def
+        {
+            Def::Fn(f) => Some(f),
+            _ => None,
+        }
+    }
+
     /// The prelude trait `name`, as a trait with no arguments.
     pub fn lang_ref(&self, name: &str) -> Option<TraitRef> {
         let t = self.lang(name)?;

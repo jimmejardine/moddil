@@ -1,6 +1,8 @@
 //! Text (`text.*`): the values of text literals, `fmt"…"`, and the prelude's built-in methods
 //! of `char`, `str` and `String` (`#[intrinsic]`).
 
+use std::collections::HashMap;
+
 use moddil_syntax::ast::{self, AstNode};
 use moddil_syntax::{SyntaxKind as K, SyntaxToken};
 
@@ -217,6 +219,26 @@ impl Machine<'_> {
         self.run_method(m, &head, args, range)
     }
 
+    /// `this` written onto the sink at `out` by its `Display`, or for `?` its `Debug`
+    /// (`expr.fmt.debug.1`), across lines for `#?` (`expr.fmt.debug.2`).
+    fn write_value(
+        &mut self,
+        spec: &Spec,
+        this: Value,
+        out: &crate::value::Pointer,
+        range: moddil_syntax::TextRange,
+    ) -> Eval<()> {
+        let args = vec![this, Value::Ref(out.clone(), true)];
+        if spec.debug && spec.prefix {
+            let f = self.program.fns["debug_pretty"].clone();
+            self.invoke(&f, args, HashMap::new(), range)?;
+        } else {
+            let tr = if spec.debug { "Debug" } else { "Display" };
+            self.call_trait(tr, "fmt", args, range)?;
+        }
+        Ok(())
+    }
+
     /// One hole: its expression, parsed where it stands in the file so its ranges are the
     /// file's, then written onto `out` by `Display::fmt` with a borrow of its value. A spec
     /// (`expr.fmt.spec.1`) writes it into a `String` of its own first, then cuts and pads it.
@@ -245,8 +267,6 @@ impl Machine<'_> {
             }
             None => (text, Spec::default()),
         };
-        // `{x:?}` writes `x`'s `Debug` (`expr.fmt.debug.1`).
-        let tr = if spec.debug { "Debug" } else { "Display" };
         let expr = hole_expr(text, start);
         let this = match self.place_of(&expr)? {
             Some((p, _)) => match self.memory.load(&p) {
@@ -265,7 +285,7 @@ impl Machine<'_> {
             && spec.radix.is_none()
             && spec.exponent.is_none()
         {
-            self.call_trait(tr, "fmt", vec![this, Value::Ref(out.clone(), true)], range)?;
+            self.write_value(&spec, this, out, range)?;
             return Ok(());
         }
         let value = self.target(this.clone());
@@ -305,12 +325,7 @@ impl Machine<'_> {
             _ => {
                 let empty = self.string_call("new", Vec::new(), range)?;
                 let piece = self.memory.temp(empty);
-                self.call_trait(
-                    tr,
-                    "fmt",
-                    vec![this, Value::Ref(piece.clone(), true)],
-                    range,
-                )?;
+                self.write_value(&spec, this, &piece, range)?;
                 crate::value::string_text(&self.memory.load(&piece)).expect("a `String`")
             }
         };

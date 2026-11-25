@@ -131,11 +131,22 @@ and characters in quotes and escaped, `[1, 2]`, `Some(x)`, `(a, b)`; `int`, `boo
 `String`, `()`, slices, arrays, `Vec`, `Option`, `Result`, pairs, and the core mod's maps
 (`{k: v}`) and sets implement it.
 
+**expr.fmt.debug.2** A hole `{e:#?}` writes `e`'s `Debug` across lines, as Rust's `{:#?}` does:
+the prelude's `debug_pretty` passes `Debug::fmt` a sink (`PrettyWrite`) that starts a new line,
+four spaces further in, after each `{`, `[` or `(`, and after each `, `; and before each `}`, `]`
+or `)` writes a `,` and a new line, back one level. An empty `()`, `[]` or `{}` stays as it is,
+and quoted text and characters are written as they are, so every `Debug`, derived or written,
+is written across lines this way: `Point {
+    x: 1,
+    y: 2,
+}`.
+
 **expr.fmt.2** The type of each hole, or what a borrow in it points to, implements `Display`
 (E0402); for `{e:?}`, `Debug`. A hole holds one expression (E0902).
 
 **expr.fmt.spec.1** A hole's **format spec**, after a `:` that is not part of a path's `::`, is
-`[[fill]align][+][#][0][width][.precision][type]`, as Rust's, the type `?` (**expr.fmt.debug.1**),
+`[[fill]align][+][#][0][width][.precision][type]`, as Rust's, the type `?` (**expr.fmt.debug.1**,
+with `#` **expr.fmt.debug.2**),
 `x`, `X`, `b` or `o` (**expr.fmt.spec.4**), or `e` or `E` (**expr.fmt.spec.5**), and the width
 and precision each a number or `name$` (**expr.fmt.spec.6**): `{n:>6}`, `{s:*^9}`, `{f:8.2}`,
 `{x:>12?}`, `{n:#06x}`, `{f:w$.p$}`.

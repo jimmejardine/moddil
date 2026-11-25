@@ -476,7 +476,7 @@ fn parse_spec(text: &str) -> Result<(Spec, [Named; 2]), String> {
     let width = spec.width.is_some() || width_name.is_some();
     if i != cs.len()
         || ((spec.align.is_some() || spec.zero) && !width)
-        || (spec.prefix && spec.radix.is_none())
+        || (spec.prefix && spec.radix.is_none() && !spec.debug)
     {
         return Err(bad());
     }

@@ -23,9 +23,20 @@ impl Checker<'_> {
                 Ty::Ref(_, x) => (*x).clone(),
                 t => t,
             };
+            // `{x:#?}`: written across lines by the prelude's `debug_pretty`
+            // (`expr.fmt.debug.2`).
+            let pretty = spec.debug && spec.prefix;
             if let Some(d) = &self.items.lang_ref(tr) {
                 self.require(t.clone(), d.clone(), self.range(*h));
-                if let Some((_, func)) = self.op_trait(tr, "fmt") {
+                if pretty && let Some(func) = self.items.prelude_fn("debug_pretty") {
+                    self.out.fmt_calls.insert(
+                        *h,
+                        Callee::Fn {
+                            func,
+                            args: vec![t.clone()],
+                        },
+                    );
+                } else if let Some((_, func)) = self.op_trait(tr, "fmt") {
                     self.out.fmt_calls.insert(
                         *h,
                         Callee::Trait {

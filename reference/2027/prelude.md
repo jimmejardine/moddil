@@ -12,7 +12,7 @@ behaviour are as written there. The files are one source, joined in this order:
 | [`convert.moddil`](prelude/convert.moddil) | conversions between the numbers, rounding, `RangeError` |
 | [`float.moddil`](prelude/float.moddil) | the float functions |
 | [`text.moddil`](prelude/text.moddil) | `TextWrite`, `Display`, `char`, `str`, `String`, `Pattern`, `Chars`, `CharIndices`, text positions, UTF-8, `RcStr` |
-| [`fmt.moddil`](prelude/fmt.moddil) | `Debug` and `Default` |
+| [`fmt.moddil`](prelude/fmt.moddil) | `Debug` (and `debug_pretty` for `{x:#?}`) and `Default` |
 | [`arrays.moddil`](prelude/arrays.moddil) | arrays and slices |
 | [`iter.moddil`](prelude/iter.moddil) | `Iterator` and `IntoIterator`, the adapters, `FromIterator`, the ranges, the slice and array iterators (`Iter`, `IterMut`) |
 | [`pointers.moddil`](prelude/pointers.moddil) | `Index`, `Deref`, `Box`, `Rc` |

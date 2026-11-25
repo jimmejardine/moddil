@@ -182,3 +182,110 @@ impl<T> Default for Option<T> {
     }
 }
 
+// `{x:#?}` (`expr.fmt.debug.2`): `x`'s `Debug` written across lines, as `PrettyWrite` makes it.
+fn debug_pretty<T: Debug>(x: &T, out: &mut dyn TextWrite) {
+    let mut p = PrettyWrite {
+        out,
+        depth: 0,
+        open: false,
+        space: false,
+        skip: false,
+        quote: '\0',
+        escaped: false,
+    };
+    Debug::fmt(x, &mut p);
+}
+
+// A sink that writes a value's one-line `Debug` onto `out` across lines (`expr.fmt.debug.2`):
+// after each `{`, `[` or `(` a new line, one level further in (four spaces), each `, ` a new
+// line, and before each closing bracket a `,` and a new line, one level back; an empty `()`,
+// `[]` or `{}` stays as it is, and quoted text and characters are written as they are.
+view PrettyWrite {
+    out: &mut dyn TextWrite,
+    // How many levels in.
+    depth: int,
+    // Just after an opening bracket: what follows starts a line, unless it closes.
+    open: bool,
+    // A space held back: written before what follows, unless that closes.
+    space: bool,
+    // The space after `{` or `, `, which a new line replaces.
+    skip: bool,
+    // Inside quoted text: its quote (`"` or `'`), else `'\0'`.
+    quote: char,
+    // Just after a `\` in quoted text.
+    escaped: bool,
+}
+
+impl PrettyWrite {
+    fn line(&mut self) {
+        self.out.write_char('\n');
+        let mut i = 0;
+        while i < self.depth {
+            self.out.write_str("    ");
+            i += 1;
+        }
+    }
+
+    fn push(&mut self, c: char) {
+        if self.quote != '\0' {
+            self.out.write_char(c);
+            if self.escaped {
+                self.escaped = false;
+            } else if c == '\\' {
+                self.escaped = true;
+            } else if c == self.quote {
+                self.quote = '\0';
+            }
+            return;
+        }
+        if c == ' ' {
+            if self.skip {
+                self.skip = false;
+            } else {
+                self.space = true;
+            }
+            return;
+        }
+        self.skip = false;
+        if c == '}' || c == ']' || c == ')' {
+            self.space = false;
+            if self.open {
+                self.open = false;
+            } else {
+                self.out.write_char(',');
+                self.depth -= 1;
+                self.line();
+            }
+            self.out.write_char(c);
+            return;
+        }
+        if self.open {
+            self.open = false;
+            self.space = false;
+            self.depth += 1;
+            self.line();
+        }
+        if self.space {
+            self.out.write_char(' ');
+            self.space = false;
+        }
+        self.out.write_char(c);
+        if c == '{' || c == '[' || c == '(' {
+            self.open = true;
+            self.skip = c == '{';
+        } else if c == ',' {
+            self.line();
+            self.skip = true;
+        } else if c == '"' || c == '\'' {
+            self.quote = c;
+        }
+    }
+}
+
+impl TextWrite for PrettyWrite {
+    fn write_str(&mut self, s: &str) {
+        for c in s.chars() {
+            self.push(c);
+        }
+    }
+}

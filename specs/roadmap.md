@@ -79,8 +79,7 @@ when part of one is, remove that part.
 **P4. Text** (prelude `text`, `crates/sema`; M)
 - Tagged literals other than `fmt`, first `re"…"` compiled when compiling, with typed captures
   (`mods/regex`, with P11).
-- `#?` (`Debug` across lines, indented), and `fmt"…"` written straight into a `TextWrite` sink,
-  not only as a new `String`.
+- `fmt"…"` written straight into a `TextWrite` sink, not only as a new `String`.
 
 **P5. Numbers** (`crates/sema`, the prelude, every runner; L)
 - `usize` and `isize`, for FFI and memory-level code: a `Num` each, the width of a pointer on
