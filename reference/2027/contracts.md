@@ -4,8 +4,9 @@ Contracts are clauses after a function's signature: what must hold when it is ca
 holds when it returns ([`specs/correctness.md`: Contracts as syntax](../../specs/correctness.md#contracts-as-syntax)).
 
 **contract.1** `requires e` and `ensures e` follow the signature, any number of each, in the
-order they are checked. Each `e` is a `bool` (E0201). A trait's method has none, and
-`requires always` waits, for now.
+order they are checked. Each `e` is a `bool` (E0201). A trait's method has none, for now.
+`requires always e` is a precondition no checking policy may switch off; as no policy switches
+any off yet, it is checked as `requires` is.
 
 **contract.2** A contract is pure: it assigns nothing and calls no function with an effect or an
 error (E1102).

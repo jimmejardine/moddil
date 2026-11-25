@@ -182,17 +182,11 @@ impl Collector<'_> {
         }
     }
 
-    /// Contracts (`contract.1`): not yet on a trait's method, nor `requires always`.
+    /// Contracts (`contract.1`): not yet on a trait's method.
     fn contracts_unsupported(&mut self, src: Src, node: &SyntaxNode, container: Container) {
         for c in node.children().filter(|c| c.kind() == K::CONTRACT) {
-            let what = if matches!(container, Container::Trait(_)) {
-                Some("a contract on a trait's method")
-            } else if c.token(K::ALWAYS_KW).is_some() {
-                Some("`requires always`")
-            } else {
-                None
-            };
-            if let Some(what) = what {
+            if matches!(container, Container::Trait(_)) {
+                let what = "a contract on a trait's method";
                 let origin = self.reporter.origin(src, node.text_range());
                 self.reporter.report(
                     src,

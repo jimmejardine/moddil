@@ -112,3 +112,17 @@ test "old of a cloned value" {
     grow(&mut v, 3);
     v.len()                                 // => 3
 }
+
+/// A precondition no policy may switch off (`requires always`): checked as `requires` is.
+fn take(buf: &[int], n: int) -> int
+    requires always n <= buf.len()
+{
+    n
+}
+
+test "requires always holds, or traps where it is called" {
+    let xs: [int; 3] = [1, 2, 3];
+    take(&xs, 2)                            // => 2
+    ;
+    take(&xs, 4);                           //~ trap
+}

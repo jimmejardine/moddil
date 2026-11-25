@@ -131,8 +131,12 @@ L)
   const parameters of types other than `int`.
 - A const holding a borrow of static data beyond text.
 
-**P12. Contracts and refinements** (`crates/sema`, `crates/mir`; M)
-- `invariant`; `requires always`; contracts on trait methods.
+**P12. Contracts and refinements** (`crates/sema`, `crates/mir`, `crates/refinterp`; L)
+- `invariant` on a struct (`correctness.md`), its field names in scope as in the spec's
+  `OrderBook`: checked when a struct literal builds one and when a method of it taking
+  `&mut self` returns.
+- Contracts on trait methods, binding every impl: the trait's `requires` and `ensures`, written
+  in the trait's file and scope, checked on entry to and return from each impl's method.
 - A refinement pattern, matched through a borrow, whose base is not `Copy` (it would need the
   value cloned, or `holds` to take a borrow).
 
