@@ -134,7 +134,7 @@ pub fn eval_const(db: &dyn Db, program: Program, index: u32) -> Result<Value, St
         Item::Fn(index),
         &[],
         &mut |_, _, _| {},
-        Some(FUEL),
+        Some(fuel_of(db, program, Item::Fn(index))),
         None,
     )
 }
@@ -151,7 +151,39 @@ pub fn frozen(
     program: Program,
     index: u32,
 ) -> Result<Result<FrozenValue, String>, Stop> {
-    machine::run_frozen(db, program, Item::Fn(index), Some(FUEL))
+    frozen_item(db, program, Item::Fn(index))
+}
+
+/// As [`frozen`], for a const item or a `const { }` block's item (`comptime.block.2`).
+///
+/// # Errors
+///
+/// As [`frozen`]'s.
+pub fn frozen_item(
+    db: &dyn Db,
+    program: Program,
+    item: Item,
+) -> Result<Result<FrozenValue, String>, Stop> {
+    machine::run_frozen(db, program, item, Some(fuel_of(db, program, item)))
+}
+
+/// The steps evaluating `item` when compiling may take: [`FUEL`], or what a `#[fuel(n)]` on
+/// the const or the block's statement gives (`comptime.eval.2`).
+pub fn fuel_of(db: &dyn Db, program: Program, item: Item) -> u64 {
+    let given = match item {
+        Item::Fn(_) => {
+            let b = &moddil_sema::body(db, moddil_sema::Owner::new(db, program, item)).body;
+            b.root.and_then(|r| b.fuel.get(&r).copied())
+        }
+        Item::Closure(_, _, e) => {
+            let base = moddil_sema::Owner::new(db, program, item.owner());
+            let b = &moddil_sema::body(db, base).body;
+            let e = moddil_sema::hir::ExprId::from_raw(la_arena::RawIdx::from_u32(e));
+            b.fuel.get(&e).copied()
+        }
+        Item::Test(_) => None,
+    };
+    given.unwrap_or(FUEL)
 }
 
 /// Every diagnostic for `program`: the front end's and the ownership check's, then, if it has
@@ -184,8 +216,9 @@ pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
             }
             Ok(_) => continue,
             Err(Stop::Trap(t)) if t.class == TrapClass::OutOfFuel => format!(
-                "evaluating `{}` when compiling takes more than {FUEL} steps",
-                f.name
+                "evaluating `{}` when compiling takes more than {} steps (`#[fuel(n)]` allows                  more)",
+                f.name,
+                fuel_of(db, program, Item::Fn(i as u32))
             ),
             Err(Stop::Trap(t)) => format!(
                 "evaluating `{}` when compiling traps: {}",
@@ -196,6 +229,55 @@ pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
         };
         let d = Diagnostic::error(Code::E1004, f.name_range, why);
         out.extend(moddil_sema::in_file(items, Item::Fn(i as u32), &[d]));
+    }
+    // Each `const { }` block computed when compiling (`comptime.block.2`): as a const's.
+    for owner in moddil_sema::owners(db, program) {
+        let base = owner.item(db);
+        if !items.freezes_blocks(base) {
+            continue;
+        }
+        let body = &moddil_sema::body(db, owner).body;
+        for (e, x) in body.exprs.iter() {
+            let moddil_sema::hir::ExprKind::ConstBlock(_) = x.kind else {
+                continue;
+            };
+            let index = e.into_raw().into_u32();
+            let item = match base {
+                Item::Fn(i) => Item::Closure(i, false, index),
+                Item::Test(i) => Item::Closure(i, true, index),
+                Item::Closure(..) => continue,
+            };
+            let d = match frozen_item(db, program, item) {
+                Ok(Ok(_)) => continue,
+                Ok(Err(what)) => Diagnostic::error(
+                    Code::E1008,
+                    x.range,
+                    format!("this block's value holds {what}, which cannot be static data"),
+                ),
+                Err(Stop::Trap(t)) if t.class == TrapClass::OutOfFuel => Diagnostic::error(
+                    Code::E1004,
+                    x.range,
+                    format!(
+                        "evaluating this block when compiling takes more than {} steps                          (`#[fuel(n)]` allows more)",
+                        fuel_of(db, program, item)
+                    ),
+                ),
+                Err(Stop::Trap(t)) => Diagnostic::error(
+                    Code::E1004,
+                    x.range,
+                    format!(
+                        "evaluating this block when compiling traps: {}",
+                        t.class.name()
+                    ),
+                ),
+                Err(Stop::Failed { .. }) => Diagnostic::error(
+                    Code::E1004,
+                    x.range,
+                    "evaluating this block when compiling fails",
+                ),
+            };
+            out.extend(moddil_sema::in_file(items, base, &[d]));
+        }
     }
     // Each literal taken as a refined value satisfies the refinement (`refine.lit.1`).
     for owner in moddil_sema::owners(db, program) {

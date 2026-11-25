@@ -965,6 +965,7 @@ version = "0.0.0"
 name = "moddil-interp"
 version = "0.0.0"
 dependencies = [
+ "la-arena",
  "moddil-ffi",
  "moddil-mir",
  "moddil-os",

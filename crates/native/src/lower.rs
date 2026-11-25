@@ -349,8 +349,11 @@ pub(crate) struct Compiler<'db, M: Module> {
     glues: HashMap<Ty, FuncId>,
     /// The drop glue declared and not yet compiled.
     glue_queue: Vec<Ty>,
-    /// Each `const` item's slot: a flag (whether it is computed yet), then its value.
+    /// Each `const` item's slot: a flag (whether it is computed yet), then its value; or, for
+    /// one computed when compiling, its value.
     statics: HashMap<u32, DataId>,
+    /// Each `const { }` block's value computed when compiling, by its item.
+    blocks: HashMap<Item, DataId>,
     /// Each task closure's trampoline, by its type.
     tramps: HashMap<Ty, FuncId>,
     /// Each type's drop glue in the platform's C convention, for the runtime.
@@ -814,6 +817,7 @@ pub(crate) fn build<'db, M: Module>(
         glues: HashMap::new(),
         glue_queue: Vec::new(),
         statics: HashMap::new(),
+        blocks: HashMap::new(),
         tramps: HashMap::new(),
         c_drops: HashMap::new(),
         foreigns: HashMap::new(),
@@ -2981,6 +2985,18 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             }
             Rvalue::StaticRef(f) => {
                 let a = self.static_ref(*f)?;
+                self.write(&dest, Val::Scalar(a))
+            }
+            // A `const { }` block's value, computed when compiling (`comptime.block.2`).
+            Rvalue::StaticBlock(item) => {
+                let Ty::Ref(_, ty) = &dest.ty else {
+                    return Err("a block's static data, not by a borrow".to_string());
+                };
+                let ty = (**ty).clone();
+                let data = self.c.frozen_block(*item, &ty)?;
+                let gv = self.c.module.declare_data_in_func(data, self.b.func);
+                let ptr = self.ptr();
+                let a = self.b.ins().symbol_value(ptr, gv);
                 self.write(&dest, Val::Scalar(a))
             }
             Rvalue::Discriminant(p) => {

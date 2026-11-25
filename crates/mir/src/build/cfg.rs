@@ -96,6 +96,7 @@ impl Cfg {
             | Rvalue::Len(_)
             | Rvalue::Length(_)
             | Rvalue::StaticRef(_)
+            | Rvalue::StaticBlock(_)
             | Rvalue::FnPtr(_) => false,
         };
         self.body.blocks.iter().enumerate().any(|(i, b)| {

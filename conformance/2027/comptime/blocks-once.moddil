@@ -1,0 +1,47 @@
+// covers: comptime.block.2, comptime.eval.2
+
+const fn sum_to(n: int) -> int {
+    let mut s = 0;
+    let mut i = 1;
+    while i <= n {
+        s += i;
+        i += 1;
+    }
+    s
+}
+
+const fn squares(n: int) -> Vec<int> {
+    let mut v: Vec<int> = Vec::new();
+    let mut i = 0;
+    while i < n {
+        v.push(i * i);
+        i += 1;
+    }
+    v
+}
+
+fn square_of(i: int) -> int {
+    let table = &const { squares(10) };
+    table[i]
+}
+
+test "a const block's value is computed when compiling" {
+    let n = const { sum_to(100) };
+    n                                       // => 5050
+    ;
+    square_of(7)                            // => 49
+    ;
+    (const { squares(4) }).len()            // => 4
+}
+
+test "one that is not Copy, used by value, is made where it is" {
+    let mut v = const { squares(3) };
+    v.push(9);
+    v.len()                                 // => 4
+}
+
+test "a fuel attribute gives a block more steps" {
+    #[fuel(20_000_000)]
+    let n = const { sum_to(1000) };
+    n                                       // => 500500
+}

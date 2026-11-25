@@ -69,6 +69,7 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
         text,
         items,
         out: Lowered::default(),
+        fuel: None,
         names: Names::default(),
         closure: None,
         olds: None,
@@ -280,6 +281,11 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
                 if let Some(e) = init {
                     let id = cx.expr(&e);
                     cx.out.body.root = Some(id);
+                    // `#[fuel(n)] const …` (`comptime.eval.2`).
+                    let item = node_at(&root, K::CONST_ITEM, sig.node);
+                    if let Some(n) = item.as_ref().and_then(|i| cx.fuel_attr(i)) {
+                        cx.out.body.fuel.insert(id, n);
+                    }
                 }
                 return cx.out;
             }
@@ -359,6 +365,8 @@ struct Lowerer<'a> {
     text: &'a str,
     items: &'a ItemTree,
     out: Lowered,
+    /// The steps a `#[fuel(n)]` on the statement being lowered gives its `const { }` blocks.
+    fuel: Option<u64>,
     /// The locals, loops and `defer` blocks in scope.
     names: Names,
     /// The innermost closure being lowered, if any.
@@ -469,17 +477,14 @@ impl Lowerer<'_> {
                     }
                 }
                 ast::Stmt::Expr(e) => {
-                    if let Some(attr) = e
-                        .syntax()
-                        .children()
-                        .find(|c| c.kind() == K::OUTER_ATTR && !crate::is_doc(c))
-                    {
-                        self.error(Diagnostic::unsupported(attr.text_range(), "an attribute"));
-                    }
+                    let fuel = self.fuel_attr(e.syntax());
                     let semi = e.syntax().token(K::SEMI).is_some();
                     let Some(inner) = e.expr() else { continue };
                     let observe = self.observed(inner.syntax().text_range().end);
+                    let outer = self.fuel;
+                    self.fuel = fuel.or(outer);
                     let expr = self.expr(&inner);
+                    self.fuel = outer;
                     stmts.push(Stmt::Expr {
                         expr,
                         semi,
@@ -535,14 +540,39 @@ impl Lowerer<'_> {
         )
     }
 
+    /// `n` of a `#[fuel(n)]` on `node` (`comptime.eval.2`): the steps compile-time evaluation
+    /// of what it holds may take. Any other attribute is not supported here.
+    fn fuel_attr(&mut self, node: &SyntaxNode) -> Option<u64> {
+        let mut fuel = None;
+        for attr in node
+            .children()
+            .filter(|c| c.kind() == K::OUTER_ATTR && !crate::is_doc(c))
+        {
+            let text = attr.text().to_string();
+            let n = text
+                .strip_prefix("#[fuel(")
+                .and_then(|t| t.strip_suffix(")]"))
+                .and_then(|t| t.trim().replace('_', "").parse::<u64>().ok());
+            match n {
+                Some(n) => fuel = Some(n),
+                None => self.error(Diagnostic::unsupported(attr.text_range(), "an attribute")),
+            }
+        }
+        fuel
+    }
+
     fn let_stmt(&mut self, l: &ast::LetStmt) -> Option<Stmt> {
         let node = l.syntax();
-        if let Some(attr) = node
-            .children()
-            .find(|c| c.kind() == K::OUTER_ATTR && !crate::is_doc(c))
-        {
-            self.error(Diagnostic::unsupported(attr.text_range(), "an attribute"));
-        }
+        let fuel = self.fuel_attr(node);
+        let outer = self.fuel;
+        self.fuel = fuel.or(outer);
+        let stmt = self.let_stmt_inner(l);
+        self.fuel = outer;
+        stmt
+    }
+
+    fn let_stmt_inner(&mut self, l: &ast::LetStmt) -> Option<Stmt> {
+        let node = l.syntax();
         let ty = l.ty().map(|t| {
             let mut ds = Vec::new();
             let ty = resolve_type(&t, &self.types, &mut ds);

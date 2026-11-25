@@ -1,0 +1,24 @@
+// covers: comptime.eval.2
+
+const fn count(n: int) -> int {
+    let mut i = 0;
+    while i < n {
+        i += 1;
+    }
+    i
+}
+
+#[fuel(100)]
+const FEW: int = count(1000);               //~ E1004
+
+const ENOUGH: int = count(1000);
+
+fn block() -> int {
+    #[fuel(100)]
+    let n = const { count(1000) };          //~ E1004
+    n + ENOUGH
+}
+
+fn traps() -> int {
+    const { 1 / 0 }                         //~ E1004
+}

@@ -16,8 +16,15 @@ ordinary function otherwise, callable at run time too.
 error (E1002).
 
 **comptime.block.1** `const { e }` is an expression whose value is `e`'s, and `e` is compile-time
-code: it names no local, type parameter or const parameter of the body it is in. For now it is
-evaluated where it is, each time.
+code: it names no local, type parameter or const parameter of the body it is in.
+
+**comptime.block.2** In a test, or in a function without type parameters (its own or its
+impl's, and not a trait's) that is not a const item, a `const { }` block is evaluated once, when
+compiling, and its value is static data, as a const's is (**comptime.static.1**): borrowed in
+place (`&const { … }`, a method called on it, indexing it), or copied if its type is `Copy`. One
+whose type is not `Copy`, used by value, is still evaluated where it is, each time, so the value
+it gives is owned. A block that traps or runs out of steps when compiling is an error there
+(E1004), as is one whose value cannot be data (E1008).
 
 **comptime.static.1** A const's value is static data: `&NAME` borrows nothing and may be returned
 from a function with no borrowed parameter ([Borrows](borrows.md)). So a const's type holds no
@@ -35,6 +42,11 @@ An `Rc` in a const keeps its own count, so it is never freed.
 
 **comptime.eval.1** Evaluating a const when compiling that traps, or takes more than 10,000,000
 steps, is an error at the const (E1004).
+
+**comptime.eval.2** `#[fuel(n)]` on a const item, or on a statement (a `let` or an expression
+statement), gives the const, or each `const { }` block in the statement, `n` steps in place of
+10,000,000: more for a costly table, fewer to bound one. An evaluation that runs out of them is
+E1004, as before.
 
 ## Derives written in Moddil
 

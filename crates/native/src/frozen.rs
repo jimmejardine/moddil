@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use cranelift_module::{DataDescription, DataId, Module};
 use moddil_interp::{Frozen, FrozenValue};
-use moddil_sema::Ty;
+use moddil_sema::{Item, Ty};
 
 use super::Compiler;
 use crate::layout::{Shape, Tag};
@@ -43,7 +43,25 @@ impl<M: Module> Compiler<'_, M> {
             return Ok(Some(*d));
         }
         let name = self.items.fns[f as usize].name.clone();
-        let value = match moddil_interp::frozen(self.db, self.program, f) {
+        let id = self.freeze(Item::Fn(f), &name, ty)?;
+        self.statics.insert(f, id);
+        Ok(Some(id))
+    }
+
+    /// The data holding the value of the `const { }` block whose item is `item`, of type `ty`,
+    /// computed when compiling (`comptime.block.2`).
+    pub(super) fn frozen_block(&mut self, item: Item, ty: &Ty) -> Result<DataId, String> {
+        if let Some(d) = self.blocks.get(&item) {
+            return Ok(*d);
+        }
+        let id = self.freeze(item, "a `const { }` block", ty)?;
+        self.blocks.insert(item, id);
+        Ok(id)
+    }
+
+    /// `item`'s value (named `name` in errors), evaluated when compiling and written as data.
+    fn freeze(&mut self, item: Item, name: &str, ty: &Ty) -> Result<DataId, String> {
+        let value = match moddil_interp::frozen_item(self.db, self.program, item) {
             Ok(Ok(v)) => v,
             Ok(Err(what)) => return Err(format!("`{name}` holds {what}")),
             Err(_) => return Err(format!("evaluating `{name}` when compiling fails")),
@@ -54,8 +72,7 @@ impl<M: Module> Compiler<'_, M> {
         };
         let id = self.declare_frozen()?;
         self.define_frozen(&mut w, id, &value.root, ty)?;
-        self.statics.insert(f, id);
-        Ok(Some(id))
+        Ok(id)
     }
 
     fn declare_frozen(&mut self) -> Result<DataId, String> {

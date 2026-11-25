@@ -45,6 +45,10 @@ pub struct Body {
     /// The `*e` written inside an `unsafe` block, where a raw pointer may be dereferenced
     /// (`expr.unsafe.1`).
     pub unsafe_derefs: std::collections::HashSet<ExprId>,
+    /// The steps compile-time evaluation may take that a `#[fuel(n)]` raised
+    /// (`comptime.eval.2`): for a const item's initialiser, by its root; for a `const { }`
+    /// block, by the block.
+    pub fuel: std::collections::BTreeMap<ExprId, u64>,
     /// Every expression written inside an `unsafe` block: where a C function may be called
     /// (`ffi.extern.1`).
     pub in_unsafe: std::collections::HashSet<ExprId>,

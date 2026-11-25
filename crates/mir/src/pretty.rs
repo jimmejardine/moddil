@@ -77,6 +77,7 @@ impl fmt::Display for Rvalue {
             Rvalue::Length(n) => write!(f, "length({n:?})"),
             Rvalue::InBounds(i, p) => write!(f, "in_bounds({i:?}, {p:?})"),
             Rvalue::StaticRef(n) => write!(f, "&static#{n}"),
+            Rvalue::StaticBlock(item) => write!(f, "&static{item:?}"),
             Rvalue::FnPtr(n) => write!(f, "fn_ptr#{n}"),
         }
     }

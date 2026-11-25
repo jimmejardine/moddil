@@ -201,10 +201,16 @@ impl Builder<'_> {
         if let Some(p) = self.place_of(e) {
             return p;
         }
-        // A const item computed when compiling: its static data (`comptime.static.1`).
+        // A const item, or a `const { }` block, computed when compiling: its static data
+        // (`comptime.static.1`, `comptime.block.2`).
         if let Some(f) = self.frozen_const(e) {
             let t = self.temp(Ty::reference(false, self.ty(e)));
             self.cfg.assign(t, Rvalue::StaticRef(f));
+            return Place::local(t).deref();
+        }
+        if let Some(item) = self.frozen_block(e) {
+            let t = self.temp(Ty::reference(false, self.ty(e)));
+            self.cfg.assign(t, Rvalue::StaticBlock(item));
             return Place::local(t).deref();
         }
         match self.hir.exprs[e].kind {

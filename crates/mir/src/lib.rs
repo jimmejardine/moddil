@@ -355,6 +355,10 @@ pub enum Rvalue {
     /// A borrow of the value of const item `n` (by its function's index): static data, which
     /// borrows nothing (`borrow.static.1`).
     StaticRef(u32),
+    /// A borrow of the value of a `const { }` block computed when compiling, by its item (a
+    /// closure item of the function or test it is in, and the block's expression): static data
+    /// (`comptime.block.2`).
+    StaticBlock(moddil_sema::Item),
     /// The address of function `n` (by its index) as a C function pointer (`type.fnptr.1`):
     /// a C function's own, or that of the C-ABI wrapper of a Moddil one.
     FnPtr(u32),

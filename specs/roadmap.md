@@ -118,7 +118,9 @@ interpreters; L)
 
 **P11. Compile-time evaluation** (`crates/sema`, `crates/mir`, the MIR interpreter as evaluator;
 L)
-- A `const { }` block evaluated once, not where it is each time; `#[fuel(…)]`.
+- A `const { }` block that is not `Copy`, used by value, evaluated once too (each use a clone of
+  its static value, or a move out of a value made once); and one in a generic function, for
+  each instance.
 - Consts as array lengths and const arguments; const arithmetic in types (`Fixed<{S + T}>`);
   const parameters of types other than `int`.
 - A const holding a borrow of static data beyond text.
@@ -137,7 +139,8 @@ L)
 
 **P13. Wrappers** (`crates/sema` `wrap.rs`, `crates/moddil`; M)
 - Wrapping methods (a field to hold `self`).
-- Wrapper arguments evaluated once, not at each call (with P11's compile-time evaluation).
+- Wrapper arguments that are not `Copy` evaluated once, not at each call (a `Copy` one is, as a
+  `const { }` block is: P11).
 - `f::Args` made and matched by that name (`f::Args { a, b }`), and for a generic function.
 - `moddil explain` printing the expansion (the command itself is not built).
 

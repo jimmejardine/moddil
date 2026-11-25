@@ -222,7 +222,12 @@ impl Lowerer<'_> {
                 self.names = names;
                 self.types.params = params;
                 let inner = inner.unwrap_or_else(|| self.missing(range));
-                self.alloc(ExprKind::ConstBlock(inner), range)
+                let block = self.alloc(ExprKind::ConstBlock(inner), range);
+                // Under a `#[fuel(n)]` statement (`comptime.eval.2`).
+                if let Some(n) = self.fuel {
+                    self.out.body.fuel.insert(block, n);
+                }
+                block
             }
             ast::Expr::Index(_) => {
                 let parts: Vec<ast::Expr> = node.children().filter_map(ast::Expr::cast).collect();

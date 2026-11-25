@@ -16,6 +16,7 @@ moddil-sema.workspace = true
 moddil-syntax.workspace = true
 moddil-os.workspace = true
 moddil-ffi.workspace = true
+la-arena.workspace = true
 
 
 [lints]

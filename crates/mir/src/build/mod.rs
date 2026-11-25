@@ -161,6 +161,26 @@ fn closure_mir<'db>(db: &'db dyn Db, owner: Owner<'db>, expr: u32) -> Body {
     let types = revealed(db, program, moddil_sema::infer(db, base));
     let types = &*types;
     let e = ExprId::from_raw(la_arena::RawIdx::from_u32(expr));
+    // A `const { }` block computed when compiling (`comptime.block.2`): a body of no
+    // parameters giving its value.
+    if let hir::ExprKind::ConstBlock(inner) = hir.exprs[e].kind {
+        let (src, name) = match base.item(db) {
+            Item::Fn(i) => (items.fns[i as usize].src, fn_name(items, i)),
+            Item::Test(i) => (
+                Src::File(items.tests[i as usize].file),
+                format!("{:?}", items.tests[i as usize].name),
+            ),
+            Item::Closure(..) => unreachable!("an owner is a function or test"),
+        };
+        let ret = types.expr(inner);
+        let mir = Body::new(format!("{name}::{{const}}"), src, false, ret, 0);
+        let mut b = Builder::new(db, owner, hir, types, &[], mir);
+        b.eval_into(Local::RETURN, inner);
+        b.leave_scopes(0);
+        b.cfg.terminate(Terminator::Return);
+        b.cleanups();
+        return b.cfg.finish();
+    }
     let Ty::Closure(c) = types.expr(e) else {
         unreachable!("a closure's type")
     };
@@ -224,6 +244,8 @@ fn idx<T>(id: la_arena::Idx<T>) -> usize {
 }
 
 struct Builder<'a> {
+    /// The function or test whose body this is, or is in.
+    base: Item,
     hir: &'a hir::Body,
     types: &'a Inference,
     items: &'a ItemTree,
@@ -287,6 +309,7 @@ impl<'a> Builder<'a> {
         let program = owner.program(db);
         let items = moddil_sema::item_tree(db, program);
         Builder {
+            base: owner.item(db).owner(),
             hir,
             types,
             items,

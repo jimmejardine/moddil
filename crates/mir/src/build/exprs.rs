@@ -3,7 +3,7 @@
 use moddil_sema::hir::{
     Align, ExprId, ExprKind, FmtPiece, Halt, Handler, LogicOp, PatKind, Radix, Stmt, UnaryOp,
 };
-use moddil_sema::{Callee, Container, Ty};
+use moddil_sema::{Callee, Container, Item, Ty};
 use moddil_syntax::TextRange;
 
 use super::scopes::{LoopCx, ScopeItem};
@@ -225,6 +225,16 @@ impl Builder<'_> {
             }
             // A `const { }` block is evaluated where it is, for now; a refined value is its
             // base's, as it is.
+            // Computed when compiling, if its value can be copied out of its static data
+            // (`comptime.block.2`); else where it is.
+            ExprKind::ConstBlock(_)
+                if self.frozen_block(e).is_some() && self.is_copy(&self.ty(e)) =>
+            {
+                let p = self.place(e);
+                let ty = self.ty(e);
+                let op = self.use_place(p, &ty);
+                self.cfg.assign(dest, Rvalue::Use(op));
+            }
             ExprKind::ConstBlock(x) | ExprKind::Refine(x, _) => self.eval_into(dest, x),
             ExprKind::Fmt(pieces) => self.fmt(dest, &pieces, range),
             ExprKind::Array(_) | ExprKind::Repeat(..) | ExprKind::RepeatN(..)
@@ -942,6 +952,19 @@ impl Builder<'_> {
     /// A call; if its function can fail, its error edge goes where the `?` or `?!` around
     /// call `e` says.
     /// The const item whose value `e` is, if it is a use of one.
+    /// The item of `const { }` block `e`, if it is computed when compiling (`comptime.block.2`).
+    pub(super) fn frozen_block(&self, e: ExprId) -> Option<Item> {
+        let ExprKind::ConstBlock(_) = self.hir.exprs[e].kind else {
+            return None;
+        };
+        let item = match self.base {
+            Item::Fn(i) => Item::Closure(i, false, super::idx(e) as u32),
+            Item::Test(i) => Item::Closure(i, true, super::idx(e) as u32),
+            Item::Closure(..) => return None,
+        };
+        self.items.freezes_blocks(self.base).then_some(item)
+    }
+
     /// The const item `e` names, if it is one frozen when compiling (`comptime.static.1`):
     /// without type arguments.
     pub(super) fn frozen_const(&self, e: ExprId) -> Option<u32> {

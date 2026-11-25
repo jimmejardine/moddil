@@ -105,6 +105,8 @@ pub(crate) struct Stack<'a> {
     next_heap: u32,
     /// Where each text is, so a position's text is told from other text (`text.pos.1`).
     pub(crate) texts: crate::texts::Texts<Pointer>,
+    /// Each `const { }` block's static number, by its item.
+    blocks: std::collections::HashMap<moddil_sema::Item, u32>,
 }
 
 /// The frame of a pointer to static data: the const item is its local.
@@ -124,6 +126,7 @@ impl<'a> Stack<'a> {
             heap: std::collections::HashMap::new(),
             next_heap: 0,
             texts: crate::texts::Texts::default(),
+            blocks: std::collections::HashMap::new(),
         }
     }
 
@@ -194,6 +197,13 @@ impl<'a> Stack<'a> {
                 false,
             )
         })
+    }
+
+    /// The static number of a `const { }` block's value (`comptime.block.2`), by its item:
+    /// numbered after the functions, so it never meets a const item's.
+    pub(crate) fn block_static(&mut self, item: moddil_sema::Item) -> u32 {
+        let next = u32::MAX / 2 + self.blocks.len() as u32;
+        *self.blocks.entry(item).or_insert(next)
     }
 
     /// Keeps const item `f`'s value as static data.

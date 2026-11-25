@@ -400,6 +400,20 @@ impl<'a> Machine<'a> {
             // A function's address as a C function pointer (`type.fnptr.1`).
             Rvalue::FnPtr(f) => self.fn_ptr(*f),
             // A const's value, computed once (it was checked when compiling).
+            // A `const { }` block's value, computed when compiling (`comptime.block.2`).
+            Rvalue::StaticBlock(item) => {
+                let n = self.stack.block_static(*item);
+                if let Some(r) = self.stack.static_ref(n) {
+                    return r;
+                }
+                let fv = crate::frozen_item(self.db, self.program, *item)
+                    .ok()
+                    .and_then(Result::ok)
+                    .unwrap_or_else(|| unreachable!("a block evaluated when compiling"));
+                let v = crate::frozen::thaw(&mut self.stack, &fv);
+                self.stack.set_static(n, v);
+                self.stack.static_ref(n).expect("just set")
+            }
             Rvalue::StaticRef(f) => {
                 if let Some(r) = self.stack.static_ref(*f) {
                     return r;

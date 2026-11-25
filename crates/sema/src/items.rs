@@ -868,6 +868,27 @@ impl ItemTree {
             }
     }
 
+    /// Whether the `const { }` blocks in the body of `item` (a function or test, or a closure
+    /// in one) are computed once, when compiling (`comptime.block.2`): those of a test, or of a
+    /// function without type parameters (its own or its impl's, and not a trait's) that is not a
+    /// const item, whose initialiser is computed when compiling as a whole.
+    pub fn freezes_blocks(&self, item: crate::Item) -> bool {
+        match item.owner() {
+            crate::Item::Test(_) => true,
+            crate::Item::Fn(f) => {
+                let sig = &self.fns[f as usize];
+                !sig.const_item
+                    && sig.generics.params.is_empty()
+                    && match sig.container {
+                        Container::Trait(_) => false,
+                        Container::Impl(k) => self.impls[k as usize].generics.params.is_empty(),
+                        _ => true,
+                    }
+            }
+            crate::Item::Closure(..) => false,
+        }
+    }
+
     /// The prelude's free function `name`, which the compiler calls for some forms
     /// (`debug_pretty` for `{x:#?}`).
     pub fn prelude_fn(&self, name: &str) -> Option<u32> {
