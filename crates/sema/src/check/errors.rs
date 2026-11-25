@@ -252,6 +252,15 @@ impl Checker<'_> {
                      annotate the type of what it is called on"
                 ),
             );
+        } else if self.body.for_nexts.contains(&e) {
+            self.report(
+                Code::E0501,
+                range,
+                format!(
+                    "this `for`'s iterator can fail with `{fails}`: pass the errors on with \
+                     `for x in it? {{ … }}`"
+                ),
+            );
         } else {
             self.report(
                 Code::E0501,
@@ -333,6 +342,13 @@ impl Checker<'_> {
         if let Some(fails) = std::mem::replace(&mut self.call_fails, saved) {
             self.out.propagated.insert(e, Propagated::Call);
             self.deliver(&fails.members(), range);
+        } else if self.body.for_nexts.contains(&x) && !t.has_error() {
+            self.report(
+                Code::E0504,
+                range,
+                "`?` after a `for`'s iterator marks its `next`, and this iterator cannot fail: \
+                 remove the `?`",
+            );
         }
         t
     }

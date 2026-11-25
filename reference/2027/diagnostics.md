@@ -87,10 +87,10 @@ and a code never changes meaning.
 | E0413 | An associated type or function that does not exist | [generic.assoc.1](generics.md) |
 | E0414 | Methods added to a type not declared in the module | [item.impl.1](items/impls.md) |
 | E0415 | An impl's type parameter that neither its type nor its trait uses | [item.impl.coherence.1](items/impls.md) |
-| E0501 | An error with nowhere to go: an unmarked call that can fail, or an error where nothing can fail | [err.question.1](errors.md), [err.set.1](errors.md), [err.entry.1](errors.md), [stmt.defer.1](statements.md), [attr.around.body.1](attributes.md) |
+| E0501 | An error with nowhere to go: an unmarked call that can fail, or an error where nothing can fail | [err.question.1](errors.md), [err.set.1](errors.md), [err.entry.1](errors.md), [stmt.defer.1](statements.md), [attr.around.body.1](attributes.md), [expr.for.3](expressions/loops.md) |
 | E0502 | An error that the function's `with fail(…)` does not list, or a closure parameter's errors that a bound takes leaving the function | [err.set.1](errors.md), [expr.closure.fails.2](expressions/closures.md) |
 | E0503 | A `Result` dropped unused | [err.unused.1](errors.md) |
-| E0504 | `?` or `?!` on something that cannot fail | [err.question.1](errors.md) |
+| E0504 | `?` or `?!` on something that cannot fail | [err.question.1](errors.md), [expr.for.3](expressions/loops.md) |
 | E0505 | A `catch` arm for an error that cannot occur, or a `catch` with nothing to catch | [err.catch.1](errors.md) |
 | E0506 | `?` on an `Option` where absence cannot go, or on both `Option`s and errors in one `try` | [err.question.1](errors.md), [err.try.1](errors.md) |
 | E0507 | An entry point that declares errors | [err.entry.1](errors.md) |

@@ -29,6 +29,14 @@ is `()`. `break` and `continue` (and labels) work in it as in the other loops.
 
 **expr.for.2** `e`'s type implements `IntoIterator` (E0402), and `p` matches every item (E0208).
 
+**expr.for.3** If the iterator's `next` can fail ([Collections](../collections.md), `iter.fails.1`),
+the loop marks it with `?` after `e`: `for p in e? block` is the loop, with each call of `next`
+marked as `next()?` is ([Errors](../errors.md), `err.question.1`), so an error it fails with goes on to
+the innermost enclosing `try` block or out of the function, and leaves the loop. `e` itself is
+evaluated unmarked, once. Without the `?`, the loop's call of `next` is an unmarked call that can
+fail (E0501); with it on an iterator whose `next` cannot fail, the `?` is an error (E0504). An
+iterator whose errors are a type parameter's (`I::Fails`) needs no mark (`iter.fails.1`).
+
 **expr.range.1** `a..b`, `a..=b` and `a..`, for `int`s `a` and `b`, are the prelude's `Range`,
 `RangeInclusive` and `RangeFrom`, iterators of the integers from `a` up to but not including `b`,
 up to and including `b`, and on without end.

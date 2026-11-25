@@ -17,8 +17,8 @@ not define it takes). `count`, `all`, `any` and `collect` fail as `next` does. I
 function, a call whose errors are a type parameter's `Fails` (`I::Fails`, through a `for` loop or
 `it.next()`) passes them on without a mark, as a call of a closure parameter does
 (**expr.closure.fails.1**), so the function's errors must include them; a `for` loop over an
-iterator that can fail with known errors is an error for now (E0501): write
-`while let Some(x) = it.next()? { … }`, or take them with `collect()?`. An associated type's value
+iterator that can fail with known errors marks them, `for x in it? { … }`
+([Loops](expressions/loops.md), **expr.for.3**), or they are taken with `collect()?`. An associated type's value
 may be an error set, `type Fails = I::Fails | F::Fails;`.
 
 **iter.adapt.1** `it.map(f)` gives the items passed through closure `f`, in order, and

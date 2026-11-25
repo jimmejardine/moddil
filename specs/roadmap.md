@@ -213,10 +213,6 @@ L)
   for duplication, dead paths and limits missing from this list; fix what is small, and add the
   rest here as packages.
 
-**P27. A `for` over a fallible iterator** (`crates/sema`, `crates/mir`, `crates/refinterp`; M)
-- `for x in it? { … }` (`error-handling.md` D22): the `?` marks every `next()`, and an error goes
-  on as from `?`. Without it, the loop stays E0501. Reference in `errors.md`.
-
 **P28. Boxed closures that hold handlers** (`crates/sema`, `crates/mir`; M)
 - A `Box<dyn Fn …>` carries the borrows of the handlers its closure captured (`closures.md`), so
   it is a view of them and cannot outlive or leave their `with`. Lift today's E0802 refusal.

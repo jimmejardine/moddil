@@ -1,0 +1,82 @@
+// covers: expr.for.3, iter.fails.1
+
+struct Odd { n: int }
+
+fn even(x: int) -> int with fail(Odd) {
+    if x % 2 == 1 { fail(Odd { n: x }) }
+    x
+}
+
+/// A user's iterator that can fail.
+struct Countdown {
+    n: int,
+}
+
+impl Iterator for Countdown {
+    type Item = int;
+    type Fails = Odd;
+    fn next(&mut self) -> Option<int> with fail(Odd) {
+        if self.n == 0 {
+            return None;
+        }
+        self.n -= 1;
+        Some(even(self.n)?)
+    }
+}
+
+fn sum_evens(n: int) -> int with fail(Odd) {
+    let mut sum = 0;
+    for x in (0..n).map(|x| even(x * 2)?)? {
+        sum += x;
+    }
+    sum
+}
+
+test "for marks a failing iterator's next with ?" {
+    sum_evens(4)?                           // => 12
+}
+
+test "an error from next leaves the loop" {
+    let mut seen = 0;
+    let r = try {
+        for x in (0..5).map(|x| even(x)?)? {
+            seen += 1;
+        }
+        0
+    } catch {
+        Odd { n } => n,
+    };
+    r                                       // => 1
+    ;
+    seen                                    // => 1
+}
+
+test "the iterator is evaluated once, unmarked" {
+    let mut seen = Vec::new();
+    let r = try {
+        for x in (Countdown { n: 3 })? {
+            seen.push(x);
+        }
+        seen.len()
+    } catch {
+        Odd { n } => n * 10,
+    };
+    r                                       // => 10
+    ;
+    seen                                    // => [2]
+}
+
+test "break and continue work in a marked loop" {
+    let r = try {
+        let mut sum = 0;
+        for x in (0..10).map(|x| even(x * 2)?)? {
+            if x == 2 { continue; }
+            if x > 6 { break; }
+            sum += x;
+        }
+        sum
+    } catch {
+        Odd { n } => -n,
+    };
+    r                                       // => 10
+}

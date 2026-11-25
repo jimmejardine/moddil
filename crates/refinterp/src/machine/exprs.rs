@@ -624,7 +624,13 @@ impl Machine<'_> {
                 .expect("a body"),
         )
         .expect("a block");
-        let v = self.eval(&exprs[0])?;
+        // `for x in it? { … }` (`expr.for.3`): the `?` marks each call of `next`, whose errors
+        // leave the loop as below.
+        let iterable = match &exprs[0] {
+            q @ ast::Expr::Propagate(_) => q.sub_exprs().into_iter().next().expect("checked"),
+            e => e.clone(),
+        };
+        let v = self.eval(&iterable)?;
         let head = v.head();
         let it = if self.program.implements(&head, "Iterator") {
             v

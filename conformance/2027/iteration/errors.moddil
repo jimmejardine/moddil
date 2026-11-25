@@ -1,4 +1,4 @@
-// covers: expr.for.2, iter.fails.1
+// covers: expr.for.2, expr.for.3, iter.fails.1
 
 fn not_iterable(n: int) {
     for x in n {}                           //~ E0402
@@ -27,6 +27,14 @@ pub fn total<I: Iterator<Item = int>>(it: I) -> int {
     let mut sum = 0;
     for x in it {                                       //~ E0501
         sum += x;
+    }
+    sum
+}
+
+fn marked_but_cannot_fail(xs: &[int]) -> int {
+    let mut sum = 0;
+    for x in xs? {                                      //~ E0504
+        sum += *x;
     }
     sum
 }

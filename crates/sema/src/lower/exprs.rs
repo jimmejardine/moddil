@@ -737,12 +737,27 @@ impl Lowerer<'_> {
     pub(super) fn for_expr(&mut self, node: &SyntaxNode, label: Option<String>) -> ExprId {
         let range = node.text_range();
         let exprs: Vec<ast::Expr> = node.children().filter_map(ast::Expr::cast).collect();
-        let (Some(iterable), Some(pat_node)) = (
+        let (Some(mut iterable), Some(pat_node)) = (
             exprs.first().cloned(),
             node.children().find_map(ast::Pat::cast),
         ) else {
             return self.missing(range);
         };
+        // `for x in it? { … }` (`expr.for.3`): the `?` marks each call of `next`.
+        let marked = matches!(iterable, ast::Expr::Propagate(_));
+        if marked {
+            let q = iterable.syntax().clone();
+            if let Some(note) = q.child(K::ERROR_CONTEXT) {
+                self.error(Diagnostic::unsupported(
+                    note.text_range(),
+                    "a note after a `for`'s `?`",
+                ));
+            }
+            match iterable.sub_exprs().into_iter().next() {
+                Some(inner) => iterable = inner,
+                None => return self.missing(range),
+            }
+        }
         let lang = |cx: &Self, tr: &str, method: &str| -> Option<(u32, u32)> {
             let t = cx.items.lang(tr)?;
             let f = cx.items.traits[t as usize]
@@ -814,13 +829,20 @@ impl Lowerer<'_> {
             },
             range,
         );
-        let scrutinee = self.alloc(
+        let call = self.alloc(
             ExprKind::Call {
                 callee: next,
                 args: vec![borrow],
             },
             range,
         );
+        self.out.body.for_nexts.insert(call);
+        // Marked, the call's errors pass on, and its `Option` is still the loop's to take apart.
+        let scrutinee = if marked {
+            self.alloc(ExprKind::Pass(call), range)
+        } else {
+            call
+        };
         let mut binds = Binds::default();
         let p = self.pat(&pat_node, &mut binds);
         self.bring_into_scope(binds);

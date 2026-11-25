@@ -48,6 +48,8 @@ pub struct Body {
     /// Every expression written inside an `unsafe` block: where a C function may be called
     /// (`ffi.extern.1`).
     pub in_unsafe: std::collections::HashSet<ExprId>,
+    /// Each `for` loop's call of `next` (`expr.for.3`), so its errors are reported as the loop's.
+    pub for_nexts: std::collections::HashSet<ExprId>,
     /// For a `#[selectable]` function, its two parts (`task.select.4`).
     pub select: Option<SelectParts>,
 }
