@@ -197,10 +197,6 @@ L)
   for duplication, dead paths and limits missing from this list; fix what is small, and add the
   rest here as packages.
 
-**P28. Boxed closures that hold handlers** (`crates/sema`, `crates/mir`; M)
-- A `Box<dyn Fn …>` carries the borrows of the handlers its closure captured (`closures.md`), so
-  it is a view of them and cannot outlive or leave their `with`. Lift today's E0802 refusal.
-
 **P29. The allocator in scope** (prelude, `crates/sema`, `crates/mir`, `crates/rt`; L)
 - `with Alloc = a { … }` (`memory.md`: The allocator in scope): `.to_rc()` and growing
   collections allocate from the innermost installed allocator, the profile's default otherwise;

@@ -167,9 +167,7 @@ fn on_message(&mut self, h: Handler) { self.handlers.push(h) }
     like any other a value holds.
     - **A `Box<dyn Fn …>` carries its closure's borrows** (decided November 2026): erasing the
       closure's type does not erase them, so the box is a view of each handler it holds and
-      cannot outlive or leave the `with` that installed it. Not built yet
-      ([`roadmap.md`: Deferred from built work](roadmap.md#deferred-from-built-work)): until then,
-      a box that would hold a handler is refused (E0802).
+      cannot outlive or leave the `with` that installed it.
   - An owned stored closure, one kept past its `with`, cannot use handlers. Its type lists only
     `suspend`, `spawn` and `fail`.
   - To keep such a closure longer, move the `with` further out, or pass the dependency as an

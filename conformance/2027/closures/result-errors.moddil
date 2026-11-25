@@ -21,7 +21,3 @@ fn now() -> int with clock: Clock { clock.now() }
 fn stamped() -> (impl Fn(int) -> int with Clock) {  //~ E0609
     |x| x
 }
-
-fn captures_one() -> (impl Fn(int) -> int) with Clock {
-    |x| x + now()                                   //~ E0802
-}

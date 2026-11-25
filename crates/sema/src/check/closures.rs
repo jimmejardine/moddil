@@ -524,12 +524,10 @@ impl Checker<'_> {
                         );
                     }
                 }
-                Capture::Evidence(_) => self.report(
-                    Code::E0802,
-                    range,
-                    "a stored closure owns what it captures, and a handler is borrowed: install \
-                     it inside the closure, or move the closure's `with` further out",
-                ),
+                // A handler it uses is borrowed, as any closure borrows one: the box is then a
+                // view of it, which the borrow checker keeps inside the handler's `with`
+                // (`expr.closure.stored.1`).
+                Capture::Evidence(_) => {}
             }
         }
     }

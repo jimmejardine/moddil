@@ -66,7 +66,7 @@ and a code never changes meaning.
 | E0307 | Use of a value borrowed with `&mut` | [borrow.rules.1](borrows.md) |
 | E0308 | A borrow that outlives its value | [borrow.scope.1](borrows.md), [item.fn.ret-borrow.1](items/functions.md), [view.borrow.1](views.md) |
 | E0309 | A borrow, closure or view stored in a field of a struct or enum that is not a view, or a `&mut` of a borrow | [borrow.type.1](borrows.md), [view.2](views.md), [expr.closure.capture.1](expressions/closures.md) |
-| E0310 | A returned borrow from a parameter the signature does not allow | [item.fn.ret-borrow.1](items/functions.md) |
+| E0310 | A returned borrow from a parameter the signature does not allow, or of a handler the function was given | [item.fn.ret-borrow.1](items/functions.md), [expr.closure.stored.1](expressions/closures.md) |
 | E0311 | A type that cannot be `Copy` | [own.copy.derive.1](ownership.md) |
 | E0312 | A `Copy` type over 64 bytes | [own.copy.derive.1](ownership.md) |
 | E0313 | `return`, `break` or `continue` out of a `defer` block | [stmt.defer.1](statements.md) |
@@ -106,7 +106,7 @@ and a code never changes meaning.
 | E0610 | A task spawned into a scope opened outside a `with` whose handler it uses | [task.with.1](concurrency.md) |
 | E0609 | A handler's effect in the bound of a closure parameter, or in a stored or returned closure's type: a closure's needs are met where it is written | [expr.closure.effects.2](expressions/closures.md), [expr.closure.stored.1](expressions/closures.md), [expr.closure.result.1](expressions/closures.md) |
 | E0801 | A closure whose kind is weaker than a bound needs | [expr.closure.param.1](expressions/closures.md) |
-| E0802 | A stored closure (`Box<dyn Fn…>`) that captures a borrow, or borrows a handler its type does not list | [expr.closure.stored.1](expressions/closures.md) |
+| E0802 | A stored closure (`Box<dyn Fn…>`) that captures a local holding a borrow | [expr.closure.stored.1](expressions/closures.md) |
 | E0701 | A path or import naming an item its module cannot see | [mod.vis.1](modules.md), [mod.use.1](modules.md) |
 | E0702 | A `use` that names nothing, a glob import, or a declared module | [mod.use.1](modules.md), [mod.tree.1](modules.md) |
 | E0703 | An item whose signature names something less visible than itself | [mod.expose.1](modules.md) |

@@ -116,6 +116,9 @@ pub fn borrowck<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Vec<Diagnostic> {
     let mut cx = Checker::new(body, items, ret_from);
     cx.destructor = destructor;
     cx.returns_held = returns_held;
+    if let Item::Fn(i) = owner.item(db) {
+        cx.written_params = items.fns[i as usize].params.len() as u32;
+    }
     cx.run();
     cx.diagnostics
 }
@@ -160,6 +163,8 @@ struct Checker<'a> {
     /// (`fn next(&mut self) -> Option<Self::Item>`): its callers take a borrow it returns as one
     /// of what its arguments hold (`view.borrow.1`), so it may return only those.
     returns_held: bool,
+    /// How many of its parameters are written: the handlers it is given come after them.
+    written_params: u32,
     /// Whether the body is a destructor, which may move fields out of its `self` (`_1`).
     destructor: bool,
 }
@@ -304,6 +309,7 @@ impl<'a> Checker<'a> {
             diagnostics: Vec::new(),
             reported: HashSet::new(),
             returns_held: false,
+            written_params: u32::MAX,
             destructor: false,
         }
     }
@@ -911,11 +917,27 @@ impl<'a> Checker<'a> {
                         .iter()
                         .zip(&block.spans)
                         .rev()
-                        .find(|(st, _)| {
-                            matches!(st, Statement::Assign(p, _) if p.local == Local::RETURN)
+                        .find(|(st, sp)| {
+                            **sp != TextRange::default()
+                                && matches!(st, Statement::Assign(p, _) if p.local == Local::RETURN)
                         })
-                        .map_or(span, |(_, sp)| *sp);
-                    self.returned(set, h);
+                        .map(|(_, sp)| *sp);
+                    // Or else at the call that gives it (`Box::new(…)` as the body's value).
+                    let set = set.or_else(|| {
+                        self.body
+                            .blocks
+                            .iter()
+                            .rev()
+                            .find_map(|bl| match &bl.terminator {
+                                Terminator::Call { .. }
+                                    if bl.terminator_span != TextRange::default() =>
+                                {
+                                    Some(bl.terminator_span)
+                                }
+                                _ => None,
+                            })
+                    });
+                    self.returned(set.unwrap_or(span), h);
                 }
             }
             Terminator::Goto(_)
@@ -964,6 +986,17 @@ impl<'a> Checker<'a> {
                 continue;
             }
             match loan.param {
+                // A handler the function was given, which a boxed closure it returns borrows
+                // (`expr.closure.stored.1`).
+                Some(p) if p >= self.written_params && !self.ret_from.contains(&p) => {
+                    found.push(Diagnostic::error(
+                        Code::E0310,
+                        span,
+                        "the returned value holds a borrow of a handler the function was given, \
+                     which lives only as long as the call: install the handler inside it, or \
+                     move the `with` out to where the value is used",
+                    ));
+                }
                 Some(p) if !self.ret_from.contains(&p) => found.push(Diagnostic::error(
                     Code::E0310,
                     span,

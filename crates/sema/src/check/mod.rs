@@ -695,7 +695,7 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
     if let Some(h) = hidden {
         let t = finish::erase(&cx.solver.deep(&h));
         // A closure it gives, as closure analysis completed it (with what it captures). What a
-        // returned closure borrows is the borrow checker's to report (E0802), so the check
+        // returned closure borrows is the borrow checker's to report (E0310), so the check
         // below looks at the type as inferred.
         let done = completed_closures(&t, &cx.out.expr_types, cx.owner);
         let at = ret_range.unwrap_or_default();

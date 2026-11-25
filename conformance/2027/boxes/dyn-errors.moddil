@@ -19,11 +19,6 @@ fn now() -> int with clock: Clock { clock.now() }
 fn wait() with suspend {}
 
 
-fn unlisted() -> int with Clock {
-    let f: Box<dyn Fn() -> int> = Box::new(|| now());            //~ E0802
-    f()
-}
-
 fn not_suspending() with suspend {
     let f: Box<dyn Fn()> = Box::new(|| wait());                  //~ E0603
     f();

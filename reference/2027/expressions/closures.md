@@ -93,17 +93,19 @@ with the errors it lists, or not at all if it lists none (E0502), and suspend or
 lists `suspend` or `spawn` (E0603). It may run after the function it is written in has returned, so
 it owns what it captures: each local it uses is moved in (copied, if it is `Copy`), and one that
 holds a borrow is an error (E0802). Its handler needs are met where it is written
-(**expr.closure.effects.1**), and its type lists no handler (E0609). A handler is borrowed, so,
-for now, one it uses from around it is an error (E0802): a box that holds a handler's borrow is
-not supported yet. A handler it installs inside itself is its own.
+(**expr.closure.effects.1**), and its type lists no handler (E0609). A handler it uses from around
+it is borrowed, so the box is a view of it ([Views](../views.md)): it cannot outlive the `with`
+that installed it (E0308), nor leave the function that was given it (E0310). A handler it installs
+inside itself is its own.
 `f(a₁, …, aₙ)`, for `f` such a box, calls the closure through it: the call can fail with its
 errors; one of a `Box<dyn FnOnce…>` gives up the box, which is moved.
 
 **expr.closure.result.1** A function whose result type is `impl Fn(A₁, …, Aₙ) -> R` (or `FnMut`,
 `FnOnce`) returns a closure: one it gives as its value, or returns, takes its parameters' and
 result's types from that type, and is a stored closure (**expr.closure.stored.1**), since it may
-be called after the function has returned. So it owns what it captures (E0802): no handler of the
-function, whose type lists none (E0609). Its result type names its other effects, parenthesised
+be called after the function has returned. So it owns what it captures (E0802), but for the
+function's handlers, which it borrows as its caller lent them (**type.impl.ret.2**): its type
+lists none (E0609). Its result type names its other effects, parenthesised
 after the return arrow: `-> (impl Fn(int) -> int with fail(Missing))`; with none, it cannot fail
 (E0502). An effect variable of the function may name them (`with E`), so a closure it is
 given and moves into the one it returns passes its errors on. A call of the result is a call of
