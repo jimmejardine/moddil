@@ -1,0 +1,59 @@
+// covers: text.rcstr.1
+
+/// A token: its kind and its text, kept in owned data.
+#[derive(Debug, PartialEq)]
+struct Token { word: bool, text: RcStr }
+
+fn tokens(line: RcStr) -> Vec<Token> {
+    let mut out: Vec<Token> = Vec::new();
+    let mut rest = line;
+    while !rest.is_empty() {
+        let end = match rest.as_str().find(' ') {
+            Some(at) => at,
+            None => rest.as_str().end(),
+        };
+        let text = rest.slice(rest.as_str().start(), end);
+        if !text.is_empty() {
+            out.push(Token { word: true, text });
+        }
+        let next = if end.offset() == rest.len() { end } else { end.after(' ') };
+        rest = rest.slice(next, rest.as_str().end());
+    }
+    out
+}
+
+test "a slice shares its text" {
+    let r = "hello, world".to_string().to_rcstr();
+    let at = r.as_str().find(',') ?! "found";
+    let hello = r.slice(r.as_str().start(), at);
+    hello.as_str()                          // => "hello"
+    ;
+    hello.len()                             // => 5
+    ;
+    let world = r.slice(at.after(", "), r.as_str().end());
+    fmt"{world}"                            // => "world"
+    ;
+    let o = world.slice(world.as_str().start(), world.as_str().find('r') ?! "found");
+    o.to_string()                           // => "wo"
+}
+
+test "slices are compared, hashed and shown as their text" {
+    let a = "ab ab".to_string().to_rcstr();
+    let sp = a.as_str().find(' ') ?! "found";
+    let x = a.slice(a.as_str().start(), sp);
+    let y = a.slice(sp.after(' '), a.as_str().end());
+    x == y                                  // => true
+    ;
+    fmt"{x:?}"                              // => "\"ab\""
+    ;
+    x.clone() < "b".to_string().to_rcstr()  // => true
+}
+
+test "a parser keeps its tokens' text" {
+    let ts = tokens("let  x = 1".to_string().to_rcstr());
+    ts.len()                                // => 4
+    ;
+    ts[1].text.as_str()                     // => "x"
+    ;
+    fmt"{ts[3]:?}"                          // => "Token { word: true, text: \"1\" }"
+}

@@ -842,3 +842,99 @@ fn utf8_valid_up_to(bytes: &[u8]) -> int {
     n
 }
 
+
+// `RcStr` (`text.rcstr.1`): a slice of shared text, a reference-counted `String` and the byte
+// range of it the slice is. `s.to_rcstr()` moves a `String` into one; `r.slice(a, b)` and
+// `r.share()` give another slice of the same text, adding one to the count and copying nothing,
+// so a parser can keep its tokens' text in owned data.
+struct RcStr {
+    buf: Rc<String>,
+    start: int,
+    end: int,
+}
+
+impl String {
+    // The whole string, shared (`text.rcstr.1`).
+    fn to_rcstr(self) -> RcStr {
+        let end = self.len();
+        RcStr { buf: self.to_rc(), start: 0, end }
+    }
+}
+
+impl RcStr {
+    // The slice's text: its positions are those `slice` takes.
+    fn as_str(&self) -> &str {
+        self.buf.deref().as_str().bytes_between(self.start, self.end)
+    }
+
+    // The text between two positions of `self.as_str()`, sharing the buffer; traps as `&s[a..b]`
+    // does if a position is not one of its text's, or they are out of order.
+    fn slice(&self, a: StrPos, b: StrPos) -> RcStr {
+        let _ = self.as_str().between(a, b);
+        RcStr { buf: self.buf.share(), start: self.start + a.offset(), end: self.start + b.offset() }
+    }
+
+    // Another owner of the same slice.
+    fn share(&self) -> RcStr {
+        RcStr { buf: self.buf.share(), start: self.start, end: self.end }
+    }
+
+    // Its length in bytes.
+    fn len(&self) -> int {
+        self.end - self.start
+    }
+
+    fn is_empty(&self) -> bool {
+        self.end == self.start
+    }
+
+    // A new `String` of its text.
+    fn to_string(&self) -> String {
+        String::from_str(self.as_str())
+    }
+}
+
+// Cloned as `share`, and compared, hashed and shown as its text.
+impl Clone for RcStr {
+    fn clone(&self) -> RcStr {
+        self.share()
+    }
+}
+
+impl PartialEq for RcStr {
+    fn eq(&self, other: &RcStr) -> bool {
+        PartialEq::eq(self.as_str(), other.as_str())
+    }
+}
+
+impl Eq for RcStr {}
+
+impl PartialOrd for RcStr {
+    fn partial_cmp(&self, other: &RcStr) -> Option<Ordering> {
+        Some(Ord::cmp(self.as_str(), other.as_str()))
+    }
+}
+
+impl Ord for RcStr {
+    fn cmp(&self, other: &RcStr) -> Ordering {
+        Ord::cmp(self.as_str(), other.as_str())
+    }
+}
+
+impl Hash for RcStr {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Hash::hash(self.as_str(), state);
+    }
+}
+
+impl Display for RcStr {
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_str(self.as_str());
+    }
+}
+
+impl Debug for RcStr {
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        Debug::fmt(self.as_str(), out);
+    }
+}

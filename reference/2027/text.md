@@ -72,6 +72,14 @@ that implements the prelude's `Pattern`: a `&str` or `&String`, whose text is lo
 `char`. They are evaluated at compile time too, as in a refinement's predicate
 (`self.chars().all(|c| ALPHABET.contains(c))`).
 
+**text.rcstr.1** `RcStr` is the prelude's slice of shared text: a reference-counted `String`
+and a byte range of it. `s.to_rcstr()` moves a `String` `s` into one, its whole text;
+`r.as_str()` borrows its text; `r.slice(a, b)`, for positions `a` and `b` of `r.as_str()`, is
+the slice between them, and `r.share()` (also `clone`) the same slice, each adding one to the
+count and copying no text (it traps as `&s[a..b]` does). Unlike a position, an `RcStr` can be
+kept in owned data. `r.len()`, `r.is_empty()` and `r.to_string()` are as for its text, and it is
+compared, ordered, hashed, displayed and debugged as its text.
+
 **text.cmp.1** `==`, `!=`, `<`, `<=`, `>` and `>=` on two `&str`s compare their text, byte by byte,
 which orders by code point. Two `String`s compare the same way, through `PartialEq` and `Ord`
 ([Comparisons](expressions/comparison.md)). No normalisation or case folding is implied.

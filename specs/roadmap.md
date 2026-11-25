@@ -77,7 +77,6 @@ more). Packages are independent unless one says otherwise. When a package is don
 when part of one is, remove that part.
 
 **P4. Text** (prelude `text`, `crates/sema`; M)
-- `RcStr` slices.
 - A text position used on other text refused when checking (as `text.md` says), not trapping
   when it runs and comparing by text.
 - Tagged literals other than `fmt`, first `re"…"` compiled when compiling, with typed captures
