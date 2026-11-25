@@ -124,7 +124,7 @@ and a code never changes meaning.
 | E1005 | `#[around]` without a wrapper, or with one that is not a function's path or a call of one | [attr.around.1](attributes.md) |
 | E1006 | A derive function not written as `const fn f(t: type) -> Impl<Tr>` with one `impl Tr for t` as its body, a `#[derive_by]` naming none, a derive function called, or `type` elsewhere | [comptime.derive.1](comptime.md) |
 | E1007 | A template's `inline for`, reflected field or `if const` written where, or as, it cannot be | [comptime.template.field.1](comptime.md) |
-| E1008 | A const whose value cannot be static data: a closure, a `dyn` value, a C pointer or function pointer, or a borrow of part of an array | [comptime.static.2](comptime.md) |
+| E1008 | A const whose value cannot be static data: a closure, a `dyn` value, or a C pointer or function pointer | [comptime.static.2](comptime.md) |
 | E1009 | A const that is not `Copy` used by value, a move of static data | [comptime.static.2](comptime.md) |
 | E1010 | An error compile-time code reported with `compile_error` | [comptime.error.1](comptime.md) |
 | E1011 | A tagged literal whose tag is not a `#[tag]` `const fn` in scope | [comptime.tag.1](comptime.md) |

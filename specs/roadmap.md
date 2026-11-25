@@ -129,7 +129,7 @@ L)
   and cannot run the interpreter); const parameters of types other than `int`.
 - A generic const (a trait's associated const, a generic impl's) computed when compiling for
   each instance, as other consts are, not when it runs; and a const holding a function pointer
-  or a borrow of part of an array frozen as data (E1008 now).
+  frozen as data (E1008 now).
 
 **P12. Contracts and refinements** (`crates/sema`, `crates/mir`, `crates/refinterp`; L)
 - `invariant` on a struct (`correctness.md`), its field names in scope as in the spec's

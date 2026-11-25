@@ -36,8 +36,8 @@ not run its initialiser again.
 **comptime.static.2** Such a const is borrowed, or copied if its type is `Copy`: `&NAME`,
 `NAME.method()` (borrowing it), `NAME[i]` and `NAME.field` read it in place. Using one whose type
 is not `Copy` by value, `let v = NAME`, would move static data, and is an error (E1009); `clone`
-gives an owned copy. A value that cannot be data (one holding a closure, a `dyn` value, a C
-pointer or function pointer, or a borrow of part of an array) is an error at the const (E1008).
+gives an owned copy. A value that cannot be data (one holding a closure, a `dyn` value, or a C
+pointer or function pointer) is an error at the const (E1008).
 An `Rc` in a const keeps its own count, so it is never freed.
 
 **comptime.static.3** A const's type may hold shared borrows (`&T`, `&[T]`), of values that hold

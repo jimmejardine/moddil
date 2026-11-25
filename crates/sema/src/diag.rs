@@ -265,8 +265,8 @@ codes! {
     E1006 = "invalid derive function",
     /// A template's `inline for`, `if const` or reflected field used where it cannot be.
     E1007 = "invalid template",
-    /// A const item whose value cannot be static data: it holds a closure, a `dyn` value, a C
-    /// pointer or function pointer, or a borrow of part of an array.
+    /// A const item whose value cannot be static data: it holds a closure, a `dyn` value, or a C
+    /// pointer or function pointer.
     E1008 = "const that cannot be static data",
     /// A const item that is not `Copy` used by value: it is static data, only borrowed.
     E1009 = "move of a const",
