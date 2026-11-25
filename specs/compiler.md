@@ -1,6 +1,6 @@
 # Compiler and bootstrap
 
-> **Status:** complete: decided, with no open questions (walked through November 2026). Answers [`roadmap.md`](roadmap.md) Q6: how the compiler is built, structured and
+> **Status:** complete: decided, with no open questions (walked through November 2026). How the compiler is built, structured and
 > bootstrapped, and which backends it uses. Milestones are in [`roadmap.md`: Milestones](roadmap.md#milestones). WASM support facts verified November 2026 ([WASM support: verified status (November 2026)](#wasm-support-verified-status-november-2026) below).
 
 ## Answers in brief

@@ -1,60 +1,16 @@
-# Roadmap and cross-cutting questions
+# Roadmap
 
-> **Status:** complete: no open questions. The single place for planning: strategic and technical questions that
-> span several areas, the milestones, what is still to build (and what built work deferred),
-> staging, and the order of the reference examples. What was built is in the git history.
-
-## Cross-cutting questions
-
-Open questions for a single area live in that area's document (see the [index](README.md)). The questions here cut across
-areas.
-
-**Strategic questions**
-1. **Primary target domain** for v0? **Decided:** backend and infrastructure services, plus fast
-   native modules for Python ([`adoption.md`: First audiences](adoption.md#first-audiences)).
-2. **Who is the first user?** **Decided:** backend and infrastructure teams, and Python teams that
-   need speed ([`adoption.md`: First audiences](adoption.md#first-audiences)).
-3. **Adoption path**: embed in existing C/C++/Rust codebases one module at a time, through C export
-   and the generated Rust bridge ([Interoperability with C and Rust](interop.md))? **Decided**, with
-   Python extension modules and `moddil migrate rust` added ([`adoption.md`: Adopting inside existing codebases](adoption.md#adopting-inside-existing-codebases)).
-4. **Is multi-tier deployment ([Distributed and multi-tier programs](distribution.md)) a v0 goal?** **Decided:** the language layer (components,
-   placement, `Remote`, contracts, single-process and simulated runs) is v0; images, Compose,
-   Kubernetes and skew checks are v1; other adapters later ([Staging](#staging-distributed-programs)).
-5. **Mobile and UI**: shared logic under native UI shells, or a Moddil UI mod? **Decided:** native UI
-   over a shared Moddil core, always; no standard UI mod ([`ui.md`](ui.md)).
-
-The **reference examples** in [`examples/`](examples/README.md) (multiplayer game, HFT platform, web
-store, Hashiverse) are the yardstick for every decision. A feature no example needs is a candidate for
-removal.
-
-**Technical questions**
-6. **Compiler and back ends — decided** in [`compiler.md`](compiler.md): the compiler is written in
-   Rust, with self-hosting deferred until after v1; Cranelift (debug) + LLVM (release) + own WASM
-   emitter + naga/LLVM for GPU; JSPI as the first WASM lowering; a separate reference interpreter.
-7. **Memory core — decided** in [`memory.md`](memory.md): unique
-   ownership, second-class borrows and view types, `.to_rc()` with biased RC, affine + linear
-   resources (summary in [Memory: ownership, borrowing and sharing](memory.md)).
-8. Effect system design. **Decided:** a hybrid of scoped handlers and second-class capability
-   values ([`effects-and-capabilities.md`](effects-and-capabilities.md), [Effects and capabilities as a unifying idea](effects-and-capabilities.md)).
-9. **Canonical AST storage — decided:** plain `.moddil` text files in git (not `.mdl`, which other
-   tools already use, so editors would misdetect it), always in canonical format (the formatter
-   prints the AST). There is no structured store: the language is its canonical text
-   ([`definition.md`: The reference](definition.md#the-reference)), and the semantic diff and
-   per-definition content hashes give the structured benefits ([`semantic-vcs.md`](semantic-vcs.md)).
-10. **Minimum viable language — decided:** M0 implemented the v0 language in vertical slices; what
-    was left for later is under [Deferred from built work](#deferred-from-built-work).
-11. **How is the language defined?** A prose reference, a formal semantics, or the MIR interpreter as
-    the executable reference? How are conformance tests organised? **Decided:** a normative
-    reference with formal core rules, the interpreter as its executable form and a mechanised core
-    model, plus a shared conformance suite ([`definition.md`](definition.md)).
+> **Status:** complete: no open questions. The single place for planning: the milestones, what
+> is still to build (and what built work deferred), staging, and the order of the reference
+> examples. Decisions live in each area's document ([index](README.md)). What was built is in the git history.
 
 ## Milestones
 
+M0 to M2 (the front end and both interpreters, the native and WASM backends, the first mods and
+the GPU path) are done; other documents still name them.
+
 | Milestone | Contents | Status |
 |---|---|---|
-| **M0** | The grammar source first ([`definition.md`: One grammar source](definition.md#one-grammar-source)), then the compiler front end in Rust, grown in vertical slices: parser, type, effect and ownership checker, MIR, MIR interpreter. Small programs run. The separate **reference interpreter** starts alongside ([`compiler.md`: Two interpreters](compiler.md#two-interpreters)). **The tour** becomes the `tour/shorty` mod and must parse and check in CI ([`tour.md`: From markdown to source](tour.md#from-markdown-to-source)). | Done |
-| **M1** | Cranelift native backend (Linux, macOS, Windows). Own WASM emitter producing core modules with the **JSPI lowering**, run in Node and browsers. | Done |
-| **M2** | First standard mods written in Moddil; `moddil/runtime` and `moddil/runtime-sim`; LSP prototype. The tour's tests pass under `moddil/runtime-sim`. **The first GPU path:** kernel lowering through naga to WGSL, the `moddil/gpu` WebGPU handler and CPU simulator, and enough of `moddil/web` for a canvas and input; the **Mandelbulb flight** showcase runs in browsers as its test ([`examples/mandelbulb.md`](examples/mandelbulb.md)). | Done |
 | **M3** | **Hashiverse CLI/native client** (phase A). LLVM release backend. **Python bindings** (`moddil bind --lang python`, wheels), the first binding target ([`adoption.md`: Python first](adoption.md#python-first)), shown off by **Talk**, on the CPU pool first and then on WebGPU. | In progress: the C ABI and the first Python bindings are built |
 | **M4** | **A backend service**: the web store API with `sql`, HTTP and deterministic simulation; distributed v0 ([Staging: distributed programs](#staging-distributed-programs)). | To do |
 | **M5** | **Browser**: the Hashiverse web client, the game client and **fumoca's engine, simulation and GPU code**, replaced together; Swift, Kotlin and TypeScript bindings ([`ui.md`](ui.md)). WASI components with stack switching once Wasmtime's support leaves Tier 3. JSPI's per-switch cost measured on the game client. | To do |
@@ -73,16 +29,43 @@ READMEs describe what exists.
 
 **M3, the rest:**
 - **The Hashiverse CLI/native client** (phase A), through the C ABI: its first pieces next.
-- **The LLVM release backend**, beside Cranelift for release builds.
+- **The LLVM release backend**, beside Cranelift for release builds, on one pinned LLVM major
+  version, upgraded about once a year in one change ([`compiler.md`: Backends](compiler.md#backends)).
 - **Python, beyond the first bindings** (`moddil build --wheel` exists; the smaller steps are
   work package P1 below):
   - `async` functions as `asyncio` awaitables, on Moddil's executor;
   - more than one call into Moddil at a time (free-threaded CPython's separate pools);
   - `moddil bind --lang python`, the command the milestone names.
-- **Talk**, the showcase ([`examples/talk.md`](examples/talk.md)): on the CPU pool first, then on
-  WebGPU.
+- **Talk**, the showcase ([`examples/talk.md`](examples/talk.md)), published as `moddil-talk`: on
+  the CPU pool first, then on WebGPU. It needs:
+  - `moddil/tensor` loading safetensors, memory-mapped, with shapes checked at load time
+    ([`accelerators.md`: Loading model weights](accelerators.md#loading-model-weights));
+  - `moddil/audio`, the `Audio` effect with OS, Web Audio and simulated handlers
+    ([`stdlib.md`: Audio](stdlib.md#audio));
+  - English G2P: a lexicon, with a small open-weights neural model for unknown words.
 
-**M4 and M5** as the milestones above say; nothing of either is built yet.
+**Decided, not yet built** (beyond the milestones):
+- **The formatter**, `moddil fmt`: source is always in canonical format, printed from the AST
+  ([`definition.md`: The reference](definition.md#the-reference)).
+- **The semantic diff** and per-definition content hashes, which give structured storage's
+  benefits over plain text files ([`semantic-vcs.md`](semantic-vcs.md)).
+- **The generated Rust bridge** (a Moddil mod as a Rust crate, and Rust crates read from rustdoc's
+  JSON) and **`moddil migrate rust`**, the adoption path into existing Rust codebases
+  ([`interop.md`: Rust: the generated bridge](interop.md#rust-the-generated-bridge),
+  [`adoption.md`: Adopting inside existing codebases](adoption.md#adopting-inside-existing-codebases)).
+- **The mechanised core model** in Lean ([`model/`](../model/README.md)), from which the reference's
+  core rules are generated and against which the reference interpreter is validated
+  ([`definition.md`](definition.md)).
+
+**M4 and M5** as the milestones above say; nothing of either is built yet. Decided for M5:
+- fumoca's `engine`, `sim` and `gpu` are replaced together, its workbooks compiled to kernels
+  through a `dyn_kernel` shader-builder mod with bindings typed and checked at launch
+  ([`accelerators.md`: Kernels built at run time](accelerators.md#kernels-built-at-run-time));
+- JSPI's per-switch cost is measured on the game client.
+
+**moddil.com** ([`web.md`: Hosting](web.md#hosting)) goes up with the playground, once `/play` runs
+real programs: Cloudflare Pages, with Astro (Starlight) for the site and, once P23 builds it,
+`moddil doc`'s API pages and checked code blocks.
 
 **Next:** any work package below; or async in the Python bindings; or the Hashiverse client's
 first pieces through the C ABI; or the LLVM release backend.
@@ -196,7 +179,8 @@ L)
 - `EnumSet`'s bits in the smallest unsigned integer that fits its enum, as `stdlib.md` decides
   (for packed structs and wire formats): a `u128` for now, chosen when compiling (P11).
 - The hasher keyed from `Rand`, with tests printing their seed, so map order differs per run.
-- Perceus-style reuse of a node no one else holds; the persistent map's iterator in O(1) per
+- Perceus-style reuse of a node no one else holds, as a pass on MIR (`mir.md`: Reference
+  counting); the persistent map's iterator in O(1) per
   entry (needs a view that holds a stack of borrows).
 
 **P20. Time zones** (`mods/time`; M)
@@ -256,6 +240,20 @@ L)
   `moddil_trapped()` after it; the process no longer ends (`interop.md`: Export). The generated
   header declares `moddil_trapped`.
 
+**P33. Runtime type information** (`mods/reflect`, `crates/sema` derives; M)
+- `#[derive(Reflect)]` (`stdlib.md`: Runtime type information): a static `TypeInfo` and typed
+  field accessors; only fields visible where they are read; read-only unless the type has
+  `#[reflect(mut)]`.
+
+**P34. Traps unwind only in isolated scopes** (`crates/native`, `crates/wasm`, `crates/rt`; L)
+- Today every internal call returns a status that its caller checks and passes on
+  (`crates/native/src/lower.rs`), so every call pays a branch. `mir.md` decides instead:
+  - ordinary code has no landing pads, and a trap there ends the process;
+  - inside `scope(…, isolate: true)`, a trap unwinds through tables, with exnref on WASM,
+    running drops and `abandon`.
+- Add a benchmark that guards the cost of isolated scopes.
+- Keep traps at the C ABI as they are now (P32).
+
 **Waits on bigger work** (not packaged)
 - The rest of M3 and M4 and M5 (above, "Still to build").
 - A parallel runtime: biased counting, `AtomicRc`, the cycle detector.
@@ -267,6 +265,8 @@ L)
   Svelte app.
 - Each for its own milestone: units, `Simd`, linear types, generators and coroutines,
   distribution ([Staging](#staging-distributed-programs)), data contracts.
+- `moddil bench`, with budgets that fail CI: the HFT hot path's latency is measured that way,
+  not checked by the compiler ([`examples/hft-platform.md`](examples/hft-platform.md)).
 
 **Known limits, with no package yet**
 - The float functions other than `sqrt` are `libm`'s, not yet correctly rounded.
