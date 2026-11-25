@@ -86,3 +86,21 @@ test "a send and a join can be arms, and an error passes on" {
     });
     v                                       // => 10
 }
+
+// On a rendezvous channel, a send arm is done once its value is received.
+test "a send arm waits for its rendezvous" {
+    let (tx, rx) = channel::<int>(0);
+    let (log, out) = channel::<int>(4);
+    scope(|s| {
+        s.spawn(|| {
+            log.send(1)?;
+            rx.recv();
+        })?;
+        select {
+            _ = tx.send(5)? => log.send(2)?,
+        }
+    })?;
+    out.recv()                              // => Some(1)
+    ;
+    out.recv()                              // => Some(2)
+}

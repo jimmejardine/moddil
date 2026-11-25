@@ -144,14 +144,12 @@ L)
 - `f::Args` made and matched by that name (`f::Args { a, b }`), and for a generic function.
 - `moddil explain` printing the expansion (the command itself is not built).
 
-**P14. Cancellation, finished** (`crates/sched`, both runtimes, the reference interpreter; M)
-- A cancelled task's pending operation's value dropped with its destructors.
-- A `send` in `select` waiting for its rendezvous.
-- A `join` of a cancelled task not unwinding the task that joins.
-
-**P15. Selectable functions in the runtimes** (`crates/sched`, `crates/interp`, `crates/rt`,
-`crates/native`; M)
-- A `select` arm on a `#[selectable]` function waits for it, rather than trapping when it runs.
+**P15. Selectable trait methods** (`crates/mir` `build/select.rs`, `crates/interp`,
+`crates/native`; L)
+- A `select` arm on a `#[selectable]` trait method reached through a bound
+  (`fn f<S: Source>(s: &S) { select { x = s.take() => … } }`) traps: the impl's two parts
+  (`task.select.4`) are known only once `S` is. Free functions and inherent methods, generic ones
+  too, already work.
 
 **P16. Errors and effects** (`crates/mir`, both runtimes, the CLI's reports; L)
 - Notes after `?` kept as an error return trace, shown with an error that escapes.
@@ -259,6 +257,9 @@ L)
   types a literal where it meets it, not by a later use of an unannotated variable; and types a
   collection literal only from a `let`'s type, a parameter or a result. Closing these needs
   inference of its own, which is not decided.
+- A `join` of a cancelled task unwinds the task that joins, and cancels its scope
+  (`task.cancel.1`). Not unwinding it needs a decision first: how the join is told, since
+  `Cancelled` is not an error (`error-handling.md` D15).
 - `panic`: only bugs trap (`unreachable`, `todo`, `assert`, `?!`), by design so far.
 
 ## Staging: distributed programs

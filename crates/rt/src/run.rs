@@ -978,18 +978,41 @@ pub extern "C" fn recv_now(c: u64, out: *mut u8) -> u8 {
 }
 
 /// A `select` arm's send, which is ready: 0, or 2 if the receiver is gone (the value dropped).
+/// On a rendezvous channel the arm is done once the value is received (`task.select.1`): it
+/// waits for that, giving 2 if the receiver goes first, or 1 or 3 to trap or unwind.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "moddil_rt_send_now")]
-pub extern "C" fn send_now(c: u64, v: *const u8, n: u64, drop: Option<DropFn>) -> u8 {
+pub extern "C" fn send_now(
+    c: u64,
+    v: *const u8,
+    n: u64,
+    drop: Option<DropFn>,
+    site: u32,
+    tracked: u8,
+) -> u8 {
+    let c = c as usize;
     let value = bytes(v, n);
-    let closed = with(|s| {
-        if s.sched.receiver_alive(c as usize) {
-            s.sched.push(c as usize, value);
-            None
+    let (closed, sent) = with(|s| {
+        if s.sched.receiver_alive(c) {
+            let (k, rendezvous) = s.sched.push(c, value);
+            (None, rendezvous.then_some(k))
         } else {
-            Some(value)
+            (Some(value), None)
         }
     });
+    if let Some(k) = sent {
+        return waiting(site, tracked != 0, |s, me| {
+            if s.sched.cancelled(me) {
+                s.sched.start_unwinding(me);
+                return Some(3);
+            }
+            if !s.sched.taken(c, k) {
+                s.sched.block(me, Wait::Taken(c, k));
+                return None;
+            }
+            Some(if s.sched.receiver_alive(c) { 0 } else { 2 })
+        });
+    }
     match (closed, drop) {
         (Some(v), Some(d)) => match drop_all(vec![(d, v)]) {
             0 => 2,

@@ -345,6 +345,16 @@ impl<'a> Stack<'a> {
         frame.after_drops = Some(after);
     }
 
+    /// Runs `calls`, then the top frame's cleanup, where [`Stack::unwind_top`] has put it.
+    pub(crate) fn drops_before_cleanup(&mut self, calls: Vec<DropCall>) {
+        if calls.is_empty() {
+            return;
+        }
+        let frame = self.top_mut();
+        frame.drops = calls;
+        frame.after_drops = Some(frame.block);
+    }
+
     /// Runs `calls` before the rest of the running `Drop` terminator's destructors.
     pub(crate) fn drops_first(&mut self, calls: Vec<DropCall>) {
         let frame = self.top_mut();

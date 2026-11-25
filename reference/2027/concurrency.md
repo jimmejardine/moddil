@@ -47,7 +47,8 @@ dropped, for now.
 **task.cancel.1** A cancelled scope cancels its tasks, its body's included, and the scopes they
 have opened, and so on in. A cancelled task runs on until it next suspends (**task.sched.1**); there
 it **unwinds** instead: it leaves every block it is in as an error would, running their `defer`s,
-`errdefer`s and drops ([Statements](statements.md)), and ends. A task waiting at a scope's end
+`errdefer`s and drops ([Statements](statements.md)), and ends; the value a `send` it waits in was
+to send is dropped. A task waiting at a scope's end
 waits for that scope's tasks first. A `join` of a cancelled task unwinds the joining task, whose
 scope is cancelled too.
 
@@ -91,8 +92,8 @@ arm's handle and value to send are evaluated first, in order; then the first arm
 order, whose operation is ready does it, its pattern (which matches every value, E0209) binds the
 result, and its body is the `select`'s value. With none ready, the task waits until one is. The
 other arms' operations are not done: a value an arm would have sent is dropped. An error of an
-operation marked with `?` passes on as `?` passes it; a `send` in a `select` does not wait for its
-value to be received.
+operation marked with `?` passes on as `?` passes it. A `send` arm on a rendezvous channel is done,
+as a `send` is, once its value is received.
 
 **task.select.2** The arms' values have one type (E0201), as a `match`'s do.
 

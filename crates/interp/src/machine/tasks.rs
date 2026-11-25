@@ -20,9 +20,18 @@ pub(super) enum Pending {
     Yielded,
     /// A scope's end.
     Scope(usize),
-    Send(usize, Value),
+    /// A `send` of a value of the type, on a channel.
+    Send(usize, Value, Ty),
     /// A rendezvous `send`, waiting for the `n`th value to be received.
     Taken(usize, u64),
+    /// A `select` whose arm `index` sent on a rendezvous channel, waiting for the `n`th value to
+    /// be received (`task.select.1`).
+    SelectTaken {
+        c: usize,
+        n: u64,
+        op: SelectOp,
+        index: usize,
+    },
     Recv(usize),
     Stop,
     /// A `select`: its arms' operations.
@@ -45,6 +54,8 @@ enum Attempt {
     Done(Result<Value, Value>),
     Wait(Pending, Wait),
     Unwind,
+    /// Unwinding, started already.
+    Unwound,
 }
 
 impl Machine<'_> {
@@ -184,7 +195,10 @@ impl Machine<'_> {
                 self.pending.insert(me, (Pending::Yielded, ret));
                 return self.switch_next();
             }
-            "send" => Pending::Send(id_of(&self.stack.deref(&values[0])), values[1].clone()),
+            "send" => {
+                let t = args.first().map_or(Ty::Unit, |t| self.concrete(t));
+                Pending::Send(id_of(&self.stack.deref(&values[0])), values[1].clone(), t)
+            }
             "recv" => Pending::Recv(id_of(&self.stack.deref(&values[0]))),
             "stop_requested" => Pending::Stop,
             _ => {
@@ -396,13 +410,21 @@ impl Machine<'_> {
                 self.switch_next()
             }
             Attempt::Unwind => self.unwind_here(),
+            Attempt::Unwound => None,
         }
     }
 
     fn try_op(&mut self, p: Pending) -> Attempt {
         let me = self.stack.current();
-        // A scope's end waits for its tasks however it is cancelled.
+        // A scope's end waits for its tasks however it is cancelled. A value a cancelled
+        // `send` was to send is dropped (`task.cancel.1`).
         if self.sched.cancelled(me) && !matches!(p, Pending::Scope(_)) {
+            if let Pending::Send(_, v, t) = p {
+                let calls = self.dispatch.drop_glue(v, &t, true);
+                self.unwind_here();
+                self.stack.drops_before_cleanup(calls);
+                return Attempt::Unwound;
+            }
             return Attempt::Unwind;
         }
         match p {
@@ -428,12 +450,12 @@ impl Machine<'_> {
                     Err(Failure::Trapped(t)) => Attempt::Done(Err(self.trapped(&t))),
                 }
             }
-            Pending::Send(c, v) => {
+            Pending::Send(c, v, t) => {
                 if !self.sched.receiver_alive(c) {
                     return Attempt::Done(Err(self.natives.unit_struct("Closed")));
                 }
                 if !self.sched.can_send(c) {
-                    return Attempt::Wait(Pending::Send(c, v), Wait::Send(c));
+                    return Attempt::Wait(Pending::Send(c, v, t), Wait::Send(c));
                 }
                 match self.sched.push(c, v) {
                     (n, true) => Attempt::Wait(Pending::Taken(c, n), Wait::Taken(c, n)),
@@ -465,6 +487,18 @@ impl Machine<'_> {
                 }
             }
             Pending::Select(ops) => self.try_select(ops),
+            Pending::SelectTaken { c, n, op, index } => {
+                if !self.sched.taken(c, n) {
+                    let w = Wait::Taken(c, n);
+                    return Attempt::Wait(Pending::SelectTaken { c, n, op, index }, w);
+                }
+                if !self.sched.receiver_alive(c) {
+                    self.stack
+                        .store(&op.error, self.natives.unit_struct("Closed"));
+                    self.stack.store(&op.failed, Value::Bool(true));
+                }
+                Attempt::Done(Ok(Value::Int(index as i64)))
+            }
         }
     }
 
@@ -610,7 +644,13 @@ impl Machine<'_> {
                 let v = self.stack.load(&p);
                 self.stack.store(&p, Value::Empty);
                 if self.sched.receiver_alive(c) {
-                    self.sched.push(c, v);
+                    self.stack.store(&o.result, Value::Unit);
+                    // On a rendezvous channel the arm is done once the value is received.
+                    if let (n, true) = self.sched.push(c, v) {
+                        let (op, index) = (o.clone(), i);
+                        let w = Wait::Taken(c, n);
+                        return Attempt::Wait(Pending::SelectTaken { c, n, op, index }, w);
+                    }
                     Ok(Value::Unit)
                 } else {
                     Err(self.natives.unit_struct("Closed"))

@@ -318,7 +318,7 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
     ("recv", &['w', 'p', 's', 'b'], Some('b')),
     ("select", &['w', 'p', 's', 'b'], Some('w')),
     ("recv_now", &['w', 'p'], Some('b')),
-    ("send_now", &['w', 'p', 'w', 'p'], Some('b')),
+    ("send_now", &['w', 'p', 'w', 'p', 's', 'b'], Some('b')),
     ("join_now", &['w', 'p', 'p'], Some('b')),
 ];
 
@@ -4903,13 +4903,23 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                     let at = self.addr_or_dangling(&pr)?;
                     let size = self.b.ins().iconst(types::I64, i64::from(l.size));
                     let drop = self.drop_fn(&pr.ty)?;
+                    let (site, tracked) = self.task_site(range);
                     let st = self
-                        .task_call("send_now", &[id, at, size, drop])
+                        .task_call("send_now", &[id, at, size, drop, site, tracked])
                         .expect("a status");
                     self.set_flag(&p, false);
+                    // 2: closed; 1 or 3: a trap, or unwinding, while it waited for its
+                    // rendezvous.
                     let closed = self.b.create_block();
                     let sent = self.b.create_block();
-                    self.b.ins().brif(st, closed, &[], sent, &[]);
+                    let not = self.b.create_block();
+                    let other = self.b.create_block();
+                    self.b.ins().brif(st, not, &[], sent, &[]);
+                    self.b.switch_to_block(not);
+                    let is = self.b.ins().icmp_imm_s(IntCC::Equal, st, 2);
+                    self.b.ins().brif(is, closed, &[], other, &[]);
+                    self.b.switch_to_block(other);
+                    self.not_returned(st)?;
                     self.b.switch_to_block(closed);
                     let er = self.place(&a.error)?;
                     let room = self.error_room(&er.ty)?;

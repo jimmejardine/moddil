@@ -132,3 +132,20 @@ test "cancellation reaches the scopes inside" {
     ;
     inner                                   // => true
 }
+
+test "a cancelled send's value is dropped" {
+    let held = 1.to_rc();
+    let (tx, rx) = channel::<Rc<int>>(1);
+    let r = try {
+        tx.send(0.to_rc())?;                // the channel is full
+        scope(|s| {
+            let v = held.share();
+            s.spawn(|| {
+                tx.send(v)?;                // waits for room, and is cancelled
+            })?;
+            yield_now();
+            risky(3)?
+        })?
+    };
+    Rc::strong_count(&held)                 // => 1
+}

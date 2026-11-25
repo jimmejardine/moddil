@@ -608,7 +608,7 @@ impl Machine<'_> {
         };
         let mut value = Some(v);
         let mut sent = None;
-        self.run_op(range, |ts, _| {
+        let r = self.run_op(range, |ts, _| {
             if let Some(n) = sent {
                 if !ts.taken(c, n) {
                     return Attempt::Wait(Wait::Taken(c, n));
@@ -632,7 +632,13 @@ impl Machine<'_> {
                 }
                 _ => Attempt::Done(Ok(Value::Unit)),
             }
-        })
+        });
+        // A value not sent, its receiver gone or its task cancelled, is dropped
+        // (`task.cancel.1`).
+        if let Some(v) = value {
+            self.drop_value(v, true, range)?;
+        }
+        r
     }
 
     /// A scope's run: its body as its first task, at once, then the scope's end, once every
@@ -1137,7 +1143,20 @@ impl Machine<'_> {
             variant: "Closed".to_string(),
             fields: Vec::new(),
         };
+        // A send arm on a rendezvous channel that sent: its index and the value's number.
+        let mut sent: Option<(usize, usize, u64)> = None;
         let chosen = self.run_op(range, |ts, me| {
+            if let Some((i, c, n)) = sent {
+                if !ts.taken(c, n) {
+                    return Attempt::Wait(Wait::Taken(c, n));
+                }
+                let outcome = if ts.channels[c].receiver {
+                    Ok(Value::Unit)
+                } else {
+                    Err(closed.clone())
+                };
+                return Attempt::Done(outcome.map(|v| Value::Tuple(vec![Value::Int(i as i64), v])));
+            }
             let Some(i) = ops.iter().position(|o| ts.op_ready(me, o)) else {
                 return Attempt::Wait(Wait::Select(ops.clone()));
             };
@@ -1146,7 +1165,11 @@ impl Machine<'_> {
                 Op::Send(c) => {
                     let v = payloads[i].take().expect("a value to send");
                     if ts.channels[c].receiver {
-                        ts.push(c, v);
+                        // On a rendezvous channel the arm is done once the value is received.
+                        if let (n, true) = ts.push(c, v) {
+                            sent = Some((i, c, n));
+                            return Attempt::Wait(Wait::Taken(c, n));
+                        }
                         Ok(Value::Unit)
                     } else {
                         Err(closed.clone())
