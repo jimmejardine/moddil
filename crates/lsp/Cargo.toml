@@ -20,5 +20,8 @@ serde_json.workspace = true
 serde.workspace = true
 salsa.workspace = true
 
+[dev-dependencies]
+lsp-server.workspace = true
+
 [lints]
 workspace = true

@@ -1,0 +1,43 @@
+{
+  "name": "moddil",
+  "displayName": "Moddil",
+  "description": "Moddil: colouring, and the moddil language server's diagnostics, hover, go to definition, inlay hints and completion.",
+  "version": "0.0.1",
+  "publisher": "moddil",
+  "license": "MIT OR Apache-2.0",
+  "private": true,
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Programming Languages"],
+  "main": "./extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "moddil",
+        "aliases": ["Moddil", "moddil"],
+        "extensions": [".moddil"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "moddil",
+        "scopeName": "source.moddil",
+        "path": "./syntaxes/moddil.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Moddil",
+      "properties": {
+        "moddil.server.path": {
+          "type": "string",
+          "default": "moddil",
+          "description": "The moddil command, which runs the language server as `moddil lsp`."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

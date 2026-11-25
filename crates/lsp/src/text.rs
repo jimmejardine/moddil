@@ -49,6 +49,29 @@ impl<'t> LineIndex<'t> {
     }
 }
 
+/// An edit of a document: the text between two positions, `(line, column)` in UTF-16 units, or
+/// all of it for `None`, replaced by the string.
+pub type Edit = (Option<((u32, u32), (u32, u32))>, String);
+
+/// `text` with each edit applied in turn: one replacing the text between two LSP positions
+/// (`(line, column)`, UTF-16), or all of it when it has none (`textDocument/didChange` with
+/// incremental sync).
+pub fn apply_edits(text: &str, edits: &[Edit]) -> String {
+    let mut text = text.to_string();
+    for (range, new) in edits {
+        match range {
+            None => text.clone_from(new),
+            Some(((l0, c0), (l1, c1))) => {
+                let ix = LineIndex::new(&text);
+                let a = ix.offset(*l0, *c0) as usize;
+                let b = (ix.offset(*l1, *c1) as usize).max(a);
+                text.replace_range(a..b, new);
+            }
+        }
+    }
+    text
+}
+
 /// The path a `file://` URI names, percent-decoded (`file:///d%3A/x.moddil` is `d:/x.moddil`).
 pub fn uri_path(uri: &str) -> Option<PathBuf> {
     let rest = uri.strip_prefix("file://")?;
@@ -114,6 +137,44 @@ mod tests {
         assert_eq!(ix.offset(1, 3), 9);
         assert_eq!(ix.offset(0, 99), 2);
         assert_eq!(ix.position(0), (0, 0));
+    }
+
+    #[test]
+    fn edits_apply_in_turn_by_utf16_positions() {
+        let t = "fn f() {
+    λ😀x
+}
+";
+        // Replace `x` (after `λ`, 1 unit, and `😀`, 2) with `yz`, then add a line at the top.
+        let edits = vec![
+            (Some(((1, 7), (1, 8))), "yz".to_string()),
+            (
+                Some(((0, 0), (0, 0))),
+                "// hi
+"
+                .to_string(),
+            ),
+        ];
+        assert_eq!(
+            apply_edits(t, &edits),
+            "// hi
+fn f() {
+    λ😀yz
+}
+"
+        );
+        // A deletion across lines, then a whole new text.
+        assert_eq!(
+            apply_edits(
+                "ab
+cd
+",
+                &[(Some(((0, 1), (1, 1))), String::new())]
+            ),
+            "ad
+"
+        );
+        assert_eq!(apply_edits("old", &[(None, "new".to_string())]), "new");
     }
 
     #[test]

@@ -185,9 +185,6 @@ L)
 - `moddil doc`, and doc links (`[[Account::open]]`) checked against the code, as `docs.md` says.
 - An example's `// => fail(E)` and snapshot-style expected output (`testing.md`).
 
-**P24. The language server, next** (`crates/lsp`; M)
-- Incremental document sync, and analysis off the server's one thread; an editor extension.
-
 **P26. A line-by-line review of the checkers and the native lowering** (`crates/sema` `check/`,
 `crates/native` `lower.rs`; L)
 - The codebase review of November 2026 scanned these (repeated code, function lengths, markers,

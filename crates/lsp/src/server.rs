@@ -1,8 +1,15 @@
 //! The LSP loop: requests and notifications over standard input and output, answered from an
-//! [`Analysis`]. Documents are synchronised whole; after each change the problems of the changed
-//! file's mod are published.
+//! [`Analysis`].
+//!
+//! - Documents are synchronised by their edits (incremental sync), applied in turn.
+//! - The analysis runs on a thread of its own, so the thread reading the input never waits on
+//!   it. That thread takes all the messages waiting at once and handles them in order, then
+//!   publishes the problems of each file they changed once: a file edited many times while it
+//!   worked is analysed only as it is now, not after each edit.
+//! - After a change, the problems of the changed file's mod are published.
 
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 
 use lsp_server::{Connection, Message, Notification, Request, Response};
 use lsp_types::notification::{
@@ -41,10 +48,17 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
-/// Serves `conn` until it is shut down.
-fn serve(conn: &Connection) -> Result<(), String> {
+/// Serves `conn` until it is shut down: [`run`]'s loop, on any connection (an in-memory one in
+/// tests).
+///
+/// # Errors
+///
+/// A broken connection, or a client that does not speak the protocol.
+pub fn serve(conn: &Connection) -> Result<(), String> {
     let caps = ServerCapabilities {
-        text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
+        text_document_sync: Some(TextDocumentSyncCapability::Kind(
+            TextDocumentSyncKind::INCREMENTAL,
+        )),
         hover_provider: Some(HoverProviderCapability::Simple(true)),
         definition_provider: Some(OneOf::Left(true)),
         inlay_hint_provider: Some(OneOf::Left(true)),
@@ -56,27 +70,44 @@ fn serve(conn: &Connection) -> Result<(), String> {
     };
     conn.initialize(serde_json::to_value(caps).map_err(err)?)
         .map_err(err)?;
-    let mut s = Server {
-        conn,
-        analysis: Analysis::new(),
-    };
-    for msg in &conn.receiver {
-        match msg {
-            Message::Request(req) => {
-                if conn.handle_shutdown(&req).map_err(err)? {
+    let (jobs, inbox) = mpsc::channel::<Message>();
+    let out = conn.sender.clone();
+    let sender: Send = Box::new(move |m| out.send(m).map_err(err));
+    std::thread::scope(|scope| {
+        let worker = scope.spawn(move || {
+            let mut s = Server {
+                sender,
+                analysis: Analysis::new(),
+            };
+            s.work(&inbox)
+        });
+        let read = (|| {
+            for msg in &conn.receiver {
+                if let Message::Request(req) = &msg
+                    && conn.handle_shutdown(req).map_err(err)?
+                {
                     return Ok(());
                 }
-                s.request(req)?;
+                if jobs.send(msg).is_err() {
+                    break;
+                }
             }
-            Message::Notification(n) => s.notification(n)?,
-            Message::Response(_) => {}
-        }
-    }
-    Ok(())
+            Ok(())
+        })();
+        // The worker ends once its inbox closes.
+        drop(jobs);
+        let worked = worker
+            .join()
+            .map_err(|_| "the analysis thread panicked".to_string())?;
+        read.and(worked)
+    })
 }
 
-struct Server<'c> {
-    conn: &'c Connection,
+/// How the analysis thread sends a message to the client.
+type Send = Box<dyn Fn(Message) -> Result<(), String> + std::marker::Send>;
+
+struct Server {
+    sender: Send,
     analysis: Analysis,
 }
 
@@ -88,27 +119,73 @@ fn uri_of(path: &Path) -> Option<Uri> {
     path_uri(path).parse().ok()
 }
 
-impl Server<'_> {
+impl Server {
     fn send(&self, m: impl Into<Message>) -> Result<(), String> {
-        self.conn.sender.send(m.into()).map_err(err)
+        (self.sender)(m.into())
     }
 
-    fn notification(&mut self, n: Notification) -> Result<(), String> {
+    /// Handles what arrives in `inbox` until it closes: each time, every message waiting, in
+    /// order, then the problems of the files they changed, each once.
+    fn work(&mut self, inbox: &mpsc::Receiver<Message>) -> Result<(), String> {
+        while let Ok(first) = inbox.recv() {
+            let mut changed: Vec<PathBuf> = Vec::new();
+            for msg in std::iter::once(first).chain(inbox.try_iter()) {
+                match msg {
+                    Message::Request(req) => {
+                        // A request sees the problems of what changed before it.
+                        for path in std::mem::take(&mut changed) {
+                            self.publish(&path)?;
+                        }
+                        self.request(req)?;
+                    }
+                    Message::Notification(n) => {
+                        if let Some(path) = self.notification(n)?
+                            && !changed.contains(&path)
+                        {
+                            changed.push(path);
+                        }
+                    }
+                    Message::Response(_) => {}
+                }
+            }
+            for path in changed {
+                self.publish(&path)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Handles a notification; the file whose text it changed, if it did.
+    fn notification(&mut self, n: Notification) -> Result<Option<PathBuf>, String> {
         match n.method.as_str() {
             DidOpenTextDocument::METHOD => {
                 let p: lsp_types::DidOpenTextDocumentParams = from(n.params)?;
                 if let Some(path) = path_of(&p.text_document.uri) {
                     self.analysis.set_text(&path, &p.text_document.text);
-                    self.publish(&path)?;
+                    return Ok(Some(path));
                 }
             }
+            // Its edits, in turn, on the text as it is (incremental sync).
             DidChangeTextDocument::METHOD => {
                 let p: lsp_types::DidChangeTextDocumentParams = from(n.params)?;
-                if let (Some(path), Some(change)) =
-                    (path_of(&p.text_document.uri), p.content_changes.last())
-                {
-                    self.analysis.set_text(&path, &change.text);
-                    self.publish(&path)?;
+                if let Some(path) = path_of(&p.text_document.uri) {
+                    let edits: Vec<_> = p
+                        .content_changes
+                        .into_iter()
+                        .map(|c| {
+                            let range = c.range.map(|r| {
+                                (
+                                    (r.start.line, r.start.character),
+                                    (r.end.line, r.end.character),
+                                )
+                            });
+                            (range, c.text)
+                        })
+                        .collect();
+                    let old = self.analysis.text(&path).unwrap_or_default();
+                    let text = crate::text::apply_edits(&old, &edits);
+                    self.analysis.set_text(&path, &text);
+                    return Ok(Some(path));
                 }
             }
             DidSaveTextDocument::METHOD | DidCloseTextDocument::METHOD => {}
@@ -116,7 +193,7 @@ impl Server<'_> {
             DidChangeWatchedFiles::METHOD => self.analysis.reload(),
             _ => {}
         }
-        Ok(())
+        Ok(None)
     }
 
     /// Publishes the problems of the mod `path` is in, file by file.

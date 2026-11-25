@@ -20,8 +20,8 @@ use query::Place;
 use salsa::Setter;
 
 pub use complete::{Completion, CompletionKind};
-pub use server::run;
-pub use text::{LineIndex, path_uri, uri_path};
+pub use server::{run, serve};
+pub use text::{Edit, LineIndex, apply_edits, path_uri, uri_path};
 
 /// A problem found: where, how serious, its code and its message.
 #[derive(Clone, Debug, PartialEq, Eq)]
