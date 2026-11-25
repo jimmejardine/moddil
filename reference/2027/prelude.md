@@ -11,7 +11,7 @@ behaviour are as written there. The files are one source, joined in this order:
 | [`numbers.moddil`](prelude/numbers.moddil) | the sized integers and the floats, and `Number`, written as templates (**comptime.derive.for.1**); `RadixText` (**expr.fmt.spec.4**) |
 | [`convert.moddil`](prelude/convert.moddil) | conversions between the numbers, rounding, `RangeError` |
 | [`float.moddil`](prelude/float.moddil) | the float functions |
-| [`text.moddil`](prelude/text.moddil) | `TextWrite`, `Display`, `char`, `str`, `String`, `Pattern`, `Chars`, `CharIndices`, text positions, UTF-8, `RcStr` |
+| [`text.moddil`](prelude/text.moddil) | `TextWrite`, `Display`, `char`, `str`, `String`, `Pattern`, `Chars`, `CharIndices`, text positions, UTF-8, `RcStr`, `Measure` and `Padded` |
 | [`fmt.moddil`](prelude/fmt.moddil) | `Debug` (and `debug_pretty` for `{x:#?}`) and `Default` |
 | [`arrays.moddil`](prelude/arrays.moddil) | arrays and slices |
 | [`iter.moddil`](prelude/iter.moddil) | `Iterator` and `IntoIterator`, the adapters, `FromIterator`, the ranges, the slice and array iterators (`Iter`, `IterMut`) |

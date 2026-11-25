@@ -196,13 +196,20 @@ impl Machine<'_> {
     pub(super) fn fmt(&mut self, tok: &SyntaxToken) -> Eval {
         let empty = self.string_call("new", Vec::new(), tok.text_range())?;
         let out = self.memory.temp(empty);
-        self.fmt_into(tok, &out)?;
+        self.fmt_into(tok, &out, false)?;
         Ok(self.memory.load(&out))
     }
 
     /// `fmt"…"` written onto the sink at `out` (`text.write.2`): each run of its text through
     /// the sink's `write_str`, and each hole as `fmt"…"` writes it.
-    pub(super) fn fmt_into(&mut self, tok: &SyntaxToken, out: &crate::value::Pointer) -> Eval<()> {
+    /// `straight` for `w.write_fmt(fmt"…")`, whose padded holes go onto the sink through the
+    /// prelude's `Measure` and `Padded`, as compiled code writes them.
+    pub(super) fn fmt_into(
+        &mut self,
+        tok: &SyntaxToken,
+        out: &crate::value::Pointer,
+        straight: bool,
+    ) -> Eval<()> {
         let text = tok.text();
         let open = text.find('"').expect("a tagged literal");
         let base = tok.text_range().start as usize + open;
@@ -211,13 +218,19 @@ impl Machine<'_> {
         if text[open..].starts_with("\"\"\"") {
             for line in block_lines(&text[open..]) {
                 if let Some((off, line)) = line {
-                    self.fmt_scan(line, base + off, out, &mut lit)?;
+                    self.fmt_scan(line, base + off, out, &mut lit, straight)?;
                 }
                 lit.push('\n');
             }
         } else {
             // Where the literal's inside starts in the file, for the holes' ranges.
-            self.fmt_scan(&text[open + 1..text.len() - 1], base + 1, out, &mut lit)?;
+            self.fmt_scan(
+                &text[open + 1..text.len() - 1],
+                base + 1,
+                out,
+                &mut lit,
+                straight,
+            )?;
         }
         self.push_text(out, &unescape(&lit.replace("{{", "{").replace("}}", "}")))?;
         Ok(())
@@ -231,6 +244,7 @@ impl Machine<'_> {
         at: usize,
         out: &crate::value::Pointer,
         lit: &mut String,
+        straight: bool,
     ) -> Eval<()> {
         let out = out.clone();
         let inner: Vec<char> = inner.chars().collect();
@@ -265,7 +279,7 @@ impl Machine<'_> {
             }
             let hole: String = inner[i + 1..j].iter().collect();
             let start = at + 1;
-            self.hole(&hole, start, &out)?;
+            self.hole(&hole, start, &out, straight)?;
             at = start + hole.len() + 1;
             i = j + 1;
         }
@@ -328,7 +342,13 @@ impl Machine<'_> {
     /// One hole: its expression, parsed where it stands in the file so its ranges are the
     /// file's, then written onto `out` by `Display::fmt` with a borrow of its value. A spec
     /// (`expr.fmt.spec.1`) writes it into a `String` of its own first, then cuts and pads it.
-    fn hole(&mut self, text: &str, start: usize, out: &crate::value::Pointer) -> Eval<()> {
+    fn hole(
+        &mut self,
+        text: &str,
+        start: usize,
+        out: &crate::value::Pointer,
+        straight: bool,
+    ) -> Eval<()> {
         let (text, spec) = match spec_colon(text) {
             Some(k) => {
                 let mut spec = parse_spec(&text[k + 1..]).expect("a checked spec");
@@ -416,6 +436,9 @@ impl Machine<'_> {
             }
         };
         // `+` before a number with no `-` (`expr.fmt.spec.4`).
+        if straight {
+            return self.padded_onto(out, &written, &spec, number, text_value, range);
+        }
         let written = if spec.plus && !written.starts_with('-') {
             format!("+{written}")
         } else {
@@ -435,6 +458,58 @@ impl Machine<'_> {
             keep,
         );
         self.push_text(out, &padded)
+    }
+
+    /// `written`, a hole's text, onto the sink at `out` padded by `spec`, as `w.write_fmt(…)`
+    /// writes it (`text.write.2`): counted by the prelude's `Measure`, then written through its
+    /// `Padded`.
+    fn padded_onto(
+        &mut self,
+        out: &crate::value::Pointer,
+        written: &str,
+        spec: &Spec,
+        number: bool,
+        text_value: bool,
+        range: moddil_syntax::TextRange,
+    ) -> Eval<()> {
+        let call = |m: &mut Self, name: &str, args: Vec<Value>| -> Eval {
+            let f = m.program.fns[name].clone();
+            m.invoke(&f, args, HashMap::new(), range)
+        };
+        let measure = call(self, "measure_new", Vec::new())?;
+        let mp = self.memory.temp(measure);
+        self.push_text(&mp, written)?;
+        let keep = match spec.precision {
+            Some(k) if text_value && !spec.debug => i64::from(k),
+            _ => -1,
+        };
+        let align = match spec.align.unwrap_or(if number { '>' } else { '<' }) {
+            '^' => 1,
+            '>' => 2,
+            _ => 0,
+        };
+        let args = vec![
+            Value::Ref(out.clone(), true),
+            Value::Ref(mp, false),
+            Value::Char(spec.fill),
+            Value::Int(align),
+            Value::Int(i64::from(spec.width.unwrap_or(0))),
+            Value::Bool(spec.zero),
+            Value::Int(keep),
+            Value::Bool(spec.plus),
+        ];
+        let padded = call(self, "padded_start", args)?;
+        let pp = self.memory.temp(padded);
+        self.push_text(&pp, written)?;
+        let head = Head::Adt("Padded".to_string());
+        let finish = self
+            .program
+            .methods(&head, "finish")
+            .into_iter()
+            .next()
+            .expect("the prelude's `Padded::finish`");
+        self.run_method(finish, &head, vec![Value::Ref(pp, true)], range)?;
+        Ok(())
     }
 
     /// The prelude's built-in function `f`, for values of kind `head`.

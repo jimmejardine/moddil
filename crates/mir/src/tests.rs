@@ -360,3 +360,17 @@ fn a_caught_error_is_matched_as_its_member() {
     );
     assert!(mir.contains("as #0).0"), "{mir}");
 }
+
+#[test]
+fn a_padded_hole_written_into_a_sink_makes_no_string() {
+    // `fmt"…"` into a sink (`text.write.2`): its padded hole is counted, then written, onto
+    // the sink, with no `String` of its own.
+    let mir = dump(
+        "fn f(out: &mut dyn TextWrite, n: int, s: &str) { \
+         out.write_fmt(fmt\"[{n:>8}|{s:.2}|{n:+05}]\"); }",
+    );
+    assert!(mir.contains("measure_new"), "{mir}");
+    assert!(mir.contains("padded_start"), "{mir}");
+    assert!(!mir.contains("String::new"), "{mir}");
+    assert!(!mir.contains("push_padded"), "{mir}");
+}

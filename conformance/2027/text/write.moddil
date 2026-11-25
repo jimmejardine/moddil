@@ -77,7 +77,8 @@ test "fmt into a sink writes its parts straight to it" {
     ;
     let mut d = Count { chars: 0, writes: 0 };
     log(&mut d, 42);
-    d.writes                                // => 3
+    // "n=", the fill, "42" and ";": the padded hole goes straight to the sink too.
+    d.writes                                // => 4
 }
 
 test "any other String is written as it is" {
@@ -85,4 +86,18 @@ test "any other String is written as it is" {
     let made = fmt"a{1}b";
     c.write_fmt(made);
     c.writes                                // => 1
+}
+
+test "padded holes written straight into a sink" {
+    let mut s = String::new();
+    let n = 42;
+    let x = -7;
+    let f = 3.14159;
+    let w = 6;
+    s.write_fmt(fmt"[{n:>5}|{n:<5}|{n:^6}|{x:05}|{n:+}|{n:#06x}|{f:.2}|{"abcdef":.3}|{n:w$}|{"é":*^5}]");
+    s                                       // => "[   42|42   |  42  |-0007|+42|0x002a|3.14|abc|    42|**é**]"
+    ;
+    let mut c = Count { chars: 0, writes: 0 };
+    c.write_fmt(fmt"{n:>8}");
+    c.chars                                 // => 8
 }

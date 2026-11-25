@@ -1,7 +1,7 @@
 //! Expressions and statements: each HIR expression kind as blocks and statements.
 
 use moddil_sema::hir::{
-    Align, ExprId, ExprKind, FmtPiece, Halt, Handler, LogicOp, PatKind, Radix, Stmt, UnaryOp,
+    Align, ExprId, ExprKind, FmtPiece, Halt, Handler, LogicOp, PatKind, Radix, Spec, Stmt, UnaryOp,
 };
 use moddil_sema::{Callee, Container, Item, Ty};
 use moddil_syntax::TextRange;
@@ -1173,6 +1173,9 @@ impl Builder<'_> {
                     self.sink_str(sink, Operand::Const(c), range);
                 }
                 FmtPiece::Hole(h, spec) if spec.is_plain() => self.write_hole(*h, sink),
+                FmtPiece::Hole(h, spec) if matches!(sink, Sink::Dyn(_)) => {
+                    self.padded_hole(*h, spec, sink, range);
+                }
                 FmtPiece::Hole(h, spec) => {
                     let h = *h;
                     let piece = self.temp(self.items.string_ty());
@@ -1221,8 +1224,7 @@ impl Builder<'_> {
                             // An integer's digits in base 2, 8 or 16 (`expr.fmt.spec.4`).
                             let (r, func) = radix.expect("a base");
                             let this = self.hole_ref(h);
-                            let out = self.temp(Ty::reference(true, self.items.string_ty()));
-                            self.cfg.assign(out, Rvalue::Ref(true, Place::local(piece)));
+                            let out = self.sink_ref(Sink::String(piece));
                             let unit = self.temp(Ty::Unit);
                             let callee = Callee::Trait {
                                 func,
@@ -1230,7 +1232,7 @@ impl Builder<'_> {
                             };
                             let args = vec![
                                 this,
-                                Operand::Move(Place::local(out)),
+                                out,
                                 Operand::Const(Const::Int(r.bits())),
                                 Operand::Const(Const::Bool(r == Radix::UpperHex)),
                                 Operand::Const(Const::Bool(spec.prefix)),
@@ -1323,6 +1325,183 @@ impl Builder<'_> {
         }
     }
 
+    /// A hole with a spec written onto the `&mut dyn TextWrite` sink of `w.write_fmt(…)`
+    /// with no `String` made for it (`text.write.2`): its text written once into a `Measure`
+    /// to count it, then once more onto the sink through a `Padded`, which adds the fill or the
+    /// zeros, the `+`, and cuts it to a precision. The hole's value is taken once.
+    fn padded_hole(&mut self, h: ExprId, spec: &Spec, sink: Sink, range: TextRange) {
+        let base = match self.ty(h) {
+            Ty::Ref(_, t) => (*t).clone(),
+            t => t,
+        };
+        let base = self.items.base(&base);
+        let number = matches!(base, Ty::Int | Ty::Num(_));
+        let text = base == Ty::Str || base == self.items.string_ty();
+        let float = matches!(base, Ty::Num(n) if n.is_float());
+        // The value's borrow, the precision and the width, each in a local, used twice.
+        let this_ty = match self.ty(h) {
+            t @ Ty::Ref(..) => t,
+            t => Ty::reference(false, t),
+        };
+        let this_op = self.hole_ref(h);
+        let this = self.temp(this_ty);
+        self.cfg.assign(this, Rvalue::Use(this_op));
+        let int_local = |b: &mut Self, op: Operand| {
+            let t = b.temp(Ty::Int);
+            b.cfg.assign(t, Rvalue::Use(op));
+            t
+        };
+        let precision = match (spec.precision, spec.precision_arg) {
+            (_, Some(x)) => {
+                let op = self.operand(x, &[]);
+                Some(int_local(self, op))
+            }
+            (Some(k), None) => Some(int_local(self, Operand::Const(Const::Int(i64::from(k))))),
+            (None, None) => None,
+        };
+        let width = match spec.width_arg {
+            Some(x) => self.operand(x, &[]),
+            None => Operand::Const(Const::Int(spec.width.map_or(0, i64::from))),
+        };
+        let width = int_local(self, width);
+        let fixed = match (precision, spec.exponent) {
+            (_, Some(upper)) if float => self.items.builtin_method(&base, "exp_text").map(|f| {
+                let digits = precision.map_or(Operand::Const(Const::Int(-1)), |p| {
+                    Operand::Copy(Place::local(p))
+                });
+                (f, vec![digits, Operand::Const(Const::Bool(upper))])
+            }),
+            (Some(digits), None) if float => self
+                .items
+                .builtin_method(&base, "fixed_text")
+                .map(|f| (f, vec![Operand::Copy(Place::local(digits))])),
+            _ => None,
+        };
+        let radix = spec.radix.and_then(|r| {
+            let tr = self.items.lang("RadixText")?;
+            let func = self.items.traits[tr as usize]
+                .methods
+                .iter()
+                .copied()
+                .find(|&m| self.items.fns[m as usize].name == "write_radix")?;
+            Some((r, func))
+        });
+        // Writes the hole's text onto the sink in `out` (a local holding a `&mut dyn
+        // TextWrite`).
+        let produce = |b: &mut Self, out: Local| {
+            let this = Operand::Copy(Place::local(this));
+            match (&radix, &fixed) {
+                (Some((r, func)), _) => {
+                    let to = b.sink_ref(Sink::Dyn(out));
+                    let unit = b.temp(Ty::Unit);
+                    let callee = Callee::Trait {
+                        func: *func,
+                        args: vec![base.clone()],
+                    };
+                    let args = vec![
+                        this,
+                        to,
+                        Operand::Const(Const::Int(r.bits())),
+                        Operand::Const(Const::Bool(*r == Radix::UpperHex)),
+                        Operand::Const(Const::Bool(spec.prefix)),
+                    ];
+                    b.call_into(None, callee, Place::local(unit), args, b.range(h));
+                }
+                (None, Some((func, rest))) => {
+                    let s = b.temp(Ty::reference(false, Ty::Str));
+                    let callee = Callee::Fn {
+                        func: *func,
+                        args: Vec::new(),
+                    };
+                    let mut args = vec![this];
+                    args.extend(rest.iter().cloned());
+                    b.call_into(None, callee, Place::local(s), args, b.range(h));
+                    b.sink_str(Sink::Dyn(out), Operand::Move(Place::local(s)), range);
+                }
+                (None, None) => b.write_hole_of(h, this, Sink::Dyn(out)),
+            }
+        };
+        // First counted.
+        let measure_new = self.prelude_fn("measure_new");
+        let measure_ty = self.items.fns[measure_new as usize].ret.clone();
+        let m = self.temp(measure_ty.clone());
+        let callee = Callee::Fn {
+            func: measure_new,
+            args: Vec::new(),
+        };
+        self.call_into(None, callee, Place::local(m), Vec::new(), range);
+        let counting = self.dyn_sink(m, &measure_ty);
+        produce(self, counting);
+        // Then written, padded.
+        let align = match spec.align {
+            Some(Align::Center) => 1,
+            Some(Align::Right) => 2,
+            None if number => 2,
+            Some(Align::Left) | None => 0,
+        };
+        let keep = match precision {
+            Some(k) if text && !spec.debug => Operand::Copy(Place::local(k)),
+            _ => Operand::Const(Const::Int(-1)),
+        };
+        let start = self.prelude_fn("padded_start");
+        let padded_ty = self.items.fns[start as usize].ret.clone();
+        let p = self.temp(padded_ty.clone());
+        let out = self.sink_ref(sink);
+        let m_ref = self.temp(Ty::reference(false, measure_ty));
+        self.cfg.assign(m_ref, Rvalue::Ref(false, Place::local(m)));
+        let args = vec![
+            out,
+            Operand::Move(Place::local(m_ref)),
+            Operand::Const(Const::Char(spec.fill.unwrap_or(' '))),
+            Operand::Const(Const::Int(align)),
+            Operand::Copy(Place::local(width)),
+            Operand::Const(Const::Bool(spec.zero)),
+            keep,
+            Operand::Const(Const::Bool(spec.plus)),
+        ];
+        let callee = Callee::Fn {
+            func: start,
+            args: Vec::new(),
+        };
+        self.call_into(None, callee, Place::local(p), args, range);
+        let writing = self.dyn_sink(p, &padded_ty);
+        produce(self, writing);
+        let finish = self
+            .items
+            .builtin_method(&padded_ty, "finish")
+            .expect("the prelude's `Padded::finish`");
+        let r = self.temp(Ty::reference(true, padded_ty));
+        self.cfg.assign(r, Rvalue::Ref(true, Place::local(p)));
+        let unit = self.temp(Ty::Unit);
+        let callee = Callee::Fn {
+            func: finish,
+            args: Vec::new(),
+        };
+        self.call_into(
+            None,
+            callee,
+            Place::local(unit),
+            vec![Operand::Move(Place::local(r))],
+            range,
+        );
+    }
+
+    /// A local holding a `&mut dyn TextWrite` of the value in `local`, of type `ty`.
+    fn dyn_sink(&mut self, local: Local, ty: &Ty) -> Local {
+        let tw = self
+            .items
+            .lang_ref("TextWrite")
+            .expect("the prelude's `TextWrite`");
+        let r = self.temp(Ty::reference(true, ty.clone()));
+        self.cfg.assign(r, Rvalue::Ref(true, Place::local(local)));
+        let out = self.temp(Ty::reference(true, Ty::dyn_of(tw)));
+        self.cfg.assign(
+            out,
+            Rvalue::Unsize(Operand::Move(Place::local(r)), ty.clone()),
+        );
+        out
+    }
+
     /// The prelude's `String` method `name`.
     fn string_method(&self, name: &str) -> Callee {
         let func = self
@@ -1368,6 +1547,11 @@ impl Builder<'_> {
     /// `&mut dyn TextWrite` (`text.write.1`).
     fn write_hole(&mut self, h: ExprId, sink: Sink) {
         let this = self.hole_ref(h);
+        self.write_hole_of(h, this, sink);
+    }
+
+    /// Hole `h`, whose value's borrow is `this`, written onto `sink` by its checked `fmt`.
+    fn write_hole_of(&mut self, h: ExprId, this: Operand, sink: Sink) {
         let out = self.sink_ref(sink);
         let unit = self.temp(Ty::Unit);
         let callee = self

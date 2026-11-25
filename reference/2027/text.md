@@ -118,8 +118,10 @@ implements it, appending; a `&mut String` is used as a `&mut dyn TextWrite` as a
 **text.write.2** `TextWrite` also has `fn write_fmt(&mut self, text: String)`, which writes
 `text` through `write_str`. Called with a `fmt"…"` literal, `w.write_fmt(fmt"…")` makes no
 `String` of it: each run of its text is written by `w`'s `write_str` and each hole by its `fmt`
-straight onto `w`, so what is written is the same and nothing is allocated for it (a hole with a
-width or another spec is still made in a `String` of its own first, to be padded).
+straight onto `w`, so what is written is the same and nothing is allocated for it. A hole with a
+spec is written twice: once into the prelude's `Measure`, which counts its characters, then onto
+`w` through its `Padded`, which writes the fill (each character a `write_char`), the zeros or the
+`+`, and cuts it to a precision.
 
 **text.display.1** The prelude's trait `Display` is how a value is written as text:
 `fn fmt(&self, out: &mut dyn TextWrite)` writes it to `out`, and `x.to_string()` is a new `String`

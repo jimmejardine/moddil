@@ -1187,7 +1187,7 @@ impl Machine<'_> {
             while let Value::Ref(q, _) = self.memory.load(&at) {
                 at = q;
             }
-            self.fmt_into(&tok, &at)?;
+            self.fmt_into(&tok, &at, true)?;
             return Ok(Value::Unit);
         }
         // A reflected variant's `is(x)` and `make()` (`comptime.template.variant.1`).

@@ -83,8 +83,6 @@ when part of one is, remove that part.
   then happens while the program is collected, so it needs a sub-program of the tag's mod and its
   dependencies, or an evaluator hook from the interpreter into sema.
 - Holes in tagged literals other than `fmt` (`sql"… {user} …"`), as typed parameters.
-- A `fmt"…"` hole with a spec (`{x:>8}`, `{n:#x}`) written into a sink without a `String` of its
-  own for padding, so `w.write_fmt(fmt"…")` allocates nothing on freestanding targets.
 
 **P5. Numbers** (`crates/sema`, the prelude, every runner; L)
 - `usize` and `isize`, for FFI and memory-level code: a `Num` each, the width of a pointer on

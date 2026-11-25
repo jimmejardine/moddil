@@ -265,13 +265,13 @@ const fn number_marker(t: type) -> Impl<Number> {
 trait RadixText {
     // Writes the digits, `bits` bits each, onto `out` (letters upper-case for `upper`), after the
     // base's prefix (`0b`, `0o` or `0x`) for `prefix`.
-    fn write_radix(&self, out: &mut String, bits: int, upper: bool, prefix: bool);
+    fn write_radix(&self, out: &mut dyn TextWrite, bits: int, upper: bool, prefix: bool);
 }
 
 #[derive_for(int, i8, i16, i32, i128, u8, u16, u32, u64, u128)]
 const fn int_radix(t: type) -> Impl<RadixText> {
     impl RadixText for t {
-        fn write_radix(&self, out: &mut String, bits: int, upper: bool, prefix: bool) {
+        fn write_radix(&self, out: &mut dyn TextWrite, bits: int, upper: bool, prefix: bool) {
             let zero: t = 0;
             let one: t = 1;
             let all = (zero -% one).count_ones();
@@ -291,13 +291,13 @@ const fn int_radix(t: type) -> Impl<RadixText> {
                 top -= 1;
             }
             if prefix {
-                out.push_str(if bits == 4 { "0x" } else if bits == 3 { "0o" } else { "0b" });
+                out.write_str(if bits == 4 { "0x" } else if bits == 3 { "0o" } else { "0b" });
             }
             let symbols = if upper { "0123456789ABCDEF" } else { "0123456789abcdef" };
             let mut i = top;
             loop {
                 let d = digits[i];
-                out.push_str(symbols.bytes_between(d, d + 1));
+                out.write_str(symbols.bytes_between(d, d + 1));
                 if i == 0 {
                     break;
                 }
