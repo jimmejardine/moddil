@@ -1,0 +1,16 @@
+[package]
+name = "moddil-fmt"
+description = "The canonical formatter for Moddil source: `moddil fmt`"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+moddil-syntax.workspace = true
+
+[lints]
+workspace = true

@@ -941,6 +941,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "moddil-fmt"
+version = "0.0.0"
+dependencies = [
+ "moddil-syntax",
+]
+
+[[package]]
 name = "moddil-gpu"
 version = "0.0.0"
 dependencies = [
