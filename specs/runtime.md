@@ -6,13 +6,13 @@ runs it: runtimes, executors, the I/O reactor, and how they differ by target.
 
 ## Summary
 
-| Rule | One line |
-|---|---|
-| **Runtimes are handlers** | Scheduling, I/O and time are core effects; runtimes are mods that handle them, so every library works on every runtime ([Pluggable runtimes without ecosystem splits](#pluggable-runtimes-without-ecosystem-splits)). |
-| **Tasks, not threads** | Everything concurrent is a stackful task; threads are an execution resource with no user-facing API ([Tasks, threads and executors](#tasks-threads-and-executors)). |
-| **Executors** | One runtime per process with several executors: `default`, `blocking`, `pinned(cores)`, `affine(main)`. |
-| **A reactor per worker** | Each worker thread has its own I/O reactor (io_uring, epoll, kqueue, IOCP); every operation is cancellable at the OS level. |
-| **Obligations from the memory model** | Runtimes drain biased-RC merge queues, expose the task tree, and keep I/O cancel-safe ([Runtime contract](#runtime-contract)). |
+| Rule                                  | One line                                                                                                                                                                                                              |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Runtimes are handlers**             | Scheduling, I/O and time are core effects; runtimes are mods that handle them, so every library works on every runtime ([Pluggable runtimes without ecosystem splits](#pluggable-runtimes-without-ecosystem-splits)). |
+| **Tasks, not threads**                | Everything concurrent is a stackful task; threads are an execution resource with no user-facing API ([Tasks, threads and executors](#tasks-threads-and-executors)).                                                   |
+| **Executors**                         | One runtime per process with several executors: `default`, `blocking`, `pinned(cores)`, `affine(main)`.                                                                                                               |
+| **A reactor per worker**              | Each worker thread has its own I/O reactor (io_uring, epoll, kqueue, IOCP); every operation is cancellable at the OS level.                                                                                           |
+| **Obligations from the memory model** | Runtimes drain biased-RC merge queues, expose the task tree, and keep I/O cancel-safe ([Runtime contract](#runtime-contract)).                                                                                        |
 
 ## Problem
 
