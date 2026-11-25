@@ -146,6 +146,26 @@ impl Machine<'_> {
                 let v = self.deref_coerced(v, Some(&t), init.syntax().text_range())?;
                 Src::Place(self.memory.temp(self.typed(v, Some(&t))), false)
             }
+            // A tuple: each element takes its own type (`let (x, y): (u8, u8) = (250, 10)`).
+            Some(t @ ast::Type::Tuple(_)) => {
+                let tys: Vec<ast::Type> =
+                    t.syntax().children().filter_map(ast::Type::cast).collect();
+                let v = match &init {
+                    ast::Expr::Tuple(_) if init.sub_exprs().len() == tys.len() => {
+                        let mut xs = Vec::new();
+                        for (x, ty) in init.sub_exprs().iter().zip(&tys) {
+                            let v = self.eval_as(x, Some(ty))?;
+                            xs.push(self.typed(v, Some(ty)));
+                        }
+                        Value::Tuple(xs)
+                    }
+                    _ => {
+                        let v = self.eval(&init)?;
+                        self.typed(v, Some(&t))
+                    }
+                };
+                Src::Place(self.memory.temp(v), false)
+            }
             _ => self.scrutinee(&init)?,
         };
         let pat = l.pat().expect("a checked `let` has a pattern");

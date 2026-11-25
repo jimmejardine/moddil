@@ -1,4 +1,4 @@
-// covers: expr.tuple.1, type.tuple.1
+// covers: expr.tuple.1, type.tuple.1, num.lit.1
 
 fn pair(a: int, b: bool) -> (int, bool) { (a, b) }
 fn one(a: int) -> (int,) { (a,) }
@@ -16,4 +16,18 @@ test "tuples" {
     t.1.1 + t.0                 // => 4
     ;
     t.2                         // => ()
+}
+
+test "a tuple pattern's type types the tuple literal's elements" {
+    let (x, y): (u8, u8) = (250, 10);
+    x                                       // => 250
+    ;
+    y                                       // => 10
+    ;
+    x.checked_add(y)                        // => None
+    ;
+    let (a, b): (u8, int) = (200, 300);
+    a.checked_add(100)                      // => None
+    ;
+    b + 1                                   // => 301
 }

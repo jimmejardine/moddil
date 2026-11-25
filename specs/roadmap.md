@@ -165,15 +165,6 @@ L)
 - A handler that holds another handler it captured; `log` with handlers; a test run for listed
   types, or declaring capabilities.
 
-**P18. The reference interpreter's differences** (`crates/refinterp`; M)
-- `?` on a call of a function whose signature lists `fail` but whose errors turn out to be `!`
-  (it takes the `?` as the call's).
-- A literal typed by a later use of an unannotated variable (it types a literal when it meets
-  one at run time).
-- A collection literal typed from every context, not only a `let`'s type, a parameter or a
-  result; and a tuple literal's elements by a tuple pattern's type (`let (x, y): (u8, u8) = (250,
-  10)` gives two `int`s there).
-
 **P19. Standard collections** (`mods/collections`, prelude `rc`, `core::collections`; L)
 - A sorted persistent map.
 - `EnumSet`'s bits in the smallest unsigned integer that fits its enum, as `stdlib.md` decides
@@ -268,6 +259,11 @@ L)
   through its C-ABI wrapper), while the MIR interpreter traps as for any call.
 - AArch64's rule that a struct is not split between registers and the stack holds only as far as
   Cranelift assigns registers; the tests stay within them.
+- The reference interpreter infers no types (`crates/refinterp/README.md`), so it takes a `?`
+  on a call whose signature lists `fail` as the call's even when the errors turn out to be `!`;
+  types a literal where it meets it, not by a later use of an unannotated variable; and types a
+  collection literal only from a `let`'s type, a parameter or a result. Closing these needs
+  inference of its own, which is not decided.
 - `panic`: only bugs trap (`unreachable`, `todo`, `assert`, `?!`), by design so far.
 
 ## Staging: distributed programs

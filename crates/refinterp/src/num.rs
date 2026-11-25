@@ -207,6 +207,25 @@ pub(crate) fn typed(v: Value, ty: Option<&moddil_syntax::ast::Type>) -> Value {
     {
         return Value::Array(xs.iter().cloned().map(|x| typed(x, Some(&elem))).collect());
     }
+    // A tuple: each element by its own type (`let (x, y): (u8, u8) = (250, 10)`).
+    if let moddil_syntax::ast::Type::Tuple(_) = t
+        && let Value::Tuple(xs) = &v
+    {
+        let elems: Vec<_> = t
+            .syntax()
+            .children()
+            .filter_map(moddil_syntax::ast::Type::cast)
+            .collect();
+        if elems.len() == xs.len() {
+            return Value::Tuple(
+                xs.iter()
+                    .cloned()
+                    .zip(&elems)
+                    .map(|(x, e)| typed(x, Some(e)))
+                    .collect(),
+            );
+        }
+    }
     let text = t.syntax().text().to_string();
     let text = text.trim();
     match (Kind::named(text), &v) {
