@@ -1,9 +1,7 @@
 # Concurrency across CPUs
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md) and builds on
-> [`memory.md`](memory.md). GPUs and other accelerators, which reuse these
-> rules for kernel launches, are in [`accelerators.md`](accelerators.md). Snippets are
-> **illustration only**.
+Builds on [`memory.md`](memory.md). GPUs and other accelerators, which reuse these rules for
+kernel launches, are in [`accelerators.md`](accelerators.md).
 
 ## Summary
 
@@ -217,10 +215,6 @@ use `?`. None of that applies here.
 
 **Later:** a lambda that is safe to run as a GPU kernel could let the same call dispatch to a GPU
 ([`accelerators.md`](accelerators.md)).
-
-## Open questions
-
-None at present: the last were decided in November 2026 ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed)).
 
 ## Background
 

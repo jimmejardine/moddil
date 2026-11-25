@@ -1,8 +1,5 @@
 # Language Definition and Conformance
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Snippets and IDs
-> are **illustration only**.
-
 ## Summary
 
 | Rule | One line |
@@ -107,7 +104,7 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
   the same operators, so generating them is nearly direct.
 - **Writing it (decided):** an inventory of every decided construct comes first
   (`reference/grammar/inventory.md`). Ambiguities and conflicts found along the way become open
-  questions in [`syntax.md`](syntax.md#open-questions), so the grammar only ever holds decided
+  questions in [`syntax.md`](syntax.md), so the grammar only ever holds decided
   syntax. It covers **all
   decided syntax from the start**, not only what M0 implements, so ambiguities surface before any
   parser code exists; the compiler's hand-written parser implements it slice by slice.
@@ -193,10 +190,6 @@ fn leak() -> int { counter.tick() }   //~ E0601
 The examples need a definition only indirectly: every feature they use is covered by reference
 paragraphs and conformance tests, and determinism lets the HFT and game examples rely on identical
 behaviour across the interpreter, native backends and WASM.
-
-## Open questions
-
-None at present.
 
 ## Prior art
 

@@ -1,8 +1,5 @@
 # Program Lifecycle
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Snippets are
-> **illustration only**.
-
 ## Summary
 
 | Rule | One line |
@@ -181,7 +178,7 @@ scope(|s| {
   trap cannot leave it half-updated.
 - **Restart policies are a library** (decided): `supervise(|s| …, restart: Backoff { … }, max: 5
   per 1[min])` in `moddil/sync`, built on isolated scopes
-  ([`concurrency.md`: Open questions](concurrency.md#open-questions)).
+  ([`concurrency.md`](concurrency.md)).
 
 ### No mutable globals
 
@@ -374,10 +371,6 @@ fn serve(listener: &Listener) with Net, suspend, spawn {
 | [HFT](examples/hft-platform.md) | Typed configuration with risk limits as refined types; traps kill the process (no partial trading state) |
 | [Web store](examples/web-store.md) | Isolated scopes per request; secrets from the environment; layered configuration per environment |
 | [Hashiverse](examples/hashiverse.md) | Volunteer binaries sandboxed to the roots they declare; layered shutdown on Ctrl-C |
-
-## Open questions
-
-None at present.
 
 ## Prior art
 

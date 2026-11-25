@@ -1,9 +1,8 @@
 # The Toolchain
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md). Docs and tests are detailed in
-> [`docs.md`](docs.md); the agent-facing API in
-> [`agent-interface.md`](agent-interface.md); packages in
-> [`packages-and-supply-chain.md`](packages-and-supply-chain.md). Commands are illustrative.
+Docs and tests are detailed in [`docs.md`](docs.md); the agent-facing API in
+[`agent-interface.md`](agent-interface.md); packages in
+[`packages-and-supply-chain.md`](packages-and-supply-chain.md).
 
 ## Principle
 
@@ -192,14 +191,6 @@ program on every edit**, in an **in-browser playground**:
 Prior art: the TypeScript playground (compiler in the browser); the Go playground and tour, and the
 Rust playground (server-side compilation); Elm reactor; Swift Playgrounds; Zig's WASM build of its
 compiler.
-
-## Open questions
-
-None at present.
-
-Decided: no REPL, script or notebook mode (a non-goal, [`requirements.md`: Non-goals (draft)](requirements.md#non-goals-draft));
-quick learning comes from the in-browser playground ([Playground: learning without a REPL](#playground-learning-without-a-repl)).
-
 
 ## Prior art
 

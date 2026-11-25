@@ -111,7 +111,3 @@ Initial targets, to be refined:
 - **The Svelte 5 demo page** uses the generated TypeScript bindings through the Svelte adapter in
   `moddil/web` ([`ui.md`: The browser](../ui.md#the-browser)).
 - **Python:** only the binding layer that `moddil bind` generates; no hand-written C.
-
-## Open questions
-
-None at present: the name, the G2P model and the languages were decided in November 2026.

@@ -1,8 +1,5 @@
 # UI, mobile and the browser
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Snippets are
-> **illustration only**.
-
 ## Summary
 
 | Topic | Decision |
@@ -260,8 +257,3 @@ Moddil does not standardise a UI framework, but nothing stops community mods fro
 | [fumoca](examples/fumoca.md) | Svelte 5 | Formula engine, simulation and GPU kernels in an engine Web Worker, through the Svelte adapter |
 | [Talk](examples/talk.md) | A Svelte 5 demo page; Python has no UI | The model, through the Svelte adapter |
 | [HFT platform](examples/hft-platform.md) | Operator dashboards | A web dashboard over a core, or an external tool reading metrics ([`observability.md`](observability.md)) |
-
-## Open questions
-
-None at present.
-

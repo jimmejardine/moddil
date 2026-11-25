@@ -1,7 +1,6 @@
 # Values: Copy, Clone and Equality
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Builds on
-> [`memory.md`](memory.md). Snippets are **illustration only**.
+Builds on [`memory.md`](memory.md).
 
 ## Summary
 
@@ -167,11 +166,6 @@ struct Quote { price: Fixed<4>, qty: Fixed<0>, venue: VenueId }
 | [HFT](examples/hft-platform.md) | `Copy` order IDs and `Fixed<4>` prices; `.share()` for reference data shared across strategy tasks; no hidden copies on the hot path |
 | [Web store](examples/web-store.md) | Derived `Eq`/`Hash` on IDs; `OrderedMap` where API output order must be stable |
 | [Hashiverse](examples/hashiverse.md) | `[u8; 32]` hashes as `Copy` keys; flood-resistant hashing for peer-supplied keys |
-
-## Open questions
-
-None at present.
-
 
 ## Prior art
 

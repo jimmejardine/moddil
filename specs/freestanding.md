@@ -1,9 +1,8 @@
 # The Freestanding Profile
 
-> **Status:** complete: decided, with no open questions. Covers kernels, bootloaders, hypervisors and microcontroller firmware: code
-> with no operating system underneath. Related: [`targets.md`](targets.md) (hosted targets),
-> [`concurrency.md`](concurrency.md), [`memory.md`](memory.md).
-> Syntax is illustrative.
+Covers kernels, bootloaders, hypervisors and microcontroller firmware: code with no operating
+system underneath. Related: [`targets.md`](targets.md) (hosted targets),
+[`concurrency.md`](concurrency.md), [`memory.md`](memory.md).
 
 ## Summary
 
@@ -222,10 +221,6 @@ this CI. The options considered were:
 - live update; record and replay (by default);
 - unbounded recursion where stack analysis is required;
 - `Rc` without an allocator.
-
-## Open questions
-
-None at present.
 
 ## Prior art
 

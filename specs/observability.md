@@ -1,10 +1,8 @@
 # Observability and Debuggability
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md). Builds on
-> effects and handlers ([Effects and capabilities as a unifying idea](effects-and-capabilities.md), R2), structured concurrency ([`concurrency.md`](concurrency.md)), error
-> traces ([`error-handling.md`: Traces](error-handling.md#traces)), record and replay
-> ([`determinism.md`: Record and replay](determinism.md#record-and-replay)) and comptime literals ([`comptime.md`: Tagged string literals (embedded DSLs)](comptime.md#tagged-string-literals-embedded-dsls)).
-> Snippets are **illustration only**.
+Builds on effects and handlers ([Effects and capabilities as a unifying idea](effects-and-capabilities.md), R2), structured concurrency ([`concurrency.md`](concurrency.md)), error
+traces ([`error-handling.md`: Traces](error-handling.md#traces)), record and replay
+([`determinism.md`: Record and replay](determinism.md#record-and-replay)) and comptime literals ([`comptime.md`: Tagged string literals (embedded DSLs)](comptime.md#tagged-string-literals-embedded-dsls)).
 
 ## Summary
 
@@ -189,11 +187,6 @@ of the task that failed", or "which tasks have been blocked on the database for 
 | [HFT](examples/hft-platform.md) | Interned logs on the tick-to-trade path; bit-for-bit replay of a trading day; latency histograms |
 | [Web store](examples/web-store.md) | OTLP traces across client, API and database; payment keys and personal data blocked from logs by type |
 | [Hashiverse](examples/hashiverse.md) | Opt-in live introspection of a volunteer node; replay of P2P incidents in simulation |
-
-## Open questions
-
-None at present.
-
 
 ## Prior art
 

@@ -1,7 +1,6 @@
 # Numerics and Data
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
-> Units of measure are a separate proposal in [`units.md`](units.md). Snippets are **illustration only**.
+Units of measure are in [`units.md`](units.md).
 
 ## Summary
 
@@ -237,10 +236,6 @@ arguments ([`units.md`: Why square brackets](units.md#why-square-brackets)).
 - Overflow-check elision through range analysis and refinements, with the remaining checks shown
   in `moddil explain`.
 - An `f128` type.
-
-## Open questions
-
-None at present.
 
 ## Prior art
 

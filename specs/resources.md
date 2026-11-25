@@ -1,9 +1,7 @@
 # Resources: drop, cleanup and linear types
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Brings together the
-> rules for destroying values and releasing resources, previously split between memory and error
-> handling. Ownership, borrowing and sharing are in [`memory.md`](memory.md). Snippets are
-> **illustration only**.
+Brings together the rules for destroying values and releasing resources. Ownership, borrowing and
+sharing are in [`memory.md`](memory.md).
 
 ## Summary
 
@@ -239,8 +237,3 @@ There are three cases, each with a precise answer:
    class-3 crash ([`error-handling.md`: Three outcome classes](error-handling.md#three-outcome-classes)): the process terminates with a full
    trace and flight-recorder dump; **remaining drops do not run**, because there is no unwinding; a
    trap while already handling a trap aborts immediately.
-
-## Open questions
-
-None at present.
-

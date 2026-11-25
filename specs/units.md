@@ -1,7 +1,6 @@
 # Units of Measure
 
-> **Status:** complete: decided, with no open questions. Expands [Numerics and data](numerics.md). Snippets
-> are **illustration only**.
+Expands [Numerics and data](numerics.md).
 
 ## Summary
 
@@ -197,11 +196,6 @@ seconds, the other expected newton-seconds.
 | [HFT](examples/hft-platform.md) | `Fixed<4>[USD]` prices, quantities, notional (`Price * Qty`); `i64[ns]` latencies |
 | [Web store](examples/web-store.md) | Money per currency; shipping weights and dimensions |
 | [Hashiverse](examples/hashiverse.md) | `500[ms]` durations and `64[MiB]` sizes, where today raw integer types (`TimeMillis`, `DurationMillis`) are used |
-
-## Open questions
-
-None at present.
-
 
 ## Prior art
 

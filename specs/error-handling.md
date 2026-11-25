@@ -1,7 +1,6 @@
 # Error Handling
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md) and defines
-> requirement **R3** ([Firm requirements (decided)](requirements.md#firm-requirements-decided)). Decisions made so far are marked **Decided**; everything else is open.
+Defines requirement **R3** ([Firm requirements (decided)](requirements.md#firm-requirements-decided)).
 
 ## Decisions so far
 
@@ -418,11 +417,6 @@ All decided:
 - `errdefer`.
 - First error wins in task scopes, with sibling errors suppressed onto it; cancellation as a separate outcome.
 - Traps (class 3) terminate the process by default.
-
-## Open questions
-
-None at present: the last (inferred tags, D21; fallible `for`, D22) were decided in November
-2026.
 
 ## Background
 

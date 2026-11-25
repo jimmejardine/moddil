@@ -109,7 +109,3 @@ Initial targets, to be refined:
 - Research workflows still use Python notebooks: research mods are exported to Python as wheels
   ([`adoption.md`: Python first](../adoption.md#python-first)), and Moddil can call Python libraries
   through `moddil/python` ([`interop.md`](../interop.md)).
-
-## Open questions
-
-None at present: the last (bounded latency) was decided in November 2026.

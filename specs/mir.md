@@ -1,9 +1,6 @@
 # MIR: the Mid-Level IR
 
-> **Status:** minor questions: the shape is decided and its open questions are answered; the
-> lowerings marked proposed are confirmed as they are built. Expands
-> [`compiler.md`: Backends](compiler.md#backends). Listed in the [index](README.md). Snippets are
-> **illustration only**; MIR has no committed textual syntax.
+Expands [`compiler.md`: Backends](compiler.md#backends).
 
 ## Summary
 
@@ -214,11 +211,7 @@ Proposed lowering of [`effects-and-capabilities.md`: Compilation](effects-and-ca
 
 ## Open questions
 
-None at present: the last were decided in November 2026.
-- **MLIR:** no export ([`compiler.md`: Backends](compiler.md#backends)).
-- **CPS lowering:** not built; WASI waits for stack switching, and the `Suspend` terminator keeps
-  it possible ([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)).
-- **Text form, reuse analysis and landing pads:** decided above.
+- **The lowerings marked proposed** are confirmed as each is built.
 
 ## Prior art
 

@@ -1,8 +1,5 @@
 # LLMs as First-Class Programmers: the Agent Interface
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
-> Snippets and message formats are **illustration only**.
-
 ## Summary
 
 | Rule | One line |
@@ -177,10 +174,6 @@ All decided:
 - **Translation tools** from Rust and TypeScript, to seed code and port projects.
 - **A small, stable surface syntax** that changes rarely, so training data stays valid; editions
   handle evolution ([Language evolution](evolution.md)).
-
-## Open questions
-
-None at present.
 
 ## Prior art
 

@@ -1,7 +1,8 @@
 # Compiler and bootstrap
 
-> **Status:** complete: decided, with no open questions (walked through November 2026). How the compiler is built, structured and
-> bootstrapped, and which backends it uses. Milestones are in [`roadmap.md`: Milestones](roadmap.md#milestones). WASM support facts verified November 2026 ([WASM support: verified status (November 2026)](#wasm-support-verified-status-november-2026) below).
+How the compiler is built, structured and bootstrapped, and which backends it uses. Milestones are
+in [`roadmap.md`: Milestones](roadmap.md#milestones). WASM support facts were verified in November
+2026 ([WASM support: verified status (November 2026)](#wasm-support-verified-status-november-2026)).
 
 ## Answers in brief
 
@@ -353,12 +354,3 @@ probes on Node v24.16.0 (V8 13.6).
 - **JSPI's per-switch cost** (decided November 2026: measured, not assumed): JSPI stays the
   browser lowering until browsers ship stack switching, and its cost is measured on the game
   client in M5, which is when it could matter.
-
-## Open questions
-
-None at present: the last were decided in November 2026.
-- MLIR, a C backend, the WASI lowering without stack switching and LLVM's version: decided
-  above.
-- Moddil-core (whether the stage 0 subset is right) and when to reconsider self-hosting belong to
-  the After v1 milestone ([`roadmap.md`: Milestones](roadmap.md#milestones)), where self-hosting
-  was deferred.

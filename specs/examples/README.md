@@ -1,7 +1,6 @@
 # Reference Examples
 
-> **Status:** design drivers, not code (yet), with no open questions: the last were decided in
-> November 2026, and the larger ones in the area documents.
+Design drivers, not code (yet).
 
 Moddil is designed against eight programs in two groups:
 

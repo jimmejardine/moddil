@@ -109,7 +109,3 @@ Initial targets, to be refined:
 - PostgreSQL (wire protocol in a mod, or a C client library via FFI).
 - Payment provider, email and search services (HTTP APIs).
 - iOS/Android platform APIs (camera, notifications, payments) through generated Swift/Kotlin bindings.
-
-## Open questions
-
-None at present.

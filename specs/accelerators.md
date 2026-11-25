@@ -1,8 +1,6 @@
 # GPUs and Accelerators
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md) and extends
-> [`concurrency.md`](concurrency.md) from CPUs to devices. Snippets are **illustration only**; no
-> syntax is committed.
+Extends [`concurrency.md`](concurrency.md) from CPUs to devices.
 
 ## Summary
 
@@ -324,11 +322,6 @@ Following [`error-handling.md`](error-handling.md):
 | [Mandelbulb flight](examples/mandelbulb.md) | A ray-marching tile kernel on WebGPU; its distance estimator also runs on the CPU; golden images on the CPU simulator |
 | [fumoca](examples/fumoca.md) | Monte Carlo iterations on WebGPU, with the RNG and samplers shared with the CPU workers; kernels that depend on the workbook |
 | [Talk](examples/talk.md) | Tensor expressions for a text-to-speech model, tile kernels for its vocoder; WebGPU and the CPU simulator |
-
-## Open questions
-
-None at present: the last (kernels built at run time, loading model weights) were decided in
-November 2026.
 
 ## Background
 

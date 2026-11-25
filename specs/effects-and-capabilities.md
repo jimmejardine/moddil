@@ -1,8 +1,5 @@
 # Effects and Capabilities
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
-> Snippets are **illustration only**.
-
 ## Summary
 
 | Rule | One line |
@@ -558,10 +555,6 @@ No mainstream language has made a typed effect system popular. The measures:
 | [HFT](examples/hft-platform.md) | Statically known handlers in production (zero cost); recorded `Net` and `Time` for whole-day replay |
 | [Web store](examples/web-store.md) | A user-defined `Db` trait instead of threading a pool; narrowed `Fs` for uploads |
 | [Hashiverse](examples/hashiverse.md) | `TimeProvider`, `TransportFactory` and `ClientStorage` stay traits but are used after `with`, so the `RuntimeServices` plumbing disappears; the in-memory transport becomes a handler |
-
-## Open questions
-
-None at present: the last were decided in November 2026 ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed)).
 
 ## Prior art
 

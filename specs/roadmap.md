@@ -1,8 +1,8 @@
 # Roadmap
 
-> **Status:** complete: no open questions. The single place for planning: the milestones, what
-> is still to build (and what built work deferred), staging, and the order of the reference
-> examples. Decisions live in each area's document ([index](README.md)). What was built is in the git history.
+The single place for planning: the milestones, what is still to build (and what built work
+deferred), staging, and the order of the reference examples. Decisions live in each area's
+document ([index](README.md)). What was built is in the git history.
 
 ## Milestones
 

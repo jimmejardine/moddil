@@ -1,8 +1,8 @@
 # Moddil specifications
 
-> **Status:** living index. Each area has its own document, which holds its problem statement, prior
-> art, decisions, directions and open questions. Start with [Why Moddil](vision.md) for the thesis
-> and [A tour of Moddil](tour.md) for a complete program.
+Each area has its own document, which holds its problem statement, prior art, decisions,
+directions and open questions. Start with [Why Moddil](vision.md) for the thesis and
+[A tour of Moddil](tour.md) for a complete program.
 
 ## Index
 
@@ -108,9 +108,10 @@ For people and LLM agents editing the specs:
   It checks that every relative link (file and heading anchor) in `specs/` resolves, and that every
   document is listed in the [index](#index). Renaming a heading breaks the links to it; the checker
   lists them.
-- **Statuses live only in the index table** above. **Open questions live only in their area's
-  document**, under *Open questions*; nothing is copied here.
+- **Statuses live only in the index table** above; documents carry no status line of their own.
+  **Open questions live only in their area's document**, under an *Open questions* section, which
+  a document has only while some are open; nothing is copied here.
 - **A new document needs an index row**, with a status from the legend.
 - **House style:** sections run *problem → state of the art → decision → directions → open
-  questions*; code blocks are illustration only and follow [`syntax.md`](syntax.md) (Rust-based
+  questions (if any)*; code blocks are illustration only and follow [`syntax.md`](syntax.md) (Rust-based
   syntax); spelling is British.

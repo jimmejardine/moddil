@@ -1,8 +1,5 @@
 # Determinism and Reproducibility
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md). Snippets are
-> **illustration only**.
-
 ## Summary
 
 | Rule | One line |
@@ -314,10 +311,6 @@ real-world evidence for it.
 | [HFT](examples/hft-platform.md) | Bit-identical backtest and replay of a trading day; replay of production traffic through new strategy versions |
 | [Web store](examples/web-store.md) | Simulated rolling deploys with mixed versions; reproducible order-flow tests |
 | [Hashiverse](examples/hashiverse.md) | The existing harness, plus deterministic randomness and interleavings, record and replay, and the self-check |
-
-## Open questions
-
-None at present.
 
 ## Background
 

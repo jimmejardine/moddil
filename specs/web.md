@@ -1,8 +1,6 @@
 # The Website and Services: moddil.com
 
-> **Status:** complete: the principle, the services, the domain rules and hosting are decided, with
-> no open questions. Listed in the [index](README.md). What the project serves from
-> moddil.com, and what it deliberately does not.
+What the project serves from moddil.com, and what it deliberately does not.
 
 ## Summary
 
@@ -115,11 +113,6 @@ New users are not, so the domain is guarded like a signing key:
 - **The site goes up with the playground**, once `/play` runs real programs: the first thing a
   visitor can do is run Moddil, rather than read a placeholder.
 - **The release archives are mirrored** to GitHub Releases, so an install never depends on one host.
-
-## Open questions
-
-None at present: the host, the site generator and when the site goes up were decided in November
-2026.
 
 ## Prior art
 

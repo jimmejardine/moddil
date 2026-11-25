@@ -1,8 +1,5 @@
 # Adoption
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Snippets are
-> **illustration only**.
-
 ## Summary
 
 | Topic | Decision |
@@ -288,7 +285,3 @@ GDScript and C# offer neither.
 - Published mods, and how many are depended on by others.
 - Newcomer compile-error rates and time to a first service ([Simpler than Rust](#simpler-than-rust)).
 - Agent success rate on a standard task suite, compared with Rust and Go.
-
-## Open questions
-
-None at present.

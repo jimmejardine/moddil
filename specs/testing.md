@@ -1,8 +1,7 @@
 # Testing
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Tests, examples,
-> property tests, fuzzing, simulation and benchmarks attach to the code they test and run under one
-> command, `moddil test`. Documentation is in [`docs.md`](docs.md). Snippets are **illustration only**.
+Tests, examples, property tests, fuzzing, simulation and benchmarks attach to the code they test
+and run under one command, `moddil test`. Documentation is in [`docs.md`](docs.md).
 
 ## Summary
 
@@ -162,11 +161,6 @@ function's whole specification and evidence in one place:
   budgets on deterministic counters gate CI; wall-clock results come with confidence intervals and
   only warn. Wall-clock benchmarks that gate merges run on dedicated or pinned machines, configured
   per project.
-
-## Open questions
-
-None at present.
-
 
 ## Prior art
 

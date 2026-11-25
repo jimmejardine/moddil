@@ -113,7 +113,3 @@ interoperate with a running network built in another language.
 - The existing Rust servers and clients (the network itself).
 - The existing React web app: the Moddil WASM client could slot in behind the same TypeScript API as a
   drop-in replacement for `hashiverse-client-wasm`.
-
-## Open questions
-
-None at present.

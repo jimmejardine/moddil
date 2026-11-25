@@ -1,7 +1,5 @@
 # Build Times
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
-
 ## Summary
 
 Build speed is decided mostly by **language rules**, not by compiler cleverness. Go is fast because of
@@ -217,10 +215,6 @@ than for humans:
 | [HFT](examples/hft-platform.md) | A fast dev loop; long release builds are acceptable if cached |
 | [Web store](examples/web-store.md) | Large-team iteration; sub-second rebuilds; patching an API handler without dropping sessions; a shared team cache |
 | [Hashiverse](examples/hashiverse.md) | Fast hash and crypto code in dev builds without manual overrides; tests in the default profile; live-patching one node of a running simulation |
-
-## Open questions
-
-None at present.
 
 ## Background
 

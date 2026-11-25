@@ -1,10 +1,10 @@
 # A tour of Moddil
 
-> **Status:** the tour is the [`tour/shorty`](../tour/shorty/README.md) mod, checked in CI since
-> slice S9d ([From markdown to source](#from-markdown-to-source)); this page points to it and keeps
-> the [gaps it exposed](#gaps-the-tour-exposed). One small, complete program written in the agreed
-> syntax, to show how the decided features fit together. Listed in the [index](README.md). Terms
-> are defined in the [glossary](glossary.md).
+The tour is the [`tour/shorty`](../tour/shorty/README.md) mod, checked in CI
+([From markdown to source](#from-markdown-to-source)); this page points to it and keeps the
+[gaps it exposed](#gaps-the-tour-exposed). One small, complete program written in the agreed
+syntax, to show how the decided features fit together. Terms are defined in the
+[glossary](glossary.md).
 
 ## The program
 

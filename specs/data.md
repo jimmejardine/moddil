@@ -1,8 +1,5 @@
 # Data Interchange and Persistence
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Snippets, file
-> names and formats are **illustration only**.
-
 ## Summary
 
 | Rule | One line |
@@ -169,10 +166,6 @@ values are contracts, so a newer app version can always read what an older one s
 | [HFT](examples/hft-platform.md) | SBE-style zero-copy views for exchange feeds; typed SQL for reference data |
 | [Web store](examples/web-store.md) | Migrations-first PostgreSQL; `Db` effect with linear transactions; generated API contracts with old mobile clients still checked |
 | [Hashiverse](examples/hashiverse.md) | Wire compatibility with the Rust implementation through consumed contracts; local storage as contracts |
-
-## Open questions
-
-None at present.
 
 ## Prior art
 

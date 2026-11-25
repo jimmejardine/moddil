@@ -1,8 +1,5 @@
 # Packages and Supply-Chain Security
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
-> Manifest syntax, commands and file formats are **illustration only**.
-
 ## Summary
 
 | Rule | One line |
@@ -332,11 +329,6 @@ Working-copy overrides are unpinned by nature, so they are for development only 
   signing as an optional extra.
 - **Rebuild attestations**: anyone can publish "I rebuilt v1.4.2 and got these bytes" as signed
   records in their own git repository.
-
-## Open questions
-
-None at present.
-
 
 ## Prior art
 

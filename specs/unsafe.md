@@ -1,8 +1,5 @@
 # `unsafe` and the Safety Boundary
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Snippets are
-> **illustration only**.
-
 ## Summary
 
 | Rule | One line |
@@ -206,11 +203,6 @@ required, the `unsafe` capability in the manifest, and the `core` mod's `ptr`, `
 | [HFT](examples/hft-platform.md) | Kernel-bypass networking and `FromBytes` wire views in a small, human-reviewed, checker-verified mod |
 | [Web store](examples/web-store.md) | No `unsafe` at all; dependencies that hold it are flagged in audits |
 | [Hashiverse](examples/hashiverse.md) | Crypto through FFI wrappers with safety contracts; human review of every unsafe delta |
-
-## Open questions
-
-None at present.
-
 
 ## Prior art
 

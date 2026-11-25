@@ -1,8 +1,8 @@
 # Why Moddil
 
-> **Status:** the reasoning behind the whole design: what Moddil builds on, why it should exist, the
-> themes that recur across areas, and where its goals pull against each other. Each area's detail is
-> in its own document; the [index](README.md) lists them all.
+The reasoning behind the whole design: what Moddil builds on, why it should exist, the themes that
+recur across areas, and where its goals pull against each other. Each area's detail is in its own
+document; the [index](README.md) lists them all.
 
 ## Preamble
 

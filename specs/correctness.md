@@ -1,9 +1,8 @@
 # Correctness: Contracts, Testing and Verification
 
-> **Status:** complete: decided, with no open questions. The plan below is adopted: the v1 tools, the reserved proof syntax,
-> the [decisions locked early](#decisions-to-lock-early), the runtime checking policy (an ambient
-> `Contracts` handler), the verifier and the assurance levels. Indexed in [`README.md`](README.md).
-> Syntax is illustrative.
+The plan below is adopted: the v1 tools, the reserved proof syntax, the
+[decisions locked early](#decisions-to-lock-early), the runtime checking policy (an ambient
+`Contracts` handler), the verifier and the assurance levels.
 
 ## Summary
 
@@ -292,10 +291,6 @@ These are cheap now and expensive to change once code exists. All are **decided*
 | [HFT](examples/hft-platform.md) | Risk limits as contracts, with the risk module at L1 or L2; property tests on the order book; interleaving tests for lock-free queues |
 | [Web store](examples/web-store.md) | Validated newtypes for money, IDs and quantities; contracts on checkout; property tests on pricing |
 | [Hashiverse](examples/hashiverse.md) | Fuzzing the wire protocol against the Rust implementation; contracts and L1 on crypto and PoW code |
-
-## Open questions
-
-None at present.
 
 ## Background
 

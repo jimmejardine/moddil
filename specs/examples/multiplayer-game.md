@@ -71,7 +71,7 @@ point is a real-time, authoritative-server architecture of the kind used by most
   allocates its temporary data in a `Scratch` arena that is reset at the end of the frame, with no
   per-object frees.
 - **In-game inspector**: a debug overlay that lists and edits entity fields needs runtime type
-  information (open: [`stdlib.md`: Open questions](../stdlib.md#open-questions)).
+  information ([`stdlib.md`: Runtime type information](../stdlib.md#runtime-type-information)).
 
 ## Success criteria
 
@@ -98,7 +98,3 @@ Initial targets, to be refined:
 - Browser APIs (WebGPU, WebTransport, input, audio) through `moddil/web`.
 - Possibly an existing physics engine (C/C++/Rust) compiled to WASM and linked as a component ([Interoperability with C and Rust](../interop.md), R1).
 - Authentication through a standard identity provider (OAuth/OIDC).
-
-## Open questions
-
-None at present.

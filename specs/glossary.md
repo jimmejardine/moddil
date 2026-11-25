@@ -1,8 +1,7 @@
 # Glossary
 
-> **Status:** reference. One line per Moddil term, each linked to the section that defines it. The
-> linked section is authoritative; if the two disagree, fix this line. Listed in the
-> [index](README.md).
+One line per Moddil term, each linked to the section that defines it. The linked section is
+authoritative; if the two disagree, fix this line.
 
 | Term | Meaning |
 |---|---|

@@ -1,8 +1,7 @@
 # Closures and Lambdas
 
-> **Status:** complete: decided, with no open questions. Follows from [`memory.md`](memory.md),
-> [`concurrency.md`](concurrency.md) and [`error-handling.md`](error-handling.md); syntax follows
-> [`syntax.md`](syntax.md) (Rust-based).
+Follows from [`memory.md`](memory.md), [`concurrency.md`](concurrency.md) and
+[`error-handling.md`](error-handling.md).
 
 ## Summary
 
@@ -196,10 +195,6 @@ lint flags a lock held across a suspension.
   inferred.
 - There are no trailing lambdas. A closure is an ordinary argument and comes before any named
   arguments: `xs.visit_concurrent(|x| …, limit: 8)` ([`syntax.md`](syntax.md)).
-
-## Open questions
-
-None at present.
 
 ## Prior art
 

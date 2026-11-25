@@ -176,7 +176,3 @@ The first build (slice M2e), `examples/mandelbulb/web`:
     fps, "copy link");
   - a message without WebGPU (it falls back to the CPU simulator, slowly);
   - the success criteria's measurements.
-
-## Open questions
-
-None at present: deep zoom and a native desktop window were decided in November 2026.

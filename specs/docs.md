@@ -1,8 +1,7 @@
 # Docs next to the code
 
-> **Status:** complete: decided, with no open questions. Expands [Tooling uniformity](toolchain.md) and [LLMs as first-class programmers](agent-interface.md),
-> Examples, tests and benchmarks are in [`testing.md`](testing.md). Snippets are
-> **illustration only**.
+Expands [Tooling uniformity](toolchain.md) and [LLMs as first-class programmers](agent-interface.md).
+Examples, tests and benchmarks are in [`testing.md`](testing.md).
 
 ## Summary
 
@@ -219,10 +218,6 @@ this one uses and is used by. The documentation page for a module combines the t
 | [HFT](examples/hft-platform.md) | Order-book properties and interleaving tests attached to the book and queues; latency benchmarks on the hot path with deltas in review |
 | [Web store](examples/web-store.md) | Contracts on checkout tested automatically; examples documenting the API contract; notes explaining pricing rules |
 | [Hashiverse](examples/hashiverse.md) | Fuzz targets attached to wire-protocol decoders; examples of the client API under simulated peers |
-
-## Open questions
-
-None at present.
 
 ## Background
 

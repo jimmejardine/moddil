@@ -1,9 +1,8 @@
 # Runtime: scheduling, executors and I/O
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). The concurrency
-> *model* (structured tasks, sharing, cancellation) is in [`concurrency.md`](concurrency.md) and
-> [`lifecycle.md`](lifecycle.md); this document covers what runs it: runtimes, executors, the I/O reactor,
-> and how they differ by target. Snippets are **illustration only**.
+The concurrency *model* (structured tasks, sharing, cancellation) is in
+[`concurrency.md`](concurrency.md) and [`lifecycle.md`](lifecycle.md); this document covers what
+runs it: runtimes, executors, the I/O reactor, and how they differ by target.
 
 ## Summary
 
@@ -132,11 +131,6 @@ thread; executor placement is recorded and simulated ([`determinism.md`](determi
 | Browsers (JSPI) | `moddil/runtime-wasm`; each task is a promising entry; one thread unless cross-origin isolated |
 | Deterministic simulation | `moddil/runtime-sim`: one deterministic thread, virtual time ([`determinism.md`](determinism.md)) |
 | Freestanding (embedded) | `moddil/rt-embedded`: a static scheduler with fixed task slots ([`freestanding.md`: Concurrency without a runtime](freestanding.md#concurrency-without-a-runtime)) |
-
-## Open questions
-
-None at present.
-
 
 ## Prior art
 

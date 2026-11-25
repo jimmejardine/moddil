@@ -1,9 +1,6 @@
 # Syntax
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
-> Moddil's surface syntax is **based on Rust**. Every
-> snippet in these specs follows this document; snippets remain illustrative where a feature's own
-> design is still open.
+Moddil's surface syntax is **based on Rust**. Every snippet in these specs follows this document.
 
 ## Rule
 
@@ -196,10 +193,6 @@ Decided while building the grammar inventory
 | Classes with shared mutable references (ARC) | Deliberately not: `Rc` contents are immutable; shared mutation goes through sync cells |
 | Objective-C interop; Playgrounds | Objective-C through C ([`interop.md`](interop.md)); REPL, script and notebook modes are a non-goal ([`requirements.md`: Non-goals (draft)](requirements.md#non-goals-draft)); an in-browser playground replaces Playgrounds ([`toolchain.md`: Playground: learning without a REPL](toolchain.md#playground-learning-without-a-repl)) |
 | Actors, `async`/`await`, typed throws, `some`/`any`, enums with payloads, `defer`, `Codable`, macros | Already covered: tasks and actors, effects, error handling, `impl`/`dyn`, ADTs, RAII and `errdefer`, derives, compile-time code |
-
-## Open questions
-
-None at present: the last were decided in November 2026 ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed)).
 
 ## Prior art
 

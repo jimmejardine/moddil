@@ -1,8 +1,5 @@
 # Distributed and Multi-tier Programs
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
-> Snippets and file formats are **illustration only**; no syntax is committed.
-
 ## Summary
 
 | Rule | One line |
@@ -227,10 +224,6 @@ What ships in v0, v1 and later is in [`roadmap.md`: Staging: distributed program
 | [HFT](examples/hft-platform.md) | Collector, store, research and execution as separate deployment units and binaries; latency-critical paths with no mesh in the way; one strategy mod placed in both research and execution |
 | [Web store](examples/web-store.md) | Client, API and database; skew checks against months-old mobile clients; Postgres provisioned by Terraform and bound as a requirement; payment keys as `Secret<T>` |
 | [Hashiverse](examples/hashiverse.md) | `peer` placement; wire compatibility with existing Rust servers via consumed contracts; a single static binary for volunteers |
-
-## Open questions
-
-None at present.
 
 ## Background
 

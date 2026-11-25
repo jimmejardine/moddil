@@ -128,8 +128,8 @@ that property: workers exchange transferable buffers.
   evaluation, not traps. Integer overflow inside a formula becomes `#NUM!` through checked
   arithmetic.
 - **Kernels built at runtime.** fumoca compiles each workbook into its own kernel, but Moddil
-  kernels are compile-time code. How to meet this is open
-  ([`accelerators.md`: Open questions](../accelerators.md#open-questions)).
+  kernels are compile-time code. Decided in
+  [`accelerators.md`: Kernels built at run time](../accelerators.md#kernels-built-at-run-time).
 - **Binary size and start-up time** of the core are release metrics
   ([`ui.md`: The browser](../ui.md#the-browser)).
 
@@ -166,7 +166,3 @@ Initial targets, to be refined:
 - **The UI libraries are fumoca's choice** (decided November 2026), not this example's. The grid
   and the charts should draw to a canvas from the core's typed arrays, rather than through DOM
   components, so large results need no copying into the DOM.
-
-## Open questions
-
-None at present: the migration order and the UI libraries were decided in November 2026.

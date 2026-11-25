@@ -1,8 +1,5 @@
 # Text and strings
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Syntax per
-> [`syntax.md`](syntax.md); snippets are **illustration only**.
-
 ## Summary
 
 | Topic | Decision |
@@ -264,8 +261,3 @@ with Locale = i18n::fixed("de-CH") { assert(order_summary(&o) == "…") }
 | **Rust** | `&str`/`String` map directly; both are UTF-8 | Zero-copy ([`interop.md`: Rust: the generated bridge](interop.md#rust-the-generated-bridge)) |
 | **WASM components** | Component-model `string`, UTF-8 | Zero-copy where both sides are UTF-8 |
 | **JavaScript and the DOM** | UTF-16 on the JS side | A transcoding copy at each crossing; batching and caching strategy belongs to [`ui.md`](ui.md) |
-
-## Open questions
-
-None at present.
-

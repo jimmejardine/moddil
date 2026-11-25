@@ -1,8 +1,7 @@
 # Security model
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). This document ties
-> together security mechanisms decided in other areas and states the guarantee they add up to.
-> Snippets are **illustration only**.
+Ties together security mechanisms decided in other areas and states the guarantee they add up
+to.
 
 ## Summary
 
@@ -254,8 +253,3 @@ Decided in [`packages-and-supply-chain.md`](packages-and-supply-chain.md) and su
 | [Hashiverse](examples/hashiverse.md) | Hostile peers, key theft, timing attacks | `Untrusted` peer data; keys as `Secret` behind a key-locker handler; constant-time crypto |
 | [HFT platform](examples/hft-platform.md) | Credential theft, insiders, compromised dependencies | Capability ceilings on market-data and FIX mods; secrets from providers; audit trail |
 | [Multiplayer game](examples/multiplayer-game.md) | Cheating clients, malformed packets | Authoritative server; `Untrusted` inputs; parse-don't-validate decoding |
-
-## Open questions
-
-None at present.
-

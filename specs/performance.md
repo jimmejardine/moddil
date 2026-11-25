@@ -1,8 +1,7 @@
 # Performance model
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Brings together
-> performance decisions made in other areas and adds the rules for hot paths, checks, optimisation
-> and benchmarks. Snippets are **illustration only**.
+Brings together performance decisions made in other areas and adds the rules for hot paths,
+checks, optimisation and benchmarks.
 
 ## Summary
 
@@ -291,8 +290,3 @@ bench "one tick" for on_tick {
 | [Multiplayer game](examples/multiplayer-game.md) | Frame budget in release and debug; cache-friendly entity data | Struct-of-arrays; optimised dependencies in debug; debug frame-rate benchmark |
 | [Web store](examples/web-store.md) | Throughput per request; low memory per request | Allocation counters per request handler; visible rc and clone costs |
 | [Hashiverse](examples/hashiverse.md) | Crypto and proof-of-work throughput | Constant-time crypto that is still vectorised; PGO from simulated network runs |
-
-## Open questions
-
-None at present.
-

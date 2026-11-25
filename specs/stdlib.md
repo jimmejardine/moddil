@@ -1,8 +1,7 @@
 # Standard library and mods
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). The catalogue of
-> standard mods is in [Initial standard-mod catalogue](#initial-standard-mod-catalogue); this document defines the shape of the
-> core interfaces they share. Snippets are **illustration only**.
+The catalogue of standard mods is in [Initial standard-mod catalogue](#initial-standard-mod-catalogue);
+this document defines the shape of the core interfaces they share.
 
 ## Summary
 
@@ -538,8 +537,3 @@ not the dynamic metaprogramming the [non-goals](requirements.md#non-goals-draft)
   sees only `pub` fields.
 - **Read-only by default.** `#[reflect(mut)]` on the type lets an editor write fields through it;
   a type with invariants simply does not opt in.
-
-## Open questions
-
-None at present: the last (audio output, runtime type information) were decided in November 2026.
-

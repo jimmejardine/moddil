@@ -1,8 +1,5 @@
 # Interoperability with C and Rust
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
-> Snippets are **illustration only**; no syntax is committed.
-
 ## Summary
 
 | Rule | One line |
@@ -205,10 +202,6 @@ The C ABI's completions (slice M3c; reference `interop.md`):
 | [HFT](examples/hft-platform.md) | DPDK / ef_vi-style kernel-bypass through C with zero overhead; C++ exchange SDKs and FIX engines through shims; `blocking` overlays for SDK calls that block |
 | [Web store](examples/web-store.md) | PostgreSQL through libpq or a native mod; mobile platform APIs through JNI and the Objective-C/Swift C surface |
 | [Hashiverse](examples/hashiverse.md) | The generated Rust bridge to `hashiverse-lib` during migration, replaced module by module by native Moddil |
-
-## Open questions
-
-None at present.
 
 ## Background
 

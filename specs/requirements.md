@@ -1,7 +1,5 @@
 # Requirements and Non-Goals
 
-> **Status:** R1–R4 are decided. The non-goals are a draft. Indexed in [`README.md`](README.md).
-
 ## Firm requirements (decided)
 
 These are no longer open for debate. Every other design decision must be compatible with them.
@@ -120,6 +118,4 @@ Details: [`determinism.md`](determinism.md).
 
 ## Open questions
 
-None at present. R1 on WASI runtimes without stack switching was decided in November 2026: they
-are not supported, and WASI concurrency waits for stack switching
-([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)).
+- **The non-goals** ([Non-goals (draft)](#non-goals-draft)) are a draft, still to be confirmed.

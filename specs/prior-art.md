@@ -1,7 +1,6 @@
 # Prior Art: Matrix and References
 
-> **Status:** reference material. The prior-art matrix and the reference list. Each spec also has its own
-> prior-art list.
+The prior-art matrix and the reference list. Each spec also has its own prior-art list.
 
 ## Prior-art matrix
 

@@ -1,8 +1,5 @@
 # Type system core
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Syntax per
-> [`syntax.md`](syntax.md); snippets are **illustration only**.
-
 ## Summary
 
 | Topic | Decision |
@@ -578,8 +575,3 @@ What replaces it:
    ```
 3. **Default methods act as mixins:** a trait can supply reusable behaviour to every type that
    implements its required methods.
-
-## Open questions
-
-None at present: the last were decided in November 2026 ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed)).
-

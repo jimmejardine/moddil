@@ -1,8 +1,5 @@
 # Targets, Cross-compilation and Static Builds
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
-> Commands, target names and file formats are **illustration only**.
-
 ## Summary
 
 | Rule | One line |
@@ -182,11 +179,6 @@ build or the repository.
 | [HFT](examples/hft-platform.md) | Static Linux binaries pinned to the servers' CPU level (`+v3`/`+v4`); research GPU boxes on a dynamic glibc target for CUDA |
 | [Web store](examples/web-store.md) | OCI images built on any host; shared-logic libraries for Android and iOS |
 | [Hashiverse](examples/hashiverse.md) | One CI host producing static volunteer binaries for Linux, Windows and macOS, signed for each |
-
-## Open questions
-
-None at present.
-
 
 ## Prior art
 

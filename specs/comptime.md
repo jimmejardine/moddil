@@ -1,8 +1,5 @@
 # Compile-time Evaluation (instead of Macros)
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
-> Snippets are **illustration only**; no syntax is committed.
-
 ## Summary
 
 | Rule                                        | One line                                                                                                                                                               |
@@ -449,10 +446,6 @@ Generated code is ordinary code once expanded:
 | [Hashiverse](examples/hashiverse.md) | Wire-protocol codecs that must match existing Rust servers; comptime crypto constant tables; `fmt` for logs |
 
 None of them needed token-level macros.
-
-## Open questions
-
-None at present.
 
 ## Prior art
 

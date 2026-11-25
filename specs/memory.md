@@ -1,9 +1,7 @@
 # Memory: ownership, borrowing and sharing
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md) and is the
-> foundation for CPU concurrency in [`concurrency.md`](concurrency.md). Destruction, cleanup and linear
-> types are in [`resources.md`](resources.md). Snippets are **illustration
-> only**; no syntax is committed.
+The foundation for CPU concurrency in [`concurrency.md`](concurrency.md). Destruction, cleanup and
+linear types are in [`resources.md`](resources.md).
 
 ## Summary
 
@@ -355,10 +353,6 @@ with Alloc = &frame {
 - Scratch arenas install themselves the same way
   ([`stdlib.md`: Scratch arenas](stdlib.md#scratch-arenas)). Not built yet: `with Alloc = …` is
   under [`roadmap.md`: Deferred from built work](roadmap.md#deferred-from-built-work).
-
-## Open questions
-
-None at present.
 
 ## Background
 

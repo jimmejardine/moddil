@@ -1,8 +1,5 @@
 # Modules, Visibility and Program Structure
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md). Snippets are
-> **illustration only**.
-
 ## Summary
 
 | Rule | One line |
@@ -239,10 +236,6 @@ shapes = { path = "../shapes" }    # a local mod, by the name the code uses for 
 | [HFT](examples/hft-platform.md) | `pub(mod)` internals of the matching engine; Linux-only kernel-bypass paths checked on every developer's machine |
 | [Web store](examples/web-store.md) | Separate mods instead of features (`store-core`, `store-payments`), each with its own capability ceiling |
 | [Hashiverse](examples/hashiverse.md) | One repository holding the protocol, client and server mods; a `pub use` facade for the protocol API |
-
-## Open questions
-
-None at present: the last were decided in November 2026 ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed)).
 
 ## Prior art
 

@@ -67,7 +67,3 @@ features honest under the rule that every feature must be needed by an example.
 
 - Vendor register descriptions (SVD files) imported at comptime to generate typed registers.
 - Optionally a vendor radio stack in C, through an overlay ([`interop.md`](../interop.md)).
-
-## Open questions
-
-None at present.

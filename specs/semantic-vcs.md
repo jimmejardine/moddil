@@ -1,7 +1,5 @@
 # Diffs, Code Review and Version Control
 
-> **Status:** complete: decided, with no open questions. Indexed in [`README.md`](README.md).
-
 ## Problem
 
 Version control operates on lines of text, but programs are trees with meaning. Reviewers
@@ -135,11 +133,6 @@ Output formats: terminal, **Markdown** (for pasting into a PR), and **JSON** (fo
   manifest act on the report, for example "a new `Net` or `ffi` capability in this mod needs security
   review" or "a semver-major change needs an API owner": CODEOWNERS keyed on *semantic* change rather
   than file paths.
-
-## Open questions
-
-None at present.
-
 
 ## Prior art
 

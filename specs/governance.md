@@ -1,7 +1,5 @@
 # Governance
 
-> **Status:** complete: decided, with no open questions. Listed in the [index](README.md).
-
 ## Summary
 
 | Rule | One line |
@@ -151,10 +149,6 @@ The `moddil/*` mods ([`stdlib.md`](stdlib.md)) follow these rules on top of the 
 Governance doesn't change what the examples can express; it decides how features they need get into
 the language (each proposal cites one), and how fast a security fix reaches them (advisories and the
 cooldown override).
-
-## Open questions
-
-None at present.
 
 ## Prior art
 
