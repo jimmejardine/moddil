@@ -336,6 +336,12 @@ Debug builds and `runtime-sim` report leaked `Rc` cycles with their allocation s
 the runtime keeps the live allocations, and at a run's end (or on asking) finds those only
 reachable from each other.
 
+**P68. A trap in `main` under `moddil run --wasm`** (`crates/wasm`, `crates/moddil`; M). A run of
+a `main` that traps (`assert(x == 2)` failing) stops with "the WASM run stopped (a backend bug):
+an unknown command: " instead of reporting the trap with its parts and exiting with 70, as the
+native and interpreted runs do. A test that traps under `moddil test --wasm` is reported
+properly; the `main` path (`run_main`, and the host's `main` command) is not.
+
 ## Known limits, with no package yet
 - The float functions other than `sqrt` are `libm`'s, not yet correctly rounded.
 - `String`'s inline size is 23 on every target (11 on 32-bit targets comes with them), and
