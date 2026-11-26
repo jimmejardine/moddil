@@ -35,37 +35,37 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Language definition and conformance](definition.md)               | 🟢 complete        | [`definition.md`](definition.md)                                                                                     |
 | [Glossary](glossary.md)                                            | reference          | [`glossary.md`](glossary.md): one line per Moddil term, linked to its definition                                     |
 | **The language**                                                   |                    |                                                                                                                      |
-| [Effects and capabilities](effects-and-capabilities.md)            | 🟢 complete        | [`effects-and-capabilities.md`](effects-and-capabilities.md)                                                         |
-| [Memory: ownership, borrowing and sharing](memory.md)              | 🟢 complete        | [`memory.md`](memory.md)                                                                                             |
+| [Effects and capabilities](effects-and-capabilities.md)            | 🟡 minor questions | [`effects-and-capabilities.md`](effects-and-capabilities.md)                                                         |
+| [Memory: ownership, borrowing and sharing](memory.md)              | 🟡 minor questions | [`memory.md`](memory.md)                                                                                             |
 | [Resources: drop, cleanup and linear types](resources.md)          | 🟢 complete        | [`resources.md`](resources.md)                                                                                       |
 | [Values: copy, clone and equality](values.md)                      | 🟢 complete        | [`values.md`](values.md)                                                                                             |
 | [Error handling](error-handling.md)                                | 🟢 complete        | [`error-handling.md`](error-handling.md)                                                                             |
-| [Type system core](types.md)                                       | 🟢 complete        | [`types.md`](types.md): traits, generics, optional values, paradigms                                                 |
+| [Type system core](types.md)                                       | 🟡 minor questions | [`types.md`](types.md): traits, generics, optional values, paradigms                                                 |
 | [Functions and closures](closures.md)                              | 🟢 complete        | [`closures.md`](closures.md)                                                                                         |
 | [Modules, visibility and program structure](modules.md)            | 🟢 complete        | [`modules.md`](modules.md)                                                                                           |
 | [`unsafe` and the safety boundary](unsafe.md)                      | 🟢 complete        | [`unsafe.md`](unsafe.md)                                                                                             |
 | [Security model](security.md)                                      | 🟢 complete        | [`security.md`](security.md)                                                                                         |
-| [Numerics and data](numerics.md)                                   | 🟢 complete        | [`numerics.md`](numerics.md), [`units.md`](units.md)                                                                 |
+| [Numerics and data](numerics.md)                                   | 🟡 minor questions | [`numerics.md`](numerics.md), [`units.md`](units.md)                                                                 |
 | [Text and strings](text.md)                                        | 🟢 complete        | [`text.md`](text.md)                                                                                                 |
-| [Metaprogramming](comptime.md)                                     | 🟢 complete        | [`comptime.md`](comptime.md)                                                                                         |
-| [Contracts and verification](correctness.md)                       | 🟢 complete        | [`correctness.md`](correctness.md)                                                                                   |
+| [Metaprogramming](comptime.md)                                     | 🟡 minor questions | [`comptime.md`](comptime.md)                                                                                         |
+| [Contracts and verification](correctness.md)                       | 🟡 minor questions | [`correctness.md`](correctness.md)                                                                                   |
 | **Running programs**                                               |                    |                                                                                                                      |
-| [Concurrency across CPUs](concurrency.md)                          | 🟢 complete        | [`concurrency.md`](concurrency.md)                                                                                   |
-| [Runtime: scheduling, executors and I/O](runtime.md)               | 🟢 complete        | [`runtime.md`](runtime.md)                                                                                           |
+| [Concurrency across CPUs](concurrency.md)                          | 🟡 minor questions | [`concurrency.md`](concurrency.md)                                                                                   |
+| [Runtime: scheduling, executors and I/O](runtime.md)               | 🟡 minor questions | [`runtime.md`](runtime.md)                                                                                           |
 | [Performance model](performance.md)                                | 🟢 complete        | [`performance.md`](performance.md)                                                                                   |
-| [GPUs and accelerators](accelerators.md)                           | 🟢 complete        | [`accelerators.md`](accelerators.md)                                                                                 |
-| [Distributed and multi-tier programs](distribution.md)             | 🟢 complete        | [`distribution.md`](distribution.md)                                                                                 |
+| [GPUs and accelerators](accelerators.md)                           | 🟡 minor questions | [`accelerators.md`](accelerators.md)                                                                                 |
+| [Distributed and multi-tier programs](distribution.md)             | 🟡 minor questions | [`distribution.md`](distribution.md)                                                                                 |
 | [Determinism and reproducibility](determinism.md)                  | 🟢 complete        | [`determinism.md`](determinism.md)                                                                                   |
 | [Program lifecycle](lifecycle.md)                                  | 🟢 complete        | [`lifecycle.md`](lifecycle.md)                                                                                       |
 | [Observability and debuggability](observability.md)                | 🟢 complete        | [`observability.md`](observability.md)                                                                               |
 | **Library and ecosystem**                                          |                    |                                                                                                                      |
-| [Standard library and mods (R2)](stdlib.md)                        | 🟢 complete        | [`stdlib.md`](stdlib.md): small core, tiers, catalogue, core interfaces                                              |
-| [Packages and supply-chain security](packages-and-supply-chain.md) | 🟢 complete        | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)                                                       |
-| [Interoperability with C and Rust](interop.md)                     | 🟢 complete        | [`interop.md`](interop.md)                                                                                           |
+| [Standard library and mods (R2)](stdlib.md)                        | 🟡 minor questions | [`stdlib.md`](stdlib.md): small core, tiers, catalogue, core interfaces                                              |
+| [Packages and supply-chain security](packages-and-supply-chain.md) | 🟡 minor questions | [`packages-and-supply-chain.md`](packages-and-supply-chain.md)                                                       |
+| [Interoperability with C and Rust](interop.md)                     | 🟡 minor questions | [`interop.md`](interop.md)                                                                                           |
 | [Data interchange and persistence](data.md)                        | 🟢 complete        | [`data.md`](data.md)                                                                                                 |
 | [UI, mobile and the browser](ui.md)                                | 🟢 complete        | [`ui.md`](ui.md)                                                                                                     |
 | **Tools and workflow**                                             |                    |                                                                                                                      |
-| [Tooling uniformity](toolchain.md)                                 | 🟢 complete        | [`toolchain.md`](toolchain.md), [`docs.md`](docs.md)                                                                 |
+| [Tooling uniformity](toolchain.md)                                 | 🟡 minor questions | [`toolchain.md`](toolchain.md), [`docs.md`](docs.md)                                                                 |
 | [Testing](testing.md)                                              | 🟢 complete        | [`testing.md`](testing.md)                                                                                           |
 | [Build times](build-times.md)                                      | 🟢 complete        | [`build-times.md`](build-times.md)                                                                                   |
 | [Cross-compilation and deployment](targets.md)                     | 🟢 complete        | [`targets.md`](targets.md), [`freestanding.md`](freestanding.md)                                                     |
@@ -73,13 +73,39 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Diffs, code review and version control](semantic-vcs.md)          | 🟢 complete        | [`semantic-vcs.md`](semantic-vcs.md)                                                                                 |
 | [Language evolution](evolution.md)                                 | 🟢 complete        | [`evolution.md`](evolution.md)                                                                                       |
 | [Adoption](adoption.md)                                            | 🟢 complete        | [`adoption.md`](adoption.md)                                                                                         |
-| [Governance](governance.md)                                        | 🟢 complete        | [`governance.md`](governance.md)                                                                                     |
+| [Governance](governance.md)                                        | 🟡 minor questions | [`governance.md`](governance.md)                                                                                     |
 | **The project**                                                    |                    |                                                                                                                      |
 | [Compiler and bootstrap](compiler.md)                              | 🟡 minor questions | [`compiler.md`](compiler.md) (R1)                                                                                    |
 | [MIR: the mid-level IR](mir.md)                                    | 🟡 minor questions | [`mir.md`](mir.md): pipeline, form, and how each feature lowers                                                      |
-| [The website and services: moddil.com](web.md)                     | 🟢 complete        | [`web.md`](web.md): what moddil.com serves, and what it deliberately does not                                        |
+| [The website and services: moddil.com](web.md)                     | 🟡 minor questions | [`web.md`](web.md): what moddil.com serves, and what it deliberately does not                                        |
 | [Roadmap: the work on the horizon](roadmap.md)                     | 🟢 complete        | [`roadmap.md`](roadmap.md)                                                                                           |
 | [Prior art](prior-art.md)                                          | reference          | [`prior-art.md`](prior-art.md)                                                                                       |
+
+## Open questions
+
+What is still undecided is in each document's own **Open questions** section, near its end, after
+the specification and before the alternatives considered and the prior art. A document marked 🟡 or
+🟠 in the index has open questions; one marked 🟢 has none. These documents have them:
+
+- [Requirements and non-goals](requirements.md#open-questions)
+- [Type system core](types.md#open-questions)
+- [Numerics](numerics.md#open-questions)
+- [Memory](memory.md#open-questions)
+- [Effects and capabilities](effects-and-capabilities.md#open-questions)
+- [Metaprogramming](comptime.md#open-questions)
+- [Contracts and verification](correctness.md#open-questions)
+- [Concurrency across CPUs](concurrency.md#open-questions)
+- [Runtime](runtime.md#open-questions)
+- [GPUs and accelerators](accelerators.md#open-questions)
+- [Distributed and multi-tier programs](distribution.md#open-questions)
+- [Standard library and mods](stdlib.md#open-questions)
+- [Packages and supply-chain security](packages-and-supply-chain.md#open-questions)
+- [Interoperability with C and Rust](interop.md#open-questions)
+- [Tooling](toolchain.md#open-questions)
+- [Compiler and bootstrap](compiler.md#open-questions)
+- [MIR](mir.md#open-questions)
+- [moddil.com](web.md#open-questions)
+- [Governance](governance.md#open-questions)
 
 ## Working on these specs
 
