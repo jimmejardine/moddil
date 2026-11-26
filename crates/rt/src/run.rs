@@ -1,10 +1,12 @@
-//! A run: the state its tasks share, and its tasks (`task.sched.1`).
+//! A run: the state its tasks share, and its tasks (`task.sched.1`, `task.runtime.1`).
 //!
-//! Only the task holding the baton (the running task's number) runs; a task that suspends hands
-//! it to the next ready one, as the scheduler says, and waits for its turn ([`crate::baton`]:
-//! a thread per task natively, a JSPI call per task on `wasm32`). So one task runs at a time, in
-//! the interpreters' order. A trap outside an isolated scope aborts the run: each task waiting
-//! is woken to return a trapped status, running no more of its code.
+//! Only the tasks with a turn run ([`crate::turns`]): one under the deterministic runtime, one a
+//! core under the parallel one. A task that suspends gives up its turn, the turns free go to the
+//! ready tasks as the scheduler says, and it waits for its own again ([`crate::baton`]: a thread
+//! per task natively, a JSPI call per task on `wasm32`). With one turn, one task runs at a time,
+//! in the interpreters' order. A trap outside an isolated scope aborts the run: each task waiting
+//! is woken to return a trapped status, running no more of its code, and each running stops at
+//! its next safe point.
 //!
 //! The statuses the code and these functions use: 0 returned, 1 trapped (the run ends),
 //! 2 failed (an error), 3 unwinding (cancelled, or a trap in an isolated scope).
@@ -12,11 +14,12 @@
 #![allow(unsafe_code)]
 
 use std::cell::{Cell, RefCell};
-use std::sync::atomic::{AtomicI64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU8, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 use crate::baton::{self, Baton, DropFn, TaskFn};
 use crate::sched::{Failure, Op, Outcome, Scheduler, Wait};
+use crate::turns::Turns;
 use crate::{Observer, Trapped};
 
 /// What a run's threads share.
@@ -32,8 +35,8 @@ pub(crate) struct State {
     /// What gives a `Trapped`'s text.
     pub(crate) trap_text: Option<crate::host::TrapText>,
     sched: Scheduler,
-    /// The running task.
-    pub(crate) current: usize,
+    /// Which tasks run now.
+    pub(crate) turns: Turns,
     pub(crate) aborted: bool,
     pub(crate) baton: Baton,
 }
@@ -100,7 +103,7 @@ fn new_ctx() -> Arc<Ctx> {
             last_trapped: None,
             trap_text: None,
             sched: Scheduler::new(),
-            current: 0,
+            turns: Turns::new(),
             aborted: false,
             baton: Baton::default(),
         }),
@@ -114,14 +117,19 @@ pub(crate) fn ctx() -> Arc<Ctx> {
     CTX.with(|c| c.borrow_mut().get_or_insert_with(new_ctx).clone())
 }
 
-/// The run's state, locked.
+/// The run's state, locked. What `f` makes ready gets a turn if one is free.
 pub(crate) fn with<R>(f: impl FnOnce(&mut State) -> R) -> R {
     let c = ctx();
     let mut s = c
         .state
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    f(&mut s)
+    let r = f(&mut s);
+    let s = &mut *s;
+    if s.turns.can_hand_out(&s.sched) && s.turns.hand_out(&mut s.sched) {
+        baton::pass_on(&c, s);
+    }
+    r
 }
 
 /// The running task's number.
@@ -153,12 +161,36 @@ pub(crate) static PREEMPT: AtomicU8 = AtomicU8::new(0);
 /// At a safe point, with [`PREEMPT`] set: gives way.
 #[unsafe(export_name = "moddil_rt_safe_point")]
 pub(crate) extern "C" fn safe_point() {
+    // A run that ended: the task runs no more of its code (its thread waits for the process).
+    if CTX.with(|c| c.borrow().as_ref().is_some_and(|c| c.lock().aborted)) {
+        loop {
+            std::thread::park();
+        }
+    }
     PREEMPT.store(0, Ordering::Relaxed);
 }
 
-/// Records that task `t` is running now.
+/// Whether the parallel runtime runs this process's tasks.
+static PARALLEL: AtomicBool = AtomicBool::new(false);
+
+/// What [`RUNNING`] holds under the parallel runtime: no task's number.
+const NO_TASK: i64 = -2;
+
+/// Records that task `t` is running now: under the deterministic runtime, the one task that is.
 pub(crate) fn running(t: usize) {
-    RUNNING.store(t as i64, Ordering::Relaxed);
+    if !PARALLEL.load(Ordering::Relaxed) {
+        RUNNING.store(t as i64, Ordering::Relaxed);
+    }
+}
+
+/// Ends the run: each task waiting is woken to return a trapped status, and, under the parallel
+/// runtime, each running stops at its next safe point.
+fn abort(c: &Ctx, s: &mut State) {
+    s.aborted = true;
+    if s.turns.parallel() {
+        PREEMPT.store(1, Ordering::Relaxed);
+    }
+    baton::pass_on(c, s);
 }
 
 /// Starts a new run on this thread, as its first task; what earlier runs left is forgotten.
@@ -169,9 +201,13 @@ pub fn begin_run() {
     running(0);
 }
 
-/// Ends this thread's run: waits for its tasks' threads to end.
+/// Ends this thread's run: waits for its tasks' threads to end; for an aborted run, only for
+/// those not stopped at a safe point, which wait for the process.
 pub fn end_run() {
-    let threads = with(baton::end_run);
+    let (threads, aborted) = with(|s| (baton::end_run(s), s.aborted && s.turns.parallel()));
+    if aborted {
+        return;
+    }
     for t in threads {
         let _ = t.join();
     }
@@ -229,14 +265,19 @@ pub(crate) fn record_trap(site: u32, tracked: bool) -> u8 {
     })
 }
 
-/// Hands the baton to the next ready task and waits for this one's turn again: 0, or 1 if the
-/// run is aborted, or, with no task ready, the status of a deadlock trap at `site`.
+/// Gives up the running task's turn, the turns free going to the ready tasks, and waits for its
+/// own again: 0, or 1 if the run is aborted, or, with no task running or ready, the status of a
+/// deadlock trap at `site`.
 fn suspend(c: &Ctx, mut s: MutexGuard<'_, State>, site: u32, tracked: bool) -> u8 {
-    let Some(next) = s.sched.next_ready() else {
+    let me = me();
+    s.turns.give_up(me);
+    let st = &mut *s;
+    st.turns.hand_out(&mut st.sched);
+    if st.turns.idle() {
         drop(s);
         return record_trap(site, tracked);
-    };
-    baton::hand_over(c, s, next)
+    }
+    baton::wait_turn(c, s)
 }
 
 /// Runs `op` until it gives a status: it is tried, and while it says to wait (`None`, having
@@ -366,8 +407,7 @@ pub(crate) fn run_task(c: &Arc<Ctx>, t: usize, spec: Start) {
         3 => Outcome::Cancelled,
         // A trap: the run ends.
         _ => {
-            s.aborted = true;
-            baton::pass_on(c, &s);
+            abort(c, &mut s);
             return;
         }
     };
@@ -377,24 +417,24 @@ pub(crate) fn run_task(c: &Arc<Ctx>, t: usize, spec: Start) {
         let status = drop_all(dropped);
         s = c.lock();
         if status != 0 {
-            s.aborted = true;
-            baton::pass_on(c, &s);
+            abort(c, &mut s);
             return;
         }
     }
-    match s.sched.next_ready() {
-        Some(next) => s.current = next,
-        None => {
-            // Every other task waits: a deadlock, where nothing says.
-            if s.trap.is_none() {
-                s.trap = Some(Trapped {
-                    site: u32::MAX,
-                    tracked: false,
-                    stack: Vec::new(),
-                });
-            }
-            s.aborted = true;
+    s.turns.give_up(t);
+    let st = &mut *s;
+    st.turns.hand_out(&mut st.sched);
+    if st.turns.idle() {
+        // Every other task waits: a deadlock, where nothing says.
+        if s.trap.is_none() {
+            s.trap = Some(Trapped {
+                site: u32::MAX,
+                tracked: false,
+                stack: Vec::new(),
+            });
         }
+        abort(c, &mut s);
+        return;
     }
     baton::pass_on(c, &s);
 }
@@ -501,8 +541,10 @@ pub unsafe extern "C" fn scope_run(
         s.sched.place(t, -1, me);
         baton::start(&mut s, &c, t, spec_of(spec));
         s.sched.block(me, Wait::Scope(s_id));
-        // The body runs at once.
-        if baton::hand_over(&c, s, t) != 0 {
+        // The body runs at once, in its owner's turn.
+        s.turns.give_up(me);
+        s.turns.take(t);
+        if baton::wait_turn(&c, s) != 0 {
             return 1;
         }
     }
@@ -586,8 +628,28 @@ pub extern "C" fn detach(t: u64) -> u8 {
 
 /// `with Runtime = …` (`task.runtime.1`): the deterministic runtime with seed `seed`.
 #[unsafe(export_name = "moddil_rt_install_runtime")]
-pub(crate) extern "C" fn install_runtime(seed: i64) {
+pub(crate) extern "C" fn install_runtime(seed: i64, workers: i64) {
     with(|s| s.sched.set_seed(seed as u64));
+    if workers != 0 {
+        set_workers(usize::try_from(workers).ok());
+    }
+}
+
+/// Runs the run's tasks in parallel from now on, up to `workers` at once (by default, one a
+/// core): the parallel runtime (`task.runtime.1`). The running task's number is then not one
+/// word of the process: compiled code, finding no task's number there, counts every `Rc`
+/// atomically.
+pub fn set_workers(workers: Option<usize>) {
+    let n = workers.unwrap_or_else(|| std::thread::available_parallelism().map_or(1, usize::from));
+    PARALLEL.store(true, Ordering::Relaxed);
+    RUNNING.store(NO_TASK, Ordering::Relaxed);
+    with(|s| s.turns.set_slots(n.max(2)));
+}
+
+/// Whether the run's tasks run in parallel (`__parallel`).
+#[unsafe(export_name = "moddil_rt_parallel")]
+pub(crate) extern "C" fn parallel() -> u8 {
+    u8::from(PARALLEL.load(Ordering::Relaxed))
 }
 
 /// Runs the tasks of the run on this thread in the order seed `seed` picks (`moddil test

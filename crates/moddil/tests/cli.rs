@@ -532,14 +532,26 @@ fn seeds_reorder_tasks_and_a_failure_names_its_seed() {
 }
 
 #[test]
-fn the_parallel_runtime_is_refused_until_it_is_built() {
+fn the_parallel_runtime_runs_tasks_at_once_natively() {
     let out = moddil(
         &["run", "--runtime", "parallel"],
         &file("par.moddil", PROGRAM),
     );
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "6765");
+    let out = moddil(
+        &["test", "--runtime", "parallel"],
+        &file("par-order.moddil", ORDER),
+    );
+    // The order its tasks send in is the machine's: the test may see another.
+    assert!(String::from_utf8_lossy(&out.stdout).contains("test \"in turn\""));
+    let out = moddil(
+        &["run", "--interp", "--runtime", "parallel"],
+        &file("par-i.moddil", PROGRAM),
+    );
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("not built yet"), "{stderr}");
+    assert!(stderr.contains("runs native code"), "{stderr}");
 }
 
 #[test]
@@ -574,9 +586,9 @@ fn the_manifest_chooses_the_runtime_and_threads() {
     manifest("threads = \"one\"");
     assert!(moddil(&["run"], &dir).status.success());
     manifest("runtime = \"parallel\"");
-    let out = moddil(&["run"], &dir);
+    assert!(moddil(&["run"], &dir).status.success());
+    let out = moddil(&["run", "--threads", "one"], &dir);
     assert!(!out.status.success());
-    assert!(String::from_utf8_lossy(&out.stderr).contains("not built yet"));
     manifest("threads = \"eight\"");
     let out = moddil(&["run"], &dir);
     assert!(String::from_utf8_lossy(&out.stderr).contains("E0704"));

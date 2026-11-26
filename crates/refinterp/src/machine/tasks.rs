@@ -463,6 +463,7 @@ impl Machine<'_> {
         let id = |m: &Self, v: &Value| id_of(&m.target(v.clone()));
         Some(match (owner, name) {
             ("", "__task_id") => Ok(Value::Int(self.memory.task() as i64)),
+            ("", "__parallel") => Ok(Value::Bool(false)),
             ("", "__install_runtime") => {
                 let Value::Int(seed) = args[0] else {
                     unreachable!("an int")

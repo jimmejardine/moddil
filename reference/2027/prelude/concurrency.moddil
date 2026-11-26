@@ -85,23 +85,37 @@ fn yield_now() with suspend;
 // runtime with seed 0.
 struct Runtime {
     seed: int,
+    // How many tasks run at once under the parallel runtime: 0 for the deterministic one, -1
+    // for one a core.
+    workers: int,
 }
 
 impl Runtime {
     // The deterministic runtime (`runtime-sim`), one task at a time: the ready tasks run in the
     // order seed `seed` picks, and with 0, first in, first out (`task.sched.1`).
     fn seeded(seed: int) -> Runtime {
-        Runtime { seed }
+        Runtime { seed, workers: 0 }
+    }
+
+    // The parallel runtime, its tasks running at once, up to `workers` (one a core if -1): what
+    // `moddil/runtime`'s `parallel` gives. The interpreters and WASM run its tasks one at a time.
+    fn __parallel(workers: int) -> Runtime {
+        Runtime { seed: 0, workers }
     }
 }
 
+// Whether the run's tasks run in parallel (`task.runtime.1`): what code that assumes one task at
+// a time refuses.
+#[intrinsic]
+fn __parallel() -> bool;
+
 // What `with Runtime = rt` does before its body.
 fn __runtime_install(rt: &Runtime) {
-    __install_runtime(rt.seed);
+    __install_runtime(rt.seed, rt.workers);
 }
 
 #[intrinsic]
-fn __install_runtime(seed: int);
+fn __install_runtime(seed: int, workers: int);
 
 // Waits, if the word at `p` holds `expected`, until a task unparks `p` (`task.park.1`): what a
 // sync cell waits with. A cancelled task unwinds from it.

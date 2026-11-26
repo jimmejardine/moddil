@@ -55,7 +55,7 @@ mod threads {
                 enter_task(&c, t);
                 {
                     let mut s = c.lock();
-                    while s.current != t && !s.aborted {
+                    while !s.turns.has(t) && !s.aborted {
                         s = c
                             .turn
                             .wait(s)
@@ -72,12 +72,11 @@ mod threads {
         s.baton.threads.push(thread);
     }
 
-    /// Gives the turn to task `next` and waits for this one's: 0, or 1 if the run is aborted.
-    pub(crate) fn hand_over(c: &Ctx, mut s: MutexGuard<'_, State>, next: usize) -> u8 {
+    /// Wakes the tasks given turns, and waits for this one's: 0, or 1 if the run is aborted.
+    pub(crate) fn wait_turn(c: &Ctx, mut s: MutexGuard<'_, State>) -> u8 {
         let me = me();
-        s.current = next;
         c.turn.notify_all();
-        while s.current != me && !s.aborted {
+        while !s.turns.has(me) && !s.aborted {
             s = c
                 .turn
                 .wait(s)
@@ -160,10 +159,14 @@ mod jspi {
         s.baton.pending.insert(t, spec);
     }
 
-    /// Gives the turn to task `next` and waits for this one's: 0, or 1 if the run is aborted.
-    pub(crate) fn hand_over(c: &Ctx, mut s: MutexGuard<'_, State>, next: usize) -> u8 {
+    /// Goes on with the task holding the one turn, and waits for this one's: 0, or 1 if the
+    /// run is aborted.
+    pub(crate) fn wait_turn(c: &Ctx, mut s: MutexGuard<'_, State>) -> u8 {
         let me = me();
-        s.current = next;
+        let next = s.turns.first().unwrap_or(me);
+        if next == me {
+            return u8::from(s.aborted);
+        }
         let stack = STACK.with(|st| std::mem::take(&mut *st.borrow_mut()));
         s.baton.stacks.insert(me, stack);
         drop(s);
@@ -184,7 +187,7 @@ mod jspi {
             if s.aborted {
                 moddil_host_abort();
             } else {
-                moddil_host_resume(s.current as u32);
+                moddil_host_resume(s.turns.first().unwrap_or(0) as u32);
             }
         }
     }

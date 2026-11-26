@@ -305,7 +305,8 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
     ("detach", &['w'], Some('b')),
     ("yield_now", &['s', 'b'], Some('b')),
     ("task_id", &[], Some('w')),
-    ("install_runtime", &['w'], None),
+    ("install_runtime", &['w', 'w'], None),
+    ("parallel", &[], Some('b')),
     ("park", &['p', 'w', 's', 'b'], Some('b')),
     ("unpark", &['p', 'w'], Some('w')),
     ("stop_requested", &['s', 'b'], Some('b')),
@@ -4721,8 +4722,13 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         match op {
             "install_runtime" => {
                 let seed = self.value(&args[0])?;
-                self.task_call("install_runtime", &[seed]);
+                let workers = self.value(&args[1])?;
+                self.task_call("install_runtime", &[seed, workers]);
                 Ok(())
+            }
+            "parallel" => {
+                let p = self.task_call(op, &[]).expect("whether");
+                self.write(d, Val::Scalar(p))
             }
             "task_id" => {
                 let t = match self.c.rt.running {

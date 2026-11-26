@@ -45,6 +45,9 @@ pub struct Options {
     pub seed: u64,
     /// How many threads its code may run on.
     pub threads: Threads,
+    /// Whether its tasks run under the parallel runtime, one a core (`task.runtime.1`), when its
+    /// `main` installs no runtime.
+    pub parallel: bool,
 }
 
 /// Runs test `index` of `program` natively: its observed values, or why it gave none. The values
@@ -68,7 +71,7 @@ pub fn run_test_with(
     match lower::compile(db, program, Item::Test(index), options.threads) {
         Err(why) => (Vec::new(), Err(Native::Unsupported(why))),
         Ok(compiled) => {
-            let (observed, result, _) = compiled.run(None, options.seed);
+            let (observed, result, _) = compiled.run(None, options);
             (observed, result.map(|_| ()))
         }
     }
@@ -113,7 +116,7 @@ pub fn run_main_with(
 ) -> Result<(String, Option<u8>), Native> {
     let compiled = lower::compile(db, program, Item::Fn(index), options.threads)
         .map_err(Native::Unsupported)?;
-    let (_, result, exit) = compiled.run(Some(args), options.seed);
+    let (_, result, exit) = compiled.run(Some(args), options);
     result.map(|shown| (shown, exit))
 }
 

@@ -205,3 +205,33 @@ fn every_order_of_a_task_tree_gives_its_value() {
         }
     }
 }
+
+/// The same trees under the parallel runtime (`task.runtime.1`), natively: their tasks run at
+/// once, in whatever order the machine gives, and each run must still give the tree's value.
+/// (The process then counts `Rc`s atomically for every run, the other test's too: correct, if
+/// slower.)
+#[test]
+fn a_task_tree_gives_its_value_in_parallel() {
+    let trees = count("MODDIL_STRESS_TREES", 12);
+    let runs = count("MODDIL_STRESS_SEEDS", 300).div_ceil(15);
+    for i in 0..trees {
+        let (text, want) = tree(i);
+        let checked = text.replace("    v\n}", &format!("    v  // => {want}\n}}"));
+        let db = Database::default();
+        let program = Program::of_project(&db, &project(&checked));
+        for run in 0..runs {
+            let options = moddil_native::Options {
+                parallel: true,
+                ..Default::default()
+            };
+            let (observed, r) = moddil_native::run_test_with(&db, program, 0, options);
+            assert!(r.is_ok(), "tree {i}, run {run}, parallel: {r:?}\n{text}");
+            let got: Vec<String> = observed.into_iter().map(|(_, _, v)| v).collect();
+            assert_eq!(
+                got,
+                vec![want.to_string()],
+                "tree {i}, run {run}, parallel\n{text}"
+            );
+        }
+    }
+}

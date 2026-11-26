@@ -133,7 +133,11 @@ time (**task.sched.1**), where the next task to run is the one seed `n` picks fr
 with seed 0 it is the first, as when nothing is installed. A seed gives the same order every run.
 The runtime is installed by `main`'s outermost `with`, once and outside its closures, before any
 task runs; anywhere else is an error (E0611). `moddil test --seed n` runs the tests with seed `n`,
-and `--seeds n` with each seed up to `n`, naming one a test fails with.
+and `--seeds n` with each seed up to `n`, naming one a test fails with. `with Runtime =
+runtime::cpus::parallel(&cpus)` (or, natively, `--runtime parallel`) runs them under the
+**parallel runtime**: as many at once as the machine has cores, so the order they run in, and
+what depends on it, may differ from run to run, and the tasks share only what sync cells hold.
+The interpreters and WASM run its tasks one at a time, in an order it may also take.
 
 **task.executor.1** An `Executor` is where tasks run: a pool of threads with a priority, which
 `main` makes from the `Cpus` root capability with `moddil/runtime`'s `pool`, `pinned`, `blocking`

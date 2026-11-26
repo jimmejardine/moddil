@@ -725,6 +725,17 @@ impl<V: Item, T: Clone, D: Copy, H: Host> Scheduler<V, T, D, H> {
                 self.fire(i);
             }
         }
+        self.pop_ready()
+    }
+
+    /// Whether a task is ready to run.
+    pub fn has_ready(&self) -> bool {
+        !self.ready.is_empty()
+    }
+
+    /// The next of the ready tasks to run, if any, with no time passing: what a runtime with
+    /// tasks still running takes (`task.runtime.1`).
+    pub fn pop_ready(&mut self) -> Option<usize> {
         // Those of the most urgent executor's priority (`task.executor.1`), in order.
         let priority = |t: usize| match self.tasks[t].executor {
             0 => 1,

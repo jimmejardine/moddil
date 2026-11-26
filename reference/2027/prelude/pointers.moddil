@@ -65,9 +65,11 @@ impl<T> DerefMut for Box<T> {
 //
 // The counts are biased to the task that made the allocation (`specs/memory.md`: Biased
 // reference counting): that task counts its owners with plain arithmetic, and every other task
-// with atomic arithmetic on a count of its own. The owners are the two counts together. One task
-// runs at a time (`task.sched.1`), so any task may read the owner's count; a runtime that runs
-// tasks in parallel hands the last owner to the owning task instead.
+// with atomic arithmetic on a count of its own. The owners are the two counts together. Under the
+// deterministic runtime one task runs at a time (`task.sched.1`), so any task may read the
+// owner's count. Under the parallel runtime no task is any allocation's owner (`__task_id` is not
+// the number of a task an `Rc` was made in), so every count is the atomic one, and the owner's
+// stays as it was.
 
 // The allocation: the task it is biased to, the owners that task counts, the owners the other
 // tasks count (atomically; below 0 while that task counts owners the others have let go), the
@@ -95,14 +97,18 @@ trait ToRc {
 
 impl<T> ToRc for T {
     fn to_rc(self) -> Rc<T> {
-        let b = Box::new(RcBox { owner: __task_id(), count: 1, shared: 0, weak: 1, value: Some(self) });
+        // Under the parallel runtime, no task's: `__task_id` there is no task's number, and -1
+        // is not it either, so no task takes the owner's count.
+        let t = __task_id();
+        let owner = if t < 0 { -1 } else { t };
+        let b = Box::new(RcBox { owner, count: 1, shared: 0, weak: 1, value: Some(self) });
         Rc { p: core::ffi::into_raw(b) }
     }
 }
 
 // How many owners the allocation at `p` has: both counts.
 fn rc_owners<T>(p: *mut RcBox<T>) -> int {
-    unsafe("p is a live allocation; one task runs at a time, so its owner's count is read") {
+    unsafe("p is live; its owner's count changes only while one task runs at a time") {
         (*p).count + core::atomic::load(&(*p).shared, core::atomic::Ordering::Acquire)
     }
 }
@@ -182,10 +188,13 @@ impl<T> Drop for Rc<T> {
         let last = unsafe("p is a live allocation: this owner keeps it") {
             if core::atomic::load(&(*p).owner, core::atomic::Ordering::Relaxed) == __task_id() {
                 (*p).count -= 1;
+                (*p).count + core::atomic::load(&(*p).shared, core::atomic::Ordering::Acquire) == 0
             } else {
-                core::atomic::fetch_add(&mut (*p).shared, -1, core::atomic::Ordering::AcqRel);
+                // What this decrement left, from its own atomic step: of tasks dropping owners at
+                // once, one sees the last go.
+                let was = core::atomic::fetch_add(&mut (*p).shared, -1, core::atomic::Ordering::AcqRel);
+                (*p).count + was - 1 == 0
             }
-            (*p).count + core::atomic::load(&(*p).shared, core::atomic::Ordering::Acquire) == 0
         };
         if last {
             let value = unsafe("the last owner: nothing borrows the value") {
@@ -229,17 +238,26 @@ impl<T> Weak<T> {
     // An owner of the value, if it still has one.
     fn upgrade(&self) -> Option<Rc<T>> {
         let p = self.p;
-        if rc_owners(p) > 0 {
-            unsafe("p is a live allocation, and its value is alive") {
-                if core::atomic::load(&(*p).owner, core::atomic::Ordering::Relaxed) == __task_id() {
-                    (*p).count += 1;
-                } else {
-                    core::atomic::fetch_add(&mut (*p).shared, 1, core::atomic::Ordering::Relaxed);
+        unsafe("p is a live allocation: this handle keeps it") {
+            if core::atomic::load(&(*p).owner, core::atomic::Ordering::Relaxed) == __task_id() {
+                if rc_owners(p) == 0 {
+                    return None;
+                }
+                (*p).count += 1;
+                return Some(Rc { p });
+            }
+            // Another owner, counted only while there is one: a step that finds the count
+            // changed by another task's tries again.
+            loop {
+                let n = core::atomic::load(&(*p).shared, core::atomic::Ordering::Acquire);
+                if (*p).count + n <= 0 {
+                    return None;
+                }
+                let ordering = core::atomic::Ordering::AcqRel;
+                if core::atomic::compare_exchange(&mut (*p).shared, n, n + 1, ordering, ordering).is_ok() {
+                    return Some(Rc { p });
                 }
             }
-            Some(Rc { p })
-        } else {
-            None
         }
     }
 }

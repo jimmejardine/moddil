@@ -63,3 +63,9 @@ pub fn blocking(cpus: &Cpus, max_threads: int = 64) -> Executor {
 pub fn affine(cpus: &Cpus) -> Executor {
     Executor::__new(3, 0..0, -1, Priority::Normal.number(), false, 1)
 }
+
+/// The parallel runtime (`task.runtime.1`): the program's tasks run at once, one a core, on the
+/// executors made from `cpus`. Installed by `main`: `with Runtime = parallel(&cpus) { … }`.
+pub fn parallel(cpus: &Cpus) -> Runtime {
+    Runtime::__parallel(-1)
+}

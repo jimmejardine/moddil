@@ -30,7 +30,10 @@ impl Node {
 }
 
 impl Sim {
+    /// A world for seed `seed`: under the deterministic runtime only, whose one task at a time
+    /// its cells assume.
     pub fn new(seed: int) -> Sim {
+        assert(!__parallel());
         Sim { seed, nodes: UnsafeCell::new(0), net: SimNet { listening: UnsafeCell::new(Vec::new()), seed } }
     }
 

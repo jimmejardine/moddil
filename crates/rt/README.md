@@ -6,9 +6,13 @@ value (`observe`), and the float remainder Cranelift has no instruction for. Eac
 function whose address `moddil-native` gives the JIT; what they record is kept per thread, and
 the host takes it once a run ends.
 
-- **Tasks** ([`src/run.rs`](src/run.rs), [`src/sched.rs`](src/sched.rs)): one task runs at a
-  time, holding the baton, in the order of the scheduler it shares with the MIR interpreter
-  ([`moddil-sched`](../sched/src/lib.rs)). What differs between targets is the baton ([`src/baton.rs`](src/baton.rs)):
+- **Tasks** ([`src/run.rs`](src/run.rs), [`src/sched.rs`](src/sched.rs)): the tasks with a turn
+  run ([`src/turns.rs`](src/turns.rs)), given out in the order of the scheduler it shares with
+  the MIR interpreter ([`moddil-sched`](../sched/src/lib.rs)): one turn under the deterministic
+  runtime, so one task runs at a time; one a core under the parallel runtime (`set_workers`,
+  `with Runtime = runtime::cpus::parallel(&cpus)`), so tasks run at once. A trap then stops the
+  running ones at their next safe point. What differs between targets is the baton
+  ([`src/baton.rs`](src/baton.rs)):
   - natively, a thread per task, waiting on a condition variable;
   - built for `wasm32` ([`moddil-rt-wasm`](../rt-wasm/README.md)), a JSPI call per task, which
     suspends in the host's `switch` until its turn comes again.

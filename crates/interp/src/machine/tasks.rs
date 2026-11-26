@@ -136,6 +136,9 @@ impl Machine<'_> {
         let me = self.stack.current();
         let pending = match name {
             "task_id" => return self.deliver(ret, Ok(Value::Int(me as i64))),
+            // The interpreter runs one task at a time: a parallel runtime's tasks run in one of
+            // the orders they may (`task.runtime.1`).
+            "parallel" => return self.deliver(ret, Ok(Value::Bool(false))),
             "install_runtime" => {
                 self.sched.set_seed(values[0].as_int() as u64);
                 return self.deliver(ret, Ok(Value::Unit));
