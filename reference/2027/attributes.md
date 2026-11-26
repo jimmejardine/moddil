@@ -92,7 +92,9 @@ implements `Debug`, `Clone` and `PartialEq` when every parameter's type does. It
 `f::Args { p₁: …, … }`. In code, `f::Args` names it as a type, at the parameters' types, for a
 function without type parameters (E0102 for a function that is not wrapped); it is not yet made
 or matched by that name. `#[around(w(c₁, …))]` passes the arguments `c₁, …` before `&INFO`;
-they are compile-time code (E1001), evaluated at each call for now, and cannot name the
+they are compile-time code (E1001), each a `const { }` block: evaluated once, when compiling, and
+copied or cloned at each call (**comptime.block.2**, **comptime.block.3**); one neither `Copy` nor
+`Clone`, or of a generic function, is evaluated at each call for now. They cannot name the
 parameters (E0101).
 
 **attr.around.order.1** With several wrappers, the first written is outermost: its closure calls

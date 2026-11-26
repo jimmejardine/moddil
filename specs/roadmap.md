@@ -79,10 +79,12 @@ L)
   in the trait's file and scope, checked on entry to and return from each impl's method.
 
 **P13. Wrappers** (`crates/sema` `wrap.rs`, `crates/moddil`; M)
-- Wrapping methods (a field to hold `self`).
-- Wrapper arguments that are not `Copy` evaluated once, not at each call (a `Copy` one is, as a
-  `const { }` block is: P11).
-- `f::Args` made and matched by that name (`f::Args { a, b }`), and for a generic function.
+- Wrapping methods (a field to hold `self`). Decided (November 2026): the field is `this`, and
+  the struct is named `Type::method::Args`.
+- Wrapper arguments neither `Copy` nor `Clone`, or of a generic function, evaluated once, not at
+  each call (the others are, as `const { }` blocks are: `comptime.block.3`; P11 has the rest).
+- `f::Args` made and matched by that name (`f::Args { a, b }`), and for a generic function,
+  which takes its type parameters (`f::Args<T>`, decided November 2026).
 - `moddil explain` printing the expansion (the command itself is not built).
 
 **P15. Selectable trait methods** (`crates/mir` `build/select.rs`, `crates/interp`,
@@ -93,9 +95,13 @@ L)
   too, already work.
 
 **P16. Errors and effects** (`crates/mir`, both runtimes, the CLI's reports; L)
-- Notes after `?` kept as an error return trace, shown with an error that escapes.
-- Suppressed errors: a scope's losing tasks' errors kept, not dropped.
-- An error set written as a type.
+- Notes after `?` kept as an error return trace, shown with an error that escapes. Decided
+  (November 2026): kept in a buffer of the task's, not in the error value, and printed under an
+  error that escapes `main` or a test, in every build for now.
+- Suppressed errors: a scope's losing tasks' errors kept, not dropped. Decided: printed under the
+  one that escapes; no `e.suppressed()` yet (there is no `Error` trait).
+- An error set written as a type. Decided: `A | B` wherever a type is (a `let`, an alias, a type
+  argument), matched by type patterns.
 - A handler that holds another handler it captured; `log` with handlers; a test run for listed
   types, or declaring capabilities.
 
