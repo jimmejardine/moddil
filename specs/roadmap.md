@@ -251,8 +251,8 @@ before and after (rc-heavy code, locks, tight loops): recorded, not gated.
 - Logic (the conformance suite, every mod's tests and the stress suite run natively under
   `parallel`, `item.test.value.2` marking what may differ; the workers' sleeping under `loom` and
   `shuttle`, `ci.py loom`; the runtime's and scheduler's tests under ThreadSanitizer, `ci.py
-  tsan`; are built): `select` in the stress suite; ThreadSanitizer over tasks, which crashes in
-  `__tsan_func_entry` on coroutines' stacks even with its fiber calls; `loom` over the deques,
+  tsan`; are built): `select` in the stress suite; ThreadSanitizer over tasks (see Known
+  limits); `loom` over the deques,
   the turns and the reactor, not only the sleeping.
 - Performance (`crates/native/benches/runtime`, `ci.py bench`: spawning, a switch, channels,
   locks, `Rc`s, a loop on every core, under each runtime, are built): budgets that fail CI, and
@@ -354,6 +354,10 @@ native and interpreted runs do. A test that traps under `moddil test --wasm` is 
 properly; the `main` path (`run_main`, and the host's `main` command) is not.
 
 ## Known limits, with no package yet
+- ThreadSanitizer cannot follow tasks yet: on coroutines' stacks it crashes in
+  `__tsan_func_entry`, with or without its fiber calls (`__tsan_switch_to_fiber`, tried and left
+  out), so `ci.py tsan` runs only the runtime's and scheduler's own tests, which switch no
+  stacks.
 - On Linux, the CLI's test of the tour serving natively has its connection reset about one run
   in five (`cli.rs`, `the_tour_serves_natively`), before and after the OS layer moved to `mio`;
   draining or lingering on close did not change it.
