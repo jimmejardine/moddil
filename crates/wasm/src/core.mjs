@@ -351,11 +351,11 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
     d.queue.writeBuffer(size, 0, new Uint32Array([width, height, 0, 0]));
     return { pixels, size };
   };
-  // Runs the kernel `source` over a `width` x `height` image: a workgroup of 8 x 8 invocations
-  // per 8 x 8 tile. `mode` 1 shows the image, 2 reads its pixels back into `out`. 0 if it could
+  // Runs the kernel `source` over a `width` x `height` image: a workgroup of `tw` x `th`
+  // invocations per tile of that size, the kernel's. `mode` 1 shows the image, 2 reads its pixels back into `out`. 0 if it could
   // not run, 1 if it ran, and `k + 2` if it trapped at its check `k` (`gpu.trap.1`): read back
   // with the pixels, or (showing only) at the frames whose GPU time is measured.
-  const dispatch = async (sp, sn, pp, pn, width, height, op, on, mode) => {
+  const dispatch = async (sp, sn, pp, pn, width, height, tw, th, op, on, mode) => {
     const d = page ? await device() : null;
     if (!d || width <= 0 || height <= 0) return 0;
     try {
@@ -380,7 +380,7 @@ export async function instantiate({ runtime, shim, program, layout, observe, log
       pass.setPipeline(pipeline);
       const layout = pipeline.getBindGroupLayout(0);
       pass.setBindGroup(0, group(d, source, layout, [params, pixels, size, trap]));
-      pass.dispatchWorkgroups(Math.ceil(width / 8), Math.ceil(height / 8));
+      pass.dispatchWorkgroups(Math.ceil(width / tw), Math.ceil(height / th));
       pass.end();
       if (mode & 1) encodeShow(d, enc, width, height);
       const words = Math.min(on >>> 0, width * height);

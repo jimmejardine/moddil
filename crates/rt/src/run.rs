@@ -990,6 +990,8 @@ pub unsafe extern "C" fn gpu_dispatch(
     pn: u64,
     width: u64,
     height: u64,
+    tile_width: u64,
+    tile_height: u64,
     op: *mut u32,
     on: u64,
     mode: u64,
@@ -1010,6 +1012,7 @@ pub unsafe extern "C" fn gpu_dispatch(
         params,
         width as i64,
         height as i64,
+        (tile_width as u32, tile_height as u32),
         out,
         mode as u32,
     ))

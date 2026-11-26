@@ -116,7 +116,6 @@ L)
   field of its parameters), crossing as a buffer of its own.
 - A GPU trap that names the instance (the tile) it was in: traps are sites with a fixed message,
   so that needs a trap with a message made when it happens.
-- `Tile` recognised by its type, not its name (E0221), and generic over its pixel and size.
 - `scope`'s `s.launch`, so `launch` need not wait for the GPU.
 
 **P22. C interop, the next steps** (`crates/ffi`, `crates/native`, `crates/interp`; L)

@@ -401,10 +401,12 @@ fn a_kernel_on_webgpu_has_64_bit_ints_and_traps() {
     );
     // The 64-bit arithmetic gave the simulator's image.
     assert!(dom.contains("wide ints agree"), "{dom}");
+    // A tile of 16 x 4 is a workgroup of that size, and draws the simulator's image.
+    assert!(dom.contains("tiles of 16 x 4 agree"), "{dom}");
     // The overflow trapped the program, at the product in the kernel's source.
     assert!(!dom.contains("not reached"), "{dom}");
     assert!(
-        dom.contains("overflow") && dom.contains("main.moddil:30"),
+        dom.contains("overflow") && dom.contains("main.moddil:37"),
         "{dom}"
     );
     assert!(!dom.contains("data-exit=\"0\""), "{dom}");

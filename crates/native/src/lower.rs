@@ -330,7 +330,7 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
     ("os_close", &['w'], None),
     (
         "gpu_dispatch",
-        &['p', 'w', 'p', 'w', 'w', 'w', 'p', 'w', 'w'],
+        &['p', 'w', 'p', 'w', 'w', 'w', 'w', 'w', 'p', 'w', 'w'],
         Some('w'),
     ),
     ("gpu_frame", &['p'], None),
@@ -5890,12 +5890,26 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let (pp, pn) = self.text(&args[1])?;
                 let width = self.value(&args[2])?;
                 let height = self.value(&args[3])?;
-                let (op, on) = self.text(&args[4])?;
-                let mode = self.value(&args[5])?;
+                let tile_width = self.value(&args[4])?;
+                let tile_height = self.value(&args[5])?;
+                let (op, on) = self.text(&args[6])?;
+                let mode = self.value(&args[7])?;
                 let r = self
                     .task_call(
                         "gpu_dispatch",
-                        &[sp, sn, pp, pn, width, height, op, on, mode],
+                        &[
+                            sp,
+                            sn,
+                            pp,
+                            pn,
+                            width,
+                            height,
+                            tile_width,
+                            tile_height,
+                            op,
+                            on,
+                            mode,
+                        ],
                     )
                     .expect("a code");
                 self.write(d, Val::Scalar(r))

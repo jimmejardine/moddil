@@ -103,7 +103,15 @@ mod native {
     }
 
     /// No GPU natively yet (`gpu.1`): nothing is dispatched.
-    pub(crate) fn gpu_dispatch(_: &str, _: &[u8], _: i64, _: i64, _: &mut [u32], _: u32) -> u32 {
+    pub(crate) fn gpu_dispatch(
+        _: &str,
+        _: &[u8],
+        _: i64,
+        _: i64,
+        _: (u32, u32),
+        _: &mut [u32],
+        _: u32,
+    ) -> u32 {
         0
     }
 
@@ -159,6 +167,8 @@ mod host {
             params_len: u32,
             width: u32,
             height: u32,
+            tile_width: u32,
+            tile_height: u32,
             out: *mut u32,
             out_len: u32,
             mode: u32,
@@ -300,6 +310,7 @@ mod host {
         params: &[u8],
         width: i64,
         height: i64,
+        tile: (u32, u32),
         out: &mut [u32],
         mode: u32,
     ) -> u32 {
@@ -313,6 +324,8 @@ mod host {
                 params.len() as u32,
                 width as u32,
                 height as u32,
+                tile.0,
+                tile.1,
                 out.as_mut_ptr(),
                 out.len() as u32,
                 mode,

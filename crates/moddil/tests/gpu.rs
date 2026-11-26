@@ -141,3 +141,13 @@ fn a_kernel_with_arrays_and_slices_lowers_to_valid_wgsl() {
         "{wgsl}"
     );
 }
+
+#[test]
+fn a_kernel_s_workgroup_is_its_tile() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/gpu/tests");
+    let wgsl = wgsl(&root, "stripes");
+    assert!(
+        wgsl.contains("@compute @workgroup_size(16, 4, 1)"),
+        "{wgsl}"
+    );
+}

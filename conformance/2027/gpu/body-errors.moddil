@@ -1,9 +1,7 @@
-// covers: gpu.kernel.2
+// covers: gpu.kernel.2, gpu.tile.1
 
-struct Tile {
-    x: int,
-    y: int,
-}
+// The tile a kernel draws: `core::gpu`'s, of 8 x 8 RGBA8 pixels.
+type Tile = core::gpu::Tile<core::gpu::Rgba8, 8, 8>;
 
 struct Words {
     counts: Vec<int>,
@@ -19,5 +17,11 @@ fn reads_a_vec(p: &Words, out: &mut Tile) {  //~ E0221
 #[kernel]
 fn uses_text(p: &int, out: &mut Tile) {  //~ E0221
     let s = "a";
+    out.x = *p;
+}
+
+// A workgroup holds at most 256 threads.
+#[kernel]
+fn too_big(p: &int, out: &mut core::gpu::Tile<core::gpu::Rgba8, 32, 16>) {  //~ E0221
     out.x = *p;
 }

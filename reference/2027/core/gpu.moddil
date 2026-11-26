@@ -13,13 +13,14 @@ pub fn source<K>(k: &K) -> &str;
 #[intrinsic]
 pub fn bytes<T>(v: &T) -> &[u8];
 
-// Runs kernel `source` on the GPU over a `width` x `height` image (in 8 x 8 tiles), with its
+// Runs kernel `source` on the GPU over a `width` x `height` image (in tiles of `tile_width` x
+// `tile_height`, the kernel's), with its
 // parameters `params`. `mode` is the sum of what to do with the image: 1, show it in the page's
 // canvas (on the GPU, with no copy back); 2, read its pixels back into `out` (a packed RGBA8
 // pixel each, row by row). 0 where there is no GPU, and then nothing ran; 1 if it ran; and
 // `k + 2` if a check of the kernel failed there, its site `k` (`gpu.trap.1`).
 #[intrinsic]
-pub fn dispatch(source: &str, params: &[u8], width: int, height: int, out: &mut [u32], mode: int) -> int with suspend;
+pub fn dispatch(source: &str, params: &[u8], width: int, height: int, tile_width: int, tile_height: int, out: &mut [u32], mode: int) -> int with suspend;
 
 // Traps as kernel `k`'s check at site `site` (a `dispatch`'s code less 2) does: at that check, in
 // the kernel's source, with its kind (`gpu.trap.1`).
@@ -223,4 +224,107 @@ pub fn wide_shift_overflows(n: WideInt) -> bool {
 // `a << n` traps also if it loses a bit (`expr.bit.shift.1`): if shifting back does not give `a`.
 pub fn wide_shl_overflows(a: WideInt, n: WideInt) -> bool {
     wide_shift_overflows(n) || !wide_eq(wide_shr(wide_shl(a, n.lo), n.lo), a)
+}
+
+// A pixel a kernel draws (`gpu.tile.1`): stored in an image as its word.
+pub trait Pixel: Copy {
+    // The pixel as the image stores it.
+    fn word(&self) -> u32;
+}
+
+// A pixel of red, green, blue and alpha, a byte each, packed into a `u32` with red lowest.
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub struct Rgba8 {
+    packed: u32,
+}
+
+impl Rgba8 {
+    // A grey of brightness `v`, from 0 (black) to 1 (white), clamped.
+    pub fn grey(v: f32) -> Rgba8 {
+        let b = byte(v);
+        Rgba8 { packed: b | (b << 8) | (b << 16) | (255 << 24) }
+    }
+
+    // The colour with these components, each from 0 to 1, clamped.
+    pub fn rgb(r: f32, g: f32, b: f32) -> Rgba8 {
+        Rgba8 { packed: byte(r) | (byte(g) << 8) | (byte(b) << 16) | (255 << 24) }
+    }
+
+    // The pixel whose word is `packed`.
+    pub fn of(packed: u32) -> Rgba8 {
+        Rgba8 { packed: packed }
+    }
+
+    pub fn packed(&self) -> u32 {
+        self.packed
+    }
+}
+
+impl Pixel for Rgba8 {
+    fn word(&self) -> u32 {
+        self.packed
+    }
+}
+
+// `v`, clamped to [0, 1], as a byte from 0 to 255.
+fn byte(v: f32) -> u32 {
+    let c = (v.clamp(0.0, 1.0) * 255.0 + 0.5).floor();
+    c.to::<u32>() ?! "a whole number from 0 to 255"
+}
+
+// The `W` x `H` pixels one kernel instance draws (`gpu.tile.1`): the tile at (`x`, `y`) of the
+// image. On a GPU it is a workgroup of `W` x `H` threads.
+pub struct Tile<P, const W: int, const H: int> {
+    // The tile's top left pixel in the image.
+    pub x: int,
+    pub y: int,
+    // Its pixels' words, row by row, on the CPU (on a GPU the image's own).
+    words: Vec<u32>,
+    pixel: Option<P>,
+}
+
+impl<P: Pixel, const W: int, const H: int> Tile<P, W, H> {
+    // The tile at (`x`, `y`), its pixels 0.
+    pub fn at(x: int, y: int) -> Tile<P, W, H> {
+        let mut words = Vec::new();
+        let mut i = 0;
+        while i < W * H {
+            words.push(0);
+            i += 1;
+        }
+        Tile { x: x, y: y, words: words, pixel: None }
+    }
+
+    pub fn width(&self) -> int {
+        W
+    }
+
+    pub fn height(&self) -> int {
+        H
+    }
+
+    // Sets pixel (`px`, `py`) of the tile, `px` from 0 to `W - 1` and `py` to `H - 1`.
+    pub fn set(&mut self, px: int, py: int, c: P) {
+        self.words[py * W + px] = c.word();
+    }
+
+    // Sets each pixel (`px`, `py`) of the tile to `f(px, py)`. On a GPU each is computed by its
+    // own thread of the tile's workgroup, in parallel; the CPU simulator computes them in turn.
+    pub fn each<F: Fn(int, int) -> P>(&mut self, f: F) {
+        let mut py = 0;
+        while py < H {
+            let mut px = 0;
+            while px < W {
+                let c = f(px, py);
+                self.set(px, py, c);
+                px += 1;
+            }
+            py += 1;
+        }
+    }
+
+    // The word of pixel (`px`, `py`), as the image stores it.
+    pub fn word_at(&self, px: int, py: int) -> u32 {
+        self.words[py * W + px]
+    }
 }

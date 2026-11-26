@@ -1,6 +1,6 @@
 //! Lowers a Moddil kernel (`#[kernel]`, `reference/2027/gpu.md`) to naga's IR, validates it, and
-//! writes it as WGSL: a compute entry point `main`, a workgroup of 8 x 8 invocations per 8 x 8
-//! tile.
+//! writes it as WGSL: a compute entry point `main`, a workgroup of `W` x `H` invocations per tile
+//! (`core::gpu::Tile<P, W, H>`, known by its struct).
 //!
 //! - **One thread per pixel:** a kernel that draws with `Tile::each` runs on every thread of its
 //!   tile's workgroup (it is pure, so each computes the same values), and each thread runs the
@@ -427,9 +427,26 @@ impl Lowering<'_> {
         }
     }
 
-    /// Whether `t` is the gpu mod's `Tile`.
+    /// Whether `t` is `core::gpu::Tile` (`gpu.tile.1`): by its struct, not its name.
     fn is_tile(&self, t: &Ty) -> bool {
-        matches!(self.plain(t), Ty::Adt(a, ..) if self.items.adts[a as usize].name == "Tile")
+        matches!(self.plain(t), Ty::Adt(a, ..)
+            if self.items.adts[a as usize].name == "Tile"
+                && self.items.adts[a as usize].src == Src::Prelude)
+    }
+
+    /// Tile type `t`'s pixel type, width and height.
+    fn tile_shape(&self, t: &Ty) -> Result<(Ty, u32, u32), String> {
+        let Ty::Adt(_, _, args) = self.plain(t) else {
+            return Err(format!("`{t}` is not a tile"));
+        };
+        let len = |a: Option<&Ty>| match a {
+            Some(Ty::Len(n)) => u32::try_from(*n).ok().filter(|n| *n > 0),
+            _ => None,
+        };
+        match (args.first(), len(args.get(1)), len(args.get(2))) {
+            (Some(p), Some(w), Some(h)) => Ok((p.clone(), w, h)),
+            _ => Err(format!("a tile, `{t}`, whose size is not known")),
+        }
     }
 
     /// The fields of struct (or tuple) `t`, by type.
@@ -676,7 +693,7 @@ impl Lowering<'_> {
         Ok(h)
     }
 
-    /// The entry point: a workgroup of 8 x 8 invocations per 8 x 8 tile, each of which reads the
+    /// The entry point: a workgroup of `W` x `H` invocations per tile of that size, each of which reads the
     /// parameters, notes its pixel, and calls the kernel with them and its tile (for a kernel
     /// without `Tile::each`, only the first).
     fn entry(&mut self, kernel: u32) -> Result<(), String> {
@@ -686,6 +703,13 @@ impl Lowering<'_> {
         }
         let param_ty = sig.params[0].ty.clone();
         let tile_ty = sig.params[1].ty.clone();
+        let (_, tw, th) = self.tile_shape(&tile_ty)?;
+        if tw * th > 256 {
+            return Err(format!(
+                "a tile of {tw} x {th} pixels is a workgroup of {} threads, more than a GPU's 256",
+                tw * th
+            ));
+        }
         let each = self.draws_each(kernel)?;
         let k = self.function(Item::Fn(kernel), &[], &[])?;
         let g = self.globals.expect("the globals");
@@ -715,7 +739,8 @@ impl Lowering<'_> {
         let mut e = Exprs::new(&mut f);
         let wg = e.add(Expression::FunctionArgument(0));
         let lid = e.add(Expression::FunctionArgument(1));
-        let eight = e.add(Expression::Literal(Literal::U32(8)));
+        let width = e.add(Expression::Literal(Literal::U32(tw)));
+        let height = e.add(Expression::Literal(Literal::U32(th)));
         let int = |e: &mut Exprs<'_>, v| {
             e.emit(Expression::As {
                 expr: v,
@@ -725,8 +750,8 @@ impl Lowering<'_> {
         };
         let wx = e.emit(Expression::AccessIndex { base: wg, index: 0 });
         let wy = e.emit(Expression::AccessIndex { base: wg, index: 1 });
-        let x = e.bin(BinaryOperator::Multiply, wx, eight);
-        let y = e.bin(BinaryOperator::Multiply, wy, eight);
+        let x = e.bin(BinaryOperator::Multiply, wx, width);
+        let y = e.bin(BinaryOperator::Multiply, wy, height);
         let xi = int(&mut e, x);
         let yi = int(&mut e, y);
         let lx = e.emit(Expression::AccessIndex {
@@ -794,7 +819,7 @@ impl Lowering<'_> {
             name: "main".to_string(),
             stage: ShaderStage::Compute,
             early_depth_test: None,
-            workgroup_size: [8, 8, 1],
+            workgroup_size: [tw, th, 1],
             workgroup_size_overrides: None,
             function: f,
             mesh_info: None,
@@ -975,6 +1000,8 @@ struct FnLowering<'l, 'a> {
     caps: Vec<Option<u32>>,
     /// The capacities of the slice arguments, by argument.
     arg_caps: Vec<Option<u32>>,
+    /// The tile of the `each` being lowered.
+    each_tile: Option<Operand>,
 }
 
 impl<'l, 'a> FnLowering<'l, 'a> {
@@ -989,6 +1016,7 @@ impl<'l, 'a> FnLowering<'l, 'a> {
             out: Vec::new(),
             caps: Vec::new(),
             arg_caps: caps.to_vec(),
+            each_tile: None,
         }
     }
 
@@ -2154,6 +2182,7 @@ impl<'l, 'a> FnLowering<'l, 'a> {
         let sig = &items.fns[f as usize];
         let owner = match sig.container {
             moddil_sema::Container::Impl(k) => match &items.impls[k as usize].self_ty {
+                t if self.l.is_tile(t) => "Tile",
                 Ty::Adt(a, ..) => items.adts[*a as usize].name.as_str(),
                 Ty::Num(_) | Ty::Int => "number",
                 Ty::Slice(_) => "slice",
@@ -2189,10 +2218,14 @@ impl<'l, 'a> FnLowering<'l, 'a> {
         }
         // The tile's `set`: a pixel of the image.
         if owner == "Tile" && name == "set" {
-            return self.set_pixel(&vals);
+            let (pixel, _, _) = self
+                .l
+                .tile_shape(&self.concrete(&self.operand_ty(&args[0])))?;
+            return self.set_pixel(&vals, &pixel);
         }
         // The tile's `each`: this thread's pixel, from the closure.
         if owner == "Tile" && name == "each" {
+            self.each_tile = Some(args[0].clone());
             return self.each(&args[1], &vals);
         }
         // The number functions: WGSL's built-ins.
@@ -2308,11 +2341,51 @@ impl<'l, 'a> FnLowering<'l, 'a> {
             result: Some(result),
         });
         self.after_call();
-        self.set_pixel(&[tile, px, py, result])
+        let tile_ty = self.concrete(&self.operand_ty(&self.each_tile.clone().ok_or("a tile")?));
+        let (pixel, _, _) = self.l.tile_shape(&tile_ty)?;
+        self.set_pixel(&[tile, px, py, result], &pixel)
+    }
+
+    /// The word of `colour`, a pixel of type `pixel`: its `Pixel::word` (`gpu.tile.1`).
+    fn pixel_word(
+        &mut self,
+        colour: Handle<Expression>,
+        pixel: &Ty,
+    ) -> Result<Handle<Expression>, String> {
+        let items = self.l.items;
+        let t = items
+            .traits
+            .iter()
+            .position(|t| t.name == "Pixel" && t.src == Src::Prelude)
+            .ok_or("`core::gpu::Pixel`")? as u32;
+        let func = items
+            .fns
+            .iter()
+            .enumerate()
+            .find(|(i, f)| f.name == "word" && items.trait_of(*i as u32) == Some(t))
+            .map(|(i, _)| i as u32)
+            .ok_or("`Pixel::word`")?;
+        let tr = TraitRef {
+            trait_: t,
+            name: "Pixel".into(),
+            args: std::sync::Arc::from([]),
+        };
+        let (f, targs) = Solver::new(items, &[])
+            .impl_method(func, pixel, &tr)
+            .ok_or_else(|| format!("a pixel of type `{pixel}`, which is not `Pixel`"))?;
+        let h = self.l.function(Item::Fn(f), &targs, &[])?;
+        let r = self.add(Expression::CallResult(h));
+        self.out.push(S::Call {
+            function: h,
+            arguments: vec![colour],
+            result: Some(r),
+        });
+        self.after_call();
+        Ok(r)
     }
 
     /// The tile's `set(px, py, colour)`: the image's pixel, if it is in the image.
-    fn set_pixel(&mut self, vals: &[Handle<Expression>]) -> Result<(), String> {
+    fn set_pixel(&mut self, vals: &[Handle<Expression>], pixel: &Ty) -> Result<(), String> {
         let g = self.l.globals.expect("the globals");
         let [tile, px, py, colour] = vals else {
             return Err("a tile's `set` with other arguments".to_string());
@@ -2378,10 +2451,7 @@ impl<'l, 'a> FnLowering<'l, 'a> {
             left: inx,
             right: iny,
         });
-        let packed = self.emit_expr(Expression::AccessIndex {
-            base: *colour,
-            index: 0,
-        });
+        let packed = self.pixel_word(*colour, pixel)?;
         // The pixel's index, `y * width + x`, inside the `if`.
         let outer = std::mem::take(&mut self.out);
         let row = self.emit_expr(Expression::Binary {

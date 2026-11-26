@@ -108,3 +108,24 @@ test "a kernel indexes arrays and slices of them" {
     assert(image.pixel(6, 7) == Rgba8::grey(0.75));
     assert(image.pixel(3, 0) == Rgba8::grey(0.25));
 }
+
+/// A tile of another size: 16 x 4 pixels, a workgroup of 16 x 4 threads on a GPU.
+type Wide = core::gpu::Tile<Rgba8, 16, 4>;
+
+#[kernel]
+fn stripes(p: &Ramp, out: &mut Wide) {
+    let y = out.y;
+    out.each(|px, py| Rgba8::grey(if (y + py) % 2 == 0 { float(px) / float(p.width) } else { 0.0 }));
+}
+
+test "a kernel draws tiles of its own size" {
+    // 20 x 6: tiles of 16 x 4 overhang the right and bottom edges, which are not drawn.
+    let mut image = Image::new(20, 6);
+    with Gpu = gpu::simulator() {
+        gpu::launch(stripes, &Ramp { width: 16 }, &mut image);
+    }
+    assert(image.pixel(8, 0) == Rgba8::grey(0.5));
+    assert(image.pixel(8, 1) == Rgba8::grey(0.0));
+    // The second tile across starts again at `px` 0.
+    assert(image.pixel(16, 2) == Rgba8::grey(0.0) && image.pixel(18, 4) == Rgba8::grey(0.125));
+}

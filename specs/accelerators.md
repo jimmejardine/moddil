@@ -272,7 +272,9 @@ it at run time.
 The first GPU path (slice M2e; reference `gpu.md`), built for
 [Mandelbulb flight](examples/mandelbulb.md). It is a small part of this design:
 - **Tile kernels only**, as `#[kernel] fn k(params: &P, out: &mut Tile)`, with the kernel effect
-  set checked (E0221). The tile is a fixed 8 x 8 of RGBA8 pixels (`mods/gpu`), not a generic tile.
+  set checked (E0221). Since P21 the tile is `core::gpu::Tile<P, W, H>`, known by its struct and
+  generic over its pixel (a `Pixel`) and its size, a workgroup of `W` x `H` threads; the `gpu`
+  mod's `Tile` is 8 x 8 RGBA8. It has no `zeros`, `store`, `row` or `col` yet.
 - **WGSL through naga** (the `moddil-gpu` crate): the kernel's MIR and its callees, specialised, are
   built as naga IR, validated, and written as WGSL. Since P21, `int` is 64 bits on the GPU too
   (two words, each operation `core::gpu`'s Moddil function for it), and a kernel's checks are made
