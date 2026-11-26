@@ -104,13 +104,11 @@ L)
   types, or declaring capabilities.
 
 **P19. Standard collections** (`mods/collections`, prelude `rc`, `core::collections`; L)
-- A sorted persistent map.
 - `EnumSet`'s bits in the smallest unsigned integer that fits its enum, as `stdlib.md` decides
   (for packed structs and wire formats): a `u128` for now, chosen when compiling (P11).
 - The hasher keyed from `Rand`, with tests printing their seed, so map order differs per run.
 - Perceus-style reuse of a node no one else holds, as a pass on MIR (`mir.md`: Reference
-  counting); the persistent map's iterator in O(1) per
-  entry (needs a view that holds a stack of borrows).
+  counting).
 
 **P21. GPU kernels** (`crates/gpu`, `mods/gpu`, `core::gpu`; L)
 - Arrays and slices in a kernel (closures, `dyn` and text later).

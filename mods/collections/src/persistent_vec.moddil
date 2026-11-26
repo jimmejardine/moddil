@@ -110,7 +110,7 @@ impl<T> PersistentVec<T> {
 
     /// The values, borrowed, in order.
     pub fn iter(&self) -> PersistentVecIter<T> {
-        PersistentVecIter { vec: self, at: 0 }
+        PersistentVecIter { vec: self, at: 0, leaf: None }
     }
 }
 
@@ -227,20 +227,29 @@ fn set_at<T: Clone>(level: int, node: &Rc<Node<T>>, i: int, x: T) -> Rc<Node<T>>
     Node::Branch(cs).to_rc()
 }
 
-/// The values of a `PersistentVec`, in order.
+/// The values of a `PersistentVec`, in order: the path down to a leaf is walked once for its
+/// `WIDTH` values, so O(1) amortised.
 pub view PersistentVecIter<T> {
     vec: &PersistentVec<T>,
     at: int,
+    /// The values of the leaf `at` is in.
+    leaf: Option<&Vec<T>>,
 }
 
 impl<T> Iterator for PersistentVecIter<T> {
     type Item = &T;
     fn next(&mut self) -> Option<&T> {
-        let x = self.vec.get(self.at);
-        if x.is_some() {
-            self.at += 1;
+        if self.at >= self.vec.len {
+            return None;
         }
-        x
+        let i = self.at & (WIDTH - 1);
+        if i == 0 || self.leaf.is_none() {
+            let vec = self.vec;
+            self.leaf = Some(values(vec.leaf(self.at)));
+        }
+        self.at += 1;
+        let leaf = self.leaf ?! "the leaf of the value";
+        Some(&leaf[i])
     }
 }
 

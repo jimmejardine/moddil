@@ -466,6 +466,20 @@ impl Builder<'_> {
                 Operand::Move(Place::local(t))
             };
         }
+        // A borrow used as a borrow of what it dereferences to (`type.deref.coerce.1`): a local
+        // holding a `&Rc<T>` passed as a `&T` goes through `deref` as `&x` does.
+        if self.uncoerced != Some(e)
+            && let Some((_, to)) = self.types.deref_coercion(e).cloned()
+        {
+            let shared = matches!(to, Ty::Ref(false, _));
+            let t = self.temp(to);
+            self.eval_into(t, e);
+            return if shared {
+                Operand::Copy(Place::local(t))
+            } else {
+                Operand::Move(Place::local(t))
+            };
+        }
         if let Some(&(v, _)) = self.recording.get(&e) {
             self.eval_into(v, e);
             // Used as any value is: moved if it is not `Copy`, so `assert(f(v))` with `f` taking

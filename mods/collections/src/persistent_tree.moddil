@@ -1,0 +1,566 @@
+//! `PersistentTreeMap` and `PersistentTreeSet`: sorted by key, and updates give a new one and
+//! leave the old one as it was (`stdlib.md`: Collections).
+//!
+//! The map is `TreeMap`'s AA tree (Andersson, "Balanced search trees made simple", 1993) on
+//! nodes of their own, shared by `Rc`. An update copies the path from the root to what it
+//! changes and shares the rest; a node it has just made, which no one else holds yet, it changes
+//! without copying (`Rc::try_unwrap`).
+
+/// A node: `pub` only because `PersistentTreeMap` holds them (`mod.expose.1`).
+pub struct TreeNode<K, V> {
+    key: K,
+    value: V,
+    /// The AA level: 1 for a leaf; a left child's is one less than its parent's; a right child's
+    /// is the same or one less, and a right grandchild's is less.
+    level: int,
+    left: Option<Rc<TreeNode<K, V>>>,
+    right: Option<Rc<TreeNode<K, V>>>,
+}
+
+fn level_of<K, V>(t: &Option<Rc<TreeNode<K, V>>>) -> int {
+    match t {
+        Some(n) => n.level,
+        None    => 0,
+    }
+}
+
+/// Another handle to the same subtree.
+fn shared<K, V>(t: &Option<Rc<TreeNode<K, V>>>) -> Option<Rc<TreeNode<K, V>>> {
+    match t {
+        Some(n) => Some(n.share()),
+        None    => None,
+    }
+}
+
+/// A node of its own to change: the node itself if no one else holds it, or else a copy, its
+/// key and value cloned and its children shared.
+fn own<K: Clone, V: Clone>(rc: Rc<TreeNode<K, V>>) -> TreeNode<K, V> {
+    match Rc::try_unwrap(rc) {
+        Ok(n)   => n,
+        Err(rc) => copy(&rc),
+    }
+}
+
+/// A copy of `n`, its key and value cloned and its children shared.
+fn copy<K: Clone, V: Clone>(n: &TreeNode<K, V>) -> TreeNode<K, V> {
+    TreeNode { key: n.key.clone(), value: n.value.clone(), level: n.level, left: shared(&n.left), right: shared(&n.right) }
+}
+
+/// Turns a left child on `t`'s level into `t`'s parent.
+fn skew<K: Clone, V: Clone>(t: TreeNode<K, V>) -> TreeNode<K, V> {
+    let TreeNode { key, value, level, left, right } = t;
+    match left {
+        Some(l) if l.level == level => {
+            let l = own(l);
+            let TreeNode { key: lk, value: lv, level: ll, left: la, right: lb } = l;
+            let t = TreeNode { key, value, level, left: lb, right };
+            TreeNode { key: lk, value: lv, level: ll, left: la, right: Some(t.to_rc()) }
+        }
+        left => TreeNode { key, value, level, left, right },
+    }
+}
+
+/// Lifts the right child of `t` when its right child is on `t`'s level too.
+fn split<K: Clone, V: Clone>(t: TreeNode<K, V>) -> TreeNode<K, V> {
+    let TreeNode { key, value, level, left, right } = t;
+    match right {
+        Some(r) if level_of(&r.right) == level => {
+            let r = own(r);
+            let TreeNode { key: rk, value: rv, level: rl, left: ra, right: rb } = r;
+            let t = TreeNode { key, value, level, left, right: ra };
+            TreeNode { key: rk, value: rv, level: rl + 1, left: Some(t.to_rc()), right: rb }
+        }
+        right => TreeNode { key, value, level, left, right },
+    }
+}
+
+fn skew_link<K: Clone, V: Clone>(t: Option<Rc<TreeNode<K, V>>>) -> Option<Rc<TreeNode<K, V>>> {
+    match t {
+        Some(n) => Some(skew(own(n)).to_rc()),
+        None    => None,
+    }
+}
+
+fn split_link<K: Clone, V: Clone>(t: Option<Rc<TreeNode<K, V>>>) -> Option<Rc<TreeNode<K, V>>> {
+    match t {
+        Some(n) => Some(split(own(n)).to_rc()),
+        None    => None,
+    }
+}
+
+/// Restores the levels at `t` after a removal below it.
+fn rebalance<K: Clone, V: Clone>(t: TreeNode<K, V>) -> TreeNode<K, V> {
+    let (l, r) = (level_of(&t.left), level_of(&t.right));
+    let should = if l < r { l + 1 } else { r + 1 };
+    let mut t = t;
+    if should < t.level {
+        t.level = should;
+        if level_of(&t.right) > should {
+            let right = replace(&mut t.right, None);
+            let mut r = own(right ?! "a right child above the level");
+            r.level = should;
+            t.right = Some(r.to_rc());
+        }
+    }
+    let mut t = skew(t);
+    let right = replace(&mut t.right, None);
+    t.right = skew_link(right);
+    if t.right.is_some() {
+        let right = replace(&mut t.right, None);
+        let mut r = own(right ?! "a right child");
+        let rr = replace(&mut r.right, None);
+        r.right = skew_link(rr);
+        t.right = Some(r.to_rc());
+    }
+    let mut t = split(t);
+    let right = replace(&mut t.right, None);
+    t.right = split_link(right);
+    t
+}
+
+/// Inserts into the subtree at `t`: its new root, and whether the key is new.
+fn insert_at<K: Ord + Clone, V: Clone>(t: &Option<Rc<TreeNode<K, V>>>, key: K, value: V) -> (TreeNode<K, V>, bool) {
+    let n = match t {
+        Some(n) => n,
+        None    => return (TreeNode { key, value, level: 1, left: None, right: None }, true),
+    };
+    let (node, added) = match key.cmp(&n.key) {
+        Ordering::Less => {
+            let (l, added) = insert_at(&n.left, key, value);
+            let mut node = copy(n);
+            node.left = Some(l.to_rc());
+            (node, added)
+        }
+        Ordering::Greater => {
+            let (r, added) = insert_at(&n.right, key, value);
+            let mut node = copy(n);
+            node.right = Some(r.to_rc());
+            (node, added)
+        }
+        Ordering::Equal => {
+            let node = TreeNode { key, value, level: n.level, left: shared(&n.left), right: shared(&n.right) };
+            return (node, false);
+        }
+    };
+    (split(skew(node)), added)
+}
+
+/// The subtree at `t` without `key`, or `None` if `key` is not in it.
+fn remove_at<K: Ord + Clone, V: Clone>(t: &Option<Rc<TreeNode<K, V>>>, key: &K) -> Option<Option<Rc<TreeNode<K, V>>>> {
+    let n = match t {
+        Some(n) => n,
+        None    => return None,
+    };
+    let node = match key.cmp(&n.key) {
+        Ordering::Less => {
+            let l = remove_at(&n.left, key)?;
+            let mut node = copy(n);
+            node.left = l;
+            node
+        }
+        Ordering::Greater => {
+            let r = remove_at(&n.right, key)?;
+            let mut node = copy(n);
+            node.right = r;
+            node
+        }
+        Ordering::Equal => {
+            if n.left.is_none() && n.right.is_none() {
+                return Some(None);
+            }
+            // The next entry in order (or the one before) takes this one's place.
+            match &n.right {
+                Some(r) => {
+                    let (r, key, value) = remove_min(r);
+                    TreeNode { key, value, level: n.level, left: shared(&n.left), right: r }
+                }
+                None => {
+                    let Some(l) = &n.left else { unreachable("a child, as the node is not a leaf") };
+                    let (l, key, value) = remove_max(l);
+                    TreeNode { key, value, level: n.level, left: l, right: None }
+                }
+            }
+        }
+    };
+    Some(Some(rebalance(node).to_rc()))
+}
+
+/// The subtree at `n` without its least entry, and that entry.
+fn remove_min<K: Clone, V: Clone>(n: &Rc<TreeNode<K, V>>) -> (Option<Rc<TreeNode<K, V>>>, K, V) {
+    match &n.left {
+        None    => (shared(&n.right), n.key.clone(), n.value.clone()),
+        Some(l) => {
+            let (l, key, value) = remove_min(l);
+            let mut node = copy(n);
+            node.left = l;
+            (Some(rebalance(node).to_rc()), key, value)
+        }
+    }
+}
+
+/// The subtree at `n` without its greatest entry, and that entry.
+fn remove_max<K: Clone, V: Clone>(n: &Rc<TreeNode<K, V>>) -> (Option<Rc<TreeNode<K, V>>>, K, V) {
+    match &n.right {
+        None    => (shared(&n.left), n.key.clone(), n.value.clone()),
+        Some(r) => {
+            let (r, key, value) = remove_max(r);
+            let mut node = copy(n);
+            node.right = r;
+            (Some(rebalance(node).to_rc()), key, value)
+        }
+    }
+}
+
+/// A map from keys to values, sorted by key, whose updates leave it as it was.
+pub struct PersistentTreeMap<K, V> {
+    root: Option<Rc<TreeNode<K, V>>>,
+    len: int,
+}
+
+impl<K: Ord, V> PersistentTreeMap<K, V> {
+    pub fn new() -> PersistentTreeMap<K, V> {
+        PersistentTreeMap { root: None, len: 0 }
+    }
+
+    pub fn len(&self) -> int {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// The node for `key`, if there is one.
+    fn find(&self, key: &K) -> Option<&TreeNode<K, V>> {
+        let mut t = &self.root;
+        while let Some(n) = t {
+            match key.cmp(&n.key) {
+                Ordering::Less    => t = &n.left,
+                Ordering::Greater => t = &n.right,
+                Ordering::Equal   => return Some(&**n),
+            }
+        }
+        None
+    }
+
+    /// The value for `key`, if there is one.
+    pub fn get(&self, key: &K) -> Option<&V> {
+        match self.find(key) {
+            Some(n) => Some(&n.value),
+            None    => None,
+        }
+    }
+
+    pub fn contains_key(&self, key: &K) -> bool {
+        self.find(key).is_some()
+    }
+
+    /// The entry with the least key.
+    pub fn first(&self) -> Option<(&K, &V)> {
+        let Some(mut t) = &self.root else {
+            return None;
+        };
+        while let Some(l) = &t.left {
+            t = l;
+        }
+        Some((&t.key, &t.value))
+    }
+
+    /// The entry with the greatest key.
+    pub fn last(&self) -> Option<(&K, &V)> {
+        let Some(mut t) = &self.root else {
+            return None;
+        };
+        while let Some(r) = &t.right {
+            t = r;
+        }
+        Some((&t.key, &t.value))
+    }
+
+    /// The entries, borrowed, in key order.
+    pub fn iter(&self) -> PersistentTreeIter<K, V> {
+        let mut it = PersistentTreeIter { stack: Vec::new(), until: None };
+        it.descend(&self.root);
+        it
+    }
+
+    /// The entries whose keys are at least `lo` and less than `hi`, in key order.
+    pub fn range(&self, lo: &K, hi: &K) -> PersistentTreeIter<K, V> {
+        let mut it = PersistentTreeIter { stack: Vec::new(), until: Some(hi) };
+        // The path to `lo`'s place, keeping the nodes at or after it.
+        let mut t = &self.root;
+        while let Some(n) = t {
+            match n.key.cmp(lo) {
+                Ordering::Less => t = &n.right,
+                _              => {
+                    it.stack.push(&**n);
+                    t = &n.left;
+                }
+            }
+        }
+        it
+    }
+}
+
+impl<K: Ord + Clone, V: Clone> PersistentTreeMap<K, V> {
+    /// The map with `value` under `key`, in place of what was there.
+    pub fn insert(&self, key: K, value: V) -> PersistentTreeMap<K, V> {
+        let (root, added) = insert_at(&self.root, key, value);
+        PersistentTreeMap { root: Some(root.to_rc()), len: if added { self.len + 1 } else { self.len } }
+    }
+
+    /// The map without an entry for `key`.
+    pub fn remove(&self, key: &K) -> PersistentTreeMap<K, V> {
+        match remove_at(&self.root, key) {
+            Some(root) => PersistentTreeMap { root, len: self.len - 1 },
+            None       => self.clone(),
+        }
+    }
+}
+
+/// A persistent tree map's entries, borrowed, in key order, up to `until` if there is one.
+/// `stack` holds the nodes still to visit whose left subtrees are done, the next on top, so each
+/// entry is O(1) amortised.
+pub view PersistentTreeIter<K, V> {
+    stack: Vec<&TreeNode<K, V>>,
+    until: Option<&K>,
+}
+
+impl<K: Ord, V> PersistentTreeIter<K, V> {
+    /// Pushes the subtree at `t`'s left spine.
+    fn descend(&mut self, t: &Option<Rc<TreeNode<K, V>>>) {
+        let mut t = t;
+        while let Some(n) = t {
+            self.stack.push(&**n);
+            t = &n.left;
+        }
+    }
+}
+
+impl<K: Ord, V> Iterator for PersistentTreeIter<K, V> {
+    type Item = (&K, &V);
+    fn next(&mut self) -> Option<(&K, &V)> {
+        let n = self.stack.pop()?;
+        if let Some(until) = self.until {
+            match n.key.cmp(until) {
+                Ordering::Less => {}
+                _              => {
+                    self.stack.clear();
+                    return None;
+                }
+            }
+        }
+        self.descend(&n.right);
+        Some((&n.key, &n.value))
+    }
+}
+
+impl<K: Ord, V> IntoIterator for &PersistentTreeMap<K, V> {
+    type Item = (&K, &V);
+    type IntoIter = PersistentTreeIter<K, V>;
+    fn into_iter(self) -> PersistentTreeIter<K, V> {
+        self.iter()
+    }
+}
+
+// Another handle to the same nodes: nothing is copied, and neither map can change them.
+impl<K, V> Clone for PersistentTreeMap<K, V> {
+    fn clone(&self) -> PersistentTreeMap<K, V> {
+        PersistentTreeMap { root: shared(&self.root), len: self.len }
+    }
+}
+
+impl<K: Ord, V: PartialEq> PartialEq for PersistentTreeMap<K, V> {
+    fn eq(&self, other: &PersistentTreeMap<K, V>) -> bool {
+        if self.len != other.len {
+            return false;
+        }
+        let mut theirs = other.iter();
+        for (k, v) in self.iter() {
+            match theirs.next() {
+                Some((j, w)) if k.cmp(j) == Ordering::Equal && *v == *w => {}
+                _                                                       => return false,
+            }
+        }
+        true
+    }
+}
+
+impl<K: Ord, V: Eq> Eq for PersistentTreeMap<K, V> {}
+
+// Later pairs win, as with `insert`.
+impl<K: Ord + Clone, V: Clone> FromArrayLiteral<(K, V)> for PersistentTreeMap<K, V> {
+    fn from_array<const N: int>(items: [(K, V); N]) -> PersistentTreeMap<K, V> {
+        let mut m = PersistentTreeMap::new();
+        for (k, v) in items {
+            m = m.insert(k, v);
+        }
+        m
+    }
+
+    fn from_repeat(x: (K, V), n: int) -> PersistentTreeMap<K, V>
+        where (K, V): Clone
+    {
+        let m = PersistentTreeMap::new();
+        if n > 0 { m.insert(x.0, x.1) } else { m }
+    }
+}
+
+impl<K: Ord, V> Default for PersistentTreeMap<K, V> {
+    fn default() -> PersistentTreeMap<K, V> {
+        PersistentTreeMap::new()
+    }
+}
+
+// `{k: v, …}`, in key order.
+impl<K: Ord + Debug, V: Debug> Debug for PersistentTreeMap<K, V> {
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_char('{');
+        let mut first = true;
+        for (k, v) in self.iter() {
+            if !first {
+                out.write_str(", ");
+            }
+            first = false;
+            Debug::fmt(k, out);
+            out.write_str(": ");
+            Debug::fmt(v, out);
+        }
+        out.write_char('}');
+    }
+}
+
+/// A set of values, sorted, whose updates leave it as it was: the keys of a
+/// `PersistentTreeMap` to `()`.
+pub struct PersistentTreeSet<T> {
+    map: PersistentTreeMap<T, ()>,
+}
+
+impl<T: Ord> PersistentTreeSet<T> {
+    pub fn new() -> PersistentTreeSet<T> {
+        PersistentTreeSet { map: PersistentTreeMap::new() }
+    }
+
+    pub fn len(&self) -> int {
+        self.map.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
+    pub fn contains(&self, x: &T) -> bool {
+        self.map.contains_key(x)
+    }
+
+    pub fn first(&self) -> Option<&T> {
+        match self.map.first() {
+            Some((x, _)) => Some(x),
+            None         => None,
+        }
+    }
+
+    pub fn last(&self) -> Option<&T> {
+        match self.map.last() {
+            Some((x, _)) => Some(x),
+            None         => None,
+        }
+    }
+
+    /// The values, borrowed, in order.
+    pub fn iter(&self) -> PersistentTreeSetIter<T> {
+        PersistentTreeSetIter { inner: self.map.iter() }
+    }
+
+    /// The values at least `lo` and less than `hi`, in order.
+    pub fn range(&self, lo: &T, hi: &T) -> PersistentTreeSetIter<T> {
+        PersistentTreeSetIter { inner: self.map.range(lo, hi) }
+    }
+}
+
+impl<T: Ord + Clone> PersistentTreeSet<T> {
+    /// The set with `x` in it.
+    pub fn insert(&self, x: T) -> PersistentTreeSet<T> {
+        PersistentTreeSet { map: self.map.insert(x, ()) }
+    }
+
+    /// The set without `x`.
+    pub fn remove(&self, x: &T) -> PersistentTreeSet<T> {
+        PersistentTreeSet { map: self.map.remove(x) }
+    }
+}
+
+/// A persistent tree set's values, borrowed, in order.
+pub view PersistentTreeSetIter<T> {
+    inner: PersistentTreeIter<T, ()>,
+}
+
+impl<T: Ord> Iterator for PersistentTreeSetIter<T> {
+    type Item = &T;
+    fn next(&mut self) -> Option<&T> {
+        match self.inner.next() {
+            Some((x, _)) => Some(x),
+            None         => None,
+        }
+    }
+}
+
+impl<T: Ord> IntoIterator for &PersistentTreeSet<T> {
+    type Item = &T;
+    type IntoIter = PersistentTreeSetIter<T>;
+    fn into_iter(self) -> PersistentTreeSetIter<T> {
+        self.iter()
+    }
+}
+
+impl<T> Clone for PersistentTreeSet<T> {
+    fn clone(&self) -> PersistentTreeSet<T> {
+        PersistentTreeSet { map: self.map.clone() }
+    }
+}
+
+impl<T: Ord> PartialEq for PersistentTreeSet<T> {
+    fn eq(&self, other: &PersistentTreeSet<T>) -> bool {
+        self.map == other.map
+    }
+}
+
+impl<T: Ord> Eq for PersistentTreeSet<T> {}
+
+impl<T: Ord + Clone> FromArrayLiteral<T> for PersistentTreeSet<T> {
+    fn from_array<const N: int>(items: [T; N]) -> PersistentTreeSet<T> {
+        let mut s = PersistentTreeSet::new();
+        for x in items {
+            s = s.insert(x);
+        }
+        s
+    }
+
+    fn from_repeat(x: T, n: int) -> PersistentTreeSet<T>
+        where T: Clone
+    {
+        let s = PersistentTreeSet::new();
+        if n > 0 { s.insert(x) } else { s }
+    }
+}
+
+impl<T: Ord> Default for PersistentTreeSet<T> {
+    fn default() -> PersistentTreeSet<T> {
+        PersistentTreeSet::new()
+    }
+}
+
+impl<T: Ord + Debug> Debug for PersistentTreeSet<T> {
+    fn fmt(&self, out: &mut dyn TextWrite) {
+        out.write_char('{');
+        let mut first = true;
+        for x in self.iter() {
+            if !first {
+                out.write_str(", ");
+            }
+            first = false;
+            Debug::fmt(x, out);
+        }
+        out.write_char('}');
+    }
+}

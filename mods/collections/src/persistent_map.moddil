@@ -109,9 +109,9 @@ impl<K: Hash + Eq, V> PersistentMap<K, V> {
 
     /// The entries, borrowed, in hash order.
     pub fn iter(&self) -> PersistentMapIter<K, V> {
-        let mut path = Vec::new();
-        path.push(0);
-        PersistentMapIter { map: self, path }
+        let mut stack = Vec::new();
+        stack.push((slots_of(&self.root), 0));
+        PersistentMapIter { stack }
     }
 }
 
@@ -288,60 +288,34 @@ fn remove_at<K: Eq + Clone, V: Clone>(node: &Rc<MapNode<K, V>>, shift: int, h: i
     }
 }
 
-/// The entries of a `PersistentMap`, in hash order.
+/// The entries of a `PersistentMap`, in hash order: each a step along a node's slots, or down
+/// into a child or back up, so O(1) amortised.
 pub view PersistentMapIter<K, V> {
-    map: &PersistentMap<K, V>,
-    /// The position in each node on the way down to the next entry.
-    path: Vec<int>,
+    /// The slots of each node on the way down to the next entry, with the position in them.
+    stack: Vec<(&Vec<Slot<K, V>>, int)>,
 }
 
-/// The node of `map` that the last position of `path` is in.
-fn node_at<K, V>(map: &PersistentMap<K, V>, path: &Vec<int>) -> &Rc<MapNode<K, V>> from map {
-    let mut node = &map.root;
-    for d in 0..path.len() - 1 {
-        if let MapNode::Bitmap(_, slots) = &**node && let Slot::Child(c) = &slots[path[d]] {
-            node = c;
-        }
+/// The slots of a node.
+fn slots_of<K, V>(node: &Rc<MapNode<K, V>>) -> &Vec<Slot<K, V>> from node {
+    match &**node {
+        MapNode::Bitmap(_, slots) | MapNode::Collision(_, slots) => slots,
     }
-    node
 }
 
 impl<K, V> Iterator for PersistentMapIter<K, V> {
     type Item = (&K, &V);
     fn next(&mut self) -> Option<(&K, &V)> {
         loop {
-            let at = self.path.last().map(|x| *x) ?! "a position";
-            let map = self.map;
-            let node = node_at(map, &self.path);
-            let slots = match &**node {
-                MapNode::Bitmap(_, slots) | MapNode::Collision(_, slots) => slots,
-            };
-            let entry = if at >= slots.len() {
-                None
-            } else {
-                match &slots[at] {
-                    Slot::Entry(_, k, v) => Some(Some((k, v))),
-                    Slot::Child(_)       => Some(None),
-                }
-            };
-            match entry {
+            let (slots, at) = self.stack.pop()?;
+            if at >= slots.len() {
                 // Past this node's slots: on to the next slot of its parent.
-                None => {
-                    self.path.pop();
-                    if self.path.is_empty() {
-                        self.path.push(WIDTH);
-                        return None;
-                    }
-                    let n = self.path.len();
-                    self.path[n - 1] += 1;
-                }
-                Some(Some(e)) => {
-                    let n = self.path.len();
-                    self.path[n - 1] += 1;
-                    return Some(e);
-                }
+                continue;
+            }
+            self.stack.push((slots, at + 1));
+            match &slots[at] {
+                Slot::Entry(_, k, v) => return Some((k, v)),
                 // Down into a child.
-                Some(None) => self.path.push(0),
+                Slot::Child(c) => self.stack.push((slots_of(c), 0)),
             }
         }
     }

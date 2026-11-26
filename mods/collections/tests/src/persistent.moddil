@@ -1,7 +1,7 @@
 //! The persistent collections: every update gives a new collection and leaves the old one as it
 //! was, sharing what did not change.
 
-use collections::{PersistentList, PersistentMap, PersistentSet, PersistentVec};
+use collections::{PersistentList, PersistentMap, PersistentSet, PersistentTreeMap, PersistentTreeSet, PersistentVec, TreeMap};
 
 test "a list's updates leave it as it was" {
     let a: PersistentList<int> = [1, 2, 3];
@@ -331,4 +331,174 @@ test "a set's updates leave it as it was" {
     ;
     let one: PersistentSet<int> = [5];
     fmt"{one:?}"  // => "{5}"
+}
+
+fn tree_at(m: &PersistentTreeMap<int, int>, k: int) -> int {
+    m
+        .get(&k)
+        .map(|v| *v)
+        .unwrap_or(-1)
+}
+
+/// Whether `m` holds just what `want` does, in the same order.
+fn same(m: &PersistentTreeMap<int, int>, want: &TreeMap<int, int>) -> bool {
+    if m.len() != want.len() {
+        return false;
+    }
+    let mut theirs = want.iter();
+    for (k, v) in m {
+        match theirs.next() {
+            Some((j, w)) if *k == *j && *v == *w => {}
+            _                                    => return false,
+        }
+    }
+    true
+}
+
+test "a sorted persistent map's updates leave it as it was" {
+    let a: PersistentTreeMap<String, int> = [("b".to_string(), 2), ("a".to_string(), 1)];
+    let b = a.insert("c".to_string(), 3);
+    let c = a.insert("a".to_string(), 10);
+    let d = a.remove(&"a".to_string());
+    a.len()  // => 2
+    ;
+    b.len()  // => 3
+    ;
+    c
+        .get(&"a".to_string())
+        .map(|v| *v)
+        .unwrap_or(0)  // => 10
+    ;
+    a
+        .get(&"a".to_string())
+        .map(|v| *v)
+        .unwrap_or(0)  // => 1
+    ;
+    d.contains_key(&"a".to_string())  // => false
+    ;
+    a.remove(&"z".to_string()) == a  // => true
+    ;
+    b.remove(&"c".to_string()) == a  // => true
+    ;
+    c == a  // => false
+    ;
+    fmt"{b:?}"  // => "{\"a\": 1, \"b\": 2, \"c\": 3}"
+}
+
+test "a sorted persistent map stays sorted through many updates" {
+    // Keys in a scrambled order, checked against a `TreeMap` after each step, and the versions
+    // before kept.
+    let mut m: PersistentTreeMap<int, int> = PersistentTreeMap::new();
+    let mut want: TreeMap<int, int> = TreeMap::new();
+    let mut x = 1;
+    let mut ok = true;
+    for _ in 0..1000 {
+        x = x * 7919 % 1009;
+        m = m.insert(x, x * 2);
+        want.insert(x, x * 2);
+    }
+    ok = ok && same(&m, &want);
+    let full = m.clone();
+    for _ in 0..700 {
+        x = x * 7919 % 1009;
+        m = m.remove(&x);
+        want.remove(&x);
+    }
+    ok = ok && same(&m, &want);
+    ok  // => true
+    ;
+    full.len()  // => 1000
+    ;
+    m.len()  // => 308
+    ;
+    tree_at(&full, 500)  // => 1000
+    ;
+    full.first().map(|(k, _)| *k)  // => Some(2)
+    ;
+    full.last().map(|(k, _)| *k)  // => Some(1008)
+    ;
+    let mut prev = -1;
+    let mut sorted = true;
+    for (k, _) in &full {
+        sorted = sorted && *k > prev;
+        prev = *k;
+    }
+    sorted  // => true
+    ;
+    for (k, _) in &full {
+        m = m.remove(k);
+    }
+    m.is_empty()  // => true
+    ;
+    m.first().is_none()  // => true
+}
+
+test "a sorted persistent map's ranges" {
+    let mut m: PersistentTreeMap<int, int> = PersistentTreeMap::new();
+    for i in 0..50 {
+        m = m.insert(i * 2, i);
+    }
+    let mut keys = 0;
+    let mut n = 0;
+    for (k, _) in m.range(&9, &21) {
+        keys += *k;
+        n += 1;
+    }
+    n  // => 6
+    ;
+    keys  // => 90
+    ;
+    m.range(&200, &300).next().is_none()  // => true
+    ;
+    m
+        .range(&-5, &1)
+        .next()
+        .map(|(k, _)| *k)  // => Some(0)
+}
+
+test "a sorted persistent map of values that need dropping" {
+    let mut m: PersistentTreeMap<String, String> = PersistentTreeMap::new();
+    for i in 0..100 {
+        m = m.insert(fmt"k{i}", fmt"v{i}");
+    }
+    let n = m
+        .remove(&"k5".to_string())
+        .insert("k6".to_string(), "six".to_string());
+    drop(m);
+    n.len()  // => 99
+    ;
+    n
+        .get(&"k6".to_string())
+        .map(|s| s.len())
+        .unwrap_or(0)  // => 3
+    ;
+    n.first().map(|(k, _)| k.len())  // => Some(2)
+}
+
+test "a sorted persistent set" {
+    let a: PersistentTreeSet<int> = [3, 1, 3, 2];
+    let b = a
+        .insert(4)
+        .remove(&1);
+    a.len()  // => 3
+    ;
+    b.contains(&1)  // => false
+    ;
+    a.contains(&1)  // => true
+    ;
+    fmt"{a:?}"  // => "{1, 2, 3}"
+    ;
+    fmt"{b:?}"  // => "{2, 3, 4}"
+    ;
+    a == b
+        .insert(1)
+        .remove(&4)  // => true
+    ;
+    b.first().map(|x| *x)  // => Some(2)
+    ;
+    let mut total = 0;
+    for x in a.range(&2, &10) {
+        total += *x;
+    }
+    total  // => 5
 }

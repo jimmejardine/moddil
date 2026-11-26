@@ -51,3 +51,32 @@ test "a borrow converts to a borrow of what it dereferences to" {
     sum(&w)  // => 7
     ;
 }
+
+/// The first of a list of `Rc`s, borrowed.
+fn head(xs: &Option<Rc<Point>>) -> &Rc<Point> {
+    match xs {
+        Some(p) => p,
+        None    => unreachable("the test passes one"),
+    }
+}
+
+test "a local holding a borrow converts as a borrow expression does" {
+    let r = Point { x: 1, y: 2 }.to_rc();
+    let b = &r;
+    sum(b)  // => 3
+    ;
+    let xs = Some(Point { x: 5, y: 6 }.to_rc());
+    let p = head(&xs);
+    sum(p)  // => 11
+    ;
+    let mut total = 0;
+    if let Some(q) = &xs {
+        total = sum(q);
+    }
+    total  // => 11
+    ;
+    let mut m = Box::new(1);
+    let mm = &mut m;
+    bump(mm);
+    *m  // => 2
+}

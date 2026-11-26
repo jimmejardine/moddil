@@ -2,7 +2,8 @@
 //! mod's hash maps, `Deque`, `RingBuffer`, `BinaryHeap`, `EnumSet` of an enum's variants (with
 //! `#[derive(Variant)]`), the sorted `TreeMap` and `TreeSet`, the
 //! insertion-ordered `OrderedMap` and `OrderedSet`, `Interner` with its `Symbol`s, and the
-//! persistent `PersistentList`, `PersistentVec`, `PersistentMap` and `PersistentSet`, whose
+//! persistent `PersistentList`, `PersistentVec`, `PersistentMap` and `PersistentSet`, and the
+//! sorted `PersistentTreeMap` and `PersistentTreeSet`, whose
 //! updates give a new collection and leave the old one as it was, sharing what did not change.
 
 use core::collections::{HashMap, HashSet, SetIter};
@@ -14,6 +15,7 @@ pub use mod::interner::{Interner, Symbol};
 pub use mod::ordered::{OrderedIter, OrderedMap, OrderedSet, OrderedSetIter};
 pub use mod::persistent_list::{PersistentList, PersistentListIter};
 pub use mod::persistent_map::{PersistentMap, PersistentMapIter, PersistentSet, PersistentSetIter};
+pub use mod::persistent_tree::{PersistentTreeIter, PersistentTreeMap, PersistentTreeSet, PersistentTreeSetIter};
 pub use mod::persistent_vec::{PersistentVec, PersistentVecIter};
 pub use mod::tree::{TreeIter, TreeMap, TreeSet, TreeSetIter};
 

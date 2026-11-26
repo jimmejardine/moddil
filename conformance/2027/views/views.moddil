@@ -1,4 +1,4 @@
-// covers: view.1, view.2, view.infect.1, generic.borrow.1
+// covers: view.1, view.2, view.infect.1, view.borrow.1, generic.borrow.1, coll.vec.borrow.1
 
 view Window {
     data: &[int],
@@ -51,4 +51,55 @@ test "a borrow as a type argument" {
     ;
     let w = Wrap { x: &n };
     *w.x  // => 7
+}
+
+/// A tree of `Rc` nodes.
+struct Node {
+    value: int,
+    left: Option<Rc<Node>>,
+    right: Option<Rc<Node>>,
+}
+
+fn leaf(value: int) -> Option<Rc<Node>> {
+    Some(Node { value, left: None, right: None }.to_rc())
+}
+
+fn node(value: int, left: Option<Rc<Node>>, right: Option<Rc<Node>>) -> Option<Rc<Node>> {
+    Some(Node { value, left, right }.to_rc())
+}
+
+/// The tree's values in order: a stack of borrows of the nodes still to visit, each reached
+/// through a borrow the view already holds.
+view InOrder {
+    stack: Vec<&Node>,
+}
+
+impl InOrder {
+    fn descend(&mut self, t: &Option<Rc<Node>>) {
+        let mut t = t;
+        while let Some(n) = t {
+            self.stack.push(&**n);
+            t = &n.left;
+        }
+    }
+}
+
+impl Iterator for InOrder {
+    type Item = &int;
+    fn next(&mut self) -> Option<&int> {
+        let n = self.stack.pop()?;
+        self.descend(&n.right);
+        Some(&n.value)
+    }
+}
+
+test "a view holds a stack of borrows it reached through its own" {
+    let t = node(4, node(2, leaf(1), leaf(3)), node(6, leaf(5), None));
+    let mut it = InOrder { stack: Vec::new() };
+    it.descend(&t);
+    let mut out = 0;
+    for x in it {
+        out = out * 10 + *x;
+    }
+    out  // => 123456
 }
