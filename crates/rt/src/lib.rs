@@ -17,6 +17,8 @@
 //! What they record is kept per run, shared by its threads, until the host [`take`]s it.
 
 mod baton;
+#[cfg(not(target_arch = "wasm32"))]
+mod executors;
 mod hash;
 pub mod host;
 pub mod num;

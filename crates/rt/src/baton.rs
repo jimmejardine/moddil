@@ -27,14 +27,15 @@ pub use workers::{DropFn, TaskFn};
 
 #[cfg(not(target_arch = "wasm32"))]
 mod workers {
-    use std::cell::{Cell, RefCell};
+    use std::cell::Cell;
     use std::collections::{HashMap, HashSet};
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{Arc, Mutex, MutexGuard};
+    use std::sync::{Arc, MutexGuard, RwLock};
 
     use corosensei::stack::DefaultStack;
     use corosensei::{Coroutine, CoroutineResult, Yielder};
-    use crossbeam_deque::{Injector, Steal, Stealer, Worker};
+
+    use crate::executors::{Group, Queues};
 
     use crate::run::{Ctx, Start, State, TaskLocals, enter_task, me, run_task, running};
 
@@ -71,7 +72,7 @@ mod workers {
     // them afresh, and compiled code keeps none).
     unsafe impl Send for Task {}
 
-    /// What the baton keeps for a run: its tasks' coroutines, and the workers and their queues.
+    /// What the baton keeps for a run: its tasks' coroutines, and its executors' workers.
     #[derive(Default)]
     pub(crate) struct Baton {
         /// The tasks not yet started.
@@ -82,81 +83,15 @@ mod workers {
         queued: HashSet<usize>,
         /// The tasks a worker runs now.
         busy: HashSet<usize>,
-        workers: Vec<std::thread::JoinHandle<()>>,
-        /// The workers' queues, once there are workers.
-        queues: Option<Arc<Queues>>,
-    }
-
-    /// The queues the tasks with a turn wait in for a worker (`crossbeam-deque`): one a worker,
-    /// which a task given its turn by code on that worker goes on, so that it stays there; one
-    /// for the tasks given turns elsewhere; and the workers asleep for want of a task. A worker
-    /// takes from its own queue, then from the shared one, then steals from the others.
-    pub(crate) struct Queues {
-        shared: Injector<usize>,
-        stealers: Vec<Stealer<usize>>,
-        asleep: Mutex<Vec<std::thread::Thread>>,
-        /// Whether the run has ended, and the workers with it.
-        over: AtomicBool,
-    }
-
-    impl Queues {
-        /// Queues task `t` on this thread's worker's queue if it is a worker's, or on the
-        /// shared one, and wakes a worker asleep.
-        fn push(&self, t: usize) {
-            if !push_local(t) {
-                self.shared.push(t);
-            }
-            self.wake_one();
-        }
-
-        /// The next task for the worker whose queue is `local`.
-        fn find(&self, local: &Worker<usize>) -> Option<usize> {
-            if let Some(t) = local.pop() {
-                return Some(t);
-            }
-            loop {
-                let mut retry = false;
-                match self.shared.steal_batch_and_pop(local) {
-                    Steal::Success(t) => return Some(t),
-                    Steal::Retry => retry = true,
-                    Steal::Empty => {}
-                }
-                for s in &self.stealers {
-                    match s.steal() {
-                        Steal::Success(t) => return Some(t),
-                        Steal::Retry => retry = true,
-                        Steal::Empty => {}
-                    }
-                }
-                if !retry {
-                    return None;
-                }
-            }
-        }
-
-        /// Wakes one worker asleep, if any is.
-        fn wake_one(&self) {
-            if let Some(w) = self
-                .asleep
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .pop()
-            {
-                w.unpark();
-            }
-        }
-
-        /// Wakes every worker asleep: the run has ended.
-        fn wake_all(&self) {
-            for w in self
-                .asleep
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .drain(..)
-            {
-                w.unpark();
-            }
-        }
+        /// Each executor's workers, once a task runs on it: under the deterministic runtime,
+        /// the default one's alone, with one worker.
+        groups: HashMap<i64, Group>,
+        /// How many workers the default executor has: the run's turns when it starts.
+        base: usize,
+        /// The queues of the executors that lend their idle workers.
+        lenders: Arc<RwLock<Vec<Arc<Queues>>>>,
+        /// Whether the run has ended, and its workers with it.
+        over: Arc<AtomicBool>,
     }
 
     thread_local! {
@@ -166,20 +101,6 @@ mod workers {
         static RESUMED: Cell<Option<std::time::Instant>> = const { Cell::new(None) };
         /// On a worker, the preemption window the running task last looked at its slice in.
         static LOOKED: Cell<usize> = const { Cell::new(usize::MAX) };
-        /// On a worker, its own queue.
-        static LOCAL: RefCell<Option<Worker<usize>>> = const { RefCell::new(None) };
-    }
-
-    /// Queues task `t` on this thread's worker's queue: whether it is a worker's.
-    #[inline(never)]
-    fn push_local(t: usize) -> bool {
-        LOCAL.with(|l| match &*l.borrow() {
-            Some(w) => {
-                w.push(t);
-                true
-            }
-            None => false,
-        })
     }
 
     /// Whether the running task, on a worker, has run its slice since it was last resumed. It
@@ -195,65 +116,55 @@ mod workers {
             .is_some_and(|at| at.elapsed() >= crate::run::slice())
     }
 
-    /// Keeps task `t`, to start when it gets a turn; and, the first time, starts a worker for
-    /// each turn, each with its queue.
-    pub(crate) fn start(s: &mut State, c: &Arc<Ctx>, t: usize, spec: Start) {
+    /// Keeps task `t`, to start when it gets a turn.
+    pub(crate) fn start(s: &mut State, _: &Arc<Ctx>, t: usize, spec: Start) {
         s.baton.starts.insert(t, spec);
-        if s.baton.queues.is_some() {
-            return;
-        }
-        let locals: Vec<Worker<usize>> = (0..s.turns.slots()).map(|_| Worker::new_fifo()).collect();
-        let queues = Arc::new(Queues {
-            shared: Injector::new(),
-            stealers: locals.iter().map(Worker::stealer).collect(),
-            asleep: Mutex::new(Vec::new()),
-            over: AtomicBool::new(false),
-        });
-        for local in locals {
-            let (c, q) = (c.clone(), queues.clone());
-            let w = std::thread::Builder::new()
-                .name("moddil-worker".to_string())
-                .spawn(move || {
-                    LOCAL.with(|l| *l.borrow_mut() = Some(local));
-                    work(&c, &q);
-                })
-                .expect("a worker thread");
-            s.baton.workers.push(w);
-        }
-        s.baton.queues = Some(queues);
     }
 
-    /// The next task for this worker, waiting asleep while there is none: `None` once the run
-    /// has ended.
-    fn next_task(q: &Queues) -> Option<usize> {
-        loop {
-            if q.over.load(Ordering::Acquire) {
-                return None;
-            }
-            let found = LOCAL.with(|l| q.find(l.borrow().as_ref().expect("a worker's queue")));
-            if found.is_some() {
-                return found;
-            }
-            // Asleep: a task queued after this looks again finds it, or wakes this worker.
-            q.asleep
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .push(std::thread::current());
-            let found = LOCAL.with(|l| q.find(l.borrow().as_ref().expect("a worker's queue")));
-            if found.is_some() {
-                return found;
-            }
-            if q.over.load(Ordering::Acquire) {
-                return None;
-            }
-            std::thread::park();
+    /// The queues of executor `e` (task `t`'s, under the parallel runtime; the default one's
+    /// under the deterministic runtime), its workers started the first time: their number added
+    /// to the run's turns, for any but the default executor.
+    fn queues_of(s: &mut State, t: usize) -> Arc<Queues> {
+        if s.baton.groups.is_empty() {
+            s.baton.base = s.turns.slots();
         }
+        let e = if s.baton.base > 1 {
+            s.sched.executor(t)
+        } else {
+            0
+        };
+        if let Some(g) = s.baton.groups.get(&e) {
+            return g.queues.clone();
+        }
+        let spec = match e {
+            0 => None,
+            e => s.sched.executor_spec(e),
+        }
+        .unwrap_or(moddil_sched::Executor {
+            kind: 0,
+            cores: (0, 0),
+            node: -1,
+            priority: 1,
+            busy_poll: false,
+            threads: 0,
+        });
+        let n = crate::executors::workers(&spec, s.baton.base);
+        if e != 0 {
+            s.turns.set_slots(s.turns.slots() + n);
+        }
+        let c = crate::run::ctx();
+        let g = crate::executors::start(e, &spec, n, &s.baton.lenders, &s.baton.over, move |q| {
+            work(&c, q);
+        });
+        let q = g.queues.clone();
+        s.baton.groups.insert(e, g);
+        q
     }
 
     /// A worker: runs the tasks given turns until the run ends.
     fn work(c: &Arc<Ctx>, q: &Queues) {
         loop {
-            let Some(t) = next_task(q) else { return };
+            let Some(t) = q.next() else { return };
             let mut task = {
                 let mut s = c.lock();
                 s.baton.queued.remove(&t);
@@ -296,7 +207,7 @@ mod workers {
                     let again = s.turns.has(t) || s.aborted;
                     s.baton.tasks.insert(t, task);
                     if again && s.baton.queued.insert(t) {
-                        q.push(t);
+                        queues_of(&mut s, t).push(t);
                     }
                 }
             }
@@ -362,11 +273,9 @@ mod workers {
             s.turns.holders().filter(|&t| t != HOST).collect()
         };
         go.sort_unstable();
-        if let Some(q) = &b.queues {
-            for t in go {
-                if !b.busy.contains(&t) && b.queued.insert(t) {
-                    q.push(t);
-                }
+        for t in go {
+            if !s.baton.busy.contains(&t) && s.baton.queued.insert(t) {
+                queues_of(s, t).push(t);
             }
         }
         // The run's own task waits on its thread.
@@ -384,11 +293,13 @@ mod workers {
 
     /// Ends the run's workers: the threads to wait for.
     pub(crate) fn end_run(s: &mut State) -> Vec<std::thread::JoinHandle<()>> {
-        if let Some(q) = &s.baton.queues {
-            q.over.store(true, Ordering::Release);
-            q.wake_all();
+        s.baton.over.store(true, Ordering::Release);
+        let mut workers = Vec::new();
+        for (_, g) in s.baton.groups.drain() {
+            g.queues.wake_all();
+            workers.extend(g.workers);
         }
-        std::mem::take(&mut s.baton.workers)
+        workers
     }
 
     /// Runs a task's code.

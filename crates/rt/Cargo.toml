@@ -20,3 +20,5 @@ workspace = true
 moddil-os.workspace = true
 corosensei.workspace = true
 crossbeam-deque.workspace = true
+core_affinity.workspace = true
+thread-priority.workspace = true

@@ -373,6 +373,14 @@ impl<V: Item, T: Clone, D: Copy, H: Host> Scheduler<V, T, D, H> {
         self.tasks[t].executor = if on < 0 { self.tasks[by].executor } else { on };
     }
 
+    /// What executor `e` is, if it is one made (not the default one, 0).
+    pub fn executor_spec(&self, e: i64) -> Option<Executor> {
+        usize::try_from(e - 1)
+            .ok()
+            .and_then(|i| self.executors.get(i))
+            .copied()
+    }
+
     /// The executor task `t` runs on.
     pub fn executor(&self, t: usize) -> i64 {
         self.tasks[t].executor

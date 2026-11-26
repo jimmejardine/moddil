@@ -36,7 +36,7 @@ test "a task parked at a lock runs once it is let go, in the order they waited" 
         s.spawn (|| m.lock().push(2));
         s.spawn (|| m.lock().push(3));
     });
-    m.into_inner()  // => [1, 2, 3]
+    m.into_inner()  // => [1, 2, 3] (in parallel, in any order)
 }
 
 test "readers share an rwlock, and a writer waits for them" {

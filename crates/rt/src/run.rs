@@ -34,7 +34,7 @@ pub(crate) struct State {
     pub(crate) last_trapped: Option<Trapped>,
     /// What gives a `Trapped`'s text.
     pub(crate) trap_text: Option<crate::host::TrapText>,
-    sched: Scheduler,
+    pub(crate) sched: Scheduler,
     /// Which tasks run now.
     pub(crate) turns: Turns,
     pub(crate) aborted: bool,

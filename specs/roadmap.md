@@ -208,12 +208,13 @@ P41's tests). In stages, each a commit with P41's suite green:
    slice, and a task on a worker past its slice gives its turn to a ready one.) `pinned`
    executors' code leaving the checks out. Eight CPU-bound tasks take 1.22 s under `parallel`
    with coroutines, against 1.04 s with a thread each (stage 1): what costs it is still to find.
-5. The manifest's core count for the parallel runtime (`[[exe]] cores`, beside `runtime` and
-   `threads`). Executors (with priority inheritance: a task parked at a sync cell lends its executor's
-   priority to the task holding it): `default` and `pool`, work-stealing; `pinned`, with core affinity, real-time
-   priority and optional busy-polling, never lending; `blocking`, growing on demand, with
-   `blocking` C functions routed to it; `affine`; `on:` placement; idle executors lending their
-   threads.
+5. (Each executor's own workers are built, `crates/rt/src/executors.rs`: pinned to its cores,
+   with the OS's priority, idle pools lending theirs.) Still: the manifest's core count
+   (`[[exe]] cores`, which needs integers in the manifest's TOML subset); `blocking` C functions
+   (a `#[blocking]` on an `extern` function) running on the `blocking` executor, which starts
+   all its threads now rather than growing on demand; priority inheritance (a task parked at a
+   sync cell lending its executor's priority to the task holding it, which the cell would have
+   to record).
 6. A reactor per worker: io_uring on Linux (epoll as fallback), kqueue on macOS, IOCP on
    Windows; a timer wheel per worker; OS-level cancellation; re-registration when a task is
    stolen; the `core::os` calls moved onto it.
