@@ -58,10 +58,37 @@ pub struct Os {
     handles: Vec<Handle>,
     signals: Option<Receiver<i64>>,
     args: Vec<String>,
-    /// The wait for readiness the handles are registered with.
-    poll: Poll,
+    /// What the handles are registered with.
+    registry: mio::Registry,
+    /// The wait for readiness, unless a reactor has taken it ([`Os::take_waiter`]).
+    waiter: Option<Waiter>,
     waker: Arc<Waker>,
+}
+
+/// What wakes the OS's wait for readiness: a run that ends wakes its reactor so.
+#[derive(Clone)]
+pub struct Wake(Arc<Waker>);
+
+impl Wake {
+    /// Wakes the wait.
+    pub fn wake(&self) {
+        let _ = self.0.wake();
+    }
+}
+
+/// The OS's wait for readiness, which a reactor waits in on a thread of its own, without the
+/// [`Os`]: then [`Os::poll`] only reads what has come.
+pub struct Waiter {
+    poll: Poll,
     events: mio::Events,
+}
+
+impl Waiter {
+    /// Waits until a handle registered is ready, a signal comes, [`Os::waker`] wakes it, or
+    /// `wait` passes (never, if `None`).
+    pub fn wait(&mut self, wait: Option<Duration>) {
+        let _ = self.poll.poll(&mut self.events, wait);
+    }
 }
 
 impl Os {
@@ -73,14 +100,28 @@ impl Os {
     pub fn new(args: Vec<String>) -> Os {
         let poll = Poll::new().expect("the OS's wait for readiness");
         let waker = Arc::new(Waker::new(poll.registry(), WAKE).expect("a waker"));
+        let registry = poll.registry().try_clone().expect("the OS's registry");
         Os {
             handles: Vec::new(),
             signals: None,
             args,
-            poll,
+            registry,
+            waiter: Some(Waiter {
+                poll,
+                events: mio::Events::with_capacity(256),
+            }),
             waker,
-            events: mio::Events::with_capacity(256),
         }
+    }
+
+    /// The wait for readiness, for a reactor to wait in, once.
+    pub fn take_waiter(&mut self) -> Option<Waiter> {
+        self.waiter.take()
+    }
+
+    /// What wakes the wait for readiness, wherever it waits.
+    pub fn waker(&self) -> Wake {
+        Wake(self.waker.clone())
     }
 
     /// The program's arguments.
@@ -97,8 +138,7 @@ impl Os {
         socket.set_nonblocking(true).map_err(|e| e.to_string())?;
         let mut socket = TcpListener::from_std(socket);
         let id = self.handles.len();
-        self.poll
-            .registry()
+        self.registry
             .register(&mut socket, Token(id), Interest::READABLE)
             .map_err(|e| e.to_string())?;
         Ok(self.add(Handle::Listener {
@@ -120,8 +160,7 @@ impl Os {
     fn add_conn(&mut self, mut stream: TcpStream) -> Result<usize, String> {
         let _ = stream.set_nodelay(true);
         let id = self.handles.len();
-        self.poll
-            .registry()
+        self.registry
             .register(&mut stream, Token(id), Interest::READABLE)
             .map_err(|e| e.to_string())?;
         Ok(self.add(Handle::Conn(Conn {
@@ -214,10 +253,10 @@ impl Os {
         match self.handles.get_mut(id) {
             Some(Handle::Conn(c)) => {
                 let _ = c.stream.shutdown(std::net::Shutdown::Both);
-                let _ = self.poll.registry().deregister(&mut c.stream);
+                let _ = self.registry.deregister(&mut c.stream);
             }
             Some(Handle::Listener { socket, .. }) => {
-                let _ = self.poll.registry().deregister(socket);
+                let _ = self.registry.deregister(socket);
             }
             _ => {}
         }
@@ -244,7 +283,9 @@ impl Os {
         if !events.is_empty() {
             return events;
         }
-        let _ = self.poll.poll(&mut self.events, wait);
+        if let Some(w) = &mut self.waiter {
+            w.wait(wait);
+        }
         self.events()
     }
 

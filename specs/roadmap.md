@@ -198,8 +198,7 @@ P41's tests). In stages, each a commit with P41's suite green:
    (`memory.md`): a non-owner that takes the shared count below 0 queues the allocation to its
    owner task, which the runtime drains when it resumes the task and at its end. The run's own
    task runs on the thread that began the run, not as a coroutine, so it cannot be stopped at a
-   safe point of an aborted run. The OS's events and timers come in
-   only when no task runs until stage 6.
+   safe point of an aborted run.
 3. (A queue a worker, `crossbeam-deque`, with stealing, workers asleep woken one at a time, and
    a task given its turn on a worker queued on that worker, are built.) The scheduler's state
    per worker: the turns, the tasks and the channels are still under the run's one lock, which
@@ -215,9 +214,10 @@ P41's tests). In stages, each a commit with P41's suite green:
    all its threads now rather than growing on demand; priority inheritance (a task parked at a
    sync cell lending its executor's priority to the task holding it, which the cell would have
    to record).
-6. A reactor per worker: io_uring on Linux (epoll as fallback), kqueue on macOS, IOCP on
-   Windows; a timer wheel per worker; OS-level cancellation; re-registration when a task is
-   stolen; the `core::os` calls moved onto it.
+6. (A reactor a run, on `mio`, is built: `crates/os` waits in epoll, kqueue or IOCP, and under
+   the parallel runtime `crates/rt/src/reactor.rs` brings the events in while tasks run.) Still:
+   one reactor a worker rather than a run; a timer wheel rather than the scheduler's list; a
+   write that waits for the socket in the reactor rather than trying again; io_uring.
 7. NUMA: topology discovery (Linux sysfs, Windows `GetLogicalProcessorInformationEx`), executors
    placed by node, node-local allocator arenas.
 8. Observability: the task tree and each task's blocked-on operation, for `Introspect` and spans

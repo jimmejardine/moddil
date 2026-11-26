@@ -23,6 +23,8 @@ mod hash;
 pub mod host;
 pub mod num;
 mod os;
+#[cfg(not(target_arch = "wasm32"))]
+mod reactor;
 mod run;
 mod sched;
 pub mod sites;

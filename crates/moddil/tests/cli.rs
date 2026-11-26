@@ -433,6 +433,12 @@ fn the_tour_serves_natively() {
     the_tour_serves(&[]);
 }
 
+/// Under the parallel runtime its reactor brings the connections in while tasks run.
+#[test]
+fn the_tour_serves_in_parallel() {
+    the_tour_serves(&["--runtime", "parallel"]);
+}
+
 #[test]
 fn the_tour_serves_on_the_interpreter() {
     the_tour_serves(&["--interp"]);

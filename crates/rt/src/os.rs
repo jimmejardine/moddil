@@ -60,6 +60,12 @@ mod native {
             self.0.waiting()
         }
 
+        /// The wait for readiness and what wakes it, for a reactor.
+        pub(crate) fn take_waiter(&mut self) -> Option<(moddil_os::Waiter, moddil_os::Wake)> {
+            let w = self.0.take_waiter()?;
+            Some((w, self.0.waker()))
+        }
+
         pub(crate) fn poll(&mut self, wait: Option<std::time::Duration>) -> Vec<Event> {
             self.0
                 .poll(wait)

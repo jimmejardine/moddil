@@ -217,6 +217,9 @@ pub struct Scheduler<V, T, D, H> {
     seed: u64,
     /// The executors made, the first numbered 1.
     executors: Vec<Executor>,
+    /// Whether a reactor brings the OS's events and fires the timers ([`Scheduler::tick`]):
+    /// then the scheduler never waits for them itself.
+    reactor: bool,
 }
 
 /// Values given back to be dropped, each with what drops it.
@@ -250,6 +253,7 @@ impl<V: Item, T: Clone, D: Copy, H: Host> Scheduler<V, T, D, H> {
             signals: None,
             seed: 0,
             executors: Vec::new(),
+            reactor: false,
         }
     }
 
@@ -708,7 +712,9 @@ impl<V: Item, T: Clone, D: Copy, H: Host> Scheduler<V, T, D, H> {
     /// which fires (`task.timer.1`), until a task is ready or no timer is left; in a run of
     /// `main`, the OS's events and the wall clock's timers come in, waiting for either.
     pub fn next_ready(&mut self) -> Option<usize> {
-        if self.os.is_some() {
+        if self.reactor {
+            self.tick();
+        } else if self.os.is_some() {
             while self.ready.is_empty() {
                 let now = self.clock();
                 if let Some((i, at)) = self.earliest()
@@ -734,6 +740,40 @@ impl<V: Item, T: Clone, D: Copy, H: Host> Scheduler<V, T, D, H> {
             }
         }
         self.pop_ready()
+    }
+
+    /// From now on a reactor brings the OS's events and fires the timers, calling
+    /// [`Scheduler::tick`] when the OS has something or a timer is due: the scheduler never waits
+    /// for them itself, so it can be locked meanwhile (the parallel runtime).
+    pub fn set_reactor(&mut self) {
+        self.reactor = true;
+    }
+
+    /// Delivers the OS's events that have come, and fires the timers due, waiting for nothing.
+    pub fn tick(&mut self) {
+        let now = self.clock();
+        while let Some((i, at)) = self.earliest()
+            && at <= now
+        {
+            self.fire(i);
+        }
+        if let Some(os) = self.os.as_mut() {
+            let events = os.poll(Some(Duration::ZERO));
+            self.deliver_os(events);
+        }
+    }
+
+    /// How long until the next timer is due, if any is: what a reactor waits at most.
+    pub fn until_timer(&self) -> Option<Duration> {
+        let now = self.clock();
+        self.earliest()
+            .map(|(_, at)| Duration::from_nanos((at - now).max(0) as u64))
+    }
+
+    /// Whether, with no task ready, the reactor may still make one so: the OS has something
+    /// watched, or a timer is set.
+    pub fn awaits_reactor(&self) -> bool {
+        self.reactor && (!self.timers.is_empty() || self.os.as_ref().is_some_and(|o| o.waiting()))
     }
 
     /// Whether a task is ready to run.

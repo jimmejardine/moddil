@@ -39,6 +39,9 @@ pub(crate) struct State {
     pub(crate) turns: Turns,
     pub(crate) aborted: bool,
     pub(crate) baton: Baton,
+    /// The parallel runtime's reactor, for a run of `main`.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) reactor: Option<crate::reactor::Reactor>,
 }
 
 // SAFETY: the observer's context pointer is used only by the task holding the baton, while the
@@ -130,6 +133,8 @@ fn new_ctx() -> Arc<Ctx> {
             turns: Turns::new(),
             aborted: false,
             baton: Baton::default(),
+            #[cfg(not(target_arch = "wasm32"))]
+            reactor: None,
         }),
         turn: Condvar::new(),
         live: AtomicI64::new(0),
@@ -161,6 +166,13 @@ pub(crate) fn with<R>(f: impl FnOnce(&mut State) -> R) -> R {
 #[inline(never)]
 pub(crate) fn me() -> usize {
     TASK.with(Cell::get)
+}
+
+/// Makes run `c` this thread's, for a thread of the runtime's own (the reactor's) that runs no
+/// task.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) fn adopt(c: &Arc<Ctx>) {
+    CTX.with(|x| *x.borrow_mut() = Some(c.clone()));
 }
 
 /// Makes this thread run task `t` of run `c`.
@@ -300,6 +312,10 @@ pub fn begin_run() {
 /// Ends this thread's run: its workers stop, and it waits for them (a task stopped at a safe
 /// point of an aborted run has given its worker back).
 pub fn end_run() {
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(r) = with(|s| s.reactor.take()) {
+        r.stop();
+    }
     let (threads, aborting) = with(|s| (baton::end_run(s), s.aborted && s.turns.slots() > 1));
     ctx().turn.notify_all();
     for t in threads {
@@ -370,7 +386,7 @@ fn suspend(c: &Ctx, mut s: MutexGuard<'_, State>, site: u32, tracked: bool) -> u
     s.turns.give_up(me);
     let st = &mut *s;
     st.turns.hand_out(&mut st.sched);
-    if st.turns.idle() {
+    if st.turns.idle() && !st.sched.awaits_reactor() {
         drop(s);
         return record_trap(site, tracked);
     }
@@ -521,7 +537,7 @@ pub(crate) fn run_task(c: &Arc<Ctx>, t: usize, spec: Start) {
     s.turns.give_up(t);
     let st = &mut *s;
     st.turns.hand_out(&mut st.sched);
-    if st.turns.idle() {
+    if st.turns.idle() && !st.sched.awaits_reactor() {
         // Every other task waits: a deadlock, where nothing says.
         if s.trap.is_none() {
             s.trap = Some(Trapped {
@@ -746,6 +762,7 @@ pub fn set_workers(workers: Option<usize>) {
     RUNNING.store(NO_TASK, Ordering::Relaxed);
     with(|s| s.turns.set_slots(n.max(2)));
     start_preempting();
+    start_reactor();
 }
 
 /// Whether the run's tasks run in parallel (`__parallel`).
@@ -847,6 +864,17 @@ pub extern "C" fn timer(nanos: i64) -> u64 {
 /// For a run of `main`: the OS, with the program's arguments `args` (`os.1`).
 pub fn set_os(args: Vec<String>) {
     with(|s| s.sched.set_os(crate::sched::RunOs::new(args)));
+    start_reactor();
+}
+
+/// Starts the run's reactor, if it has the OS and its tasks run in parallel.
+fn start_reactor() {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let c = ctx();
+        let mut s = c.lock();
+        crate::reactor::Reactor::start(&c, &mut s);
+    }
 }
 
 /// `core::os::arg_count`.
@@ -1065,7 +1093,14 @@ pub extern "C" fn os_channel(kind: u64, id: u64) -> u64 {
         1 => OsSource::Arrivals,
         _ => OsSource::Signals,
     };
-    with(|s| s.sched.os_channel(kind, id as usize) as u64)
+    with(|s| {
+        let c = s.sched.os_channel(kind, id as usize) as u64;
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(r) = &s.reactor {
+            r.nudge();
+        }
+        c
+    })
 }
 
 /// `core::os::take`: connection `conn`'s bytes into the `n` at `out`; how many.
