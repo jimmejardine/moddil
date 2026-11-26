@@ -492,6 +492,9 @@ pub struct TypeDef {
     pub node: TextRange,
     /// The type it names (an alias), or its base (a refinement).
     pub ty: Ty,
+    /// An alias's type parameters (`type Pairs<T> = Vec<(T, T)>`, `type.alias.generic.1`): `ty`
+    /// names them, and a use gives each an argument.
+    pub params: Vec<GenericParam>,
     /// For a refinement: the predicate's text, and the functions `X::holds` and `X::new`.
     pub refinement: Option<Refinement>,
 }

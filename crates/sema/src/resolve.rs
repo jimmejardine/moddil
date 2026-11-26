@@ -397,6 +397,45 @@ pub(crate) fn dyn_type(node: &SyntaxNode, scope: &Scope, diags: &mut Vec<Diagnos
 }
 
 /// The type a `type` item names: a refined type, or the type an alias stands for.
+/// The type `type` item `t` names, written as `seg`: a generic alias's with `seg`'s arguments
+/// for its parameters (`type.alias.generic.1`), or left to infer where types may be.
+fn alias_type(
+    t: u32,
+    seg: &Segment,
+    range: TextRange,
+    scope: &Scope,
+    diags: &mut Vec<Diagnostic>,
+) -> Ty {
+    let def = &scope.tree.types[t as usize];
+    let want = def.params.len();
+    if want == 0 {
+        if let Some(a) = &seg.args {
+            diags.push(Diagnostic::error(
+                Code::E0404,
+                a.text_range(),
+                format!("`{}` takes no type arguments", def.name),
+            ));
+        }
+        return type_of_item(scope.tree, t);
+    }
+    let args = match &seg.args {
+        Some(a) => {
+            let (types, _) = generic_args(a, scope, diags);
+            if arity(&format!("`{}`", def.name), want, types.len(), range, diags) {
+                types
+            } else {
+                vec![Ty::Error; want]
+            }
+        }
+        None if scope.holes => vec![hole(); want],
+        None => {
+            arity(&format!("`{}`", def.name), want, 0, range, diags);
+            vec![Ty::Error; want]
+        }
+    };
+    def.ty.subst(&args)
+}
+
 fn type_of_item(tree: &ItemTree, t: u32) -> Ty {
     let def = &tree.types[t as usize];
     match def.refinement {
@@ -769,8 +808,7 @@ pub(crate) fn path_type(
                     return tree.adts[a as usize].ty_with(a, args);
                 }
                 Some(Def::Type(t)) => {
-                    no_args(one, diags);
-                    return type_of_item(tree, t);
+                    return alias_type(t, one, range, scope, diags);
                 }
                 Some(Def::Trait(_)) => format!("`{name}` is a trait, not a type"),
                 Some(Def::Module(_)) => format!("`{name}` is a module, not a type"),
@@ -821,8 +859,7 @@ pub(crate) fn path_type(
                     tree.adts[a as usize].ty_with(a, args)
                 }
                 Ok((Def::Type(t), n)) if n == segs.len() => {
-                    no_args(last, diags);
-                    type_of_item(tree, t)
+                    alias_type(t, last, range, scope, diags)
                 }
                 Ok((Def::Adt(a), n)) if n + 1 == segs.len() => {
                     let base = &segs[n - 1];

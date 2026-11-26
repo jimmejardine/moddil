@@ -5,9 +5,14 @@ a validated newtype ([`specs/correctness.md`: Validated newtypes](../../specs/co
 
 **refine.1** `type X = T where p;` declares the refined type `X`, of the values of `T` for which
 `p` holds; in `p`, `self` is the value. `type X = T;`, without `where`, declares an alias: `X` is
-`T`. A `type` item is not generic, for now. `p` is a `bool` and is compile-time code
+`T`. `p` is a `bool` and is compile-time code
 ([Compile-time evaluation](comptime.md)): pure, calling only `const fn`s and the prelude's
 functions (E1001).
+
+**type.alias.generic.1** An alias may be generic, `type Pairs<T> = Vec<(T, T)>;`: each use gives
+its parameters arguments (E0404 for another number), `Pairs<int>` being `Vec<(int, int)>`, or
+leaves them to infer where a type may be inferred. Its parameters have no bounds or defaults, and
+a refinement is not generic, for now.
 
 **refine.base.1** An `X` is used as its base: it converts to `T` where a `T` is expected (and a
 `&X` to a `&T`), the base's
@@ -25,6 +30,10 @@ prelude's `RefinementError { ty, clause, value }`: `X`'s name, `p` as written, a
 `Base` is the refinement's base, and `refine(v)` is its `new(v)`. So generic code makes a value of
 a refined type: `fn make<T: Refined>(v: T::Base) -> T with fail(RefinementError) { T::refine(v)? }`.
 Nothing else implements it, and an impl of it is an error (E0406).
+
+**refine.trait.2** A refinement may implement a trait its base does not (`impl Display for
+Port`): its values then have that impl's methods, as well as the base's. Implementing a trait its
+base implements, or writing methods of its own (`impl Port { … }`), is an error (E0414), for now.
 
 **refine.lit.1** A literal where an `X` is expected (a `let`'s type, a parameter, a function's
 result) is an `X`, and compiling checks that `p` holds for it (E1101).

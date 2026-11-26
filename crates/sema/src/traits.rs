@@ -505,10 +505,14 @@ impl<'a> Solver<'a> {
                     Answer::No
                 };
             }
-            // A refined type has its base's traits (`refine.base.1`).
+            // A refined type has its base's traits (`refine.base.1`), and the impls of its own
+            // of traits its base does not implement (`refine.trait.2`).
             Ty::Refined(..) => {
                 let base = self.tree.base(&ty);
-                return self.implements(&base, trait_ref);
+                match self.implements(&base, trait_ref) {
+                    Answer::No => {}
+                    a => return a,
+                }
             }
             _ => {}
         }

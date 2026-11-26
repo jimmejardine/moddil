@@ -1,0 +1,13 @@
+// covers: type.alias.generic.1
+
+type Pairs<T> = Vec<(T, T)>;
+
+type Count = int;
+
+fn wrong(ps: Pairs<int, int>) -> int {  //~ E0404
+    0
+}
+
+fn none(c: Count<int>) -> int {  //~ E0404
+    0
+}

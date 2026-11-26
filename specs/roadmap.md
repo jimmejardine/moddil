@@ -45,7 +45,8 @@ Python teams and backend teams come before the browser (decided November 2026,
 
 **P8. The trait system** (`crates/sema`, `crates/syntax` and the grammar, the prelude, both
 interpreters; L)
-- Generic `type` aliases; a refinement with impls of its own, or whose base holds a borrow.
+- A generic refinement, bounds on an alias's type parameters, a refinement's methods of its own
+  and its own impl of a trait its base has (E0414), and a refinement whose base holds a borrow.
 - An `impl Trait` result in a trait's method, one whose hidden type holds a borrow or a closure,
   and recursion between functions that return one.
 

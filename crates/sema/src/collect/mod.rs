@@ -1050,6 +1050,17 @@ impl Collector<'_> {
         } else {
             name
         };
+        let (params, bounded) = self.params(src, None, node.child(K::GENERIC_PARAMS), &[]);
+        let mut ds = Vec::new();
+        for (_, p) in &bounded {
+            if p.child(K::BOUND).is_some() {
+                ds.push(Diagnostic::unsupported(
+                    p.text_range(),
+                    "a bound on a `type` item's type parameter",
+                ));
+            }
+        }
+        self.reporter.report(src, None, ds);
         self.tree.types.push(crate::items::TypeDef {
             name,
             name_range,
@@ -1058,6 +1069,7 @@ impl Collector<'_> {
             vis,
             node: node.text_range(),
             ty: Ty::Error,
+            params,
             refinement: None,
         });
     }
@@ -1066,17 +1078,28 @@ impl Collector<'_> {
     /// `X::holds` and `X::new`.
     fn type_item(&mut self, k: usize, src: Src, node: &SyntaxNode) {
         let mut ds = Vec::new();
-        if let Some(g) = node.child(K::GENERIC_PARAMS) {
+        let pred = node.children().find_map(ast::Expr::cast);
+        let params = self.tree.types[k].params.clone();
+        if !params.is_empty()
+            && pred.is_some()
+            && let Some(g) = node.child(K::GENERIC_PARAMS)
+        {
             ds.push(Diagnostic::unsupported(
                 g.text_range(),
-                "a generic `type` item",
+                "a generic refinement",
             ));
         }
         let ty = match node.children().find_map(ast::Type::cast) {
-            Some(t) => resolve_type(&t, &self.scope(), &mut ds),
+            Some(t) => resolve_type(
+                &t,
+                &Scope {
+                    params: &params,
+                    ..self.scope()
+                },
+                &mut ds,
+            ),
             None => Ty::Error,
         };
-        let pred = node.children().find_map(ast::Expr::cast);
         let name_range = self.tree.types[k].name_range;
         if pred.is_some() && self.tree.is_view(&ty) {
             ds.push(Diagnostic::error(

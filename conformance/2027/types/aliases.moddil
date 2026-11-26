@@ -1,0 +1,36 @@
+// covers: refine.1, type.alias.generic.1
+
+type Pairs<T> = Vec<(T, T)>;
+
+type Lookup<K, V> = Option<(K, V)>;
+
+type Count = int;
+
+fn sum(ps: &Pairs<int>) -> Count {
+    let mut n = 0;
+    for (a, b) in ps {
+        n += *a + *b;
+    }
+    n
+}
+
+fn find(ps: &Pairs<int>, k: int) -> Lookup<int, int> {
+    for (a, b) in ps {
+        if *a == k {
+            return Some((*a, *b));
+        }
+    }
+    None
+}
+
+test "a generic alias is its type with the arguments it is given" {
+    let ps: Pairs<int> = [(1, 2), (3, 4)];
+    sum(&ps)  // => 10
+    ;
+    find(&ps, 3)  // => Some((3, 4))
+    ;
+    find(&ps, 5)  // => None
+    ;
+    let names: Pairs<String> = [("a".to_string(), "b".to_string())];
+    names.len()  // => 1
+}

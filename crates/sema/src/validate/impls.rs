@@ -16,19 +16,30 @@ pub(crate) fn check_impls(tree: &ItemTree) -> Vec<Found> {
     let drop = tree.lang("Drop");
     for imp in &tree.impls {
         let push = |found: &mut Vec<_>, d: Diagnostic| found.push((imp.src, imp.origin, d));
-        // A refined type has its base's methods and traits, and none of its own yet.
+        // A refined type has its base's methods and traits, and impls of its own of traits its
+        // base does not implement (`refine.trait.2`); no methods of its own, for now.
         if let Ty::Refined(_, name) = &imp.self_ty {
-            push(
-                &mut found,
-                Diagnostic::error(
-                    Code::E0414,
-                    imp.range,
-                    format!(
-                        "`{name}` has the methods and traits of its base, and none of its own, for now"
-                    ),
-                ),
-            );
-            continue;
+            let base = tree.base(&imp.self_ty);
+            let why = match &imp.trait_ref {
+                None => Some(format!(
+                    "`{name}` has the methods of its base, and none of its own, for now: define a \
+                     trait for them instead"
+                )),
+                Some(tr)
+                    if Solver::new(tree, &imp.generics.preds).implements(&base, tr)
+                        != Answer::No =>
+                {
+                    Some(format!(
+                        "`{name}` has its base's `{}`, so it cannot have one of its own",
+                        tr.name
+                    ))
+                }
+                Some(_) => None,
+            };
+            if let Some(why) = why {
+                push(&mut found, Diagnostic::error(Code::E0414, imp.range, why));
+                continue;
+            }
         }
         if let Some(tr) = &imp.trait_ref
             && tree.lang("Refined") == Some(tr.trait_)

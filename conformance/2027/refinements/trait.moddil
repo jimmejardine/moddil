@@ -1,4 +1,4 @@
-// covers: refine.trait.1
+// covers: refine.trait.1, refine.trait.2
 
 type Small = int where self < 10;
 type Word = String where self.len() <= 4;
@@ -31,4 +31,27 @@ test "a refinement implements `Refined`" {
     w.unwrap_or(Word::new("x".to_string()) ?! "short").len()  // => 3
     ;
     why::<Small>(12)  // => "self < 10"
+}
+
+trait Named {
+    fn name(&self) -> String;
+}
+
+type Weekday = int where self >= 1 && self <= 7;
+
+// A trait the base does not implement (`refine.trait.2`).
+impl Named for Weekday {
+    fn name(&self) -> String {
+        if *self == 1 { "Monday".to_string() } else { fmt"day {self}" }
+    }
+}
+
+test "a refinement has the impls of its own of traits its base lacks" {
+    let d = Weekday::new(1) ?! "a day";
+    d.name()  // => "Monday"
+    ;
+    let e = Weekday::new(3) ?! "a day";
+    e.name()  // => "day 3"
+    ;
+    e + 1  // => 4
 }

@@ -1,4 +1,4 @@
-// covers: refine.trait.1
+// covers: refine.trait.1, refine.trait.2
 
 struct S;
 
@@ -15,4 +15,13 @@ fn needs<T: Refined>() -> Option<T> {
 
 fn plain() -> Option<int> {
     needs::<int>()  //~ E0402
+}
+
+type Small = int where self < 10;
+
+// Its base has `Clone` already (`refine.trait.2`).
+impl Clone for Small {  //~ E0414
+    fn clone(&self) -> Small {
+        *self
+    }
 }
