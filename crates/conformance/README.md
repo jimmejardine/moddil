@@ -18,5 +18,10 @@ The markers and how they bind are in the [suite's README](../../conformance/READ
   and native code) and reports any disagreement. The native backend runs only the files whose
   code it compiles so far; `MODDIL_NATIVE_WHY=1` prints, for each file it skips, what it does not
   compile yet.
+- `tests/stress.rs`, the runtimes' stress suite: random trees of tasks (nested scopes, spawns,
+  joins, channels, `yield_now`, `Rc`s shared across tasks, isolated scopes a task traps in) whose
+  value is fixed whatever order the tasks run in, each run under many seeds of the deterministic
+  runtime (`task.runtime.1`), on the MIR interpreter and natively: every seed gives the value,
+  with no trap and no leak. `MODDIL_STRESS_TREES` and `MODDIL_STRESS_SEEDS` set how many.
 - Measures **reference coverage** from the paragraph IDs tests cite (`// covers: …`).
 - Skips tests marked *disputed*.

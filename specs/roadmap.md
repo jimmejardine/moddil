@@ -239,9 +239,9 @@ before and after (rc-heavy code, locks, tight loops): recorded, not gated.
 `conformance`; L, its logic half before P38's first stage).
 - Logic: the conformance suite and every mod's tests also run natively under `parallel`
   (`moddil test --runtime parallel`), their results matching `runtime-sim`'s; tests whose result
-  depends on interleaving are marked, and checked for a valid result rather than one result. A
-  stress suite of random task trees (channels, `select`, cancellation, isolated traps, scoped
-  borrows, `Rc`s shared across tasks), thousands of seeds per CI run. ThreadSanitizer builds of
+  depends on interleaving are marked, and checked for a valid result rather than one result. The
+  stress suite (`crates/conformance/tests/stress.rs`, built under seeds of `runtime-sim`) also
+  run under `parallel`, and given `select`. ThreadSanitizer builds of
   `moddil-rt` on Linux. The scheduler's Rust core (deques, stealing, parking, merge queues)
   model-checked with `loom` and randomised with `shuttle`.
 - Performance: benchmarks in `crates/rt/benches` and Moddil programs under `moddil bench`, each
