@@ -74,8 +74,6 @@ L)
   `&mut self` returns.
 - Contracts on trait methods, binding every impl: the trait's `requires` and `ensures`, written
   in the trait's file and scope, checked on entry to and return from each impl's method.
-- A refinement pattern, matched through a borrow, whose base is not `Copy` (it would need the
-  value cloned, or `holds` to take a borrow).
 
 **P13. Wrappers** (`crates/sema` `wrap.rs`, `crates/moddil`; M)
 - Wrapping methods (a field to hold `self`).

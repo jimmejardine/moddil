@@ -508,6 +508,9 @@ pub struct Refinement {
     pub holds: u32,
     /// `X::new(self: T) -> X with fail(RefinementError)`.
     pub new: u32,
+    /// For a base that is not a scalar: whether `p` holds of what a `&T` points to, so a value
+    /// matched through a borrow is tested where it is (`refine.pat.2`).
+    pub holds_ref: Option<u32>,
 }
 
 /// One variant of an enum, or a struct's shape.

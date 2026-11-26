@@ -59,6 +59,11 @@ impl Checker<'_> {
                 | PatKind::Slice { .. }
                 | PatKind::Adt { .. }
         );
+        // A refinement of a base that is not a borrow tests, through a borrow, what it points to
+        // (`refine.pat.2`).
+        let tests_value = tests_value
+            || matches!(self.body.pats[p].kind, PatKind::Refined { refinement, .. }
+                if !matches!(self.items.types[refinement as usize].ty, Ty::Ref(..)));
         // A string literal matches a `&str` itself.
         let str_lit = matches!(self.body.pats[p].kind, PatKind::Str(_))
             && matches!(&expected, Ty::Ref(_, t) if **t == Ty::Str);
@@ -101,8 +106,13 @@ impl Checker<'_> {
                     return;
                 }
                 // The predicate runs on a copy of the value, or on the value itself, which it
-                // gives back; one matched through a borrow cannot be moved there.
-                if !self.solver.is_copy(&base) && base != Ty::Error && mode.is_some() {
+                // gives back; one matched through a borrow is tested where it is, through the
+                // borrow (`refine.pat.2`).
+                let by_ref = def
+                    .refinement
+                    .as_ref()
+                    .is_some_and(|r| r.holds_ref.is_some());
+                if !self.solver.is_copy(&base) && base != Ty::Error && mode.is_some() && !by_ref {
                     self.out.diagnostics.push(crate::Diagnostic::unsupported(
                         range,
                         "a refinement test, through a borrow, of a value that is not `Copy`",

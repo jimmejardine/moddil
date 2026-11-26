@@ -46,5 +46,10 @@ items may name each other in any order.
 
 **refine.pat.1** At the top of a `match` arm, `q: X` matches a value of `X`'s base for which `p`
 holds, and then matches it as an `X` with `q`. A base that is not `Copy` is given to the
-predicate and back, so the value is the same for the next arm; matched through a borrow it must
-be `Copy`, for now (I0001). Exhaustiveness treats the arm as one with a guard: it covers nothing.
+predicate and back, so the value is the same for the next arm. Exhaustiveness treats the arm as
+one with a guard: it covers nothing.
+
+**refine.pat.2** Matched through a borrow (a `&T` where `X` refines a `T` that is not a borrow),
+`q: X` tests what the borrow points to, where it is: a copy of it if `T` is `Copy`, or else `p`
+of it through the borrow, so nothing is moved or cloned; `q` then binds as a borrow of an `X`
+(`match s { w: Word => w.len(), _ => 0 }` for `s: &String`).

@@ -261,8 +261,13 @@ pub fn body<'db>(db: &'db dyn Db, owner: Owner<'db>) -> Lowered {
                         Some(e) => cx.expr(&e),
                         None => cx.missing(range),
                     };
-                    let back = cx.alloc(ExprKind::Local(this), range);
-                    cx.alloc(ExprKind::Tuple(vec![pred, back]), range)
+                    // `holds_ref` is `p` of what `self`, a borrow, points to (`refine.pat.2`).
+                    if sig.name == "holds_ref" {
+                        pred
+                    } else {
+                        let back = cx.alloc(ExprKind::Local(this), range);
+                        cx.alloc(ExprKind::Tuple(vec![pred, back]), range)
+                    }
                 };
                 cx.out.body.root = Some(id);
                 return cx.out;

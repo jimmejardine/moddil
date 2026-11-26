@@ -1148,12 +1148,24 @@ impl Collector<'_> {
             false,
         );
         let new_sig = sig("new", refined, error, true);
+        // For a value matched through a borrow, the test of what it points to (`refine.pat.2`).
+        let scalar = matches!(ty, Ty::Int | Ty::Num(_) | Ty::Bool | Ty::Char | Ty::Error);
+        let by_ref = (!scalar).then(|| {
+            let mut s = sig("holds_ref", Ty::Bool, Ty::Never, false);
+            s.params[0].ty = Ty::reference(false, ty.clone());
+            s
+        });
         self.tree.fns.push(holds_sig);
         self.tree.fns.push(new_sig);
+        let holds_ref = by_ref.map(|s| {
+            self.tree.fns.push(s);
+            holds + 2
+        });
         self.tree.types[k].refinement = Some(crate::items::Refinement {
             clause: pred.syntax().text().to_string().trim().to_string(),
             holds,
             new: holds + 1,
+            holds_ref,
         });
     }
 }

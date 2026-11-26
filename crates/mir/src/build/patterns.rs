@@ -78,13 +78,37 @@ impl Builder<'_> {
                 refinement,
                 pat: inner,
             } => {
-                let holds = self.items.types[refinement as usize]
+                let r = self.items.types[refinement as usize]
                     .refinement
                     .as_ref()
-                    .expect("a refinement")
-                    .holds;
+                    .expect("a refinement");
+                let (holds, holds_ref) = (r.holds, r.holds_ref);
                 let base = self.items.types[refinement as usize].ty.clone();
                 let copy = self.is_copy(&base);
+                // Matched through a borrow, a value that is not `Copy` is tested where it is
+                // (`refine.pat.2`).
+                if !copy
+                    && self.types.pat_through_borrow(pat)
+                    && let Some(f) = holds_ref
+                {
+                    let r = self.temp(Ty::reference(false, base));
+                    self.cfg.assign(r, Rvalue::Ref(false, place.clone()));
+                    let ok = self.temp(Ty::Bool);
+                    let range = self.hir.pats[pat].range;
+                    self.call_into(
+                        None,
+                        moddil_sema::Callee::Fn {
+                            func: f,
+                            args: Vec::new(),
+                        },
+                        Place::local(ok),
+                        vec![Operand::Move(Place::local(r))],
+                        range,
+                    );
+                    self.cfg.branch(Operand::Copy(Place::local(ok)), fail);
+                    self.test_pat(inner, place, fail);
+                    return;
+                }
                 let ok = self.temp(Ty::tuple(vec![Ty::Bool, base]));
                 let range = self.hir.pats[pat].range;
                 let value = if copy {

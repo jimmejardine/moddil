@@ -1,4 +1,4 @@
-// covers: refine.1, refine.base.1, refine.new.1, refine.lit.1, refine.pat.1
+// covers: refine.1, refine.base.1, refine.new.1, refine.lit.1, refine.pat.1, refine.pat.2
 type Port = int where self >= 1024 && self <= 65535;
 type Code = String where self.len() == 3 && self.chars().all(|c| c.is_alphabetic());
 
@@ -51,4 +51,36 @@ test "a borrow of a refined value is a borrow of its base" {
     s.push_str("xyz");
     let c = Code::new(s) ?! "three letters";
     width(&c)  // => 3
+}
+
+type ShortWord = String where self.len() <= 4;
+
+type Digit = int where self >= 0 && self < 10;
+
+fn word_len(s: &String) -> int {
+    match s {
+        w: ShortWord => w.len(),
+        _            => -1,
+    }
+}
+
+fn digit(n: &int) -> int {
+    match n {
+        d: Digit => 1,
+        _        => 2,
+    }
+}
+
+test "a refinement pattern through a borrow tests what it points to" {
+    let a = "abc".to_string();
+    let b = "abcdef".to_string();
+    word_len(&a)  // => 3
+    ;
+    word_len(&b)  // => -1
+    ;
+    a.len()  // => 3
+    ;
+    digit(&3)  // => 1
+    ;
+    digit(&30)  // => 2
 }
