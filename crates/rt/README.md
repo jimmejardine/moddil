@@ -13,7 +13,11 @@ the host takes it once a run ends.
   `with Runtime = runtime::cpus::parallel(&cpus)`), so tasks run at once. A trap then stops the
   running ones at their next safe point. What differs between targets is the baton
   ([`src/baton.rs`](src/baton.rs)):
-  - natively, a thread per task, waiting on a condition variable;
+  - natively, a coroutine per task (`corosensei`), each with a 256 MiB stack reserved and
+    committed as it is used, resumed by a worker thread (one a turn) once it has a turn; the
+    run's own task runs on the thread that began the run, waiting on a condition variable. What
+    a task keeps of its thread's locals (its call sites, its `const` depth) goes with it, and the
+    runtime reads its thread's locals afresh after a switch;
   - built for `wasm32` ([`moddil-rt-wasm`](../rt-wasm/README.md)), a JSPI call per task, which
     suspends in the host's `switch` until its turn comes again.
 - **Site tables** ([`src/sites.rs`](src/sites.rs)): the text of a trap for a program run without

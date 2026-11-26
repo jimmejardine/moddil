@@ -31,9 +31,14 @@ impl Turns {
         self.slots = n.max(1);
     }
 
-    /// Whether tasks run at once: the parallel runtime.
-    pub(crate) fn parallel(&self) -> bool {
-        self.slots > 1
+    /// How many tasks may run at once.
+    pub(crate) fn slots(&self) -> usize {
+        self.slots
+    }
+
+    /// The tasks with a turn.
+    pub(crate) fn holders(&self) -> impl Iterator<Item = usize> + '_ {
+        self.running.iter().copied()
     }
 
     /// Whether task `t` has a turn.

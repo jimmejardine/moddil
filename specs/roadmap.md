@@ -179,16 +179,16 @@ half, then P38's stages, with P41's benchmarks as each lands (`runtime.md`).
 
 **P38. The parallel runtime** (`crates/rt`, `crates/sched`, `crates/native`; L, after P40, with
 P41's tests). In stages, each a commit with P41's suite green:
-1. (Several tasks at once, a thread per task, is built: `crates/rt/src/turns.rs`.) Under it an
-   `Rc` is counted atomically by every task, as no task is its owner. Biased counting comes back
-   with stage 2: the running task's number from its stack (stacks reserved aligned, the task's
-   context at the base), and the merge queue (`memory.md`): a non-owner that takes the shared
-   count below 0 queues the allocation to its owner task, which the runtime drains when it
-   resumes the task and at its end. The OS's events and timers come in only when no task runs
-   until stage 6.
-2. User-space stacks with `corosensei` (decided over a context switch of our own; `runtime.md`):
-   stacks reserved large, committed lazily, with guard pages; tasks become coroutines on worker
-   threads (M:N).
+1. (Tasks at once, as coroutines on a worker for each turn, are built: `crates/rt/src/turns.rs`
+   and `baton.rs`.) Under the parallel runtime an `Rc` is counted atomically by every task, as
+   no task is its owner. Biased counting comes back with the running task's number from its
+   stack (stacks reserved aligned, the task's context at the base), and the merge queue
+   (`memory.md`): a non-owner that takes the shared count below 0 queues the allocation to its
+   owner task, which the runtime drains when it resumes the task and at its end. The run's own
+   task runs on the thread that began the run, not as a coroutine, so it cannot be stopped at a
+   safe point of an aborted run. A turn's change wakes every worker through one condition
+   variable (a ping-pong of tasks is about 1.2 µs a switch). The OS's events and timers come in
+   only when no task runs until stage 6.
 3. Workers and stealing: a worker per core with a Chase-Lev deque; stealing; parking and
    unparking with an event count; a spawned task first on its spawner's worker.
 4. Preemption: a timer thread sets each worker's safe-point word (`moddil_rt_preempt`, one word

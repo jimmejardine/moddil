@@ -74,6 +74,30 @@ thread_local! {
     static IN_STATIC: Cell<u32> = const { Cell::new(0) };
 }
 
+/// What a task keeps of its thread's state while another runs on the thread: its call sites,
+/// and how many `const` values it is computing.
+#[derive(Default)]
+pub(crate) struct TaskLocals {
+    stack: Vec<u32>,
+    in_static: u32,
+}
+
+/// The running task's [`TaskLocals`], taken from its thread.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) fn save_locals() -> TaskLocals {
+    TaskLocals {
+        stack: STACK.with(|s| std::mem::take(&mut *s.borrow_mut())),
+        in_static: IN_STATIC.with(|d| d.replace(0)),
+    }
+}
+
+/// Gives the thread the [`TaskLocals`] of the task about to run on it.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) fn restore_locals(l: TaskLocals) {
+    STACK.with(|s| *s.borrow_mut() = l.stack);
+    IN_STATIC.with(|d| d.set(l.in_static));
+}
+
 /// Counts `n` more allocations not yet freed (fewer, if negative), unless they are a `const`
 /// item's.
 pub(crate) fn count_live(n: i64) {
@@ -112,7 +136,8 @@ fn new_ctx() -> Arc<Ctx> {
     })
 }
 
-/// This thread's run.
+/// This thread's run: read afresh after a task's coroutine may have moved threads.
+#[inline(never)]
 pub(crate) fn ctx() -> Arc<Ctx> {
     CTX.with(|c| c.borrow_mut().get_or_insert_with(new_ctx).clone())
 }
@@ -132,7 +157,8 @@ pub(crate) fn with<R>(f: impl FnOnce(&mut State) -> R) -> R {
     r
 }
 
-/// The running task's number.
+/// The running task's number: read afresh after a task's coroutine may have moved threads.
+#[inline(never)]
 pub(crate) fn me() -> usize {
     TASK.with(Cell::get)
 }
@@ -161,11 +187,9 @@ pub(crate) static PREEMPT: AtomicU8 = AtomicU8::new(0);
 /// At a safe point, with [`PREEMPT`] set: gives way.
 #[unsafe(export_name = "moddil_rt_safe_point")]
 pub(crate) extern "C" fn safe_point() {
-    // A run that ended: the task runs no more of its code (its thread waits for the process).
+    // A run that ended: the task runs no more of its code.
     if CTX.with(|c| c.borrow().as_ref().is_some_and(|c| c.lock().aborted)) {
-        loop {
-            std::thread::park();
-        }
+        baton::abandon();
     }
     PREEMPT.store(0, Ordering::Relaxed);
 }
@@ -187,7 +211,7 @@ pub(crate) fn running(t: usize) {
 /// runtime, each running stops at its next safe point.
 fn abort(c: &Ctx, s: &mut State) {
     s.aborted = true;
-    if s.turns.parallel() {
+    if s.turns.slots() > 1 {
         PREEMPT.store(1, Ordering::Relaxed);
     }
     baton::pass_on(c, s);
@@ -201,16 +225,15 @@ pub fn begin_run() {
     running(0);
 }
 
-/// Ends this thread's run: waits for its tasks' threads to end; for an aborted run, only for
-/// those not stopped at a safe point, which wait for the process.
+/// Ends this thread's run: its workers stop, and it waits for them (a task stopped at a safe
+/// point of an aborted run has given its worker back).
 pub fn end_run() {
-    let (threads, aborted) = with(|s| (baton::end_run(s), s.aborted && s.turns.parallel()));
-    if aborted {
-        return;
-    }
+    let threads = with(baton::end_run);
+    ctx().turn.notify_all();
     for t in threads {
         let _ = t.join();
     }
+    PREEMPT.store(0, Ordering::Relaxed);
 }
 
 /// Gives the host's functions `host`, for the run.
@@ -436,7 +459,7 @@ pub(crate) fn run_task(c: &Arc<Ctx>, t: usize, spec: Start) {
         abort(c, &mut s);
         return;
     }
-    baton::pass_on(c, &s);
+    baton::pass_on(c, &mut s);
 }
 
 fn spec_of(spec: &TaskSpec) -> Start {

@@ -3,8 +3,10 @@
 //! called. Everything else about tasks ([`crate::run`], [`crate::sched`]) is the same on every
 //! target; this is what is not.
 //!
-//! - **Threads** (native code): each task is a thread, waiting on the run's condition variable
-//!   until it holds the baton.
+//! - **Workers** (native code): each task but the run's own is a coroutine (`corosensei`), with
+//!   a stack of its own, which a worker thread resumes once the task has a turn and which gives
+//!   the worker back where it waits for its turn again; there is a worker for each turn. The run's
+//!   own task runs on the thread that began the run, waiting on the run's condition variable.
 //! - **JSPI** (`wasm32`): each task is a call the host started as a promising one; handing over
 //!   calls the host's suspending `moddil_host_switch`, which resumes the next task's call and
 //!   returns once this one's turn comes again. The code and the glue are slots in the program's
@@ -13,7 +15,7 @@
 #![allow(unsafe_code)]
 
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) use threads::*;
+pub(crate) use workers::*;
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) use jspi::*;
@@ -21,16 +23,24 @@ pub(crate) use jspi::*;
 #[cfg(target_arch = "wasm32")]
 pub use jspi::{DropFn, TaskFn, task};
 #[cfg(not(target_arch = "wasm32"))]
-pub use threads::{DropFn, TaskFn};
+pub use workers::{DropFn, TaskFn};
 
 #[cfg(not(target_arch = "wasm32"))]
-mod threads {
+mod workers {
+    use std::cell::Cell;
+    use std::collections::{HashMap, HashSet, VecDeque};
     use std::sync::{Arc, MutexGuard};
 
-    use crate::run::{Ctx, Start, State, enter_task, me, run_task, running};
+    use corosensei::stack::DefaultStack;
+    use corosensei::{Coroutine, CoroutineResult, Yielder};
 
-    /// How much stack a task's thread has.
+    use crate::run::{Ctx, Start, State, TaskLocals, enter_task, me, run_task, running};
+
+    /// How much stack a task reserves: committed as it is used, with a guard page below.
     const TASK_STACK: usize = 256 * 1024 * 1024;
+
+    /// The run's own task, which runs on the thread that began the run, not on a worker.
+    const HOST: usize = 0;
 
     /// A task's code: its closure's body, given its captures and its argument, writing its
     /// result to `out` and an error to `err`, in the platform's C convention: its status.
@@ -40,61 +50,205 @@ mod threads {
     /// platform's C convention): 0, or the status of a trap in a destructor.
     pub type DropFn = extern "C" fn(*mut u8) -> i8;
 
-    /// What the baton keeps for a run: its tasks' threads.
-    #[derive(Default)]
-    pub(crate) struct Baton {
-        threads: Vec<std::thread::JoinHandle<()>>,
+    /// Why a task's coroutine gives its worker back.
+    enum Pause {
+        /// It waits for its turn.
+        Wait,
+        /// The run is over and the task runs no more of its code: its coroutine is left.
+        Abandon,
     }
 
-    /// Starts task `t`'s thread, which waits for its turn and then runs.
+    /// A task's coroutine, and what it keeps of its thread's state while it is not running.
+    struct Task {
+        co: Coroutine<(), Pause, (), DefaultStack>,
+        locals: TaskLocals,
+    }
+
+    // SAFETY: a coroutine runs on one worker at a time, which the baton's lock hands it to;
+    // nothing on its stack refers to a thread's locals across a suspension (the runtime reads
+    // them afresh, and compiled code keeps none).
+    unsafe impl Send for Task {}
+
+    /// What the baton keeps for a run: its tasks' coroutines, those with a turn waiting for a
+    /// worker, and the workers.
+    #[derive(Default)]
+    pub(crate) struct Baton {
+        /// The tasks not yet started.
+        starts: HashMap<usize, Start>,
+        /// The tasks suspended.
+        tasks: HashMap<usize, Task>,
+        /// The tasks with a turn, waiting for a worker to run them, in the order given.
+        queue: VecDeque<usize>,
+        /// The tasks a worker runs now.
+        busy: HashSet<usize>,
+        workers: Vec<std::thread::JoinHandle<()>>,
+        /// Whether the run has ended, and the workers with it.
+        over: bool,
+    }
+
+    thread_local! {
+        /// On a worker, the running coroutine's yielder: what a task suspends through.
+        static YIELDER: Cell<*const Yielder<(), Pause>> = const { Cell::new(std::ptr::null()) };
+    }
+
+    /// Queues task `t`, to start when it gets a turn; and starts a worker for each turn.
     pub(crate) fn start(s: &mut State, c: &Arc<Ctx>, t: usize, spec: Start) {
-        let c = c.clone();
-        let thread = std::thread::Builder::new()
-            .stack_size(TASK_STACK)
-            .spawn(move || {
-                enter_task(&c, t);
-                {
-                    let mut s = c.lock();
-                    while !s.turns.has(t) && !s.aborted {
-                        s = c
-                            .turn
-                            .wait(s)
-                            .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    }
-                    if s.aborted {
+        s.baton.starts.insert(t, spec);
+        while s.baton.workers.len() < s.turns.slots() {
+            let c = c.clone();
+            let w = std::thread::Builder::new()
+                .name("moddil-worker".to_string())
+                .spawn(move || work(&c))
+                .expect("a worker thread");
+            s.baton.workers.push(w);
+        }
+    }
+
+    /// A worker: runs the tasks given turns until the run ends.
+    fn work(c: &Arc<Ctx>) {
+        loop {
+            let (t, mut task) = {
+                let mut s = c.lock();
+                loop {
+                    if s.baton.over {
                         return;
                     }
+                    if let Some(t) = s.baton.queue.pop_front() {
+                        if let Some(spec) = s.baton.starts.remove(&t) {
+                            let c = c.clone();
+                            let stack = DefaultStack::new(TASK_STACK).expect("a task's stack");
+                            let co =
+                                Coroutine::with_stack(stack, move |y: &Yielder<(), Pause>, ()| {
+                                    set_yielder(y);
+                                    run_task(&c, t, spec);
+                                });
+                            s.baton.busy.insert(t);
+                            break (
+                                t,
+                                Task {
+                                    co,
+                                    locals: TaskLocals::default(),
+                                },
+                            );
+                        }
+                        if let Some(task) = s.baton.tasks.remove(&t) {
+                            s.baton.busy.insert(t);
+                            break (t, task);
+                        }
+                        // Running elsewhere, about to suspend: that worker queues it again.
+                        continue;
+                    }
+                    s = c
+                        .turn
+                        .wait(s)
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                 }
-                running(t);
-                run_task(&c, t, spec);
-            })
-            .expect("a thread for a task");
-        s.baton.threads.push(thread);
+            };
+            enter_task(c, t);
+            running(t);
+            crate::run::restore_locals(std::mem::take(&mut task.locals));
+            let r = task.co.resume(());
+            set_yielder(std::ptr::null());
+            task.locals = crate::run::save_locals();
+            let mut s = c.lock();
+            s.baton.busy.remove(&t);
+            match r {
+                CoroutineResult::Return(()) => {}
+                // Left, not dropped: its stack holds frames that must not be unwound.
+                CoroutineResult::Yield(Pause::Abandon) => std::mem::forget(task),
+                CoroutineResult::Yield(Pause::Wait) => {
+                    // Given a turn again while it suspended, or to unwind an aborted run.
+                    let again = s.turns.has(t) || s.aborted;
+                    s.baton.tasks.insert(t, task);
+                    if again {
+                        s.baton.queue.push_back(t);
+                        c.turn.notify_all();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Suspends the running task's coroutine for `why`, giving its worker back. It may resume
+    /// on another worker: what it reads of its thread's locals after that, it reads afresh, in
+    /// functions of their own, as the compiler may keep a thread local's address within one.
+    fn pause(why: Pause) {
+        let y = yielder();
+        // SAFETY: the yielder is the running coroutine's, which lives while it runs.
+        unsafe { (*y).suspend(why) };
+        set_yielder(y);
+    }
+
+    /// This thread's running coroutine's yielder (null if none).
+    #[inline(never)]
+    fn yielder() -> *const Yielder<(), Pause> {
+        YIELDER.with(Cell::get)
+    }
+
+    /// Makes `y` this thread's running coroutine's yielder.
+    #[inline(never)]
+    fn set_yielder(y: *const Yielder<(), Pause>) {
+        YIELDER.with(|x| x.set(y));
+    }
+
+    /// Whether the running code is a task's coroutine on a worker.
+    fn on_worker() -> bool {
+        !yielder().is_null()
     }
 
     /// Wakes the tasks given turns, and waits for this one's: 0, or 1 if the run is aborted.
     pub(crate) fn wait_turn(c: &Ctx, mut s: MutexGuard<'_, State>) -> u8 {
         let me = me();
-        c.turn.notify_all();
-        while !s.turns.has(me) && !s.aborted {
-            s = c
-                .turn
-                .wait(s)
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        pass_on(c, &mut s);
+        if !on_worker() {
+            while !s.turns.has(me) && !s.aborted {
+                s = c
+                    .turn
+                    .wait(s)
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+            }
+            running(me);
+            return u8::from(s.aborted);
         }
-        running(me);
-        u8::from(s.aborted)
+        if s.turns.has(me) || s.aborted {
+            return u8::from(s.aborted);
+        }
+        drop(s);
+        pause(Pause::Wait);
+        u8::from(c.lock().aborted)
     }
 
-    /// Wakes whoever the state says goes on: the task holding the turn, or, in an aborted run,
-    /// every one waiting.
-    pub(crate) fn pass_on(c: &Ctx, _: &State) {
+    /// Hands the tasks given turns to the workers (the run's own task waits on its thread), and
+    /// wakes whoever goes on; in an aborted run, every task waiting, to unwind.
+    pub(crate) fn pass_on(c: &Ctx, s: &mut State) {
+        let b = &mut s.baton;
+        let mut go: Vec<usize> = if s.aborted {
+            b.tasks.keys().copied().collect()
+        } else {
+            s.turns.holders().filter(|&t| t != HOST).collect()
+        };
+        go.sort_unstable();
+        for t in go {
+            if !b.busy.contains(&t) && !b.queue.contains(&t) {
+                b.queue.push_back(t);
+            }
+        }
         c.turn.notify_all();
     }
 
-    /// Waits for the run's threads to end.
+    /// At a safe point of an aborted run: a task on a worker runs no more of its code. The
+    /// run's own task, on the thread that began the run, goes on to its next call of the
+    /// runtime, which gives it the trapped status.
+    pub(crate) fn abandon() {
+        if on_worker() {
+            pause(Pause::Abandon);
+        }
+    }
+
+    /// Ends the run's workers: the threads to wait for.
     pub(crate) fn end_run(s: &mut State) -> Vec<std::thread::JoinHandle<()>> {
-        std::mem::take(&mut s.baton.threads)
+        s.baton.over = true;
+        std::mem::take(&mut s.baton.workers)
     }
 
     /// Runs a task's code.
@@ -181,7 +335,7 @@ mod jspi {
 
     /// Asks the host to go on with whoever the state says: the task holding the turn, or, in
     /// an aborted run, every one waiting.
-    pub(crate) fn pass_on(_: &Ctx, s: &State) {
+    pub(crate) fn pass_on(_: &Ctx, s: &mut State) {
         // SAFETY: the host's functions take a task's number, or nothing.
         unsafe {
             if s.aborted {
@@ -196,6 +350,9 @@ mod jspi {
     pub(crate) fn end_run(_: &mut State) -> Vec<std::thread::JoinHandle<()>> {
         Vec::new()
     }
+
+    /// At a safe point of an aborted run (WASM has none: its code checks for none).
+    pub(crate) fn abandon() {}
 
     /// Runs a task's code.
     pub(crate) fn call_code(spec: &Start, out: *mut u8, err: *mut u8) -> i8 {

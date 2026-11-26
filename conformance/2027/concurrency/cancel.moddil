@@ -58,7 +58,7 @@ test "a failing body cancels its tasks" {
     };
     shown(r)  // => -2
     ;
-    cleaned  // => 1
+    cleaned  // => 1 (in parallel, also 11)
 }
 
 test "a task still held keeps its error for its join" {
