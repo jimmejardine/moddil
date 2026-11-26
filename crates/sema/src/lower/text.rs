@@ -223,13 +223,20 @@ impl Lowerer<'_> {
     /// `fmt"""` block (`text.lit.block.1`) dedented as a block is, each hole on one line.
     pub(super) fn tagged(&mut self, tok: &SyntaxToken, range: TextRange) -> ExprId {
         let text = tok.text();
-        let tag_len = text.find('"').unwrap_or(0);
-        let (tag, lit) = text.split_at(tag_len);
-        let lit = lit.to_string();
-        if tag != "fmt" {
-            return self.tag_call(tag, &lit, range);
+        let t = moddil_syntax::Tagged::of(text);
+        if t.tag != "fmt" {
+            return self.tag_call(&t, range);
         }
-        let start = range.start as usize + tag_len;
+        if t.raw {
+            self.report(
+                Code::E0902,
+                range,
+                "a `fmt` literal cannot be raw: its holes need `{{` and `}}` to write braces",
+            );
+            return self.missing(range);
+        }
+        let lit = t.lit.to_string();
+        let start = range.start as usize + t.lit_at;
         let mut pieces = Vec::new();
         let mut lit_buf = String::new();
         if lit.starts_with("\"\"\"") {
@@ -291,7 +298,8 @@ impl Lowerer<'_> {
     /// `tag` in scope with the literal's text, in a `const { }` block, so it runs when
     /// compiling. A tag taking `&[&str]` has holes (`comptime.tag.2`): it is called with the
     /// text's parts between them, and its value's `bind` with the holes' values.
-    fn tag_call(&mut self, tag: &str, lit: &str, range: TextRange) -> ExprId {
+    fn tag_call(&mut self, t: &moddil_syntax::Tagged<'_>, range: TextRange) -> ExprId {
+        let (tag, lit) = (t.tag, t.lit);
         let f = match self
             .types
             .tree
@@ -330,7 +338,7 @@ impl Lowerer<'_> {
             }
         };
         if parts {
-            return self.parts_call(f, tag, lit, range);
+            return self.parts_call(f, t, range);
         }
         // As written, as a raw string's text (`comptime.tag.1`).
         let text = match string_value(&format!("r{lit}")) {
@@ -357,9 +365,9 @@ impl Lowerer<'_> {
         );
         let block = self.alloc(ExprKind::ConstBlock(call), range);
         // Where the text starts: after the tag and the opening quotes.
-        let quotes = if lit.starts_with("\"\"\"") { 3 } else { 1 };
-        let at = (tag.len() + quotes) as u32;
-        self.out.body.tagged.insert(block, at);
+        let (_, at) = t.body();
+        let text = crate::hir::TagText::at(range.start + at as u32, range.end);
+        self.out.body.tagged.insert(block, text);
         // A literal with fields is its value in the wrapper that reads them
         // (`comptime.tag.fields.1`).
         let (_, make) = crate::collect::wrapper_names(range);
@@ -390,12 +398,17 @@ impl Lowerer<'_> {
     /// `tag"… {e} …"` for a tag taking `&[&str]` (`comptime.tag.2`): `const { tag(&[parts]) }`,
     /// and with holes, its value's `bind((e, …,))`. The text is as written, but `{{` and `}}`
     /// are braces.
-    fn parts_call(&mut self, f: u32, tag: &str, lit: &str, range: TextRange) -> ExprId {
-        let start = range.start as usize + tag.len();
+    fn parts_call(&mut self, f: u32, t: &moddil_syntax::Tagged<'_>, range: TextRange) -> ExprId {
+        let (tag, lit) = (t.tag, t.lit);
+        let start = range.start as usize + t.lit_at;
         let mut parts = Vec::new();
         let mut holes = Vec::new();
         let mut cur = String::new();
-        if lit.starts_with("\"\"\"") {
+        let mut text = crate::hir::TagText {
+            runs: Vec::new(),
+            end: range.end,
+        };
+        if !t.raw && lit.starts_with("\"\"\"") {
             let lines = match block_lines(lit) {
                 Ok(lines) => lines,
                 Err(why) => {
@@ -408,16 +421,25 @@ impl Lowerer<'_> {
                 }
             };
             for line in lines {
-                if let Some((off, text)) = line
-                    && !self.parts_scan(text, start + off, &mut parts, &mut holes, &mut cur)
+                if let Some((off, line)) = line
+                    && !self.parts_scan(
+                        line,
+                        start + off,
+                        &mut parts,
+                        &mut holes,
+                        &mut cur,
+                        &mut text,
+                    )
                 {
                     return self.missing(range);
                 }
                 cur.push('\n');
             }
         } else {
-            let inner = &lit[1..lit.len() - 1];
-            if !self.parts_scan(inner, start + 1, &mut parts, &mut holes, &mut cur) {
+            // A raw literal (`sqlr#"…"#`) is between its `#"` and `"#`, so a hole may hold a `"`.
+            let (inner, at) = t.body();
+            let from = range.start as usize + at;
+            if !self.parts_scan(inner, from, &mut parts, &mut holes, &mut cur, &mut text) {
                 return self.missing(range);
             }
         }
@@ -457,6 +479,7 @@ impl Lowerer<'_> {
             range,
         );
         let block = self.alloc(ExprKind::ConstBlock(call), range);
+        self.out.body.tagged.insert(block, text);
         if holes.is_empty() {
             return block;
         }
@@ -482,13 +505,19 @@ impl Lowerer<'_> {
         parts: &mut Vec<String>,
         holes: &mut Vec<ExprId>,
         cur: &mut String,
+        text: &mut crate::hir::TagText,
     ) -> bool {
         let chars: Vec<char> = inner.chars().collect();
         let mut i = 0;
         let mut offset = 0;
+        // Where the next byte of the parts joined is.
+        let joined = |parts: &[String], cur: &str| {
+            (parts.iter().map(String::len).sum::<usize>() + cur.len()) as u32
+        };
         while i < chars.len() {
             match chars[i] {
                 c @ ('{' | '}') if chars.get(i + 1) == Some(&c) => {
+                    text.mark(joined(parts, cur), (start + offset) as u32);
                     cur.push(c);
                     i += 2;
                     offset += 2;
@@ -520,6 +549,7 @@ impl Lowerer<'_> {
                     i = end + 1;
                 }
                 c => {
+                    text.mark(joined(parts, cur), (start + offset) as u32);
                     cur.push(c);
                     offset += c.len_utf8();
                     i += 1;

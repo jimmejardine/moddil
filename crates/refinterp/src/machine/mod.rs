@@ -21,6 +21,7 @@ mod effects;
 mod errors;
 mod exprs;
 mod fields;
+pub(crate) use fields::FIELDS;
 mod ops;
 mod patterns;
 pub(crate) mod tasks;
@@ -243,7 +244,7 @@ impl Machine<'_> {
         match v {
             Value::Tuple(_) => name.parse().expect("a tuple index"),
             // What a tagged literal's `read` gives: its fields by name (`comptime.tag.fields.1`).
-            Value::Adt { ty, variant, .. } if ty == fields::FIELDS => variant
+            Value::Adt { ty, variant, .. } if ty == FIELDS => variant
                 .split(',')
                 .position(|f| f == name)
                 .expect("a checked field"),
@@ -302,7 +303,7 @@ impl Machine<'_> {
                 // (`expr.field.deref.1`).
                 if let ast::Expr::Field(_) = e
                     && let Value::Adt { ty, variant, .. } = self.memory.load(&p)
-                    && ty != fields::FIELDS
+                    && ty != FIELDS
                     && (ty == fields::WRAPPER
                         || !self
                             .program

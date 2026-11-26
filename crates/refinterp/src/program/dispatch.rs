@@ -22,12 +22,23 @@ impl Program {
             return true;
         }
         match head {
-            Head::Adt(ty) => self.adts[ty].derives.iter().any(|d| d == name),
+            Head::Adt(ty) => self.derives(ty).iter().any(|d| d == name),
             Head::Ref | Head::Tuple(_) | Head::Unit | Head::Array => {
                 matches!(name, "Clone" | "Copy")
             }
             _ => false,
         }
+    }
+
+    /// The traits struct or enum `ty` derives: what `read` gives a tagged literal's fields as
+    /// derives the compiled struct's (`comptime.tag.fields.1`), though it has no item here.
+    fn derives(&self, ty: &str) -> &[String] {
+        static FIELDS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        if ty == crate::machine::FIELDS {
+            return FIELDS
+                .get_or_init(|| ["Clone", "Debug", "PartialEq"].map(str::to_string).to_vec());
+        }
+        self.adts.get(ty).map_or(&[], |a| a.derives.as_slice())
     }
 
     /// The methods called `name` that values of kind `head` have, in the order they are
@@ -69,10 +80,8 @@ impl Program {
             }
         }
         // A tagged literal's wrapper has no type of its own here (`comptime.tag.fields.1`).
-        if let Head::Adt(ty) = head
-            && let Some(adt) = self.adts.get(ty)
-        {
-            for d in &adt.derives {
+        if let Head::Adt(ty) = head {
+            for d in self.derives(ty) {
                 let provides = matches!(
                     (d.as_str(), name),
                     ("Clone", "clone")
@@ -141,7 +150,7 @@ impl Program {
             }
         }
         if let Head::Adt(ty) = head
-            && self.adts[ty].derives.iter().any(|d| d == tr)
+            && self.derives(ty).iter().any(|d| d == tr)
             && matches!(
                 (tr, name),
                 ("Clone", "clone")

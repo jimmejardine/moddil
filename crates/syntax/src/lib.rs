@@ -23,7 +23,7 @@ pub use doc::{DocExample, doc_examples};
 pub use expected::{Expected, expected};
 pub use kinds::SyntaxKind;
 pub use lexer::{Token, lex};
-pub use text::{SyntaxError, TextRange, line_col};
+pub use text::{SyntaxError, Tagged, TextRange, line_col};
 pub use tree::{
     GreenBuilder, GreenElement, GreenNode, GreenToken, SyntaxElement, SyntaxNode, SyntaxToken,
 };

@@ -390,6 +390,19 @@ impl Machine<'_> {
                 let Value::Ref(out, _) = args[1].clone() else {
                     unreachable!("a `&mut dyn TextWrite`")
                 };
+                // What a tagged literal's `read` gives: its fields, named, and no type's name
+                // (`comptime.tag.fields.1`).
+                if ty == super::FIELDS {
+                    self.push_text(&out, "{ ")?;
+                    for (i, f) in variant.split(',').enumerate() {
+                        let sep = if i == 0 { "" } else { ", " };
+                        self.push_text(&out, &format!("{sep}{f}: "))?;
+                        let x = vec![Value::Ref(field(&a, i), false), args[1].clone()];
+                        self.call_trait("Debug", "fmt", x, range)?;
+                    }
+                    self.push_text(&out, " }")?;
+                    return Ok(Value::Unit);
+                }
                 let info = &self.program.adts[ty];
                 let path = if info.is_enum {
                     format!("{}::{variant}", info.name)

@@ -55,7 +55,9 @@ its braces are text. The call is a `const { }` block (**comptime.block.2**): com
 compiling, so its value is static data, and an error in it is a compile error. A tag that is not
 such a function in scope, or that takes anything but one `&str` or one `&[&str]`
 (**comptime.tag.2**), is an error (E1011). The `moddil/regex` mod's `re` is one: `re"^\d+$"` is a
-`Regex` compiled when compiling.
+`Regex` compiled when compiling. A **raw** tagged literal, `namer#"…"#` with any number of `#`s
+(**text.lit.raw.1**), is the tag `name`'s, its text between the `#"` and the `"#`: so the text
+may hold a `"`. `fmt` has none (E0902).
 
 **comptime.tag.2** A tag taking `&[&str]` has **holes**: in its literal, `{e}` is an expression
 `e` (E0902 if empty) and `{{` and `}}` are braces (a lone `}` is E0902). The text, as written but
@@ -65,8 +67,7 @@ it is `const { tag(&[parts]) }.bind((e1, e2, …,))`: the value's `bind` method 
 tuple of the holes' values, evaluated left to right where the literal is, and its parameter's type
 types them, as for any call. So a hole is a value given to the tag's value, never text spliced into
 the literal: `sql"… WHERE id = {user}"` gives the query and `user` apart. A hole cannot hold a `"`,
-which would end the literal; a `compile_error` (**comptime.error.1**) in such a tag is reported at
-the tag.
+which would end the literal, except in a raw one (`sqlr#"… {name("x")}"#`).
 
 **comptime.tag.fields.1** A tagged literal whose tag takes a `&str` and gives a value that
 implements the prelude's `TagFields` has **fields**: one for each name its value's
@@ -75,7 +76,8 @@ implements the prelude's `TagFields` has **fields**: one for each name its value
 methods are the value's, and that has `read(text: &str)`: an `Option` of a struct with those
 fields, whose values are the value's `field_values(text)`, `None` if that is `None`. A field every
 reading has that a reading lacks traps. The wrapper and the struct are hidden types, which no code
-can name. The `moddil/regex` mod's `Regex` implements it, a field for each named group:
+can name; the struct is `Clone` and `PartialEq` field by field, and `Debug` writes its fields
+with no type's name (`{ year: "2026", month: "11", day: None }`). The `moddil/regex` mod's `Regex` implements it, a field for each named group:
 
 ```rust
 let date = re"(?<year>\d{4})-(?<month>\d{2})(-(?<day>\d{2}))?";
@@ -94,8 +96,9 @@ trap, or running out of fuel, is E1004.
 
 **comptime.error.1** `compile_error(message, start, end)`, a prelude function, ends compile-time
 code with an error, reported when compiling with `message` (E1010): at bytes `start` to `end` of
-the text of the tagged literal being evaluated, or at the const or block. Called when the program
-runs, it traps (`unreachable`).
+the text of the tagged literal being evaluated, or at the const or block. For a tag taking
+`&[&str]`, the text is its parts joined, and each byte is reported where it is in the literal,
+past the holes and the `{{`s between. Called when the program runs, it traps (`unreachable`).
 
 **comptime.eval.2** `#[fuel(n)]` on a const item, or on a statement (a `let` or an expression
 statement), gives the const, or each `const { }` block in the statement, `n` steps in place of

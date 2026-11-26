@@ -67,8 +67,8 @@ pub(crate) fn tag_items(db: &dyn Db, program: Program) -> TagItems {
         let Some(module) = tree.modules.iter().position(|m| m.file == Some(f)) else {
             continue;
         };
-        let at = text.find('"').unwrap_or(0);
-        let (tag, lit) = text.split_at(at);
+        let tagged = moddil_syntax::Tagged::of(&text);
+        let (tag, lit) = (tagged.tag, tagged.lit);
         let Some(Def::Fn(t)) = tree.lookup(module as u32, tag, false) else {
             continue;
         };
@@ -142,8 +142,7 @@ pub(crate) fn tag_items(db: &dyn Db, program: Program) -> TagItems {
             text: value,
         };
         // Where the text starts in the literal: after the tag and its opening quotes.
-        let quotes = if lit.starts_with("\"\"\"") { 3 } else { 1 };
-        let from = range.start + (tag.len() + quotes) as u32;
+        let from = range.start + tagged.body().1 as u32;
         let fields = match evaluator.tag_fields(&request) {
             TagAnswer::Fields(fields) => fields,
             TagAnswer::CompileError(message, s, e) => {
@@ -246,7 +245,19 @@ fn items(range: TextRange, fields: &[(String, bool)]) -> Vec<String> {
         ),
         format!("struct {read} {{ {} }}", decls.join(", ")),
         format!("impl Clone for {read} {{ }}"),
-        format!("impl Debug for {read} {{ }}"),
+        format!(
+            "impl Debug for {read} {{ fn fmt(&self, out: &mut dyn TextWrite) {{ \
+             out.write_str(\"{{ \"); {} out.write_str(\" }}\"); }} }}",
+            fields
+                .iter()
+                .enumerate()
+                .map(|(i, (n, _))| {
+                    let sep = if i == 0 { "" } else { ", " };
+                    format!("out.write_str(\"{sep}{n}: \"); Debug::fmt(&self.{n}, out);")
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
         format!("impl PartialEq for {read} {{ }}"),
     ]
 }

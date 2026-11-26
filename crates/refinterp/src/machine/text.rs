@@ -202,12 +202,13 @@ impl Machine<'_> {
         range: moddil_syntax::TextRange,
     ) -> Eval {
         let text = tok.text();
-        let open = text.find('"').expect("a tagged literal");
+        let t = moddil_syntax::Tagged::of(text);
+        let open = t.lit_at;
         let base = tok.text_range().start as usize + open;
         let mut parts = Vec::new();
         let mut holes = Vec::new();
         let mut cur = String::new();
-        if text[open..].starts_with("\"\"\"") {
+        if !t.raw && text[open..].starts_with("\"\"\"") {
             for line in block_lines(&text[open..]) {
                 if let Some((off, line)) = line {
                     parts_scan(line, base + off, &mut parts, &mut holes, &mut cur);
@@ -215,8 +216,15 @@ impl Machine<'_> {
                 cur.push('\n');
             }
         } else {
-            let inner = &text[open + 1..text.len() - 1];
-            parts_scan(inner, base + 1, &mut parts, &mut holes, &mut cur);
+            // A raw literal (`sqlr#"…"#`) is between its `#"` and `"#`.
+            let (inner, at) = t.body();
+            parts_scan(
+                inner,
+                tok.text_range().start as usize + at,
+                &mut parts,
+                &mut holes,
+                &mut cur,
+            );
         }
         parts.push(cur);
         let strings = parts.into_iter().map(|p| Value::Str(p.into())).collect();

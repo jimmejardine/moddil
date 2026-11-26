@@ -30,12 +30,6 @@ Python teams and backend teams come before the browser (decided November 2026,
   gives, so a function can return one.
 - Fields for a tag taking `&[&str]`, and for a tag of the literal's own mod (E1012 now): the
   second needs the mod collected without the literals that use it first.
-- The reference interpreter's `read` result has its fields, but not the `Clone`, `Debug` and
-  `PartialEq` the compiled struct derives.
-- Raw tagged literals (`sqlr#"…"#`): the lexer gives them, but sema reads `sqlr#` as the tag.
-  They would also let a hole of a tag taking `&[&str]` hold a `"` (`comptime.tag.2`).
-- A `compile_error` in a tag taking `&[&str]` reported at its bytes of the text, as for a tag
-  taking `&str` (it is reported at the tag now).
 
 **P5. Numbers** (`crates/sema`, `crates/native`, `crates/wasm`, `crates/rt`; L)
 - `usize` and `isize` 32 bits wide on wasm32 (`num.types.2` says a pointer's width; they are 64

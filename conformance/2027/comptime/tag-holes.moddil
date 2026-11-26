@@ -50,3 +50,16 @@ test "a literal with no holes is the tag's value" {
     ;
     q"{{x}}".parts[0].clone()  // => "{x}"
 }
+
+#[tag]
+const fn width(text: &str) -> int {
+    text.len()
+}
+
+test "a raw tagged literal is the tag's, its text raw" {
+    // `qr#"…"#` is the tag `q` with a raw text: a hole may hold a `"`.
+    qr#"name = {"bob"} and age > {40}"#  // => "name = ?1 and age > ?2 [bob, 40]"
+    ;
+    // No escapes in a raw text: `\n` is two bytes.
+    widthr#"a "b" \n c"#  // => 10
+}

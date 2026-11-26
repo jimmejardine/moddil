@@ -41,3 +41,14 @@ test "a literal whose value has fields reads a text into them" {
     ;
     date.is_match("1999-01")  // => true
 }
+
+test "what a literal reads is cloned, compared and debugged as a struct of its fields" {
+    let date = re"(?<year>\d{4})-(?<month>\d{2})(-(?<day>\d{2}))?";
+    let d = date.read("2026-11") ?! "a date";
+    let e = d.clone();
+    d == e  // => true
+    ;
+    d == (date.read("2026-12") ?! "a date")  // => false
+    ;
+    fmt"{d:?}"  // => "{ year: \"2026\", month: \"11\", day: None }"
+}

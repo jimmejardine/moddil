@@ -25,8 +25,8 @@ impl Machine<'_> {
                     // `tag"…"` (`comptime.tag.1`): the `#[tag]` function called with the text.
                     Some(tok) => {
                         let text = tok.text();
-                        let at = text.find('"').unwrap_or(0);
-                        let (tag, lit) = text.split_at(at);
+                        let t = moddil_syntax::Tagged::of(text);
+                        let (tag, lit) = (t.tag, t.lit);
                         let value = string(&format!("r{lit}"));
                         let Some((crate::program::Def::Item(k), 1)) =
                             self.resolve(&[tag.to_string()])

@@ -264,16 +264,10 @@ pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
                 Err(Stop::Trap(t)) if t.at.is_some() => {
                     let (s, end) = t.at.unwrap_or_default();
                     let at = match body.tagged.get(&e) {
-                        Some(&off) => {
-                            let from = x.range.start + off;
-                            let clamp = |v: i64| {
-                                u32::try_from(v.max(0))
-                                    .unwrap_or(0)
-                                    .saturating_add(from)
-                                    .min(x.range.end)
-                            };
-                            TextRange::new(clamp(s), clamp(end.max(s)))
-                        }
+                        Some(text) => TextRange::new(
+                            text.file_offset(s),
+                            text.file_offset(end.max(s)).max(text.file_offset(s)),
+                        ),
                         None => x.range,
                     };
                     Diagnostic::error(Code::E1010, at, t.reason.unwrap_or_default())

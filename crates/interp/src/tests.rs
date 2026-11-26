@@ -423,3 +423,42 @@ fn closures_capture_and_run() {
              fn main() -> int { let k = 10; let mut n = 0; each(|x| n += x * k, 1, 2); n }";
     assert_eq!(value(t), Value::Int(30));
 }
+
+/// Where a `compile_error` in a tag's text is reported (`comptime.error.1`): `start` and `end`
+/// count bytes of the text the tag was given, its parts joined for a tag taking `&[&str]`, and
+/// each part is found where its bytes are in the file, past holes and `{{`.
+#[test]
+fn a_compile_error_is_reported_where_its_bytes_of_the_text_are() {
+    let tags = "\
+#[tag]
+const fn s(text: &str) -> int {
+    compile_error(\"bad\", 2, 4)
+}
+
+#[tag]
+const fn p(parts: &[&str]) -> Q {
+    // The parts joined: `ab{c` then `de`; bytes 3 to 5 are `cd`.
+    compile_error(\"bad\", 3, 5)
+}
+
+struct Q {}
+
+impl Q {
+    fn bind(self, args: (int,)) -> int {
+        args.0
+    }
+}
+";
+    let reported = |lit: &str| {
+        let text = format!("{tags}\nfn main() -> int {{\n    {lit}\n}}\n");
+        let db = Database::default();
+        let file = Program::single(&db, "t.moddil".to_string(), text.clone());
+        let d = diagnostics(&db, file);
+        assert_eq!(d.len(), 1, "{d:?}");
+        let r = d[0].range;
+        text[r.start as usize..r.end as usize].to_string()
+    };
+    assert_eq!(reported("s\"wxyz\""), "yz");
+    assert_eq!(reported("p\"ab{{c{1}de\""), "c{1}d");
+    assert_eq!(reported("pr#\"ab{{c{1}de\"#"), "c{1}d");
+}

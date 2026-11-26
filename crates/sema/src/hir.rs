@@ -12,6 +12,48 @@ pub type LocalId = Idx<Local>;
 /// A pattern's ID within its body.
 pub type PatId = Idx<Pat>;
 
+/// Where the text a tag was given is in the file (`comptime.error.1`): its runs that are each
+/// one run of the file's bytes, as (the run's first byte in the text, that byte in the file), in
+/// order, and where the literal ends. For a tag taking `&[&str]`, the text is its parts joined.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct TagText {
+    /// Each run: its first byte in the text, and that byte's offset in the file.
+    pub runs: Vec<(u32, u32)>,
+    /// Where the literal ends in the file.
+    pub end: u32,
+}
+
+impl TagText {
+    /// Text that starts at `file` in the file, one run.
+    pub fn at(file: u32, end: u32) -> TagText {
+        TagText {
+            runs: vec![(0, file)],
+            end,
+        }
+    }
+
+    /// That byte `at` of the text is at byte `file` of the file: a new run unless it follows
+    /// on from the last.
+    pub fn mark(&mut self, at: u32, file: u32) {
+        if let Some(&(a, f)) = self.runs.last()
+            && at.checked_sub(a) == file.checked_sub(f)
+        {
+            return;
+        }
+        self.runs.push((at, file));
+    }
+
+    /// Where byte `at` of the text is in the file, no further than the literal's end.
+    pub fn file_offset(&self, at: i64) -> u32 {
+        let at = u32::try_from(at.max(0)).unwrap_or(u32::MAX);
+        let run = self.runs.iter().rev().find(|(a, _)| *a <= at);
+        match run {
+            Some(&(a, f)) => f.saturating_add(at - a).min(self.end),
+            None => self.runs.first().map_or(self.end, |r| r.1),
+        }
+    }
+}
+
 /// A function's or a test's body.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct Body {
@@ -49,9 +91,9 @@ pub struct Body {
     /// (`comptime.eval.2`): for a const item's initialiser, by its root; for a `const { }`
     /// block, by the block.
     pub fuel: std::collections::BTreeMap<ExprId, u64>,
-    /// Each tagged literal's `const { }` block (`comptime.tag.1`): how far into it its text
-    /// starts, for an error compile-time code reports in the text (`compile_error`).
-    pub tagged: std::collections::BTreeMap<ExprId, u32>,
+    /// Each tagged literal's `const { }` block (`comptime.tag.1`): where the text its tag was
+    /// given is in the file, for an error compile-time code reports in it (`compile_error`).
+    pub tagged: std::collections::BTreeMap<ExprId, TagText>,
     /// Every expression written inside an `unsafe` block: where a C function may be called
     /// (`ffi.extern.1`).
     pub in_unsafe: std::collections::HashSet<ExprId>,
