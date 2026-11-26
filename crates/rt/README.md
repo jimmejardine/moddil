@@ -15,7 +15,7 @@ the host takes it once a run ends.
   to a ready one there: a thread sets the safe-point word for the last 200 µs of each slice. What differs between targets is the baton
   ([`src/baton.rs`](src/baton.rs)):
   - natively, a coroutine per task (`corosensei`), each with a 256 MiB stack reserved and
-    committed as it is used, resumed by a worker thread (one a turn) once it has a turn; the
+    committed as it is used, resumed by a worker thread (one a turn) once it has a turn: each worker has a queue (`crossbeam-deque`), takes from its own, then from the shared one, then steals, and sleeps when there is nothing; the
     run's own task runs on the thread that began the run, waiting on a condition variable. What
     a task keeps of its thread's locals (its call sites, its `const` depth) goes with it, and the
     runtime reads its thread's locals afresh after a switch;

@@ -68,6 +68,7 @@ unicode-normalization = "0.1.26"  # NFC checks on identifiers (the lexer)
 cargo_metadata = "0.23.1"   # the refinterp independence check
 libm = "0.2.16"             # float functions with the same bits on every platform (both interpreters)
 corosensei = "0.3.4"        # stackful coroutines: the parallel runtime's tasks on worker threads (`moddil-rt`)
+crossbeam-deque = "0.8.8"   # the parallel runtime's work-stealing queues (`moddil-rt`)
 ctrlc = "3.5.3"             # Ctrl-C and termination as `core::os` signals (`moddil-os`)
 naga = { version = "30.0.2", features = ["wgsl-out", "wgsl-in"] }  # kernels to WGSL, validated (`moddil-gpu`)
 lsp-server = "0.10.0"       # the language server's JSON-RPC loop (`moddil-lsp`)

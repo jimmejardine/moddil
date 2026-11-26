@@ -198,11 +198,12 @@ P41's tests). In stages, each a commit with P41's suite green:
    (`memory.md`): a non-owner that takes the shared count below 0 queues the allocation to its
    owner task, which the runtime drains when it resumes the task and at its end. The run's own
    task runs on the thread that began the run, not as a coroutine, so it cannot be stopped at a
-   safe point of an aborted run. A turn's change wakes every worker through one condition
-   variable (a ping-pong of tasks is about 1.2 µs a switch). The OS's events and timers come in
+   safe point of an aborted run. The OS's events and timers come in
    only when no task runs until stage 6.
-3. Workers and stealing: a worker per core with a Chase-Lev deque; stealing; parking and
-   unparking with an event count; a spawned task first on its spawner's worker.
+3. (A queue a worker, `crossbeam-deque`, with stealing, workers asleep woken one at a time, and
+   a task given its turn on a worker queued on that worker, are built.) The scheduler's state
+   per worker: the turns, the tasks and the channels are still under the run's one lock, which
+   every turn's change takes (a ping-pong of tasks, about 0.8 µs a switch).
 4. (Preemption is built: a thread sets the safe-point word for the last 200 µs of each 10 ms
    slice, and a task on a worker past its slice gives its turn to a ready one.) `pinned`
    executors' code leaving the checks out. Eight CPU-bound tasks take 1.22 s under `parallel`
