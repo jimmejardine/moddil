@@ -124,9 +124,9 @@ from what the closure is used as. A type's function (`Point::at`, `Vec::new`) an
 (`Some`) are values too, the variant a closure that builds it.
 
 **expr.anon-impl.1** `impl Trait { fn … }` as an expression is a value of a type of its own that
-implements the trait, each method a closure over the enclosing body's locals (**expr.closure.capture.1**).
-Its methods take `&self` (and cannot name `self` yet); it defines each of the trait's methods that
-has no default (E0407), and none the trait does not declare (E0408); a method fails only with the
-errors its trait's method lists (E0502). The trait must be one that can be used as `dyn`
+implements the trait, and its supertraits, each method a closure over the enclosing body's locals
+(**expr.closure.capture.1**). Its methods take `&self` (and cannot name `self` yet); it defines
+each method of the trait and its supertraits that has no default (E0407), and none they do not
+declare (E0408); a method fails only with the errors its trait's method lists (E0502). The trait must be one that can be used as `dyn`
 ([Types](../types.md)). It can be installed as a handler (`with Time = impl Time { … } { … }`) or
 used as a value of its trait, as a `dyn` borrow.

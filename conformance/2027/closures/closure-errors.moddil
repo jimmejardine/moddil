@@ -91,3 +91,21 @@ fn fails_unlisted() {
         }
     };
 }
+
+trait Base {
+    fn base(&self) -> int;
+}
+
+trait Derived: Base {
+    fn derived(&self) -> int;
+}
+
+// A supertrait's method without a default is one it must write too.
+fn missing_super() -> int {
+    let d = impl Derived {  //~ E0407
+        fn derived(&self) -> int {
+            1
+        }
+    };
+    d.derived()
+}

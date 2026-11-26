@@ -218,6 +218,22 @@ pub fn elaborate(tree: &ItemTree, preds: &[Pred]) -> Vec<Pred> {
     out
 }
 
+/// Trait `tr` for `ty`, and its supertraits, theirs, and so on, each once: what an anonymous
+/// impl of `tr` implements (`expr.anon-impl.1`).
+pub(crate) fn with_supertraits(tree: &ItemTree, ty: &Ty, tr: &TraitRef) -> Vec<TraitRef> {
+    let p = Pred {
+        ty: ty.clone(),
+        trait_ref: tr.clone(),
+        assoc: Vec::new(),
+        control: 0,
+        range: moddil_syntax::TextRange::default(),
+    };
+    elaborate(tree, &[p])
+        .into_iter()
+        .map(|p| p.trait_ref)
+        .collect()
+}
+
 impl<'a> Solver<'a> {
     /// A solver with the bounds `preds` in scope.
     pub fn new(tree: &'a ItemTree, preds: &[Pred]) -> Self {
@@ -528,12 +544,13 @@ impl<'a> Solver<'a> {
                 None => Answer::Yes(Source::Builtin),
             };
         }
-        // An anonymous impl implements its trait.
+        // An anonymous impl implements its trait, and the trait's supertraits.
         if let Ty::Anon(a) = &ty
-            && a.trait_ref.trait_ == tr
+            && let Some(own) = with_supertraits(self.tree, &ty, &a.trait_ref)
+                .into_iter()
+                .find(|t| t.trait_ == tr)
         {
-            return if a
-                .trait_ref
+            return if own
                 .args
                 .iter()
                 .zip(trait_ref.args.iter())

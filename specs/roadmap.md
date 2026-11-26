@@ -41,7 +41,9 @@ Python teams and backend teams come before the browser (decided November 2026,
   `dyn` in it needs a struct whose last field is unsized (its size and alignment from the
   vtable, the pointer fat) through sema's layout, MIR and every runner; then the coercion, as
   `Box`'s.
-- Anonymous impls that implement the trait's supertraits, and methods taking `&mut self`.
+- An anonymous impl's methods taking `&mut self`, changing what it captured: it would be used
+  as a `&mut dyn`, its closures `FnMut`, called through the value's place in every runner (the
+  interpreters copy the method's closure out of the value today).
 
 **P8. The trait system** (`crates/sema`, `crates/syntax` and the grammar, the prelude, both
 interpreters; L)

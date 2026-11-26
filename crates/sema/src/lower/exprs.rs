@@ -1576,6 +1576,8 @@ impl Lowerer<'_> {
             ));
             return self.missing(range);
         }
+        let traits =
+            crate::traits::with_supertraits(self.items, &Ty::Param(0, "Self".into()), &trait_ref);
         let mut methods = Vec::new();
         for f in node
             .child(K::IMPL_BODY)
@@ -1588,17 +1590,18 @@ impl Lowerer<'_> {
                 .and_then(ast::Name::cast)
                 .map(|n| n.text())
                 .unwrap_or_default();
+            // The trait's method, or a supertrait's (`expr.anon-impl.1`).
             let def = &self.items.traits[trait_ref.trait_ as usize];
-            let Some(&func) = def
-                .methods
+            let Some(func) = traits
                 .iter()
-                .find(|&&m| self.items.fns[m as usize].name == name)
+                .flat_map(|t| self.items.traits[t.trait_ as usize].methods.iter().copied())
+                .find(|&m| self.items.fns[m as usize].name == name)
             else {
                 let t = def.name.clone();
                 self.report(
                     Code::E0408,
                     f.text_range(),
-                    format!("`{t}` has no method `{name}`"),
+                    format!("`{t}` and its supertraits have no method `{name}`"),
                 );
                 continue;
             };
@@ -1623,10 +1626,13 @@ impl Lowerer<'_> {
             let closure = self.closure_of(&f, &params, body);
             methods.push((func, closure));
         }
-        let def = &self.items.traits[trait_ref.trait_ as usize];
-        for &m in &def.methods {
-            let sig = &self.items.fns[m as usize];
-            if !sig.has_body && !methods.iter().any(|&(f, _)| f == m) {
+        for t in &traits {
+            let def = &self.items.traits[t.trait_ as usize];
+            for &m in &def.methods {
+                let sig = &self.items.fns[m as usize];
+                if sig.has_body || methods.iter().any(|&(f, _)| f == m) {
+                    continue;
+                }
                 let (t, n) = (def.name.clone(), sig.name.clone());
                 self.report(
                     Code::E0407,

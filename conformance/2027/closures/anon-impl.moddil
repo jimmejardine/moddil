@@ -72,3 +72,43 @@ test "an anonymous impl is a value of its trait" {
     ;
     fixed.now()  // => 7
 }
+
+trait Named {
+    fn name(&self) -> String;
+}
+
+trait Greeter: Named {
+    fn greet(&self) -> String {
+        fmt"hello, {self.name()}"
+    }
+    fn shout(&self) -> String;
+}
+
+fn as_named(n: &dyn Named) -> String {
+    n.name()
+}
+
+fn as_greeter(g: &dyn Greeter) -> String {
+    fmt"{g.greet()} / {g.shout()}"
+}
+
+fn named_of<G: Greeter>(g: &G) -> String {
+    g.name()
+}
+
+test "an anonymous impl writes its trait's supertraits' methods too" {
+    let who = "ada";
+    let g = impl Greeter {
+        fn name(&self) -> String {
+            who.to_string()
+        }
+        fn shout(&self) -> String {
+            "HI".to_string()
+        }
+    };
+    as_greeter(&g)  // => "hello, ada / HI"
+    ;
+    as_named(&g)  // => "ada"
+    ;
+    named_of(&g)  // => "ada"
+}
