@@ -1,0 +1,33 @@
+use runtime::cpus::{Cpus, Priority, affine, blocking, pinned, pool};
+
+test "a task runs on the default executor unless placed" {
+    Executor::current()  // => Executor { id: 0 }
+}
+
+test "tasks run on the executor they are spawned on, and their children on theirs" {
+    let cpus = Cpus::simulated();
+    let hot = pinned(&cpus, cores: 0..2, priority: Priority::RealTime, busy_poll: true);
+    let batch = pool(&cpus, cores: 2..8, priority: Priority::Low);
+    let (tx, rx) = channel::<Executor>(4);
+    scope(|s| {
+        s.spawn (|| tx.send(Executor::current()) ?! "the receiver is here", on: hot);
+        s.spawn (|| {
+            scope(|inner| {
+                inner.spawn (|| tx.send(Executor::current()) ?! "the receiver is here");
+            });
+            tx.send(Executor::current()) ?! "the receiver is here";
+        }, on: batch);
+        s.spawn (|| tx.send(Executor::current()) ?! "the receiver is here");
+    });
+    (rx.recv() == Some(hot), rx.recv() == Some(Executor::current()))  // => (true, true)
+    ;
+    (rx.recv() == Some(batch), rx.recv() == Some(batch))  // => (true, true)
+}
+
+test "a scope's body runs on the executor it is opened on" {
+    let cpus = Cpus::simulated();
+    let io = blocking(&cpus, max_threads: 4);
+    let one = affine(&cpus);
+    let inside = scope(|s| Executor::current(), on: io);
+    (inside == io, inside == one, Executor::current() == io)  // => (true, false, false)
+}

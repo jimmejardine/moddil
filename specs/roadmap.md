@@ -185,12 +185,9 @@ half, then P38's stages, with P41's benchmarks as each lands (`runtime.md`).
 
 **P37. Choosing the runtime** (`crates/rt`, `crates/sched`, prelude, `mods/runtime`,
 `crates/moddil`; M). The apparatus, with only the deterministic runtime behind it.
-- The `Cpus` root capability in `mods/runtime`; the executor constructors `pool`, `pinned`, `blocking` and `affine` (cores, `node(n)`, priority,
-  busy-polling) as values (`runtime.md`: Starting a program).
-- `scope(…, on: e)` and `spawn(…, on: e)` in the checker and MIR, children inheriting their
-  executor.
-- Placement recorded and simulated under `runtime-sim` (`Runtime::seeded(n)` and
-  `moddil test --seed n`/`--seeds n` are built, `task.runtime.1`).
+- Executors' priorities simulated under `runtime-sim`: a ready task of a higher-priority executor
+  runs first (the `Cpus` capability, the executors and `on:` are built and recorded,
+  `task.executor.1`).
 - The manifest's runtime and core counts (`moddil run --runtime sim|parallel` is built, `parallel`
   refused until P38); the one-thread build's manifest key and `--threads one` (its lowering is
   P40's).

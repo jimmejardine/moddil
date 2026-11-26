@@ -429,6 +429,11 @@ pub fn symbols() -> Vec<(&'static str, *const u8)> {
             "moddil_rt_install_runtime",
             run::install_runtime as *const u8,
         ),
+        (
+            "moddil_rt_executor_of_task",
+            run::executor_of_task as *const u8,
+        ),
+        ("moddil_rt_executor_new", run::executor_new as *const u8),
         ("moddil_rt_park", park as *const u8),
         ("moddil_rt_safe_point", run::safe_point as *const u8),
         (
@@ -545,7 +550,7 @@ mod tests {
     #[allow(unsafe_code)]
     fn tasks_take_turns() {
         begin_run();
-        let s = scope_open(0);
+        let s = scope_open(0, -1);
         let c = channel(0);
         let captures = alloc(8, 8);
         // SAFETY: room for the channel's number.
@@ -561,7 +566,7 @@ mod tests {
             drop: None,
         };
         // SAFETY: `spec` is a task to start.
-        let t = unsafe { spawn(s, &raw const spec) };
+        let t = unsafe { spawn(s, &raw const spec, -1) };
         let mut got = 0u64;
         // The sender runs once this task waits; a rendezvous, so it waits for the value to go.
         assert_eq!(recv(c, (&raw mut got).cast(), 0, 0), 0);

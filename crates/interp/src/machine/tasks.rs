@@ -140,8 +140,27 @@ impl Machine<'_> {
                 self.sched.set_seed(values[0].as_int() as u64);
                 return self.deliver(ret, Ok(Value::Unit));
             }
+            "executor_of_task" => {
+                let e = self.sched.executor(me);
+                return self.deliver(ret, Ok(Value::Int(e)));
+            }
+            "executor_new" => {
+                let w = |i: usize| values[i].as_int();
+                let e = self.sched.new_executor(crate::sched::Executor {
+                    kind: w(0),
+                    cores: (w(1), w(2)),
+                    node: w(3),
+                    priority: w(4),
+                    busy_poll: values[5] == Value::Bool(true),
+                    threads: w(6),
+                });
+                return self.deliver(ret, Ok(Value::Int(e)));
+            }
             "__scope_open" => {
-                let s = self.sched.open_scope(me, values[0] == Value::Bool(true));
+                let on = values[1].as_int();
+                let s = self
+                    .sched
+                    .open_scope(me, values[0] == Value::Bool(true), on);
                 return self.deliver(ret, Ok(Value::Int(s as i64)));
             }
             // The body runs at once, as the scope's first task (`task.scope.1`).
@@ -150,6 +169,7 @@ impl Machine<'_> {
                 let t = self.start_task(&args[0], &values[1], vec![values[0].clone()]);
                 let n = self.sched.spawn(s, true, None);
                 debug_assert_eq!(n, t, "tasks are numbered as they start");
+                self.sched.place(t, -1, me);
                 self.sched.block(me, Wait::Scope(s));
                 self.pending.insert(me, (Pending::Scope(s), ret));
                 self.stack.switch(t);
@@ -160,6 +180,11 @@ impl Machine<'_> {
                 let t = self.start_task(&args[0], &values[1], Vec::new());
                 let n = self.sched.spawn(s, false, None);
                 debug_assert_eq!(n, t, "tasks are numbered as they start");
+                let on = match &values[2] {
+                    Value::Adt { fields, .. } => fields[0].as_int(),
+                    other => unreachable!("an executor: {other:?}"),
+                };
+                self.sched.place(t, on, me);
                 let task = self.natives.handle("Task", t);
                 return self.deliver(ret, Ok(task));
             }

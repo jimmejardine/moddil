@@ -414,9 +414,39 @@ fn spec_of(spec: &TaskSpec) -> Start {
 /// `__scope_open`: a scope for the running task's `scope` call.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "moddil_rt_scope_open")]
-pub extern "C" fn scope_open(isolated: u8) -> u64 {
+pub extern "C" fn scope_open(isolated: u8, on: i64) -> u64 {
     let me = me();
-    with(|s| s.sched.open_scope(me, isolated != 0) as u64)
+    with(|s| s.sched.open_scope(me, isolated != 0, on) as u64)
+}
+
+/// `__executor_of_task`: the executor the running task runs on (`task.executor.1`).
+#[unsafe(export_name = "moddil_rt_executor_of_task")]
+pub(crate) extern "C" fn executor_of_task() -> i64 {
+    let me = me();
+    with(|s| s.sched.executor(me))
+}
+
+/// `__executor_new`: keeps a new executor, giving its number.
+#[unsafe(export_name = "moddil_rt_executor_new")]
+pub(crate) extern "C" fn executor_new(
+    kind: i64,
+    first: i64,
+    end: i64,
+    node: i64,
+    priority: i64,
+    busy_poll: u8,
+    threads: i64,
+) -> i64 {
+    with(|s| {
+        s.sched.new_executor(moddil_sched::Executor {
+            kind,
+            cores: (first, end),
+            node,
+            priority,
+            busy_poll: busy_poll != 0,
+            threads,
+        })
+    })
 }
 
 /// `Scope::spawn`: starts task `spec` in scope `scope`, queued; its number.
@@ -426,10 +456,11 @@ pub extern "C" fn scope_open(isolated: u8) -> u64 {
 /// `spec` points to a task to start.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "moddil_rt_spawn")]
-pub unsafe extern "C" fn spawn(scope: u64, spec: *const TaskSpec) -> u64 {
+pub unsafe extern "C" fn spawn(scope: u64, spec: *const TaskSpec, on: i64) -> u64 {
     // SAFETY: as the caller says.
     let spec = unsafe { &*spec };
     let c = ctx();
+    let me = me();
     let mut s = c
         .state
         .lock()
@@ -437,6 +468,7 @@ pub unsafe extern "C" fn spawn(scope: u64, spec: *const TaskSpec) -> u64 {
     let t = s
         .sched
         .spawn(scope as usize, false, baton::drop_of(spec.drop));
+    s.sched.place(t, on, me);
     baton::start(&mut s, &c, t, spec_of(spec));
     t as u64
 }
@@ -466,6 +498,7 @@ pub unsafe extern "C" fn scope_run(
     {
         let mut s = c.lock();
         let t = s.sched.spawn(s_id, true, baton::drop_of(spec.drop));
+        s.sched.place(t, -1, me);
         baton::start(&mut s, &c, t, spec_of(spec));
         s.sched.block(me, Wait::Scope(s_id));
         // The body runs at once.

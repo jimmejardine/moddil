@@ -144,6 +144,8 @@ struct TaskState<V, D> {
     /// Whether it is unwinding, during which cancellation is not seen again.
     unwinding: bool,
     waiting: Option<Wait>,
+    /// The executor it runs on (`task.executor.1`): 0, the default one, unless placed.
+    executor: i64,
     /// What drops its value, if nobody takes it.
     drop: Option<D>,
 }
@@ -156,6 +158,26 @@ struct ScopeState<V, T> {
     isolated: bool,
     failure: Option<Failure<V, T>>,
     stopped: bool,
+    /// The executor its body runs on, or -1 for its owner's (`task.executor.1`).
+    on: i64,
+}
+
+/// An executor (`task.executor.1`): what `main` made it as. Under `runtime-sim` it is only kept,
+/// and the tasks on it are recorded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Executor {
+    /// 0 a pool, 1 pinned, 2 for blocking calls, 3 affine.
+    pub kind: i64,
+    /// Its cores, from the first up to the end.
+    pub cores: (i64, i64),
+    /// Its NUMA node, or -1 for any.
+    pub node: i64,
+    /// 0 low to 3 real-time.
+    pub priority: i64,
+    /// Whether its threads poll for work rather than sleep.
+    pub busy_poll: bool,
+    /// How many threads it may have, or 0 for one a core.
+    pub threads: i64,
 }
 
 /// A channel: its values in order, how many it holds, how many senders it has, whether its
@@ -193,6 +215,8 @@ pub struct Scheduler<V, T, D, H> {
     /// The seed's generator, which picks the next ready task (`task.runtime.1`); with seed 0,
     /// none, and the first ready runs.
     seed: u64,
+    /// The executors made, the first numbered 1.
+    executors: Vec<Executor>,
 }
 
 /// Values given back to be dropped, each with what drops it.
@@ -225,6 +249,7 @@ impl<V: Item, T: Clone, D: Copy, H: Host> Scheduler<V, T, D, H> {
             arrivals: HashMap::new(),
             signals: None,
             seed: 0,
+            executors: Vec::new(),
         }
     }
 
@@ -326,15 +351,37 @@ impl<V: Item, T: Clone, D: Copy, H: Host> Scheduler<V, T, D, H> {
     }
 
     /// Opens a scope for task `owner`'s `scope` call, and gives its index.
-    pub fn open_scope(&mut self, owner: usize, isolated: bool) -> usize {
+    pub fn open_scope(&mut self, owner: usize, isolated: bool, on: i64) -> usize {
         self.scopes.push(ScopeState {
             owner,
             tasks: Vec::new(),
             isolated,
             failure: None,
             stopped: false,
+            on,
         });
         self.scopes.len() - 1
+    }
+
+    /// Puts task `t`, just spawned by task `by`, on executor `on`, or on `by`'s if `on` is -1
+    /// (`task.executor.1`); a scope's body goes on the executor the scope was opened `on`.
+    pub fn place(&mut self, t: usize, on: i64, by: usize) {
+        let on = match self.tasks[t].scope {
+            Some(s) if self.scopes[s].tasks.first() == Some(&t) && on < 0 => self.scopes[s].on,
+            _ => on,
+        };
+        self.tasks[t].executor = if on < 0 { self.tasks[by].executor } else { on };
+    }
+
+    /// The executor task `t` runs on.
+    pub fn executor(&self, t: usize) -> i64 {
+        self.tasks[t].executor
+    }
+
+    /// Keeps executor `e`, giving its number; the default one is 0.
+    pub fn new_executor(&mut self, e: Executor) -> i64 {
+        self.executors.push(e);
+        self.executors.len() as i64
     }
 
     /// Records a task, just started in `scope`, and gives its number. Unless it is the scope's
@@ -733,6 +780,7 @@ impl<V, D> TaskState<V, D> {
             cancelled: false,
             unwinding: false,
             waiting: None,
+            executor: 0,
             drop,
         }
     }

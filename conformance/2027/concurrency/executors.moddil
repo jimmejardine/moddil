@@ -1,0 +1,22 @@
+// covers: task.executor.1
+
+test "a task runs on its spawner's executor, or the one it is spawned on" {
+    let pool = Executor::__new(0, 0..4, -1, 1, false, 0);
+    let (tx, rx) = channel::<Executor>(3);
+    scope(|s| {
+        s.spawn (|| tx.send(Executor::current()) ?! "the receiver is here");
+        s.spawn (|| {
+            scope(|inner| {
+                inner.spawn (|| tx.send(Executor::current()) ?! "the receiver is here");
+            });
+        }, on: pool);
+    });
+    (rx.recv(), rx.recv() == Some(pool))  // => (Some(Executor { id: 0 }), true)
+}
+
+test "a scope's body runs on the executor it is opened on" {
+    let one = Executor::__new(3, 0..0, -1, 1, false, 1);
+    scope(|s| Executor::current() == one, on: one)  // => true
+    ;
+    Executor::current()  // => Executor { id: 0 }
+}

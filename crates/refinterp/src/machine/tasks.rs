@@ -66,6 +66,8 @@ struct TaskState {
     cancelled: bool,
     unwinding: bool,
     waiting: Option<Wait>,
+    /// The executor it runs on (`task.executor.1`): 0, the default, unless placed.
+    executor: i64,
 }
 
 struct ScopeState {
@@ -74,6 +76,8 @@ struct ScopeState {
     isolated: bool,
     failure: Option<Failure>,
     stopped: bool,
+    /// The executor its body runs on, or -1 for its owner's.
+    on: i64,
 }
 
 struct Channel {
@@ -109,6 +113,8 @@ pub(crate) struct Tasks {
     /// The seed's generator, which picks the next ready task (`task.runtime.1`); 0 for first
     /// in, first out.
     seed: u64,
+    /// How many executors have been made (`task.executor.1`): they are numbered from 1.
+    executors: i64,
 }
 
 impl TaskState {
@@ -121,6 +127,7 @@ impl TaskState {
             cancelled: false,
             unwinding: false,
             waiting: None,
+            executor: 0,
         }
     }
 }
@@ -142,7 +149,18 @@ impl Tasks {
             threads: Vec::new(),
             panicked: false,
             seed: 0,
+            executors: 0,
         }
+    }
+
+    /// Puts task `t`, spawned by `by`, on executor `on`: a scope's body on the one the scope was
+    /// opened `on`, and with -1, on `by`'s.
+    fn place(&mut self, t: usize, on: i64, by: usize) {
+        let on = match self.states[t].scope {
+            Some(s) if self.scopes[s].tasks.first() == Some(&t) && on < 0 => self.scopes[s].on,
+            _ => on,
+        };
+        self.states[t].executor = if on < 0 { self.states[by].executor } else { on };
     }
 
     /// Records task `t`, just started in `scope`: ready after those already ready, unless it is
@@ -445,6 +463,9 @@ impl Machine<'_> {
             ("", "__scope_open") => {
                 let me = self.memory.task();
                 let isolated = args[0] == Value::Bool(true);
+                let Value::Int(on) = args[1] else {
+                    unreachable!("an executor's number")
+                };
                 let s = self.with_tasks(|ts| {
                     ts.scopes.push(ScopeState {
                         owner: me,
@@ -452,6 +473,7 @@ impl Machine<'_> {
                         isolated,
                         failure: None,
                         stopped: false,
+                        on,
                     });
                     ts.scopes.len() - 1
                 });
@@ -463,9 +485,24 @@ impl Machine<'_> {
             }
             ("Scope", "spawn") => {
                 let s = id(self, &args[0]);
-                let t = self.start_task(s, args[1].clone(), None, range);
+                let on = match self.target(args[2].clone()) {
+                    Value::Adt { fields, .. } => match fields[..] {
+                        [Value::Int(on)] => on,
+                        _ => unreachable!("an executor's number"),
+                    },
+                    _ => unreachable!("an executor"),
+                };
+                let t = self.start_task(s, args[1].clone(), None, on, range);
                 Ok(handle("Task", t))
             }
+            ("", "__executor_of_task") => {
+                let me = self.memory.task();
+                Ok(Value::Int(self.with_tasks(|ts| ts.states[me].executor)))
+            }
+            ("", "__executor_new") => Ok(Value::Int(self.with_tasks(|ts| {
+                ts.executors += 1;
+                ts.executors
+            }))),
             ("Scope", "stop") => {
                 let s = id(self, &args[0]);
                 self.with_tasks(|ts| {
@@ -709,7 +746,7 @@ impl Machine<'_> {
     /// task has ended: the body's value, or the scope's failure.
     fn scope_run(&mut self, s: usize, body: Value, handle: Value, range: TextRange) -> Eval {
         let me = self.memory.task();
-        let t = self.start_task(s, body, Some(handle), range);
+        let t = self.start_task(s, body, Some(handle), -1, range);
         let shared = self.memory.shared();
         {
             let (lock, turn) = &*shared;
@@ -788,11 +825,16 @@ impl Machine<'_> {
         scope: usize,
         f: Value,
         handle: Option<Value>,
+        on: i64,
         range: TextRange,
     ) -> usize {
         let t = self.memory.add_task();
         let body = handle.is_some();
-        self.with_tasks(|ts| ts.spawn(t, scope, body));
+        let me = self.memory.task();
+        self.with_tasks(|ts| {
+            ts.spawn(t, scope, body);
+            ts.place(t, on, me);
+        });
         let shared = self.memory.shared();
         let sources = self.program.sources();
         let args: Vec<Value> = handle.into_iter().collect();

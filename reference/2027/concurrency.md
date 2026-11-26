@@ -135,6 +135,15 @@ The runtime is installed by `main`'s outermost `with`, once and outside its clos
 task runs; anywhere else is an error (E0611). `moddil test --seed n` runs the tests with seed `n`,
 and `--seeds n` with each seed up to `n`, naming one a test fails with.
 
+**task.executor.1** An `Executor` is where tasks run: a pool of threads with a priority, which
+`main` makes from the `Cpus` root capability with `moddil/runtime`'s `pool`, `pinned`, `blocking`
+or `affine` ([`specs/runtime.md`: Starting a program](../../specs/runtime.md#starting-a-program)).
+`s.spawn(f, on: e)` runs its task on `e`, and `scope(body, on: e)` its body; without `on:`, a
+task runs on the executor of the task that spawns it, and a scope's body on the running task's.
+The run's first task is on executor 0, the default one. `Executor::current()` is the running
+task's. Under the deterministic runtime an executor is only kept, and its tasks recorded: they run
+one at a time as any do (**task.sched.1**).
+
 **task.borrow.1** A task's closure may borrow what outlives the scope: a shared borrow by any
 number of tasks, a `&mut` borrow by one. The scope keeps what its tasks borrow until it ends, so
 the code around them cannot use what a task borrows mutably, or change what it borrows, before

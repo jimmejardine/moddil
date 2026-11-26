@@ -644,6 +644,8 @@ pub fn runtime_op(items: &moddil_sema::ItemTree, f: u32) -> Option<&'static str>
         ("", "__task_id") => "task_id",
         ("", "__park") => "park",
         ("", "__install_runtime") => "install_runtime",
+        ("", "__executor_of_task") => "executor_of_task",
+        ("", "__executor_new") => "executor_new",
         ("", "__unpark") => "unpark",
         ("", "stop_requested") => "stop_requested",
         ("", "__scope_open") => "__scope_open",

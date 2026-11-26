@@ -1,0 +1,6 @@
+[mod]
+name = "runtime_tests"
+edition = "2027"
+
+[dependencies]
+runtime = { path = ".." }

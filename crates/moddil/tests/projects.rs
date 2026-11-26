@@ -118,6 +118,7 @@ projects! {
     num => "mods/num/tests",
     rand => "mods/rand/tests",
     regex => "mods/regex/tests",
+    runtime => "mods/runtime/tests",
     serde => "mods/serde/tests",
     sim => "mods/sim/tests",
     sync => "mods/sync/tests",

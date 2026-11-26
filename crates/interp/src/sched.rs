@@ -5,7 +5,7 @@
 use crate::Trap;
 use crate::value::Value;
 
-pub(crate) use moddil_sched::{Op, OsSource, Wait};
+pub(crate) use moddil_sched::{Executor, Op, OsSource, Wait};
 
 /// The scheduler of a run.
 pub(crate) type Scheduler = moddil_sched::Scheduler<Value, Trap, (), RunOs>;

@@ -1,0 +1,65 @@
+//! The machine's cores, and the executors made from them (`task.executor.1`, `runtime.md`:
+//! Starting a program). Making threads, pinning them to cores and giving them a priority are the
+//! OS's privileges, so `main` takes the `Cpus` root capability to make its executors; a task then
+//! runs on one with `s.spawn(f, on: e)` or `scope(body, on: e)`. Under `runtime-sim`, one task at
+//! a time, an executor is kept and its tasks recorded: what it is takes effect under the parallel
+//! runtime.
+
+/// The machine's cores.
+#[root_capability]
+pub struct Cpus {
+    /// 0 for the machine's, -1 for a simulated machine's.
+    handle: int,
+}
+
+impl Cpus {
+    /// A simulated machine's cores, for tests: its executors are only kept and recorded, as
+    /// every executor is under `runtime-sim`.
+    pub fn simulated() -> Cpus {
+        Cpus { handle: -1 }
+    }
+}
+
+/// How urgently an executor's tasks run, against other executors'.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Priority {
+    Low,
+    Normal,
+    High,
+    /// Before every other: for latency-critical work, on pinned cores.
+    RealTime,
+}
+
+impl Priority {
+    fn number(self) -> int {
+        match self {
+            Priority::Low      => 0,
+            Priority::Normal   => 1,
+            Priority::High     => 2,
+            Priority::RealTime => 3,
+        }
+    }
+}
+
+/// A pool of threads on cores `cores` (of NUMA node `node`, if not -1), which steal work from
+/// each other and lend their threads to other executors when idle.
+pub fn pool(cpus: &Cpus, cores: Range, priority: Priority = Priority::Normal, node: int = -1) -> Executor {
+    Executor::__new(0, cores, node, priority.number(), false, 0)
+}
+
+/// Threads pinned to cores `cores`, one each, which never migrate and never lend their threads:
+/// for a latency-critical loop, polling for work rather than sleeping if `busy_poll`.
+pub fn pinned(cpus: &Cpus, cores: Range, priority: Priority = Priority::High, busy_poll: bool = false) -> Executor {
+    Executor::__new(1, cores, -1, priority.number(), busy_poll, 0)
+}
+
+/// Threads for blocking calls (a C function that waits), up to `max_threads`, made as they are
+/// needed.
+pub fn blocking(cpus: &Cpus, max_threads: int = 64) -> Executor {
+    Executor::__new(2, 0..0, -1, Priority::Normal.number(), false, max_threads)
+}
+
+/// One thread, which its tasks never leave: for what must stay on the thread it was made on.
+pub fn affine(cpus: &Cpus) -> Executor {
+    Executor::__new(3, 0..0, -1, Priority::Normal.number(), false, 1)
+}

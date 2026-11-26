@@ -17,16 +17,47 @@ view Task<F, T> {
 
 // With `isolate: true`, a trap in the scope cancels it, and it fails with `Trapped`
 // (`task.isolate.1`); otherwise a trap ends the program. Only an isolated scope's call can fail
-// with `Trapped`.
-fn scope<F: FnOnce(&mut Scope) -> R, R>(body: F, isolate: bool = false) -> R with spawn, fail(Trapped) {
-    let mut s = Scope { id: __scope_open(isolate) };
+// with `Trapped`. With `on: e`, its body runs on executor `e` (`task.executor.1`); otherwise on
+// the running task's.
+fn scope<F: FnOnce(&mut Scope) -> R, R>(body: F, isolate: bool = false, on: Executor = Executor { id: -1 }) -> R with spawn, fail(Trapped) {
+    let mut s = Scope { id: __scope_open(isolate, on.id) };
     __scope_run::<F, R>(&mut s, body)?
 }
 
+// Where tasks run (`task.executor.1`): a pool of threads with a priority, which `main` makes from
+// the `Cpus` root capability (`moddil/runtime`). Executor 0 is the default one; a task runs on
+// its spawner's unless it is spawned `on:` another.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Executor {
+    id: int,
+}
+
+impl Executor {
+    // The executor the running task runs on.
+    fn current() -> Executor {
+        Executor { id: __executor_of_task() }
+    }
+
+    // A new executor: what `moddil/runtime`'s constructors make, of kind `kind` (0 a pool, 1
+    // pinned, 2 for blocking calls, 3 affine) on cores `cores` of NUMA node `node` (-1 for any),
+    // with priority `priority` (0 low to 3 real-time), busy-polling or not, for up to `threads`
+    // threads (0 for one a core). The runtime keeps what it is; under `runtime-sim` that is all.
+    fn __new(kind: int, cores: Range, node: int, priority: int, busy_poll: bool, threads: int) -> Executor {
+        Executor { id: __executor_new(kind, cores.start, cores.end, node, priority, busy_poll, threads) }
+    }
+}
+
+#[intrinsic]
+fn __executor_of_task() -> int;
+
+#[intrinsic]
+fn __executor_new(kind: int, first: int, end: int, node: int, priority: int, busy_poll: bool, threads: int) -> int;
+
 impl Scope {
-    // Starts a task running `f`, queued to run when the running task suspends.
+    // Starts a task running `f`, queued to run when the running task suspends: on executor `on`
+    // (`task.executor.1`), or the running task's.
     #[intrinsic]
-    fn spawn<F: FnOnce() -> T, T>(&mut self, f: F) -> Task<F, T> from f with spawn;
+    fn spawn<F: FnOnce() -> T, T>(&mut self, f: F, on: Executor = Executor { id: -1 }) -> Task<F, T> from f with spawn;
 
     // Asks the scope's tasks to stop, the scopes inside it first (`task.stop.1`).
     #[intrinsic]
@@ -108,7 +139,7 @@ impl Display for Trapped {
 }
 
 #[intrinsic]
-fn __scope_open(isolate: bool) -> int;
+fn __scope_open(isolate: bool, on: int) -> int;
 
 // Waits until one of a `select`'s operations, described by `ops`, is ready, does it, and gives
 // its arm's index (`task.select.1`).

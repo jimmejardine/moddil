@@ -18,3 +18,4 @@ pub use gpu;
 pub use web;
 pub use runtime::root;
 pub use runtime::io;
+pub use runtime::cpus;

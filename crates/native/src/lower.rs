@@ -291,8 +291,14 @@ struct Rt {
 
 /// The runtime's task functions: each one's name, parameters and result.
 const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
-    ("scope_open", &['b'], Some('w')),
-    ("spawn", &['w', 'p'], Some('w')),
+    ("scope_open", &['b', 'w'], Some('w')),
+    ("spawn", &['w', 'p', 'w'], Some('w')),
+    ("executor_of_task", &[], Some('w')),
+    (
+        "executor_new",
+        &['w', 'w', 'w', 'w', 'w', 'b', 'w'],
+        Some('w'),
+    ),
     ("scope_run", &['w', 'p', 'p', 'p', 's', 'b'], Some('b')),
     ("stop", &['w'], None),
     ("join", &['w', 'p', 'p', 's', 'b'], Some('b')),
@@ -4723,9 +4729,24 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 };
                 self.write(d, Val::Scalar(t))
             }
+            "executor_of_task" => {
+                let e = self.task_call(op, &[]).expect("an executor");
+                self.write(d, Val::Scalar(e))
+            }
+            "executor_new" => {
+                let vals = args
+                    .iter()
+                    .map(|a| self.value(a))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let e = self.task_call(op, &vals).expect("an executor");
+                self.write(d, Val::Scalar(e))
+            }
             "__scope_open" => {
                 let isolated = self.value(&args[0])?;
-                let s = self.task_call("scope_open", &[isolated]).expect("a scope");
+                let on = self.value(&args[1])?;
+                let s = self
+                    .task_call("scope_open", &[isolated, on])
+                    .expect("a scope");
                 self.write(d, Val::Scalar(s))
             }
             "__scope_run" => {
@@ -4767,7 +4788,13 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let id = self.handle_id(scope, &sty)?;
                 let zero = self.b.ins().iconst(types::I64, 0);
                 let spec = self.task_spec(&args[1], zero)?;
-                let t = self.task_call("spawn", &[id, spec]).expect("a task");
+                // The executor's number, its one field.
+                let on = match self.operand(&args[2])? {
+                    Val::Scalar(v) => v,
+                    Val::Mem(a) => self.b.ins().load(types::I64, flags, a, 0),
+                    _ => return Err("an executor not as a number".to_string()),
+                };
+                let t = self.task_call("spawn", &[id, spec, on]).expect("a task");
                 let a = self.addr_of(d)?;
                 self.b.ins().store(flags, t, a, 0);
                 Ok(())
