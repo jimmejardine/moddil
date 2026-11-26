@@ -317,6 +317,8 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
     ("os_arg_count", &[], Some('w')),
     ("os_arg_len", &['w'], Some('w')),
     ("os_arg_copy", &['w', 'p', 'w'], None),
+    ("os_task_tree_len", &[], Some('w')),
+    ("os_task_tree_copy", &['p', 'w'], None),
     ("os_write_stderr", &['p', 'w'], None),
     ("os_random", &[], Some('w')),
     ("os_wall_clock", &[], Some('w')),
@@ -5916,7 +5918,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             Ok(())
         };
         match op {
-            "os_arg_count" | "os_random" | "os_wall_clock" => {
+            "os_arg_count" | "os_random" | "os_wall_clock" | "os_task_tree_len" => {
                 let r = self.task_call(op, &[]).expect("a number");
                 self.write(d, Val::Scalar(r))
             }
@@ -5931,7 +5933,7 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 self.task_call(op, &[i, p, n]);
                 Ok(())
             }
-            "os_write_stderr" => {
+            "os_write_stderr" | "os_task_tree_copy" => {
                 let (p, n) = self.text(&args[0])?;
                 self.task_call(op, &[p, n]);
                 Ok(())

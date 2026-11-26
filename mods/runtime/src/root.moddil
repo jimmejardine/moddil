@@ -205,3 +205,32 @@ impl Rand for Entropy {
         os::random() % n
     }
 }
+
+/// The running program's own state, to look at (`observability.md`: Live introspection): what
+/// `main` grants the code that may see the other tasks.
+#[root_capability]
+pub struct Introspect {
+    handle: int,
+}
+
+impl Introspect {
+    /// For tests, which `main` grants nothing: the run's own tasks, to look at.
+    pub fn simulated() -> Introspect {
+        Introspect { handle: -1 }
+    }
+
+    /// The task tree: a line for each task not ended, in the order they were spawned, with its
+    /// scope, its executor, and whether it runs, is ready, or what it waits for and how long it
+    /// has, on the run's clock.
+    pub fn task_tree(&self) -> String {
+        let n = os::task_tree_len();
+        let mut buf: Vec<u8> = Vec::with_capacity(n);
+        let mut k = 0;
+        while k < n {
+            buf.push(0);
+            k += 1;
+        }
+        os::task_tree_copy(buf.as_mut_slice());
+        String::from_utf8(buf) ?! "the runtime writes UTF-8"
+    }
+}

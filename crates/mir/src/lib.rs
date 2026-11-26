@@ -619,6 +619,8 @@ pub fn runtime_op(items: &moddil_sema::ItemTree, f: u32) -> Option<&'static str>
             "arg_len" => "os_arg_len",
             "arg_copy" => "os_arg_copy",
             "write_stderr" => "os_write_stderr",
+            "task_tree_len" => "os_task_tree_len",
+            "task_tree_copy" => "os_task_tree_copy",
             "random" => "os_random",
             "wall_clock" => "os_wall_clock",
             "listen" => "os_listen",

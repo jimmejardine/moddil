@@ -39,6 +39,8 @@ pub(crate) struct State {
     pub(crate) turns: Turns,
     pub(crate) aborted: bool,
     pub(crate) baton: Baton,
+    /// The task tree each task asked the length of, until it copies it.
+    pub(crate) trees: std::collections::HashMap<usize, String>,
     /// The parallel runtime's reactor, for a run of `main`.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) reactor: Option<crate::reactor::Reactor>,
@@ -133,6 +135,7 @@ fn new_ctx() -> Arc<Ctx> {
             turns: Turns::new(),
             aborted: false,
             baton: Baton::default(),
+            trees: std::collections::HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             reactor: None,
         }),
@@ -881,6 +884,33 @@ fn start_reactor() {
 #[unsafe(export_name = "moddil_rt_os_arg_count")]
 pub extern "C" fn os_arg_count() -> u64 {
     with(|s| s.sched.os().map_or(0, |os| os.arg_count()) as u64)
+}
+
+/// `core::os::task_tree_len`: the run's task tree's length, kept for the running task.
+#[unsafe(export_name = "moddil_rt_os_task_tree_len")]
+pub(crate) extern "C" fn os_task_tree_len() -> u64 {
+    let me = me();
+    with(|s| {
+        let tree = s.sched.task_tree();
+        let n = tree.len() as u64;
+        s.trees.insert(me, tree);
+        n
+    })
+}
+
+/// `core::os::task_tree_copy`: the task tree kept, into the `n` bytes at `out`.
+///
+/// # Safety
+///
+/// `out` points to `n` writable bytes.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_os_task_tree_copy")]
+pub(crate) unsafe extern "C" fn os_task_tree_copy(out: *mut u8, n: u64) {
+    let me = me();
+    let tree = with(|s| s.trees.remove(&me)).unwrap_or_default();
+    let k = tree.len().min(n as usize);
+    // SAFETY: the caller gives `n` bytes at `out`.
+    unsafe { std::ptr::copy_nonoverlapping(tree.as_ptr(), out, k) };
 }
 
 /// `core::os::arg_len`.

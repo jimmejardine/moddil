@@ -1,4 +1,5 @@
 use runtime::cpus::{Cpus, Priority, affine, blocking, pinned, pool};
+use runtime::root::Introspect;
 
 test "a task runs on the default executor unless placed" {
     Executor::current()  // => Executor { id: 0 }
@@ -40,4 +41,21 @@ test "a scope's body runs on the executor it is opened on" {
     let one = affine(&cpus);
     let inside = scope(|s| Executor::current(), on: io);
     (inside == io, inside == one, Executor::current() == io)  // => (true, false, false)
+}
+
+test "the task tree says what each task waits for" {
+    let look = Introspect::simulated();
+    let (tx, rx) = channel::<int>(0);
+    scope(|s| {
+        s.spawn (|| rx.recv());
+        yield_now();
+        let tree = look.task_tree();
+        tree.contains("task 0 (the run's own, executor 0): waits for scope 0's tasks")  // => true
+        ;
+        tree.contains(": receives on channel 0, for 0 ms")  // => true (in parallel, also false)
+        ;
+        tree.contains("(in scope 0 of task 0, executor 0): runs")  // => true (in parallel, also false)
+        ;
+        tx.send(1) ?! "the receiver is here";
+    });
 }

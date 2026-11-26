@@ -146,6 +146,8 @@ struct TaskState<V, D> {
     waiting: Option<Wait>,
     /// The executor it runs on (`task.executor.1`): 0, the default one, unless placed.
     executor: i64,
+    /// When it began to wait, on the run's clock.
+    since: i64,
     /// What drops its value, if nobody takes it.
     drop: Option<D>,
 }
@@ -680,7 +682,51 @@ impl<V: Item, T: Clone, D: Copy, H: Host> Scheduler<V, T, D, H> {
     /// Suspends task `t` until `w` happens.
     pub fn block(&mut self, t: usize, w: Wait) {
         self.tasks[t].waiting = Some(w);
+        self.tasks[t].since = self.clock();
         self.blocked.push(t);
+    }
+
+    /// The task tree (`observability.md`: Task-aware stacks and the task tree): a line for each
+    /// task that has not ended, in the order they were spawned, each under its scope's owner,
+    /// with its executor and what it does: runs, is ready, or what it waits for and how long it
+    /// has, on the run's clock.
+    pub fn task_tree(&self) -> String {
+        let now = self.clock();
+        let mut out = String::new();
+        for (t, task) in self.tasks.iter().enumerate() {
+            if task.ended.is_some() {
+                continue;
+            }
+            let parent = match task.scope {
+                Some(s) => format!("in scope {s} of task {}", self.scopes[s].owner),
+                None => "the run's own".to_string(),
+            };
+            let what = match &task.waiting {
+                None if self.ready.contains(&t) => "is ready".to_string(),
+                None => "runs".to_string(),
+                Some(w) => {
+                    let ms = (now - task.since).max(0) / 1_000_000;
+                    let on = match w {
+                        Wait::Join(j) => format!("joins task {j}"),
+                        Wait::Scope(s) => format!("waits for scope {s}'s tasks"),
+                        Wait::Send(c) => format!("sends on channel {c}"),
+                        Wait::Taken(c, _) => {
+                            format!("waits for its value on channel {c} to be taken")
+                        }
+                        Wait::Recv(c) => format!("receives on channel {c}"),
+                        Wait::Stop => "waits for a stop".to_string(),
+                        Wait::Select(ops) => format!("selects on {} operations", ops.len()),
+                        Wait::Park(_) => "waits at a sync cell".to_string(),
+                    };
+                    format!("{on}, for {ms} ms")
+                }
+            };
+            out.push_str(&format!(
+                "task {t} ({parent}, executor {}): {what}\n",
+                task.executor
+            ));
+        }
+        out
     }
 
     /// Makes ready up to `n` of the tasks parked on `key`, in the order they parked
@@ -850,6 +896,7 @@ impl<V, D> TaskState<V, D> {
             unwinding: false,
             waiting: None,
             executor: 0,
+            since: 0,
             drop,
         }
     }

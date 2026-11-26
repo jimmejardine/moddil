@@ -34,6 +34,9 @@ struct Machine<'a> {
     raw_result: bool,
     /// The run's hash seed (`coll.hash.2`), or `None` until a hash draws one from the OS.
     hash_seed: Option<u64>,
+    /// The task tree `os::task_tree_len` kept, until `os::task_tree_copy` (one task runs at a
+    /// time).
+    tree: Option<String>,
 }
 
 mod ffi;
@@ -100,6 +103,7 @@ pub(crate) fn run_seeded(
         pending: std::collections::HashMap::new(),
         raw_result: false,
         hash_seed,
+        tree: None,
     };
     m.run_to_end(observer)
 }
@@ -130,6 +134,7 @@ pub(crate) fn run_frozen(
         pending: std::collections::HashMap::new(),
         raw_result: true,
         hash_seed: Some(0),
+        tree: None,
     };
     let v = m.run_to_end(&mut |_, _, _| {})?;
     Ok(crate::frozen::freeze(&m.stack, &v))

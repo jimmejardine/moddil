@@ -21,7 +21,7 @@ umbrella mod [`moddil`](moddil/README.md), which re-exports them.
 | [`time`](time/src/lib.moddil) | `Date` (proleptic Gregorian), `TimeOfDay`, `DateTime` and `Timestamp`, with ISO 8601 and RFC 3339 text, and time zones: the IANA database compiled into the mod (`tools/zonedata.py`), POSIX TZ rules, and wall times both ways; no clock yet | |
 | [`regex`](regex/src/lib.moddil) | `Regex`: linear-time matching (a Pike VM), groups and named groups, `find_all`, `replace_all`; backreferences and lookaround refused | |
 | [`decimal`](decimal/src/lib.moddil) | `Fixed<S>` (the scale in the type) and `BigDecimal`, rounding by the prelude's `Round` | |
-| [`runtime`](runtime/src/lib.moddil) | the root capabilities (`root`: `Args`, `Stdio`, `NetRoot`, `Entropy`, …), the terminal (`io`), the `Cpus` capability and the executors made from it (`cpus`), `serve_until_stopped` and `Signal` | `os` |
+| [`runtime`](runtime/src/lib.moddil) | the root capabilities (`root`: `Args`, `Stdio`, `NetRoot`, `Entropy`, `Introspect`, …), the terminal (`io`), the `Cpus` capability and the executors made from it (`cpus`), `serve_until_stopped` and `Signal` | `os` |
 | [`gpu`](gpu/src/lib.moddil) | `Rgba8`, `Tile` (with `each`: a pixel per GPU thread), `Image`, the `Gpu` effect, the CPU `simulator()`, the root capability `GpuRoot` (WebGPU in a browser), `launch` (draws an image and reads it back) and `present` (shows it, with no copy back) | `os` |
 | [`web`](web/src/lib.moddil) | the root capability `Window`: each animation frame's input (keys, mouse, wheel) and size | `os` |
 | [`moddil`](moddil/src/lib.moddil) | the umbrella: every mod above, re-exported as `moddil::<mod>`, with `moddil::root` and `moddil::io` from `runtime` | |

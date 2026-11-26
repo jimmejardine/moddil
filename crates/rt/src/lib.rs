@@ -462,6 +462,14 @@ pub fn symbols() -> Vec<(&'static str, *const u8)> {
         ("moddil_rt_os_arg_count", os_arg_count as *const u8),
         ("moddil_rt_os_arg_len", os_arg_len as *const u8),
         ("moddil_rt_os_arg_copy", os_arg_copy as *const u8),
+        (
+            "moddil_rt_os_task_tree_len",
+            run::os_task_tree_len as *const u8,
+        ),
+        (
+            "moddil_rt_os_task_tree_copy",
+            run::os_task_tree_copy as *const u8,
+        ),
         ("moddil_rt_os_write_stderr", os_write_stderr as *const u8),
         ("moddil_rt_os_random", os_random as *const u8),
         ("moddil_rt_os_wall_clock", os_wall_clock as *const u8),

@@ -221,8 +221,9 @@ P41's tests). In stages, each a commit with P41's suite green:
 7. (NUMA nodes' cores, from Linux's sysfs and Windows' `GetLogicalProcessorInformationEx`, and an
    executor made for a node placed on its cores, are built: `crates/rt/src/numa.rs`; tested on
    one node only.) Still: node-local allocator arenas.
-8. Observability: the task tree and each task's blocked-on operation, for `Introspect` and spans
-   (`observability.md`).
+8. (The task tree, `moddil/runtime`'s `Introspect::task_tree`, is built: each task's scope,
+   executor, and what it waits for and how long.) Still: spans for scopes and tasks; deadlock
+   reports from the tree; the tree as values rather than text.
 
 WASM stays single-threaded; Web Workers come later.
 

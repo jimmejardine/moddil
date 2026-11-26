@@ -23,6 +23,16 @@ pub fn arg_copy(i: int, out: &mut [u8]);
 #[intrinsic]
 pub fn write_stderr(text: &str);
 
+// The length in bytes of the run's task tree as text (`observability.md`), which the running task
+// keeps until `task_tree_copy`: a line for each task not ended, with its scope, its executor, and
+// what it waits for and how long.
+#[intrinsic]
+pub fn task_tree_len() -> int;
+
+// Copies the task tree `task_tree_len` kept into `out`, which is as long as it.
+#[intrinsic]
+pub fn task_tree_copy(out: &mut [u8]);
+
 // A random number, from the OS's sources: not 0 or less.
 #[intrinsic]
 pub fn random() -> int;

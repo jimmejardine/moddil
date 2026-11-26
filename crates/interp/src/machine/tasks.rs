@@ -314,6 +314,19 @@ impl Machine<'_> {
                     .unwrap_or(0);
                 Value::Int(n as i64)
             }
+            "os_task_tree_len" => {
+                let tree = self.sched.task_tree();
+                let n = tree.len();
+                self.tree = Some(tree);
+                Value::Int(n as i64)
+            }
+            "os_task_tree_copy" => {
+                let tree = self.tree.take().unwrap_or_default();
+                if let Value::Ref(p, _) = &values[0] {
+                    self.store_bytes(p, tree.bytes().map(byte).collect());
+                }
+                Value::Unit
+            }
             "os_arg_copy" => {
                 let i = id(&values[0]);
                 let arg = self
