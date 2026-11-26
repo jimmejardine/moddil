@@ -73,17 +73,17 @@ Targets are named `os-arch[-abi][.version]`:
 | `macos-aarch64`, `macos-x86_64`, `macos-universal` | macOS; universal = both architectures in one file |
 | `wasm32-wasi`, `wasm32-browser` | WASM (R1) |
 
-- **CPU feature levels** are part of the target (e.g. `linux-x86_64+v3` for AVX2). **Defaults
-  (decided):** x86-64-v2 (SSE4.2, POPCNT); armv8.0 for Linux and Windows on aarch64; apple-m1 for
-  macOS on aarch64; SIMD128 for WASM. Hot functions can carry several versions selected at start-up
+- **CPU feature levels** are part of the target (e.g. `linux-x86_64+v3` for AVX2). **Defaults:**
+  x86-64-v2 (SSE4.2, POPCNT); armv8.0 for Linux and Windows on aarch64; apple-m1 for macOS on
+  aarch64; SIMD128 for WASM. Hot functions can carry several versions selected at start-up
   (`#[multiversion(v3, v4)]`), and a `+v3` target is an explicit choice.
 - **Tier 1** targets are built and tested in CI on every change: Linux (x86-64, ARM64), Windows
   (x86-64), macOS (ARM64, x86-64), WASM (WASI and browser, R1).
 - **Tier 2** targets build but are tested less often (e.g. Windows on ARM, FreeBSD, RISC-V).
-- **Bare-metal tiers (decided):** tier 1 is `thumbv7em` (Cortex-M4F, on Renode) and `riscv64` QEMU
+- **Bare-metal tiers:** tier 1 is `thumbv7em` (Cortex-M4F, on Renode) and `riscv64` QEMU
   `virt`; tier 2 is Cortex-M0+ and M33, x86_64 bare metal and AArch64 `virt`; others are tier 3
   ([`freestanding.md`](freestanding.md)).
-- **A published target-tier policy (decided)** sets the bar, and the tier-2 list grows from
+- **A published target-tier policy** sets the bar, and the tier-2 list grows from
   contributions: tier 1 needs CI hardware, two maintainers and the full test suite passing on every
   change. Promotion is a Moddil Evolution proposal ([`governance.md`: Moddil Evolution](governance.md#moddil-evolution)).
 
@@ -101,10 +101,6 @@ Targets are named `os-arch[-abi][.version]`:
 
 ## Dynamic glibc targets
 
-**Versions (decided):** stubs are generated from one ABI list for every glibc from 2.17, so any
-version can be chosen; `-gnu` without a version means 2.28 (RHEL 8, Debian 10), and the default moves
-with editions.
-
 Some programs must load libraries that only exist on the machine they run on:
 - GPU drivers: CUDA's `libcuda`, the Vulkan loader, OpenGL ([`accelerators.md`](accelerators.md));
 - NSS and PAM modules (enterprise logins, LDAP host lookup).
@@ -113,6 +109,10 @@ Loading these from a fully static binary is unreliable, so such programs choose 
 target with a pinned minimum version**, e.g. `linux-x86_64-gnu.2.28`, built against bundled stubs for
 that version (Zig's approach). The binary runs on any distribution with glibc 2.28 or newer.
 Everything else in it is still linked statically; only glibc and the drivers are dynamic.
+
+**Versions:** stubs are generated from one ABI list for every glibc from 2.17, so any version can be
+chosen. `-gnu` without a version means 2.28 (RHEL 8, Debian 10), and the default moves with
+editions.
 
 ## Byte-identical output on any host
 
@@ -139,11 +139,11 @@ Two payoffs:
 Signing keys and Apple credentials are **capabilities supplied at release time**, never stored in the
 build or the repository.
 
-- **macOS headers (decided):** the toolchain bundles only headers derived from Apple's open-source
+- **macOS headers:** the toolchain bundles only headers derived from Apple's open-source
   releases (APSL) and generated `.tbd` link stubs, as Zig does, with a legal review before v1.
   Frameworks beyond `libSystem` (AppKit, Metal) need the user's SDK, found automatically on a Mac or
   given by path elsewhere.
-- **Notarisation without a Mac (decided):** `moddil release` signs and notarises through the App
+- **Notarisation without a Mac:** `moddil release` signs and notarises through the App
   Store Connect API on any host. The Developer ID certificate and the API key come from a
   secret-provider handler at release time.
 
@@ -167,8 +167,8 @@ build or the repository.
   libraries for apps.
 - **iOS:** Moddil produces static libraries or frameworks; final app packaging needs Apple's tools.
 - This matches the web store's "shared logic, native UI shells" approach
-  ([`examples/web-store.md`](examples/web-store.md)). **Decided scope:** Moddil builds the
-  XCFramework and AAR plus generated bindings; Xcode and Gradle build and sign the app
+  ([`examples/web-store.md`](examples/web-store.md)). **Scope:** Moddil builds the XCFramework
+  and AAR plus generated bindings; Xcode and Gradle build and sign the app
   ([`ui.md`: Mobile packaging](ui.md#mobile-packaging)).
 
 ## Fit check against the reference examples

@@ -65,7 +65,7 @@ Rules:
   `Rc` somewhere that outlives the borrow (e.g. in a value it sends on a channel).
 - Long-lived tasks (e.g. a server's per-connection tasks, children of an accept-loop scope near the
   top of `main`) still borrow from that top-level frame, or receive owned values and `Rc`s.
-  **Libraries package the shape** (decided): `http::serve(listener, app)` is an accept loop with an
+  **Libraries package the shape:** `http::serve(listener, app)` is an accept loop with an
   isolated scope per connection ([`stdlib.md`: HTTP](stdlib.md#http)), and
   `supervise(|s| …, restart: …)` in `moddil/sync` covers pollers and workers with restart policies.
   The hand-written loop in the [tour](tour.md) is the documented pattern underneath.
@@ -75,14 +75,12 @@ Rules:
   must consume linear values like the error path
   ([`lifecycle.md`: Cancellation and shutdown](lifecycle.md#cancellation-and-shutdown)). There is no
   async drop ([`stdlib.md`: I/O](stdlib.md#io)).
-
-- **A task does not outlive the handlers it uses (decided November 2026).** A task that uses a
+- **A task does not outlive the handlers it uses.** A task that uses a
   handler a `with` installs must be spawned into a scope opened inside that `with`, so the scope,
   and the task, ends before the handler does; spawning it into a scope opened outside the `with`
   is a compile error (E0610). Handlers installed around the scope reach its tasks as they reach
   any code ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 4).
-- **Spawning a closure that can fail is marked twice, and that is the rule (decided November
-  2026).** `c.spawn(|| serve(conn)?)?`: the closure raises its own errors with `?`, and the
+- **Spawning a closure that can fail is marked twice.** `c.spawn(|| serve(conn)?)?`: the closure raises its own errors with `?`, and the
   `spawn` call, which passes a closure that can fail, is marked, as `xs.visit(|x| f(x)?)?` is
   ([`closures.md`: Effects flow through](closures.md#effects-flow-through)). Every way an error
   leaves stays visible ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 5).
@@ -94,17 +92,22 @@ All shared mutation goes through sync cells ([`memory.md`: rc contents are immut
 - **Core intrinsics:** atomic loads/stores/RMW with explicit memory orderings, fences.
 - **`moddil/sync`:** `Atomic<T>`, `AtomicRc<T>`, `Mutex<T>`, `RwLock<T>`, channels, lock-free
   SPSC/MPMC queues.
-- Locks expose their contents through **scoped access**, not storable guards:
+- Locks expose their contents through **scoped access** (a closure, or a guard that is a view),
+  never through a storable guard:
 
 ```rust
 config.with(|c| c.max_conns = 100);         // lock held for the closure only
 ```
 
-A guard is a view (second-class), so it cannot leak out of the scope or be held across task
-boundaries by accident. Holding a lock across a suspension point is allowed but visible
-(the closure has the `suspend` effect); a lint can flag it.
+**A lock gives a guard.** `Mutex::lock(&self)` gives a `Guard<T>`, a view of the mutex that
+unlocks it when dropped. It reaches the value through `Deref` and `DerefMut`, so the value's
+methods are called on the guard (`map.lock().get(k)`), and a guard cannot outlive the mutex it
+locks ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 7). A guard is a view (second-class), so
+it cannot leak out of the scope or be held across task boundaries by accident. Holding a lock
+across a suspension point is allowed but visible (the closure has the `suspend` effect); a lint
+can flag it.
 
-**Deadlocks** (decided). The model prevents data races, not deadlocks, so:
+**Deadlocks.** The model prevents data races, not deadlocks, so:
 - a mutex may carry a **lock level** (`Mutex<T, level: 3>`). Taking a lock whose level is equal to
   or lower than one already held is a compile error where it can be seen statically, and a trap
   otherwise, as in kernel lock-ordering schemes; unlevelled mutexes are allowed;
@@ -112,18 +115,13 @@ boundaries by accident. Holding a lock across a suspension point is allowed but 
   that replays it;
 - documentation steers towards channels and actors.
 
-**Software transactional memory is a library pattern, not a language feature** (decided). Nothing in
-the core is needed: `atomically(|tx| …)` can take a closure whose effects are restricted to an
-`Stm` trait ([`effects-and-capabilities.md`: Restricted code is one mechanism](effects-and-capabilities.md#restricted-code-is-one-mechanism)),
+**Software transactional memory is a library pattern, not a language feature.** Nothing in the
+core is needed: `atomically(|tx| …)` can take a closure whose effects are restricted to an `Stm`
+trait ([`effects-and-capabilities.md`: Restricted code is one mechanism](effects-and-capabilities.md#restricted-code-is-one-mechanism)),
 so a retried body can do no I/O, `spawn` or `suspend`, and immutable `Rc` contents make snapshots
-cheap. It stays out of the standard mods: logging every read and write allocates (so it is
-unusable under `#[no_alloc]`), contention causes retry storms, and it is unavailable in
-freestanding builds and on GPUs. Community mods may provide it.
-
-- **A lock gives a guard (decided November 2026).** `Mutex::lock(&self)` gives a `Guard<T>`, a
-  view of the mutex that unlocks it when dropped. It reaches the value through `Deref` and
-  `DerefMut`, so the value's methods are called on the guard (`map.lock().get(k)`), and a guard
-  cannot outlive the mutex it locks ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 7).
+cheap. It is not in the standard mods; community mods may provide it. *Why:* logging every read
+and write allocates (so it is unusable under `#[no_alloc]`), contention causes retry storms, and it
+is unavailable in freestanding builds and on GPUs.
 
 ## Patterns the model makes easy
 
@@ -213,9 +211,6 @@ on the result.
 `T: Sync` and `U: Send`, cannot take async closures, and needs `collect::<Result<Vec<_>, _>>()` to
 use `?`. None of that applies here.
 
-**Later:** a lambda that is safe to run as a GPU kernel could let the same call dispatch to a GPU
-([`accelerators.md`](accelerators.md)).
-
 ## Background
 
 The problem and the state of the art that led to this design.
@@ -256,6 +251,21 @@ ecosystems into "sync" and "async" halves.
   as the only model.
 - Deterministic scheduling mode for tests (see [Determinism and reproducibility](determinism.md)).
 - Lints for holding a lock across a suspension point.
+
+## Open questions
+
+- **`parallel_map` on a GPU.** Whether a lambda that is safe to run as a GPU kernel lets the same
+  call dispatch to a GPU ([`accelerators.md`](accelerators.md)).
+
+## Alternatives considered
+
+- **`Send` and `Sync` auto traits, as in Rust:** Moddil has no non-thread-safe sharing, so every
+  type is sendable and the traits would only add bounds to learn and get wrong.
+- **Unstructured, `'static` tasks:** a task could outlive its parent's frame, so it could not
+  borrow from it and would need `Arc::clone`; scoped tasks are the only mode.
+- **Software transactional memory in the language or the standard mods:** it allocates on every
+  read and write, causes retry storms under contention, and is unavailable in freestanding builds
+  and on GPUs.
 
 ## Prior art
 

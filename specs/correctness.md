@@ -1,27 +1,27 @@
 # Correctness: Contracts, Testing and Verification
 
-The plan below is adopted: the v1 tools, the reserved proof syntax, the
-[decisions locked early](#decisions-to-lock-early), the runtime checking policy (an ambient
-`Contracts` handler), the verifier and the assurance levels.
+This document specifies Moddil's correctness tooling: the v1 tools, the reserved proof syntax, the
+[rules fixed early](#rules-fixed-from-the-start), the runtime checking policy (an ambient `Contracts`
+handler), the verifier and the assurance levels.
 
 ## Summary
 
-Moddil should make correctness tooling **cheap by default and deep on demand**:
+Moddil's correctness tooling is **cheap by default and deep on demand**:
 - **v1 (easy wins):** contracts as syntax, validated newtypes, built-in property testing and fuzzing,
   mutation testing, a Miri-style checker, systematic concurrency testing, and differential testing of
   the compiler's backends ([Easy wins (v1)](#easy-wins-v1)).
 - **Designed in now, built later:** proofs written in Moddil itself (SMT-backed), refinement types,
   bounded model checking, protocol verification, and assurance levels per mod ([State of the art not to miss (design now, build later)](#state-of-the-art-not-to-miss-design-now-build-later)).
-- A handful of **decisions are locked early**, because they are expensive to retrofit ([Decisions to lock early](#decisions-to-lock-early)).
+- A handful of **rules are fixed from the start**, because they are expensive to retrofit ([Rules fixed from the start](#rules-fixed-from-the-start)).
 - **Which contracts are checked at run time** is chosen by an ambient `Contracts` handler, installed
   per scope like any other handler ([Checking policy: the `Contracts` handler](#checking-policy-the-contracts-handler)).
 
 ## Why Moddil is unusually well placed
 
-Most languages bolt verification on afterwards and fight their own semantics. Several Moddil
-decisions remove the usual obstacles:
+Most languages bolt verification on afterwards and fight their own semantics. Several parts of
+Moddil's design remove the usual obstacles:
 
-| Existing decision | What it gives correctness tooling |
+| Design rule | What it gives correctness tooling |
 |---|---|
 | **Effects** ([Effects and capabilities as a unifying idea](effects-and-capabilities.md)) | The compiler can *check* that contract expressions are pure; most languages can only trust them to be. Effect handlers swap real I/O, time and scheduling for test versions. |
 | **Ownership; immutable rc contents; shared mutation only in sync cells** ([`memory.md`](memory.md)) | No unrestricted aliasing, so a verifier knows what a function can modify (the "frame problem"). This is why Verus, Prusti and Creusot work for Rust and why C/C++ verification is so hard. |
@@ -49,14 +49,13 @@ struct OrderBook {
 ```
 
 - `requires`, `ensures`, `invariant`, and `old(expr)` in postconditions (Eiffel, Ada 2012, SPARK,
-  Dafny). **Decided:** contracts are clauses after the signature, not attributes
-  ([`syntax.md`](syntax.md)).
+  Dafny). Contracts are clauses after the signature, not attributes ([`syntax.md`](syntax.md)).
 - **Contract expressions must be pure**, checked by the effect system.
 - **Contracts on effect traits bind every handler.** A `requires` or `ensures` on a trait method
   (`Db::put`) applies to every handler, under the same Liskov rule. Properties about *how* effects
   are used ("called at most once", "commit or roll back") are not contracts: they are types
   (`FnOnce`, linear values, typestate, [`resources.md`](resources.md)), and temporal properties are
-  checked by simulation and property tests ([`determinism.md`](determinism.md)) (decided).
+  checked by simulation and property tests ([`determinism.md`](determinism.md)).
 - Contracts are part of the **mod interface**: shown by the language server, included in generated
   docs, subject to semver, and visible in semantic diffs ([Diffs, code review and version control](semantic-vcs.md)). A trait impl may weaken
   preconditions and strengthen postconditions, never the reverse (Liskov).
@@ -64,7 +63,7 @@ struct OrderBook {
 
 ### Checking policy: the `Contracts` handler
 
-**Decision: which contracts are checked at run time is set by an ambient `Contracts` handler.** Like
+**Which contracts are checked at run time is set by an ambient `Contracts` handler.** Like
 `log`, it is always present and never written in signatures ([`effects-and-capabilities.md`: The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)).
 Installing a handler changes the policy for a scope, including the tasks spawned in it:
 
@@ -106,9 +105,9 @@ let p = Port::new(raw)?;      // fail(RefinementError): invalid input is an erro
 let q: Port = 8080;           // literal checked at compile time
 ```
 
-- **Decided:** `where` is the only refinement form; ranges are written `where self in 1..`
+- `where` is the only refinement form; ranges are written `where self in 1..`
   ([`syntax.md`](syntax.md)).
-- **Decided: a failed check raises the standard `RefinementError { ty, clause, value }`**, naming
+- **A failed check raises the standard `RefinementError { ty, clause, value }`**, naming
   the newtype and the `where` clause that failed. A newtype that wants its own error writes an
   ordinary constructor (`fn parse(s: &str) -> Port with fail(PortError)`) that checks first, so the
   `where` form stays one line.
@@ -185,9 +184,10 @@ Creusot do:
 - an SMT solver (Z3 or cvc5) discharges proof obligations.
 
 Verus's linear ghost permissions are a particularly good fit for Moddil's ownership model.
-**Decided:** the syntax and erasure semantics are reserved now, even if the verifier ships much later.
+The syntax and erasure semantics are reserved from the start, though the verifier ships later.
+*Why:* adding them once code exists would break that code.
 
-**The verifier is part of the toolchain (decided).** `moddil verify` is a subcommand like the
+**The verifier is part of the toolchain.** `moddil verify` is a subcommand like the
 others ([`toolchain.md`](toolchain.md)): the compiler parses ghost code, erases it, and generates
 the proof obligations; the verifier sends them to a solver.
 
@@ -203,7 +203,7 @@ the proof obligations; the verifier sends them to a solver.
 ### Assurance levels per mod
 
 Following SPARK's graded levels (Stone, Bronze, Silver, Gold, Platinum), a mod declares how far it is
-verified (decided):
+verified:
 
 | Level | Meaning |
 |---|---|
@@ -230,14 +230,15 @@ D7) and index safety, and generalises [Validated newtypes (lightweight refinemen
 ### Bounded model checking
 
 Kani (Rust, via CBMC) proves a property for *all* inputs up to a bound. Its proof harnesses look like
-tests, so engineers adopt it easily. A Moddil equivalent could run on MIR.
+tests, so engineers adopt it easily. Moddil's bounded model checking takes the same form: harnesses
+attached to their subject like tests ([`testing.md`](testing.md#correctness-tools-in-the-same-place)).
 
 ### Protocol and distributed verification
 
 - **Choreographies and session types** ([Distributed and multi-tier programs](distribution.md)) are deadlock-free by construction.
-- **TLA+** and **P** (used at AWS and Microsoft) model-check distributed protocols. Moddil
-  choreographies could be exported to such a checker, and deterministic simulation ([Determinism and reproducibility](determinism.md)) gives a
-  cheaper complement.
+- **TLA+** and **P** (used at AWS and Microsoft) model-check distributed protocols. Deterministic
+  simulation ([Determinism and reproducibility](determinism.md)) is a cheaper complement to such
+  checkers.
 
 ### Information flow
 
@@ -250,7 +251,7 @@ correctness property.
 A mechanised model of Moddil-core (for example in Lean), as WebAssembly (WasmCert), CakeML and
 CompCert have, used to validate the reference interpreter. This keeps "what Moddil means" precise,
 which every other tool here depends on. How the model, the reference and the interpreter relate is
-decided in [`definition.md`: Three artefacts, one meaning](definition.md#three-artefacts-one-meaning).
+set out in [`definition.md`: Three artefacts, one meaning](definition.md#three-artefacts-one-meaning).
 
 ### LLMs plus verification
 
@@ -263,12 +264,12 @@ spec is what the human reviews; the proof certifies that the code meets it. To s
 
 ### Static analysers
 
-Abstract-interpretation tools (Infer, Astrée, IKOS) can be added later as tooling. They don't
-require language design decisions beyond a well-specified MIR.
+Abstract-interpretation tools (Infer, Astrée, IKOS) can be added later as tooling. They do not
+require any language design beyond a well-specified MIR.
 
-## Decisions to lock early
+## Rules fixed from the start
 
-These are cheap now and expensive to change once code exists. All are **decided**.
+These rules are fixed from the start, because they are expensive to change once code exists.
 
 1. **Contract syntax**: `requires`, `ensures`, `invariant`, `old`; contract expressions pure,
    enforced by effects.
@@ -276,8 +277,8 @@ These are cheap now and expensive to change once code exists. All are **decided*
    erased.
 3. **Contracts in interfaces**: part of the mod's public surface, under semver, in semantic diffs,
    with Liskov rules for trait impls.
-4. **A runtime contract failure traps (class 3).** **Decided** ([`error-handling.md`](error-handling.md) D13). A broken contract is a bug, not an
-   error. Untrusted input goes through validated newtypes or explicit checks that return errors
+4. **A runtime contract failure traps (class 3)** ([`error-handling.md`](error-handling.md) D13).
+   A broken contract is a bug, not an error. Untrusted input goes through validated newtypes or explicit checks that return errors
    (class 1).
 5. **Runtime checking policy**: an ambient `Contracts` handler, `all` in debug builds and
    `pub_preconditions` in release, replaceable per scope ([Checking policy: the `Contracts` handler](#checking-policy-the-contracts-handler)).
@@ -294,7 +295,7 @@ These are cheap now and expensive to change once code exists. All are **decided*
 
 ## Background
 
-The problem and the state of the art that led to this design.
+The problem and the state of the art behind this design.
 
 - **Problem.** Tests show the presence of bugs, not their absence; specifications live in comments or
   nowhere.
@@ -303,6 +304,26 @@ The problem and the state of the art that led to this design.
 - **Directions.** Contracts are syntax, not library calls; checked at runtime in debug, optionally
   proven by an SMT-backed verifier for critical modules; property tests generated from contracts.
   This becomes much more valuable with LLMs, which can write proofs and code against a fixed spec.
+
+## Open questions
+
+- **Bounded model checking on MIR.** Whether Moddil's model checker works on MIR, as Kani works on
+  Rust's MIR through CBMC, is not settled.
+- **Exporting choreographies.** Whether Moddil choreographies are exported to a protocol model
+  checker such as TLA+ or P is not settled.
+
+## Alternatives considered
+
+- **Contracts as attributes** (`#[requires(…)]`): not taken. Contracts are clauses after the
+  signature ([`syntax.md`](syntax.md)).
+- **Contracts on how effects are used** ("called at most once", "commit or roll back"): not taken.
+  These are expressed as types (`FnOnce`, linear values, typestate), and temporal properties are
+  checked by simulation and property tests.
+- **A second refinement form for ranges**: not taken. Ranges are written `where self in 1..`, so
+  `where` is the only form.
+- **A custom error per validated newtype in the `where` form**: not taken. Every failed check
+  raises `RefinementError`, and a newtype that wants its own error writes an ordinary constructor,
+  so the `where` form stays one line.
 
 ## Prior art
 

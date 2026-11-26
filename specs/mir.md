@@ -4,17 +4,17 @@ Expands [`compiler.md`: Backends](compiler.md#backends).
 
 ## Summary
 
-| Topic | Decision |
+| Topic | Rule |
 |---|---|
-| **Pipeline** | Canonical AST → **typed HIR** → **MIR** (built → analysed → runtime) → per-target lowering → backends (decided) |
-| **Form** | **Places and a control-flow graph**, as Rust's MIR: locals, places, statements and terminators in basic blocks; not SSA (decided) |
-| **Ownership** | Moves, drops, linear consumption and second-class borrows are **checked on MIR**, and drops are elaborated there (decided) |
-| **Suspension** | `suspend` is an **explicit terminator in every body**, so every suspension point is visible to checks, lints and lowerings (decided) |
-| **Effects** | Handlers are hidden parameters (evidence passing); a pass turns statically known handlers into direct calls; `fail` is a second exit edge on calls (proposed) |
-| **Checks** | Overflow, bounds, refinements, `?!` and contracts are explicit `Assert` statements with a trap class and a source span (proposed) |
-| **Reference counting** | Explicit `dup`/`drop` after a Perceus-style pass, with reuse tokens (proposed); reuse analysis runs on MIR (decided) |
-| **Generics** | Bodies stay polymorphic with witness tables; monomorphisation is a pass (proposed) |
-| **Identity** | A canonical, deterministic text form and a hash per body; never a stable public format (decided) |
+| **Pipeline** | Canonical AST → **typed HIR** → **MIR** (built → analysed → runtime) → per-target lowering → backends |
+| **Form** | **Places and a control-flow graph**, as Rust's MIR: locals, places, statements and terminators in basic blocks; not SSA |
+| **Ownership** | Moves, drops, linear consumption and second-class borrows are **checked on MIR**, and drops are elaborated there |
+| **Suspension** | `suspend` is an **explicit terminator in every body**, so every suspension point is visible to checks, lints and lowerings |
+| **Effects** | Handlers are hidden parameters (evidence passing); a pass turns statically known handlers into direct calls; `fail` is a second exit edge on calls |
+| **Checks** | Overflow, bounds, refinements, `?!` and contracts are explicit `Assert` statements with a trap class and a source span |
+| **Reference counting** | Explicit `dup`/`drop` after a Perceus-style pass, with reuse tokens; reuse analysis runs on MIR |
+| **Generics** | Bodies stay polymorphic with witness tables; monomorphisation is a pass |
+| **Identity** | A canonical, deterministic text form and a hash per body; never a stable public format |
 
 ## Problem
 
@@ -44,7 +44,7 @@ work on it directly.
 | **MLIR** | Extensible dialects | A possible later bridge for GPU and tensor work, not the core IR |
 | **Cranelift CLIF, LLVM IR** | SSA, low level | The targets: both build their own SSA from what they are given |
 
-## Decisions
+## Design
 
 ### Pipeline
 
@@ -58,13 +58,13 @@ canonical AST ──► typed HIR ──► MIR (built) ──► MIR (analysed)
                                                       └── interpreter ────┘ (comptime, tests, checker)
 ```
 
-- **A typed HIR (decided)** sits between the canonical AST and MIR: desugared and name-resolved,
+- **A typed HIR** sits between the canonical AST and MIR: desugared and name-resolved,
   carrying inferred types, effects and error sets. Salsa queries, the language server and
   `moddil explain` read it ([`agent-interface.md`](agent-interface.md)). The canonical AST stays the
   source of truth for formatting, semantic diffs and cache keys.
 - **MIR is built per item** (function, closure, constant, comptime block) from the HIR, on demand,
   through the same query system.
-- **Phases** (proposed, after Rust's): *built*, as lowered from HIR; *analysed*, after ownership
+- **Phases**, after Rust's: *built*, as lowered from HIR; *analysed*, after ownership
   checking and drop elaboration; *runtime*, after checks, handlers, reference counting and generics
   are made explicit. The interpreter runs analysed or runtime MIR; it never needs target lowering
   ([`compiler.md`: Two interpreters](compiler.md#two-interpreters)).
@@ -73,10 +73,11 @@ canonical AST ──► typed HIR ──► MIR (built) ──► MIR (analysed)
 
 ### Core shape
 
-- **Places and a CFG (decided), not SSA.** A body has typed **locals** (parameters, temporaries,
+- **Places and a CFG, not SSA.** A body has typed **locals** (parameters, temporaries,
   user variables), **places** (`_3.field[_5]`), **statements** (assign, `Assert`, `dup`/`drop`,
   storage markers) and one **terminator** per basic block (goto, switch, call, return, `Suspend`,
-  trap). Cranelift and LLVM build SSA themselves; optimisations that need SSA stay in the backends.
+  trap). *Why:* Cranelift and LLVM build SSA themselves, so optimisations that need SSA stay in the
+  backends.
 - **Types in MIR** are Moddil types with layouts available on demand. Units of measure and
   refinements are **erased to their base types** ([`units.md`](units.md), [`correctness.md`](correctness.md)); what they
   checked becomes explicit `Assert`s or disappears.
@@ -94,7 +95,7 @@ fn make_code(_ev_rand: &dyn Rand) -> Code {
 
 ### Effects
 
-Proposed lowering of [`effects-and-capabilities.md`: Compilation](effects-and-capabilities.md#compilation):
+The lowering of [`effects-and-capabilities.md`: Compilation](effects-and-capabilities.md#compilation):
 
 - **Handlers are hidden parameters** (evidence passing): a function `with Net, Time` receives one
   evidence argument per effect trait, as a `&dyn Trait`. Context data is a hidden `&T` parameter.
@@ -110,12 +111,12 @@ Proposed lowering of [`effects-and-capabilities.md`: Compilation](effects-and-ca
 
 ### Concurrency
 
-- **`Suspend` is an explicit terminator (decided).** Every call that may suspend ends its block,
+- **`Suspend` is an explicit terminator.** Every call that may suspend ends its block,
   with the resume block as its target. The cancellation check sits on that edge, the lint for locks
   held across suspension reads it, and any CPS lowering
   ([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering), lowering 4)
   starts from it. On native targets it lowers to an ordinary call into the runtime.
-- **Task scopes are structured regions** (proposed): `ScopeEnter`, `Spawn` and `ScopeExit`
+- **Task scopes are structured regions**: `ScopeEnter`, `Spawn` and `ScopeExit`
   terminators, so ownership checking knows which borrows children hold and that they end at
   `ScopeExit` ([`concurrency.md`: Tasks and borrowing](concurrency.md#tasks-and-borrowing)). `select`
   is a terminator with one target per arm.
@@ -124,7 +125,7 @@ Proposed lowering of [`effects-and-capabilities.md`: Compilation](effects-and-ca
 
 ### Ownership and resources
 
-- **Checked on MIR (decided)**, as Rust's borrow checker has been since non-lexical lifetimes:
+- **Checked on MIR**, as Rust's borrow checker has been since non-lexical lifetimes:
   - moves and copies are explicit operands; use after move is an error on the CFG;
   - **second-class borrows** need no lifetime inference: the check is that a borrow never flows into
     a place that outlives its scope, never crosses a `ScopeExit` it started outside, and never
@@ -135,7 +136,7 @@ Proposed lowering of [`effects-and-capabilities.md`: Compilation](effects-and-ca
 - **Drop elaboration** happens in the same pass: drop flags where a value is moved on only some
   paths; `defer` and `errdefer` become cleanup blocks on the normal and error/cancellation edges
   ([`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)).
-- **Unwind edges exist only inside isolated scopes** (decided November 2026). A trap elsewhere ends
+- **Unwind edges exist only inside isolated scopes.** A trap elsewhere ends
   the process, so ordinary code has no landing pads; inside `scope(…, isolate: true)` a trap
   unwinds, running drops, poisoning held sync cells and calling `abandon` on linear values
   ([`lifecycle.md`: Traps](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)).
@@ -144,17 +145,17 @@ Proposed lowering of [`effects-and-capabilities.md`: Compilation](effects-and-ca
 
 ### Reference counting
 
-- After ownership checking, a Perceus-style pass (proposed) inserts explicit **`dup` and `drop`**
+- After ownership checking, a Perceus-style pass inserts explicit **`dup` and `drop`**
   for `Rc` values, removes redundant pairs, and threads **reuse tokens** so a functional update
   becomes an in-place write when the old value is dead ([`memory.md`: Biased reference counting](memory.md#biased-reference-counting)).
-- **Reuse analysis runs on MIR** (decided November 2026), not in the backends: it is done once for
-  every runner, so its effect is the same everywhere and the MIR interpreter can test it.
+- **Reuse analysis runs on MIR**, not in the backends. *Why:* it is done once for every runner, so
+  its effect is the same everywhere and the MIR interpreter can test it.
 - Biased counting (owner task versus shared count) stays behind those two operations, in the
   runtime.
 
 ### Explicit checks
 
-- **`Assert` statements** (proposed) make every class-3 check visible: overflow, division, bounds,
+- **`Assert` statements** make every class-3 check visible: overflow, division, bounds,
   refinement validation, `?!` and contracts. Each carries its **trap class**, a message and the
   span.
 - **Contracts** are asserts tagged `requires`, `requires always`, `ensures` or `invariant`; the
@@ -174,7 +175,7 @@ Proposed lowering of [`effects-and-capabilities.md`: Compilation](effects-and-ca
 
 ### Generics
 
-- **Bodies stay polymorphic** (proposed): generic code calls through witness tables (size,
+- **Bodies stay polymorphic**: generic code calls through witness tables (size,
   alignment, copy, drop, trait methods), which debug builds run as is
   ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)).
 - **Monomorphisation is a pass** producing specialised bodies, run for release builds and for
@@ -184,14 +185,14 @@ Proposed lowering of [`effects-and-capabilities.md`: Compilation](effects-and-ca
 
 ### GPU kernels
 
-- `#[kernel]` bodies are a **restricted MIR subset** (proposed): no `dyn`, no `Suspend`, no
+- `#[kernel]` bodies are a **restricted MIR subset**: no `dyn`, no `Suspend`, no
   allocation, no unwind edges, statically known handlers only
   ([`accelerators.md`: Race freedom inside kernels](accelerators.md#race-freedom-inside-kernels)).
   The subset is checked on MIR and lowered to `naga` or LLVM NVPTX/AMDGPU.
 
 ### Identity and stability
 
-- **A canonical text form** (decided November 2026): deterministic numbering and printing, for
+- **A canonical text form**: deterministic numbering and printing, for
   snapshot tests, `moddil explain --mir` and bug reports. It is **never** a stable public format:
   tools use the compiler's queries and the language server instead.
 - **A hash per body** keys the build cache and live update
@@ -211,7 +212,26 @@ Proposed lowering of [`effects-and-capabilities.md`: Compilation](effects-and-ca
 
 ## Open questions
 
-- **The lowerings marked proposed** are confirmed as each is built.
+- **Which lowerings are confirmed.** The core shape, the pipeline, ownership checking on MIR,
+  `Suspend` as a terminator, unwind edges only in isolated scopes, reuse analysis on MIR and the
+  canonical text form are settled. The rest is confirmed as each is built: the three phases,
+  evidence passing and devirtualisation, `Assert` statements, the task-scope terminators, the
+  Perceus-style `dup`/`drop` pass, polymorphic bodies with a monomorphisation pass, and the GPU
+  kernel subset.
+
+## Alternatives considered
+
+- **SSA as the MIR form**, as Swift SIL: SSA-based ownership is powerful but a larger design, and
+  the backends build their own SSA anyway.
+- **MLIR as the core IR**: kept only as a possible later bridge for GPU and tensor work.
+- **Checking ownership and inserting drops on the canonical AST**: it has no control-flow graph, no
+  drops, no explicit checks and no resolved handlers.
+- **Reuse analysis in the backends**: it would run once per backend and could differ between
+  runners; on MIR the interpreter can test it.
+- **Unwind edges in all code**: traps end the process outside isolated scopes, so ordinary code
+  carries no landing pads.
+- **A stable public MIR text format**: tools use the compiler's queries and the language server
+  instead, so the MIR stays free to change.
 
 ## Prior art
 

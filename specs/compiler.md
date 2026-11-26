@@ -6,25 +6,25 @@ to do is in [`roadmap.md`: On the horizon](roadmap.md#on-the-horizon). WASM supp
 
 ## Answers in brief
 
-**What do we build the compiler in?** **Rust**, at least until v1 (decided). Self-hosting, rewriting
-the compiler in Moddil, is **deferred until after v1**: until then the language is dogfooded through
-the standard mods and the reference examples, not the compiler. If Moddil does self-host later,
-bootstrapping would use a checked-in WASM build of the compiler (Zig's approach), with the Rust
-compiler kept alive to cross-check it ([Staged bootstrap](#staged-bootstrap)).
+**Implementation language.** The compiler is written in **Rust**, at least until v1. Self-hosting,
+rewriting the compiler in Moddil, comes **after v1**: until then the language is dogfooded through
+the standard mods and the reference examples, not the compiler. A self-hosted compiler bootstraps
+from a checked-in WASM build of itself (Zig's approach), with the Rust compiler kept alive to
+cross-check it ([Staged bootstrap](#staged-bootstrap)).
 
-**Our own backends, or existing ones?** **Existing ones, except WASM.** Moddil owns its front end and
+**Backends.** Moddil uses **existing backends, except for WASM**. Moddil owns its front end and
 its mid-level IR (where all the Moddil-specific checking and lowering happens). Cranelift does fast
 debug builds, LLVM does optimised release builds and broad target coverage, `naga` and LLVM handle
-GPUs, and Moddil writes its **own WASM backend** because WASM is central (R1) and needs proposals that
-LLVM lags on.
+GPUs, and Moddil writes its **own WASM backend** because WASM is central (R1) and needs proposals
+that LLVM lags on.
 
-**Which WASM lowering first?** **JSPI** (decided). It is a finished standard in every major browser and
-in Node 26, on every operating system. **WASM stack switching** remains the preferred long-term
-lowering and is added for Wasmtime and other WASI hosts once it leaves Tier 3
+**The first WASM lowering.** The first WASM lowering is **JSPI**. It is a finished standard in every
+major browser and in Node 26, on every operating system. **WASM stack switching** is the preferred
+long-term lowering and is added for Wasmtime and other WASI hosts once it leaves Tier 3
 ([WASM concurrency lowering](#wasm-concurrency-lowering)).
 
-**What is the reference interpreter?** A **separate, small interpreter over the canonical AST**
-(decided), independent of the compiler's MIR, so that the two can check each other
+**The reference interpreter.** The reference interpreter is a **separate, small interpreter over the
+canonical AST**, independent of the compiler's MIR, so that the two can check each other
 ([Two interpreters](#two-interpreters)).
 
 ---
@@ -40,21 +40,14 @@ lowering and is added for Wasmtime and other WASI hosts once it leaves Tier 3
   - `gimli`: DWARF debug info.
   - `salsa`: query-based incremental compilation, as used by rust-analyzer ([Build times](build-times.md), compiler-as-a-service [LLMs as first-class programmers](agent-interface.md)).
   - `inkwell` / `llvm-sys`: LLVM.
-  - `lsp-server` with `lsp-types` (rust-analyzer's synchronous loop, which suits salsa; chosen
-    over `tower-lsp` in M2f), `ariadne`/`codespan-reporting`, `logos`: language server,
-    diagnostics, lexing.
+  - `lsp-server` with `lsp-types` (rust-analyzer's synchronous loop, which suits salsa),
+    `ariadne`/`codespan-reporting`, `logos`: language server, diagnostics, lexing.
 - **Familiarity.** The project owner works in Rust daily (Hashiverse).
 - **Translation path.** Rust's ownership model is close to Moddil's, so rewriting the compiler in
   Moddil later is largely mechanical, which suits LLM-assisted porting.
 
-**Alternatives considered:**
-- **OCaml**: a classic compiler language (Rust's first compiler was in OCaml), but a weaker fit with
-  the WASM, Cranelift and GPU ecosystems above.
-- **C++**: native access to LLVM and MLIR, but slow builds and no safety.
-- **Zig**: attractive, but a younger ecosystem with fewer of the pieces above.
-
-**Accepted cost:** stage 0 itself builds at Rust speed. Mitigate with a workspace split into many small
-crates, plus Cranelift for the compiler's own debug builds.
+**Accepted cost:** stage 0 itself builds at Rust speed. The workspace is split into many small
+crates to limit this, and the compiler's own debug builds use Cranelift.
 
 ## Staged bootstrap
 
@@ -70,15 +63,14 @@ crates, plus Cranelift for the compiler's own debug builds.
   types, generics, ownership, modules and mods, basic effects and handlers. It is not the full language.
 - Stage 0 includes an **interpreter for MIR** (the mid-level IR, [Backends](#backends)). Compile-time evaluation ([Metaprogramming](comptime.md))
   needs one anyway, and it lets the language run tests before any backend exists.
-- **Dogfood early.** Write the first standard mods (`moddil/collections`, `text`, `serde`, `test`)
-  in Moddil while the compiler is still in Rust.
+- **Dogfood early.** The first standard mods (`moddil/collections`, `text`, `serde`, `test`) are
+  written in Moddil while the compiler is still in Rust.
 - **Fixed-point check**: stage 2 and stage 3 must be bit-identical. This runs in CI, and also checks
   reproducible builds ([Package management and supply-chain security](packages-and-supply-chain.md)).
-- **When to self-host: deferred until after v1 (decided).** Self-hosting too early means rewriting
-  the compiler every time the language changes, and it competes with the first audiences (Python
-  bindings, backend services; [`adoption.md`](adoption.md)) for effort. Until then the Rust compiler is
-  *the* compiler, and stages 1–3 above describe the eventual plan. TypeScript (now ported to Go),
-  Gleam and Roc show that a language can thrive with a compiler written in another language.
+- **When to self-host: after v1.** Until then the Rust compiler is *the* compiler, and stages 1–3
+  above describe the eventual plan. *Why:* self-hosting too early means rewriting the compiler
+  every time the language changes, and it competes with the first audiences (Python bindings,
+  backend services; [`adoption.md`](adoption.md)) for effort.
 
 ## Bootstrapping after self-hosting
 
@@ -95,8 +87,8 @@ problem, which is exactly the supply-chain concern of [Package management and su
 - The WASM blob must be **reproducible**: anyone can rebuild it from source and get the same bytes.
 - Keep the **Rust stage 0 buildable** so the compiler can be built by two independent paths and the
   results compared (**diverse double-compiling**, David A. Wheeler).
-- **No C backend** (decided November 2026), though Nim has one and Zig's CBE gives a third path:
-  self-hosting is deferred, and Cranelift, LLVM and WASM reach every target a C backend would.
+- **No C backend.** *Why:* self-hosting comes after v1, and Cranelift, LLVM and WASM reach every
+  target a C backend would.
 
 ## Compiler architecture
 
@@ -110,28 +102,27 @@ problem, which is exactly the supply-chain concern of [Package management and su
 - **No link step in dev builds:** functions are reached through an indirection table and compiled by
   Cranelift in process, which also enables **live update** ([Live update (debug builds)](build-times.md#live-update-debug-builds)). Release builds link normally with
   `lld` or `mold`, with split debug info.
-- **Traps in JIT code return, they do not unwind (decided November 2026, M1 slice C0).** Code
+- **Traps in JIT code return, they do not unwind.** Code
   compiled into the compiler's process returns a status beside each result: a failed check
   records its site with the runtime and returns "trapped", and each caller passes that on, so a
   trap in a test or a `moddil run` leaves the compiler running. A process built to run
   on its own ends on a trap outside an isolated scope, as
   [`mir.md`: Ownership and resources](mir.md#ownership-and-resources) says.
   - **The statuses:** 0 returned, 1 trapped, 2 failed (the error written where the caller's
-    error pointer says, decided November 2026, M1 slice C4), and 3 unwinding (decided November
-    2026, M1 slice C5).
+    error pointer says), and 3 unwinding.
   - **Unwinding:** a cancelled task, or one that traps in an isolated scope, unwinds with status
     3. Each frame runs the MIR's cleanup code for the point it is at, then returns 3 to its
     caller, so destructors run as the interpreters run them.
-- **`moddil build` (decided November 2026, M1).** The same lowering writes an object file with
+- **`moddil build`.** The same lowering writes an object file with
   `cranelift-object`.
   - **Linking:** the object is linked with `moddil-rt-main`, the runtime as a static library,
     which gives the process its `main`. The linker is MSVC's `link.exe` on Windows and the
     system's `cc` elsewhere.
-  - **Release builds (decided November 2026, M1 slice W3):** `moddil build --release` links
+  - **Release builds:** `moddil build --release` links
     with `lld`, the toolchain's `rust-lld` (or `mold` where it is installed). It writes DWARF
     line tables, from the source location the lowering gives each statement's code: split into
     `name.debug` on Linux, left for `dsymutil` on macOS, and none yet on Windows (PDB).
-  - **`moddil build --wasm` (decided November 2026, M1 slice W3):** core modules plus generated
+  - **`moddil build --wasm`:** core modules plus generated
     JS glue, as below. The glue is an ES module that runs `main` in a browser or in Node, and it
     shares its core with the test host.
   - **The object's exports:** the program's entry, its exit code for `main`'s result
@@ -148,14 +139,14 @@ problem, which is exactly the supply-chain concern of [Package management and su
 - **Grammar first.** The machine-readable grammar is written before the parser, and the parser is
   **hand-written** against it (for good error recovery and diagnostics), with the grammar's
   generated tests keeping them in step ([`definition.md`: One grammar source](definition.md#one-grammar-source)).
-- **Syntax tree (decided):** a lossless tree (every token, whitespace and comment, with error
+- **Syntax tree:** a lossless tree (every token, whitespace and comment, with error
   nodes) with a typed AST over it, in our own small implementation rather than a library; the
   parser recovers from errors from the start, so a tree always exists. The formatter, the language
   server and agents edit the same tree the compiler reads
   ([`crates/syntax`](../crates/syntax/README.md)).
-- **Queries from the first slice (decided):** the compiler is built on Salsa from slice S0, with
-  coarse queries (parse a file, its items, each body's HIR, types and MIR) that later slices
-  refine, so the query structure is never retrofitted
+- **Queries from the first slice:** the compiler is built on Salsa from slice S0, with coarse
+  queries (parse a file, its items, each body's HIR, types and MIR) that each slice refines.
+  *Why:* the query structure is never retrofitted
   ([`crates/sema`](../crates/sema/README.md)).
 - **Vertical slices.** The language grows slice by slice, each running end to end
   ([`roadmap.md`: How work is built](roadmap.md#how-work-is-built)).
@@ -175,15 +166,14 @@ problem, which is exactly the supply-chain concern of [Package management and su
   the MIR interpreter and compiled code; any difference in results is a bug in one of them.
 - The reference interpreter covers the safe language and the closed list of undefined behaviour
   ([`unsafe.md`](unsafe.md)); it does not need to be fast enough for real programs.
-- **Timing (decided):** the reference interpreter started at slice S1 of M0 and follows every
-  slice after it ([`roadmap.md`: How work is built](roadmap.md#how-work-is-built)).
-- **Independence (decided):** it shares only the parser and AST (`crates/syntax`, pinned down by the
+- **Timing:** the reference interpreter covers every slice from slice S1 of M0 on ([`roadmap.md`: How work is built](roadmap.md#how-work-is-built)).
+- **Independence:** it shares only the parser and AST (`crates/syntax`, pinned down by the
   grammar's generated tests) with the compiler, and never depends on semantic analysis, MIR or the
   MIR interpreter ([Repository layout](#repository-layout)).
 
 ## Repository layout
 
-**Decided: one main repository** for the language, its toolchain, the reference, the conformance
+**One main repository** holds the language, its toolchain, the reference, the conformance
 suite, the standard mods and the tour.
 
 ```
@@ -263,11 +253,11 @@ moddil/
 | **MIR + front end** | All Moddil-specific semantics | **Own** | This is where the language's value lies |
 | MIR interpreter | Compile-time evaluation, fast tests | **Own** | Needed anyway for [Metaprogramming](comptime.md) |
 | **Cranelift** | Debug/dev builds | Reuse | Fast compile; x86-64, AArch64, RISC-V 64, s390x |
-| **LLVM** | Release builds; iOS/Android/embedded; mature optimisation | Reuse | Pin one major version, upgraded about once a year in one change with the full suite on every runner (decided November 2026); use via the C API / `inkwell` |
+| **LLVM** | Release builds; iOS/Android/embedded; mature optimisation | Reuse | Pin one major version, upgraded about once a year in one change with the full suite on every runner; use via the C API / `inkwell` |
 | **WASM** | Browser, Node, WASI, components, bootstrap | **Own** emitter (`wasm-encoder`), translating the native lowering's Cranelift IR (one lowering for both), + Binaryen `wasm-opt` | WASM is simple; needs stack switching, JSPI glue, exnref, GC and Component Model earlier than LLVM provides them; binary size matters |
-| **GPU** | Kernels | Reuse | `naga` for WGSL/SPIR-V/MSL/HLSL; LLVM NVPTX/AMDGPU for CUDA/ROCm-class targets. **No MLIR export** (decided November 2026): tensors go through `moddil/tensor`; revisit only if an NPU or vendor graph compiler target needs it |
-| **C** | Third bootstrap path, odd platforms | Own (optional) | Decide later |
-| Native backends of our own | Faster compiles, full control | **Not now** | Go and Zig did this at great cost; revisit only if Cranelift + LLVM block the build-time goals |
+| **GPU** | Kernels | Reuse | `naga` for WGSL/SPIR-V/MSL/HLSL; LLVM NVPTX/AMDGPU for CUDA/ROCm-class targets. **No MLIR export**: tensors go through `moddil/tensor`; revisited only if an NPU or vendor graph compiler target needs it |
+| **C** | Third bootstrap path, odd platforms | Own (optional) | Not decided ([Open questions](#open-questions)) |
+| Native backends of our own | Faster compiles, full control | **Not now** | Go and Zig did this at great cost; revisited only if Cranelift + LLVM block the build-time goals |
 
 **Linkers:** `lld` or `mold` for native code; `wasm-ld` or a Moddil linker for WASM modules and
 components. **Cross-compilation ([Cross-compilation and deployment](targets.md)):** LLVM plus bundled libc/sysroots, as Zig does
@@ -281,9 +271,9 @@ are target-independent. The backend chooses how to implement suspension:
 | # | Lowering | Where | Status |
 |---|---|---|---|
 | 1 | Native stacks | Native targets | Always available |
-| 2 | **WASM + JSPI** | All major browsers, Node ≥ 26, every OS | **Built first (decided).** Each Moddil task is a separate `WebAssembly.promising` entry with its own suspended WASM stack; switching goes through a JS-side scheduler promise. Slower per switch, but works everywhere now. |
+| 2 | **WASM + JSPI** | All major browsers, Node ≥ 26, every OS | **Built first.** Each Moddil task is a separate `WebAssembly.promising` entry with its own suspended WASM stack; switching goes through a JS-side scheduler promise. Slower per switch, but works everywhere now. |
 | 3 | **WASM stack switching** (`cont.new` / `resume` / `suspend`) | Wasmtime (Tier 3, x86_64 Linux), Wasmer; browsers when shipped | **Preferred long-term** lowering; added for WASI hosts once Wasmtime's support leaves Tier 3 |
-| 4 | CPS / Asyncify-style transform | WASI runtimes without stack switching | **Not built (decided November 2026).** WASI concurrency waits for stack switching; MIR's explicit `Suspend` terminator keeps this lowering possible if a host never gets it. |
+| 4 | CPS / Asyncify-style transform | WASI runtimes without stack switching | **Not built.** WASI concurrency waits for stack switching; MIR's explicit `Suspend` terminator keeps this lowering possible if a host never gets it. |
 
 The dependency on the stack-switching proposal stays isolated in the task/continuation runtime, so
 changes to the proposal stay local.
@@ -310,7 +300,7 @@ WASI waits for its stack switching to mature; the first WASM lowering is JSPI ([
 **Caveats:**
 - **Stack switching in Wasmtime is Tier 3 and x86_64 Linux only.** Development on Windows needs WSL2
   or Linux CI for that path. Tier 3 means incomplete fuzzing and no C API yet, so expect bugs.
-- Pin a recent Wasmtime version (the docs reference ~47; a local Windows install was 37.0.1).
+- A recent Wasmtime version is pinned (the docs reference ~47; a local Windows install was 37.0.1).
 - Wasmtime does not cover the browser; JSPI does, from the first WASM milestone.
 
 ## WASM support: verified status (November 2026)
@@ -341,26 +331,51 @@ probes on Node v24.16.0 (V8 13.6).
   `cont.new` ("Invalid opcode 0xe0"), so the prototype in this V8 version is incomplete.
 
 **Consequences:**
-- Do not assume stack switching in browsers or Node yet; JSPI is the browser baseline ([WASM concurrency lowering](#wasm-concurrency-lowering)).
+- Stack switching is not assumed in browsers or Node yet; JSPI is the browser baseline ([WASM concurrency lowering](#wasm-concurrency-lowering)).
 - Memory64 is not available in Safari: `wasm32` is the browser default.
 - Browser threads need cross-origin isolation (COOP/COEP headers).
-- The Component Model is only Phase 1 and absent from browsers, so emit core modules + JS glue for the
-  web.
+- The Component Model is only Phase 1 and absent from browsers, so the web gets core modules + JS glue.
 
 ## Risks
 
 - Stack switching may change shape before standardisation, or arrive late in Safari. The
   dependency stays isolated in the task runtime ([WASM concurrency lowering](#wasm-concurrency-lowering)).
-- **JSPI's per-switch cost** (decided November 2026: measured, not assumed): JSPI stays the
-  browser lowering until browsers ship stack switching, and its cost is measured on the game
-  client (P51), which is when it could matter.
+- **JSPI's per-switch cost** is measured, not assumed: JSPI stays the browser lowering until
+  browsers ship stack switching, and its cost is measured on the game client (P51), which is when
+  it could matter.
 
 ## Open questions
 
-- **The LLVM route**, decided when the work starts. LLVM can be given either:
+- **The LLVM route**, to be settled when the work starts. LLVM can be given either:
   - LLVM IR translated from the Cranelift IR the native lowering already makes, as the WASM
     emitter does: one lowering for every backend, about 1 to 2 weeks, but LLVM sees IR whose ABI
     and stack slots are fixed, so it may optimise less well;
   - or a second lowering straight from MIR, with the types and aliasing LLVM can use: the best
     code, but about 3 to 6 weeks, and every later feature built twice.
+- **Whether to self-host at all.** Self-hosting waits until after v1, and the bootstrap above
+  applies once it happens; whether the compiler is rewritten in Moddil after v1 is not settled.
+- **A C backend** for odd platforms ([Backends](#backends)): none is built while self-hosting
+  waits, and whether one comes later is not decided.
 
+## Alternatives considered
+
+- **OCaml** as the stage 0 language: a classic compiler language (Rust's first compiler was in
+  OCaml), but a weaker fit with the WASM, Cranelift and GPU ecosystems Moddil needs.
+- **C++** as the stage 0 language: native access to LLVM and MLIR, but slow builds and no safety.
+- **Zig** as the stage 0 language: attractive, but a younger ecosystem with fewer of the pieces
+  Moddil needs.
+- **Self-hosting before v1:** the compiler would be rewritten every time the language changes, and
+  the work would compete with the first audiences. TypeScript (now ported to Go), Gleam and Roc
+  show that a language can thrive with a compiler written in another language.
+- **A C backend** (Nim has one; Zig's CBE gives a third bootstrap path): not needed while
+  self-hosting waits, and Cranelift, LLVM and WASM reach every target it would.
+- **`tower-lsp`** for the language server: `lsp-server` is used instead, since rust-analyzer's
+  synchronous loop suits salsa.
+- **The MIR interpreter as the reference:** a front-end or lowering bug would change the compiler
+  and the reference at the same time, and nothing would notice.
+- **A CPS / Asyncify-style transform** for WASI concurrency: WASI concurrency waits for stack
+  switching instead; MIR's explicit `Suspend` terminator keeps the transform possible.
+- **MLIR export** for tensors: tensors go through `moddil/tensor`; it is reconsidered only for an
+  NPU or vendor graph compiler target.
+- **Native backends of Moddil's own:** Go and Zig did this at great cost, and Cranelift and LLVM
+  serve unless they block the build-time goals.

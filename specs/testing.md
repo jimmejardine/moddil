@@ -53,11 +53,11 @@ and flaky tests are the main brake.
   `where:` clauses) and can see private items in its module.
 - Tests without a single subject are module-level `test "name" { … }` blocks; larger scenarios live in
   separate integration-test modules.
-- **Subjects are qualified paths (decided):** `test "…" for OrderBook::add` (a method),
+- **Subjects are qualified paths:** `test "…" for OrderBook::add` (a method),
   `for <Money as Display>` (a trait implementation) and `for sort::<int>` (one instantiation). A
   generic test is written once and run for listed types:
   `test "sorts" for sort::<T> with T in [int, f64, String] { … }`.
-- **Fixtures and helpers (decided):** `#[test_only]` items and modules compile only in test builds,
+- **Fixtures and helpers:** `#[test_only]` items and modules compile only in test builds,
   and the compiler checks that only tests and other test-only items use them. Helpers meant for other
   mods (fake handlers, builders) go in a separate `-testing` mod, so release builds never contain test
   code.
@@ -75,7 +75,7 @@ and flaky tests are the main brake.
 
 ### Errors inside tests
 
-**Decided: an error that escapes a test fails the test.** A test is an entry point with an explicit
+**An error that escapes a test fails the test.** A test is an entry point with an explicit
 exemption from R3 ([`requirements.md`: R3](requirements.md#r3-no-crash-from-an-unhandled-error)):
 its body may use `?`, and any error that escapes, like any trap, fails that test and is reported with
 its error return trace ([`error-handling.md`: Traces](error-handling.md#traces)). `main`, task
@@ -83,7 +83,7 @@ bodies and callbacks keep the full R3 rule.
 
 ## Assertions
 
-**Decided: `assert(cond)` is a power assert.** When it fails, the compiler, which sees the whole
+**`assert(cond)` is a power assert.** When it fails, the compiler, which sees the whole
 condition, reports the value of every part of it, as Groovy, Spock and pytest do. There is no
 `assert_eq` or `assert_ne` family: `assert(a == b)` already shows both sides.
 
@@ -157,10 +157,21 @@ function's whole specification and evidence in one place:
   counters, which fail CI ([`performance.md`: Benchmarks and budgets](performance.md#benchmarks-and-budgets)).
 - Results are recorded per build hash, so the semantic diff can report **performance deltas** for
   changed functions ([Diffs, code review and version control](semantic-vcs.md)).
-- **Noise handling (decided in [`performance.md`: Benchmarks and budgets](performance.md#benchmarks-and-budgets)):**
+- **Noise handling ([`performance.md`: Benchmarks and budgets](performance.md#benchmarks-and-budgets)):**
   budgets on deterministic counters gate CI; wall-clock results come with confidence intervals and
   only warn. Wall-clock benchmarks that gate merges run on dedicated or pinned machines, configured
   per project.
+
+## Alternatives considered
+
+- **An `assert_eq` / `assert_ne` family**: not taken. A power assert already shows both sides of
+  `assert(a == b)`.
+- **Compiling asserts out in release builds**, as C's `NDEBUG` does: not taken. `assert` runs in
+  every build, like overflow checks; only a proven-redundant one is removed.
+- **Mocks through traits written by hand, or global monkey-patching**: not taken. Fakes are scoped
+  effect handlers under the simulation runtime.
+- **Wall-clock benchmarks gating CI by default**: not taken. Budgets on deterministic counters gate
+  CI; wall-clock results only warn, unless a project runs them on dedicated or pinned machines.
 
 ## Prior art
 

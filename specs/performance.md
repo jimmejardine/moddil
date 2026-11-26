@@ -1,11 +1,11 @@
 # Performance model
 
-Brings together performance decisions made in other areas and adds the rules for hot paths,
+Brings together the performance rules set in other areas and adds the rules for hot paths,
 checks, optimisation and benchmarks.
 
 ## Summary
 
-| Topic | Decision |
+| Topic | Rule |
 |---|---|
 | **Cost model** | Published per construct. **No construct hides an allocation, a lock, or a copy proportional to data size**; each appears in the source ([A published cost model](#a-published-cost-model)). |
 | **Hot paths** | **`#[no_alloc]` and `#[no_lock]`** on functions or blocks, checked transitively through callees. "Never suspends" already follows from effect sets ([Hot-path guarantees](#hot-path-guarantees)). |
@@ -18,27 +18,14 @@ checks, optimisation and benchmarks.
 Moddil promises that cost is visible ([`vision.md`: Cross-cutting themes](vision.md#cross-cutting-themes)), and two reference examples
 depend on it: the [HFT platform](examples/hft-platform.md) needs tick-to-trade latency competitive
 with tuned C++, with zero allocation on the hot path, and the [multiplayer game](examples/multiplayer-game.md)
-must hit its frame budget, including in debug builds. The relevant decisions are spread across memory,
-values, numerics, concurrency and build times. What is missing is one model: what each construct costs,
-how a programmer guarantees that a hot path stays fast, and how regressions are caught.
-
-## Prior art
-
-| Language or tool | Approach | Lesson |
-|---|---|---|
-| **C++** | Zero-cost abstractions | Hidden costs remain: implicit copies, exceptions, virtual calls through templates |
-| **Rust** | Zero-cost abstractions, monomorphisation | Fast, but async state machines bloat, generic code compiles slowly, and release builds turn overflow checks off |
-| **Swift** | ARC; `@_noAllocation` and `@_noLocks` performance annotations; `-Ounchecked` | Hot-path annotations work when the compiler checks them transitively; ARC traffic is the hidden cost |
-| **Zig** | Explicit allocators; `ReleaseSafe` vs `ReleaseFast` | Explicit cost; build modes that change semantics |
-| **Go** | Garbage collection | Simple, with tail-latency costs that real-time systems cannot accept |
-| **Jai, Zig** | Built-in or library struct-of-arrays | Layout transformations without rewriting code |
-| **AutoFDO, LLVM BOLT** | Profile-guided and post-link optimisation | 10–20% gains on large services; profiles are hard to keep reproducible |
-| **iai, cachegrind** | Benchmarks on instruction counts instead of time | Deterministic counters make benchmark budgets reliable on noisy CI machines |
+must hit its frame budget, including in debug builds. The relevant rules are spread across memory,
+values, numerics, concurrency and build times. This document gives one model: what each construct
+costs, how a programmer guarantees that a hot path stays fast, and how regressions are caught.
 
 ## A published cost model
 
-**Decision: every construct has a documented cost, and no construct hides an allocation, a lock or a
-copy whose size grows with the data.**
+**Every construct has a documented cost, and no construct hides an allocation, a lock or a copy
+whose size grows with the data.**
 
 | Construct | Compiles to | Cost |
 |---|---|---|
@@ -61,15 +48,15 @@ copy whose size grows with the data.**
 
 ## Data layout
 
-Decided in [`numerics.md`: Data layout](numerics.md#data-layout) and summarised here:
+Specified in [`numerics.md`: Data layout](numerics.md#data-layout) and summarised here:
 
 - The compiler **reorders fields** to minimise padding unless the type is `#[repr(C)]`.
 - **Packed structs, bitfields and endian types** (`u32be`) for wire formats.
 - A **comptime struct-of-arrays container**, so a `Vec<Particle>` can become a column per field
   without rewriting the code that uses it.
-- **No automatic layout changes (decided).** The compiler never switches a collection to
-  struct-of-arrays by itself; layout stays visible in the code. The profiler and `moddil perf`
-  suggest `Soa<T>` as a diagnostic with a fix.
+- **No automatic layout changes.** The compiler never switches a collection to struct-of-arrays
+  by itself; layout stays visible in the code. The profiler and `moddil perf` suggest `Soa<T>` as a
+  diagnostic with a fix.
 
 Added here:
 
@@ -79,7 +66,7 @@ Added here:
 
 ## Hot-path guarantees
 
-**Decision: `#[no_alloc]` and `#[no_lock]` are checked attributes.**
+**`#[no_alloc]` and `#[no_lock]` are checked attributes.**
 
 ```rust
 #[no_alloc, no_lock]
@@ -108,17 +95,17 @@ fn on_tick(book: &mut OrderBook, tick: &Tick, out: &mut SpscProducer<Order>) wit
   ([`interop.md`](interop.md)).
 - **Traps still trap.** These attributes are about latency, not failure; a bounds or overflow trap
   inside a `no_alloc` function behaves as everywhere else.
-- **Closures and parameters (decided):** `NoAlloc` and `NoLock` are marker traits that the compiler
+- **Closures and parameters:** `NoAlloc` and `NoLock` are marker traits that the compiler
   infers for every function and closure (nobody writes the impls). A parameter requires them as a
   bound, `f: impl Fn(&Tick) + NoAlloc + NoLock`, so a `pub` signature can promise and demand the
   property, and a violating closure is reported at the call site.
-- **Bounded execution (decided, v1):** `#[bounded]` joins `no_alloc` and `no_lock`. Inside it, loops
+- **Bounded execution (v1):** `#[bounded]` joins `no_alloc` and `no_lock`. Inside it, loops
   are only `for` over finite ranges or collections (no `while` or `loop`), and there is no recursion,
   directly or through calls. It is checked transitively, recorded in the interface artefact and
   covered by the semver check, like the other two.
-- **Why attributes:** making allocation an effect would put `alloc` in almost every public signature,
-  and running the hot path with the allocator capability withheld would only check the code reached
-  in that one scope. Swift's `@_noAllocation` shows that checked attributes work.
+- *Why attributes:* an attribute checks every path through the code, not only the paths one run
+  reaches, and keeps `alloc` out of ordinary public signatures. Swift's `@_noAllocation` shows that
+  checked attributes work.
 
 ## Kernel-bypass I/O: a worked example
 
@@ -196,7 +183,7 @@ fn feed_handler(rx: &RxQueue) with Net, suspend, fail(NetError) {
 
 ## Real-time guarantees
 
-**Decided: `pinned` executors guarantee isolation, not hard real time.**
+**`pinned` executors guarantee isolation, not hard real time.**
 
 - No work stealing, no migration, and no preemption checks on their cores; no other executor's
   tasks run there.
@@ -209,8 +196,8 @@ fn feed_handler(rx: &RxQueue) with Net, suspend, fail(NetError) {
 
 ## Checks and their elision
 
-**Decision: overflow and bounds checks are never turned off for a whole build.** A program behaves the
-same in debug and release, on every target ([`numerics.md`: Overflow traps](numerics.md#overflow-traps),
+**Overflow and bounds checks are never turned off for a whole build.** A program behaves the same
+in debug and release, on every target ([`numerics.md`: Overflow traps](numerics.md#overflow-traps),
 [`error-handling.md`](error-handling.md)).
 
 - **Elision the compiler promises:** loops over `0..xs.len()` and iterators over slices; indices
@@ -228,13 +215,13 @@ same in debug and release, on every target ([`numerics.md`: Overflow traps](nume
 ## Optimisation control
 
 - **Inlining hints:** `#[inline]`, `#[inline(never)]` and `#[cold]`, as in Rust.
-- **Call-site inlining (decided):** `#[inline]` or `#[inline(never)]` on a *statement* applies to the
+- **Call-site inlining:** `#[inline]` or `#[inline(never)]` on a *statement* applies to the
   calls written in that statement, not to calls inside the callees, as Jai's `inline` and
   `no_inline` at a call. It goes on statements because the grammar has statement attributes but
   no expression attributes. A call that cannot be inlined (recursive, through `dyn`, foreign) gets
   a warning, and the hint never changes semantics.
 - **LTO** in release builds; no cross-mod inlining in debug builds ([`build-times.md`: Profiles](build-times.md#profiles)).
-- **PGO from replays (decided):**
+- **PGO from replays:**
   - `moddil build --pgo` uses profiles gathered from **recorded production runs or simulated runs**
     ([`determinism.md`: Record and replay](determinism.md#record-and-replay)): the HFT platform replays a trading day; the game
     runs its simulated clients;
@@ -257,7 +244,7 @@ Games and simulations must stay usable in debug builds:
 
 ## Benchmarks and budgets
 
-**Decision: budgets on deterministic counters fail CI; wall-clock results only warn.**
+**Budgets on deterministic counters fail CI; wall-clock results only warn.**
 
 ```rust
 #[budget(allocations: 0, instructions: 2_000)]
@@ -269,7 +256,7 @@ bench "one tick" for on_tick {
 
 - `moddil bench` (from `moddil/bench`) runs benchmarks and compares them with the previous commit
   statistically.
-- **Counters are deterministic (decided):** allocations, bytes allocated, syscalls and effect
+- **Counters are deterministic:** allocations, bytes allocated, syscalls and effect
   operations are counted by the runtime on every target. Instructions come from hardware counters
   where available, and otherwise from deterministic instruction counting (Wasm fuel, or the MIR
   interpreter). Each budget names the counter it uses. A budget on
@@ -290,3 +277,29 @@ bench "one tick" for on_tick {
 | [Multiplayer game](examples/multiplayer-game.md) | Frame budget in release and debug; cache-friendly entity data | Struct-of-arrays; optimised dependencies in debug; debug frame-rate benchmark |
 | [Web store](examples/web-store.md) | Throughput per request; low memory per request | Allocation counters per request handler; visible rc and clone costs |
 | [Hashiverse](examples/hashiverse.md) | Crypto and proof-of-work throughput | Constant-time crypto that is still vectorised; PGO from simulated network runs |
+
+## Alternatives considered
+
+- **Allocation as an effect.** It would put `alloc` in almost every public signature, and running
+  the hot path with the allocator capability withheld would only check the code reached in that one
+  scope.
+- **Automatic struct-of-arrays layout.** The compiler choosing layout by itself would hide it from
+  the code; `moddil perf` suggests `Soa<T>` instead.
+- **Build modes that turn checks off** (Rust's release overflow behaviour, Swift's `-Ounchecked`,
+  Zig's `ReleaseFast`). They make a program behave differently between builds; opt-outs are local
+  instead.
+- **Wall-clock budgets that fail CI.** Timing on shared CI machines is too noisy; budgets use
+  deterministic counters.
+
+## Prior art
+
+| Language or tool | Approach | Lesson |
+|---|---|---|
+| **C++** | Zero-cost abstractions | Hidden costs remain: implicit copies, exceptions, virtual calls through templates |
+| **Rust** | Zero-cost abstractions, monomorphisation | Fast, but async state machines bloat, generic code compiles slowly, and release builds turn overflow checks off |
+| **Swift** | ARC; `@_noAllocation` and `@_noLocks` performance annotations; `-Ounchecked` | Hot-path annotations work when the compiler checks them transitively; ARC traffic is the hidden cost |
+| **Zig** | Explicit allocators; `ReleaseSafe` vs `ReleaseFast` | Explicit cost; build modes that change semantics |
+| **Go** | Garbage collection | Simple, with tail-latency costs that real-time systems cannot accept |
+| **Jai, Zig** | Built-in or library struct-of-arrays | Layout transformations without rewriting code |
+| **AutoFDO, LLVM BOLT** | Profile-guided and post-link optimisation | 10–20% gains on large services; profiles are hard to keep reproducible |
+| **iai, cachegrind** | Benchmarks on instruction counts instead of time | Deterministic counters make benchmark budgets reliable on noisy CI machines |

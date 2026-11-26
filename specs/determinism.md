@@ -15,8 +15,8 @@
 
 ## The principle
 
-**Decided, as firm requirement R4
-([`requirements.md`: R4](requirements.md#r4-deterministic-by-construction)):** *the core language is
+Firm requirement R4
+([`requirements.md`: R4](requirements.md#r4-deterministic-by-construction)): *the core language is
 deterministic, and every source of nondeterminism enters through an effect or a root capability.*
 
 Pure code run under deterministic handlers then produces **bit-identical** results on every target.
@@ -47,8 +47,8 @@ What it enables:
 
 ## The `nondet` effect
 
-**Decided: all opt-in nondeterminism performs one built-in effect, `nondet`.** Like `ffi` and
-`unsafe`, it has no handler to swap
+**All opt-in nondeterminism performs one built-in effect, `nondet`.** Like `ffi` and `unsafe`, it
+has no handler to swap
 ([`effects-and-capabilities.md`: The effect catalogue](effects-and-capabilities.md#the-effect-catalogue)).
 
 | Performs `nondet` | Deterministic default |
@@ -71,7 +71,7 @@ fn splat(points: &[Point], grid: &mut [f32]) with nondet {   // float atomics: o
 - **Forbidden where replay or lockstep matters:** durable workflows, lockstep game simulation and
   any scope that requires replay reject it, through the same effect-set check as other restricted
   code ([`effects-and-capabilities.md`: Restricted code is one mechanism](effects-and-capabilities.md#restricted-code-is-one-mechanism)).
-- **Requiring replay** (decided): durable workflows and lockstep code require it automatically. Any
+- **Requiring replay:** durable workflows and lockstep code require it automatically. Any
   other scope opts in, with `scope(…, replayable: true)` or `#[replayable]` on a function, and the
   compiler then rejects `nondet` inside it. Typical users are consensus code, ledgers and trading
   strategies.
@@ -80,10 +80,10 @@ fn splat(points: &[Point], grid: &mut [f32]) with nondet {   // float atomics: o
 
 ## Deterministic maths
 
-**Decided: every `f32` and `f64` elementary function in `moddil/math` is correctly rounded**
-(`exp`, `log`, `pow`, trigonometric and hyperbolic functions and their inverses), as CORE-MATH has
-shown can be done at speeds close to existing `libm`s. A correctly rounded result is unique, so it is
-bit-identical on every target and every implementation.
+**Every `f32` and `f64` elementary function in `moddil/math` is correctly rounded** (`exp`, `log`,
+`pow`, trigonometric and hyperbolic functions and their inverses). A correctly rounded result is
+unique, so it is bit-identical on every target and every implementation. *Why it is affordable:*
+CORE-MATH has shown that correct rounding runs at speeds close to existing `libm`s.
 
 - **`math::fast`** gives portable software versions with a stated error bound (a few ulp). They are
   faster and **still deterministic**, because Moddil ships the same implementation for every target.
@@ -91,7 +91,7 @@ bit-identical on every target and every implementation.
 
 ## Randomness
 
-**Decided: one `Rand` trait, and every `Rand` handler is cryptographically secure.**
+**There is one `Rand` trait, and every `Rand` handler is cryptographically secure.**
 
 - In production, the handler is built from the **`Entropy`** root capability (the OS CSPRNG,
   [`lifecycle.md`: `main` declares its root capabilities](lifecycle.md#main-declares-its-root-capabilities)).
@@ -125,7 +125,7 @@ nondeterminism, caught immediately (TigerBeetle does this).
 
 ### The `Sim` API
 
-**Decided**, in the shape used by the [tour](tour.md):
+The API, in the shape the [tour](tour.md) uses:
 
 | Operation | Shape |
 |---|---|
@@ -137,7 +137,7 @@ nondeterminism, caught immediately (TigerBeetle does this).
 
 ### Peers not written in Moddil
 
-**Decided: three ways in, in order of preference:**
+**Three ways in, in order of preference:**
 1. **WASM components** run under the deterministic host ([`interop.md`: WASM components: the sandboxed path](interop.md#wasm-components-the-sandboxed-path));
 2. a **Moddil model** of the peer's protocol, written as a handler;
 3. **replay of recorded traffic** at the `Net` boundary.
@@ -218,7 +218,7 @@ Uses:
 
 ### Format and retention
 
-**Decided: one effect log per task.**
+**There is one effect log per task.**
 
 - Each task's log holds its **effect results** and the **scheduling decisions** that affected it
   (wake order, `select` choices). Logs are linked through the task tree, so a request, a workflow or
@@ -259,7 +259,7 @@ Bit-identical results across x86, ARM, WASM and GPU (for code without `nondet`),
 systems. It follows from [Sources of nondeterminism](#sources-of-nondeterminism): strict floating
 point, correctly rounded maths, and fixed-width integers.
 
-**GPUs are included, across vendors** (decided): for code without `nondet`, strict IEEE, correctly
+**GPUs are included, across vendors:** for code without `nondet`, strict IEEE, correctly
 rounded maths and fixed-order reductions give the same bits on any GPU and on the CPU simulator.
 Tensor-core paths whose accumulation order a vendor leaves open, and fast intrinsics, perform
 `nondet` ([`accelerators.md`: Runtimes and backends](accelerators.md#runtimes-and-backends)).

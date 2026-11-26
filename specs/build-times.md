@@ -35,11 +35,11 @@ The compiler itself is query-based and lazy, and skips linking in dev builds
 - Tests run under a custom `profiling` profile (release optimisation plus debug info), not the default
   dev profile, because proof-of-work in debug builds is too slow.
 
-Both are workarounds that every serious Rust project rediscovers. Moddil should make them unnecessary.
+Both are workarounds that every serious Rust project rediscovers. Moddil makes them unnecessary.
 
 ## Language rules that decide build speed
 
-**Decided.** Each is very hard to add later.
+Each is very hard to add later, so each is part of the language from the start.
 
 1. **No cycles between mods** (as in Go). Mods form a DAG and compile in parallel. Cycles between
    modules inside a mod are allowed ([`modules.md`: Cycles](modules.md#cycles)).
@@ -50,10 +50,10 @@ Both are workarounds that every serious Rust project rediscovers. Moddil should 
    dependents**.
 3. **No inlining across mods in debug builds.** Cross-mod optimisation (LTO, ThinLTO) happens only in
    release builds.
-4. **Generics are checked once, at their definition** (decided, [`comptime.md`: Generics are bounded](comptime.md#generics-are-bounded)).
+4. **Generics are checked once, at their definition** ([`comptime.md`: Generics are bounded](comptime.md#generics-are-bounded)).
    No per-instantiation re-checking as with C++ templates.
-5. **Generics compile differently in debug and release, with identical semantics** (decided,
-   [`types.md`: Generics](types.md#generics)).
+5. **Generics compile differently in debug and release, with identical semantics**
+   ([`types.md`: Generics](types.md#generics)).
    - Debug: one copy of the code, receiving a hidden **witness table** of type information and
      operations (size, alignment, copy, drop, trait methods).
    - Release: a specialised copy per type (monomorphisation).
@@ -67,7 +67,7 @@ Both are workarounds that every serious Rust project rediscovers. Moddil should 
    - Trivial functions are inlined at the MIR level even in debug builds.
    - **Target:** debug code runs at most about 3× slower than release on the benchmark suite
      ([Budgets](#budgets)).
-6. **Pure, sandboxed, cached comptime** (decided, [`comptime.md`](comptime.md)). No build scripts, no
+6. **Pure, sandboxed, cached comptime** ([`comptime.md`](comptime.md)). No build scripts, no
    proc macros with I/O.
 7. **Local type inference only.** Function signatures are explicit; there is no whole-program
    inference.
@@ -116,7 +116,7 @@ reports exactly where. Even layout changes then feel live in most development lo
 - WASM (browser and Wasmtime): calls go through a function table (`call_indirect`). New code is a new
   module instantiated against the same memory and table, then its entries are swapped in.
 
-**Staging (decided November 2026).** Built in this order, each step usable on its own:
+**Staging.** Built in this order, each step usable on its own:
 1. **The MVP:** native debug builds, single-threaded, changed bodies with the same signature:
    the indirection table, `moddil run --watch` re-checking on save through the incremental
    queries, swaps at suspension points, and running frames finishing on the old code.
@@ -160,13 +160,13 @@ deploys with compiler-checked compatibility between versions
 
 ### Prebuilt dependencies
 
-**Decided: prebuilt artefacts are opt-in and verified.**
+Prebuilt artefacts are **opt-in and verified**.
 
 - They come **only from sources the user configures**: the team's CI, or a foundation-run cache.
   With nothing configured, only the local store and the team cache are used.
 - Every artefact is **signed by its builder**.
 - **A fraction of hits is rebuilt and compared** byte for byte; reproducible builds make that
-  possible. The defaults (decided): developer builds rebuild 1% of hits in the background, and CI
+  possible. The defaults: developer builds rebuild 1% of hits in the background, and CI
   rebuilds every artefact not yet verified for that cache, so each artefact is checked once per
   cache. A mismatch is a hard error naming the artefact and its signer, and a security alert
   reported like an advisory by `moddil audit`.
@@ -181,19 +181,20 @@ input changed.
 
 ## Profiles
 
-**Decided default dev profile:**
+**The default dev profile:**
 - **dependencies optimised** and fetched from the cache;
 - **your workspace** built with fast, unoptimised code generation and full debug info.
 
-Hashiverse needed a manual override to get this; in Moddil it is the default. Per-mod overrides remain
-available (for example, optimising one hot mod of your own in dev builds).
+*Why:* unoptimised hash and crypto code is too slow to use, and Hashiverse needed a manual
+override to get this; in Moddil it is the default. Per-mod overrides remain available (for
+example, optimising one hot mod of your own in dev builds).
 
 Other profiles: `release` (full optimisation, LTO), `profiling` (release plus debug info), `fuzz`.
 PGO from recorded runs and the debug-build speed target are in [`performance.md`: Optimisation control](performance.md#optimisation-control).
 
 ## Budgets
 
-**Decided**, tracked in CI as benchmarks. A regression is a bug.
+Tracked in CI as benchmarks. A regression is a bug.
 
 | Operation | Target |
 |---|---|
@@ -248,6 +249,20 @@ that iterate dozens of times per task.
   to caching.
 - Macro and compile-time evaluation systems that can run arbitrary code break incremental caching.
 - Linking is often the slowest single step (mold and lld help).
+
+## Alternatives considered
+
+- **Cycles between mods**: they would stop mods compiling in parallel as a DAG.
+- **Inferring signatures, effects or error sets across mods**: an edit to a body could then
+  re-check its dependents.
+- **Re-checking generics per instantiation**, as C++ templates: the cost grows with every use.
+- **Monomorphising everything in debug builds**, as Rust: it is the dominant build cost.
+- **Build scripts and proc macros with I/O**: they are opaque to caching and break hermetic
+  builds.
+- **Production hot upgrades**: a non-goal; production uses rolling deploys with compiler-checked
+  compatibility between versions.
+- **Prebuilt artefacts on by default, or from a central registry**: a shared cache is a
+  supply-chain risk, so they come only from configured sources, signed and sampled.
 
 ## Prior art
 

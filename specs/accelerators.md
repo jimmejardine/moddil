@@ -124,10 +124,9 @@ CI with only a CPU pool.
 "brand" trick in Rust's GhostCell). Mixing buffers from different devices is a compile error, with no
 device indices in the types. When devices are only known dynamically (a `Vec` of devices),
 `.erase()` turns a buffer into `Buffer<T, dyn Gpu>`, and the device is checked at launch. A mismatch is a
-bug and traps. The brand mechanism is a general type-system feature. It could also tie indices to
-their arena and DMA buffers to their NIC ring.
+bug and traps. The brand mechanism is a general type-system feature.
 
-- **Brands are scoped and second-class (decided)**, as in GhostCell. Generic code takes the brand
+- **Brands are scoped and second-class**, as in GhostCell. Generic code takes the brand
   as a parameter (`fn f<dev>(b: &Buffer<T, dev>)`), and a branded value is a view that cannot
   outlive its device handle ([`memory.md`: View types](memory.md#view-types)). To store or send a
   buffer, `.erase()` it.
@@ -166,12 +165,12 @@ Streams, queues and events are runtime-handler details ([Runtimes and backends](
 removes the classic bugs: using a buffer before its kernel finished, freeing it while it is in use,
 and forgetting a fence.
 
-**Sharing a device (decided).** Within a program, launches on a device queue in scope order, with
+**Sharing a device.** Within a program, launches on a device queue in scope order, with
 optional priorities per scope. Sharing a device between processes is left to the driver and
 operating system (MPS, MIG, time-slicing), configured in the deployment manifest.
 
 **Multi-GPU collectives** (all-reduce, broadcast) are a library on device handles and scopes,
-`moddil/collective` (decided). It uses NCCL or RCCL through FFI where available, and a portable
+`moddil/collective`. It uses NCCL or RCCL through FFI where available, and a portable
 fallback otherwise.
 
 ## Race freedom inside kernels
@@ -202,16 +201,16 @@ fallback otherwise.
     this is the **only** way to reach NPUs, since nobody writes NPU kernels; or
   - lowered to generated tile kernels for GPUs and CPU pools.
 - Tensor types live in a mod, not the core language (R2). **Multi-dimensional slicing is core
-  syntax** (decided), spelled with ranges because `:` is taken by named arguments: `a[.., 1..3]`,
+  syntax**, spelled with ranges because `:` is taken by named arguments: `a[.., 1..3]`,
   `a[i, ..]`.
-- **Autodiff** is a comptime transformation in a mod, `moddil/autodiff`, in the style of Enzyme
-  (decided): it derives `grad(f)` for any differentiable function, kernels and loops included, with
+- **Autodiff** is a comptime transformation in a mod, `moddil/autodiff`, in the style of Enzyme:
+  it derives `grad(f)` for any differentiable function, kernels and loops included, with
   no compiler change.
 
 ### Loading model weights
 
-**Decided (November 2026): `moddil/tensor` reads safetensors itself.** [Talk](examples/talk.md)
-loads published weights in `f16` and `bf16`.
+**`moddil/tensor` reads safetensors itself**, so [Talk](examples/talk.md) can load published
+weights in `f16` and `bf16`.
 - Files are **memory-mapped**, so loading is lazy and costs no copy on the CPU.
 - A tensor's **static shape is checked against the file at load time**; a mismatch fails with a
   typed error, never a trap.
@@ -220,15 +219,14 @@ loads published weights in `f16` and `bf16`.
 
 ## Kernels built at run time
 
-**Decided (November 2026): a shader builder in a mod.** Kernels are compile-time code, but
-[fumoca](examples/fumoca.md) compiles each user's workbook into its own kernel, as do database
+**Kernels built at run time come from a shader builder in a mod.** Kernels are compile-time code,
+but [fumoca](examples/fumoca.md) compiles each user's workbook into its own kernel, as do database
 query engines and shader-graph editors. A mod generates WGSL or SPIR-V text and launches it through
 a `dyn_kernel` API whose **bindings are typed and checked at launch**. It is as fast as fumoca is
 today. The generated kernel itself is not checked by the compiler, which is the price of building
 it at run time.
-- **No interpreter kernel and no JIT:** an instruction-tape interpreter is slower than specialised
-  code, and shipping the compiler's kernel back end in a program makes it large and runs the
-  compiler at run time.
+- **No interpreter kernel and no JIT.** *Why:* the generated text is specialised code, and the
+  program does not carry or run the compiler's kernel back end.
 
 ## Algorithm and schedule
 
@@ -251,7 +249,7 @@ it at run time.
      through wgpu gives portable CI on Vulkan, Metal and DX12.
   2. **CUDA second.** Peak performance and tensor cores, for the HFT research workloads.
 - **Feature tiers** (subgroups, f16, tensor cores, shared-memory size) are declared by the kernel
-  (`#[requires(f16, subgroups)]`). On a device that lacks a feature (decided):
+  (`#[requires(f16, subgroups)]`). On a device that lacks a feature:
   - the compiler substitutes an **automatic emulation** (subgroups through workgroup memory, f16
     through f32 with f16 rounding on store) and **warns**: at build time for known targets, and at
     `devs.pick` as a logged warning;
@@ -262,7 +260,7 @@ it at run time.
   everything else in them stays static ([`targets.md`: Dynamic glibc targets](targets.md#dynamic-glibc-targets)).
 - The **CPU simulator** runs kernels deterministically on the CPU. It gives GPU-free tests and CI,
   race detection ([Race freedom inside kernels](#race-freedom-inside-kernels)), and lets the same kernels run on servers without GPUs.
-  It is **bit-exact where rounding is specified** (decided): strict IEEE add, multiply and FMA,
+  It is **bit-exact where rounding is specified**: strict IEEE add, multiply and FMA,
   and correctly rounded `moddil/math`. Where vendor approximations are allowed (`math::fast`,
   tensor-core accumulation order), it documents a tolerance; those paths perform `nondet`
   ([`determinism.md`: The `nondet` effect](determinism.md#the-nondet-effect)).
@@ -299,7 +297,7 @@ Following [`error-handling.md`](error-handling.md):
   launch or join. They must be handled (R3).
 - **Device loss** (a driver reset, an unplugged eGPU) is `fail(DeviceLost)` at the next launch,
   join or transfer, and that device's buffers become invalid. **Hot-plugged** devices arrive as
-  events from `devs.watch()`; roles are not rebound automatically (decided).
+  events from `devs.watch()`; roles are not rebound automatically.
 - **Faults inside a kernel** (out-of-bounds, unreachable, ÷ 0): class-3 traps, reported at the join
   with the kernel and the program instance that faulted.
 
@@ -354,6 +352,24 @@ touch it; those who do are often tied to one vendor.
 **Directions.**
 - MLIR for tensor-level optimisation if needed; vendor graph compilers for NPUs.
 - Feature tiers (subgroups, f16, tensor cores) as target capabilities checked at compile time.
+
+## Open questions
+
+- Whether tensor-level optimisation needs MLIR, beyond naga and LLVM.
+- Whether the brand mechanism also ties indices to their arena and DMA buffers to their NIC ring.
+- Whether [Hashiverse](examples/hashiverse.md) runs its proof-of-work on a GPU or a CPU pool.
+
+## Alternatives considered
+
+- **An interpreter kernel for kernels built at run time.** An instruction-tape interpreter is slower
+  than specialised code.
+- **A JIT for kernels built at run time.** Shipping the compiler's kernel back end in a program
+  makes it large and runs the compiler at run time.
+- **Ambient device indices** (`cuda:0` in types or library code). Indices are facts about one
+  machine at run time, and their order is not guaranteed; code uses capability handles and roles
+  instead.
+- **Runtime tracing to build tensor graphs**, as Python frameworks do. Comptime builds the graph
+  instead.
 
 ## Prior art
 

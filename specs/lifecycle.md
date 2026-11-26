@@ -12,29 +12,7 @@
 | **Traps end the process, unless a scope is isolated** | An isolated scope unwinds on a trap and reports `Trapped` to its parent. |
 | **No mutable globals** | Process-wide state lives in values created in `main`, or in context effects. |
 
-## Problem
-
-- **Ambient authority from the first instruction**: in C, Rust and Go, `main` can open any file or
-  socket, so nothing tells a reader or the OS what a program actually needs.
-- **Life before `main`**: C++ global constructors run in an unspecified order (the "static
-  initialisation order fiasco"); Rust's lazy statics hide initialisation and shared state.
-- **`exit()` skips cleanup**: Go's `os.Exit` and C's `exit` bypass deferred work and destructors.
-- **Configuration is scattered** across arguments, environment variables and files, parsed by hand
-  and validated late, if at all.
-- **What a crash ends is unclear**: some runtimes kill the process, some the thread, some let
-  `recover` swallow bugs.
-
-## State of the art
-
-| Topic | Approaches |
-|---|---|
-| **Entry and authority** | **C, Rust, Go**: `main` has full ambient authority. **WASI**: directories and sockets are pre-opened and handed in. **OpenBSD `pledge`/`unveil`**, **Linux Landlock and seccomp**: a process gives up privileges it doesn't need. **Deno**: `--allow-*` flags. |
-| **Exit** | **Rust**: `main` returns `Result` or `ExitCode`; a panic exits with 101. **Go**: `os.Exit` skips defers. Conventions: 128+n for death by signal n; `sysexits.h` (64 usage, 70 internal software error, 78 configuration). |
-| **Configuration** | **Rust `clap` derive**: the type is the command line. **figment**, **viper**: layered sources. **12-factor**: configuration from the environment. |
-| **Crash scope** | **Rust**: panics unwind (or abort), `catch_unwind`, `Mutex` poisoning. **Erlang**: a crashed process is isolated and a supervisor restarts it. **Midori**: abandonment of the failed process. **Go**: a panic kills the process unless recovered. **Swift**: traps always kill the process. |
-| **Global state** | **C++**: static initialisation order. **Rust**: `static`, `LazyLock`, `OnceLock`. **Zig**: comptime-known globals. **Erlang**, **Pony**: no mutable globals. |
-
-## Decisions
+## Rules
 
 ### No life before `main`
 
@@ -82,11 +60,11 @@ fn main(args: Args, env: Env, stdio: Stdio, files: FsRoot, net: NetRoot, clock: 
   **drops every OS privilege that wasn't requested** before `main` runs: Landlock and seccomp on
   Linux, `pledge`/`unveil` on OpenBSD, pre-opens on WASI, and the best available mechanism elsewhere.
   What could and couldn't be enforced is reported.
-- **The sandbox follows narrowing** (decided). Paths often come from configuration read at run time,
-  so narrowing a root capability after start (`files.read_only(cfg.data_dir)`) also tightens the OS
-  sandbox (adding Landlock rules, calling `unveil`) once the wider root is no longer held anywhere.
-  This happens wherever the OS allows tightening after start, and the final enforced state is
-  reported.
+- **The sandbox follows narrowing.** Narrowing a root capability after start
+  (`files.read_only(cfg.data_dir)`) also tightens the OS sandbox (adding Landlock rules, calling
+  `unveil`) once the wider root is no longer held anywhere. This happens wherever the OS allows
+  tightening after start, and the final enforced state is reported. *Why:* paths often come from
+  configuration read at run time, after the startup sandbox is in place.
 - `moddil audit` shows each executable's root set, and a change to it appears in the semantic diff.
 - Tests and simulations call the same code with **simulated** roots
   ([`determinism.md`](determinism.md)).
@@ -104,7 +82,7 @@ fn main(args: Args, env: Env, stdio: Stdio, files: FsRoot, net: NetRoot, clock: 
   ([`requirements.md`](requirements.md)), so `main` decides how each one becomes an exit code.
 - There is **no ambient `exit()`**. `exit_now(code)` exists only on `ProcessRoot`; it skips cleanup,
   so it shows up in the root set and in review.
-- **Windows uses the same codes** (decided); Ctrl-C gives 0xC000013A, as Windows expects. A trap
+- **Windows uses the same codes**; Ctrl-C gives 0xC000013A, as Windows expects. A trap
   prints the same trace to stderr and exits 70; Windows Error Reporting dialogs are suppressed so a
   service never hangs on one, and crash dumps are opt-in.
 
@@ -141,12 +119,12 @@ struct ServerConfig {
   other processes can see), and never print
   ([`observability.md`: Secrets never reach observability](observability.md#secrets-never-reach-observability)).
 - Bad arguments exit with `Usage`; bad configuration with `Config`.
-- **Arguments** (decided): the main path is a derive, `#[derive(Args)] struct Cli { port: Port = 8080,
+- **Arguments:** the main path is a derive, `#[derive(Args)] struct Cli { port: Port = 8080,
   verbose: bool }`, parsed with `Cli::parse(&args)?`. It shares its machinery with
   `#[derive(Config)]` (it is the command-line layer), giving `--help`, subcommands from enums and
   refined-type validation. Small tools can read one typed flag:
   `args.value::<Port>("port", default: 8080)?`.
-- **A snapshot by default; live on request** (decided). The configuration is an immutable value. A
+- **A snapshot by default; live on request.** The configuration is an immutable value. A
   program that wants reloading holds `Live<Config>`, refreshed by a task that `select`s on SIGHUP
   from `Signals` and re-validates; readers take a consistent snapshot per request, and a failed
   reload keeps the old value and logs.
@@ -176,7 +154,7 @@ scope(|s| {
   - the parent receives **`fail(Trapped)`** with the trace.
 - A trap inside `drop` or `abandon` still terminates the process. Shared rc data is immutable, so a
   trap cannot leave it half-updated.
-- **Restart policies are a library** (decided): `supervise(|s| …, restart: Backoff { … }, max: 5
+- **Restart policies are a library:** `supervise(|s| …, restart: Backoff { … }, max: 5
   per 1[min])` in `moddil/sync`, built on isolated scopes
   ([`concurrency.md`](concurrency.md)).
 
@@ -205,11 +183,8 @@ In servers and interactive programs, work regularly becomes unwanted before it f
 Without cancellation that work keeps running and holding resources (Go's goroutine leaks before
 `context.Context`).
 
-**Two designs Moddil rejects:**
-- **Explicit tokens** (C#'s `CancellationToken`, Go's `context.Context`) must be threaded through
-  every call. People forget, libraries ignore them, and signatures get noisier.
-- **Asynchronous killing** (.NET's `Thread.Abort`, Java's `Thread.stop`) was removed from both
-  platforms: stopping code at an arbitrary instruction breaks invariants halfway through an update.
+Cancellation is neither an explicit token nor asynchronous killing
+([Alternatives considered](#alternatives-considered)).
 
 ### The model: implicit and cooperative
 
@@ -371,6 +346,40 @@ fn serve(listener: &Listener) with Net, suspend, spawn {
 | [HFT](examples/hft-platform.md) | Typed configuration with risk limits as refined types; traps kill the process (no partial trading state) |
 | [Web store](examples/web-store.md) | Isolated scopes per request; secrets from the environment; layered configuration per environment |
 | [Hashiverse](examples/hashiverse.md) | Volunteer binaries sandboxed to the roots they declare; layered shutdown on Ctrl-C |
+
+## Background
+
+The problems and the state of the art this design answers.
+
+### Problem
+
+- **Ambient authority from the first instruction**: in C, Rust and Go, `main` can open any file or
+  socket, so nothing tells a reader or the OS what a program actually needs.
+- **Life before `main`**: C++ global constructors run in an unspecified order (the "static
+  initialisation order fiasco"); Rust's lazy statics hide initialisation and shared state.
+- **`exit()` skips cleanup**: Go's `os.Exit` and C's `exit` bypass deferred work and destructors.
+- **Configuration is scattered** across arguments, environment variables and files, parsed by hand
+  and validated late, if at all.
+- **What a crash ends is unclear**: some runtimes kill the process, some the thread, some let
+  `recover` swallow bugs.
+
+### State of the art
+
+| Topic | Approaches |
+|---|---|
+| **Entry and authority** | **C, Rust, Go**: `main` has full ambient authority. **WASI**: directories and sockets are pre-opened and handed in. **OpenBSD `pledge`/`unveil`**, **Linux Landlock and seccomp**: a process gives up privileges it doesn't need. **Deno**: `--allow-*` flags. |
+| **Exit** | **Rust**: `main` returns `Result` or `ExitCode`; a panic exits with 101. **Go**: `os.Exit` skips defers. Conventions: 128+n for death by signal n; `sysexits.h` (64 usage, 70 internal software error, 78 configuration). |
+| **Configuration** | **Rust `clap` derive**: the type is the command line. **figment**, **viper**: layered sources. **12-factor**: configuration from the environment. |
+| **Crash scope** | **Rust**: panics unwind (or abort), `catch_unwind`, `Mutex` poisoning. **Erlang**: a crashed process is isolated and a supervisor restarts it. **Midori**: abandonment of the failed process. **Go**: a panic kills the process unless recovered. **Swift**: traps always kill the process. |
+| **Global state** | **C++**: static initialisation order. **Rust**: `static`, `LazyLock`, `OnceLock`. **Zig**: comptime-known globals. **Erlang**, **Pony**: no mutable globals. |
+
+## Alternatives considered
+
+- **Explicit cancellation tokens** (C#'s `CancellationToken`, Go's `context.Context`): they must be
+  threaded through every call. People forget, libraries ignore them, and signatures get noisier.
+- **Asynchronous killing** (.NET's `Thread.Abort`, Java's `Thread.stop`): removed from both
+  platforms, because stopping code at an arbitrary instruction breaks invariants halfway through an
+  update.
 
 ## Prior art
 

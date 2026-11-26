@@ -62,8 +62,8 @@ fn on_trap(info: &TrapInfo) -> ! { log_to_flash(info); system_reset() }
   - a program-supplied heap allocator (TLSF, linked list).
 - `Rc` exists only when an allocator is available. On a single core, biased reference counting
   reduces to plain owner counts.
-- **Decided:** an `Rc` records its allocator only when it is not the default one; arenas stay
-  borrow-based ([`memory.md`: Sharing: `.to_rc()`](memory.md#sharing-to_rc)).
+- An `Rc` records its allocator only when it is not the default one; arenas stay borrow-based
+  ([`memory.md`: Sharing: `.to_rc()`](memory.md#sharing-to_rc)).
 
 ## Concurrency without a runtime
 
@@ -81,7 +81,7 @@ Three levels, from nothing to a full scheduler:
   sections. A compile-time **priority-ceiling analysis** (as in Rust's RTIC) makes this deadlock-free
   and lock-free where priorities allow.
 - **Floats in interrupt handlers** are allowed when the handler declares them,
-  `#[interrupt(TIMER0, fpu)]` (decided). Using floats without `fpu` is a compile error; the runtime
+  `#[interrupt(TIMER0, fpu)]`. Using floats without `fpu` is a compile error; the runtime
   enables lazy FPU state saving, and the stack analysis counts the extra frame.
 
 **L1: static tasks.**
@@ -91,10 +91,10 @@ Three levels, from nothing to a full scheduler:
 - Stackful tasks on bare metal need only a register-saving context switch, as in an RTOS.
 - **Each task's stack size is computed at compile time** by stack-depth analysis: no unbounded
   recursion, and no indirect calls without a declared bound (see [`correctness.md`: Assurance levels per mod](correctness.md#assurance-levels-per-mod), level L1).
-  **The analysis covers all freestanding code** (decided): interrupt handlers, tasks and the main
-  loop, so a stack overflow is impossible rather than a crash. Recursion and indirect calls declare
-  a bound (`#[max_depth(8)]`); L2 tasks with an allocator may opt out per task and use a guard
-  region instead.
+  **The analysis covers all freestanding code:** interrupt handlers, tasks and the main loop, so a
+  stack overflow is impossible rather than a crash. Recursion and indirect calls declare a bound
+  (`#[max_depth(8)]`); L2 tasks with an allocator may opt out per task and use a guard region
+  instead.
 - Structured concurrency still holds: the root scope lasts as long as the program.
 
 **L2: freestanding with an allocator and a full scheduler.** Executors behave as in hosted mode
@@ -129,8 +129,8 @@ testing.
 
 ## Verifying the platform in emulators
 
-**Decision:** no hardware-in-the-loop testing by the project. Bare-metal support is verified with
-**QEMU** and **Renode** in CI. Hardware testing is left to users and HAL mod authors.
+The project does no hardware-in-the-loop testing. Bare-metal support is verified with **QEMU** and
+**Renode** in CI. Hardware testing is left to users and HAL mod authors.
 
 ### Test pyramid
 
@@ -178,8 +178,7 @@ behaviour via QEMU's multi-threaded emulation.
 | Peripheral model fidelity, silicon errata | Models are written from datasheets | Renode models where available; errata handled in HAL mods; user bug reports |
 | Low-power modes, analog, radio | Partly or not modelled | Out of scope for the toolchain; the responsibility of HAL mods |
 
-**Decided:** a bare-metal target is **tier 1 only if a free emulator runs its full test suite
-in CI**.
+A bare-metal target is **tier 1 only if a free emulator runs its full test suite in CI**.
 
 ### Architectures and boards
 
@@ -198,7 +197,7 @@ in CI**.
 | ESP32-C3 / C6 | RISC-V microcontroller | Freestanding: `riscv32imc` | Architecture: yes. Wi-Fi and Bluetooth: no |
 | ESP32 / ESP32-S3 (e.g. Arduino Nano ESP32) | **Xtensa** | Not supported: no mainline LLVM backend (only Espressif's fork) | No |
 
-**Bare-metal tiers (decided):** tier 1 is `thumbv7em` (Cortex-M4F, on Renode) and `riscv64` QEMU
+**Bare-metal tiers:** tier 1 is `thumbv7em` (Cortex-M4F, on Renode) and `riscv64` QEMU
 `virt`, matching the [fifth reference example](examples/sensor-firmware.md); tier 2 is Cortex-M0+
 and M33, x86_64 bare metal and AArch64 `virt`; others are tier 3
 ([`targets.md`: Target names and tiers](targets.md#target-names-and-tiers)).
@@ -209,10 +208,9 @@ emulator models. Classic 8-bit Arduinos are a stretch. Xtensa-based ESP32s are o
 
 ### Proving the profile end to end
 
-**Decided:** the fifth reference example, [sensor firmware](examples/sensor-firmware.md), runs in
-this CI. The options considered were:
-- sensor firmware on Renode (Cortex-M4F) and QEMU (Cortex-M33, RISC-V); and/or
-- a tiny kernel that boots on QEMU `x86_64` and RISC-V `virt` and runs its own test suite.
+The fifth reference example, [sensor firmware](examples/sensor-firmware.md), runs in this CI: in
+Renode and in QEMU, on the tier-1 bare-metal targets `thumbv7em` (Cortex-M4F) and `riscv64` QEMU
+`virt`.
 
 ## Not available in freestanding profiles
 
@@ -221,6 +219,13 @@ this CI. The options considered were:
 - live update; record and replay (by default);
 - unbounded recursion where stack analysis is required;
 - `Rc` without an allocator.
+
+## Alternatives considered
+
+- **Hardware-in-the-loop testing by the project:** not taken. Free emulators run every bare-metal
+  test in CI, and testing on real boards is left to users and HAL mod authors.
+- **A tiny kernel as the end-to-end proof** (booting on QEMU `x86_64` and RISC-V `virt` and running
+  its own test suite): not taken; the sensor firmware reference example is the proof.
 
 ## Prior art
 

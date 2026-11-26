@@ -17,18 +17,6 @@ traces ([`error-handling.md`: Traces](error-handling.md#traces)), record and rep
 | **Live introspection** | Attach to a running process, inspect tasks and enable tracing dynamically, behind an `Introspect` capability. |
 | **Release builds stay debuggable** | Full debug info is always produced, stored separately and keyed by build hash. |
 
-## Problems
-
-- **Release builds can't be debugged**: variables are "optimised out", inlined frames disappear, and
-  debug and release builds sometimes behave differently.
-- **Async stacks are unreadable**: you see executor frames, not who awaited whom.
-- **Tracing is bolted on**: trace IDs are threaded by hand, or kept in thread-locals that break
-  across suspension points; instrumentation relies on agents or monkey-patching.
-- **Logging is slow and stringly typed**: formatting on the hot path, levels checked at run time, a
-  global logger that libraries fight over.
-- **Secrets end up in logs**, caught only by luck in review.
-- **Production bugs can't be reproduced**: logs are the only evidence.
-
 ## Observability effects
 
 `log`, `span` and `metric` are effects with **handlers provided by mods** ([R2](requirements.md#firm-requirements-decided)):
@@ -56,7 +44,7 @@ log.info(fmt"order {order.id} filled {qty} @ {price}")
 metric.count("orders.filled", 1, venue: order.venue)
 ```
 
-- **Events have stable names (decided):** the module path plus an optional `name:`, with typed
+- **Events have stable names:** the module path plus an optional `name:`, with typed
   fields. Adding a field is free. Renaming or removing a field, or changing its type, is reported by
   the semantic diff ([`semantic-vcs.md`](semantic-vcs.md)): a warning, or a breaking change for events
   marked `#[stable]`, which dashboards and alerts depend on.
@@ -121,16 +109,16 @@ Limits:
 - Recording I/O can be large; volume and retention are configurable.
 - Code outside the effect boundary (FFI, `unsafe`, code performing `nondet`) is not
   replayable unless wrapped by effects; the recorder flags it.
-- **Secrets in recordings (decided):** effect results typed `Secret<T>` or `Personal<T>` are stored
+- **Secrets in recordings:** effect results typed `Secret<T>` or `Personal<T>` are stored
   **encrypted** with a per-deployment key, so the rest of a recording can be shared freely. Replaying
   them needs the **`ReplayKey`** capability; without it, replay substitutes placeholders and reports
   where the run diverged. Retention is configuration
   ([`determinism.md`: Record and replay](determinism.md#record-and-replay)).
-- **Sampling (decided):** a deterministic head decision from a hash of the trace ID, propagated with
+- **Sampling:** a deterministic head decision from a hash of the trace ID, propagated with
   the trace context, so a trace is kept or dropped as a whole. Every task also buffers its spans in
   its ring buffer, and a trace that errors, traps or exceeds a latency threshold is kept in full
   anyway (tail rescue). Recordings follow the same decision.
-- **Fleet replay (decided):** each process replays on its own from its own recording; other
+- **Fleet replay:** each process replays on its own from its own recording; other
   processes' replies are recorded `Net` and `Remote` results. Recordings are linked by trace, span
   and `Remote` call IDs, so tools follow a request across processes and replay the chain in causal
   order. Moddil peers can also be loaded together into one simulation with their recorded external
@@ -147,14 +135,15 @@ Behind an **`Introspect` capability**, granted by `main` or the manifest and nev
 
 In the browser this maps onto DevTools.
 
-**Continuous profiling (decided)** is a handler mod enabled through `Introspect`. It combines CPU
+**Continuous profiling** is a handler mod enabled through `Introspect`. It combines CPU
 sampling with the runtime's record of which effect operation each task is blocked on, so on-CPU and
 off-CPU time is attributed per task, per span and per effect (`Net`, `Db`, locks, GPU). It exports
 pprof and OTLP profiles, and costs nothing while disabled.
 
 ## Overhead budgets
 
-**Decided**, tracked in CI like the other budgets ([`performance.md`: Benchmarks and budgets](performance.md#benchmarks-and-budgets)):
+These are budgets, tracked in CI like the others
+([`performance.md`: Benchmarks and budgets](performance.md#benchmarks-and-budgets)):
 
 | Level | Cost on the hot path |
 |---|---|
@@ -187,6 +176,21 @@ of the task that failed", or "which tasks have been blocked on the database for 
 | [HFT](examples/hft-platform.md) | Interned logs on the tick-to-trade path; bit-for-bit replay of a trading day; latency histograms |
 | [Web store](examples/web-store.md) | OTLP traces across client, API and database; payment keys and personal data blocked from logs by type |
 | [Hashiverse](examples/hashiverse.md) | Opt-in live introspection of a volunteer node; replay of P2P incidents in simulation |
+
+## Background
+
+The problems this design answers.
+
+
+- **Release builds can't be debugged**: variables are "optimised out", inlined frames disappear, and
+  debug and release builds sometimes behave differently.
+- **Async stacks are unreadable**: you see executor frames, not who awaited whom.
+- **Tracing is bolted on**: trace IDs are threaded by hand, or kept in thread-locals that break
+  across suspension points; instrumentation relies on agents or monkey-patching.
+- **Logging is slow and stringly typed**: formatting on the hot path, levels checked at run time, a
+  global logger that libraries fight over.
+- **Secrets end up in logs**, caught only by luck in review.
+- **Production bugs can't be reproduced**: logs are the only evidence.
 
 ## Prior art
 

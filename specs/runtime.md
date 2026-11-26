@@ -24,11 +24,7 @@ and a static scheduler on a microcontroller.
 
 ## Pluggable runtimes without ecosystem splits
 
-**Lesson from Rust.** `async` is in the language, but the executor is not, and there is no standard
-interface for spawning, timers or I/O. The result: libraries tied to tokio, async-std or smol, and an
-ecosystem that partly fragmented.
-
-**Moddil's approach.** The *interfaces* are core effects: `suspend`, `spawn` (scoped), `Time`, `Net`,
+The *interfaces* are core effects: `suspend`, `spawn` (scoped), `Time`, `Net`,
 `Fs`, `Rand`, `log`. *Implementations* are mods that provide **handlers** for those effects:
 
 - `moddil/runtime`: the standard multi-threaded work-stealing runtime.
@@ -41,7 +37,7 @@ Because libraries only use the *effects*, **every library works on every runtime
 runtime is a choice in `main` (or in the deployment manifest, [Distributed and multi-tier programs](distribution.md)), not a choice made by the whole
 dependency tree.
 
-**How a runtime is chosen (decided November 2026):**
+**How a runtime is chosen:**
 - **The effect is how a runtime is chosen, not how one is written.** A runtime's scheduler (stack
   switching, moving tasks between threads, work stealing, atomics) is runtime code linked into
   the program; the handler its mod provides is how `main`, or the manifest, picks it.
@@ -58,9 +54,9 @@ Moddil these are effects, and the test versions are handlers.
 
 ### Starting a program
 
-**Decided (November 2026):** a runtime is installed with `with Runtime = …`, as any handler is;
-executors are values built from the `Cpus` root capability; tasks within an executor are
-scheduled fairly, and priority belongs to executors.
+A runtime is installed with `with Runtime = …`, as any handler is. Executors are values built
+from the `Cpus` root capability. Tasks within an executor are scheduled fairly, and priority
+belongs to executors.
 
 **On the deterministic runtime.** A test needs nothing: each runs under `runtime-sim` with its own
 seed, printed when it fails, so a failure replays exactly. A whole program can be run under it
@@ -111,14 +107,13 @@ differs. Under `runtime-sim`, executor placement is recorded and simulated; unde
 varied priorities: priority is per executor, and tasks within one are scheduled fairly
 ([Tasks, threads and executors](#tasks-threads-and-executors)).
 
-**Decided: a program means the same under every runtime, and is compiled the same way.** Rc
-counts, locks and safe points always use the threaded lowering, so the tests under `runtime-sim`
-run the code that ships. The exception is a *one-thread build*, set when the program is built
+**A program means the same under every runtime, and is compiled the same way.** Rc counts,
+locks and safe points always use the threaded lowering, so the tests under `runtime-sim` run the
+code that ships. The exception is a *one-thread build*, set when the program is built
 (`[[exe]] threads = "one"` in the manifest, or `--threads one`), and always on WASM. It lowers Rc
 counts to plain counts, leaves out the safe points and makes locks without atomics;
-`runtime::parallel` refuses it. The
-cost of the threaded lowering on one thread is a few percent at most ([`memory.md`: Biased
-reference counting](memory.md#biased-reference-counting)).
+`runtime::parallel` refuses it. The cost of the threaded lowering on one thread is a few percent
+at most ([`memory.md`: Biased reference counting](memory.md#biased-reference-counting)).
 
 ## Runtime contract
 
@@ -126,11 +121,11 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](r
 [`stdlib.md`: The core / mod boundary](stdlib.md#the-core--mod-boundary)). The memory model adds obligations for runtime handlers:
 
 - **Biased-RC merge queue:** objects whose last shared reference was dropped elsewhere are queued
-  to their owner. Decided ([`memory.md`: Biased reference counting](memory.md#biased-reference-counting)): the owner
-  is a **task**, and the runtime drains a task's queue when it resumes the task and at task exit.
-- **Task migration:** with task-biased RC, a task moved by work stealing keeps its fast
-  path; migration costs nothing. With thread-biased RC it would become a non-owner on its new thread
-  (correct, but slower).
+  to their owner. The owner is a **task** ([`memory.md`: Biased reference
+  counting](memory.md#biased-reference-counting)), and the runtime drains a task's queue when it
+  resumes the task and at task exit.
+- **Task migration:** because the bias is per task, a task moved by work stealing keeps its fast
+  path; migration costs nothing.
 - **Single-threaded targets** (browser WASM without cross-origin isolation, [R1](requirements.md#firm-requirements-decided)): every rc
   operation is an owner operation; scopes still work, with children interleaved on one thread.
 - **Deterministic simulation** (`moddil/runtime-sim`, [Determinism and reproducibility](determinism.md)): the scheduler is a handler, so
@@ -165,13 +160,13 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](r
 | `pinned(cores)` | One thread per core, no stealing, optional busy-polling and real-time priority | HFT hot path; shard-per-core designs (Seastar, Glommio) |
 | `affine(main)` | One dedicated thread | Thread-affine resources: GUI main thread, GL contexts, C libraries with thread-local state |
 
-- **Executors are values (decided November 2026),** built in `main` from the `Cpus` root
+- **Executors are values,** built in `main` from the `Cpus` root
   capability, since making OS threads, pinning them and setting their priority are OS
   privileges ([Starting a program](#starting-a-program)). The deployment manifest may retune
   their core counts per deployment ([Distributed and multi-tier programs](distribution.md)).
-- **NUMA placement (decided November 2026):** an executor can be placed on a NUMA node
+- **NUMA placement:** an executor can be placed on a NUMA node
   (`pool(&cpus, cores: node(1), …)`), and what its tasks allocate comes from that node's memory.
-- **Idle executors lend their threads (decided November 2026):** a worker of an executor with no
+- **Idle executors lend their threads:** a worker of an executor with no
   work may run another executor's ready tasks, at its own executor's priority, so no core sits
   idle while work waits. `pinned` executors neither lend nor borrow, keeping their latency and
   their caches.
@@ -184,7 +179,7 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](r
   s.spawn(|| legacy_c_lib.compress(buf), on: blocking);
   ```
 
-- **A reactor per worker (decided November 2026):** each worker thread has its own io_uring ring or
+- **A reactor per worker:** each worker thread has its own io_uring ring or
   poller (epoll, kqueue, IOCP), so I/O does not contend on one shared reactor at many cores; a
   task's operations complete on its worker's reactor, and one moved by stealing re-registers. I/O
   is an effect, so there are no runtime-specific I/O types (as tokio's `TcpStream` is), no
@@ -195,12 +190,12 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](r
 | Issue | Moddil's answer |
 |---|---|
 | A task blocks its OS thread | All I/O goes through effects, so safe code cannot block. FFI functions are declared `blocking` and run on the `blocking` executor automatically. |
-| A long CPU loop never yields | **Decided:** preemption at compiler-inserted safe points at loop back-edges and function entries (a cheap flag check), as in Go 1.14+ and Erlang, guaranteed on `default` executors. `pinned` executors and `#[no_lock]`/`#[bounded]` hot paths can turn the checks off. The same safe points serve live update and cancellation. They are compiled in under every runtime and never fire under `runtime-sim`; a one-thread build and WASM leave them out ([Starting a program](#starting-a-program)). |
+| A long CPU loop never yields | Preemption at compiler-inserted safe points at loop back-edges and function entries (a cheap flag check), as in Go 1.14+ and Erlang, guaranteed on `default` executors. `pinned` executors and `#[no_lock]`/`#[bounded]` hot paths can turn the checks off. The same safe points serve live update and cancellation. They are compiled in under every runtime and never fire under `runtime-sim`; a one-thread build and WASM leave them out ([Starting a program](#starting-a-program)). |
 | Thread identity, thread-local storage | Tasks migrate, so safe code has no thread-local storage. Task-local context comes from effects and handlers. Thread-affine resources require the `affine` executor (a capability). |
-| Stack memory | Native: large virtual reservations, committed lazily, with guard pages, switched by the `corosensei` crate (**decided:** a crate first, a context switch of our own only if it limits us). Go-style stack copying is impossible because borrows point into frames. **wasm32 (decided):** small initial stacks (around 16 KiB) that grow in segments, never by copying; the task limit is documented, and programs needing very many tasks target wasm64 (memory64). Revisited once growable stacks are standardised in stack switching. |
-| Biased RC after migration | See the task-biased proposal in [`memory.md`: Biased reference counting](memory.md#biased-reference-counting): migration costs nothing. `pinned` executors never migrate anyway. |
+| Stack memory | Native: large virtual reservations, committed lazily, with guard pages, switched by the `corosensei` crate. Stacks are never copied, since borrows point into frames. **wasm32:** small initial stacks (around 16 KiB) that grow in segments, never by copying; the task limit is documented, and programs needing very many tasks target wasm64 (memory64). |
+| Biased RC after migration | Counts are biased to tasks ([`memory.md`: Biased reference counting](memory.md#biased-reference-counting)), so migration costs nothing. `pinned` executors never migrate anyway. |
 | Switch cost | Task switch: tens of nanoseconds. OS thread switch: microseconds. |
-| Priorities, real time | **Decided:** priority lives on executors only (OS thread priority per pool); tasks within an executor are scheduled fairly, so latency-critical work gets its own executor. Moddil's `Mutex` uses priority inheritance across executors where the OS supports it. Guarantees of `pinned`: [`performance.md`: Real-time guarantees](performance.md#real-time-guarantees). |
+| Priorities, real time | Priority lives on executors only (OS thread priority per pool); tasks within an executor are scheduled fairly, so latency-critical work gets its own executor. Moddil's `Mutex` uses priority inheritance across executors where the OS supports it. Guarantees of `pinned`: [`performance.md`: Real-time guarantees](performance.md#real-time-guarantees). |
 
 **As built (November 2026):** the runtime is the single deterministic scheduler: one task runs at
 a time, in the interpreters' order. Natively each task is an OS thread that waits for the baton
@@ -221,6 +216,23 @@ thread; executor placement is recorded and simulated ([`determinism.md`](determi
 | Browsers (JSPI) | `moddil/runtime-wasm`; each task is a promising entry; one thread unless cross-origin isolated |
 | Deterministic simulation | `moddil/runtime-sim`: one deterministic thread, virtual time ([`determinism.md`](determinism.md)) |
 | Freestanding (embedded) | `moddil/rt-embedded`: a static scheduler with fixed task slots ([`freestanding.md`: Concurrency without a runtime](freestanding.md#concurrency-without-a-runtime)) |
+
+## Open questions
+
+- **wasm32 stacks once growable stacks are standard.** Segmented stacks are the answer until WASM
+  stack switching standardises growable stacks; the choice is to be revisited then.
+
+## Alternatives considered
+
+- **An executor left out of the language, as in Rust:** with no standard interface for spawning,
+  timers or I/O, libraries tie themselves to one runtime and the ecosystem splits.
+- **Rc counts biased to the owner thread:** a task moved by work stealing would become a non-owner
+  on its new thread, correct but slower.
+- **A lowering per runtime** (plain counts and no safe points under `runtime-sim`): tests would
+  not run the code that ships. Only a one-thread build lowers for one thread.
+- **Go-style stack copying:** impossible, because borrows point into frames.
+- **A context switch of Moddil's own:** a crate (`corosensei`) comes first; an own context switch
+  is written only if the crate limits the runtime.
 
 ## Prior art
 
