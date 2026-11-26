@@ -299,6 +299,7 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
     ("detach", &['w'], Some('b')),
     ("yield_now", &['s', 'b'], Some('b')),
     ("task_id", &[], Some('w')),
+    ("install_runtime", &['w'], None),
     ("park", &['p', 'w', 's', 'b'], Some('b')),
     ("unpark", &['p', 'w'], Some('w')),
     ("stop_requested", &['s', 'b'], Some('b')),
@@ -4706,6 +4707,11 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             return self.os(op, args, d);
         }
         match op {
+            "install_runtime" => {
+                let seed = self.value(&args[0])?;
+                self.task_call("install_runtime", &[seed]);
+                Ok(())
+            }
             "task_id" => {
                 let t = match self.c.rt.running {
                     Some(data) => {

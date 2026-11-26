@@ -80,9 +80,11 @@ impl Compiled<'_> {
     /// and its result as Moddil source, or the trap.
     /// With it, if the result is an `ExitCode`, the process's exit code for it (`main.exit.1`).
     /// For a run of `main`, `os` holds the program's arguments: the run has the OS (`os.1`).
+    /// `seed` orders its tasks (`task.runtime.1`).
     pub(crate) fn run(
         self,
         os: Option<Vec<String>>,
+        seed: u64,
     ) -> (Vec<Observed>, Result<String, Native>, Option<u8>) {
         let ptr = self.module.get_finalized_function(self.entry) as usize;
         let drop_ptr = self.module.get_finalized_function(self.drop_result) as usize;
@@ -103,6 +105,7 @@ impl Compiled<'_> {
                     if let Some(args) = os {
                         moddil_rt::set_os(args);
                     }
+                    moddil_rt::set_seed(seed);
                     moddil_rt::set_host(std::ptr::from_ref(host) as usize);
                     moddil_rt::set_trap_text(crate::host::trap_text);
                     let live = moddil_rt::live();

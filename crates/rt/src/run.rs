@@ -551,6 +551,18 @@ pub extern "C" fn detach(t: u64) -> u8 {
     drop_all(dropped.into_iter().collect())
 }
 
+/// `with Runtime = …` (`task.runtime.1`): the deterministic runtime with seed `seed`.
+#[unsafe(export_name = "moddil_rt_install_runtime")]
+pub(crate) extern "C" fn install_runtime(seed: i64) {
+    with(|s| s.sched.set_seed(seed as u64));
+}
+
+/// Runs the tasks of the run on this thread in the order seed `seed` picks (`moddil test
+/// --seed`), before its entry is called.
+pub fn set_seed(seed: u64) {
+    with(|s| s.sched.set_seed(seed));
+}
+
 /// The running task's number (`__task_id`), which an `Rc` is biased to.
 #[unsafe(export_name = "moddil_rt_task_id")]
 pub extern "C" fn task_id() -> i64 {

@@ -1,0 +1,22 @@
+// covers: task.runtime.1
+
+fn main() -> int {
+    with Runtime = Runtime::seeded(5) {
+        let (tx, rx) = channel::<int>(3);
+        scope(|s| {
+            s.spawn (|| tx.send(1) ?! "the receiver is here");
+            s.spawn (|| tx.send(2) ?! "the receiver is here");
+        });
+        (rx.recv() ?! "sent") * 10 + (rx.recv() ?! "sent")
+    }
+}
+
+test "with nothing installed, the ready tasks run first in, first out" {
+    let (tx, rx) = channel::<int>(3);
+    scope(|s| {
+        s.spawn (|| tx.send(1) ?! "the receiver is here");
+        s.spawn (|| tx.send(2) ?! "the receiver is here");
+        s.spawn (|| tx.send(3) ?! "the receiver is here");
+    });
+    (rx.recv(), rx.recv(), rx.recv())  // => (Some(1), Some(2), Some(3))
+}

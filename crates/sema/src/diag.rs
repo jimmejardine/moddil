@@ -245,6 +245,8 @@ codes! {
     /// A task spawned into a scope opened outside a `with` whose handler it uses, so that it
     /// could outlive the handler.
     E0610 = "task outliving its handler",
+    /// A runtime installed other than by `main`'s outermost `with`, once (`task.runtime.1`).
+    E0611 = "runtime installed outside `main`",
     /// A closure whose kind is weaker than a bound needs: it changes or moves what it captures,
     /// where `Fn` or `FnMut` is needed.
     E0801 = "closure of the wrong kind",

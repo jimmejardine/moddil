@@ -105,6 +105,7 @@ and a code never changes meaning.
 | E0607 | Effects inferred without end | [eff.infer.1](effects.md) |
 | E0608 | A parameter of `main` that is not a root capability (a struct marked `#[root_capability]`), or one taken twice | [main.root.1](items/functions.md) |
 | E0610 | A task spawned into a scope opened outside a `with` whose handler it uses | [task.with.1](concurrency.md) |
+| E0611 | A runtime installed other than by `main`'s outermost `with`, once | [task.runtime.1](concurrency.md) |
 | E0609 | A handler's effect in the bound of a closure parameter, or in a stored or returned closure's type: a closure's needs are met where it is written | [expr.closure.effects.2](expressions/closures.md), [expr.closure.stored.1](expressions/closures.md), [expr.closure.result.1](expressions/closures.md) |
 | E0801 | A closure whose kind is weaker than a bound needs | [expr.closure.param.1](expressions/closures.md) |
 | E0802 | A stored closure (`Box<dyn Fn…>`) that captures a local holding a borrow | [expr.closure.stored.1](expressions/closures.md) |

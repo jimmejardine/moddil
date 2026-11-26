@@ -43,6 +43,10 @@ enum Command {
         /// Compile it to WebAssembly instead, and run that in Node (M1, slice W0).
         #[arg(long, conflicts_with = "interp")]
         wasm: bool,
+        /// The runtime its tasks run on, if `main` installs none (`task.runtime.1`): `sim`,
+        /// the deterministic one.
+        #[arg(long, default_value = "sim")]
+        runtime: String,
         /// The program's own arguments, after `--` (`Args`, `os.1`).
         #[arg(last = true)]
         args: Vec<String>,
@@ -57,6 +61,16 @@ enum Command {
         /// Compile them to WebAssembly instead, and run them in Node (M1, slice W0).
         #[arg(long, conflicts_with = "interp")]
         wasm: bool,
+        /// The runtime their tasks run on (`task.runtime.1`): `sim`, the deterministic one.
+        #[arg(long, default_value = "sim")]
+        runtime: String,
+        /// Run each with this seed: its ready tasks run in the order it picks, and with 0 (the
+        /// default), first in, first out. A failure under `--seeds` names its seed for this.
+        #[arg(long, default_value_t = 0, conflicts_with = "wasm")]
+        seed: u64,
+        /// Run each with seeds 1 to `n` too, to find an order of its tasks it fails in.
+        #[arg(long, default_value_t = 0, conflicts_with_all = ["wasm", "seed"])]
+        seeds: u64,
     },
     /// Compiles a program's `fn main()` ahead of time into an executable.
     Build {
@@ -104,7 +118,12 @@ enum Command {
     Lsp,
     /// Runs test `index` natively, for `moddil test`, which runs each in a process of its own.
     #[command(name = "__native-test", hide = true)]
-    NativeTest { file: PathBuf, index: u32 },
+    NativeTest {
+        file: PathBuf,
+        index: u32,
+        #[arg(long, default_value_t = 0)]
+        seed: u64,
+    },
 }
 
 /// The exit code for a trap: 70 (`EX_SOFTWARE`), as a built program's (`lifecycle.md`).
@@ -112,6 +131,22 @@ const TRAPPED: u8 = 70;
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    // The runtimes (`task.runtime.1`): only the deterministic one is built yet.
+    if let Command::Run { runtime, .. } | Command::Test { runtime, .. } = &cli.command {
+        match runtime.as_str() {
+            "sim" => {}
+            "parallel" => {
+                eprintln!(
+                    "moddil: the parallel runtime is not built yet; `--runtime sim`, the                      deterministic one, runs one task at a time"
+                );
+                return ExitCode::FAILURE;
+            }
+            other => {
+                eprintln!("moddil: there is no runtime `{other}`: it is `sim` or `parallel`");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
     if matches!(cli.command, Command::Lsp) {
         return match moddil_lsp::run() {
             Ok(()) => ExitCode::SUCCESS,
@@ -206,7 +241,19 @@ fn main() -> ExitCode {
         } => run_wasm(&db, program, &files, &name, args),
         Command::Test { wasm: true, .. } => test_wasm(&db, program, &files),
         Command::Run { args, .. } => run_native(&db, program, &files, &name, args.clone()),
-        Command::Test { interp, .. } => test(&db, program, &files, *interp, path),
+        Command::Test {
+            interp,
+            seed,
+            seeds,
+            ..
+        } => {
+            let seeds = if *seeds > 0 {
+                (0..=*seeds).collect()
+            } else {
+                vec![*seed]
+            };
+            test(&db, program, &files, *interp, path, &seeds)
+        }
         Command::Build {
             output, wasm: true, ..
         } => finish(build_wasm(&db, program, path, output.as_deref())),
@@ -231,7 +278,7 @@ fn main() -> ExitCode {
         Command::Build {
             output, release, ..
         } => finish(build(&db, program, path, output.as_deref(), *release, &c)),
-        Command::NativeTest { index, .. } => native_test(&db, program, &files, *index),
+        Command::NativeTest { index, seed, .. } => native_test(&db, program, &files, *index, *seed),
         Command::Lsp | Command::Fmt { .. } => unreachable!("handled above"),
     }
 }
@@ -493,8 +540,9 @@ fn native_test(
     program: Program,
     files: &[(String, String)],
     index: u32,
+    seed: u64,
 ) -> ExitCode {
-    let (observed, result) = moddil_native::run_test(db, program, index);
+    let (observed, result) = moddil_native::run_test_seeded(db, program, index, seed);
     match result {
         Ok(()) => {
             let t = &moddil_sema::item_tree(db, program).tests[index as usize];
@@ -551,12 +599,13 @@ impl TestRun {
 
 /// Runs test `index` natively in a child process (so that a crash in compiled code fails it,
 /// not the run).
-fn native_child(path: &Path, index: u32, name: &str) -> TestRun {
+fn native_child(path: &Path, index: u32, name: &str, seed: u64) -> TestRun {
     let out = std::env::current_exe().and_then(|exe| {
         std::process::Command::new(exe)
             .arg("__native-test")
             .arg(path)
             .arg(index.to_string())
+            .arg(format!("--seed={seed}"))
             .output()
     });
     let Ok(out) = out else {
@@ -946,6 +995,7 @@ fn test(
     files: &[(String, String)],
     interp: bool,
     path: &Path,
+    seeds: &[u64],
 ) -> ExitCode {
     let items = moddil_sema::item_tree(db, program);
     // The tests of the mod being built, not of its dependencies.
@@ -958,11 +1008,26 @@ fn test(
         || db.clone(),
         |db, k| {
             let i = tests[k];
-            if interp {
-                interp_test(db, program, files, i)
-            } else {
-                native_child(path, i, &items.tests[i as usize].name)
+            // The first seed it fails with, if any (`task.runtime.1`).
+            let mut run = None;
+            for &seed in seeds {
+                let r = if interp {
+                    interp_test(db, program, files, i, seed)
+                } else {
+                    native_child(path, i, &items.tests[i as usize].name, seed)
+                };
+                let passed = r.passed;
+                run = Some(r);
+                if !passed {
+                    if seed != 0 {
+                        let r = run.as_mut().expect("a run");
+                        r.line
+                            .push_str(&format!(" with seed {seed} (`--seed {seed}`)"));
+                    }
+                    break;
+                }
             }
+            run.expect("a seed")
         },
     );
     let mut failed = 0;
@@ -981,13 +1046,20 @@ fn test(
 }
 
 /// Test `index` on the MIR interpreter: whether it passed, and what `moddil test` prints for it.
-fn interp_test(db: &dyn Db, program: Program, files: &[(String, String)], index: u32) -> TestRun {
+fn interp_test(
+    db: &dyn Db,
+    program: Program,
+    files: &[(String, String)],
+    index: u32,
+    seed: u64,
+) -> TestRun {
     let items = moddil_sema::item_tree(db, program);
     let t = &items.tests[index as usize];
     let mut observed = Vec::new();
-    let result = moddil_interp::run_test(db, program, index, &mut |file, range, value| {
-        observed.push((file, range, value.render(items)));
-    });
+    let result =
+        moddil_interp::run_test_seeded(db, program, index, seed, &mut |file, range, value| {
+            observed.push((file, range, value.render(items)));
+        });
     let mut err = Vec::new();
     let (passed, how) = match result {
         Ok(()) => {

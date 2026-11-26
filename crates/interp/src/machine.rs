@@ -54,6 +54,21 @@ pub(crate) fn run(
     fuel: Option<u64>,
     os: Option<Vec<String>>,
 ) -> Result<Value, Stop> {
+    run_seeded(db, program, item, args, observer, fuel, os, 0)
+}
+
+/// As [`run`], its tasks run in the order seed `seed` picks (`task.runtime.1`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_seeded(
+    db: &dyn Db,
+    program: Program,
+    item: Item,
+    args: &[Value],
+    observer: Observer<'_>,
+    fuel: Option<u64>,
+    os: Option<Vec<String>>,
+    seed: u64,
+) -> Result<Value, Stop> {
     let items = moddil_sema::item_tree(db, program);
     let first = Frame::new(
         body(db, Owner::new(db, program, item)),
@@ -73,6 +88,7 @@ pub(crate) fn run(
             if let Some(args) = os {
                 s.set_os(crate::sched::RunOs::new(args));
             }
+            s.set_seed(seed);
             s
         },
         pending: std::collections::HashMap::new(),

@@ -49,6 +49,29 @@ impl<F, T> Drop for Task<F, T> {
 #[intrinsic]
 fn yield_now() with suspend;
 
+// How a program's tasks run (`task.runtime.1`), installed by `main`'s outermost `with`:
+// `with Runtime = Runtime::seeded(42) { … }`. Without one, a program runs under the deterministic
+// runtime with seed 0.
+struct Runtime {
+    seed: int,
+}
+
+impl Runtime {
+    // The deterministic runtime (`runtime-sim`), one task at a time: the ready tasks run in the
+    // order seed `seed` picks, and with 0, first in, first out (`task.sched.1`).
+    fn seeded(seed: int) -> Runtime {
+        Runtime { seed }
+    }
+}
+
+// What `with Runtime = rt` does before its body.
+fn __runtime_install(rt: &Runtime) {
+    __install_runtime(rt.seed);
+}
+
+#[intrinsic]
+fn __install_runtime(seed: int);
+
 // Waits, if the word at `p` holds `expected`, until a task unparks `p` (`task.park.1`): what a
 // sync cell waits with. A cancelled task unwinds from it.
 #[intrinsic]

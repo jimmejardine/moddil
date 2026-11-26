@@ -391,7 +391,24 @@ pub fn run_test(
     index: u32,
     observer: Observer<'_>,
 ) -> Result<(), Stop> {
-    machine::run(db, program, Item::Test(index), &[], observer, None, None).map(|_| ())
+    run_test_seeded(db, program, index, 0, observer)
+}
+
+/// As [`run_test`], its tasks run in the order seed `seed` picks (`task.runtime.1`): with 0,
+/// first in, first out.
+///
+/// # Errors
+///
+/// As [`run_test`].
+pub fn run_test_seeded(
+    db: &dyn Db,
+    program: Program,
+    index: u32,
+    seed: u64,
+    observer: Observer<'_>,
+) -> Result<(), Stop> {
+    let item = Item::Test(index);
+    machine::run_seeded(db, program, item, &[], observer, None, None, seed).map(|_| ())
 }
 
 /// This crate's version.

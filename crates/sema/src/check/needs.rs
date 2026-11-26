@@ -278,11 +278,41 @@ impl Checker<'_> {
             let t = self.infer(h.value);
             self.handler_fits(h, &t);
             effects.push(h.effect.clone());
+            if matches!(&h.effect, Ty::Adt(a, ..) if Some(*a) == self.items.lang("Runtime")) {
+                self.runtime_installs
+                    .push((h.range, !self.installs.is_empty()));
+            }
         }
         self.installs.push((e, effects));
         let t = self.infer(body);
         self.installs.pop();
         t
+    }
+
+    /// A runtime is installed by `main`'s outermost `with`, once, outside its closures
+    /// (`task.runtime.1`, E0611).
+    pub(super) fn check_runtime_installs(&mut self) {
+        let main = matches!(self.owner, Item::Fn(f) if self.items.is_main(f));
+        let closures: Vec<TextRange> = self.closures.iter().map(|&c| self.range(c)).collect();
+        for (k, (at, nested)) in std::mem::take(&mut self.runtime_installs)
+            .into_iter()
+            .enumerate()
+        {
+            let why = if !main {
+                "a runtime is installed only by `main`, which chooses how the program's tasks run"
+            } else if nested
+                || closures
+                    .iter()
+                    .any(|c| c.start <= at.start && at.end <= c.end)
+            {
+                "a runtime is installed by `main`'s outermost `with`, before any task runs"
+            } else if k > 0 {
+                "`main` installs one runtime"
+            } else {
+                continue;
+            };
+            self.report(Code::E0611, at, why.to_string());
+        }
     }
 
     /// Whether a handler of type `t` can be installed for `h.effect`: a value of a type that

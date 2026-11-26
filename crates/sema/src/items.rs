@@ -660,6 +660,7 @@ impl AdtDef {
 /// The traits, types and functions of the prelude the language itself refers to.
 const LANG: &[&str] = &[
     "RadixText",
+    "Runtime",
     "Option",
     "Result",
     "Ordering",
@@ -725,7 +726,8 @@ impl ItemTree {
             }
             Ty::Adt(a, _, args) => {
                 let def = &self.adts[*a as usize];
-                if def.src == Src::Prelude {
+                // The prelude's `Runtime` is installed, as context data is (`task.runtime.1`).
+                if def.src == Src::Prelude && Some(*a) != self.lang("Runtime") {
                     Some(format!(
                         "`{}` is the prelude's: context data is a type of this program, so wrap \
                          it in one",

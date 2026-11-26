@@ -190,6 +190,9 @@ pub struct Scheduler<V, T, D, H> {
     incoming: HashMap<usize, usize>,
     arrivals: HashMap<usize, usize>,
     signals: Option<usize>,
+    /// The seed's generator, which picks the next ready task (`task.runtime.1`); with seed 0,
+    /// none, and the first ready runs.
+    seed: u64,
 }
 
 /// Values given back to be dropped, each with what drops it.
@@ -221,6 +224,7 @@ impl<V: Item, T: Clone, D: Copy, H: Host> Scheduler<V, T, D, H> {
             incoming: HashMap::new(),
             arrivals: HashMap::new(),
             signals: None,
+            seed: 0,
         }
     }
 
@@ -674,7 +678,17 @@ impl<V: Item, T: Clone, D: Copy, H: Host> Scheduler<V, T, D, H> {
                 self.fire(i);
             }
         }
-        self.ready.pop_front()
+        if self.seed == 0 || self.ready.len() < 2 {
+            return self.ready.pop_front();
+        }
+        let i = (split_mix(&mut self.seed) % self.ready.len() as u64) as usize;
+        self.ready.remove(i)
+    }
+
+    /// Runs the tasks from now on in the order seed `seed` picks (`task.runtime.1`): with 0,
+    /// first in, first out.
+    pub fn set_seed(&mut self, seed: u64) {
+        self.seed = seed;
     }
 
     /// Makes ready, in the order they began to wait, the suspended tasks whose wait is over, or
@@ -722,4 +736,18 @@ impl<V, D> TaskState<V, D> {
             drop,
         }
     }
+}
+
+/// The next number of the SplitMix64 generator whose state is `state` (Steele, Lea and Flood,
+/// 2014): what a seed's order of tasks is made from (`task.runtime.1`). The state never becomes
+/// 0, so a seeded scheduler stays seeded.
+pub fn split_mix(state: &mut u64) -> u64 {
+    *state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    if *state == 0 {
+        *state = 0x9e37_79b9_7f4a_7c15;
+    }
+    let mut z = *state;
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
 }

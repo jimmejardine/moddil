@@ -513,6 +513,7 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
             Item::Test(_) | Item::Closure(..) => Vec::new(),
         },
         closures: Vec::new(),
+        runtime_installs: Vec::new(),
         closure_calls: Vec::new(),
         stored: Vec::new(),
         boxed_hint: None,
@@ -800,6 +801,8 @@ struct Checker<'a> {
     owner_args: Vec<Ty>,
     /// The closures checked so far, innermost first.
     closures: Vec<ExprId>,
+    /// Each `with Runtime = …` (`task.runtime.1`): where, and whether a `with` is around it.
+    runtime_installs: Vec<(TextRange, bool)>,
     /// The calls of closures: the call, its callee, the callee's type and its arguments' tuple.
     closure_calls: Vec<(ExprId, ExprId, Ty, Ty)>,
     /// The closures kept in a `Box<dyn Fn…>`, with that `dyn` type and where: they own what
@@ -1176,6 +1179,7 @@ impl Checker<'_> {
         self.out.resolve_all(&mut self.solver);
         self.check_literals();
         self.meet_needs();
+        self.check_runtime_installs();
         self.finish_closures();
         let deferred = std::mem::take(&mut self.deferred);
         let ds = deferred.run(self.items, self.body, &self.out, &mut self.solver);

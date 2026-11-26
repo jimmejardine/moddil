@@ -76,7 +76,7 @@ test "orders settle" {
 }
 
 fn main(args: Args, stdio: Stdio) -> ExitCode {
-    with Runtime = Sim::seeded(42) {    // one task at a time, seed-ordered, virtual time
+    with Runtime = Runtime::seeded(42) {    // one task at a time, seed-ordered, virtual time
         app::run(&stdio)
     }
 }
@@ -105,7 +105,7 @@ fn main(args: Args, stdio: Stdio, net: NetRoot, cpus: Cpus) -> ExitCode {
 }
 ```
 
-The same `matcher`, `analytics` and `api` run unchanged under `Sim::seeded` in tests: only `main`
+The same `matcher`, `analytics` and `api` run unchanged under `Runtime::seeded` in tests: only `main`
 differs. Under `runtime-sim`, executor placement is recorded and simulated; under
 `runtime::parallel` it is real. So one program can keep 128 cores busy with varied work at
 varied priorities: priority is per executor, and tasks within one are scheduled fairly

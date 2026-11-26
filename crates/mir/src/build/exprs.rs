@@ -973,6 +973,16 @@ impl Builder<'_> {
                 _ => Rvalue::Use(borrow.0),
             };
             self.cfg.assign(installed, value);
+            // A runtime takes over before the body runs (`task.runtime.1`).
+            if matches!(&h.effect, Ty::Adt(a, ..) if Some(*a) == self.items.lang("Runtime")) {
+                let unit = self.temp(Ty::Unit);
+                let callee = Callee::Fn {
+                    func: self.prelude_fn("__runtime_install"),
+                    args: Vec::new(),
+                };
+                let rt = Operand::Copy(Place::local(installed));
+                self.call_into(None, callee, Place::local(unit), vec![rt], h.range);
+            }
             self.installed.insert((e, k), Place::local(installed));
         }
         self.eval_into(dest, body);

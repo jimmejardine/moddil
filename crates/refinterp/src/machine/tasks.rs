@@ -106,6 +106,9 @@ pub(crate) struct Tasks {
     now: i64,
     /// The timers not yet fired: when each fires, in the order made, and its channel.
     timers: Vec<(i64, usize)>,
+    /// The seed's generator, which picks the next ready task (`task.runtime.1`); 0 for first
+    /// in, first out.
+    seed: u64,
 }
 
 impl TaskState {
@@ -138,6 +141,7 @@ impl Tasks {
             timers: Vec::new(),
             threads: Vec::new(),
             panicked: false,
+            seed: 0,
         }
     }
 
@@ -318,7 +322,11 @@ impl Tasks {
             self.channels[c].senders -= 1;
             self.wake();
         }
-        self.ready.pop_front()
+        if self.seed == 0 || self.ready.len() < 2 {
+            return self.ready.pop_front();
+        }
+        let i = (split_mix(&mut self.seed) % self.ready.len() as u64) as usize;
+        self.ready.remove(i)
     }
 
     fn pop(&mut self, c: usize) -> Option<Value> {
@@ -427,6 +435,13 @@ impl Machine<'_> {
         let id = |m: &Self, v: &Value| id_of(&m.target(v.clone()));
         Some(match (owner, name) {
             ("", "__task_id") => Ok(Value::Int(self.memory.task() as i64)),
+            ("", "__install_runtime") => {
+                let Value::Int(seed) = args[0] else {
+                    unreachable!("an int")
+                };
+                self.with_tasks(|ts| ts.seed = seed as u64);
+                Ok(Value::Unit)
+            }
             ("", "__scope_open") => {
                 let me = self.memory.task();
                 let isolated = args[0] == Value::Bool(true);
@@ -1264,4 +1279,17 @@ impl Machine<'_> {
         let result = self.eval(&body);
         self.exit(mark, result, range)
     }
+}
+
+/// The next number of the SplitMix64 generator whose state is `state`: a seed's order of tasks
+/// (`task.runtime.1`). The state never becomes 0.
+fn split_mix(state: &mut u64) -> u64 {
+    *state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    if *state == 0 {
+        *state = 0x9e37_79b9_7f4a_7c15;
+    }
+    let mut z = *state;
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
 }

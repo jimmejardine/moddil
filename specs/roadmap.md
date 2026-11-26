@@ -185,19 +185,15 @@ half, then P38's stages, with P41's benchmarks as each lands (`runtime.md`).
 
 **P37. Choosing the runtime** (`crates/rt`, `crates/sched`, prelude, `mods/runtime`,
 `crates/moddil`; M). The apparatus, with only the deterministic runtime behind it.
-- The prelude's `Runtime` handler type; the `Cpus` root capability in `mods/runtime`; the
-  executor constructors `pool`, `pinned`, `blocking` and `affine` (cores, `node(n)`, priority,
+- The `Cpus` root capability in `mods/runtime`; the executor constructors `pool`, `pinned`, `blocking` and `affine` (cores, `node(n)`, priority,
   busy-polling) as values (`runtime.md`: Starting a program).
 - `scope(…, on: e)` and `spawn(…, on: e)` in the checker and MIR, children inheriting their
   executor.
-- `with Runtime = …` only in `main`, once (an error elsewhere, with its reference paragraphs).
-- Today's scheduler named `runtime-sim`, with `Sim::seeded(n)`; placement recorded and
-  simulated.
-- Each test under `runtime-sim` with its own seed, printed when it fails; `moddil test --seed n`
-  replays one.
-- `moddil run --runtime sim|parallel` and the manifest's runtime and core counts (`parallel`
-  refused with a message until P38); the one-thread build's manifest key and `--threads one`
-  (its lowering is P40's).
+- Placement recorded and simulated under `runtime-sim` (`Runtime::seeded(n)` and
+  `moddil test --seed n`/`--seeds n` are built, `task.runtime.1`).
+- The manifest's runtime and core counts (`moddil run --runtime sim|parallel` is built, `parallel`
+  refused until P38); the one-thread build's manifest key and `--threads one` (its lowering is
+  P40's).
 - `moddil/sim` refused under `parallel`: its cells assume one task at a time.
 - Conformance on all four runners, which all run `runtime-sim` and so keep agreeing.
 

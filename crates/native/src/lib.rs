@@ -43,10 +43,21 @@ pub type Observed = (u32, TextRange, String);
 /// [`Native::Unsupported`] if the test reaches code not compiled natively yet, and
 /// [`Native::Trap`] if it traps.
 pub fn run_test(db: &dyn Db, program: Program, index: u32) -> (Vec<Observed>, Result<(), Native>) {
+    run_test_seeded(db, program, index, 0)
+}
+
+/// As [`run_test`], its tasks run in the order seed `seed` picks (`task.runtime.1`): with 0,
+/// first in, first out.
+pub fn run_test_seeded(
+    db: &dyn Db,
+    program: Program,
+    index: u32,
+    seed: u64,
+) -> (Vec<Observed>, Result<(), Native>) {
     match lower::compile(db, program, Item::Test(index)) {
         Err(why) => (Vec::new(), Err(Native::Unsupported(why))),
         Ok(compiled) => {
-            let (observed, result, _) = compiled.run(None);
+            let (observed, result, _) = compiled.run(None, seed);
             (observed, result.map(|_| ()))
         }
     }
@@ -75,7 +86,7 @@ pub fn run_main_exit(
     args: Vec<String>,
 ) -> Result<(String, Option<u8>), Native> {
     let compiled = lower::compile(db, program, Item::Fn(index)).map_err(Native::Unsupported)?;
-    let (_, result, exit) = compiled.run(Some(args));
+    let (_, result, exit) = compiled.run(Some(args), 0);
     result.map(|shown| (shown, exit))
 }
 

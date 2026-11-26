@@ -36,8 +36,9 @@ suspends: at a `join` of a task that has not ended, at a scope's end while its t
 at a channel's `send` or `recv` that must wait, at a `select` or `stop_requested()` with nothing
 ready, or at `yield_now()`, which needs `suspend` and lets the ready tasks run first. Then the task
 at the front of the queue runs; with none ready, every task waits for another, and the program
-traps (a deadlock). So a program's tasks run in the same order every time, for now:
-other schedules, and tasks running in parallel, come with the runtimes.
+traps (a deadlock). So a program's tasks run in the same order every time, under the
+deterministic runtime with seed 0 (**task.runtime.1**); tasks running in parallel come with the
+parallel runtime.
 
 **task.error.1** A task's error goes to its `join`. When a task whose `Task` has been dropped (so
 it can no longer be joined) fails, or has failed, or the body fails, the scope **fails** with that
@@ -125,6 +126,14 @@ same place, in the order they parked (it gives how many), or until it is cancell
 unwinds (**task.cancel.1**). Tasks parked with nothing else ready are a deadlock
 (**task.sched.1**). They are what sync cells wait with ([`mods/sync`](../../mods/sync)): a task
 that finds a `Mutex` held parks on it, and the task that lets it go unparks one.
+
+**task.runtime.1** How a program's tasks run is its **runtime**, a handler `main` installs:
+`with Runtime = Runtime::seeded(n) { … }` runs them under the deterministic runtime, one at a
+time (**task.sched.1**), where the next task to run is the one seed `n` picks from those ready;
+with seed 0 it is the first, as when nothing is installed. A seed gives the same order every run.
+The runtime is installed by `main`'s outermost `with`, once and outside its closures, before any
+task runs; anywhere else is an error (E0611). `moddil test --seed n` runs the tests with seed `n`,
+and `--seeds n` with each seed up to `n`, naming one a test fails with.
 
 **task.borrow.1** A task's closure may borrow what outlives the scope: a shared borrow by any
 number of tasks, a `&mut` borrow by one. The scope keeps what its tasks borrow until it ends, so

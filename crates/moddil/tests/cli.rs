@@ -500,3 +500,44 @@ fn fmt_refuses_a_named_file_that_does_not_parse() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("does not parse"));
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "fn broken( {\n");
 }
+
+/// Tasks whose values arrive in the order they run.
+const ORDER: &str = "\
+test \"in turn\" {
+    let (tx, rx) = channel::<int>(3);
+    scope(|s| {
+        s.spawn(|| tx.send(1) ?! \"open\");
+        s.spawn(|| tx.send(2) ?! \"open\");
+        s.spawn(|| tx.send(3) ?! \"open\");
+    });
+    (rx.recv(), rx.recv(), rx.recv())  // => (Some(1), Some(2), Some(3))
+}
+";
+
+#[test]
+fn seeds_reorder_tasks_and_a_failure_names_its_seed() {
+    let path = file("order.moddil", ORDER);
+    for runner in [&[][..], &["--interp"][..]] {
+        let args = [&["test"][..], runner].concat();
+        assert!(moddil(&args, &path).status.success());
+        let args = [&["test", "--seeds", "10"][..], runner].concat();
+        let out = moddil(&args, &path);
+        assert!(!out.status.success());
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            stdout.contains("failed with seed 1 (`--seed 1`)"),
+            "{stdout}"
+        );
+    }
+}
+
+#[test]
+fn the_parallel_runtime_is_refused_until_it_is_built() {
+    let out = moddil(
+        &["run", "--runtime", "parallel"],
+        &file("par.moddil", PROGRAM),
+    );
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("not built yet"), "{stderr}");
+}
