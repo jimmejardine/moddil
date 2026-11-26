@@ -2,7 +2,7 @@
 
 ## Summary
 
-| Topic | Decision |
+| Topic | Rule |
 |---|---|
 | **Pitch** | **"Moddil: Rust's armour, without the baggage."** Rust's safety without Rust's pain. The mascot is the **armadillo** ([Positioning: armour, not baggage](#positioning-armour-not-baggage)). |
 | **First audiences** | **Backend and infrastructure teams**, and **Python teams that need speed** ([First audiences](#first-audiences)). |
@@ -37,15 +37,14 @@ target domain, and tooling that delights from the first command.
 
 ## Positioning: armour, not baggage
 
-**Decision: the tagline is "Moddil: Rust's armour, without the baggage", and the mascot is the
-armadillo** (the tagline named Rust from November 2026; it was "the programming language with
-armour, not baggage"). The pitch is **Rust's safety without Rust's pain**: Moddil keeps the armour
-and leaves the baggage behind.
+The tagline is **"Moddil: Rust's armour, without the baggage"**, and the mascot is the
+**armadillo**. The pitch is **Rust's safety without Rust's pain**: Moddil keeps the armour and
+leaves the baggage behind.
 
 | Armour kept | Baggage dropped |
 |---|---|
 | Memory safety and data-race freedom without a GC ([`memory.md`](memory.md)) | Lifetime annotations: borrows are second-class ([`memory.md`: Borrowing](memory.md#borrowing)) |
-| No crash from an unhandled error ([R3](requirements.md#firm-requirements-decided)) | `async`/`.await` and coloured functions: suspension is an effect ([`concurrency.md`](concurrency.md)) |
+| No crash from an unhandled error ([R3](requirements.md#firm-requirements)) | `async`/`.await` and coloured functions: suspension is an effect ([`concurrency.md`](concurrency.md)) |
 | Effects and capabilities in signatures ([`effects-and-capabilities.md`](effects-and-capabilities.md)) | `Send`, `Sync`, `Pin`, `'static` and `move` ([`concurrency.md`: No `Send` / `Sync`](concurrency.md#no-send--sync), [`closures.md`](closures.md)) |
 | Checked contracts and refinements ([`correctness.md`](correctness.md)) | `macro_rules!` and procedural macros: comptime instead ([`comptime.md`](comptime.md)) |
 | Capability-scoped dependencies ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)) | Build scripts and code run at fetch time ([`packages-and-supply-chain.md`: No code at fetch or build time](packages-and-supply-chain.md#no-code-at-fetch-or-build-time)) |
@@ -61,12 +60,12 @@ Three secondary reasons, each a pitch to a particular reader:
 - **Testable by construction:** time, network and randomness are effects, so deterministic simulation
   testing comes free ([`determinism.md`: Deterministic simulation testing](determinism.md#deterministic-simulation-testing)).
 
-**The name and the armadillo** will be registered as trademarks later, once there is adoption
-(decided); until then the name is used consistently ([`governance.md`](governance.md)).
+**The name and the armadillo** are registered as trademarks once there is adoption; until then
+the name is used consistently ([`governance.md`](governance.md)).
 
 ## First audiences
 
-**Decision: two first audiences.**
+Moddil has **two first audiences**.
 
 | Audience | Today they use | The itch | What must be ready on day one |
 |---|---|---|---|
@@ -93,7 +92,7 @@ What a newcomer to Moddil never has to learn, compared with Rust:
 - orphan-rule workarounds and object-safety rules ([`types.md`](types.md));
 - numeric `as` casts with silent truncation ([`numerics.md`](numerics.md)).
 
-**Decided: simplicity is measured, not asserted, by agents.** Each release runs a fixed set of
+**Simplicity is measured by agents, not asserted.** Each release runs a fixed set of
 newcomer tasks with LLM agents (a CLI tool, an HTTP service with a database, a concurrent crawler,
 a parser with tests, a Python extension) and publishes, compared with Rust and Go:
 
@@ -107,7 +106,7 @@ There is no human user study; the measurement is automatic and repeatable.
 
 ## Python first
 
-**Decision: Python bindings are in v0, and Python is the first `moddil bind` target.**
+**Python bindings are in v0, and Python is the first `moddil bind` target.**
 
 ```rust
 // fast_stats.moddil
@@ -132,7 +131,7 @@ smooth = rolling_mean(prices, window=50)  # numpy array in, no copy; list or arr
 - **Async:** functions that `suspend` become awaitables usable from `asyncio`; cancellation crosses both
   ways, as with the other bindings ([`ui.md`: Generated bindings](ui.md#generated-bindings)).
 - **The GIL:** Moddil code releases the GIL while it runs, and runs its own tasks on its own executor.
-- **Free-threaded CPython** (decided): separate pools, with a handoff. A Python thread that calls
+- **Free-threaded CPython:** separate pools, with a handoff. A Python thread that calls
   into Moddil blocks while the call runs on Moddil's executor; Moddil calls back into Python through
   typed callbacks that run on a Python thread. Neither runtime schedules the other's threads, so
   this works with and without the GIL.
@@ -147,7 +146,7 @@ smooth = rolling_mean(prices, window=50)  # numpy array in, no copy; list or arr
 
 ## Migrating existing code
 
-**Decision: an official Rust translator, and an agent-assisted path for everything else.**
+There is **an official Rust translator, and an agent-assisted path for everything else**.
 
 ### `moddil migrate rust`
 
@@ -174,13 +173,13 @@ Rust and Moddil share most syntax, so translation of the common subset is mechan
   translated mechanically, what was flagged, and the test results.
 - The **generated Rust bridge** lets translated and untranslated crates work together during a
   migration ([`interop.md`](interop.md)).
-- **The v0 target** (decided): 80% of the top 100 crates without `unsafe` or procedural macros
+- **The v0 target:** 80% of the top 100 crates without `unsafe` or procedural macros
   translate with their tests passing; everything else is flagged, never dropped.
 
 ### TypeScript and other languages: agent-assisted
 
 TypeScript, Python and Go are too far from Moddil (a GC, dynamic shapes, exceptions) for a purely
-mechanical translation, and **TypeScript migration stays agent-assisted** (decided): structural types,
+mechanical translation, so **TypeScript migration is agent-assisted**. *Why:* structural types,
 `any` and shared mutation do not map mechanically to ownership, even in functional-style code. The
 workflow:
 
@@ -242,9 +241,10 @@ Models write well only in languages they have seen. Moddil's plan is in
 
 ## Games through Godot
 
-**Decided: Godot bindings are official and come early**, built and maintained by the core team as a
-showcase alongside the two [first audiences](#first-audiences). Moddil game code runs inside the unmodified Godot engine; a port
-of the engine itself (about 1.5 million lines of C++) is out of scope.
+**Godot bindings are official and come early**, built and maintained by the core team as a
+showcase alongside the two [first audiences](#first-audiences). Moddil game code runs inside the
+unmodified Godot engine; a port of the engine itself (about 1.5 million lines of C++) is out of
+scope.
 
 Precedent: **godot-rust (gdext)** brought many game developers to Rust; **SwiftGodot** and
 **godot-cpp** do the same for Swift and C++.
@@ -285,3 +285,14 @@ GDScript and C# offer neither.
 - Published mods, and how many are depended on by others.
 - Newcomer compile-error rates and time to a first service ([Simpler than Rust](#simpler-than-rust)).
 - Agent success rate on a standard task suite, compared with Rust and Go.
+
+## Alternatives considered
+
+- **The tagline "the programming language with armour, not baggage".** Replaced by a tagline that
+  names Rust, so the comparison the pitch rests on is explicit.
+- **A human user study to show Moddil is simpler than Rust.** Not taken: agent-run newcomer tasks
+  are automatic and repeatable on every release.
+- **A mechanical TypeScript translator.** Not taken: structural types, `any` and shared mutation do
+  not map mechanically to ownership, even in functional-style code.
+- **Porting the Godot engine to Moddil.** Out of scope: the engine is about 1.5 million lines of
+  C++, and GDExtension's C ABI lets Moddil game code run inside the unmodified engine.

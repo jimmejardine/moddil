@@ -27,7 +27,7 @@ the compiler. That makes code easier for agents to write correctly and for human
 Read [`specs/README.md`](specs/README.md) first. It is the **index**: every area with a status
 (⚪ not started, 🔴 superficial, 🟠 major questions, 🟡 minor questions, 🟢 complete) and a link to
 the document that holds its detail. Then read [Why Moddil](specs/vision.md) for the thesis, and the
-[firm requirements](specs/requirements.md#firm-requirements-decided). People and agents editing
+[firm requirements](specs/requirements.md#firm-requirements). People and agents editing
 the specs should follow [Working on these specs](specs/README.md#working-on-these-specs).
 
 The language itself is defined by the [2027 reference](reference/README.md) and its grammar,

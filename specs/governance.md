@@ -9,7 +9,7 @@
 | **Agents as equals** | Agent reviews and approvals count as humans' do; contributions are marked as agent- or human-authored; humans break ties. |
 | **Low-friction contributions** | MIT/Apache-2.0, DCO sign-off, no CLA. |
 | **A code of conduct** | Contributor Covenant 2.1, moderated separately from technical decisions. |
-| **A protected, permissive name** | "Moddil" and the armadillo will be registered once there is adoption; community use is free; implementations need the conformance suite. |
+| **A protected, permissive name** | "Moddil" and the armadillo are registered once there is adoption; community use is free; implementations need the conformance suite. |
 | **An independent non-profit** | Funded by donations and sponsors, without corporate control. |
 | **Security response in git** | OSV advisories in a project repository; community mods publish their own; `moddil audit` reads both. |
 
@@ -39,7 +39,7 @@
 | **Contributor terms** | DCO sign-off (Linux, many Rust projects) vs CLAs (Apache, Google) |
 | **Codes of conduct** | Contributor Covenant 2.1; Rust's code of conduct and moderation team |
 
-## Decisions
+## Rules
 
 ### Staged decision making
 
@@ -50,10 +50,9 @@
 | **3. Steering council** | An elected council, with teams for the compiler, standard mods, tooling and the reference | — |
 | **Foundation** (alongside 2 or 3) | Holds the trademark, money and infrastructure; does not make technical decisions | Created when there is money or a trademark to hold |
 
-- **The founder decides when each transition happens** (decided), announcing it publicly with
-  reasons. The triggers above are written down now as guidance, so each transition is planned
-  rather than forced by a crisis. Council members are elected by contributors; the details are set
-  at the transition.
+- **The founder decides when each transition happens**, announcing it publicly with reasons. The
+  triggers above are written down as guidance, so each transition is planned rather than forced by
+  a crisis. Council members are elected by contributors; the details are set at the transition.
 
 ### Moddil Evolution
 
@@ -79,7 +78,7 @@ The proposal process sketched in [`evolution.md`](evolution.md), formalised:
 - **Humans break ties**: when reviews split, or agents and humans disagree, the human reviewers
   decide.
 - An agent cannot certify that it has the right to contribute, so **its operator signs the DCO**.
-- **Agents do not vote or hold seats** (decided). Elections and council seats are for people,
+- **Agents do not vote or hold seats.** Elections and council seats are for people,
   because accountability, conduct enforcement and legal duties need a person. An agent's operator
   votes as themselves.
 
@@ -95,14 +94,16 @@ The `moddil/*` mods ([`stdlib.md`](stdlib.md)) follow these rules on top of the 
 
 - **RFCs** for new standard mods and breaking changes.
 - **Capability review**: any increase in a standard mod's declared capabilities needs review.
-- **Audit trail** ([Package management and supply-chain security](packages-and-supply-chain.md)): standard mod releases are reproducibly built, signed, and reviewed. The
-  review record says whether the reviewer was a human or an agent.
+- **Audit trail** ([Package management and supply-chain security](packages-and-supply-chain.md)):
+  standard mod releases are reproducibly built, signed, and reviewed. The review record says whether
+  the reviewer was a human or an agent.
 - **Wrappers are allowed**: a mod may wrap a C or Rust library ([`interop.md`](interop.md)),
   but it carries the `ffi` capability, which is visible to every consumer.
-- **Human review for `unsafe` and `ffi`** (decided): new or changed `unsafe` or `ffi` code in a
+- **Human review for `unsafe` and `ffi`:** new or changed `unsafe` or `ffi` code in a
   standard mod needs at least one human approval as well as the checker, the same default the
   project asks of its users ([`unsafe.md`: Review and audit](unsafe.md#review-and-audit)).
-- **Editions**: standard mods follow language editions, with automated migrations ([Language evolution](evolution.md)).
+- **Editions**: standard mods follow language editions, with automated migrations
+  ([Language evolution](evolution.md)).
 
 ### Code of conduct
 
@@ -112,8 +113,8 @@ The `moddil/*` mods ([`stdlib.md`](stdlib.md)) follow these rules on top of the 
 
 ### Name, logo and trademark
 
-- **"Moddil" and the armadillo logo will be registered later, once there is adoption** (decided,
-  [`adoption.md`: Positioning: armour, not baggage](adoption.md#positioning-armour-not-baggage)).
+- **"Moddil" and the armadillo logo are registered once there is adoption**
+  ([`adoption.md`: Positioning: armour, not baggage](adoption.md#positioning-armour-not-baggage)).
   Until the foundation exists, the founder holds them, with a written intent to transfer them.
 - **The policy is permissive**: community mods, books, talks, courses and "for Moddil" products may
   use the name freely.
@@ -149,6 +150,24 @@ The `moddil/*` mods ([`stdlib.md`](stdlib.md)) follow these rules on top of the 
 Governance doesn't change what the examples can express; it decides how features they need get into
 the language (each proposal cites one), and how fast a security fix reaches them (advisories and the
 cooldown override).
+
+## Open questions
+
+- **How the steering council is elected.** Council members are elected by contributors; the
+  electorate, terms and voting method are set when the project moves to stage 3.
+- **The stage 2 trigger.** The guidance names "a set number of years" at stage 2 without fixing the
+  number.
+
+## Alternatives considered
+
+- **Agents voting or holding council seats.** Not taken: accountability, conduct enforcement and
+  legal duties need a person, so an agent's operator votes as themselves.
+- **A contributor licence agreement.** Not taken: a DCO sign-off on each commit keeps contributing
+  low-friction.
+- **A foundation run by corporate members** (the Rust Foundation model). Not taken: sponsors give
+  money without board seats or control, as at the Zig Software Foundation.
+- **Transitions forced by fixed triggers.** Not taken: the founder decides when each transition
+  happens, with the triggers as guidance, so each one is planned.
 
 ## Prior art
 

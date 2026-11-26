@@ -2,8 +2,8 @@
 
 The tour is the [`tour/shorty`](../tour/shorty/README.md) mod, checked in CI
 ([From markdown to source](#from-markdown-to-source)); this page points to it and keeps the
-[gaps it exposed](#gaps-the-tour-exposed). One small, complete program written in the agreed
-syntax, to show how the decided features fit together. Terms are defined in the
+[gaps it exposed](#gaps-the-tour-exposed). It is one small, complete program, showing how the
+language's features fit together. Terms are defined in the
 [glossary](glossary.md).
 
 ## The program
@@ -31,33 +31,32 @@ of the tour with its explanations and spec links in its `//!` overview:
 
 ## From markdown to source
 
-**Decided: at M0 the tour becomes real Moddil source, a dogfood program that checks itself.**
-Done in slice S9d (November 2026).
+The tour is real Moddil source, a dogfood program that checks itself (built in slice S9d).
 
-- It moves to **`tour/shorty/`** at the repository root: a real mod with a manifest and `src/*.moddil`
+- It lives in **`tour/shorty/`** at the repository root: a real mod with a manifest and `src/*.moddil`
   files ([`modules.md`: Mods and modules](modules.md#mods-and-modules)).
-- **Each section becomes a module** (`types`, `links`, `routes`, `serve`, `main`). Its `//!`
+- **Each section is a module** (`types`, `links`, `routes`, `serve`, `main`). Its `//!`
   overview carries this page's explanations and spec links, and the mod overview gives the reading
   order ([`docs.md`: Overviews](docs.md#overviews-mod-module-and-group-docs)).
 - **Everything that can be checked is checked:** the tests in section 6 are attached `test` blocks,
   and the `// =>` examples in doc comments run as tests
   ([`testing.md`: Examples are tests](testing.md#examples-are-tests)).
-- **`moddil doc` renders the mod as the tour** (once `moddil doc` exists), and this page shrinks
-  to a pointer plus the gaps table.
+- **`moddil doc` renders the mod as the tour**, and this page is a pointer plus the gaps it
+  exposed. Not yet: `moddil doc` writes each module's public items and docs, not the tour's
+  narrative ([`roadmap.md`: P23](roadmap.md#on-the-horizon)).
 - **Its libraries are the standard mods, written in Moddil** (since M2 slices M2c and M2d), under
   [`mods/`](../mods/README.md): `collections`, `sync`, `rand`, `serde`, `net` (with `http`),
   `sim` and `runtime` (the root capabilities). It names them through
   the umbrella mod [`mods/moddil/`](../mods/moddil/README.md), which re-exports them. `moddil run tour/shorty`
   serves real HTTP/1.1, natively, on the MIR interpreter and as WebAssembly under Node.
-- **Gates, run in CI from then on** ([`roadmap.md`: How work is built](roadmap.md#how-work-is-built)):
+- **Gates, run in CI** ([`roadmap.md`: How work is built](roadmap.md#how-work-is-built)):
   - **M0:** the tour parses and passes the type, effect and ownership checks;
   - **M2:** its tests pass, including the simulated-network test under `moddil/runtime-sim`.
 - A failing tour blocks a release: it is the first program written in Moddil.
-- The link checker (`tools/check_spec_links.py`) is to check links in the tour's source comments
-  too; its comments name spec sections as text for now.
+- Not yet: the link checker (`tools/check_spec_links.py`) does not check links in the tour's
+  source comments, which name spec sections as text.
 
-The source is now the tour; where it had to differ from the page it replaced, the gaps table says
-why.
+Where the source differs from the page it replaced, the gaps below say why.
 
 ## What the tour leaves out
 
@@ -67,10 +66,10 @@ own document in the [index](README.md).
 
 ## Gaps the tour exposed
 
-Writing a complete program needed these, and no spec decides them yet. The spellings above are
-placeholders. Each gap is recorded as an open question in its area.
+Writing a complete program raised these questions. Each is answered in its area's spec, and the
+tour's code uses each answer.
 
-Resolved since the tour was written:
+From the first draft of the tour:
 
 - effects are traits used after `with`, how handlers are defined, how a handler gets its own
   dependencies, and `spawn` being an effect ([Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly),
@@ -85,8 +84,7 @@ Resolved since the tour was written:
   ([Errors inside tests](testing.md#errors-inside-tests));
 - typed argument access and the named `sysexits.h` exit codes ([`lifecycle.md`: Typed, layered configuration](lifecycle.md#typed-layered-configuration), [Conventional exits](lifecycle.md#conventional-exits)).
 
-Found when the tour became source (slice S9d), and decided in November 2026; the tour's code
-now uses each answer:
+Found when the tour became source (slice S9d):
 
 1. `default` stays a keyword, so a parameter is never called `default`: the API says
    `fallback:` ([`syntax.md`: Named and default arguments](syntax.md#named-and-default-arguments)).
@@ -105,7 +103,7 @@ now uses each answer:
    ([`concurrency.md`: Shared mutable state](concurrency.md#shared-mutable-state)).
 8. The lossy network takes `rate: 0.1`, a float.
 
-Found when the tour's tests first ran (M2 slice M2c, November 2026):
+Found when the tour's tests first ran (M2 slice M2c):
 
 9. `app()` lists `Links` and `Rand` but not `suspend`: its routes capture the handlers where
    they are named, and suspend only when `handle` calls them, since the router's bounds list

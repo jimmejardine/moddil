@@ -240,7 +240,7 @@ it at run time.
 ## Runtimes and backends
 
 - `Gpu` is an effect. **Handler mods** implement it: WebGPU (via wgpu), Vulkan, Metal, CUDA, ROCm
-  and a **CPU simulator**. Libraries work with every handler ([R2](requirements.md#firm-requirements-decided)).
+  and a **CPU simulator**. Libraries work with every handler ([R2](requirements.md#firm-requirements)).
 - **Lowering** reuses existing tools, as in [`compiler.md`](compiler.md): naga for
   WGSL/SPIR-V/MSL/HLSL; LLVM NVPTX and AMDGPU for CUDA- and ROCm-class targets; MLIR later if
   tensor-level optimisation needs it.

@@ -136,7 +136,7 @@ supported = ["native", "wasm-wasi", "wasm-browser"]
   unchanged types, so they *are* the same type.
 - **Migration is mechanical.** Renames and moves are inferred from the two versions
   ([`semantic-vcs.md`](semantic-vcs.md)), and libraries can ship replacement rules
-  ([`evolution.md`: Decisions](evolution.md#decisions)), so `moddil migrate` and `moddil fix` can upgrade consumers from
+  ([`evolution.md`: Design](evolution.md#design)), so `moddil migrate` and `moddil fix` can upgrade consumers from
   v1 to v2.
 
 ### Semver is checked by the compiler

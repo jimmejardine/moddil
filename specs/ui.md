@@ -18,7 +18,7 @@ cross-platform UI toolkit (Flutter, React Native, Compose Multiplatform) is a mu
 a large team.
 
 Yet three of the four [reference examples](examples/README.md) have a UI, and the browser is a required
-target ([R1](requirements.md#firm-requirements-decided)):
+target ([R1](requirements.md#firm-requirements)):
 
 - the [web store](examples/web-store.md) needs web, Android and iOS clients;
 - the [multiplayer game](examples/multiplayer-game.md) renders with WebGPU and has a chat UI;
@@ -47,7 +47,7 @@ Why:
   conventions come for free and stay current.
 - **Agents already write these toolkits fluently.** SwiftUI, Compose and React have far more training
   data than any new UI framework could ([`agent-interface.md`](agent-interface.md)).
-- **A small core** ([R2](requirements.md#firm-requirements-decided)): Moddil's effort goes into the language,
+- **A small core** ([R2](requirements.md#firm-requirements)): Moddil's effort goes into the language,
   where its guarantees matter: the state, rules and networking that must be identical everywhere.
 - **It already works:** Hashiverse ships exactly this shape today, with a Rust core under React.
 

@@ -1,8 +1,11 @@
 # Requirements and Non-Goals
 
-## Firm requirements (decided)
+The four firm requirements every part of Moddil's design must be compatible with, and what Moddil
+does not try to be.
 
-These are no longer open for debate. Every other design decision must be compatible with them.
+## Firm requirements
+
+Every other design decision must be compatible with these.
 
 ### R1. WebAssembly is a first-class compilation target.
 
@@ -31,19 +34,18 @@ What "first-class" means in practice:
 Design constraints this places on the rest of Moddil:
 - **Memory model**: Moddil has no global tracing GC, so linear memory is the natural fit. The WASM GC
   proposal is an optional optimisation for interop with JS objects, not a dependency.
-- **Concurrency without function colouring ([Concurrency across CPUs](concurrency.md))** needs suspendable stacks. *Revised after checking
-  engine support (Nov 2026; see [`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering) and [`compiler.md`: WASM support: verified status (November 2026)](compiler.md#wasm-support-verified-status-november-2026)):* stack switching is Phase 3
-  but ships in **no** browser or Node (Chrome has it behind a flag only); Wasmtime has it at Tier 3 on
-  x86_64 Linux. JSPI, however, is standardised and ships in all major browsers and Node ≥ 26.
-  **Decision:** the concurrency semantics are target-independent, and the backend picks a lowering:
-  1. **JSPI**: built first (decided November 2026); the browser and Node baseline until stack
-     switching ships there. Each Moddil task is its own suspended `promising` stack, scheduled from JS.
-  2. **WASM stack switching**: the preferred long-term lowering, added for **Wasmtime** and other WASI
-     hosts once their support matures.
-  3. **CPS/Asyncify-style transform**: only if WASI runtimes without stack switching must be
-     supported (open question).
+- **Concurrency without function colouring ([Concurrency across CPUs](concurrency.md))** needs suspendable stacks. The
+  concurrency semantics are target-independent, and the backend picks a lowering ([`compiler.md`:
+  WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)):
+  1. **JSPI**: the browser and Node baseline until stack switching ships there. Each Moddil task is
+     its own suspended `promising` stack, scheduled from JS. Built first.
+  2. **WASM stack switching**: the preferred long-term lowering, added for **Wasmtime** and other
+     WASI hosts once their support matures.
 
-  Keep the dependency in one place in the backend (the task/continuation runtime) so proposal
+  *Why:* stack switching is Phase 3 but ships in **no** browser or Node (Chrome has it behind a
+  flag only), and Wasmtime has it at Tier 3 on x86_64 Linux; JSPI is standardised and ships in all
+  major browsers and Node ≥ 26 ([`compiler.md`: WASM support: verified status (November 2026)](compiler.md#wasm-support-verified-status-november-2026)).
+  The dependency stays in one place in the backend (the task/continuation runtime) so proposal
   changes stay local.
 - **Threads**: shared memory + atomics are available but restricted in browsers (cross-origin
   isolation). Structured concurrency must degrade gracefully to a single thread; on a single thread
@@ -77,7 +79,7 @@ error at any entry point (`main`, task bodies, exported/FFI functions, tier endp
 silently dropped result is a **compile-time error**. There are **no fire-and-forget tasks**: every
 task is awaited by its enclosing scope. Out of scope for R3: traps such as out of memory, stack
 overflow, integer overflow, integer division by zero and out-of-bounds indexing, which are crashes
-as in Rust. **Tests are exempt** (decided): an error that escapes a test body fails that test, with
+as in Rust. **Tests are exempt**: an error that escapes a test body fails that test, with
 its error return trace ([`testing.md`: Errors inside tests](testing.md#errors-inside-tests)).
 
 Details: [`error-handling.md`](error-handling.md).
@@ -96,9 +98,12 @@ Details: [`determinism.md`](determinism.md).
 
 ## Non-goals (draft)
 
+The list is a draft, except for three firm non-goals: a REPL, script mode or notebook mode;
+production hot code upgrades; and a resilience mode for native binary libraries.
+
 - Maximum syntactic novelty. Familiar syntax wins unless there is a strong reason.
 - Replacing every language. Scripting, notebooks and quick glue stay with other languages.
-- **A REPL, script mode or notebook mode (decided).** Moddil is compiled and checked as a whole.
+- **A REPL, script mode or notebook mode.** Moddil is compiled and checked as a whole.
   Quick experiments use attached tests and examples-as-tests (`moddil test`,
   [`docs.md`](docs.md)) and live update in debug builds
   ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds)). Quick learning is served by an in-browser playground
@@ -108,14 +113,22 @@ Details: [`determinism.md`](determinism.md).
 - A cloud platform, orchestrator or service mesh. Moddil emits artefacts and manifests for existing
   ones.
 - Transparent remote calls.
-- **Production hot code upgrades (decided).** Live update is for debug builds; production uses
+- **Production hot code upgrades.** Live update is for debug builds; production uses
   rolling deploys with compiler-checked compatibility ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds)).
 - Runtime reflection / dynamic metaprogramming. (Opt-in `#[derive(Reflect)]`, static data generated
   at compile time, is a standard mod: [`stdlib.md`: Runtime type information](stdlib.md#runtime-type-information).)
-- **A resilience mode for native binary libraries (decided).** The C ABI and WASM components are the
+- **A resilience mode for native binary libraries.** The C ABI and WASM components are the
   stable binary boundaries; Moddil-to-Moddil linking is always from source or from artefacts built
   from it ([`syntax.md`: What Swift has that we lack](syntax.md#what-swift-has-that-we-lack)).
 
 ## Open questions
 
-- **The non-goals** ([Non-goals (draft)](#non-goals-draft)) are a draft, still to be confirmed.
+- **The draft non-goals** ([Non-goals (draft)](#non-goals-draft)): the items not listed there as
+  firm are still to be confirmed.
+- **WASI runtimes without stack switching**: whether they must be supported. If so, a third
+  lowering, a CPS/Asyncify-style transform, serves them.
+
+## Alternatives considered
+
+- **WASM stack switching as the only concurrency lowering**: it ships in no browser or Node, so
+  JSPI is the baseline there.

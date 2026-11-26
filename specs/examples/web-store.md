@@ -73,17 +73,14 @@ The web client is covered by WASM (R1). Android and iOS raise new requirements:
 - **iOS forbids JIT compilation** in apps, so Moddil must compile **ahead of time** to native ARM64
   (or ship WASM with an interpreter, which is too slow for real apps).
 - **Android** can run native code via the NDK, or WASM in a WebView.
-- **UI** is the hard part. Options:
-  1. **Shared logic, native UI shells.** Moddil compiles models, networking, validation and state
-     management for all three platforms; the UI is SwiftUI (iOS), Jetpack Compose (Android) and web,
-     calling Moddil through generated bindings. This is the Kotlin Multiplatform / Rust-core approach.
-  2. **Moddil UI (`moddil/ui`)**: one declarative UI framework rendering natively or via its own
-     renderer on all three platforms (the Flutter / Compose Multiplatform approach).
-  3. **Web everywhere**: the web client wrapped in a native shell (Capacitor/Tauri-style).
+- **UI** is shared logic under native UI shells. Moddil compiles models, networking, validation
+  and state management for all three platforms; the UI is SwiftUI (iOS), Jetpack Compose (Android)
+  and web, calling Moddil through generated bindings. This is the Kotlin Multiplatform / Rust-core
+  approach.
 
-**Decided:** option 1, shared logic under native UI shells, permanently. Moddil never owns UI;
-`moddil bind` generates the Swift, Kotlin and TypeScript bindings, and the toolchain packages the core
-as an XCFramework and an AAR ([`ui.md`](../ui.md)). Options 2 and 3 are left to community mods.
+Moddil never owns UI. `moddil bind` generates the Swift, Kotlin and TypeScript bindings, and the
+toolchain packages the core as an XCFramework and an AAR ([`ui.md`](../ui.md)). A Moddil UI
+framework, or a web client in a native shell, is left to community mods.
 
 ## Success criteria
 
@@ -109,3 +106,11 @@ Initial targets, to be refined:
 - PostgreSQL (wire protocol in a mod, or a C client library via FFI).
 - Payment provider, email and search services (HTTP APIs).
 - iOS/Android platform APIs (camera, notifications, payments) through generated Swift/Kotlin bindings.
+
+## Alternatives considered
+
+- **A Moddil UI framework (`moddil/ui`)**: one declarative UI rendering natively or through its own
+  renderer on all three platforms (the Flutter / Compose Multiplatform approach). Not taken: Moddil
+  never owns UI; it is left to community mods.
+- **Web everywhere**: the web client wrapped in a native shell (Capacitor/Tauri-style). Not taken
+  for the same reason; it is left to community mods.

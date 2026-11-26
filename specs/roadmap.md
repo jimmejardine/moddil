@@ -21,13 +21,13 @@ each area's document ([index](README.md)); what was built is in the git history,
 
 ## On the horizon
 
-Python teams and backend teams come before the browser (decided November 2026,
-[`adoption.md`: First audiences](adoption.md#first-audiences)).
+Python teams and backend teams come before the browser
+([`adoption.md`: First audiences](adoption.md#first-audiences)).
 
 **P4. Text** (prelude `text`, `crates/sema`; M)
 - A tagged literal's fields (`comptime.tag.fields.1`) of types other than `String` and
   `Option<String>` (a `Match`, a number), named by the tag; and a way to name the struct `read`
-  gives, so a function can return one. Decided (November 2026): the tag gives each field's type
+  gives, so a function can return one. The design: the tag gives each field's type
   as type text (`"int"`, `"Option<Match>"`), each value parsed with `FromStr` (a `Match` built
   in), and the struct is named through the const holding the literal
   (`const DATE: Regex = re"…"; fn f() -> DATE::Fields`). It needs a prelude `FromStr`, and a
@@ -79,12 +79,12 @@ L)
   in the trait's file and scope, checked on entry to and return from each impl's method.
 
 **P13. Wrappers** (`crates/sema` `wrap.rs`, `crates/moddil`; M)
-- Wrapping methods (a field to hold `self`). Decided (November 2026): the field is `this`, and
+- Wrapping methods (a field to hold `self`). The design: the field is `this`, and
   the struct is named `Type::method::Args`.
 - Wrapper arguments neither `Copy` nor `Clone`, or of a generic function, evaluated once, not at
   each call (the others are, as `const { }` blocks are: `comptime.block.3`; P11 has the rest).
 - `f::Args` made and matched by that name (`f::Args { a, b }`), and for a generic function,
-  which takes its type parameters (`f::Args<T>`, decided November 2026).
+  which takes its type parameters (`f::Args<T>`).
 - `moddil explain` printing the expansion (the command itself is not built).
 
 **P15. Selectable trait methods** (`crates/mir` `build/select.rs`, `crates/interp`,
@@ -95,12 +95,12 @@ L)
   too, already work.
 
 **P16. Errors and effects** (`crates/mir`, both runtimes, the CLI's reports; L)
-- Notes after `?` kept as an error return trace, shown with an error that escapes. Decided
-  (November 2026): kept in a buffer of the task's, not in the error value, and printed under an
+- Notes after `?` kept as an error return trace, shown with an error that escapes. The design:
+  kept in a buffer of the task's, not in the error value, and printed under an
   error that escapes `main` or a test, in every build for now.
-- Suppressed errors: a scope's losing tasks' errors kept, not dropped. Decided: printed under the
+- Suppressed errors: a scope's losing tasks' errors kept, not dropped. The design: printed under the
   one that escapes; no `e.suppressed()` yet (there is no `Error` trait).
-- An error set written as a type. Decided: `A | B` wherever a type is (a `let`, an alias, a type
+- An error set written as a type. The design: `A | B` wherever a type is (a `let`, an alias, a type
   argument), matched by type patterns.
 - A handler that holds another handler it captured; `log` with handlers; a test run for listed
   types, or declaring capabilities.

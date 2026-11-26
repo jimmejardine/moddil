@@ -117,7 +117,7 @@ at most ([`memory.md`: Biased reference counting](memory.md#biased-reference-cou
 
 ## Runtime contract
 
-Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](requirements.md#firm-requirements-decided),
+Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](requirements.md#firm-requirements),
 [`stdlib.md`: The core / mod boundary](stdlib.md#the-core--mod-boundary)). The memory model adds obligations for runtime handlers:
 
 - **Biased-RC merge queue:** objects whose last shared reference was dropped elsewhere are queued
@@ -126,7 +126,7 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](r
   resumes the task and at task exit.
 - **Task migration:** because the bias is per task, a task moved by work stealing keeps its fast
   path; migration costs nothing.
-- **Single-threaded targets** (browser WASM without cross-origin isolation, [R1](requirements.md#firm-requirements-decided)): every rc
+- **Single-threaded targets** (browser WASM without cross-origin isolation, [R1](requirements.md#firm-requirements)): every rc
   operation is an owner operation; scopes still work, with children interleaved on one thread.
 - **Deterministic simulation** (`moddil/runtime-sim`, [Determinism and reproducibility](determinism.md)): the scheduler is a handler, so
   interleavings are seed-controlled and replayable.

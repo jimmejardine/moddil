@@ -30,7 +30,7 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
   Java; Go's inline-directed fixes.
 - **Unison:** code addressed by content hash, so existing code never breaks.
 
-## Decisions
+## Design
 
 1. **Editions per mod**, declared in the manifest (`edition = "2027"`).
    - Mods of different editions **work together in one program**. This is guaranteed because a mod's
@@ -38,16 +38,16 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
    - An edition may change syntax, defaults, lints and name resolution. It may change semantics only
      **inside a mod, and only when that mod moves to the new edition** (Go 1.22's loop variable is
      the model), and **only if `moddil migrate` can rewrite old code to keep its old meaning**,
-     checked by comparing MIR (decided). A change that no tool can migrate, such as Python 3's
+     checked by comparing MIR. A change that no tool can migrate, such as Python 3's
      `str`/`bytes` split, is forbidden.
    - Nothing changes meaning across a mod boundary.
 2. **A compatibility promise between editions.** Within an edition, every new toolchain release is
    backwards compatible (as with Go 1 and Rust's stability guarantee). The only exceptions are
    soundness and security fixes, each preceded by a lint period.
-3. **Cadence (decided): on demand, with rising minimum gaps.** An edition comes only when there is
-   something worth changing, and is kept small. The second edition may follow the first after at
-   least one year, the third after at least two more, and every later one after at least three,
-   while the language is young enough to need faster fixes.
+3. **Cadence: on demand, with rising minimum gaps.** An edition comes only when there is something
+   worth changing, and is kept small. The second edition may follow the first after at least one
+   year, the third after at least two more, and every later one after at least three. *Why:* the
+   shorter early gaps leave room for faster fixes while the language is young.
 4. **Automated, verified migrations.** `moddil migrate --edition 2030` rewrites a mod through
    compiler-driven AST transformations.
    - The result is **checked equivalent**: the old program under the old edition elaborates to the
@@ -64,15 +64,16 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
 
    Rename rules cover types and modules. `moddil fix` applies the rules across downstream code (as
    Dart's data-driven fixes, Go's inline fixes and OpenRewrite do). Deprecated items warn for at
-   least one released minor version **and** six months before a major release may remove them
-   (decided); standard mods must ship `replace_with` rules, so `moddil fix` migrates users.
+   least one released minor version **and** six months before a major release may remove them;
+   standard mods must ship `replace_with` rules, so `moddil fix` migrates users.
 6. **No unstable features in published code.** Feature gates exist in development builds of the
    toolchain, but **`moddil publish` refuses to tag a mod that uses unstable features**, and consumers'
    builds refuse such dependencies (there is no registry,
    [`packages-and-supply-chain.md`](packages-and-supply-chain.md)). This avoids Rust's split
    between stable crates and crates that build only on nightly. Experiments live in development
    toolchains and forks, not in the ecosystem.
-7. **Process.** A proposal process ([Moddil Evolution](governance.md#moddil-evolution), in the spirit of Rust RFCs and Swift
+7. **Process.** Changes go through a proposal process
+   ([Moddil Evolution](governance.md#moddil-evolution), in the spirit of Rust RFCs and Swift
    Evolution). Every proposal must:
    - cite a reference example that needs it ([`examples/README.md`](examples/README.md));
    - include its migration if it changes anything;
@@ -80,7 +81,7 @@ Languages either freeze (C) or break their ecosystems (Python 2→3). The failur
      git repository, which authors opt into) from their tags with the new toolchain (Rust's crater,
      Swift's source-compatibility suite). Reproducible builds and the shared cache
      ([`build-times.md`: Cached builds](build-times.md#cached-builds)) keep this cheap.
-8. **Long-term support (decided).** One toolchain release a year is designated LTS and receives
+8. **Long-term support.** One toolchain release a year is designated LTS and receives
    security and soundness fixes for two years. Standard mods state the oldest LTS they support.
 9. **Standard mods** follow semver, with the bump computed by `moddil diff`. They remove items only
    across editions, always with replacement rules ([`stdlib.md`](stdlib.md)).

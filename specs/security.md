@@ -220,7 +220,7 @@ Specified in [`packages-and-supply-chain.md`](packages-and-supply-chain.md) and 
   [`concurrency.md`](concurrency.md)).
 - `unsafe` is contained, carries safety contracts, is checked before publishing and needs human review
   by default ([`unsafe.md`](unsafe.md)).
-- Errors cannot be left unhandled ([R3](requirements.md#firm-requirements-decided)); traps end a task
+- Errors cannot be left unhandled ([R3](requirements.md#firm-requirements)); traps end a task
   or process with a full trace, never with undefined behaviour ([`error-handling.md`](error-handling.md)).
 
 ## Security response

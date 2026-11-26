@@ -21,7 +21,7 @@ the URL, so a view can be shared.
 
 It is the **simplest showcase**, and the first program built for the browser and the GPU
 ([`roadmap.md`: How work is built](../roadmap.md#how-work-is-built)). Its kernel is fixed, so it needs nothing
-beyond what [`accelerators.md`](../accelerators.md) already decides.
+beyond what [`accelerators.md`](../accelerators.md) already specifies.
 
 ## The pitch
 
@@ -107,7 +107,7 @@ beyond what [`accelerators.md`](../accelerators.md) already decides.
   The camera calls `distance(camera.position, …)` on the CPU to set its speed.
 - **Floats:** `f32` everywhere, with strict IEEE semantics, so the CPU and GPU agree where rounding
   is specified ([`numerics.md`: Floats](../numerics.md#floats)). Deep zoom uses camera-relative
-  coordinates in `f32`, with no emulated `f64` in the kernel (decided November 2026); a native
+  coordinates in `f32`, with no emulated `f64` in the kernel; a native
   desktop window, which would need a windowing mod, is out of scope.
 - **A launch is a structured task:** the frame's scope lends `view` and the output texture to the
   launch, and its end is the fence before presenting
@@ -118,7 +118,7 @@ beyond what [`accelerators.md`](../accelerators.md) already decides.
   - `Gpu` for rendering;
   - the camera's physics is pure, so it is tested as plain code
     ([`ui.md`: The browser](../ui.md#the-browser)).
-- **Missing GPU features are emulated** with a warning, as the accelerators spec decides
+- **Missing GPU features are emulated** with a warning, as the accelerators spec specifies
   ([`accelerators.md`: Runtimes and backends](../accelerators.md#runtimes-and-backends)).
 - **Testing:**
   - golden images, rendered by the kernel on the CPU simulator;

@@ -259,7 +259,7 @@ Notes:
   is unchanged). Moddil mitigates this differently: child tasks *borrow* an rc without touching its
   count ([`concurrency.md`: Tasks and borrowing](concurrency.md#tasks-and-borrowing)), removing most of the clones Rust needs for
   `'static` spawns.
-- The merge-queue drain is part of the runtime-handler contract ([R2](requirements.md#firm-requirements-decided),
+- The merge-queue drain is part of the runtime-handler contract ([R2](requirements.md#firm-requirements),
   [`runtime.md`: Runtime contract](runtime.md#runtime-contract)). On single-threaded WASM every count is the owner count.
 
 **One lowering, and a one-thread build.** The threaded lowering is always used, so tests run the

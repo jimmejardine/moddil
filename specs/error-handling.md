@@ -1,6 +1,6 @@
 # Error Handling
 
-Defines requirement **R3** ([Firm requirements](requirements.md#firm-requirements-decided)).
+Defines requirement **R3** ([Firm requirements](requirements.md#firm-requirements)).
 
 ## The rules in brief
 

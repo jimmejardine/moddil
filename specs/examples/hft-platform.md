@@ -64,9 +64,9 @@ data, time and order routing are effects, and only their handlers differ.
   machine (isolated cores, IRQ affinity, reserved huge pages); at startup the program checks that
   what it asked for was provisioned, and fails with a typed error if not
   ([`performance.md`: Kernel-bypass I/O: a worked example](../performance.md#kernel-bypass-io-a-worked-example)).
-  **Latency bounds are measured, not checked** (decided November 2026): `#[no_alloc]` and
-  `#[no_lock]` are the checked guarantees, and the hot path's latency is a `moddil bench` budget
-  that fails CI. A static bound in time is impractical on out-of-order CPUs with caches.
+  **Latency bounds are measured, not checked:** `#[no_alloc]` and `#[no_lock]` are the checked
+  guarantees, and the hot path's latency is a `moddil bench` budget that fails CI. *Why:* a static
+  bound in time is impractical on out-of-order CPUs with caches.
 - **Lock-free concurrency ([Concurrency across CPUs](../concurrency.md)).** SPSC/MPMC rings between feed, strategy and gateway threads;
   thread-per-core designs; busy-polling.
 - **C/C++ interop ([Interoperability with C and Rust](../interop.md)).** Kernel-bypass NIC libraries (e.g. DPDK, ef_vi/Onload-style APIs), exchange

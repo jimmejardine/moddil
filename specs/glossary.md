@@ -39,7 +39,7 @@ authoritative; if the two disagree, fix this line.
 | **Delegation** | `#[delegate(Trait)]` forwards a trait's methods to a field, replacing implementation inheritance ([Multiple inheritance](types.md#multiple-inheritance)). |
 | **`discard`** | `discard(r, "reason")`: the only way to ignore an error, visible in review (D14) ([Entry points must handle everything (R3)](error-handling.md#entry-points-must-handle-everything-r3)). |
 | **`dyn`** | An existential: any trait used as a type, behind a pointer with a witness table ([`dyn`: existentials](types.md#dyn-existentials)). |
-| **Edition** | A version of the language chosen per mod in its manifest (`edition = "2027"`); mods of different editions work together in one program, and migrations are automated ([Decisions](evolution.md#decisions)). |
+| **Edition** | A version of the language chosen per mod in its manifest (`edition = "2027"`); mods of different editions work together in one program, and migrations are automated ([Design](evolution.md#design)). |
 | **Effect** | A trait listed after `with` in a signature (`with net: Net`), whose implementation is passed implicitly by scope; plus the built-in control effects `suspend`, `spawn` and `fail(E)` ([Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly)). |
 | **Effect polymorphism** | A function such as `visit` takes on the effects of the closure it is given ([Effect polymorphism](effects-and-capabilities.md#effect-polymorphism)). |
 | **`escape`** | `escape v`: returns `v` from the enclosing function across non-escaping lambdas; in a task scope the first one wins and cancels the rest ([Control flow out of a lambda](closures.md#control-flow-out-of-a-lambda)). |

@@ -1,7 +1,7 @@
 # Moddil specifications
 
-Each area has its own document, which holds its problem statement, prior art, decisions,
-directions and open questions. Start with [Why Moddil](vision.md) for the thesis and
+Each area has its own document: its specification, with a short reason where one is not
+obvious, then its open questions, the alternatives considered and the prior art. Start with [Why Moddil](vision.md) for the thesis and
 [A tour of Moddil](tour.md) for a complete program.
 
 ## Index
@@ -11,10 +11,10 @@ Status legend:
 | Marker                 | Meaning                                                                                                                    |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | ⚪ **not started**     | No content beyond a heading                                                                                                |
-| 🔴 **superficial**     | A brainstorm or stub; little is decided                                                                                    |
+| 🔴 **superficial**     | A brainstorm or stub; little is specified                                                                                  |
 | 🟠 **major questions** | A direction exists, but open questions could still change the core design, or the document is a proposal not yet confirmed |
-| 🟡 **minor questions** | Decided; the remaining questions are details                                                                               |
-| 🟢 **complete**        | Decided, with no open questions                                                                                            |
+| 🟡 **minor questions** | Specified; the remaining questions are details                                                                             |
+| 🟢 **complete**        | Specified, with no open questions                                                                                          |
 
 Rule of thumb: 🟠 if an open question could change language semantics or a requirement, or the
 document is still a proposal; 🟡 if what is left is detail, tooling or operations.
@@ -85,11 +85,12 @@ workflow**; and last **the project**. The order is for reading, not priority.
 
 For people and LLM agents editing the specs:
 
-- **Each area's document is authoritative.** It holds the problem statement, prior art, decisions,
-  directions and open questions in full; this index only points to it.
-- **Respect what is settled.** Sections marked **Decision** or **Decided**, and the firm
-  requirements **R1–R4**, are settled: don't reopen them unless asked. **Directions** and
-  **Open questions** are still open.
+- **Each area's document is authoritative.** It holds the area's specification, open questions,
+  alternatives considered and prior art in full; this index only points to it.
+- **Respect what is settled.** A document's specification, and the firm requirements **R1–R4**,
+  are settled: don't reopen them unless asked. Only its **Open questions** are still open. Write
+  the specification as it stands, in the present tense, without marking rules as decided or
+  dating them: git keeps the history.
 - **The [reference examples](examples/README.md) are the yardstick:** a feature that none of them
   needs is a candidate for removal.
 

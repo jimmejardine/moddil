@@ -148,7 +148,7 @@ let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → 
 ## WASM components: the sandboxed path
 
 - C and Rust code compiled to WASM can be linked as **components**, with interfaces in **WIT**, which
-  Moddil maps to and from automatically ([R1](requirements.md#firm-requirements-decided)). Rust has strong tooling for this
+  Moddil maps to and from automatically ([R1](requirements.md#firm-requirements)). Rust has strong tooling for this
   (`wit-bindgen`).
 - It costs copying at the boundary (the canonical ABI), so it isn't zero-copy.
 - In return, the foreign code is **isolated**: it can reach only the capabilities it is given, as

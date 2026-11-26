@@ -19,7 +19,7 @@ traces ([`error-handling.md`: Traces](error-handling.md#traces)), record and rep
 
 ## Observability effects
 
-`log`, `span` and `metric` are effects with **handlers provided by mods** ([R2](requirements.md#firm-requirements-decided)):
+`log`, `span` and `metric` are effects with **handlers provided by mods** ([R2](requirements.md#firm-requirements)):
 stdout/pretty-printing, OTLP export, Prometheus, a ring buffer, test capture, the simulation runtime.
 The handler is chosen in `main` or the deployment manifest. There is no global logger, and libraries
 never choose where their events go.
