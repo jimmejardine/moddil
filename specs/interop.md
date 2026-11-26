@@ -26,7 +26,7 @@ exceptions and compiler-specific ABIs. Swift and Carbon have each spent years on
 | CUDA libraries, LLVM, SQLite, OpenSSL, DPDK, libpq | C APIs | Direct ([The C ABI, both directions](#the-c-abi-both-directions)) |
 | Mobile platform APIs (web store) | iOS: Objective-C/Swift; Android: Java/Kotlin | Still C underneath: JNI is a C ABI, the Objective-C runtime has a C API, and Swift can export C functions (`@_cdecl`). Platform mods wrap them. |
 | The Rust ecosystem, existing Rust code (Hashiverse) | Rust crates | The generated bridge ([Rust: the generated bridge](#rust-the-generated-bridge)) or components ([WASM components: the sandboxed path](#wasm-components-the-sandboxed-path)) |
-| Python libraries for research glue (NumPy, pandas in an HFT backtest) | CPython | A mod, `moddil/python`, on CPython's C API (decided): Python objects are opaque handles, calls go through the free-threading handoff ([`adoption.md`: Python first](adoption.md#python-first)), and the mod needs `ffi`. Calling Moddil *from* Python is the first binding target |
+| Python libraries for research glue (NumPy, pandas in an HFT backtest) | CPython | A mod, `moddil/python`, on CPython's C API: Python objects are opaque handles, calls go through the free-threading handoff ([`adoption.md`: Python first](adoption.md#python-first)), and the mod needs `ffi`. Calling Moddil *from* Python is the first binding target |
 
 ## The C ABI, both directions
 
@@ -38,7 +38,7 @@ exceptions and compiler-specific ABIs. Swift and Carbon have each spent years on
   simple macros become raw bindings automatically.
 - **The toolchain compiles C.** C sources of a dependency are compiled by the toolchain's clang
   component, using the LLVM Moddil already ships ([`compiler.md`](compiler.md)):
-  - fetched on first use (decided): clang is a separate, pinned and hash-verified component of about
+  - fetched on first use: clang is a separate, pinned and hash-verified component of about
     50–80 MB, downloaded by the first build that needs C, so pure-Moddil users never pay for it;
     offline installers may include it;
   - hermetic and reproducible: declared inputs only, the same compiler on every machine ([Package management and supply-chain security](packages-and-supply-chain.md));
@@ -66,7 +66,7 @@ and turn raw bindings into Moddil types:
 
 - Overlays live in a **shared repository**, versioned against library versions, like TypeScript's
   DefinitelyTyped, so each C library is annotated once for everyone. It accepts overlays by reviewed
-  pull request (decided).
+  pull request.
 - **Consumers pin overlay versions** in the lockfile and record reviews in their own audit trail,
   like any dependency ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)). A project's
   local overlay takes precedence, and an overlay change that alters ownership or capabilities is
@@ -95,11 +95,11 @@ and turn raw bindings into Moddil types:
 ## Export
 
 - Moddil functions and `#[repr(C)]` types can be **exported with the C ABI**, with a **generated header**.
-- **A trap in an exported function does not end the host** (decided November 2026): a library must
-  not kill the program that loaded it. The call returns the result type's zero value (0, `false`,
-  null, an all-zero struct), or the sentinel the function names with `#[export(on_trap = -1)]`,
-  and C reads `moddil_trapped()` after the call for the exact answer, since
-  a sentinel can also be a valid result. `#[export(status)]` keeps its `i32` status.
+- **A trap in an exported function does not end the host.** The call returns the result type's
+  zero value (0, `false`, null, an all-zero struct), or the sentinel the function names with
+  `#[export(on_trap = -1)]`, and C reads `moddil_trapped()` after the call for the exact answer,
+  since a sentinel can also be a valid result. `#[export(status)]` keeps its `i32` status. *Why:* a
+  library must not kill the program that loaded it.
 - Moddil mods can also be exposed to Rust as a **generated crate** ([Rust: the generated bridge](#rust-the-generated-bridge), reverse direction).
 - This is the adoption path: Moddil can be introduced inside existing C, C++ or Rust projects one
   module at a time ([Open Questions and Next Steps for Moddil](roadmap.md)).
@@ -107,9 +107,9 @@ and turn raw bindings into Moddil types:
 ## Rust: the generated bridge
 
 Rust has **no stable ABI**: layouts, generics, trait objects and `Result` cannot cross a boundary
-directly. Rust's experimental interoperable ABI (crABI) is tracked but not depended on. Moddil uses
-the approach of Mozilla's UniFFI, ICU4X's Diplomat and `cxx`: **generate both sides of a C-ABI
-bridge from one description.**
+directly. Moddil therefore uses the approach of Mozilla's UniFFI, ICU4X's Diplomat and `cxx`:
+**generate both sides of a C-ABI bridge from one description.** Rust's experimental interoperable
+ABI (crABI) is tracked but not depended on.
 
 - **Input:** the crate's public API, read from rustdoc's JSON output, plus light annotations where
   intent is ambiguous.
@@ -137,7 +137,7 @@ let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → 
 ```
 
 - **rustdoc JSON is unstable**, so the generator supports a window of its format versions, with a
-  small adapter per version (decided). CI runs it against Rust stable and beta, so breakage shows
+  small adapter per version. CI runs it against Rust stable and beta, so breakage shows
   six weeks early, and a project can pin its Rust toolchain in the bridge description.
 - **Generics beyond explicit instantiations:** the bridge also instantiates every concrete use the
   Moddil side makes of a generic Rust item, found at build time. A Moddil type used as `T` inside
@@ -162,8 +162,7 @@ let post = hashiverse::Post::decode(bytes)?;   // Result<Post, DecodeError> → 
 - C++ exceptions must not cross the shim: catch them and return error codes, which the overlay maps
   to `fail(E)`.
 - A **shim generator** for a subset of C++ (plain classes, non-template functions, explicit
-  instantiations) may exist as an optional tool (standard or community). It is tooling, not part of
-  the language or compiler.
+  instantiations) is optional tooling, not part of the language or compiler.
 
 ## As built (M3a)
 
@@ -226,6 +225,19 @@ codebases, and a growing Rust ecosystem must be reachable with low friction and 
 - C++ interop is hard: templates, overloading, exceptions, ABI differences between compilers.
 - **Rust has no stable ABI**; interop goes through `extern "C"`, losing generics, traits, and ownership.
 - Each FFI boundary is a hole in safety guarantees.
+
+## Open questions
+
+- Whether a C++ shim generator is written at all, and whether it is a standard tool or a community
+  one.
+
+## Alternatives considered
+
+- **Direct C++ interop**, a C++ importer in the compiler as Swift and Carbon have: templates,
+  overloading, exceptions and compiler-specific ABIs make it the most expensive interop feature a
+  language can take on, and both have spent years on it. Thin C shims reach the same libraries.
+- **Depending on crABI**, Rust's experimental interoperable ABI: it is not stable. It can become a
+  second backend under the same bridge description if it stabilises.
 
 ## Prior art
 

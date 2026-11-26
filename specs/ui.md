@@ -2,7 +2,7 @@
 
 ## Summary
 
-| Topic | Decision |
+| Topic | Rule |
 |---|---|
 | **Who owns UI** | **The platform, always.** Moddil compiles the **shared core** (models, state, validation, networking, storage); the UI is the platform's own toolkit: SwiftUI or UIKit, Jetpack Compose, or TypeScript with any web framework. There is no standard `moddil/ui` ([Native UI over a shared core](#native-ui-over-a-shared-core)). |
 | **Bindings** | `moddil bind` generates **Swift, Kotlin and TypeScript** bindings to a core (and Python bindings, the first target, [`adoption.md`: Python first](adoption.md#python-first)): types, async calls, errors, cancellation and state observation ([Generated bindings](#generated-bindings)). |
@@ -26,19 +26,10 @@ target ([R1](requirements.md#firm-requirements-decided)):
 
 Moddil has to answer how its code reaches the screen without becoming a UI toolkit project.
 
-## Prior art
-
-| Approach | Examples | Lesson |
-|---|---|---|
-| **Shared core, native shells** | [Crux](https://redbadger.github.io/crux/) (Rust core; the shell performs effects on the core's request), Mozilla UniFFI (Rust → Swift, Kotlin, Python), Kotlin Multiplatform | Native UI quality everywhere; the binding layer is the product |
-| **One UI toolkit everywhere** | Flutter (own renderer), Compose Multiplatform, React Native, .NET MAUI | One codebase, at the cost of a huge toolkit and a near-native feel |
-| **Web everywhere** | Capacitor, Tauri, Electron | Cheapest; mobile feel and performance suffer |
-| **Browser bindings** | Rust's wasm-bindgen and web-sys (generated from WebIDL); jco for WASM components | Generated bindings scale to the whole web platform; ambient access makes UI logic hard to test |
-
 ## Native UI over a shared core
 
-**Decision: Moddil never owns UI.** UI is always written in the platform's toolkit. Moddil compiles
-everything underneath it.
+**Moddil never owns UI.** UI is always written in the platform's toolkit. Moddil compiles everything
+underneath it.
 
 ```
  ┌──────── SwiftUI ────────┐  ┌──── Jetpack Compose ────┐  ┌──── TypeScript + React ────┐
@@ -88,7 +79,7 @@ impl Cart {
 ```
 
 - **Actions are calls into the core**: the shell calls `add` or `check_out` from its event handlers.
-- **Observation (decided: per field, diffed by the core):** after each action the core compares the
+- **Observation is per field, diffed by the core:** after each action the core compares the
   old and new view models (a derived structural comparison) and reports only the fields that changed.
   The generated bindings turn that into each platform's own terms: `@Observable` properties in Swift,
   `StateFlow`s in Kotlin, per-key subscriptions in TypeScript, so the native framework redraws only
@@ -133,16 +124,16 @@ built on the C ABI on native targets ([`interop.md`: The C ABI, both directions]
 - **Versioned together.** A core and its bindings come from one build, so there is no version skew
   between them. Skew between client and server is handled by the contract checks
   ([`distribution.md`](distribution.md)).
-- **Traits the shell implements (decided).** An exported trait becomes a Swift `protocol`, a Kotlin
+- **Traits the shell implements.** An exported trait becomes a Swift `protocol`, a Kotlin
   `interface`, a TypeScript `interface` and a Python `Protocol`. The shell's object crosses as a
   `&dyn Trait` or is installed as a handler; `suspend` methods map to async ones and `fail(E)` to typed
   throws or rejections. Generic trait methods are not exportable.
-- **Live update under a running shell (decided).** A debug core is updated in place while the app stays
+- **Live update under a running shell.** A debug core is updated in place while the app stays
   open ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds)), on
   desktop, Android, the browser and the iOS simulator; the shell re-reads its view models after each
   update. On iOS devices, where apps cannot create executable memory, changed functions run in the
   MIR interpreter, as Flutter's debug mode does.
-- **More languages come from the community (decided).** The project maintains Python, Swift, Kotlin
+- **More languages come from the community.** The project maintains Python, Swift, Kotlin
   and TypeScript. `moddil bind` exposes its model of a core's exported API, so community generators
   can add C#, the JVM or anything else on the same footing.
 - These are **export** bindings for shells. They do not widen what Moddil imports: libraries are still
@@ -150,17 +141,18 @@ built on the C ABI on native targets ([`interop.md`: The C ABI, both directions]
 
 ### Platform APIs as shell-provided handlers
 
-**Decided.** Camera, notifications, payments, the keychain and similar platform services are Moddil
-**effects** (traits used after `with`), defined in a standard mod, **`moddil/platform`**. Their
-handlers are written in Swift, Kotlin or TypeScript (from generated skeletons) and installed by the
-shell when it starts the core; community mods can add more traits the same way:
+Camera, notifications, payments, the keychain and similar platform services are Moddil **effects**
+(traits used after `with`), defined in a standard mod, **`moddil/platform`**. Their handlers are
+written in Swift, Kotlin or TypeScript (from generated skeletons) and installed by the shell when it
+starts the core; community mods can add more traits the same way:
 
 ```rust
 trait Payments { fn pay(&self, amount: Money, order: OrderId) -> Receipt with suspend, fail(PayError); }
 ```
 
-- The core calls `payments.pay(…)` (with `payments: Payments` in its signature); on iOS the handler is Swift calling Apple Pay, on Android Kotlin
-  calling Google Pay, on the web TypeScript calling a payment provider.
+- The core calls `payments.pay(…)` (with `payments: Payments` in its signature); on iOS the
+  handler is Swift calling Apple Pay, on Android Kotlin calling Google Pay, on the web TypeScript
+  calling a payment provider.
 - Tests and simulations install a fake handler, so checkout logic is tested without a device
   ([`effects-and-capabilities.md`](effects-and-capabilities.md), [`determinism.md`](determinism.md)).
 - This generalises Crux's design, where the core asks the shell to perform effects, using Moddil's
@@ -180,7 +172,7 @@ TypeScript UI.
   Moddil type.
 - **Promises suspend.** Calling a Promise-returning API suspends the Moddil task through JSPI until
   the Promise settles; rejection becomes a typed failure ([`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)).
-- **Browser access is two effects (decided).** Touching the page performs **`Dom`**; calling
+- **Browser access is two effects.** Touching the page performs **`Dom`**; calling
   JavaScript that never touches the page (Web Crypto, JS libraries, timers) performs **`Js`**.
   Network APIs stay behind `Net`.
   - Both are visible in signatures, so a reviewer can see which code touches the page;
@@ -193,7 +185,7 @@ TypeScript UI.
 - **Packaging:** output is an ES module plus generated `.d.ts` types, usable from any bundler (Vite,
   webpack, esbuild) ([`compiler.md`](compiler.md)). Binary size and start-up time are tracked as
   release metrics for the game, the web store and fumoca.
-- **Framework adapters (decided).** The generated bindings are framework-agnostic: plain functions,
+- **Framework adapters.** The generated bindings are framework-agnostic: plain functions,
   classes and an event subscription. `moddil/web` adds thin adapters that turn a core's views into
   each framework's reactive state:
   - **React**, through `useSyncExternalStore`;
@@ -205,7 +197,7 @@ TypeScript UI.
 
 ## Mobile packaging
 
-**Decision: the toolchain builds libraries and bindings; the vendor tools build the app.**
+**The toolchain builds libraries and bindings; the vendor tools build the app.**
 
 | Platform | Moddil produces | The app is built by |
 |---|---|---|
@@ -257,3 +249,23 @@ Moddil does not standardise a UI framework, but nothing stops community mods fro
 | [fumoca](examples/fumoca.md) | Svelte 5 | Formula engine, simulation and GPU kernels in an engine Web Worker, through the Svelte adapter |
 | [Talk](examples/talk.md) | A Svelte 5 demo page; Python has no UI | The model, through the Svelte adapter |
 | [HFT platform](examples/hft-platform.md) | Operator dashboards | A web dashboard over a core, or an external tool reading metrics ([`observability.md`](observability.md)) |
+
+## Alternatives considered
+
+- **One UI toolkit everywhere** (Flutter, Compose Multiplatform, React Native, .NET MAUI): one
+  codebase, but a multi-year toolkit project with a large team, and only a near-native feel.
+- **Web everywhere** (Capacitor, Tauri, Electron): the cheapest route, but mobile feel and
+  performance suffer. A webview shell such as Tauri remains a choice for a desktop shell.
+- **Ambient browser access**, as `web-sys` gives: it makes UI logic hard to test. The `Dom` and `Js`
+  effects keep it visible and let tests install a simulated DOM.
+- **A separate message protocol between core and shell**, as Crux has: Moddil's ordinary effect
+  handlers do the same job.
+
+## Prior art
+
+| Approach | Examples | Lesson |
+|---|---|---|
+| **Shared core, native shells** | [Crux](https://redbadger.github.io/crux/) (Rust core; the shell performs effects on the core's request), Mozilla UniFFI (Rust → Swift, Kotlin, Python), Kotlin Multiplatform | Native UI quality everywhere; the binding layer is the product |
+| **One UI toolkit everywhere** | Flutter (own renderer), Compose Multiplatform, React Native, .NET MAUI | One codebase, at the cost of a huge toolkit and a near-native feel |
+| **Web everywhere** | Capacitor, Tauri, Electron | Cheapest; mobile feel and performance suffer |
+| **Browser bindings** | Rust's wasm-bindgen and web-sys (generated from WebIDL); jco for WASM components | Generated bindings scale to the whole web platform; ambient access makes UI logic hard to test |

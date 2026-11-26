@@ -12,46 +12,7 @@
 | **Agent-written code runs safely** | Pure comptime, simulated tests and declared capabilities. |
 | **A review surface for humans** | Semantic diffs, untested changes, mutation scores and checked summaries. |
 
-## Problem
-
-Languages assume the person who writes the code also understands it. In an LLM-heavy
-workflow, the writer is a model and the human is the *reviewer, architect and approver*. Current
-languages optimise for the writer and against the reviewer.
-
-## What LLMs struggle with today
-
-- **Non-local semantics**: implicit conversions, overload resolution, operator overloading, Scala
-  implicits, C++ ADL, monkey patching, global state. A model (and a human) has to see far away to
-  understand a single line.
-- **Many ways to say the same thing**: style variation makes training data noisier and diffs bigger.
-- **Opaque macros**: generated code that neither model nor reviewer can see.
-- **Weak feedback loops**: compiler diagnostics written for humans, not structured for agents; slow
-  builds limiting iterations.
-- **Hallucinated APIs**: names that look plausible but don't exist. Fast and precise feedback is the cure.
-- **Version drift**: the model learned an old API; nothing tells it the API changed.
-- **A new language starts cold**: models write well in languages they have seen millions of examples
-  of. Moddil starts with none ([Solving the cold start](#solving-the-cold-start)).
-
-## What humans struggle with when reviewing LLM code
-
-- "What does this change *actually* do?" Side effects are invisible in signatures.
-- "Is this safe?" Nothing marks which code touches the network, filesystem, or `unsafe`.
-- "Why was it written like this?" Intent is lost; only the result remains.
-- Big diffs from mechanical changes hide the few lines that matter.
-
-## State of the art
-
-- **Go**: one formatter, a small language, few ways to do things. LLMs write Go well.
-- **Rust and Elm**: precise, structured compiler errors with suggested fixes; strong types catch
-  hallucinations.
-- **TypeScript**: types + LSP give models a tight feedback loop.
-- **Dafny / Lean / Verus**: specifications that a model can try to satisfy and a checker can verify.
-- **Language servers / tree-sitter / rust-analyzer**: queryable structure for tooling.
-- **MCP** (Model Context Protocol): a common protocol for giving agents tools and context.
-- **Constrained decoding**: grammar-constrained generation (Outlines, llama.cpp grammars) and research
-  on type-constrained decoding.
-
-## Decisions
+## Design
 
 ### Verbosity is a view
 
@@ -82,7 +43,7 @@ over **MCP** for agents, from the same front end.
 | Kind | Examples |
 |---|---|
 | **Queries** | **Overviews first**: mod, then module, then group, then item ([`docs.md`: Overviews: mod, module and group docs](docs.md#overviews-mod-module-and-group-docs)); signatures, effects, error sets and contracts of any definition; the call graph; which tests cover a definition; docs and examples of the **installed** version of each mod ([`docs.md`: For agents and tools](docs.md#for-agents-and-tools)); `explain` (desugared, effect-annotated views; comptime expansions) |
-| **Actions** | Apply a fix; submit a **refactor intent** (rename, move, extract) as an operation rather than text edits ([`semantic-vcs.md`: Decisions](semantic-vcs.md#decisions)); run the affected tests ([`build-times.md`: Agents](build-times.md#agents)); replay a recording and inspect the failing task ([`observability.md`: For agents](observability.md#for-agents)) |
+| **Actions** | Apply a fix; submit a **refactor intent** (rename, move, extract) as an operation rather than text edits ([`semantic-vcs.md`: Design](semantic-vcs.md#design)); run the affected tests ([`build-times.md`: Agents](build-times.md#agents)); replay a recording and inspect the failing task ([`observability.md`: For agents](observability.md#for-agents)) |
 
 ### Diagnostics built for agents
 
@@ -96,7 +57,7 @@ over **MCP** for agents, from the same front end.
 ### "Did you mean?"
 
 Cheap to build, because the query-based compiler already indexes every name, and unusually useful
-because of earlier decisions:
+because of the rest of the design:
 
 | Kind of mistake | What the compiler suggests |
 |---|---|
@@ -151,9 +112,6 @@ Every change can be reviewed through:
 
 ## Provenance, decoding and protocol
 
-All decided:
-
-
 - **Provenance in version control.** Commit trailers record who or what wrote a change
   (model, version, session or prompt reference, approving human), and a per-definition index is
   derived from them, so blame survives moves and renames. Never in the source; prompts by reference
@@ -174,6 +132,55 @@ All decided:
 - **Translation tools** from Rust and TypeScript, to seed code and port projects.
 - **A small, stable surface syntax** that changes rarely, so training data stays valid; editions
   handle evolution ([Language evolution](evolution.md)).
+
+## Background
+
+### Problem
+
+Languages assume the person who writes the code also understands it. In an LLM-heavy
+workflow, the writer is a model and the human is the *reviewer, architect and approver*. Current
+languages optimise for the writer and against the reviewer.
+
+### What LLMs struggle with today
+
+- **Non-local semantics**: implicit conversions, overload resolution, operator overloading, Scala
+  implicits, C++ ADL, monkey patching, global state. A model (and a human) has to see far away to
+  understand a single line.
+- **Many ways to say the same thing**: style variation makes training data noisier and diffs bigger.
+- **Opaque macros**: generated code that neither model nor reviewer can see.
+- **Weak feedback loops**: compiler diagnostics written for humans, not structured for agents; slow
+  builds limiting iterations.
+- **Hallucinated APIs**: names that look plausible but don't exist. Fast and precise feedback is the cure.
+- **Version drift**: the model learned an old API; nothing tells it the API changed.
+- **A new language starts cold**: models write well in languages they have seen millions of examples
+  of. Moddil starts with none ([Solving the cold start](#solving-the-cold-start)).
+
+### What humans struggle with when reviewing LLM code
+
+- "What does this change *actually* do?" Side effects are invisible in signatures.
+- "Is this safe?" Nothing marks which code touches the network, filesystem, or `unsafe`.
+- "Why was it written like this?" Intent is lost; only the result remains.
+- Big diffs from mechanical changes hide the few lines that matter.
+
+### State of the art
+
+- **Go**: one formatter, a small language, few ways to do things. LLMs write Go well.
+- **Rust and Elm**: precise, structured compiler errors with suggested fixes; strong types catch
+  hallucinations.
+- **TypeScript**: types + LSP give models a tight feedback loop.
+- **Dafny / Lean / Verus**: specifications that a model can try to satisfy and a checker can verify.
+- **Language servers / tree-sitter / rust-analyzer**: queryable structure for tooling.
+- **MCP** (Model Context Protocol): a common protocol for giving agents tools and context.
+- **Constrained decoding**: grammar-constrained generation (Outlines, llama.cpp grammars) and research
+  on type-constrained decoding.
+
+## Alternatives considered
+
+- **MCP or LSP as the agent server's own interface**: not taken. The interface is Moddil's own
+  versioned JSON-RPC API, with MCP and LSP as adapters over it, so further adapters can be added as
+  agent protocols change.
+- **Provenance in the source**: not taken. It is recorded in commit trailers, and a per-definition
+  index derived from them keeps blame across moves and renames.
 
 ## Prior art
 

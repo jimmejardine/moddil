@@ -5,7 +5,7 @@ this document defines the shape of the core interfaces they share.
 
 ## Summary
 
-| Topic | Decision |
+| Topic | Rule |
 |---|---|
 | **Small core (R2)** | The core holds only what the compiler must check, what other mods need defined, or what cannot be expressed efficiently in a mod; everything else is a mod ([Small core, functionality in mods (R2)](#small-core-functionality-in-mods-r2)). |
 | **Batteries** | **Broad, as separate mods.** Coverage at Go's level (networking, HTTP, crypto, serialisation, SQL, time, testing), delivered as many independently versioned `moddil/*` mods. Only the small `moddil/core-*` set is tied to the compiler ([Batteries and tiers](#batteries-and-tiers)). |
@@ -30,17 +30,6 @@ the ecosystem splits, and the split is permanent:
   each one a supply-chain risk ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)).
 - A monolithic standard library ties every library fix to a compiler release and can never drop a
   mistake (Python's "dead batteries", Java's `Date`).
-
-## Prior art
-
-| Language | Approach | Lesson |
-|---|---|---|
-| **Go** | Broad std (HTTP, crypto, JSON); `io.Reader`/`io.Writer`; range-over-func iterators (1.23) | Broad and stable wins adoption; small, universal I/O interfaces compose everywhere |
-| **Rust** | Minimal std; `Iterator` with lazy adaptors; async split into separate traits; `gen` blocks still unstable | The iterator design is excellent; the sync/async split is the cost of coloured functions |
-| **Python** | Batteries included; generators | Generators make custom iteration trivial; old batteries become dead weight |
-| **C#, Swift, Kotlin** | Separate sync and async sequence protocols | The same duplication as Rust, for the same reason |
-| **Zig** | Allocators passed explicitly; small `std.io` | Explicit cost; less convenient defaults |
-| **tokio-uring, monoio** | Owned buffers for io_uring | Needed in Rust because a future can be dropped while the kernel still writes into the buffer |
 
 ## Small core, functionality in mods (R2)
 
@@ -73,7 +62,7 @@ Something belongs in the **core** only if at least one of these is true:
    evaluation and reflection.
 3. **It cannot be expressed efficiently in a mod.** Intrinsics, the C ABI, SIMD primitives, atomics.
 
-Candidate core list (to be argued over):
+The core list:
 
 | Core | Why core |
 |---|---|
@@ -92,7 +81,7 @@ async runtime**.
 
 ## Batteries and tiers
 
-**Decision: broad batteries, delivered as separate mods.**
+The batteries are **broad, delivered as separate mods**.
 
 | Tier | Contents | Bar | Tied to |
 |---|---|---|---|
@@ -108,12 +97,11 @@ A mod belongs in `moddil/*` when at least one of these holds:
 3. **It is an interoperability contract** that other mods must agree on (`serde`'s traits, the
    `log` and `span` effects, HTTP types).
 
-Unused mods cost nothing: they are not fetched, compiled or linked. Standard mods can be deprecated and
-moved out without a compiler release.
+Unused mods cost nothing: they are not fetched, compiled or linked.
 
 **Promotion path:** a community mod that becomes a de facto standard can be proposed for `moddil/`
-(the Boost → C++ standard library path). Standard mods can also be **deprecated** and moved out,
-which a monolithic std cannot easily do.
+(the Boost → C++ standard library path). Standard mods can also be **deprecated** and moved out
+without a compiler release, which a monolithic std cannot easily do.
 
 ## Initial standard-mod catalogue
 
@@ -136,31 +124,30 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 | `moddil/platform` | Device-service effects (camera, notifications, payments, keychain) with shell-provided handlers ([`ui.md`: Platform APIs as shell-provided handlers](ui.md#platform-apis-as-shell-provided-handlers)) | G W X |
 | `moddil/runtime`, `-wasm`, `-sim` | Effect handlers for scheduling and I/O ([Pluggable runtimes without ecosystem splits](runtime.md#pluggable-runtimes-without-ecosystem-splits)) | G H W X |
 | `moddil/sync` | Sync cells (`Atomic<T>`, `AtomicRc<T>`, `Mutex`, `RwLock`), channels, lock-free queues (SPSC/MPMC) ([`concurrency.md`: Shared mutable state](concurrency.md#shared-mutable-state)) | G H X |
-| `moddil/alloc` | Arenas, pools, bump allocators, scratch arenas ([Scratch arenas](#scratch-arenas)), allocator capability | G H |
+| `moddil/alloc` | Arenas, pools, bump allocators, scratch arenas ([Scratch arenas](#scratch-arenas)), allocator capability; allocator-backed collections and `Rc` without an OS (`freestanding-alloc` profile) | all |
 | `moddil/crypto` | Ed25519, ML-DSA, FN-DSA, Blake2/3, SHA-2/3, ChaCha20-Poly1305, TLS primitives | W X |
 | `moddil/simd`, `moddil/tensor` | Portable SIMD; n-d arrays and tensor expressions compiled to graphs or kernels ([`accelerators.md`: Level 1: tensor expressions](accelerators.md#level-1-tensor-expressions)) | G H X |
 | `moddil/gpu` | Devices, buffers, launches; WebGPU/Vulkan/Metal/CUDA/ROCm and CPU-simulator handlers ([`accelerators.md`](accelerators.md)) | G H |
 | `moddil/decimal` | `Fixed<S>` fixed-point (scale in the type) and `BigDecimal` ([`numerics.md`: Decimals for money](numerics.md#decimals-for-money)) | H W |
 | `moddil/num` | `BigInt`, `Rational` | X |
 | `moddil/units` | Unit packs: `si`, `information`, `currency`, `angle` ([`units.md`](units.md)) | G H W X |
-| `moddil/alloc` | Allocator-backed collections and `Rc`, without an OS (`freestanding-alloc` profile) | all |
 | `moddil/rt-embedded` | Bare-metal scheduler handler with static task slots ([`freestanding.md`: Concurrency without a runtime](freestanding.md#concurrency-without-a-runtime)) | embedded |
 | `moddil/hal` | Hardware effects (`gpio`, `uart`, `timer`, `mmio`), SVD-generated register views, simulation handlers | embedded |
 | `moddil/sql` | Typed SQL, schemas, migrations, connection pools | H W |
 | `moddil/timeseries` | Columnar storage, compression, tick data | H |
 | `moddil/sim` | Deterministic simulation: network, time, faults ([Determinism and reproducibility](determinism.md)) | G H W X |
 | `moddil/test`, `moddil/prop`, `moddil/bench` | Test runner, property-based testing, fuzzing, mutation testing, benchmarks ([`correctness.md`](correctness.md), [`docs.md`](docs.md)) | G H W X |
-| `moddil/verify` | Verifier front end: proof obligations, SMT back ends, assurance levels (open: core tool or mod) | H X |
+| `moddil/verify` | Verifier front end: proof obligations, SMT back ends, assurance levels | H X |
 | `moddil/log`, `moddil/trace` | Handlers for the write-only `log`/`span`/`metric` effects: pretty output, OTLP, Prometheus, flight recorder ([`observability.md`](observability.md)) | G H W X |
 | `moddil/web` | Bindings generated from WebIDL; the `Dom` effect and a simulated DOM; JS interop for `wasm32-browser` ([`ui.md`: The browser](ui.md#the-browser)) | G W X |
 | `moddil/storage` | Key-value storage: SQLite, IndexedDB, files | W X |
 | `moddil/audio` | The `Audio` effect: playing and capturing samples, with handlers for CoreAudio, WASAPI, ALSA/PipeWire and Web Audio, and a simulated handler that captures what is played for tests ([Audio](#audio)) | G, Talk |
 | `moddil/reflect` | `#[derive(Reflect)]`: opt-in runtime type information for editors and inspectors ([Runtime type information](#runtime-type-information)) | G |
-| `moddil/dht`, `moddil/pow` | Kademlia DHT, proof-of-work | X (probably community mods, not standard) |
+| `moddil/dht`, `moddil/pow` | Kademlia DHT, proof-of-work | X |
 
 ## Distribution and versioning
 
-**Decision: the core ships with the compiler; the rest is pinned like any dependency.**
+The core ships with the compiler; the rest is pinned like any dependency.
 
 - **`core-*` ships in the toolchain** and changes only with editions
   ([`evolution.md`](evolution.md)). It is what the compiler itself knows about: `Option`, `Iterator`,
@@ -177,7 +164,7 @@ Legend: G = multiplayer game, H = HFT platform, W = web store, X = Hashiverse.
 
 ## The prelude
 
-**Decision:** the prelude is small, and contains no effects:
+The prelude is small, and contains no effects:
 
 - types: `Option`, `Result`, `Vec`, `String`, `Box`, `Rc`;
 - traits: `Iterator`, `IntoIterator`, `Clone`, `Copy`, `Eq`, `Ord`, `Hash`, `Display`, `Debug`,
@@ -189,7 +176,7 @@ from root capabilities ([`effects-and-capabilities.md`: Authority comes only fro
 
 ## Iteration
 
-**Decision: one external iterator protocol, for every kind of sequence.**
+One external iterator protocol serves every kind of sequence.
 
 ```rust
 trait Iterator {
@@ -199,7 +186,7 @@ trait Iterator {
 }
 ```
 
-- **Errors are an associated type (decided November 2026).** `next`'s errors are `Self::Fails`, as
+- **Errors are an associated type.** `next`'s errors are `Self::Fails`, as
   a closure's are `F::Fails` (`FnOnce` has the same associated type), rather than inferred per impl:
   a trait's method declares the control effects it may perform, and an impl performs no more
   ([`types.md`: Traits](types.md#traits)). A generic function over `I: Iterator` passes `I::Fails`
@@ -227,7 +214,7 @@ trait Iterator {
   ([`closures.md`](closures.md)). It is simpler to implement for trees and concurrent maps, and lets
   the collection keep its own locks or traversal stack. `for` and adaptors use `Iterator`; `visit` is
   an alternative, not a replacement.
-- **Vectorisation is asserted, not promised** (decided). Release builds vectorise adaptor chains
+- **Vectorisation is asserted, not promised.** Release builds vectorise adaptor chains
   over slices when they can, but the language does not guarantee it. Where it matters,
   `#[vectorise]` on a loop or function fails the release build if the backend did not vectorise it,
   and says why (possible aliasing, a call it could not inline, a trap edge). It is a performance
@@ -237,7 +224,7 @@ trait Iterator {
 
 ### Generators
 
-**Decision: `gen` blocks and `gen fn` are in v0.**
+`gen` blocks and `gen fn` are in v0.
 
 ```rust
 fn evens(xs: &[int]) -> impl Iterator<Item = int> {
@@ -269,7 +256,7 @@ gen fn read_records(file: &mut File) -> Record {          // an iterator of Reco
 
 ### Coroutines
 
-**Decision: generators that receive a value on each resume are in v1.**
+Generators that receive a value on each resume, coroutines, are in v1.
 
 ```rust
 gen fn guard_ai(start: Pos) -> Action resume first: Frame {      // a Coroutine<Action, Frame, ()>
@@ -308,10 +295,10 @@ Rust's names and shapes, in `core-*` (with an allocator) and `moddil/collections
 | `TreeMap<K, V>`, `TreeSet<T>` | Sorted; Rust's `BTreeMap` |
 | `OrderedMap<K, V>`, `OrderedSet<T>` | Insertion order |
 | `BinaryHeap<T>`, `RingBuffer<T>` | |
-| `EnumSet<E>` | A bit set over a fieldless enum, Jai's `enum_flags`: bit *i* is the variant with index *i*, stored in the smallest unsigned integer that fits; `#[repr(u8)]`-style layout is guaranteed, so it fits packed structs, register maps and wire formats (decided) |
-| `PersistentList<T>`, `PersistentVec<T>`, `PersistentMap<K, V>`, `PersistentSet<T>`, `PersistentTreeMap<K, V>`, `PersistentTreeSet<T>` | Persistent: an update (`v.push(x)`, `m.insert(k, v)`) borrows the collection and gives a new one, sharing every node it did not change, so the old one stays as it was; `.clone()` is O(1), and iterating is O(1) per value. A cons list, a 32-way trie with a tail (Clojure's vector), a hash array mapped trie, and an AA tree sorted by key; in `moddil/collections` (decided) |
+| `EnumSet<E>` | A bit set over a fieldless enum, Jai's `enum_flags`: bit *i* is the variant with index *i*, stored in the smallest unsigned integer that fits; `#[repr(u8)]`-style layout is guaranteed, so it fits packed structs, register maps and wire formats |
+| `PersistentList<T>`, `PersistentVec<T>`, `PersistentMap<K, V>`, `PersistentSet<T>`, `PersistentTreeMap<K, V>`, `PersistentTreeSet<T>` | Persistent: an update (`v.push(x)`, `m.insert(k, v)`) borrows the collection and gives a new one, sharing every node it did not change, so the old one stays as it was; `.clone()` is O(1), and iterating is O(1) per value. A cons list, a 32-way trie with a tail (Clojure's vector), a hash array mapped trie, and an AA tree sorted by key; in `moddil/collections` |
 
-- **Collection literals are typed by context (decided).** There is no `vec!`. `[a, b, c]` and
+- **Collection literals are typed by context.** There is no `vec!`. `[a, b, c]` and
   `[x; n]` build whatever type the context expects, if it implements the prelude trait
   `FromArrayLiteral<T>` (`from_array<const N: int>(items: [T; N]) -> Self` and
   `from_repeat(x: T, n: int) -> Self where T: Clone`); with no expected type, the literal is a
@@ -326,13 +313,13 @@ Rust's names and shapes, in `core-*` (with an allocator) and `moddil/collections
   ```
 - **`Map` and `Set` traits** let generic code accept any map (the specs' snippets write
   `&Map<K, V>`).
-- **Indexing:** `xs[i]` traps when out of bounds (decided, [`numerics.md`](numerics.md)); `xs.get(i)`
+- **Indexing:** `xs[i]` traps when out of bounds ([`numerics.md`](numerics.md)); `xs.get(i)`
   returns `Option`.
 - **Capacity is explicit**: `with_capacity`, `reserve`. What happens when allocation fails depends on
   the profile ([`freestanding.md`: Memory without an operating system](freestanding.md#memory-without-an-operating-system)).
 - Shared, mutable collections are sync cells or lock-free structures in `moddil/sync`
   ([`concurrency.md`: Shared mutable state](concurrency.md#shared-mutable-state)).
-- **Spare capacity is written, never read (decided).** `vec.spare()` gives a view of the
+- **Spare capacity is written, never read.** `vec.spare()` gives a view of the
   uninitialised capacity that tracks how much of it has been written, like Rust's `BorrowedBuf`.
   It can be split, filled element by element, or filled by an I/O read; `commit` extends `len` by
   the written prefix only. Large I/O and frame buffers skip zeroing without `unsafe`, unlike Jai's
@@ -340,8 +327,8 @@ Rust's names and shapes, in `core-*` (with an allocator) and `moddil/collections
 
 ## Scratch arenas
 
-**Decided: `moddil/alloc` provides `Scratch`, a bump arena that is reset whole at the end of a
-scope**, as Jai's temporary storage and `reset_temporary_storage()`.
+`moddil/alloc` provides **`Scratch`, a bump arena that is reset whole at the end of a scope**,
+as Jai's temporary storage and `reset_temporary_storage()`.
 
 ```rust
 let mut scratch = Scratch::with_capacity(4[MiB]);
@@ -372,7 +359,7 @@ loop {
 
 ## I/O
 
-**Decision: one set of I/O traits, with borrowed buffers.**
+One set of I/O traits serves every kind of I/O, with borrowed buffers.
 
 ```rust
 trait Read {
@@ -402,7 +389,7 @@ follow Rust's `std::io`.
 - **Closing can fail, so it is explicit.** Files open for writing and buffered writers are linear:
   they must be `close`d or `abort`ed, and a flush error cannot be lost in a destructor
   ([`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear)).
-- **Graceful or abrupt close, chosen per type (decided).** Drop never suspends, and there is no
+- **Graceful or abrupt close, chosen per type.** Drop never suspends, and there is no
   async drop ([`resources.md`: Construction may suspend; drop may not](resources.md#construction-may-suspend-drop-may-not)):
   - if skipping the graceful close would **lose data** (a buffered file writer, a transaction), the
     type is **linear** and must be `close`d, `commit`ted or `abort`ed;
@@ -430,7 +417,7 @@ follow Rust's `std::io`.
 
 ## HTTP
 
-**Decision: a router with compile-time-checked paths and typed parameters**, in `moddil/net::http`.
+`moddil/net::http` provides **a router with compile-time-checked paths and typed parameters**.
 
 ```rust
 fn create(req: &Request) -> Response with links: Links, Rand, suspend, fail(LinkError | DecodeError) { … }
@@ -461,12 +448,12 @@ http::serve(listener, app)?;
 - **Serving.** `http::serve(listener, app)` is the accept loop: one isolated scope per connection, and
   it returns when `stop_requested()` fires ([`lifecycle.md`: Two levels: stop, then cancel](lifecycle.md#two-levels-stop-then-cancel)).
   `http::serve_connection(conn, &app)` serves one connection for a hand-written loop.
-- **Typed extractors (decided).** Besides path parameters, a handler's parameters can be
+- **Typed extractors.** Besides path parameters, a handler's parameters can be
   extractors: `Query<T>`, `Header<"name", T>` and `Json<T>`. The router decodes and validates each
   one, answering `400` (or `404` for a path parameter) before the handler runs.
-- **Middleware is a plain function (decided):** `fn(req: &Request, next: Next<T>) -> Response`,
-  attached with `router.wrap(…)`. Middleware **passes what it learns as a value**, not as a handler
-  (decided November 2026): handlers are captured where routes are named
+- **Middleware is a plain function:** `fn(req: &Request, next: Next<T>) -> Response`, attached
+  with `router.wrap(…)`. Middleware **passes what it learns as a value**, not as a handler:
+  handlers are captured where routes are named
   ([`effects-and-capabilities.md`: Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)),
   so one cannot be installed per request beneath them.
   - A route behind the middleware takes the value as an extractor parameter, `user: Ctx<User>`.
@@ -487,7 +474,7 @@ http::serve(listener, app)?;
   let app = Router::new().get("/orders", orders).wrap(auth);
   ```
 
-- **Streaming bodies (decided).** `req.body()` buffers up to a configured limit and fails with a typed
+- **Streaming bodies.** `req.body()` buffers up to a configured limit and fails with a typed
   `TooLarge` beyond it; `req.body_stream()` is a byte stream whose reads suspend. A response streams
   from a generator, `Response::stream(gen { for row in rows { yield row.to_csv() } })`. Backpressure
   comes from suspension.
@@ -501,32 +488,23 @@ http::serve(listener, app)?;
 |---|---|
 | `From`, `Into`, `TryFrom`, `TryInto` | As in Rust; `TryFrom` fails through `fail(E)` ([`error-handling.md`](error-handling.md)) |
 | `Borrow` | Kept for keyed lookups: `map.get("k")` on a `Map<String, V>` |
-| ~~`AsRef`~~ | Not in Moddil (decided): functions take `&str` or `&[T]`, and callers convert with unsizing or `.as_str()` |
+| ~~`AsRef`~~ | Not in Moddil: functions take `&str` or `&[T]`, and callers convert with unsizing or `.as_str()` |
 | `Default` | As in Rust |
 | `Display`, `Debug` | [`text.md`: Formatting](text.md#formatting) |
 | `Clone`, `Copy`, `Eq`, `Ord`, `Hash` | [`values.md`](values.md) |
 | `Drop` | Cannot suspend or fail ([`resources.md`: Construction may suspend; drop may not](resources.md#construction-may-suspend-drop-may-not)) |
 | `Fn`, `FnMut`, `FnOnce` | [`closures.md`](closures.md) |
 
-## Fit with the reference examples
-
-| Example | What it needs from the standard library |
-|---|---|
-| [Multiplayer game](examples/multiplayer-game.md) | Collections and ring buffers in the frame loop, `net` (UDP, WebTransport), `serde` binary formats, the browser runtime |
-| [HFT platform](examples/hft-platform.md) | Zero-copy reads, io_uring with borrowed buffers, lock-free queues, `decimal`, `timeseries` |
-| [Web store](examples/web-store.md) | HTTP, `sql`, `serde` JSON, `i18n`, `crypto` for sessions; streams of rows as ordinary iterators |
-| [Hashiverse](examples/hashiverse.md) | `crypto`, `net`, `storage`, simulation handlers; generators for protocol state machines |
-
 ## Audio
 
-**Decided (November 2026): audio output is a standard mod, `moddil/audio`.** [Talk](examples/talk.md)'s
-`say` plays sound, and games need it too. An `Audio` effect plays and captures sample buffers;
+Audio output is a standard mod, **`moddil/audio`**. [Talk](examples/talk.md)'s `say` plays
+sound, and games need it too. An `Audio` effect plays and captures sample buffers;
 handlers cover CoreAudio, WASAPI, ALSA or PipeWire, and Web Audio. A **simulated handler** records
 what is played, so a test can check the samples without a sound card.
 
 ## Runtime type information
 
-**Decided (November 2026): opt-in runtime type information is a standard mod, `moddil/reflect`.**
+Opt-in runtime type information is a standard mod, **`moddil/reflect`**.
 `reflect(T)` exists only at compile time ([`comptime.md`: Static reflection](comptime.md#static-reflection)),
 but in-game editors, inspectors and generic debug UIs need a description of a value's fields at
 run time, as Jai's `Type_Info` gives. `#[derive(Reflect)]` emits a static `TypeInfo` and typed
@@ -537,3 +515,46 @@ not the dynamic metaprogramming the [non-goals](requirements.md#non-goals-draft)
   sees only `pub` fields.
 - **Read-only by default.** `#[reflect(mut)]` on the type lets an editor write fields through it;
   a type with invariants simply does not opt in.
+
+## Fit with the reference examples
+
+| Example | What it needs from the standard library |
+|---|---|
+| [Multiplayer game](examples/multiplayer-game.md) | Collections and ring buffers in the frame loop, `net` (UDP, WebTransport), `serde` binary formats, the browser runtime |
+| [HFT platform](examples/hft-platform.md) | Zero-copy reads, io_uring with borrowed buffers, lock-free queues, `decimal`, `timeseries` |
+| [Web store](examples/web-store.md) | HTTP, `sql`, `serde` JSON, `i18n`, `crypto` for sessions; streams of rows as ordinary iterators |
+| [Hashiverse](examples/hashiverse.md) | `crypto`, `net`, `storage`, simulation handlers; generators for protocol state machines |
+
+## Open questions
+
+- **The exact core list.** The table in [The core / mod boundary](#the-core--mod-boundary) is the
+  current candidate list; which items belong in the core may still be argued over.
+- **`moddil/verify`: a core tool or a mod.** The verifier front end is catalogued as a mod, but
+  whether it ships as a core tool instead is not settled.
+- **`moddil/dht` and `moddil/pow`.** The Kademlia DHT and proof-of-work are catalogued, but are
+  probably better as community mods than standard ones.
+
+## Alternatives considered
+
+- **Separate sync and async protocols** (`Stream`, `AsyncRead`): every adaptor would exist twice,
+  as in Rust, C#, Swift and Kotlin. Suspension is an effect instead.
+- **An iterator's errors inferred per impl:** a trait's method declares the control effects it may
+  perform, so `next`'s errors are the associated type `Fails`.
+- **Owned buffers for completion-based I/O,** as Rust's io_uring libraries take: not needed, since a
+  suspended task cannot be dropped and the runtime waits for the kernel to release the buffer.
+- **Async drop:** drop never suspends; a type whose graceful close matters is linear instead.
+- **Middleware that installs a handler per request:** handlers are captured where routes are named,
+  so middleware passes a value (`Ctx<T>`) instead.
+- **A minimal or a monolithic standard library:** a minimal one pushes basic needs onto third-party
+  packages; a monolithic one ties every fix to a compiler release.
+
+## Prior art
+
+| Language | Approach | Lesson |
+|---|---|---|
+| **Go** | Broad std (HTTP, crypto, JSON); `io.Reader`/`io.Writer`; range-over-func iterators (1.23) | Broad and stable wins adoption; small, universal I/O interfaces compose everywhere |
+| **Rust** | Minimal std; `Iterator` with lazy adaptors; async split into separate traits; `gen` blocks still unstable | The iterator design is excellent; the sync/async split is the cost of coloured functions |
+| **Python** | Batteries included; generators | Generators make custom iteration trivial; old batteries become dead weight |
+| **C#, Swift, Kotlin** | Separate sync and async sequence protocols | The same duplication as Rust, for the same reason |
+| **Zig** | Allocators passed explicitly; small `std.io` | Explicit cost; less convenient defaults |
+| **tokio-uring, monoio** | Owned buffers for io_uring | Needed in Rust because a future can be dropped while the kernel still writes into the buffer |

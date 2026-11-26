@@ -1,11 +1,11 @@
 # Security model
 
-Ties together security mechanisms decided in other areas and states the guarantee they add up
-to.
+Ties together the security mechanisms specified in other areas and states the guarantee they add
+up to.
 
 ## Summary
 
-| Topic | Decision |
+| Topic | Rule |
 |---|---|
 | **The guarantee** | **Capabilities are a real security boundary for safe code.** Code in a mod without the `unsafe` or `ffi` capability can use only the authority it is passed. Compiler soundness bugs are therefore security vulnerabilities ([The guarantee: capabilities as a boundary](#the-guarantee-capabilities-as-a-boundary)). |
 | **Stronger isolation** | Crash containment, resource limits and untrusted `unsafe` or native code go in **WASM components** ([Isolation beyond capabilities](#isolation-beyond-capabilities)). |
@@ -20,18 +20,6 @@ capability ceilings on dependencies, the randomised cooldown, the `unsafe` bound
 between distributed components, and secrets kept out of logs. Each is useful on its own, but without a
 threat model nobody can say which attackers Moddil defends against, what it promises as a single
 claim, or where the gaps between the pieces are.
-
-## Prior art
-
-| System | What it does | Lesson |
-|---|---|---|
-| **E, Joe-E, Austral, Pony** | Object-capability languages: no ambient authority; references are permissions | Capabilities can be a real boundary inside one process when the language removes ambient authority |
-| **Java SecurityManager** | Runtime permission checks inside the JVM; deprecated for removal | Failed because of ambient authority, reflection and a huge trusted library surface; checks at run time are easy to forget |
-| **Deno** | Process-wide permissions (`--allow-net`) | Coarse, but proves that users accept declared authority |
-| **Rust** | Memory safety; RustSec advisories and `cargo audit`; the `subtle` crate for constant time | Safety without authority control; constant time is best effort because the optimiser may break it |
-| **WASM components** | Memory-isolated modules with explicit imports | Strong isolation at a calling-convention cost |
-| **Jif, FlowCaml** | Information-flow type systems with label lattices | Expressive, but rarely adopted because labels are noisy |
-| **Spectre and its variants** | Speculative execution leaks across boundaries | No language can fully close microarchitectural channels in software |
 
 ## Threat model
 
@@ -51,7 +39,7 @@ granted `unsafe` or `ffi`, which can do anything its process can.
 
 ## The guarantee: capabilities as a boundary
 
-**Decision: Moddil's capabilities are a security boundary for safe code, not just an audit aid.**
+Moddil's capabilities are a security boundary for safe code, not just an audit aid.
 
 > Code in a mod that does not hold the `unsafe` or `ffi` capability can perform only the effects it
 > declares, using only the capability values and handlers it is passed. It cannot read or write
@@ -77,10 +65,9 @@ What makes the claim possible:
 - **A closed list of undefined behaviour**, reachable only inside `unsafe`
   ([`unsafe.md`: The closed list of undefined behaviour](unsafe.md#the-closed-list-of-undefined-behaviour)).
 
-**Why this succeeds where Java's SecurityManager failed:** Java had ambient authority (any code could
-call `new FileInputStream`), unrestricted reflection, and permission checks that libraries had to
-remember to call at run time. Moddil has none of these. Authority is a value, its absence is a
-compile error, and reflection cannot reach private state.
+*Why it holds:* authority is a value, its absence is a compile error, and reflection cannot reach
+private state, so there is no ambient authority, unrestricted reflection or run-time permission
+check to get wrong.
 
 **In practice:**
 
@@ -112,7 +99,7 @@ component, code runs at full speed.
 
 ## Information-flow labels
 
-**Decision: a small, fixed set of labels, checked by the compiler.**
+A small, fixed set of labels, checked by the compiler.
 
 | Label | Meaning | Rules |
 |---|---|---|
@@ -122,11 +109,11 @@ component, code runs at full speed.
 
 - **Labels nest.** A struct with a `Secret` field cannot be logged as a whole; a derived `Debug`
   prints the field as redacted ([`values.md`](values.md)).
-- **Categories, not more labels (decided).** Domains such as health or export-controlled data use a
+- **Categories, not more labels.** Domains such as health or export-controlled data use a
   category on `Personal`, e.g. `Personal<Diagnosis, Health>`, and the topology declares which stores
   and placements accept each category. The compiler rules stay the same; there is no policy
   language.
-- **Declassification is explicit and reviewed (decided).** `secret.redacted()` and
+- **Declassification is explicit and reviewed.** `secret.redacted()` and
   `personal.hash_for_correlation()` are projections; `x.declassify("reason")` removes a label and
   takes a mandatory string literal, like `unsafe("…")`. Every declassification is listed by
   `moddil audit` and reported by the semantic diff ([`semantic-vcs.md`](semantic-vcs.md)), and a new
@@ -157,7 +144,7 @@ log.info(fmt"checkout for {customer:?}");           // ✓ prints email and card
 
 ## Constant-time code
 
-**Decision: constant-time code is checked by the compiler, and the backends preserve it.**
+Constant-time code is checked by the compiler, and the backends preserve it.
 
 ```rust
 #[constant_time]
@@ -173,11 +160,11 @@ fn verify_mac(expected: &Secret<[u8; 32]>, actual: &[u8; 32]) -> bool {
 - **The backends preserve it**: secret-dependent selections lower to conditional moves or masked
   arithmetic, and optimisation passes that could introduce branches or table lookups on those values
   are disabled for them, in Cranelift and in LLVM.
-- **LLVM without a fork (decided):** Moddil uses LLVM's upstream constant-time intrinsics and
+- **LLVM without a fork:** Moddil uses LLVM's upstream constant-time intrinsics and
   carries no patches. CI runs binary analysis on the emitted code of every `#[constant_time]`
   function, looking for secret-dependent branches and memory addresses. A function LLVM cannot
   preserve on some target is compiled with Cranelift there instead.
-- **Speculation (decided):** `#[constant_time]` functions also get speculative load hardening. Other
+- **Speculation:** `#[constant_time]` functions also get speculative load hardening. Other
   functions opt in with `#[speculation_hardened]`; there is no global flag. Process and component
   isolation stay the main defence across trust boundaries.
 - **Testing:** `moddil/test` includes statistical timing tests (dudect style) for
@@ -186,7 +173,7 @@ fn verify_mac(expected: &Secret<[u8; 32]>, actual: &[u8; 32]) -> bool {
 
 ## Tests are held to the same rules
 
-**Decided.** Test code counts against its mod's capability ceiling, like any other code:
+Test code counts against its mod's capability ceiling, like any other code:
 
 - A test gets **no root capabilities** unless it declares them (`test "reads real config" with FsRoot`),
   so the default test runs against simulation handlers only.
@@ -198,7 +185,7 @@ Comptime is already pure and sandboxed ([`comptime.md`](comptime.md)).
 
 ## Resource budgets
 
-**Decided: soft budgets per scope; hard limits per component.**
+Soft budgets per scope; hard limits per component.
 
 - **Opt-in per-scope budgets:** an allocator handler with a byte limit, where an allocation past it
   fails with a typed error, and deadlines that cancel the scope
@@ -209,7 +196,7 @@ Comptime is already pure and sandboxed ([`comptime.md`](comptime.md)).
 
 ## Supply chain
 
-Decided in [`packages-and-supply-chain.md`](packages-and-supply-chain.md) and summarised here:
+Specified in [`packages-and-supply-chain.md`](packages-and-supply-chain.md) and summarised here:
 
 - **Capability ceilings** per dependency; capability increases need explicit acceptance.
 - **Hash-pinned sources** in plain git; the source is the release.
@@ -217,15 +204,15 @@ Decided in [`packages-and-supply-chain.md`](packages-and-supply-chain.md) and su
 - **Randomised cooldown** of 7–28 days before a new version can be adopted.
 - **An audit trail in git**, recording whether a human or an agent reviewed each version.
 
-**Security fixes (decided): advisories inform; a person or agent decides.**
+**Security fixes: advisories inform; a person or agent decides.**
 
 - `moddil audit` checks the dependency graph against advisory feeds the project chooses (such as
   OSV) and flags affected versions in every build and in CI.
 - Taking a fixed version before its cooldown ends is a **manual override**, per mod and version,
   recorded in the manifest so that it shows up in review
-  ([`packages-and-supply-chain.md`: Randomised cooldown](packages-and-supply-chain.md#randomised-cooldown)). Advisories never
-  bypass the cooldown automatically: an attacker who can publish a fake advisory must not be able to
-  push a release straight into every project.
+  ([`packages-and-supply-chain.md`: Randomised cooldown](packages-and-supply-chain.md#randomised-cooldown)).
+  Advisories never bypass the cooldown automatically. *Why:* an attacker who can publish a fake
+  advisory must not be able to push a release straight into every project.
 
 ## Memory safety and `unsafe`
 
@@ -253,3 +240,31 @@ Decided in [`packages-and-supply-chain.md`](packages-and-supply-chain.md) and su
 | [Hashiverse](examples/hashiverse.md) | Hostile peers, key theft, timing attacks | `Untrusted` peer data; keys as `Secret` behind a key-locker handler; constant-time crypto |
 | [HFT platform](examples/hft-platform.md) | Credential theft, insiders, compromised dependencies | Capability ceilings on market-data and FIX mods; secrets from providers; audit trail |
 | [Multiplayer game](examples/multiplayer-game.md) | Cheating clients, malformed packets | Authoritative server; `Untrusted` inputs; parse-don't-validate decoding |
+
+## Alternatives considered
+
+- **Run-time permission checks, as in Java's SecurityManager.** Not taken: it failed because of
+  ambient authority (any code could call `new FileInputStream`), unrestricted reflection and checks
+  that libraries had to remember to call at run time.
+- **More labels, or a label lattice and policy language (as in Jif and FlowCaml).** Not taken: such
+  labels are noisy and rarely adopted; categories on `Personal` cover regulated domains with the
+  same compiler rules.
+- **A patched or forked LLVM for constant-time code.** Not taken: Moddil uses the upstream
+  intrinsics, checks the emitted code in CI, and falls back to Cranelift on a target where LLVM
+  cannot preserve a function.
+- **A global speculation-hardening flag.** Not taken: hardening is per function, and process and
+  component isolation are the main defence across trust boundaries.
+- **Letting advisories bypass the cooldown automatically.** Not taken: a fake advisory would then
+  push a release straight into every project.
+
+## Prior art
+
+| System | What it does | Lesson |
+|---|---|---|
+| **E, Joe-E, Austral, Pony** | Object-capability languages: no ambient authority; references are permissions | Capabilities can be a real boundary inside one process when the language removes ambient authority |
+| **Java SecurityManager** | Runtime permission checks inside the JVM; deprecated for removal | Failed because of ambient authority, reflection and a huge trusted library surface; checks at run time are easy to forget |
+| **Deno** | Process-wide permissions (`--allow-net`) | Coarse, but proves that users accept declared authority |
+| **Rust** | Memory safety; RustSec advisories and `cargo audit`; the `subtle` crate for constant time | Safety without authority control; constant time is best effort because the optimiser may break it |
+| **WASM components** | Memory-isolated modules with explicit imports | Strong isolation at a calling-convention cost |
+| **Jif, FlowCaml** | Information-flow type systems with label lattices | Expressive, but rarely adopted because labels are noisy |
+| **Spectre and its variants** | Speculative execution leaks across boundaries | No language can fully close microarchitectural channels in software |

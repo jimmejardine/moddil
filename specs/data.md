@@ -36,7 +36,7 @@
 | **ORMs** | EF Core, Django, Prisma, Diesel: code-first models with generated migrations. |
 | **Migrations** | **Flyway**, golang-migrate: versioned SQL files. **Atlas**: declarative schema diffing. |
 
-## Decisions
+## Specification
 
 ### Types are the schema
 
@@ -55,7 +55,7 @@ struct Order {
   ([`comptime.md`](comptime.md)) that produce typed impls of a **format-agnostic data model** (as
   serde does).
 - **Formats are mods.** `moddil/serde` ships JSON, TOML (for configuration, matching the
-  manifests) and the Moddil binary format (decided); YAML, CSV, CBOR, MessagePack and others are
+  manifests) and the Moddil binary format; YAML, CSV, CBOR, MessagePack and others are
   community mods on the same data model.
 
 ### A binary format with locked tags
@@ -129,7 +129,7 @@ schema.sql                    -- derived: replaying the migrations; CI checks it
   service starts.
 - **No ORM.** Queries are SQL, typed by the compiler; rows come back as generated types or anonymous
   records.
-- **PostgreSQL and SQLite first** (decided): `moddil/sql` supports both from the start; other
+- **PostgreSQL and SQLite first:** `moddil/sql` supports both from the start; other
   databases come from the community through the same driver trait.
 
 ### The `Db` effect
@@ -148,7 +148,7 @@ fn place(order: Order) -> OrderId with db: Db, suspend, fail(DbError) {
   ([`effects-and-capabilities.md`](effects-and-capabilities.md)).
 - **Transactions are linear values**: they must be committed or rolled back
   ([`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear)).
-- **Tests choose their own `Db` handler** (decided); nothing is defaulted. The standard library
+- **Tests choose their own `Db` handler**; nothing is defaulted. The standard library
   offers handlers (an in-memory SQLite or PGlite, a throwaway real PostgreSQL, a recorder), and a
   test can read where it is running (on a developer machine, in CI, or locally pretending to be CI)
   from its test environment and choose accordingly ([`testing.md`](testing.md)).

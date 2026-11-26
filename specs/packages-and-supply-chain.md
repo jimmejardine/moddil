@@ -47,7 +47,7 @@ largest attack surface in modern software:
 | **pnpm `minimumReleaseAge`, uv `exclude-newer`** | A release cooldown: ignore versions newer than a cut-off | One fixed delay for everyone |
 | **Sigstore, SLSA, trusted publishing** | Signing, provenance, and publishing from CI without long-lived tokens | Need central services |
 
-## Decisions
+## Specification
 
 ### What a mod is
 
@@ -60,18 +60,19 @@ A mod is the unit of:
 - **Targets**: native, WASM (R1), GPU-kernel-safe, and so on. A mod declares which targets it supports.
 - **Audit** ([Package management and supply-chain security](packages-and-supply-chain.md)): reviews and attestations attach to a mod version.
 
-**The word "mod" (decided):** it stays, as part of the name Moddil. A mod is a package; a module is a
+**The word "mod"** is part of the name Moddil. A mod is a package; a module is a
 file inside it ([`modules.md`: Mods and modules](modules.md#mods-and-modules)). Moddil has no `mod`
 keyword, but readers coming from Rust expect one, so documentation and diagnostics say "mod
 (package)" on first use, and the [glossary](glossary.md) keeps the distinction.
 
-**What one mod produces (decided):** at most **one library** and any number of **executables**
+**What one mod produces:** at most **one library** and any number of **executables**
 ([`modules.md`: Library and executables](modules.md#library-and-executables)). Several libraries means
-several mods, usually in one repository, because each library needs its own version, capability
+several mods, usually in one repository. *Why:* each library needs its own version, capability
 ceiling and audit record anyway.
 
-Illustrative manifest (the file, `moddil.toml`, and its basic form are decided in
-[`modules.md`: The manifest](modules.md#the-manifest); the rest of its syntax is not):
+Illustrative manifest (the file, `moddil.toml`, and its basic form are specified in
+[`modules.md`: The manifest](modules.md#the-manifest); the rest of its syntax is an
+[open question](#open-questions)):
 
 ```toml
 [mod]
@@ -105,7 +106,7 @@ supported = ["native", "wasm-wasi", "wasm-browser"]
   [`web.md`](web.md).
 - In these specs, `moddil/…` is shorthand for the standard mods under the project's own domain
   (illustration only).
-- **Look-alike names (decided).** With no naming authority, typosquatting is caught locally:
+- **Look-alike names.** With no naming authority, typosquatting is caught locally:
   `moddil add` warns about Unicode confusables or mixed scripts in a URL, a small edit distance to
   your existing dependencies or to a curated list of popular mods, and very young repositories. It
   shows the new mod's capability ceiling and asks for confirmation. Advisories can mark known squats
@@ -117,7 +118,7 @@ supported = ["native", "wasm-wasi", "wasm-browser"]
   repository.
 - **The major is part of the path**: `github.com/x/y` is v0/v1, and `github.com/x/y/v2` is a different
   mod. A build contains **at most one version per major** of each mod.
-- **Before 1.0, the minor is the major (decided)**, as in Cargo: `0.3` → `0.4` is breaking and
+- **Before 1.0, the minor is the major**, as in Cargo: `0.3` → `0.4` is breaking and
   `0.3.1` → `0.3.2` is compatible. The compiler's semver check enforces this, so pre-1.0 mods can
   move fast and upgrades stay safe.
 - **Minimal version selection** within a major: each mod states the minimum version it needs, and the
@@ -192,7 +193,7 @@ github.com/acme/json                  v2 → v3 available (major)
   automatically ([`security.md`: Supply chain](security.md#supply-chain)).
 - **Transitive interaction**: if a new release of A requires B ≥ 1.5 and B 1.5 is still in its
   cooldown, `update` holds A back and says why.
-- **A release's age (decided)** is measured from the later of its tag date and the date this
+- **A release's age** is measured from the later of its tag date and the date this
   project first saw the tag, which `update` and `outdated` record in the lockfile. Tag dates are set by
   the author and can be backdated; first sight cannot. A first `add` has to trust the tag date, so it
   shows the date and warns when the release is recent.
@@ -255,9 +256,10 @@ requires = []                     # pure: no net, fs, ffi
 
 ### A broad standard library
 
-A broad set of `moddil/` mods reduces trivial third-party dependencies ([`stdlib.md`: Initial standard-mod catalogue](stdlib.md#initial-standard-mod-catalogue)).
-**Decided:** broad, as separately versioned mods that are pinned like any other dependency
-([`stdlib.md`: Batteries and tiers](stdlib.md#batteries-and-tiers)).
+The standard library is broad, as separately versioned `moddil/` mods that are pinned like any
+other dependency ([`stdlib.md`: Batteries and tiers](stdlib.md#batteries-and-tiers)). *Why:* a broad
+set reduces trivial third-party dependencies
+([`stdlib.md`: Initial standard-mod catalogue](stdlib.md#initial-standard-mod-catalogue)).
 
 ### Local repositories and working copies
 
@@ -323,12 +325,36 @@ Working-copy overrides are unpinned by nature, so they are for development only 
 | [Web store](examples/web-store.md) | Capability diffs on upgrades of payment and auth mods; shared audits across teams |
 | [Hashiverse](examples/hashiverse.md) | `hashiverse/protocol` published from its own repository; no central service, in keeping with a decentralised project |
 
-## Directions (not yet decided)
+## Open questions
 
-- **Tag signing**: SSH or GPG keys pinned in the lockfile (no service needed), or Sigstore keyless
-  signing as an optional extra.
-- **Rebuild attestations**: anyone can publish "I rebuilt v1.4.2 and got these bytes" as signed
-  records in their own git repository.
+- **Tag signing**: which scheme signs tags: SSH or GPG keys pinned in the lockfile (no service
+  needed), or Sigstore keyless signing as an optional extra.
+- **Rebuild attestations**: whether anyone can publish "I rebuilt v1.4.2 and got these bytes" as
+  signed records in their own git repository.
+- **The rest of the manifest's syntax**: beyond the basic form in
+  [`modules.md`: The manifest](modules.md#the-manifest), the manifests shown here are illustrations.
+
+## Alternatives considered
+
+- **A central registry, proxy or checksum database** (crates.io, `sum.golang.org`): it owns names
+  and must be up for builds to work; plain git with vendoring and private mirrors needs neither.
+- **Trusting the tag or git's SHA-1**: a release can be re-tagged; the lockfile trusts a content
+  hash of the normalised tree, so a re-tag is detected.
+- **A solver over version ranges**: minimal version selection is deterministic and never picks a
+  version nobody asked for.
+- **One fixed cooldown for everyone** (pnpm `minimumReleaseAge`, uv `exclude-newer`): everyone
+  would take a malicious release on the same day; a per-project, per-version delay staggers
+  adoption.
+- **Measuring a release's age from its tag date alone**: tag dates are set by the author and can be
+  backdated; the date this project first saw the tag cannot.
+- **Advisories that bypass the cooldown automatically**: overrides stay explicit and recorded in the
+  manifest, so they show up in review.
+- **Install scripts, `build.rs` and proc macros**: they run arbitrary code at fetch or build time;
+  pure, sandboxed comptime and the bundled clang replace them.
+- **Release tarballs or uploaded artefacts**: they can differ from the repository, as with
+  `xz-utils`; the tagged tree is the release.
+- **Several libraries per mod**: each library needs its own version, capability ceiling and audit
+  record, so several libraries are several mods.
 
 ## Prior art
 

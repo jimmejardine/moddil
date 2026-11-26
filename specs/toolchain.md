@@ -49,8 +49,7 @@ human-oriented text.
   of the canonical AST ([LLMs as first-class programmers](agent-interface.md), [Diffs, code review and version control](semantic-vcs.md)), so formatting never appears in a diff.
 - Comments and blank-line grouping are part of the AST and are preserved.
 - `moddil fmt --check` runs in CI; editors format on save.
-- **No line width, and no setting (decided November 2026).** This replaces an earlier decision for
-  a line width in the manifest.
+- **No line width, and no setting.**
   - Lines break where the structure says, never because a line is long; editors wrap long lines
     for display, each as its user likes.
   - So the layout depends on the code and its comments alone, and the same code always prints
@@ -75,10 +74,10 @@ human-oriented text.
 - **Custom lints are mods:** pure, sandboxed comptime functions over the semantic model
   ([`comptime.md`](comptime.md)). They give Clippy-style power without plugin trust problems, and run
   in the same daemon.
-- **Limits (decided):** lint mods follow comptime's fuel, memory and caching rules, and
+- **Limits:** lint mods follow comptime's fuel, memory and caching rules, and
   `moddil build --timings` attributes their cost per lint. A lint runs only if the consuming project
   enables it, never just because a dependency ships it. Being pure, they need no security review.
-- **Diagnostics for people (decided)**, in the rustc and Elm style: one primary message, labelled
+- **Diagnostics for people**, in the rustc and Elm style: one primary message, labelled
   source snippets, notes, and a suggested fix when one is mechanical. Every error has a code with a
   long explanation (`moddil explain E0xxx`) whose examples are tests. Effect, borrow and coherence
   errors show the causal chain ("`parse` uses `Net` via `fetch_schema`, line 40"). A published style
@@ -99,7 +98,7 @@ human-oriented text.
   stack, `explain` and the semantic diff come later.
 - An official **tree-sitter grammar** for syntax highlighting elsewhere (GitHub, other editors and
   tools).
-- Official editor integrations, in priority order (decided): VS Code (most users; the playground's
+- Official editor integrations, in priority order: VS Code (most users; the playground's
   editor shares its grammar), Zed, Neovim, then JetBrains (via LSP).
 
 ## Debugger
@@ -146,7 +145,7 @@ human-oriented text.
   compiler.
 - The **compiler-as-a-service API** ([`agent-interface.md`](agent-interface.md)) is versioned, so
   third-party tools see exactly what official tools see.
-- **Tools are pinned mods, not PATH plugins (decided).** There is no `moddil-xyz` discovery on
+- **Tools are pinned mods, not PATH plugins.** There is no `moddil-xyz` discovery on
   `PATH`. A tool is a mod with an executable, pinned in the manifest's `[tools]` section (in the
   lockfile, hash-checked), and run as `moddil tool <name> …` under the capabilities it declares. The
   core command set stays closed and the same everywhere.
@@ -184,13 +183,29 @@ program on every edit**, in an **in-browser playground**:
   [`testing.md`: Examples are tests](testing.md#examples-are-tests)); runnable error-explanation pages.
 - **On the desktop**, `moddil run --watch` gives the same loop: re-check and re-run on save, with
   live update for long-running programs ([`build-times.md`: Live update (debug builds)](build-times.md#live-update-debug-builds)).
-- **Costs and risks:** the compiler's download size (estimated in the tens of MB; loaded lazily; to
-  be measured) and compile speed in the browser against the budget above. The playground is a
-  tier-1 target in CI.
+- **Costs and risks:** the compiler's download size (loaded lazily) and compile speed in the
+  browser against the budget above ([Open questions](#open-questions)). The playground is a tier-1
+  target in CI.
 
 Prior art: the TypeScript playground (compiler in the browser); the Go playground and tour, and the
 Rust playground (server-side compilation); Elm reactor; Swift Playgrounds; Zig's WASM build of its
 compiler.
+
+## Open questions
+
+- How large the compiler's download for the playground is (estimated in the tens of MB) and how
+  fast it compiles in the browser against the budget: both are still to be measured.
+
+## Alternatives considered
+
+- **A line width in the manifest** for the formatter: not taken. With no width the layout depends
+  on the code and its comments alone, so the same code always prints the same way.
+- **Tools discovered on `PATH`** (`moddil-xyz` plugins): not taken. A tool is a mod pinned in the
+  manifest and the lockfile, hash-checked and run under its declared capabilities, and the core
+  command set stays closed and the same everywhere.
+- **A REPL, script mode or notebook mode**: not taken. A REPL session would need exceptions to R3,
+  borrow scopes, linear values, task scopes and redefinition; the playground and `run --watch`
+  re-run the whole program instead.
 
 ## Prior art
 

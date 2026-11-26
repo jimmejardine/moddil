@@ -36,11 +36,11 @@ it falls on. Adoption must be incremental: a Moddil service is an ordinary servi
 
 ## Three layers
 
-| Layer | Scope | Decision |
+| Layer | Scope | Moddil's part |
 |---|---|---|
-| **A. Language** | Components and placement; the `Remote` effect; generated contracts and skew checks; trust, secrets and capabilities; structured concurrency across machines; whole-system simulation | **Do it.** Only a compiler can, and most of it reuses existing decisions. |
-| **B. Artefacts and adapters** | Static binaries, WASM and OCI images; a topology file; adapter mods emitting Compose, Kubernetes, Nomad, systemd and WASI-platform formats; discovery, secret and policy integration | **Do it thinly**, as ordinary mods (R2). |
-| **C. Infrastructure** | Orchestration, scheduling, autoscaling, service mesh, load balancing, provisioning, secret storage, rollout strategy | **Never.** Kubernetes, Nomad, Consul, Vault, Terraform and Argo own these (non-goals, [Non-goals (draft)](requirements.md#non-goals-draft)). |
+| **A. Language** | Components and placement; the `Remote` effect; generated contracts and skew checks; trust, secrets and capabilities; structured concurrency across machines; whole-system simulation | **Built in.** Only a compiler can do it, and most of it reuses the rest of the language. |
+| **B. Artefacts and adapters** | Static binaries, WASM and OCI images; a topology file; adapter mods emitting Compose, Kubernetes, Nomad, systemd and WASI-platform formats; discovery, secret and policy integration | **Built thinly**, as ordinary mods (R2). |
+| **C. Infrastructure** | Orchestration, scheduling, autoscaling, service mesh, load balancing, provisioning, secret storage, rollout strategy | **None.** Kubernetes, Nomad, Consul, Vault, Terraform and Argo own these (non-goals, [Non-goals (draft)](requirements.md#non-goals-draft)). |
 
 ## Layer A: components and placement
 
@@ -77,7 +77,7 @@ mod web    { … api::checkout(cart) … }   // here: with Remote, suspend, fail
   an idempotency key), and the retry policy is part of the call site or the topology.
 - There is **no fire-and-forget** (error-handling D4): a message either belongs to a scope, or is a
   durable workflow step ([Durable workflows](#durable-workflows)).
-- **Unreliable channels are type parameters** (decided): `Channel<T, Reliable>` or
+- **Unreliable channels are type parameters**: `Channel<T, Reliable>` or
   `Channel<T, Datagram>`, with `Ordered` or `Unordered` as a second parameter. On a datagram
   channel, `send` may lose a message and `recv` may see messages out of order, so messages must be
   idempotent or carry sequence numbers, which a derive checks. Game snapshots over WebTransport
@@ -93,10 +93,10 @@ mod web    { … api::checkout(cart) … }   // here: with Remote, suspend, fail
   `contracts.lock` in the repository ([`data.md`: One contract system, in space and time](data.md#one-contract-system-in-space-and-time)). The compiler compares a change with every version still in service
   (including months-old mobile clients) and rejects changes that would break a rolling deploy. The
   semantic diff shows contract changes.
-- **Components deploy independently** (decided). A component is built and deployed on its own,
+- **Components deploy independently.** A component is built and deployed on its own,
   checked against the recorded contracts rather than other components' source; a whole-system
   build is needed only for whole-system simulation.
-- **Rollout safety stops at compatibility** (decided): Moddil proves that a new version can coexist
+- **Rollout safety stops at compatibility**: Moddil proves that a new version can coexist
   with every recorded version and emits that proof as rollout metadata. Canary analysis, traffic
   shifting and rollback stay with the platform ([Layer C: what Moddil never does](#layer-c-what-moddil-never-does)).
 - **At the edges**, for non-Moddil peers, the compiler generates standard descriptions
@@ -126,10 +126,10 @@ mod web    { … api::checkout(cart) … }   // here: with Remote, suspend, fail
 
 ## Choreographies (after v1)
 
-**Decided: a library after v1.** `moddil/choreo` projects a multi-party protocol written once (the
-game's match lifecycle, two-phase commit) into per-component functions and typed channels at compile
-time ([`comptime.md`](comptime.md)), in the style of Choral and HasChor. Ordinary request and response
-stays a `Remote` call.
+Choreographies are a library, after v1. `moddil/choreo` projects a multi-party protocol written once
+(the game's match lifecycle, two-phase commit) into per-component functions and typed channels at
+compile time ([`comptime.md`](comptime.md)), in the style of Choral and HasChor. Ordinary request
+and response stays a `Remote` call.
 
 ## Durable workflows
 
@@ -209,8 +209,8 @@ least privilege follows from the code instead of being written by hand.
 ## Layer C: what Moddil never does
 
 Orchestration, scheduling, autoscaling, service mesh, load balancing, provisioning, secret storage and
-rollout strategy (canaries, blue-green). Moddil supplies what these tools lack — compatibility
-guarantees, generated policies and typed requirements — and leaves the rest to them.
+rollout strategy (canaries, blue-green). Moddil supplies what these tools lack (compatibility
+guarantees, generated policies and typed requirements) and leaves the rest to them.
 
 ## Staging
 
@@ -274,6 +274,24 @@ Today that means:
 - **Schema evolution** across independently deployed versions is still manual discipline.
 - Infrastructure definitions live apart from the code that depends on them, and drift.
 - Running and testing the *whole system* locally is slow and flaky.
+
+## Open questions
+
+- **The topology file's exact syntax.** The example in [The topology file](#the-topology-file) is
+  illustrative; the mapping it expresses is specified, its concrete keys are not.
+
+## Alternatives considered
+
+- **Remote calls that look local (transparent RPC).** Not taken: it hides latency, partial failure
+  and concurrency (Waldo et al., 1994), and several multitier languages failed on it.
+- **Owning deployment, scheduling, networking and secrets.** Not taken: those belong to platform
+  teams and their tools, and multitier systems that fought the ops team stayed niche.
+- **All-or-nothing adoption.** Not taken: real organisations are polyglot, so a Moddil service is an
+  ordinary service to everyone else, with standard contracts at the edges.
+- **Provisioning infrastructure from Moddil.** Not taken: Terraform, OpenTofu and Pulumi remain the
+  provisioning tools; Moddil binds to what exists.
+- **A workflow engine of Moddil's own.** Not taken: handlers target Temporal, Restate or a built-in
+  handler based on record and replay.
 
 ## Prior art
 

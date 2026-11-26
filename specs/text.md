@@ -2,7 +2,7 @@
 
 ## Summary
 
-| Topic | Decision |
+| Topic | Rule |
 |---|---|
 | **Encoding** | `str` and `String` are **always valid UTF-8**, as in Rust. Bytes are `[u8]`. Paths, environment variables and arguments are `Path` and `OsStr`, which round-trip losslessly ([Bytes, paths and OS strings](#bytes-paths-and-os-strings)). |
 | **Types** | `&str` (borrow), `String` (owned, with **short strings stored inline**), `Rc<str>` (shared), `RcStr` (zero-copy slice of a shared buffer), `char` (a Unicode scalar value) ([String types](#string-types)). |
@@ -25,18 +25,6 @@ are well known:
   `"I".to_lowercase()` behaving differently under a Turkish locale.
 - **Injection** through string concatenation into SQL, HTML or shell commands.
 - **Hidden cost**: implicit copies and allocations in string-heavy code.
-
-## Prior art
-
-| Language | Approach | Lesson |
-|---|---|---|
-| **Rust** | `str`/`String` always UTF-8; `OsStr`, `Path`, `CStr` for the boundaries; byte-offset slicing that panics off a boundary | The right types; the slicing trap is the weak spot |
-| **Swift** | `String` of grapheme `Character`s; opaque `String.Index`; small-string optimisation | Correct for humans, but awkward and O(n) for counting; opaque indices are the right idea |
-| **Go** | A string is bytes, usually UTF-8; `range` decodes runes | Simple, but invalid text surfaces late as U+FFFD |
-| **Python 3** | Code-point strings; `surrogateescape` for undecodable OS data | Lossless OS round-trips, at the cost of strings that are not really Unicode |
-| **Java, C#, JavaScript** | UTF-16 code units | A legacy encoding that makes surrogate pairs everyone's problem |
-| **Zig** | `[]const u8`, with UTF-8 helpers | Explicit, but no type-level guarantee of validity |
-| **ICU4X, Fluent, MessageFormat 2** | Modern, data-driven localisation; plural and gender rules; messages as data | What a localisation mod should build on |
 
 ## String types
 
@@ -65,9 +53,9 @@ Cost stays visible, as everywhere in Moddil ([`values.md`](values.md)):
 
 ### Short strings are stored inline
 
-**Decision: `String` uses a small-string optimisation.** On 64-bit targets a `String` is 24 bytes,
-and text of up to 23 bytes is stored inside it with no heap allocation (as `compact_str` does in Rust;
-Swift and C++ standard libraries store 15).
+`String` uses a small-string optimisation. On 64-bit targets a `String` is 24 bytes, and text of
+up to 23 bytes is stored inside it with no heap allocation (as `compact_str` does in Rust; Swift and
+C++ standard libraries store 15).
 
 - **Why:** most strings in services and agents' code are short (keys, identifiers, field names,
   small numbers formatted as text), and avoiding an allocation for each is a large, broad win.
@@ -84,7 +72,7 @@ Swift and C++ standard libraries store 15).
 
 ## Positions and slicing
 
-**Decision: strings are not indexed by integers.**
+Strings are not indexed by integers.
 
 - `s[i]` does not exist. `s.len()` is the length **in bytes**, as an `int`
   ([`numerics.md`: Integer types](numerics.md#integer-types)).
@@ -104,11 +92,11 @@ Swift and C++ standard libraries store 15).
   format) go through `s.slice_bytes(a..b)`, which fails with a typed error when an offset is out of
   range or not on a boundary. There is no trapping integer slice in everyday code.
 - **Iteration** chooses its unit explicitly: `.bytes()`, `.chars()` (scalar values), or
-  `.graphemes()` (user-perceived characters). **Decided:** grapheme, word and sentence segmentation,
-  display width and normalisation live in `moddil/text`, part of the default batteries, because the
-  Unicode tables are large; core keeps UTF-8, scalar values and positions, so freestanding binaries
-  stay small. Counting characters is `s.chars().count()`, visibly O(n).
-- **A position belongs to its string, by type (decided).** A `StrPos` is a view
+  `.graphemes()` (user-perceived characters). Grapheme, word and sentence segmentation, display
+  width and normalisation live in `moddil/text`, part of the default batteries; core keeps UTF-8,
+  scalar values and positions. *Why:* the Unicode tables are large, and freestanding binaries stay
+  small. Counting characters is `s.chars().count()`, visibly O(n).
+- **A position belongs to its string, by type.** A `StrPos` is a view
   ([`memory.md`: View types](memory.md#view-types)) derived from a borrow of
   the string it was found in, in the same way an accelerator buffer is branded with its device
   ([`accelerators.md`](accelerators.md)). The compiler therefore rejects:
@@ -130,7 +118,7 @@ Swift and C++ standard libraries store 15).
 
 ## Bytes, paths and OS strings
 
-**Decision: `String` is strict UTF-8; the operating system's strings have their own types.**
+`String` is strict UTF-8; the operating system's strings have their own types.
 
 | Type | Holds | Notes |
 |---|---|---|
@@ -165,7 +153,7 @@ Swift and C++ standard libraries store 15).
 
   - The newline after the opening `"""` is dropped; the final newline before the closing `"""` is
     kept, so a block is a sequence of complete lines.
-  - **Exact rules (decided, as Java's text blocks):** a whitespace-only line becomes an empty line,
+  - **Exact rules (as Java's text blocks):** a whitespace-only line becomes an empty line,
     whatever its indentation; trailing spaces and tabs are stripped from every line, and `\s` keeps
     one deliberately; line endings are normalised to `\n`, so a CRLF source file gives the same
     string, and `\r\n` is written explicitly when needed.
@@ -182,7 +170,7 @@ Swift and C++ standard libraries store 15).
   ([`comptime.md`: Tagged string literals (embedded DSLs)](comptime.md#tagged-string-literals-embedded-dsls)).
 - **`Display`** (for users) and **`Debug`** (for developers, derivable) are the formatting traits, as
   in Rust; format specifiers (`{x:>8}`, `{x:.3}`, `{x:?}`, `{x:#x}`) follow Rust's.
-- **Locale-independent by decision.** `fmt"…"`, `Display`, `Debug`, number parsing and
+- **Locale-independent.** `fmt"…"`, `Display`, `Debug`, number parsing and
   `to_lowercase`/`to_uppercase` (using Unicode's default, locale-free rules) give the same result on
   every machine. This makes them safe for files, protocols and logs, and part of the determinism
   guarantee ([`determinism.md`: Sources of nondeterminism](determinism.md#sources-of-nondeterminism)).
@@ -194,7 +182,7 @@ Swift and C++ standard libraries store 15).
 
 ## Regular expressions
 
-**Decision: the standard library's regular expressions are linear-time only.**
+The standard library's regular expressions are linear-time only.
 
 - `moddil/regex` uses a linear-time engine (RE2 and Rust's `regex`), so matching can never blow up
   on hostile input.
@@ -206,9 +194,9 @@ Swift and C++ standard libraries store 15).
 
 ## Interning
 
-**Decision: an instance interner, never a global one.** `moddil/collections` provides `Interner<T>`,
-which hands out typed `Symbol<T>` handles: `Eq` and `Hash` in O(1), resolved back through the
-interner that made them. There are no mutable globals, so there is no process-wide interner; a
+An interner is an instance, never a global. `moddil/collections` provides `Interner<T>`, which
+hands out typed `Symbol<T>` handles: `Eq` and `Hash` in O(1), resolved back through the interner
+that made them. There is no process-wide interner, because there are no mutable globals; a
 concurrent variant keeps its table in a sync cell.
 
 ## Comparison, normalisation and case
@@ -225,7 +213,7 @@ concurrent variant keeps its table in a sync cell.
 
 ## Localisation: the `Locale` effect
 
-**Decision: anything that depends on the user's language or region uses the `Locale` effect.**
+Anything that depends on the user's language or region uses the `Locale` effect.
 
 ```rust
 fn order_summary(o: &Order) -> String with Locale {
@@ -261,3 +249,15 @@ with Locale = i18n::fixed("de-CH") { assert(order_summary(&o) == "…") }
 | **Rust** | `&str`/`String` map directly; both are UTF-8 | Zero-copy ([`interop.md`: Rust: the generated bridge](interop.md#rust-the-generated-bridge)) |
 | **WASM components** | Component-model `string`, UTF-8 | Zero-copy where both sides are UTF-8 |
 | **JavaScript and the DOM** | UTF-16 on the JS side | A transcoding copy at each crossing; batching and caching strategy belongs to [`ui.md`](ui.md) |
+
+## Prior art
+
+| Language | Approach | Lesson |
+|---|---|---|
+| **Rust** | `str`/`String` always UTF-8; `OsStr`, `Path`, `CStr` for the boundaries; byte-offset slicing that panics off a boundary | The right types; the slicing trap is the weak spot |
+| **Swift** | `String` of grapheme `Character`s; opaque `String.Index`; small-string optimisation | Correct for humans, but awkward and O(n) for counting; opaque indices are the right idea |
+| **Go** | A string is bytes, usually UTF-8; `range` decodes runes | Simple, but invalid text surfaces late as U+FFFD |
+| **Python 3** | Code-point strings; `surrogateescape` for undecodable OS data | Lossless OS round-trips, at the cost of strings that are not really Unicode |
+| **Java, C#, JavaScript** | UTF-16 code units | A legacy encoding that makes surrogate pairs everyone's problem |
+| **Zig** | `[]const u8`, with UTF-8 helpers | Explicit, but no type-level guarantee of validity |
+| **ICU4X, Fluent, MessageFormat 2** | Modern, data-driven localisation; plural and gender rules; messages as data | What a localisation mod should build on |

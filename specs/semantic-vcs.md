@@ -6,27 +6,7 @@ Version control operates on lines of text, but programs are trees with meaning. 
 see noise (formatting, renames, moved code) and miss signal (a new side effect, a changed error path, a
 performance regression). As agents produce more code, review becomes the bottleneck.
 
-## State of the art
-
-- **Git**: universal, fast, but line-based and snapshot-based; merges are textual.
-- **Difftastic / SemanticDiff / GumTree**: AST-aware diffs that ignore formatting and track moves.
-- **Unison**: code is stored by hash; names are metadata. Renames are free and never conflict.
-- **Pijul / Darcs**: patch theory, so patches commute and merges are more predictable.
-- **Jujutsu (jj)**: first-class conflicts, working copy as a commit, easy history rewriting.
-- **Stacked diffs** (Phabricator, Gerrit, Graphite, Sapling): small, reviewable, dependent changes.
-- **Refactoring-aware review tools** (RefactoringMiner, IDE "show refactors") detect renames and moves.
-- **cargo-semver-checks**: computes whether a Rust API change is breaking.
-
-## What still hurts
-
-- A rename across 200 files is a 200-file diff.
-- Reformatting obscures history (`git blame` breaks).
-- Diffs show *textual* change, not *behavioural* change.
-- Reviewers can't easily ask "which public APIs changed? which functions gained side effects? did
-  allocation or complexity change?"
-- Merge conflicts on code that is semantically independent.
-
-## Decisions
+## Design
 
 - **Git is assumed.** There is no custom version control system and **no required metadata**: no
   commit trailers, git notes or special comments. Everything works on any Git repository, branch or
@@ -48,7 +28,7 @@ performance regression). As agents produce more code, review becomes the bottlen
   - a **content hash per definition** (the same hash as the build-cache key,
     [`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)) for instant "unchanged" checks.
 
-  **Confidence (decided):**
+  **Confidence:**
 
   | Match | Shown as |
   |---|---|
@@ -74,8 +54,9 @@ Concise by default, most important first:
 4. **Refactors, collapsed:** renames, moves, extractions and formatting. When the canonical ASTs are
    identical after applying the detected renames, the refactor is marked **verified
    behaviour-preserving**, and reviewers can skip it.
-5. **Tests:** affected tests, listed; `--test` runs them (decided: on request, so `diff` stays fast
-   and works on any two revisions; CI's pull-request report runs them by default, configurably); optional mutation-score
+5. **Tests:** affected tests, listed; `--test` runs them. They run only on request, so `diff` stays
+   fast and works on any two revisions. CI's pull-request report runs them by default,
+   configurably. Optional mutation-score
    ([`correctness.md`: Mutation testing](correctness.md#mutation-testing)) and benchmark changes.
 6. **Suggested description:** a ready-to-paste **PR or commit description** generated from the
    report: summary, breaking changes, risk notes, testing. The user or an LLM edits and enriches it.
@@ -119,7 +100,7 @@ Output formats: terminal, **Markdown** (for pasting into a PR), and **JSON** (fo
 
 - **Git integration without metadata:**
   - a `.gitattributes` diff driver or difftool, so `git diff` can show the semantic view;
-  - an optional semantic **merge driver** that merges on the AST. It is **conservative (decided)**:
+  - an optional semantic **merge driver** that merges on the AST. It is **conservative**:
     only structurally independent changes merge automatically (different definitions, import
     lists, additions at the same place, and a rename on one side with a body edit on the other). A
     conflict inside one body falls back to an ordinary text conflict. Every automatic merge is
@@ -133,6 +114,36 @@ Output formats: terminal, **Markdown** (for pasting into a PR), and **JSON** (fo
   manifest act on the report, for example "a new `Net` or `ffi` capability in this mod needs security
   review" or "a semver-major change needs an API owner": CODEOWNERS keyed on *semantic* change rather
   than file paths.
+
+## Background
+
+### State of the art
+
+- **Git**: universal, fast, but line-based and snapshot-based; merges are textual.
+- **Difftastic / SemanticDiff / GumTree**: AST-aware diffs that ignore formatting and track moves.
+- **Unison**: code is stored by hash; names are metadata. Renames are free and never conflict.
+- **Pijul / Darcs**: patch theory, so patches commute and merges are more predictable.
+- **Jujutsu (jj)**: first-class conflicts, working copy as a commit, easy history rewriting.
+- **Stacked diffs** (Phabricator, Gerrit, Graphite, Sapling): small, reviewable, dependent changes.
+- **Refactoring-aware review tools** (RefactoringMiner, IDE "show refactors") detect renames and moves.
+- **cargo-semver-checks**: computes whether a Rust API change is breaking.
+
+### What still hurts
+
+- A rename across 200 files is a 200-file diff.
+- Reformatting obscures history (`git blame` breaks).
+- Diffs show *textual* change, not *behavioural* change.
+- Reviewers can't easily ask "which public APIs changed? which functions gained side effects? did
+  allocation or complexity change?"
+- Merge conflicts on code that is semantically independent.
+
+## Alternatives considered
+
+- **A version control system of Moddil's own** (code stored by hash as in Unison, or patches as in
+  Pijul): not taken. Git is assumed, so everything works on any Git repository and with
+  Git-compatible tools.
+- **Required metadata** (commit trailers, git notes or special comments recording identity): not
+  taken. Definition identity is inferred from the two revisions, so any branch or tag works.
 
 ## Prior art
 

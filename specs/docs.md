@@ -82,7 +82,7 @@ AST ([LLMs as first-class programmers](agent-interface.md)) instead of treating 
   (assurance level L1, [`correctness.md`: Assurance levels per mod](correctness.md#assurance-levels-per-mod));
 - attached tests, properties and benchmarks, with mutation scores ([Correctness tools in the same place](testing.md#correctness-tools-in-the-same-place)).
 
-**Coverage policy** follows the mod's assurance level (decided): at L0 every public item has a
+**Coverage policy** follows the mod's assurance level: at L0 every public item has a
 `///` doc; at L1 each also has at least one runnable example; at L2 every public function also
 documents its contracts in prose. A missing one is a compile error, and a mod may only raise its
 level.
@@ -138,9 +138,6 @@ fn remove_empty(…) { … }               // untagged private helper: inherits 
 - **Scope:** groups are local to their module. A `pub group` declared at the mod root can be used by
   every module in the mod, for themes that span modules (e.g. *Authentication* across `session`,
   `tokens` and `oauth`).
-- Alternatives considered: free-form string tags (typos silently create new groups, and the group's
-  doc has no home), blocks (one group per item, contiguous members, re-indentation), region markers
-  (positional and unchecked).
 
 **Membership rules:**
 - **Every public item belongs to at least one group**, by an explicit `#[group]`: functions, types and
@@ -193,7 +190,7 @@ this one uses and is used by. The documentation page for a module combines the t
 - Notes are attached to declarations in the AST, so they survive moves and renames, unlike comments.
 - They are shown to maintainers, reviewers and agents, and kept out of user-facing API docs.
 - This is the "intent" half of [LLMs as first-class programmers](agent-interface.md). Notes live in
-  the source (decided); *provenance* (human or agent, model version) lives in commit trailers
+  the source; *provenance* (human or agent, model version) lives in commit trailers
   ([`agent-interface.md`: Provenance, decoding and protocol](agent-interface.md#provenance-decoding-and-protocol)).
 
 ## For agents and tools
@@ -227,6 +224,14 @@ Tooling uniformity ([Tooling uniformity](toolchain.md)), which this document bui
   LSP, benchmark harness and linter, shipped with the compiler, removes endless ecosystem fragmentation.
 - **Directions.** The compiler is a library and a service; every tool (formatter, LSP, agent API,
   semantic diff, docs) uses the same front end.
+
+## Alternatives considered
+
+- **Free-form string tags instead of declared groups:** a typo silently creates a new group, and
+  the group's doc has no home.
+- **Group blocks:** an item could belong to only one group, members would have to be contiguous,
+  and tagging would re-indent code.
+- **Region markers:** positional and unchecked.
 
 ## Prior art
 
