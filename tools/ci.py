@@ -5,21 +5,25 @@ step, and the same script runs locally, so the two cannot drift.
 
     python tools/ci.py                 every step, here
     python tools/ci.py clippy test     chosen steps, here
-    python tools/ci.py quick           the quick check, while working
+    python tools/ci.py quick [AREA...] the quick check, while working: what the changes affect
     python tools/ci.py --wsl           every step inside WSL (Linux), on this same checkout
     python tools/ci.py --all           here, then inside WSL
 
 Steps: fmt, clippy, deny, test, tour, examples, links, grammars. Compatible with Python 3.8 (WSL's Ubuntu 20.04).
 
-`quick` is not one of them: it is `fmt` and the tests of every crate but the CLI's, which is the
-libraries' tests and the whole conformance suite on all four implementations, in about half a
-minute. It leaves out the CLI's tests (its commands, the projects on each runtime, the browser and
-Python tests), `random_edits`, doc tests, clippy, deny, links, `tour`, `examples` and `grammars`:
-run the steps themselves before committing.
+`quick` is not one of them: it checks what the uncommitted changes (`git status`) affect. It
+runs `cargo fmt`, the layout check on the changed `.moddil` files, the tests of each changed
+crate, and the conformance areas whose files changed (on all four implementations). It cannot
+see which areas a change to the compiler or the prelude reaches, so name them:
+`ci.py quick borrows comparison`; a target may also be a package (`moddil-mir`). It leaves out
+the CLI's tests (its commands, the projects on each runtime, the browser and Python tests),
+`random_edits`, doc tests, clippy, deny, links, `tour`, `examples` and `grammars`: run the steps
+themselves before committing.
 This script never installs anything; when a tool is missing it says how to install it.
 """
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -80,17 +84,129 @@ def step_test():
     return run("cargo", "test", "--workspace", "--doc") and ok
 
 
-def step_quick():
-    # Every crate's tests but the CLI's (`crates/moddil`), whose tests build and run whole
-    # projects, in browsers and Python too, and which needs the `moddil` binary linked.
-    if not step_fmt():
-        return False
-    if has_cargo_tool("nextest"):
-        return run("cargo", "nextest", "run", "--workspace", "--exclude", "moddil",
-                   "-E", "not test(random_edits)")
-    print("(cargo-nextest not installed; using cargo test, random_edits included. "
-          "Install it with: cargo install --locked cargo-nextest)")
-    return run("cargo", "test", "--workspace", "--exclude", "moddil", "--all-targets")
+# What `quick` cannot see the reach of: a change to these crates can affect any area.
+COMPILER = {"moddil-syntax", "moddil-sema", "moddil-mir", "moddil-interp", "moddil-refinterp",
+            "moddil-native", "moddil-wasm"}
+# Files every package depends on: a change to one runs every package's tests.
+WORKSPACE_FILES = {"Cargo.toml", "Cargo.lock", "rust-toolchain.toml"}
+SUITE = ROOT / "conformance" / "2027"
+# The suite's checks of itself (`crates/conformance/tests/suite.rs`).
+AREA_LIST_TEST = "every_area_has_a_test"
+COVERAGE_TEST = "every_reference_paragraph_is_cited"
+# Areas named by a keyword, whose tests are `r#if` and so on.
+KEYWORD_AREAS = {"if", "match", "unsafe"}
+
+
+def packages():
+    """Each crate's directory under crates/, and its package name."""
+    found = {}
+    for toml in sorted((ROOT / "crates").glob("*/Cargo.toml")):
+        m = re.search(r'^name\s*=\s*"([^"]+)"', toml.read_text(encoding="utf-8"), re.M)
+        if m:
+            found[toml.parent.name] = m.group(1)
+    return found
+
+
+def areas():
+    return sorted(p.name for p in SUITE.iterdir() if p.is_dir())
+
+
+def changed_paths():
+    """The paths `git status` lists, both sides of a rename, with forward slashes."""
+    out = subprocess.run(["git", "status", "--porcelain", "-uall"], stdout=subprocess.PIPE,
+                         universal_newlines=True, cwd=str(ROOT)).stdout
+    paths = []
+    for line in out.splitlines():
+        for part in line[3:].split(" -> "):
+            paths.append(part.strip().strip('"'))
+    return paths
+
+
+def affected(paths, targets):
+    """What `quick` runs for the changed `paths` and the named `targets`: the packages whose
+    tests run, the conformance areas, the suite's own checks, the changed `.moddil` files, and
+    notes on what it leaves to other steps."""
+    crates = packages()
+    names = set(crates.values())
+    pkgs, run_areas, meta, moddil_files, notes = set(), set(), set(), set(), set()
+    for path in paths:
+        parts = path.split("/")
+        if path.endswith(".moddil") and any(path.startswith(src + "/") for src in MODDIL_SOURCES):
+            if (ROOT / path).is_file():
+                moddil_files.add(path)
+        if path in WORKSPACE_FILES or parts[0] == ".config":
+            pkgs |= names - {"moddil"}
+        elif parts[0] == "crates" and len(parts) > 2 and parts[1] in crates:
+            name = crates[parts[1]]
+            if name == "moddil":
+                notes.add("the CLI changed: its tests run in the `test` step")
+            else:
+                pkgs.add(name)
+        elif parts[:2] == ["conformance", "2027"] and len(parts) > 3:
+            if (SUITE / parts[2]).is_dir():
+                run_areas.add(parts[2])
+            meta.add(AREA_LIST_TEST)
+        elif parts[:2] == ["reference", "grammar"]:
+            pkgs |= {"moddil-grammar", "moddil-syntax"}
+        elif parts[:3] in (["reference", "2027", "prelude"], ["reference", "2027", "core"]):
+            notes.add("the prelude or a core mod changed: name the areas it affects, "
+                      "e.g. `ci.py quick iteration`")
+        elif parts[:2] == ["reference", "2027"] and path.endswith(".md"):
+            meta.add(COVERAGE_TEST)
+        elif parts[0] in ("mods", "tour", "examples"):
+            notes.add("{}/ changed: it runs in the `test`, `tour` and `examples` steps"
+                      .format(parts[0]))
+    for t in targets:
+        if t in names:
+            pkgs.add(t)
+        else:
+            run_areas.add(t)
+    if pkgs & COMPILER and not run_areas:
+        notes.add("no conformance areas ran: name the ones your change affects, "
+                  "e.g. `ci.py quick borrows`")
+    return pkgs, run_areas, meta, sorted(moddil_files), sorted(notes)
+
+
+def bad_targets(targets):
+    names = set(packages().values())
+    known = set(areas())
+    return [t for t in targets if t not in names and t not in known]
+
+
+def step_quick(targets=()):
+    # The CLI (`crates/moddil`) is never built: its tests build and run whole projects, in
+    # browsers and Python too, and the layout check uses the formatter's example instead.
+    pkgs, run_areas, meta, moddil_files, notes = affected(changed_paths(), targets)
+    ok = run("cargo", "fmt", "--all", "--check")
+    if moddil_files:
+        ok = run("cargo", "run", "-q", "-p", "moddil-fmt", "--example", "fmt", "--",
+                 "--check", *moddil_files) and ok
+    suite = sorted(run_areas) + sorted(meta)
+    if not pkgs and not suite:
+        print("nothing the changes affect has tests here")
+    elif has_cargo_tool("nextest"):
+        filters = ["package({})".format(p) for p in sorted(pkgs)]
+        if suite:
+            filters.append("(package(moddil-conformance) & test(/^(r#)?({})$/))"
+                           .format("|".join(suite)))
+        selected = sorted(pkgs | ({"moddil-conformance"} if suite else set()))
+        args = ["cargo", "nextest", "run"]
+        for p in selected:
+            args += ["-p", p]
+        expr = "({}) & not test(random_edits)".format(" | ".join(filters))
+        ok = run(*args, "-E", expr) and ok
+    else:
+        print("(cargo-nextest not installed; using cargo test, random_edits included. "
+              "Install it with: cargo install --locked cargo-nextest)")
+        for p in sorted(pkgs):
+            ok = run("cargo", "test", "-p", p, "--all-targets") and ok
+        if suite:
+            names = ["r#" + n if n in KEYWORD_AREAS else n for n in suite]
+            ok = run("cargo", "test", "-p", "moddil-conformance", "--test", "suite", "--",
+                     "--exact", *names) and ok
+    for n in notes:
+        print("note: " + n)
+    return ok
 
 
 def step_tour():
@@ -159,14 +275,15 @@ def check_toolchain():
                  "--component rustfmt clippy".format(TOOLCHAIN))
 
 
-def run_here(steps):
+def run_here(steps, targets=()):
     check_toolchain()
     results = []
     for name in steps:
         print("\n=== {} ===".format(name), flush=True)
         start = time.time()
         try:
-            status = "ok" if STEPS[name]() else "FAILED"
+            done = STEPS[name](targets) if name == "quick" else STEPS[name]()
+            status = "ok" if done else "FAILED"
         except Skip as e:
             status = "FAILED" if IN_CI else "skipped"
             print("{}: {}".format(status, e))
@@ -182,28 +299,39 @@ def wsl_path(path):
     return "/mnt/{}{}".format(drive.rstrip(":").lower(), rest.replace("\\", "/"))
 
 
-def run_in_wsl(steps):
+def run_in_wsl(steps, targets=()):
     if os.name != "nt":
         sys.exit("--wsl runs from Windows")
     # A separate target directory on the Linux file system: Windows and Linux builds never share
     # target/, and builds avoid the slow /mnt/ file system.
     script = ("cd '{}' && CARGO_TARGET_DIR=\"$HOME/.cache/moddil-target\" "
-              "python3 tools/ci.py {}").format(wsl_path(ROOT), " ".join(steps))
+              "python3 tools/ci.py {}").format(wsl_path(ROOT), " ".join(list(steps) + list(targets)))
     print("\n##### WSL ({}) #####".format(WSL_DISTRO), flush=True)
     return subprocess.call(["wsl", "-d", WSL_DISTRO, "--", "bash", "-lc", script]) == 0
 
 
 def main(argv):
     flags = {a for a in argv if a.startswith("--")}
-    steps = [a for a in argv if not a.startswith("--")] or DEFAULT
+    words = [a for a in argv if not a.startswith("--")]
+    # The words after `quick` that are not steps are its targets: areas or packages.
+    targets = []
+    if "quick" in words:
+        after = words[words.index("quick") + 1:]
+        targets = [w for w in after if w not in STEPS]
+        words = [w for w in words if w not in targets]
+        bad = bad_targets(targets)
+        if bad:
+            sys.exit("not an area or a package: {}\n\nareas: {}".format(
+                ", ".join(bad), ", ".join(areas())))
+    steps = words or DEFAULT
     unknown = [s for s in steps if s not in STEPS] + sorted(flags - {"--wsl", "--all"})
     if unknown:
         sys.exit("unknown: {}\n\n{}".format(", ".join(unknown), __doc__))
     ok = True
     if "--wsl" not in flags:
-        ok = run_here(steps)
+        ok = run_here(steps, targets)
     if "--wsl" in flags or "--all" in flags:
-        ok = run_in_wsl(steps) and ok
+        ok = run_in_wsl(steps, targets) and ok
     return 0 if ok else 1
 
 

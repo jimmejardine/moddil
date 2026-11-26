@@ -2,9 +2,11 @@
 
 ## Checks
 
-- **While working**, after each change: `python tools/ci.py quick` (about half a minute). It runs
-  `fmt` and every crate's tests but the CLI's: the libraries' tests and the whole conformance
-  suite on all four implementations.
+- **While working**, after each change: `python tools/ci.py quick [AREA...]`. It runs what the
+  uncommitted changes affect: `cargo fmt`, the layout of the changed `.moddil` files, the tests
+  of each crate you changed, and the conformance areas whose files you changed, on all four
+  implementations. It cannot see which areas a change to the compiler or the prelude reaches:
+  name them (`python tools/ci.py quick borrows comparison`), or a package (`moddil-mir`).
 - **Before committing**: `python tools/ci.py fmt clippy links test tour examples`, the steps CI
   runs. `quick` leaves out clippy, the CLI's tests (its commands, the mods, the tour and the
   examples on each runtime, the browser and Python tests), doc tests, `tour` and `examples`.

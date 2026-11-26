@@ -65,7 +65,7 @@ tests are skipped.
 ```
 cargo build --workspace
 python tools/ci.py        # fmt, clippy, deny, test, tour, examples, links, grammars: as GitHub runs
-python tools/ci.py quick  # while working: fmt, and the library and conformance tests (~30 s)
+python tools/ci.py quick  # while working: the tests of what you changed (name areas: quick borrows)
 ```
 
 A small program, saved as `hello.moddil`:

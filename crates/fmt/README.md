@@ -10,7 +10,9 @@ formatting (`moddil lsp`). The repository's own Moddil sources are kept in its l
 let text = moddil_fmt::format(source)?;   // canonical, with `\n` line endings
 ```
 
-`cargo run -p moddil-fmt --example fmt -- file.moddil` prints a file formatted.
+`cargo run -p moddil-fmt --example fmt -- file.moddil` prints a file formatted; with `--check`,
+it lists the files not in the layout and fails (`tools/ci.py quick` checks changed files so,
+without building the CLI).
 
 ## The layout
 
