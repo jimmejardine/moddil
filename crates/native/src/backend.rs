@@ -65,7 +65,15 @@ fn lower_with<'db, M: Module>(
     module: M,
     exit: bool,
 ) -> Result<Lowered<'db, M>, String> {
-    let mut b = crate::lower::build(db, program, items, module, false)?;
+    // The modules this lowers for run one thread (WASM): atomics are plain reads and writes.
+    let mut b = crate::lower::build(
+        db,
+        program,
+        items,
+        module,
+        false,
+        crate::lower::Threads::One,
+    )?;
     let files = crate::lower::files_of(db, program);
     b.c.site_tables(&files)?;
     if exit {

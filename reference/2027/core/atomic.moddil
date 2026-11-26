@@ -1,7 +1,9 @@
 // The `core` mod's `atomic` module (`core.atomic.1`): loads, stores and read-modify-writes of a
-// value behind a raw pointer, each with a memory ordering. Every runtime runs one task at a time
-// today, so a plain read or write is already atomic and these are written with them; the
-// orderings matter once tasks run in parallel.
+// value behind a raw pointer, each with a memory ordering. Compiled code makes `load`, `store`,
+// `swap` and `cas` single atomic instructions for a value of a number type, `bool`, `char` or a
+// pointer, every one sequentially consistent (as strong as any ordering asks); the bodies here
+// are what the interpreters and a one-thread build run, where one task runs at a time and a plain
+// read or write is already atomic.
 
 // How an atomic operation is ordered against the others.
 pub enum Ordering {
@@ -14,45 +16,50 @@ pub enum Ordering {
 
 // The value `p` points to. `p` must point to a value.
 pub fn load<T: Copy>(p: *const T, order: Ordering) -> T {
-    unsafe("the caller's pointer points to a value") { *p }
+    unsafe("the caller's pointer points to a value") {
+        *p
+    }
 }
 
 // Puts `v` where `p` points, dropping what was there. `p` must point to a value.
 pub fn store<T>(p: *mut T, v: T, order: Ordering) {
-    unsafe("the caller's pointer points to a value") { *p = v; }
+    unsafe("the caller's pointer points to a value") {
+        *p = v;
+    }
 }
 
 // Puts `v` where `p` points, giving back what was there. `p` must point to a value.
 pub fn swap<T>(p: *mut T, v: T, order: Ordering) -> T {
-    unsafe("the caller's pointer points to a value") { replace(&mut *p, v) }
+    unsafe("the caller's pointer points to a value") {
+        replace(&mut *p, v)
+    }
 }
 
 // Puts `new` where `p` points if `current` is there: `Ok` with what was there if so, and `Err`
 // with it if not. `p` must point to a value.
-pub fn compare_exchange<T: Copy + PartialEq>(
-    p: *mut T,
-    current: T,
-    new: T,
-    success: Ordering,
-    failure: Ordering,
-) -> Result<T, T> {
+pub fn compare_exchange<T: Copy + PartialEq>(p: *mut T, current: T, new: T, success: Ordering, failure: Ordering) -> Result<T, T> {
+    let old = cas(p, current, new);
+    if old == current { Ok(old) } else { Err(old) }
+}
+
+// Puts `new` where `p` points if `current` is there, giving back what was there.
+fn cas<T: Copy + PartialEq>(p: *mut T, current: T, new: T) -> T {
     unsafe("the caller's pointer points to a value") {
         let old = *p;
         if old == current {
             *p = new;
-            Ok(old)
-        } else {
-            Err(old)
         }
+        old
     }
 }
 
 // Adds `v` to the integer `p` points to, giving back what was there; overflow traps. `p` must
 // point to a value.
 pub fn fetch_add(p: *mut int, v: int, order: Ordering) -> int {
-    unsafe("the caller's pointer points to a value") {
-        let old = *p;
-        *p = old + v;
-        old
+    loop {
+        let old = load(p, Ordering::Relaxed);
+        if cas(p, old, old + v) == old {
+            return old;
+        }
     }
 }

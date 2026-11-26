@@ -251,8 +251,8 @@ before and after (rc-heavy code, locks, tight loops): recorded, not gated.
   the mods: each made safe for threads or confined to one task, with the reason in the
   reference.
 - The one-thread lowering, on WASM and in a one-thread build (`runtime.md`: Starting a program):
-  plain rc counts, no safe points, locks without atomics; the conformance suite also run in that
-  build.
+  plain rc counts and no safe points (atomics already lower plainly on WASM: `Threads::One` in
+  `crates/native`); the conformance suite also run in that build.
 
 **P41. Testing the parallel runtime** (`crates/rt` tests and benches, `tools/ci.py`,
 `conformance`; L, its logic half before P38's first stage).

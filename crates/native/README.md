@@ -14,5 +14,8 @@ so both are the same code.
   failed check calls `moddil-rt` to record where, and returns "trapped", which each caller passes
   on, so a trap in a test never takes the process down.
 - **`unsafe`** is confined to `jit.rs`, which calls the finished code.
+- **Threads**: the JIT and `moddil build` lower the `core` mod's atomics (`core.atomic.1`) to
+  Cranelift's atomic instructions; the modules of [`backend`](src/backend.rs), which WASM uses, run
+  one thread (`Threads::One`) and read and write plainly.
 - The conformance suite runs every file it can natively, and its results must equal the
   interpreters'.

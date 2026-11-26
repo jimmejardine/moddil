@@ -35,8 +35,11 @@ to its value even through `&c`, and `c.into_inner()`.
 **core.atomic.1** The `core` mod's `atomic` module ([source](core/atomic.moddil)) holds the atomic
 operations on a value behind a raw pointer, each with an `Ordering` (`Relaxed`, `Acquire`,
 `Release`, `AcqRel`, `SeqCst`): `load`, `store`, `swap`, `compare_exchange` (`Ok` with the old value
-if it was the one expected and was replaced, `Err` with it if not) and `fetch_add`. Every runtime
-runs one task at a time for now, so each is as written in the source, over plain reads and writes.
+if it was the one expected and was replaced, `Err` with it if not) and `fetch_add` (overflow
+traps). On a value of a number type other than a float, `bool`, `char` or a pointer, each is atomic
+and sequentially consistent, as strong as any `Ordering` asks; on other values it is as written in
+the source, over plain reads and writes. Code that runs on one thread (WASM, the interpreters) needs
+nothing more, as one task runs at a time there.
 
 ## Diagnostics
 

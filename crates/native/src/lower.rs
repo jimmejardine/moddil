@@ -369,6 +369,17 @@ pub(crate) struct Compiler<'db, M: Module> {
     place_ids: HashMap<(u32, u32), u32>,
     /// For a release build, each compiled function's lines (`None` when not kept).
     pub(crate) lines: Option<Vec<crate::dwarf::FnLines>>,
+    /// Whether the code may run on several threads at once, and so lowers atomics as atomic
+    /// instructions.
+    threads: Threads,
+}
+
+/// How many threads the compiled code may run on at once: the lowering of atomics (`core.atomic.1`)
+/// follows it. A one-thread build, and WASM, read and write plainly.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Threads {
+    One,
+    Many,
 }
 
 /// The host's target, with the flags the code needs: `pic` for an object to link.
@@ -401,7 +412,14 @@ pub(crate) fn compile<'db>(
     }
     // C functions (`ffi.extern.1`): in the C libraries loaded for the run, then the C runtime.
     builder.symbol_lookup_fn(Box::new(moddil_ffi::lookup));
-    let mut b = build(db, program, &[item], JITModule::new(builder), false)?;
+    let mut b = build(
+        db,
+        program,
+        &[item],
+        JITModule::new(builder),
+        false,
+        Threads::Many,
+    )?;
     let mut module = b.c.module;
     module.finalize_definitions().map_err(|e| e.to_string())?;
     let e = b.entries.remove(0);
@@ -442,6 +460,7 @@ pub(crate) fn compile_object(
         &[item],
         cranelift_object::ObjectModule::new(builder),
         lines,
+        Threads::Many,
     )?;
     let mut c = b.c;
     let files = files_of(db, program);
@@ -481,6 +500,7 @@ pub(crate) fn compile_library(
         &[],
         cranelift_object::ObjectModule::new(builder),
         false,
+        Threads::Many,
     )?;
     let mut c = b.c;
     let mut targets = Vec::new();
@@ -682,6 +702,7 @@ pub(crate) fn build<'db, M: Module>(
     entries: &[Item],
     mut module: M,
     lines: bool,
+    threads: Threads,
 ) -> Result<Built<'db, M>, String> {
     let ptr = module.target_config().pointer_type();
     let mut import = |name: &str, params: &[ir::Type], ret: Option<ir::Type>| {
@@ -825,6 +846,7 @@ pub(crate) fn build<'db, M: Module>(
         places: Vec::new(),
         place_ids: HashMap::new(),
         lines: lines.then(Vec::new),
+        threads,
     };
     let mut pending = Vec::new();
     for (k, &item) in entries.iter().enumerate() {
@@ -3681,6 +3703,12 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                     self.b.switch_to_block(dead);
                     return Ok(());
                 }
+                if self.c.threads == Threads::Many && self.atomic(*func, &cargs, args, &d)? {
+                    self.set_init(dest);
+                    let b = self.block(target.index())?;
+                    self.b.ins().jump(b, &[]);
+                    return Ok(());
+                }
                 if self.c.items.fns[*func as usize].intrinsic {
                     self.intrinsic(*func, &cargs, args, &d, range, &catch)?;
                     self.set_init(dest);
@@ -5569,6 +5597,54 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             }
             _ => Err(format!("the built-in function `ffi::{name}`")),
         }
+    }
+
+    /// A call of the `core` mod's `atomic` module's `load`, `store`, `swap` or `cas`, as one
+    /// atomic instruction (`core.atomic.1`), into `d`: whether it is one, for a value of a number
+    /// type (not a float), `bool`, `char` or a pointer. Cranelift's atomics are all sequentially
+    /// consistent, as strong as any ordering asks. Other calls run the module's code.
+    fn atomic(
+        &mut self,
+        f: u32,
+        targs: &[Ty],
+        args: &[Operand],
+        d: &PlaceRef,
+    ) -> Result<bool, String> {
+        let sig = &self.c.items.fns[f as usize];
+        if sig.src != Src::Prelude || self.c.items.modules[sig.module as usize].path != ["atomic"] {
+            return Ok(false);
+        }
+        let name = sig.name.as_str();
+        if !matches!(name, "load" | "store" | "swap" | "cas") {
+            return Ok(false);
+        }
+        let t = match targs.first().map(clif_type) {
+            Some(Ok(Some(t))) if t.is_int() && t.bits() <= 64 => t,
+            _ => return Ok(false),
+        };
+        let flags = ir::MemFlagsData::trusted();
+        let p = self.value(&args[0])?;
+        let v = match name {
+            "load" => self.b.ins().atomic_load(t, flags, p),
+            "store" => {
+                let v = self.value(&args[1])?;
+                self.b.ins().atomic_store(flags, v, p);
+                return Ok(true);
+            }
+            "swap" => {
+                let v = self.value(&args[1])?;
+                self.b
+                    .ins()
+                    .atomic_rmw(t, flags, ir::AtomicRmwOp::Xchg, p, v)
+            }
+            _ => {
+                let current = self.value(&args[1])?;
+                let new = self.value(&args[2])?;
+                self.b.ins().atomic_cas(flags, p, current, new)
+            }
+        };
+        self.write(d, Val::Scalar(v))?;
+        Ok(true)
     }
 
     /// A call of the `core` mod's `ptr` module, `name`, into `d` (`core.ptr.2`): null pointers,
