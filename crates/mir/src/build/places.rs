@@ -253,18 +253,15 @@ impl Builder<'_> {
                 let base_ty = callee.args()[0].clone();
                 let b = self.temp(Ty::reference(mutable, base_ty));
                 self.cfg.assign(b, Rvalue::Ref(mutable, p));
-                let i = self.temp(Ty::Int);
-                self.eval_into(i, index);
+                // The index: an `int`, or a value of the type the impl takes (`Index<Key>`).
+                let i = self.operand(index, &[]);
                 let r = self.temp(Ty::reference(mutable, self.ty(e)));
                 let range = self.range(e);
                 self.call_into(
                     None,
                     callee,
                     Place::local(r),
-                    vec![
-                        Operand::Move(Place::local(b)),
-                        Operand::Copy(Place::local(i)),
-                    ],
+                    vec![Operand::Move(Place::local(b)), i],
                     range,
                 );
                 Place::local(r).deref()
@@ -321,6 +318,57 @@ impl Builder<'_> {
         let mut p = self.place(base);
         if self.types.field_through_borrow(e) {
             p = p.deref();
+        }
+        // Through `Index<Range>` and the like (`expr.index.trait.1`): `*base.index(a..b)`, the
+        // impl checking the range.
+        if let Some(callee @ moddil_sema::Callee::Trait { .. }) =
+            self.types.index_callee(e).cloned()
+        {
+            let mutable = self
+                .items
+                .fns
+                .get(callee.func() as usize)
+                .is_some_and(|f| f.name == "index_mut");
+            let base_ty = callee.args()[0].clone();
+            let range_ty = callee.args()[1].clone();
+            let b = self.temp(Ty::reference(mutable, base_ty));
+            self.cfg.assign(b, Rvalue::Ref(mutable, p));
+            let Ty::Adt(adt, ..) = range_ty else {
+                unreachable!("a range type")
+            };
+            let mut fields: Vec<Operand> = [start, end]
+                .into_iter()
+                .flatten()
+                .map(|x| self.operand(x, &[]))
+                .collect();
+            if inclusive {
+                fields.push(Operand::Const(Const::Bool(false)));
+            }
+            let r_val = self.temp(range_ty);
+            let path = self.items.adts[adt as usize].path(0);
+            self.cfg.assign(
+                r_val,
+                Rvalue::Aggregate(
+                    crate::AggregateKind::Adt {
+                        adt,
+                        variant: 0,
+                        path,
+                    },
+                    fields,
+                ),
+            );
+            let r = self.temp(Ty::reference(mutable, self.ty(e)));
+            self.call_into(
+                None,
+                callee,
+                Place::local(r),
+                vec![
+                    Operand::Move(Place::local(b)),
+                    Operand::Move(Place::local(r_val)),
+                ],
+                range,
+            );
+            return Place::local(r).deref();
         }
         if let Some(callee) = self.types.index_callee(e).cloned() {
             let mutable = self

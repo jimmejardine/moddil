@@ -1,15 +1,16 @@
 // Part of the prelude (`../prelude.md`): `Index`, `Deref`, `Box` and `Rc`.
 
 // Indexing: `xs[i]` on a type other than an array or slice is `*xs.index(i)`, or
-// `*xs.index_mut(i)` where the element is changed.
+// `*xs.index_mut(i)` where the element is changed. `i` is an `int` unless an impl takes another
+// type (`impl Index<Key> for Table`), and `xs[a..b]` is `Index<Range>`'s (`expr.index.trait.1`).
 
-trait Index {
+trait Index<Idx = int> {
     type Output;
-    fn index(&self, i: int) -> &Self::Output;
+    fn index(&self, i: Idx) -> &Self::Output;
 }
 
-trait IndexMut: Index {
-    fn index_mut(&mut self, i: int) -> &mut Self::Output;
+trait IndexMut<Idx = int>: Index<Idx> {
+    fn index_mut(&mut self, i: Idx) -> &mut Self::Output;
 }
 
 // Dereferencing (`type.box.1`): `*x` on a type other than a borrow is `*x.deref()`, or

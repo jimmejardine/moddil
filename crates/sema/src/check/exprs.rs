@@ -543,9 +543,10 @@ impl Checker<'_> {
                 }
             }
             // Changing an element through `IndexMut`, or a box's value through `DerefMut`: the
-            // indexed or dereferenced value is borrowed `&mut`.
-            ExprKind::Index { base, .. } | ExprKind::Deref(base)
-                if self.out.index_calls.contains_key(&e) =>
+            // indexed or dereferenced value is borrowed `&mut`; and a range of a type sliced
+            // through `Index<Range>`.
+            ExprKind::Index { base, .. } | ExprKind::Deref(base) | ExprKind::Slice { base, .. }
+                if matches!(self.out.index_calls.get(&e), Some(Callee::Trait { .. })) =>
             {
                 let bt = self.out.expr(base);
                 let bt = match self.norm(&bt) {
@@ -554,9 +555,20 @@ impl Checker<'_> {
                 };
                 let (name, method, how) = match self.body.exprs[e].kind {
                     ExprKind::Deref(_) => ("DerefMut", "deref_mut", "through `*`"),
+                    ExprKind::Slice { .. } => ("IndexMut", "index_mut", "by a range"),
                     _ => ("IndexMut", "index_mut", "by index"),
                 };
-                if let Some((tr, func)) = self.op_trait(name, method) {
+                // `IndexMut` takes the index type `Index` did (`Index<Key>`).
+                let idx: Vec<Ty> = self.out.index_calls[&e]
+                    .args()
+                    .iter()
+                    .skip(1)
+                    .cloned()
+                    .collect();
+                if let Some((mut tr, func)) = self.op_trait(name, method) {
+                    if !idx.is_empty() {
+                        tr.args = idx.clone().into();
+                    }
                     if self.solver.implements(&bt, &tr) == crate::traits::Answer::No {
                         let s = self.show(&bt);
                         self.report(
@@ -567,13 +579,9 @@ impl Checker<'_> {
                         return;
                     }
                     self.require(bt.clone(), tr, range);
-                    self.out.index_calls.insert(
-                        e,
-                        Callee::Trait {
-                            func,
-                            args: vec![bt],
-                        },
-                    );
+                    let mut args = vec![bt];
+                    args.extend(idx);
+                    self.out.index_calls.insert(e, Callee::Trait { func, args });
                 }
                 if !self.out.field_derefs.contains(&e) {
                     self.check_mutable(base, what);
@@ -829,6 +837,12 @@ impl Checker<'_> {
                 ends(self, &pos);
                 Ty::Str
             }
+            // Through `Index<Range>` and the like, for a type with an impl taking the range
+            // (`expr.index.trait.1`).
+            t if self.range_indexed(t, e, start, end) => {
+                ends(self, &Ty::Int);
+                self.range_index(e, t, start, end).unwrap_or(Ty::Error)
+            }
             t => match self.items.inherent_method(t, "as_slice") {
                 // Through its `as_slice`, or `as_mut_slice` where it is changed.
                 Some((func, args)) => {
@@ -855,6 +869,65 @@ impl Checker<'_> {
         }
     }
 
+    /// `base[a..b]` on a type `t` with an impl of `Index` for the range's type (`Range`,
+    /// `RangeInclusive`, `RangeFrom`): the element type, the call recorded; `None` if it has
+    /// none, or the range has no such type (`..b`, `..`).
+    fn range_index(
+        &mut self,
+        e: ExprId,
+        t: &Ty,
+        start: Option<ExprId>,
+        end: Option<ExprId>,
+    ) -> Option<Ty> {
+        let range_ty = self.range_ty(e, start, end)?;
+        let out = self.operator_with(
+            e,
+            self.range(e),
+            "[]",
+            t,
+            Some(&range_ty),
+            ("Index", "index"),
+        )?;
+        if let Some(c) = self.out.calls.remove(&e) {
+            self.out.index_calls.insert(e, c);
+        }
+        Some(out)
+    }
+
+    /// The type of the range in `base[a..b]` at `e`: `Range`, `RangeInclusive` or `RangeFrom`
+    /// (`..b` and `..` have none).
+    fn range_ty(&self, e: ExprId, start: Option<ExprId>, end: Option<ExprId>) -> Option<Ty> {
+        let ExprKind::Slice { inclusive, .. } = self.body.exprs[e].kind else {
+            return None;
+        };
+        let name = match (start.is_some(), end.is_some(), inclusive) {
+            (true, true, false) => "Range",
+            (true, true, true) => "RangeInclusive",
+            (true, false, _) => "RangeFrom",
+            _ => return None,
+        };
+        let adt = self.items.lang(name)?;
+        Some(Ty::Adt(adt, name.into(), Vec::new().into()))
+    }
+
+    /// Whether `t` has an impl of `Index` for the range in `base[a..b]` at `e`.
+    fn range_indexed(
+        &mut self,
+        t: &Ty,
+        e: ExprId,
+        start: Option<ExprId>,
+        end: Option<ExprId>,
+    ) -> bool {
+        let Some(range_ty) = self.range_ty(e, start, end) else {
+            return false;
+        };
+        let Some((mut tr, _)) = self.op_trait("Index", "index") else {
+            return false;
+        };
+        tr.args = vec![range_ty].into();
+        self.solver.implements(t, &tr) != crate::traits::Answer::No
+    }
+
     /// The prelude's `StrPos`, a position in text (`text.pos.1`).
     pub(super) fn strpos_ty(&self) -> Ty {
         match self.items.lang("StrPos") {
@@ -871,22 +944,50 @@ impl Checker<'_> {
             self.out.field_derefs.insert(e);
             bt = self.norm(inner);
         }
-        self.check(index, &Ty::Int);
+        match &bt {
+            Ty::Error | Ty::Infer(_) | Ty::Array(..) | Ty::Slice(_) => {
+                self.check(index, &Ty::Int);
+            }
+            _ => {}
+        }
         match &bt {
             Ty::Error => Ty::Error,
             Ty::Infer(_) => self.unknown(self.range(base), "to index it"),
             Ty::Array(t, _) | Ty::Slice(t) => (**t).clone(),
-            // Through `Index` (`expr.index.trait.1`); `IndexMut` where it is changed.
-            _ => match self.operator(e, self.range(e), "[]", &bt, ("Index", "index")) {
-                Some(t) => {
-                    if let Some(c) = self.out.calls.remove(&e) {
-                        self.out.index_calls.insert(e, c);
+            // Through `Index` (`expr.index.trait.1`); `IndexMut` where it is changed. The index
+            // is an `int` unless it is of a type the impl takes (`Index<Key>`).
+            _ => {
+                let it = self.index_type(index);
+                let r = self.range(e);
+                match self.operator_with(e, r, "[]", &bt, Some(&it), ("Index", "index")) {
+                    Some(t) => {
+                        if let Some(c) = self.out.calls.remove(&e) {
+                            self.out.index_calls.insert(e, c);
+                        }
+                        t
                     }
-                    t
+                    None => Ty::Error,
                 }
-                None => Ty::Error,
-            },
+            }
         }
+    }
+
+    /// The type of `index`, indexing a type through `Index`: an integer literal's, and one whose
+    /// type is still to be inferred, is `int`.
+    fn index_type(&mut self, index: ExprId) -> Ty {
+        if matches!(self.body.exprs[index].kind, ExprKind::Int(_)) {
+            self.check(index, &Ty::Int);
+            return Ty::Int;
+        }
+        let it = self.infer(index);
+        let it = self.norm(&it);
+        if matches!(it, Ty::Infer(_)) {
+            if !self.coerce(&it, &Ty::Int) {
+                self.mismatch(index, &Ty::Int, &it);
+            }
+            return Ty::Int;
+        }
+        it
     }
 
     pub(super) fn field(

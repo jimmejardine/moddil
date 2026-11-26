@@ -36,11 +36,6 @@ Python teams and backend teams come before the browser (decided November 2026,
   everywhere today): needs 32-bit layouts there, for pointers, borrows and `Buf`, through sema's
   `size_of`, the lowering, the runtime and the shower, with a conformance test's value per target.
 
-**P6. Arrays and iteration** (prelude `arrays` and `iter`, `crates/sema`, `crates/mir`, the
-runners; M)
-- `Index` beyond `int` (ranges as `Index`): `Index<Idx = int>`, now that type parameters have
-  defaults (`generic.default.1`).
-
 **P7. Shared and anonymous values** (`crates/sema`, the prelude's `pointers`; L)
 - `Rc<dyn Trait>`: `Rc` is the prelude's, over `*mut RcBox<T>` with `value: Option<T>`, so a
   `dyn` in it needs a struct whose last field is unsized (its size and alignment from the

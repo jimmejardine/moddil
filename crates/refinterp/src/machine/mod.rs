@@ -357,15 +357,58 @@ impl Machine<'_> {
                     indirect = true;
                 }
                 // `xs[a..b]` (`expr.slice.1`): part of the array, or of what a `Vec`'s
-                // `as_slice` gives.
+                // `as_slice` gives; or of a type with an impl of `Index` for the range's type
+                // (`expr.index.trait.1`).
                 if let ast::Expr::Range(_) = &parts[1] {
+                    let rn = parts[1].syntax();
+                    let name = if rn.token(K::DOT_DOT_EQ).is_some() {
+                        "RangeInclusive"
+                    } else if parts[1].sub_exprs().len() == 2 {
+                        "Range"
+                    } else {
+                        "RangeFrom"
+                    };
+                    let head = self.memory.load(&p).head();
+                    let of = Head::Adt(name.to_string());
+                    if let Some(m) = self
+                        .program
+                        .trait_method_by_arg("Index", &head, "index", &of)
+                    {
+                        let r = self.range_value(rn, &parts[1])?;
+                        let got =
+                            self.run_method(m, &head, vec![Value::Ref(p, false), r], range_of(e))?;
+                        let Value::Ref(q, _) = got else {
+                            unreachable!("a borrow of what the range gives")
+                        };
+                        return Ok(Some((q, true)));
+                    }
                     return Ok(Some((
                         self.slice_place(p, &parts[1], range_of(e))?,
                         indirect,
                     )));
                 }
-                let Value::Int(i) = self.eval(&parts[1])? else {
-                    unreachable!("a checked index")
+                let i = match self.eval(&parts[1])? {
+                    Value::Int(i) => i,
+                    // An index of another type an impl takes (`Index<Key>`).
+                    other => {
+                        let head = self.memory.load(&p).head();
+                        let of = self.target(other.clone()).head();
+                        let m = self
+                            .program
+                            .trait_method_by_arg("Index", &head, "index", &of)
+                            .or_else(|| self.program.trait_method("Index", &head, "index"))
+                            .expect("a checked index");
+                        let got = self.run_method(
+                            m,
+                            &head,
+                            vec![Value::Ref(p, false), other],
+                            e.syntax().text_range(),
+                        )?;
+                        let Value::Ref(q, _) = got else {
+                            unreachable!("a borrow of the element")
+                        };
+                        return Ok(Some((q, true)));
+                    }
                 };
                 // An index into part of an array is one into the array.
                 let i = if let Some((start, n)) = p.span.take() {

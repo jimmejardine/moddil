@@ -1,0 +1,89 @@
+// covers: expr.index.trait.1, generic.default.1
+
+#[derive(Clone, Copy, PartialEq)]
+enum Colour {
+    Red,
+    Green,
+}
+
+struct Palette {
+    red: int,
+    green: int,
+    names: Vec<String>,
+}
+
+// Indexed by an enum, and changed through `IndexMut` by it.
+impl Index<Colour> for Palette {
+    type Output = int;
+    fn index(&self, c: Colour) -> &int {
+        match c {
+            Colour::Red   => &self.red,
+            Colour::Green => &self.green,
+        }
+    }
+}
+
+impl IndexMut<Colour> for Palette {
+    fn index_mut(&mut self, c: Colour) -> &mut int {
+        match c {
+            Colour::Red   => &mut self.red,
+            Colour::Green => &mut self.green,
+        }
+    }
+}
+
+// And by text.
+impl Index<&str> for Palette {
+    type Output = String;
+    fn index(&self, name: &str) -> &String {
+        for n in &self.names {
+            let m: &str = n;
+            if m == name {
+                return n;
+            }
+        }
+        &self.names[0]
+    }
+}
+
+struct Words {
+    words: Vec<String>,
+    first: String,
+}
+
+// Sliced by its ranges' types.
+impl Index<Range> for Words {
+    type Output = String;
+    fn index(&self, r: Range) -> &String {
+        &self.words[r.end - r.start]
+    }
+}
+
+impl Index<RangeFrom> for Words {
+    type Output = String;
+    fn index(&self, r: RangeFrom) -> &String {
+        &self.words[r.start]
+    }
+}
+
+test "an index of the type an impl takes" {
+    let mut p = Palette { red: 1, green: 2, names: ["x".to_string(), "yy".to_string()] };
+    p[Colour::Green]  // => 2
+    ;
+    p[Colour::Red] = 7;
+    p.red  // => 7
+    ;
+    p["yy"].len()  // => 2
+    ;
+    let v = [10, 20, 30];
+    v[1]  // => 20
+}
+
+test "a range of a type with an impl for it" {
+    let w = Words { words: ["a".to_string(), "bb".to_string(), "ccc".to_string()], first: "a".to_string() };
+    w[1..3].len()  // => 3
+    ;
+    w[1..].len()  // => 2
+    ;
+    w.first.len()  // => 1
+}

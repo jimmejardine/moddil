@@ -934,7 +934,7 @@ impl Machine<'_> {
     }
 
     /// `a..b`, `a..=b` and `a..` (`expr.range.1`): values of the prelude's range structs.
-    fn range_value(&mut self, node: &SyntaxNode, e: &ast::Expr) -> Eval {
+    pub(super) fn range_value(&mut self, node: &SyntaxNode, e: &ast::Expr) -> Eval {
         let parts = e.sub_exprs();
         let mut fields = self.eval_all(&parts)?;
         let name = if node.token(K::DOT_DOT_EQ).is_some() {

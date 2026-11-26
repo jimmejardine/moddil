@@ -40,9 +40,13 @@ an error (E0205).
 **expr.index.trait.1** On another type, `a[i]` is `*Index::index(&a, i)`, or
 `*IndexMut::index_mut(&mut a, i)` where the element is changed (assigned, borrowed with `&mut`, or
 the receiver of a method taking `&mut self`); changing it through a type that does not implement
-`IndexMut` is an error (E0205). The prelude's `Index` has `type Output` and
-`fn index(&self, i: int) -> &Self::Output`, and `IndexMut: Index` has
-`fn index_mut(&mut self, i: int) -> &mut Self::Output`.
+`IndexMut` is an error (E0205). The prelude's `Index<Idx = int>` has `type Output` and
+`fn index(&self, i: Idx) -> &Self::Output`, and `IndexMut<Idx = int>: Index<Idx>` has
+`fn index_mut(&mut self, i: Idx) -> &mut Self::Output` (**generic.default.1**). The index is an
+`int`, an integer literal always, unless it is of a type the impl takes (`impl Index<Key> for
+Table`). On such a type, `a[x..y]`, `a[x..=y]` and `a[x..]` are `*Index::index(&a, r)` with `r`
+the range's value (`Range`, `RangeInclusive`, `RangeFrom`) if it has an impl for that range's
+type; arrays, slices, a `Vec` and text are sliced as they are (**expr.slice.1**).
 
 **expr.index.move.1** An element of an array or slice whose type is not `Copy` cannot be moved
 out of by indexing (E0315); it can be swapped out, replaced (`replace(&mut a[i], x)`), or cloned.
