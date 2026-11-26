@@ -111,6 +111,14 @@ differs. Under `runtime-sim`, executor placement is recorded and simulated; unde
 varied priorities: priority is per executor, and tasks within one are scheduled fairly
 ([Tasks, threads and executors](#tasks-threads-and-executors)).
 
+**Decided: a program means the same under every runtime, and is compiled the same way.** Rc
+counts, locks and safe points always use the threaded lowering, so the tests under `runtime-sim`
+run the code that ships. The exception is a *one-thread build*, set when the program is built (a
+manifest key and `--threads one`), and always on WASM. It lowers Rc counts to plain counts,
+leaves out the safe points and makes locks without atomics; `runtime::parallel` refuses it. The
+cost of the threaded lowering on one thread is a few percent at most ([`memory.md`: Biased
+reference counting](memory.md#biased-reference-counting)).
+
 ## Runtime contract
 
 Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](requirements.md#firm-requirements-decided),
@@ -186,7 +194,7 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](r
 | Issue | Moddil's answer |
 |---|---|
 | A task blocks its OS thread | All I/O goes through effects, so safe code cannot block. FFI functions are declared `blocking` and run on the `blocking` executor automatically. |
-| A long CPU loop never yields | **Decided:** preemption at compiler-inserted safe points at loop back-edges and function entries (a cheap flag check), as in Go 1.14+ and Erlang, guaranteed on `default` executors. `pinned` executors and `#[no_lock]`/`#[bounded]` hot paths can turn the checks off. The same safe points serve live update and cancellation. |
+| A long CPU loop never yields | **Decided:** preemption at compiler-inserted safe points at loop back-edges and function entries (a cheap flag check), as in Go 1.14+ and Erlang, guaranteed on `default` executors. `pinned` executors and `#[no_lock]`/`#[bounded]` hot paths can turn the checks off. The same safe points serve live update and cancellation. They are compiled in under every runtime and never fire under `runtime-sim`; a one-thread build and WASM leave them out ([Starting a program](#starting-a-program)). |
 | Thread identity, thread-local storage | Tasks migrate, so safe code has no thread-local storage. Task-local context comes from effects and handlers. Thread-affine resources require the `affine` executor (a capability). |
 | Stack memory | Native: large virtual reservations, committed lazily, with guard pages. Go-style stack copying is impossible because borrows point into frames. **wasm32 (decided):** small initial stacks (around 16 KiB) that grow in segments, never by copying; the task limit is documented, and programs needing very many tasks target wasm64 (memory64). Revisited once growable stacks are standardised in stack switching. |
 | Biased RC after migration | See the task-biased proposal in [`memory.md`: Biased reference counting](memory.md#biased-reference-counting): migration costs nothing. `pinned` executors never migrate anyway. |

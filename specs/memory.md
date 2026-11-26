@@ -258,6 +258,14 @@ lose the fast path. Instead:
 
 The remaining slow case is an rc used heavily by many tasks at once (cache-line contention), which
 biasing never addressed; borrowing does.
+
+**Decided: one lowering, plus a one-thread build.** On one thread, the owner's path costs a
+task-id compare and a plain increment or decrement over an unbiased count (about 1 to 3% on
+rc-heavy code, and 8 more header bytes). The cost that remains is under `runtime-sim`: tasks are
+still separate there, so a non-owner pays an uncontended atomic it does not need. The threaded
+lowering is still always used, so tests run the code that ships; a one-thread build, and WASM,
+make every count the owner count ([`runtime.md`: Starting a program](runtime.md#starting-a-program)). What a
+program means never depends on the runtime.
 - An rc's destructor runs on **whichever thread drops the last reference**. Destructors must not
   rely on thread identity. This is one reason linear values cannot be rc'd ([Resources: affine and linear](resources.md#resources-affine-and-linear)).
 

@@ -196,7 +196,8 @@ half, then P38's stages, with P41's benchmarks as each lands (`runtime.md`).
 - Each test under `runtime-sim` with its own seed, printed when it fails; `moddil test --seed n`
   replays one.
 - `moddil run --runtime sim|parallel` and the manifest's runtime and core counts (`parallel`
-  refused with a message until P38).
+  refused with a message until P38); the one-thread build's manifest key and `--threads one`
+  (its lowering is P40's).
 - Conformance on all four runners, which all run `runtime-sim` and so keep agreeing.
 
 **P38. The parallel runtime** (`crates/rt`, `crates/sched`, `crates/native`; L, after P37 and
@@ -230,7 +231,8 @@ WASM stays single-threaded; Web Workers come later.
 
 **P40. Hardening the language for threads** (prelude `pointers`, `mods/sync`, `crates/rt`,
 `crates/native`, `crates/mir`; L, before P38 runs two tasks at once). Each item a commit, the
-single-threaded behaviour unchanged.
+single-threaded behaviour unchanged. Each commit's message gives single-threaded benchmarks
+before and after (rc-heavy code, locks, tight loops): recorded, not gated.
 - `Rc`: biased counting (`memory.md`: Biased reference counting). The owner task's count is
   plain, the others' an atomic shared count, and a merge queue per task is drained by the
   runtime when it resumes the task and at its end. `Weak` likewise. Today `RcBox` counts with a
@@ -248,6 +250,9 @@ single-threaded behaviour unchanged.
 - An audit of every `UnsafeCell`, raw pointer and `core::atomic` use in the prelude, `core` and
   the mods: each made safe for threads or confined to one task, with the reason in the
   reference.
+- The one-thread lowering, on WASM and in a one-thread build (`runtime.md`: Starting a program):
+  plain rc counts, no safe points, locks without atomics; the conformance suite also run in that
+  build.
 
 **P41. Testing the parallel runtime** (`crates/rt` tests and benches, `tools/ci.py`,
 `conformance`; L, its logic half before P38's first stage).
