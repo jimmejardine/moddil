@@ -88,9 +88,7 @@ macros.
 - **Errors**: `compile_error(msg, span)` reports a diagnostic at a source location chosen by the
   comptime code, such as a position inside a literal. Diagnostics are structured, for agents ([LLMs as first-class programmers](agent-interface.md)).
 - **Sandboxed**: the evaluator has no ambient authority. It is the compiler's MIR interpreter
-  ([`compiler.md`: Two interpreters](compiler.md#two-interpreters)). Later, a second tier may
-  compile hot comptime functions (large derives, parser generators) to WASM and run them in
-  Wasmtime, with identical results checked in CI.
+  ([`compiler.md`: Two interpreters](compiler.md#two-interpreters)).
 - **Cached** by a hash of the function, its arguments and the reflected inputs it read. This makes it
   fit the query-based, content-addressed compiler of [Build times](build-times.md): editing a body
   does not rerun derives on unrelated types.
@@ -112,8 +110,8 @@ fn pow<const N: u32>(x: f64) -> f64 { … }                  // specialised per 
 Compile-time evaluation uses Rust's spelling ([`syntax.md`](syntax.md)): `const` generic
 parameters, `const fn`, `const { … }` blocks and `if const`. "Comptime" remains the name of the
 concept. The one exception is unrolling over reflected fields, which uses Zig's spelling,
-`inline for f in fields(t) { … }` (decided November 2026, M2 slice M2a), since Rust has no
-equivalent and `const for` would read as a loop run at compile time.
+`inline for f in fields(t) { … }`. *Why:* Rust has no equivalent, and `const for` would read as a
+loop run at compile time.
 
 Comptime values cover sizes, constants, lookup tables, format strings and specialisation. A comptime
 value can be anything with a defined compile-time representation. Borrows of compile-time data
@@ -167,56 +165,51 @@ struct Order {
   against the trait like hand-written code. The API is a full typed syntax tree, able to build any
   item a person could write. It is versioned per edition: older derives keep working through
   adapters, and migrations update them ([`evolution.md`](evolution.md)).
-- **Built first: impl templates (decided November 2026, M2 slice M2a).** Before the full
-  construction API, a derive function's body is a template: `const fn f(t: type) -> Impl<Tr> {
-  impl Tr for t { … } }`.
+- **Impl templates.** A derive function's body is a template: `const fn f(t: type) -> Impl<Tr> {
+  impl Tr for t { … } }`. *Status:* templates are what is built; the full construction API comes
+  later and builds on them, for the items that templates cannot express
+  ([`reference/2027/comptime.md`](../reference/2027/comptime.md)).
   - A trait names its derive with `#[derive_by(f)]`.
   - Instantiation: names resolve where the template is written, `t` and `Self` are the struct,
     and the result is checked like hand-written code.
   - In the template, `inline for f in fields(t) { … }` unrolls over the struct's fields, and
     `f.name`, `x.[f]`, `[f]: e`, `f.is_refined()` and `f.new(e)` reflect each one.
   - `if const` chooses by reflection, and only the branch chosen is compiled.
-  - The construction API comes later and builds on this, for enums, generic types and impls
-    that templates cannot express ([`reference/2027/comptime.md`](../reference/2027/comptime.md)).
-- **Templates for built-in types: `#[derive_for]` (decided 24 November 2026).** A built-in type
-  such as `i8` has no declaration to put `#[derive]` on. So a derive function can list the types
-  it is for: `#[derive_for(i8, i16, …)] const fn int_add(t: type) -> Impl<Add> { … }`. The impl is
-  written once, and the types it is made for are written in the same place. Generation stays
-  visible at one annotation, typed and checked like any template. It replaced about 1,100 lines of
-  per-type impls in the prelude (`prelude/numbers.moddil`). It is prelude-only for now: user
-  types keep `#[derive]` at their declaration.
-- **Templates for generic structs (decided 24 November 2026).** A template's derive for a generic
-  struct bounds each type parameter by the trait, as the built-in derives do (`impl<T: Tr> Tr for
-  S<T>`), in place of the I0001 it was.
-- **Templates for fieldless enums (decided 24 November 2026).** A template reflects on an enum
-  by its variants: `inline for v in variants(t)`, `v.name`, `v.is(x)` and `v.make()`, and
-  `if const t.is_enum()` lets one template serve structs and enums. Every variant must be a unit
-  variant for now. That covers C-like enums (serde, display and parse by name, variant lists)
-  with no new syntax.
-- **Variants with fields (decided 24 November 2026).** `inline for f in fields(v)` reflects a
-  variant's fields. `x.[f]` reads one through a borrow (a match on the variant, trapping on
-  another), and `v { [f]: e, … }` builds the variant, of any shape. `v.index`, `t.name`, and
-  `is_unit()`/`is_positional()` of `t` and `v` in `if const` give what `Debug`, `Hash` and the
-  orderings need. Templates cannot bind fields in patterns, so a variant is chosen by `v.is(x)`
-  rather than by a match: an if chain, one test per variant.
-- **The built-in derives are prelude templates (decided 24 November 2026).** `Clone`,
-  `PartialEq`, `PartialOrd`, `Ord`, `Hash`, `Debug` and `Default` are derived by templates in
-  `prelude/derives.moddil`, named by `#[derive_by]` on each trait. That replaced the generators in
-  `crates/sema/src/derive.rs`. `Copy`, `Eq` and a `Copy` type's `*self` clone stay built in. The
-  reference interpreter keeps its structural derives, so the conformance suite compares the two.
-  Every field must still implement the trait, checked at the `#[derive]`.
-- **`if v.is(x)` compiles to a match (decided 24 November 2026).** In a template, `if v.is(x) {
-  a } else { b }` (`x` a name) lowers to `match x { V { … } => a, _ => b }`, and an `inline for v
-  in variants(t)` whose block is only such an `if` lowers to one match with an arm per variant.
-  In `a`, `x.[f]` reads the arm's binding, with no second match. With `if const v == w`, the
-  comparison derives match `self` and then `other`, as the generated code did. A loop of derived
-  `==`, `clone`, `cmp` and `hash` on an enum and a struct ran about 7% slower with if chains, and
-  about 3% slower (within the noise of the measurement) with these matches, than with the old
-  generators.
-- **Tuples in `#[derive_for]` (decided 24 November 2026).** `#[derive_for(tuples(2..=12))]`
-  makes a template's impl for each size of tuple, with every element type bounded. A tuple's
-  elements reflect as fields named `0`, `1`, …, so the prelude's `Clone`, `Debug` and `Hash` for
-  tuples are one template each, in place of about 380 lines of impls written per size.
+- **Generic structs.** A template's derive for a generic struct bounds each type parameter by the
+  trait, as the built-in derives do (`impl<T: Tr> Tr for S<T>`).
+- **Enums.** A template reflects on an enum by its variants: `inline for v in variants(t)`,
+  `v.name`, `v.is(x)` and `v.make()`, and `if const t.is_enum()` lets one template serve structs
+  and enums. That covers C-like enums (serde, display and parse by name, variant lists) with no
+  new syntax.
+  - `inline for f in fields(v)` reflects a variant's fields. `x.[f]` reads one through a borrow (a
+    match on the variant, trapping on another), and `v { [f]: e, … }` builds the variant, of any
+    shape.
+  - `v.index`, `t.name`, and `is_unit()`/`is_positional()` of `t` and `v` in `if const` give what
+    `Debug`, `Hash` and the orderings need.
+  - Templates cannot bind fields in patterns, so a variant is chosen by `v.is(x)` rather than by a
+    match.
+- **`if v.is(x)` compiles to a match.** In a template, `if v.is(x) { a } else { b }` (`x` a name)
+  lowers to `match x { V { … } => a, _ => b }`, and an `inline for v in variants(t)` whose block
+  is only such an `if` lowers to one match with an arm per variant. In `a`, `x.[f]` reads the
+  arm's binding, with no second match. With `if const v == w`, the comparison derives match
+  `self` and then `other`. *Why:* a loop of derived `==`, `clone`, `cmp` and `hash` on an enum and
+  a struct runs about 3% slower with these matches (within the noise of the measurement) than
+  with generators built into the compiler, against about 7% with an if chain of tests.
+- **Templates for built-in types: `#[derive_for]`.** A built-in type such as `i8` has no
+  declaration to put `#[derive]` on, so a derive function can list the types it is for:
+  `#[derive_for(i8, i16, …)] const fn int_add(t: type) -> Impl<Add> { … }`. The impl is written
+  once, and the types it is made for are written in the same place. Generation stays visible at
+  one annotation, typed and checked like any template. The prelude's numeric impls
+  (`prelude/numbers.moddil`) are made this way. `#[derive_for]` is prelude-only: user types use
+  `#[derive]` at their declaration.
+  - `#[derive_for(tuples(2..=12))]` makes a template's impl for each size of tuple, with every
+    element type bounded. A tuple's elements reflect as fields named `0`, `1`, …, so the prelude's
+    `Clone`, `Debug` and `Hash` for tuples are one template each.
+- **The built-in derives are prelude templates.** `Clone`, `PartialEq`, `PartialOrd`, `Ord`,
+  `Hash`, `Debug` and `Default` are derived by templates in `prelude/derives.moddil`, named by
+  `#[derive_by]` on each trait. `Copy`, `Eq` and a `Copy` type's `*self` clone stay built in. The
+  reference interpreter keeps structural derives, so the conformance suite compares the two.
+  Every field must implement the trait, checked at the `#[derive]`.
 - **Derives can depend on each other.** Derives are compiler queries: a derive may ask whether
   `T: Eq` holds, which runs that derive first, and a cycle is a compile error that shows it. A derive
   sees which traits are implemented, never another derive's generated body.
@@ -232,7 +225,7 @@ struct Order {
 
 ## Function wrappers
 
-**Decided: `#[around(w)]` wraps a function in an ordinary generic function `w`.** This covers
+`#[around(w)]` wraps a function in an ordinary generic function `w`. This covers
 what Rust's attribute macros are best at (entry and exit logging, permission checks, timing,
 retries, memoisation) without rewriting tokens.
 
@@ -449,6 +442,29 @@ Generated code is ordinary code once expanded:
 | [Hashiverse](examples/hashiverse.md) | Wire-protocol codecs that must match existing Rust servers; comptime crypto constant tables; `fmt` for logs |
 
 None of them needed token-level macros.
+
+## Open questions
+
+- **A compiled tier for comptime.** Hot comptime functions (large derives, parser generators)
+  might be compiled to WASM and run in Wasmtime, as a second tier beside the MIR interpreter, with
+  CI checking that both give identical results. Whether to add it is not settled.
+
+## Alternatives considered
+
+- **Token-level macros** (`macro_rules!`, proc macros, a preprocessor): opaque to IDEs, reviewers
+  and LLMs, slow and poorly cached, and proc macros run arbitrary code at build time.
+- **Duck-typed generics** (Zig's `anytype`, C++ templates): errors appear at instantiation inside
+  library code, and a signature does not say what it requires.
+- **Checking `sql"…"` against a live database** (`sqlx::query!`): compile-time I/O breaks
+  determinism and the sandbox; an embedded schema file is used instead.
+- **`const for`** for unrolling over reflected fields: it would read as a loop run at compile
+  time.
+- **An if chain, one `v.is(x)` test per variant**: derived code ran about 7% slower than the
+  compiler's generators; lowering to a match brings it within the noise.
+- **Derives generated by the compiler** (`crates/sema/src/derive.rs`): the built-in derives are
+  prelude templates instead, and the reference interpreter's structural derives check them.
+- **Impls written per type and per tuple size in the prelude**: about 1,100 lines of numeric
+  impls and 380 lines of tuple impls, replaced by `#[derive_for]` templates written once.
 
 ## Prior art
 

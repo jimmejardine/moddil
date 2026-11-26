@@ -109,7 +109,7 @@ trap: assertion failed: fee(amount) + amount == 260
 - **A reason comes with strings:** `assert(cond, "reason")` adds a message
   ([`roadmap.md`](roadmap.md#on-the-horizon)).
 - **It always runs, in every build**, like overflow checks (D5 in
-  [`error-handling.md`](error-handling.md#decisions-so-far)), and is never compiled out as C's
+  [`error-handling.md`](error-handling.md#the-rules-in-brief)), and is never compiled out as C's
   `NDEBUG` does. Optimisation may remove one only when it is proven redundant
   ([`mir.md`: Explicit checks](mir.md#explicit-checks)). Contracts differ: the `Contracts` policy
   can strip them per scope ([`correctness.md`](correctness.md#checking-policy-the-contracts-handler)).

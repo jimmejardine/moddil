@@ -67,8 +67,8 @@ literals (`KEYWORD`, `PUNCT`) is a choice of terminals.
 
 1. **[`inventory.md`](inventory.md)** lists every decided construct, the spec that decides it and an
    example. It is the grammar's checklist.
-2. Conflicts and undecided spellings it finds become open questions in
-   [`specs/syntax.md`](../../specs/syntax.md#open-questions) and are decided there.
+2. Conflicts and undecided spellings it finds are settled in
+   [`specs/syntax.md`](../../specs/syntax.md) (its open questions, while one is open).
 3. Only then does a construct go into `moddil.ebnf`, so the grammar holds decided syntax only.
 
 ## Rules

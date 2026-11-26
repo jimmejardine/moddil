@@ -37,7 +37,7 @@ Units of measure are in [`units.md`](units.md).
 | **Decimals** | **C#** `decimal` (128-bit); **Java** `BigDecimal`; IEEE 754-2008 decimal128; scaled integers (fixed point) in trading systems. |
 | **Layout** | **Zig** `MultiArrayList`; **Jai** built-in SoA; Rust `#[repr(C)]`, `#[repr(packed)]`. |
 
-## Decisions
+## Specification
 
 ### Integer types
 
@@ -51,7 +51,7 @@ Units of measure are in [`units.md`](units.md).
   target arrives. A lint flags them in cross-target code ([`determinism.md`: Sources of nondeterminism](determinism.md#sources-of-nondeterminism)).
 - **Arbitrary widths** such as `u3` and `i24`, as in Zig ([`freestanding.md`: Hardware access](freestanding.md#hardware-access)).
   They give exact ranges as types (a `u3` holds 0 to 7 and traps beyond it) and bit-packed
-  registers, packets and compact state without hand-written masks. Decided (November 2026):
+  registers, packets and compact state without hand-written masks:
   - an odd width is **stored in the next standard size** (`u3` in a byte, `i24` in four), and
     packed to its bits only in a `#[repr(packed)]` struct, so a typo never changes a layout
     silently;
@@ -76,7 +76,7 @@ Units of measure are in [`units.md`](units.md).
 - **Cost**: typically 1–5% in integer-heavy code before optimisation. Checks are removed where
   range analysis or refinements prove that overflow can't happen (loop counters bounded by a
   length, values of `type Percent = u8 where self <= 100`).
-- **No opt-out (decided):** overflow checks are never turned off, not per build, per mod or per
+- **No opt-out:** overflow checks are never turned off, not per build, per mod or per
   block; there is no `unchecked` region. The only exits are:
   - explicit wrapping (`+%`, `Wrapping<T>`), where wrapping is the intended meaning;
   - checks the compiler removes because it can prove they never fire: range analysis, refinements,
@@ -108,7 +108,7 @@ for i in (0..xs.len()).rev() { … }
   - `let p: Fixed<2> = 0.10` is exactly ten cents;
   - `let x: f64 = 0.1` rounds to the nearest double, as always.
 - Without other constraints, integer literals are `int` and fractional literals are `f64`.
-- **No type suffixes (decided):** Rust's `0u8` and `1.5f32` are not used; a literal gets its type
+- **No type suffixes:** Rust's `0u8` and `1.5f32` are not used; a literal gets its type
   from an annotation or its context (`let d: u8 = 0`), so there is one spelling.
 - This is comptime evaluation applied to numbers ([`comptime.md`](comptime.md)).
 
@@ -144,7 +144,7 @@ for i in (0..xs.len()).rev() { … }
   and `Hash`, so it can be sorted and used as a map key. Constructing one from an `f64` is checked
   ([`correctness.md`](correctness.md)).
 - Float division by zero gives ±∞ or NaN, as IEEE says; only integer division traps.
-- **Float functions are methods (decided):** `x.sqrt()`, `y.atan2(x)`, `r.powf(n)`, `t.sin()`,
+- **Float functions are methods:** `x.sqrt()`, `y.atan2(x)`, `r.powf(n)`, `t.sin()`,
   `a.max(b)`, `v.clamp(lo, hi)` and the rest are inherent methods on `f32` and `f64` in the
   prelude, so numeric code needs no import, on the CPU or in kernels. They are correctly rounded
   ([`determinism.md`: Deterministic maths](determinism.md#deterministic-maths)); the faster
@@ -162,12 +162,12 @@ In `moddil/decimal`:
   - Overflow traps, like integers.
 - **`BigDecimal`**: arbitrary precision with explicit rounding contexts, for accounting.
 - Exact literals ([Exact literals](#exact-literals)) make `let price: Fixed<4> = 101.2550` safe.
-- **Rounding is always stated (decided).** `+`, `-` and widening `*` are exact and take no mode.
+- **Rounding is always stated.** `+`, `-` and widening `*` are exact and take no mode.
   Anything that can lose digits takes an explicit `Round` mode: rescaling to a smaller scale,
   division (`a.div::<4>(b, Round::HalfEven)`), conversion from a float, and `BigDecimal` operations
   bounded by a precision. There is no default and no ambient context (unlike Python's `decimal`), and
   a type alias cannot carry a mode: as with [conversions](#conversions), nothing is lost silently.
-- **One `Round` enum (decided)**, in core, shared by `Fixed`, `BigDecimal` and float-to-integer
+- **One `Round` enum**, in core, shared by `Fixed`, `BigDecimal` and float-to-integer
   conversion: `HalfEven`, `HalfUp`, `HalfDown`, `HalfAwayFromZero`, `TowardZero`, `AwayFromZero`,
   `Floor`, `Ceiling`. The documentation names the IEEE 754 equivalents (`HalfEven` is
   roundTiesToEven, `TowardZero` is roundTowardZero, and so on).
@@ -194,19 +194,17 @@ let notional = (price * qty).rescale::<2>(Round::HalfEven);  // Fixed<2>[USD]
 ### Data layout
 
 - **Field order**: the compiler may reorder fields to reduce padding, unless the type is
-  `#[repr(C)]`. The native backend puts them largest alignment first, ties in the order declared
-  (decided November 2026, M1 slice C1).
+  `#[repr(C)]`. The native backend puts them largest alignment first, ties in the order declared.
 - **Niches**: an enum with one variant that holds data, the others none, stores the others in
   that data's invalid values when it has some: a `bool`'s 2 to 255, a `char` past U+10FFFF, a
   borrow's null, an enum tag's unused values. So `Option<&T>` is a pointer and `Option<bool>` a
   byte. Other enums put a tag, the smallest integer that numbers the variants, before the
-  largest variant's payload (decided November 2026, M1 slice C1).
+  largest variant's payload.
 - **Borrows of unsized values** are two words: the address, then a `str`'s or slice's length, or
-  a `dyn` value's vtable. A `&[dyn Trait]` is three: the address, the length, the vtable
-  (decided November 2026, M1 slices C2 and C3).
+  a `dyn` value's vtable. A `&[dyn Trait]` is three: the address, the length, the vtable.
 - **`Buf<T>`** is three words: its memory's address, its length and its capacity. A
   `Buf<dyn Trait>`, a `Box<dyn Trait>`'s, has its vtable as a fourth. A closure is laid out as
-  the tuple of what it captures (decided November 2026, M1 slice C3).
+  the tuple of what it captures.
 - **Packed structs and bitfields** with arbitrary-width integers
   ([`freestanding.md`: Hardware access](freestanding.md#hardware-access)).
 - **Endian types** `u16be`, `u32le` and so on, for wire formats and zero-copy views over network
@@ -221,7 +219,7 @@ let notional = (price * qty).rescale::<2>(Round::HalfEven);  // Fixed<2>[USD]
 Units are a type-level feature (`f64[m/s]`, `i64[ns]`, `100[cm]`), defined in
 [`units.md`](units.md).
 
-**Decided: units are written in square brackets**, after the number or the type: `101.2550[USD]`,
+**Units are written in square brackets**, after the number or the type: `101.2550[USD]`,
 `f64[m]`, `Fixed<4>[USD]`, `Simd<f32, 8>[m]`, `BigDecimal[USD]`. Angle brackets are only for generic
 arguments ([`units.md`: Why square brackets](units.md#why-square-brackets)).
 
@@ -234,11 +232,24 @@ arguments ([`units.md`: Why square brackets](units.md#why-square-brackets)).
 | [Web store](examples/web-store.md) | `Fixed<2>` or `BigDecimal` for money; exact literals for prices |
 | [Hashiverse](examples/hashiverse.md) | `Wrapping<u64>` hashes; `u32be` wire formats; `BigInt` where cryptography needs it |
 
-## Directions (not yet decided)
+## Open questions
 
-- Overflow-check elision through range analysis and refinements, with the remaining checks shown
-  in `moddil explain`.
-- An `f128` type.
+- Whether `moddil explain` also shows the overflow checks that range analysis and refinements
+  leave in place, alongside `moddil perf checks`.
+- Whether to add an `f128` type.
+
+## Alternatives considered
+
+- **Wrapping in release builds, as Rust does:** `+` would mean different things in different
+  builds, so overflow traps in every build.
+- **An opt-out (`unchecked` regions, or turning checks off per build or mod):** `+` would no
+  longer mean the same thing in every file; wrapping operators and proven elision cover the need.
+- **Unsigned lengths and indices (`usize`):** `len - 1` on an empty collection wraps to a huge
+  number.
+- **Literal type suffixes (`0u8`, `1.5f32`):** a second spelling for the same thing.
+- **`as` for numeric conversions:** it truncates and saturates silently.
+- **A default or ambient rounding context, as in Python's `decimal`:** digits would be lost
+  without the code saying how.
 
 ## Prior art
 

@@ -2,6 +2,9 @@
 
 ## Summary
 
+This document gives `unsafe` its meaning: what needs it, what its contracts are, which undefined
+behaviour it can reach, and how it is checked and reviewed.
+
 | Rule | One line |
 |---|---|
 | **Contained, not contagious** | A safe function may use `unsafe` inside and still be safe to call; visibility comes from the mod's `unsafe` capability, audits and diffs. |
@@ -13,33 +16,7 @@
 | **Part of the security model** | Safe code's authority is bounded by its capabilities only if `unsafe` code is correct; that is why `unsafe` is trusted, visible and reviewed ([`security.md`](security.md)). |
 | **Human review by default** | New or changed `unsafe` and `ffi` code needs a human reviewer under the default `vet` policy. |
 
-## Problem
-
-- `unsafe` appears throughout the specs as a capability and an escape hatch, but its meaning is
-  undefined.
-- **C and C++** have hundreds of kinds of undefined behaviour, most of them reachable from ordinary
-  code.
-- **Rust** limits UB to `unsafe`, but its aliasing model (Stacked Borrows, now Tree Borrows) is hard
-  for humans, and harder for LLMs, to reason about. Its safety obligations are free-text
-  `// SAFETY:` comments that no tool can check.
-- **Unsafe code in dependencies** is rarely reviewed: a single mistake deep in the graph undermines
-  every guarantee above it.
-
-## State of the art
-
-| System | What it does well | Limits |
-|---|---|---|
-| **Rust** | `unsafe` blocks, functions, traits and impls; since the 2024 edition an `unsafe fn` body still needs blocks; strict provenance (stable since 1.84); Miri finds UB in tests | Tree Borrows is subtle; `// SAFETY:` comments are unchecked; Miri is slow and opt-in |
-| **Zig** | "Illegal behaviour" checked at runtime in Debug and ReleaseSafe; `noalias` is explicit | No `unsafe` keyword: unsafe operations aren't marked |
-| **C** | `restrict`; type-based aliasing | Hundreds of kinds of UB; unsafe everywhere |
-| **Verus, Kani, Prusti** | Safety conditions as contracts, proved or model-checked | Annotation effort |
-| **Sanitizers** (ASan, TSan, UBSan) | Find memory errors and races at runtime | Partial coverage; overhead |
-| **CHERI** | Provenance enforced in hardware | Special hardware |
-| **cargo-geiger, cargo-vet** | Count and review `unsafe` in dependencies | Opt-in, outside the compiler |
-
-## Decisions
-
-### What needs `unsafe`
+## What needs `unsafe`
 
 | Operation | Why |
 |---|---|
@@ -52,7 +29,7 @@
 | GPU scatter writes ([`accelerators.md`](accelerators.md)) | Writes may race |
 | Inline assembly (also needs the `asm` capability, [`freestanding.md`](freestanding.md)) | The compiler can't see what it does |
 
-### Contained, not contagious
+## Contained, not contagious
 
 - **`unsafe` does not propagate to callers.** A safe function that uses `unsafe` inside, such as
   `Vec::push`, is safe to call. That is what makes safe abstractions possible.
@@ -63,7 +40,7 @@
 - Inside an `unsafe fn`, each unsafe operation still needs its own `unsafe` block (the Rust 2024
   rule), so the dangerous lines stay marked.
 
-### Safety contracts
+## Safety contracts
 
 An `unsafe fn` states what its caller must guarantee as **`requires` clauses**
 ([`correctness.md`: Contracts as syntax](correctness.md#contracts-as-syntax)), and every `unsafe`
@@ -86,16 +63,16 @@ fn append(buf: &mut Vec<u8>, data: &[u8]) {
 
 - The preconditions are **checked at runtime** in debug builds and checker runs. In release builds
   they follow the contract-checking policy; preconditions written **`requires always`** are checked
-  in every build (decided, [`correctness.md`: Checking policy: the `Contracts` handler](correctness.md#checking-policy-the-contracts-handler)).
+  in every build ([`correctness.md`: Checking policy: the `Contracts` handler](correctness.md#checking-policy-the-contracts-handler)).
   Null and alignment checks are debug-only.
-- **Citations (decided):** a `requires` clause may be named (`valid:` above), and a justification
+- **Citations:** a `requires` clause may be named (`valid:` above), and a justification
   may cite names (`unsafe("valid: …")`). Tools link each claim to the obligation it discharges, a
   lint flags named preconditions that no block cites, and the verifier knows what each block claims.
 - They can be **proved** later by the verifier
   ([`correctness.md`: Proofs in Moddil itself](correctness.md#proofs-in-moddil-itself)).
 - The justification is required: an `unsafe` block without one is a compile error.
 
-### The closed list of undefined behaviour
+## The closed list of undefined behaviour
 
 Undefined behaviour exists **only inside `unsafe`**, and only these kinds:
 
@@ -113,7 +90,7 @@ Undefined behaviour exists **only inside `unsafe`**, and only these kinds:
 Everything else is **defined or traps**: integer overflow, division, bounds and float behaviour are
 specified in [`error-handling.md`](error-handling.md) and [`numerics.md`](numerics.md).
 
-### Aliasing: the scoped-borrow model
+## Aliasing: the scoped-borrow model
 
 Moddil's borrows are **second-class**: they cannot be stored, so every borrow has a lexical scope
 ([`memory.md`: Borrowing](memory.md#borrowing)). That makes the aliasing
@@ -126,8 +103,8 @@ rules much simpler than Rust's:
   - While a `&` is in scope, **no write** to that memory may happen.
 - The optimiser may assume `noalias` for borrows during their scope, as it does for safe code.
 - Views and owning views follow the borrow they were made from
-  ([`memory.md`: View types](memory.md#view-types)). **A view that outlives its `unsafe` block
-  (decided)** keeps the borrow alive until the view's own scope ends: no conflicting access to that
+  ([`memory.md`: View types](memory.md#view-types)). **A view that outlives its `unsafe` block**
+  keeps the borrow alive until the view's own scope ends: no conflicting access to that
   memory may happen meanwhile, through any pointer. Views are second-class, so that scope is lexical,
   and the checker verifies it. This is what makes zero-copy `FromBytes` views over raw buffers safe to
   hand to safe code.
@@ -140,7 +117,7 @@ unsafe("p is valid and uniquely owned here") {
 }                                   // r's scope ends: raw access through p or q is fine again
 ```
 
-### Strict provenance
+## Strict provenance
 
 - Every pointer carries **provenance**: which allocation it may access.
 - **`ptr.addr()`** (pointer to integer) and **`ptr.with_addr(a)`** (integer back to a pointer, keeping
@@ -148,14 +125,14 @@ unsafe("p is valid and uniquely owned here") {
 - Safe code never observes an address
   ([`determinism.md`: Sources of nondeterminism](determinism.md#sources-of-nondeterminism)).
 
-### Unsafe traits
+## Unsafe traits
 
 An `unsafe trait` has an invariant the compiler can't check, so implementing it needs `unsafe impl`.
 Example: **`FromBytes`**, "every bit pattern of the right size is a valid value", which zero-copy
 views rely on ([`memory.md`: Zero-copy I/O](memory.md#zero-copy-io)).
 Derives can implement it safely when they can check the invariant from the type's fields.
 
-### Checking
+## Checking
 
 | When | What is checked |
 |---|---|
@@ -167,13 +144,13 @@ Derives can implement it safely when they can check the invariant from the type'
 - **The checker must pass before `moddil publish`** tags a release of a mod with the `unsafe`
   capability. Audits show the release as checked.
 - Locally it is `moddil test --check-unsafe`; CI runs it on changed unsafe code.
-- **Incremental and cached (decided).** Only tests that reach `unsafe` code run under the checker
+- **Incremental and cached.** Only tests that reach `unsafe` code run under the checker
   (test-impact analysis, [`testing.md`: Test impact and caching](testing.md#test-impact-and-caching)),
   and results are cached per function hash, so a publish re-checks only unsafe paths changed since
   the last checked release. The published budget: a typical mod's checker run takes under ten minutes
   in CI; a mod that is slower splits its unsafe core into a mod of its own.
 
-### Review and audit
+## Review and audit
 
 - **`moddil audit`** lists every `unsafe` block in a mod and its dependencies, with its
   justification.
@@ -183,7 +160,7 @@ Derives can implement it safely when they can check the invariant from the type'
   ([`packages-and-supply-chain.md`: Audit trail in git](packages-and-supply-chain.md#audit-trail-in-git)).
   Agent reviews are recorded but don't satisfy it. A project can relax the policy explicitly.
 
-### Where `unsafe` lives
+## Where `unsafe` lives
 
 The goal is that **almost no application mod needs `unsafe`**. Collections, sync cells, allocators,
 runtimes and FFI wrappers live in audited standard mods
@@ -203,6 +180,44 @@ required, the `unsafe` capability in the manifest, and the `core` mod's `ptr`, `
 | [HFT](examples/hft-platform.md) | Kernel-bypass networking and `FromBytes` wire views in a small, human-reviewed, checker-verified mod |
 | [Web store](examples/web-store.md) | No `unsafe` at all; dependencies that hold it are flagged in audits |
 | [Hashiverse](examples/hashiverse.md) | Crypto through FFI wrappers with safety contracts; human review of every unsafe delta |
+
+## Background
+
+### Problem
+
+- `unsafe` appears throughout the specs as a capability and an escape hatch, and needs a precise
+  meaning.
+- **C and C++** have hundreds of kinds of undefined behaviour, most of them reachable from ordinary
+  code.
+- **Rust** limits UB to `unsafe`, but its aliasing model (Stacked Borrows, now Tree Borrows) is hard
+  for humans, and harder for LLMs, to reason about. Its safety obligations are free-text
+  `// SAFETY:` comments that no tool can check.
+- **Unsafe code in dependencies** is rarely reviewed: a single mistake deep in the graph undermines
+  every guarantee above it.
+
+### State of the art
+
+| System | What it does well | Limits |
+|---|---|---|
+| **Rust** | `unsafe` blocks, functions, traits and impls; since the 2024 edition an `unsafe fn` body still needs blocks; strict provenance (stable since 1.84); Miri finds UB in tests | Tree Borrows is subtle; `// SAFETY:` comments are unchecked; Miri is slow and opt-in |
+| **Zig** | "Illegal behaviour" checked at runtime in Debug and ReleaseSafe; `noalias` is explicit | No `unsafe` keyword: unsafe operations aren't marked |
+| **C** | `restrict`; type-based aliasing | Hundreds of kinds of UB; unsafe everywhere |
+| **Verus, Kani, Prusti** | Safety conditions as contracts, proved or model-checked | Annotation effort |
+| **Sanitizers** (ASan, TSan, UBSan) | Find memory errors and races at runtime | Partial coverage; overhead |
+| **CHERI** | Provenance enforced in hardware | Special hardware |
+| **cargo-geiger, cargo-vet** | Count and review `unsafe` in dependencies | Opt-in, outside the compiler |
+
+## Alternatives considered
+
+- **`unsafe` that propagates to callers:** safe abstractions such as `Vec::push` would be
+  impossible; visibility comes from the capability, audits and the semantic diff instead.
+- **Free-text `// SAFETY:` comments** (Rust): no tool can check them; `requires` clauses and cited
+  justifications can be checked and later proved.
+- **An aliasing model like Stacked or Tree Borrows** (Rust): hard for humans, and harder for LLMs,
+  to reason about; second-class borrows allow a lexical-scope model.
+- **No `unsafe` keyword** (Zig): unsafe operations would not be marked.
+- **An opt-in UB checker** (Miri): the checker must pass before a mod with the `unsafe` capability
+  is published.
 
 ## Prior art
 

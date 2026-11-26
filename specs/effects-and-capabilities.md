@@ -47,11 +47,11 @@
 | **Java checked exceptions** | Failure in signatures | The lesson: no polymorphism, so lambdas and generics broke, and people wrapped everything in unchecked exceptions |
 | **E, Austral, WASI** | Object capabilities: authority only by holding a reference | Austral and E are small; WASI covers the host boundary only |
 
-## Decisions
+## Design
 
 ### Effects are traits passed implicitly
 
-**Decided: there is no separate `effect` construct. An effect is any trait listed after `with`.**
+There is no separate `effect` construct. **An effect is any trait listed after `with`.**
 
 ```rust
 trait Time {
@@ -75,7 +75,7 @@ with Time = sim.clock(node) {          // installs a handler for this block
 - **Found by trait type.** `with Time = value { … }` installs `value` (whose type implements `Time`)
   for the block, and the innermost one wins. Lookup is by the **exact trait**: a `DbInput` handler
   does not satisfy `with Db`, even though `DbInput: Db`
-  ([Two handlers of one trait](#two-handlers-of-one-trait)).
+  ([Two handlers of one trait](#two-handlers-of-one-trait)). Handlers are scoped, not global
   ([`determinism.md`: Handlers are scoped, not global](determinism.md#handlers-are-scoped-not-global)).
   This is Scala's `using`/`given`, resolved by dynamic scope rather than by imports.
 - **Named when used, bare when passed through.** `with time: Time` binds `time` (a second-class
@@ -114,7 +114,7 @@ hand-written provider traits, at the cost of one name per effect in public signa
 
 ### Which traits are effects
 
-**Decided: any dyn-compatible trait, with no opt-in.**
+**Any dyn-compatible trait is an effect, with no opt-in.**
 
 - A trait may follow `with` if it can be used as `&dyn Trait` and its methods take `&self`, because
   the name a signature binds is a second-class `&dyn Trait` ([Capability values](#capability-values)).
@@ -124,7 +124,7 @@ hand-written provider traits, at the cost of one name per effect in public signa
   methods ([Role traits](#role-traits)).
 - A **lint** flags traits that are legal but meaningless as effects, such as `with Display`.
 
-**Decided: each instantiation of a generic trait is a separate effect.**
+**Each instantiation of a generic trait is a separate effect.**
 
 ```rust
 trait Store<T> {
@@ -142,7 +142,7 @@ with Store<User> = users, Store<Order> = orders {   // two handlers, found by fu
 
 ### Defining handlers
 
-**Decided: a reusable handler is an `impl`; a one-off handler is an anonymous impl expression.**
+**A reusable handler is an `impl`; a one-off handler is an anonymous impl expression.**
 
 ```rust
 trait Links {
@@ -185,16 +185,15 @@ assert(calls == 3);
 - **A single-method trait can be installed from a closure.** When a trait has exactly one required
   method, a closure with a matching signature coerces to an anonymous impl of it, at a `with`
   install or an explicit `dyn Trait` site only: `with Time = || t0 { … }`.
-
-- **A handler can be installed from a borrow (decided November 2026).** `with Net = &net { … }`
+- **A handler can be installed from a borrow.** `with Net = &net { … }`
   installs a borrow of `net` for the block, which lasts as long as the block does, so the block
   can use `net` too (`net.listen(port)`), as the borrow rules allow; `with Net = net` gives the
   value up to the block, which drops it at the end ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 3).
 
 ### Effects inside handlers
 
-**Decided: control effects follow the caller; everything else a handler needs is captured when the
-handler is built.**
+**Control effects follow the caller; everything else a handler needs is captured when the handler
+is built.**
 
 ```rust
 // a production handler for `Links`, backed by SQL: a view, because it holds a capability
@@ -232,7 +231,7 @@ fn main(…) -> ExitCode {
   capability is second-class, a [view type](memory.md#view-types), so it cannot outlive the scope
   that provided `Db`. Callers of `Links` never see `Db`, and **swapping a handler never changes a
   caller's signature**.
-- **A value built with handlers is a view (decided November 2026).**
+- **A value built with handlers is a view.**
   - `fn app() -> impl Handler with Links, Rand` builds a router whose routes captured `Links` and
     `Rand` where they were named.
   - So the router lives inside the `with` that provides them, as `SqlLinks` does.
@@ -240,16 +239,12 @@ fn main(…) -> ExitCode {
     on `handle`.
   - This holds for closures too, stored ones included ([`closures.md`: Stored (escaping)
     closures](closures.md#stored-escaping-closures)).
-  - **Why, and what it gives up.**
-    - Meeting a value's needs where it is *called* would let it outlive the `with`. But every
-      library type that stores or calls it would then carry the effects of code it was not
-      written for (effect variables on trait bounds and `impl Trait` results), and swapping a
-      handler would change those signatures.
-    - Capturing where it is written keeps handlers configured near the top and trait methods free
-      of handler effects (`eff.method.1`).
-    - Its one limit, that a view cannot leave its `with`, is met by moving the `with` further out.
-    - Per-request context that middleware learns is passed as a value instead
-      ([`stdlib.md`: HTTP](stdlib.md#http)).
+  - A view cannot leave its `with`; code that needs it longer moves the `with` further out.
+    Per-request context that middleware learns is passed as a value instead
+    ([`stdlib.md`: HTTP](stdlib.md#http)).
+  - *Why:* capturing where a value is written keeps handlers configured near the top and trait
+    methods free of handler effects (`eff.method.1`), and library types that store or call the
+    value never carry the effects of code they were not written for.
 - **Interposition falls out.** A recorder built inside a scope with a `Net` handler captures that
   outer `Net` and forwards to it, so a recorder, a fault injector or a rate limiter is an ordinary
   handler ([`determinism.md`: Handlers are scoped, not global](determinism.md#handlers-are-scoped-not-global)).
@@ -270,7 +265,7 @@ fn main(…) -> ExitCode {
 | **Ambient, write-only** | `log`, `span`, `metric`, `Contracts` | Never written in signatures; cannot feed values back ([`observability.md`](observability.md)). `Contracts` sets which contracts are checked at run time ([`correctness.md`: Checking policy](correctness.md#checking-policy-the-contracts-handler)) |
 | **User-defined** | any trait, or a nominal data type as read-only context | A database pool (`Db`), configuration, the tenant, feature flags ([Context data](#context-data)) |
 
-**`spawn` is its own effect (decided).** Starting tasks is separate from suspending: `drop`,
+**`spawn` is its own effect.** Starting tasks is separate from suspending: `drop`,
 GPU kernels and freestanding profiles without a scheduler must be able to forbid `spawn` while still
 allowing `suspend` (or forbid both). A function that opens a `scope` and spawns into it lists
 `spawn`; one that only waits on I/O lists `suspend`
@@ -296,7 +291,7 @@ not from more traits. This keeps signatures short ([Signatures and inference](#s
 | **Abortive** | Never resume; unwind to the handler, like an exception | Built in for `fail`. A user handler aborts by failing through its method's declared `fail(E)` | An ordinary return (`fail`, [`error-handling.md`: Results and effects](error-handling.md#results-and-effects)) |
 | **One-shot continuation** | Capture the rest of the computation and resume it **once**, later | Built in only: `suspend` and generators (`gen`, [`stdlib.md`: Generators](stdlib.md#generators)). Never available to user traits; schedulers plug in through the runtime contract | Stack switching ([`runtime.md`: Runtime contract](runtime.md#runtime-contract), [`compiler.md`: WASM concurrency lowering](compiler.md#wasm-concurrency-lowering)); generators compile to state machines |
 
-**Decided: ending a block early reuses `fail`.** There is no separate abortive form for user traits.
+**Ending a block early reuses `fail`.** There is no separate abortive form for user traits.
 The method declares the failure, the handler fails, and the code around the `with` block catches it:
 
 ```rust
@@ -322,7 +317,7 @@ let found = try {
 - **It stays visible:** every caller of `visit` sees `fail(Found)` in its effect set.
 - **It costs nothing extra:** it compiles to ordinary returns, like any `fail`.
 
-**Decided: user traits never get one-shot continuations.** A user handler is always an ordinary
+**User traits never get one-shot continuations.** A user handler is always an ordinary
 call, which keeps user effects simple to compile (including to WASM) and to reason about, for people
 and agents. Alternative schedulers plug in through the runtime contract
 ([`runtime.md`: Runtime contract](runtime.md#runtime-contract)), not through continuations.
@@ -416,10 +411,9 @@ with DbInput = mock_a, DbOutput = mock_b { migrate()? }
 ```
 
 Lookup is by **exact trait**, so `DbInput` and `DbOutput` are separate effects, and a child that
-asks for `Db` does not find either of them. If lookup went through supertraits, a child asking for
-`Db` would be ambiguous with both roles installed; picking the innermost would silently choose a
-role. So handing a role to plain-`Db` code takes one explicit `with Db = input { … }`. As a value,
-`&input` coerces to `&dyn Db`.
+asks for `Db` does not find either of them. Handing a role to plain-`Db` code takes one explicit
+`with Db = input { … }`. As a value, `&input` coerces to `&dyn Db`. *Why:* with both roles
+installed, a lookup through supertraits would be ambiguous, or would silently pick a role.
 
 ### Signatures and inference
 
@@ -448,8 +442,6 @@ pub fn place_order(req: Request) -> Response with Net, Db, Time, Rand, suspend, 
 // a domain trait whose handler captured Net, Db, Time and Rand where it was built
 pub fn place_order(req: Request) -> Response with Orders, suspend, fail(OrderError)
 ```
-
-- This is re-checked once the reference examples are written in Moddil.
 
 ### Effect polymorphism
 
@@ -513,7 +505,7 @@ No mainstream language has made a typed effect system popular. The measures:
 
 ### Context data
 
-**Decided: context is traits for behaviour, and nominal data types for data.** This replaces
+**Context is traits for behaviour, and nominal data types for data.** This replaces
 `Context` objects threaded through every call.
 
 - **Behaviour** (a database pool, a clock, payments) is a trait used as an effect, as everywhere in
@@ -555,6 +547,24 @@ No mainstream language has made a typed effect system popular. The measures:
 | [HFT](examples/hft-platform.md) | Statically known handlers in production (zero cost); recorded `Net` and `Time` for whole-day replay |
 | [Web store](examples/web-store.md) | A user-defined `Db` trait instead of threading a pool; narrowed `Fs` for uploads |
 | [Hashiverse](examples/hashiverse.md) | `TimeProvider`, `TransportFactory` and `ClientStorage` stay traits but are used after `with`, so the `RuntimeServices` plumbing disappears; the in-memory transport becomes a handler |
+
+## Open questions
+
+- **Are domain traits enough to keep public effect lists short?** This is to be re-checked once the
+  reference examples are written in Moddil ([Signatures and inference](#signatures-and-inference)).
+
+## Alternatives considered
+
+- **Meeting a value's needs where it is called**, not where it is built. It would let a value
+  built with handlers outlive the `with`, but every library type that stores or calls it would
+  carry effect variables on its trait bounds and `impl Trait` results, and swapping a handler
+  would change those signatures.
+- **Handler lookup through supertraits.** With two role subtraits of `Db` installed, a child asking
+  for `Db` would be ambiguous; picking the innermost would silently choose a role.
+- **An `effect` keyword or an `#[effect]` marker.** It would make two kinds of trait; any
+  dyn-compatible trait serves.
+- **Effect aliases and umbrella effects** (an `Io` trait). A reader would have to look up what the
+  alias means; coarse effects and domain traits keep lists short instead.
 
 ## Prior art
 

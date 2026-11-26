@@ -1,10 +1,10 @@
 # Error Handling
 
-Defines requirement **R3** ([Firm requirements (decided)](requirements.md#firm-requirements-decided)).
+Defines requirement **R3** ([Firm requirements](requirements.md#firm-requirements-decided)).
 
-## Decisions so far
+## The rules in brief
 
-| # | Decision |
+| # | Rule |
 |---|---|
 | D1 | **Rust-style `?`** for propagation. Chained `?` propagates at every step. |
 | D2 | **Try blocks**: `try { … }` is an expression that scopes `?`. |
@@ -26,8 +26,8 @@ Defines requirement **R3** ([Firm requirements (decided)](requirements.md#firm-r
 | D18 | **`catch` arms name error types, then patterns**: `DecodeError(e)`, `LinkError::Taken(c)`, `IoError::NotFound`; no flattening ([Matching removes what it handles](#matching-removes-what-it-handles)). |
 | D19 | **No built-in resumable recovery**: "retry" or "use a default" decided by a caller is an ordinary effect trait, whose function-like handler resumes ([Results and effects](#results-and-effects)). |
 | D20 | **The model:** `fail(E)` is a non-resumable effect compiled to the return channel, with `Result` as its value form; error sets are inferred open unions of named error types, explicit on `pub` signatures; error return traces are on in debug builds ([Summary of the model](#summary-of-the-model)). |
-| D21 | **No inferred error tags** (decided November 2026): every error is a value of a named struct or enum, so it has one constructor syntax and can be found by name; only the *set* is inferred ([Error types](#error-types)). |
-| D22 | **A `for` over a fallible iterator is `for x in it? { … }`** (decided November 2026): the `?` marks every `next()`, so an error goes on as from `?` ([Loops over fallible iterators](#loops-over-fallible-iterators)). |
+| D21 | **No inferred error tags**: every error is a value of a named struct or enum, so it has one constructor syntax and can be found by name; only the *set* is inferred ([Error types](#error-types)). |
+| D22 | **A `for` over a fallible iterator is `for x in it? { … }`**: the `?` marks every `next()`, so an error goes on as from `?` ([Loops over fallible iterators](#loops-over-fallible-iterators)). |
 
 ## Three outcome classes
 
@@ -183,8 +183,7 @@ let config = try { load(p)? } catch {
 
 ### Loops over fallible iterators
 
-**Decided (D22, November 2026):** a `for` over an iterator whose `next()` can fail marks it with
-`?` after the iterator:
+A `for` over an iterator whose `next()` can fail marks it with `?` after the iterator (D22):
 
 ```rust
 for line in file.lines()? {          // each next() can fail with IoError
@@ -227,12 +226,12 @@ Every **entry point** must have an *empty* failure set:
 If anything remains, compilation fails, and the error lists each unhandled variant with the chain of
 `?`s it would travel through.
 
-**Tests are the one exemption (decided):** an error that escapes a test body fails that test, with its
+**Tests are the one exemption:** an error that escapes a test body fails that test, with its
 error return trace ([`testing.md`: Errors inside tests](testing.md#errors-inside-tests)).
 
 **Ignored results:** dropping a `Result` silently is a compile error (not a warning, as `must_use` is
-in Rust). **Decided (D14):** an explicit discard is allowed and requires a reason string, such
-as `discard(r, "best-effort cache warm")`, so it is visible in reviews and semantic diffs ([Diffs, code review and version control](semantic-vcs.md)).
+in Rust). An explicit discard is allowed and requires a reason string (D14), such as
+`discard(r, "best-effort cache warm")`, so it is visible in reviews and semantic diffs ([Diffs, code review and version control](semantic-vcs.md)).
 
 ### Tasks and concurrency
 
@@ -266,10 +265,9 @@ as `discard(r, "best-effort cache warm")`, so it is visible in reviews and seman
   `?` and `fail` can raise.
 - Unlike Zig, errors carry **payloads**: each is a value of a struct or enum
   (`TomlError { line }`, `IoError::NotFound(path)`).
-- **No inferred tags (D21, decided November 2026).** An error is never an anonymous tag raised
-  without a declaration (`fail(Toml{line})`, as in Roc). A named type has one constructor syntax,
-  can be found by name in code and review, and documents its payload; a one-off error costs a
-  one-line `struct`.
+- **No inferred tags (D21).** An error is never an anonymous tag raised without a declaration
+  (`fail(Toml{line})`, as in Roc). *Why:* a named type has one constructor syntax, can be found by
+  name in code and review, and documents its payload; a one-off error costs a one-line `struct`.
 - Unlike Rust, no `From` conversions are needed to combine errors from different sources; the sets
   simply union.
 - **Explicit at mod boundaries.** Public functions of a mod declare their error set (consistent with
@@ -313,17 +311,14 @@ fn start(p: Path) -> App {
 
 ### Caller locations
 
-**Decided: `#[track_caller]` on a function** (decided November 2026), as in Rust. A trap in a
-tracked function is reported where its caller called it, and on up through tracked callers to the
-first untracked one, so `unwrap`, `expect`, `xs[i]` and assert-like helpers report the user's line.
+**`#[track_caller]` on a function**, as in Rust: a trap in a tracked function is reported where
+its caller called it, and on up through tracked callers to the first untracked one, so `unwrap`,
+`expect`, `xs[i]` and assert-like helpers report the user's line.
 
 - It is part of the function's signature, visible to readers and in its API, and costs nothing
   when nothing traps (the location travels in the trap, not in every call).
 - The prelude's and the core mods' functions that can trap are tracked; derived code is reported
   at its `derive` attribute's callers the same way.
-- The alternative, a default argument `loc: Location = caller_location()` (Jai, Swift), gives a
-  location *value* for logging wrappers too; logging already records its own call site
-  ([`observability.md`](observability.md)), so the attribute is enough.
 
 ## Language server support
 
@@ -370,15 +365,15 @@ and P0709):
 - every exit point is visible as `?`;
 - ordinary errors do not depend on the WASM exceptions proposal (R1).
 
-**Costs we accept:**
+**The costs:**
 - one predictable branch per `?` (can be marked cold);
 - larger return values when payloads are big. Mitigations: small or boxed payloads (Rust's
   `result_large_err` lint), packing the tag into spare bits, or returning the error flag in a
   register (Swift) or CPU flag (P0709);
 - in very deep chains where errors almost never happen, table-based exceptions can benchmark faster.
 
-**Traps (class 3)** are where cleanup is hard. Decided: a trap terminates the process by default; a
-scope that opts into isolation is unwound on this rare path instead, running drops, poisoning held
+**Traps (class 3)** are where cleanup is hard. A trap terminates the process by default; a scope
+that opts into isolation is unwound on this rare path instead, running drops, poisoning held
 sync cells and abandoning linear values
 ([`lifecycle.md`: Traps: the process by default, isolated scopes on request](lifecycle.md#traps-the-process-by-default-isolated-scopes-on-request)).
 
@@ -405,8 +400,6 @@ sync cells and abandoning linear values
 
 ## Summary of the model
 
-All decided:
-
 - `?` and `try {}`, with `catch` that handles listed variants and propagates the rest; context
   notes after `?`; `?!` for calls that cannot fail.
 - `fail(E)` as an effect underneath; `Result` as its value form.
@@ -429,10 +422,18 @@ The problem and the state of the art that led to this design.
   sets and error return traces; Go explicit `error` values; Erlang "let it crash" plus supervisors.
 - **Directions.** Errors as an *effect* (`fail(E)`) so they are visible in signatures but cheap to
   propagate; inferred error sets (Zig) to reduce boilerplate; mandatory handling; error return traces
-  for free; a clear split between *recoverable errors* and *bugs* (contract violations → abort the
-  task, not the process, in structured concurrency). Error propagation must also respect linear
+  for free; a clear split between *recoverable errors* and *bugs* (a bug traps,
+  [Three outcome classes](#three-outcome-classes)). Error propagation must also respect linear
   values ([Memory: ownership, borrowing and sharing](memory.md)): a path that propagates an error while holding an open transaction has to consume it.
   Absence is *not* an error: "not found" is an `Option` ([`types.md`: Optional values and invalid states](types.md#optional-values-and-invalid-states)), and `or_fail` converts explicitly.
+
+## Alternatives considered
+
+- **A default argument for caller locations**, `loc: Location = caller_location()` (Jai, Swift). It
+  gives a location *value* for logging wrappers too, but logging already records its own call site
+  ([`observability.md`](observability.md)), so `#[track_caller]` is enough.
+- **Inferred anonymous error tags** (Roc's `fail(Toml{line})`). An error without a declaration has
+  no single constructor syntax, cannot be found by name and does not document its payload.
 
 ## References
 

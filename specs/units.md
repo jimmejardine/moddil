@@ -16,7 +16,7 @@ let budget         = 64[MiB];
 
 - Units are part of the **type**: `f64[m]`, `i64[ns]`, `Fixed<4>[USD]`. Literals use the same syntax:
   `100[cm]`.
-- **Units are written in square brackets (decided)**, after the number or the type: `100[cm]`,
+- **Units are written in square brackets**, after the number or the type: `100[cm]`,
   `f64[m]`, `Fixed<4>[USD]`, `Simd<f32, 8>[m]`, `BigDecimal[USD]`. Angle brackets stay for generic
   arguments only ([Why square brackets](#why-square-brackets)).
 - **Zero runtime cost:** units are checked at compile time and erased; conversion factors are folded
@@ -44,7 +44,7 @@ F#'s weaknesses, which Moddil addresses ([Declaring units](#declaring-units)):
 - `cm` and `m` are unrelated measures; you convert by multiplying by constants such as `100.0<cm/m>`.
 - No affine units (°C vs K).
 
-**Decided: units are written in square brackets**, the one syntax for types and literals:
+Units are written in **square brackets**, the one syntax for types and literals:
 
 ```rust
 let length: f64[m] = 100[cm] + 50.5[mm];
@@ -66,9 +66,12 @@ let t = x * 1[s];                         // a unit on a computed value
 
 ## Dimensions: the SI vector and an open set
 
-**The SI vector.** A dimension can be represented as a vector of exponents over the seven SI base
-dimensions: length L, mass M, time T, electric current I, temperature Θ, amount of substance N,
-luminous intensity J.
+A dimension is a **sparse map from declared base dimensions to exponents**: F#'s free abelian
+group. Multiplying quantities adds exponents, dividing subtracts them, and `sqrt` halves them.
+
+**The SI vector.** Over the seven SI base dimensions (length L, mass M, time T, electric current I,
+temperature Θ, amount of substance N, luminous intensity J) such a map is the familiar vector of
+exponents:
 
 | Quantity | Dimension | Vector (L, M, T, I, Θ, N, J) |
 |---|---|---|
@@ -76,14 +79,8 @@ luminous intensity J.
 | Force | M L T⁻² | (1, 1, −2, 0, 0, 0, 0) |
 | Energy | M L² T⁻² | (2, 1, −2, 0, 0, 0, 0) |
 
-Multiplying quantities adds vectors, dividing subtracts them, and `sqrt` halves them. Boost.Units,
-Rust's `uom` and C++ mp-units work this way.
-
-**Its limitation:** the basis is fixed. Currency, information (bits and bytes), pixels, "orders" or
-"items" cannot be added without changing the library.
-
-**Decided: an open set.** A dimension is a **sparse map from declared base dimensions to
-exponents**: F#'s free abelian group, rather than a fixed seven-element vector.
+**An open set.** The basis is not fixed at seven, so currency, information (bits and bytes),
+pixels, "orders" or "items" are dimensions like any other.
 
 - Any mod can declare a base dimension:
   ```
@@ -115,7 +112,7 @@ unit MiB = 1048576 * B;
 unit USD: Currency::USD;      // each currency is its own base dimension (see below)
 ```
 
-**Unit expressions (decided)** in declarations use explicit operators over unit names: `*` and `/`
+**Unit expressions** in declarations use explicit operators over unit names: `*` and `/`
 for scale (`1000 * m`, `m / 100`), `^` for powers, and `+` for an affine offset (`K + 273.15`).
 There is no juxtaposition, so `1000 m` is not a unit expression.
 
@@ -125,22 +122,22 @@ weakness.
 ## Arithmetic, conversion and polymorphism
 
 - `+`, `-` and comparisons require the **same dimension**. Units within a dimension are converted to
-  a common unit: the expected type's unit if annotated, otherwise **the finer of the two**
-  (decided): `1[m] + 5[cm]` is `105[cm]`. That is exact for integers and does not depend on the order
+  a common unit: the expected type's unit if annotated, otherwise **the finer of the two**:
+  `1[m] + 5[cm]` is `105[cm]`. That is exact for integers and does not depend on the order
   of the operands.
 - `*` and `/` combine dimensions: `f64[m] / f64[s]` is `f64[m/s]`. A dimensionless result is a plain
   number.
 - **Conversion rules:**
   - floating-point representations convert implicitly;
   - integer representations convert implicitly only when exact (`cm` to `mm`); otherwise the
-    conversion is explicit, with a rounding mode: `.to_unit::<cm>(Round::HalfEven)` (decided);
+    conversion is explicit, with a rounding mode: `.to_unit::<cm>(Round::HalfEven)`;
   - fractional integer quantities use fixed point, `Fixed<1>[cm]`; units never carry a scale of their
     own ([`numerics.md`: Decimals for money](numerics.md#decimals-for-money));
   - different dimensions never convert.
-- **Rational exponents (decided):** exponents are fractions, as in F#, so `sqrt(f64[m^2])` is `f64[m]`
+- **Rational exponents:** exponents are fractions, as in F#, so `sqrt(f64[m^2])` is `f64[m]`
   and `sqrt(f64[Hz])` is `f64[Hz^(1/2)]` (noise densities such as `V/Hz^(1/2)` can be written).
   Exponents are normalised, so `m^(1/2) * m^(1/2)` is `m`.
-- **Angles are their own dimension (decided).** `Angle` is a base dimension with `rad`, `deg` and
+- **Angles are their own dimension.** `Angle` is a base dimension with `rad`, `deg` and
   `turn`, in `moddil/units/angle`. `sin` and `cos` accept any angle unit and convert, so passing
   degrees where radians are meant is a type error. Where the dimensions cancel (`rad/s * s`) the
   result is plain; where a formula needs a bare number, `.per_radian()` says so explicitly.
@@ -196,6 +193,19 @@ seconds, the other expected newton-seconds.
 | [HFT](examples/hft-platform.md) | `Fixed<4>[USD]` prices, quantities, notional (`Price * Qty`); `i64[ns]` latencies |
 | [Web store](examples/web-store.md) | Money per currency; shipping weights and dimensions |
 | [Hashiverse](examples/hashiverse.md) | `500[ms]` durations and `64[MiB]` sizes, where today raw integer types (`TimeMillis`, `DurationMillis`) are used |
+
+## Alternatives considered
+
+- **Angle brackets, as F# writes them (`100.0<cm>`):** `100<cm>` and `100 < cm` would differ only
+  by whitespace, and a type's generic arguments and its unit would share a bracket.
+- **A suffix form (`100cm`):** it clashes with identifiers and hex digits, and would be a second
+  form.
+- **A backtick form:** it is not safe to quote in Markdown inline code.
+- **A fixed seven-element SI vector, as in Boost.Units, Rust's `uom` and C++ mp-units:** the basis
+  is fixed, so currency, information, pixels or items cannot be added without changing the
+  library.
+- **Unrelated measures, as in F#:** `cm` and `m` would convert only by multiplying by constants
+  such as `100.0<cm/m>`; declaring a unit's scale lets related units convert automatically.
 
 ## Prior art
 

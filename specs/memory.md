@@ -39,8 +39,8 @@ traits and without lifetime annotations ([`concurrency.md`: No `Send` / `Sync`](
   - There is no `this` before the literal, so a partially constructed object can never be observed.
   - If creation fails or is cancelled midway, the resources acquired so far are owned locals and
     are dropped. Linear ones must be consumed on that path ([Resources: affine and linear](resources.md#resources-affine-and-linear)).
-  - The asymmetry is deliberate: creation may suspend, drop may not. Async teardown is a linear
-    type's explicit `close` or `commit` ([Resources: affine and linear](resources.md#resources-affine-and-linear), [`resources.md`: Construction may suspend; drop may not](resources.md#construction-may-suspend-drop-may-not)).
+  - Creation may suspend; drop may not. Async teardown is a linear type's explicit `close` or
+    `commit` ([Resources: affine and linear](resources.md#resources-affine-and-linear), [`resources.md`: Construction may suspend; drop may not](resources.md#construction-may-suspend-drop-may-not)).
 - **Drop must not suspend and must not fail.** The compiler checks this: a drop implementation has
   an empty effect set. Finalisation that can fail or needs a decision is a linear type ([Resources: affine and linear](resources.md#resources-affine-and-linear), [`resources.md`: Cleanup that can fail](resources.md#cleanup-that-can-fail)).
 - Unique ownership covers more than people expect: singly linked lists, trees, ASTs with owned
@@ -50,8 +50,8 @@ traits and without lifetime annotations ([`concurrency.md`: No `Send` / `Sync`](
 
 ### Parameter modes
 
-Parameter modes use Rust's spelling (decided, [`syntax.md`](syntax.md)); borrows are second-class,
-so no lifetimes appear.
+Parameter modes use Rust's spelling ([`syntax.md`](syntax.md)); borrows are second-class, so no
+lifetimes appear.
 
 | Parameter | Meaning | Caller's value during the call |
 |---|---|---|
@@ -69,21 +69,21 @@ by pointer**, whichever is cheaper (as Swift and Hylo do). Small types travel in
 - Checking is **intraprocedural** and flow-sensitive (NLL-style): a borrow ends at its last use.
   Function signatures carry everything a caller needs, so checking stays local and incremental
   ([Build times](build-times.md)).
-- **Operators read through borrows (decided, November 2026):** field access looks through a
-  borrow (`r.x`), and so do operators: arithmetic on a borrow of a `Copy` value reads the value
-  (`3.0 * r * r` for `r: &f64`), and comparisons read through borrows of any type, since they
-  borrow what they compare (`a == b` for two `&String`s). Writes through a borrow still need `*`
-  (`*r += 1`, `*r = v`), so a change through a borrow stays visible. Rust gets the same effect
-  from its standard library's operator impls for references (`&f64 * &f64`); Moddil's borrows
-  are second-class, so there are no such impls, and the rule is the language's instead
+- **Operators read through borrows.** Field access looks through a borrow (`r.x`), and so do
+  operators: arithmetic on a borrow of a `Copy` value reads the value (`3.0 * r * r` for
+  `r: &f64`), and comparisons read through borrows of any type, since they borrow what they
+  compare (`a == b` for two `&String`s). Writes through a borrow still need `*` (`*r += 1`,
+  `*r = v`), so a change through a borrow stays visible. *Why a language rule:* Rust gets the same
+  effect from its standard library's operator impls for references (`&f64 * &f64`); Moddil's
+  borrows are second-class, so there are no such impls
   ([`borrow.deref.2`](../reference/2027/borrows.md)).
   Using a `&mut` borrow lends it again (an implicit reborrow) instead of using it up.
 - **Non-escaping closures** may capture borrows (Swift's model). Escaping closures capture by move
   or rc. Details in [`closures.md`](closures.md).
-- **Diagnostics built for agents** (decided): every borrow error has one root cause and a ranked
-  menu of machine-applicable fixes (clone, `.to_rc()`, a view, splitting the borrow by field, a
-  move), each with a confidence level and a short cost note. The fix success rate is measured with
-  the agent simplicity benchmarks ([`adoption.md`: Simpler than Rust](adoption.md#simpler-than-rust)).
+- **Diagnostics built for agents:** every borrow error has one root cause and a ranked menu of
+  machine-applicable fixes (clone, `.to_rc()`, a view, splitting the borrow by field, a move), each
+  with a confidence level and a short cost note. The fix success rate is measured with the agent
+  simplicity benchmarks ([`adoption.md`: Simpler than Rust](adoption.md#simpler-than-rust)).
 
 ### Returning borrows
 
@@ -92,7 +92,7 @@ A function may return a borrow or a view ([View types](#view-types)) derived fro
 - **Methods**: the result derives from `self`.
 - **Free functions**: the result derives from *all* borrowed parameters (conservative default).
 - **Optional** precision: `-> T from a` (or `from a, b`) names a *parameter*, never an abstract
-  region. This spelling is decided.
+  region.
 
 ```rust
 fn get(&self, key: &K) -> Option<&V>                        // derives from self
@@ -102,12 +102,12 @@ fn first_word(text: &str, sep: &str) -> &str from text
 
 ### Borrows of static data
 
-**Decided: a borrow of static data borrows nothing.** Static data is the text of a string literal
-(and of a byte-string literal) and the value of a `const` item, which comptime copies into
-read-only memory ([`comptime.md`: Evaluation model](comptime.md#evaluation-model)). A literal is
-in effect a borrow of an anonymous `const`. A borrow's rules protect its source, which must not be
-mutated, moved or dropped while the borrow lives; static data is immutable, never moves and lives
-as long as the program, so there is nothing to protect.
+**A borrow of static data borrows nothing.** Static data is the text of a string literal (and of a
+byte-string literal) and the value of a `const` item, which comptime copies into read-only memory
+([`comptime.md`: Evaluation model](comptime.md#evaluation-model)). A literal is in effect a borrow
+of an anonymous `const`. *Why:* a borrow's rules protect its source, which must not be mutated,
+moved or dropped while the borrow lives; static data is immutable, never moves and lives as long as
+the program, so there is nothing to protect.
 
 - **It is an ordinary `&T`.** `"hi"` is a `&str` ([`text.md`: String types](text.md#string-types)),
   accepted wherever a `&str` is, but it freezes no variable and is never ended by the checker.
@@ -134,8 +134,8 @@ as long as the program, so there is nothing to protect.
 ## View types
 
 A **view type** is a struct or container whose fields hold borrows, declared with
-`view Name<T> { … }` (decided). Each view has **exactly one implicit region**, always inferred. It
-is second-class, like a borrow:
+`view Name<T> { … }`. Each view has **exactly one implicit region**, always inferred. It is
+second-class, like a borrow:
 
 - It can be created, kept in locals, passed *down* the call stack, nested in other views, returned
   under the [Returning borrows](#returning-borrows) rules, and lent to structured child tasks ([`concurrency.md`: Tasks and borrowing](concurrency.md#tasks-and-borrowing)).
@@ -160,11 +160,11 @@ fn alloc(&self, n: Node) -> &Node
 view SymbolTable { map: Map<Name, &Node> }
 ```
 
-An alternative to context objects that fits Moddil especially well: things like `Config` and
-`DbPool` can be **effects/capabilities** provided by a handler higher up ([Effects and capabilities as a unifying idea](effects-and-capabilities.md)), giving
+Context such as `Config` and `DbPool` can also be **effects/capabilities** provided by a handler
+higher up ([Effects and capabilities as a unifying idea](effects-and-capabilities.md)), giving
 implicit context with no parameter threading, still visible in signatures.
 
-### Known limitations (accepted)
+### Known limitations
 
 | Not expressible | Workaround | Rust? |
 |---|---|---|
@@ -188,15 +188,14 @@ let back = shared.weak()       // Weak<Node>: does not keep it alive; upgrade() 
 
 - `.to_rc()` **consumes** the owner; the value now lives as long as any `Rc` does. It uses the
   allocator in scope; an `Rc` records its allocator only when it is not the default one, so default
-  rcs pay nothing (decided). Arenas stay borrow-based: arena allocations are views tied to the
-  arena's scope and cannot become `Rc`s
+  rcs pay nothing. Arenas stay borrow-based: arena allocations are views tied to the arena's scope
+  and cannot become `Rc`s
   ([`freestanding.md`: Memory without an operating system](freestanding.md#memory-without-an-operating-system)).
 - RC cannot collect cycles. Back-edges (parent pointers, doubly-linked `prev`) use `Weak`, which is
   **core**, beside `Rc`, because the header layout and biased counting must know about weak counts.
-- **There is no garbage collector** (decided). Cycles are avoided by design: `Weak` for back-edges,
-  arenas and indices for graphs. Debug builds and the simulator run a cycle detector that reports
-  leaked rc cycles with their allocation sites. A collected `Gc<T>` arena could be a library if a
-  real need appears.
+- **There is no garbage collector.** Cycles are avoided by design: `Weak` for back-edges, arenas
+  and indices for graphs. Debug builds and the simulator run a cycle detector that reports leaked
+  rc cycles with their allocation sites.
 - Passing an `Rc` as a shared borrow (`&Rc<T>`) does **not** touch the count. Only `.share()` does ([`values.md`: `.share()` for reference counts](values.md#share-for-reference-counts)).
 - Compile-time RC elision (Perceus-style) removes inc/dec pairs the compiler can prove redundant.
 
@@ -210,8 +209,8 @@ Shared data is read-only. The only way to mutate through an rc is a **sync cell*
 | `AtomicRc<T>` | Swap a pointer (e.g. a link in a shared graph, a config snapshot) | One atomic op + RC |
 | `Mutex<T>`, `RwLock<T>` | Arbitrary mutation | Lock acquire/release |
 
-Atomics are core intrinsics; the cell types live in `moddil/sync`. There is deliberately **no
-`RefCell` and no copy-on-write `make_mut`**: every shared mutation is visibly synchronised.
+Atomics are core intrinsics; the cell types live in `moddil/sync`. There is **no `RefCell` and no
+copy-on-write `make_mut`**: every shared mutation is visibly synchronised.
 
 Consequence: a mutable graph used by one thread pays (cheap, uncontended) atomic costs on its link
 fields. The idiomatic answers are arenas + indices, or a `moddil/collections` type that implements
@@ -221,35 +220,27 @@ the structure internally with `unsafe` and exposes a safe API.
 
 Every `Rc` is safe to send between threads, but cross-thread traffic is the rare case. Moddil uses
 **biased reference counting** (Choi, Shull, Torrellas, PACT 2018; also used by CPython 3.13's
-free-threaded build):
+free-threaded build), biased to the owner **task**:
 
-- The header holds an **owner thread id**, a **non-atomic owner count** and an **atomic shared
+- The header holds an **owner task id**, a **non-atomic owner count** and an **atomic shared
   count** (~16 bytes vs ~8 for a plain atomic count).
-- On the owner thread: compare thread id, then plain inc/dec (~1 cycle, predictable branch).
-- On other threads: atomic inc/dec of the shared count.
-- When the owner count reaches zero the counts merge. If another thread drops the last shared
+- In the owner task: compare the task id, then plain inc/dec (~1 cycle, predictable branch).
+- In other tasks: atomic inc/dec of the shared count.
+- When the owner count reaches zero the counts merge. If another task drops the last shared
   reference while the owner still holds some, the object is queued to the owner, which frees it
-  the next time its runtime worker polls its queue.
+  when its queue is drained.
 
-Notes:
-- The paper reports roughly a 20% speed-up over always-atomic RC on Swift benchmarks.
-- Biased RC does **not** help many threads cloning the same rc concurrently (cache-line contention
-  is unchanged). Moddil mitigates this differently: child tasks *borrow* an rc without touching its
-  count ([`concurrency.md`: Tasks and borrowing](concurrency.md#tasks-and-borrowing)), removing most of the clones Rust needs for
-  `'static` spawns.
-- The merge-queue poll is part of the runtime-handler contract ([R2](requirements.md#firm-requirements-decided),
-  [`runtime.md`: Runtime contract](runtime.md#runtime-contract)). On single-threaded WASM every count is the owner count.
-
-**Decided: bias to the owner task, not the owner thread.** Tasks migrate between worker threads
-([`runtime.md`: Tasks, threads and executors](runtime.md#tasks-threads-and-executors)), and with a thread id in the header a migrated task would
-lose the fast path. Instead:
+**Bias to the owner task, not the owner thread.** *Why:* tasks migrate between worker threads
+([`runtime.md`: Tasks, threads and executors](runtime.md#tasks-threads-and-executors)), and with a
+thread id in the header a migrated task would lose the fast path.
 
 1. **The header stores the owner *task* id.** Only the owning task touches the non-atomic owner
    count. A task runs on one thread at a time, and every migration passes through the scheduler's
    queues (release/acquire), so the owner's successive accesses stay ordered even across threads.
    Non-atomic is still correct, and migration costs nothing. The check compares against the current
    task id, which the runtime keeps in a register or thread-local slot: as cheap as a thread-id
-   check. Non-owners only ever touch the atomic shared count, so the merge protocol is unchanged.
+   check. Non-owners only ever touch the atomic shared count, so the merge protocol is the one in
+   the paper.
 2. **Merge queue per task.** An object whose last shared reference is dropped by a non-owner while
    the owner still holds some is queued to the owner *task*. The runtime drains the queue when it
    resumes the task, and always at task exit (when the owner count must reach zero anyway).
@@ -262,16 +253,23 @@ lose the fast path. Instead:
 5. **Measured:** the runtime counts slow-path rc operations per task and call site, and the profiler
    reports them.
 
-The remaining slow case is an rc used heavily by many tasks at once (cache-line contention), which
-biasing never addressed; borrowing does.
+Notes:
+- The paper reports roughly a 20% speed-up over always-atomic RC on Swift benchmarks.
+- Biased RC does **not** help many threads cloning the same rc concurrently (cache-line contention
+  is unchanged). Moddil mitigates this differently: child tasks *borrow* an rc without touching its
+  count ([`concurrency.md`: Tasks and borrowing](concurrency.md#tasks-and-borrowing)), removing most of the clones Rust needs for
+  `'static` spawns.
+- The merge-queue drain is part of the runtime-handler contract ([R2](requirements.md#firm-requirements-decided),
+  [`runtime.md`: Runtime contract](runtime.md#runtime-contract)). On single-threaded WASM every count is the owner count.
 
-**Decided: one lowering, plus a one-thread build.** On one thread, the owner's path costs a
-task-id compare and a plain increment or decrement over an unbiased count (about 1 to 3% on
-rc-heavy code, and 8 more header bytes). The cost that remains is under `runtime-sim`: tasks are
-still separate there, so a non-owner pays an uncontended atomic it does not need. The threaded
-lowering is still always used, so tests run the code that ships; a one-thread build, and WASM,
-make every count the owner count ([`runtime.md`: Starting a program](runtime.md#starting-a-program)). What a
-program means never depends on the runtime.
+**One lowering, and a one-thread build.** The threaded lowering is always used, so tests run the
+code that ships. On one thread, the owner's path costs a task-id compare and a plain increment or
+decrement over an unbiased count (about 1 to 3% on rc-heavy code, and 8 more header bytes). Under
+`runtime-sim` tasks are still separate, so a non-owner pays an uncontended atomic it does not need.
+A one-thread build, and WASM, make every count the owner count
+([`runtime.md`: Starting a program](runtime.md#starting-a-program)). What a program means never
+depends on the runtime.
+
 - An rc's destructor runs on **whichever thread drops the last reference**. Destructors must not
   rely on thread identity. This is one reason linear values cannot be rc'd ([Resources: affine and linear](resources.md#resources-affine-and-linear)).
 
@@ -305,8 +303,8 @@ fn on_rx(pkt: Packet) with Net, fail(DecodeError) {
 ```
 
 **Ring pressure:** holding a `Packet` for a long time ties up a ring slot. This is resource
-pressure, not unsafety. The runtime mod should expose ring occupancy, and offer an explicit
-`.detach()` that copies the payload out for long-term storage.
+pressure, not unsafety. The runtime mod exposes ring occupancy, and offers an explicit `.detach()`
+that copies the payload out for long-term storage.
 
 ## Cost table
 
@@ -336,10 +334,10 @@ No case required first-class references with explicit lifetimes.
 
 ## The allocator in scope
 
-**Decided: the allocator in scope is an ambient scoped handler** (decided November 2026).
-`.to_rc()` and growing collections ([Conversion](#conversion)) use the allocator that the innermost
-`with Alloc = a { … }` installs, as Jai's `push_allocator` and context allocator do, and the
-profile's default allocator where none is installed.
+**The allocator in scope is an ambient scoped handler.** `.to_rc()` and growing collections
+([Conversion](#conversion)) use the allocator that the innermost `with Alloc = a { … }` installs,
+as Jai's `push_allocator` and context allocator do, and the profile's default allocator where none
+is installed.
 
 ```rust
 let frame = Arena::new(1[MiB]);
@@ -355,12 +353,12 @@ with Alloc = &frame {
   So allocation does not spread into every signature: a library that grows a `Vec` uses whatever
   allocator its caller installed.
 - **Installed like any handler.** `with Alloc = … { … }` takes a value or a borrow of an allocator,
-  and the innermost one wins. **There are no `_in(alloc)` constructors** (decided November 2026):
-  a value that must use a particular allocator is built inside its own `with Alloc = … { … }`
-  block, so there is one way to choose an allocator, and no API comes in two versions.
+  and the innermost one wins. **There are no `_in(alloc)` constructors**: a value that must use a
+  particular allocator is built inside its own `with Alloc = … { … }` block, so there is one way to
+  choose an allocator, and no API comes in two versions.
 - **Lifetimes are checked by the borrow rules.** A handler borrowed from an arena lives as long as
   the `with` block, and what is allocated in the arena is a view tied to it, so it cannot leave the
-  block ([View types](#view-types)); as before, arena allocations cannot become `Rc`s.
+  block ([View types](#view-types)); arena allocations cannot become `Rc`s.
 - **`#[no_alloc]` is unchanged.** It forbids any call into an allocator, whichever one is in scope
   ([`performance.md`: Hot-path guarantees](performance.md#hot-path-guarantees)); installing an
   arena does not make allocation allowed there.
@@ -402,10 +400,37 @@ The problem and the state of the art that led to this design.
 - Rust lifetimes leak into APIs and make refactoring expensive.
 
 **Directions.**
-- **Allocators as a capability**: the allocator is visible (Zig-style), and per-scope arenas are cheap
-  and idiomatic.
+- **Allocators in scope**: per-scope arenas are cheap and idiomatic, through the ambient handler of
+  [The allocator in scope](#the-allocator-in-scope) rather than an allocator passed explicitly.
 - Machine-applicable diagnostics for the borrow check (e.g. "insert `.to_rc()` here"), aimed at
   agents ([LLMs as first-class programmers](agent-interface.md)).
+
+## Open questions
+
+- **A collected `Gc<T>` arena.** Whether one is ever needed; if a real need appears, it would be a
+  library, not part of the language.
+- **Key-locker unlock sessions in Hashiverse.** Whether they should be linear values is still to be
+  evaluated (see the fit-check table).
+
+## Alternatives considered
+
+- **Lifetime parameters and first-class references** (Rust's `<'a>`): they leak into APIs and make
+  refactoring expensive, and none of the reference examples needed them.
+- **A tracing garbage collector:** pauses, memory overhead and non-deterministic destruction;
+  cycles are avoided by design instead.
+- **`RefCell` and copy-on-write `make_mut`:** they allow shared mutation that is not visibly
+  synchronised.
+- **Biasing rc to the owner thread:** a task that migrates to another worker thread would lose the
+  fast path.
+- **A separate single-threaded lowering of rc:** tests would no longer run the code that ships.
+- **Implicit promotion of temporaries to static data** (as in Rust): static data would no longer be
+  one rule; a `const` makes a value static explicitly.
+- **Operator impls for references** (Rust's `&f64 * &f64`): borrows are second-class, so reading
+  through borrows is a language rule instead.
+- **Allocation as an effect in signatures, or explicit allocators passed around** (Zig): allocation
+  would spread into every signature.
+- **`_in(alloc)` constructors:** every allocating API would come in two versions, and there would
+  be two ways to choose an allocator.
 
 ## Prior art
 

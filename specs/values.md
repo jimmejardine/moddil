@@ -43,7 +43,7 @@ Builds on [`memory.md`](memory.md).
 | **Go** | Implicit copy of all values | `==` on comparable types | Deliberately randomised |
 | **Python 3.7+, JavaScript** | References | Per-type | Insertion order |
 
-## Decisions
+## Rules
 
 ### Moves by default
 
@@ -55,10 +55,10 @@ Assignment, argument passing and returning **move** a value: the source can't be
 - A type is `Copy` only when it **says so** (`#[derive(Copy, Clone)]`).
 - Only **plain data** may be `Copy`: no `Drop`, no owned heap data, no `Rc`, no sync cells, not
   linear.
-- **Size cap (decided): 64 bytes**, one cache line. For generic types and arrays it is checked per
+- **Size cap: 64 bytes**, one cache line. For generic types and arrays it is checked per
   instantiation. Exceeding it is a deny-by-default lint that a type can override with a reason,
   `#[allow(large_copy, "4×4 f64 matrix, copied by design")]`, visible in review and semantic diffs.
-- **`Copy` always copies (decided).** No position, such as a consuming `sink` parameter, forces a move
+- **`Copy` always copies.** No position, such as a consuming `sink` parameter, forces a move
   of a `Copy` value: plain data has no `Drop`, so ending its use explicitly would add a concept for
   no benefit.
 
@@ -92,8 +92,7 @@ fn render(n: &Rc<Node>) { … }    // borrowing an Rc touches no count
 
 - `rc.share()` increments the count and returns another handle to **the same object**.
 - `Rc<T>` has **no `.clone()` method**, so reading code tells you the cost: `.share()` is cheap,
-  `.clone()` copies. Writing `rc.clone()` is an error that suggests `.share()` (decided November
-  2026).
+  `.clone()` copies. Writing `rc.clone()` is an error that suggests `.share()`.
 - `Rc<T>` still implements the `Clone` **trait**, as a share, so generic code bounded by `Clone`
   takes it: a `Vec<Rc<T>>` clones, and a derived `Clone` shares `Rc` fields (below). This is sound
   because rc contents are immutable, so sharing is observably the same as copying. Rust gets the
@@ -127,7 +126,7 @@ struct Quote { price: Fixed<4>, qty: Fixed<0>, venue: VenueId }
 - **Derived ordering uses declaration order** for fields and variant order for enums, even when the
   compiler reorders fields in memory ([`numerics.md`: Data layout](numerics.md#data-layout)).
 - Generated code is visible through `moddil explain` and in the semantic diff.
-- **`Debug` in tests needs no derive (decided).** In test builds, assertion failures and test output
+- **`Debug` in tests needs no derive.** In test builds, assertion failures and test output
   print any value through static reflection ([`comptime.md`](comptime.md)), redacting `Secret` and
   `Personal` fields ([`testing.md`](testing.md)). Production code still needs `#[derive(Debug)]` to
   format a type.

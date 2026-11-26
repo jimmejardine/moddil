@@ -5,7 +5,8 @@ Moddil's surface syntax is **based on Rust**. Every snippet in these specs follo
 ## Rule
 
 **Rust syntax, unless Moddil's semantics genuinely differ.** Every difference from Rust is listed
-here with its reason ([Deltas from Rust (and why)](#deltas-from-rust-and-why)). A Rust programmer should be able to read Moddil code on day one.
+here with its reason ([Deltas from Rust (and why)](#deltas-from-rust-and-why)). A Rust programmer
+should be able to read Moddil code on day one.
 
 ## Mapping
 
@@ -24,7 +25,7 @@ here with its reason ([Deltas from Rust (and why)](#deltas-from-rust-and-why)). 
 | Labelled exits | `'label: { … break 'label value … }` | As in Rust |
 | Compile-time evaluation | `const fn`, `const { … }` blocks, `<const N: int>` | Rust's spelling for the comptime concept ([`comptime.md`](comptime.md)) |
 | Errors | `?`, `try { … }`, `Result`, `Option` | As in Rust, with `try … catch` sugar ([`error-handling.md`: Propagation, matching and try blocks](error-handling.md#propagation-matching-and-try-blocks)) |
-| Optional values | `Option<T>` only (decided); no `T?` sugar; `x.unwrap_or(d)` rather than `x ?? d` | As in Rust; one canonical spelling, and no clash with the `?` operator |
+| Optional values | `Option<T>` only; no `T?` sugar; `x.unwrap_or(d)` rather than `x ?? d` | As in Rust; one canonical spelling, and no clash with the `?` operator |
 | Prefix literals | `sql"…"`, `re"…"`, `fmt"…"` | Rust already has `b"…"` and `r"…"`; Moddil lets mods define prefixes ([`comptime.md`: Tagged string literals (embedded DSLs)](comptime.md#tagged-string-literals-embedded-dsls)) |
 | Never type | `-> !` | As in Rust |
 | Dynamic dispatch | `dyn Trait` | As in Rust, but any trait can be `dyn`, including generic methods ([`types.md`: `dyn`: existentials](types.md#dyn-existentials)) |
@@ -33,12 +34,12 @@ here with its reason ([Deltas from Rust (and why)](#deltas-from-rust-and-why)). 
 
 | Delta | Example | Why |
 |---|---|---|
-| **Effects in signatures, keyword `with`** (decided) | `fn fetch(id: UserId) -> User with net: Net, suspend, fail(HttpError)` | Effects are traits listed after `with` (`net: Net` names the handle; bare `Net` passes it through); `suspend`, `spawn` and `fail` are keywords. Effects are core semantics ([`effects-and-capabilities.md`](effects-and-capabilities.md)). `with` reads naturally and leaves `!` as the never type. |
+| **Effects in signatures, keyword `with`** | `fn fetch(id: UserId) -> User with net: Net, suspend, fail(HttpError)` | Effects are traits listed after `with` (`net: Net` names the handle; bare `Net` passes it through); `suspend`, `spawn` and `fail` are keywords. Effects are core semantics ([`effects-and-capabilities.md`](effects-and-capabilities.md)). `with` reads naturally and leaves `!` as the never type. |
 | Effects are traits | `trait Time { fn now(&self) -> Instant; }`, used as `with time: Time`; data as `with config: &AppConfig` | No `effect` keyword: any trait listed after `with` is an effect, resolved by type in the dynamic scope ([`effects-and-capabilities.md`: Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly)) |
 | Effect variables | `fn map<T, U, E>(xs: &[T], f: impl FnMut(&T) -> U with E) -> Vec<U> with E` | Effect polymorphism ([`error-handling.md`: Why `Result`-only languages duplicate higher-order APIs](error-handling.md#why-result-only-languages-duplicate-higher-order-apis)); written only to name or constrain: an unannotated closure parameter is implicitly polymorphic ([`effects-and-capabilities.md`: Effect polymorphism](effects-and-capabilities.md#effect-polymorphism)) |
 | Handler definitions | `impl Links for MemoryLinks { … }`; anonymous `impl Time { fn now(&self) -> Instant { t0 } }` | A handler is an ordinary impl; the anonymous impl expression captures like a closure. There is no `effect` keyword ([`effects-and-capabilities.md`: Defining handlers](effects-and-capabilities.md#defining-handlers)) |
 | Handler blocks | `with Time = sim.clock(node), Net = sim.net.endpoint(node) { … }` | Installing effect handlers ([`determinism.md`: Handlers are scoped, not global](determinism.md#handlers-are-scoped-not-global)); the same keyword as in signatures |
-| **Named and default arguments** (decided) | `urls.parallel_map(\|u\| fetch(u)?, limit: 32)`; `fn connect(host: &str, port: u16 = 443)` | Readability at call sites (Swift, Kotlin, Python). Positional arguments come first, then named ones. |
+| **Named and default arguments** | `urls.parallel_map(\|u\| fetch(u)?, limit: 32)`; `fn connect(host: &str, port: u16 = 443)` | Readability at call sites (Swift, Kotlin, Python). Positional arguments come first, then named ones. |
 | Expression-level optional chaining | `try { users.get(id)?.profile?.email }` | `?` always propagates, as in Rust (inside a function returning `Option`, the chain works as is). A `try` block keeps the chain inside one expression, giving Swift-style chaining without a new operator ([`types.md`](types.md)). |
 | Early exit from lambdas | `escape Some(p)` | Returns from the enclosing `fn` across non-escaping lambdas; in task scopes the first `escape` wins ([`closures.md`: Control flow out of a lambda](closures.md#control-flow-out-of-a-lambda)) |
 | Multi-dimensional slicing | `a[.., 1..3]`, `a[i, ..]` | Ranges, not `:`, which named arguments use ([`accelerators.md`: Level 1: tensor expressions](accelerators.md#level-1-tensor-expressions)) |
@@ -53,9 +54,9 @@ here with its reason ([Deltas from Rust (and why)](#deltas-from-rust-and-why)). 
 | Generators | `gen { for x in xs { yield f(x) } }`, `gen fn lines(…) -> Line` | Stable in v0 (unstable in Rust); compile to state-machine iterators ([`stdlib.md`: Generators](stdlib.md#generators)) |
 | Dedented string blocks | `sql"""` … `"""`; the closing quotes' indentation is stripped | Embedded SQL, JSON and HTML keep the code's indentation without a macro ([`text.md`: Literals](text.md#literals)) |
 | No integer string indexing | `let at = s.find('@')?; &s[at..s.end()]` | Positions are `StrPos` values on character boundaries, so slicing never traps ([`text.md`: Positions and slicing](text.md#positions-and-slicing)) |
-| Refinements (decided: one form) | `type Port = u16 where self >= 1024`; ranges as `type Port = u16 where self in 1..` | Validated newtypes ([`correctness.md`: Validated newtypes (lightweight refinements)](correctness.md#validated-newtypes-lightweight-refinements)). The compiler recognises range predicates and uses excluded values as layout niches, so `Option<Port>` stays 2 bytes ([`types.md`](types.md)). |
-| Contracts (decided: clauses) | `requires …`, `ensures …`, `invariant …` after the signature, positioned like `where` | First-class syntax for docs, tooling and verification ([`correctness.md`: Contracts as syntax](correctness.md#contracts-as-syntax)) |
-| Anonymous records (decided) | `fn bounds(xs: &[f64]) -> { min: f64, max: f64 }` | [Inference: "generic on the fly"](#inference-generic-on-the-fly) |
+| Refinements (one form) | `type Port = u16 where self >= 1024`; ranges as `type Port = u16 where self in 1..` | Validated newtypes ([`correctness.md`: Validated newtypes (lightweight refinements)](correctness.md#validated-newtypes-lightweight-refinements)). The compiler recognises range predicates and uses excluded values as layout niches, so `Option<Port>` stays 2 bytes ([`types.md`](types.md)). |
+| Contracts as clauses | `requires …`, `ensures …`, `invariant …` after the signature, positioned like `where` | First-class syntax for docs, tooling and verification ([`correctness.md`: Contracts as syntax](correctness.md#contracts-as-syntax)) |
+| Anonymous records | `fn bounds(xs: &[f64]) -> { min: f64, max: f64 }` | [Inference: "generic on the fly"](#inference-generic-on-the-fly) |
 | Linear and view types | `linear struct Txn { … }`, `view RingIter<T> { … }` | [`memory.md`: View types](memory.md#view-types), [`resources.md`: Resources: affine and linear](resources.md#resources-affine-and-linear) |
 | Comparison chaining | `0 <= i < len`, `lo < x <= hi` | One direction only; `==` does not chain ([`types.md`: Operators](types.md#operators)) |
 | Matrix multiply | `a @ b` | Tensor code ([`accelerators.md`](accelerators.md)) |
@@ -83,7 +84,9 @@ let y = add(1.5, 2.25);   // f64
   types**. The compiler infers the most general signature: generic parameters, trait bounds, effects
   and error sets.
 - **Public functions at mod boundaries must write their signatures.** This keeps the fast-build and
-  local-reasoning rules ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed)) and makes interfaces reviewable.
+  local-reasoning rules
+  ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed))
+  and makes interfaces reviewable.
 - `moddil fix` writes an inferred signature into the source; the language server shows inferred
   signatures as inlay hints ([`toolchain.md`](toolchain.md)).
 - Recursive and mutually recursive functions are solved by fixpoint; an ambiguous case asks for an
@@ -91,7 +94,7 @@ let y = add(1.5, 2.25);   // f64
 - Inferred bounds are still bounds, checked once ([`comptime.md`: Generics are bounded](comptime.md#generics-are-bounded)).
 - **Structural typing** (TypeScript's object shapes) is not the default: Moddil types are nominal,
   with traits.
-- **Anonymous records (decided):** `{ min: f64, max: f64 }` is a type that needs no declaration.
+- **Anonymous records:** `{ min: f64, max: f64 }` is a type that needs no declaration.
   Two records with the same field names and types are the same type. There is **no width
   subtyping**: a record with extra fields is not accepted where fewer are expected, so records
   behave like tuples with named fields.
@@ -113,9 +116,9 @@ As in Rust, unless a delta says otherwise:
 | Conditional binding | `if let`, `if let` chains (`if let Some(x) = a && x > 0`), `while let`, `let … else` | |
 | Loops | `loop`, `while`, `for x in iter`; `break value` from `loop`; labelled `break` and `continue` | `for` uses `IntoIterator`, including effectful iterators ([`stdlib.md`: Iteration](stdlib.md#iteration)) |
 | Expressions | `if`, `match` and blocks are expressions; the last expression is the value | |
-| Binding modes | **One rule (decided):** matching through a borrow binds borrows (`&mut` in, `&mut` out); matching an owned value moves or copies; `&x` in a pattern only dereferences `Copy` values. There are no `ref` or `ref mut` keywords | No lifetimes involved: the bindings are second-class like any borrow ([`memory.md`: Borrowing](memory.md#borrowing)). `moddil migrate rust` rewrites `ref` patterns ([`adoption.md`](adoption.md#moddil-migrate-rust)) |
-| Refinement patterns | `match s { p: Port => …, _ => … }` (decided) | Runs the refinement's pure predicate and binds `p` as the refined type; exhaustiveness treats it as a guard, so a fallback arm is needed |
-| Destructuring by name | `let { host, port, .. } = opts` (decided) | Records and structs destructure by field name, matching named arguments |
+| Binding modes | **One rule:** matching through a borrow binds borrows (`&mut` in, `&mut` out); matching an owned value moves or copies; `&x` in a pattern only dereferences `Copy` values. There are no `ref` or `ref mut` keywords | No lifetimes involved: the bindings are second-class like any borrow ([`memory.md`: Borrowing](memory.md#borrowing)). `moddil migrate rust` rewrites `ref` patterns ([`adoption.md`](adoption.md#moddil-migrate-rust)) |
+| Refinement patterns | `match s { p: Port => …, _ => … }` | Runs the refinement's pure predicate and binds `p` as the refined type; exhaustiveness treats it as a guard, so a fallback arm is needed |
+| Destructuring by name | `let { host, port, .. } = opts` | Records and structs destructure by field name, matching named arguments |
 | Evaluation order | Left to right, specified | [`determinism.md`: Sources of nondeterminism](determinism.md#sources-of-nondeterminism) |
 
 ## Named and default arguments
@@ -125,31 +128,29 @@ As in Rust, unless a delta says otherwise:
 - Positional arguments come first, named arguments after, in any order.
 - Defaults are part of the public interface, under semver and in semantic diffs
   ([`semantic-vcs.md`](semantic-vcs.md)).
-- **Name-only parameters (decided, opt-in):** parameters after a `*` must be passed by name, as in
+- **Name-only parameters (opt-in):** parameters after a `*` must be passed by name, as in
   Python. A lint suggests this for `bool` parameters, so `resize(w, h, true)` cannot happen:
   ```rust
   fn resize(w: u32, h: u32, *, keep_aspect: bool = false) { … }
   resize(800, 600, keep_aspect: true);
   ```
-- **Defaults on trait methods (decided):** defaults are written only on the trait method;
+- **Defaults on trait methods:** defaults are written only on the trait method;
   implementations inherit them and may not redeclare them (Kotlin's rule). A call through `dyn`, a
   generic bound or the concrete type therefore uses the same defaults. Changing a trait's default is
   a semver-visible change.
-
-- **Keywords do not name parameters or arguments (decided November 2026).** `default` stays a
-  keyword (it marks a specialising impl member), so a parameter, and so an argument, is never
-  called `default`; an API names its fallback otherwise (`args.value::<Port>("port",
-  fallback: 8080)`). A keyword that could name a parameter would need a second, inner name to be
-  used in the body, which is more syntax than the rare collision is worth
-  ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 1).
+- **Keywords do not name parameters or arguments.** `default` is a keyword (it marks a
+  specialising impl member), so a parameter, and so an argument, is never called `default`; an API
+  names its fallback otherwise (`args.value::<Port>("port", fallback: 8080)`). *Why:* a
+  keyword parameter would need a second, inner name for the body, which is more syntax than the
+  rare collision is worth ([`tour.md`: Gaps](tour.md#gaps-the-tour-exposed), 1).
 
 ## Grammar rules
 
-Decided while building the grammar inventory
-([`reference/grammar/inventory.md`](../reference/grammar/inventory.md)) and writing the grammar
-([`reference/grammar/moddil.ebnf`](../reference/grammar/README.md)):
+These rules fix what the grammar inventory
+([`reference/grammar/inventory.md`](../reference/grammar/inventory.md)) and the grammar
+([`reference/grammar/moddil.ebnf`](../reference/grammar/README.md)) accept:
 
-| Rule | Decision |
+| Construct | Rule |
 |---|---|
 | **Statements** | Rust's rule: a statement ends with `;`; a block's final expression without `;` is its value; items and block-ended expressions (`if`, `match`, `loop`, `with … { }`) need none |
 | **Comptime conditionals** | `if const target.os == Os::Linux { … }` ([`modules.md`](modules.md#conditional-code-is-comptime-if)) |
@@ -184,15 +185,28 @@ Decided while building the grammar inventory
 |---|---|
 | Argument labels and default parameter values | **Adopted:** named and default arguments ([`syntax.md`: Named and default arguments](syntax.md#named-and-default-arguments)) |
 | Optional chaining `a?.b?.c` | **Adopted** ([`syntax.md`: Deltas from Rust (and why)](syntax.md#deltas-from-rust-and-why)) |
-| Computed properties | **Not adopted (decided):** methods only, so a call is visibly a call and cost and effects are never hidden behind a field-like read |
+| Computed properties | **Not adopted:** methods only, so a call is visibly a call and cost and effects are never hidden behind a field-like read |
 | Property observers (`willSet`, `didSet`) | Not adopted: hidden control flow |
 | Property wrappers, `@dynamicMemberLookup` | Not adopted: compile-time derives cover the useful cases, and dynamic lookup harms local reasoning |
 | Result builders (the SwiftUI DSL style) | Covered by compile-time code plus closures; relevant to the UI question in [`examples/web-store.md`](examples/web-store.md) |
-| Key paths (`\Person.name`) | **Decided:** `\Order.customer.email` is a typed `KeyPath<Order, Email>`, generated by static reflection: composable (`a.then(b)`), `Eq` and `Hash`, and privacy-respecting; `WritableKeyPath` gives `&mut` access. It ships when UI binding or typed queries first need it; closures cover the rest |
-| **Library evolution: a stable binary ABI** for frameworks | **Decided:** the C ABI plus **WASM components (WIT)** are Moddil's stable binary boundaries, for plugins and binary SDKs ([`interop.md`](interop.md)). A Swift-style resilience mode (fields and methods reached through indirection so binaries survive upgrades) is a **non-goal** ([`requirements.md`: Non-goals (draft)](requirements.md#non-goals-draft)). |
+| Key paths (`\Person.name`) | **Adopted:** `\Order.customer.email` is a typed `KeyPath<Order, Email>`, generated by static reflection: composable (`a.then(b)`), `Eq` and `Hash`, and privacy-respecting; `WritableKeyPath` gives `&mut` access. It ships when UI binding or typed queries first need it; closures cover the rest |
+| **Library evolution: a stable binary ABI** for frameworks | The C ABI plus **WASM components (WIT)** are Moddil's stable binary boundaries, for plugins and binary SDKs ([`interop.md`](interop.md)). A Swift-style resilience mode (fields and methods reached through indirection so binaries survive upgrades) is a **non-goal** ([`requirements.md`: Non-goals (draft)](requirements.md#non-goals-draft)). |
 | Classes with shared mutable references (ARC) | Deliberately not: `Rc` contents are immutable; shared mutation goes through sync cells |
 | Objective-C interop; Playgrounds | Objective-C through C ([`interop.md`](interop.md)); REPL, script and notebook modes are a non-goal ([`requirements.md`: Non-goals (draft)](requirements.md#non-goals-draft)); an in-browser playground replaces Playgrounds ([`toolchain.md`: Playground: learning without a REPL](toolchain.md#playground-learning-without-a-repl)) |
 | Actors, `async`/`await`, typed throws, `some`/`any`, enums with payloads, `defer`, `Codable`, macros | Already covered: tasks and actors, effects, error handling, `impl`/`dyn`, ADTs, RAII and `errdefer`, derives, compile-time code |
+
+## Alternatives considered
+
+- **`T?` and `x ?? d` for optional values:** two spellings for `Option`, and `??` clashes with the
+  `?` operator.
+- **`!` to mark effects in signatures:** `!` stays the never type; `with` reads naturally.
+- **An `effect` keyword:** any trait listed after `with` is an effect, so none is needed.
+- **Keywords as parameter names, with a second, inner name for use in the body:** more syntax than
+  the rare collision is worth.
+- **A Swift-style resilience mode for a stable binary ABI:** a non-goal; the C ABI and WASM
+  components are the stable binary boundaries.
+- **Computed properties:** a call should be visibly a call, never hiding cost or effects behind a
+  field-like read.
 
 ## Prior art
 

@@ -51,10 +51,10 @@ that made them painful: lifetimes, `Send`, `'static` and `move`.
 | `impl FnMut(…)` | call it any number of times, one call at a time | read and mutate its captures |
 | `impl FnOnce(…)` | call it at most once | consume (move out of) its captures |
 
-**Decided:** `pub` signatures state the trait, and `impl FnMut` is the documented default for
-callbacks such as `visit`, `map` and `for_each`; private functions may leave it to inference, which
-picks the most permissive trait the body allows. Closures
-passed as `impl Fn…` parameters are **non-escaping** ([Non-escaping by default](#non-escaping-by-default)). Captures are inferred, so `move` is never
+`pub` signatures state the trait, and `impl FnMut` is the documented default for callbacks such
+as `visit`, `map` and `for_each`; private functions may leave it to inference, which picks the most
+permissive trait the body allows. Closures passed as `impl Fn…` parameters are **non-escaping**
+([Non-escaping by default](#non-escaping-by-default)). Captures are inferred, so `move` is never
 needed.
 
 ## Non-escaping by default
@@ -80,12 +80,12 @@ fn visit<E>(&self, f: impl FnMut(&K, &V) with E) with E
 
 One implementation serves all cases; there is no `try_visit` or `visit_async`.
 
-- **A call that passes a closure that can fail is marked (decided November 2026):**
+- **A call that passes a closure that can fail is marked:**
   `index.visit(|p, m| upload(p)?)?`, like any call that can fail, so every way an error leaves a
   function stays visible ([`error-handling.md`](error-handling.md)). Inside `visit`, a call of
   `f` passes `f`'s errors on without a mark: they are not `visit`'s to handle, and its caller's
   call is marked.
-- **A closure's other effects are met where it is written (decided):** a `with` around the closure,
+- **A closure's other effects are met where it is written:** a `with` around the closure,
   or the enclosing function's own effects, provides them, not the function that calls it, as
   Effekt's capabilities are lexical ([`effects-and-capabilities.md`](effects-and-capabilities.md)).
   A callee that installs a handler of its own around a call of `f` does not change what `f` uses.
@@ -116,15 +116,15 @@ fn refresh(&mut self) {
 - A method called from inside the closure normally borrows the whole of `self`. Methods can declare
   the fields they touch, so that `self.add_to_total(x)` can also be called while `self.items` is
   being visited (view types, [`memory.md`: View types](memory.md#view-types)).
-- **Decided:** a private method's field footprint is inferred from its body within the mod. A `pub`
+- A private method's field footprint is inferred from its body within the mod. A `pub`
   method may declare one, `fn add_to_total(&mut self.{total}, x: Money)`; the declaration is part
   of its API and checked against its body.
 
 ## Control flow out of a lambda
 
-- `?` propagates (decided, via effects).
+- `?` propagates, via effects.
 - `return` inside a lambda returns from the lambda, and `break` never crosses a lambda.
-- **`escape v` returns `v` from the enclosing function** (decided), crossing any number of
+- **`escape v` returns `v` from the enclosing function**, crossing any number of
   non-escaping lambdas. There are no labels: its destination is always the enclosing `fn`, and
   closures are not `fn`s. To stop only part of a function early, put that part in its own function.
 
@@ -159,12 +159,11 @@ fn on_message(&mut self, h: Handler) { self.handlers.push(h) }
 - Their **stored type names their effects**. Effect polymorphism does not leak into stored values
   except through explicit effect variables.
 - They are the only place where effects are usually written out by hand.
-- **A closure's handler needs are always met where it is written (decided November 2026,
-  superseding the earlier decision that a stored closure's are met where it is called).**
+- **A closure's handler needs are always met where it is written.**
   - A closure that uses a handler captures a shared borrow of it, so it is a
     [view](memory.md#view-types), and so is a `Box<dyn Fn …>` holding it. That borrow is tracked
     like any other a value holds.
-    - **A `Box<dyn Fn …>` carries its closure's borrows** (decided November 2026): erasing the
+    - **A `Box<dyn Fn …>` carries its closure's borrows**: erasing the
       closure's type does not erase them, so the box is a view of each handler it holds and
       cannot outlive or leave the `with` that installed it.
   - An owned stored closure, one kept past its `with`, cannot use handlers. Its type lists only
@@ -174,7 +173,7 @@ fn on_message(&mut self, h: Handler) { self.handlers.push(h) }
   - Why: see [`effects-and-capabilities.md`: Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers).
     There is one model for closures, anonymous impls and handlers that depend on other handlers,
     and library code that stores or calls a value never provides effects it was not written for.
-- **A function that keeps a closure names its errors (decided November 2026).** `Iterator::map`
+- **A function that keeps a closure names its errors.** `Iterator::map`
   keeps `f` in the `Map` it returns and calls it in `next`, so `f`'s errors are `Map`'s, not
   `map`'s: its bound names them with an effect variable it does not list,
   `F: FnMut(Self::Item) -> B with E`, which says they do not leave it.
@@ -185,7 +184,7 @@ There is no `await` keyword; suspension is implicit ([`resources.md`: Constructi
 Reviewers may still want to see where a lambda can suspend, because state in sync cells can change
 across a suspension and a lock might be held across it.
 
-**Decided: no marker in the source.** The language server shows suspension points as inlay hints,
+**There is no marker in the source.** The language server shows suspension points as inlay hints,
 semantic diffs report new ones ([Diffs, code review and version control](semantic-vcs.md)), and a
 lint flags a lock held across a suspension.
 
@@ -195,6 +194,17 @@ lint flags a lock held across a suspension.
   inferred.
 - There are no trailing lambdas. A closure is an ordinary argument and comes before any named
   arguments: `xs.visit_concurrent(|x| …, limit: 8)` ([`syntax.md`](syntax.md)).
+
+## Alternatives considered
+
+- **Meeting a stored closure's handler needs where it is called:** library code that stores or
+  calls a value would then provide effects it was not written for, and closures, anonymous impls
+  and handlers would not share one model.
+- **A suspension marker in the source (an `await`):** inlay hints, semantic diffs and a lint show
+  suspension points without one.
+- **Labels on `escape`:** its destination is always the enclosing `fn`; a part of a function that
+  must stop early goes in its own function.
+- **Trailing lambdas:** a closure is an ordinary argument, placed before any named arguments.
 
 ## Prior art
 

@@ -15,34 +15,6 @@ sharing are in [`memory.md`](memory.md).
 | **Linear types for fallible cleanup** | A `linear` value must be consumed explicitly (`close`, `commit`, `rollback`) on every path, including cancellation ([Resources: affine and linear](#resources-affine-and-linear)). |
 | **Nothing is lost (D10)** | A cleanup failure on an error path is attached to the primary error as suppressed, never replacing it and never terminating ([Cleanup that can fail](#cleanup-that-can-fail)). |
 
-## Problem
-
-**C++ shows what goes wrong when cleanup can fail:**
-
-- Destructors run during stack unwinding. If one throws while another exception is in flight, C++
-  cannot carry two exceptions and calls `std::terminate`.
-- Since C++11, destructors are implicitly `noexcept`, so a throw terminates even when nothing else
-  is in flight. The rule is enforced at runtime, by killing the process.
-- Cleanup can genuinely fail: `fclose` flushing to a full disk, a network filesystem reporting a
-  write error on close, a commit. Because destructors can't report it, libraries swallow the error,
-  and the program believes its data was written.
-- A throwing member destructor can leave the remaining members and bases uncleaned.
-
-**Construction has the mirror-image problem.** C#, JavaScript, Python, Java and C++ all forbid async
-constructors, so code falls back on `CreateAsync()` factories, two-phase `InitAsync()` and
-`Lazy<Task<T>>`, each leaving invalid states reachable.
-
-## Prior art
-
-- **Rust:** `Drop` cannot return an error; a panic in drop while already panicking aborts; `BufWriter`
-  silently discards flush errors on drop. `drop(&mut self)` cannot move fields out, which forces
-  `Option::take` and `ManuallyDrop` workarounds.
-- **Go:** `defer f.Close()` routinely ignores the error.
-- **Java:** try-with-resources is the best mainstream answer: a failing `close` becomes a *suppressed*
-  exception on the primary one.
-- **Zig:** `defer` and `errdefer`.
-- **Linear types:** Austral, Vale, Linear Haskell, and Rust's long-discussed "must-use" types.
-
 ## Destructors
 
 **Most types never write one.** The compiler generates *drop glue*: dropping a value drops each of
@@ -120,7 +92,7 @@ fs.rename(tmp, final)?;
 
 ## Construction may suspend; drop may not
 
-Two decisions remove the async-constructor problem rather than working around it:
+Two rules remove the async-constructor problem rather than working around it:
 
 - **No special constructors** ([`memory.md`: Ownership and RAII](memory.md#ownership-and-raii)). A value
   exists only once an all-fields literal has been evaluated. Creators are ordinary functions.
@@ -173,10 +145,9 @@ fn checkout() with db: Db, suspend, fail(DbError) {
 Rules:
 - Linear values **cannot be `.to_rc()`'d**: the last-drop point of an rc is not known statically,
   and it may be on any thread.
-- Every control-flow path, including error propagation, must consume a linear value. Error
-  propagation (`?`) on a path holding a linear value requires an explicit handler for it, usually an
-  `errdefer` (decided). Every `?` or suspension point reached while a linear value is held needs an
-  `errdefer` that consumes it, or explicit handling; the compiler offers the `errdefer` as a quick
+- Every control-flow path, including error propagation, must consume a linear value. Every `?` or
+  suspension point reached while a linear value is held needs an explicit handler for it: usually an
+  `errdefer` that consumes it, or explicit handling. The compiler offers the `errdefer` as a quick
   fix, so the cleanup is always visible where the value is used.
 - **Cancellation paths are checked like error paths**: a task observes cancellation only at a
   suspension point, and must consume its linear values on that path too, typically with
@@ -202,7 +173,7 @@ Rules:
    - the primary error stays the one that propagates and is matched on;
    - suppressed errors appear in traces ([`error-handling.md`: Traces](error-handling.md#traces)), in the language server
      ([`error-handling.md`: Language server support](error-handling.md#language-server-support)) and in logs;
-   - they can be read from the error value with **`e.suppressed()`** (decided), a provided method of
+   - they can be read from the error value with **`e.suppressed()`**, a provided method of
      the `Error` trait returning `impl Iterator<Item = &dyn Error>` in the order they occurred, as
      Java's `getSuppressed()` does;
    - a failure inside an `errdefer` body is suppressed in this way automatically.
@@ -237,3 +208,46 @@ There are three cases, each with a precise answer:
    class-3 crash ([`error-handling.md`: Three outcome classes](error-handling.md#three-outcome-classes)): the process terminates with a full
    trace and flight-recorder dump; **remaining drops do not run**, because there is no unwinding; a
    trap while already handling a trap aborts immediately.
+
+## Problem
+
+**C++ shows what goes wrong when cleanup can fail:**
+
+- Destructors run during stack unwinding. If one throws while another exception is in flight, C++
+  cannot carry two exceptions and calls `std::terminate`.
+- Since C++11, destructors are implicitly `noexcept`, so a throw terminates even when nothing else
+  is in flight. The rule is enforced at runtime, by killing the process.
+- Cleanup can genuinely fail: `fclose` flushing to a full disk, a network filesystem reporting a
+  write error on close, a commit. Because destructors can't report it, libraries swallow the error,
+  and the program believes its data was written.
+- A throwing member destructor can leave the remaining members and bases uncleaned.
+
+**Construction has the mirror-image problem.** C#, JavaScript, Python, Java and C++ all forbid async
+constructors, so code falls back on `CreateAsync()` factories, two-phase `InitAsync()` and
+`Lazy<Task<T>>`, each leaving invalid states reachable.
+
+## Alternatives considered
+
+- **Destructors that may fail** (C++ before C++11): a throw during unwinding cannot carry two
+  errors and terminates the process.
+- **Implicitly `noexcept` destructors enforced at runtime** (C++11): the rule is enforced by
+  killing the process; Moddil rejects a fallible destructor at compile time.
+- **`drop(&mut self)`** (Rust): fields cannot be moved out, which forces `Option::take` and
+  `ManuallyDrop` workarounds; `fn drop(self)` may destructure the value.
+- **Flushing or closing on drop and discarding the error** (Rust's `BufWriter`, Go's
+  `defer f.Close()`): the program believes its data was written when it was not.
+- **Async constructors, `CreateAsync()` factories or two-phase `InitAsync()`:** each leaves
+  invalid states reachable; a creator is an ordinary function that may suspend.
+- **Temporary lifetime extension** (Rust): a known source of surprise; a value is kept by binding
+  it with `let`.
+
+## Prior art
+
+- **Rust:** `Drop` cannot return an error; a panic in drop while already panicking aborts; `BufWriter`
+  silently discards flush errors on drop. `drop(&mut self)` cannot move fields out, which forces
+  `Option::take` and `ManuallyDrop` workarounds.
+- **Go:** `defer f.Close()` routinely ignores the error.
+- **Java:** try-with-resources is the best mainstream answer: a failing `close` becomes a *suppressed*
+  exception on the primary one.
+- **Zig:** `defer` and `errdefer`.
+- **Linear types:** Austral, Vale, Linear Haskell, and Rust's long-discussed "must-use" types.

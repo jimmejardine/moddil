@@ -14,7 +14,7 @@
 
 ## Problem
 
-- Moddil has no definition yet beyond these design documents.
+- Design documents are not a definition: they say what is wanted, not exactly what a program means.
 - Several tools will need to agree exactly on what a program means: the compiler, the language
   server, the formatter, agents' constrained decoding, the verifier, and perhaps other compilers.
 - **"The compiler is the spec"** (Rust until 2025) turns compiler bugs into semantics, and makes
@@ -36,7 +36,7 @@
 Compiler testing: Csmith and YARPGen (random programs for differential testing), grammar-based
 fuzzers, and Alive2 (translation validation for LLVM optimisations).
 
-## Decisions
+## Specification
 
 ### Three artefacts, one meaning
 
@@ -48,12 +48,12 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
 
 - **Any disagreement between them is a bug.** The reference decides the intended meaning (changing it
   if it was wrong), and the fix lands in all three.
-- This is WebAssembly's arrangement, which has kept several engines in close agreement.
-- **Lean is the source of truth for the core** (decided). The reference shows the core rules as
+- *Why:* this is WebAssembly's arrangement, which has kept several engines in close agreement.
+- **Lean is the source of truth for the core.** The reference shows the core rules as
   inference rules generated from the Lean definitions, so the two cannot drift.
-- **The formal core covers everything from the start** (decided): dynamic semantics, type and
+- **The formal core covers everything from the start:** dynamic semantics, type and
   effect soundness, and borrows, in the style of RustBelt.
-- **When each starts (decided):** the reference and the conformance suite grow from the first M0
+- **When each starts:** the reference and the conformance suite grow from the first M0
   slice; the reference interpreter from slice S1; work on the Lean model after slice S5, once the core
   has settled ([`roadmap.md`: On the horizon](roadmap.md#on-the-horizon), P55).
 
@@ -65,7 +65,7 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
   meaning; a rule that changes gets a new ID, and the old one is marked with the edition that
   retired it.
 - Conformance tests cite the IDs they cover, so coverage of the reference is measurable.
-- **The language is defined by its canonical text form** (decided): the grammar and lexical rules
+- **The language is defined by its canonical text form:** the grammar and lexical rules
   below. However code is stored ([`roadmap.md`](roadmap.md), question 9), a structured store would
   be a lossless encoding of that text, so the reference does not change.
 
@@ -76,7 +76,7 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
   name are the same identifier.
 - **Confusable and mixed-script identifiers are linted** (Unicode UTS #39): `раssword` with a
   Cyrillic `р` next to `password` is flagged.
-- **Keywords are ASCII and all reserved** (decided): there are no contextual keywords
+- **Keywords are ASCII and all reserved:** there are no contextual keywords
   ([`syntax.md`: Grammar rules](syntax.md#grammar-rules)). A keyword may still name a **member** (a
   field or method, where declared and after `.` or `::`) or be a named-argument label
   (`pub fn view(&self)`, `Type::from(x)`, `default: 8080`), as in Swift and Kotlin, because those
@@ -97,17 +97,16 @@ fuzzers, and Alive2 (translation validation for LLVM optimisations).
     ([`agent-interface.md`](agent-interface.md)).
 - The formatter's canonical output must parse back to the same AST: the formatter checks it on
   every file it formats, and its tests run it over the grammar's whole corpus.
-- **The source (decided):** `reference/grammar/moddil.ebnf`, in a small EBNF dialect of our own. A
+- **The source:** `reference/grammar/moddil.ebnf`, in a small EBNF dialect of our own. A
   Rust tool checks that it is LL(k) and unambiguous and generates the outputs above.
-- **Notation (decided):** W3C-style EBNF (`rule ::= a b? c* (d | e)+`), with quoted terminals and
+- **Notation:** W3C-style EBNF (`rule ::= a b? c* (d | e)+`), with quoted terminals and
   UPPERCASE token rules, in one file with a Tokens section and a Syntax section. GBNF and Lark use
   the same operators, so generating them is nearly direct.
-- **Writing it (decided):** an inventory of every decided construct comes first
+- **Writing it:** an inventory of every settled construct comes first
   (`reference/grammar/inventory.md`). Ambiguities and conflicts found along the way become open
-  questions in [`syntax.md`](syntax.md), so the grammar only ever holds decided
-  syntax. It covers **all
-  decided syntax from the start**, not only what M0 implements, so ambiguities surface before any
-  parser code exists; the compiler's hand-written parser implements it slice by slice.
+  questions in [`syntax.md`](syntax.md), so the grammar only ever holds settled syntax. It covers
+  **all settled syntax from the start**, not only what M0 implements, so ambiguities surface
+  before any parser code exists; the compiler's hand-written parser implements it slice by slice.
 
 ### A shared conformance suite
 
@@ -137,14 +136,14 @@ fn leak() -> int { counter.tick() }   //~ E0601
 - Tests are ordinary Moddil files with **inline expectations**: `// =>` for values (as in
   [`docs.md`](docs.md)), `//~ E0601` for diagnostics, `//~ trap` for traps. From S1, tests may
   also use [`assert`](testing.md#assertions), whose failure is a trap like any other.
-- **How expectations bind (decided):** `// =>` follows an expression statement or a block's final
+- **How expectations bind:** `// =>` follows an expression statement or a block's final
   expression inside a `test` item, and every such line must run and produce exactly that value;
   `//~ E…` names a diagnostic starting on its line; `//~ trap` marks the line where a trap
   happens. A file with expected diagnostics is only checked, not run, so error tests live in their
   own files. A file has only items at the top level, so values are always observed in tests.
 - **Diagnostic codes are part of conformance; message wording is not**, so implementations may
   word errors their own way.
-- **Codes come in blocks by area (decided):** E00xx syntax, E01xx names, E02xx types, E03xx
+- **Codes come in blocks by area:** E00xx syntax, E01xx names, E02xx types, E03xx
   ownership and mutability, E04xx traits and generics, E05xx errors and `fail`, E06xx effects, and
   further blocks as areas arrive. A code never changes meaning. The table is in the reference
   ([`reference/2027/diagnostics.md`](../reference/2027/diagnostics.md)).

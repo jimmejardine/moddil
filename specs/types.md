@@ -2,7 +2,7 @@
 
 ## Summary
 
-| Topic | Decision |
+| Topic | Rule |
 |---|---|
 | **Baseline** | Rust's type system: structs, enums with payloads, traits, generics with bounds, associated types, GATs. **No lifetimes**, because borrows are second-class ([`memory.md`](memory.md)). |
 | **Subtyping** | **None.** No variance rules. A short, fixed list of implicit coercions; every other conversion is explicit ([No subtyping](#no-subtyping)). |
@@ -16,7 +16,7 @@
 | **Inference** | Local only. Private signatures may be inferred and generalised within a mod; nothing is inferred across a mod boundary ([Inference](#inference)). |
 | **Optional values** | No null in safe code: `Option<T>` only, no `T?` sugar; definite initialisation; guaranteed niches ([Optional values and invalid states](#optional-values-and-invalid-states)). |
 | **Paradigms** | Functional and object-oriented styles both supported; no inheritance, traits plus delegation instead ([Paradigms: functional and object-oriented](#paradigms-functional-and-object-oriented)). |
-| **Higher-kinded types** | Not now; GATs cover the known needs ([Paradigms: functional and object-oriented](#paradigms-functional-and-object-oriented)). |
+| **Higher-kinded types** | Not supported; GATs cover the known needs ([Paradigms: functional and object-oriented](#paradigms-functional-and-object-oriented)). |
 
 ## Problem
 
@@ -32,24 +32,6 @@ either gets painfully wrong for an ecosystem or leaves unstable:
   generic function requires should all be visible from the code at hand, not from imports elsewhere.
 - **Subtyping and variance are a large source of confusion** in Rust (lifetime variance), Java
   (array covariance) and Scala, and Moddil has removed most of the reasons for them.
-
-## Prior art
-
-| Language | What it does | Lesson |
-|---|---|---|
-| **Rust** | Orphan rule; `min_specialization` (unstable for about ten years, mostly because of lifetimes); "dyn compatibility" rules | Coherence works, but the orphan workarounds are a constant tax; specialisation is hard *because of lifetimes* |
-| **Swift** | Protocols, witness tables, existentials (`any P`), retroactive conformances (warned about since Swift 6) | One generics implementation that can be unspecialised or specialised; existentials that handle generic requirements |
-| **Haskell** | Type classes; orphan instances allowed with a warning; `OverlappingInstances` | Orphans cause real conflicts; unrestricted overlap makes instance choice hard to predict |
-| **Scala** | `given`/`using` (Scala 3), implicits (Scala 2) | Scoped instances are flexible, but Scala 2's implicits are the standard example of code whose behaviour depends on imports |
-| **OCaml** | Modules and functors instead of type classes | Explicit instance passing is fully local, but verbose for everyday operations like `==` and hashing |
-| **Go** | Structural interfaces, no explicit impls | No coherence problem, but no associated types, and accidental conformance |
-
-Further reading: Hoare, "Null References: The Billion Dollar Mistake" (QCon 2009); Swift `Optional`;
-Kotlin null safety; TypeScript `strictNullChecks`; Dart sound null safety; C# 8 nullable reference
-types; Java Valhalla null-restricted types and JSpecify; Rust niche optimisation and pattern types;
-F* and Liquid Haskell refinement types; typestate (Strom and Yemini, 1986). Kotlin `by` delegation
-and Go embedding; Scala and Swift traits and protocols with default implementations; Haskell and
-Koka (purity, effects); Lean 4 and Koka (Perceus reuse).
 
 ## Kinds of type
 
@@ -72,7 +54,7 @@ This document defines the rules; the types themselves are mostly defined elsewhe
 
 ## No subtyping
 
-**Decision: Moddil has no subtyping, so it has no variance.** Rust's variance exists almost entirely
+**Moddil has no subtyping, so it has no variance.** *Why:* Rust's variance exists almost entirely
 for lifetimes, Java's and Scala's for inheritance, and TypeScript's for width subtyping. Moddil has
 none of these.
 
@@ -100,11 +82,11 @@ unit conversions ([`units.md`](units.md)).
 
 ## Traits
 
-As in Rust, with the omissions that follow from other decisions:
+As in Rust, with the omissions that follow from the rest of the design:
 
 - **Supertraits and default methods**; associated types and associated consts.
-- **Generic associated types** (lending iterators, collection families). **Higher-kinded types are
-  deferred**.
+- **Generic associated types** (lending iterators, collection families). **There are no
+  higher-kinded types** ([Functional programming](#functional-programming)).
 - **No inheritance.** Delegation (`#[delegate(Trait)]`) forwards a trait's methods to a field
   ([Multiple inheritance](#multiple-inheritance)).
 - **Derives** (`#[derive(Eq, Hash, …)]`) are comptime code ([`comptime.md`](comptime.md)); what they
@@ -117,7 +99,7 @@ As in Rust, with the omissions that follow from other decisions:
   own role, see [Role traits](effects-and-capabilities.md#role-traits)); coherence is
   unaffected, because each handler is an ordinary impl on its own type
   ([`effects-and-capabilities.md`: Effects are traits passed implicitly](effects-and-capabilities.md#effects-are-traits-passed-implicitly)).
-- **Trait aliases** (decided): `trait Num = Add + Sub + Mul + Copy;` is a transparent name for a
+- **Trait aliases**: `trait Num = Add + Sub + Mul + Copy;` is a transparent name for a
   set of bounds. Every type that meets the bounds satisfies it, and nothing implements it
   directly. This is the opposite of a [role trait](effects-and-capabilities.md#role-traits), which
   is a distinct trait.
@@ -126,8 +108,7 @@ As in Rust, with the omissions that follow from other decisions:
 - Trait methods may carry the **control effects** `suspend` and `fail(E)`; implementations may
   perform fewer than the trait declares, never more. Other dependencies of an implementation are
   captured when the value is built ([`effects-and-capabilities.md`: Effects inside handlers](effects-and-capabilities.md#effects-inside-handlers)).
-
-- **A type's function and a method may share a name (decided November 2026).** An inherent
+- **A type's function and a method may share a name.** An inherent
   impl may define one function without `self` and one method of the same name, told apart by
   `self`: `Type::f(…)` (and `Type::f` as a value) names the function, `x.f()` the method. So
   `Response::status(s)` makes a response and `r.status()` reads one. Two of one kind are still
@@ -135,8 +116,10 @@ As in Rust, with the omissions that follow from other decisions:
 
 ## Coherence: one impl per trait and type
 
-**Decision: in any program there is at most one implementation of a trait for a type.** Which impl
-runs is therefore a property of the program, not of the imports in scope.
+**In any program there is at most one implementation of a trait for a type.** Which impl runs is
+therefore a property of the program, not of the imports in scope. *Why:* impls that vary by scope
+let data structures disagree about their own keys, make behaviour depend on imports, and let an
+upgraded dependency make existing code ambiguous.
 
 ### Who may write an impl
 
@@ -148,7 +131,7 @@ An `impl Trait for Type` is allowed in a mod when **any** of these holds:
    component. Nothing depends on it, so nothing downstream can clash with it.
 3. **The mods share an owner**: mods published from the **same repository** count as one owner for
    this rule. This removes Rust's "split crate" problem, where a project that owns both crates still
-   cannot write the impl in a third. The repository is the unit (decided), not a declared family:
+   cannot write the impl in a third. The repository is the unit, not a declared family:
    a mod's identity is already its repository path ([`packages-and-supply-chain.md`](packages-and-supply-chain.md)),
    so the boundary cannot be claimed by a stranger and needs no extra declaration.
 4. **The mod is a declared bridge** between the trait's mod and the type's mod (below).
@@ -169,10 +152,10 @@ traits = "moddil.com/serde"            # the mod whose traits are implemented
 types  = "github.com/chrono/chrono"    # the mod whose types they are implemented for
 ```
 
-- A bridge joins **exactly two mods**, named by key rather than position (decided). It may
+- A bridge joins **exactly two mods**, named by key rather than position. It may
   implement **traits of the `traits` mod for types of the `types` mod**, and nothing else outside the
   orphan rule.
-- **Duplicate bridges are a build error until the application picks one** (decided). When a program
+- **Duplicate bridges are a build error until the application picks one.** When a program
   is built, the toolchain checks that no two mods in the dependency graph implement the same trait
   for the same type. If two bridges for the same pair of mods are present (pulled in by two
   libraries, say), the error names both, and the application's manifest chooses one:
@@ -195,19 +178,6 @@ types  = "github.com/chrono/chrono"    # the mod whose types they are implemente
 - The owning mods can later absorb the impl. Moving an impl from a bridge into the owning mod is a
   migration `moddil` can verify ([`evolution.md`](evolution.md)).
 
-### Why not scoped or named impls
-
-Scala's `given`s and Haskell's local-instance proposals let different parts of a program use
-different impls of the same trait for the same type. Moddil rejects this:
-
-- **Data structures can disagree.** A `HashMap` built where one `Hash` impl is in scope and queried
-  where another is in scope misses its own keys. The fixes (carrying the impl in the type, as in
-  `Set<T, by = MyOrd>`) complicate every generic type.
-- **Behaviour depends on imports.** Changing a `use` line can change which code runs without any
-  visible change at the call site: bad for reviewers and for agents.
-- **Upgrades break builds at a distance.** A dependency that adds an impl can make existing code
-  ambiguous.
-
 ### What Rust's workarounds cost, and what remains
 
 | Rust workaround | Cost | In Moddil |
@@ -219,9 +189,9 @@ different impls of the same trait for the same type. Moddil rejects this:
 
 ## Specialisation
 
-**Decision: a restricted form of specialisation is in v0.** Rust's `specialization` has been unstable
-for about ten years mainly because impl selection could depend on lifetimes, which are erased before
-code generation. Moddil has no lifetime parameters, which removes that problem.
+**A restricted form of specialisation is part of v0.** *Why:* Rust's `specialization` has been
+unstable for about ten years mainly because impl selection could depend on lifetimes, which are
+erased before code generation. Moddil has no lifetime parameters, which removes that problem.
 
 ```rust
 impl<T: Clone> Extend<T> for Vec<T> {
@@ -237,11 +207,11 @@ impl<T: Copy> Extend<T> for Vec<T> {
 }
 ```
 
-Rules (decided):
+Rules:
 
 1. **Strictly more specific.** Two impls may overlap only if one applies to a strict subset of the
-   other's types. Overlaps that neither contains are an error, as today. Rust's "always applicable"
-   lattice rule exists to keep lifetimes out of impl selection, and Moddil has none.
+   other's types. Overlaps that neither contains are an error, as in Rust. Rust's "always
+   applicable" lattice rule exists to keep lifetimes out of impl selection, and Moddil has none.
 2. **`default` marks what may be overridden.** Only items marked `default` in the general impl can be
    replaced: methods, and associated types marked `default type`.
 3. **A `default type` is opaque to generic code.** A specialisation may change it, so generic code
@@ -274,10 +244,10 @@ Rules (decided):
 
 ## Generics
 
-- **Checked once, at the definition** (decided, [`comptime.md`: Generics are bounded](comptime.md#generics-are-bounded)).
+- **Checked once, at the definition** ([`comptime.md`: Generics are bounded](comptime.md#generics-are-bounded)).
   A generic function's bounds are the whole contract; errors point at the call site, not into the
   library.
-- **Two compilation strategies, one semantics** (decided):
+- **Two compilation strategies, one semantics:**
   - debug builds compile one copy of a generic function, which receives a hidden **witness table**
     (size, alignment, copy, drop and the trait methods it uses);
   - release builds produce a specialised copy per type (monomorphisation);
@@ -285,11 +255,11 @@ Rules (decided):
     ([`build-times.md`: Language rules that decide build speed](build-times.md#language-rules-that-decide-build-speed), rule 5);
   - generics from optimised dependencies are specialised even in debug builds, and cached (same rule).
 - **Const generics** use Rust's spelling, with `int` for sizes (`<const N: int>`,
-  [`numerics.md`: Integer types](numerics.md#integer-types)). **Decided:** a const parameter may
-  have any type that is comptime-evaluable and has structural equality (integers, `bool`, `char`,
+  [`numerics.md`: Integer types](numerics.md#integer-types)). A const parameter may have any
+  type that is comptime-evaluable and has structural equality (integers, `bool`, `char`,
   strings, and enums and structs made of them), so `Matrix<f32, 3, 3>` and `Format<"utf-8">` are
   both possible.
-- **Default type parameters**, as in Rust (`HashMap<K, V, S = RandomState>`; decided). Named
+- **Default type parameters**, as in Rust (`HashMap<K, V, S = RandomState>`). Named
   arguments are for values; a type default lets a type gain a parameter without breaking its users
   ([`evolution.md`](evolution.md)).
 - **`impl Trait`** in argument position (an anonymous generic) and in return position (an opaque
@@ -300,7 +270,7 @@ Rules (decided):
 
 ## `dyn`: existentials
 
-**Decision: any trait can be used as `dyn Trait`**, as with Swift's `any P`, rather than only the
+**Any trait can be used as `dyn Trait`**, as with Swift's `any P`, rather than only the
 "dyn-compatible" traits Rust allows.
 
 - A `dyn Trait` value is a pointer to the data plus a **witness table** for its concrete type, the
@@ -340,10 +310,10 @@ Operators are traits, as in Rust: `a + b` calls `Add::add`, `a[i]` calls `Index:
 - `==` and `<` come from `PartialEq` and `PartialOrd`; `Eq` and `Ord` are markers that add
   guarantees ([`values.md`: Equality and ordering traits](values.md#equality-and-ordering-traits)).
   There is no separate overloadable `==`.
-- **Operator traits are pure** (decided): no `fail`, no `suspend`, and no other effects. They may
+- **Operator traits are pure:** no `fail`, no `suspend`, and no other effects. They may
   trap and may allocate (allocation is a capability of the profile, not an effect), so `+` on big
   numbers works. Anything that can fail is a named method: `a.checked_add(b)?`.
-- **Comparisons chain in one direction** (decided): `lo <= x < hi` means `lo <= x && x < hi`, with
+- **Comparisons chain in one direction:** `lo <= x < hi` means `lo <= x && x < hi`, with
   `x` evaluated once. Every operator in a chain is `<`/`<=`, or every one is `>`/`>=`; `==` and `!=`
   do not chain, and `a < b > c` is an error (which also keeps generics' angle brackets
   unambiguous). Rust rejects `a < b < c`, and `(a < b) < c` cannot compile, since `bool` does not
@@ -354,7 +324,7 @@ Operators are traits, as in Rust: `a + b` calls `Add::add`, `a[i]` calls `Index:
   if lo < x <= hi { … }                        // an exclusive lower bound, which ranges cannot express
   type Ephemeral = u16 where 49152 <= self <= 65535;
   ```
-- **Operators keep their meaning** (decided): an operator impl must be the operation its symbol
+- **Operators keep their meaning:** an operator impl must be the operation its symbol
   names. This is a review rule for people and agents, and the standard library sets the example
   (no `+` on strings, [`text.md`](text.md)); no lint can decide what an operation "means".
 
@@ -371,9 +341,11 @@ Operators are traits, as in Rust: `a + b` calls `Add::add`, `a[i]` calls `Index:
 
 ### No general union types
 
-**Decided: there are no anonymous union types for values**, as TypeScript's `int | String`. A sum of
-values is a named enum. Error sets remain the only open unions
+**There are no anonymous union types for values**, as TypeScript's `int | String`. A sum of values
+is a named enum. Error sets are the only open unions
 ([`error-handling.md`: Error types](error-handling.md#error-types)).
+
+*Why:*
 
 - **Unions reopen subtyping.** If `A` flows into `A | B`, the next question is whether `Vec<A>` is a
   `Vec<A | B>`: the variance Moddil removed ([No subtyping](#no-subtyping)).
@@ -385,8 +357,6 @@ values is a named enum. Error sets remain the only open unions
   ([LLMs as first-class programmers](agent-interface.md)).
 - **Foreign unions become enums:** generated bindings turn WebIDL and TypeScript unions into named
   enums ([`ui.md`: The browser](ui.md#the-browser)).
-- Adding unions later, for example restricted to named nominal types and matched only by `match`,
-  stays backwards compatible.
 
 ## Optional values and invalid states
 
@@ -422,11 +392,11 @@ plus compiler-checked narrowing*, in one of two styles:
   - newtypes;
   - typestate.
 
-### Decision: no null, and no invalid states
+### No null, and no invalid states
 
 - **No null in safe code.** Absence is `Option<T>` = `None | Some(T)`. It is an ordinary sum type in a
   core-adjacent mod (R2); the compiler adds only sugar and layout guarantees.
-- **`Option<T>` only, as in Rust** (decided; [`syntax.md`](syntax.md)). There is no `T?` sugar.
+- **`Option<T>` only, as in Rust** ([`syntax.md`](syntax.md)). There is no `T?` sugar.
   Nesting is explicit: `Option<Option<T>>`. It comes with:
   - exhaustive `match`, `if let` and `let … else`;
   - `?`, which always **propagates** `None`, as in Rust. Inside a function returning `Option`,
@@ -442,7 +412,7 @@ plus compiler-checked narrowing*, in one of two styles:
   - Catching a failure can produce an `Option`.
 - **Guaranteed niches:** `Option<&T>`, `Option<Rc<T>>`, owned pointers, non-zero and range-typed
   integers, and enums with spare values are all the same size as `T`. Nullable C pointers import as
-  `Option<…>` ([Interoperability with C and Rust](interop.md)). Beyond this list (decided), the
+  `Option<…>` ([Interoperability with C and Rust](interop.md)). Beyond this list, the
   layout of nested options such as `Option<Option<T>>` and of other enums is the compiler's choice:
   it packs into spare values where it can, but programs cannot rely on it, and a size change from
   better packing is not a breaking change. `#[repr(C)]` and the guaranteed niches are the only stable
@@ -457,10 +427,10 @@ plus compiler-checked narrowing*, in one of two styles:
 - **Invalid states beyond null:**
   - **Cheap newtypes:** zero-cost and distinct, with no implicit conversion (`UserId` ≠ `OrderId`).
   - **Range refinements** (`u32 where self in 1..`): values that are excluded become free niches for
-    `Option`. This is the same `where` form as other refinements (decided).
+    `Option`. This is the same `where` form as other refinements.
   - **Refinement types** (`Int where 0 <= self < 100`): checked statically where provable,
     dynamically otherwise. They share machinery with contracts ([Correctness tooling: contracts and verification](correctness.md)).
-    **How much is static** (decided): literals and constants are checked at compile time; a cheap
+    **How much is static:** literals and constants are checked at compile time; a cheap
     analysis within one function (linear integer facts from dominating `if`s, `match` guards and loop
     bounds, no solver) removes runtime checks it can prove; everything else is checked at
     construction. SMT-backed proofs across functions are opt-in per mod, at the verification levels
@@ -525,13 +495,12 @@ fn connect(host: &str, port: Option<Port>) with Net, suspend, fail(NetError) {
 - **Functional updates in place:** compile-time reference-count elision with reuse (Perceus style)
   turns "build a new value" into an in-place update when the old one is no longer used.
 - **Guaranteed tail calls** with `become f(x)` (Rust's accepted design; WASM tail calls are standard).
-- **Laziness (decided):** evaluation is eager. Iterators are lazy, as in Rust, and a `Lazy<T>`
+- **Laziness:** evaluation is eager. Iterators are lazy, as in Rust, and a `Lazy<T>`
   library type computes a value once, on first use.
-- **Higher-kinded types (decided): not now.** Generic associated types (GATs), as in Rust, cover
-  the concrete needs (lending iterators, collection families). HKTs are revisited later; adding
-  them is backwards compatible. Rationale: they clash with ownership and lifetimes, monadic
-  `bind` breaks `?`/`return`/`break` inside closures, inference gets harder, and Moddil's effects
-  already provide what monads give Haskell (errors, state, async).
+- **No higher-kinded types.** Generic associated types (GATs), as in Rust, cover the concrete
+  needs (lending iterators, collection families). *Why:* they clash with ownership and
+  lifetimes, monadic `bind` breaks `?`/`return`/`break` inside closures, inference gets harder,
+  and Moddil's effects already provide what monads give Haskell (errors, state, async).
 
 ### Object-oriented programming
 
@@ -575,3 +544,41 @@ What replaces it:
    ```
 3. **Default methods act as mixins:** a trait can supply reusable behaviour to every type that
    implements its required methods.
+
+## Open questions
+
+- **Higher-kinded types.** They are left out for now and may be revisited. Adding them later is
+  backwards compatible.
+- **Restricted unions.** Union types limited to named nominal types and matched only by `match`
+  could be added later without breaking code; whether to add them is open.
+
+## Alternatives considered
+
+- **Scoped or named impls** (Scala's `given`s, Haskell's local-instance proposals), letting parts
+  of a program use different impls of one trait for one type. Not taken: a `HashMap` built where
+  one `Hash` impl is in scope and queried where another is misses its own keys, and the fixes
+  (carrying the impl in the type, as in `Set<T, by = MyOrd>`) complicate every generic type;
+  changing a `use` line can change which code runs with no visible change at the call site, which
+  is bad for reviewers and agents; and a dependency that adds an impl can make existing code
+  ambiguous.
+- **A declared family of mods as the owner for coherence**, instead of the repository. Not taken:
+  a mod's identity is already its repository path, so the repository boundary cannot be claimed
+  by a stranger and needs no extra declaration.
+
+## Prior art
+
+| Language | What it does | Lesson |
+|---|---|---|
+| **Rust** | Orphan rule; `min_specialization` (unstable for about ten years, mostly because of lifetimes); "dyn compatibility" rules | Coherence works, but the orphan workarounds are a constant tax; specialisation is hard *because of lifetimes* |
+| **Swift** | Protocols, witness tables, existentials (`any P`), retroactive conformances (warned about since Swift 6) | One generics implementation that can be unspecialised or specialised; existentials that handle generic requirements |
+| **Haskell** | Type classes; orphan instances allowed with a warning; `OverlappingInstances` | Orphans cause real conflicts; unrestricted overlap makes instance choice hard to predict |
+| **Scala** | `given`/`using` (Scala 3), implicits (Scala 2) | Scoped instances are flexible, but Scala 2's implicits are the standard example of code whose behaviour depends on imports |
+| **OCaml** | Modules and functors instead of type classes | Explicit instance passing is fully local, but verbose for everyday operations like `==` and hashing |
+| **Go** | Structural interfaces, no explicit impls | No coherence problem, but no associated types, and accidental conformance |
+
+Further reading: Hoare, "Null References: The Billion Dollar Mistake" (QCon 2009); Swift `Optional`;
+Kotlin null safety; TypeScript `strictNullChecks`; Dart sound null safety; C# 8 nullable reference
+types; Java Valhalla null-restricted types and JSpecify; Rust niche optimisation and pattern types;
+F* and Liquid Haskell refinement types; typestate (Strom and Yemini, 1986). Kotlin `by` delegation
+and Go embedding; Scala and Swift traits and protocols with default implementations; Haskell and
+Koka (purity, effects); Lean 4 and Koka (Perceus reuse).
