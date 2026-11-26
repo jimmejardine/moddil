@@ -235,3 +235,33 @@ fn a_task_tree_gives_its_value_in_parallel() {
         }
     }
 }
+
+/// More tasks spinning than the machine has cores, and one more that ends them: under the
+/// parallel runtime the spinners give way at their loops' back-edges once their slices are
+/// over (`runtime.md`: a long CPU loop never yields), so the last one runs.
+#[test]
+fn spinning_tasks_give_way_in_parallel() {
+    let cores = std::thread::available_parallelism().map_or(4, usize::from);
+    let spinners: String = (0..cores * 2)
+        .map(|_| "        s.spawn(|| while atomic::load(stop.get(), Ordering::Acquire) == 0 {});\n")
+        .collect();
+    let text = format!(
+        "use core::atomic::{{self, Ordering}};\nuse core::cell::UnsafeCell;\n\n\
+         test \"spinners give way\" {{\n    let stop = UnsafeCell::new(0);\n    scope(|s| {{\n\
+         {spinners}        s.spawn(|| atomic::store(stop.get(), 1, Ordering::Release));\n    \
+         }});\n    1  // => 1\n}}\n"
+    );
+    let mut p = project(&text);
+    p.mods[0].unsafe_ok = true;
+    let db = Database::default();
+    let program = Program::of_project(&db, &p);
+    let diagnostics = moddil_interp::diagnostics(&db, program);
+    assert!(diagnostics.is_empty(), "{diagnostics:?}\n{text}");
+    let options = moddil_native::Options {
+        parallel: true,
+        ..Default::default()
+    };
+    let (observed, r) = moddil_native::run_test_with(&db, program, 0, options);
+    assert!(r.is_ok(), "{r:?}");
+    assert_eq!(observed.len(), 1);
+}

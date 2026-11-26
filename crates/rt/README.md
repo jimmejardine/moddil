@@ -11,7 +11,8 @@ the host takes it once a run ends.
   the MIR interpreter ([`moddil-sched`](../sched/src/lib.rs)): one turn under the deterministic
   runtime, so one task runs at a time; one a core under the parallel runtime (`set_workers`,
   `with Runtime = runtime::cpus::parallel(&cpus)`), so tasks run at once. A trap then stops the
-  running ones at their next safe point. What differs between targets is the baton
+  running ones at their next safe point, and a task that has run its 10 ms slice gives its turn
+  to a ready one there: a thread sets the safe-point word for the last 200 µs of each slice. What differs between targets is the baton
   ([`src/baton.rs`](src/baton.rs)):
   - natively, a coroutine per task (`corosensei`), each with a 256 MiB stack reserved and
     committed as it is used, resumed by a worker thread (one a turn) once it has a turn; the

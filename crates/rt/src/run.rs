@@ -14,7 +14,7 @@
 #![allow(unsafe_code)]
 
 use std::cell::{Cell, RefCell};
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 use crate::baton::{self, Baton, DropFn, TaskFn};
@@ -187,11 +187,79 @@ pub(crate) static PREEMPT: AtomicU8 = AtomicU8::new(0);
 /// At a safe point, with [`PREEMPT`] set: gives way.
 #[unsafe(export_name = "moddil_rt_safe_point")]
 pub(crate) extern "C" fn safe_point() {
-    // A run that ended: the task runs no more of its code.
-    if CTX.with(|c| c.borrow().as_ref().is_some_and(|c| c.lock().aborted)) {
-        baton::abandon();
+    // Most calls, while the word is set: a task within its slice, in no run that is ending.
+    if ABORTING.load(Ordering::Relaxed) == 0 && !baton::slice_over() {
+        return;
     }
-    PREEMPT.store(0, Ordering::Relaxed);
+    let Some(c) = CTX.with(|c| c.borrow().clone()) else {
+        return;
+    };
+    let mut s = c.lock();
+    // A run that ended: the task runs no more of its code.
+    if s.aborted {
+        drop(s);
+        baton::abandon();
+        return;
+    }
+    // A task that has had its slice gives its turn to a ready one, and queues behind it.
+    if !baton::slice_over() || !s.sched.has_ready() {
+        return;
+    }
+    let me = me();
+    s.sched.requeue(me);
+    s.turns.give_up(me);
+    let st = &mut *s;
+    st.turns.hand_out(&mut st.sched);
+    baton::wait_turn(&c, s);
+}
+
+/// How many runs are ending after a trap: while any is, the preemption word stays set, so that
+/// each of their running tasks stops at its next safe point.
+static ABORTING: AtomicUsize = AtomicUsize::new(0);
+
+/// How long a task runs before it gives way to a ready one at a safe point, under the parallel
+/// runtime. The preemption word is set for the last [`WINDOW`] of each slice: long enough for a
+/// running loop to reach a back-edge, short enough that the checks it then makes cost little.
+const SLICE: std::time::Duration = std::time::Duration::from_millis(10);
+const WINDOW: std::time::Duration = std::time::Duration::from_micros(200);
+
+/// Which window the word is set for: a task that has looked at its slice in this one does not
+/// look again.
+static WINDOWS: AtomicUsize = AtomicUsize::new(0);
+
+/// The window the preemption word is set for now.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) fn window() -> usize {
+    WINDOWS.load(Ordering::Relaxed)
+}
+
+/// [`SLICE`], for the baton.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) fn slice() -> std::time::Duration {
+    SLICE
+}
+
+/// Starts, once a process, the thread that sets the preemption word at the end of each slice:
+/// the parallel runtime's preemption (`runtime.md`: a long CPU loop never yields). No signal is
+/// sent; a task finds the word at its next loop back-edge or call.
+fn start_preempting() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        std::thread::Builder::new()
+            .name("moddil-preempt".to_string())
+            .spawn(|| {
+                loop {
+                    std::thread::sleep(SLICE - WINDOW);
+                    WINDOWS.fetch_add(1, Ordering::Relaxed);
+                    PREEMPT.store(1, Ordering::Relaxed);
+                    std::thread::sleep(WINDOW);
+                    if ABORTING.load(Ordering::Relaxed) == 0 {
+                        PREEMPT.store(0, Ordering::Relaxed);
+                    }
+                }
+            })
+            .expect("the preempting thread");
+    });
 }
 
 /// Whether the parallel runtime runs this process's tasks.
@@ -210,10 +278,11 @@ pub(crate) fn running(t: usize) {
 /// Ends the run: each task waiting is woken to return a trapped status, and, under the parallel
 /// runtime, each running stops at its next safe point.
 fn abort(c: &Ctx, s: &mut State) {
-    s.aborted = true;
-    if s.turns.slots() > 1 {
+    if !s.aborted && s.turns.slots() > 1 {
+        ABORTING.fetch_add(1, Ordering::Relaxed);
         PREEMPT.store(1, Ordering::Relaxed);
     }
+    s.aborted = true;
     baton::pass_on(c, s);
 }
 
@@ -228,12 +297,14 @@ pub fn begin_run() {
 /// Ends this thread's run: its workers stop, and it waits for them (a task stopped at a safe
 /// point of an aborted run has given its worker back).
 pub fn end_run() {
-    let threads = with(baton::end_run);
+    let (threads, aborting) = with(|s| (baton::end_run(s), s.aborted && s.turns.slots() > 1));
     ctx().turn.notify_all();
     for t in threads {
         let _ = t.join();
     }
-    PREEMPT.store(0, Ordering::Relaxed);
+    if aborting && ABORTING.fetch_sub(1, Ordering::Relaxed) == 1 {
+        PREEMPT.store(0, Ordering::Relaxed);
+    }
 }
 
 /// Gives the host's functions `host`, for the run.
@@ -667,6 +738,7 @@ pub fn set_workers(workers: Option<usize>) {
     PARALLEL.store(true, Ordering::Relaxed);
     RUNNING.store(NO_TASK, Ordering::Relaxed);
     with(|s| s.turns.set_slots(n.max(2)));
+    start_preempting();
 }
 
 /// Whether the run's tasks run in parallel (`__parallel`).

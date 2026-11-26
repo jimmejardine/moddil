@@ -191,9 +191,10 @@ P41's tests). In stages, each a commit with P41's suite green:
    only when no task runs until stage 6.
 3. Workers and stealing: a worker per core with a Chase-Lev deque; stealing; parking and
    unparking with an event count; a spawned task first on its spawner's worker.
-4. Preemption: a timer thread sets each worker's safe-point word (`moddil_rt_preempt`, one word
-   now), and `moddil_rt_safe_point` gives way; no signals. `pinned` executors' code leaves the
-   checks out.
+4. (Preemption is built: a thread sets the safe-point word for the last 200 µs of each 10 ms
+   slice, and a task on a worker past its slice gives its turn to a ready one.) `pinned`
+   executors' code leaving the checks out. Eight CPU-bound tasks take 1.22 s under `parallel`
+   with coroutines, against 1.04 s with a thread each (stage 1): what costs it is still to find.
 5. The manifest's core count for the parallel runtime (`[[exe]] cores`, beside `runtime` and
    `threads`). Executors (with priority inheritance: a task parked at a sync cell lends its executor's
    priority to the task holding it): `default` and `pool`, work-stealing; `pinned`, with core affinity, real-time

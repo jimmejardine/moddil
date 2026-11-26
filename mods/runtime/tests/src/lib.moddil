@@ -19,9 +19,19 @@ test "tasks run on the executor they are spawned on, and their children on their
         }, on: batch);
         s.spawn (|| tx.send(Executor::current()) ?! "the receiver is here");
     });
-    (rx.recv() == Some(hot), rx.recv() == Some(Executor::current()))  // => (true, true)
-    ;
-    (rx.recv() == Some(batch), rx.recv() == Some(batch))  // => (true, true)
+    // Counted, as under the parallel runtime they arrive in any order.
+    let (mut on_hot, mut on_batch, mut here) = (0, 0, 0);
+    for _ in 0..4 {
+        let e = rx.recv() ?! "each task sent";
+        if e == hot {
+            on_hot += 1;
+        } else if e == batch {
+            on_batch += 1;
+        } else if e == Executor::current() {
+            here += 1;
+        }
+    }
+    (on_hot, on_batch, here)  // => (1, 2, 1)
 }
 
 test "a scope's body runs on the executor it is opened on" {

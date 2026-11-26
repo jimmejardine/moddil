@@ -37,6 +37,7 @@ impl Turns {
     }
 
     /// The tasks with a turn.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fn holders(&self) -> impl Iterator<Item = usize> + '_ {
         self.running.iter().copied()
     }

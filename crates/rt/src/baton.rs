@@ -89,6 +89,23 @@ mod workers {
     thread_local! {
         /// On a worker, the running coroutine's yielder: what a task suspends through.
         static YIELDER: Cell<*const Yielder<(), Pause>> = const { Cell::new(std::ptr::null()) };
+        /// On a worker, when the running task was last resumed: its slice's start.
+        static RESUMED: Cell<Option<std::time::Instant>> = const { Cell::new(None) };
+        /// On a worker, the preemption window the running task last looked at its slice in.
+        static LOOKED: Cell<usize> = const { Cell::new(usize::MAX) };
+    }
+
+    /// Whether the running task, on a worker, has run its slice since it was last resumed. It
+    /// looks once a preemption window, so its other checks in the window cost no clock.
+    #[inline(never)]
+    pub(crate) fn slice_over() -> bool {
+        let window = crate::run::window();
+        if LOOKED.with(|l| l.replace(window)) == window {
+            return false;
+        }
+        RESUMED
+            .with(Cell::get)
+            .is_some_and(|at| at.elapsed() >= crate::run::slice())
     }
 
     /// Queues task `t`, to start when it gets a turn; and starts a worker for each turn.
@@ -146,6 +163,8 @@ mod workers {
             };
             enter_task(c, t);
             running(t);
+            RESUMED.with(|r| r.set(Some(std::time::Instant::now())));
+            LOOKED.with(|l| l.set(usize::MAX));
             crate::run::restore_locals(std::mem::take(&mut task.locals));
             let r = task.co.resume(());
             set_yielder(std::ptr::null());
@@ -353,6 +372,11 @@ mod jspi {
 
     /// At a safe point of an aborted run (WASM has none: its code checks for none).
     pub(crate) fn abandon() {}
+
+    /// WASM's one thread runs a task until it suspends.
+    pub(crate) fn slice_over() -> bool {
+        false
+    }
 
     /// Runs a task's code.
     pub(crate) fn call_code(spec: &Start, out: *mut u8, err: *mut u8) -> i8 {
