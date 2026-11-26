@@ -23,8 +23,6 @@ use crate::{Observer, Trapped};
 pub(crate) struct State {
     pub(crate) trap: Option<Trapped>,
     pub(crate) failed: Option<u32>,
-    pub(crate) live: i64,
-    pub(crate) static_from: i64,
     pub(crate) observer: Option<Observer>,
     pub(crate) texts: Vec<Box<str>>,
     /// What the host gives its functions (a pointer it owns for the run).
@@ -46,6 +44,9 @@ unsafe impl Send for State {}
 
 pub(crate) struct Ctx {
     state: Mutex<State>,
+    /// How many allocations are not yet freed, not counting those of `const` items' values:
+    /// counted without the state's lock, by whichever thread allocates.
+    pub(crate) live: AtomicI64,
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) turn: Condvar,
 }
@@ -65,6 +66,27 @@ thread_local! {
     pub(crate) static STACK: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
     /// The task this thread runs.
     static TASK: Cell<usize> = const { Cell::new(0) };
+    /// How many `const` items' values this thread is computing, one inside another: what they
+    /// allocate lives as long as the program, so it is not counted.
+    static IN_STATIC: Cell<u32> = const { Cell::new(0) };
+}
+
+/// Counts `n` more allocations not yet freed (fewer, if negative), unless they are a `const`
+/// item's.
+pub(crate) fn count_live(n: i64) {
+    if IN_STATIC.with(Cell::get) == 0 {
+        CTX.with(|c| {
+            c.borrow_mut()
+                .get_or_insert_with(new_ctx)
+                .live
+                .fetch_add(n, Ordering::Relaxed)
+        });
+    }
+}
+
+/// Before (`true`) and after a `const` item's value is computed.
+pub(crate) fn in_static(begin: bool) {
+    IN_STATIC.with(|d| d.set(if begin { d.get() + 1 } else { d.get() - 1 }));
 }
 
 fn new_ctx() -> Arc<Ctx> {
@@ -72,8 +94,6 @@ fn new_ctx() -> Arc<Ctx> {
         state: Mutex::new(State {
             trap: None,
             failed: None,
-            live: 0,
-            static_from: 0,
             observer: None,
             texts: Vec::new(),
             host: 0,
@@ -85,6 +105,7 @@ fn new_ctx() -> Arc<Ctx> {
             baton: Baton::default(),
         }),
         turn: Condvar::new(),
+        live: AtomicI64::new(0),
     })
 }
 

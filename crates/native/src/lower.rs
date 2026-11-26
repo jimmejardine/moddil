@@ -765,8 +765,8 @@ pub(crate) fn build<'db, M: Module>(
         )?,
         memmove: import("moddil_rt_memmove", &[ptr, ptr, types::I64], None)?,
         fail_at: import("moddil_rt_fail_at", &[types::I32], None)?,
-        static_begin: import("moddil_rt_static_begin", &[], None)?,
-        static_end: import("moddil_rt_static_end", &[], None)?,
+        static_begin: import("moddil_rt_static_begin", &[ptr], Some(types::I8))?,
+        static_end: import("moddil_rt_static_end", &[ptr], None)?,
         convert: import(
             "moddil_rt_convert",
             &[
@@ -4277,17 +4277,27 @@ impl<M: Module> Lower<'_, '_, '_, M> {
         let ptr = self.ptr();
         let base = self.b.ins().symbol_value(ptr, gv);
         let value = self.offset(base, 16);
+        // Its first byte: 0 before the value is computed, 1 while a task computes it, 2 once
+        // it is; the runtime gives the computing to one task, and the others wait for it.
         let flags = ir::MemFlagsData::trusted();
-        let done = self.b.ins().load(types::I8, flags, base, 0);
+        let state = match self.c.threads {
+            Threads::Many => self.b.ins().atomic_load(types::I8, flags, base),
+            Threads::One => self.b.ins().load(types::I8, flags, base, 0),
+        };
+        let done = self.b.ins().icmp_imm_s(IntCC::Equal, state, 2);
+        let claim = self.b.create_block();
         let compute = self.b.create_block();
         let join = self.b.create_block();
-        self.b.ins().brif(done, join, &[], compute, &[]);
-        self.b.switch_to_block(compute);
+        self.b.ins().brif(done, join, &[], claim, &[]);
+        self.b.switch_to_block(claim);
         let begin = self
             .c
             .module
             .declare_func_in_func(self.c.rt.static_begin, self.b.func);
-        self.b.ins().call(begin, &[]);
+        let call = self.b.ins().call(begin, &[base]);
+        let mine = self.b.inst_results(call)[0];
+        self.b.ins().brif(mine, compute, &[], join, &[]);
+        self.b.switch_to_block(compute);
         let at = PlaceRef::at(value, ret.clone());
         let span = self.span;
         self.emit_call(Run::Direct(id, ret), Vec::new(), Some(&at), span)?;
@@ -4295,10 +4305,10 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             .c
             .module
             .declare_func_in_func(self.c.rt.static_end, self.b.func);
-        self.b.ins().call(end, &[]);
-        let one = self.b.ins().iconst(types::I8, 1);
-        self.b.ins().store(flags, one, base, 0);
+        self.b.ins().call(end, &[base]);
         self.b.ins().jump(join, &[]);
+        self.b.seal_block(claim);
+        self.b.seal_block(compute);
         self.b.switch_to_block(join);
         Ok(value)
     }

@@ -240,9 +240,10 @@ before and after (rc-heavy code, locks, tight loops): recorded, not gated.
 - `Rc`'s rebias on a unique transfer (a channel send, a move into a child). The biased counts
   are built (`rc.task.1`); the last owner is found by reading the owner's count, which holds
   while one task runs at a time.
-- The runtime's state: `crates/rt`'s one mutex split, the scheduler state per worker; statics
-  and `const` values initialised once, atomically; the allocation count without the run's lock
-  on each allocation; a thread-safe allocator with per-thread caches.
+- The runtime's state: `crates/rt`'s one mutex split, the scheduler state per worker; a
+  thread-safe allocator with per-thread caches. (The allocation count already takes no lock, and
+  a lazy `const`'s value is computed by one task while the others wait.) A `const` whose
+  computing traps in an isolated scope leaves the others waiting for it.
 - Preemption safe points: a flag check at loop back-edges and function entries, in MIR and
   native code, off in `#[bounded]` hot paths and on `pinned` executors (`runtime.md`); inert
   under `runtime-sim`.

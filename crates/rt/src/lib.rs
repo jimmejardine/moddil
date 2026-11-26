@@ -261,21 +261,46 @@ pub extern "C" fn char_is(which: u32, c: u32) -> u8 {
 /// How many allocations made with [`alloc`] are not yet freed, on this thread, not counting
 /// those of `const` items' values (which live as long as the program).
 pub fn live() -> i64 {
-    run::with(|s| s.live)
+    run::ctx().live.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// Before a `const` item's value is computed.
+/// Before a `const` item's value is computed, given its state byte (0 not computed, 1 being
+/// computed, 2 computed): 1 if this task is to compute it, or 0 once another task has.
+///
+/// # Safety
+///
+/// `state` is the byte the code keeps for the value.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "moddil_rt_static_begin")]
-pub extern "C" fn static_begin() {
-    run::with(|s| s.static_from = s.live);
+pub unsafe extern "C" fn static_begin(state: *mut u8) -> u8 {
+    use std::sync::atomic::{AtomicU8, Ordering};
+    // SAFETY: as the caller says; the byte is only ever read and written atomically.
+    let state = unsafe { AtomicU8::from_ptr(state) };
+    loop {
+        match state.compare_exchange(0, 1, Ordering::Acquire, Ordering::Acquire) {
+            Ok(_) => {
+                run::in_static(true);
+                return 1;
+            }
+            Err(2) => return 0,
+            // Another task computes it: it does not suspend, so it ends soon.
+            Err(_) => std::thread::yield_now(),
+        }
+    }
 }
 
 /// After it is computed: what it allocated lives as long as the program, so it is not counted.
+///
+/// # Safety
+///
+/// As [`static_begin`]'s, which gave 1.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "moddil_rt_static_end")]
-pub extern "C" fn static_end() {
-    run::with(|s| s.live = s.static_from);
+pub unsafe extern "C" fn static_end(state: *mut u8) {
+    use std::sync::atomic::{AtomicU8, Ordering};
+    run::in_static(false);
+    // SAFETY: as the caller says.
+    unsafe { AtomicU8::from_ptr(state) }.store(2, Ordering::Release);
 }
 
 fn layout(size: u64, align: u64) -> std::alloc::Layout {
@@ -291,7 +316,7 @@ pub extern "C" fn alloc(size: u64, align: u64) -> *mut u8 {
     if size == 0 {
         return std::ptr::without_provenance_mut(align.max(1) as usize);
     }
-    run::with(|s| s.live += 1);
+    run::count_live(1);
     let l = layout(size, align);
     #[allow(unsafe_code)]
     // SAFETY: `l` has a size other than zero.
@@ -313,7 +338,7 @@ pub unsafe extern "C" fn free(ptr: *mut u8, size: u64, align: u64) {
     if size == 0 {
         return;
     }
-    run::with(|s| s.live -= 1);
+    run::count_live(-1);
     // SAFETY: as the caller says.
     unsafe {
         std::alloc::dealloc(ptr, layout(size, align));
