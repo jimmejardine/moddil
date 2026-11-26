@@ -87,7 +87,9 @@ closure's control effects to the function it is written in, which may call it du
 
 **expr.closure.stored.1** A closure is kept beyond the call it is passed to as a
 `Box<dyn Fn(A₁, …, Aₙ) -> R with …>` (or `FnMut`, `FnOnce`), a **stored closure**: a
-`Box::new(|…| …)` written where one is expected takes its parameters' and result's types from it.
+`Box::new(|…| …)` written where one is expected takes its parameters' and result's types from it,
+and one bound to a local first (`let c = || …; Box::new(c)`) meets them where it is boxed: its
+control effects are then the box's, not the function's.
 Its type names its effects, as a bound does (**expr.closure.effects.2**): the closure can fail only
 with the errors it lists, or not at all if it lists none (E0502), and suspend or spawn only if it
 lists `suspend` or `spawn` (E0603). It may run after the function it is written in has returned, so
@@ -101,7 +103,8 @@ inside itself is its own.
 errors; one of a `Box<dyn FnOnce…>` gives up the box, which is moved.
 
 **expr.closure.result.1** A function whose result type is `impl Fn(A₁, …, Aₙ) -> R` (or `FnMut`,
-`FnOnce`) returns a closure: one it gives as its value, or returns, takes its parameters' and
+`FnOnce`) returns a closure: one it gives as its value, or returns, or binds to the local it gives
+(`let f = |x| x + 1; f`), takes its parameters' and
 result's types from that type, and is a stored closure (**expr.closure.stored.1**), since it may
 be called after the function has returned. So it owns what it captures (E0802), but for the
 function's handlers, which it borrows as its caller lent them (**type.impl.ret.2**): its type

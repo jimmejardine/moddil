@@ -51,10 +51,6 @@ interpreters; L)
   and recursion between functions that return one.
 
 **P9. Closures** (`crates/sema` `check/closures.rs`, `crates/mir`; L)
-- A closure bound to a local before `Box::new` meeting its needs at the call (today only one
-  written where the box is expected does).
-- A returned closure bound to a local first (today only one written as the function's value,
-  or after `return`, is taken as the one returned).
 - `Copy` closures; `escape`.
 
 **P11. Compile-time evaluation** (`crates/sema`, `crates/mir`, the MIR interpreter as evaluator;

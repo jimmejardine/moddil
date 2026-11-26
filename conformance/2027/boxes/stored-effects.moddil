@@ -26,3 +26,22 @@ test "a stored closure installs the handlers it uses" {
         inner()  // => 1
     }
 }
+
+fn sleeps() with suspend {
+    yield_now();
+}
+
+/// A closure bound to a local, then boxed with the control effects it has: the box's calls
+/// have them, the function that made it not.
+fn boxed() -> Box<dyn Fn() -> int with suspend> {
+    let c = || {
+        sleeps();
+        2
+    };
+    Box::new(c)
+}
+
+test "a closure bound to a local first is boxed with its effects" {
+    let b = boxed();
+    b()  // => 2
+}

@@ -228,7 +228,9 @@ impl Checker<'_> {
             },
             _ => false,
         };
+        self.checking_closures.push(index(e) as u32);
         self.check(body, &rt);
+        self.checking_closures.pop();
         if stored {
             self.stored_ctx.pop();
         }

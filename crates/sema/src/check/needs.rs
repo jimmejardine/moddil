@@ -245,7 +245,15 @@ impl Checker<'_> {
                         );
                     }
                 }
-                None => self.control_uses.push((control, range)),
+                None => {
+                    self.control_uses.push((control, range));
+                    for &c in &self.checking_closures {
+                        self.closure_control
+                            .entry(c)
+                            .or_default()
+                            .push((control, range));
+                    }
+                }
             }
         }
         if needs.is_empty() {
@@ -480,6 +488,29 @@ impl Checker<'_> {
                     }
                 }
                 let d = self.norm(&ys[0]);
+                // A closure bound to a local first: its calls' control effects are its type's
+                // to list, not the function's (`expr.closure.stored.1`).
+                if let Ty::Closure(c) = &inner
+                    && c.owner == self.owner
+                    && let Some(uses) = self.closure_control.remove(&c.expr)
+                {
+                    let own = d.dyn_control();
+                    for (control, at) in uses {
+                        self.control_uses.retain(|&(_, r)| r != at);
+                        let missing = control & !own;
+                        if missing != 0 {
+                            let name = crate::items::show_control(missing);
+                            self.report(
+                                Code::E0603,
+                                at,
+                                format!(
+                                    "this call needs `{name}`, which the closure's stored type \
+                                     does not list: add `with {name}` to it"
+                                ),
+                            );
+                        }
+                    }
+                }
                 self.stored.push((inner, d, range));
             }
             self.out.dyn_coercions.insert(e, x.clone());

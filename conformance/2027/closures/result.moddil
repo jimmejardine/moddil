@@ -59,3 +59,13 @@ test "a returned closure's type names its effects" {
         Missing => -1,
     }  // => -1
 }
+
+// Bound to a local first, which the function gives.
+fn doubler() -> impl Fn(int) -> int {
+    let f = |x| x * 2;
+    f
+}
+
+test "a returned closure may be bound to a local first" {
+    doubler()(21)  // => 42
+}

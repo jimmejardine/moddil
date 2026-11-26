@@ -503,6 +503,8 @@ pub(crate) fn check_body<'db>(db: &'db dyn Db, owner: Owner<'db>, fx: &Effects) 
         installs: Vec::new(),
         needs: Vec::new(),
         control_uses: Vec::new(),
+        checking_closures: Vec::new(),
+        closure_control: HashMap::new(),
         own_control: match owner.item(db) {
             Item::Fn(i) => fx.fns[i as usize].control,
             Item::Test(_) | Item::Closure(..) => 0,
@@ -748,7 +750,29 @@ fn completed_closures(t: &Ty, expr_types: &[Ty], owner: Item) -> Ty {
 fn result_closure(body: &Body, e: ExprId, out: &mut Vec<ExprId>) {
     match &body.exprs[e].kind {
         ExprKind::Closure { .. } => out.push(e),
-        ExprKind::Block { tail: Some(t), .. } => result_closure(body, *t, out),
+        // A closure bound to a local first, the block giving the local
+        // (`expr.closure.result.1`): `let f = |x| x + 1; f`.
+        ExprKind::Block {
+            stmts,
+            tail: Some(t),
+            ..
+        } => match body.exprs[*t].kind {
+            ExprKind::Local(l) => {
+                for s in stmts {
+                    if let crate::hir::Stmt::Let {
+                        pat,
+                        init: Some(init),
+                        ..
+                    } = s
+                        && matches!(body.pats[*pat].kind, crate::hir::PatKind::Bind { local, .. } if local == l)
+                        && matches!(body.exprs[*init].kind, ExprKind::Closure { .. })
+                    {
+                        out.push(*init);
+                    }
+                }
+            }
+            _ => result_closure(body, *t, out),
+        },
         _ => {}
     }
 }
@@ -793,6 +817,12 @@ struct Checker<'a> {
     needs: Vec<Need>,
     /// Each call's control effects, with where it is.
     control_uses: Vec<(crate::Control, TextRange)>,
+    /// The closures whose bodies are being checked, innermost last.
+    checking_closures: Vec<u32>,
+    /// Each closure's calls' control effects, as recorded in `control_uses`: a closure bound to
+    /// a local and later boxed as a `Box<dyn Fn… with …>` meets its type's
+    /// (`expr.closure.stored.1`), and no longer the function's.
+    closure_control: HashMap<u32, Vec<(crate::Control, TextRange)>>,
     /// The function's own control effects.
     own_control: crate::Control,
     /// The function or test being checked.

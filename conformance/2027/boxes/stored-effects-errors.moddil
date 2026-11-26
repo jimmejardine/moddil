@@ -11,3 +11,14 @@ fn now() -> int with clock: Clock {
 fn listed() {
     let f: Box<dyn Fn() -> int with Clock> = Box::new(|| 1);  //~ E0609
 }
+
+fn sleeps() with suspend {
+    yield_now();
+}
+
+/// A closure bound to a local, then boxed: its type lists the control effects it has.
+fn bound_first() {
+    let c = || sleeps();  //~ E0603
+    let b: Box<dyn Fn()> = Box::new(c);
+    b();
+}
