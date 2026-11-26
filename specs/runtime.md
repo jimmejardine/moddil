@@ -196,7 +196,7 @@ Scheduling is a core **effect**; runtimes are mods that provide handlers ([R2](r
 **As built (November 2026):** the runtime is the single deterministic scheduler: one task runs at
 a time, in the interpreters' order. Natively each task is an OS thread that waits for the baton
 (`crates/rt`), and on WASM a JSPI call. The stackful coroutines on M:N workers described above
-come with the parallel runtime ([`roadmap.md`: Deferred from built work](roadmap.md#deferred-from-built-work)).
+come with the parallel runtime (P38 in [`roadmap.md`: On the horizon](roadmap.md#on-the-horizon)).
 
 **Targets:** on browser WASM without cross-origin isolation, all executors collapse onto one thread;
 with it, Web Workers add threads. GPU devices act as executors for kernel tasks

@@ -78,7 +78,7 @@ workflow**; and last **the project**. The order is for reading, not priority.
 | [Compiler and bootstrap](compiler.md)                              | 🟡 minor questions | [`compiler.md`](compiler.md) (R1)                                                                                    |
 | [MIR: the mid-level IR](mir.md)                                    | 🟡 minor questions | [`mir.md`](mir.md): pipeline, form, and how each feature lowers                                                      |
 | [The website and services: moddil.com](web.md)                     | 🟢 complete        | [`web.md`](web.md): what moddil.com serves, and what it deliberately does not                                        |
-| [Roadmap: milestones, what is still to build, staging](roadmap.md) | 🟢 complete        | [`roadmap.md`](roadmap.md)                                                                                           |
+| [Roadmap: the work on the horizon](roadmap.md)                     | 🟢 complete        | [`roadmap.md`](roadmap.md)                                                                                           |
 | [Prior art](prior-art.md)                                          | reference          | [`prior-art.md`](prior-art.md)                                                                                       |
 
 ## Working on these specs

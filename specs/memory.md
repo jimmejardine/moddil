@@ -352,7 +352,7 @@ with Alloc = &frame {
   arena does not make allocation allowed there.
 - Scratch arenas install themselves the same way
   ([`stdlib.md`: Scratch arenas](stdlib.md#scratch-arenas)). Not built yet: `with Alloc = …` is
-  under [`roadmap.md`: Deferred from built work](roadmap.md#deferred-from-built-work).
+  P29 in [`roadmap.md`: On the horizon](roadmap.md#on-the-horizon).
 
 ## Background
 

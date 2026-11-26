@@ -81,7 +81,7 @@ Some details worth noticing:
 
 ## Status
 
-Built in M3 slice M3a ([`specs/roadmap.md`](../../specs/roadmap.md#milestones)); the strings, the
+Built in M3 slice M3a ([`specs/roadmap.md`](../../specs/roadmap.md#how-work-is-built)); the strings, the
 CRC table, `Stats` by value and the callbacks in slice M3c. Later, header
 import (`#[c_import]`) will read `zlib.h` itself. The shim would still be the portable choice for
 the `uLong` types.

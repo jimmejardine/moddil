@@ -2,7 +2,7 @@
 
 The **umbrella** for the standard mods: it re-exports them ([`mods/`](../README.md)), so a
 program names them as `moddil::net`, `moddil::root` and so on
-([`specs/roadmap.md`: Milestones](../../specs/roadmap.md#milestones)).
+([`specs/roadmap.md`: How work is built](../../specs/roadmap.md#how-work-is-built)).
 
 **Status:** M2 slice M2d: every module is a re-export of a mod written in Moddil. Until M2d it was
 a stub mod (`stub = true`, [`reference/2027/modules.md`](../../reference/2027/modules.md)) holding

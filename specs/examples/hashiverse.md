@@ -22,9 +22,9 @@ interoperate with a running network built in another language.
 ## Recommendation: client first, server second
 
 **Phase A: Moddil reference client.**
-- **CLI/native client first, browser client second.** The native client is milestone M3; the browser
-  client follows at M5, once the backend-service milestone is done (see
-  [`../roadmap.md`: Milestones](../roadmap.md#milestones)–[`../compiler.md`: Wasmtime as the short-term reference runtime](../compiler.md#wasmtime-as-the-short-term-reference-runtime)).
+- **CLI/native client first, browser client second.** The native client is P42; the browser
+  client (P48) follows once the backend service (P46) is done (see
+  [`../roadmap.md`: On the horizon](../roadmap.md#on-the-horizon)–[`../compiler.md`: Wasmtime as the short-term reference runtime](../compiler.md#wasmtime-as-the-short-term-reference-runtime)).
 - Smaller scope than a server.
 - Must speak the protocol **on the wire** with existing Rust servers. This is a strong test of
   compiler-checked wire contracts against a protocol Moddil does not own ([Interoperability with C and Rust](../interop.md), [Distributed and multi-tier programs](../distribution.md)).

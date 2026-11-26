@@ -68,5 +68,5 @@ take C pieces and give a status, C glue against the stable ABI, and the stubs.
 
 ## Status
 
-Built in M3 slice M3b ([`specs/roadmap.md`](../../specs/roadmap.md#milestones)). Not yet: `async`
+Built in M3 slice M3b ([`specs/roadmap.md`](../../specs/roadmap.md#how-work-is-built)). Not yet: `async`
 functions, keyword arguments, methods taking `self` by value, and `Vec` results as arrays.

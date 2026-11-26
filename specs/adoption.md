@@ -136,14 +136,14 @@ smooth = rolling_mean(prices, window=50)  # numpy array in, no copy; list or arr
   into Moddil blocks while the call runs on Moddil's executor; Moddil calls back into Python through
   typed callbacks that run on a Python thread. Neither runtime schedules the other's threads, so
   this works with and without the GIL.
-- **Placement in the roadmap:** Python bindings ship at M3, with the first optimised native release
-  ([`roadmap.md`: Milestones](roadmap.md#milestones)), before the Swift, Kotlin and TypeScript
-  bindings.
+- **Placement in the roadmap:** Python bindings come first (P44), with the first optimised native
+  release (P43), before the Swift, Kotlin and TypeScript bindings (P50,
+  [`roadmap.md`: On the horizon](roadmap.md#on-the-horizon)).
 - **As built (M3b):** `#[export(python)]` functions and structs, `moddil build --wheel` (an abi3
   extension module, `.pyi` stubs and a wheel), zero-copy buffers, `fail` errors as exception
   classes, traps as `name.Trap`, and the GIL released during calls. Async (`asyncio` awaitables),
   numpy arrays as results, and free-threaded CPython's separate pools come later
-  ([`roadmap.md`: Still to build](roadmap.md#still-to-build)).
+  ([`roadmap.md`: On the horizon](roadmap.md#on-the-horizon), P44).
 
 ## Migrating existing code
 
@@ -227,7 +227,7 @@ Models write well only in languages they have seen. Moddil's plan is in
 
 ## Flagship software
 
-- The **Hashiverse client** (milestones M3 and M5, [`roadmap.md`: Milestones](roadmap.md#milestones)) is the
+- The **Hashiverse client** (P42 and P48, [`roadmap.md`: On the horizon](roadmap.md#on-the-horizon)) is the
   first real application, and it is used by a real network.
 - The [reference examples](examples/README.md) are published as complete, idiomatic programs.
 - **Flagship showcases** are built to market Moddil:

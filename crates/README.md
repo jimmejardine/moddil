@@ -6,7 +6,7 @@ whose `Cargo.toml` sits at the repository root
 
 **Status:** the grammar checker and the parser cover the whole grammar; the rest covers M0 to M2
 and M3 so far, and what is still to build is in the
-[roadmap](../specs/roadmap.md#still-to-build).
+[roadmap](../specs/roadmap.md#on-the-horizon).
 
 ## Building and checking
 

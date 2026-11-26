@@ -1,7 +1,7 @@
 # Compiler and bootstrap
 
-How the compiler is built, structured and bootstrapped, and which backends it uses. Milestones are
-in [`roadmap.md`: Milestones](roadmap.md#milestones). WASM support facts were verified in November
+How the compiler is built, structured and bootstrapped, and which backends it uses. The work still
+to do is in [`roadmap.md`: On the horizon](roadmap.md#on-the-horizon). WASM support facts were verified in November
 2026 ([WASM support: verified status (November 2026)](#wasm-support-verified-status-november-2026)).
 
 ## Answers in brief
@@ -158,7 +158,7 @@ problem, which is exactly the supply-chain concern of [Package management and su
   refine, so the query structure is never retrofitted
   ([`crates/sema`](../crates/sema/README.md)).
 - **Vertical slices.** The language grows slice by slice, each running end to end
-  ([`roadmap.md`: Milestones](roadmap.md#milestones)).
+  ([`roadmap.md`: How work is built](roadmap.md#how-work-is-built)).
 - **Interpreter first.** Every slice runs on the MIR interpreter; no code-generation backend exists
   until M1.
 
@@ -176,7 +176,7 @@ problem, which is exactly the supply-chain concern of [Package management and su
 - The reference interpreter covers the safe language and the closed list of undefined behaviour
   ([`unsafe.md`](unsafe.md)); it does not need to be fast enough for real programs.
 - **Timing (decided):** the reference interpreter started at slice S1 of M0 and follows every
-  slice after it ([`roadmap.md`: Milestones](roadmap.md#milestones)).
+  slice after it ([`roadmap.md`: How work is built](roadmap.md#how-work-is-built)).
 - **Independence (decided):** it shares only the parser and AST (`crates/syntax`, pinned down by the
   grammar's generated tests) with the compiler, and never depends on semantic analysis, MIR or the
   MIR interpreter ([Repository layout](#repository-layout)).
@@ -353,7 +353,7 @@ probes on Node v24.16.0 (V8 13.6).
   dependency stays isolated in the task runtime ([WASM concurrency lowering](#wasm-concurrency-lowering)).
 - **JSPI's per-switch cost** (decided November 2026: measured, not assumed): JSPI stays the
   browser lowering until browsers ship stack switching, and its cost is measured on the game
-  client in M5, which is when it could matter.
+  client (P51), which is when it could matter.
 
 ## Open questions
 

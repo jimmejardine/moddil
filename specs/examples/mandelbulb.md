@@ -20,7 +20,7 @@ power, the iteration count and the quality, and a "copy link" button that writes
 the URL, so a view can be shared.
 
 It is the **simplest showcase**, and the first program built for the browser and the GPU
-([`roadmap.md`: Milestones](../roadmap.md#milestones)). Its kernel is fixed, so it needs nothing
+([`roadmap.md`: How work is built](../roadmap.md#how-work-is-built)). Its kernel is fixed, so it needs nothing
 beyond what [`accelerators.md`](../accelerators.md) already decides.
 
 ## The pitch

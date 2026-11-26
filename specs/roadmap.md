@@ -1,81 +1,28 @@
 # Roadmap
 
-The single place for planning: the milestones, what is still to build (and what built work
-deferred), staging, and the order of the reference examples. Decisions live in each area's
-document ([index](README.md)). What was built is in the git history.
+The single place for planning: one numbered list of the work on the horizon. Decisions live in
+each area's document ([index](README.md)); what was built is in the git history, the reference
+(`reference/2027/`) and the crates' READMEs.
 
-## Milestones
+## How work is built
 
-M0 to M2 (the front end and both interpreters, the native and WASM backends, the first mods and
-the GPU path) are done; other documents still name them.
+- In vertical slices, each running end to end (grammar, checker, MIR, every runner) before the
+  next, and landing with its reference paragraphs and conformance tests
+  ([`definition.md`: Written with the compiler](definition.md#written-with-the-compiler)).
+- Each item below is numbered; the numbers are names, not an order. Sizes: **M** a few hours,
+  **L** a day or more, **XL** several L packages, built in stages. An M or L item is a package an
+  agent can finish in one go, in a small set of crates, needing no decision first, and ending
+  with conformance tests on every runner. Items are independent unless one says otherwise.
+- When an item is done, remove it; when part of one is, remove that part. A part left for later
+  goes into its item, or becomes a new one.
+- Earlier work was built as milestones: M0 to M2 (the front end and both interpreters, the
+  native and WASM backends, the first mods and the GPU path) and M3's first slices (M3a to M3c:
+  the C ABI and the first Python bindings). Other documents name those slices.
 
-| Milestone | Contents | Status |
-|---|---|---|
-| **M3** | **Hashiverse CLI/native client** (phase A). LLVM release backend. **Python bindings** (`moddil bind --lang python`, wheels), the first binding target ([`adoption.md`: Python first](adoption.md#python-first)), shown off by **Talk**, on the CPU pool first and then on WebGPU. | In progress: the C ABI and the first Python bindings are built |
-| **M4** | **A backend service**: the web store API with `sql`, HTTP and deterministic simulation; distributed v0 ([Staging: distributed programs](#staging-distributed-programs)). | To do |
-| **M5** | **Browser**: the Hashiverse web client, the game client and **fumoca's engine, simulation and GPU code**, replaced together; Swift, Kotlin and TypeScript bindings ([`ui.md`](ui.md)). WASI components with stack switching once Wasmtime's support leaves Tier 3. JSPI's per-switch cost measured on the game client. | To do |
-| **After v1** | Reconsider self-hosting ([`compiler.md`: Staged bootstrap](compiler.md#staged-bootstrap)): what would justify it, and whether Moddil-core (the stage 0 subset) is the right size to write a compiler in. | To do |
+## On the horizon
 
-The order puts the two first audiences, Python teams and backend teams, before the browser
-(decided November 2026).
-
-How a milestone is built: in vertical slices, each running end to end (grammar, checker, MIR,
-every runner) before the next, and landing with its reference paragraphs and conformance tests
-([`definition.md`: Written with the compiler](definition.md#written-with-the-compiler)). What was
-built, slice by slice, is in the git history; the reference (`reference/2027/`) and the crates'
-READMEs describe what exists.
-
-## Still to build
-
-**M3, the rest:**
-- **The Hashiverse CLI/native client** (phase A), through the C ABI: its first pieces next.
-- **The LLVM release backend**, beside Cranelift for release builds (its route, translating the
-  Cranelift IR or lowering from MIR, is open: [`compiler.md`: Open questions](compiler.md#open-questions)), on one pinned LLVM major
-  version, upgraded about once a year in one change ([`compiler.md`: Backends](compiler.md#backends)).
-- **Python, beyond the first bindings** (`moddil build --wheel` exists; the smaller steps are
-  work package P1 below):
-  - `async` functions as `asyncio` awaitables, on Moddil's executor;
-  - more than one call into Moddil at a time (free-threaded CPython's separate pools);
-  - `moddil bind --lang python`, the command the milestone names.
-- **Talk**, the showcase ([`examples/talk.md`](examples/talk.md)), published as `moddil-talk`: on
-  the CPU pool first, then on WebGPU. It needs:
-  - `moddil/tensor` loading safetensors, memory-mapped, with shapes checked at load time
-    ([`accelerators.md`: Loading model weights](accelerators.md#loading-model-weights));
-  - `moddil/audio`, the `Audio` effect with OS, Web Audio and simulated handlers
-    ([`stdlib.md`: Audio](stdlib.md#audio));
-  - English G2P: a lexicon, with a small open-weights neural model for unknown words.
-
-**Decided, not yet built** (beyond the milestones):
-- **The semantic diff** and per-definition content hashes, which give structured storage's
-  benefits over plain text files ([`semantic-vcs.md`](semantic-vcs.md)).
-- **The generated Rust bridge** (a Moddil mod as a Rust crate, and Rust crates read from rustdoc's
-  JSON) and **`moddil migrate rust`**, the adoption path into existing Rust codebases
-  ([`interop.md`: Rust: the generated bridge](interop.md#rust-the-generated-bridge),
-  [`adoption.md`: Adopting inside existing codebases](adoption.md#adopting-inside-existing-codebases)).
-- **The mechanised core model** in Lean ([`model/`](../model/README.md)), from which the reference's
-  core rules are generated and against which the reference interpreter is validated
-  ([`definition.md`](definition.md)).
-
-**M4 and M5** as the milestones above say; nothing of either is built yet. Decided for M5:
-- fumoca's `engine`, `sim` and `gpu` are replaced together, its workbooks compiled to kernels
-  through a `dyn_kernel` shader-builder mod with bindings typed and checked at launch
-  ([`accelerators.md`: Kernels built at run time](accelerators.md#kernels-built-at-run-time));
-- JSPI's per-switch cost is measured on the game client.
-
-**moddil.com** ([`web.md`: Hosting](web.md#hosting)) goes up with the playground, once `/play` runs
-real programs: Cloudflare Pages, with Astro (Starlight) for the site and, once P23 builds it,
-`moddil doc`'s API pages and checked code blocks.
-
-**Next:** any work package below; or async in the Python bindings; or the Hashiverse client's
-first pieces through the C ABI; or the LLVM release backend.
-
-## Deferred from built work
-
-What was left out of something built, until another feature exists or a decision is made, as
-**work packages**: each one an agent can finish in one go, in a small set of crates, needing no
-decision first, and ending with conformance tests on every runner (M: a few hours; L: a day or
-more). Packages are independent unless one says otherwise. When a package is done, remove it;
-when part of one is, remove that part.
+Python teams and backend teams come before the browser (decided November 2026,
+[`adoption.md`: First audiences](adoption.md#first-audiences)).
 
 **P4. Text** (prelude `text`, `crates/sema`; M)
 - Typed captures for `re"…"`: a field for each named group, through a prelude `TagFields` trait
@@ -252,6 +199,35 @@ half, then P38's stages, with P41's benchmarks as each lands (`runtime.md`).
   refused with a message until P38).
 - Conformance on all four runners, which all run `runtime-sim` and so keep agreeing.
 
+**P38. The parallel runtime** (`crates/rt`, `crates/sched`, `crates/native`; L, after P37 and
+P40, with P41's tests). In stages, each a commit with P41's suite green:
+1. Several tasks at once: the baton becomes N batons, still a thread per task, so the semantics
+   are proven before the mechanics change.
+2. User-space stacks: a context switch of its own per target (x86-64 SysV and Win64, AArch64);
+   stacks reserved large, committed lazily, with guard pages; tasks become coroutines on worker
+   threads (M:N).
+3. Workers and stealing: a worker per core with a Chase-Lev deque; stealing; parking and
+   unparking with an event count; a spawned task first on its spawner's worker.
+4. Preemption: a timer thread sets the safe-point flags (P40); no signals.
+5. Executors: `default` and `pool`, work-stealing; `pinned`, with core affinity, real-time
+   priority and optional busy-polling, never lending; `blocking`, growing on demand, with
+   `blocking` C functions routed to it; `affine`; `on:` placement; idle executors lending their
+   threads.
+6. A reactor per worker: io_uring on Linux (epoll as fallback), kqueue on macOS, IOCP on
+   Windows; a timer wheel per worker; OS-level cancellation; re-registration when a task is
+   stolen; the `core::os` calls moved onto it.
+7. NUMA: topology discovery (Linux sysfs, Windows `GetLogicalProcessorInformationEx`), executors
+   placed by node, node-local allocator arenas.
+8. Observability: the task tree and each task's blocked-on operation, for `Introspect` and spans
+   (`observability.md`).
+
+WASM stays single-threaded; Web Workers come later.
+
+**P39. Live update, the MVP** (`crates/native`, `crates/moddil`; L)
+- The first step of `build-times.md`'s staging: an indirection table in native debug builds,
+  `moddil run --watch`, swaps of changed bodies at suspension points. Its later steps follow as
+  packages of their own.
+
 **P40. Hardening the language for threads** (prelude `pointers`, `mods/sync`, `crates/rt`,
 `crates/native`, `crates/mir`; L, before P38 runs two tasks at once). Each item a commit, the
 single-threaded behaviour unchanged.
@@ -288,49 +264,89 @@ single-threaded behaviour unchanged.
   cores on parallel map and tree work. CI runs the small budgets on every change; scaling to 64
   and 128 cores runs on demand on a large machine.
 
-**P38. The parallel runtime** (`crates/rt`, `crates/sched`, `crates/native`; L, after P37 and
-P40, with P41's tests). In stages, each a commit with P41's suite green:
-1. Several tasks at once: the baton becomes N batons, still a thread per task, so the semantics
-   are proven before the mechanics change.
-2. User-space stacks: a context switch of its own per target (x86-64 SysV and Win64, AArch64);
-   stacks reserved large, committed lazily, with guard pages; tasks become coroutines on worker
-   threads (M:N).
-3. Workers and stealing: a worker per core with a Chase-Lev deque; stealing; parking and
-   unparking with an event count; a spawned task first on its spawner's worker.
-4. Preemption: a timer thread sets the safe-point flags (P40); no signals.
-5. Executors: `default` and `pool`, work-stealing; `pinned`, with core affinity, real-time
-   priority and optional busy-polling, never lending; `blocking`, growing on demand, with
-   `blocking` C functions routed to it; `affine`; `on:` placement; idle executors lending their
-   threads.
-6. A reactor per worker: io_uring on Linux (epoll as fallback), kqueue on macOS, IOCP on
-   Windows; a timer wheel per worker; OS-level cancellation; re-registration when a task is
-   stolen; the `core::os` calls moved onto it.
-7. NUMA: topology discovery (Linux sysfs, Windows `GetLogicalProcessorInformationEx`), executors
-   placed by node, node-local allocator arenas.
-8. Observability: the task tree and each task's blocked-on operation, for `Introspect` and spans
-   (`observability.md`).
+**P42. The Hashiverse CLI/native client**, phase A, through the C ABI
+([`examples/hashiverse.md`](examples/hashiverse.md); XL).
 
-WASM stays single-threaded; Web Workers come later.
+**P43. The LLVM release backend**, beside Cranelift for release builds (XL). Its route,
+translating the Cranelift IR or lowering from MIR, is open
+([`compiler.md`: Open questions](compiler.md#open-questions)); on one pinned LLVM major version,
+upgraded about once a year in one change ([`compiler.md`: Backends](compiler.md#backends)).
 
-**P39. Live update, the MVP** (`crates/native`, `crates/moddil`; L)
-- The first step of `build-times.md`'s staging: an indirection table in native debug builds,
-  `moddil run --watch`, swaps of changed bodies at suspension points. Its later steps follow as
-  packages of their own.
+**P44. Python beyond the first bindings** (`crates/py`, `crates/moddil`; L)
+- `async` functions as `asyncio` awaitables, on Moddil's executor.
+- More than one call into Moddil at a time (free-threaded CPython's separate pools).
+- `moddil bind --lang python`.
 
-**Waits on bigger work** (not packaged)
-- The rest of M3 and M4 and M5 (above, "Still to build").
-- Packaging: registry dependencies, a lockfile, targets and profiles, executables with
-  dependencies of their own, `mod name;` with a generating attribute, and `String`, `Vec` and
-  `core` as `moddil/core-*` mods.
-- Header import through libclang (`#[c_import]`), with annotation overlays; C on WASM.
-- Graphemes (Unicode's data); the browser program as an exported `Flight` the page drives, in the
-  Svelte app.
-- Each for its own milestone: units, `Simd`, linear types, generators and coroutines,
-  distribution ([Staging](#staging-distributed-programs)), data contracts.
-- `moddil bench`, with budgets that fail CI: the HFT hot path's latency is measured that way,
-  not checked by the compiler ([`examples/hft-platform.md`](examples/hft-platform.md)).
+**P45. Talk**, the showcase, published as `moddil-talk` ([`examples/talk.md`](examples/talk.md);
+XL): on the CPU pool first, then on WebGPU.
+- `moddil/tensor` loading safetensors, memory-mapped, with shapes checked at load time
+  ([`accelerators.md`: Loading model weights](accelerators.md#loading-model-weights)).
+- `moddil/audio`, the `Audio` effect with OS, Web Audio and simulated handlers
+  ([`stdlib.md`: Audio](stdlib.md#audio)).
+- English G2P: a lexicon, with a small open-weights neural model for unknown words.
 
-**Known limits, with no package yet**
+**P46. A backend service**: the web store API with `sql`, HTTP and deterministic simulation
+([`examples/web-store.md`](examples/web-store.md); XL).
+
+**P47. Distributed programs, v0** ([Staging: distributed programs](#staging-distributed-programs);
+XL).
+
+**P48. The browser**: the Hashiverse web client and the game client (XL, after P42).
+
+**P49. fumoca**: its `engine`, `sim` and `gpu` replaced together, its workbooks compiled to
+kernels through a `dyn_kernel` shader-builder mod with bindings typed and checked at launch
+([`accelerators.md`: Kernels built at run time](accelerators.md#kernels-built-at-run-time); XL).
+
+**P50. Swift, Kotlin and TypeScript bindings** ([`ui.md`](ui.md); XL).
+
+**P51. WASI components with stack switching**, once Wasmtime's support leaves Tier 3; and JSPI's
+per-switch cost measured on the game client ([`compiler.md`](compiler.md); L).
+
+**P52. moddil.com** with the playground, once `/play` runs real programs: Cloudflare Pages, with
+Astro (Starlight) for the site and, after P23, `moddil doc`'s API pages and checked code blocks
+([`web.md`: Hosting](web.md#hosting); L).
+
+**P53. The semantic diff** and per-definition content hashes, which give structured storage's
+benefits over plain text files ([`semantic-vcs.md`](semantic-vcs.md); L).
+
+**P54. The generated Rust bridge** (a Moddil mod as a Rust crate, and Rust crates read from
+rustdoc's JSON) and **`moddil migrate rust`**
+([`interop.md`: Rust: the generated bridge](interop.md#rust-the-generated-bridge),
+[`adoption.md`: Adopting inside existing codebases](adoption.md#adopting-inside-existing-codebases); XL).
+
+**P55. The mechanised core model** in Lean ([`model/`](../model/README.md)), from which the
+reference's core rules are generated and against which the reference interpreter is validated
+([`definition.md`](definition.md); XL).
+
+**P56. Packaging** (XL): registry dependencies, a lockfile, targets and profiles, executables
+with dependencies of their own, `mod name;` with a generating attribute, and `String`, `Vec` and
+`core` as `moddil/core-*` mods.
+
+**P57. Header import through libclang** (`#[c_import]`), with annotation overlays; C on WASM (L).
+
+**P58. Graphemes**, from Unicode's data (`mods/text`; M).
+
+**P59. The Mandelbulb browser program** as an exported `Flight` the page drives, in the Svelte
+app (M).
+
+**P60. `moddil bench`**, with budgets that fail CI; the HFT hot path's latency is measured that
+way, not checked by the compiler ([`examples/hft-platform.md`](examples/hft-platform.md); L).
+
+**P61. Units** ([`units.md`](units.md); XL).
+
+**P62. `Simd`** ([`performance.md`](performance.md); XL).
+
+**P63. Linear types** ([`resources.md`](resources.md); XL).
+
+**P64. Generators and coroutines** (XL).
+
+**P65. Data contracts** ([`data.md`](data.md); XL).
+
+**P66. After v1: reconsider self-hosting**
+([`compiler.md`: Staged bootstrap](compiler.md#staged-bootstrap)): what would justify it, and
+whether Moddil-core (the stage 0 subset) is the right size to write a compiler in.
+
+## Known limits, with no package yet
 - The float functions other than `sqrt` are `libm`'s, not yet correctly rounded.
 - `String`'s inline size is 23 on every target (11 on 32-bit targets comes with them), and
   strings are byte by byte in Moddil, so slower in the interpreters.
@@ -353,8 +369,7 @@ WASM stays single-threaded; Web Workers come later.
 
 1. **Hashiverse client.** A real protocol with real users, with existing Rust servers to interoperate
    against. It exercises WASM, interop, crypto and effects-as-pluggable-traits. The CLI/native client
-   comes first and the browser client follows once JSPI lowering exists
-   ([Milestones](#milestones)).
+   comes first (P42), and the browser client follows (P48).
 2. **Multiplayer game.** Multi-tier, browser, real-time, WebGPU.
 3. **Web store.** Everyday ergonomics, databases and the mobile question.
 4. **HFT platform.** The hardest latency requirements and the flagship "same code in simulation and live"
@@ -363,9 +378,9 @@ WASM stays single-threaded; Web Workers come later.
 The order is open for discussion. HFT has the strongest single demonstration of effects, but the
 largest scope.
 
-The **flagship showcases** are not in this order: each is built as soon as its milestone allows,
+The **flagship showcases** are not in this order: each is built as soon as what it needs is,
 because they exist to market Moddil to its first audiences.
-1. **[Mandelbulb flight](examples/mandelbulb.md), first,** in M2: the simplest program that runs on
-   the GPU in a browser.
-2. [Talk](examples/talk.md), with the Python bindings in M3.
-3. [fumoca](examples/fumoca.md), with the browser in M5.
+1. **[Mandelbulb flight](examples/mandelbulb.md), first:** built, the simplest program that runs
+   on the GPU in a browser.
+2. [Talk](examples/talk.md), with the Python bindings (P45).
+3. [fumoca](examples/fumoca.md), with the browser (P49).

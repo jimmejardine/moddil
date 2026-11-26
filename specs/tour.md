@@ -49,7 +49,7 @@ Done in slice S9d (November 2026).
   `sim` and `runtime` (the root capabilities). It names them through
   the umbrella mod [`mods/moddil/`](../mods/moddil/README.md), which re-exports them. `moddil run tour/shorty`
   serves real HTTP/1.1, natively, on the MIR interpreter and as WebAssembly under Node.
-- **Gates, run in CI from then on** ([`roadmap.md`: Milestones](roadmap.md#milestones)):
+- **Gates, run in CI from then on** ([`roadmap.md`: How work is built](roadmap.md#how-work-is-built)):
   - **M0:** the tour parses and passes the type, effect and ownership checks;
   - **M2:** its tests pass, including the simulated-network test under `moddil/runtime-sim`.
 - A failing tour blocks a release: it is the first program written in Moddil.

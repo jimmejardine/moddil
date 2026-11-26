@@ -108,6 +108,6 @@ calling side as `c/main.c` checks the called side. It also calls Moddil back (`t
 
 ## Status
 
-Built in M3 slice M3a ([`specs/roadmap.md`](../../specs/roadmap.md#milestones)); structs by
+Built in M3 slice M3a ([`specs/roadmap.md`](../../specs/roadmap.md#how-work-is-built)); structs by
 value and the calls back in M3c. `#[export(python)]` and `moddil build --wheel` export to Python
 (M3b, [`../python`](../python/src/lib.moddil)).
