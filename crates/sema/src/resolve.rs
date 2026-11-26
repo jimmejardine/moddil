@@ -67,6 +67,9 @@ pub(crate) struct Scope<'a> {
     pub impls: &'a [(TextRange, usize)],
     /// What `Self` is.
     pub self_ty: Option<Ty>,
+    /// What `Self` is in a trait's default type argument (`generic.default.1`), if not
+    /// `self_ty`: what a bound bounds (`T: Add` is `T: Add<T>`), or what an impl is for.
+    pub default_self: Option<Ty>,
     /// Inside a trait: the trait, so `Self::Name` is its associated type.
     pub trait_ctx: Option<u32>,
     /// Inside an impl of a trait: the trait and the impl's associated types.
@@ -90,6 +93,7 @@ impl<'a> Scope<'a> {
             preds: &[],
             impls: &[],
             self_ty: None,
+            default_self: None,
             trait_ctx: None,
             impl_assoc: None,
             holes: false,
@@ -621,6 +625,21 @@ pub(crate) fn arity(
     false
 }
 
+/// `args` with the arguments left out after them filled from `params`' defaults
+/// (`generic.default.1`), each with the parameters before it as `before` and the arguments so
+/// far: `None` if one left out has none.
+pub(crate) fn with_defaults(
+    params: &[GenericParam],
+    before: &[Ty],
+    args: Vec<Ty>,
+) -> Option<Vec<Ty>> {
+    let mut all: Vec<Ty> = before.iter().cloned().chain(args).collect();
+    for p in &params[all.len()..] {
+        all.push(p.default.as_ref()?.subst(&all));
+    }
+    Some(all.split_off(before.len()))
+}
+
 /// The arguments of a struct or enum written with `args` (or without any).
 pub(crate) fn adt_args(
     adt: u32,
@@ -641,6 +660,11 @@ pub(crate) fn adt_args(
                     format!("`{}` has no associated types", def.name),
                 ));
             }
+            let types = if types.len() < want {
+                with_defaults(&def.generics.params, &[], types.clone()).unwrap_or(types)
+            } else {
+                types
+            };
             if arity(&format!("`{}`", def.name), want, types.len(), range, diags) {
                 types
             } else {
@@ -980,6 +1004,18 @@ pub(crate) fn trait_path(
         Some(a) => generic_args(a, scope, diags),
         None => (Vec::new(), Vec::new()),
     };
+    // Arguments left out take their defaults, `Self` being what the bound or impl is for
+    // (`generic.default.1`): `Add` is `Add<Self>`.
+    let args = if args.len() < want {
+        let this = scope
+            .default_self
+            .clone()
+            .or_else(|| scope.self_ty.clone())
+            .unwrap_or(Ty::Error);
+        with_defaults(&def.generics.params, &[this], args.clone()).unwrap_or(args)
+    } else {
+        args
+    };
     let args = if arity(&format!("`{}`", def.name), want, args.len(), range, diags) {
         args
     } else {
@@ -1267,7 +1303,12 @@ pub(crate) fn bounds(
             ));
             continue;
         }
-        if let Some((trait_ref, assoc)) = trait_path(&path, scope, diags) {
+        // A default argument naming `Self` names what is bounded (`T: Add` is `T: Add<T>`).
+        let bounded = Scope {
+            default_self: Some(ty.clone()),
+            ..scope.clone()
+        };
+        if let Some((trait_ref, assoc)) = trait_path(&path, &bounded, diags) {
             out.push(Pred {
                 ty: ty.clone(),
                 trait_ref,

@@ -47,6 +47,24 @@ impl Checker<'_> {
         t
     }
 
+    /// Whether `r` is a literal, or built of them, whose type an operator's other operand gives
+    /// (`num.lit.1`): checked against that type as it is.
+    fn literal_operand(&self, r: ExprId) -> bool {
+        matches!(
+            self.body.exprs[r].kind,
+            ExprKind::Int(_)
+                | ExprKind::Float(_)
+                | ExprKind::Bool(_)
+                | ExprKind::Char(_)
+                | ExprKind::Str(_)
+                | ExprKind::Array(_)
+                | ExprKind::Repeat(..)
+                | ExprKind::RepeatN(..)
+                | ExprKind::Unary(..)
+                | ExprKind::Closure { .. }
+        )
+    }
+
     /// The right operand `r` of an arithmetic operator, checked against `expected` after it is
     /// read through its borrows. A literal is checked against `expected` as it is, so the
     /// type is the literal's from the start.
@@ -82,9 +100,31 @@ impl Checker<'_> {
         range: TextRange,
         symbol: &str,
         operand: &Ty,
+        names: (&str, &str),
+    ) -> Option<Ty> {
+        self.operator_with(e, range, symbol, operand, None, names)
+    }
+
+    /// As [`Self::operator`], with `rhs` as the trait's type argument where it takes one
+    /// (`Add<Rhs = Self>`, `generic.default.1`).
+    pub(super) fn operator_with(
+        &mut self,
+        e: ExprId,
+        range: TextRange,
+        symbol: &str,
+        operand: &Ty,
+        rhs: Option<&Ty>,
         (tr, method): (&str, &str),
     ) -> Option<Ty> {
-        let (trait_ref, func) = self.op_trait(tr, method)?;
+        let (mut trait_ref, func) = self.op_trait(tr, method)?;
+        let generic = self.items.traits[trait_ref.trait_ as usize]
+            .generics
+            .params
+            .len()
+            > 1;
+        if generic {
+            trait_ref.args = vec![rhs.unwrap_or(operand).clone()].into();
+        }
         if self.solver.implements(operand, &trait_ref) == Answer::No {
             let t = self.show(operand);
             self.report(
@@ -95,13 +135,9 @@ impl Checker<'_> {
             return Some(Ty::Error);
         }
         self.require(operand.clone(), trait_ref.clone(), range);
-        self.out.calls.insert(
-            e,
-            Callee::Trait {
-                func,
-                args: vec![operand.clone()],
-            },
-        );
+        let mut args = vec![operand.clone()];
+        args.extend(trait_ref.args.iter().cloned());
+        self.out.calls.insert(e, Callee::Trait { func, args });
         let def = &self.items.traits[trait_ref.trait_ as usize];
         let out = match def.assoc.iter().position(|(n, _)| n == "Output") {
             Some(i) => Ty::Assoc(std::sync::Arc::new(crate::ty::AssocTy {
@@ -224,11 +260,31 @@ impl Checker<'_> {
                 Ty::Error
             }
             _ if names.is_some() => {
-                let t = self.operator(e, range, op.symbol(), &lt, names.expect("a trait"));
-                if t.as_ref().is_some_and(|t| *t != Ty::Error) {
-                    self.check_operand(r, &lt);
-                } else {
-                    self.infer(r);
+                let names = names.expect("a trait");
+                // The right operand's own type, if the left's has an impl of the trait for it
+                // (`impl Add<Duration> for Instant`); or else the left's, which a literal takes
+                // (`expr.op.trait.1`).
+                if self.literal_operand(r) {
+                    let t = self.operator_with(e, range, op.symbol(), &lt, None, names);
+                    if t.as_ref().is_some_and(|t| *t != Ty::Error) {
+                        self.check_operand(r, &lt);
+                    } else {
+                        self.infer(r);
+                    }
+                    return t.unwrap_or(Ty::Error);
+                }
+                let rt = self.infer(r);
+                let rt = self.read_through(r, &rt, true);
+                let rt = self.norm(&rt);
+                let mixed = !self.solver.can_unify(&rt, &lt)
+                    && self.op_trait(names.0, names.1).is_some_and(|(mut tr, _)| {
+                        tr.args = vec![rt.clone()].into();
+                        self.solver.implements(&lt, &tr) != Answer::No
+                    });
+                let rhs = if mixed { rt.clone() } else { lt.clone() };
+                let t = self.operator_with(e, range, op.symbol(), &lt, Some(&rhs), names);
+                if !mixed && t.as_ref().is_some_and(|t| *t != Ty::Error) && !self.coerce(&rt, &lt) {
+                    self.mismatch(r, &lt, &rt);
                 }
                 t.unwrap_or(Ty::Error)
             }

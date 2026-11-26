@@ -112,6 +112,9 @@ pub(crate) struct ImplInfo {
     /// The trait as written, until it is resolved.
     trait_path: Option<Vec<String>>,
     pub(crate) self_ty: ast::Type,
+    /// The trait's first type argument as written (`impl Add<Duration> for Instant`), if any:
+    /// which of two impls of one trait for one type an operator calls (`generic.default.1`).
+    pub(crate) trait_arg: Option<ast::Type>,
     pub(crate) params: Vec<String>,
     pub(crate) methods: HashMap<String, FnDef>,
     /// Its consts' initialisers, by name (`item.const.assoc.1`).
@@ -748,12 +751,23 @@ impl Program {
                     methods.insert(key, def);
                 }
                 let blanket = trait_path.is_some() && unbounded_self_param(&item, &self_ty);
+                let trait_arg = has_trait
+                    .then(|| {
+                        types[0]
+                            .syntax()
+                            .descendants()
+                            .into_iter()
+                            .find(|n| n.kind() == K::TYPE_ARG)
+                            .and_then(|a| a.children().find_map(ast::Type::cast))
+                    })
+                    .flatten();
                 self.impls.push(ImplInfo {
                     trait_: None,
                     head: Head::Unit,
                     module: module as u32,
                     trait_path,
                     self_ty,
+                    trait_arg,
                     params: generic_names(&item),
                     methods,
                     consts: member_consts(item.child(K::IMPL_BODY)),
@@ -1333,6 +1347,7 @@ fn template_impl(def: &FnDef, tr: String, head: Head) -> Option<ImplInfo> {
         module: def.module,
         trait_path: None,
         self_ty,
+        trait_arg: None,
         params: Vec::new(),
         methods,
         consts: HashMap::new(),

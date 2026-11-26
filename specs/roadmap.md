@@ -38,8 +38,8 @@ Python teams and backend teams come before the browser (decided November 2026,
 
 **P6. Arrays and iteration** (prelude `arrays` and `iter`, `crates/sema`, `crates/mir`, the
 runners; M)
-- `Index` beyond `int` (ranges as `Index`): `Index<Idx = int>`, with P8's default type
-  parameters.
+- `Index` beyond `int` (ranges as `Index`): `Index<Idx = int>`, now that type parameters have
+  defaults (`generic.default.1`).
 
 **P7. Shared and anonymous values** (`crates/sema`, the prelude's `pointers`; L)
 - `Rc<dyn Trait>`: `Rc` is the prelude's, over `*mut RcBox<T>` with `value: Option<T>`, so a
@@ -50,7 +50,6 @@ runners; M)
 
 **P8. The trait system** (`crates/sema`, `crates/syntax` and the grammar, the prelude, both
 interpreters; L)
-- Default type parameters, then the operator traits' `Rhs` (`Add<Rhs = Self>`).
 - Generic `type` aliases; a refinement with impls of its own, or whose base holds a borrow.
 - An `impl Trait` result in a trait's method, one whose hidden type holds a borrow or a closure,
   and recursion between functions that return one.

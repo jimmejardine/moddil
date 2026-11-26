@@ -19,6 +19,7 @@ impl Collector<'_> {
             name: "Self".to_string(),
             range: name_range,
             konst: false,
+            default: None,
         };
         let (params, _) = self.params(src, None, node.child(K::GENERIC_PARAMS), &[self_param]);
         let mut assoc = Vec::new();
@@ -142,8 +143,23 @@ impl Collector<'_> {
             };
             defaults.push(ty);
         }
+        // Its type parameters' defaults (`generic.default.1`): `Rhs = Self`.
+        let mut with_defaults = params.clone();
+        Self::param_defaults(
+            node,
+            1,
+            &mut with_defaults,
+            &Scope {
+                params: &params,
+                self_ty: Some(Ty::Param(0, "Self".into())),
+                trait_ctx: Some(i as u32),
+                ..self.scope()
+            },
+            &mut ds,
+        );
         self.reporter.report(src, None, ds);
         let def = &mut self.tree.traits[i];
+        def.generics.params = with_defaults;
         def.supertraits = supers;
         def.generics.preds = preds;
         if defaults.len() == def.assoc.len() {
@@ -251,6 +267,11 @@ impl Collector<'_> {
                 .first()
                 .and_then(|t| t.syntax().child(K::PATH))
                 .and_then(|p| {
+                    // A default argument naming `Self` names the impl's type (`generic.default.1`).
+                    let scope = Scope {
+                        default_self: Some(self_ty.clone()),
+                        ..scope.clone()
+                    };
                     let r = trait_path(&p, &scope, &mut ds);
                     if let Some((_, fixed)) = &r
                         && !fixed.is_empty()

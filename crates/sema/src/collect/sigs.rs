@@ -725,6 +725,7 @@ fn impl_params(
             impls.push((range, params.len()));
             bounded.push((params.len(), t.syntax().clone()));
             params.push(crate::items::GenericParam {
+                default: None,
                 name,
                 range,
                 konst: false,

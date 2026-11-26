@@ -79,6 +79,16 @@ impl Collector<'_> {
             ds.push(Diagnostic::unsupported(t.text_range(), "a `linear` struct"));
         }
         let params = self.tree.adts[i].generics.params.clone();
+        // Its type parameters' defaults (`generic.default.1`).
+        let mut with_defaults = params.clone();
+        {
+            let scope = Scope {
+                params: &params,
+                ..self.scope()
+            };
+            Self::param_defaults(node, 0, &mut with_defaults, &scope, &mut ds);
+        }
+        self.tree.adts[i].generics.params = with_defaults;
         let scope = Scope {
             params: &params,
             ..self.scope()

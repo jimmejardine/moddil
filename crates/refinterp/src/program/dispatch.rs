@@ -123,6 +123,34 @@ impl Program {
         self.trait_method_of(tr, head, name)
     }
 
+    /// Trait `tr`'s method `name` for values of kind `head` whose impl's first type argument is
+    /// of kind `arg` (`Self` if it gives none, `generic.default.1`): of `impl Add for Instant`
+    /// and `impl Add<Duration> for Instant`, the one an operand of kind `arg` calls. `None` if
+    /// no impl says.
+    pub(crate) fn trait_method_by_arg(
+        &self,
+        tr: &str,
+        head: &Head,
+        name: &str,
+        arg: &Head,
+    ) -> Option<Method> {
+        for (k, i) in self.impls.iter().enumerate() {
+            if i.trait_.as_deref() != Some(tr) || i.head != *head {
+                continue;
+            }
+            let of = match &i.trait_arg {
+                Some(t) => self.head_in(i.module as usize, t),
+                None => head.clone(),
+            };
+            if of == *arg
+                && let Some(f) = i.methods.get(name)
+            {
+                return Some(Method::Code(f.clone(), Some(k)));
+            }
+        }
+        None
+    }
+
     /// Trait `tr`'s method `name` for a borrow of a value of kind `target`: from the impl for
     /// `&X` whose `X` is of that kind (`impl IntoIterator for &Bag`), as every borrow has one
     /// kind, [`Head::Ref`].

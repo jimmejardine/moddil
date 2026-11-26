@@ -1,0 +1,60 @@
+// covers: expr.op.trait.1, generic.default.1, expr.assign.compound.2
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct Instant {
+    at: int,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct Span {
+    len: int,
+}
+
+// An instant and a span: the right operand is not the left's type.
+impl Add<Span> for Instant {
+    type Output = Instant;
+    fn add(self, rhs: Span) -> Instant {
+        Instant { at: self.at + rhs.len }
+    }
+}
+
+impl Sub for Instant {
+    type Output = Span;
+    fn sub(self, rhs: Instant) -> Span {
+        Span { len: self.at - rhs.at }
+    }
+}
+
+impl Add for Span {
+    type Output = Span;
+    fn add(self, rhs: Span) -> Span {
+        Span { len: self.len + rhs.len }
+    }
+}
+
+impl Add<int> for Span {
+    type Output = Span;
+    fn add(self, rhs: int) -> Span {
+        Span { len: self.len + rhs * 100 }
+    }
+}
+
+test "an operator's right operand may be of another type" {
+    let t = Instant { at: 10 };
+    let d = Span { len: 5 };
+    (t + d).at  // => 15
+    ;
+    (t + d - t).len  // => 5
+    ;
+    let mut u = t;
+    u += d;
+    u.at  // => 15
+}
+
+test "of two impls, the one for the right operand's type" {
+    let d = Span { len: 5 };
+    (d + d).len  // => 10
+    ;
+    let n = 2;
+    (d + n).len  // => 205
+}

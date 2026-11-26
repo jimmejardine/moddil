@@ -1,0 +1,10 @@
+// covers: generic.default.1
+
+fn f<T = int>(x: T) -> T {  //~ E0404
+    x
+}
+
+struct Late<A = int, B> {  //~ E0404
+    a: A,
+    b: B,
+}

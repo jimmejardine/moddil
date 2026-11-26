@@ -1,0 +1,39 @@
+// covers: generic.default.1
+
+struct Pair<A, B = A> {
+    a: A,
+    b: B,
+}
+
+trait Scale<By = Self> {
+    fn scale(&self, by: By) -> int;
+}
+
+impl Scale for int {
+    fn scale(&self, by: int) -> int {
+        *self * by
+    }
+}
+
+impl Scale<bool> for bool {
+    fn scale(&self, by: bool) -> int {
+        if *self && by { 1 } else { 0 }
+    }
+}
+
+// `T: Scale` is `T: Scale<T>`.
+fn twice<T: Scale>(x: &T, by: T) -> int {
+    x.scale(by)
+}
+
+test "an argument left out is its default" {
+    let p: Pair<int> = Pair { a: 1, b: 2 };
+    p.a + p.b  // => 3
+    ;
+    let q: Pair<int, bool> = Pair { a: 1, b: true };
+    q.b  // => true
+    ;
+    twice(&3, 4)  // => 12
+    ;
+    true.scale(true)  // => 1
+}

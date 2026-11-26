@@ -794,6 +794,7 @@ impl Collector<'_> {
         let mut params = parent.to_vec();
         let mut bounded = Vec::new();
         let mut ds = Vec::new();
+        let mut defaulted = false;
         if let Some(g) = node {
             for p in g.children() {
                 match p.kind() {
@@ -809,10 +810,27 @@ impl Collector<'_> {
                                 .with_label(first.range, "first declared here"),
                             );
                         }
+                        // A default (`generic.default.1`) is resolved with the item's other
+                        // types; only a trait's, a struct's or an enum's parameter has one.
+                        let owner = g.parent().map(|o| o.kind());
                         if p.token(K::EQ).is_some() {
-                            ds.push(Diagnostic::unsupported(
+                            if !matches!(
+                                owner,
+                                Some(K::TRAIT_ITEM | K::STRUCT_ITEM | K::ENUM_ITEM | K::VIEW_ITEM)
+                            ) {
+                                ds.push(Diagnostic::error(
+                                    Code::E0404,
+                                    p.text_range(),
+                                    "only a trait's, a struct's or an enum's type parameter has a \
+                                     default",
+                                ));
+                            }
+                            defaulted = true;
+                        } else if defaulted {
+                            ds.push(Diagnostic::error(
+                                Code::E0404,
                                 p.text_range(),
-                                "a default type parameter",
+                                "type parameters with defaults come after those without",
                             ));
                         }
                         bounded.push((params.len(), p.clone()));
@@ -820,6 +838,7 @@ impl Collector<'_> {
                             name,
                             range,
                             konst: false,
+                            default: None,
                         });
                     }
                     // `const N: int` (`generic.const.1`): its arguments are lengths.
@@ -854,6 +873,7 @@ impl Collector<'_> {
                             name,
                             range,
                             konst: true,
+                            default: None,
                         });
                     }
                     _ => {}
@@ -862,6 +882,35 @@ impl Collector<'_> {
         }
         self.reporter.report(src, origin, ds);
         (params, bounded)
+    }
+
+    /// The defaults of the type parameters `node`'s `GENERIC_PARAMS` declare
+    /// (`generic.default.1`), resolved in `scope`, set on `params` from index `first` on (a
+    /// trait's start after `Self`).
+    pub(super) fn param_defaults(
+        node: &SyntaxNode,
+        first: usize,
+        params: &mut [GenericParam],
+        scope: &Scope,
+        ds: &mut Vec<Diagnostic>,
+    ) {
+        let declared = node
+            .child(K::GENERIC_PARAMS)
+            .into_iter()
+            .flat_map(|g| g.children().collect::<Vec<_>>())
+            .filter(|c| matches!(c.kind(), K::TYPE_PARAM | K::CONST_PARAM));
+        for (k, p) in declared.enumerate() {
+            if p.kind() != K::TYPE_PARAM || p.token(K::EQ).is_none() {
+                continue;
+            }
+            let Some(t) = p.children().find_map(ast::Type::cast) else {
+                continue;
+            };
+            let ty = resolve_type(&t, scope, ds);
+            if let Some(slot) = params.get_mut(first + k) {
+                slot.default = Some(ty);
+            }
+        }
     }
 
     /// Reports the parts of an item this slice does not support. `attrs_handled` says the caller

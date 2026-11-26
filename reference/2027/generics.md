@@ -31,6 +31,12 @@ its body may use only what its bounds give a type parameter (the traits' methods
 operators: E0205, E0403). A use with a type argument that does not implement a bound's trait is an
 error (E0402). A bound also gives the trait's supertraits.
 
+**generic.default.1** A trait's, a struct's or an enum's type parameter may have a **default**,
+`<T, U = T>` or `trait Add<Rhs = Self>`: an argument left out is its default, which may name the
+parameters before it and, in a trait, `Self`, the type the bound or impl is for. So `Pair<int>`
+is `Pair<int, int>`, and `T: Add` is `T: Add<T>`. The parameters with defaults come last, and a
+function's or an impl's has none (E0404).
+
 **generic.assoc.1** `T::Name`, for a type parameter or `Self`, is the associated type `Name` of a
 trait in `T`'s bounds ([Traits](items/traits.md)) (E0413 if none has one). A bound may fix an
 associated type: `T: Add<Output = T>`; `T::Output` is then that type. For a type that implements

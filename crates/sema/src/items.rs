@@ -165,6 +165,9 @@ pub struct GenericParam {
     /// Whether it is a const parameter (`const N: int`), whose arguments are lengths
     /// ([`Ty::Len`]) rather than types.
     pub konst: bool,
+    /// Its default (`generic.default.1`), a type parameter of a trait, struct or enum only: the
+    /// type an argument left out is, which may name the parameters before it and `Self`.
+    pub default: Option<Ty>,
 }
 
 /// The type parameters an item can name, and the bounds on them.

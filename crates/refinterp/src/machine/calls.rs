@@ -248,9 +248,16 @@ impl Machine<'_> {
                 .collect();
             return self.call_trait(tr, name, args, range);
         }
-        let m = self
-            .program
-            .trait_method(tr, &head, name)
+        // An operator's trait may have impls for more than one right operand.
+        let by_arg = match args.get(1) {
+            Some(b) if matches!(tr, "Add" | "Sub" | "Mul" | "Div" | "Rem") => {
+                let arg = self.target(b.clone()).head();
+                self.program.trait_method_by_arg(tr, &head, name, &arg)
+            }
+            _ => None,
+        };
+        let m = by_arg
+            .or_else(|| self.program.trait_method(tr, &head, name))
             .expect("a checked trait call");
         self.run_method(m, &head, args, range)
     }

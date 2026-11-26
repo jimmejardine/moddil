@@ -137,31 +137,32 @@ trait Ord: Eq + PartialOrd {
     fn cmp(&self, other: &Self) -> Ordering;
 }
 
-// Operators.
+// Operators: `a + b` is `Add<B>`'s for `a`'s type, `B` being `b`'s if there is an impl for it,
+// or else `a`'s own (`expr.op.trait.1`).
 
-trait Add {
+trait Add<Rhs = Self> {
     type Output;
-    fn add(self, rhs: Self) -> Self::Output;
+    fn add(self, rhs: Rhs) -> Self::Output;
 }
 
-trait Sub {
+trait Sub<Rhs = Self> {
     type Output;
-    fn sub(self, rhs: Self) -> Self::Output;
+    fn sub(self, rhs: Rhs) -> Self::Output;
 }
 
-trait Mul {
+trait Mul<Rhs = Self> {
     type Output;
-    fn mul(self, rhs: Self) -> Self::Output;
+    fn mul(self, rhs: Rhs) -> Self::Output;
 }
 
-trait Div {
+trait Div<Rhs = Self> {
     type Output;
-    fn div(self, rhs: Self) -> Self::Output;
+    fn div(self, rhs: Rhs) -> Self::Output;
 }
 
-trait Rem {
+trait Rem<Rhs = Self> {
     type Output;
-    fn rem(self, rhs: Self) -> Self::Output;
+    fn rem(self, rhs: Rhs) -> Self::Output;
 }
 
 trait Neg {
