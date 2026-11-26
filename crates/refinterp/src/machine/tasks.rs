@@ -15,7 +15,7 @@ use moddil_syntax::TextRange;
 
 use crate::memory::{Memory, Shared};
 use crate::program::Program;
-use crate::value::{Head, Value};
+use crate::value::{Head, Pointer, Value};
 use crate::{Eval, Flow, ModSpec, SourceSpec, Trap, TrapClass};
 
 use super::Machine;
@@ -45,6 +45,8 @@ enum Wait {
     Recv(usize),
     Stop,
     Select(Vec<Op>),
+    /// An `unpark` of the place (`task.park.1`).
+    Park(Pointer),
 }
 
 /// An operation a `select` arm waits on (`task.select.1`).
@@ -341,6 +343,25 @@ impl Tasks {
         self.blocked.push(t);
     }
 
+    /// Makes ready up to `n` of the tasks parked on `p`, in the order they parked: how many.
+    fn unpark(&mut self, p: &Pointer, n: usize) -> usize {
+        let mut woken = 0;
+        let states = &mut self.states;
+        let ready = &mut self.ready;
+        self.blocked.retain(|&t| {
+            let parked = matches!(&states[t].waiting, Some(Wait::Park(q)) if q == p);
+            if parked && woken < n {
+                woken += 1;
+                states[t].waiting = None;
+                ready.push_back(t);
+                false
+            } else {
+                true
+            }
+        });
+        woken
+    }
+
     /// Makes ready, in the order they began to wait, the suspended tasks whose wait is over, or
     /// which are cancelled where cancellation is seen (anywhere but a scope's end).
     fn wake(&mut self) {
@@ -357,6 +378,7 @@ impl Tasks {
                             Wait::Recv(c) => self.can_recv(*c),
                             Wait::Stop => self.stop_reached(t),
                             Wait::Select(ops) => ops.iter().any(|o| self.op_ready(t, o)),
+                            Wait::Park(_) => false,
                             Wait::Scope(_) => unreachable!("handled above"),
                         }
                 }
@@ -545,6 +567,32 @@ impl Machine<'_> {
                     }
                     Attempt::Done(Ok(option(ts.pop(c))))
                 })
+            }
+            // A sync cell's wait (`task.park.1`): one task runs at a time, so the word is read
+            // before parking.
+            ("", "__park") => {
+                let Value::Ref(p, _) = args[0].clone() else {
+                    unreachable!("a pointer")
+                };
+                let mut parked = self.target(args[0].clone()) != args[1];
+                self.run_op(range, |_, _| {
+                    if parked {
+                        Attempt::Done(Ok(Value::Unit))
+                    } else {
+                        parked = true;
+                        Attempt::Wait(Wait::Park(p.clone()))
+                    }
+                })
+            }
+            ("", "__unpark") => {
+                let Value::Ref(p, _) = &args[0] else {
+                    unreachable!("a pointer")
+                };
+                let Value::Int(n) = args[1] else {
+                    unreachable!("an int")
+                };
+                let woken = self.with_tasks(|ts| ts.unpark(p, usize::try_from(n).unwrap_or(0)));
+                Ok(Value::Int(woken as i64))
             }
             ("", "stop_requested") => self.run_op(range, |ts, me| {
                 if ts.stop_reached(me) {

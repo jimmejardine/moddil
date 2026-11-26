@@ -1,4 +1,4 @@
-use sync::Mutex;
+use sync::{Condvar, Mutex, Once, RwLock};
 
 test "a mutex changes behind a shared borrow" {
     let m = Mutex::new(Vec::new());
@@ -22,4 +22,77 @@ test "tasks take turns at the lock" {
         });
     });
     m.into_inner()  // => 11
+}
+
+test "a task parked at a lock runs once it is let go, in the order they waited" {
+    let m = Mutex::new(Vec::new());
+    scope(|s| {
+        s.spawn (|| {
+            let mut g = m.lock();
+            yield_now();
+            yield_now();
+            g.push(1);
+        });
+        s.spawn (|| m.lock().push(2));
+        s.spawn (|| m.lock().push(3));
+    });
+    m.into_inner()  // => [1, 2, 3]
+}
+
+test "readers share an rwlock, and a writer waits for them" {
+    let l = RwLock::new(1);
+    let (tx, rx) = channel::<int>(4);
+    scope(|s| {
+        s.spawn (|| {
+            let r = l.read();
+            yield_now();
+            tx.send(*r * 10) ?! "the receiver outlives the scope";
+        });
+        s.spawn (|| {
+            let r = l.read();
+            tx.send(*r * 100) ?! "the receiver outlives the scope";
+        });
+        s.spawn (|| {
+            *l.write() += 1;
+            tx.send(*l.read()) ?! "the receiver outlives the scope";
+        });
+    });
+    (rx.recv(), rx.recv(), rx.recv())  // => (Some(100), Some(10), Some(2))
+}
+
+test "a condvar wakes a task waiting under a mutex" {
+    let m = Mutex::new(false);
+    let c = Condvar::new();
+    let seen = scope(|s| {
+        let t = s.spawn (|| {
+            let mut g = m.lock();
+            while !*g {
+                g = c.wait(g);
+            }
+            1
+        });
+        s.spawn (|| {
+            *m.lock() = true;
+            c.notify_all();
+        });
+        t.join()
+    });
+    seen  // => 1
+}
+
+test "once runs its code once, and the other tasks wait for it" {
+    let o = Once::new();
+    let m = Mutex::new(0);
+    scope(|s| {
+        for _ in 0..3 {
+            s.spawn (|| {
+                o.call_once(|| {
+                    yield_now();
+                    *m.lock() += 1;
+                });
+                *m.lock() += 10;
+            });
+        }
+    });
+    (o.is_completed(), m.into_inner())  // => (true, 31)
 }

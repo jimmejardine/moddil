@@ -296,6 +296,8 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
     ("detach", &['w'], Some('b')),
     ("yield_now", &['s', 'b'], Some('b')),
     ("task_id", &[], Some('w')),
+    ("park", &['p', 'w', 's', 'b'], Some('b')),
+    ("unpark", &['p', 'w'], Some('w')),
     ("stop_requested", &['s', 'b'], Some('b')),
     ("channel", &['w'], Some('w')),
     ("timer", &['w'], Some('w')),
@@ -4728,6 +4730,23 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let st = self.task_call(op, &[site, tracked]).expect("a status");
                 let null = self.b.ins().iconst(ptr, 0);
                 self.task_status(st, catch, null, Before::Nothing)
+            }
+            // A sync cell's wait (`task.park.1`).
+            "park" => {
+                let p = self.value(&args[0])?;
+                let expected = self.value(&args[1])?;
+                let (site, tracked) = self.task_site(range);
+                let st = self
+                    .task_call("park", &[p, expected, site, tracked])
+                    .expect("a status");
+                let null = self.b.ins().iconst(ptr, 0);
+                self.task_status(st, catch, null, Before::Nothing)
+            }
+            "unpark" => {
+                let p = self.value(&args[0])?;
+                let n = self.value(&args[1])?;
+                let woken = self.task_call("unpark", &[p, n]).expect("a count");
+                self.write(d, Val::Scalar(woken))
             }
             // A timer's channel (`task.timer.1`): its id is the `Receiver`'s.
             "timer" => {

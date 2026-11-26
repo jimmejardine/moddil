@@ -523,6 +523,34 @@ pub extern "C" fn task_id() -> i64 {
     me() as i64
 }
 
+/// `__park`: waits for an `unpark` of `p` if `p` holds `expected` (`task.park.1`): 0, or the
+/// status of a cancellation or deadlock.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "moddil_rt_park")]
+pub extern "C" fn park(p: *const i64, expected: i64, site: u32, tracked: u8) -> u8 {
+    let mut parked = false;
+    waiting(site, tracked != 0, |s, me| {
+        if s.sched.cancelled(me) {
+            s.sched.start_unwinding(me);
+            return Some(3);
+        }
+        // SAFETY: the code passes a sync cell's word, which lives while the cell is borrowed.
+        let now = unsafe { AtomicI64::from_ptr(p.cast_mut()) }.load(Ordering::Acquire);
+        if parked || now != expected {
+            return Some(0);
+        }
+        parked = true;
+        s.sched.block(me, Wait::Park(p as u64));
+        None
+    })
+}
+
+/// `__unpark`: makes ready up to `n` of the tasks parked on `p`: how many.
+#[unsafe(export_name = "moddil_rt_unpark")]
+pub extern "C" fn unpark(p: *const i64, n: i64) -> i64 {
+    with(|s| s.sched.unpark(p as u64, n.max(0) as usize) as i64)
+}
+
 /// `yield_now`.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "moddil_rt_yield_now")]

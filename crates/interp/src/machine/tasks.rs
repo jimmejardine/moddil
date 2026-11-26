@@ -36,6 +36,14 @@ pub(super) enum Pending {
     Stop,
     /// A `select`: its arms' operations.
     Select(Vec<SelectOp>),
+    /// `__park` on the word at `at` (its key) if it holds `expected`; once parked, until an
+    /// `unpark` (`task.park.1`).
+    Park {
+        at: Value,
+        key: u64,
+        expected: i64,
+        parked: bool,
+    },
 }
 
 /// A `select` arm's operation (`task.select.1`): what it waits on, the value it sends, and
@@ -202,6 +210,17 @@ impl Machine<'_> {
             }
             "recv" => Pending::Recv(id_of(&self.stack.deref(&values[0]))),
             "stop_requested" => Pending::Stop,
+            "park" => Pending::Park {
+                at: values[0].clone(),
+                key: park_key(&values[0]),
+                expected: values[1].as_int(),
+                parked: false,
+            },
+            "unpark" => {
+                let n = usize::try_from(values[1].as_int()).unwrap_or(0);
+                let woken = self.sched.unpark(park_key(&values[0]), n);
+                return self.deliver(ret, Ok(Value::Int(woken as i64)));
+            }
             _ => {
                 // An arm on a `#[selectable]` function waits for the runtimes (`task.select.3`).
                 let Value::Tuple(arms) = &values[0] else {
@@ -437,6 +456,23 @@ impl Machine<'_> {
                 None => Attempt::Wait(Pending::Join(t), Wait::Join(t)),
             },
             Pending::Yielded => Attempt::Done(Ok(Value::Unit)),
+            Pending::Park {
+                at,
+                key,
+                expected,
+                parked,
+            } => {
+                if parked || self.stack.deref(&at).as_int() != expected {
+                    return Attempt::Done(Ok(Value::Unit));
+                }
+                let p = Pending::Park {
+                    at,
+                    key,
+                    expected,
+                    parked: true,
+                };
+                Attempt::Wait(p, Wait::Park(key))
+            }
             Pending::Scope(s) => {
                 if !self.sched.scope_done(s) {
                     return Attempt::Wait(Pending::Scope(s), Wait::Scope(s));
@@ -682,4 +718,16 @@ fn id_of(v: &Value) -> usize {
         Value::Adt { fields, .. } => fields[0].as_int() as usize,
         other => unreachable!("a handle: {other:?}"),
     }
+}
+
+/// The key a sync cell's word at `p` parks tasks under (`task.park.1`): its place's hash.
+fn park_key(p: &Value) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::hash::DefaultHasher::new();
+    match p {
+        Value::Ref(at, _) => at.hash(&mut h),
+        Value::Foreign(a) => return *a,
+        other => unreachable!("a pointer: {other:?}"),
+    }
+    h.finish()
 }

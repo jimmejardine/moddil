@@ -213,7 +213,8 @@ P40, with P41's tests). In stages, each a commit with P41's suite green:
 3. Workers and stealing: a worker per core with a Chase-Lev deque; stealing; parking and
    unparking with an event count; a spawned task first on its spawner's worker.
 4. Preemption: a timer thread sets the safe-point flags (P40); no signals.
-5. Executors: `default` and `pool`, work-stealing; `pinned`, with core affinity, real-time
+5. Executors (with priority inheritance: a task parked at a sync cell lends its executor's
+   priority to the task holding it): `default` and `pool`, work-stealing; `pinned`, with core affinity, real-time
    priority and optional busy-polling, never lending; `blocking`, growing on demand, with
    `blocking` C functions routed to it; `affine`; `on:` placement; idle executors lending their
    threads.
@@ -240,9 +241,6 @@ before and after (rc-heavy code, locks, tight loops): recorded, not gated.
   are built (`rc.task.1`); the last owner is found by reading the owner's count, which holds
   while one task runs at a time.
 - `AtomicRc<T>` for sync cells holding shared values; then the cycle detector.
-- `moddil/sync`: `Mutex` and `RwLock` parking through the scheduler's wait queues, not spinning
-  with yields as now; condition waits; priority inheritance across executors; the atomics'
-  orderings documented against the memory model (`unsafe.md`).
 - The runtime's state: `crates/rt`'s one mutex split, the scheduler state per worker; statics
   and `const` values initialised once, atomically; the allocation count without the run's lock
   on each allocation; a thread-safe allocator with per-thread caches.

@@ -118,6 +118,14 @@ the tasks of its own scope have opened has ended, so the innermost scopes stop f
 cancels nothing: the code that asks for it chooses what to do, typically to stop taking new work
 and let the work in hand finish.
 
+**task.park.1** `__park(p, expected)`, which needs `suspend`, waits if the `int` that `p` points
+to holds `expected`, and gives back at once if not: the word is read and the task parked as one
+step. A parked task waits until `__unpark(p, n)` makes ready up to `n` of the tasks parked on the
+same place, in the order they parked (it gives how many), or until it is cancelled, when it
+unwinds (**task.cancel.1**). Tasks parked with nothing else ready are a deadlock
+(**task.sched.1**). They are what sync cells wait with ([`mods/sync`](../../mods/sync)): a task
+that finds a `Mutex` held parks on it, and the task that lets it go unparks one.
+
 **task.borrow.1** A task's closure may borrow what outlives the scope: a shared borrow by any
 number of tasks, a `&mut` borrow by one. The scope keeps what its tasks borrow until it ends, so
 the code around them cannot use what a task borrows mutably, or change what it borrows, before

@@ -1,0 +1,39 @@
+// covers: task.park.1
+
+use core::atomic::{self, Ordering};
+use core::cell::UnsafeCell;
+
+test "a task parks while the word holds what it expects, until it is unparked" {
+    let word = UnsafeCell::new(0);
+    let (tx, rx) = channel::<int>(4);
+    scope(|s| {
+        s.spawn (|| {
+            __park(word.get(), 0);
+            tx.send(1) ?! "the receiver outlives the scope";
+        });
+        s.spawn (|| {
+            __park(word.get(), 0);
+            tx.send(2) ?! "the receiver outlives the scope";
+        });
+        s.spawn (|| {
+            atomic::store(word.get(), 1, Ordering::Release);
+            __unpark(word.get(), 1)  // => 1
+            ;
+            tx.send(3) ?! "the receiver outlives the scope";
+            __unpark(word.get(), 5)  // => 1
+            ;
+        });
+    });
+    (rx.recv(), rx.recv(), rx.recv())  // => (Some(3), Some(1), Some(2))
+}
+
+test "a task whose word holds something else does not park" {
+    let word = UnsafeCell::new(7);
+    __park(word.get(), 0);
+    __unpark(word.get(), 1)  // => 0
+}
+
+test "a task parked with nothing else to run is a deadlock" {
+    let word = UnsafeCell::new(0);
+    __park(word.get(), 0);  //~ trap
+}

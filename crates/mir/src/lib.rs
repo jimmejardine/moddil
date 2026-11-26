@@ -642,6 +642,8 @@ pub fn runtime_op(items: &moddil_sema::ItemTree, f: u32) -> Option<&'static str>
     Some(match (owner, sig.name.as_str()) {
         ("", "yield_now") => "yield_now",
         ("", "__task_id") => "task_id",
+        ("", "__park") => "park",
+        ("", "__unpark") => "unpark",
         ("", "stop_requested") => "stop_requested",
         ("", "__scope_open") => "__scope_open",
         ("", "__scope_run") => "__scope_run",

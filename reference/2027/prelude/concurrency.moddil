@@ -49,6 +49,15 @@ impl<F, T> Drop for Task<F, T> {
 #[intrinsic]
 fn yield_now() with suspend;
 
+// Waits, if the word at `p` holds `expected`, until a task unparks `p` (`task.park.1`): what a
+// sync cell waits with. A cancelled task unwinds from it.
+#[intrinsic]
+fn __park(p: *const int, expected: int) with suspend;
+
+// Makes ready up to `n` of the tasks parked on `p`, in the order they parked: how many.
+#[intrinsic]
+fn __unpark(p: *const int, n: int) -> int;
+
 // The running task's number, which no other task of the run has: what an `Rc` is biased to
 // (`rc.1`).
 #[intrinsic]

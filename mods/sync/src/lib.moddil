@@ -1,28 +1,34 @@
 //! Sync cells: the only state tasks share and change (`concurrency.md`: Shared mutable state).
-//! Written over the `core` mod's `UnsafeCell` and atomics.
+//! Written over the `core` mod's `UnsafeCell` and atomics. A task that finds a cell taken parks
+//! on the cell's word (`task.park.1`) until the task that has it lets it go, so a wait costs
+//! nothing while it lasts.
 
 use core::atomic::{self, Ordering};
 use core::cell::UnsafeCell;
 
-/// A value behind a lock. Every runtime runs one task at a time for now, so a task that finds it
-/// held lets the others run until it is free.
+/// As many tasks as are parked: what `__unpark` wakes when every waiting task must look again.
+const EVERY: int = 1000000000000;
+
+/// A value behind a lock.
 pub struct Mutex<T> {
-    locked: UnsafeCell<bool>,
+    /// 0 when free, 1 when held, 2 when held and a task may be parked waiting for it.
+    state: UnsafeCell<int>,
     value: UnsafeCell<T>,
 }
 
 impl<T> Mutex<T> {
     pub fn new(value: T) -> Mutex<T> {
-        Mutex { locked: UnsafeCell::new(false), value: UnsafeCell::new(value) }
+        Mutex { state: UnsafeCell::new(0), value: UnsafeCell::new(value) }
     }
 
     /// The value, held until the guard is dropped; the guard reaches it through `Deref` and
     /// `DerefMut`, so its methods are called on the guard (`expr.method.deref.1`).
     pub fn lock(&self) -> Guard<T> with suspend {
-        loop {
-            match atomic::compare_exchange(self.locked.get(), false, true, Ordering::Acquire, Ordering::Relaxed) {
-                Ok(_)  => break,
-                Err(_) => yield_now(),
+        let p = self.state.get();
+        if atomic::compare_exchange(p, 0, 1, Ordering::Acquire, Ordering::Relaxed).is_err() {
+            // Taken: marked as waited for, and parked on until it is free.
+            while atomic::swap(p, 2, Ordering::Acquire) != 0 {
+                __park(p, 2);
             }
         }
         Guard { mutex: self }
@@ -67,6 +73,176 @@ impl<T> DerefMut for Guard<T> {
 
 impl<T> Drop for Guard<T> {
     fn drop(self) {
-        atomic::store(self.mutex.locked.get(), false, Ordering::Release);
+        let p = self.mutex.state.get();
+        if atomic::swap(p, 0, Ordering::Release) == 2 {
+            __unpark(p, 1);
+        }
+    }
+}
+
+/// A value many tasks read at once, or one task changes.
+pub struct RwLock<T> {
+    /// How many tasks read the value, or -1 while one writes it.
+    state: UnsafeCell<int>,
+    value: UnsafeCell<T>,
+}
+
+impl<T> RwLock<T> {
+    pub fn new(value: T) -> RwLock<T> {
+        RwLock { state: UnsafeCell::new(0), value: UnsafeCell::new(value) }
+    }
+
+    /// The value to read, shared with other readers until the guard is dropped.
+    pub fn read(&self) -> ReadGuard<T> with suspend {
+        let p = self.state.get();
+        loop {
+            let n = atomic::load(p, Ordering::Relaxed);
+            if n >= 0 {
+                if atomic::compare_exchange(p, n, n + 1, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+                    break;
+                }
+            } else {
+                __park(p, n);
+            }
+        }
+        ReadGuard { lock: self }
+    }
+
+    /// The value to change, held by this task alone until the guard is dropped.
+    pub fn write(&self) -> WriteGuard<T> with suspend {
+        let p = self.state.get();
+        loop {
+            match atomic::compare_exchange(p, 0, -1, Ordering::Acquire, Ordering::Relaxed) {
+                Ok(_)  => break,
+                Err(n) => __park(p, n),
+            }
+        }
+        WriteGuard { lock: self }
+    }
+
+    pub fn into_inner(self) -> T {
+        self.value.into_inner()
+    }
+}
+
+/// A read of an `RwLock`'s value: dropping it lets the value go.
+pub view ReadGuard<T> {
+    lock: &RwLock<T>,
+}
+
+impl<T> Deref for ReadGuard<T> {
+    type Output = T;
+    fn deref(&self) -> &T {
+        unsafe("the guard reads the value, so no task changes it") {
+            &*self.lock.value.get()
+        }
+    }
+}
+
+impl<T> Drop for ReadGuard<T> {
+    fn drop(self) {
+        let p = self.lock.state.get();
+        // The last reader wakes the writers waiting for it.
+        if atomic::fetch_add(p, -1, Ordering::Release) == 1 {
+            __unpark(p, EVERY);
+        }
+    }
+}
+
+/// A write of an `RwLock`'s value: dropping it lets the value go.
+pub view WriteGuard<T> {
+    lock: &RwLock<T>,
+}
+
+impl<T> Deref for WriteGuard<T> {
+    type Output = T;
+    fn deref(&self) -> &T {
+        unsafe("the guard writes the value, so nothing else reaches it") {
+            &*self.lock.value.get()
+        }
+    }
+}
+
+impl<T> DerefMut for WriteGuard<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        unsafe("the guard writes the value, so nothing else reaches it") {
+            &mut *self.lock.value.get()
+        }
+    }
+}
+
+impl<T> Drop for WriteGuard<T> {
+    fn drop(self) {
+        let p = self.lock.state.get();
+        atomic::store(p, 0, Ordering::Release);
+        __unpark(p, EVERY);
+    }
+}
+
+/// Where tasks holding a `Mutex` wait for a change another task makes under it.
+pub struct Condvar {
+    /// How many times it has been notified: a waiter parks while it is unchanged.
+    seq: UnsafeCell<int>,
+}
+
+impl Condvar {
+    pub fn new() -> Condvar {
+        Condvar { seq: UnsafeCell::new(0) }
+    }
+
+    /// Lets the lock go and waits for a notification, then takes the lock again. A waiter may
+    /// wake without one, so it checks what it waits for in a loop.
+    pub fn wait<T>(&self, guard: Guard<T>) -> Guard<T> with suspend {
+        let p = self.seq.get();
+        let seen = atomic::load(p, Ordering::Relaxed);
+        let mutex = guard.mutex;
+        drop(guard);
+        __park(p, seen);
+        mutex.lock()
+    }
+
+    /// Wakes one waiting task.
+    pub fn notify_one(&self) {
+        let p = self.seq.get();
+        atomic::fetch_add(p, 1, Ordering::Release);
+        __unpark(p, 1);
+    }
+
+    /// Wakes every waiting task.
+    pub fn notify_all(&self) {
+        let p = self.seq.get();
+        atomic::fetch_add(p, 1, Ordering::Release);
+        __unpark(p, EVERY);
+    }
+}
+
+/// Code run once, however many tasks ask for it: the others wait until it has run.
+pub struct Once {
+    /// 0 before it runs, 1 while it runs, 2 once it has.
+    state: UnsafeCell<int>,
+}
+
+impl Once {
+    pub fn new() -> Once {
+        Once { state: UnsafeCell::new(0) }
+    }
+
+    /// Runs `f` if no task has, or waits for the task running it.
+    pub fn call_once<F: FnOnce()>(&self, f: F) with suspend {
+        let p = self.state.get();
+        if atomic::compare_exchange(p, 0, 1, Ordering::Acquire, Ordering::Acquire).is_ok() {
+            f();
+            atomic::store(p, 2, Ordering::Release);
+            __unpark(p, EVERY);
+        } else {
+            while atomic::load(p, Ordering::Acquire) != 2 {
+                __park(p, 1);
+            }
+        }
+    }
+
+    /// Whether the code has run.
+    pub fn is_completed(&self) -> bool {
+        atomic::load(self.state.get(), Ordering::Acquire) == 2
     }
 }

@@ -1,0 +1,4 @@
+[mod]
+name = "park"
+edition = "2027"
+capabilities = ["unsafe"]

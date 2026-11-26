@@ -29,9 +29,9 @@ pub use baton::task;
 pub use baton::{DropFn, TaskFn};
 pub use run::{
     TaskSpec, begin_run, channel, clone_sender, detach, drop_receiver, drop_sender, end_run, host,
-    join, join_now, keep_text, last_trapped, recv, recv_now, scope_open, scope_run, select, send,
-    send_now, set_host, set_os, set_trap_text, spawn, stop, stop_requested, task_id, timer,
-    yield_now,
+    join, join_now, keep_text, last_trapped, park, recv, recv_now, scope_open, scope_run, select,
+    send, send_now, set_host, set_os, set_trap_text, spawn, stop, stop_requested, task_id, timer,
+    unpark, yield_now,
 };
 pub use run::{
     callback_trapped, export_begin, export_trapped, gpu_dispatch, gpu_frame, gpu_show, os_arg_copy,
@@ -396,6 +396,8 @@ pub fn symbols() -> Vec<(&'static str, *const u8)> {
         ("moddil_rt_detach", detach as *const u8),
         ("moddil_rt_yield_now", yield_now as *const u8),
         ("moddil_rt_task_id", task_id as *const u8),
+        ("moddil_rt_park", park as *const u8),
+        ("moddil_rt_unpark", unpark as *const u8),
         (
             "moddil_rt_task",
             std::ptr::addr_of!(run::RUNNING).cast::<u8>(),

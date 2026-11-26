@@ -104,6 +104,8 @@ pub enum Wait {
     Stop,
     /// One of a `select`'s operations to be ready.
     Select(Vec<Op>),
+    /// An `unpark` of the place with this key (a sync cell's word, `task.park.1`).
+    Park(u64),
 }
 
 /// An operation a `select` arm waits on (`task.select.1`).
@@ -618,6 +620,26 @@ impl<V: Item, T: Clone, D: Copy, H: Host> Scheduler<V, T, D, H> {
         self.blocked.push(t);
     }
 
+    /// Makes ready up to `n` of the tasks parked on `key`, in the order they parked
+    /// (`task.park.1`): how many.
+    pub fn unpark(&mut self, key: u64, n: usize) -> usize {
+        let mut woken = 0;
+        let tasks = &mut self.tasks;
+        let ready = &mut self.ready;
+        self.blocked.retain(|&t| {
+            let parked = matches!(tasks[t].waiting, Some(Wait::Park(k)) if k == key);
+            if parked && woken < n {
+                woken += 1;
+                tasks[t].waiting = None;
+                ready.push_back(t);
+                false
+            } else {
+                true
+            }
+        });
+        woken
+    }
+
     /// Queues task `t` again, after those already ready (`yield_now`).
     pub fn requeue(&mut self, t: usize) {
         self.ready.push_back(t);
@@ -671,6 +693,7 @@ impl<V: Item, T: Clone, D: Copy, H: Host> Scheduler<V, T, D, H> {
                             Wait::Recv(c) => self.can_recv(*c),
                             Wait::Stop => self.stop_reached(t),
                             Wait::Select(ops) => ops.iter().any(|o| self.op_ready(t, o)),
+                            Wait::Park(_) => false,
                             Wait::Scope(_) => unreachable!("handled above"),
                         }
                 }
