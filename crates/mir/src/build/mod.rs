@@ -492,6 +492,22 @@ impl Builder<'_> {
         self.solver.is_copy(ty)
     }
 
+    /// `Clone::clone`, if `ty` implements `Clone` (and is not `Copy`, which needs none).
+    pub(super) fn clone_fn(&mut self, ty: &Ty) -> Option<u32> {
+        if self.is_copy(ty) {
+            return None;
+        }
+        let tr = self.items.lang_ref("Clone")?;
+        if self.solver.implements(ty, &tr) == moddil_sema::Answer::No {
+            return None;
+        }
+        self.items.traits[tr.trait_ as usize]
+            .methods
+            .iter()
+            .copied()
+            .find(|&m| self.items.fns[m as usize].name == "clone")
+    }
+
     /// `old(e)`'s value on entry (`contract.old.1`) into `dest`: a copy of `e`, or, for a value
     /// that is `Clone` but not `Copy`, its clone, so `e` itself is left as it is.
     fn keep_old(&mut self, dest: Local, e: ExprId) {

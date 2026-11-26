@@ -55,9 +55,10 @@ interpreters; L)
 
 **P11. Compile-time evaluation** (`crates/sema`, `crates/mir`, the MIR interpreter as evaluator;
 L)
-- A `const { }` block that is not `Copy`, used by value, evaluated once too (each use a clone of
-  its static value, or a move out of a value made once); and one in a generic function, for
-  each instance.
+- A `const { }` block in a generic function, evaluated when compiling for each instance (one
+  that is `Clone` is a clone of its static data now, `comptime.block.3`; the interpreter would
+  evaluate it with the instance's type arguments, and native and WASM emit data for each), and
+  one neither `Copy` nor `Clone` used by value (evaluated where it is today).
 - Const arithmetic on const parameters in types (`Fixed<{S + T}>`, a normalised type form
   compared by structure), and a length a `const fn` gives (sema folds lengths from the syntax,
   and cannot run the interpreter); const parameters of types other than `int`.

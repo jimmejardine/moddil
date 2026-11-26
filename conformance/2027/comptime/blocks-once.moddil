@@ -1,4 +1,4 @@
-// covers: comptime.block.2, comptime.eval.2
+// covers: comptime.block.2, comptime.eval.2, comptime.block.3
 
 const fn sum_to(n: int) -> int {
     let mut s = 0;
@@ -34,7 +34,7 @@ test "a const block's value is computed when compiling" {
     (const { squares(4) }).len()  // => 4
 }
 
-test "one that is not Copy, used by value, is made where it is" {
+test "one that is Clone, used by value, is a value of its own" {
     let mut v = const { squares(3) };
     v.push(9);
     v.len()  // => 4
@@ -44,4 +44,19 @@ test "a fuel attribute gives a block more steps" {
     #[fuel(20_000_000)]
     let n = const { sum_to(1000) };
     n  // => 500500
+}
+
+fn square_table() -> Vec<int> {
+    const { squares(5) }
+}
+
+test "a block that is Clone is a clone of its static data at each use" {
+    let mut a = square_table();
+    let b = square_table();
+    a.push(99);
+    a.len()  // => 6
+    ;
+    b.len()  // => 5
+    ;
+    b[4]  // => 16
 }

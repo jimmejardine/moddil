@@ -257,6 +257,27 @@ impl Builder<'_> {
                 let op = self.use_place(p, &ty);
                 self.cfg.assign(dest, Rvalue::Use(op));
             }
+            // One whose value is `Clone`: each use a clone of its static data, so it is
+            // computed once, when compiling (`comptime.block.3`).
+            ExprKind::ConstBlock(_)
+                if self.frozen_block(e).is_some() && self.clone_fn(&self.ty(e)).is_some() =>
+            {
+                let ty = self.ty(e);
+                let func = self.clone_fn(&ty).expect("a clone");
+                let p = self.place(e);
+                let r = self.temp(Ty::reference(false, ty.clone()));
+                self.cfg.assign(r, Rvalue::Ref(false, p));
+                self.call_into(
+                    None,
+                    Callee::Trait {
+                        func,
+                        args: vec![ty],
+                    },
+                    Place::local(dest),
+                    vec![Operand::Move(Place::local(r))],
+                    range,
+                );
+            }
             ExprKind::ConstBlock(x) | ExprKind::Refine(x, _) => self.eval_into(dest, x),
             ExprKind::Fmt(pieces) => self.fmt(dest, &pieces, range),
             ExprKind::Array(_) | ExprKind::Repeat(..) | ExprKind::RepeatN(..)

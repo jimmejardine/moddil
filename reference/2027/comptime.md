@@ -21,10 +21,14 @@ code: it names no local, type parameter or const parameter of the body it is in.
 **comptime.block.2** In a test, or in a function without type parameters (its own or its
 impl's, and not a trait's) that is not a const item, a `const { }` block is evaluated once, when
 compiling, and its value is static data, as a const's is (**comptime.static.1**): borrowed in
-place (`&const { … }`, a method called on it, indexing it), or copied if its type is `Copy`. One
-whose type is not `Copy`, used by value, is still evaluated where it is, each time, so the value
-it gives is owned. A block that traps or runs out of steps when compiling is an error there
-(E1004), as is one whose value cannot be data (E1008).
+place (`&const { … }`, a method called on it, indexing it), or copied if its type is `Copy`, or
+cloned if it is `Clone` (**comptime.block.3**). One whose type is neither, used by value, is still
+evaluated where it is, each time, so the value it gives is owned. A block that traps or runs out
+of steps when compiling is an error there (E1004), as is one whose value cannot be data (E1008).
+
+**comptime.block.3** A `const { }` block whose type is `Clone` but not `Copy`, used by value, is a
+clone of its static data: computed once, when compiling, each use owns a value of its own, and
+changing one changes no other (`let mut a = const { table() }; a.push(1)`).
 
 **comptime.static.1** A const's value is static data: `&NAME` borrows nothing and may be returned
 from a function with no borrowed parameter ([Borrows](borrows.md)). So a const's type holds no
