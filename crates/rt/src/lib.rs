@@ -22,6 +22,8 @@ mod executors;
 mod hash;
 pub mod host;
 pub mod num;
+#[cfg(not(target_arch = "wasm32"))]
+mod numa;
 mod os;
 #[cfg(not(target_arch = "wasm32"))]
 mod reactor;

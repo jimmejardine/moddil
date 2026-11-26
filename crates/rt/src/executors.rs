@@ -4,7 +4,8 @@
 //! executor that lends (the default one and the pools) then takes from the other lenders, so an
 //! idle pool's threads run another pool's tasks. A pinned executor's workers are each pinned to
 //! one of its cores (`core_affinity`), never lend, and may poll for work rather than sleep; each
-//! executor's workers have the OS's priority for its own (`thread-priority`).
+//! executor's workers have the OS's priority for its own (`thread-priority`). An executor that
+//! names a NUMA node and no cores has that node's ([`crate::numa`]).
 
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -190,11 +191,22 @@ pub(crate) fn workers(e: &Executor, n: usize) -> usize {
     match e.kind {
         AFFINE => 1,
         BLOCKING => usize::try_from(e.threads).unwrap_or(1).max(1),
-        _ => usize::try_from(e.cores.1 - e.cores.0)
-            .ok()
-            .filter(|&k| k > 0)
-            .unwrap_or(n),
+        _ => cores(e).map_or(n, |c| c.len().max(1)),
     }
+}
+
+/// The cores executor `e` names: its range, or, with none, those of its NUMA node, if it names
+/// one (`crate::numa`).
+fn cores(e: &Executor) -> Option<Vec<usize>> {
+    if e.cores.1 > e.cores.0 {
+        let (a, b) = (
+            usize::try_from(e.cores.0).ok()?,
+            usize::try_from(e.cores.1).ok()?,
+        );
+        return Some((a..b).collect());
+    }
+    let node = usize::try_from(e.node).ok()?;
+    crate::numa::cores_of(node).map(<[usize]>::to_vec)
 }
 
 /// Starts executor `id` (`e`): its workers, `n` of them, each running `work` with the queues;
@@ -225,16 +237,17 @@ pub(crate) fn start(
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(queues.clone());
     }
-    let cores = core_affinity::get_core_ids().unwrap_or_default();
+    let ids = core_affinity::get_core_ids().unwrap_or_default();
+    // A pinned or pool executor naming cores, or a NUMA node: one of them a worker.
+    let named = matches!(e.kind, PINNED | POOL).then(|| cores(e)).flatten();
     let mut workers = Vec::new();
     for (i, local) in locals.into_iter().enumerate() {
         let q = queues.clone();
         let work = work.clone();
-        // The core of a pinned or pool executor naming cores: its own, one a worker.
-        let core = (e.kind == PINNED || e.kind == POOL && e.cores.1 > e.cores.0)
-            .then(|| usize::try_from(e.cores.0).ok())
-            .flatten()
-            .and_then(|first| cores.get(first + i).copied());
+        let core = named
+            .as_ref()
+            .and_then(|c| c.get(i))
+            .and_then(|&c| ids.iter().find(|id| id.id == c).copied());
         let priority = e.priority;
         let w = std::thread::Builder::new()
             .name(format!("moddil-executor-{id}"))

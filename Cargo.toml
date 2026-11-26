@@ -71,6 +71,7 @@ corosensei = "0.3.4"        # stackful coroutines: the parallel runtime's tasks 
 crossbeam-deque = "0.8.8"   # the parallel runtime's work-stealing queues (`moddil-rt`)
 core_affinity = "0.8.3"     # pinning a pinned executor's workers to its cores (`moddil-rt`)
 thread-priority = "3.1.1"   # an executor's workers' priority (`moddil-rt`)
+windows-sys = "0.61.2"      # the NUMA nodes' cores on Windows (`moddil-rt`)
 ctrlc = "3.5.3"             # Ctrl-C and termination as `core::os` signals (`moddil-os`)
 mio = { version = "1.2.5", features = ["os-poll", "net"] }  # the OS's wait for readiness: epoll, kqueue, IOCP (`moddil-os`)
 naga = { version = "30.0.2", features = ["wgsl-out", "wgsl-in"] }  # kernels to WGSL, validated (`moddil-gpu`)

@@ -22,3 +22,6 @@ corosensei.workspace = true
 crossbeam-deque.workspace = true
 core_affinity.workspace = true
 thread-priority.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_System_SystemInformation", "Win32_System_Kernel"] }

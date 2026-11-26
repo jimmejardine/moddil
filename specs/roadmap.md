@@ -218,8 +218,9 @@ P41's tests). In stages, each a commit with P41's suite green:
    the parallel runtime `crates/rt/src/reactor.rs` brings the events in while tasks run.) Still:
    one reactor a worker rather than a run; a timer wheel rather than the scheduler's list; a
    write that waits for the socket in the reactor rather than trying again; io_uring.
-7. NUMA: topology discovery (Linux sysfs, Windows `GetLogicalProcessorInformationEx`), executors
-   placed by node, node-local allocator arenas.
+7. (NUMA nodes' cores, from Linux's sysfs and Windows' `GetLogicalProcessorInformationEx`, and an
+   executor made for a node placed on its cores, are built: `crates/rt/src/numa.rs`; tested on
+   one node only.) Still: node-local allocator arenas.
 8. Observability: the task tree and each task's blocked-on operation, for `Introspect` and spans
    (`observability.md`).
 

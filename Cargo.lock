@@ -1110,6 +1110,7 @@ dependencies = [
  "moddil-os",
  "moddil-sched",
  "thread-priority",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
