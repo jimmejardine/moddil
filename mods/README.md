@@ -11,7 +11,7 @@ umbrella mod [`moddil`](moddil/README.md), which re-exports them.
 | Mod | What it has | Capabilities |
 |---|---|---|
 | [`collections`](collections/src/lib.moddil) | `Map` and `Set` over the `core` mod's hash maps, `Deque`, `RingBuffer`, `BinaryHeap`, the sorted `TreeMap` and `TreeSet`, the insertion-ordered `OrderedMap` and `OrderedSet`, `Interner` with typed `Symbol`s, and the persistent `PersistentList`, `PersistentVec`, `PersistentMap` and `PersistentSet` | |
-| [`sync`](sync/src/lib.moddil) | `Mutex` (with a `Guard` view, and `with`), `RwLock`, `Condvar` and `Once`, over `UnsafeCell` and atomics; a waiting task parks (`task.park.1`) | `unsafe` |
+| [`sync`](sync/src/lib.moddil) | `Mutex` (with a `Guard` view, and `with`), `RwLock`, `Condvar`, `Once` and `AtomicRc`, over `UnsafeCell` and atomics; a waiting task parks (`task.park.1`) | `unsafe` |
 | [`rand`](rand/src/lib.moddil) | the `Rand` effect, and `Seeded` (`seeded`) | `unsafe` |
 | [`serde`](serde/src/lib.moddil) | `Serialize` and `Deserialize` with their derives (impl templates), `DecodeError`, JSON | |
 | [`net`](net/src/lib.moddil) | the `Net` effect, `Port`, `Url`, `Conn` (bytes, over a simulated link or an OS connection), `Listener` (a selectable `accept`); [`http`](net/src/http.moddil): HTTP/1.1, `Router`, `Request`, `Response`, `serve_connection`, `post` with retries | `os` |

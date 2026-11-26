@@ -246,3 +246,66 @@ impl Once {
         atomic::load(self.state.get(), Ordering::Acquire) == 2
     }
 }
+
+/// An `Rc` that tasks load and replace through a shared borrow: a config snapshot, a link in a
+/// shared graph. Each operation holds a flag for the few instructions it takes to share or
+/// replace the `Rc` (one atomic operation, then the count), never across a suspension.
+pub struct AtomicRc<T> {
+    /// 1 while an operation holds the `Rc`.
+    busy: UnsafeCell<int>,
+    rc: UnsafeCell<Rc<T>>,
+}
+
+impl<T> AtomicRc<T> {
+    pub fn new(rc: Rc<T>) -> AtomicRc<T> {
+        AtomicRc { busy: UnsafeCell::new(0), rc: UnsafeCell::new(rc) }
+    }
+
+    /// Another owner of the value it holds now.
+    pub fn load(&self) -> Rc<T> {
+        self.hold();
+        let r = unsafe("the flag is held, so nothing else reaches the rc") {
+            (*self.rc.get()).share()
+        };
+        self.release();
+        r
+    }
+
+    /// Holds `rc` from now on, giving back what it held.
+    pub fn swap(&self, rc: Rc<T>) -> Rc<T> {
+        self.hold();
+        let old = unsafe("the flag is held, so nothing else reaches the rc") {
+            replace(&mut *self.rc.get(), rc)
+        };
+        self.release();
+        old
+    }
+
+    /// Holds `rc` from now on, dropping what it held.
+    pub fn store(&self, rc: Rc<T>) {
+        drop(self.swap(rc));
+    }
+
+    /// Holds `new` if it holds `current` (the same value, `Rc::ptr_eq`): `Ok` with what it held
+    /// if so, and `Err` with `new` back if not.
+    pub fn compare_exchange(&self, current: &Rc<T>, new: Rc<T>) -> Result<Rc<T>, Rc<T>> {
+        self.hold();
+        let r = unsafe("the flag is held, so nothing else reaches the rc") {
+            if Rc::ptr_eq(&*self.rc.get(), current) { Ok(replace(&mut *self.rc.get(), new)) } else { Err(new) }
+        };
+        self.release();
+        r
+    }
+
+    pub fn into_inner(self) -> Rc<T> {
+        self.rc.into_inner()
+    }
+
+    fn hold(&self) {
+        while atomic::compare_exchange(self.busy.get(), 0, 1, Ordering::Acquire, Ordering::Relaxed).is_err() {}
+    }
+
+    fn release(&self) {
+        atomic::store(self.busy.get(), 0, Ordering::Release);
+    }
+}

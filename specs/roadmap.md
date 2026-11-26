@@ -240,7 +240,6 @@ before and after (rc-heavy code, locks, tight loops): recorded, not gated.
 - `Rc`'s rebias on a unique transfer (a channel send, a move into a child). The biased counts
   are built (`rc.task.1`); the last owner is found by reading the owner's count, which holds
   while one task runs at a time.
-- `AtomicRc<T>` for sync cells holding shared values; then the cycle detector.
 - The runtime's state: `crates/rt`'s one mutex split, the scheduler state per worker; statics
   and `const` values initialised once, atomically; the allocation count without the run's lock
   on each allocation; a thread-safe allocator with per-thread caches.
@@ -350,6 +349,12 @@ way, not checked by the compiler ([`examples/hft-platform.md`](examples/hft-plat
 **P66. After v1: reconsider self-hosting**
 ([`compiler.md`: Staged bootstrap](compiler.md#staged-bootstrap)): what would justify it, and
 whether Moddil-core (the stage 0 subset) is the right size to write a compiler in.
+
+**P67. The rc cycle detector** (`crates/native`, `crates/interp`, `crates/rt`, prelude; L).
+Debug builds and `runtime-sim` report leaked `Rc` cycles with their allocation sites
+(`memory.md`: no garbage collector). The compiler gives each type a trace of the `Rc`s it holds;
+the runtime keeps the live allocations, and at a run's end (or on asking) finds those only
+reachable from each other.
 
 ## Known limits, with no package yet
 - The float functions other than `sqrt` are `libm`'s, not yet correctly rounded.

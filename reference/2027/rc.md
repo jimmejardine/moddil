@@ -40,8 +40,8 @@ the allocation ([`specs/memory.md`: Biased reference
 counting](../../specs/memory.md#biased-reference-counting)): that task counts plainly, and the
 others atomically.
 
-Not yet: `Rc<dyn Trait>`, `AtomicRc`, and the merge queue a parallel runtime hands a last owner
-to its allocation's task through.
+An `Rc` that tasks swap is `moddil/sync`'s `AtomicRc`. Not yet: `Rc<dyn Trait>`, and the merge
+queue a parallel runtime hands a last owner to its allocation's task through.
 
 ## Diagnostics
 

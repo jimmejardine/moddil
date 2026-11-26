@@ -1,4 +1,4 @@
-use sync::{Condvar, Mutex, Once, RwLock};
+use sync::{AtomicRc, Condvar, Mutex, Once, RwLock};
 
 test "a mutex changes behind a shared borrow" {
     let m = Mutex::new(Vec::new());
@@ -95,4 +95,21 @@ test "once runs its code once, and the other tasks wait for it" {
         }
     });
     (o.is_completed(), m.into_inner())  // => (true, 31)
+}
+
+test "an atomic rc is loaded and replaced through a shared borrow" {
+    let a = AtomicRc::new(1.to_rc());
+    let first = a.load();
+    let old = a.swap(2.to_rc());
+    (*first, *old, *a.load())  // => (1, 1, 2)
+    ;
+    let now = a.load();
+    a.compare_exchange(&first, 3.to_rc()).is_err()  // => true
+    ;
+    *a.compare_exchange(&now, 4.to_rc()) ?! "it holds now"  // => 2
+    ;
+    scope(|s| {
+        s.spawn (|| a.store(5.to_rc()));
+    });
+    *a.into_inner()  // => 5
 }
