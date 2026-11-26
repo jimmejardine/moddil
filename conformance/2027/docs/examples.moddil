@@ -1,4 +1,4 @@
-// covers: test.doc.1
+// covers: test.doc.1, item.test.fail.1
 
 /// Doubles `x`. An example in a doc comment is a test: its lines are Moddil, each `// =>` its
 /// expected value, in the item's module.
@@ -38,4 +38,19 @@ impl Counter {
 /// ```
 fn secret() -> int {
     42
+}
+
+#[derive(Debug)]
+struct Empty;
+
+/// The first element. An example shows a call that fails.
+///
+/// # Example
+/// first(&[3, 4])?                         // => 3
+/// first(&[])                              // => fail(Empty)
+fn first(xs: &[int]) -> int with fail(Empty) {
+    if xs.is_empty() {
+        fail(Empty);
+    }
+    xs[0]
 }

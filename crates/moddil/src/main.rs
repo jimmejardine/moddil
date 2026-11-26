@@ -1,6 +1,7 @@
 //! The `moddil` command: it checks programs, runs them and their tests (compiled to native code,
 //! or on the MIR interpreter), builds them into executables, and formats them. See `crates/moddil/README.md`.
 
+mod doc;
 mod fmt;
 mod link;
 mod wheel;
@@ -32,6 +33,15 @@ enum Command {
     Check {
         /// A file, or a mod's directory (with a `moddil.toml`).
         file: PathBuf,
+    },
+    /// Writes a mod's API pages, one Markdown file per module, once it checks: each public
+    /// item's declaration (its signature, effects, errors and contracts) and doc comment.
+    Doc {
+        /// A file, or a mod's directory (with a `moddil.toml`).
+        file: PathBuf,
+        /// Where to write them (by default, `target/doc` beside the mod).
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
     /// Runs a program's `fn main()`, compiled to native code, and prints its result.
     Run {
@@ -166,6 +176,7 @@ fn main() -> ExitCode {
     let path = match &cli.command {
         Command::Lsp | Command::Fmt { .. } => unreachable!("handled above"),
         Command::Check { file }
+        | Command::Doc { file, .. }
         | Command::Run { file, .. }
         | Command::Test { file, .. }
         | Command::Build { file, .. }
@@ -202,6 +213,28 @@ fn main() -> ExitCode {
     let name = path.display().to_string();
     if matches!(cli.command, Command::Check { .. }) {
         return ExitCode::SUCCESS;
+    }
+    if let Command::Doc { output, .. } = &cli.command {
+        let base = if path.is_dir() {
+            path.to_path_buf()
+        } else {
+            path.parent().map_or_else(PathBuf::new, Path::to_path_buf)
+        };
+        let out = output
+            .clone()
+            .unwrap_or_else(|| base.join("target").join("doc"));
+        return match doc::write(&project, &out) {
+            Ok(written) => {
+                for p in written {
+                    println!("{}", p.display());
+                }
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("moddil: writing the pages into {}: {e}", out.display());
+                ExitCode::FAILURE
+            }
+        };
     }
     // The runtime and the threads (`task.runtime.1`): as asked, or as the manifest says.
     let (runtime, threads) = match &cli.command {
@@ -282,7 +315,7 @@ fn main() -> ExitCode {
         }
     }
     match &cli.command {
-        Command::Check { .. } => ExitCode::SUCCESS,
+        Command::Check { .. } | Command::Doc { .. } => ExitCode::SUCCESS,
         Command::Run {
             interp: true, args, ..
         } => run(&db, program, &files, &name, args.clone()),

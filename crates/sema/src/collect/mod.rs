@@ -730,6 +730,54 @@ impl Collector<'_> {
         self.report_found(found);
         let found = validate::exposed(&self.tree);
         self.report_found(found);
+        // The links to code in the files' doc comments name it (`test.doc.link.1`).
+        for (src, root) in sources {
+            let Src::File(f) = src else { continue };
+            let Some(module) = self.tree.modules.iter().position(|m| m.file == Some(*f)) else {
+                continue;
+            };
+            let ds: Vec<Diagnostic> = moddil_syntax::doc_links(root)
+                .into_iter()
+                .filter(|(link, _)| !self.doc_link_resolves(module as u32, link))
+                .map(|(link, range)| {
+                    Diagnostic::error(
+                        Code::E0113,
+                        range,
+                        format!("`[[{link}]]` names nothing: no item, member or module is called that here"),
+                    )
+                })
+                .collect();
+            self.reporter.report(*src, None, ds);
+        }
+    }
+
+    /// Whether doc link `link` (`Account::open`) names something from `module`: an item or
+    /// module, or a method, field or variant of a type, or a trait's method.
+    fn doc_link_resolves(&self, module: u32, link: &str) -> bool {
+        let segs: Vec<&str> = link.split("::").collect();
+        let Some(last) = segs.last() else {
+            return false;
+        };
+        match self.tree.path(module, &segs, false) {
+            Ok((_, n)) if n == segs.len() => true,
+            Ok((Def::Adt(a), n)) if n + 1 == segs.len() => {
+                let def = &self.tree.adts[a as usize];
+                def.variants
+                    .iter()
+                    .any(|v| v.name == *last || v.fields.iter().any(|f| f.name == *last))
+                    || self.tree.impls.iter().any(|i| {
+                        i.self_ty.adt() == Some(a)
+                            && i.methods
+                                .iter()
+                                .any(|&m| self.tree.fns[m as usize].name == *last)
+                    })
+            }
+            Ok((Def::Trait(t), n)) if n + 1 == segs.len() => self.tree.traits[t as usize]
+                .methods
+                .iter()
+                .any(|&m| self.tree.fns[m as usize].name == *last),
+            _ => false,
+        }
     }
 
     /// Declares the free functions `fns` in their modules, with placeholder signatures that are

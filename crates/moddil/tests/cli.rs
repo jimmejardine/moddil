@@ -685,3 +685,33 @@ fn the_manifest_chooses_the_runtime_and_threads() {
     let out = moddil(&["run"], &dir);
     assert!(String::from_utf8_lossy(&out.stderr).contains("E0704"));
 }
+
+#[test]
+fn doc_writes_a_page_for_each_module() {
+    let path = file(
+        "documented.moddil",
+        "//! A documented file.
+
+/// Doubles `x`.
+pub fn twice(x: int) -> int {
+    x * 2
+}
+
+fn hidden() {}
+",
+    );
+    let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("cli-doc");
+    let _ = std::fs::remove_dir_all(&out);
+    let run = Command::new(env!("CARGO_BIN_EXE_moddil"))
+        .args(["doc", "-o"])
+        .arg(&out)
+        .arg(&path)
+        .output()
+        .expect("moddil runs");
+    assert!(run.status.success(), "{run:?}");
+    let page = std::fs::read_to_string(out.join("main").join("index.md")).expect("a page");
+    assert!(page.contains("pub fn twice(x: int) -> int"), "{page}");
+    assert!(page.contains("Doubles `x`."), "{page}");
+    assert!(page.contains("A documented file."), "{page}");
+    assert!(!page.contains("hidden"), "{page}");
+}

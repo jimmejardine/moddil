@@ -644,16 +644,41 @@ impl Machine<'_> {
     /// Whether a `// =>` expectation follows `end` on the same line, after an optional `;`
     /// (`items.test.observe.1`).
     fn observed(&self, end: u32) -> bool {
-        let Some(file) = self.memory.file() else {
-            return false;
-        };
+        self.expectation(end).is_some()
+    }
+
+    /// The `// =>` expectation after `end` on its line, from `=>` on.
+    fn expectation(&self, end: u32) -> Option<String> {
+        let file = self.memory.file()?;
         let rest =
             self.program.texts[file as usize][end as usize..].trim_start_matches([' ', '\t']);
         let rest = rest
             .strip_prefix(';')
             .unwrap_or(rest)
             .trim_start_matches([' ', '\t']);
-        rest.starts_with("// =>")
+        rest.strip_prefix("// =>")
+            .map(|x| x.trim_start().lines().next().unwrap_or("").to_string())
+    }
+
+    /// `x` evaluated as an observed line: for `// => fail(E)`, an `Ok` of its value or an
+    /// `Err` of the error it fails with, so the error is what it shows (`item.test.fail.1`).
+    pub(super) fn eval_observed(&mut self, x: &ast::Expr) -> Eval {
+        let fails = self
+            .expectation(x.syntax().text_range().end)
+            .is_some_and(|e| e.starts_with("fail("));
+        if !fails {
+            return self.eval(x);
+        }
+        let (variant, v) = match self.eval(x) {
+            Ok(v) => ("Ok", v),
+            Err(Flow::Fail(e, _)) => ("Err", e),
+            Err(other) => return Err(other),
+        };
+        Ok(Value::Adt {
+            ty: "Result".to_string(),
+            variant: variant.to_string(),
+            fields: vec![v],
+        })
     }
 
     fn observe(&mut self, range: TextRange, v: &Value) {

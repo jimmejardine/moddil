@@ -409,11 +409,19 @@ fn read_comments(file: &str, text: &str, e: &mut Expectations) -> Result<(), Str
     for tok in moddil_syntax::lex(text).0 {
         let at = offset;
         offset += tok.len;
+        let comment = &text[at as usize..offset as usize];
+        let line = line_col(text, at).0;
+        // A doc comment's line may end with a mark for a problem in it (`[[link]]`): there is
+        // no room for a comment of its own after it.
+        if matches!(tok.kind, SyntaxKind::DOC_OUTER | SyntaxKind::DOC_INNER)
+            && let Some((_, rest)) = comment.split_once("  //~")
+        {
+            marks(rest, &at_line(line), e)?;
+            continue;
+        }
         if tok.kind != SyntaxKind::LINE_COMMENT {
             continue;
         }
-        let comment = &text[at as usize..offset as usize];
-        let line = line_col(text, at).0;
         if let Some(rest) = comment.strip_prefix("//~") {
             marks(rest, &at_line(line), e)?;
         } else if let Some(x) = moddil_syntax::expected(comment) {

@@ -1,4 +1,4 @@
-// covers: item.test.decl.1, item.test.value.1, trap.1
+// covers: item.test.decl.1, item.test.value.1, trap.1, item.test.fail.1
 
 test "values of any type" {
     let n = 3;
@@ -14,4 +14,28 @@ test "a test passes unless it traps" {}
 test "this one fails" {
     let max = 9223372036854775807;
     max + 1;  //~ trap
+}
+
+#[derive(Debug)]
+struct Overdraft;
+
+struct Account {
+    balance: int,
+}
+
+fn withdraw(a: &mut Account, n: int) -> int with fail(Overdraft) {
+    if n > a.balance {
+        fail(Overdraft);
+    }
+    a.balance -= n;
+    n
+}
+
+test "a line may say the error it fails with" {
+    let mut a = Account { balance: 50 };
+    withdraw(&mut a, 100)  // => fail(Overdraft)
+    ;
+    withdraw(&mut a, 20)?  // => 20
+    ;
+    a.balance  // => 30
 }

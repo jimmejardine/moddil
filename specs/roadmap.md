@@ -27,7 +27,11 @@ Python teams and backend teams come before the browser (decided November 2026,
 **P4. Text** (prelude `text`, `crates/sema`; M)
 - A tagged literal's fields (`comptime.tag.fields.1`) of types other than `String` and
   `Option<String>` (a `Match`, a number), named by the tag; and a way to name the struct `read`
-  gives, so a function can return one.
+  gives, so a function can return one. Decided (November 2026): the tag gives each field's type
+  as type text (`"int"`, `"Option<Match>"`), each value parsed with `FromStr` (a `Match` built
+  in), and the struct is named through the const holding the literal
+  (`const DATE: Regex = re"…"; fn f() -> DATE::Fields`). It needs a prelude `FromStr`, and a
+  const typed as the literal's wrapper (today the wrapper is hidden).
 - Fields for a tag taking `&[&str]`, and for a tag of the literal's own mod (E1012 now): the
   second needs the mod collected without the literals that use it first.
 
@@ -120,8 +124,11 @@ L)
   past the call (zlib's `zalloc`), and a trap in a callback raised where it happens.
 
 **P23. Documentation tooling** (`crates/syntax`, `crates/sema`, `crates/moddil`; L)
-- `moddil doc`, and doc links (`[[Account::open]]`) checked against the code, as `docs.md` says.
-- An example's `// => fail(E)` and snapshot-style expected output (`testing.md`).
+- `moddil doc`'s pages as the site's fragments (`web.md`: Astro includes them): today it writes
+  Markdown, a file a module, each public item's declaration and doc; linking a `[[path]]` to its
+  page, the generated sections `docs.md` lists (effects, error set, contracts, tests), and groups
+  and required overviews (`docs.md`).
+- Snapshot-style expected output (`testing.md`).
 
 **P26. A line-by-line review of the checkers and the native lowering** (`crates/sema` `check/`,
 `crates/native` `lower.rs`; L)

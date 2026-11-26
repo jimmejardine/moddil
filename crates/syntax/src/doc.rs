@@ -136,3 +136,52 @@ mod tests {
         assert!(crate::parse(&e.source).errors().is_empty());
     }
 }
+
+/// The links in the doc comments (`///` and `//!`) of `root` that name code (`docs.md`: Checked
+/// links): each `[[path]]` whose text is a path of names (`[[Account::open]]`, not
+/// `[[ADR-12]]`), with where its path is in the file.
+pub fn doc_links(root: &SyntaxNode) -> Vec<(String, TextRange)> {
+    let mut out = Vec::new();
+    for t in root.tokens() {
+        if !matches!(t.kind(), SyntaxKind::DOC_OUTER | SyntaxKind::DOC_INNER) {
+            continue;
+        }
+        let text = t.text();
+        let base = t.text_range().start as usize;
+        let mut from = 0;
+        while let Some(open) = text[from..].find("[[") {
+            let start = from + open + 2;
+            let Some(len) = text[start..].find("]]") else {
+                break;
+            };
+            let link = &text[start..start + len];
+            let is_path = !link.is_empty()
+                && link.split("::").all(|s| {
+                    s.chars()
+                        .next()
+                        .is_some_and(|c| c.is_alphabetic() || c == '_')
+                        && s.chars().all(|c| c.is_alphanumeric() || c == '_')
+                });
+            if is_path {
+                let at = (base + start) as u32;
+                out.push((link.to_string(), TextRange::new(at, at + link.len() as u32)));
+            }
+            from = start + len + 2;
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod link_tests {
+    #[test]
+    fn a_doc_comment_s_code_links_are_found() {
+        let text = "//! See [[Account::open]] and [[ADR-12]].\n/// Uses [[open]].\nfn open() {}\n";
+        let parse = crate::parse(text);
+        let links = super::doc_links(&parse.syntax());
+        let names: Vec<&str> = links.iter().map(|(l, _)| l.as_str()).collect();
+        assert_eq!(names, ["Account::open", "open"]);
+        let (_, r) = &links[0];
+        assert_eq!(&text[r.start as usize..r.end as usize], "Account::open");
+    }
+}

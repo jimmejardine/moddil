@@ -101,7 +101,7 @@ impl Machine<'_> {
         match b.tail_expr() {
             Some(t) => {
                 let mark = self.memory.mark();
-                let v = self.eval(&t)?;
+                let v = self.eval_observed(&t)?;
                 self.observe(t.syntax().text_range(), &v);
                 self.drop_temps(mark, t.syntax().text_range())?;
                 Ok(v)
@@ -119,7 +119,7 @@ impl Machine<'_> {
             self.observe(range, &v);
             return Ok(());
         }
-        let v = self.eval(x)?;
+        let v = self.eval_observed(x)?;
         self.observe(range, &v);
         self.drop_value(v, true, range)
     }

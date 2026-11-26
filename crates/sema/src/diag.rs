@@ -85,6 +85,8 @@ codes! {
     E0111 = "struct or variant in the wrong form",
     /// A built-in such as `assert` used other than by calling it.
     E0112 = "built-in used as a value",
+    /// A doc comment's link to code (`[[Account::open]]`) that names nothing.
+    E0113 = "unresolved doc link",
     /// A type other than the one expected.
     E0201 = "mismatched types",
     /// A call with the wrong number of arguments.

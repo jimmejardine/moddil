@@ -1,0 +1,33 @@
+// covers: test.doc.link.1
+
+//! Accounts: open one with [[Account::open]], and see [[Kind]] and [[ADR-12]] (not code).
+
+/// What an account is: its [[Kind::Savings]] or not, and its [[Account::balance]].
+pub enum Kind {
+    Savings,
+    Current,
+}
+
+/// An account; [[Account::deposit]] adds to it.
+pub struct Account {
+    balance: int,
+    kind: Kind,
+}
+
+impl Account {
+    /// A new one; it starts empty, as [[Account::balance]] says.
+    pub fn open(kind: Kind) -> Account {
+        Account { balance: 0, kind }
+    }
+
+    /// Adds `n`.
+    pub fn deposit(&mut self, n: int) {
+        self.balance += n;
+    }
+}
+
+/// Uses [[Account::close]], which there is not.  //~ E0113
+fn dangling() {}
+
+/// And [[Nothing]].  //~ E0113
+fn nothing() {}

@@ -456,12 +456,42 @@ impl Lowerer<'_> {
 
     /// Whether a `// =>` expectation follows `end` on the same line (after an optional `;`).
     fn observed(&self, end: u32) -> bool {
+        self.expectation(end).is_some()
+    }
+
+    /// The `// =>` expectation after `end` on its line, from `=>` on, if there is one.
+    fn expectation(&self, end: u32) -> Option<&str> {
         let rest = self.text[end as usize..].trim_start_matches([' ', '\t']);
         let rest = rest
             .strip_prefix(';')
             .unwrap_or(rest)
             .trim_start_matches([' ', '\t']);
-        rest.starts_with("// =>")
+        rest.strip_prefix("// =>").map(str::trim_start)
+    }
+
+    /// `e`, an observed statement's expression: `try { e }` if its expectation is `fail(E)`,
+    /// so the error it fails with is its value (`item.test.fail.1`).
+    fn observed_expr(&mut self, e: &ast::Expr) -> ExprId {
+        let fails = self
+            .expectation(e.syntax().text_range().end)
+            .is_some_and(|x| x.starts_with("fail("));
+        let x = self.expr(e);
+        if !fails {
+            return x;
+        }
+        // `e?` in the `try`, unless written so: the call fails into it.
+        let range = e.syntax().text_range();
+        let x = match self.out.body.exprs[x].kind {
+            ExprKind::Question(_) => x,
+            _ => self.alloc(ExprKind::Question(x), range),
+        };
+        self.alloc(
+            ExprKind::Try {
+                body: x,
+                catch: None,
+            },
+            range,
+        )
     }
 
     fn block(&mut self, block: &ast::Block) -> ExprId {
@@ -488,7 +518,7 @@ impl Lowerer<'_> {
                     let observe = self.observed(inner.syntax().text_range().end);
                     let outer = self.fuel;
                     self.fuel = fuel.or(outer);
-                    let expr = self.expr(&inner);
+                    let expr = self.observed_expr(&inner);
                     self.fuel = outer;
                     stmts.push(Stmt::Expr {
                         expr,
@@ -530,7 +560,7 @@ impl Lowerer<'_> {
         let (tail, observe_tail) = match block.tail_expr() {
             Some(t) => {
                 let observe = self.observed(t.syntax().text_range().end);
-                (Some(self.expr(&t)), observe)
+                (Some(self.observed_expr(&t)), observe)
             }
             None => (None, false),
         };

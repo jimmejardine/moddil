@@ -35,6 +35,7 @@ and a code never changes meaning.
 | E0110 | Unresolved label | [expr.break.label.1](expressions/loops.md) |
 | E0111 | A struct or variant in a form it is not declared with | [expr.struct.form.1](expressions/structs.md), [pat.struct.tuple.1](patterns.md) |
 | E0112 | A built-in used as a value | [expr.assert.name.1](expressions/assert.md) |
+| E0113 | A doc comment's link to code that names nothing | [test.doc.link.1](items/tests.md) |
 | E0201 | Mismatched types | [type.match.1](types.md) and the rules that expect a type |
 | E0202 | Wrong number of arguments | [expr.call.1](expressions/calls.md), [expr.closure.call.1](expressions/closures.md) |
 | E0203 | Not a function | [expr.call.1](expressions/calls.md), [expr.closure.call.1](expressions/closures.md) |

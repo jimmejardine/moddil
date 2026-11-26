@@ -2,7 +2,8 @@
 //! its value, and, under the parallel runtime, whose tasks run in whatever order, the others it
 //! may give: `// => v (in parallel, also w; x)`, `// => v (in parallel, in any order)` for a
 //! tuple or array whose parts may come in another order, or both, `(in parallel, in any order,
-//! also w; x)`. `moddil test` and the conformance suite read them alike.
+//! also w; x)`; or `// => fail(E)`, a line that fails with an error shown `E`
+//! (`item.test.fail.1`). `moddil test` and the conformance suite read them alike.
 
 /// A `// =>` comment's expectation.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,8 +21,18 @@ impl Expected<'_> {
     /// Whether `seen` is what it says: the value, or, under the parallel runtime if `parallel`,
     /// one of the others it may be.
     pub fn accepts(&self, seen: &str, parallel: bool) -> bool {
+        // `// => fail(E)`: the line fails with an error shown as `E` (`item.test.fail.1`),
+        // which the line's value shows as `Err(E)`.
+        if let Some(e) = self.fails() {
+            return seen.strip_prefix("Err(").and_then(|s| s.strip_suffix(')')) == Some(e);
+        }
         let one = |v: &str| seen == v || self.any_order && parts(seen) == parts(v);
         seen == self.value || parallel && (one(self.value) || self.also.iter().any(|&a| one(a)))
+    }
+
+    /// For `// => fail(E)`, the error as shown: `E`.
+    pub fn fails(&self) -> Option<&str> {
+        self.value.strip_prefix("fail(")?.strip_suffix(')')
     }
 }
 

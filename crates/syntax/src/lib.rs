@@ -19,7 +19,7 @@ mod parser;
 mod text;
 mod tree;
 
-pub use doc::{DocExample, doc_examples};
+pub use doc::{DocExample, doc_examples, doc_links};
 pub use expected::{Expected, expected};
 pub use kinds::SyntaxKind;
 pub use lexer::{Token, lex};
