@@ -12,8 +12,12 @@
 //!   its current block, which is structured whatever the MIR's control flow.
 //! - **Values:** `int` is `i32` (WGSL has no 64-bit integers), `f32` and `bool` themselves, `u8`
 //!   to `u32` as `u32`; structs and tuples are structs, an enum a struct of its tag and every
-//!   variant's fields; a borrow is the value it borrows (kernel code only reads through shared
-//!   borrows), and the tile (`&mut Tile`) is its position.
+//!   variant's fields; an array an array; a borrow is the value it borrows (kernel code only reads
+//!   through shared borrows), and the tile (`&mut Tile`) is its position.
+//! - **Slices:** every array in a kernel is the kernel's own or part of its parameters, so a
+//!   slice is the array it is part of (its capacity: found from where the slice is made, and a
+//!   function taking slices is lowered for each capacity it is given), where in it the slice
+//!   starts, and how long it is.
 //! - **Traps are not checked** on the GPU (the MIR's `Assert`s are dropped), and an error edge is
 //!   never taken: interim limits.
 //! - **Bindings:** the parameters (`@binding(0)`, words in Moddil's own layout, which the
@@ -31,8 +35,10 @@ use moddil_mir::{
     UnOp,
 };
 use moddil_sema::{
-    Callee, ClosureTy, Db, Item, ItemTree, Num, Owner, Program, Solver, TraitRef, Ty,
+    Callee, ClosureTy, Code, Db, Diagnostic, Item, ItemTree, Num, Owner, Program, Solver, Src,
+    TraitRef, Ty,
 };
+use moddil_syntax::TextRange;
 use naga::{
     AddressSpace, ArraySize, BinaryOperator, Binding, Block, BuiltIn, EntryPoint, Expression,
     Function, FunctionArgument, FunctionResult, GlobalVariable, Handle, Literal, LocalVariable,
@@ -43,6 +49,12 @@ use naga::{
 /// The byte offsets of a struct's or tuple's fields, in field order, in Moddil's own layout: what
 /// the parameters' words are read at. `None` for a type it does not know.
 pub type Offsets<'a> = &'a mut dyn FnMut(&Ty) -> Option<Vec<u64>>;
+
+/// Where an error is: a statement's source and range, if it is in one.
+type At = Option<(Src, TextRange)>;
+
+/// A function instance: the function, its type arguments, and its slice arguments' capacities.
+type Instance = (Item, Vec<Ty>, Vec<Option<u32>>);
 
 /// The kernel a value of type `k` runs: a function marked `#[kernel]`, named as a value, is a
 /// closure that calls it.
@@ -93,6 +105,65 @@ pub fn wgsl(
         .map_err(|e| format!("writing the kernel's WGSL: {e}"))
 }
 
+/// Every kernel of `program`'s files that cannot run on a GPU, with why: what in it lowering
+/// does not support, at the statement it is in, or why its WGSL does not validate, at the
+/// kernel (E0221, `gpu.kernel.2`).
+pub fn check(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
+    let items = moddil_sema::item_tree(db, program);
+    let mut out = Vec::new();
+    for (k, sig) in items.fns.iter().enumerate() {
+        let Src::File(file) = sig.src else { continue };
+        if !sig.kernel || !sig.has_body {
+            continue;
+        }
+        // The parameters' layout does not matter here: only that they can be read.
+        let mut offsets = |t: &Ty| checking_offsets(items, t);
+        let (why, at) = match lower(db, program, k as u32, &mut offsets) {
+            Ok(module) => match naga::valid::Validator::new(
+                naga::valid::ValidationFlags::all(),
+                naga::valid::Capabilities::empty(),
+            )
+            .validate(&module)
+            {
+                Ok(_) => continue,
+                Err(e) => (
+                    format!("its WGSL does not validate: {:?}", e.as_inner()),
+                    None,
+                ),
+            },
+            Err((why, at)) => (why, at),
+        };
+        let (range, file) = match at {
+            Some((Src::File(f), r)) => (r, f),
+            _ => (sig.name_range, file),
+        };
+        out.push(
+            Diagnostic::error(
+                Code::E0221,
+                range,
+                format!("`{}` cannot run on a GPU: {why}", sig.name),
+            )
+            .in_file(file),
+        );
+    }
+    out
+}
+
+/// Byte offsets of `t`'s fields, or an array's elements, one word each: enough for lowering to
+/// read them, in [`check`].
+fn checking_offsets(items: &ItemTree, t: &Ty) -> Option<Vec<u64>> {
+    let n = match t {
+        Ty::Array(_, n) => match **n {
+            Ty::Len(n) => usize::try_from(n).ok()?,
+            _ => return None,
+        },
+        Ty::Tuple(ts) => ts.len(),
+        Ty::Adt(a, ..) => items.adts.get(*a as usize)?.variants.first()?.fields.len(),
+        _ => return None,
+    };
+    Some((0..n as u64).map(|i| i * 8).collect())
+}
+
 /// Kernel `kernel` of `program` as naga's IR.
 ///
 /// # Errors
@@ -104,6 +175,16 @@ pub fn module(
     kernel: u32,
     offsets: Offsets<'_>,
 ) -> Result<Module, String> {
+    lower(db, program, kernel, offsets).map_err(|(why, _)| why)
+}
+
+/// As [`module`]; an error also says where in the program it is, if it is in a statement.
+fn lower(
+    db: &dyn Db,
+    program: Program,
+    kernel: u32,
+    offsets: Offsets<'_>,
+) -> Result<Module, (String, At)> {
     let items = moddil_sema::item_tree(db, program);
     let mut l = Lowering {
         db,
@@ -113,11 +194,15 @@ pub fn module(
         module: Module::default(),
         types: HashMap::new(),
         fns: HashMap::new(),
+        slices: HashMap::new(),
         globals: None,
+        at: None,
     };
     l.globals = Some(l.globals());
-    l.entry(kernel)?;
-    Ok(l.module)
+    match l.entry(kernel) {
+        Ok(()) => Ok(l.module),
+        Err(why) => Err((why, l.at)),
+    }
 }
 
 /// The module's buffers, and the pixel of its tile this thread draws (for `Tile::each`).
@@ -138,9 +223,14 @@ struct Lowering<'a> {
     module: Module,
     /// Each Moddil type's naga type, or `None` for a type with no value (`()`).
     types: HashMap<Ty, Option<Handle<Type>>>,
-    /// Each function instance lowered so far.
-    fns: HashMap<(Item, Vec<Ty>), Handle<Function>>,
+    /// Each function instance lowered so far: by its type arguments, and the capacity of each
+    /// slice argument.
+    fns: HashMap<Instance, Handle<Function>>,
+    /// The type of a slice of each element type and capacity.
+    slices: HashMap<(Ty, u32), Handle<Type>>,
     globals: Option<Globals>,
+    /// The statement being lowered: where an error is.
+    at: At,
 }
 
 const U: Span = Span::UNDEFINED;
@@ -318,6 +408,30 @@ impl Lowering<'_> {
                 // A struct without fields has no value, as `()`.
                 (!members.is_empty()).then(|| self.structure(&name, members))
             }
+            Ty::Array(elem, n) => {
+                let Ty::Len(n) = **n else {
+                    return Err(format!("an array of `{t}` in a kernel"));
+                };
+                let base = self
+                    .ty(elem)?
+                    .ok_or_else(|| format!("an array of `{elem}` in a kernel"))?;
+                let (size, align) = self.size_align(base);
+                let len = u32::try_from(n)
+                    .ok()
+                    .and_then(std::num::NonZeroU32::new)
+                    .ok_or("an empty array in a kernel")?;
+                Some(self.module.types.insert(
+                    Type {
+                        name: None,
+                        inner: TypeInner::Array {
+                            base,
+                            size: ArraySize::Constant(len),
+                            stride: size.div_ceil(align) * align,
+                        },
+                    },
+                    U,
+                ))
+            }
             // A closure (`Tile::each`'s): its captures, the first parameter of its body.
             Ty::Closure(c) => {
                 let item = closure_item(c).ok_or("a closure in a closure, in a kernel")?;
@@ -391,13 +505,55 @@ impl Lowering<'_> {
                     .unwrap_or(4);
                 (*span, a)
             }
+            TypeInner::Array {
+                base,
+                size: ArraySize::Constant(n),
+                stride,
+            } => (stride * n.get(), self.size_align(*base).1),
             _ => (4, 4),
         }
     }
 
-    /// Function `item` with type arguments `targs`, lowered (with what it calls) the first time.
-    fn function(&mut self, item: Item, targs: &[Ty]) -> Result<Handle<Function>, String> {
-        let key = (item, targs.to_vec());
+    /// The element type of `t` if it is a slice (behind borrows).
+    fn slice_elem(&self, t: &Ty) -> Option<Ty> {
+        match self.plain(t) {
+            Ty::Slice(e) => Some((*e).clone()),
+            _ => None,
+        }
+    }
+
+    /// A slice of `elem` whose array has `cap` elements: the array, where the slice starts in
+    /// it, and its length.
+    fn slice_ty(&mut self, elem: &Ty, cap: u32) -> Result<Handle<Type>, String> {
+        let key = (self.plain(elem), cap);
+        if let Some(h) = self.slices.get(&key) {
+            return Ok(*h);
+        }
+        let array = self
+            .ty(&Ty::array(elem.clone(), Ty::Len(i64::from(cap))))?
+            .ok_or_else(|| format!("a slice of `{elem}` in a kernel"))?;
+        let i = self.scalar(Scalar::I32);
+        let h = self.structure(
+            "Slice",
+            vec![
+                ("data".into(), array),
+                ("start".into(), i),
+                ("len".into(), i),
+            ],
+        );
+        self.slices.insert(key, h);
+        Ok(h)
+    }
+
+    /// Function `item` with type arguments `targs` and its slice arguments' capacities `caps`
+    /// (by argument), lowered (with what it calls) the first time.
+    fn function(
+        &mut self,
+        item: Item,
+        targs: &[Ty],
+        caps: &[Option<u32>],
+    ) -> Result<Handle<Function>, String> {
+        let key = (item, targs.to_vec(), caps.to_vec());
         if let Some(h) = self.fns.get(&key) {
             return Ok(*h);
         }
@@ -405,7 +561,7 @@ impl Lowering<'_> {
         let body = moddil_mir::mir(self.db, owner)
             .as_ref()
             .ok_or("a program with errors")?;
-        let f = FnLowering::new(self, body, targs).lower()?;
+        let f = FnLowering::new(self, body, targs, caps).lower()?;
         let h = self.module.functions.append(f, U);
         self.fns.insert(key, h);
         Ok(h)
@@ -422,7 +578,7 @@ impl Lowering<'_> {
         let param_ty = sig.params[0].ty.clone();
         let tile_ty = sig.params[1].ty.clone();
         let each = self.draws_each(kernel)?;
-        let k = self.function(Item::Fn(kernel), &[])?;
+        let k = self.function(Item::Fn(kernel), &[], &[])?;
         let g = self.globals.expect("the globals");
         let u32v = self.module.types.insert(
             Type {
@@ -493,6 +649,7 @@ impl Lowering<'_> {
             });
         }
         let tile = self.ty(&tile_ty)?.expect("a tile type");
+        self.at = None;
         let params = self.decode(&mut f, &param_ty, 0)?;
         let mut e = Exprs::new(&mut f);
         let tile = e.emit(Expression::Compose {
@@ -564,6 +721,19 @@ impl Lowering<'_> {
                 } else {
                     vec![b]
                 }
+            }
+            // An array: its elements, one stride apart.
+            Ty::Array(elem, _) => {
+                let offs = (self.offsets)(&t).ok_or_else(|| format!("the layout of `{t}`"))?;
+                let mut parts = Vec::new();
+                for off in offs {
+                    parts.extend(self.decode(f, elem, at + off)?);
+                }
+                let ty = self.ty(&t)?.ok_or("an array with no value")?;
+                vec![Exprs::new(f).emit(Expression::Compose {
+                    ty,
+                    components: parts,
+                })]
             }
             Ty::Adt(..) | Ty::Tuple(_) if self.fields(&t).is_some() => {
                 let fields = self.fields(&t).expect("fields");
@@ -641,10 +811,14 @@ struct FnLowering<'l, 'a> {
     bb: Option<Handle<LocalVariable>>,
     /// The statements being written: a block's case.
     out: Vec<S>,
+    /// For each local that is (or borrows) an array or slice, the array's capacity.
+    caps: Vec<Option<u32>>,
+    /// The capacities of the slice arguments, by argument.
+    arg_caps: Vec<Option<u32>>,
 }
 
 impl<'l, 'a> FnLowering<'l, 'a> {
-    fn new(l: &'l mut Lowering<'a>, body: &'a Body, targs: &[Ty]) -> Self {
+    fn new(l: &'l mut Lowering<'a>, body: &'a Body, targs: &[Ty], caps: &[Option<u32>]) -> Self {
         FnLowering {
             l,
             body,
@@ -653,6 +827,108 @@ impl<'l, 'a> FnLowering<'l, 'a> {
             vars: Vec::new(),
             bb: None,
             out: Vec::new(),
+            caps: Vec::new(),
+            arg_caps: caps.to_vec(),
+        }
+    }
+
+    /// The naga type of local `i`'s value: a slice's from its capacity.
+    fn local_naga_ty(&mut self, i: usize) -> Result<Option<Handle<Type>>, String> {
+        let t = self.local_ty(i);
+        if let Some(elem) = self.l.slice_elem(&t) {
+            let cap = self.caps[i].ok_or_else(|| {
+                format!("a slice of `{elem}` in a kernel whose array is not the kernel's")
+            })?;
+            return Ok(Some(self.l.slice_ty(&elem, cap)?));
+        }
+        self.l.ty(&t)
+    }
+
+    /// The type `t` of a place, after projection `proj` (`variant` the downcast before).
+    fn step_ty(&self, t: Ty, proj: &Projection, variant: &mut Option<u32>) -> Ty {
+        match proj {
+            Projection::Deref => match t {
+                Ty::Ref(_, inner) => (*inner).clone(),
+                t => t,
+            },
+            Projection::Downcast(v) => {
+                *variant = Some(*v);
+                t
+            }
+            Projection::Field(k) => {
+                let plain = self.l.plain(&t);
+                match (variant.take(), self.l.variants(&plain)) {
+                    (Some(v), Some(vs)) => vs[v as usize][*k as usize].clone(),
+                    _ => self
+                        .l
+                        .fields(&plain)
+                        .map_or(Ty::Error, |fs| fs[*k as usize].clone()),
+                }
+            }
+            Projection::Index(_) => match self.l.plain(&t) {
+                Ty::Array(e, _) | Ty::Slice(e) => (*e).clone(),
+                _ => Ty::Error,
+            },
+            Projection::Subslice(..) => match self.l.plain(&t) {
+                Ty::Array(e, _) | Ty::Slice(e) => Ty::Slice(e),
+                _ => Ty::Error,
+            },
+        }
+    }
+
+    /// The capacity of the array the place `p` is or is part of, if it is an array or slice,
+    /// given the capacities `caps` of the locals found so far.
+    fn place_cap(&self, p: &Place, caps: &[Option<u32>]) -> Option<u32> {
+        let i = p.local.index();
+        let mut t = self.local_ty(i);
+        let mut cap = caps[i].or_else(|| array_len(&self.l.plain(&t)));
+        let mut variant = None;
+        for proj in &p.projection {
+            t = self.step_ty(t, proj, &mut variant);
+            match proj {
+                Projection::Field(_) | Projection::Index(_) => cap = array_len(&self.l.plain(&t)),
+                Projection::Deref | Projection::Downcast(_) | Projection::Subslice(..) => {}
+            }
+        }
+        cap
+    }
+
+    /// Each local's array capacity, from the arguments' and from where each slice is made.
+    fn find_caps(&self) -> Vec<Option<u32>> {
+        let n = self.body.locals.len();
+        let mut caps = vec![None; n];
+        for (k, c) in self.arg_caps.iter().enumerate() {
+            if k + 1 < n {
+                caps[k + 1] = *c;
+            }
+        }
+        loop {
+            let mut changed = false;
+            for block in &self.body.blocks {
+                for s in &block.statements {
+                    let Statement::Assign(dest, rv) = s else {
+                        continue;
+                    };
+                    if !dest.projection.is_empty() || caps[dest.local.index()].is_some() {
+                        continue;
+                    }
+                    let from = match rv {
+                        Rvalue::Use(Operand::Copy(p) | Operand::Move(p))
+                        | Rvalue::Ref(_, p)
+                        | Rvalue::Unsize(Operand::Copy(p) | Operand::Move(p), _) => {
+                            self.place_cap(p, &caps)
+                        }
+                        _ => None,
+                    };
+                    if from.is_some() {
+                        caps[dest.local.index()] = from;
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                return caps;
+            }
         }
     }
 
@@ -665,17 +941,18 @@ impl<'l, 'a> FnLowering<'l, 'a> {
     }
 
     fn lower(mut self) -> Result<Function, String> {
+        // Until its statements: an error is the kernel's, not a statement's.
+        self.l.at = None;
         self.f.name = Some(sanitize(&self.body.name));
-        let ret = self.local_ty(0);
-        if let Some(t) = self.l.ty(&ret)? {
+        self.caps = self.find_caps();
+        if let Some(t) = self.local_naga_ty(0)? {
             self.f.result = Some(FunctionResult {
                 ty: t,
                 binding: None,
             });
         }
         for i in 0..self.body.locals.len() {
-            let t = self.local_ty(i);
-            let h = match self.l.ty(&t)? {
+            let h = match self.local_naga_ty(i)? {
                 Some(ty) => Some(self.f.local_variables.append(
                     LocalVariable {
                         name: Some(format!("l{i}")),
@@ -691,8 +968,7 @@ impl<'l, 'a> FnLowering<'l, 'a> {
         // The arguments, into their variables.
         let mut args = Vec::new();
         for i in 1..=self.body.arg_count {
-            let t = self.local_ty(i);
-            if let Some(ty) = self.l.ty(&t)? {
+            if let Some(ty) = self.local_naga_ty(i)? {
                 let k = self.f.arguments.len() as u32;
                 self.f.arguments.push(FunctionArgument {
                     name: Some(format!("a{i}")),
@@ -715,9 +991,11 @@ impl<'l, 'a> FnLowering<'l, 'a> {
         let mut stmts = Vec::new();
         let mut exits = Vec::new();
         for block in &self.body.blocks {
-            for s in &block.statements {
+            for (s, span) in block.statements.iter().zip(&block.spans) {
+                self.l.at = Some((self.body.src, *span));
                 self.statement(s)?;
             }
+            self.l.at = Some((self.body.src, block.terminator_span));
             exits.push(self.exit(&block.terminator)?);
             stmts.push(std::mem::take(&mut self.out));
         }
@@ -866,12 +1144,105 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                     p = self.emit_expr(Expression::AccessIndex { base: p, index });
                     t = ft;
                 }
-                Projection::Index(_) | Projection::Subslice(..) => {
-                    return Err("indexing in a kernel".to_string());
+                // An element: of the array, or of the slice's array, past where it starts.
+                Projection::Index(l) => {
+                    let ip = self.var(l.index());
+                    let index = self.emit_expr(Expression::Load { pointer: ip });
+                    match self.l.plain(&t) {
+                        Ty::Array(e, _) => {
+                            p = self.emit_expr(Expression::Access { base: p, index });
+                            t = (*e).clone();
+                        }
+                        Ty::Slice(e) => {
+                            let data =
+                                self.emit_expr(Expression::AccessIndex { base: p, index: 0 });
+                            let sp = self.emit_expr(Expression::AccessIndex { base: p, index: 1 });
+                            let start = self.emit_expr(Expression::Load { pointer: sp });
+                            let at = self.emit_expr(Expression::Binary {
+                                op: BinaryOperator::Add,
+                                left: start,
+                                right: index,
+                            });
+                            p = self.emit_expr(Expression::Access {
+                                base: data,
+                                index: at,
+                            });
+                            t = (*e).clone();
+                        }
+                        other => return Err(format!("indexing a `{other}` in a kernel")),
+                    }
+                }
+                Projection::Subslice(..) => {
+                    return Err("a part of an array, other than borrowed, in a kernel".to_string());
                 }
             }
         }
         Ok(Some((p, t)))
+    }
+
+    /// The length of the array or slice at `place`.
+    fn len_of(&mut self, place: &Place) -> Result<Handle<Expression>, String> {
+        let (p, t) = self.place(place)?.ok_or("the length of `()`")?;
+        match self.l.plain(&t) {
+            Ty::Array(_, n) => match *n {
+                Ty::Len(n) => Ok(self.add(Expression::Literal(Literal::I32(n as i32)))),
+                _ => Err(format!("an array of `{t}` in a kernel")),
+            },
+            Ty::Slice(_) => {
+                let lp = self.emit_expr(Expression::AccessIndex { base: p, index: 2 });
+                Ok(self.emit_expr(Expression::Load { pointer: lp }))
+            }
+            t => Err(format!("the length of a `{t}` in a kernel")),
+        }
+    }
+
+    /// `a op b`, emitted.
+    fn bin(
+        &mut self,
+        op: BinaryOperator,
+        left: Handle<Expression>,
+        right: Handle<Expression>,
+    ) -> Handle<Expression> {
+        self.emit_expr(Expression::Binary { op, left, right })
+    }
+
+    /// `&base[a..b]`: a slice of the array or slice at `base`.
+    fn subslice(
+        &mut self,
+        base: &Place,
+        a: moddil_mir::Local,
+        b: moddil_mir::Local,
+    ) -> Result<Option<Handle<Expression>>, String> {
+        let Some((bp, bt)) = self.place(base)? else {
+            return Ok(None);
+        };
+        let elem = match self.l.plain(&bt) {
+            Ty::Array(e, _) | Ty::Slice(e) => (*e).clone(),
+            t => return Err(format!("a part of a `{t}` in a kernel")),
+        };
+        let caps = self.caps.clone();
+        let cap = self
+            .place_cap(base, &caps)
+            .ok_or("a part of an array that is not the kernel's")?;
+        let ty = self.l.slice_ty(&elem, cap)?;
+        let (ap, bpv) = (self.var(a.index()), self.var(b.index()));
+        let av = self.emit_expr(Expression::Load { pointer: ap });
+        let bv = self.emit_expr(Expression::Load { pointer: bpv });
+        let len = self.bin(BinaryOperator::Subtract, bv, av);
+        let (data, start) = match self.l.plain(&bt) {
+            Ty::Array(..) => (self.emit_expr(Expression::Load { pointer: bp }), av),
+            _ => {
+                let dp = self.emit_expr(Expression::AccessIndex { base: bp, index: 0 });
+                let data = self.emit_expr(Expression::Load { pointer: dp });
+                let sp = self.emit_expr(Expression::AccessIndex { base: bp, index: 1 });
+                let s0 = self.emit_expr(Expression::Load { pointer: sp });
+                (data, self.bin(BinaryOperator::Add, s0, av))
+            }
+        };
+        Ok(Some(self.emit_expr(Expression::Compose {
+            ty,
+            components: vec![data, start, len],
+        })))
     }
 
     /// `op`'s value, if it has one.
@@ -903,25 +1274,7 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                 let mut t = self.local_ty(p.local.index());
                 let mut variant = None;
                 for proj in &p.projection {
-                    match proj {
-                        Projection::Deref => {
-                            if let Ty::Ref(_, inner) = t {
-                                t = (*inner).clone();
-                            }
-                        }
-                        Projection::Downcast(v) => variant = Some(*v),
-                        Projection::Field(k) => {
-                            let plain = self.l.plain(&t);
-                            t = match (variant.take(), self.l.variants(&plain)) {
-                                (Some(v), Some(vs)) => vs[v as usize][*k as usize].clone(),
-                                _ => self
-                                    .l
-                                    .fields(&plain)
-                                    .map_or(Ty::Error, |fs| fs[*k as usize].clone()),
-                            };
-                        }
-                        _ => {}
-                    }
+                    t = self.step_ty(t, proj, &mut variant);
                 }
                 t
             }
@@ -953,6 +1306,76 @@ impl<'l, 'a> FnLowering<'l, 'a> {
     fn rvalue(&mut self, rv: &Rvalue, ty: &Ty) -> Result<Option<Handle<Expression>>, String> {
         Ok(match rv {
             Rvalue::Use(op) => self.operand(op)?,
+            // A part of an array or slice, borrowed: a slice.
+            Rvalue::Ref(_, place)
+                if matches!(place.projection.last(), Some(Projection::Subslice(..))) =>
+            {
+                let Some(&Projection::Subslice(a, b)) = place.projection.last() else {
+                    unreachable!("a subslice")
+                };
+                let base = Place {
+                    local: place.local,
+                    projection: place.projection[..place.projection.len() - 1].to_vec(),
+                };
+                self.subslice(&base, a, b)?
+            }
+            // An array borrowed as a slice: all of it.
+            Rvalue::Unsize(op, _) if self.l.slice_elem(ty).is_some() => {
+                let elem = self.l.slice_elem(ty).expect("a slice");
+                let cap = array_len(&self.l.plain(&self.operand_ty(op)))
+                    .ok_or("a slice of other than an array, in a kernel")?;
+                let sty = self.l.slice_ty(&elem, cap)?;
+                let Some(v) = self.operand(op)? else {
+                    return Ok(None);
+                };
+                let zero = self.add(Expression::Literal(Literal::I32(0)));
+                let n = self.add(Expression::Literal(Literal::I32(cap as i32)));
+                Some(self.emit_expr(Expression::Compose {
+                    ty: sty,
+                    components: vec![v, zero, n],
+                }))
+            }
+            Rvalue::Repeat(op, n) => {
+                let Ty::Len(n) = self.concrete(n) else {
+                    return Err("an array of unknown length in a kernel".to_string());
+                };
+                let Some(th) = self.l.ty(ty)? else {
+                    return Ok(None);
+                };
+                let Some(v) = self.operand(op)? else {
+                    return Ok(None);
+                };
+                Some(self.emit_expr(Expression::Compose {
+                    ty: th,
+                    components: vec![v; n as usize],
+                }))
+            }
+            Rvalue::Length(n) => {
+                let Ty::Len(n) = self.concrete(n) else {
+                    return Err("a length not known in a kernel".to_string());
+                };
+                Some(self.add(Expression::Literal(Literal::I32(n as i32))))
+            }
+            Rvalue::Len(place) => Some(self.len_of(place)?),
+            Rvalue::InBounds(i, place) => {
+                let i = self.operand(i)?.ok_or("an index")?;
+                let n = self.len_of(place)?;
+                let zero = self.add(Expression::Literal(Literal::I32(0)));
+                let lo = self.bin(BinaryOperator::GreaterEqual, i, zero);
+                let hi = self.bin(BinaryOperator::Less, i, n);
+                Some(self.bin(BinaryOperator::LogicalAnd, lo, hi))
+            }
+            Rvalue::SpanOk(a, b, place) => {
+                let a = self.operand(a)?.ok_or("an index")?;
+                let b = self.operand(b)?.ok_or("an index")?;
+                let n = self.len_of(place)?;
+                let zero = self.add(Expression::Literal(Literal::I32(0)));
+                let c0 = self.bin(BinaryOperator::LessEqual, zero, a);
+                let c1 = self.bin(BinaryOperator::LessEqual, a, b);
+                let c2 = self.bin(BinaryOperator::LessEqual, b, n);
+                let c01 = self.bin(BinaryOperator::LogicalAnd, c0, c1);
+                Some(self.bin(BinaryOperator::LogicalAnd, c01, c2))
+            }
             Rvalue::Ref(_, place) => self
                 .place(place)?
                 .map(|(ptr, _)| self.emit_expr(Expression::Load { pointer: ptr })),
@@ -1045,10 +1468,8 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                     // A closure's value is its captures (`Tile::each`'s).
                     AggregateKind::Tuple
                     | AggregateKind::Adt { .. }
-                    | AggregateKind::Closure(_) => vals,
-                    AggregateKind::Array => {
-                        return Err("an array in a kernel".to_string());
-                    }
+                    | AggregateKind::Closure(_)
+                    | AggregateKind::Array => vals,
                 };
                 Some(self.emit_expr(Expression::Compose { ty: th, components }))
             }
@@ -1147,6 +1568,7 @@ impl<'l, 'a> FnLowering<'l, 'a> {
             moddil_sema::Container::Impl(k) => match &items.impls[k as usize].self_ty {
                 Ty::Adt(a, ..) => items.adts[*a as usize].name.as_str(),
                 Ty::Num(_) | Ty::Int => "number",
+                Ty::Slice(_) => "slice",
                 _ => "",
             },
             _ => "",
@@ -1167,6 +1589,15 @@ impl<'l, 'a> FnLowering<'l, 'a> {
                 });
             }
         };
+        // A slice's length.
+        if owner == "slice" && name == "len" {
+            let v = self.emit_expr(Expression::AccessIndex {
+                base: *vals.first().ok_or("a slice")?,
+                index: 2,
+            });
+            store(self, v);
+            return Ok(());
+        }
         // The tile's `set`: a pixel of the image.
         if owner == "Tile" && name == "set" {
             return self.set_pixel(&vals);
@@ -1221,7 +1652,20 @@ impl<'l, 'a> FnLowering<'l, 'a> {
         if sig.intrinsic || !sig.has_body {
             return Err(format!("the built-in function `{name}` in a kernel"));
         }
-        let h = self.l.function(Item::Fn(f), &fargs)?;
+        // Each slice argument's capacity, which the function is lowered for.
+        let caps = self.caps.clone();
+        let arg_caps: Vec<Option<u32>> = args
+            .iter()
+            .map(|a| match a {
+                Operand::Copy(p) | Operand::Move(p)
+                    if self.l.slice_elem(&self.operand_ty(a)).is_some() =>
+                {
+                    self.place_cap(p, &caps)
+                }
+                _ => None,
+            })
+            .collect();
+        let h = self.l.function(Item::Fn(f), &fargs, &arg_caps)?;
         let result = self.l.module.functions[h]
             .result
             .is_some()
@@ -1246,7 +1690,7 @@ impl<'l, 'a> FnLowering<'l, 'a> {
             return Err("a tile's `each` of other than a closure".to_string());
         };
         let item = closure_item(c).ok_or("a closure in a closure, in a kernel")?;
-        let h = self.l.function(item, &self.targs)?;
+        let h = self.l.function(item, &self.targs, &[])?;
         let pair_ty = self.l.module.functions[h]
             .arguments
             .last()
@@ -1379,4 +1823,15 @@ fn sanitize(name: &str) -> String {
         out.insert(0, 'f');
     }
     out
+}
+
+/// The length of array type `t`, if it is one of a known length.
+fn array_len(t: &Ty) -> Option<u32> {
+    match t {
+        Ty::Array(_, n) => match **n {
+            Ty::Len(n) => u32::try_from(n).ok(),
+            _ => None,
+        },
+        _ => None,
+    }
 }

@@ -1,0 +1,23 @@
+// covers: gpu.kernel.2
+
+struct Tile {
+    x: int,
+    y: int,
+}
+
+struct Words {
+    counts: Vec<int>,
+}
+
+// A `Vec`'s elements are in the CPU's memory, which a kernel cannot reach.
+#[kernel]
+fn reads_a_vec(p: &Words, out: &mut Tile) {  //~ E0221
+    out.x = p.counts.len();
+}
+
+// Text is not a GPU's: a kernel's locals are refused where it is declared.
+#[kernel]
+fn uses_text(p: &int, out: &mut Tile) {  //~ E0221
+    let s = "a";
+    out.x = *p;
+}

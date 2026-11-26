@@ -291,6 +291,12 @@ The first GPU path (slice M2e; reference `gpu.md`), built for
   - `gpu::present` shows an image straight from the GPU, with no copy back, and `launch` reads
     one back.
   - WGSL's back ends inline every function, so Moddil does no inlining of its own.
+- **Since P21:**
+  - arrays in a kernel, its own and its parameters', and slices of them: a slice is its array,
+    where it starts and its length, and a function taking one is lowered for each array length it
+    is given;
+  - what a kernel holds that a GPU does not (a `Vec`, text) is E0221 when the program is checked,
+    not a failure to build.
 
 ## Errors
 

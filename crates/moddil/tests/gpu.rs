@@ -44,6 +44,12 @@ fn wgsl(root: &Path, name: &str) -> String {
     let mut layouts = Layouts::new(items);
     let mut offsets = |t: &Ty| match &layouts.of(t).ok()?.shape {
         Shape::Fields(fs) => Some(fs.iter().map(|(o, _)| u64::from(*o)).collect()),
+        // An array's elements, one stride apart.
+        Shape::Array { stride, len, .. } => Some(
+            (0..u64::from(*len))
+                .map(|i| i * u64::from(*stride))
+                .collect(),
+        ),
         _ => None,
     };
     moddil_gpu::wgsl(&db, program, kernel, &mut offsets).unwrap_or_else(|e| panic!("{e}"))
@@ -117,4 +123,16 @@ gpu = {{ path = \"{mods}\" }}
     // `first` keeps the loop-over-switch; the kernel and its closure are structured.
     assert!(wgsl.contains("switch"), "{wgsl}");
     assert!(wgsl.contains("@compute @workgroup_size(8, 8, 1)"), "{wgsl}");
+}
+
+#[test]
+fn a_kernel_with_arrays_and_slices_lowers_to_valid_wgsl() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/gpu/tests");
+    let wgsl = wgsl(&root, "bands");
+    // Its own array, the parameters' array, and the slices of it a helper is given.
+    assert!(
+        wgsl.contains("array<i32, 4>") && wgsl.contains("array<f32, 4>"),
+        "{wgsl}"
+    );
+    assert!(wgsl.contains("struct Slice"), "{wgsl}");
 }

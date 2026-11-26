@@ -5856,6 +5856,12 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let layouts = &mut self.c.layouts;
                 let mut offsets = |t: &Ty| match &layouts.of(t).ok()?.shape {
                     Shape::Fields(fs) => Some(fs.iter().map(|(o, _)| u64::from(*o)).collect()),
+                    // An array's elements, one stride apart.
+                    Shape::Array { stride, len, .. } => Some(
+                        (0..u64::from(*len))
+                            .map(|i| i * u64::from(*stride))
+                            .collect(),
+                    ),
                     _ => None,
                 };
                 let text = moddil_gpu::wgsl(db, program, k, &mut offsets)?;

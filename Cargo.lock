@@ -1095,6 +1095,7 @@ version = "0.0.0"
 dependencies = [
  "moddil-mir",
  "moddil-sema",
+ "moddil-syntax",
  "naga",
 ]
 
@@ -1108,6 +1109,7 @@ version = "0.0.0"
 dependencies = [
  "la-arena",
  "moddil-ffi",
+ "moddil-gpu",
  "moddil-mir",
  "moddil-os",
  "moddil-sched",

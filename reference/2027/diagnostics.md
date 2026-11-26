@@ -56,7 +56,7 @@ and a code never changes meaning.
 | E0218 | A raw pointer dereferenced, or a C function called, outside an `unsafe` block | [type.ptr.1](unsafe.md) |
 | E0219 | An `unsafe` block in a mod without the `unsafe` capability, or with no reason given | [expr.unsafe.1](unsafe.md), [mod.caps.1](unsafe.md) |
 | E0220 | `core::os` or `core::gpu` named in a mod without the `os` capability | [os.cap.1](os.md), [gpu.cap.1](gpu.md) |
-| E0221 | A `#[kernel]` that is not `fn k(params: &P, out: &mut Tile)`, or that needs handlers, can fail, suspends or spawns | [gpu.kernel.1](gpu.md) |
+| E0221 | A `#[kernel]` that is not `fn k(params: &P, out: &mut Tile)`, or that needs handlers, can fail, suspends or spawns, or holds what a GPU does not have | [gpu.kernel.1](gpu.md), [gpu.kernel.2](gpu.md) |
 | E0222 | A C or `#[export]` function with a type C does not have, or with effects, errors or suspension; an `extern` block that is not `extern "C"`; a C function with a body; an `on_trap` that is not one of the result's integers | [ffi.types.1](interop.md), [ffi.extern.1](interop.md), [ffi.export.1](interop.md), [ffi.export.3](interop.md) |
 | E0301 | Mutation of an immutable local (assigning, or borrowing with `&mut`; a `let x;` assigned again) | [expr.assign.1](expressions/assignment.md), [borrow.mut.1](borrows.md), [stmt.let.uninit.1](statements.md) |
 | E0302 | Mutation through a shared borrow | [borrow.mut.1](borrows.md) |

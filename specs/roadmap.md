@@ -112,7 +112,8 @@ L)
   node is never dead), and a count of allocations to test the reuse with.
 
 **P21. GPU kernels** (`crates/gpu`, `mods/gpu`, `core::gpu`; L)
-- Arrays and slices in a kernel (closures, `dyn` and text later).
+- Closures kept in values, `dyn` and text in a kernel; a slice of the CPU's memory (a `Vec`
+  field of its parameters), crossing as a buffer of its own.
 - A kernel's traps (overflow, a failed `?!`) checked on the GPU; `int` 64 bits there, not 32.
 - `Tile` recognised by its type, not its name (E0221), and generic over its pixel and size.
 - `scope`'s `s.launch`, so `launch` need not wait for the GPU.

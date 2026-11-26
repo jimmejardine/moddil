@@ -15,6 +15,13 @@ it is a closure that calls it. On a GPU a tile is a workgroup of 8 x 8 threads: 
 the kernel's body, which is pure, so each computes the same values, and the closure given to
 `Tile::each` runs once per thread, for that thread's pixel.
 
+**gpu.kernel.2** A kernel, and what it calls, holds only what a GPU has: numbers but `f64`, the
+64-bit and the 128-bit ones, `bool` and `char`, structs, tuples and enums of them, the closure given
+to `Tile::each`, and arrays of them. A slice is of an array the kernel has: its own, or one in its
+parameters (`&p.weights[2..]`); its length and its elements are read as on the CPU. Anything else
+in a kernel (a `Vec` or a slice of the CPU's memory, text, `dyn`, a closure kept in a value) is an
+error (E0221) at the kernel or at the statement it is in, reported when the program is checked.
+
 **gpu.1** `core::gpu` runs kernels. `source(&k)` is the WGSL of kernel `k` (named as a value), made
 when the program is compiled; `bytes(&v)` is a value's bytes, in Moddil's own layout, which the
 WGSL reads its parameters in; `dispatch(source, params, width, height, out, mode)` runs a kernel
@@ -39,4 +46,4 @@ are the same on every machine.
 
 | Code | Meaning |
 |---|---|
-| E0221 | A `#[kernel]` that is not `fn k(params: &P, out: &mut Tile)`, or that needs handlers, can fail, suspends or spawns |
+| E0221 | A `#[kernel]` that is not `fn k(params: &P, out: &mut Tile)`, or that needs handlers, can fail, suspends or spawns, or holds what a GPU does not have |

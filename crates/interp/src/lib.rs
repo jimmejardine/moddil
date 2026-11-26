@@ -199,6 +199,8 @@ pub fn diagnostics(db: &dyn Db, program: Program) -> Vec<Diagnostic> {
     if moddil_mir::has_errors(db, program) {
         return out;
     }
+    // A kernel that cannot run on a GPU (`gpu.kernel.2`).
+    out.extend(moddil_gpu::check(db, program));
     let items = moddil_sema::item_tree(db, program);
     for (i, f) in items.fns.iter().enumerate() {
         if !f.const_item || !f.src.is_file() {

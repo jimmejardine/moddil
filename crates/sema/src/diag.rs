@@ -130,7 +130,7 @@ codes! {
     /// capability.
     E0220 = "`core::os` or `core::gpu` without the capability",
     /// A `#[kernel]` that is not a free function taking `&P` and `&mut Tile`, or that needs
-    /// handlers, can fail, suspends or spawns.
+    /// handlers, can fail, suspends or spawns, or holds what a GPU does not have.
     E0221 = "invalid kernel",
     /// A C function or an `#[export]` with a type C does not have, or with effects, errors or
     /// suspension; an `extern` block that is not `extern "C"`; a C function with a body.
