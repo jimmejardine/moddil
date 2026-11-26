@@ -569,7 +569,7 @@ fn test_wasm(db: &Database, program: Program, files: &[(String, String)]) -> Exi
         let name = &t.name;
         match result {
             Ok(()) => {
-                let wrong = wrong_values(files, t, observed);
+                let wrong = wrong_values(files, t, observed, false);
                 if wrong.is_empty() {
                     println!("test \"{name}\" ... ok");
                 } else {
@@ -618,7 +618,7 @@ fn native_test(
     match result {
         Ok(()) => {
             let t = &moddil_sema::item_tree(db, program).tests[index as usize];
-            let wrong = wrong_values(files, t, &observed);
+            let wrong = wrong_values(files, t, &observed, options.parallel);
             if wrong.is_empty() {
                 println!("ok");
             } else {
@@ -1143,7 +1143,7 @@ fn interp_test(
     let mut err = Vec::new();
     let (passed, how) = match result {
         Ok(()) => {
-            let wrong = wrong_values(files, t, &observed);
+            let wrong = wrong_values(files, t, &observed, false);
             if wrong.is_empty() {
                 (true, "ok")
             } else {
@@ -1173,6 +1173,7 @@ fn wrong_values(
     files: &[(String, String)],
     t: &moddil_sema::TestSig,
     observed: &[(u32, TextRange, String)],
+    parallel: bool,
 ) -> Vec<(TextRange, String)> {
     let file = &files[t.file as usize].1;
     // An example in a doc comment: its expectations are in its source (`test.doc.1`).
@@ -1196,25 +1197,28 @@ fn wrong_values(
             continue;
         }
         let comment = &text[at as usize..offset as usize];
-        let Some(expected) = comment.strip_prefix("// =>").map(str::trim) else {
-            continue;
-        };
         let range = TextRange::new(at, offset);
+        let expected = match moddil_syntax::expected(comment) {
+            None => continue,
+            Some(Ok(e)) => e,
+            Some(Err(why)) => {
+                wrong.push((range, why));
+                continue;
+            }
+        };
         let line = moddil_syntax::line_col(text, at).0;
         let seen: Vec<&String> = observed
             .iter()
             .filter(|(f, r, _)| *f == t.file && moddil_syntax::line_col(text, r.end).0 == line)
             .map(|(_, _, v)| v)
             .collect();
+        let value = expected.value;
         if seen.is_empty() {
-            wrong.push((
-                range,
-                format!("expected {expected}, but the line never ran"),
-            ));
+            wrong.push((range, format!("expected {value}, but the line never ran")));
         }
         for v in seen {
-            if v != expected {
-                wrong.push((range, format!("expected {expected}, found {v}")));
+            if !expected.accepts(v, parallel) {
+                wrong.push((range, format!("expected {value}, found {v}")));
             }
         }
     }

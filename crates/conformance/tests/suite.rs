@@ -8,8 +8,8 @@
 use std::path::{Path, PathBuf};
 
 use moddil_conformance::{
-    EDITION, Implementation, MirInterpreter, Native, ReferenceInterpreter, Wasm, areas, coverage,
-    run_area,
+    EDITION, Implementation, MirInterpreter, Native, NativeParallel, ReferenceInterpreter, Wasm,
+    areas, coverage, run_area,
 };
 
 fn repo() -> PathBuf {
@@ -17,8 +17,13 @@ fn repo() -> PathBuf {
 }
 
 fn run(area: &str) {
-    let implementations: [&dyn Implementation; 4] =
-        [&MirInterpreter, &ReferenceInterpreter, &Native, &Wasm];
+    let implementations: [&dyn Implementation; 5] = [
+        &MirInterpreter,
+        &ReferenceInterpreter,
+        &Native,
+        &NativeParallel,
+        &Wasm,
+    ];
     let report = run_area(&repo(), EDITION, area, &implementations);
     println!(
         "{area}: {} files, {} disputed, {} run natively, {} as WASM",

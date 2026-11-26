@@ -18,5 +18,5 @@ test "a stop reaches the inner scope's tasks first" {
         }));
         s.stop();
     });
-    (rx.recv(), rx.recv())  // => (Some(1), Some(2))
+    (rx.recv(), rx.recv())  // => (Some(1), Some(2)) (in parallel, in any order)
 }

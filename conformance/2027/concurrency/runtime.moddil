@@ -18,5 +18,5 @@ test "with nothing installed, the ready tasks run first in, first out" {
         s.spawn (|| tx.send(2) ?! "the receiver is here");
         s.spawn (|| tx.send(3) ?! "the receiver is here");
     });
-    (rx.recv(), rx.recv(), rx.recv())  // => (Some(1), Some(2), Some(3))
+    (rx.recv(), rx.recv(), rx.recv())  // => (Some(1), Some(2), Some(3)) (in parallel, in any order)
 }

@@ -57,7 +57,7 @@ test "readers share an rwlock, and a writer waits for them" {
             tx.send(*l.read()) ?! "the receiver outlives the scope";
         });
     });
-    (rx.recv(), rx.recv(), rx.recv())  // => (Some(100), Some(10), Some(2))
+    (rx.recv(), rx.recv(), rx.recv())  // => (Some(100), Some(10), Some(2)) (in parallel, in any order, also (Some(100), Some(20), Some(2)); (Some(200), Some(10), Some(2)); (Some(200), Some(20), Some(2)))
 }
 
 test "a condvar wakes a task waiting under a mutex" {

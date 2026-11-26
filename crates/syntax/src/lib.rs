@@ -12,6 +12,7 @@
 mod kinds;
 pub mod ast;
 mod doc;
+mod expected;
 mod grammar;
 mod lexer;
 mod parser;
@@ -19,6 +20,7 @@ mod text;
 mod tree;
 
 pub use doc::{DocExample, doc_examples};
+pub use expected::{Expected, expected};
 pub use kinds::SyntaxKind;
 pub use lexer::{Token, lex};
 pub use text::{SyntaxError, TextRange, line_col};

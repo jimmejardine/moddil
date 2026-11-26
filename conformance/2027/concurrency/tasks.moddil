@@ -1,4 +1,4 @@
-// covers: task.scope.1, task.spawn.1, task.join.1, task.sched.1, task.borrow.1, task.effects.1
+// covers: task.scope.1, task.spawn.1, task.join.1, task.sched.1, task.borrow.1, task.effects.1, item.test.value.2
 
 fn sum(xs: &[int]) -> int {
     let mut t = 0;
@@ -108,5 +108,5 @@ test "waiting at a join lets the other ready tasks run, in order" {
         first.join();
         second.join();
     });
-    (rx.recv(), rx.recv(), rx.recv())  // => (Some(1), Some(2), Some(3))
+    (rx.recv(), rx.recv(), rx.recv())  // => (Some(1), Some(2), Some(3)) (in parallel, in any order)
 }

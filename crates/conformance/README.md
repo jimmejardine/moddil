@@ -14,10 +14,11 @@ The markers and how they bind are in the [suite's README](../../conformance/READ
 - Finds `conformance/<edition>/<feature>/*.moddil` files, and directories with a `moddil.toml`
   (read with [`moddil-project`](../project/README.md)), and their inline expectations: `// =>`
   values, `//~ E…` diagnostic codes, `//~ trap`, `//~ error`, and `#~ E…` in a manifest.
-- Runs each test on every available implementation (the reference interpreter, the MIR interpreter,
-  and native code) and reports any disagreement. The native backend runs only the files whose
-  code it compiles so far; `MODDIL_NATIVE_WHY=1` prints, for each file it skips, what it does not
-  compile yet.
+- Runs each test on every available implementation (the reference interpreter, the MIR
+  interpreter, native code, native code under the parallel runtime, and WASM) and reports any
+  disagreement; under the parallel runtime a `// =>` line may also give what its `(in parallel,
+  …)` lists (`item.test.value.2`). The native backend runs only the files whose code it compiles
+  so far; `MODDIL_NATIVE_WHY=1` prints, for each file it skips, what it does not compile yet.
 - `tests/stress.rs`, the runtimes' stress suite: random trees of tasks (nested scopes, spawns,
   joins, channels, `yield_now`, `Rc`s shared across tasks, isolated scopes a task traps in) whose
   value is fixed whatever order the tasks run in, each run under many seeds of the deterministic

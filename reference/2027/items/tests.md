@@ -18,6 +18,12 @@ must exist (E0101). It runs as any test does. For now a test cannot be run for l
 are not returned anywhere. (Conformance tests and documentation examples state such values with
 `// =>`.)
 
+**item.test.value.2** Under the parallel runtime (**task.runtime.1**) a test's tasks run in
+whatever order the machine gives, so a value that depends on it may differ: `// => v (in
+parallel, also w; x)` says it may then also be `w` or `x`; `// => v (in parallel, in any order)`
+that its parts (a tuple's or an array's elements) may come in another order; and `(in parallel,
+in any order, also w)` both. Under the deterministic runtime only `v` is right.
+
 **test.doc.1** An example in a doc comment is a test. In the `///` comment of an item, the lines
 after a `# Example` or `# Examples` heading, up to the next heading, are Moddil without their
 `///` (and without any ` ``` ` fence lines): `moddil test` runs them as a test named `example of`

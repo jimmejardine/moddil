@@ -40,6 +40,12 @@ pub struct Expectations {
     pub covers: Vec<String>,
     /// `// =>` values.
     pub values: BTreeMap<Line, String>,
+    /// The other values a `// =>` line may have under the parallel runtime, whose tasks run in
+    /// whatever order: `// => v (in parallel, also w; x)`, or, for `(in parallel, in any
+    /// order)`, none but its parts in another order.
+    pub parallel: BTreeMap<Line, Vec<String>>,
+    /// The `// =>` lines whose value's parts may come in any order under the parallel runtime.
+    pub any_order: BTreeSet<Line>,
     /// `//~ E…` codes.
     pub diagnostics: BTreeSet<(Line, String)>,
     /// `//~ trap` lines.
@@ -84,6 +90,11 @@ pub trait Implementation: Sync {
     /// that expect no diagnostics.
     fn checks(&self) -> bool {
         true
+    }
+    /// Whether it runs tasks in parallel, so that a `// =>` line may also have the values it
+    /// lists `in parallel`.
+    fn parallel(&self) -> bool {
+        false
     }
 }
 
@@ -159,6 +170,9 @@ impl Implementation for MirInterpreter {
 /// process. A file whose tests reach code it does not compile yet is skipped.
 pub struct Native;
 
+/// Native code under the parallel runtime (`task.runtime.1`): its tasks run at once.
+pub struct NativeParallel;
+
 impl Implementation for Native {
     fn name(&self) -> &str {
         "native"
@@ -169,52 +183,83 @@ impl Implementation for Native {
     }
 
     fn run_if(&self, loaded: &Loaded) -> Option<Outcome> {
-        let project = loaded.as_ref().ok()?;
-        let db = Database::default();
-        let program = Program::of_project(&db, project);
-        if moddil_interp::has_errors(&db, program) {
-            return None;
-        }
-        let items = moddil_sema::item_tree(&db, program);
-        let mut outcome = Outcome::default();
-        for i in 0..items.tests.len() as u32 {
-            let (observed, result) = moddil_native::run_test(&db, program, i);
-            outcome.observed.extend(
-                observed
-                    .into_iter()
-                    .map(|(file, range, value)| (line_of(project, file, range.end), value)),
-            );
-            match result {
-                Ok(()) => {}
-                Err(moddil_native::Native::Trap(_, file, range, _)) => {
-                    outcome.traps.insert(line_of(project, file, range.start));
-                }
-                Err(moddil_native::Native::Failed(file, range, _)) => {
-                    outcome.errors.insert(line_of(project, file, range.start));
-                }
-                // A leak is a disagreement: no interpreter observes one.
-                Err(moddil_native::Native::Leak(n)) => {
-                    outcome.observed.push((
-                        line_of(project, 0, 0),
-                        format!("native code leaked {n} allocations"),
-                    ));
-                }
-                Err(moddil_native::Native::Unsupported(why)) => {
-                    // `MODDIL_NATIVE_WHY=1` says what keeps each file from running natively.
-                    if std::env::var_os("MODDIL_NATIVE_WHY").is_some() {
-                        let name = project.files.first().map_or("", |f| f.display.as_str());
-                        eprintln!("native skips {name}: {why}");
-                    }
-                    return None;
-                }
-            }
-        }
-        Some(outcome)
+        run_native(loaded, moddil_native::Options::default())
     }
 
     fn checks(&self) -> bool {
         false
     }
+}
+
+impl Implementation for NativeParallel {
+    fn name(&self) -> &str {
+        "native, parallel"
+    }
+
+    fn run(&self, loaded: &Loaded) -> Outcome {
+        self.run_if(loaded).unwrap_or_default()
+    }
+
+    fn run_if(&self, loaded: &Loaded) -> Option<Outcome> {
+        let options = moddil_native::Options {
+            parallel: true,
+            ..moddil_native::Options::default()
+        };
+        run_native(loaded, options)
+    }
+
+    fn checks(&self) -> bool {
+        false
+    }
+
+    fn parallel(&self) -> bool {
+        true
+    }
+}
+
+/// A file's tests natively, with `options`; `None` if native code does not compile it yet.
+fn run_native(loaded: &Loaded, options: moddil_native::Options) -> Option<Outcome> {
+    let project = loaded.as_ref().ok()?;
+    let db = Database::default();
+    let program = Program::of_project(&db, project);
+    if moddil_interp::has_errors(&db, program) {
+        return None;
+    }
+    let items = moddil_sema::item_tree(&db, program);
+    let mut outcome = Outcome::default();
+    for i in 0..items.tests.len() as u32 {
+        let (observed, result) = moddil_native::run_test_with(&db, program, i, options);
+        outcome.observed.extend(
+            observed
+                .into_iter()
+                .map(|(file, range, value)| (line_of(project, file, range.end), value)),
+        );
+        match result {
+            Ok(()) => {}
+            Err(moddil_native::Native::Trap(_, file, range, _)) => {
+                outcome.traps.insert(line_of(project, file, range.start));
+            }
+            Err(moddil_native::Native::Failed(file, range, _)) => {
+                outcome.errors.insert(line_of(project, file, range.start));
+            }
+            // A leak is a disagreement: no interpreter observes one.
+            Err(moddil_native::Native::Leak(n)) => {
+                outcome.observed.push((
+                    line_of(project, 0, 0),
+                    format!("native code leaked {n} allocations"),
+                ));
+            }
+            Err(moddil_native::Native::Unsupported(why)) => {
+                // `MODDIL_NATIVE_WHY=1` says what keeps each file from running natively.
+                if std::env::var_os("MODDIL_NATIVE_WHY").is_some() {
+                    let name = project.files.first().map_or("", |f| f.display.as_str());
+                    eprintln!("native skips {name}: {why}");
+                }
+                return None;
+            }
+        }
+    }
+    Some(outcome)
 }
 
 /// The WASM backend (M1): the front end, then a file's tests compiled into one WebAssembly
@@ -371,12 +416,17 @@ fn read_comments(file: &str, text: &str, e: &mut Expectations) -> Result<(), Str
         let line = line_col(text, at).0;
         if let Some(rest) = comment.strip_prefix("//~") {
             marks(rest, &at_line(line), e)?;
-        } else if let Some(rest) = comment.strip_prefix("// =>") {
-            let value = rest.trim();
-            if value.is_empty() {
-                return Err(format!("line {line}: `// =>` without a value"));
+        } else if let Some(x) = moddil_syntax::expected(comment) {
+            let x = x.map_err(|why| format!("line {line}: {why}"))?;
+            let at = at_line(line);
+            if x.any_order {
+                e.any_order.insert(at.clone());
             }
-            e.values.insert(at_line(line), value.to_string());
+            if !x.also.is_empty() {
+                let also = x.also.iter().map(|a| a.to_string()).collect();
+                e.parallel.insert(at.clone(), also);
+            }
+            e.values.insert(at, x.value.to_string());
         } else if let Some(rest) = comment.strip_prefix("// covers:") {
             e.covers.extend(
                 rest.split(',')
@@ -445,6 +495,12 @@ fn is_code(w: &str) -> bool {
 
 /// Why an outcome does not meet its expectations; empty if it does.
 pub fn compare(expected: &Expectations, outcome: &Outcome) -> Vec<String> {
+    compare_in(expected, outcome, false)
+}
+
+/// As [`compare`], for an implementation that runs tasks in parallel if `parallel`: a value may
+/// then also be one its line lists `in parallel`.
+pub fn compare_in(expected: &Expectations, outcome: &Outcome, parallel: bool) -> Vec<String> {
     let mut problems = Vec::new();
     // A file that expects diagnostics is only checked, so what it says of running would never
     // be checked.
@@ -480,8 +536,17 @@ pub fn compare(expected: &Expectations, outcome: &Outcome) -> Vec<String> {
         if seen.is_empty() {
             problems.push(format!("{shown}: expected {value}, but the line never ran"));
         }
+        let x = moddil_syntax::Expected {
+            value,
+            also: expected
+                .parallel
+                .get(line)
+                .map(|a| a.iter().map(String::as_str).collect())
+                .unwrap_or_default(),
+            any_order: expected.any_order.contains(line),
+        };
         for v in seen {
-            if v != value {
+            if !x.accepts(v, parallel) {
                 problems.push(format!("{shown}: expected {value}, found {v}"));
             }
         }
@@ -756,7 +821,7 @@ fn run_test(repo: &Path, t: &Path, implementations: &[&dyn Implementation]) -> T
             continue;
         };
         r.ran.push(imp.name().to_string());
-        for p in compare(&expected, &outcome) {
+        for p in compare_in(&expected, &outcome, imp.parallel()) {
             r.failures.push(format!("{rel} ({}): {p}", imp.name()));
         }
     }

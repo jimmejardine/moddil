@@ -233,13 +233,11 @@ before and after (rc-heavy code, locks, tight loops): recorded, not gated.
 
 **P41. Testing the parallel runtime** (`crates/rt` tests and benches, `tools/ci.py`,
 `conformance`; L, its logic half before P38's first stage).
-- Logic: the conformance suite and every mod's tests also run natively under `parallel`
-  (`moddil test --runtime parallel`), their results matching `runtime-sim`'s; tests whose result
-  depends on interleaving are marked, and checked for a valid result rather than one result. The
-  stress suite (`crates/conformance/tests/stress.rs`, built under seeds of `runtime-sim`) also
-  run under `parallel`, and given `select`. ThreadSanitizer builds of
-  `moddil-rt` on Linux. The scheduler's Rust core (deques, stealing, parking, merge queues)
-  model-checked with `loom` and randomised with `shuttle`.
+- Logic (the conformance suite, every mod's tests and the stress suite run natively under
+  `parallel`, `item.test.value.2` marking what may differ, are built): `select` in the stress
+  suite; ThreadSanitizer builds of `moddil-rt` on Linux; the scheduler's Rust core (deques,
+  stealing, parking, merge queues) model-checked with `loom` and randomised with `shuttle`, as
+  P38's stages 2 and 3 make it.
 - Performance: benchmarks in `crates/rt/benches` and Moddil programs under `moddil bench`, each
   with a budget: spawning, a task switch (tens of nanoseconds), channel ping-pong, `Mutex`
   contention, shared and unshared `Rc` operations, reactor throughput, and scaling from 1 to N

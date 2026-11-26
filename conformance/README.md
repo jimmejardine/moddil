@@ -56,6 +56,7 @@ fn f() -> int {
 |---|---|
 | `// covers: id, …` | The reference paragraphs the file tests; every file has one |
 | `// => value` | The expression statement or block's final expression it follows evaluates to `value`, written as Moddil source (`3`, `-1`, `true`, `()`) |
+| `// => v (in parallel, …)` | As `// => v`; native code under the parallel runtime may also give what follows (`also w; x`, or `in any order` for a tuple's or array's parts, or both, `item.test.value.2`) |
 | `//~ E0202` | A diagnostic with that code starting on this line; several codes may follow (wording is not part of conformance). Warnings have `W` codes, such as `//~ W0201` |
 | `//~ trap` | A trap on this line: the line of the operation that fails, which may be inside a function the test calls |
 | `//~ error` | An error leaves a test on this line (the `?`, `fail` or `try` in the test's body it leaves through), failing the test |

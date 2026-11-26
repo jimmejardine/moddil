@@ -50,7 +50,7 @@ test "the first to fail, by when it ends, wins" {
             0
         })?
     };
-    shown(r)  // => -2
+    shown(r)  // => -2 (in parallel, also -1)
 }
 
 test "a scope whose body fails waits for its tasks, then fails with the body's error" {

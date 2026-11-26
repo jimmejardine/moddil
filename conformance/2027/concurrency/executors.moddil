@@ -11,7 +11,7 @@ test "a task runs on its spawner's executor, or the one it is spawned on" {
             });
         }, on: pool);
     });
-    (rx.recv(), rx.recv() == Some(pool))  // => (Some(Executor { id: 0 }), true)
+    (rx.recv(), rx.recv() == Some(pool))  // => (Some(Executor { id: 0 }), true) (in parallel, also (Some(Executor { id: 1 }), false))
 }
 
 test "a scope's body runs on the executor it is opened on" {
@@ -30,5 +30,5 @@ test "the ready tasks of a more urgent executor run first" {
         s.spawn (|| tx.send(2) ?! "the receiver is here");
         s.spawn (|| tx.send(3) ?! "the receiver is here", on: high);
     });
-    (rx.recv(), rx.recv(), rx.recv())  // => (Some(3), Some(2), Some(1))
+    (rx.recv(), rx.recv(), rx.recv())  // => (Some(3), Some(2), Some(1)) (in parallel, in any order)
 }

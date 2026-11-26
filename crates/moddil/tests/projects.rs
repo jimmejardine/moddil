@@ -29,6 +29,10 @@ fn passes(dir: &str, how: Option<&str>) {
         eprintln!("skipped: no Node with JSPI");
         return;
     }
+    if how == Some("--runtime=parallel") && ONE_TASK_AT_A_TIME.contains(&dir) {
+        eprintln!("skipped: it simulates with `moddil/sim`, under the deterministic runtime only");
+        return;
+    }
     let out = Command::new(env!("CARGO_BIN_EXE_moddil"))
         .arg("test")
         .args(how)
@@ -46,7 +50,12 @@ fn passes(dir: &str, how: Option<&str>) {
     assert!(!stderr.contains("runs on the interpreter"), "{stderr}");
 }
 
-/// For each project, a module of three tests, one for each runtime.
+/// The projects that use `moddil/sim`, whose cells assume one task at a time: the parallel
+/// runtime refuses them.
+const ONE_TASK_AT_A_TIME: &[&str] = &["mods/sim/tests", "tour/shorty"];
+
+/// For each project, a module of four tests: natively, natively under the parallel runtime, on
+/// the interpreter and as WASM.
 macro_rules! projects {
     ($($name:ident => $dir:literal),* $(,)?) => {
         const PROJECTS: &[&str] = &[$($dir),*];
@@ -55,6 +64,11 @@ macro_rules! projects {
                 #[test]
                 fn native() {
                     super::passes($dir, None);
+                }
+
+                #[test]
+                fn parallel() {
+                    super::passes($dir, Some("--runtime=parallel"));
                 }
 
                 #[test]
