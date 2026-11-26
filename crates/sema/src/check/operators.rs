@@ -3,7 +3,7 @@
 
 use moddil_syntax::TextRange;
 
-use crate::hir::{BinaryOp, CompareOp, ExprId, UnaryOp};
+use crate::hir::{BinaryOp, CompareOp, ExprId, ExprKind, UnaryOp};
 use crate::traits::Answer;
 use crate::ty::TraitRef;
 use crate::{Code, Ty};
@@ -22,6 +22,56 @@ impl Checker<'_> {
             .copied()
             .find(|&m| self.items.fns[m as usize].name == method)?;
         Some((tr, m))
+    }
+
+    /// Operand `x` of an operator, of type `t`, read through its borrows (`borrow.deref.2`): the
+    /// type it is read as. With `copy_only` (arithmetic), only a borrow of a `Copy` type is read
+    /// through, since reading it gives a copy; a comparison borrows what it compares, so it reads
+    /// through any borrow. A `&str` or a slice borrow is not read through: it is compared as it
+    /// is (`text.cmp.1`).
+    pub(super) fn read_through(&mut self, x: ExprId, t: &Ty, copy_only: bool) -> Ty {
+        let mut t = self.norm(t);
+        let mut n = 0;
+        while let Ty::Ref(_, inner) = &t {
+            let inner = self.norm(inner);
+            if matches!(inner, Ty::Str | Ty::Slice(_)) || copy_only && !self.solver.is_copy(&inner)
+            {
+                break;
+            }
+            t = inner;
+            n += 1;
+        }
+        if n > 0 {
+            self.out.operand_derefs.insert(x, n);
+        }
+        t
+    }
+
+    /// The right operand `r` of an arithmetic operator, checked against `expected` after it is
+    /// read through its borrows. A literal is checked against `expected` as it is, so the
+    /// type is the literal's from the start.
+    fn check_operand(&mut self, r: ExprId, expected: &Ty) {
+        if matches!(
+            self.body.exprs[r].kind,
+            ExprKind::Int(_)
+                | ExprKind::Float(_)
+                | ExprKind::Bool(_)
+                | ExprKind::Char(_)
+                | ExprKind::Str(_)
+                | ExprKind::Array(_)
+                | ExprKind::Repeat(..)
+                | ExprKind::RepeatN(..)
+                | ExprKind::Unary(..)
+                | ExprKind::Closure { .. }
+        ) {
+            self.check(r, expected);
+            return;
+        }
+        let t = self.infer(r);
+        let t = self.read_through(r, &t, true);
+        if !self.coerce(&t, expected) {
+            self.mismatch(r, expected, &t);
+        }
     }
 
     /// An operator on a type other than `int` and `bool`: through the trait `tr` and its method
@@ -68,7 +118,7 @@ impl Checker<'_> {
     pub(super) fn unary(&mut self, e: ExprId, op: UnaryOp, x: ExprId) -> Ty {
         let range = self.range(e);
         let t = self.infer(x);
-        let t = self.norm(&t);
+        let t = self.read_through(x, &t, true);
         let t = self.items.base(&t);
         let sym = if op == UnaryOp::Neg { "-" } else { "!" };
         match (op, &t) {
@@ -90,7 +140,9 @@ impl Checker<'_> {
                 self.report(
                     Code::E0205,
                     range,
-                    format!("`{sym}` is not defined for `{t}`: dereference it with `*`"),
+                    format!(
+                        "`{sym}` is not defined for `{t}`: what it borrows is not `Copy`, so                          reading it would move it out of the borrow"
+                    ),
                 );
                 Ty::Error
             }
@@ -128,25 +180,26 @@ impl Checker<'_> {
         let lit = self.solver.table.lit_kind(&lt).is_some();
         match &lt {
             Ty::Int => {
-                self.check(r, &Ty::Int);
+                self.check_operand(r, &Ty::Int);
                 Ty::Int
             }
             // On the sized integers and the floats, both operands have one type
             // (`num.ops.1`); a float has no bitwise operators.
             Ty::Num(n) if !n.is_float() || !(op.is_bitwise() || op.wraps()) => {
-                self.check(r, &lt);
+                self.check_operand(r, &lt);
                 lt.clone()
             }
             // A literal's type is decided by the other operand, or by default.
             Ty::Infer(_) if lit => {
                 let rt = self.infer(r);
+                let rt = self.read_through(r, &rt, true);
                 if !self.coerce(&rt, &lt) {
                     self.mismatch(r, &lt, &rt);
                 }
                 lt.clone()
             }
             Ty::Bool if op.applies_to_bool() => {
-                self.check(r, &Ty::Bool);
+                self.check_operand(r, &Ty::Bool);
                 Ty::Bool
             }
             Ty::Error | Ty::Never => {
@@ -164,7 +217,7 @@ impl Checker<'_> {
                     Code::E0205,
                     range,
                     format!(
-                        "`{}` is not defined for `{lt}`: dereference it with `*`",
+                        "`{}` is not defined for `{lt}`: what it borrows is not `Copy`, so                          reading it would move it out of the borrow",
                         op.symbol()
                     ),
                 );
@@ -173,7 +226,7 @@ impl Checker<'_> {
             _ if names.is_some() => {
                 let t = self.operator(e, range, op.symbol(), &lt, names.expect("a trait"));
                 if t.as_ref().is_some_and(|t| *t != Ty::Error) {
-                    self.check(r, &lt);
+                    self.check_operand(r, &lt);
                 } else {
                     self.infer(r);
                 }
@@ -195,11 +248,11 @@ impl Checker<'_> {
     pub(super) fn compare(&mut self, e: ExprId, first: ExprId, rest: &[(CompareOp, ExprId)]) -> Ty {
         let range = self.range(e);
         let t0 = self.infer(first);
-        let t0 = self.norm(&t0);
+        let t0 = self.read_through(first, &t0, false);
         let mut prev = (first, self.items.base(&t0));
         for (i, &(op, x)) in rest.iter().enumerate() {
             let t = self.infer(x);
-            let t = self.norm(&t);
+            let t = self.read_through(x, &t, false);
             let t = self.items.base(&t);
             let (_, pt) = prev.clone();
             let Some(j) = self.join(&pt, &t) else {

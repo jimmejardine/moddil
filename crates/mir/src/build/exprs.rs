@@ -583,16 +583,16 @@ impl Builder<'_> {
                     .assign(dest, Rvalue::Use(Operand::Const(Const::Unit)));
             }
             ExprKind::Unary(_, x) if self.types.callee(e).is_some() => {
-                let a = self.operand(x, &[]);
+                let a = self.read_operand(x, &[]);
                 self.call(e, dest, vec![a]);
             }
             ExprKind::Binary(_, l, r) if self.types.callee(e).is_some() => {
-                let a = self.operand(l, &[r]);
-                let b = self.operand(r, &[]);
+                let a = self.read_operand(l, &[r]);
+                let b = self.read_operand(r, &[]);
                 self.call(e, dest, vec![a, b]);
             }
             ExprKind::Unary(op, x) => {
-                let a = self.operand(x, &[]);
+                let a = self.read_operand(x, &[]);
                 let float = matches!(self.ty(e), Ty::Num(n) if n.is_float());
                 if op == UnaryOp::Neg && !float {
                     let t = self.temp(Ty::Bool);
@@ -606,9 +606,10 @@ impl Builder<'_> {
                 self.cfg.assign(dest, Rvalue::Unary(op, a));
             }
             ExprKind::Binary(op, l, r) => {
-                let a = self.operand(l, &[r]);
-                let b = self.operand(r, &[]);
-                self.arith(Place::local(dest), op, &self.ty(l), a, b, range);
+                let a = self.read_operand(l, &[r]);
+                let b = self.read_operand(r, &[]);
+                let ty = self.read_ty(l);
+                self.arith(Place::local(dest), op, &ty, a, b, range);
             }
             ExprKind::Logic(op, l, r) => {
                 let a = self.operand(l, &[]);
@@ -652,7 +653,7 @@ impl Builder<'_> {
                     // Through its operator trait (`expr.assign.compound.2`): `x = x + y`.
                     Some(_) if self.types.callee(e).is_some() => {
                         let place = self.place(target);
-                        let b = self.operand(value, &[]);
+                        let b = self.read_operand(value, &[]);
                         let a = self.use_place(place.clone(), &ty);
                         let t = self.temp(ty.clone());
                         self.call(e, t, vec![a, b]);
@@ -669,7 +670,7 @@ impl Builder<'_> {
                         } else {
                             Operand::Copy(place.clone())
                         };
-                        let b = self.operand(value, &[]);
+                        let b = self.read_operand(value, &[]);
                         self.arith(place, op, &ty, a, b, range);
                     }
                 }

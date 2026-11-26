@@ -1,0 +1,81 @@
+// covers: borrow.deref.2
+
+#[derive(Copy, Clone)]
+struct V {
+    x: int,
+    y: int,
+}
+
+impl Add for V {
+    type Output = V;
+    fn add(self, rhs: V) -> V {
+        V { x: self.x + rhs.x, y: self.y + rhs.y }
+    }
+}
+
+fn area(r: &f64) -> f64 {
+    3.0 * r * r
+}
+
+fn squared<T>(x: &T) -> T
+    where T: Mul<Output = T> + Copy
+{
+    x * x
+}
+
+fn same(a: &String, b: &String) -> bool {
+    a == b
+}
+
+test "arithmetic reads through a borrow of a Copy value" {
+    area(&1.5)  // => 6.75
+    ;
+    let n = 41;
+    let r = &n;
+    r + 1  // => 42
+    ;
+    1 + r  // => 42
+    ;
+    -r  // => -41
+    ;
+    let rr = &r;
+    rr * 2  // => 82
+    ;
+    let yes = true;
+    let b = &yes;
+    !b  // => false
+    ;
+    let v = V { x: 1, y: 2 };
+    let w = &v;
+    (w + w).y  // => 4
+    ;
+    squared(&7)  // => 49
+}
+
+test "a compound assignment reads its value through a borrow" {
+    let step = 5;
+    let by = &step;
+    let mut total = 1;
+    total += by;
+    total  // => 6
+}
+
+test "comparisons read through borrows of any value" {
+    let n = 3;
+    let r = &n;
+    r == 3  // => true
+    ;
+    let m = 4;
+    r < &m  // => true
+    ;
+    1 < r <= 3  // => true
+    ;
+    let rr = &r;
+    rr != 3  // => false
+    ;
+    let (a, b) = (String::from_str("hi"), String::from_str("hi"));
+    same(&a, &b)  // => true
+    ;
+    let c = String::from_str("ho");
+    same(&a, &c)  // => false
+}

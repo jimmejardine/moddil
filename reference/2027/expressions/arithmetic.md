@@ -24,5 +24,5 @@ calls its trait (**expr.op.trait.1**), and is not defined if the type does not i
 a prelude trait ([Prelude](../prelude.md)): `a + b` is `Add::add(a, b)`, and likewise `-` `Sub::sub`,
 `*` `Mul::mul`, `/` `Div::div`, `%` `Rem::rem`; unary `-a` is `Neg::neg(a)` and `!a` `Not::not(a)`.
 The operands are moved in; the right operand has the left operand's type (E0201), and the result
-has the trait's `Output` type. An operator applied to a borrow is not defined (E0205): dereference
-it with `*`.
+has the trait's `Output` type. An operand that is a borrow of a `Copy` value is read through it
+(**borrow.deref.2**); one that borrows a value that is not `Copy` is an error (E0205).

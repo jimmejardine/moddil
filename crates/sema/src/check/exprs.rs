@@ -384,6 +384,7 @@ impl Checker<'_> {
             &ExprKind::Unary(op, x) => self.unary(e, op, x),
             &ExprKind::Binary(op, l, r) => {
                 let lt = self.infer(l);
+                let lt = self.read_through(l, &lt, true);
                 self.binary(e, range, op, &lt, r)
             }
             &ExprKind::Logic(_, l, r) => {
@@ -406,7 +407,9 @@ impl Checker<'_> {
                 // A local declared without a value is given one by `=` (`stmt.let.uninit.1`).
                 let late = op.is_none()
                     && matches!(self.body.exprs[target].kind, ExprKind::Local(l) if self.late.contains(&l));
-                if !late {
+                // `r += 1` through a borrow is refused below, for its missing `*`.
+                let through = op.is_some() && matches!(self.norm(&lt), Ty::Ref(..));
+                if !late && !through {
                     self.check_mutable(target, "assigned to");
                 }
                 match op {
@@ -446,6 +449,19 @@ impl Checker<'_> {
                             }
                             Ty::Infer(_) if self.solver.table.lit_kind(&lt).is_some() => {
                                 self.binary(e, range, op, &lt, value);
+                            }
+                            // A write through a borrow is written with `*` (`borrow.deref.2`).
+                            Ty::Ref(..) => {
+                                self.infer(value);
+                                self.report(
+                                    Code::E0205,
+                                    range,
+                                    format!(
+                                        "`{}=` writes through a borrow only with `*`: `*r {}= …`",
+                                        op.symbol(),
+                                        op.symbol()
+                                    ),
+                                );
                             }
                             _ => {
                                 self.infer(value);

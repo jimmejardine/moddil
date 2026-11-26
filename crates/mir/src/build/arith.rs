@@ -89,16 +89,16 @@ impl Builder<'_> {
             return self.compare_traits(e, dest, first, rest);
         }
         let operands: Vec<ExprId> = rest.iter().map(|&(_, x)| x).collect();
-        let mut prev = self.operand(first, &operands);
+        let mut prev = self.read_operand(first, &operands);
         if let [(op, x)] = rest {
-            let cur = self.operand(*x, &[]);
+            let cur = self.read_operand(*x, &[]);
             self.cfg
                 .assign(dest, Rvalue::Binary(compare_op(*op), prev, cur));
             return;
         }
         let join = self.cfg.new_block();
         for (i, &(op, x)) in rest.iter().enumerate() {
-            let cur = self.operand(x, &operands[i + 1..]);
+            let cur = self.read_operand(x, &operands[i + 1..]);
             self.cfg
                 .assign(dest, Rvalue::Binary(compare_op(op), prev, cur.clone()));
             if i + 1 < rest.len() {
@@ -127,11 +127,12 @@ impl Builder<'_> {
         rest: &[(CompareOp, ExprId)],
     ) {
         let join = self.cfg.new_block();
-        let mut prev = self.place(first);
-        let mut prev_ty = self.ty(first);
+        // Each operand read through its borrows (`borrow.deref.2`), and borrowed again.
+        let mut prev = self.read_place(first);
+        let mut prev_ty = self.read_ty(first);
         for (i, &(_, x)) in rest.iter().enumerate() {
-            let cur = self.place(x);
-            let cur_ty = self.ty(x);
+            let cur = self.read_place(x);
+            let cur_ty = self.read_ty(x);
             // A slice borrow is passed as it is; other operands are borrowed.
             let borrow = |b: &mut Self, place: Place, ty: &Ty| match ty {
                 // Of its own type, as it is: the method takes `&[T]`, `Self` being `[T]`.
@@ -179,6 +180,15 @@ impl Builder<'_> {
             prev_ty = cur_ty;
         }
         self.cfg.terminate_into(Terminator::Goto(join), join);
+    }
+}
+
+impl Builder<'_> {
+    /// The place of operand `e` of a comparison, past the borrows it is read through.
+    fn read_place(&mut self, e: ExprId) -> Place {
+        let n = self.types.operand_derefs(e);
+        let p = self.place(e);
+        (0..n).fold(p, |p, _| p.deref())
     }
 }
 

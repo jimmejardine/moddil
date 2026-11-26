@@ -69,8 +69,14 @@ by pointer**, whichever is cheaper (as Swift and Hylo do). Small types travel in
 - Checking is **intraprocedural** and flow-sensitive (NLL-style): a borrow ends at its last use.
   Function signatures carry everything a caller needs, so checking stays local and incremental
   ([Build times](build-times.md)).
-- **Dereferencing follows Rust (decided):** field access looks through a borrow (`r.x`);
-  operators, comparisons and writes through a borrow need `*` (`*r + 1`, `*a == *b`, `*r = v`).
+- **Operators read through borrows (decided, November 2026):** field access looks through a
+  borrow (`r.x`), and so do operators: arithmetic on a borrow of a `Copy` value reads the value
+  (`3.0 * r * r` for `r: &f64`), and comparisons read through borrows of any type, since they
+  borrow what they compare (`a == b` for two `&String`s). Writes through a borrow still need `*`
+  (`*r += 1`, `*r = v`), so a change through a borrow stays visible. Rust gets the same effect
+  from its standard library's operator impls for references (`&f64 * &f64`); Moddil's borrows
+  are second-class, so there are no such impls, and the rule is the language's instead
+  ([`borrow.deref.2`](../reference/2027/borrows.md)).
   Using a `&mut` borrow lends it again (an implicit reborrow) instead of using it up.
 - **Non-escaping closures** may capture borrows (Swift's model). Escaping closures capture by move
   or rc. Details in [`closures.md`](closures.md).

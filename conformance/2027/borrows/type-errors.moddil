@@ -8,12 +8,6 @@ fn mut_of_a_borrow(r: &int) {
     let mut s = r;
     let m = &mut s;  //~ E0309
 }
-fn compare(a: &int, b: &int) -> bool {
-    a == b  //~ E0205
-}
-fn add(a: &int) -> int {
-    a + 1  //~ E0205
-}
 fn not_a_borrow(n: int) -> int {
     *n  //~ E0205
 }

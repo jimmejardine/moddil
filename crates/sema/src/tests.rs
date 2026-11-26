@@ -409,7 +409,14 @@ fn borrows_and_copy_2() {
 #[test]
 fn borrows_and_copy_3() {
     err("fn f(a: int) -> int { *a }", &[("E0205", 1)]);
-    err("fn f(a: &int, b: &int) -> bool { a == b }", &[("E0205", 1)]);
+    ok("fn f(a: &int, b: &int) -> bool { a == b }");
+    err(
+        "struct B { n: int }
+impl Add for B { type Output = B; fn add(self, r: B) -> B { r } }
+fn f(a: &B, b: &B) -> B { a + b }",
+        &[("E0205", 3)],
+    );
+    err("fn f(r: &mut int) { r += 1; }", &[("E0205", 1)]);
     err("struct P { r: &int }", &[("E0309", 1)]);
     err("fn f(a: &mut &int) {}", &[("E0309", 1)]);
     err("fn f() -> &int { 1 }", &[("E0201", 1)]);

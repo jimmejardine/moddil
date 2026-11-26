@@ -411,6 +411,41 @@ impl Builder<'_> {
         }
     }
 
+    /// Operand `e` of an operator, read through as many borrows as the checker found
+    /// (`borrow.deref.2`): `r` in `r * 2.0`, for `r: &float`, is a copy of `*r`, taken here.
+    pub(super) fn read_operand(&mut self, e: ExprId, later: &[ExprId]) -> Operand {
+        let n = self.types.operand_derefs(e);
+        let op = self.operand(e, later);
+        if n == 0 {
+            return op;
+        }
+        let place = match op {
+            Operand::Copy(p) | Operand::Move(p) => p,
+            Operand::Const(c) => {
+                let t = self.temp(self.ty(e));
+                self.cfg.assign(t, Rvalue::Use(Operand::Const(c)));
+                Place::local(t)
+            }
+        };
+        let place = (0..n).fold(place, |p, _| p.deref());
+        let ty = self.read_ty(e);
+        let t = self.temp(ty);
+        self.cfg.assign(t, Rvalue::Use(Operand::Copy(place)));
+        Operand::Copy(Place::local(t))
+    }
+
+    /// The type operand `e` of an operator is read as: its own, past the borrows it is read
+    /// through (`borrow.deref.2`).
+    pub(super) fn read_ty(&mut self, e: ExprId) -> Ty {
+        let mut t = self.ty(e);
+        for _ in 0..self.types.operand_derefs(e) {
+            if let Ty::Ref(_, inner) = self.solver.norm(&t) {
+                t = (*inner).clone();
+            }
+        }
+        t
+    }
+
     /// `e` as an operand. If an expression evaluated later (`later`) may assign to a local, a
     /// place's value is taken into a temporary first, so the operand keeps the value it had here.
     pub(super) fn operand(&mut self, e: ExprId, later: &[ExprId]) -> Operand {

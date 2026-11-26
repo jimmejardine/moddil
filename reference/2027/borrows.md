@@ -22,8 +22,17 @@ borrows. Borrows hash and compare (`eq`) as what they point to; `==` on them is 
 (E0205).
 
 **borrow.deref.1** `*e`, for a borrow `e`, is the place it points to, of type `T`. A field access
-looks through a borrow (`r.x` is `(*r).x`); operators and comparisons do not, so they need `*`: an
-arithmetic operator or a comparison applied to borrows is an error (E0205).
+looks through a borrow (`r.x` is `(*r).x`).
+
+**borrow.deref.2** Operators read through borrows. An operand of an arithmetic, bitwise or unary
+operator whose type is a borrow of a `Copy` type, through any number of borrows (`&T`, `&&T`), is
+read as what they point to: `3.0 * r * r`, for `r: &f64`, is `3.0 * *r * *r`. An operand of a
+comparison is read through its borrows whatever its type, since a comparison borrows what it
+compares (**expr.cmp.trait.1**), and the two sides may be borrowed to different depths
+(`r == 3`). A `&str` or a slice borrow is compared as it is (`text.cmp.1`). An arithmetic operand
+that borrows a value that is not `Copy` is an error (E0205): reading it would move it out of the
+borrow. Writes are not read through: the target of `+=` through a borrow is written `*r += 1`
+(E0205 without the `*`).
 
 **borrow.mut.1** A place can be changed (assigned, compound-assigned or borrowed with `&mut`) if
 it is a variable declared `mut` (E0301), or is reached through a `&mut` borrow; through a `&`

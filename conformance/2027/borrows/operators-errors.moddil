@@ -1,0 +1,22 @@
+// covers: borrow.deref.2
+
+struct Big {
+    n: int,
+}
+
+impl Add for Big {
+    type Output = Big;
+    fn add(self, rhs: Big) -> Big {
+        rhs
+    }
+}
+
+// Reading a borrow of a value that is not `Copy` would move it out.
+fn add(a: &Big, b: &Big) -> Big {
+    a + b  //~ E0205
+}
+
+// A write through a borrow is written with `*`.
+fn bump(r: &mut int) {
+    r += 1;  //~ E0205
+}

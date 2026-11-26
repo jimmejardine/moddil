@@ -110,6 +110,8 @@ pub struct Inference {
     local_types: Vec<Ty>,
     field_indices: HashMap<ExprId, u32>,
     field_derefs: HashSet<ExprId>,
+    /// For an operand of an operator that is read through borrows (`borrow.deref.2`): how many.
+    operand_derefs: HashMap<ExprId, u32>,
     pat_derefs: HashSet<PatId>,
     by_ref: HashMap<PatId, bool>,
     calls: HashMap<ExprId, Callee>,
@@ -180,6 +182,12 @@ impl Inference {
     /// Whether field expression `e` reads its field through a borrow (`r.x` for `r: &Point`).
     pub fn field_through_borrow(&self, e: ExprId) -> bool {
         self.field_derefs.contains(&e)
+    }
+
+    /// How many borrows operand `e` of an operator is read through (`borrow.deref.2`): `r` in
+    /// `r * 2.0` for `r: &float` is read as `*r`. Zero for an operand that is not.
+    pub fn operand_derefs(&self, e: ExprId) -> u32 {
+        self.operand_derefs.get(&e).copied().unwrap_or(0)
     }
 
     /// Whether pattern `p` matches through a borrow: the value is a borrow, and `p` tests what

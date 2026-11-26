@@ -957,7 +957,8 @@ impl Machine<'_> {
             let (p, _) = self.place_of(e)?.expect("a dereference is a place");
             return Ok(self.memory.load(&p));
         }
-        match (op.kind(), self.eval(operand)?) {
+        let v = self.eval(operand)?;
+        match (op.kind(), self.read_through(v)) {
             (
                 k,
                 v @ (Value::Num(..) | Value::FloatLit(_) | Value::BigLit(_) | Value::HugeLit(_)),
@@ -1009,6 +1010,7 @@ impl Machine<'_> {
             k => {
                 let a = self.eval(&l)?;
                 let b = self.eval(&r)?;
+                let (a, b) = (self.read_through(a), self.read_through(b));
                 // Numbers of a sized type, and the literals that meet them (`num.ops.1`).
                 if crate::num::is_num(&a, &b) {
                     return crate::num::arith(op.text(), a, b, range);
@@ -1027,6 +1029,28 @@ impl Machine<'_> {
                 self.call_trait(tr, method, vec![a, b], range)
             }
         }
+    }
+
+    /// An operand of an arithmetic operator, read through its borrows (`borrow.deref.2`): what
+    /// they point to.
+    fn read_through(&self, mut v: Value) -> Value {
+        while let Value::Ref(q, _) = &v {
+            v = self.memory.load(q);
+        }
+        v
+    }
+
+    /// The place of an operand of a comparison, read through its borrows (`borrow.deref.2`)
+    /// but for a slice's, which is compared as it is.
+    fn compared(&mut self, e: &ast::Expr) -> Eval<crate::value::Pointer> {
+        let mut p = self.place(e)?;
+        while let Value::Ref(q, _) = self.memory.load(&p) {
+            if matches!(self.memory.load(&q), Value::Array(_) | Value::Buf(..)) {
+                break;
+            }
+            p = q;
+        }
+        Ok(p)
     }
 
     /// `a < b <= c`: each operand once, left to right, stopping at the first comparison that is
@@ -1059,9 +1083,9 @@ impl Machine<'_> {
         {
             return Ok(Value::Bool((a == b) == (*op == K::EQ_EQ)));
         }
-        let mut prev = self.place(first)?;
+        let mut prev = self.compared(first)?;
         for (op, x) in rest {
-            let cur = self.place(x)?;
+            let cur = self.compared(x)?;
             let (a, b) = (self.memory.load(&prev), self.memory.load(&cur));
             let texts = (text::text_of(self, &a), text::text_of(self, &b));
             let holds = match (&a, &b) {
@@ -1146,6 +1170,7 @@ impl Machine<'_> {
             let p = self.place(&target)?;
             let old = self.memory.load(&p);
             let v = self.eval(&value)?;
+            let v = self.read_through(v);
             let new = if crate::num::is_num(&old, &v) {
                 let sym = op.text();
                 crate::num::arith(&sym[..sym.len() - 1], old, v, range)?
