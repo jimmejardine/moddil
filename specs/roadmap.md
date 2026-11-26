@@ -105,9 +105,15 @@ L)
 
 **P19. Standard collections** (`mods/collections`, prelude `rc`, `core::collections`; L)
 - `EnumSet`'s bits in the smallest unsigned integer that fits its enum, as `stdlib.md` decides
-  (for packed structs and wire formats): a `u128` for now, chosen when compiling (P11).
+  (for packed structs and wire formats): a `u128` for now. It waits on generics the compiler
+  does not have (I0001 today): bounds on a struct's type parameters, bounds on an associated
+  type (`type Bits: BitWord`), and a projection as a field's type (`bits: T::Bits`). Then
+  `#[derive(Variant)]` picks `Bits` from the enum's number of variants.
 - Perceus-style reuse of a node no one else holds, as a pass on MIR (`mir.md`: Reference
-  counting).
+  counting). It needs a MIR pass layer (a query over `mir`, which the runners then call),
+  `Rc`'s operations visible to MIR (today `Rc` is prelude code that MIR sees as ordinary
+  calls), updates of the persistent collections that take `self` (they borrow it, so the old
+  node is never dead), and a count of allocations to test the reuse with.
 
 **P21. GPU kernels** (`crates/gpu`, `mods/gpu`, `core::gpu`; L)
 - Arrays and slices in a kernel (closures, `dyn` and text later).
