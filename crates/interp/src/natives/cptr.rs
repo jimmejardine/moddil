@@ -38,6 +38,10 @@ impl Natives<'_> {
         Some(match name {
             "null" | "null_mut" if ptr => Ok(Value::Foreign(0)),
             "is_null" if ptr => Ok(Value::Bool(matches!(args[0], Value::Foreign(0)))),
+            "addr_eq" if ptr => Ok(Value::Bool(match (&args[0], &args[1]) {
+                (Value::Ref(a, _), Value::Ref(b, _)) => a == b,
+                (a, b) => a == b,
+            })),
             "cast" | "cast_mut_to" if ptr => Ok(args[0].clone()),
             "add" | "add_mut" if ptr => {
                 let n = args[1].as_int();

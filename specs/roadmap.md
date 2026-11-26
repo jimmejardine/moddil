@@ -203,7 +203,10 @@ half, then P38's stages, with P41's benchmarks as each lands (`runtime.md`).
 **P38. The parallel runtime** (`crates/rt`, `crates/sched`, `crates/native`; L, after P37 and
 P40, with P41's tests). In stages, each a commit with P41's suite green:
 1. Several tasks at once: the baton becomes N batons, still a thread per task, so the semantics
-   are proven before the mechanics change.
+   are proven before the mechanics change. `Rc` then needs the merge queue (`memory.md`): a
+   non-owner that takes the shared count below 0 queues the allocation to its owner task, which
+   the runtime drains when it resumes the task and at its end; and the running task's number
+   (`moddil_rt_task`, one word now) per worker.
 2. User-space stacks: a context switch of its own per target (x86-64 SysV and Win64, AArch64);
    stacks reserved large, committed lazily, with guard pages; tasks become coroutines on worker
    threads (M:N).
@@ -233,10 +236,9 @@ WASM stays single-threaded; Web Workers come later.
 `crates/native`, `crates/mir`; L, before P38 runs two tasks at once). Each item a commit, the
 single-threaded behaviour unchanged. Each commit's message gives single-threaded benchmarks
 before and after (rc-heavy code, locks, tight loops): recorded, not gated.
-- `Rc`: biased counting (`memory.md`: Biased reference counting). The owner task's count is
-  plain, the others' an atomic shared count, and a merge queue per task is drained by the
-  runtime when it resumes the task and at its end. `Weak` likewise. Today `RcBox` counts with a
-  plain `int`.
+- `Rc`'s rebias on a unique transfer (a channel send, a move into a child). The biased counts
+  are built (`rc.task.1`); the last owner is found by reading the owner's count, which holds
+  while one task runs at a time.
 - `AtomicRc<T>` for sync cells holding shared values; then the cycle detector.
 - `moddil/sync`: `Mutex` and `RwLock` parking through the scheduler's wait queues, not spinning
   with yields as now; condition waits; priority inheritance across executors; the atomics'

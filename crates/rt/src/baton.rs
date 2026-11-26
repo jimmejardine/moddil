@@ -27,7 +27,7 @@ pub use threads::{DropFn, TaskFn};
 mod threads {
     use std::sync::{Arc, MutexGuard};
 
-    use crate::run::{Ctx, Start, State, enter_task, me, run_task};
+    use crate::run::{Ctx, Start, State, enter_task, me, run_task, running};
 
     /// How much stack a task's thread has.
     const TASK_STACK: usize = 256 * 1024 * 1024;
@@ -65,6 +65,7 @@ mod threads {
                         return;
                     }
                 }
+                running(t);
                 run_task(&c, t, spec);
             })
             .expect("a thread for a task");
@@ -82,6 +83,7 @@ mod threads {
                 .wait(s)
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
         }
+        running(me);
         u8::from(s.aborted)
     }
 

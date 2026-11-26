@@ -1,4 +1,4 @@
-// covers: rc.drop.1
+// covers: rc.drop.1, rc.task.1
 
 use core::cell::UnsafeCell;
 
@@ -56,4 +56,42 @@ test "an rc in a vector is dropped with it" {
     unsafe("count outlives the rcs") {
         *count.get()
     }  // => 1
+}
+
+test "an rc shared with tasks is dropped with its last owner, in whichever task" {
+    let count = UnsafeCell::new(0);
+    let a = Noisy { drops: count.get() }.to_rc();
+    let b = a.share();
+    let c = a.share();
+    scope(|s| {
+        s.spawn (|| drop(b));
+        s.spawn (|| {
+            let d = c.share();
+            drop(c);
+            Rc::strong_count(&d)
+        });
+    });
+    Rc::strong_count(&a)  // => 1
+    ;
+    let e = a.share();
+    drop(a);
+    scope(|s| {
+        s.spawn (|| drop(e));
+    });
+    unsafe("count outlives the rcs") {
+        *count.get()
+    }  // => 1
+}
+
+test "a weak handle upgrades in another task" {
+    let a = 5.to_rc();
+    let w = a.weak();
+    let n = scope(|s| {
+        let t = s.spawn (|| match w.upgrade() {
+            Some(r) => *r + Rc::strong_count(&r),
+            None    => 0,
+        });
+        t.join()
+    });
+    n  // => 7
 }

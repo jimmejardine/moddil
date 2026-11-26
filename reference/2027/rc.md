@@ -32,11 +32,16 @@ its parent) is a `Weak`, so that the two do not keep each other alive.
 
 **rc.drop.1** Dropping an `Rc` takes one from the count. The last owner drops the value; the
 allocation goes with the last owner or `Weak`, whichever is later. `Rc`s that own each other in a
-cycle are never dropped: nothing collects them. Only one task runs at a time
-(**task.sched.1**), so the counts are plain numbers.
+cycle are never dropped: nothing collects them.
 
-Not yet: `Rc<dyn Trait>`, and the biased counts and
-`AtomicRc` of [`specs/memory.md`](../../specs/memory.md) for parallel runtimes.
+**rc.task.1** An `Rc` may be shared with, moved to and dropped in any task: its value is dropped
+when its last owner is, in whichever task that is. The counts are biased to the task that made
+the allocation ([`specs/memory.md`: Biased reference
+counting](../../specs/memory.md#biased-reference-counting)): that task counts plainly, and the
+others atomically.
+
+Not yet: `Rc<dyn Trait>`, `AtomicRc`, and the merge queue a parallel runtime hands a last owner
+to its allocation's task through.
 
 ## Diagnostics
 

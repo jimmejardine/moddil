@@ -61,12 +61,21 @@ impl<T> DerefMut for Box<T> {
 // allocation; `rc.share()` gives another owner of the same value; the value is dropped with its
 // last owner. What an `Rc` holds cannot be changed through it (`rc.immutable.1`). A `Weak<T>`
 // (`rc.weak.1`) keeps the allocation but not the value: `upgrade` gives an owner while there is
-// one. One task runs at a time (`task.sched.1`), so the counts are plain.
+// one.
+//
+// The counts are biased to the task that made the allocation (`specs/memory.md`: Biased
+// reference counting): that task counts its owners with plain arithmetic, and every other task
+// with atomic arithmetic on a count of its own. The owners are the two counts together. One task
+// runs at a time (`task.sched.1`), so any task may read the owner's count; a runtime that runs
+// tasks in parallel hands the last owner to the owning task instead.
 
-// The allocation: the owners' count, the weak count (the owners together hold one), and the
-// value while an owner lives.
+// The allocation: the task it is biased to, the owners that task counts, the owners the other
+// tasks count (atomically; below 0 while that task counts owners the others have let go), the
+// weak count (atomically; the owners together hold one), and the value while an owner lives.
 struct RcBox<T> {
-    strong: int,
+    owner: int,
+    count: int,
+    shared: int,
     weak: int,
     value: Option<T>,
 }
@@ -86,51 +95,55 @@ trait ToRc {
 
 impl<T> ToRc for T {
     fn to_rc(self) -> Rc<T> {
-        let b = Box::new(RcBox { strong: 1, weak: 1, value: Some(self) });
+        let b = Box::new(RcBox { owner: __task_id(), count: 1, shared: 0, weak: 1, value: Some(self) });
         Rc { p: core::ffi::into_raw(b) }
+    }
+}
+
+// How many owners the allocation at `p` has: both counts.
+fn rc_owners<T>(p: *mut RcBox<T>) -> int {
+    unsafe("p is a live allocation; one task runs at a time, so its owner's count is read") {
+        (*p).count + core::atomic::load(&(*p).shared, core::atomic::Ordering::Acquire)
     }
 }
 
 impl<T> Rc<T> {
     // Another owner of the same value: the count goes up by one, and nothing is copied.
     fn share(&self) -> Rc<T> {
+        // Written out here, in `drop` and in `upgrade`, not called: they are what an `Rc` costs.
+        let p = self.p;
         unsafe("p is a live allocation: this owner keeps it") {
-            (*self.p).strong += 1;
+            if core::atomic::load(&(*p).owner, core::atomic::Ordering::Relaxed) == __task_id() {
+                (*p).count += 1;
+            } else {
+                core::atomic::fetch_add(&mut (*p).shared, 1, core::atomic::Ordering::Relaxed);
+            }
         }
-        Rc { p: self.p }
+        Rc { p }
     }
 
     // A weak handle to the value, which does not keep it alive.
     fn weak(&self) -> Weak<T> {
         unsafe("p is a live allocation: this owner keeps it") {
-            (*self.p).weak += 1;
+            core::atomic::fetch_add(&mut (*self.p).weak, 1, core::atomic::Ordering::Relaxed);
         }
         Weak { p: self.p }
     }
 
-    // Whether `a` and `b` share one value (`rc.1`): the only test of identity. A live
-    // allocation's count is never 0, so `b` sees 0 only if it is `a`'s.
+    // Whether `a` and `b` share one value (`rc.1`): the only test of identity.
     fn ptr_eq(a: &Rc<T>, b: &Rc<T>) -> bool {
-        unsafe("a and b are live allocations; one task runs at a time") {
-            let n = (*a.p).strong;
-            (*a.p).strong = 0;
-            let same = (*b.p).strong == 0;
-            (*a.p).strong = n;
-            same
-        }
+        core::ptr::addr_eq(a.p, b.p)
     }
 
     // How many owners the value has.
     fn strong_count(rc: &Rc<T>) -> int {
-        unsafe("p is a live allocation: rc keeps it") {
-            (*rc.p).strong
-        }
+        rc_owners(rc.p)
     }
 
     // How many weak handles the value has.
     fn weak_count(rc: &Rc<T>) -> int {
         unsafe("p is a live allocation: rc keeps it") {
-            (*rc.p).weak - 1
+            core::atomic::load(&(*rc.p).weak, core::atomic::Ordering::Acquire) - 1
         }
     }
 
@@ -167,8 +180,12 @@ impl<T> Drop for Rc<T> {
     fn drop(self) {
         let p = self.p;
         let last = unsafe("p is a live allocation: this owner keeps it") {
-            (*p).strong -= 1;
-            (*p).strong == 0
+            if core::atomic::load(&(*p).owner, core::atomic::Ordering::Relaxed) == __task_id() {
+                (*p).count -= 1;
+            } else {
+                core::atomic::fetch_add(&mut (*p).shared, -1, core::atomic::Ordering::AcqRel);
+            }
+            (*p).count + core::atomic::load(&(*p).shared, core::atomic::Ordering::Acquire) == 0
         };
         if last {
             let value = unsafe("the last owner: nothing borrows the value") {
@@ -183,8 +200,7 @@ impl<T> Drop for Rc<T> {
 // Lets go of one weak count of the allocation at `p`, freeing it with the last.
 fn rc_release<T>(p: *mut RcBox<T>) {
     let last = unsafe("p is a live allocation: the caller holds a weak count") {
-        (*p).weak -= 1;
-        (*p).weak == 0
+        core::atomic::fetch_add(&mut (*p).weak, -1, core::atomic::Ordering::AcqRel) == 1
     };
     if last {
         drop(unsafe("the last count: into_raw's pointer, given back once") {
@@ -205,21 +221,23 @@ impl<T> Weak<T> {
     // Another weak handle to the same value.
     fn share(&self) -> Weak<T> {
         unsafe("p is a live allocation: this handle keeps it") {
-            (*self.p).weak += 1;
+            core::atomic::fetch_add(&mut (*self.p).weak, 1, core::atomic::Ordering::Relaxed);
         }
         Weak { p: self.p }
     }
 
     // An owner of the value, if it still has one.
     fn upgrade(&self) -> Option<Rc<T>> {
-        let alive = unsafe("p is a live allocation: this handle keeps it") {
-            (*self.p).strong > 0
-        };
-        if alive {
+        let p = self.p;
+        if rc_owners(p) > 0 {
             unsafe("p is a live allocation, and its value is alive") {
-                (*self.p).strong += 1;
+                if core::atomic::load(&(*p).owner, core::atomic::Ordering::Relaxed) == __task_id() {
+                    (*p).count += 1;
+                } else {
+                    core::atomic::fetch_add(&mut (*p).shared, 1, core::atomic::Ordering::Relaxed);
+                }
             }
-            Some(Rc { p: self.p })
+            Some(Rc { p })
         } else {
             None
         }

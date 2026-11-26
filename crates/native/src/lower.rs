@@ -281,6 +281,9 @@ struct Rt {
     log: FuncId,
     trapped: FuncId,
     task: HashMap<&'static str, FuncId>,
+    /// The running task's number, which code that may run on several threads reads with one
+    /// load (`moddil_rt::RUNNING`); a one-thread build calls `task_id` instead.
+    running: Option<DataId>,
 }
 
 /// The runtime's task functions: each one's name, parameters and result.
@@ -292,6 +295,7 @@ const TASK_FNS: &[(&str, &[char], Option<char>)] = &[
     ("join", &['w', 'p', 'p', 's', 'b'], Some('b')),
     ("detach", &['w'], Some('b')),
     ("yield_now", &['s', 'b'], Some('b')),
+    ("task_id", &[], Some('w')),
     ("stop_requested", &['s', 'b'], Some('b')),
     ("channel", &['w'], Some('w')),
     ("timer", &['w'], Some('w')),
@@ -820,6 +824,14 @@ pub(crate) fn build<'db, M: Module>(
             &[types::I32, types::I64, types::I64, types::I64, types::I64],
             Some(types::I64),
         )?,
+        running: match threads {
+            Threads::Many => Some(
+                module
+                    .declare_data("moddil_rt_task", Linkage::Import, false, false)
+                    .map_err(|e| e.to_string())?,
+            ),
+            Threads::One => None,
+        },
     };
     let items = moddil_sema::item_tree(db, program);
     let mut c = Compiler {
@@ -4631,6 +4643,17 @@ impl<M: Module> Lower<'_, '_, '_, M> {
             return self.os(op, args, d);
         }
         match op {
+            "task_id" => {
+                let t = match self.c.rt.running {
+                    Some(data) => {
+                        let gv = self.c.module.declare_data_in_func(data, self.b.func);
+                        let at = self.b.ins().symbol_value(ptr, gv);
+                        self.b.ins().atomic_load(types::I64, flags, at)
+                    }
+                    None => self.task_call("task_id", &[]).expect("a task's number"),
+                };
+                self.write(d, Val::Scalar(t))
+            }
             "__scope_open" => {
                 let isolated = self.value(&args[0])?;
                 let s = self.task_call("scope_open", &[isolated]).expect("a scope");
@@ -5669,6 +5692,11 @@ impl<M: Module> Lower<'_, '_, '_, M> {
                 let n = self.value(&args[1])?;
                 let by = self.b.ins().imul_imm_s(n, size);
                 self.b.ins().iadd(p, by)
+            }
+            "addr_eq" => {
+                let a = self.value(&args[0])?;
+                let b = self.value(&args[1])?;
+                self.b.ins().icmp(IntCC::Equal, a, b)
             }
             "cast" | "cast_mut_to" => self.value(&args[0])?,
             _ => return Err(format!("the built-in function `ptr::{name}`")),

@@ -127,6 +127,7 @@ impl Machine<'_> {
     ) -> Option<Stop> {
         let me = self.stack.current();
         let pending = match name {
+            "task_id" => return self.deliver(ret, Ok(Value::Int(me as i64))),
             "__scope_open" => {
                 let s = self.sched.open_scope(me, values[0] == Value::Bool(true));
                 return self.deliver(ret, Ok(Value::Int(s as i64)));

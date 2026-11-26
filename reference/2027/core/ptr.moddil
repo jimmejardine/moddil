@@ -18,6 +18,10 @@ pub fn null_mut<T>() -> *mut T;
 #[intrinsic]
 pub fn is_null<T>(p: *const T) -> bool;
 
+// Whether `a` and `b` point to the same place.
+#[intrinsic]
+pub fn addr_eq<T>(a: *const T, b: *const T) -> bool;
+
 // The pointer `n` values of type `T` after `p` (before it, if `n` is negative), as C's `p + n`.
 // It is sound to read through only if the values from `p` to it are one array.
 #[intrinsic]

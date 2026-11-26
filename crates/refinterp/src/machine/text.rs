@@ -704,6 +704,11 @@ impl Machine<'_> {
                     .and_then(|rest| rest.chars().next());
                 option(c.map(Value::Char))
             }
+            // Whether two pointers point to the same place (`core.ptr.1`).
+            (Head::Unit, "addr_eq") => match (args[0].clone(), args[1].clone()) {
+                (Value::Ref(a, _), Value::Ref(b, _)) => Value::Bool(a == b),
+                _ => unreachable!("pointers"),
+            },
             // The same pointer, to change through (`core.ptr.1`).
             (Head::Unit, "cast_mut") => {
                 let Value::Ref(p, _) = args[0].clone() else {

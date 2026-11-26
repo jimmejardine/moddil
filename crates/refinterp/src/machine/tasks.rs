@@ -404,6 +404,7 @@ impl Machine<'_> {
         let owner = owner.as_str();
         let id = |m: &Self, v: &Value| id_of(&m.target(v.clone()));
         Some(match (owner, name) {
+            ("", "__task_id") => Ok(Value::Int(self.memory.task() as i64)),
             ("", "__scope_open") => {
                 let me = self.memory.task();
                 let isolated = args[0] == Value::Bool(true);

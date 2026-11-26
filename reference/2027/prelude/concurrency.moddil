@@ -49,6 +49,11 @@ impl<F, T> Drop for Task<F, T> {
 #[intrinsic]
 fn yield_now() with suspend;
 
+// The running task's number, which no other task of the run has: what an `Rc` is biased to
+// (`rc.1`).
+#[intrinsic]
+fn __task_id() -> int;
+
 // Waits until the running task's scope, or one around it, has been asked to stop, once the
 // scopes inside its scope have ended (`task.stop.1`).
 #[intrinsic]

@@ -12,6 +12,7 @@
 #![allow(unsafe_code)]
 
 use std::cell::{Cell, RefCell};
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 use crate::baton::{self, Baton, DropFn, TaskFn};
@@ -113,11 +114,25 @@ pub(crate) fn enter_task(c: &Arc<Ctx>, t: usize) {
     TASK.with(|x| x.set(t));
 }
 
+/// The task running now, which compiled code reads with one load where a call of `task_id`
+/// would cost a call: what an `Rc`'s counts are biased to. One task of a run runs at a time, and
+/// a task always counts an `Rc` correctly whichever count it takes, so runs on other threads of
+/// the process writing it too cost only speed. A runtime that runs tasks in parallel keeps one a
+/// worker.
+#[unsafe(export_name = "moddil_rt_task")]
+pub(crate) static RUNNING: AtomicI64 = AtomicI64::new(0);
+
+/// Records that task `t` is running now.
+pub(crate) fn running(t: usize) {
+    RUNNING.store(t as i64, Ordering::Relaxed);
+}
+
 /// Starts a new run on this thread, as its first task; what earlier runs left is forgotten.
 pub fn begin_run() {
     CTX.with(|c| *c.borrow_mut() = Some(new_ctx()));
     STACK.with(|s| s.borrow_mut().clear());
     TASK.with(|t| t.set(0));
+    running(0);
 }
 
 /// Ends this thread's run: waits for its tasks' threads to end.
@@ -500,6 +515,12 @@ pub extern "C" fn join(t: u64, out: *mut u8, err: *mut u8, site: u32, tracked: u
 pub extern "C" fn detach(t: u64) -> u8 {
     let dropped = with(|s| s.sched.detach(t as usize));
     drop_all(dropped.into_iter().collect())
+}
+
+/// The running task's number (`__task_id`), which an `Rc` is biased to.
+#[unsafe(export_name = "moddil_rt_task_id")]
+pub extern "C" fn task_id() -> i64 {
+    me() as i64
 }
 
 /// `yield_now`.
