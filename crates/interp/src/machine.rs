@@ -505,12 +505,14 @@ impl<'a> Machine<'a> {
                     AggregateKind::Closure(_) => Value::Closure(fields),
                 }
             }
+            // The tag, and the lengths below, read in place: copying the value to read them
+            // would make each index of a `Vec` cost its length.
             Rvalue::ErrorIs(p, a) => {
-                Value::Bool(matches!(self.stack.read(p), Value::Adt { adt, .. } if adt == *a))
+                Value::Bool(self.stack.tag_of(p).is_some_and(|(adt, _)| adt == *a))
             }
-            Rvalue::Discriminant(p) => match self.stack.read(p) {
-                Value::Adt { variant, .. } => Value::Int(i64::from(variant)),
-                other => unreachable!("the discriminant of {other:?}"),
+            Rvalue::Discriminant(p) => match self.stack.tag_of(p) {
+                Some((_, variant)) => Value::Int(i64::from(variant)),
+                None => unreachable!("the discriminant of {:?}", self.stack.read(p)),
             },
             Rvalue::Ref(m, p) => {
                 let base = match p.projection.last() {
@@ -537,29 +539,18 @@ impl<'a> Machine<'a> {
                 Value::Array(vec![v; self.dispatch.length(n, self.stack.type_args())])
             }
             Rvalue::Length(n) => Value::Int(self.dispatch.length(n, self.stack.type_args()) as i64),
-            Rvalue::Len(p) => match self.stack.read(p) {
-                Value::Array(xs) | Value::Buf(_, xs) => Value::Int(xs.len() as i64),
-                other => unreachable!("the length of {other:?}"),
-            },
+            Rvalue::Len(p) => Value::Int(self.stack.len_of(p) as i64),
             Rvalue::SpanOk(a, b, p) => {
                 let (a, b) = (
                     self.stack.operand(a).as_int(),
                     self.stack.operand(b).as_int(),
                 );
-                let n = match self.stack.read(p) {
-                    Value::Array(xs) | Value::Buf(_, xs) => xs.len() as i64,
-                    other => unreachable!("slicing {other:?}"),
-                };
+                let n = self.stack.len_of(p) as i64;
                 Value::Bool(0 <= a && a <= b && b <= n)
             }
             Rvalue::InBounds(i, p) => {
                 let i = self.stack.operand(i).as_int();
-                match self.stack.read(p) {
-                    Value::Array(xs) | Value::Buf(_, xs) => {
-                        Value::Bool(i >= 0 && (i as usize) < xs.len())
-                    }
-                    other => unreachable!("indexing {other:?}"),
-                }
+                Value::Bool(i >= 0 && (i as usize) < self.stack.len_of(p))
             }
             // A number as a wider type (`num.widen.1`): exact, so `checked_to` gives it.
             Rvalue::Widen(a, to) => {

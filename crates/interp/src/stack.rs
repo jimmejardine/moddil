@@ -487,10 +487,8 @@ impl<'a> Stack<'a> {
         ptr
     }
 
-    pub(crate) fn load(&self, ptr: &Pointer) -> Value {
-        if ptr.frame == CMEM {
-            return self.cmem.load_at(self.items, ptr);
-        }
+    /// The value `ptr` points to, in place: not C's memory, and its span (if any) not applied.
+    fn at(&self, ptr: &Pointer) -> &Value {
         let mut v = if ptr.frame == STATIC {
             &self.statics[&ptr.local]
         } else if ptr.frame == HEAP {
@@ -508,6 +506,44 @@ impl<'a> Stack<'a> {
                 other => unreachable!("a field of {other:?}"),
             };
         }
+        v
+    }
+
+    /// How many elements the array, `Buf` or slice at `place` has, without copying them.
+    pub(crate) fn len_of(&self, place: &Place) -> usize {
+        let ptr = self.resolve(place);
+        if let Some((_, n)) = ptr.span {
+            return n as usize;
+        }
+        let len = |v: &Value| match v {
+            Value::Array(xs) | Value::Buf(_, xs) => xs.len(),
+            other => unreachable!("the length of {other:?}"),
+        };
+        if ptr.frame == CMEM {
+            return len(&self.load(&ptr));
+        }
+        len(self.at(&ptr))
+    }
+
+    /// The struct or enum and the variant of the value at `place`, if it is one of those,
+    /// without copying it.
+    pub(crate) fn tag_of(&self, place: &Place) -> Option<(u32, u32)> {
+        let ptr = self.resolve(place);
+        let tag = |v: &Value| match v {
+            Value::Adt { adt, variant, .. } => Some((*adt, *variant)),
+            _ => None,
+        };
+        if ptr.frame == CMEM {
+            return tag(&self.load(&ptr));
+        }
+        tag(self.at(&ptr))
+    }
+
+    pub(crate) fn load(&self, ptr: &Pointer) -> Value {
+        if ptr.frame == CMEM {
+            return self.cmem.load_at(self.items, ptr);
+        }
+        let v = self.at(ptr);
         // Part of an array (`expr.slice.1`).
         if let Some((s, n)) = ptr.span {
             return match v {
