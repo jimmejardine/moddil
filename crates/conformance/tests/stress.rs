@@ -5,12 +5,15 @@
 //! give the value the tree was made to give, with no trap and, natively, no leak.
 //!
 //! `MODDIL_STRESS_TREES` and `MODDIL_STRESS_SEEDS` set how many trees and seeds (natively, a
-//! tenth as many seeds, as each run compiles).
+//! tenth as many seeds). A tree's interpreted runs go on a thread a core; its native runs share
+//! one compile (`moddil_native::run_test_runs`), one after another, as the runtime's state is
+//! the process's.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use moddil_project::{File, Mod, Project};
-use moddil_sema::Program;
+use moddil_sema::{Database, Program};
 
 /// SplitMix64, to make the trees: the same trees every run.
 struct Rng(u64);
@@ -154,6 +157,83 @@ fn count(var: &str, default: u64) -> u64 {
         .unwrap_or(default)
 }
 
+/// Runs test 0 of `program` on the MIR interpreter under seeds 0 to `seeds`, on a thread a
+/// core, each with its own handle to `db` (sharing what is already worked out): the seeds whose
+/// runs did not end well, and how they ended.
+fn interpreted(db: &Database, program: Program, seeds: u64) -> Vec<(u64, String)> {
+    let next = AtomicU64::new(0);
+    let next = &next;
+    let threads = std::thread::available_parallelism().map_or(1, usize::from);
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..threads)
+            .map(|_| {
+                let db = db.clone();
+                std::thread::Builder::new()
+                    // The interpreter needs more stack than a spawned thread has by default.
+                    .stack_size(64 << 20)
+                    .spawn_scoped(scope, move || {
+                        let mut bad = Vec::new();
+                        loop {
+                            let seed = next.fetch_add(1, Ordering::Relaxed);
+                            if seed >= seeds {
+                                return bad;
+                            }
+                            let r = moddil_interp::run_test_seeded(
+                                &db,
+                                program,
+                                0,
+                                seed,
+                                &mut |_, _, _| {},
+                            );
+                            if let Err(e) = r {
+                                bad.push((seed, format!("{e:?}")));
+                            }
+                        }
+                    })
+                    .expect("a thread")
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().expect("an interpreted run does not panic"))
+            .collect()
+    })
+}
+
+/// Test 0 of `program` natively under each of `runs`, compiled once: the runs that did not end
+/// well, or (with `want`) observed other than it, and what they did.
+fn native(
+    db: &Database,
+    program: Program,
+    runs: &[moddil_native::Options],
+    want: Option<i64>,
+) -> Vec<(usize, String)> {
+    moddil_native::run_test_runs(db, program, 0, runs)
+        .into_iter()
+        .enumerate()
+        .filter_map(|(k, (observed, r))| {
+            let got: Vec<String> = observed.into_iter().map(|(_, _, v)| v).collect();
+            match (r, want) {
+                (Err(e), _) => Some((k, format!("{e:?}"))),
+                (Ok(()), Some(w)) if got != vec![w.to_string()] => {
+                    Some((k, format!("observed {got:?}")))
+                }
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+/// Options for the deterministic runtime under each of `seeds`.
+fn seeded(seeds: impl Iterator<Item = u64>) -> Vec<moddil_native::Options> {
+    seeds
+        .map(|seed| moddil_native::Options {
+            seed,
+            ..Default::default()
+        })
+        .collect()
+}
+
 #[test]
 fn every_order_of_a_task_tree_gives_its_value() {
     let trees = count("MODDIL_STRESS_TREES", 12);
@@ -164,45 +244,34 @@ fn every_order_of_a_task_tree_gives_its_value() {
         let program = Program::of_project(&db, &project(&text));
         let diagnostics = moddil_interp::diagnostics(&db, program);
         assert!(diagnostics.is_empty(), "tree {i}: {diagnostics:?}\n{text}");
-        for seed in 0..seeds {
-            let r = moddil_interp::run_test_seeded(&db, program, 0, seed, &mut |_, _, _| {});
-            assert!(
-                r.is_ok(),
-                "tree {i}, seed {seed}, interpreted: {r:?}\n{text}"
-            );
-        }
-        for seed in 0..seeds.div_ceil(10) {
-            let options = moddil_native::Options {
-                seed,
-                ..Default::default()
-            };
-            let (_, r) = moddil_native::run_test_with(&db, program, 0, options);
-            assert!(r.is_ok(), "tree {i}, seed {seed}, native: {r:?}\n{text}");
-        }
+        let bad = interpreted(&db, program, seeds);
+        assert!(
+            bad.is_empty(),
+            "tree {i}, interpreted (seed, how): {bad:?}\n{text}"
+        );
+        let bad = native(&db, program, &seeded(0..seeds.div_ceil(10)), None);
+        assert!(
+            bad.is_empty(),
+            "tree {i}, native (seed, how): {bad:?}\n{text}"
+        );
         // The value: a `// =>` on the test's last line, checked by both.
         let checked = text.replace("    v\n}", &format!("    v  // => {want}\n}}"));
         let db = moddil_interp::database();
         let program = Program::of_project(&db, &project(&checked));
-        for seed in [0, 1, seeds / 2, seeds.saturating_sub(1)] {
+        let checks = [0, 1, seeds / 2, seeds.saturating_sub(1)];
+        for seed in checks {
             let mut got = Vec::new();
             let r = moddil_interp::run_test_seeded(&db, program, 0, seed, &mut |_, _, v| {
                 got.push(v.render(moddil_sema::item_tree(&db, program)));
             });
             assert!(r.is_ok(), "tree {i}, seed {seed}: {r:?}");
             assert_eq!(got, vec![want.to_string()], "tree {i}, seed {seed}\n{text}");
-            let options = moddil_native::Options {
-                seed,
-                ..Default::default()
-            };
-            let (observed, r) = moddil_native::run_test_with(&db, program, 0, options);
-            assert!(r.is_ok(), "tree {i}, seed {seed}, native: {r:?}");
-            let got: Vec<String> = observed.into_iter().map(|(_, _, v)| v).collect();
-            assert_eq!(
-                got,
-                vec![want.to_string()],
-                "tree {i}, seed {seed}, native\n{text}"
-            );
         }
+        let bad = native(&db, program, &seeded(checks.into_iter()), Some(want));
+        assert!(
+            bad.is_empty(),
+            "tree {i}, native, of seeds {checks:?} (run, how): {bad:?}\n{text}"
+        );
     }
 }
 
@@ -219,26 +288,22 @@ fn a_task_tree_gives_its_value_in_parallel() {
         let checked = text.replace("    v\n}", &format!("    v  // => {want}\n}}"));
         let db = moddil_interp::database();
         let program = Program::of_project(&db, &project(&checked));
-        for run in 0..runs {
-            let options = moddil_native::Options {
-                parallel: true,
-                ..Default::default()
-            };
-            let (observed, r) = moddil_native::run_test_with(&db, program, 0, options);
-            assert!(r.is_ok(), "tree {i}, run {run}, parallel: {r:?}\n{text}");
-            let got: Vec<String> = observed.into_iter().map(|(_, _, v)| v).collect();
-            assert_eq!(
-                got,
-                vec![want.to_string()],
-                "tree {i}, run {run}, parallel\n{text}"
-            );
-        }
+        let options = moddil_native::Options {
+            parallel: true,
+            ..Default::default()
+        };
+        let bad = native(&db, program, &vec![options; runs as usize], Some(want));
+        assert!(
+            bad.is_empty(),
+            "tree {i}, parallel (run, how): {bad:?}\n{text}"
+        );
     }
 }
 
 /// More tasks spinning than the machine has cores, and one more that ends them: under the
 /// parallel runtime the spinners give way at their loops' back-edges once their slices are
-/// over (`runtime.md`: a long CPU loop never yields), so the last one runs.
+/// over (`runtime.md`: a long CPU loop never yields), so the last one runs. Slices are 10 ms,
+/// so a run takes a few of them: one that takes seconds gave way by luck, not by preemption.
 #[test]
 fn spinning_tasks_give_way_in_parallel() {
     let cores = std::thread::available_parallelism().map_or(4, usize::from);
@@ -261,7 +326,17 @@ fn spinning_tasks_give_way_in_parallel() {
         parallel: true,
         ..Default::default()
     };
-    let (observed, r) = moddil_native::run_test_with(&db, program, 0, options);
-    assert!(r.is_ok(), "{r:?}");
-    assert_eq!(observed.len(), 1);
+    let start = std::time::Instant::now();
+    let runs = moddil_native::run_test_runs(&db, program, 0, &[options; 5]);
+    let took = start.elapsed();
+    for (k, (observed, r)) in runs.into_iter().enumerate() {
+        assert!(r.is_ok(), "run {k}: {r:?}");
+        assert_eq!(observed.len(), 1, "run {k}");
+    }
+    // Compiling and five runs: about a second. Minutes would mean the spinners gave way only
+    // by chance.
+    assert!(
+        took < std::time::Duration::from_secs(60),
+        "the spinners took {took:?} to give way five times"
+    );
 }

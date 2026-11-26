@@ -80,6 +80,34 @@ pub fn run_test_with(
     }
 }
 
+/// As [`run_test_with`], once for each of `runs`, the test compiled once: what each observed
+/// and how it ended. For running one test under many seeds (`task.runtime.1`).
+pub fn run_test_runs(
+    db: &dyn Db,
+    program: Program,
+    index: u32,
+    runs: &[Options],
+) -> Vec<(Vec<Observed>, Result<(), Native>)> {
+    let threads = runs.first().copied().unwrap_or_default().threads;
+    match lower::compile(db, program, Item::Test(index), threads) {
+        Err(why) => runs
+            .iter()
+            .map(|_| (Vec::new(), Err(Native::Unsupported(why.clone()))))
+            .collect(),
+        Ok(compiled) => {
+            let out = runs
+                .iter()
+                .map(|options| {
+                    let (observed, result, _) = compiled.run_again(None, *options);
+                    (observed, result.map(|_| ()))
+                })
+                .collect();
+            compiled.free();
+            out
+        }
+    }
+}
+
 /// Runs `fn main()` (function `index`) of `program` natively: its result, as Moddil source.
 ///
 /// # Errors

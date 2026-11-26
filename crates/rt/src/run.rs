@@ -188,7 +188,10 @@ pub(crate) static PREEMPT: AtomicU8 = AtomicU8::new(0);
 #[unsafe(export_name = "moddil_rt_safe_point")]
 pub(crate) extern "C" fn safe_point() {
     // Most calls, while the word is set: a task within its slice, in no run that is ending.
-    if ABORTING.load(Ordering::Relaxed) == 0 && !baton::slice_over() {
+    // `slice_over` looks once a window, so it is asked once here: asked again, it would say
+    // no, and a task whose slice is over would not give way.
+    let over = baton::slice_over();
+    if ABORTING.load(Ordering::Relaxed) == 0 && !over {
         return;
     }
     let Some(c) = CTX.with(|c| c.borrow().clone()) else {
@@ -202,7 +205,7 @@ pub(crate) extern "C" fn safe_point() {
         return;
     }
     // A task that has had its slice gives its turn to a ready one, and queues behind it.
-    if !baton::slice_over() || !s.sched.has_ready() {
+    if !over || !s.sched.has_ready() {
         return;
     }
     let me = me();

@@ -86,6 +86,18 @@ impl Compiled<'_> {
         os: Option<Vec<String>>,
         options: crate::Options,
     ) -> (Vec<Observed>, Result<String, Native>, Option<u8>) {
+        let ran = self.run_again(os, options);
+        self.free();
+        ran
+    }
+
+    /// As [`Compiled::run`], keeping the code to run again: each run begins afresh
+    /// (`moddil_rt::begin_run`), so a test compiled once runs under many seeds.
+    pub(crate) fn run_again(
+        &self,
+        os: Option<Vec<String>>,
+        options: crate::Options,
+    ) -> (Vec<Observed>, Result<String, Native>, Option<u8>) {
         let ptr = self.module.get_finalized_function(self.entry) as usize;
         let drop_ptr = self.module.get_finalized_function(self.drop_result) as usize;
         let (sites, items, ret) = (&self.sites, self.items, &self.ret);
@@ -206,9 +218,13 @@ impl Compiled<'_> {
                 None => Err(Native::Unsupported("a trap without a site".to_string())),
             },
         };
-        // SAFETY: nothing runs the module's code after this.
-        unsafe { self.module.free_memory() };
         (observed, result, exit)
+    }
+
+    /// Frees the compiled code.
+    pub(crate) fn free(self) {
+        // SAFETY: nothing runs the module's code after this: `self` is gone.
+        unsafe { self.module.free_memory() };
     }
 }
 

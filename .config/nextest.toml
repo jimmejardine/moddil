@@ -4,3 +4,9 @@
 # The conformance suite starts many test processes at once, and on Windows tearing them down can
 # take longer than the default 100ms, which nextest reports as a leak.
 leak-timeout = "500ms"
+
+# The runtimes' stress suite takes seconds a test. One running for minutes is a scheduling bug
+# (a task that never gives way), not a slow machine: end it, and name it, after three minutes.
+[[profile.default.overrides]]
+filter = 'binary(stress)'
+slow-timeout = { period = "60s", terminate-after = 3 }
